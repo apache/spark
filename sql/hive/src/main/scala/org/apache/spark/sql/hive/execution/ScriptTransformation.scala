@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive.execution
 import java.io._
 import java.nio.charset.StandardCharsets
 import java.util.Properties
+import java.util.concurrent.atomic.AtomicReference
 import javax.annotation.Nullable
 
 import scala.collection.JavaConverters._
@@ -32,7 +33,7 @@ import org.apache.hadoop.hive.serde2.AbstractSerDe
 import org.apache.hadoop.hive.serde2.objectinspector._
 import org.apache.hadoop.io.Writable
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
@@ -127,14 +128,36 @@ case class ScriptTransformation(
         }
         val mutableRow = new SpecificMutableRow(output.map(_.dataType))
 
+        private def checkFailureAndPropagate(): Unit = {
+          if (writerThread.exception.isDefined) {
+            throw writerThread.exception.get
+          }
+
+          // Checks if the proc is still alive (incase the command ran was bad)
+          // The ideal way to do this is to use Java 8's Process#isAlive()
+          // Unfortunately, Jenkins builds for Spark run with Java 7 so that cannot be used
+          // Following is a workaround used to check if a process is alive in Java 7
+          // TODO: Once builds are switched to Java 8, this can be changed
+          try {
+            val exitCode = proc.exitValue()
+            if (exitCode != 0) {
+              logError(stderrBuffer.toString) // log the stderr circular buffer
+              throw new SparkException(s"Subprocess exited with status $exitCode. " +
+                s"Error: ${stderrBuffer.toString}")
+            }
+          } catch {
+            case _: IllegalThreadStateException =>
+            // This means that the process is still active so the command was being launched
+            // Ignore the exception and move ahead
+          }
+        }
+
         override def hasNext: Boolean = {
           if (outputSerde == null) {
             if (curLine == null) {
               curLine = reader.readLine()
               if (curLine == null) {
-                if (writerThread.exception.isDefined) {
-                  throw writerThread.exception.get
-                }
+                checkFailureAndPropagate()
                 false
               } else {
                 true
@@ -147,7 +170,7 @@ case class ScriptTransformation(
 
             if (scriptOutputReader != null) {
               if (scriptOutputReader.next(scriptOutputWritable) <= 0) {
-                writerThread.exception.foreach(throw _)
+                checkFailureAndPropagate()
                 false
               } else {
                 true
@@ -158,9 +181,7 @@ case class ScriptTransformation(
                 true
               } catch {
                 case _: EOFException =>
-                  if (writerThread.exception.isDefined) {
-                    throw writerThread.exception.get
-                  }
+                  checkFailureAndPropagate()
                   false
               }
             }
@@ -240,10 +261,11 @@ private class ScriptTransformationWriterThread(
 
   setDaemon(true)
 
-  @volatile private var _exception: Throwable = null
+  private val _exception = new AtomicReference[Throwable](null)
 
   /** Contains the exception thrown while writing the parent iterator to the external process. */
-  def exception: Option[Throwable] = Option(_exception)
+  def exception: Option[Throwable] =
+    if (_exception.get() == null) None else Option(_exception.get())
 
   override def run(): Unit = Utils.logUncaughtExceptions {
     TaskContext.setTaskContext(taskContext)
@@ -290,7 +312,7 @@ private class ScriptTransformationWriterThread(
       case NonFatal(e) =>
         // An error occurred while writing input, so kill the child process. According to the
         // Javadoc this call will not throw an exception:
-        _exception = e
+        _exception.set(e)
         proc.destroy()
         throw e
     } finally {

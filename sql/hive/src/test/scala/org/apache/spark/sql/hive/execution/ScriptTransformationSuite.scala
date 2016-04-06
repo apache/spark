@@ -109,6 +109,22 @@ class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton {
     }
     assert(e.getMessage().contains("intentional exception"))
   }
+
+  test("some_non_existent_command") {
+    val rowsDf = Seq("a", "b", "c").map(Tuple1.apply).toDF("a")
+    intercept[TestFailedException] {
+      checkAnswer(
+        rowsDf,
+        (child: SparkPlan) => new ScriptTransformation(
+          input = Seq(rowsDf.col("a").expr),
+          script = "some_non_existent_command",
+          output = Seq(AttributeReference("a", StringType)()),
+          child = child,
+          ioschema = serdeIOSchema
+        )(hiveContext),
+        rowsDf.collect())
+    }
+  }
 }
 
 private case class ExceptionInjectingOperator(child: SparkPlan) extends UnaryExecNode {
