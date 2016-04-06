@@ -98,6 +98,8 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
           Map.empty))
         sql(s"DROP DATABASE $dbName CASCADE")
         assert(!catalog.databaseExists(dbNameWithoutBackTicks))
+      } finally {
+        catalog.reset()
       }
     }
   }
