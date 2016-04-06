@@ -18,6 +18,7 @@
 package org.apache.spark.ml.param
 
 import java.lang.reflect.Modifier
+import java.util.{List => JList}
 import java.util.NoSuchElementException
 
 import scala.annotation.varargs
@@ -833,6 +834,11 @@ final class ParamMap private[ml] (private val map: mutable.Map[Param[Any], Any])
     this
   }
 
+  /** Put param pairs with a [[java.util.List]] of values for Python. */
+  private[ml] def put(paramPairs: JList[ParamPair[_]]): this.type = {
+    put(paramPairs.asScala: _*)
+  }
+
   /**
    * Optionally returns the value associated with a param.
    */
@@ -930,6 +936,11 @@ final class ParamMap private[ml] (private val map: mutable.Map[Param[Any], Any])
     map.toSeq.map { case (param, value) =>
       ParamPair(param, value)
     }
+  }
+
+  /** Java-friendly method for Python API */
+  private[ml] def toList: java.util.List[ParamPair[_]] = {
+    this.toSeq.asJava
   }
 
   /**

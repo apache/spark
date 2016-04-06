@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.Row
+import org.apache.spark.api.java.function.MapFunction
+import org.apache.spark.sql.{Encoders, Row}
 import org.apache.spark.sql.execution.aggregate.TungstenAggregate
 import org.apache.spark.sql.execution.joins.BroadcastHashJoin
 import org.apache.spark.sql.functions.{avg, broadcast, col, max}
@@ -69,5 +70,16 @@ class WholeStageCodegenSuite extends SparkPlanTest with SharedSQLContext {
       p.isInstanceOf[WholeStageCodegen] &&
         p.asInstanceOf[WholeStageCodegen].child.isInstanceOf[Sort]).isDefined)
     assert(df.collect() === Array(Row(1), Row(2), Row(3)))
+  }
+
+  test("MapElements should be included in WholeStageCodegen") {
+    import testImplicits._
+
+    val ds = sqlContext.range(10).map(_.toString)
+    val plan = ds.queryExecution.executedPlan
+    assert(plan.find(p =>
+      p.isInstanceOf[WholeStageCodegen] &&
+        p.asInstanceOf[WholeStageCodegen].child.isInstanceOf[MapElements]).isDefined)
+    assert(ds.collect() === 0.until(10).map(_.toString).toArray)
   }
 }

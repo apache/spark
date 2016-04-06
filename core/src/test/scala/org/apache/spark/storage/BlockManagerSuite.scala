@@ -515,6 +515,19 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     }
   }
 
+  test("SPARK-14252: getOrElseUpdate should still read from remote storage") {
+    store = makeBlockManager(8000, "executor1")
+    store2 = makeBlockManager(8000, "executor2")
+    val list1 = List(new Array[Byte](4000))
+    store2.putIterator(
+      "list1", list1.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+    assert(store.getOrElseUpdate(
+      "list1",
+      StorageLevel.MEMORY_ONLY,
+      ClassTag.Any,
+      () => throw new AssertionError("attempted to compute locally")).isLeft)
+  }
+
   test("in-memory LRU storage") {
     testInMemoryLRUStorage(StorageLevel.MEMORY_ONLY)
   }
