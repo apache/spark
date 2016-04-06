@@ -486,20 +486,9 @@ class SessionCatalog(
    * Check if the specified function exists.
    */
   def functionExists(name: FunctionIdentifier): Boolean = {
-    if (functionRegistry.functionExists(name.unquotedString)) {
-      // This function exists in the FunctionRegistry.
-      true
-    } else {
-      // Need to check if this function exists in the metastore.
-      try {
-        // TODO: It's better to ask external catalog if this function exists.
-        // So, we can avoid of having this hacky try/catch block.
-        getFunction(name) != null
-      } catch {
-        case _: NoSuchFunctionException => false
-        case _: AnalysisException => false // HiveExternalCatalog wraps all exceptions with it.
-      }
-    }
+    val db = name.database.getOrElse(currentDb)
+    functionRegistry.functionExists(name.unquotedString) ||
+      externalCatalog.functionExists(db, name.funcName)
   }
 
   // ----------------------------------------------------------------
