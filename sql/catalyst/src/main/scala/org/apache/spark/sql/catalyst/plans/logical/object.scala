@@ -65,7 +65,7 @@ object MapPartitions {
       child: LogicalPlan): MapPartitions = {
     MapPartitions(
       func.asInstanceOf[Iterator[Any] => Iterator[Any]],
-      UnresolvedDeserializer(encoderFor[T].deserializer, Nil),
+      UnresolvedDeserializer(encoderFor[T].deserializer),
       encoderFor[U].namedExpressions,
       child)
   }
@@ -89,7 +89,7 @@ object MapElements {
       child: LogicalPlan): MapElements = {
     MapElements(
       func,
-      encoderFor[T].deserializer,
+      UnresolvedDeserializer(encoderFor[T].deserializer),
       encoderFor[U].namedExpressions,
       child)
   }
@@ -105,9 +105,7 @@ case class MapElements(
     func: AnyRef,
     deserializer: Expression,
     serializer: Seq[NamedExpression],
-    child: LogicalPlan) extends UnaryNode with ObjectOperator {
-  override def deserializers: Seq[(Expression, Seq[Attribute])] = Seq(deserializer -> child.output)
-}
+    child: LogicalPlan) extends UnaryNode with ObjectOperator
 
 /** Factory for constructing new `AppendColumn` nodes. */
 object AppendColumns {
@@ -116,7 +114,7 @@ object AppendColumns {
       child: LogicalPlan): AppendColumns = {
     new AppendColumns(
       func.asInstanceOf[Any => Any],
-      UnresolvedDeserializer(encoderFor[T].deserializer, Nil),
+      UnresolvedDeserializer(encoderFor[T].deserializer),
       encoderFor[U].namedExpressions,
       child)
   }
