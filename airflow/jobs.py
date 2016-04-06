@@ -17,17 +17,14 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
-from builtins import str
 from past.builtins import basestring
 from collections import defaultdict, Counter
 from datetime import datetime
 from itertools import product
 import getpass
 import logging
-import signal
 import socket
 import subprocess
-import sys
 from time import sleep
 
 from sqlalchemy import Column, Integer, String, DateTime, func, Index, or_
@@ -40,7 +37,6 @@ from airflow.utils.state import State
 from airflow.utils.db import provide_session, pessimistic_connection_handling
 from airflow.utils.email import send_email
 from airflow.utils.logging import LoggingMixin
-from airflow.utils import asciiart
 
 
 Base = models.Base
@@ -663,18 +659,13 @@ class SchedulerJob(BaseJob):
     def _execute(self):
         dag_id = self.dag_id
 
-        def signal_handler(signum, frame):
-            self.logger.error("SIGINT (ctrl-c) received")
-            sys.exit(1)
-        signal.signal(signal.SIGINT, signal_handler)
-
         pessimistic_connection_handling()
 
         logging.basicConfig(level=logging.DEBUG)
         self.logger.info("Starting the scheduler")
 
         dagbag = models.DagBag(self.subdir, sync_to_db=True)
-        executor = dagbag.executor
+        executor = self.executor = dagbag.executor
         executor.start()
         i = 0
         while not self.num_runs or self.num_runs > i:
