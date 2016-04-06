@@ -61,8 +61,12 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         .filter(regex.matcher(_).matches()).map(Row(_))
     }
     checkAnswer(sql("SHOW functions"), getFunctions(".*"))
-    Seq("^c.*", ".*e$", "log.*", ".*date.*").foreach { pattern =>
-      checkAnswer(sql(s"SHOW FUNCTIONS '$pattern'"), getFunctions(pattern))
+    Seq("^c*", "*e$", "log*", "*date*").foreach { pattern =>
+      // For the pattern part, only '*' and '|' are allowed as wildcards.
+      // For '*', we need to replace it to '.*'.
+      checkAnswer(
+        sql(s"SHOW FUNCTIONS '$pattern'"),
+        getFunctions(pattern.replaceAll("\\*", ".*")))
     }
   }
 

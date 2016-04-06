@@ -22,7 +22,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
-import org.antlr.v4.runtime.tree.{ParseTree, TerminalNode}
+import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
@@ -44,6 +44,19 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
 
   protected def typedVisit[T](ctx: ParseTree): T = {
     ctx.accept(this).asInstanceOf[T]
+  }
+
+  /**
+   * Override the default behavior for all visit methods. This will only return a non-null result
+   * when the context has only one child. This is done because there is no generic method to
+   * combine the results of the context children. In all other cases null is returned.
+   */
+  override def visitChildren(node: RuleNode): AnyRef = {
+    if (node.getChildCount == 1) {
+      node.getChild(0).accept(this)
+    } else {
+      null
+    }
   }
 
   override def visitSingleStatement(ctx: SingleStatementContext): LogicalPlan = withOrigin(ctx) {
@@ -351,7 +364,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
           string(script),
           attributes,
           withFilter,
-          withScriptIOSchema(inRowFormat, recordWriter, outRowFormat, recordReader, schemaLess))
+          withScriptIOSchema(
+            ctx, inRowFormat, recordWriter, outRowFormat, recordReader, schemaLess))
 
       case SqlBaseParser.SELECT =>
         // Regular select
@@ -398,11 +412,14 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * Create a (Hive based) [[ScriptInputOutputSchema]].
    */
   protected def withScriptIOSchema(
+      ctx: QuerySpecificationContext,
       inRowFormat: RowFormatContext,
       recordWriter: Token,
       outRowFormat: RowFormatContext,
       recordReader: Token,
-      schemaLess: Boolean): ScriptInputOutputSchema = null
+      schemaLess: Boolean): ScriptInputOutputSchema = {
+    throw new ParseException("Script Transform is not supported", ctx)
+  }
 
   /**
    * Create a logical plan for a given 'FROM' clause. Note that we support multiple (comma
@@ -532,8 +549,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
         Explode(expressions.head)
       case "json_tuple" =>
         JsonTuple(expressions)
-      case other =>
-        withGenerator(other, expressions, ctx)
+      case name =>
+        UnresolvedGenerator(name, expressions)
     }
 
     Generate(
@@ -543,16 +560,6 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       Some(ctx.tblName.getText.toLowerCase),
       ctx.colName.asScala.map(_.getText).map(UnresolvedAttribute.apply),
       query)
-  }
-
-  /**
-   * Create a [[Generator]]. Override this method in order to support custom Generators.
-   */
-  protected def withGenerator(
-      name: String,
-      expressions: Seq[Expression],
-      ctx: LateralViewContext): Generator = {
-    throw new ParseException(s"Generator function '$name' is not supported", ctx)
   }
 
   /**
@@ -779,17 +786,6 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   }
 
   /**
-   * Invert a boolean expression if it has a valid NOT clause.
-   */
-  private def invertIfNotDefined(expression: Expression, not: TerminalNode): Expression = {
-    if (not != null) {
-      Not(expression)
-    } else {
-      expression
-    }
-  }
-
-  /**
    * Create a star (i.e. all) expression; this selects all elements (in the specified object).
    * Both un-targeted (global) and targeted aliases are supported.
    */
@@ -909,57 +905,55 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   }
 
   /**
-   * Create a BETWEEN expression. This tests if an expression lies with in the bounds set by two
-   * other expressions. The inverse can also be created.
+   * Create a predicated expression. A predicated expression is a normal expression with a
+   * predicate attached to it, for example:
+   * {{{
+   *    a + 1 IS NULL
+   * }}}
    */
-  override def visitBetween(ctx: BetweenContext): Expression = withOrigin(ctx) {
-    val value = expression(ctx.value)
-    val between = And(
-      GreaterThanOrEqual(value, expression(ctx.lower)),
-      LessThanOrEqual(value, expression(ctx.upper)))
-    invertIfNotDefined(between, ctx.NOT)
-  }
-
-  /**
-   * Create an IN expression. This tests if the value of the left hand side expression is
-   * contained by the sequence of expressions on the right hand side.
-   */
-  override def visitInList(ctx: InListContext): Expression = withOrigin(ctx) {
-    val in = In(expression(ctx.value), ctx.expression().asScala.map(expression))
-    invertIfNotDefined(in, ctx.NOT)
-  }
-
-  /**
-   * Create an IN expression, where the the right hand side is a query. This is unsupported.
-   */
-  override def visitInSubquery(ctx: InSubqueryContext): Expression = {
-    throw new ParseException("IN with a Sub-query is currently not supported.", ctx)
-  }
-
-  /**
-   * Create a (R)LIKE/REGEXP expression.
-   */
-  override def visitLike(ctx: LikeContext): Expression = {
-    val left = expression(ctx.value)
-    val right = expression(ctx.pattern)
-    val like = ctx.like.getType match {
-      case SqlBaseParser.LIKE =>
-        Like(left, right)
-      case SqlBaseParser.RLIKE =>
-        RLike(left, right)
-    }
-    invertIfNotDefined(like, ctx.NOT)
-  }
-
-  /**
-   * Create an IS (NOT) NULL expression.
-   */
-  override def visitNullPredicate(ctx: NullPredicateContext): Expression = withOrigin(ctx) {
-    val value = expression(ctx.value)
-    if (ctx.NOT != null) {
-      IsNotNull(value)
+  override def visitPredicated(ctx: PredicatedContext): Expression = withOrigin(ctx) {
+    val e = expression(ctx.valueExpression)
+    if (ctx.predicate != null) {
+      withPredicate(e, ctx.predicate)
     } else {
-      IsNull(value)
+      e
+    }
+  }
+
+  /**
+   * Add a predicate to the given expression. Supported expressions are:
+   * - (NOT) BETWEEN
+   * - (NOT) IN
+   * - (NOT) LIKE
+   * - (NOT) RLIKE
+   * - IS (NOT) NULL.
+   */
+  private def withPredicate(e: Expression, ctx: PredicateContext): Expression = withOrigin(ctx) {
+    // Invert a predicate if it has a valid NOT clause.
+    def invertIfNotDefined(e: Expression): Expression = ctx.NOT match {
+      case null => e
+      case not => Not(e)
+    }
+
+    // Create the predicate.
+    ctx.kind.getType match {
+      case SqlBaseParser.BETWEEN =>
+        // BETWEEN is translated to lower <= e && e <= upper
+        invertIfNotDefined(And(
+          GreaterThanOrEqual(e, expression(ctx.lower)),
+          LessThanOrEqual(e, expression(ctx.upper))))
+      case SqlBaseParser.IN if ctx.query != null =>
+        throw new ParseException("IN with a Sub-query is currently not supported.", ctx)
+      case SqlBaseParser.IN =>
+        invertIfNotDefined(In(e, ctx.expression.asScala.map(expression)))
+      case SqlBaseParser.LIKE =>
+        invertIfNotDefined(Like(e, expression(ctx.pattern)))
+      case SqlBaseParser.RLIKE =>
+        invertIfNotDefined(RLike(e, expression(ctx.pattern)))
+      case SqlBaseParser.NULL if ctx.NOT != null =>
+        IsNotNull(e)
+      case SqlBaseParser.NULL =>
+        IsNull(e)
     }
   }
 
