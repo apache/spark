@@ -579,6 +579,16 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
 
     assert(CatalystReadSupport.expandUDT(schema) === expected)
   }
+
+  test("read/write wide table") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+
+      val df = sqlContext.range(1000).select(Seq.tabulate(1000) {i => ('id + i).as(s"c$i")} : _*)
+      df.write.mode(SaveMode.Overwrite).parquet(path)
+      checkAnswer(sqlContext.read.parquet(path), df)
+    }
+  }
 }
 
 object TestingUDT {

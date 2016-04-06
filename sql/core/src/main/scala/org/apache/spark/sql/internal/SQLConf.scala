@@ -396,6 +396,13 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val WHOLESTAGE_MAX_NUM_FIELDS = SQLConfigBuilder("spark.sql.codegen.maxFields")
+    .internal()
+    .doc("The maximum number of fields (including nested fields) that will be supported before" +
+      " deactivating whole-stage codegen.")
+    .intConf
+    .createWithDefault(200)
+
   val FILES_MAX_PARTITION_BYTES = SQLConfigBuilder("spark.sql.files.maxPartitionBytes")
     .doc("The maximum number of bytes to pack into a single partition when reading files.")
     .longConf
@@ -480,6 +487,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def parquetCacheMetadata: Boolean = getConf(PARQUET_CACHE_METADATA)
 
+  def parquetVectorizedReaderEnabled: Boolean = getConf(PARQUET_VECTORIZED_READER_ENABLED)
+
   def columnBatchSize: Int = getConf(COLUMN_BATCH_SIZE)
 
   def numShufflePartitions: Int = getConf(SHUFFLE_PARTITIONS)
@@ -503,6 +512,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def nativeView: Boolean = getConf(NATIVE_VIEW)
 
   def wholeStageEnabled: Boolean = getConf(WHOLESTAGE_CODEGEN_ENABLED)
+
+  def wholeStageMaxNumFields: Int = getConf(WHOLESTAGE_MAX_NUM_FIELDS)
 
   def exchangeReuseEnabled: Boolean = getConf(EXCHANGE_REUSE_ENABLED)
 
