@@ -30,7 +30,7 @@ import org.json4s.jackson.JsonMethods.{compact, parse => parseJson, render}
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.{AlphaComponent, Since}
-import org.apache.spark.mllib.util.NumericParser
+import org.apache.spark.ml.util.NumericParser
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 import org.apache.spark.sql.catalyst.util.GenericArrayData
