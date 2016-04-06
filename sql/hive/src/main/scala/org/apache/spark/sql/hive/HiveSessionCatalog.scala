@@ -241,33 +241,41 @@ private[sql] class HiveSessionCatalog(
       val info = new ExpressionInfo(clazz.getCanonicalName, functionName)
       createTempFunction(functionName, info, builder, ignoreIfExists = false)
   }
+  
+  private def generateCreateTableHeader(
+              ct: CatalogTable,
+              processedProps: scala.collection.mutable.ArrayBuffer[String]): String =  {
+    if (ct.tableType == CatalogTableType.EXTERNAL_TABLE) {
+      processedProps += "EXTERNAL"
+      "CREATE EXTERNAL TABLE " + ct.qualifiedName
+    } else {
+      "CREATE TABLE " + ct.qualifiedName
+    }
+  }
 
+  private def generateCols(ct: CatalogTable): String = {
+    val cols = ct.schema map { col =>
+      col.name + " " + col.dataType + (col.comment.getOrElse("") match {
+        case cmt: String if cmt.length > 0 => " COMMENT '" + escapeHiveCommand(cmt) + "'"
+        case _ => ""
+      })
+    }
+    cols.mkString("(", ", ", ")")
+  }
+  
   /**
    * Generate Create table DDL string for the specified tableIdentifier
    * that is from Hive metastore
    */
   override def generateHiveDDL(ct: CatalogTable): String = {
-    val sb = new StringBuilder("CREATE ")
+    val sb = new StringBuilder("")
     val processedProperties = scala.collection.mutable.ArrayBuffer.empty[String]
 
     if (ct.tableType == CatalogTableType.VIRTUAL_VIEW) {
-      sb.append(" VIEW " + ct.qualifiedName + " AS " + ct.viewOriginalText.getOrElse(""))
+      sb.append("CREATE VIEW " + ct.qualifiedName + " AS " + ct.viewOriginalText.getOrElse(""))
     } else {
-      if (ct.tableType == CatalogTableType.EXTERNAL_TABLE) {
-        processedProperties += "EXTERNAL"
-        sb.append(" EXTERNAL TABLE " + ct.qualifiedName)
-      } else {
-        sb.append(" TABLE " + ct.qualifiedName)
-      }
-      // column list
-      val cols = ct.schema map { col =>
-        col.name + " " + col.dataType + (col.comment.getOrElse("") match {
-          case cmt: String if cmt.length > 0 => " COMMENT '" + escapeHiveCommand(cmt) + "'"
-          case _ => ""
-        })
-        // hive ddl does not honor NOT NULL, it is always default to be nullable
-      }
-      sb.append(cols.mkString("(", ", ", ")") + "\n")
+      sb.append(generateCreateTableHeader(ct, processedProperties) + "\n")
+      sb.append(generateCols(ct) + "\n")
 
       // table comment
       sb.append(" " +
@@ -311,6 +319,9 @@ private[sql] class HiveSessionCatalog(
       sb.append(" ROW FORMAT ")
 
       val serdeProps = ct.storage.serdeProperties
+      val processedSerdeProps =
+        Seq("field.delim", "colelction.delim", "mapkey.delim", "line.delim",
+          "serialization.null.format")
       val delimiterPrefixes =
         Seq("FIELDS TERMINATED BY",
           "COLLECTION ITEMS TERMINATED BY",
@@ -339,6 +350,14 @@ private[sql] class HiveSessionCatalog(
         sb.append(escapeHiveCommand(ct.storage.serde.getOrElse("")) + "' \n")
       }
 
+      val leftOverSerdeProps = serdeProps.filter(e => !processedSerdeProps.contains(e._1))
+      if (leftOverSerdeProps.size > 0) {
+        sb.append("WITH SERDEPROPERTIES \n")
+        sb.append(
+          leftOverSerdeProps.map(e => "'" + e._1 + "'='" + e._2 + "'").
+            mkString("( ", ", ", " )\n"))
+      }
+
       sb.append("STORED AS INPUTFORMAT '" +
         escapeHiveCommand(ct.storage.inputFormat.getOrElse("")) + "' \n")
       sb.append("OUTPUTFORMAT  '" +
@@ -360,11 +379,34 @@ private[sql] class HiveSessionCatalog(
     sb.toString()
   }
 
+  /**
+   * Generate DDL for datasource tables that are created by following ways:
+   * 1. CREATE [TEMPORARY] TABLE .... USING .... OPTIONS(.....)
+   * 2. DF.write.format("parquet").saveAsTable("t1")
+   * @param ct spark sql version of table metadator loaded
+   * @return DDL string
+   */
   private def generateDataSourceDDL(ct: CatalogTable): String = {
-    val sb = new StringBuilder("CREATE TABLE " + ct.qualifiedName)
-    // TODO will continue on generating Datasource syntax DDL
-    // will remove generateHiveDDL once it is done.
-    generateHiveDDL(ct)
+    val processedProperties = scala.collection.mutable.ArrayBuffer.empty[String]
+    val sb = new StringBuilder(generateCreateTableHeader(ct, processedProperties))
+    // It is possible that the column list returned from hive metastore is just a dummy
+    // one, such as "col array<String>", because the metastore was created as spark sql
+    // specific metastore (refer to HiveMetaStoreCatalog.createDataSourceTable.
+    // newSparkSQLSpecificMetastoreTable). In such case, the column schema information
+    // is located in tblproperties in json format. However, the data types in the json string
+    // spark sql types, e.g.: Long type for hive's bigint. So if we do parse this json string
+    // and contruct the ddl with such spark sql column type, it may be not executable when it
+    // comes to hive native command. We may need to wait till spark sql native command to be ready
+    // in order to decide how to deal with this case.
+    sb.append(generateCols(ct) + "\n")
+    sb.append("USING " + ct.properties.get("spark.sql.sources.provider").get + "\n")
+    sb.append("OPTIONS ")
+    val options = scala.collection.mutable.ArrayBuffer.empty[String]
+    ct.storage.serdeProperties.foreach { e =>
+      options += "" + escapeHiveCommand(e._1) + " '" + escapeHiveCommand(e._2) + "'"
+    }
+    if (options.size > 0) sb.append(options.mkString("( ", ", \n", " )"))
+    sb.toString
   }
 
   /**

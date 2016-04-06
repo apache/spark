@@ -937,4 +937,27 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       })
     }
   }
+
+  test("SPARK-14346: show create table created with datasource -- partitioned") {
+    withTable("ttt3") {
+      val df = (1 to 3).map(i => (i, s"val_$i", i * 2)).toDF("a", "b", "c")
+      df.write
+        .partitionBy("a")
+        .format("parquet")
+        .mode(SaveMode.Overwrite)
+        .saveAsTable("ttt3")
+      sql("show create table ttt3").show(false)
+    }
+  }
+
+  test("SPARK-14346: show create table created with datasource") {
+    withTable("ttt3") {
+      val df = (1 to 3).map(i => (i, s"val_$i", i * 2)).toDF("a", "b", "c")
+      df.write
+        .format("parquet")
+        .mode(SaveMode.Overwrite)
+        .saveAsTable("ttt3")
+      sql("show create table ttt3").show(false)
+    }
+  }
 }
