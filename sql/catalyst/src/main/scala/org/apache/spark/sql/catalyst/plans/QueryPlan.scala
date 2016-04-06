@@ -211,8 +211,10 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
     if (changed) makeCopy(newArgs).asInstanceOf[this.type] else this
   }
 
-  /** Returns the result of running [[transformExpressions]] on this node
-    * and all its children. */
+  /**
+   * Returns the result of running [[transformExpressions]] on this node
+   * and all its children.
+   */
   def transformAllExpressions(rule: PartialFunction[Expression, Expression]): this.type = {
     transform {
       case q: QueryPlan[_] => q.transformExpressions(rule).asInstanceOf[PlanType]

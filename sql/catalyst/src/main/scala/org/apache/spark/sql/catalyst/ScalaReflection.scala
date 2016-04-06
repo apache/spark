@@ -762,15 +762,15 @@ trait ScalaReflection {
   }
 
   /**
-    * Returns the full class name for a type. The returned name is the canonical
-    * Scala name, where each component is separated by a period. It is NOT the
-    * Java-equivalent runtime name (no dollar signs).
-    *
-    * In simple cases, both the Scala and Java names are the same, however when Scala
-    * generates constructs that do not map to a Java equivalent, such as singleton objects
-    * or nested classes in package objects, it uses the dollar sign ($) to create
-    * synthetic classes, emulating behaviour in Java bytecode.
-    */
+   * Returns the full class name for a type. The returned name is the canonical
+   * Scala name, where each component is separated by a period. It is NOT the
+   * Java-equivalent runtime name (no dollar signs).
+   *
+   * In simple cases, both the Scala and Java names are the same, however when Scala
+   * generates constructs that do not map to a Java equivalent, such as singleton objects
+   * or nested classes in package objects, it uses the dollar sign ($) to create
+   * synthetic classes, emulating behaviour in Java bytecode.
+   */
   def getClassNameFromType(tpe: `Type`): String = {
     tpe.erasure.typeSymbol.asClass.fullName
   }
