@@ -190,8 +190,6 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext
       .setOutputCol("features")
       .setBinary(true)
       .fit(df)
-    assert(cv2.vocabulary === Array("a", "b", "c", "d"))
-
     cv2.transform(df).select("features", "expected").collect().foreach {
       case Row(features: Vector, expected: Vector) =>
         assert(features ~== expected absTol 1e-14)
