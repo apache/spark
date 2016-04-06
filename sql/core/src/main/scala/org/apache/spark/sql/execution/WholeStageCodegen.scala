@@ -438,7 +438,7 @@ case class CollapseCodegenStages(conf: SQLConf) extends Rule[SparkPlan] {
   private def numOfNestedFields(dataType: DataType): Int = dataType match {
     case dt: StructType => dt.fields.map(f => numOfNestedFields(f.dataType)).sum
     case m: MapType => numOfNestedFields(m.keyType) + numOfNestedFields(m.valueType)
-    case a: ArrayType => numOfNestedFields(a.elementType) + 1
+    case a: ArrayType => numOfNestedFields(a.elementType)
     case u: UserDefinedType[_] => numOfNestedFields(u.sqlType)
     case _ => 1
   }
