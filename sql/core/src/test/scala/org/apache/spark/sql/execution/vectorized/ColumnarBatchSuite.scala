@@ -756,4 +756,25 @@ class ColumnarBatchSuite extends SparkFunSuite {
       }}
     }
   }
+
+  test("mutable ColumnarBatch rows") {
+    val NUM_ITERS = 10
+    val types = Array(
+      BooleanType, FloatType, DoubleType,
+      IntegerType, LongType, ShortType, DecimalType.IntDecimal, new DecimalType(30, 10))
+    for (i <- 0 to NUM_ITERS) {
+      val random = new Random(System.nanoTime())
+      val schema = RandomDataGenerator.randomSchema(random, numFields = 20, types)
+      val oldRow = RandomDataGenerator.randomRow(random, schema)
+      val newRow = RandomDataGenerator.randomRow(random, schema)
+
+      (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: Nil).foreach { memMode =>
+        val batch = ColumnVectorUtils.toBatch(schema, memMode, (oldRow :: Nil).iterator.asJava)
+        val columnarBatchRow = batch.getRow(0)
+        newRow.toSeq.zipWithIndex.foreach(i => columnarBatchRow.update(i._2, i._1))
+        compareStruct(schema, columnarBatchRow, newRow, 0)
+        batch.close()
+      }
+    }
+  }
 }

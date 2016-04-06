@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.vectorized;
 
 import java.util.Arrays;
 
+import com.google.common.annotations.VisibleForTesting;
+
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.types.StructType;
 
@@ -38,9 +40,9 @@ import static org.apache.spark.sql.types.DataTypes.LongType;
  * for certain distribution of keys) and requires us to fall back on the latter for correctness.
  */
 public class AggregateHashMap {
-  public ColumnarBatch batch;
-  public int[] buckets;
 
+  private ColumnarBatch batch;
+  private int[] buckets;
   private int numBuckets;
   private int numRows = 0;
   private int maxSteps = 3;
@@ -69,16 +71,17 @@ public class AggregateHashMap {
     this(schema, DEFAULT_CAPACITY, DEFAULT_LOAD_FACTOR, DEFAULT_MAX_STEPS);
   }
 
-  public int findOrInsert(long key) {
+  public ColumnarBatch.Row findOrInsert(long key) {
     int idx = find(key);
     if (idx != -1 && buckets[idx] == -1) {
       batch.column(0).putLong(numRows, key);
       batch.column(1).putLong(numRows, 0);
       buckets[idx] = numRows++;
     }
-    return idx;
+    return batch.getRow(buckets[idx]);
   }
 
+  @VisibleForTesting
   public int find(long key) {
     long h = hash(key);
     int step = 0;
