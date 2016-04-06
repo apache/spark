@@ -187,7 +187,7 @@ case class BroadcastNestedLoopJoin(
 
       if (condition.isDefined) {
         streamedIter.filter(l =>
-          buildRows.exists(r => boundCondition(joinedRow(l, r)) == exists)
+          buildRows.exists(r => boundCondition(joinedRow(l, r))) == exists
         )
       } else if (buildRows.nonEmpty == exists) {
         streamedIter

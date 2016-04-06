@@ -95,8 +95,9 @@ class ExistenceJoinSuite extends SparkPlanTest with SharedSQLContext {
       extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _) =>
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-            BroadcastHashJoin(
-              leftKeys, rightKeys, joinType, BuildRight, boundCondition, left, right),
+            EnsureRequirements(left.sqlContext.sessionState.conf).apply(
+              BroadcastHashJoin(
+                leftKeys, rightKeys, joinType, BuildRight, boundCondition, left, right)),
             expectedAnswer,
             sortAnswers = true)
         }
@@ -106,7 +107,8 @@ class ExistenceJoinSuite extends SparkPlanTest with SharedSQLContext {
     test(s"$testName using BroadcastNestedLoopJoin build left") {
       withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
         checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-          BroadcastNestedLoopJoin(left, right, BuildLeft, joinType, Some(condition)),
+          EnsureRequirements(left.sqlContext.sessionState.conf).apply(
+            BroadcastNestedLoopJoin(left, right, BuildLeft, joinType, Some(condition))),
           expectedAnswer,
           sortAnswers = true)
       }
@@ -115,7 +117,8 @@ class ExistenceJoinSuite extends SparkPlanTest with SharedSQLContext {
     test(s"$testName using BroadcastNestedLoopJoin build right") {
       withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
         checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-          BroadcastNestedLoopJoin(left, right, BuildRight, joinType, Some(condition)),
+          EnsureRequirements(left.sqlContext.sessionState.conf).apply(
+            BroadcastNestedLoopJoin(left, right, BuildRight, joinType, Some(condition))),
           expectedAnswer,
           sortAnswers = true)
       }
@@ -137,18 +140,7 @@ class ExistenceJoinSuite extends SparkPlanTest with SharedSQLContext {
     right,
     conditionNEQ,
     Seq(Row(1, 2.0), Row(1, 2.0), Row(2, 1.0), Row(2, 1.0)))
-/*
-+----+----+
-|   a|   b|
-+----+----+
-|null|null|
-|null| 5.0|
-|   1| 2.0|
-|   1| 2.0|
-|   6|null|
-|   3| 3.0|
-+----+----+
-*/
+
   testExistenceJoin(
     "basic test for anti join",
     LeftAnti,
@@ -156,22 +148,12 @@ class ExistenceJoinSuite extends SparkPlanTest with SharedSQLContext {
     right,
     condition,
     Seq(Row(1, 2.0), Row(1, 2.0), Row(3, 3.0), Row(6, null), Row(null, 5.0), Row(null, null)))
-/*
-+----+----+
-|   a|   b|
-+----+----+
-|   3| 3.0|
-|null|null|
-|null| 5.0|
-|   6|null|
-+----+----+
- */
-/*
+
   testExistenceJoin(
     "basic test for anti non equal join",
-    Anti,
+    LeftAnti,
     left,
     right,
     conditionNEQ,
-    Seq()) */
+    Seq(Row(3, 3.0), Row(6, null), Row(null, 5.0), Row(null, null)))
 }

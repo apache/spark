@@ -160,15 +160,14 @@ case class BroadcastHashJoin(
   }
 
   /**
-   * Generates the code for Inner join.
+   * Generate the (non-equi) condition used to filter joined rows. This is used in Inner, Left Semi
+   * and Left Anti joins.
    */
-  private def codegenInner(ctx: CodegenContext, input: Seq[ExprCode]): String = {
-    val (broadcastRelation, relationTerm) = prepareBroadcast(ctx)
-    val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
+  private def getJoinCondition(
+      ctx: CodegenContext,
+      input: Seq[ExprCode]): (String, String, Seq[ExprCode]) = {
     val matched = ctx.freshName("matched")
     val buildVars = genBuildSideVars(ctx, matched)
-    val numOutput = metricTerm(ctx, "numOutputRows")
-
     val checkCondition = if (condition.isDefined) {
       val expr = condition.get
       // evaluate the variables from build side that used by condition
@@ -184,6 +183,17 @@ case class BroadcastHashJoin(
     } else {
       ""
     }
+    (matched, checkCondition, buildVars)
+  }
+
+  /**
+   * Generates the code for Inner join.
+   */
+  private def codegenInner(ctx: CodegenContext, input: Seq[ExprCode]): String = {
+    val (broadcastRelation, relationTerm) = prepareBroadcast(ctx)
+    val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
+    val (matched, checkCondition, buildVars) = getJoinCondition(ctx, input)
+    val numOutput = metricTerm(ctx, "numOutputRows")
 
     val resultVars = buildSide match {
       case BuildLeft => buildVars ++ input
@@ -220,7 +230,6 @@ case class BroadcastHashJoin(
        """.stripMargin
     }
   }
-
 
   /**
    * Generates the code for left or right outer join.
@@ -276,7 +285,6 @@ case class BroadcastHashJoin(
       ctx.copyResult = true
       val matches = ctx.freshName("matches")
       val iteratorCls = classOf[Iterator[UnsafeRow]].getName
-      val i = ctx.freshName("i")
       val found = ctx.freshName("found")
       s"""
          |// generate join key for stream side
@@ -304,26 +312,8 @@ case class BroadcastHashJoin(
   private def codegenSemi(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     val (broadcastRelation, relationTerm) = prepareBroadcast(ctx)
     val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
-    val matched = ctx.freshName("matched")
-    val buildVars = genBuildSideVars(ctx, matched)
+    val (matched, checkCondition, _) = getJoinCondition(ctx, input)
     val numOutput = metricTerm(ctx, "numOutputRows")
-
-    val checkCondition = if (condition.isDefined) {
-      val expr = condition.get
-      // evaluate the variables from build side that used by condition
-      val eval = evaluateRequiredVariables(buildPlan.output, buildVars, expr.references)
-      // filter the output via condition
-      ctx.currentVars = input ++ buildVars
-      val ev = BindReferences.bindReference(expr, streamedPlan.output ++ buildPlan.output).gen(ctx)
-      s"""
-         |$eval
-         |${ev.code}
-         |if (${ev.isNull} || !${ev.value}) continue;
-       """.stripMargin
-    } else {
-      ""
-    }
-
     if (broadcastRelation.value.keyIsUnique) {
       s"""
          |// generate join key for stream side
@@ -364,25 +354,8 @@ case class BroadcastHashJoin(
   private def codegenAnti(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     val (broadcastRelation, relationTerm) = prepareBroadcast(ctx)
     val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
-    val matched = ctx.freshName("matched")
-    val buildVars = genBuildSideVars(ctx, matched)
+    val (matched, checkCondition, _) = getJoinCondition(ctx, input)
     val numOutput = metricTerm(ctx, "numOutputRows")
-
-    val checkCondition = if (condition.isDefined) {
-      val expr = condition.get
-      // evaluate the variables from build side that used by condition
-      val eval = evaluateRequiredVariables(buildPlan.output, buildVars, expr.references)
-      // filter the output via condition
-      ctx.currentVars = input ++ buildVars
-      val ev = BindReferences.bindReference(expr, streamedPlan.output ++ buildPlan.output).gen(ctx)
-      s"""
-         |$eval
-         |${ev.code}
-         |if (!${ev.isNull}  && ${ev.value}) continue;
-       """.stripMargin
-    } else {
-      "continue;"
-    }
 
     if (broadcastRelation.value.keyIsUnique) {
       s"""
@@ -403,6 +376,7 @@ case class BroadcastHashJoin(
     } else {
       val matches = ctx.freshName("matches")
       val iteratorCls = classOf[Iterator[UnsafeRow]].getName
+      val found = ctx.freshName("found")
       s"""
          |// generate join key for stream side
          |${keyEv.code}
@@ -412,10 +386,13 @@ case class BroadcastHashJoin(
          |  $iteratorCls $matches = ($iteratorCls)$relationTerm.get(${keyEv.value});
          |  if ($matches != null) {
          |    // Evaluate the condition.
-         |    while ($matches.hasNext()) {
+         |    boolean $found = false;
+         |    while (!$found && $matches.hasNext()) {
          |      UnsafeRow $matched = (UnsafeRow) $matches.next();
          |      $checkCondition
+         |      $found = true;
          |    }
+         |    if ($found) continue;
          |  }
          |}
          |$numOutput.add(1);
