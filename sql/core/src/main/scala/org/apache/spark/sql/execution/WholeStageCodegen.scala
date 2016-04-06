@@ -312,8 +312,8 @@ case class WholeStageCodegen(child: SparkPlan) extends UnaryNode with CodegenSup
       }
 
       /** Codegened pipeline for:
-        * ${toCommentSafeString(child.treeString.trim)}
-        */
+       * ${toCommentSafeString(child.treeString.trim)}
+       */
       final class GeneratedIterator extends org.apache.spark.sql.execution.BufferedRowIterator {
 
         private Object[] references;
