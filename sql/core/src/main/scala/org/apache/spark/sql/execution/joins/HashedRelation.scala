@@ -18,9 +18,7 @@
 package org.apache.spark.sql.execution.joins
 
 import java.io.{Externalizable, IOException, ObjectInput, ObjectOutput}
-import java.util.{HashMap => JavaHashMap}
 
-import org.apache.spark.unsafe.hash.Murmur3_x86_32
 import org.apache.spark.{SparkConf, SparkEnv, SparkException}
 import org.apache.spark.memory.{MemoryConsumer, MemoryMode, StaticMemoryManager, TaskMemoryManager}
 import org.apache.spark.sql.catalyst.InternalRow
