@@ -115,6 +115,27 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext
     }
   }
 
+  test("CountVectorizer with binary") {
+    val df = sqlContext.createDataFrame(Seq(
+      (0, split("a b c d e a b"),
+        Vectors.sparse(5, Seq((0, 1.0), (1, 1.0), (2, 1.0), (3, 1.0), (4, 1.0)))),
+      (1, split("a a a a a a"), Vectors.sparse(5, Seq((0, 1.0)))),
+      (2, split("c c"), Vectors.sparse(5, Seq((2, 1.0)))),
+      (3, split("b b b b b"), Vectors.sparse(5, Seq((1, 1.0)))))
+    ).toDF("id", "words", "expected")
+    val cv = new CountVectorizer()
+      .setInputCol("words")
+      .setOutputCol("features")
+      .setBinary(true)
+      .fit(df)
+    assert(cv.vocabulary === Array("a", "b", "c", "d", "e"))
+
+    cv.transform(df).select("features", "expected").collect().foreach {
+      case Row(features: Vector, expected: Vector) =>
+        assert(features ~== expected absTol 1e-14)
+    }
+  }
+
   test("CountVectorizer throws exception when vocab is empty") {
     intercept[IllegalArgumentException] {
       val df = sqlContext.createDataFrame(Seq(

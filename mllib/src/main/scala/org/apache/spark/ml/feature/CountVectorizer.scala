@@ -173,11 +173,7 @@ class CountVectorizer(override val uid: String)
     }.filter { case (word, (wc, df)) =>
       df >= minDf
     }.map { case (word, (count, dfCount)) =>
-      if ($(binary)) {
-        (word, 1L)
-      } else {
-        (word, count)
-      }
+      (word, count)
     }.cache()
     val fullVocabSize = wordCounts.count()
     val vocab: Array[String] = {
