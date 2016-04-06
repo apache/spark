@@ -26,16 +26,18 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans
 import org.apache.spark.sql.catalyst.dsl.plans.DslLogicalPlan
 import org.apache.spark.sql.catalyst.expressions.JsonTuple
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, ScriptTransformation}
-import org.apache.spark.sql.hive.execution.HiveSqlParser
+import org.apache.spark.sql.hive.execution.{HiveNativeCommand, HiveSqlParser}
 
-class HiveQlSuite extends PlanTest {
+class HiveDDLCommandSuite extends PlanTest {
   val parser = HiveSqlParser
 
   private def extractTableDesc(sql: String): (CatalogTable, Boolean) = {
     parser.parsePlan(sql).collect {
-      case CreateTableAsSelect(desc, child, allowExisting) => (desc, allowExisting)
+      case CreateTableAsSelect(desc, _, allowExisting) => (desc, allowExisting)
+      case CreateViewAsSelect(desc, _, allowExisting, _, _) => (desc, allowExisting)
     }.head
   }
 
@@ -250,5 +252,57 @@ class HiveQlSuite extends PlanTest {
         |LATERAL VIEW explode(array(array(1, 2,  3))) `gen``tab1` AS `gen``col1`
         |LATERAL VIEW explode(`gen``tab1`.`gen``col1`) `gen``tab2` AS `gen``col2`
       """.stripMargin)
+  }
+
+  test("create view -- basic") {
+    val v1 = "CREATE VIEW view1 AS SELECT * FROM tab1"
+    val (desc, exists) = extractTableDesc(v1)
+    assert(!exists)
+    assert(desc.identifier.database.isEmpty)
+    assert(desc.identifier.table == "view1")
+    assert(desc.tableType == CatalogTableType.VIRTUAL_VIEW)
+    assert(desc.storage.locationUri.isEmpty)
+    assert(desc.schema == Seq.empty[CatalogColumn])
+    assert(desc.viewText.contains("SELECT * FROM tab1"))
+    assert(desc.viewOriginalText.contains("SELECT * FROM tab1"))
+    assert(desc.storage.serdeProperties == Map())
+    assert(desc.storage.inputFormat.isEmpty)
+    assert(desc.storage.outputFormat.isEmpty)
+    assert(desc.storage.serde.isEmpty)
+    assert(desc.properties == Map())
+  }
+
+  test("create view - full") {
+    val v1 =
+      """
+        |CREATE OR REPLACE VIEW IF NOT EXISTS view1
+        |(col1, col3)
+        |COMMENT 'I cannot spell'
+        |TBLPROPERTIES('prop1Key'="prop1Val")
+        |AS SELECT * FROM tab1
+      """.stripMargin
+    val (desc, exists) = extractTableDesc(v1)
+    assert(exists)
+    assert(desc.identifier.database.isEmpty)
+    assert(desc.identifier.table == "view1")
+    assert(desc.tableType == CatalogTableType.VIRTUAL_VIEW)
+    assert(desc.storage.locationUri.isEmpty)
+    assert(desc.schema ==
+      CatalogColumn("col1", null, nullable = true, None) ::
+        CatalogColumn("col3", null, nullable = true, None) :: Nil)
+    assert(desc.viewText.contains("SELECT * FROM tab1"))
+    assert(desc.viewOriginalText.contains("SELECT * FROM tab1"))
+    assert(desc.storage.serdeProperties == Map())
+    assert(desc.storage.inputFormat.isEmpty)
+    assert(desc.storage.outputFormat.isEmpty)
+    assert(desc.storage.serde.isEmpty)
+    assert(desc.properties == Map("prop1Key" -> "prop1Val"))
+  }
+
+  test("create view -- partitioned view") {
+    val v1 = "CREATE VIEW view1 partitioned on (ds, hr) as select * from srcpart"
+    intercept[ParseException] {
+      parser.parsePlan(v1).isInstanceOf[HiveNativeCommand]
+    }
   }
 }
