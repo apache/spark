@@ -659,26 +659,28 @@ class SessionCatalogSuite extends SparkFunSuite {
     val externalCatalog = newEmptyCatalog()
     val sessionCatalog = new SessionCatalog(externalCatalog)
     sessionCatalog.createDatabase(newDb("mydb"), ignoreIfExists = false)
-    sessionCatalog.createFunction(newFunc("myfunc", Some("mydb")))
+    sessionCatalog.createFunction(newFunc("myfunc", Some("mydb")), ignoreIfExists = false)
     assert(externalCatalog.listFunctions("mydb", "*").toSet == Set("myfunc"))
     // Create function without explicitly specifying database
     sessionCatalog.setCurrentDatabase("mydb")
-    sessionCatalog.createFunction(newFunc("myfunc2"))
+    sessionCatalog.createFunction(newFunc("myfunc2"), ignoreIfExists = false)
     assert(externalCatalog.listFunctions("mydb", "*").toSet == Set("myfunc", "myfunc2"))
   }
 
   test("create function when database does not exist") {
     val catalog = new SessionCatalog(newBasicCatalog())
     intercept[AnalysisException] {
-      catalog.createFunction(newFunc("func5", Some("does_not_exist")))
+      catalog.createFunction(
+        newFunc("func5", Some("does_not_exist")), ignoreIfExists = false)
     }
   }
 
   test("create function that already exists") {
     val catalog = new SessionCatalog(newBasicCatalog())
     intercept[AnalysisException] {
-      catalog.createFunction(newFunc("func1", Some("db2")))
+      catalog.createFunction(newFunc("func1", Some("db2")), ignoreIfExists = false)
     }
+    catalog.createFunction(newFunc("func1", Some("db2")), ignoreIfExists = true)
   }
 
   test("create temp function") {
@@ -711,24 +713,27 @@ class SessionCatalogSuite extends SparkFunSuite {
     val externalCatalog = newBasicCatalog()
     val sessionCatalog = new SessionCatalog(externalCatalog)
     assert(externalCatalog.listFunctions("db2", "*").toSet == Set("func1"))
-    sessionCatalog.dropFunction(FunctionIdentifier("func1", Some("db2")))
+    sessionCatalog.dropFunction(
+      FunctionIdentifier("func1", Some("db2")), ignoreIfNotExists = false)
     assert(externalCatalog.listFunctions("db2", "*").isEmpty)
     // Drop function without explicitly specifying database
     sessionCatalog.setCurrentDatabase("db2")
-    sessionCatalog.createFunction(newFunc("func2", Some("db2")))
+    sessionCatalog.createFunction(newFunc("func2", Some("db2")), ignoreIfExists = false)
     assert(externalCatalog.listFunctions("db2", "*").toSet == Set("func2"))
-    sessionCatalog.dropFunction(FunctionIdentifier("func2"))
+    sessionCatalog.dropFunction(FunctionIdentifier("func2"), ignoreIfNotExists = false)
     assert(externalCatalog.listFunctions("db2", "*").isEmpty)
   }
 
   test("drop function when database/function does not exist") {
     val catalog = new SessionCatalog(newBasicCatalog())
     intercept[AnalysisException] {
-      catalog.dropFunction(FunctionIdentifier("something", Some("does_not_exist")))
+      catalog.dropFunction(
+        FunctionIdentifier("something", Some("does_not_exist")), ignoreIfNotExists = false)
     }
     intercept[AnalysisException] {
-      catalog.dropFunction(FunctionIdentifier("does_not_exist"))
+      catalog.dropFunction(FunctionIdentifier("does_not_exist"), ignoreIfNotExists = false)
     }
+    catalog.dropFunction(FunctionIdentifier("does_not_exist"), ignoreIfNotExists = true)
   }
 
   test("drop temp function") {
@@ -787,8 +792,8 @@ class SessionCatalogSuite extends SparkFunSuite {
     val info2 = new ExpressionInfo("tempFunc2", "yes_me")
     val tempFunc1 = (e: Seq[Expression]) => e.head
     val tempFunc2 = (e: Seq[Expression]) => e.last
-    catalog.createFunction(newFunc("func2", Some("db2")))
-    catalog.createFunction(newFunc("not_me", Some("db2")))
+    catalog.createFunction(newFunc("func2", Some("db2")), ignoreIfExists = false)
+    catalog.createFunction(newFunc("not_me", Some("db2")), ignoreIfExists = false)
     catalog.createTempFunction("func1", info1, tempFunc1, ignoreIfExists = false)
     catalog.createTempFunction("yes_me", info2, tempFunc2, ignoreIfExists = false)
     assert(catalog.listFunctions("db1", "*").toSet ==
