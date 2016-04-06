@@ -239,6 +239,17 @@ class OtherTestParams(HasMaxIter, HasInputCol, HasSeed):
         return self._set(**kwargs)
 
 
+class HasThrowableProperty(Params):
+
+    def __init__(self):
+        super(HasThrowableProperty, self).__init__()
+        self.p = Param(self, "none", "empty param")
+
+    @property
+    def test_property(self):
+        raise RuntimeError("Test property to raise error when invoked")
+
+
 class ParamTests(PySparkTestCase):
 
     def test_copy_new_parent(self):
@@ -749,15 +760,75 @@ class PersistenceTest(PySparkTestCase):
             pass
 
 
-class HasThrowableProperty(Params):
+class TrainingSummaryTest(PySparkTestCase):
 
-    def __init__(self):
-        super(HasThrowableProperty, self).__init__()
-        self.p = Param(self, "none", "empty param")
+    def test_linear_regression_summary(self):
+        from pyspark.mllib.linalg import Vectors
+        sqlContext = SQLContext(self.sc)
+        df = sqlContext.createDataFrame([(1.0, 2.0, Vectors.dense(1.0)),
+                                         (0.0, 2.0, Vectors.sparse(1, [], []))],
+                                        ["label", "weight", "features"])
+        lr = LinearRegression(maxIter=5, regParam=0.0, solver="normal", weightCol="weight",
+                              fitIntercept=False)
+        model = lr.fit(df)
+        self.assertTrue(model.hasSummary)
+        s = model.summary
+        # test that api is callable and returns expected types
+        self.assertGreater(s.totalIterations, 0)
+        self.assertTrue(isinstance(s.predictions, DataFrame))
+        self.assertEqual(s.predictionCol, "prediction")
+        self.assertEqual(s.labelCol, "label")
+        self.assertEqual(s.featuresCol, "features")
+        objHist = s.objectiveHistory
+        self.assertTrue(isinstance(objHist, list) and isinstance(objHist[0], float))
+        self.assertAlmostEqual(s.explainedVariance, 0.25, 2)
+        self.assertAlmostEqual(s.meanAbsoluteError, 0.0)
+        self.assertAlmostEqual(s.meanSquaredError, 0.0)
+        self.assertAlmostEqual(s.rootMeanSquaredError, 0.0)
+        self.assertAlmostEqual(s.r2, 1.0, 2)
+        self.assertTrue(isinstance(s.residuals, DataFrame))
+        self.assertEqual(s.numInstances, 2)
+        devResiduals = s.devianceResiduals
+        self.assertTrue(isinstance(devResiduals, list) and isinstance(devResiduals[0], float))
+        coefStdErr = s.coefficientStandardErrors
+        self.assertTrue(isinstance(coefStdErr, list) and isinstance(coefStdErr[0], float))
+        tValues = s.tValues
+        self.assertTrue(isinstance(tValues, list) and isinstance(tValues[0], float))
+        pValues = s.pValues
+        self.assertTrue(isinstance(pValues, list) and isinstance(pValues[0], float))
+        # test evaluation (with training dataset) produces a summary with same values
+        # one check is enough to verify a summary is returned, Scala version runs full test
+        sameSummary = model.evaluate(df)
+        self.assertAlmostEqual(sameSummary.explainedVariance, s.explainedVariance)
 
-    @property
-    def test_property(self):
-        raise RuntimeError("Test property to raise error when invoked")
+    def test_logistic_regression_summary(self):
+        from pyspark.mllib.linalg import Vectors
+        sqlContext = SQLContext(self.sc)
+        df = sqlContext.createDataFrame([(1.0, 2.0, Vectors.dense(1.0)),
+                                         (0.0, 2.0, Vectors.sparse(1, [], []))],
+                                        ["label", "weight", "features"])
+        lr = LogisticRegression(maxIter=5, regParam=0.01, weightCol="weight", fitIntercept=False)
+        model = lr.fit(df)
+        self.assertTrue(model.hasSummary)
+        s = model.summary
+        # test that api is callable and returns expected types
+        self.assertTrue(isinstance(s.predictions, DataFrame))
+        self.assertEqual(s.probabilityCol, "probability")
+        self.assertEqual(s.labelCol, "label")
+        self.assertEqual(s.featuresCol, "features")
+        objHist = s.objectiveHistory
+        self.assertTrue(isinstance(objHist, list) and isinstance(objHist[0], float))
+        self.assertGreater(s.totalIterations, 0)
+        self.assertTrue(isinstance(s.roc, DataFrame))
+        self.assertAlmostEqual(s.areaUnderROC, 1.0, 2)
+        self.assertTrue(isinstance(s.pr, DataFrame))
+        self.assertTrue(isinstance(s.fMeasureByThreshold, DataFrame))
+        self.assertTrue(isinstance(s.precisionByThreshold, DataFrame))
+        self.assertTrue(isinstance(s.recallByThreshold, DataFrame))
+        # test evaluation (with training dataset) produces a summary with same values
+        # one check is enough to verify a summary is returned, Scala version runs full test
+        sameSummary = model.evaluate(df)
+        self.assertAlmostEqual(sameSummary.areaUnderROC, s.areaUnderROC)
 
 
 if __name__ == "__main__":
