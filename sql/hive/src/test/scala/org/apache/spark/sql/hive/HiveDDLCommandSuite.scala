@@ -263,8 +263,8 @@ class HiveDDLCommandSuite extends PlanTest {
     assert(desc.tableType == CatalogTableType.VIRTUAL_VIEW)
     assert(desc.storage.locationUri.isEmpty)
     assert(desc.schema == Seq.empty[CatalogColumn])
-    assert(desc.viewText.contains("SELECT * FROM tab1"))
-    assert(desc.viewOriginalText.contains("SELECT * FROM tab1"))
+    assert(desc.viewText == Option("SELECT * FROM tab1"))
+    assert(desc.viewOriginalText == Option("SELECT * FROM tab1"))
     assert(desc.storage.serdeProperties == Map())
     assert(desc.storage.inputFormat.isEmpty)
     assert(desc.storage.outputFormat.isEmpty)
@@ -290,8 +290,8 @@ class HiveDDLCommandSuite extends PlanTest {
     assert(desc.schema ==
       CatalogColumn("col1", null, nullable = true, None) ::
         CatalogColumn("col3", null, nullable = true, None) :: Nil)
-    assert(desc.viewText.contains("SELECT * FROM tab1"))
-    assert(desc.viewOriginalText.contains("SELECT * FROM tab1"))
+    assert(desc.viewText == Option("SELECT * FROM tab1"))
+    assert(desc.viewOriginalText == Option("SELECT * FROM tab1"))
     assert(desc.storage.serdeProperties == Map())
     assert(desc.storage.inputFormat.isEmpty)
     assert(desc.storage.outputFormat.isEmpty)
