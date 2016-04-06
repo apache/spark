@@ -170,7 +170,7 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext
 
   test("CountVectorizerModel and CountVectorizer with binary") {
     val df = sqlContext.createDataFrame(Seq(
-      (0, split("a a a a b b b b c d"), 
+      (0, split("a a a a b b b b c d"),
       Vectors.sparse(4, Seq((0, 1.0), (1, 1.0), (2, 1.0), (3, 1.0)))),
       (1, split("c c c"), Vectors.sparse(4, Seq((2, 1.0)))),
       (2, split("a"), Vectors.sparse(4, Seq((0, 1.0))))
