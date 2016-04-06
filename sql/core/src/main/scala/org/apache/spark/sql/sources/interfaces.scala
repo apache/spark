@@ -638,15 +638,12 @@ class HDFSFileCatalog(
           Try(fs.listStatus(path)).getOrElse(Array.empty)
         }
 
-        fs match {
-          case _: S3FileSystem =>
-            // S3 doesn't provide locality information.
-            statuses.toSeq
-
-          case _ =>
-            statuses.map { f =>
-              new LocatedFileStatus(f, fs.getFileBlockLocations(f, 0, f.getLen))
-            }
+        // Note that although S3/S3A/S3N file system doesn't provide valid locality information,
+        // calling `getFileBlockLocations` does no harm here since these file system implementations
+        // don't issue RPC for this method.
+        statuses.map {
+          case f: LocatedFileStatus => f
+          case f => new LocatedFileStatus(f, fs.getFileBlockLocations(f, 0, f.getLen))
         }
       }.filterNot { status =>
         val name = status.getPath.getName

@@ -146,6 +146,8 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
               (0L to file.getLen by maxSplitBytes).map { offset =>
                 val remaining = file.getLen - offset
                 val size = if (remaining > maxSplitBytes) maxSplitBytes else remaining
+                // Finds out a list of location hosts where lives the first block that contains the
+                // starting point the file block starts at `offset` with length `size`.
                 val hosts = getBlockHosts(blockLocations, offset)
                 PartitionedFile(partition.values, file.getPath.toUri.toString, offset, size, hosts)
               }
@@ -218,12 +220,18 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
     case f => Array.empty[BlockLocation]
   }
 
+  // Given locations of all blocks of a single file, `blockLocations`, and an `offset` position of
+  // the same file, find out the index of the block that contains this `offset`. If no such block
+  // can be found, returns -1.
   private def getBlockIndex(blockLocations: Array[BlockLocation], offset: Long): Int = {
     blockLocations.indexWhere { b =>
       b.getOffset <= offset && offset < b.getOffset + b.getLength
     }
   }
 
+  // Given locations of all blocks of a single file, `blockLocations`, and an `offset` position of
+  // the same file, find out the block that contains this `offset`, and returns location hosts of
+  // that block. If no such block can be found, returns an empty array.
   private def getBlockHosts(blockLocations: Array[BlockLocation], offset: Long): Array[String] = {
     val index = getBlockIndex(blockLocations, offset)
     if (index < 0) Array.empty[String] else blockLocations(index).getHosts
