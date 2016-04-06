@@ -202,7 +202,6 @@ object CountVectorizer extends DefaultParamsReadable[CountVectorizer] {
 /**
  * :: Experimental ::
  * Converts a text document to a sparse vector of token counts.
- *
  * @param vocabulary An Array over terms. Only the terms in the vocabulary will be counted.
  */
 @Experimental
