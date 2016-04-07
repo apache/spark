@@ -27,11 +27,6 @@ in the UI to persisted storage.
 
 ## Viewing After the Fact
 
-Spark's Standalone Mode cluster manager also has its own
-[web UI](spark-standalone.html#monitoring-and-logging). If an application has logged events over
-the course of its lifetime, then the Standalone master's web UI will automatically re-render the
-application's UI after the application has finished.
-
 If Spark is run on Mesos or YARN, it is still possible to construct the UI of an
 application through Spark's history server, provided that the application's event logs exist.
 You can start the history server by executing:
