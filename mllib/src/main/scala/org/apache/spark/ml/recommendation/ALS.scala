@@ -674,7 +674,6 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
           userLocalIndexEncoder, solver = solver)
         if (shouldCheckpoint(iter)) {
           ALS.checkpointAndCleanParents(itemFactors)
-          itemFactors.count() // checkpoint item factors and cut lineage
           deletePreviousCheckpointFile()
           previousCheckpointFile = itemFactors.getCheckpointFile
         }
