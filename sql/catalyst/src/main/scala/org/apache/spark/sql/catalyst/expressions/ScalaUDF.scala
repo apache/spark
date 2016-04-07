@@ -118,8 +118,13 @@ case class ScalaUDF(
     val evals = children.map(_.gen(ctx))
     val (converters, evalsArgs) = evals.zipWithIndex.map { case (eval, i) =>
       val argTerm = ctx.freshName("arg")
-      val convert = s"${ctx.boxedType(children(i).dataType)} $argTerm = ${eval.isNull} ? null " +
-        s": new ${ctx.boxedType(children(i).dataType)}(${eval.value});"
+      val convert = if (ctx.isPrimitiveType(children(i).dataType)) {
+        s"${ctx.boxedType(children(i).dataType)} $argTerm = ${eval.isNull} ? null " +
+          s": new ${ctx.boxedType(children(i).dataType)}(${eval.value});"
+      } else {
+        s"${ctx.boxedType(children(i).dataType)} $argTerm = ${eval.isNull} ? null " +
+          s": (${ctx.boxedType(children(i).dataType)}) ${eval.value};"
+      }
       (convert, argTerm)
     }.unzip
     val evalsAsSeq = s"$javaConversionClassName.collectionAsScalaIterable" +
