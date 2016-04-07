@@ -17,7 +17,6 @@
 
 import operator
 import warnings
-from multiprocessing.dummy import Pool
 
 from pyspark.ml import Estimator, Model
 from pyspark.ml.param.shared import *
@@ -1202,6 +1201,9 @@ class OneVsRest(Estimator, HasFeaturesCol, HasLabelCol, HasPredictionCol):
     def setClassifier(self, value):
         """
         Sets the value of :py:attr:`classifier`.
+
+        .. note:: Only LogisticRegression, NaiveBayes and MultilayerPerceptronClassifier are
+                  supported now.
         """
         self._paramMap[self.classifier] = value
         return self
@@ -1237,13 +1239,10 @@ class OneVsRest(Estimator, HasFeaturesCol, HasLabelCol, HasPredictionCol):
             paramMap = dict([(classifier.labelCol, binaryLabelCol),
                             (classifier.featuresCol, featuresCol),
                             (classifier.predictionCol, predictionCol)])
-            duplicatedClassifier = classifier.__class__()
-            duplicatedClassifier._resetUid(classifier.uid)
-            classifier._copyValues(duplicatedClassifier)
-            return duplicatedClassifier.fit(trainingDataset, paramMap)
+            return classifier.fit(trainingDataset, paramMap)
 
-        pool = Pool()
-        models = pool.map(trainSingleClass, range(numClasses))
+        # TODO: Parallel training for all classes.
+        models = [trainSingleClass(i) for i in range(numClasses)]
 
         if handlePersistence:
             multiclassLabeled.unpersist()
