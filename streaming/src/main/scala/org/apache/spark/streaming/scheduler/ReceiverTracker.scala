@@ -241,8 +241,14 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
    * @return a map containing receiver ids to optional executor ids.
    */
   def allocatedExecutors(): Map[Int, Option[String]] = {
-    endpoint.askWithRetry[Map[Int, ReceiverTrackingInfo]](GetAllReceiverInfo).mapValues {
-      _.runningExecutor.map { _.executorId }
+    if (isTrackerStarted) {
+      endpoint.askWithRetry[Map[Int, ReceiverTrackingInfo]](GetAllReceiverInfo).mapValues {
+        _.runningExecutor.map {
+          _.executorId
+        }
+      }
+    } else {
+      Map.empty
     }
   }
 
