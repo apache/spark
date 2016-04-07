@@ -35,8 +35,8 @@ object ComplexResultAgg extends Aggregator[(String, Int), (Long, Long), (Long, L
     (b1._1 + b2._1, b1._2 + b2._2)
   }
   override def finish(reduction: (Long, Long)): (Long, Long) = reduction
-  override def bufferEncoder: Encoder[(Long, Long)] = ExpressionEncoder[(Long, Long)]()
-  override def outputEncoder: Encoder[(Long, Long)] = ExpressionEncoder[(Long, Long)]()
+  override def bufferEncoder: Encoder[(Long, Long)] = Encoders.product[(Long, Long)]
+  override def outputEncoder: Encoder[(Long, Long)] = Encoders.product[(Long, Long)]
 }
 
 
@@ -47,8 +47,8 @@ object ClassInputAgg extends Aggregator[AggData, Int, Int] {
   override def reduce(b: Int, a: AggData): Int = b + a.a
   override def finish(reduction: Int): Int = reduction
   override def merge(b1: Int, b2: Int): Int = b1 + b2
-  override def bufferEncoder: Encoder[Int] = ExpressionEncoder[Int]()
-  override def outputEncoder: Encoder[Int] = ExpressionEncoder[Int]()
+  override def bufferEncoder: Encoder[Int] = Encoders.scalaInt
+  override def outputEncoder: Encoder[Int] = Encoders.scalaInt
 }
 
 
@@ -58,8 +58,8 @@ object ComplexBufferAgg extends Aggregator[AggData, (Int, AggData), Int] {
   override def finish(reduction: (Int, AggData)): Int = reduction._1
   override def merge(b1: (Int, AggData), b2: (Int, AggData)): (Int, AggData) =
     (b1._1 + b2._1, b1._2)
-  override def bufferEncoder: Encoder[(Int, AggData)] = ExpressionEncoder[(Int, AggData)]()
-  override def outputEncoder: Encoder[Int] = ExpressionEncoder[Int]()
+  override def bufferEncoder: Encoder[(Int, AggData)] = Encoders.product[(Int, AggData)]
+  override def outputEncoder: Encoder[Int] = Encoders.scalaInt
 }
 
 
@@ -68,8 +68,8 @@ object NameAgg extends Aggregator[AggData, String, String] {
   def reduce(b: String, a: AggData): String = a.b + b
   def merge(b1: String, b2: String): String = b1 + b2
   def finish(r: String): String = r
-  override def bufferEncoder: Encoder[String] = ExpressionEncoder[String]()
-  override def outputEncoder: Encoder[String] = ExpressionEncoder[String]()
+  override def bufferEncoder: Encoder[String] = Encoders.STRING
+  override def outputEncoder: Encoder[String] = Encoders.STRING
 }
 
 
