@@ -66,25 +66,24 @@ class ColumnarAggMapCodeGenerator(
       """.stripMargin
 
     s"""
-       |  private org.apache.spark.sql.execution.vectorized.ColumnarBatch batch;
+       |  public org.apache.spark.sql.execution.vectorized.ColumnarBatch batch;
        |  private int[] buckets;
        |  private int numBuckets;
        |  private int maxSteps;
        |  private int numRows = 0;
        |  private org.apache.spark.sql.types.StructType schema = $generatedSchema
        |
-       |  public $generatedClassName(int capacity, double loadFactor, int maxSteps) {
-       |    assert (capacity > 0 && ((capacity & (capacity - 1)) == 0));
-       |    this.maxSteps = maxSteps;
-       |    numBuckets = (int) (capacity / loadFactor);
+       |  public $generatedClassName() {
+       |    int DEFAULT_CAPACITY = 1 << 16;
+       |    double DEFAULT_LOAD_FACTOR = 0.25;
+       |    int DEFAULT_MAX_STEPS = 5;
+       |    assert (DEFAULT_CAPACITY > 0 && ((DEFAULT_CAPACITY & (DEFAULT_CAPACITY - 1)) == 0));
+       |    this.maxSteps = DEFAULT_MAX_STEPS;
+       |    numBuckets = (int) (DEFAULT_CAPACITY / DEFAULT_LOAD_FACTOR);
        |    batch = org.apache.spark.sql.execution.vectorized.ColumnarBatch.allocate(schema,
-       |      org.apache.spark.memory.MemoryMode.ON_HEAP, capacity);
+       |      org.apache.spark.memory.MemoryMode.ON_HEAP, DEFAULT_CAPACITY);
        |    buckets = new int[numBuckets];
        |    java.util.Arrays.fill(buckets, -1);
-       |  }
-       |
-       |  public $generatedClassName() {
-       |    new $generatedClassName(1 << 16, 0.25, 5);
        |  }
      """.stripMargin
   }

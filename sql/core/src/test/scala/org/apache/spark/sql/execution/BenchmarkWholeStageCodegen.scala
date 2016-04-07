@@ -150,11 +150,12 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
       */
   }
 
-  ignore("aggregate with keys") {
+  test("aggregate with keys") {
     val N = 20 << 20
 
     runBenchmark("Aggregate w keys", N) {
-      sqlContext.range(N).selectExpr("(id & 65535) as k").groupBy("k").sum().collect()
+      sqlContext.range(N).selectExpr("id", "(id & 65535) as k1", "(id & 65535) as k2")
+        .groupBy("k1", "k2").sum("id", "k1").collect() //.foreach(println)
     }
 
     /*
