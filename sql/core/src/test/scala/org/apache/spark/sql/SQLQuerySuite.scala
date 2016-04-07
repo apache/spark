@@ -2230,6 +2230,34 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     assert(error.getMessage contains "grouping__id is deprecated; use grouping_id() instead")
   }
 
+  test("grouping and grouping_id in having") {
+    checkAnswer(
+      sql("select course, year from courseSales group by cube(course, year)" +
+        " having grouping(year) = 1 and grouping_id(course, year) > 0"),
+        Row("Java", null) ::
+        Row("dotNET", null) ::
+        Row(null, null) :: Nil
+    )
+
+    var error = intercept[AnalysisException] {
+      sql("select course, year from courseSales group by course, year" +
+        " having grouping(course) > 0")
+    }
+    assert(error.getMessage contains
+      "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
+    error = intercept[AnalysisException] {
+      sql("select course, year from courseSales group by course, year" +
+        " having grouping_id(course, year) > 0")
+    }
+    assert(error.getMessage contains
+      "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
+    error = intercept[AnalysisException] {
+      sql("select course, year from courseSales group by cube(course, year)" +
+        " having grouping__id > 0")
+    }
+    assert(error.getMessage contains "grouping__id is deprecated; use grouping_id() instead")
+  }
+
   test("SPARK-13056: Null in map value causes NPE") {
     val df = Seq(1 -> Map("abc" -> "somestring", "cba" -> null)).toDF("key", "value")
     withTempTable("maptest") {

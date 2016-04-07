@@ -228,10 +228,17 @@ class Analyzer(
       Seq.tabulate(1 << c.groupByExprs.length)(i => i)
     }
 
-    private def hasGroupingId(expr: Seq[Expression]): Boolean = {
-      expr.exists(_.collectFirst {
+    private def hasGroupingAttribute(expr: Expression): Boolean = {
+      expr.collectFirst {
         case u: UnresolvedAttribute if resolver(u.name, VirtualColumn.groupingIdName) => u
-      }.isDefined)
+      }.isDefined
+    }
+
+    private def hasGroupingFunction(e: Expression): Boolean = {
+      e.collectFirst {
+        case f: UnresolvedFunction if Seq("grouping", "grouping_id").contains(f.name.toLowerCase) =>
+          f
+      }.isDefined
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
@@ -240,9 +247,8 @@ class Analyzer(
         GroupingSets(bitmasks(c), groupByExprs, child, aggregateExpressions)
       case Aggregate(Seq(r @ Rollup(groupByExprs)), aggregateExpressions, child) =>
         GroupingSets(bitmasks(r), groupByExprs, child, aggregateExpressions)
-      case g: GroupingSets if g.expressions.exists(!_.resolved) && hasGroupingId(g.expressions) =>
-        failAnalysis(
-          s"${VirtualColumn.groupingIdName} is deprecated; use grouping_id() instead")
+      case g: GroupingSets if g.expressions.exists(hasGroupingAttribute) =>
+        failAnalysis(s"${VirtualColumn.groupingIdName} is deprecated; use grouping_id() instead")
       // Ensure all the expressions have been resolved.
       case x: GroupingSets if x.expressions.forall(_.resolved) =>
         val gid = AttributeReference(VirtualColumn.groupingIdName, IntegerType, false)()
@@ -306,9 +312,52 @@ class Analyzer(
         }
 
         Aggregate(
-          groupByAttributes :+ VirtualColumn.groupingIdAttribute,
+          groupByAttributes :+ gid,
           aggregations,
           Expand(x.bitmasks, groupByAliases, groupByAttributes, gid, x.child))
+
+      case f @ Filter(cond, a: Aggregate) if hasGroupingAttribute(cond) =>
+        failAnalysis(s"${VirtualColumn.groupingIdName} is deprecated; use grouping_id() instead")
+      case f @ Filter(cond, a: Aggregate) if hasGroupingFunction(cond) && a.resolved =>
+        val gid = a.groupingExpressions.last
+        if (!gid.isInstanceOf[AttributeReference] ||
+          gid.asInstanceOf[AttributeReference].name != VirtualColumn.groupingIdName) {
+          throw new AnalysisException(s"grouping()/grouping_id() can only be used with " +
+            s"GroupingSets/Cube/Rollup")
+        }
+        val groupByExprs = a.groupingExpressions.take(a.groupingExpressions.length - 1)
+        val newAgg = if (a.aggregateExpressions.contains(gid)) {
+          a
+        } else {
+          a.copy(aggregateExpressions = a.aggregateExpressions :+ gid.asInstanceOf[NamedExpression])
+        }
+        // resolve grouping()/grouping_id() also the references
+        val resolvedFilter = ResolveFunctions(ResolveReferences(f)).asInstanceOf[Filter]
+        val newCond = resolvedFilter.condition.transformUp {
+          case g: GroupingID =>
+            if (g.groupByExprs.isEmpty || g.groupByExprs == groupByExprs) {
+              gid
+            } else {
+              throw new AnalysisException(
+                s"Columns of grouping_id (${g.groupByExprs.mkString(",")}) does not match " +
+                  s"grouping columns (${groupByExprs.mkString(",")})")
+            }
+          case Grouping(col) =>
+            val idx = groupByExprs.indexOf(col)
+            if (idx >= 0) {
+              Cast(BitwiseAnd(ShiftRight(gid, Literal(groupByExprs.length - 1 - idx)),
+                Literal(1)), ByteType)
+            } else {
+              throw new AnalysisException(s"Column of grouping ($col) can't be found " +
+                s"in grouping columns ${groupByExprs.mkString(",")}")
+            }
+        }
+        if (newAgg fastEquals a) {
+          f.copy(condition = newCond)
+        } else {
+          // remove the gid column
+          Project(f.output, Filter(newCond, newAgg))
+        }
     }
   }
 
@@ -843,27 +892,33 @@ class Analyzer(
           if aggregate.resolved =>
 
         // Try resolving the condition of the filter as though it is in the aggregate clause
-        val aggregatedCondition =
-          Aggregate(
-            grouping,
-            Alias(havingCondition, "havingCondition")(isGenerated = true) :: Nil,
-            child)
-        val resolvedOperator = execute(aggregatedCondition)
-        def resolvedAggregateFilter =
-          resolvedOperator
-            .asInstanceOf[Aggregate]
-            .aggregateExpressions.head
+        try {
+          val aggregatedCondition =
+            Aggregate(
+              grouping,
+              Alias(havingCondition, "havingCondition")(isGenerated = true) :: Nil,
+              child)
+          val resolvedOperator = execute(aggregatedCondition)
+          def resolvedAggregateFilter =
+            resolvedOperator
+              .asInstanceOf[Aggregate]
+              .aggregateExpressions.head
 
-        // If resolution was successful and we see the filter has an aggregate in it, add it to
-        // the original aggregate operator.
-        if (resolvedOperator.resolved && containsAggregate(resolvedAggregateFilter)) {
-          val aggExprsWithHaving = resolvedAggregateFilter +: originalAggExprs
+          // If resolution was successful and we see the filter has an aggregate in it, add it to
+          // the original aggregate operator.
+          if (resolvedOperator.resolved && containsAggregate(resolvedAggregateFilter)) {
+            val aggExprsWithHaving = resolvedAggregateFilter +: originalAggExprs
 
-          Project(aggregate.output,
-            Filter(resolvedAggregateFilter.toAttribute,
-              aggregate.copy(aggregateExpressions = aggExprsWithHaving)))
-        } else {
-          filter
+            Project(aggregate.output,
+              Filter(resolvedAggregateFilter.toAttribute,
+                aggregate.copy(aggregateExpressions = aggExprsWithHaving)))
+          } else {
+            filter
+          }
+        } catch {
+          // Attempting to resolve in the aggregate can result in ambiguity.  When this happens,
+          // just return the original plan.
+          case ae: AnalysisException => filter
         }
 
       case sort @ Sort(sortOrder, global, aggregate: Aggregate) if aggregate.resolved =>
