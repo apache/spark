@@ -624,7 +624,7 @@ class DDLCommandSuite extends PlanTest {
     comparePlans(parsed1, expected1)
     comparePlans(parsed2, expected2)
   }
-  
+
   test("SPARK-14383: DISTRIBUTE and UNSET as non-keywords") {
     val sql = "SELECT distribute, unset FROM x"
     val parsed = parser.parsePlan(sql)
