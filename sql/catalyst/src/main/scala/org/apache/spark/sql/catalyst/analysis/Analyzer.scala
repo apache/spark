@@ -1001,11 +1001,8 @@ class Analyzer(
         }
     }
 
-    private def isAggregateExpression(e: Expression): Boolean = {
-      e.isInstanceOf[AggregateExpression]
-    }
     def containsAggregate(condition: Expression): Boolean = {
-      condition.find(isAggregateExpression).isDefined
+      condition.find(_.isInstanceOf[AggregateExpression]).isDefined
     }
   }
 
