@@ -90,7 +90,7 @@ abstract class UnaryTransformer[IN, OUT, T <: UnaryTransformer[IN, OUT, T]]
    * account of the embedded param map. So the param values should be determined solely by the input
    * param map.
    */
-  protected def createTransformFunc: IN => OUT
+  protected val createTransformFunc: IN => OUT
 
   /**
    * Returns the data type of the output column.

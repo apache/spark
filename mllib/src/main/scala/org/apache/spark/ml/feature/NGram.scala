@@ -56,7 +56,7 @@ class NGram(override val uid: String)
 
   setDefault(n -> 2)
 
-  override protected def createTransformFunc: Seq[String] => Seq[String] = {
+  override protected val createTransformFunc: Seq[String] => Seq[String] = {
     _.iterator.sliding($(n)).withPartial(false).map(_.mkString(" ")).toSeq
   }
 

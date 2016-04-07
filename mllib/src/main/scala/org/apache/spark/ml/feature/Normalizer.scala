@@ -50,7 +50,7 @@ class Normalizer(override val uid: String)
   /** @group setParam */
   def setP(value: Double): this.type = set(p, value)
 
-  override protected def createTransformFunc: Vector => Vector = {
+  override protected val createTransformFunc: Vector => Vector = {
     val normalizer = new feature.Normalizer($(p))
     normalizer.transform
   }
