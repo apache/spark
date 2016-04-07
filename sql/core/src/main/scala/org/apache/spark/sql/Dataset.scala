@@ -1527,7 +1527,7 @@ class Dataset[T] private[sql](
     val sorted = Sort(logicalPlan.output.map(SortOrder(_, Ascending)), global = false, logicalPlan)
     val sum = weights.sum
     val normalizedCumWeights = weights.map(_ / sum).scanLeft(0.0d)(_ + _)
-    val values= normalizedCumWeights.sliding(2).map { x =>
+    val values = normalizedCumWeights.sliding(2).map { x =>
       new Dataset[T](
         sqlContext, Sample(x(0), x(1), withReplacement = false, seed, sorted)(), encoder)
     }.toArray
