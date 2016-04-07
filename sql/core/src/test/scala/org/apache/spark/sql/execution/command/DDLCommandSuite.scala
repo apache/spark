@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.execution.datasources.BucketSpec
 import org.apache.spark.sql.types._
@@ -684,5 +685,11 @@ class DDLCommandSuite extends PlanTest {
     intercept[ParseException] {
       parser.parsePlan("SELECT TRANSFORM (key, value) USING 'cat' AS (tKey, tValue) FROM testData")
     }
+  }
+
+  test("SPARK-14383: DISTRIBUTE and UNSET as non-keywords") {
+    val sql = "SELECT distribute, unset FROM x"
+    val parsed = parser.parsePlan(sql)
+    assert(parsed.isInstanceOf[Project])
   }
 }

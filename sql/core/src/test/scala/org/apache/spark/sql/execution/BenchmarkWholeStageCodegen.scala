@@ -517,9 +517,8 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
         .add("value", LongType)
       val map = new AggregateHashMap(schema)
       while (i < numKeys) {
-        val idx = map.findOrInsert(i.toLong)
-        map.batch.column(1).putLong(map.buckets(idx),
-          map.batch.column(1).getLong(map.buckets(idx)) + 1)
+        val row = map.findOrInsert(i.toLong)
+        row.setLong(1, row.getLong(1) +  1)
         i += 1
       }
       var s = 0
