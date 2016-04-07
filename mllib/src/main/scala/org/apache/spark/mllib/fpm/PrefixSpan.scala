@@ -36,9 +36,8 @@ import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 
