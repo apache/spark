@@ -113,8 +113,6 @@ private[feature] trait CountVectorizerParams extends Params with HasInputCol wit
 
   /** @group getParam */
   def getBinary: Boolean = $(binary)
-
-  setDefault(binary -> false)
 }
 
 /**
@@ -146,6 +144,8 @@ class CountVectorizer(override val uid: String)
   def setBinary(value: Boolean): this.type = set(binary, value)
 
   setDefault(vocabSize -> (1 << 18), minDF -> 1)
+
+  setDefault(binary -> false)
 
   override def fit(dataset: DataFrame): CountVectorizerModel = {
     transformSchema(dataset.schema, logging = true)
@@ -226,6 +226,8 @@ class CountVectorizerModel(override val uid: String, val vocabulary: Array[Strin
 
   /** @group setParam */
   def setBinary(value: Boolean): this.type = set(binary, value)
+
+  setDefault(binary -> false)
 
   /** Dictionary created from [[vocabulary]] and its indices, broadcast once for [[transform()]] */
   private var broadcastDict: Option[Broadcast[Map[String, Int]]] = None

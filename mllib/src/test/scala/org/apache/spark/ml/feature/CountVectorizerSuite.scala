@@ -176,21 +176,22 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext
       (2, split("a"), Vectors.sparse(4, Seq((0, 1.0))))
     )).toDF("id", "words", "expected")
 
-    val cv = new CountVectorizerModel(Array("a", "b", "c", "d"))
+    // CountVectorizer test
+    val cv = new CountVectorizer()
       .setInputCol("words")
       .setOutputCol("features")
       .setBinary(true)
+      .fit(df)
     cv.transform(df).select("features", "expected").collect().foreach {
       case Row(features: Vector, expected: Vector) =>
         assert(features ~== expected absTol 1e-14)
     }
 
-    // CountVectorizer test
-    val cv2 = new CountVectorizer()
+    // CountVectorizerModel test
+    val cv2 = new CountVectorizerModel(cv.vocabulary)
       .setInputCol("words")
       .setOutputCol("features")
       .setBinary(true)
-      .fit(df)
     cv2.transform(df).select("features", "expected").collect().foreach {
       case Row(features: Vector, expected: Vector) =>
         assert(features ~== expected absTol 1e-14)
