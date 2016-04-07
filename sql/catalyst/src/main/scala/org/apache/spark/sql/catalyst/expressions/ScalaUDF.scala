@@ -116,9 +116,14 @@ case class ScalaUDF(
 
     // codegen for children expressions
     val evals = children.map(_.gen(ctx))
-    val evalsArgs = evals.map(_.value).mkString(", ")
+    val (converters, evalsArgs) = evals.zipWithIndex.map { case (eval, i) =>
+      val argTerm = ctx.freshName("arg")
+      val convert = s"${ctx.boxedType(children(i).dataType)} $argTerm = ${eval.isNull} ? null " +
+        s": new ${ctx.boxedType(children(i).dataType)}(${eval.value});"
+      (convert, argTerm)
+    }.unzip
     val evalsAsSeq = s"$javaConversionClassName.collectionAsScalaIterable" +
-      s"(java.util.Arrays.asList($evalsArgs)).toList()"
+      s"(java.util.Arrays.asList(${evalsArgs.mkString(", ")})).toList()"
 
     // Encode children expression results to Scala objects
     val inputInternalRowTerm = ctx.freshName("inputRow")
@@ -148,20 +153,22 @@ case class ScalaUDF(
     // UDF return values are encoded as the field 0 as StructType in the internal row
     // We extract it back
     val udfDataType = s"$scalaUDFObject.dataType()"
-    val callFunc = s"${ctx.boxedType(ctx.javaType(dataType))} $resultTerm = " +
-      s"(${ctx.boxedType(ctx.javaType(dataType))}) $internalRowTerm.get(0, $udfDataType);"
+    val callFunc = s"${ctx.boxedType(dataType)} $resultTerm = " +
+      s"(${ctx.boxedType(dataType)}) $internalRowTerm.get(0, $udfDataType);"
 
     evalCode + s"""
+      ${converters.mkString("\n")}
       ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-      Boolean ${ev.isNull};
 
       $inputInternalRow
       $innerRow
       $internalRow
       $callFunc
 
-      ${ev.value} = $resultTerm;
-      ${ev.isNull} = $resultTerm == null;
+      boolean ${ev.isNull} = $resultTerm == null;
+      if (!${ev.isNull}) {
+        ${ev.value} = $resultTerm;
+      }
     """
   }
 
