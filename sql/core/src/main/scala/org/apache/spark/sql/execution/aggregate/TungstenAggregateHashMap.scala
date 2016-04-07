@@ -25,8 +25,8 @@ class TungstenAggregateHashMap(
     generatedClassName: String,
     groupingKeySchema: StructType,
     bufferSchema: StructType) {
-  val groupingKeys = groupingKeySchema.map(key => (key.dataType.typeName, ctx.freshName("key")))
-  val bufferValues = bufferSchema.map(key => (ctx.freshName("value"), key.dataType.typeName))
+  val groupingKeys = groupingKeySchema.map(k => (k.dataType.typeName, ctx.freshName("key")))
+  val bufferValues = bufferSchema.map(k => (k.dataType.typeName, ctx.freshName("value")))
   val groupingKeySignature = groupingKeys.map(_.productIterator.toList.mkString(" ")).mkString(", ")
 
   def generate(): String = {
@@ -44,23 +44,15 @@ class TungstenAggregateHashMap(
   }
 
   def initializeAggregateHashMap(): String = {
-    val generatedSchema: String =
-      s"""
-         |new org.apache.spark.sql.types.StructType()
-         |${(groupingKeySchema ++ bufferSchema).map(key =>
-            s""".add("${key.name}", org.apache.spark.sql.types.DataTypes.${key.dataType})""")
-            .mkString("\n")};
-       """.stripMargin
-
     s"""
        |  private org.apache.spark.sql.execution.vectorized.ColumnarBatch batch;
        |  private int[] buckets;
        |  private int numBuckets;
        |  private int maxSteps;
        |  private int numRows = 0;
-       |  private org.apache.spark.sql.types.StructType schema = $generatedSchema
        |
-       |  public $generatedClassName(int capacity, double loadFactor, int maxSteps) {
+       |  public $generatedClassName(org.apache.spark.sql.types.StructType schema, int capacity,
+       |      double loadFactor, int maxSteps) {
        |    assert (capacity > 0 && ((capacity & (capacity - 1)) == 0));
        |    this.maxSteps = maxSteps;
        |    numBuckets = (int) (capacity / loadFactor);
@@ -70,8 +62,8 @@ class TungstenAggregateHashMap(
        |    java.util.Arrays.fill(buckets, -1);
        |  }
        |
-       |  public $generatedClassName() {
-       |    new $generatedClassName(1 << 16, 0.25, 5);
+       |  public $generatedClassName(org.apache.spark.sql.types.StructType schema) {
+       |    new $generatedClassName(schema, 1 << 16, 0.25, 5);
        |  }
      """.stripMargin
   }
@@ -80,7 +72,7 @@ class TungstenAggregateHashMap(
     s"""
        |// TODO: Improve this Hash Function
        |private long hash($groupingKeySignature) {
-       |  return ${groupingKeys.map(_._2).mkString(" & ")};
+       |  return ${groupingKeys.map(_._2).mkString(" ^ ")};
        |}
      """.stripMargin
   }
@@ -88,8 +80,8 @@ class TungstenAggregateHashMap(
   def generateEquals(): String = {
     s"""
        |private boolean equals(int idx, $groupingKeySignature) {
-       |  return ${groupingKeys.zipWithIndex.map(key =>
-            s"batch.column(${key._2}).getLong(buckets[idx]) == ${key._1._2}").mkString(" && ")};
+       |  return ${groupingKeys.zipWithIndex.map(k =>
+            s"batch.column(${k._2}).getLong(buckets[idx]) == ${k._1._2}").mkString(" && ")};
        |}
      """.stripMargin
   }
@@ -98,34 +90,27 @@ class TungstenAggregateHashMap(
     s"""
        |public org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row findOrInsert(${
           groupingKeySignature}) {
-       |  int idx = find(${groupingKeys.map(_._2).mkString(", ")});
-       |  if (idx != -1 && buckets[idx] == -1) {
-       |    ${groupingKeys.zipWithIndex.map(key =>
-              s"batch.column(${key._2}).putLong(numRows, ${key._1._2});").mkString("\n")}
-       |    ${bufferValues.zipWithIndex.map(key =>
-              s"batch.column(${groupingKeys.length + key._2}).putLong(numRows, 0);")
-              .mkString("\n")}
-       |    buckets[idx] = numRows++;
-       |  }
-       |  return batch.getRow(buckets[idx]);
-       |}
-       |
-       |private int find($groupingKeySignature) {
        |  long h = hash(${groupingKeys.map(_._2).mkString(", ")});
        |  int step = 0;
        |  int idx = (int) h & (numBuckets - 1);
        |  while (step < maxSteps) {
        |    // Return bucket index if it's either an empty slot or already contains the key
        |    if (buckets[idx] == -1) {
-       |      return idx;
+       |      ${groupingKeys.zipWithIndex.map(k =>
+                s"batch.column(${k._2}).putLong(numRows, ${k._1._2});").mkString("\n")}
+       |      ${bufferValues.zipWithIndex.map(k =>
+                s"batch.column(${groupingKeys.length + k._2}).putLong(numRows, 0);")
+                .mkString("\n")}
+       |      buckets[idx] = numRows++;
+       |      return batch.getRow(buckets[idx]);
        |    } else if (equals(idx, ${groupingKeys.map(_._2).mkString(", ")})) {
-       |      return idx;
+       |      return batch.getRow(buckets[idx]);
        |    }
        |    idx = (idx + 1) & (numBuckets - 1);
        |    step++;
        |  }
        |// Didn't find it
-       |return -1;
+       |return null;
        |}
      """.stripMargin
   }

@@ -442,12 +442,19 @@ case class TungstenAggregate(
     val isAggregateHashMapSupported: Boolean =
       (groupingKeySchema ++ bufferSchema).forall(_.dataType == LongType)
     val aggregateHashMapTerm = ctx.freshName("aggregateHashMap")
-    val aggregateHashMapClassName = ctx.freshName("AggregateHashMap")
+    val aggregateHashMapClassName = ctx.freshName("GeneratedAggregateHashMap")
     val aggregateHashMapGenerator =
       new TungstenAggregateHashMap(ctx, aggregateHashMapClassName, groupingKeySchema, bufferSchema)
     if (isAggregateHashMapEnabled && isAggregateHashMapSupported) {
       ctx.addMutableState(aggregateHashMapClassName, aggregateHashMapTerm,
-        s"$aggregateHashMapTerm = new $aggregateHashMapClassName();")
+        s"""
+           |org.apache.spark.sql.types.StructType schema =
+           |  new org.apache.spark.sql.types.StructType()
+           |  ${(groupingKeySchema ++ bufferSchema).map(k =>
+                s""".add("${k.name}", org.apache.spark.sql.types.DataTypes.${k.dataType})""")
+                .mkString("\n")};
+           |$aggregateHashMapTerm = new $aggregateHashMapClassName(schema);
+         """.stripMargin)
     }
 
     // create hashMap
