@@ -2306,6 +2306,12 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     assert(error.getMessage contains "grouping__id is deprecated; use grouping_id() instead")
   }
 
+  test("filter on a grouping column that is not presented in SELECT") {
+    checkAnswer(
+      sql("select count(1) from (select 1 as a) t group by a having a > 0"),
+      Row(1) :: Nil)
+  }
+
   test("SPARK-13056: Null in map value causes NPE") {
     val df = Seq(1 -> Map("abc" -> "somestring", "cba" -> null)).toDF("key", "value")
     withTempTable("maptest") {
