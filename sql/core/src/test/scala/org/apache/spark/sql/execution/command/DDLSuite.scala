@@ -390,6 +390,28 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       Nil)
   }
 
+  test("drop table") {
+    val catalog = sqlContext.sessionState.catalog
+    val tableIdent = TableIdentifier("tab1", Some("dbx"))
+    createDatabase(catalog, "dbx")
+    createTable(catalog, tableIdent)
+    assert(catalog.listTables("dbx") == Seq(tableIdent))
+    sql("DROP TABLE dbx.tab1")
+    assert(catalog.listTables("dbx") == Nil)
+    sql("DROP TABLE IF EXISTS dbx.tab1")
+    val e = intercept[AnalysisException] {
+      sql("DROP TABLE dbx.tab1")
+    }
+    assert(e.getMessage.contains("Table 'tab1' does not exist in database 'dbx'"))
+  }
+
+  test("drop view") {
+    val e = intercept[AnalysisException] {
+      sql("DROP VIEW dbx.tab1")
+    }
+    assert(e.getMessage.contains("Not supported object: views"))
+  }
+
   private def convertToDatasourceTable(
       catalog: SessionCatalog,
       tableIdent: TableIdentifier): Unit = {

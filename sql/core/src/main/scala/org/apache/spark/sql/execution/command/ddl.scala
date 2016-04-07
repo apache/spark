@@ -176,6 +176,12 @@ case class DescribeDatabase(
 
 /**
  * Drops a table/view from the metastore and removes it if it is cached.
+ *
+ * The syntax of this command is:
+ * {{{
+ *   DROP TABLE [IF EXISTS] table_name [PURGE];
+ *   DROP VIEW [IF EXISTS] [db_name.]view_name;
+ * }}}
  */
 case class DropTable(
     tableName: TableIdentifier,
@@ -184,21 +190,12 @@ case class DropTable(
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val catalog = sqlContext.sessionState.catalog
+    if (isView && !catalog.isViewSupported) {
+      throw new AnalysisException(s"Not supported object: views")
+    }
     // If the command DROP VIEW is to drop a table or DROP TABLE is to drop a view
     // issue an exception.
-    val catalogTable: Option[CatalogTable] = try {
-      // If the table/view does not exist, it will throw an exception:
-      // - AnalysisException, if it is from InMemoryCatalog.
-      // - NoSuchTableException, if it is from HiveExternalCatalog
-      catalog.getTableOption(tableName)
-    } catch {
-      case _: org.apache.spark.sql.AnalysisException => None
-      case e if e.getClass.getName == "org.apache.hadoop.hive.ql.metadata.InvalidTableException" =>
-        None
-      case _: org.apache.spark.sql.catalyst.analysis.NoSuchTableException => None
-    }
-
-    catalogTable.map(_.tableType match {
+    catalog.getTableOption(tableName).map(_.tableType match {
       case CatalogTableType.VIRTUAL_VIEW if !isView =>
         throw new AnalysisException(s"Cannot drop a view with DROP TABLE")
       case o if o != CatalogTableType.VIRTUAL_VIEW && isView =>
@@ -220,11 +217,12 @@ case class DropTable(
     catalog.invalidateTable(tableName)
 
     try {
-      // Quiesce the exception issued from Hive. Log it as an error message
-      // This is just to make it consistent with Hive Native Command; Otherwise, many test cases
-      // in HiveCompabilitySuite fail
       catalog.dropTable(tableName, ifExists)
     } catch {
+      // Quiesce the exception issued from Hive. Log it as an error message
+      // This is just to make it consistent with Hive Native Command; Otherwise, many test cases
+      // in HiveCompatibilitySuite fail. In Hive, the orders of test cases matter. That is, the
+      // test cases are not independent.
       case e: org.apache.spark.sql.AnalysisException
         if e.getMessage.contains("NoSuchObjectException") => logError(s"${e.getMessage}", e)
     }

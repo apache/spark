@@ -182,6 +182,10 @@ private[spark] class HiveExternalCatalog(client: HiveClient) extends ExternalCat
     client.getTable(db, table)
   }
 
+  override def getTableOption(db: String, table: String): Option[CatalogTable] = withClient {
+    client.getTableOption(db, table)
+  }
+
   override def tableExists(db: String, table: String): Boolean = withClient {
     client.getTableOption(db, table).isDefined
   }

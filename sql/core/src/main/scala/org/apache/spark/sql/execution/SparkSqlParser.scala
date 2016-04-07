@@ -379,7 +379,7 @@ class SparkSqlAstBuilder extends AstBuilder {
     DropTable(
       visitTableIdentifier(ctx.tableIdentifier),
       ctx.EXISTS != null,
-      ctx.kind.getType == SqlBaseParser.VIEW)
+      ctx.VIEW != null)
   }
 
   /**

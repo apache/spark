@@ -175,8 +175,15 @@ class SessionCatalog(
     externalCatalog.getTable(db, table)
   }
 
+  /**
+   * Retrieve the metadata of an existing metastore table.
+   * If no database is specified, assume the table is in the current database.
+   * If the specified table is not found in the database then return None if it doesn't exist.
+   */
   def getTableOption(name: TableIdentifier): Option[CatalogTable] = {
-    Option(getTable(name))
+    val db = name.database.getOrElse(currentDb)
+    val table = formatTableName(name.table)
+    externalCatalog.getTableOption(db, table)
   }
 
   // -------------------------------------------------------------
@@ -287,8 +294,13 @@ class SessionCatalog(
    * explicitly specified.
    */
   def isTemporaryTable(name: TableIdentifier): Boolean = {
-    !name.database.isDefined && tempTables.contains(formatTableName(name.table))
+    name.database.isEmpty && tempTables.contains(formatTableName(name.table))
   }
+
+  /**
+   * Return whether View is supported
+   */
+  def isViewSupported: Boolean = false
 
   /**
    * List all tables in the specified database, including temporary tables.

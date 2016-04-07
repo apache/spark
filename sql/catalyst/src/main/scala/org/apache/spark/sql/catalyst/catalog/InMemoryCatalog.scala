@@ -192,6 +192,11 @@ class InMemoryCatalog extends ExternalCatalog {
     catalog(db).tables(table).table
   }
 
+  override def getTableOption(db: String, table: String): Option[CatalogTable] = synchronized {
+    requireDbExists(db)
+    if (!catalog(db).tables.contains(table)) None else Option(catalog(db).tables(table).table)
+  }
+
   override def tableExists(db: String, table: String): Boolean = synchronized {
     requireDbExists(db)
     catalog(db).tables.contains(table)
