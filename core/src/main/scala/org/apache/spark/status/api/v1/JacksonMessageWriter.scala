@@ -47,7 +47,6 @@ private[v1] class JacksonMessageWriter extends MessageBodyWriter[Object]{
       super.writeValueAsString(t)
     }
   }
-  mapper.registerModule(com.fasterxml.jackson.module.scala.DefaultScalaModule)
   mapper.enable(SerializationFeature.INDENT_OUTPUT)
   mapper.setSerializationInclusion(JsonInclude.Include.NON_NULL)
   mapper.setDateFormat(JacksonMessageWriter.makeISODateFormat)

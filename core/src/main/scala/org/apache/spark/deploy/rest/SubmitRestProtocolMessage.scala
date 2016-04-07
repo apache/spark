@@ -21,7 +21,6 @@ import com.fasterxml.jackson.annotation._
 import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility
 import com.fasterxml.jackson.annotation.JsonInclude.Include
 import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper, SerializationFeature}
-import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods._
 
@@ -102,7 +101,6 @@ private[spark] object SubmitRestProtocolMessage {
   private val mapper = new ObjectMapper()
     .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
     .enable(SerializationFeature.INDENT_OUTPUT)
-    .registerModule(DefaultScalaModule)
 
   /**
    * Parse the value of the action field from the given JSON.
