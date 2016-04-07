@@ -15,22 +15,23 @@
  * limitations under the License.
  */
 
-var baseParams
+var baseParams;
 
-var curLogLength
-var startByte
-var endByte
-var totalLogLength
+var curLogLength;
+var startByte;
+var endByte;
+var totalLogLength;
 
-var byteLength
-var btnHeight = 30
+var byteLength;
 
 function setLogScroll(oldHeight) {
-  $(".log-content").scrollTop($(".log-content")[0].scrollHeight - oldHeight);
+  var logContent = $(".log-content");
+  logContent.scrollTop(logContent[0].scrollHeight - oldHeight);
 }
 
 function tailLog() {
-  $(".log-content").scrollTop($(".log-content")[0].scrollHeight);
+  var logContent = $(".log-content");
+  logContent.scrollTop(logContent[0].scrollHeight);
 }
 
 function setLogData() {
@@ -39,31 +40,33 @@ function setLogData() {
 }
 
 function disableMoreButton() {
-  $(".log-more-btn").attr("disabled", "disabled");;
-  $(".log-more-btn").html("Top of Log");
+  var moreBtn = $(".log-more-btn");
+  moreBtn.attr("disabled", "disabled");
+  moreBtn.html("Top of Log");
 }
 
 function noNewAlert() {
-  $(".no-new-alert").css("display", "block");
-  window.setTimeout(function () {$(".no-new-alert").css("display", "none");}, 4000);
+  var alert = $(".no-new-alert")
+  alert.css("display", "block");
+  window.setTimeout(function () {alert.css("display", "none");}, 4000);
 }
 
 function loadMore() {
   var offset = Math.max(startByte - byteLength, 0);
-  var newLogLength = Math.min(curLogLength + byteLength, totalLogLength);
+  var moreByteLength = Math.min(byteLength, startByte);
 
   $.ajax({
     type: "GET",
-    url: "/log" + baseParams + "&offset=" + offset + "&byteLength=" + byteLength,
+    url: "/log" + baseParams + "&offset=" + offset + "&byteLength=" + moreByteLength,
     success: function (data) {
       var oldHeight = $(".log-content")[0].scrollHeight;
-      var dataInfo = data.substring(0, data.indexOf('\n')).match(/\d+/g);
+      var newlineIndex = data.indexOf('\n')
+      var dataInfo = data.substring(0, newlineIndex).match(/\d+/g);
       var retStartByte = dataInfo[0];
       var retLogLength = dataInfo[2];
 
-      var cleanData = data.substring(data.indexOf('\n') + 1).trim();
+      var cleanData = data.substring(newlineIndex + 1);
       if (retStartByte == 0) {
-        cleanData = cleanData.substring(0, startByte);
         disableMoreButton();
       }
       $("pre", ".log-content").prepend(cleanData);
@@ -80,7 +83,7 @@ function loadMore() {
 function loadNew() {
   $.ajax({
     type: "GET",
-    url: "/log" + baseParams,
+    url: "/log" + baseParams + "&byteLength=0",
     success: function (data) {
       var dataInfo = data.substring(0, data.indexOf('\n')).match(/\d+/g);
       var newDataLen = dataInfo[2] - totalLogLength;
@@ -89,12 +92,13 @@ function loadNew() {
           type: "GET",
           url: "/log" + baseParams + "&byteLength=" + newDataLen,
           success: function (data) {
-            var dataInfo = data.substring(0, data.indexOf('\n')).match(/\d+/g);
+            var newlineIndex = data.indexOf('\n')
+            var dataInfo = data.substring(0, newlineIndex).match(/\d+/g);
             var retStartByte = dataInfo[0];
             var retEndByte = dataInfo[1];
             var retLogLength = dataInfo[2];
 
-            var cleanData = data.substring(data.indexOf('\n') + 1).trim();
+            var cleanData = data.substring(newlineIndex + 1);
             $("pre", ".log-content").append(cleanData);
 
             curLogLength = curLogLength + (retEndByte - retStartByte);
