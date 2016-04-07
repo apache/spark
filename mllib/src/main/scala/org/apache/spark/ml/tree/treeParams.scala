@@ -17,13 +17,14 @@
 
 package org.apache.spark.ml.tree
 
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, BoostingStrategy => OldBoostingStrategy, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.impurity.{Entropy => OldEntropy, Gini => OldGini, Impurity => OldImpurity, Variance => OldVariance}
-import org.apache.spark.mllib.tree.loss.{Loss => OldLoss}
+import org.apache.spark.mllib.tree.loss.{LogLoss => OldLogLoss, Loss => OldLoss}
 import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
 
 /**
@@ -456,3 +457,42 @@ private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter with HasS
   /** Get old Gradient Boosting Loss type */
   private[ml] def getOldLossType: OldLoss
 }
+
+private[spark] object GBTClassifierParams {
+
+  // The losses below should be lowercase.
+  /** Accessor for supported loss settings: logistic */
+  final val supportedLossTypes: Array[String] = Array("logistic").map(_.toLowerCase)
+}
+
+private[ml] trait GBTClassifierParams extends GBTParams with TreeClassifierParams {
+
+  /**
+   * Loss function which GBT tries to minimize. (case-insensitive)
+   * Supported: "logistic"
+   * (default = logistic)
+   * @group param
+   */
+  val lossType: Param[String] = new Param[String](this, "lossType", "Loss function which GBT" +
+    " tries to minimize (case-insensitive). Supported options:" +
+    s" ${GBTClassifierParams.supportedLossTypes.mkString(", ")}",
+    (value: String) => GBTClassifierParams.supportedLossTypes.contains(value.toLowerCase))
+
+  setDefault(lossType -> "logistic")
+
+  /** @group getParam */
+  @Since("1.4.0")
+  def getLossType: String = $(lossType).toLowerCase
+
+  /** (private[ml]) Convert new loss to old loss. */
+  override private[ml] def getOldLossType: OldLoss = {
+    getLossType match {
+      case "logistic" => OldLogLoss
+      case _ =>
+        // Should never happen because of check in setter method.
+        throw new RuntimeException(s"GBTClassifier was given bad loss type: $getLossType")
+    }
+  }
+}
+
+private[ml] trait GBTClassificationModelParams extends GBTClassifierParams
