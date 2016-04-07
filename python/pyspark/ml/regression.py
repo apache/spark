@@ -400,6 +400,10 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     ...     (1.0, Vectors.dense(1.0)),
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
     >>> dt = DecisionTreeRegressor(maxDepth=2)
+    >>> isinstance(dt.setVarianceCol("varianceColTest"), DecisionTreeRegressor)
+    True
+    >>> dt.getVarianceCol() == "varianceColTest"
+    True
     >>> model = dt.fit(df)
     >>> model.depth
     1
@@ -425,10 +429,9 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     True
     >>> model.depth == model2.depth
     True
-    >>> isinstance(dt.setVarianceCol("varianceColTest"), DecisionTreeRegressor)
-    True
-    >>> dt.getVarianceCol() == "varianceColTest"
-    True
+    >>> test2 = sqlContext.createDataFrame([(Vectors.sparse(1, [1.0], [1.0]),)], ["features"])
+    >>> model.transform(test2).head().varianceColTest
+    0.0
 
     .. versionadded:: 1.4.0
     """
