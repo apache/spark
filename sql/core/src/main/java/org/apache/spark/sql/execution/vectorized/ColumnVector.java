@@ -56,7 +56,7 @@ import org.apache.spark.unsafe.types.UTF8String;
  *
  * ColumnVectors are intended to be reused.
  */
-public abstract class ColumnVector {
+public abstract class ColumnVector implements AutoCloseable {
   /**
    * Allocates a column to store elements of `type` on or off heap.
    * Capacity is the initial capacity of the vector and it will grow as necessary. Capacity is
