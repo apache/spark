@@ -17,60 +17,33 @@
 
 package test.org.apache.spark.sql;
 
+import java.io.Serializable;
+import java.math.BigDecimal;
+import java.sql.Date;
+import java.sql.Timestamp;
+import java.util.*;
+
 import com.google.common.base.Objects;
-import org.apache.spark.Accumulator;
-import org.apache.spark.SparkContext;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.api.java.function.CoGroupFunction;
-import org.apache.spark.api.java.function.FilterFunction;
-import org.apache.spark.api.java.function.FlatMapFunction;
-import org.apache.spark.api.java.function.FlatMapGroupsFunction;
-import org.apache.spark.api.java.function.ForeachFunction;
-import org.apache.spark.api.java.function.MapFunction;
-import org.apache.spark.api.java.function.MapGroupsFunction;
-import org.apache.spark.api.java.function.MapPartitionsFunction;
-import org.apache.spark.api.java.function.ReduceFunction;
-import org.apache.spark.sql.Dataset;
-import org.apache.spark.sql.Encoder;
-import org.apache.spark.sql.Encoders;
-import org.apache.spark.sql.KeyValueGroupedDataset;
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.catalyst.encoders.OuterScopes;
-import org.apache.spark.sql.catalyst.expressions.GenericRow;
-import org.apache.spark.sql.test.TestSQLContext;
-import org.apache.spark.sql.types.StructType;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Rule;
-import org.junit.Test;
 import org.junit.rules.ExpectedException;
 import scala.Tuple2;
 import scala.Tuple3;
 import scala.Tuple4;
 import scala.Tuple5;
 
-import java.io.Serializable;
-import java.math.BigDecimal;
-import java.sql.Date;
-import java.sql.Timestamp;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Locale;
-import java.util.Set;
+import org.junit.*;
 
-import static org.apache.spark.sql.functions.col;
-import static org.apache.spark.sql.functions.expr;
-import static org.apache.spark.sql.types.DataTypes.BinaryType;
-import static org.apache.spark.sql.types.DataTypes.BooleanType;
-import static org.apache.spark.sql.types.DataTypes.IntegerType;
-import static org.apache.spark.sql.types.DataTypes.LongType;
-import static org.apache.spark.sql.types.DataTypes.StringType;
-import static org.apache.spark.sql.types.DataTypes.createArrayType;
+import org.apache.spark.Accumulator;
+import org.apache.spark.SparkContext;
+import org.apache.spark.api.java.function.*;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.sql.*;
+import org.apache.spark.sql.test.TestSQLContext;
+import org.apache.spark.sql.catalyst.encoders.OuterScopes;
+import org.apache.spark.sql.catalyst.expressions.GenericRow;
+import org.apache.spark.sql.types.StructType;
+
+import static org.apache.spark.sql.functions.*;
+import static org.apache.spark.sql.types.DataTypes.*;
 
 public class JavaDatasetSuite implements Serializable {
   private transient JavaSparkContext jsc;
@@ -487,9 +460,8 @@ public class JavaDatasetSuite implements Serializable {
     Dataset<String> ds = context.createDataset(data, Encoders.STRING());
     double[] arraySplit = {1, 2, 3};
 
-    java.util.List randomSplit =  ds.randomSplitAsList(arraySplit, 1);
-
-    Assert.assertEquals( randomSplit.size(), 3);
+    List<Dataset<String>> randomSplit =  ds.randomSplitAsList(arraySplit, 1);
+    Assert.assertEquals("wrong number of splits", randomSplit.size(), 3);
   }
 
   /**
