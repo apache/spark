@@ -43,9 +43,9 @@ import org.apache.spark.util.UninterruptibleThread
  * and the results are committed transactionally to the given [[Sink]].
  */
 class StreamExecution(
-    val sqlContext: SQLContext,
+    override val sqlContext: SQLContext,
     override val name: String,
-    val checkpointRoot: String,
+    checkpointRoot: String,
     private[sql] val logicalPlan: LogicalPlan,
     val sink: Sink,
     val trigger: Trigger) extends ContinuousQuery with Logging {
@@ -72,7 +72,7 @@ class StreamExecution(
 
   /** All stream sources present the query plan. */
   private val sources =
-    logicalPlan.collect { case s: StreamingRelation => s.source }
+    logicalPlan.collect { case s: StreamingExecutionRelation => s.source }
 
   /** A list of unique sources in the query plan. */
   private val uniqueSources = sources.distinct
@@ -159,7 +159,7 @@ class StreamExecution(
       triggerExecutor.execute(() => {
         if (isActive) {
           if (dataAvailable) runBatch()
-          commitAndConstructNextBatch()
+          constructNextBatch()
           true
         } else {
           false
@@ -207,7 +207,7 @@ class StreamExecution(
       case None => // We are starting this stream for the first time.
         logInfo(s"Starting new continuous query.")
         currentBatchId = 0
-        commitAndConstructNextBatch()
+        constructNextBatch()
     }
   }
 
@@ -227,15 +227,8 @@ class StreamExecution(
   /**
    * Queries all of the sources to see if any new data is available. When there is new data the
    * batchId counter is incremented and a new log entry is written with the newest offsets.
-   *
-   * Note that committing the offsets for a new batch implicitly marks the previous batch as
-   * finished and thus this method should only be called when all currently available data
-   * has been written to the sink.
    */
-  private def commitAndConstructNextBatch(): Boolean = {
-    // Update committed offsets.
-    committedOffsets ++= availableOffsets
-
+  private def constructNextBatch(): Boolean = {
     // There is a potential dead-lock in Hadoop "Shell.runCommand" before 2.5.0 (HADOOP-10622).
     // If we interrupt some thread running Shell.runCommand, we may hit this issue.
     // As "FileStreamSource.getOffset" will create a file using HDFS API and call "Shell.runCommand"
@@ -295,7 +288,7 @@ class StreamExecution(
     var replacements = new ArrayBuffer[(Attribute, Attribute)]
     // Replace sources in the logical plan with data that has arrived since the last batch.
     val withNewSources = logicalPlan transform {
-      case StreamingRelation(source, output) =>
+      case StreamingExecutionRelation(source, output) =>
         newData.get(source).map { data =>
           val newPlan = data.logicalPlan
           assert(output.size == newPlan.output.size,
@@ -331,6 +324,8 @@ class StreamExecution(
 
     val batchTime = (System.nanoTime() - startTime).toDouble / 1000000
     logInfo(s"Completed up to $availableOffsets in ${batchTime}ms")
+    // Update committed offsets.
+    committedOffsets ++= availableOffsets
     postEvent(new QueryProgress(this))
   }
 

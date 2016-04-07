@@ -36,6 +36,7 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.util.Utils
 
@@ -66,9 +67,9 @@ import org.apache.spark.util.Utils
 trait StreamTest extends QueryTest with Timeouts {
 
   implicit class RichSource(s: Source) {
-    def toDF(): DataFrame = Dataset.ofRows(sqlContext, StreamingRelation(s))
+    def toDF(): DataFrame = Dataset.ofRows(sqlContext, StreamingExecutionRelation(s))
 
-    def toDS[A: Encoder](): Dataset[A] = Dataset(sqlContext, StreamingRelation(s))
+    def toDS[A: Encoder](): Dataset[A] = Dataset(sqlContext, StreamingExecutionRelation(s))
   }
 
   /** How long to wait for an active stream to catch up when checking a result. */

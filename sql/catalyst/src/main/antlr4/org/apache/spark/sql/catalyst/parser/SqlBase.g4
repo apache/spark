@@ -380,6 +380,7 @@ joinType
     | LEFT SEMI
     | RIGHT OUTER?
     | FULL OUTER?
+    | LEFT? ANTI
     ;
 
 joinCriteria
@@ -468,15 +469,15 @@ booleanExpression
 //  https://github.com/antlr/antlr4/issues/780
 //  https://github.com/antlr/antlr4/issues/781
 predicated
-    : valueExpression predicate[$valueExpression.ctx]?
+    : valueExpression predicate?
     ;
 
-predicate[ParserRuleContext value]
-    : NOT? BETWEEN lower=valueExpression AND upper=valueExpression        #between
-    | NOT? IN '(' expression (',' expression)* ')'                        #inList
-    | NOT? IN '(' query ')'                                               #inSubquery
-    | NOT? like=(RLIKE | LIKE) pattern=valueExpression                    #like
-    | IS NOT? NULL                                                        #nullPredicate
+predicate
+    : NOT? kind=BETWEEN lower=valueExpression AND upper=valueExpression
+    | NOT? kind=IN '(' expression (',' expression)* ')'
+    | NOT? kind=IN '(' query ')'
+    | NOT? kind=(RLIKE | LIKE) pattern=valueExpression
+    | IS NOT? kind=NULL
     ;
 
 valueExpression
@@ -645,7 +646,7 @@ nonReserved
     | NO | DATA
     | START | TRANSACTION | COMMIT | ROLLBACK | WORK | ISOLATION | LEVEL
     | SNAPSHOT | READ | WRITE | ONLY
-    | SORT | CLUSTER | DISTRIBUTE UNSET | TBLPROPERTIES | SKEWED | STORED | DIRECTORIES | LOCATION
+    | SORT | CLUSTER | DISTRIBUTE | UNSET | TBLPROPERTIES | SKEWED | STORED | DIRECTORIES | LOCATION
     | EXCHANGE | ARCHIVE | UNARCHIVE | FILEFORMAT | TOUCH | COMPACT | CONCATENATE | CHANGE | FIRST
     | AFTER | CASCADE | RESTRICT | BUCKETS | CLUSTERED | SORTED | PURGE | INPUTFORMAT | OUTPUTFORMAT
     | INPUTDRIVER | OUTPUTDRIVER | DBPROPERTIES | DFS | TRUNCATE | METADATA | REPLICATION | COMPUTE
@@ -878,6 +879,7 @@ INDEX: 'INDEX';
 INDEXES: 'INDEXES';
 LOCKS: 'LOCKS';
 OPTION: 'OPTION';
+ANTI: 'ANTI';
 
 STRING
     : '\'' ( ~('\''|'\\') | ('\\' .) )* '\''

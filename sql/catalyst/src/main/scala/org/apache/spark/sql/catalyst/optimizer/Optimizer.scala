@@ -136,10 +136,19 @@ object SamplePushDown extends Rule[LogicalPlan] {
  * representation of data item.  For example back to back map operations.
  */
 object EliminateSerialization extends Rule[LogicalPlan] {
+  // TODO: find a more general way to do this optimization.
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case m @ MapPartitions(_, deserializer, _, child: ObjectOperator)
         if !deserializer.isInstanceOf[Attribute] &&
           deserializer.dataType == child.outputObject.dataType =>
+      val childWithoutSerialization = child.withObjectOutput
+      m.copy(
+        deserializer = childWithoutSerialization.output.head,
+        child = childWithoutSerialization)
+
+    case m @ MapElements(_, deserializer, _, child: ObjectOperator)
+      if !deserializer.isInstanceOf[Attribute] &&
+        deserializer.dataType == child.outputObject.dataType =>
       val childWithoutSerialization = child.withObjectOutput
       m.copy(
         deserializer = childWithoutSerialization.output.head,
@@ -352,8 +361,8 @@ object ColumnPruning extends Rule[LogicalPlan] {
     case p @ Project(_, g: Generate) if g.join && p.references.subsetOf(g.generatedSet) =>
       p.copy(child = g.copy(join = false))
 
-    // Eliminate unneeded attributes from right side of a LeftSemiJoin.
-    case j @ Join(left, right, LeftSemi, condition) =>
+    // Eliminate unneeded attributes from right side of a Left Existence Join.
+    case j @ Join(left, right, LeftExistence(_), condition) =>
       j.copy(right = prunedChild(right, j.references))
 
     // all the columns will be used to compare, so we can't prune them
@@ -1117,7 +1126,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
 
           (leftFilterConditions ++ commonFilterCondition).
             reduceLeftOption(And).map(Filter(_, newJoin)).getOrElse(newJoin)
-        case _ @ (LeftOuter | LeftSemi) =>
+        case LeftOuter | LeftExistence(_) =>
           // push down the left side only `where` condition
           val newLeft = leftFilterConditions.
             reduceLeftOption(And).map(Filter(_, left)).getOrElse(left)
@@ -1138,7 +1147,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
         split(joinCondition.map(splitConjunctivePredicates).getOrElse(Nil), left, right)
 
       joinType match {
-        case _ @ (Inner | LeftSemi) =>
+        case Inner | LeftExistence(_) =>
           // push down the single side only join filter for both sides sub queries
           val newLeft = leftJoinConditions.
             reduceLeftOption(And).map(Filter(_, left)).getOrElse(left)

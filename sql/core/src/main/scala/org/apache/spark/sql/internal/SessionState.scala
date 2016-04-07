@@ -51,7 +51,12 @@ private[sql] class SessionState(ctx: SQLContext) {
   /**
    * Internal catalog for managing table and database states.
    */
-  lazy val catalog = new SessionCatalog(ctx.externalCatalog, functionRegistry, conf)
+  lazy val catalog =
+    new SessionCatalog(
+      ctx.externalCatalog,
+      ctx.functionResourceLoader,
+      functionRegistry,
+      conf)
 
   /**
    * Interface exposed to the user for registering user-defined functions.
@@ -62,7 +67,7 @@ private[sql] class SessionState(ctx: SQLContext) {
    * Logical query plan analyzer for resolving unresolved attributes and relations.
    */
   lazy val analyzer: Analyzer = {
-    new Analyzer(catalog, functionRegistry, conf) {
+    new Analyzer(catalog, conf) {
       override val extendedResolutionRules =
         PreInsertCastAndRename ::
         DataSourceAnalysis ::
@@ -98,5 +103,5 @@ private[sql] class SessionState(ctx: SQLContext) {
    * Interface to start and stop [[org.apache.spark.sql.ContinuousQuery]]s.
    */
   lazy val continuousQueryManager: ContinuousQueryManager = new ContinuousQueryManager(ctx)
-
 }
+
