@@ -375,7 +375,12 @@ private[hive] class HiveClientImpl(
       // The provided spec here can be a partial spec, i.e. it will match all partitions
       // whose specs are supersets of this partial spec. E.g. If a table has partitions
       // (b='1', c='1') and (b='1', c='2'), a partial spec of (b='1') will match both.
-      client.getPartitions(hiveTable, s.asJava).asScala.foreach { hivePartition =>
+      val matchingParts = client.getPartitions(hiveTable, s.asJava).asScala
+      if (matchingParts.isEmpty) {
+        throw new AnalysisException(
+          s"partition to drop '$s' does not exist in table '$table' database '$db'")
+      }
+      matchingParts.foreach { hivePartition =>
         client.dropPartition(db, table, hivePartition.getValues, purge)
       }
     }

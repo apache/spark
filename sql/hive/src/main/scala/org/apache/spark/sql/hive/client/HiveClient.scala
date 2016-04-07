@@ -120,7 +120,7 @@ private[hive] trait HiveClient {
       ignoreIfExists: Boolean): Unit
 
   /**
-   * Drop one or many partitions in the given table.
+   * Drop one or many partitions in the given table, assuming they exist.
    *
    * Note: Unfortunately, Hive does not currently provide a way to ignore this call if the
    * partitions do not already exist. The seemingly relevant flag `ifExists` in
