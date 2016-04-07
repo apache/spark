@@ -18,6 +18,7 @@
 package org.apache.spark.streaming
 
 import java.io.{InputStream, NotSerializableException}
+import java.util.Properties
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 
 import scala.collection.Map
@@ -25,6 +26,7 @@ import scala.collection.mutable.Queue
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
+import org.apache.commons.lang.SerializationUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{BytesWritable, LongWritable, Text}
@@ -200,6 +202,10 @@ class StreamingContext private[streaming] (
   private var state: StreamingContextState = INITIALIZED
 
   private val startSite = new AtomicReference[CallSite](null)
+
+  // Copy of thread-local properties from SparkContext. These properties will be set in all tasks
+  // submitted by this StreamingContext after start.
+  private[streaming] val localProperties = new AtomicReference[Properties](new Properties)
 
   private[streaming] def getStartSite(): CallSite = startSite.get()
 
@@ -563,6 +569,8 @@ class StreamingContext private[streaming] (
     state match {
       case INITIALIZED =>
         startSite.set(DStream.getCreationSite())
+        localProperties.set(
+          SerializationUtils.clone(sparkContext.localProperties.get()).asInstanceOf[Properties])
         StreamingContext.ACTIVATION_LOCK.synchronized {
           StreamingContext.assertNoOtherContextIsActive()
           try {

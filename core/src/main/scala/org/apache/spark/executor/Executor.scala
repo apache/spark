@@ -21,6 +21,7 @@ import java.io.{File, NotSerializableException}
 import java.lang.management.ManagementFactory
 import java.net.URL
 import java.nio.ByteBuffer
+import java.util.Properties
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 
 import scala.collection.JavaConverters._
@@ -206,7 +207,13 @@ private[spark] class Executor(
       startGCTime = computeTotalGcTime()
 
       try {
-        val (taskFiles, taskJars, taskBytes) = Task.deserializeWithDependencies(serializedTask)
+        val (taskFiles, taskJars, taskProps, taskBytes) =
+          Task.deserializeWithDependencies(serializedTask)
+
+        // Must be set before updateDependencies() is called, in case fetching dependencies
+        // requires access to properties contained within (e.g. for access control).
+        Executor.taskDeserializationProps.set(taskProps)
+
         updateDependencies(taskFiles, taskJars)
         task = ser.deserialize[Task[Any]](taskBytes, Thread.currentThread.getContextClassLoader)
         task.setTaskMemoryManager(taskMemoryManager)
@@ -505,4 +512,15 @@ private[spark] class Executor(
     }
     heartbeater.scheduleAtFixedRate(heartbeatTask, initialDelay, intervalMs, TimeUnit.MILLISECONDS)
   }
+}
+
+private[spark] object Executor {
+  // This is reserved for internal use by components that need to read task properties before a
+  // task is fully deserialized. When possible, the TaskContext.getLocalProperty call should be
+  // used instead.
+  val taskDeserializationProps: ThreadLocal[Properties] = new ThreadLocal[Properties]
+}
+
+object Debug {
+  val s = Executor.taskDeserializationProps
 }
