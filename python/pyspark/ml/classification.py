@@ -1247,10 +1247,7 @@ class OneVsRest(Estimator, HasFeaturesCol, HasLabelCol, HasPredictionCol):
         if handlePersistence:
             multiclassLabeled.unpersist()
 
-        return OneVsRestModel(models=models)\
-            .setFeaturesCol(featuresCol)\
-            .setLabelCol(labelCol)\
-            .setPredictionCol(predictionCol)
+        return self._copyValues(OneVsRestModel(models=models))
 
     @since("2.0.0")
     def copy(self, extra=None):
@@ -1264,10 +1261,7 @@ class OneVsRest(Estimator, HasFeaturesCol, HasLabelCol, HasPredictionCol):
         """
         if extra is None:
             extra = dict()
-        newOvr = Params.copy(self, extra)
-        if self.isSet(self.classifier):
-            newOvr.setClassifier(self.getClassifier().copy(extra))
-        return newOvr
+        return self._copyValues(OneVsRest(self.getClassifier().copy(extra)))
 
 
 class OneVsRestModel(Model, HasFeaturesCol, HasLabelCol, HasPredictionCol):
@@ -1345,7 +1339,7 @@ class OneVsRestModel(Model, HasFeaturesCol, HasLabelCol, HasPredictionCol):
         """
         if extra is None:
             extra = dict()
-        return OneVsRestModel([model.copy(extra) for model in self.models.copy(extra)])
+        return self._copyValues(OneVsRestModel([model.copy(extra) for model in self.models]))
 
 
 if __name__ == "__main__":
