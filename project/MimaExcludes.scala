@@ -613,6 +613,17 @@ object MimaExcludes {
       ) ++ Seq(
         // [SPARK-13430][ML] moved featureCol from LinearRegressionModelSummary to LinearRegressionSummary
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.ml.regression.LinearRegressionSummary.this")
+      ) ++ Seq(
+        // [SPARK-11593][SQL] Replace catalyst converter with RowEncoder in ScalaUDF
+        ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.ml.UnaryTransformer.createTransformFunc"),
+        ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.ml.UnaryTransformer.createTransformFunc"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.ml.feature.DCT.createTransformFunc"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.ml.feature.ElementwiseProduct.createTransformFunc"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.ml.feature.Normalizer.createTransformFunc"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.ml.feature.PolynomialExpansion.createTransformFunc"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.ml.feature.NGram.createTransformFunc"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.ml.feature.Tokenizer.createTransformFunc"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.ml.feature.RegexTokenizer.createTransformFunc")
       )
     case v if v.startsWith("1.6") =>
       Seq(
