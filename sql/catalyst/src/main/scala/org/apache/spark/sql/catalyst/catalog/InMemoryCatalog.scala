@@ -47,11 +47,6 @@ class InMemoryCatalog extends ExternalCatalog {
   // Database name -> description
   private val catalog = new scala.collection.mutable.HashMap[String, DatabaseDesc]
 
-  private def functionExists(db: String, funcName: String): Boolean = {
-    requireDbExists(db)
-    catalog(db).functions.contains(funcName)
-  }
-
   private def partitionExists(db: String, table: String, spec: TablePartitionSpec): Boolean = {
     requireTableExists(db, table)
     catalog(db).tables(table).partitions.contains(spec)
@@ -313,6 +308,11 @@ class InMemoryCatalog extends ExternalCatalog {
   override def getFunction(db: String, funcName: String): CatalogFunction = synchronized {
     requireFunctionExists(db, funcName)
     catalog(db).functions(funcName)
+  }
+
+  override def functionExists(db: String, funcName: String): Boolean = {
+    requireDbExists(db)
+    catalog(db).functions.contains(funcName)
   }
 
   override def listFunctions(db: String, pattern: String): Seq[String] = synchronized {

@@ -47,6 +47,7 @@ case class CreateFunction(
   extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
+    val catalog = sqlContext.sessionState.catalog
     if (isTemp) {
       if (databaseName.isDefined) {
         throw new AnalysisException(
@@ -55,24 +56,18 @@ case class CreateFunction(
       }
       // We first load resources and then put the builder in the function registry.
       // Please note that it is allowed to overwrite an existing temp function.
-      sqlContext.sessionState.catalog.loadFunctionResources(resources)
+      catalog.loadFunctionResources(resources)
       val info = new ExpressionInfo(className, functionName)
-      val builder =
-        sqlContext.sessionState.catalog.makeFunctionBuilder(functionName, className)
-      sqlContext.sessionState.catalog.createTempFunction(
-        functionName, info, builder, ignoreIfExists = false)
+      val builder = catalog.makeFunctionBuilder(functionName, className)
+      catalog.createTempFunction(functionName, info, builder, ignoreIfExists = false)
     } else {
       // For a permanent, we will store the metadata into underlying external catalog.
       // This function will be loaded into the FunctionRegistry when a query uses it.
       // We do not load it into FunctionRegistry right now.
-      val dbName = databaseName.getOrElse(sqlContext.sessionState.catalog.getCurrentDatabase)
-      val func = FunctionIdentifier(functionName, Some(dbName))
-      val catalogFunc = CatalogFunction(func, className, resources)
-      if (sqlContext.sessionState.catalog.functionExists(func)) {
-        throw new AnalysisException(
-          s"Function '$functionName' already exists in database '$dbName'.")
-      }
-      sqlContext.sessionState.catalog.createFunction(catalogFunc)
+      // TODO: should we also parse "IF NOT EXISTS"?
+      catalog.createFunction(
+        CatalogFunction(FunctionIdentifier(functionName, databaseName), className, resources),
+        ignoreIfExists = false)
     }
     Seq.empty[Row]
   }
@@ -101,13 +96,9 @@ case class DropFunction(
       catalog.dropTempFunction(functionName, ifExists)
     } else {
       // We are dropping a permanent function.
-      val dbName = databaseName.getOrElse(catalog.getCurrentDatabase)
-      val func = FunctionIdentifier(functionName, Some(dbName))
-      if (!ifExists && !catalog.functionExists(func)) {
-        throw new AnalysisException(
-          s"Function '$functionName' does not exist in database '$dbName'.")
-      }
-      catalog.dropFunction(func)
+      catalog.dropFunction(
+        FunctionIdentifier(functionName, databaseName),
+        ignoreIfNotExists = ifExists)
     }
     Seq.empty[Row]
   }

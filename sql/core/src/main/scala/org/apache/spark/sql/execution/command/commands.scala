@@ -407,7 +407,7 @@ case class ShowTablePropertiesCommand(
     if (catalog.isTemporaryTable(table)) {
       Seq.empty[Row]
     } else {
-      val catalogTable = sqlContext.sessionState.catalog.getTable(table)
+      val catalogTable = sqlContext.sessionState.catalog.getTableMetadata(table)
 
       propertyKey match {
         case Some(p) =>

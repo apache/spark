@@ -124,7 +124,7 @@ case class AlterDatabaseProperties(
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val catalog = sqlContext.sessionState.catalog
-    val db: CatalogDatabase = catalog.getDatabase(databaseName)
+    val db: CatalogDatabase = catalog.getDatabaseMetadata(databaseName)
     catalog.alterDatabase(db.copy(properties = db.properties ++ props))
 
     Seq.empty[Row]
@@ -149,7 +149,8 @@ case class DescribeDatabase(
   extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
-    val dbMetadata: CatalogDatabase = sqlContext.sessionState.catalog.getDatabase(databaseName)
+    val dbMetadata: CatalogDatabase =
+      sqlContext.sessionState.catalog.getDatabaseMetadata(databaseName)
     val result =
       Row("Database Name", dbMetadata.name) ::
         Row("Description", dbMetadata.description) ::
@@ -213,7 +214,7 @@ case class AlterTableSetProperties(
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val catalog = sqlContext.sessionState.catalog
-    val table = catalog.getTable(tableName)
+    val table = catalog.getTableMetadata(tableName)
     val newProperties = table.properties ++ properties
     if (DDLUtils.isDatasourceTable(newProperties)) {
       throw new AnalysisException(
@@ -243,7 +244,7 @@ case class AlterTableUnsetProperties(
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val catalog = sqlContext.sessionState.catalog
-    val table = catalog.getTable(tableName)
+    val table = catalog.getTableMetadata(tableName)
     if (DDLUtils.isDatasourceTable(table)) {
       throw new AnalysisException(
         "alter table properties is not supported for datasource tables")
@@ -286,7 +287,7 @@ case class AlterTableSerDeProperties(
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val catalog = sqlContext.sessionState.catalog
-    val table = catalog.getTable(tableName)
+    val table = catalog.getTableMetadata(tableName)
     // Do not support setting serde for datasource tables
     if (serdeClassName.isDefined && DDLUtils.isDatasourceTable(table)) {
       throw new AnalysisException(
@@ -376,7 +377,7 @@ case class AlterTableSetLocation(
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val catalog = sqlContext.sessionState.catalog
-    val table = catalog.getTable(tableName)
+    val table = catalog.getTableMetadata(tableName)
     partitionSpec match {
       case Some(spec) =>
         // Partition spec is specified, so we set the location only for this partition

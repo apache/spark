@@ -21,7 +21,6 @@ import java.io.{File, PrintStream}
 
 import scala.collection.JavaConverters._
 import scala.language.reflectiveCalls
-import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -30,7 +29,8 @@ import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.{TableType => HiveTableType}
 import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, FieldSchema, Function => HiveFunction, FunctionType, PrincipalType, ResourceType, ResourceUri}
 import org.apache.hadoop.hive.ql.Driver
-import org.apache.hadoop.hive.ql.metadata.{Hive, Partition => HivePartition, Table => HiveTable}
+import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition, Table => HiveTable}
+import org.apache.hadoop.hive.ql.metadata.{Hive, HiveException}
 import org.apache.hadoop.hive.ql.plan.AddPartitionDesc
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
@@ -559,7 +559,11 @@ private[hive] class HiveClientImpl(
   override def getFunctionOption(
       db: String,
       name: String): Option[CatalogFunction] = withHiveState {
-    Option(client.getFunction(db, name)).map(fromHiveFunction)
+    try {
+      Option(client.getFunction(db, name)).map(fromHiveFunction)
+    } catch {
+      case he: HiveException => None
+    }
   }
 
   override def listFunctions(db: String, pattern: String): Seq[String] = withHiveState {
