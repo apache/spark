@@ -56,8 +56,9 @@ class NGram(override val uid: String)
 
   setDefault(n -> 2)
 
-  override protected lazy val createTransformFunc: Seq[String] => Seq[String] = {
-    _.iterator.sliding($(n)).withPartial(false).map(_.mkString(" ")).toSeq
+  override protected val createTransformFunc: (NGram, Seq[String]) => Seq[String] = {
+    (ngram, strings) =>
+      strings.iterator.sliding(ngram.$(n)).withPartial(false).map(_.mkString(" ")).toSeq
   }
 
   override protected def validateInputType(inputType: DataType): Unit = {

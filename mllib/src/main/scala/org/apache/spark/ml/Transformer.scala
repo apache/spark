@@ -90,7 +90,7 @@ abstract class UnaryTransformer[IN, OUT, T <: UnaryTransformer[IN, OUT, T]]
    * account of the embedded param map. So the param values should be determined solely by the input
    * param map.
    */
-  protected val createTransformFunc: IN => OUT
+  protected val createTransformFunc: (T, IN) => OUT
 
   /**
    * Returns the data type of the output column.
@@ -115,7 +115,8 @@ abstract class UnaryTransformer[IN, OUT, T <: UnaryTransformer[IN, OUT, T]]
 
   override def transform(dataset: DataFrame): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    val transformUDF = udf(this.createTransformFunc, outputDataType)
+    val func = (x: IN) => createTransformFunc(copy(ParamMap.empty), x)
+    val transformUDF = udf(func, outputDataType)
     dataset.withColumn($(outputCol), transformUDF(dataset($(inputCol))))
   }
 
