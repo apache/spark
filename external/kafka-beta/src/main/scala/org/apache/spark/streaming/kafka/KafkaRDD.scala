@@ -30,6 +30,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
+import org.apache.spark.storage.StorageLevel
 
 /**
  * A batch-oriented interface for consuming from Kafka.
@@ -69,6 +70,12 @@ class KafkaRDD[
     conf.getInt("spark.streaming.kafka.consumer.cache.maxCapacity", 64)
   private val cacheLoadFactor =
     conf.getDouble("spark.streaming.kafka.consumer.cache.loadFactor", 0.75).toFloat
+
+  override def persist(newLevel: StorageLevel): this.type = {
+    log.error("Kafka ConsumerRecord is not serializable. " +
+      "Use .map to extract fields before calling .persist or .window")
+    super.persist(newLevel)
+  }
 
   override def getPartitions: Array[Partition] = {
     offsetRanges.zipWithIndex.map { case (o, i) =>
@@ -203,6 +210,13 @@ object KafkaRDD extends Logging {
 
     log.warn(s"overriding ${ConsumerConfig.AUTO_OFFSET_RESET_CONFIG} to none for executor")
     kafkaParams.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "none")
+
+    // possible workaround for KAFKA-3135
+    val rbb = kafkaParams.get(ConsumerConfig.RECEIVE_BUFFER_CONFIG)
+    if (null == rbb || rbb.asInstanceOf[java.lang.Integer] < 65536) {
+      log.warn(s"overriding ${ConsumerConfig.RECEIVE_BUFFER_CONFIG} to 65536 for KAFKA-3135")
+      kafkaParams.put(ConsumerConfig.RECEIVE_BUFFER_CONFIG, 65536: java.lang.Integer)
+    }
   }
 
   def apply[K: ClassTag, V: ClassTag](

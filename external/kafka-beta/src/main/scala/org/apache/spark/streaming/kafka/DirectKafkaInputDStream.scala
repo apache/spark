@@ -31,6 +31,7 @@ import org.apache.kafka.common.{ PartitionInfo, TopicPartition }
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{StreamingContext, Time}
 import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.scheduler.{RateController, StreamInputInfo}
@@ -66,6 +67,12 @@ class DirectKafkaInputDStream[K: ClassTag, V: ClassTag] private[spark] (
     kc
   }
   consumer()
+
+  override def persist(newLevel: StorageLevel): DStream[ConsumerRecord[K, V]] = {
+    log.error("Kafka ConsumerRecord is not serializable. " +
+      "Use .map to extract fields before calling .persist or .window")
+    super.persist(newLevel)
+  }
 
   protected def getBrokers = {
     val c = consumer
@@ -180,8 +187,7 @@ class DirectKafkaInputDStream[K: ClassTag, V: ClassTag] private[spark] (
       val fo = currentOffsets(tp)
       OffsetRange(tp.topic, tp.partition, fo, uo)
     }
-
-    val rdd = KafkaRDD[K, V](
+    val rdd = new KafkaRDD[K, V](
       context.sparkContext, executorKafkaParams, offsetRanges.toArray, getPreferredHosts)
 
     // Report the record number and metadata of this batch interval to InputInfoTracker.

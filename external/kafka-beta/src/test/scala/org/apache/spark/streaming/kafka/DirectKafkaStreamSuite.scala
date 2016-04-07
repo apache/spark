@@ -478,6 +478,8 @@ class DirectKafkaStreamSuite
     val topicPartitions = Set(new TopicPartition(topic, 0), new TopicPartition(topic, 1))
     kafkaTestUtils.createTopic(topic, 2)
     val kafkaParams = getKafkaParams("auto.offset.reset" -> "earliest")
+    val executorKafkaParams = new JHashMap[String, Object](kafkaParams)
+    KafkaRDD.fixKafkaParams(executorKafkaParams)
 
     val batchIntervalMilliseconds = 100
     val estimator = new ConstantEstimator(100)
@@ -495,7 +497,7 @@ class DirectKafkaStreamSuite
     ssc = new StreamingContext(sparkConf, Milliseconds(batchIntervalMilliseconds))
 
     val kafkaStream = withClue("Error creating direct stream") {
-      new DirectKafkaInputDStream[String, String](ssc, preferredHosts, kafkaParams, () => {
+      new DirectKafkaInputDStream[String, String](ssc, preferredHosts, executorKafkaParams, () => {
         val consumer = new KafkaConsumer[String, String](kafkaParams)
         consumer.subscribe(Arrays.asList(topic))
         consumer
@@ -557,14 +559,20 @@ class DirectKafkaStreamSuite
     ssc = new StreamingContext(sparkConf, Milliseconds(batchIntervalMilliseconds))
 
     val kafkaParams = getKafkaParams("auto.offset.reset" -> "earliest")
+    val executorKafkaParams = new JHashMap[String, Object](kafkaParams)
+    KafkaRDD.fixKafkaParams(executorKafkaParams)
 
-    val s = new DirectKafkaInputDStream[String, String](ssc, preferredHosts, kafkaParams, () => {
-      val consumer = new KafkaConsumer[String, String](kafkaParams)
-      val tps = List(new TopicPartition(topic, 0), new TopicPartition(topic, 1))
-      consumer.assign(Arrays.asList(tps: _*))
-      tps.foreach(tp => consumer.seek(tp, 0))
-      consumer
-    }) {
+    val s = new DirectKafkaInputDStream[String, String](
+      ssc,
+      preferredHosts,
+      executorKafkaParams,
+      () => {
+        val consumer = new KafkaConsumer[String, String](kafkaParams)
+        val tps = List(new TopicPartition(topic, 0), new TopicPartition(topic, 1))
+        consumer.assign(Arrays.asList(tps: _*))
+        tps.foreach(tp => consumer.seek(tp, 0))
+        consumer
+      }) {
       override protected[streaming] val rateController = mockRateController
     }
     // manual start necessary because we arent consuming the stream, just checking its state
