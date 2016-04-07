@@ -680,7 +680,8 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       withTempPath { dir =>
         val path = "file://" + dir.getCanonicalPath
         val df1 = sqlContext.range(4)
-        df1.repartition(2).write.format(dataSourceName).save(path)
+        df1.coalesce(1).write.mode("overwrite").format(dataSourceName).save(path)
+        df1.coalesce(1).write.mode("append").format(dataSourceName).save(path)
 
         val df2 = sqlContext.read
           .format(dataSourceName)
