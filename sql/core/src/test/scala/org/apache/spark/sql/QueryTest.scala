@@ -29,9 +29,11 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.LogicalRDD
+import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.streaming.MemoryPlan
+import org.apache.spark.sql.types.ObjectType
 
 abstract class QueryTest extends PlanTest {
 
@@ -204,6 +206,8 @@ abstract class QueryTest extends PlanTest {
       case _: MemoryPlan => return
     }.transformAllExpressions {
       case a: ImperativeAggregate => return
+      case _: TypedAggregateExpression => return
+      case Literal(_, _: ObjectType) => return
     }
 
     // bypass hive tests before we fix all corner cases in hive module.
