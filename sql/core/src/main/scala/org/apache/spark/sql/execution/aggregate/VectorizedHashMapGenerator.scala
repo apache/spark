@@ -130,9 +130,10 @@ class VectorizedHashMapGenerator(
    */
   private def generateHashFunction(): String = {
     s"""
-       |// TODO: Improve this hash function
        |private long hash($groupingKeySignature) {
-       |  return ${groupingKeys.map(_._2).mkString(" | ")};
+       |  long h = 0;
+       |  ${groupingKeys.map(key => s"h = (h << 5) - h + ${key._2};").mkString("\n")}
+       |  return h;
        |}
      """.stripMargin
   }
