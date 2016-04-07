@@ -129,16 +129,17 @@ private[sql] abstract class BaseWriterContainer(
       outputWriterFactory.newInstance(path, bucketId, dataSchema, taskAttemptContext)
     } catch {
       case e: org.apache.hadoop.fs.FileAlreadyExistsException =>
-        if (outputCommitter.isInstanceOf[parquet.DirectParquetOutputCommitter]) {
-          // Spark-11382: DirectParquetOutputCommitter is not idempotent, meaning on retry
+        if (outputCommitter.getClass.getName.contains("Direct")) {
+          // SPARK-11382: DirectParquetOutputCommitter is not idempotent, meaning on retry
           // attempts, the task will fail because the output file is created from a prior attempt.
           // This often means the most visible error to the user is misleading. Augment the error
           // to tell the user to look for the actual error.
           throw new SparkException("The output file already exists but this could be due to a " +
             "failure from an earlier attempt. Look through the earlier logs or stage page for " +
-            "the first error.\n  File exists error: " + e)
+            "the first error.\n  File exists error: " + e.getLocalizedMessage, e)
+        } else {
+          throw e
         }
-        throw e
     }
   }
 
@@ -155,15 +156,6 @@ private[sql] abstract class BaseWriterContainer(
       logInfo(
         s"Using default output committer ${defaultOutputCommitter.getClass.getCanonicalName} " +
           "for appending.")
-      defaultOutputCommitter
-    } else if (speculationEnabled) {
-      // When speculation is enabled, it's not safe to use customized output committer classes,
-      // especially direct output committers (e.g. `DirectParquetOutputCommitter`).
-      //
-      // See SPARK-9899 for more details.
-      logInfo(
-        s"Using default output committer ${defaultOutputCommitter.getClass.getCanonicalName} " +
-          "because spark.speculation is configured to be true.")
       defaultOutputCommitter
     } else {
       val configuration = context.getConfiguration
