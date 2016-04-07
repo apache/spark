@@ -29,10 +29,11 @@ import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
 import org.apache.spark.sql.catalyst._
-import org.apache.spark.sql.catalyst.catalog.{ExternalCatalog, InMemoryCatalog}
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Range}
@@ -41,7 +42,6 @@ import org.apache.spark.sql.execution.command.ShowTablesCommand
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.ui.{SQLListener, SQLTab}
 import org.apache.spark.sql.internal.{SessionState, SQLConf}
-import org.apache.spark.sql.internal.SQLConf.SQLConfEntry
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ExecutionListenerManager
@@ -120,7 +120,7 @@ class SQLContext private[sql](
    */
   @transient
   protected[sql] lazy val sessionState: SessionState = new SessionState(self)
-  protected[sql] def conf: SQLConf = sessionState.conf
+  protected[spark] def conf: SQLConf = sessionState.conf
 
   /**
    * An interface to register custom [[org.apache.spark.sql.util.QueryExecutionListener]]s
@@ -138,7 +138,7 @@ class SQLContext private[sql](
   def setConf(props: Properties): Unit = conf.setConf(props)
 
   /** Set the given Spark SQL configuration property. */
-  private[sql] def setConf[T](entry: SQLConfEntry[T], value: T): Unit = conf.setConf(entry, value)
+  private[sql] def setConf[T](entry: ConfigEntry[T], value: T): Unit = conf.setConf(entry, value)
 
   /**
    * Set the given Spark SQL configuration property.
@@ -158,16 +158,16 @@ class SQLContext private[sql](
 
   /**
    * Return the value of Spark SQL configuration property for the given key. If the key is not set
-   * yet, return `defaultValue` in [[SQLConfEntry]].
+   * yet, return `defaultValue` in [[ConfigEntry]].
    */
-  private[sql] def getConf[T](entry: SQLConfEntry[T]): T = conf.getConf(entry)
+  private[sql] def getConf[T](entry: ConfigEntry[T]): T = conf.getConf(entry)
 
   /**
    * Return the value of Spark SQL configuration property for the given key. If the key is not set
-   * yet, return `defaultValue`. This is useful when `defaultValue` in SQLConfEntry is not the
+   * yet, return `defaultValue`. This is useful when `defaultValue` in ConfigEntry is not the
    * desired one.
    */
-  private[sql] def getConf[T](entry: SQLConfEntry[T], defaultValue: T): T = {
+  private[sql] def getConf[T](entry: ConfigEntry[T], defaultValue: T): T = {
     conf.getConf(entry, defaultValue)
   }
 
@@ -206,6 +206,22 @@ class SQLContext private[sql](
    */
   protected[sql] def addJar(path: String): Unit = {
     sparkContext.addJar(path)
+  }
+
+  /** A [[FunctionResourceLoader]] that can be used in SessionCatalog. */
+  @transient protected[sql] lazy val functionResourceLoader: FunctionResourceLoader = {
+    new FunctionResourceLoader {
+      override def loadResource(resource: FunctionResource): Unit = {
+        resource.resourceType match {
+          case JarResource => addJar(resource.uri)
+          case FileResource => sparkContext.addFile(resource.uri)
+          case ArchiveResource =>
+            throw new AnalysisException(
+              "Archive is not allowed to be loaded. If YARN mode is used, " +
+                "please use --archives options while calling spark-submit.")
+        }
+      }
+    }
   }
 
   /**
@@ -712,13 +728,13 @@ class SQLContext private[sql](
   }
 
   /**
-    * :: Experimental ::
-    * Creates a [[Dataset]] with a single [[LongType]] column named `id`, containing elements
-    * in an range from `start` to `end` (exclusive) with an step value.
-    *
-    * @since 2.0.0
-    * @group dataset
-    */
+   * :: Experimental ::
+   * Creates a [[Dataset]] with a single [[LongType]] column named `id`, containing elements
+   * in an range from `start` to `end` (exclusive) with an step value.
+   *
+   * @since 2.0.0
+   * @group dataset
+   */
   @Experimental
   def range(start: Long, end: Long, step: Long): Dataset[java.lang.Long] = {
     range(start, end, step, numPartitions = sparkContext.defaultParallelism)
@@ -781,7 +797,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def tables(): DataFrame = {
-    Dataset.ofRows(this, ShowTablesCommand(None))
+    Dataset.ofRows(this, ShowTablesCommand(None, None))
   }
 
   /**
@@ -793,7 +809,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def tables(databaseName: String): DataFrame = {
-    Dataset.ofRows(this, ShowTablesCommand(Some(databaseName)))
+    Dataset.ofRows(this, ShowTablesCommand(Some(databaseName), None))
   }
 
   /**

@@ -27,6 +27,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.util._
@@ -42,19 +43,17 @@ import org.apache.spark.util.UninterruptibleThread
  * and the results are committed transactionally to the given [[Sink]].
  */
 class StreamExecution(
-    val sqlContext: SQLContext,
+    override val sqlContext: SQLContext,
     override val name: String,
-    val checkpointRoot: String,
+    checkpointRoot: String,
     private[sql] val logicalPlan: LogicalPlan,
-    val sink: Sink) extends ContinuousQuery with Logging {
+    val sink: Sink,
+    val trigger: Trigger) extends ContinuousQuery with Logging {
 
   /** An monitor used to wait/notify when batches complete. */
   private val awaitBatchLock = new Object
   private val startLatch = new CountDownLatch(1)
   private val terminationLatch = new CountDownLatch(1)
-
-  /** Minimum amount of time in between the start of each batch. */
-  private val minBatchTime = 10
 
   /**
    * Tracks how much data we have processed and committed to the sink or state store from each
@@ -73,10 +72,14 @@ class StreamExecution(
 
   /** All stream sources present the query plan. */
   private val sources =
-    logicalPlan.collect { case s: StreamingRelation => s.source }
+    logicalPlan.collect { case s: StreamingExecutionRelation => s.source }
 
   /** A list of unique sources in the query plan. */
   private val uniqueSources = sources.distinct
+
+  private val triggerExecutor = trigger match {
+    case t: ProcessingTime => ProcessingTimeExecutor(t)
+  }
 
   /** Defines the internal state of execution */
   @volatile
@@ -153,11 +156,15 @@ class StreamExecution(
       SQLContext.setActive(sqlContext)
       populateStartOffsets()
       logDebug(s"Stream running from $committedOffsets to $availableOffsets")
-      while (isActive) {
-        if (dataAvailable) runBatch()
-        commitAndConstructNextBatch()
-        Thread.sleep(minBatchTime) // TODO: Could be tighter
-      }
+      triggerExecutor.execute(() => {
+        if (isActive) {
+          if (dataAvailable) runBatch()
+          constructNextBatch()
+          true
+        } else {
+          false
+        }
+      })
     } catch {
       case _: InterruptedException if state == TERMINATED => // interrupted by stop()
       case NonFatal(e) =>
@@ -200,7 +207,7 @@ class StreamExecution(
       case None => // We are starting this stream for the first time.
         logInfo(s"Starting new continuous query.")
         currentBatchId = 0
-        commitAndConstructNextBatch()
+        constructNextBatch()
     }
   }
 
@@ -220,15 +227,8 @@ class StreamExecution(
   /**
    * Queries all of the sources to see if any new data is available. When there is new data the
    * batchId counter is incremented and a new log entry is written with the newest offsets.
-   *
-   * Note that committing the offsets for a new batch implicitly marks the previous batch as
-   * finished and thus this method should only be called when all currently available data
-   * has been written to the sink.
    */
-  private def commitAndConstructNextBatch(): Boolean = {
-    // Update committed offsets.
-    committedOffsets ++= availableOffsets
-
+  private def constructNextBatch(): Boolean = {
     // There is a potential dead-lock in Hadoop "Shell.runCommand" before 2.5.0 (HADOOP-10622).
     // If we interrupt some thread running Shell.runCommand, we may hit this issue.
     // As "FileStreamSource.getOffset" will create a file using HDFS API and call "Shell.runCommand"
@@ -272,6 +272,8 @@ class StreamExecution(
   private def runBatch(): Unit = {
     val startTime = System.nanoTime()
 
+    // TODO: Move this to IncrementalExecution.
+
     // Request unprocessed data from all sources.
     val newData = availableOffsets.flatMap {
       case (source, available) if committedOffsets.get(source).map(_ < available).getOrElse(true) =>
@@ -286,7 +288,7 @@ class StreamExecution(
     var replacements = new ArrayBuffer[(Attribute, Attribute)]
     // Replace sources in the logical plan with data that has arrived since the last batch.
     val withNewSources = logicalPlan transform {
-      case StreamingRelation(source, output) =>
+      case StreamingExecutionRelation(source, output) =>
         newData.get(source).map { data =>
           val newPlan = data.logicalPlan
           assert(output.size == newPlan.output.size,
@@ -305,13 +307,14 @@ class StreamExecution(
     }
 
     val optimizerStart = System.nanoTime()
-
-    lastExecution = new QueryExecution(sqlContext, newPlan)
-    val executedPlan = lastExecution.executedPlan
+    lastExecution =
+        new IncrementalExecution(sqlContext, newPlan, checkpointFile("state"), currentBatchId)
+    lastExecution.executedPlan
     val optimizerTime = (System.nanoTime() - optimizerStart).toDouble / 1000000
     logDebug(s"Optimized batch in ${optimizerTime}ms")
 
-    val nextBatch = Dataset.ofRows(sqlContext, newPlan)
+    val nextBatch =
+      new Dataset(sqlContext, lastExecution, RowEncoder(lastExecution.analyzed.schema))
     sink.addBatch(currentBatchId - 1, nextBatch)
 
     awaitBatchLock.synchronized {
@@ -321,6 +324,8 @@ class StreamExecution(
 
     val batchTime = (System.nanoTime() - startTime).toDouble / 1000000
     logInfo(s"Completed up to $availableOffsets in ${batchTime}ms")
+    // Update committed offsets.
+    committedOffsets ++= availableOffsets
     postEvent(new QueryProgress(this))
   }
 

@@ -415,7 +415,7 @@ class ExpressionParserSuite extends PlanTest {
     assertEqual("'\\110\\145\\154\\154\\157\\041'", "Hello!")
 
     // Unicode
-    assertEqual("'\\u0087\\u0111\\u0114\\u0108\\u0100\\u0032\\u0058\\u0041'", "World :)")
+    assertEqual("'\\u0057\\u006F\\u0072\\u006C\\u0064\\u0020\\u003A\\u0029'", "World :)")
   }
 
   test("intervals") {

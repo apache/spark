@@ -272,7 +272,12 @@ private[spark] class HiveExternalCatalog(client: HiveClient) extends ExternalCat
   override def createFunction(
       db: String,
       funcDefinition: CatalogFunction): Unit = withClient {
-    client.createFunction(db, funcDefinition)
+    // Hive's metastore is case insensitive. However, Hive's createFunction does
+    // not normalize the function name (unlike the getFunction part). So,
+    // we are normalizing the function name.
+    val functionName = funcDefinition.identifier.funcName.toLowerCase
+    val functionIdentifier = funcDefinition.identifier.copy(funcName = functionName)
+    client.createFunction(db, funcDefinition.copy(identifier = functionIdentifier))
   }
 
   override def dropFunction(db: String, name: String): Unit = withClient {
@@ -281,10 +286,6 @@ private[spark] class HiveExternalCatalog(client: HiveClient) extends ExternalCat
 
   override def renameFunction(db: String, oldName: String, newName: String): Unit = withClient {
     client.renameFunction(db, oldName, newName)
-  }
-
-  override def alterFunction(db: String, funcDefinition: CatalogFunction): Unit = withClient {
-    client.alterFunction(db, funcDefinition)
   }
 
   override def getFunction(db: String, funcName: String): CatalogFunction = withClient {

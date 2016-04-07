@@ -37,7 +37,7 @@ private[r] class KMeansWrapper private (
 
   lazy val k: Int = kMeansModel.getK
 
-  lazy val size: Array[Int] = kMeansModel.summary.size
+  lazy val size: Array[Int] = kMeansModel.summary.clusterSizes
 
   lazy val cluster: DataFrame = kMeansModel.summary.cluster
 
