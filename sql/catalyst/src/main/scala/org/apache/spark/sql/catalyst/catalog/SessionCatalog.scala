@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchFunctionE
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
-
+import org.apache.spark.sql.catalyst.util.StringUtils
 
 /**
  * An internal catalog that is used by a Spark Session. This internal catalog serves as a
@@ -297,9 +297,7 @@ class SessionCatalog(
   def listTables(db: String, pattern: String): Seq[TableIdentifier] = {
     val dbTables =
       externalCatalog.listTables(db, pattern).map { t => TableIdentifier(t, Some(db)) }
-    val regex = pattern.replaceAll("\\*", ".*").r
-    val _tempTables = tempTables.keys.toSeq
-      .filter { t => regex.pattern.matcher(t).matches() }
+    val _tempTables = StringUtils.filterPattern(tempTables.keys.toSeq, pattern)
       .map { t => TableIdentifier(t) }
     dbTables ++ _tempTables
   }
@@ -613,9 +611,7 @@ class SessionCatalog(
   def listFunctions(db: String, pattern: String): Seq[FunctionIdentifier] = {
     val dbFunctions =
       externalCatalog.listFunctions(db, pattern).map { f => FunctionIdentifier(f, Some(db)) }
-    val regex = pattern.replaceAll("\\*", ".*").r
-    val loadedFunctions = functionRegistry.listFunction()
-      .filter { f => regex.pattern.matcher(f).matches() }
+    val loadedFunctions = StringUtils.filterPattern(functionRegistry.listFunction(), pattern)
       .map { f => FunctionIdentifier(f) }
     // TODO: Actually, there will be dbFunctions that have been loaded into the FunctionRegistry.
     // So, the returned list may have two entries for the same function.

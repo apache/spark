@@ -372,7 +372,11 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "alter_index",
 
     // Macro commands are not supported
-    "macro"
+    "macro",
+
+    // Create partitioned view is not supported
+    "create_like_view",
+    "describe_formatted_view_partitioned"
   )
 
   /**
@@ -482,7 +486,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "cp_mj_rc",
     "create_insert_outputformat",
     "create_like_tbl_props",
-    "create_like_view",
     "create_nested_type",
     "create_skewed_table1",
     "create_struct_table",
@@ -507,7 +510,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "default_partition_name",
     "delimiter",
     "desc_non_existent_tbl",
-    "describe_formatted_view_partitioned",
     "diff_part_input_formats",
     "disable_file_format_check",
     "disallow_incompatible_type_change_off",
