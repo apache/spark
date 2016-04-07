@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive
 import org.apache.hadoop.hive.serde.serdeConstants
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -29,7 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.JsonTuple
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, ScriptTransformation}
-import org.apache.spark.sql.hive.execution.{HiveNativeCommand, HiveSqlParser}
+import org.apache.spark.sql.hive.execution.{DropTable, HiveNativeCommand, HiveSqlParser}
 
 class HiveDDLCommandSuite extends PlanTest {
   val parser = HiveSqlParser
@@ -72,6 +73,7 @@ class HiveDDLCommandSuite extends PlanTest {
       CatalogColumn("country", "string", comment = Some("country of origination")) :: Nil)
     // TODO will be SQLText
     assert(desc.viewText == Option("This is the staging page view table"))
+    assert(desc.viewOriginalText.isEmpty)
     assert(desc.partitionColumns ==
       CatalogColumn("dt", "string", comment = Some("date type")) ::
       CatalogColumn("hour", "string", comment = Some("hour of the day")) :: Nil)
@@ -118,6 +120,7 @@ class HiveDDLCommandSuite extends PlanTest {
       CatalogColumn("country", "string", comment = Some("country of origination")) :: Nil)
     // TODO will be SQLText
     assert(desc.viewText == Option("This is the staging page view table"))
+    assert(desc.viewOriginalText.isEmpty)
     assert(desc.partitionColumns ==
       CatalogColumn("dt", "string", comment = Some("date type")) ::
       CatalogColumn("hour", "string", comment = Some("hour of the day")) :: Nil)
@@ -138,6 +141,7 @@ class HiveDDLCommandSuite extends PlanTest {
     assert(desc.storage.locationUri == None)
     assert(desc.schema == Seq.empty[CatalogColumn])
     assert(desc.viewText == None) // TODO will be SQLText
+    assert(desc.viewOriginalText.isEmpty)
     assert(desc.storage.serdeProperties == Map())
     assert(desc.storage.inputFormat == Some("org.apache.hadoop.mapred.TextInputFormat"))
     assert(desc.storage.outputFormat ==
@@ -173,6 +177,7 @@ class HiveDDLCommandSuite extends PlanTest {
     assert(desc.storage.locationUri == None)
     assert(desc.schema == Seq.empty[CatalogColumn])
     assert(desc.viewText == None) // TODO will be SQLText
+    assert(desc.viewOriginalText.isEmpty)
     assert(desc.storage.serdeProperties == Map(("serde_p1" -> "p1"), ("serde_p2" -> "p2")))
     assert(desc.storage.inputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileInputFormat"))
     assert(desc.storage.outputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileOutputFormat"))
@@ -227,7 +232,7 @@ class HiveDDLCommandSuite extends PlanTest {
   }
 
   test("use backticks in output of Script Transform") {
-    val plan = parser.parsePlan(
+    parser.parsePlan(
       """SELECT `t`.`thing1`
         |FROM (SELECT TRANSFORM (`parquet_t1`.`key`, `parquet_t1`.`value`)
         |USING 'cat' AS (`thing1` int, `thing2` string) FROM `default`.`parquet_t1`) AS t
@@ -235,7 +240,7 @@ class HiveDDLCommandSuite extends PlanTest {
   }
 
   test("use backticks in output of Generator") {
-    val plan = parser.parsePlan(
+    parser.parsePlan(
       """
         |SELECT `gentab2`.`gencol2`
         |FROM `default`.`src`
@@ -245,7 +250,7 @@ class HiveDDLCommandSuite extends PlanTest {
   }
 
   test("use escaped backticks in output of Generator") {
-    val plan = parser.parsePlan(
+    parser.parsePlan(
       """
         |SELECT `gen``tab2`.`gen``col2`
         |FROM `default`.`src`
@@ -304,5 +309,53 @@ class HiveDDLCommandSuite extends PlanTest {
     intercept[ParseException] {
       parser.parsePlan(v1).isInstanceOf[HiveNativeCommand]
     }
+  }
+
+  test("drop table") {
+    val tableName1 = "db.tab"
+    val tableName2 = "tab"
+
+    val parsed1 = parser.parsePlan(s"DROP TABLE $tableName1")
+    val parsed2 = parser.parsePlan(s"DROP TABLE IF EXISTS $tableName1")
+    val parsed3 = parser.parsePlan(s"DROP TABLE $tableName2")
+    val parsed4 = parser.parsePlan(s"DROP TABLE IF EXISTS $tableName2")
+
+    val expected1 =
+      DropTable(TableIdentifier("tab", Option("db")), ifExists = false, isView = false)
+    val expected2 =
+      DropTable(TableIdentifier("tab", Option("db")), ifExists = true, isView = false)
+    val expected3 =
+      DropTable(TableIdentifier("tab", None), ifExists = false, isView = false)
+    val expected4 =
+      DropTable(TableIdentifier("tab", None), ifExists = true, isView = false)
+
+    comparePlans(parsed1, expected1)
+    comparePlans(parsed2, expected2)
+    comparePlans(parsed3, expected3)
+    comparePlans(parsed4, expected4)
+  }
+
+  test("drop view") {
+    val viewName1 = "db.view"
+    val viewName2 = "view"
+
+    val parsed1 = parser.parsePlan(s"DROP VIEW $viewName1")
+    val parsed2 = parser.parsePlan(s"DROP VIEW IF EXISTS $viewName1")
+    val parsed3 = parser.parsePlan(s"DROP VIEW $viewName2")
+    val parsed4 = parser.parsePlan(s"DROP VIEW IF EXISTS $viewName2")
+
+    val expected1 =
+      DropTable(TableIdentifier("view", Option("db")), ifExists = false, isView = true)
+    val expected2 =
+      DropTable(TableIdentifier("view", Option("db")), ifExists = true, isView = true)
+    val expected3 =
+      DropTable(TableIdentifier("view", None), ifExists = false, isView = true)
+    val expected4 =
+      DropTable(TableIdentifier("view", None), ifExists = true, isView = true)
+
+    comparePlans(parsed1, expected1)
+    comparePlans(parsed2, expected2)
+    comparePlans(parsed3, expected3)
+    comparePlans(parsed4, expected4)
   }
 }

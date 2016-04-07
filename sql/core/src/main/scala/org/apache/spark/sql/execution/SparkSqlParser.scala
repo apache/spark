@@ -367,6 +367,22 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   /**
+   * Create a [[DropTable]] command.
+   */
+  override def visitDropTable(ctx: DropTableContext): LogicalPlan = withOrigin(ctx) {
+    if (ctx.PURGE != null) {
+      logWarning("PURGE option is ignored.")
+    }
+    if (ctx.REPLICATION != null) {
+      logWarning("REPLICATION clause is ignored.")
+    }
+    DropTable(
+      visitTableIdentifier(ctx.tableIdentifier),
+      ctx.EXISTS != null,
+      ctx.kind.getType == SqlBaseParser.VIEW)
+  }
+
+  /**
    * Create a [[AlterTableRename]] command.
    *
    * For example:
