@@ -447,14 +447,7 @@ case class TungstenAggregate(
       new TungstenAggregateHashMap(ctx, aggregateHashMapClassName, groupingKeySchema, bufferSchema)
     if (isAggregateHashMapEnabled && isAggregateHashMapSupported) {
       ctx.addMutableState(aggregateHashMapClassName, aggregateHashMapTerm,
-        s"""
-           |org.apache.spark.sql.types.StructType schema =
-           |  new org.apache.spark.sql.types.StructType()
-           |  ${(groupingKeySchema ++ bufferSchema).map(k =>
-                s""".add("${k.name}", org.apache.spark.sql.types.DataTypes.${k.dataType})""")
-                .mkString("\n")};
-           |$aggregateHashMapTerm = new $aggregateHashMapClassName(schema);
-         """.stripMargin)
+        s"$aggregateHashMapTerm = new $aggregateHashMapClassName();")
     }
 
     // create hashMap

@@ -44,15 +44,23 @@ class TungstenAggregateHashMap(
   }
 
   def initializeAggregateHashMap(): String = {
+    val generatedSchema: String =
+      s"""
+         |new org.apache.spark.sql.types.StructType()
+         |${(groupingKeySchema ++ bufferSchema).map(key =>
+          s""".add("${key.name}", org.apache.spark.sql.types.DataTypes.${key.dataType})""")
+          .mkString("\n")};
+      """.stripMargin
+
     s"""
        |  private org.apache.spark.sql.execution.vectorized.ColumnarBatch batch;
        |  private int[] buckets;
        |  private int numBuckets;
        |  private int maxSteps;
        |  private int numRows = 0;
+       |  private org.apache.spark.sql.types.StructType schema = $generatedSchema
        |
-       |  public $generatedClassName(org.apache.spark.sql.types.StructType schema, int capacity,
-       |      double loadFactor, int maxSteps) {
+       |  public $generatedClassName(int capacity, double loadFactor, int maxSteps) {
        |    assert (capacity > 0 && ((capacity & (capacity - 1)) == 0));
        |    this.maxSteps = maxSteps;
        |    numBuckets = (int) (capacity / loadFactor);
@@ -62,8 +70,8 @@ class TungstenAggregateHashMap(
        |    java.util.Arrays.fill(buckets, -1);
        |  }
        |
-       |  public $generatedClassName(org.apache.spark.sql.types.StructType schema) {
-       |    new $generatedClassName(schema, 1 << 16, 0.25, 5);
+       |  public $generatedClassName() {
+       |    new $generatedClassName(1 << 16, 0.25, 5);
        |  }
      """.stripMargin
   }
