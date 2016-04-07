@@ -1162,7 +1162,7 @@ class DataFrame(object):
             self._jdf.na().replace(self._jseq(subset), self._jmap(rep_dict)), self.sql_ctx)
 
     @since(2.0)
-    def approxQuantile(self, col, probabilities, relativeError):
+    def approxQuantile(self, cols, probabilities, relativeError):
         """
         Calculates the approximate quantiles of a numerical column of a
         DataFrame.
@@ -1181,7 +1181,7 @@ class DataFrame(object):
         Space-efficient Online Computation of Quantile Summaries]]
         by Greenwald and Khanna.
 
-        :param col: the name of the numerical column
+        :param cols: the name(s) of the numerical column(s)
         :param probabilities: a list of quantile probabilities
           Each number must belong to [0, 1].
           For example 0 is the minimum, 0.5 is the median, 1 is the maximum.
@@ -1191,8 +1191,13 @@ class DataFrame(object):
           accepted but give the same result as 1.
         :return:  the approximate quantiles at the given probabilities
         """
-        if not isinstance(col, str):
-            raise ValueError("col should be a string.")
+        if not isinstance(cols, (str, list, tuple)):
+            raise ValueError("col should be a string, list or tuple.")
+
+        if isinstance(cols, tuple):
+            cols = list(cols)
+        if isinstance(cols, list):
+            cols = _to_list(self._sc, cols)
 
         if not isinstance(probabilities, (list, tuple)):
             raise ValueError("probabilities should be a list or tuple")
@@ -1207,8 +1212,12 @@ class DataFrame(object):
             raise ValueError("relativeError should be numerical (float, int, long) >= 0.")
         relativeError = float(relativeError)
 
-        jaq = self._jdf.stat().approxQuantile(col, probabilities, relativeError)
-        return list(jaq)
+        jaq = self._jdf.stat().approxQuantile(cols, probabilities, relativeError)
+        jaq = list(jaq)
+        for idx, a in enumerate(jaq):
+            if not isinstance(a, (list, float)):
+                jaq[idx] = list(a)
+        return jaq
 
     @since(1.4)
     def corr(self, col1, col2, method=None):
@@ -1440,8 +1449,8 @@ class DataFrameStatFunctions(object):
     def __init__(self, df):
         self.df = df
 
-    def approxQuantile(self, col, probabilities, relativeError):
-        return self.df.approxQuantile(col, probabilities, relativeError)
+    def approxQuantile(self, cols, probabilities, relativeError):
+        return self.df.approxQuantile(cols, probabilities, relativeError)
 
     approxQuantile.__doc__ = DataFrame.approxQuantile.__doc__
 
