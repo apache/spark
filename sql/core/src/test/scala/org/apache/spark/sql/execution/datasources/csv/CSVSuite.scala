@@ -152,19 +152,6 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     checkAnswer(rows, expectedRows)
   }
 
-  test("throws an wrapped exception for maxCharsPerColumn") {
-    val exception = intercept[RuntimeException] {
-      val rows = sqlContext.read
-        .format("csv")
-        .option("maxCharsPerColumn", "2")
-        .load(testFile(unescapedQuotesFile))
-        .collect()
-    }
-
-    assert(exception.getMessage.contains("Length of parsed input exceeds the " +
-      "maximum number of characters defined at maxCharsPerColumn."))
-  }
-
   test("bad encoding name") {
     val exception = intercept[UnsupportedCharsetException] {
       sqlContext

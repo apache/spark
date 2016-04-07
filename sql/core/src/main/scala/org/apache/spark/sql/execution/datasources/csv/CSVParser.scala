@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.datasources.csv
 import java.io.{ByteArrayOutputStream, OutputStreamWriter, StringReader}
 import java.nio.charset.StandardCharsets
 
-import com.univocity.parsers.common.TextParsingException
 import com.univocity.parsers.csv.{CsvParser, CsvParserSettings, CsvWriter, CsvWriterSettings}
 
 import org.apache.spark.internal.Logging
@@ -105,18 +104,10 @@ private[sql] class LineCsvReader(params: CSVOptions)
    * @return array of strings where each string is a field in the CSV record
    */
   def parseLine(line: String): Array[String] = {
-    try {
-      parser.parseLine(line)
-    } catch {
-      case e: TextParsingException =>
-        val contents = e.getParsedContent
-        val length = e.getParsedContent.length
-        val colIndex = e.getColumnIndex
-        throw new RuntimeException(s"Length of parsed input exceeds the maximum number of " +
-          s"characters defined at maxCharsPerColumn. Please increase the value " +
-          s"for maxCharsPerColumn option. Column index: [$colIndex] " +
-          s"maxCharsPerColumn value: [$length] Parsed content: [$contents]")
-    }
+    parser.beginParsing(new StringReader(line))
+    val parsed = parser.parseNext()
+    parser.stopParsing()
+    parsed
   }
 }
 
@@ -144,18 +135,7 @@ private[sql] class BulkCsvReader(
   override def next(): Array[String] = {
     val curRecord = nextRecord
     if(curRecord != null) {
-      try {
-        nextRecord = parser.parseNext()
-      } catch {
-        case e: TextParsingException =>
-          val contents = e.getParsedContent
-          val length = e.getParsedContent.length
-          val colIndex = e.getColumnIndex
-          throw new RuntimeException(s"Length of parsed input exceeds the maximum number of " +
-            s"characters defined at maxCharsPerColumn. Please increase the value " +
-            s"for maxCharsPerColumn option. Column index: [$colIndex] " +
-            s"maxCharsPerColumn value: [$length] Parsed content: [$contents]")
-      }
+      nextRecord = parser.parseNext()
     } else {
       throw new NoSuchElementException("next record is null")
     }
