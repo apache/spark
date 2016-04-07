@@ -76,13 +76,6 @@ private[sql] class DefaultSource
 
     val conf = ContextUtil.getConfiguration(job)
 
-    // SPARK-9849 DirectParquetOutputCommitter qualified name should be backward compatible
-    val committerClassName = conf.get(SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key)
-    if (committerClassName == "org.apache.spark.sql.parquet.DirectParquetOutputCommitter") {
-      conf.set(SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key,
-        classOf[DirectParquetOutputCommitter].getCanonicalName)
-    }
-
     val committerClass =
       conf.getClass(
         SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key,
