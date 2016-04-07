@@ -44,33 +44,33 @@ abstract class SQLImplicits {
   }
 
   /** @since 1.6.0 */
-  implicit def newProductEncoder[T <: Product : TypeTag]: Encoder[T] = ExpressionEncoder()
+  implicit def newProductEncoder[T <: Product : TypeTag]: Encoder[T] = Encoders.product[T]
 
   // Primitives
 
   /** @since 1.6.0 */
-  implicit def newIntEncoder: Encoder[Int] = ExpressionEncoder()
+  implicit def newIntEncoder: Encoder[Int] = Encoders.scalaInt
 
   /** @since 1.6.0 */
-  implicit def newLongEncoder: Encoder[Long] = ExpressionEncoder()
+  implicit def newLongEncoder: Encoder[Long] = Encoders.scalaLong
 
   /** @since 1.6.0 */
-  implicit def newDoubleEncoder: Encoder[Double] = ExpressionEncoder()
+  implicit def newDoubleEncoder: Encoder[Double] = Encoders.scalaDouble
 
   /** @since 1.6.0 */
-  implicit def newFloatEncoder: Encoder[Float] = ExpressionEncoder()
+  implicit def newFloatEncoder: Encoder[Float] = Encoders.scalaFloat
 
   /** @since 1.6.0 */
-  implicit def newByteEncoder: Encoder[Byte] = ExpressionEncoder()
+  implicit def newByteEncoder: Encoder[Byte] = Encoders.scalaByte
 
   /** @since 1.6.0 */
-  implicit def newShortEncoder: Encoder[Short] = ExpressionEncoder()
+  implicit def newShortEncoder: Encoder[Short] = Encoders.scalaShort
 
   /** @since 1.6.0 */
-  implicit def newBooleanEncoder: Encoder[Boolean] = ExpressionEncoder()
+  implicit def newBooleanEncoder: Encoder[Boolean] = Encoders.scalaBoolean
 
   /** @since 1.6.0 */
-  implicit def newStringEncoder: Encoder[String] = ExpressionEncoder()
+  implicit def newStringEncoder: Encoder[String] = Encoders.STRING
 
   // Seqs
 
