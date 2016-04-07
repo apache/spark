@@ -65,7 +65,7 @@ object MapPartitions {
       child: LogicalPlan): MapPartitions = {
     MapPartitions(
       func.asInstanceOf[Iterator[Any] => Iterator[Any]],
-      UnresolvedDeserializer(encoderFor[T].deserializer, Nil),
+      UnresolvedDeserializer(encoderFor[T].deserializer),
       encoderFor[U].namedExpressions,
       child)
   }
@@ -83,6 +83,30 @@ case class MapPartitions(
     serializer: Seq[NamedExpression],
     child: LogicalPlan) extends UnaryNode with ObjectOperator
 
+object MapElements {
+  def apply[T : Encoder, U : Encoder](
+      func: AnyRef,
+      child: LogicalPlan): MapElements = {
+    MapElements(
+      func,
+      UnresolvedDeserializer(encoderFor[T].deserializer),
+      encoderFor[U].namedExpressions,
+      child)
+  }
+}
+
+/**
+ * A relation produced by applying `func` to each element of the `child`.
+ *
+ * @param deserializer used to extract the input to `func` from an input row.
+ * @param serializer use to serialize the output of `func`.
+ */
+case class MapElements(
+    func: AnyRef,
+    deserializer: Expression,
+    serializer: Seq[NamedExpression],
+    child: LogicalPlan) extends UnaryNode with ObjectOperator
+
 /** Factory for constructing new `AppendColumn` nodes. */
 object AppendColumns {
   def apply[T : Encoder, U : Encoder](
@@ -90,7 +114,7 @@ object AppendColumns {
       child: LogicalPlan): AppendColumns = {
     new AppendColumns(
       func.asInstanceOf[Any => Any],
-      UnresolvedDeserializer(encoderFor[T].deserializer, Nil),
+      UnresolvedDeserializer(encoderFor[T].deserializer),
       encoderFor[U].namedExpressions,
       child)
   }

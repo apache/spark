@@ -610,6 +610,9 @@ object MimaExcludes {
         // [SPARK-13674][SQL] Add wholestage codegen support to Sample
         ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.util.random.PoissonSampler.this"),
         ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.util.random.PoissonSampler.this")
+      ) ++ Seq(
+        // [SPARK-13430][ML] moved featureCol from LinearRegressionModelSummary to LinearRegressionSummary
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.ml.regression.LinearRegressionSummary.this")
       )
     case v if v.startsWith("1.6") =>
       Seq(

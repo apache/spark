@@ -24,6 +24,7 @@ import org.apache.spark.AccumulatorSuite
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.expressions.SortOrder
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
+import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, CartesianProduct, SortMergeJoin}
 import org.apache.spark.sql.functions._
@@ -56,17 +57,14 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("show functions") {
     def getFunctions(pattern: String): Seq[Row] = {
-      val regex = java.util.regex.Pattern.compile(pattern)
-      sqlContext.sessionState.functionRegistry.listFunction()
-        .filter(regex.matcher(_).matches()).map(Row(_))
+      StringUtils.filterPattern(sqlContext.sessionState.functionRegistry.listFunction(), pattern)
+        .map(Row(_))
     }
-    checkAnswer(sql("SHOW functions"), getFunctions(".*"))
+    checkAnswer(sql("SHOW functions"), getFunctions("*"))
     Seq("^c*", "*e$", "log*", "*date*").foreach { pattern =>
       // For the pattern part, only '*' and '|' are allowed as wildcards.
       // For '*', we need to replace it to '.*'.
-      checkAnswer(
-        sql(s"SHOW FUNCTIONS '$pattern'"),
-        getFunctions(pattern.replaceAll("\\*", ".*")))
+      checkAnswer(sql(s"SHOW FUNCTIONS '$pattern'"), getFunctions(pattern))
     }
   }
 
