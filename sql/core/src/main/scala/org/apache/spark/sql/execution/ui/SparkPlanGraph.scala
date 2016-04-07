@@ -45,8 +45,8 @@ private[ui] case class SparkPlanGraph(
   }
 
   /**
-    * All the SparkPlanGraphNodes, including those inside of WholeStageCodegen.
-    */
+   * All the SparkPlanGraphNodes, including those inside of WholeStageCodegen.
+   */
   val allNodes: Seq[SparkPlanGraphNode] = {
     nodes.flatMap {
       case cluster: SparkPlanGraphCluster => cluster.nodes :+ cluster
@@ -167,8 +167,8 @@ private[ui] class SparkPlanGraphNode(
 }
 
 /**
-  * Represent a tree of SparkPlan for WholeStageCodegen.
-  */
+ * Represent a tree of SparkPlan for WholeStageCodegen.
+ */
 private[ui] class SparkPlanGraphCluster(
     id: Long,
     name: String,
