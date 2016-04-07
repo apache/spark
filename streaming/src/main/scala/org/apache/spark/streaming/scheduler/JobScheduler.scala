@@ -206,7 +206,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
       val oldProps = ssc.sparkContext.getLocalProperties
       try {
         ssc.sparkContext.setLocalProperties(
-          SerializationUtils.clone(ssc.localProperties.get()).asInstanceOf[Properties])
+          SerializationUtils.clone(ssc.savedProperties.get()).asInstanceOf[Properties])
         val formattedTime = UIUtils.formatBatchTime(
           job.time.milliseconds, ssc.graph.batchDuration.milliseconds, showYYYYMMSS = false)
         val batchUrl = s"/streaming/batch/?id=${job.time.milliseconds}"
