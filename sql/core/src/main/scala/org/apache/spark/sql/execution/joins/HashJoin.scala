@@ -47,7 +47,7 @@ trait HashJoin {
         left.output ++ right.output.map(_.withNullability(true))
       case RightOuter =>
         left.output.map(_.withNullability(true)) ++ right.output
-      case LeftSemi =>
+      case LeftExistence(_) =>
         left.output
       case x =>
         throw new IllegalArgumentException(s"HashJoin should not take $x as the JoinType")
@@ -197,6 +197,20 @@ trait HashJoin {
     }
   }
 
+  private def antiJoin(
+      streamIter: Iterator[InternalRow],
+      hashedRelation: HashedRelation): Iterator[InternalRow] = {
+    val joinKeys = streamSideKeyGenerator()
+    val joinedRow = new JoinedRow
+    streamIter.filter { current =>
+      val key = joinKeys(current)
+      lazy val buildIter = hashedRelation.get(key)
+      key.anyNull || buildIter == null || (condition.isDefined && !buildIter.exists {
+        row => boundCondition(joinedRow(current, row))
+      })
+    }
+  }
+
   protected def join(
       streamedIter: Iterator[InternalRow],
       hashed: HashedRelation,
@@ -209,6 +223,8 @@ trait HashJoin {
         outerJoin(streamedIter, hashed)
       case LeftSemi =>
         semiJoin(streamedIter, hashed)
+      case LeftAnti =>
+        antiJoin(streamedIter, hashed)
       case x =>
         throw new IllegalArgumentException(
           s"BroadcastHashJoin should not take $x as the JoinType")

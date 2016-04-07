@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.joins
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions.{And, Expression, LessThan}
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
-import org.apache.spark.sql.catalyst.plans.{Inner, LeftSemi}
+import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.plans.logical.Join
 import org.apache.spark.sql.execution.{SparkPlan, SparkPlanTest}
 import org.apache.spark.sql.execution.exchange.EnsureRequirements
@@ -28,7 +28,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{DoubleType, IntegerType, StructType}
 
-class SemiJoinSuite extends SparkPlanTest with SharedSQLContext {
+class ExistenceJoinSuite extends SparkPlanTest with SharedSQLContext {
 
   private lazy val left = sqlContext.createDataFrame(
     sparkContext.parallelize(Seq(
@@ -58,14 +58,20 @@ class SemiJoinSuite extends SparkPlanTest with SharedSQLContext {
       LessThan(left.col("b").expr, right.col("d").expr))
   }
 
+  private lazy val conditionNEQ = {
+    And((left.col("a") < right.col("c")).expr,
+      LessThan(left.col("b").expr, right.col("d").expr))
+  }
+
   // Note: the input dataframes and expression must be evaluated lazily because
   // the SQLContext should be used only within a test to keep SQL tests stable
-  private def testLeftSemiJoin(
+  private def testExistenceJoin(
       testName: String,
+      joinType: JoinType,
       leftRows: => DataFrame,
       rightRows: => DataFrame,
       condition: => Expression,
-      expectedAnswer: Seq[Product]): Unit = {
+      expectedAnswer: Seq[Row]): Unit = {
 
     def extractJoinParts(): Option[ExtractEquiJoinKeys.ReturnType] = {
       val join = Join(leftRows.logicalPlan, rightRows.logicalPlan, Inner, Some(condition))
@@ -73,25 +79,26 @@ class SemiJoinSuite extends SparkPlanTest with SharedSQLContext {
     }
 
     test(s"$testName using ShuffledHashJoin") {
-      extractJoinParts().foreach { case (joinType, leftKeys, rightKeys, boundCondition, _, _) =>
+      extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _) =>
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
             EnsureRequirements(left.sqlContext.sessionState.conf).apply(
               ShuffledHashJoin(
-                leftKeys, rightKeys, LeftSemi, BuildRight, boundCondition, left, right)),
-            expectedAnswer.map(Row.fromTuple),
+                leftKeys, rightKeys, joinType, BuildRight, boundCondition, left, right)),
+            expectedAnswer,
             sortAnswers = true)
         }
       }
     }
 
     test(s"$testName using BroadcastHashJoin") {
-      extractJoinParts().foreach { case (joinType, leftKeys, rightKeys, boundCondition, _, _) =>
+      extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _) =>
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-            BroadcastHashJoin(
-              leftKeys, rightKeys, LeftSemi, BuildRight, boundCondition, left, right),
-            expectedAnswer.map(Row.fromTuple),
+            EnsureRequirements(left.sqlContext.sessionState.conf).apply(
+              BroadcastHashJoin(
+                leftKeys, rightKeys, joinType, BuildRight, boundCondition, left, right)),
+            expectedAnswer,
             sortAnswers = true)
         }
       }
@@ -100,8 +107,9 @@ class SemiJoinSuite extends SparkPlanTest with SharedSQLContext {
     test(s"$testName using BroadcastNestedLoopJoin build left") {
       withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
         checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-          BroadcastNestedLoopJoin(left, right, BuildLeft, LeftSemi, Some(condition)),
-          expectedAnswer.map(Row.fromTuple),
+          EnsureRequirements(left.sqlContext.sessionState.conf).apply(
+            BroadcastNestedLoopJoin(left, right, BuildLeft, joinType, Some(condition))),
+          expectedAnswer,
           sortAnswers = true)
       }
     }
@@ -109,21 +117,43 @@ class SemiJoinSuite extends SparkPlanTest with SharedSQLContext {
     test(s"$testName using BroadcastNestedLoopJoin build right") {
       withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
         checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-          BroadcastNestedLoopJoin(left, right, BuildRight, LeftSemi, Some(condition)),
-          expectedAnswer.map(Row.fromTuple),
+          EnsureRequirements(left.sqlContext.sessionState.conf).apply(
+            BroadcastNestedLoopJoin(left, right, BuildRight, joinType, Some(condition))),
+          expectedAnswer,
           sortAnswers = true)
       }
     }
   }
 
-  testLeftSemiJoin(
-    "basic test",
+  testExistenceJoin(
+    "basic test for left semi join",
+    LeftSemi,
     left,
     right,
     condition,
-    Seq(
-      (2, 1.0),
-      (2, 1.0)
-    )
-  )
+    Seq(Row(2, 1.0), Row(2, 1.0)))
+
+  testExistenceJoin(
+    "basic test for left semi non equal join",
+    LeftSemi,
+    left,
+    right,
+    conditionNEQ,
+    Seq(Row(1, 2.0), Row(1, 2.0), Row(2, 1.0), Row(2, 1.0)))
+
+  testExistenceJoin(
+    "basic test for anti join",
+    LeftAnti,
+    left,
+    right,
+    condition,
+    Seq(Row(1, 2.0), Row(1, 2.0), Row(3, 3.0), Row(6, null), Row(null, 5.0), Row(null, null)))
+
+  testExistenceJoin(
+    "basic test for anti non equal join",
+    LeftAnti,
+    left,
+    right,
+    conditionNEQ,
+    Seq(Row(3, 3.0), Row(6, null), Row(null, 5.0), Row(null, null)))
 }

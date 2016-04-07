@@ -38,7 +38,7 @@ class SparkPlanner(
       DDLStrategy ::
       SpecialLimits ::
       Aggregation ::
-      LeftSemiJoin ::
+      ExistenceJoin ::
       EquiJoinSelection ::
       InMemoryScans ::
       BasicOperators ::

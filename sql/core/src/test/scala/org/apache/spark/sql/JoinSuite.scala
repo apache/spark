@@ -41,7 +41,8 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     assert(planned.size === 1)
   }
 
-  def assertJoin(sqlString: String, c: Class[_]): Any = {
+  def assertJoin(pair: (String, Class[_])): Any = {
+    val (sqlString, c) = pair
     val df = sql(sqlString)
     val physical = df.queryExecution.sparkPlan
     val operators = physical.collect {
@@ -53,8 +54,8 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     }
 
     assert(operators.size === 1)
-    if (operators(0).getClass() != c) {
-      fail(s"$sqlString expected operator: $c, but got ${operators(0)}\n physical: \n$physical")
+    if (operators.head.getClass != c) {
+      fail(s"$sqlString expected operator: $c, but got ${operators.head}\n physical: \n$physical")
     }
   }
 
@@ -93,8 +94,10 @@ class JoinSuite extends QueryTest with SharedSQLContext {
         ("SELECT * FROM testData right JOIN testData2 ON (key * a != key + a)",
           classOf[BroadcastNestedLoopJoin]),
         ("SELECT * FROM testData full JOIN testData2 ON (key * a != key + a)",
-          classOf[BroadcastNestedLoopJoin])
-      ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
+          classOf[BroadcastNestedLoopJoin]),
+        ("SELECT * FROM testData ANTI JOIN testData2 ON key = a", classOf[ShuffledHashJoin]),
+        ("SELECT * FROM testData LEFT ANTI JOIN testData2", classOf[BroadcastNestedLoopJoin])
+      ).foreach(assertJoin)
     }
   }
 
@@ -114,7 +117,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
         classOf[BroadcastHashJoin]),
       ("SELECT * FROM testData join testData2 ON key = a where key = 2",
         classOf[BroadcastHashJoin])
-    ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
+    ).foreach(assertJoin)
     sql("UNCACHE TABLE testData")
   }
 
@@ -129,7 +132,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
         classOf[BroadcastHashJoin]),
       ("SELECT * FROM testData right join testData2 ON key = a and key = 2",
         classOf[BroadcastHashJoin])
-    ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
+    ).foreach(assertJoin)
     sql("UNCACHE TABLE testData")
   }
 
@@ -419,25 +422,22 @@ class JoinSuite extends QueryTest with SharedSQLContext {
       Row(null, 10))
   }
 
-  test("broadcasted left semi join operator selection") {
+  test("broadcasted existence join operator selection") {
     sqlContext.cacheManager.clearCache()
     sql("CACHE TABLE testData")
 
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1000000000") {
       Seq(
-        ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a",
-          classOf[BroadcastHashJoin])
-      ).foreach {
-        case (query, joinClass) => assertJoin(query, joinClass)
-      }
+        ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a", classOf[BroadcastHashJoin]),
+        ("SELECT * FROM testData ANT JOIN testData2 ON key = a", classOf[BroadcastHashJoin])
+      ).foreach(assertJoin)
     }
 
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       Seq(
-        ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a", classOf[ShuffledHashJoin])
-      ).foreach {
-        case (query, joinClass) => assertJoin(query, joinClass)
-      }
+        ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a", classOf[ShuffledHashJoin]),
+        ("SELECT * FROM testData LEFT ANTI JOIN testData2 ON key = a", classOf[ShuffledHashJoin])
+      ).foreach(assertJoin)
     }
 
     sql("UNCACHE TABLE testData")
@@ -489,7 +489,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
           classOf[BroadcastNestedLoopJoin]),
         ("SELECT * FROM testData full JOIN testData2 WHERE (key * a != key + a)",
           classOf[BroadcastNestedLoopJoin])
-      ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
+      ).foreach(assertJoin)
 
       checkAnswer(
         sql(

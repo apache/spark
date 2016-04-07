@@ -572,6 +572,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
         case null => Inner
         case jt if jt.FULL != null => FullOuter
         case jt if jt.SEMI != null => LeftSemi
+        case jt if jt.ANTI != null => LeftAnti
         case jt if jt.LEFT != null => LeftOuter
         case jt if jt.RIGHT != null => RightOuter
         case _ => Inner

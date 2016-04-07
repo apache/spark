@@ -45,6 +45,7 @@ case class ShuffledHashJoin(
 
   override def outputPartitioning: Partitioning = joinType match {
     case Inner => PartitioningCollection(Seq(left.outputPartitioning, right.outputPartitioning))
+    case LeftAnti => left.outputPartitioning
     case LeftSemi => left.outputPartitioning
     case LeftOuter => left.outputPartitioning
     case RightOuter => right.outputPartitioning

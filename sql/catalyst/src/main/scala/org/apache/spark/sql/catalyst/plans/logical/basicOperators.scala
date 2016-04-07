@@ -252,7 +252,7 @@ case class Join(
 
   override def output: Seq[Attribute] = {
     joinType match {
-      case LeftSemi =>
+      case LeftExistence(_) =>
         left.output
       case LeftOuter =>
         left.output ++ right.output.map(_.withNullability(true))
@@ -276,7 +276,7 @@ case class Join(
           .union(splitConjunctivePredicates(condition.get).toSet)
       case Inner =>
         left.constraints.union(right.constraints)
-      case LeftSemi =>
+      case LeftExistence(_) =>
         left.constraints
       case LeftOuter =>
         left.constraints
