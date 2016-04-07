@@ -77,6 +77,7 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
     val conf = new SparkConf()
       .setMaster("local[4]")
       .setAppName(classOf[OutputCommitCoordinatorSuite].getSimpleName)
+      .set("spark.hadoop.outputCommitCoordination.enabled", "true")
     sc = new SparkContext(conf) {
       override private[spark] def createSparkEnv(
           conf: SparkConf,
