@@ -185,7 +185,8 @@ case class DescribeDatabase(
  */
 case class AlterTableRename(
     oldName: TableIdentifier,
-    newName: TableIdentifier)
+    newName: TableIdentifier,
+    isView: Boolean)
   extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
@@ -194,7 +195,6 @@ case class AlterTableRename(
     catalog.renameTable(oldName, newName)
     Seq.empty[Row]
   }
-
 }
 
 /**
@@ -208,7 +208,8 @@ case class AlterTableRename(
  */
 case class AlterTableSetProperties(
     tableName: TableIdentifier,
-    properties: Map[String, String])
+    properties: Map[String, String],
+    isView: Boolean)
   extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
@@ -238,7 +239,8 @@ case class AlterTableSetProperties(
 case class AlterTableUnsetProperties(
     tableName: TableIdentifier,
     propKeys: Seq[String],
-    ifExists: Boolean)
+    ifExists: Boolean,
+    isView: Boolean)
   extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
