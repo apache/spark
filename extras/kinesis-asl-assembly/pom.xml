@@ -147,6 +147,15 @@
             <include>*:*</include>
           </includes>
         </artifactSet>
+        <relocations>
+            <relocation>
+              <pattern>com.google.protobuf</pattern>
+              <shadedPattern>kcl.protobuf</shadedPattern>
+              <includes>
+                <include>com.google.protobuf</include>
+              </includes>
+            </relocation>
+        </relocations>
         <filters>
           <filter>
             <artifact>*:*</artifact>
