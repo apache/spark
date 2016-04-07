@@ -370,7 +370,15 @@ private[hive] class HiveClientImpl(
       specs: Seq[ExternalCatalog.TablePartitionSpec],
       purge: Boolean): Unit = withHiveState {
     // TODO: figure out how to drop multiple partitions in one call
-    specs.foreach { s => client.dropPartition(db, table, s.values.toList.asJava, purge) }
+    val hiveTable = client.getTable(db, table, true /* throw exception */)
+    specs.foreach { s =>
+      // The provided spec here can be a partial spec, i.e. it will match all partitions
+      // whose specs are supersets of this partial spec. E.g. If a table has partitions
+      // (b='1', c='1') and (b='1', c='2'), a partial spec of (b='1') will match both.
+      client.getPartitions(hiveTable, s.asJava).asScala.foreach { hivePartition =>
+        client.dropPartition(db, table, hivePartition.getValues, purge)
+      }
+    }
   }
 
   override def renamePartitions(
