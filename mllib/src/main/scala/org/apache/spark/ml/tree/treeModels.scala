@@ -396,14 +396,14 @@ private[ml] object EnsembleModelReadWrite {
       sql: SQLContext,
       extraMetadata: JObject): Unit = {
     DefaultParamsWriter.saveMetadata(instance, path, sql.sparkContext, Some(extraMetadata))
-    val treesMetadataJson: Array[(Int, String, Double)] = instance.trees.zipWithIndex.map {
+    val treesMetadataWeights: Array[(Int, String, Double)] = instance.trees.zipWithIndex.map {
       case (tree, treeID) =>
         (treeID,
           DefaultParamsWriter.getMetadataToSave(tree.asInstanceOf[Params], sql.sparkContext),
           instance.treeWeights(treeID))
     }
     val treesMetadataPath = new Path(path, "treesMetadata").toString
-    sql.createDataFrame(treesMetadataJson).toDF("treeID", "metadata", "weights")
+    sql.createDataFrame(treesMetadataWeights).toDF("treeID", "metadata", "weights")
       .write.parquet(treesMetadataPath)
     val dataPath = new Path(path, "data").toString
     val nodeDataRDD = sql.sparkContext.parallelize(instance.trees.zipWithIndex).flatMap {
