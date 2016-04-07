@@ -39,7 +39,7 @@ import org.apache.spark.util.Utils
 /**
  * A BlockTransferService that uses Netty to fetch a set of blocks at at time.
  */
-class NettyBlockTransferService(
+private[spark] class NettyBlockTransferService(
     conf: SparkConf,
     securityManager: SecurityManager,
     override val hostName: String,
