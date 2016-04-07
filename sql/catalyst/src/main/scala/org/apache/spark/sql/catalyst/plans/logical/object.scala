@@ -34,6 +34,10 @@ object CatalystSerde {
   }
 }
 
+/**
+ * Takes the input row from child and turns it into object using the given deserializer expression.
+ * The output of this operator is a single-field safe row containing the deserialized object.
+ */
 case class DeserializeToObject(
     deserializer: Alias,
     child: LogicalPlan) extends UnaryNode {
@@ -42,6 +46,10 @@ case class DeserializeToObject(
   def outputObjectType: DataType = deserializer.dataType
 }
 
+/**
+ * Takes the input object from child and turns in into unsafe row using the given serializer
+ * expression.  The output of its child must be a single-field row containing the input object.
+ */
 case class SerializeFromObject(
     serializer: Seq[NamedExpression],
     child: LogicalPlan) extends UnaryNode {

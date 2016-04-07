@@ -27,6 +27,10 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.types.ObjectType
 
+/**
+ * Takes the input row from child and turns it into object using the given deserializer expression.
+ * The output of this operator is a single-field safe row containing the deserialized object.
+ */
 case class DeserializeToObject(
     deserializer: Alias,
     child: SparkPlan) extends UnaryNode with CodegenSupport {
@@ -45,9 +49,7 @@ case class DeserializeToObject(
       BindReferences.bindReference(deserializer, child.output))
     ctx.currentVars = input
     val resultVars = bound.gen(ctx) :: Nil
-    s"""
-      ${consume(ctx, resultVars)}
-    """
+    consume(ctx, resultVars)
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
@@ -58,6 +60,10 @@ case class DeserializeToObject(
   }
 }
 
+/**
+ * Takes the input object from child and turns in into unsafe row using the given serializer
+ * expression.  The output of its child must be a single-field row containing the input object.
+ */
 case class SerializeFromObject(
     serializer: Seq[NamedExpression],
     child: SparkPlan) extends UnaryNode with CodegenSupport {
@@ -77,9 +83,7 @@ case class SerializeFromObject(
     }
     ctx.currentVars = input
     val resultVars = bound.map(_.gen(ctx))
-    s"""
-      ${consume(ctx, resultVars)}
-    """
+    consume(ctx, resultVars)
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
