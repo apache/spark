@@ -44,12 +44,6 @@ def create_test_pipeline(suffix, trigger_rule, dag):
 
     join = DummyOperator(task_id=trigger_rule, dag=dag, trigger_rule=trigger_rule)
 
-
-    op = MyEmrOperator(task_id='my_task_id', dag=dag,
-                       template='my_jinja_template.conf',
-                       params={ 'param1': '{{ ti.xcom_pull(...) }}' }
-    )
-
     join.set_upstream(skip_operator)
     join.set_upstream(always_true)
 
