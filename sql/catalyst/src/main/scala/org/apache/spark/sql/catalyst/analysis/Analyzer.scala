@@ -87,7 +87,7 @@ class Analyzer(
       ResolveGroupingAnalytics ::
       ResolvePivot ::
       ResolveOrdinalInOrderByAndGroupBy ::
-      ResolveSortReferences ::
+      ResolveMissingReferences ::
       ResolveGenerate ::
       ResolveFunctions ::
       ResolveAliases ::
@@ -230,25 +230,54 @@ class Analyzer(
 
     private def hasGroupingAttribute(expr: Expression): Boolean = {
       expr.collectFirst {
-        case u: UnresolvedAttribute if resolver(u.name, VirtualColumn.groupingIdName) => u
+        case u: UnresolvedAttribute if resolver(u.name, VirtualColumn.hiveGroupingIdName) => u
       }.isDefined
     }
 
     private def hasGroupingFunction(e: Expression): Boolean = {
       e.collectFirst {
-        case f: UnresolvedFunction if Seq("grouping", "grouping_id").contains(f.name.toLowerCase) =>
-          f
+        case g: Grouping => g
+        case g: GroupingID => g
       }.isDefined
     }
 
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+    private def replaceGroupingFunc(
+        expr: Expression,
+        groupByExprs: Seq[Expression],
+        gid: Expression): Expression = {
+      expr transform {
+        case e: GroupingID =>
+          if (e.groupByExprs.isEmpty || e.groupByExprs == groupByExprs) {
+            gid
+          } else {
+            throw new AnalysisException(
+              s"Columns of grouping_id (${e.groupByExprs.mkString(",")}) does not match " +
+                s"grouping columns (${groupByExprs.mkString(",")})")
+          }
+        case Grouping(col: Expression) =>
+          val idx = groupByExprs.indexOf(col)
+          if (idx >= 0) {
+            Cast(BitwiseAnd(ShiftRight(gid, Literal(groupByExprs.length - 1 - idx)),
+              Literal(1)), ByteType)
+          } else {
+            throw new AnalysisException(s"Column of grouping ($col) can't be found " +
+              s"in grouping columns ${groupByExprs.mkString(",")}")
+          }
+      }
+    }
+
+    // This require transformUp to replace grouping()/grouping_id() in resolved Filter/Sort
+    def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
       case a if !a.childrenResolved => a // be sure all of the children are resolved.
+      case p if p.expressions.exists(hasGroupingAttribute) =>
+        failAnalysis(
+          s"${VirtualColumn.hiveGroupingIdName} is deprecated; use grouping_id() instead")
+
       case Aggregate(Seq(c @ Cube(groupByExprs)), aggregateExpressions, child) =>
         GroupingSets(bitmasks(c), groupByExprs, child, aggregateExpressions)
       case Aggregate(Seq(r @ Rollup(groupByExprs)), aggregateExpressions, child) =>
         GroupingSets(bitmasks(r), groupByExprs, child, aggregateExpressions)
-      case g: GroupingSets if g.expressions.exists(hasGroupingAttribute) =>
-        failAnalysis(s"${VirtualColumn.groupingIdName} is deprecated; use grouping_id() instead")
+
       // Ensure all the expressions have been resolved.
       case x: GroupingSets if x.expressions.forall(_.resolved) =>
         val gid = AttributeReference(VirtualColumn.groupingIdName, IntegerType, false)()
@@ -276,7 +305,7 @@ class Analyzer(
           def isPartOfAggregation(e: Expression): Boolean = {
             aggsBuffer.exists(a => a.find(_ eq e).isDefined)
           }
-          expr.transformDown {
+          replaceGroupingFunc(expr, x.groupByExprs, gid).transformDown {
             // AggregateExpression should be computed on the unmodified value of its argument
             // expressions, so we should not replace any references to grouping expression
             // inside it.
@@ -284,23 +313,6 @@ class Analyzer(
               aggsBuffer += e
               e
             case e if isPartOfAggregation(e) => e
-            case e: GroupingID =>
-              if (e.groupByExprs.isEmpty || e.groupByExprs == x.groupByExprs) {
-                gid
-              } else {
-                throw new AnalysisException(
-                  s"Columns of grouping_id (${e.groupByExprs.mkString(",")}) does not match " +
-                    s"grouping columns (${x.groupByExprs.mkString(",")})")
-              }
-            case Grouping(col: Expression) =>
-              val idx = x.groupByExprs.indexOf(col)
-              if (idx >= 0) {
-                Cast(BitwiseAnd(ShiftRight(gid, Literal(x.groupByExprs.length - 1 - idx)),
-                  Literal(1)), ByteType)
-              } else {
-                throw new AnalysisException(s"Column of grouping ($col) can't be found " +
-                  s"in grouping columns ${x.groupByExprs.mkString(",")}")
-              }
             case e =>
               val index = groupByAliases.indexWhere(_.child.semanticEquals(e))
               if (index == -1) {
@@ -316,48 +328,33 @@ class Analyzer(
           aggregations,
           Expand(x.bitmasks, groupByAliases, groupByAttributes, gid, x.child))
 
-      case f @ Filter(cond, a: Aggregate) if hasGroupingAttribute(cond) =>
-        failAnalysis(s"${VirtualColumn.groupingIdName} is deprecated; use grouping_id() instead")
-      case f @ Filter(cond, a: Aggregate) if hasGroupingFunction(cond) && a.resolved =>
-        val gid = a.groupingExpressions.last
-        if (!gid.isInstanceOf[AttributeReference] ||
-          gid.asInstanceOf[AttributeReference].name != VirtualColumn.groupingIdName) {
-          throw new AnalysisException(s"grouping()/grouping_id() can only be used with " +
-            s"GroupingSets/Cube/Rollup")
-        }
-        val groupByExprs = a.groupingExpressions.take(a.groupingExpressions.length - 1)
-        val newAgg = if (a.aggregateExpressions.contains(gid)) {
-          a
-        } else {
-          a.copy(aggregateExpressions = a.aggregateExpressions :+ gid.asInstanceOf[NamedExpression])
-        }
-        // resolve grouping()/grouping_id() also the references
-        val resolvedFilter = ResolveFunctions(ResolveReferences(f)).asInstanceOf[Filter]
-        val newCond = resolvedFilter.condition.transformUp {
-          case g: GroupingID =>
-            if (g.groupByExprs.isEmpty || g.groupByExprs == groupByExprs) {
-              gid
-            } else {
-              throw new AnalysisException(
-                s"Columns of grouping_id (${g.groupByExprs.mkString(",")}) does not match " +
-                  s"grouping columns (${groupByExprs.mkString(",")})")
-            }
-          case Grouping(col) =>
-            val idx = groupByExprs.indexOf(col)
-            if (idx >= 0) {
-              Cast(BitwiseAnd(ShiftRight(gid, Literal(groupByExprs.length - 1 - idx)),
-                Literal(1)), ByteType)
-            } else {
-              throw new AnalysisException(s"Column of grouping ($col) can't be found " +
-                s"in grouping columns ${groupByExprs.mkString(",")}")
-            }
-        }
-        if (newAgg fastEquals a) {
-          f.copy(condition = newCond)
-        } else {
-          // remove the gid column
-          Project(f.output, Filter(newCond, newAgg))
-        }
+      case f @ Filter(cond, child) if hasGroupingFunction(cond) =>
+        val groupingExprs = findGroupingExprs(child)
+        // The unresolved grouping id will be resolved by ResolveMissingReferences
+        val newCond = replaceGroupingFunc(cond, groupingExprs, VirtualColumn.groupingIdAttribute)
+        f.copy(condition = newCond)
+
+      case s @ Sort(order, _, child) if order.exists(hasGroupingFunction) =>
+        val groupingExprs = findGroupingExprs(child)
+        val gid = VirtualColumn.groupingIdAttribute
+        // The unresolved grouping id will be resolved by ResolveMissingReferences
+        val newOrder = order.map(replaceGroupingFunc(_, groupingExprs, gid).asInstanceOf[SortOrder])
+        s.copy(order = newOrder)
+    }
+
+    private def findGroupingExprs(plan: LogicalPlan): Seq[Expression] = {
+      plan.collectFirst {
+        case a: Aggregate =>
+          // this Aggregate should have grouping id as the last grouping key.
+          val gid = a.groupingExpressions.last
+          if (!gid.isInstanceOf[AttributeReference]
+            || gid.asInstanceOf[AttributeReference].name != VirtualColumn.groupingIdName) {
+            failAnalysis(s"grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
+          }
+          a.groupingExpressions.take(a.groupingExpressions.length - 1)
+      }.getOrElse {
+        failAnalysis(s"grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
+      }
     }
   }
 
@@ -713,12 +710,12 @@ class Analyzer(
    * projection, so that they will be available during sorting. Another projection is added to
    * remove these attributes after sorting.
    */
-  object ResolveSortReferences extends Rule[LogicalPlan] {
+  object ResolveMissingReferences extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       // Skip sort with aggregate. This will be handled in ResolveAggregateFunctions
       case sa @ Sort(_, _, child: Aggregate) => sa
 
-      case s @ Sort(order, _, child) if !s.resolved && child.resolved =>
+      case s @ Sort(order, _, child) if child.resolved =>
         try {
           val newOrder = order.map(resolveExpressionRecursively(_, child).asInstanceOf[SortOrder])
           val requiredAttrs = AttributeSet(newOrder).filter(_.resolved)
@@ -737,6 +734,26 @@ class Analyzer(
           // Users will see an AnalysisException for resolution failure of missing attributes
           // in Sort
           case ae: AnalysisException => s
+        }
+
+      case f @ Filter(cond, child) if child.resolved =>
+        try {
+          val newCond = resolveExpressionRecursively(cond, child)
+          val requiredAttrs = newCond.references.filter(_.resolved)
+          val missingAttrs = requiredAttrs -- child.outputSet
+          if (missingAttrs.nonEmpty) {
+            // Add missing attributes and then project them away.
+            Project(child.output,
+              Filter(newCond, addMissingAttr(child, missingAttrs)))
+          } else if (newCond != cond) {
+            f.copy(condition = newCond)
+          } else {
+            f
+          }
+        } catch {
+          // Attempting to resolve it might fail. When this happens, return the original plan.
+          // Users will see an AnalysisException for resolution failure of missing attributes
+          case ae: AnalysisException => f
         }
     }
 
@@ -983,7 +1000,7 @@ class Analyzer(
     }
 
     private def isAggregateExpression(e: Expression): Boolean = {
-      e.isInstanceOf[AggregateExpression] || e.isInstanceOf[Grouping] || e.isInstanceOf[GroupingID]
+      e.isInstanceOf[AggregateExpression]
     }
     def containsAggregate(condition: Expression): Boolean = {
       condition.find(isAggregateExpression).isDefined
