@@ -880,18 +880,19 @@ class BackfillJob(BaseJob):
                             'although the task says it is running.'.format(key))
                         self.logger.error(msg)
                         ti.handle_failure(msg)
+                        tasks_to_run.pop(key)
 
                     # task reports skipped
                     elif ti.state == State.SKIPPED:
-                        skipped.add(key)
                         self.logger.error("Skipping {} ".format(key))
+                        skipped.add(key)
+                        tasks_to_run.pop(key)
 
                     # anything else is a failure
                     else:
-                        failed.add(key)
                         self.logger.error("Task instance {} failed".format(key))
-
-                    tasks_to_run.pop(key)
+                        failed.add(key)
+                        tasks_to_run.pop(key)
 
                 # executor reports success
                 elif state == State.SUCCESS:
@@ -907,6 +908,12 @@ class BackfillJob(BaseJob):
                     elif ti.state == State.FAILED:
                         self.logger.error("Task instance {} failed".format(key))
                         failed.add(key)
+                        tasks_to_run.pop(key)
+
+                    # task reports skipped
+                    elif ti.state == State.SKIPPED:
+                        self.logger.info("Task instance {} skipped".format(key))
+                        skipped.add(key)
                         tasks_to_run.pop(key)
 
                     # this probably won't ever be triggered
