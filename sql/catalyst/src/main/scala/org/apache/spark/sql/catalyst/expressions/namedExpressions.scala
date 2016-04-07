@@ -333,6 +333,8 @@ case class PrettyAttribute(
 }
 
 object VirtualColumn {
-  val groupingIdName: String = "grouping__id"
+  // The attribute name used by Hive, which has different result than Spark, deprecated.
+  val hiveGroupingIdName: String = "grouping__id"
+  val groupingIdName: String = "spark_grouping_id"
   val groupingIdAttribute: UnresolvedAttribute = UnresolvedAttribute(groupingIdName)
 }
