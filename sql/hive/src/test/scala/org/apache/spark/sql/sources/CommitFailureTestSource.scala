@@ -16,6 +16,7 @@
  */
 
 package org.apache.spark.sql.sources
+
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
 import org.apache.spark.sql.SQLContext

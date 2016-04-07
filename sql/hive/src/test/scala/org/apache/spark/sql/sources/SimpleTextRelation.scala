@@ -16,19 +16,21 @@
  */
 
 package org.apache.spark.sql.sources
+
 import java.text.NumberFormat
 
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.io.{NullWritable, Text}
-import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat, TextOutputFormat}
 import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
+import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat, TextOutputFormat}
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
+import org.apache.spark.sql.{sources, Row, SQLContext}
+import org.apache.spark.sql.catalyst.{expressions, InternalRow}
+import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, GenericInternalRow, InterpretedPredicate, Literal}
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.types.{DataType, StructType}
-import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.util.SerializableConfiguration
 import org.apache.spark.util.collection.BitSet
 
@@ -67,13 +69,40 @@ class SimpleTextSource extends FileFormat with DataSourceRegister {
       options: Map[String, String]): RDD[InternalRow] = {
 
     val fields = dataSchema.map(_.dataType)
+    val inputAttributes = dataSchema.toAttributes
+    val outputAttributes = requiredColumns.flatMap(name => inputAttributes.find(_.name == name))
 
-    sqlContext.sparkContext.textFile(inputFiles.map(_.getPath).mkString(",")).map { record =>
-      InternalRow(record.split(",", -1).zip(fields).map { case (v, dataType) =>
-        val value = if (v == "") null else v
-        // `Cast`ed values are always of Catalyst types (i.e. UTF8String instead of String, etc.)
-        Cast(Literal(value), dataType).eval()
-      }: _*)
+    val inputPaths = inputFiles.map(_.getPath).mkString(",")
+    sqlContext.sparkContext.textFile(inputPaths).mapPartitions { iterator =>
+      // Constructs a filter predicate to simulate filter push-down
+      val predicate = {
+        val filterCondition: Expression = filters.collect {
+          // According to `unhandledFilters`, `SimpleTextRelation` only handles `GreaterThan` filter
+          case sources.GreaterThan(column, value) =>
+            val dataType = dataSchema(column).dataType
+            val literal = Literal.create(value, dataType)
+            val attribute = inputAttributes.find(_.name == column).get
+            expressions.GreaterThan(attribute, literal)
+        }.reduceOption(expressions.And).getOrElse(Literal(true))
+        InterpretedPredicate.create(filterCondition, inputAttributes)
+      }
+
+      // Uses a simple projection to simulate column pruning
+      val projection = GenerateUnsafeProjection.generate(outputAttributes, inputAttributes)
+
+      iterator.map { record =>
+        val row = new GenericInternalRow(record.split(",", -1).zip(fields).map {
+          case (v, dataType) =>
+            val value = if (v == "") null else v
+            // `Cast`ed values are always of internal types (e.g. UTF8String instead of String)
+            Cast(Literal(value), dataType).eval()
+        })
+        row
+      }.filter { row =>
+        predicate(row)
+      }.map { row =>
+        projection(row)
+      }
     }
   }
 }
