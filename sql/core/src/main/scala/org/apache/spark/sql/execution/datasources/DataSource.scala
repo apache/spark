@@ -348,16 +348,6 @@ case class DataSource(
         PartitioningUtils.validatePartitionColumnDataTypes(
           data.schema, partitionColumns, caseSensitive)
 
-        val equality =
-          if (sqlContext.conf.caseSensitiveAnalysis) {
-            org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
-          } else {
-            org.apache.spark.sql.catalyst.analysis.caseInsensitiveResolution
-          }
-
-        val dataSchema = StructType(
-          data.schema.filterNot(f => partitionColumns.exists(equality(_, f.name))))
-
         // If we are appending to a table that already exists, make sure the partitioning matches
         // up.  If we fail to load the table for whatever reason, ignore the check.
         if (mode == SaveMode.Append) {
