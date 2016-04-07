@@ -66,6 +66,9 @@ private[sql] abstract class BaseWriterContainer(
   // This is only used on driver side.
   @transient private val jobContext: JobContext = job
 
+  private val speculationEnabled: Boolean =
+    relation.sqlContext.sparkContext.conf.getBoolean("spark.speculation", defaultValue = false)
+
   // The following fields are initialized and used on both driver and executor side.
   @transient protected var outputCommitter: OutputCommitter = _
   @transient private var jobId: JobID = _
