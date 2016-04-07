@@ -85,30 +85,23 @@ class FileScanRDD(
 
       /** Advances to the next file. Returns true if a new non-empty iterator is available. */
       private def nextIterator(): Boolean = {
-        if (asyncIO) {
-          if (nextFile == null) return false
-        } else {
-          if (!files.hasNext) return false
-        }
-
-        // Wait for the async task to complete
         val file = if (asyncIO) {
+          if (nextFile == null) return false
+          // Wait for the async task to complete
           Await.result(nextFile, Duration.Inf)
         } else {
+          if (!files.hasNext) return false
           val f = files.next()
-          val it = readFunction(f)
-          NextFile(f, it)
+          NextFile(f, readFunction(f))
         }
 
         // This is only used to evaluate the rest of the execution so we can safely set it here.
         SqlNewHadoopRDDState.setInputFileName(file.file.filePath)
         currentIterator = file.iter
 
-        if (asyncIO && files.hasNext) {
+        if (asyncIO) {
           // Asynchronously start the next file.
           nextFile = prepareNextFile()
-        } else {
-          nextFile = null
         }
 
         hasNext
@@ -119,17 +112,17 @@ class FileScanRDD(
       }
 
       def prepareNextFile() = {
-        Future {
-          if (files.hasNext) {
+        if (files.hasNext) {
+          Future {
             val file = files.next()
             val it = readFunction(file)
             // Read something from the file to trigger some initial IO.
             it.hasNext
             NextFile(file, it)
-          } else {
-            null
-          }
-        }(FileScanRDD.ioExecutionContext)
+          }(FileScanRDD.ioExecutionContext)
+        } else {
+          null
+        }
       }
     }
 
