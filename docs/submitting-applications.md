@@ -30,7 +30,7 @@ dependencies, and can support different cluster managers and deploy modes that S
 
 {% highlight bash %}
 ./bin/spark-submit \
-  --class <main-class>
+  --class <main-class> \
   --master <master-url> \
   --deploy-mode <deploy-mode> \
   --conf <key>=<value> \
@@ -92,8 +92,8 @@ run it with `--help`. Here are a few examples of common options:
 ./bin/spark-submit \
   --class org.apache.spark.examples.SparkPi \
   --master spark://207.184.161.138:7077 \
-  --deploy-mode cluster
-  --supervise
+  --deploy-mode cluster \
+  --supervise \
   --executor-memory 20G \
   --total-executor-cores 100 \
   /path/to/examples.jar \
@@ -120,8 +120,8 @@ export HADOOP_CONF_DIR=XXX
 ./bin/spark-submit \
   --class org.apache.spark.examples.SparkPi \
   --master mesos://207.184.161.138:7077 \
-  --deploy-mode cluster
-  --supervise
+  --deploy-mode cluster \
+  --supervise \
   --executor-memory 20G \
   --total-executor-cores 100 \
   http://path/to/examples.jar \
@@ -149,12 +149,6 @@ The master URL passed to Spark can be in one of the following formats:
 <tr><td> <code>yarn</code> </td><td> Connect to a <a href="running-on-yarn.html"> YARN </a> cluster in
         <code>client</code> or <code>cluster</code> mode depending on the value of <code>--deploy-mode</code>.
         The cluster location will be found based on the <code>HADOOP_CONF_DIR</code> or <code>YARN_CONF_DIR</code> variable.
-</td></tr>
-<tr><td> <code>yarn-client</code> </td><td> Equivalent to <code>yarn</code> with <code>--deploy-mode client</code>,
-        which is preferred to `yarn-client`
-</td></tr>
-<tr><td> <code>yarn-cluster</code> </td><td> Equivalent to <code>yarn</code> with <code>--deploy-mode cluster</code>,
-        which is preferred to `yarn-cluster`
 </td></tr>
 </table>
 

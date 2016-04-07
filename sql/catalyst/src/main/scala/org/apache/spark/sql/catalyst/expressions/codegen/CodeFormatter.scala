@@ -25,19 +25,63 @@ package org.apache.spark.sql.catalyst.expressions.codegen
  */
 object CodeFormatter {
   def format(code: String): String = new CodeFormatter().addLines(code).result()
+  def stripExtraNewLines(input: String): String = {
+    val code = new StringBuilder
+    var lastLine: String = "dummy"
+    input.split('\n').foreach { l =>
+      val line = l.trim()
+      val skip = line == "" && (lastLine == "" || lastLine.endsWith("{"))
+      if (!skip) {
+        code.append(line)
+        code.append("\n")
+      }
+      lastLine = line
+    }
+    code.result()
+  }
 }
 
 private class CodeFormatter {
   private val code = new StringBuilder
-  private var indentLevel = 0
   private val indentSize = 2
+
+  // Tracks the level of indentation in the current line.
+  private var indentLevel = 0
   private var indentString = ""
   private var currentLine = 1
 
+  // Tracks the level of indentation in multi-line comment blocks.
+  private var inCommentBlock = false
+  private var indentLevelOutsideCommentBlock = indentLevel
+
   private def addLine(line: String): Unit = {
-    val indentChange =
-      line.count(c => "({".indexOf(c) >= 0) - line.count(c => ")}".indexOf(c) >= 0)
-    val newIndentLevel = math.max(0, indentLevel + indentChange)
+
+    // We currently infer the level of indentation of a given line based on a simple heuristic that
+    // examines the number of parenthesis and braces in that line. This isn't the most robust
+    // implementation but works for all code that we generate.
+    val indentChange = line.count(c => "({".indexOf(c) >= 0) - line.count(c => ")}".indexOf(c) >= 0)
+    var newIndentLevel = math.max(0, indentLevel + indentChange)
+
+    // Please note that while we try to format the comment blocks in exactly the same way as the
+    // rest of the code, once the block ends, we reset the next line's indentation level to what it
+    // was immediately before entering the comment block.
+    if (!inCommentBlock) {
+      if (line.startsWith("/*")) {
+        // Handle multi-line comments
+        inCommentBlock = true
+        indentLevelOutsideCommentBlock = indentLevel
+      } else if (line.startsWith("//")) {
+        // Handle single line comments
+        newIndentLevel = indentLevel
+      }
+    }
+    if (inCommentBlock) {
+      if (line.endsWith("*/")) {
+        inCommentBlock = false
+        newIndentLevel = indentLevelOutsideCommentBlock
+      }
+    }
+
     // Lines starting with '}' should be de-indented even if they contain '{' after;
     // in addition, lines ending with ':' are typically labels
     val thisLineIndent = if (line.startsWith("}") || line.startsWith(")") || line.endsWith(":")) {

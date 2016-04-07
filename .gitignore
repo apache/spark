@@ -17,8 +17,6 @@ cache
 work/
 out/
 .DS_Store
-third_party/libmesos.so
-third_party/libmesos.dylib
 build/apache-maven*
 build/zinc*
 build/scala*
@@ -60,7 +58,6 @@ dev/create-release/*final
 spark-*-bin-*.tgz
 unit-tests.log
 /lib/
-rat-results.txt
 scalastyle.txt
 scalastyle-output.xml
 R-unit-tests.log

@@ -21,7 +21,6 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.SecurityManager
 import org.apache.spark.SparkConf
-import org.apache.spark.annotation.DeveloperApi
 
 /**
  * An interface for all the broadcast implementations in Spark (to allow

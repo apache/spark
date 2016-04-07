@@ -108,7 +108,7 @@ abstract class ReceiverInputDStream[T: ClassTag](_ssc: StreamingContext)
       } else {
         // Else, create a BlockRDD. However, if there are some blocks with WAL info but not
         // others then that is unexpected and log a warning accordingly.
-        if (blockInfos.find(_.walRecordHandleOption.nonEmpty).nonEmpty) {
+        if (blockInfos.exists(_.walRecordHandleOption.nonEmpty)) {
           if (WriteAheadLogUtils.enableReceiverLog(ssc.conf)) {
             logError("Some blocks do not have Write Ahead Log information; " +
               "this is unexpected and data may not be recoverable after driver failures")
@@ -119,7 +119,7 @@ abstract class ReceiverInputDStream[T: ClassTag](_ssc: StreamingContext)
         val validBlockIds = blockIds.filter { id =>
           ssc.sparkContext.env.blockManager.master.contains(id)
         }
-        if (validBlockIds.size != blockIds.size) {
+        if (validBlockIds.length != blockIds.length) {
           logWarning("Some blocks could not be recovered as they were not found in memory. " +
             "To prevent such data loss, enable Write Ahead Log (see programming guide " +
             "for more details.")

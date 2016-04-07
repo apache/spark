@@ -30,12 +30,12 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
       Option(request.getParameter("showIncomplete")).getOrElse("false").toBoolean
 
     val allApps = parent.getApplicationList()
-      .filter(_.attempts.head.completed != requestedIncomplete)
+      .filter(_.completed != requestedIncomplete)
     val allAppsSize = allApps.size
 
     val providerConfig = parent.getProviderConfig()
     val content =
-      <div class="row-fluid">
+      <div>
           <div class="span12">
             <ul class="unstyled">
               {providerConfig.map { case (k, v) => <li><strong>{k}:</strong> {v}</li> }}
@@ -69,7 +69,7 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
             </a>
           </div>
       </div>
-    UIUtils.basicSparkPage(content, "History Server")
+    UIUtils.basicSparkPage(content, "History Server", true)
   }
 
   private def makePageLink(showIncomplete: Boolean): String = {

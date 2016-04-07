@@ -26,11 +26,10 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FileStatus
 import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.fs.permission.FsAction
 import org.apache.hadoop.yarn.api.records.LocalResource
 import org.apache.hadoop.yarn.api.records.LocalResourceType
 import org.apache.hadoop.yarn.api.records.LocalResourceVisibility
-import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
+import org.apache.hadoop.yarn.util.ConverterUtils
 import org.mockito.Mockito.when
 import org.scalatest.mock.MockitoSugar
 

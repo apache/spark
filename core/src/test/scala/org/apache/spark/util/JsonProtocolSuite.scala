@@ -508,7 +508,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
 
   /** -------------------------------- *
    | Util methods for comparing events |
-    * --------------------------------- */
+   * --------------------------------- */
 
   private[spark] def assertEquals(event1: SparkListenerEvent, event2: SparkListenerEvent) {
     (event1, event2) match {
@@ -773,7 +773,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
 
   /** ----------------------------------- *
    | Util methods for constructing events |
-    * ------------------------------------ */
+   * ------------------------------------ */
 
   private val properties = {
     val p = new Properties
@@ -853,7 +853,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
     if (hasHadoopInput) {
       val inputMetrics = t.registerInputMetrics(DataReadMethod.Hadoop)
       inputMetrics.setBytesRead(d + e + f)
-      inputMetrics.incRecordsRead(if (hasRecords) (d + e + f) / 100 else -1)
+      inputMetrics.incRecordsReadInternal(if (hasRecords) (d + e + f) / 100 else -1)
     } else {
       val sr = t.registerTempShuffleReadMetrics()
       sr.incRemoteBytesRead(b + d)

@@ -25,7 +25,6 @@ import breeze.stats.distributions.{Gamma, RandBasis}
 
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.graphx._
-import org.apache.spark.graphx.impl.GraphImpl
 import org.apache.spark.mllib.impl.PeriodicGraphCheckpointer
 import org.apache.spark.mllib.linalg.{DenseVector, Matrices, SparseVector, Vector, Vectors}
 import org.apache.spark.rdd.RDD
@@ -188,7 +187,7 @@ final class EMLDAOptimizer extends LDAOptimizer {
       graph.aggregateMessages[(Boolean, TopicCounts)](sendMsg, mergeMsg)
         .mapValues(_._2)
     // Update the vertex descriptors with the new counts.
-    val newGraph = GraphImpl.fromExistingRDDs(docTopicDistributions, graph.edges)
+    val newGraph = Graph(docTopicDistributions, graph.edges)
     graph = newGraph
     graphCheckpointer.update(newGraph)
     globalTopicTotals = computeGlobalTopicTotals()
@@ -452,10 +451,11 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
       }
       Iterator((stat, gammaPart))
     }
-    val statsSum: BDM[Double] = stats.map(_._1).reduce(_ += _)
+    val statsSum: BDM[Double] = stats.map(_._1).treeAggregate(BDM.zeros[Double](k, vocabSize))(
+      _ += _, _ += _)
     expElogbetaBc.unpersist()
     val gammat: BDM[Double] = breeze.linalg.DenseMatrix.vertcat(
-      stats.map(_._2).reduce(_ ++ _).map(_.toDenseMatrix): _*)
+      stats.map(_._2).flatMap(list => list).collect().map(_.toDenseMatrix): _*)
     val batchResult = statsSum :* expElogbeta.t
 
     // Note that this is an optimization to avoid batch.count

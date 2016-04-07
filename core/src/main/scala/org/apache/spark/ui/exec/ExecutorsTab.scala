@@ -45,6 +45,7 @@ private[ui] class ExecutorsTab(parent: SparkUI) extends SparkUITab(parent, "exec
 @DeveloperApi
 class ExecutorsListener(storageStatusListener: StorageStatusListener, conf: SparkConf)
     extends SparkListener {
+  val executorToTotalCores = HashMap[String, Int]()
   val executorToTasksMax = HashMap[String, Int]()
   val executorToTasksActive = HashMap[String, Int]()
   val executorToTasksComplete = HashMap[String, Int]()
@@ -60,13 +61,15 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener, conf: Spar
   val executorToLogUrls = HashMap[String, Map[String, String]]()
   val executorIdToData = HashMap[String, ExecutorUIData]()
 
-  def storageStatusList: Seq[StorageStatus] = storageStatusListener.storageStatusList
+  def activeStorageStatusList: Seq[StorageStatus] = storageStatusListener.storageStatusList
+
+  def deadStorageStatusList: Seq[StorageStatus] = storageStatusListener.deadStorageStatusList
 
   override def onExecutorAdded(executorAdded: SparkListenerExecutorAdded): Unit = synchronized {
     val eid = executorAdded.executorId
     executorToLogUrls(eid) = executorAdded.executorInfo.logUrlMap
-    executorToTasksMax(eid) =
-      executorAdded.executorInfo.totalCores / conf.getInt("spark.task.cpus", 1)
+    executorToTotalCores(eid) = executorAdded.executorInfo.totalCores
+    executorToTasksMax(eid) = executorToTotalCores(eid) / conf.getInt("spark.task.cpus", 1)
     executorIdToData(eid) = ExecutorUIData(executorAdded.time)
   }
 
@@ -80,7 +83,7 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener, conf: Spar
 
   override def onApplicationStart(applicationStart: SparkListenerApplicationStart): Unit = {
     applicationStart.driverLogs.foreach { logs =>
-      val storageStatus = storageStatusList.find { s =>
+      val storageStatus = activeStorageStatusList.find { s =>
         s.blockManagerId.executorId == SparkContext.LEGACY_DRIVER_IDENTIFIER ||
         s.blockManagerId.executorId == SparkContext.DRIVER_IDENTIFIER
       }

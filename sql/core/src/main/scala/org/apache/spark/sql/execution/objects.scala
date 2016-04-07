@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql.execution
 
+import scala.language.existentials
+
+import org.apache.spark.api.java.function.MapFunction
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateSafeProjection, GenerateUnsafeProjection, GenerateUnsafeRowJoiner}
+import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.types.ObjectType
 
@@ -53,14 +56,14 @@ trait ObjectOperator extends SparkPlan {
  */
 case class MapPartitions(
     func: Iterator[Any] => Iterator[Any],
-    input: Expression,
+    deserializer: Expression,
     serializer: Seq[NamedExpression],
     child: SparkPlan) extends UnaryNode with ObjectOperator {
   override def output: Seq[Attribute] = serializer.map(_.toAttribute)
 
   override protected def doExecute(): RDD[InternalRow] = {
     child.execute().mapPartitionsInternal { iter =>
-      val getObject = generateToObject(input, child.output)
+      val getObject = generateToObject(deserializer, child.output)
       val outputObject = generateToRow(serializer)
       func(iter.map(getObject)).map(outputObject)
     }
@@ -68,11 +71,75 @@ case class MapPartitions(
 }
 
 /**
+ * Applies the given function to each input row and encodes the result.
+ *
+ * Note that, each serializer expression needs the result object which is returned by the given
+ * function, as input. This operator uses some tricks to make sure we only calculate the result
+ * object once. We don't use [[Project]] directly as subexpression elimination doesn't work with
+ * whole stage codegen and it's confusing to show the un-common-subexpression-eliminated version of
+ * a project while explain.
+ */
+case class MapElements(
+    func: AnyRef,
+    deserializer: Expression,
+    serializer: Seq[NamedExpression],
+    child: SparkPlan) extends UnaryNode with ObjectOperator with CodegenSupport {
+  override def output: Seq[Attribute] = serializer.map(_.toAttribute)
+
+  override def upstreams(): Seq[RDD[InternalRow]] = {
+    child.asInstanceOf[CodegenSupport].upstreams()
+  }
+
+  protected override def doProduce(ctx: CodegenContext): String = {
+    child.asInstanceOf[CodegenSupport].produce(ctx, this)
+  }
+
+  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
+    val (funcClass, methodName) = func match {
+      case m: MapFunction[_, _] => classOf[MapFunction[_, _]] -> "call"
+      case _ => classOf[Any => Any] -> "apply"
+    }
+    val funcObj = Literal.create(func, ObjectType(funcClass))
+    val resultObjType = serializer.head.collect { case b: BoundReference => b }.head.dataType
+    val callFunc = Invoke(funcObj, methodName, resultObjType, Seq(deserializer))
+
+    val bound = ExpressionCanonicalizer.execute(
+      BindReferences.bindReference(callFunc, child.output))
+    ctx.currentVars = input
+    val evaluated = bound.gen(ctx)
+
+    val resultObj = LambdaVariable(evaluated.value, evaluated.isNull, resultObjType)
+    val outputFields = serializer.map(_ transform {
+      case _: BoundReference => resultObj
+    })
+    val resultVars = outputFields.map(_.gen(ctx))
+    s"""
+      ${evaluated.code}
+      ${consume(ctx, resultVars)}
+    """
+  }
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    val callFunc: Any => Any = func match {
+      case m: MapFunction[_, _] => i => m.asInstanceOf[MapFunction[Any, Any]].call(i)
+      case _ => func.asInstanceOf[Any => Any]
+    }
+    child.execute().mapPartitionsInternal { iter =>
+      val getObject = generateToObject(deserializer, child.output)
+      val outputObject = generateToRow(serializer)
+      iter.map(row => outputObject(callFunc(getObject(row))))
+    }
+  }
+
+  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
+}
+
+/**
  * Applies the given function to each input row, appending the encoded result at the end of the row.
  */
 case class AppendColumns(
     func: Any => Any,
-    input: Expression,
+    deserializer: Expression,
     serializer: Seq[NamedExpression],
     child: SparkPlan) extends UnaryNode with ObjectOperator {
 
@@ -82,7 +149,7 @@ case class AppendColumns(
 
   override protected def doExecute(): RDD[InternalRow] = {
     child.execute().mapPartitionsInternal { iter =>
-      val getObject = generateToObject(input, child.output)
+      val getObject = generateToObject(deserializer, child.output)
       val combiner = GenerateUnsafeRowJoiner.create(child.schema, newColumnSchema)
       val outputObject = generateToRow(serializer)
 
@@ -103,10 +170,11 @@ case class AppendColumns(
  */
 case class MapGroups(
     func: (Any, Iterator[Any]) => TraversableOnce[Any],
-    keyObject: Expression,
-    input: Expression,
+    keyDeserializer: Expression,
+    valueDeserializer: Expression,
     serializer: Seq[NamedExpression],
     groupingAttributes: Seq[Attribute],
+    dataAttributes: Seq[Attribute],
     child: SparkPlan) extends UnaryNode with ObjectOperator {
 
   override def output: Seq[Attribute] = serializer.map(_.toAttribute)
@@ -121,8 +189,8 @@ case class MapGroups(
     child.execute().mapPartitionsInternal { iter =>
       val grouped = GroupedIterator(iter, groupingAttributes, child.output)
 
-      val getKey = generateToObject(keyObject, groupingAttributes)
-      val getValue = generateToObject(input, child.output)
+      val getKey = generateToObject(keyDeserializer, groupingAttributes)
+      val getValue = generateToObject(valueDeserializer, dataAttributes)
       val outputObject = generateToRow(serializer)
 
       grouped.flatMap { case (key, rowIter) =>
@@ -142,12 +210,14 @@ case class MapGroups(
  */
 case class CoGroup(
     func: (Any, Iterator[Any], Iterator[Any]) => TraversableOnce[Any],
-    keyObject: Expression,
-    leftObject: Expression,
-    rightObject: Expression,
+    keyDeserializer: Expression,
+    leftDeserializer: Expression,
+    rightDeserializer: Expression,
     serializer: Seq[NamedExpression],
     leftGroup: Seq[Attribute],
     rightGroup: Seq[Attribute],
+    leftAttr: Seq[Attribute],
+    rightAttr: Seq[Attribute],
     left: SparkPlan,
     right: SparkPlan) extends BinaryNode with ObjectOperator {
 
@@ -164,9 +234,9 @@ case class CoGroup(
       val leftGrouped = GroupedIterator(leftData, leftGroup, left.output)
       val rightGrouped = GroupedIterator(rightData, rightGroup, right.output)
 
-      val getKey = generateToObject(keyObject, leftGroup)
-      val getLeft = generateToObject(leftObject, left.output)
-      val getRight = generateToObject(rightObject, right.output)
+      val getKey = generateToObject(keyDeserializer, leftGroup)
+      val getLeft = generateToObject(leftDeserializer, leftAttr)
+      val getRight = generateToObject(rightDeserializer, rightAttr)
       val outputObject = generateToRow(serializer)
 
       new CoGroupedIterator(leftGrouped, rightGrouped, leftGroup).flatMap {

@@ -23,8 +23,9 @@ import javax.ws.rs.core.{MediaType, Response, StreamingOutput}
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.internal.Logging
 
 @Produces(Array(MediaType.APPLICATION_OCTET_STREAM))
 private[v1] class EventLogDownloadResource(

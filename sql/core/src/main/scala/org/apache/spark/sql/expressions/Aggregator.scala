@@ -46,7 +46,6 @@ import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
  * @tparam I The input type for the aggregation.
  * @tparam B The type of the intermediate value of the reduction.
  * @tparam O The type of the final output result.
- *
  * @since 1.6.0
  */
 abstract class Aggregator[-I, B, O] extends Serializable {
@@ -85,10 +84,10 @@ abstract class Aggregator[-I, B, O] extends Serializable {
       implicit bEncoder: Encoder[B],
       cEncoder: Encoder[O]): TypedColumn[I, O] = {
     val expr =
-      new AggregateExpression(
+      AggregateExpression(
         TypedAggregateExpression(this),
         Complete,
-        false)
+        isDistinct = false)
 
     new TypedColumn[I, O](expr, encoderFor[O])
   }

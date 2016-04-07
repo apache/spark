@@ -121,12 +121,12 @@ The parameters are listed below roughly in order of descending importance.  New 
 These parameters describe the problem you want to solve and your dataset.
 They should be specified and do not require tuning.
 
-* **`algo`**: `Classification` or `Regression`
+* **`algo`**: Type of decision tree, either `Classification` or `Regression`.
 
-* **`numClasses`**: Number of classes (for `Classification` only)
+* **`numClasses`**: Number of classes (for `Classification` only).
 
 * **`categoricalFeaturesInfo`**: Specifies which features are categorical and how many categorical values each of those features can take.  This is given as a map from feature indices to feature arity (number of categories).  Any features not in this map are treated as continuous.
-  * E.g., `Map(0 -> 2, 4 -> 10)` specifies that feature `0` is binary (taking values `0` or `1`) and that feature `4` has 10 categories (values `{0, 1, ..., 9}`).  Note that feature indices are 0-based: features `0` and `4` are the 1st and 5th elements of an instance's feature vector.
+  * For example, `Map(0 -> 2, 4 -> 10)` specifies that feature `0` is binary (taking values `0` or `1`) and that feature `4` has 10 categories (values `{0, 1, ..., 9}`).  Note that feature indices are 0-based: features `0` and `4` are the 1st and 5th elements of an instance's feature vector.
   * Note that you do not have to specify `categoricalFeaturesInfo`.  The algorithm will still run and may get reasonable results.  However, performance should be better if categorical features are properly designated.
 
 ### Stopping criteria

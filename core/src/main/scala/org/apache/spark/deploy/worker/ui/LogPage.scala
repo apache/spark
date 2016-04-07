@@ -18,19 +18,18 @@
 package org.apache.spark.deploy.worker.ui
 
 import java.io.File
-import java.net.URI
 import javax.servlet.http.HttpServletRequest
 
 import scala.xml.{Node, Unparsed}
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
 import org.apache.spark.util.logging.RollingFileAppender
 
 private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with Logging {
   private val worker = parent.worker
-  private val workDir = parent.workDir
+  private val workDir = new File(parent.workDir.toURI.normalize().getPath)
   private val supportedLogTypes = Set("stderr", "stdout")
   private val defaultBytes = 100 * 1024
 
@@ -101,19 +100,18 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
       s"initLogPage('$logParams', $curLogLength, $startByte, $endByte, $logLength, $byteLength);"
 
     val content =
-      <html>
-        <body>
-          {linkToMaster}
-          {range}
-          <div class="log-content" style="height:80vh; overflow:auto; padding:5px;">
-            <div>{moreButton}</div>
-            <pre>{logText}</pre>
-            {alert}
-            <div>{newButton}</div>
-          </div>
-          <script>{Unparsed(jsOnload)}</script>
-        </body>
-      </html>
+      <div>
+        {linkToMaster}
+        {range}
+        <div class="log-content" style="height:80vh; overflow:auto; padding:5px;">
+          <div>{moreButton}</div>
+          <pre>{logText}</pre>
+          {alert}
+          <div>{newButton}</div>
+        </div>
+        <script>{Unparsed(jsOnload)}</script>
+      </div>
+
     UIUtils.basicSparkPage(content, logType + " log page for " + pageName)
   }
 
@@ -130,7 +128,7 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
     }
 
     // Verify that the normalized path of the log directory is in the working directory
-    val normalizedUri = new URI(logDirectory).normalize()
+    val normalizedUri = new File(logDirectory).toURI.normalize()
     val normalizedLogDir = new File(normalizedUri.getPath)
     if (!Utils.isInDirectory(workDir, normalizedLogDir)) {
       return ("Error: invalid log directory " + logDirectory, 0, 0, 0)

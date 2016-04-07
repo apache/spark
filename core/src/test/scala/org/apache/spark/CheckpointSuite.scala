@@ -54,7 +54,7 @@ trait RDDCheckpointTester { self: SparkFunSuite =>
     // Generate the final RDD using given RDD operation
     val baseRDD = generateFatRDD()
     val operatedRDD = op(baseRDD)
-    val parentRDD = operatedRDD.dependencies.headOption.orNull
+    val parentDependency = operatedRDD.dependencies.headOption.orNull
     val rddType = operatedRDD.getClass.getSimpleName
     val numPartitions = operatedRDD.partitions.length
 
@@ -82,7 +82,7 @@ trait RDDCheckpointTester { self: SparkFunSuite =>
     }
 
     // Test whether dependencies have been changed from its earlier parent RDD
-    assert(operatedRDD.dependencies.head.rdd != parentRDD)
+    assert(operatedRDD.dependencies.head != parentDependency)
 
     // Test whether the partitions have been changed from its earlier partitions
     assert(operatedRDD.partitions.toList != partitionsBeforeCheckpoint.toList)
@@ -511,6 +511,27 @@ class CheckpointSuite extends SparkFunSuite with RDDCheckpointTester with LocalS
     assert(rdd.isCheckpointed === true)
     assert(rdd.isCheckpointedAndMaterialized === true)
     assert(rdd.partitions.size === 0)
+  }
+
+  runTest("checkpointAllMarkedAncestors") { reliableCheckpoint: Boolean =>
+    testCheckpointAllMarkedAncestors(reliableCheckpoint, checkpointAllMarkedAncestors = true)
+    testCheckpointAllMarkedAncestors(reliableCheckpoint, checkpointAllMarkedAncestors = false)
+  }
+
+  private def testCheckpointAllMarkedAncestors(
+      reliableCheckpoint: Boolean, checkpointAllMarkedAncestors: Boolean): Unit = {
+    sc.setLocalProperty(RDD.CHECKPOINT_ALL_MARKED_ANCESTORS, checkpointAllMarkedAncestors.toString)
+    try {
+      val rdd1 = sc.parallelize(1 to 10)
+      checkpoint(rdd1, reliableCheckpoint)
+      val rdd2 = rdd1.map(_ + 1)
+      checkpoint(rdd2, reliableCheckpoint)
+      rdd2.count()
+      assert(rdd1.isCheckpointed === checkpointAllMarkedAncestors)
+      assert(rdd2.isCheckpointed === true)
+    } finally {
+      sc.setLocalProperty(RDD.CHECKPOINT_ALL_MARKED_ANCESTORS, null)
+    }
   }
 }
 

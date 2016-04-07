@@ -19,7 +19,8 @@ package org.apache.spark.mllib.stat
 
 import breeze.linalg.{DenseMatrix => BDM, Matrix => BM}
 
-import org.apache.spark.{Logging, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.stat.correlation.{Correlations, PearsonCorrelation,
   SpearmanCorrelation}
