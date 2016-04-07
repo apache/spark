@@ -56,7 +56,7 @@ class PolynomialExpansion(override val uid: String)
   /** @group setParam */
   def setDegree(value: Int): this.type = set(degree, value)
 
-  override protected val createTransformFunc: Vector => Vector = { v =>
+  override protected lazy val createTransformFunc: Vector => Vector = { v =>
     PolynomialExpansion.expand(v, $(degree))
   }
 

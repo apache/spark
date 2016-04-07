@@ -35,7 +35,7 @@ class Tokenizer(override val uid: String)
 
   def this() = this(Identifiable.randomUID("tok"))
 
-  override protected val createTransformFunc: String => Seq[String] = {
+  override protected lazy val createTransformFunc: String => Seq[String] = {
     _.toLowerCase.split("\\s")
   }
 
@@ -124,7 +124,7 @@ class RegexTokenizer(override val uid: String)
 
   setDefault(minTokenLength -> 1, gaps -> true, pattern -> "\\s+", toLowercase -> true)
 
-  override protected val createTransformFunc: String => Seq[String] = { originStr =>
+  override protected lazy val createTransformFunc: String => Seq[String] = { originStr =>
     val re = $(pattern).r
     val str = if ($(toLowercase)) originStr.toLowerCase() else originStr
     val tokens = if ($(gaps)) re.split(str).toSeq else re.findAllIn(str).toSeq

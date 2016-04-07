@@ -49,7 +49,7 @@ class ElementwiseProduct(override val uid: String)
   /** @group getParam */
   def getScalingVec: Vector = getOrDefault(scalingVec)
 
-  override protected val createTransformFunc: Vector => Vector = {
+  override protected lazy val createTransformFunc: Vector => Vector = {
     require(params.contains(scalingVec), s"transformation requires a weight vector")
     val elemScaler = new feature.ElementwiseProduct($(scalingVec))
     elemScaler.transform
