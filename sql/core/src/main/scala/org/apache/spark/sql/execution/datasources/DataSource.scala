@@ -123,8 +123,16 @@ case class DataSource(
     }
   }
 
-  /** Returns a source that can be used to continually read data. */
-  def createSource(): Source = {
+  /**
+   * Returns a source that can be used to continually read data.
+   *
+   * Before running a real query (e.g., df.explain), `sourceId` and `checkpointLocation` is None
+   * as they are unknown. [[ContinuousQueryManager]] should set `sourceId` and `checkpointLocation`
+   * before starting a query.
+   */
+  def createSource(
+      sourceId: Option[Long] = None,
+      checkpointLocation: Option[String] = None): Source = {
     providingClass.newInstance() match {
       case s: StreamSourceProvider =>
         s.createSource(sqlContext, userSpecifiedSchema, className, options)
@@ -134,7 +142,9 @@ case class DataSource(
         val path = caseInsensitiveOptions.getOrElse("path", {
           throw new IllegalArgumentException("'path' is not specified")
         })
-        val metadataPath = caseInsensitiveOptions.getOrElse("metadataPath", s"$path/_metadata")
+
+        val metadataPath =
+          sourceId.flatMap(id => checkpointLocation.map(location => s"$location/sources/$id"))
 
         val allPaths = caseInsensitiveOptions.get("path")
         val globbedPaths = allPaths.toSeq.flatMap { path =>
@@ -167,8 +177,10 @@ case class DataSource(
                   new CaseInsensitiveMap(options.filterKeys(_ != "path"))).resolveRelation()))
         }
 
-        new FileStreamSource(
-          sqlContext, metadataPath, path, Some(dataSchema), className, dataFrameBuilder)
+        val source = new FileStreamSource(
+          sqlContext, path, Some(dataSchema), className, dataFrameBuilder)
+        metadataPath.foreach(source.setMetadataPath)
+        source
       case _ =>
         throw new UnsupportedOperationException(
           s"Data source $className does not support streamed reading")

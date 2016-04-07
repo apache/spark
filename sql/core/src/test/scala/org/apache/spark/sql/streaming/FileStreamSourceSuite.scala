@@ -19,6 +19,9 @@ package org.apache.spark.sql.streaming
 
 import java.io.File
 
+import org.apache.hadoop.fs.Path
+import org.scalatest.PrivateMethodTester
+
 import org.apache.spark.sql.{AnalysisException, StreamTest}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.streaming._
@@ -63,6 +66,7 @@ class FileStreamSourceTest extends StreamTest with SharedSQLContext {
       format: String,
       path: String,
       schema: Option[StructType] = None): FileStreamSource = {
+    val checkpointLocation = Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
     val reader =
       if (schema.isDefined) {
         sqlContext.read.format(format).schema(schema.get)
@@ -72,14 +76,16 @@ class FileStreamSourceTest extends StreamTest with SharedSQLContext {
     reader.stream(path)
       .queryExecution.analyzed
       .collect { case StreamingRelation(dataSource, _, _) =>
-        dataSource.createSource().asInstanceOf[FileStreamSource]
+        // There is only one source in our tests so just set sourceId to 1
+        dataSource.createSource(Some(0), Some(checkpointLocation)).asInstanceOf[FileStreamSource]
       }.head
   }
 
   val valueSchema = new StructType().add("value", StringType)
 }
 
-class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
+class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext
+  with PrivateMethodTester {
 
   import testImplicits._
 
@@ -341,6 +347,33 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
     Utils.deleteRecursively(tmp)
   }
 
+  test("metadataPath should be in checkpointLocation") {
+    val src = Utils.createTempDir(namePrefix = "streaming.src")
+    val location = Utils.createTempDir(namePrefix = "steaming.checkpoint")
+
+    val query = sqlContext.read.format("text").stream(src.getCanonicalPath).write
+      .format("memory")
+      .queryName("memStream")
+      .option("checkpointLocation", location.getCanonicalPath)
+      .startStream()
+
+    val source = query.asInstanceOf[StreamExecution].logicalPlan.collect {
+      case StreamingExecutionRelation(source, _) => source
+    }.head
+
+    // Use reflection to get the metadata path of FileStreamSource
+    val metadataLogMethod = PrivateMethod[MetadataLog[Seq[String]]]('metadataLog)
+    val metadataLog =
+      source.invokePrivate(metadataLogMethod()).asInstanceOf[HDFSMetadataLog[_]]
+    val metadataPathMethod = PrivateMethod[Path]('metadataPath)
+    val path = metadataLog.invokePrivate(metadataPathMethod())
+    val expectedPath = s"$location/sources/0"
+    assert(expectedPath === path.toString)
+
+    query.stop()
+    Utils.deleteRecursively(location)
+    Utils.deleteRecursively(src)
+  }
 }
 
 class FileStreamSourceStressTestSuite extends FileStreamSourceTest with SharedSQLContext {

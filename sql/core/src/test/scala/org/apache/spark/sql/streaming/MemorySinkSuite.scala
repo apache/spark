@@ -59,7 +59,7 @@ class MemorySinkSuite extends StreamTest with SharedSQLContext {
   }
 
   test("error if attempting to resume specific checkpoint") {
-    val location = Utils.createTempDir("steaming.checkpoint").getCanonicalPath
+    val location = Utils.createTempDir(namePrefix = "steaming.checkpoint").getCanonicalPath
 
     val input = MemoryStream[Int]
     val query = input.toDF().write
