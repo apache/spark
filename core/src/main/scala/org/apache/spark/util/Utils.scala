@@ -1297,6 +1297,37 @@ private[spark] object Utils extends Logging {
     }
   }
 
+  /**
+   * Execute a block of code, then a catch block, but if exceptions happen in
+   * the catch block, do not suppress the original exception.
+   *
+   * This is primarily an issue with `catch { out.close() }` blocks, where
+   * close needs to be called to clean up `out`, but if an exception happened
+   * in `out.write`, it's likely `out` may be corrupted and `out.close` will
+   * fail as well. This would then suppress the original/likely more meaningful
+   * exception from the original `out.write` call.
+   */
+  def tryWithSafeCatchAndFailureCallbacks[T](block: => T)(catchBlock: => Unit): T = {
+    try {
+      block
+    } catch {
+      case cause: Throwable =>
+        // Purposefully not using NonFatal, because for even fatal exceptions
+        // we don't want to have our catchBlock suppress
+        val originalThrowable = cause
+        try {
+          logError("Aborting task", originalThrowable)
+          TaskContext.get().asInstanceOf[TaskContextImpl].markTaskFailed(originalThrowable)
+          catchBlock
+        } catch {
+          case t: Throwable =>
+            logWarning(s"Suppressing exception in catch: " + t.getMessage, t)
+            originalThrowable.addSuppressed(t)
+        }
+        throw originalThrowable
+    }
+  }
+
   /** Default filtering function for finding call sites using `getCallSite`. */
   private def sparkInternalExclusionFunction(className: String): Boolean = {
     // A regular expression to match classes of the internal Spark API's
