@@ -17,15 +17,15 @@
 
 package org.apache.spark
 
-import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
+import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.LinkedHashSet
 
 import org.apache.avro.{Schema, SchemaNormalization}
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{ConfigEntry, OptionalConfigEntry}
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.util.Utils
 
@@ -419,8 +419,10 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
    */
   private[spark] def getenv(name: String): String = System.getenv(name)
 
-  /** Checks for illegal or deprecated config settings. Throws an exception for the former. Not
-    * idempotent - may mutate this conf object to convert deprecated settings to supported ones. */
+  /**
+   * Checks for illegal or deprecated config settings. Throws an exception for the former. Not
+   * idempotent - may mutate this conf object to convert deprecated settings to supported ones.
+   */
   private[spark] def validateSettings() {
     if (contains("spark.local.dir")) {
       val msg = "In Spark 1.0 and later spark.local.dir will be overridden by the value set by " +

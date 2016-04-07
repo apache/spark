@@ -20,6 +20,9 @@ package org.apache.spark.sql.catalyst.catalog
 import javax.annotation.Nullable
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
 
 
 /**
@@ -36,7 +39,7 @@ abstract class ExternalCatalog {
 
   protected def requireDbExists(db: String): Unit = {
     if (!databaseExists(db)) {
-      throw new AnalysisException(s"Database $db does not exist")
+      throw new AnalysisException(s"Database '$db' does not exist")
     }
   }
 
@@ -87,6 +90,8 @@ abstract class ExternalCatalog {
   def alterTable(db: String, tableDefinition: CatalogTable): Unit
 
   def getTable(db: String, table: String): CatalogTable
+
+  def tableExists(db: String, table: String): Boolean
 
   def listTables(db: String): Seq[String]
 
@@ -145,15 +150,6 @@ abstract class ExternalCatalog {
 
   def renameFunction(db: String, oldName: String, newName: String): Unit
 
-  /**
-   * Alter a function whose name that matches the one specified in `funcDefinition`,
-   * assuming the function exists.
-   *
-   * Note: If the underlying implementation does not support altering a certain field,
-   * this becomes a no-op.
-   */
-  def alterFunction(db: String, funcDefinition: CatalogFunction): Unit
-
   def getFunction(db: String, funcName: String): CatalogFunction
 
   def listFunctions(db: String, pattern: String): Seq[String]
@@ -164,10 +160,15 @@ abstract class ExternalCatalog {
 /**
  * A function defined in the catalog.
  *
- * @param name name of the function
+ * @param identifier name of the function
  * @param className fully qualified class name, e.g. "org.apache.spark.util.MyFunc"
+ * @param resources resource types and Uris used by the function
  */
-case class CatalogFunction(name: String, className: String)
+// TODO: Use FunctionResource instead of (String, String) as the element type of resources.
+case class CatalogFunction(
+    identifier: FunctionIdentifier,
+    className: String,
+    resources: Seq[(String, String)])
 
 
 /**
@@ -211,8 +212,7 @@ case class CatalogTablePartition(
  * future once we have a better understanding of how we want to handle skewed columns.
  */
 case class CatalogTable(
-    specifiedDatabase: Option[String],
-    name: String,
+    identifier: TableIdentifier,
     tableType: CatalogTableType,
     storage: CatalogStorageFormat,
     schema: Seq[CatalogColumn],
@@ -226,12 +226,12 @@ case class CatalogTable(
     viewText: Option[String] = None) {
 
   /** Return the database this table was specified to belong to, assuming it exists. */
-  def database: String = specifiedDatabase.getOrElse {
-    throw new AnalysisException(s"table $name did not specify database")
+  def database: String = identifier.database.getOrElse {
+    throw new AnalysisException(s"table $identifier did not specify database")
   }
 
   /** Return the fully qualified name of this table, assuming the database was specified. */
-  def qualifiedName: String = s"$database.$name"
+  def qualifiedName: String = identifier.unquotedString
 
   /** Syntactic sugar to update a field in `storage`. */
   def withNewStorage(
@@ -271,4 +271,21 @@ object ExternalCatalog {
    * Specifications of a table partition. Mapping column name to column value.
    */
   type TablePartitionSpec = Map[String, String]
+}
+
+
+/**
+ * A [[LogicalPlan]] that wraps [[CatalogTable]].
+ */
+case class CatalogRelation(
+    db: String,
+    metadata: CatalogTable,
+    alias: Option[String] = None)
+  extends LeafNode {
+
+  // TODO: implement this
+  override def output: Seq[Attribute] = Seq.empty
+
+  require(metadata.identifier.database == Some(db),
+    "provided database does not match the one specified in the table definition")
 }

@@ -72,7 +72,7 @@ private[serializer] class GenericAvroSerializer(schemas: Map[Long, String])
   def compress(schema: Schema): Array[Byte] = compressCache.getOrElseUpdate(schema, {
     val bos = new ByteArrayOutputStream()
     val out = codec.compressedOutputStream(bos)
-    out.write(schema.toString.getBytes("UTF-8"))
+    out.write(schema.toString.getBytes(StandardCharsets.UTF_8))
     out.close()
     bos.toByteArray
   })

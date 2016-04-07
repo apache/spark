@@ -30,6 +30,7 @@ import scala.util.Random
 
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
+import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.scheduler.TaskLocality.TaskLocality
 import org.apache.spark.storage.BlockManagerId
@@ -88,6 +89,8 @@ private[spark] class TaskSchedulerImpl(
 
   // Number of tasks running on each executor
   private val executorIdToTaskCount = new HashMap[String, Int]
+
+  def runningTasksByExecutors(): Map[String, Int] = executorIdToTaskCount.toMap
 
   // The set of executors we have on each host; this is used to compute hostsAlive, which
   // in turn is used to decide when we can attain data locality on a given host

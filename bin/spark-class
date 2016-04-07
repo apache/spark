@@ -36,20 +36,19 @@ else
 fi
 
 # Find Spark jars.
-# TODO: change the directory name when Spark jars move from "lib".
 if [ -f "${SPARK_HOME}/RELEASE" ]; then
-  SPARK_JARS_DIR="${SPARK_HOME}/lib"
+  SPARK_JARS_DIR="${SPARK_HOME}/jars"
 else
-  SPARK_JARS_DIR="${SPARK_HOME}/assembly/target/scala-$SPARK_SCALA_VERSION"
+  SPARK_JARS_DIR="${SPARK_HOME}/assembly/target/scala-$SPARK_SCALA_VERSION/jars"
 fi
 
-if [ ! -d "$SPARK_JARS_DIR" ]; then
+if [ ! -d "$SPARK_JARS_DIR" ] && [ -z "$SPARK_TESTING$SPARK_SQL_TESTING" ]; then
   echo "Failed to find Spark jars directory ($SPARK_JARS_DIR)." 1>&2
-  echo "You need to build Spark before running this program." 1>&2
+  echo "You need to build Spark with the target \"package\" before running this program." 1>&2
   exit 1
+else
+  LAUNCH_CLASSPATH="$SPARK_JARS_DIR/*"
 fi
-
-LAUNCH_CLASSPATH="$SPARK_JARS_DIR/*"
 
 # Add the launcher build dir to the classpath if requested.
 if [ -n "$SPARK_PREPEND_CLASSES" ]; then

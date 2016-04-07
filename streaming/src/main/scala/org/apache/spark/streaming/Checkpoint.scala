@@ -24,8 +24,9 @@ import java.util.concurrent.RejectedExecutionException
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.{Logging, SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.internal.Logging
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.streaming.scheduler.JobGenerator
 import org.apache.spark.util.Utils
@@ -333,8 +334,7 @@ object CheckpointReader extends Logging {
       ignoreReadError: Boolean = false): Option[Checkpoint] = {
     val checkpointPath = new Path(checkpointDir)
 
-    // TODO(rxin): Why is this a def?!
-    def fs: FileSystem = checkpointPath.getFileSystem(hadoopConf)
+    val fs = checkpointPath.getFileSystem(hadoopConf)
 
     // Try to find the checkpoint files
     val checkpointFiles = Checkpoint.getCheckpointFiles(checkpointDir, Some(fs)).reverse

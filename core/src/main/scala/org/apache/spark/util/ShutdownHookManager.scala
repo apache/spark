@@ -24,7 +24,7 @@ import scala.util.Try
 
 import org.apache.hadoop.fs.FileSystem
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 
 /**
  * Various utility methods used by Spark.

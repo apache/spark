@@ -37,7 +37,7 @@ import org.apache.hadoop.hive.ql.processors.{AddResourceProcessor, CommandProces
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.thrift.transport.TSocket
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.util.ShutdownHookManager
@@ -150,7 +150,8 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     }
 
     if (sessionState.database != null) {
-      SparkSQLEnv.hiveContext.runSqlHive(s"USE ${sessionState.database}")
+      SparkSQLEnv.hiveContext.sessionState.catalog.setCurrentDatabase(
+        s"${sessionState.database}")
     }
 
     // Execute -i init files (always in silent mode)

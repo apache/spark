@@ -20,8 +20,9 @@ package org.apache.spark.ml.regression
 import breeze.stats.{distributions => dist}
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{Logging, SparkException}
+import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.internal.Logging
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.optim._
@@ -32,6 +33,7 @@ import org.apache.spark.mllib.linalg.{BLAS, Vector}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
 
 /**
  * Params for Generalized Linear Regression.
@@ -45,6 +47,7 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
    * to be used in the model.
    * Supported options: "gaussian", "binomial", "poisson" and "gamma".
    * Default is "gaussian".
+   *
    * @group param
    */
   @Since("2.0.0")
@@ -61,6 +64,7 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
    * Param for the name of link function which provides the relationship
    * between the linear predictor and the mean of the distribution function.
    * Supported options: "identity", "log", "inverse", "logit", "probit", "cloglog" and "sqrt".
+   *
    * @group param
    */
   @Since("2.0.0")
@@ -77,7 +81,10 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
   import GeneralizedLinearRegression._
 
   @Since("2.0.0")
-  override def validateParams(): Unit = {
+  override def validateAndTransformSchema(
+      schema: StructType,
+      fitting: Boolean,
+      featuresDataType: DataType): StructType = {
     if ($(solver) == "irls") {
       setDefault(maxIter -> 25)
     }
@@ -86,6 +93,7 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
         Family.fromName($(family)) -> Link.fromName($(link))), "Generalized Linear Regression " +
         s"with ${$(family)} family does not support ${$(link)} link function.")
     }
+    super.validateAndTransformSchema(schema, fitting, featuresDataType)
   }
 }
 
@@ -204,9 +212,10 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
     }
 
     val w = if ($(weightCol).isEmpty) lit(1.0) else col($(weightCol))
-    val instances: RDD[Instance] = dataset.select(col($(labelCol)), w, col($(featuresCol))).rdd
-      .map { case Row(label: Double, weight: Double, features: Vector) =>
-        Instance(label, weight, features)
+    val instances: RDD[Instance] =
+      dataset.select(col($(labelCol)).cast(DoubleType), w, col($(featuresCol))).rdd.map {
+        case Row(label: Double, weight: Double, features: Vector) =>
+          Instance(label, weight, features)
       }
 
     if (familyObj == Gaussian && linkObj == Identity) {
@@ -675,8 +684,7 @@ class GeneralizedLinearRegressionModel private[ml] (
   @Since("2.0.0")
   def summary: GeneralizedLinearRegressionSummary = trainingSummary.getOrElse {
     throw new SparkException(
-      "No training summary available for this GeneralizedLinearRegressionModel",
-      new RuntimeException())
+      "No training summary available for this GeneralizedLinearRegressionModel")
   }
 
   private[regression] def setSummary(summary: GeneralizedLinearRegressionSummary): this.type = {
@@ -693,7 +701,7 @@ class GeneralizedLinearRegressionModel private[ml] (
     : (GeneralizedLinearRegressionModel, String) = {
     $(predictionCol) match {
       case "" =>
-        val predictionColName = "prediction_" + java.util.UUID.randomUUID.toString()
+        val predictionColName = "prediction_" + java.util.UUID.randomUUID.toString
         (copy(ParamMap.empty).setPredictionCol(predictionColName), predictionColName)
       case p => (this, p)
     }

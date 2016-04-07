@@ -21,7 +21,8 @@ import java.util.{Date, ServiceLoader}
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext}
+import org.apache.spark.{SecurityManager, SparkConf, SparkContext}
+import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler._
 import org.apache.spark.status.api.v1.{ApiRootResource, ApplicationAttemptInfo, ApplicationInfo,
   UIRoot}

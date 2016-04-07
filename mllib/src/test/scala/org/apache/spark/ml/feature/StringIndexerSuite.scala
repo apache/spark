@@ -114,7 +114,7 @@ class StringIndexerSuite
     val indexerModel = new StringIndexerModel("indexer", Array("a", "b", "c"))
       .setInputCol("label")
       .setOutputCol("labelIndex")
-    val df = sqlContext.range(0L, 10L)
+    val df = sqlContext.range(0L, 10L).toDF()
     assert(indexerModel.transform(df).eq(df))
   }
 
@@ -209,5 +209,18 @@ class StringIndexerSuite
       .setOutputCol("myOutputCol")
       .setLabels(Array("a", "b", "c"))
     testDefaultReadWrite(t)
+  }
+
+  test("StringIndexer metadata") {
+    val data = sc.parallelize(Seq((0, "a"), (1, "b"), (2, "c"), (3, "a"), (4, "a"), (5, "c")), 2)
+    val df = sqlContext.createDataFrame(data).toDF("id", "label")
+    val indexer = new StringIndexer()
+      .setInputCol("label")
+      .setOutputCol("labelIndex")
+      .fit(df)
+    val transformed = indexer.transform(df)
+    val attrs =
+      NominalAttribute.decodeStructField(transformed.schema("labelIndex"), preserveName = true)
+    assert(attrs.name.nonEmpty && attrs.name.get === "labelIndex")
   }
 }

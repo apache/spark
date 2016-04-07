@@ -90,7 +90,7 @@ trait PredicateHelper {
 
 
 case class Not(child: Expression)
-  extends UnaryExpression with Predicate with ImplicitCastInputTypes {
+  extends UnaryExpression with Predicate with ImplicitCastInputTypes with NullIntolerant {
 
   override def toString: String = s"NOT $child"
 
@@ -274,22 +274,35 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
     val eval2 = right.gen(ctx)
 
     // The result should be `false`, if any of them is `false` whenever the other is null or not.
-    s"""
-      ${eval1.code}
-      boolean ${ev.isNull} = false;
-      boolean ${ev.value} = false;
+    if (!left.nullable && !right.nullable) {
+      ev.isNull = "false"
+      s"""
+        ${eval1.code}
+        boolean ${ev.value} = false;
 
-      if (!${eval1.isNull} && !${eval1.value}) {
-      } else {
-        ${eval2.code}
-        if (!${eval2.isNull} && !${eval2.value}) {
-        } else if (!${eval1.isNull} && !${eval2.isNull}) {
-          ${ev.value} = true;
-        } else {
-          ${ev.isNull} = true;
+        if (${eval1.value}) {
+          ${eval2.code}
+          ${ev.value} = ${eval2.value};
         }
-      }
-     """
+      """
+    } else {
+      s"""
+        ${eval1.code}
+        boolean ${ev.isNull} = false;
+        boolean ${ev.value} = false;
+
+        if (!${eval1.isNull} && !${eval1.value}) {
+        } else {
+          ${eval2.code}
+          if (!${eval2.isNull} && !${eval2.value}) {
+          } else if (!${eval1.isNull} && !${eval2.isNull}) {
+            ${ev.value} = true;
+          } else {
+            ${ev.isNull} = true;
+          }
+        }
+      """
+    }
   }
 }
 
@@ -325,22 +338,35 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
     val eval2 = right.gen(ctx)
 
     // The result should be `true`, if any of them is `true` whenever the other is null or not.
-    s"""
-      ${eval1.code}
-      boolean ${ev.isNull} = false;
-      boolean ${ev.value} = true;
+    if (!left.nullable && !right.nullable) {
+      ev.isNull = "false"
+      s"""
+        ${eval1.code}
+        boolean ${ev.value} = true;
 
-      if (!${eval1.isNull} && ${eval1.value}) {
-      } else {
-        ${eval2.code}
-        if (!${eval2.isNull} && ${eval2.value}) {
-        } else if (!${eval1.isNull} && !${eval2.isNull}) {
-          ${ev.value} = false;
-        } else {
-          ${ev.isNull} = true;
+        if (!${eval1.value}) {
+          ${eval2.code}
+          ${ev.value} = ${eval2.value};
         }
-      }
-     """
+      """
+    } else {
+      s"""
+        ${eval1.code}
+        boolean ${ev.isNull} = false;
+        boolean ${ev.value} = true;
+
+        if (!${eval1.isNull} && ${eval1.value}) {
+        } else {
+          ${eval2.code}
+          if (!${eval2.isNull} && ${eval2.value}) {
+          } else if (!${eval1.isNull} && !${eval2.isNull}) {
+            ${ev.value} = false;
+          } else {
+            ${ev.isNull} = true;
+          }
+        }
+      """
+    }
   }
 }
 
@@ -376,7 +402,8 @@ private[sql] object Equality {
 }
 
 
-case class EqualTo(left: Expression, right: Expression) extends BinaryComparison {
+case class EqualTo(left: Expression, right: Expression)
+    extends BinaryComparison with NullIntolerant {
 
   override def inputType: AbstractDataType = AnyDataType
 
@@ -441,7 +468,8 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
 }
 
 
-case class LessThan(left: Expression, right: Expression) extends BinaryComparison {
+case class LessThan(left: Expression, right: Expression)
+    extends BinaryComparison with NullIntolerant {
 
   override def inputType: AbstractDataType = TypeCollection.Ordered
 
@@ -453,7 +481,8 @@ case class LessThan(left: Expression, right: Expression) extends BinaryCompariso
 }
 
 
-case class LessThanOrEqual(left: Expression, right: Expression) extends BinaryComparison {
+case class LessThanOrEqual(left: Expression, right: Expression)
+    extends BinaryComparison with NullIntolerant {
 
   override def inputType: AbstractDataType = TypeCollection.Ordered
 
@@ -465,7 +494,8 @@ case class LessThanOrEqual(left: Expression, right: Expression) extends BinaryCo
 }
 
 
-case class GreaterThan(left: Expression, right: Expression) extends BinaryComparison {
+case class GreaterThan(left: Expression, right: Expression)
+    extends BinaryComparison with NullIntolerant {
 
   override def inputType: AbstractDataType = TypeCollection.Ordered
 
@@ -477,7 +507,8 @@ case class GreaterThan(left: Expression, right: Expression) extends BinaryCompar
 }
 
 
-case class GreaterThanOrEqual(left: Expression, right: Expression) extends BinaryComparison {
+case class GreaterThanOrEqual(left: Expression, right: Expression)
+    extends BinaryComparison with NullIntolerant {
 
   override def inputType: AbstractDataType = TypeCollection.Ordered
 

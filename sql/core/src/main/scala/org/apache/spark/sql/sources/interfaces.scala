@@ -25,9 +25,10 @@ import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
-import org.apache.spark.{Logging, SparkContext}
+import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{expressions, CatalystTypeConverters, InternalRow}
@@ -151,19 +152,19 @@ trait StreamSinkProvider {
 @DeveloperApi
 trait CreatableRelationProvider {
   /**
-    * Creates a relation with the given parameters based on the contents of the given
-    * DataFrame. The mode specifies the expected behavior of createRelation when
-    * data already exists.
-    * Right now, there are three modes, Append, Overwrite, and ErrorIfExists.
-    * Append mode means that when saving a DataFrame to a data source, if data already exists,
-    * contents of the DataFrame are expected to be appended to existing data.
-    * Overwrite mode means that when saving a DataFrame to a data source, if data already exists,
-    * existing data is expected to be overwritten by the contents of the DataFrame.
-    * ErrorIfExists mode means that when saving a DataFrame to a data source,
-    * if data already exists, an exception is expected to be thrown.
-     *
-     * @since 1.3.0
-    */
+   * Creates a relation with the given parameters based on the contents of the given
+   * DataFrame. The mode specifies the expected behavior of createRelation when
+   * data already exists.
+   * Right now, there are three modes, Append, Overwrite, and ErrorIfExists.
+   * Append mode means that when saving a DataFrame to a data source, if data already exists,
+   * contents of the DataFrame are expected to be appended to existing data.
+   * Overwrite mode means that when saving a DataFrame to a data source, if data already exists,
+   * existing data is expected to be overwritten by the contents of the DataFrame.
+   * ErrorIfExists mode means that when saving a DataFrame to a data source,
+   * if data already exists, an exception is expected to be thrown.
+   *
+   * @since 1.3.0
+   */
   def createRelation(
       sqlContext: SQLContext,
       mode: SaveMode,
@@ -384,9 +385,9 @@ abstract class OutputWriter {
  *
  * @param location A [[FileCatalog]] that can enumerate the locations of all the files that comprise
  *                 this relation.
- * @param partitionSchema The schmea of the columns (if any) that are used to partition the relation
+ * @param partitionSchema The schema of the columns (if any) that are used to partition the relation
  * @param dataSchema The schema of any remaining columns.  Note that if any partition columns are
- *                   present in the actual data files as well, they are removed.
+ *                   present in the actual data files as well, they are preserved.
  * @param bucketSpec Describes the bucketing (hash-partitioning of the files by some column values).
  * @param fileFormat A file format that can be used to read and write the data in files.
  * @param options Configuration used when reading / writing data.
@@ -414,7 +415,7 @@ case class HadoopFsRelation(
   def refresh(): Unit = location.refresh()
 
   override def toString: String =
-    s"$fileFormat part: ${partitionSchema.simpleString}, data: ${dataSchema.simpleString}"
+    s"HadoopFiles"
 
   /** Returns the list of files that will be read when scanning this relation. */
   override def inputFiles: Array[String] =
@@ -438,6 +439,15 @@ trait FileFormat {
       files: Seq[FileStatus]): Option[StructType]
 
   /**
+   * Prepares a read job and returns a potentially updated data source option [[Map]]. This method
+   * can be useful for collecting necessary global information for scanning input data.
+   */
+  def prepareRead(
+      sqlContext: SQLContext,
+      options: Map[String, String],
+      files: Seq[FileStatus]): Map[String, String] = options
+
+  /**
    * Prepares a write job and returns an [[OutputWriterFactory]].  Client side job preparation can
    * be put here.  For example, user defined output committer can be configured here
    * by setting the output committer class in the conf of spark.sql.sources.outputCommitterClass.
@@ -459,22 +469,35 @@ trait FileFormat {
       options: Map[String, String]): RDD[InternalRow]
 
   /**
+   * Returns whether this format support returning columnar batch or not.
+   *
+   * TODO: we should just have different traits for the different formats.
+   */
+  def supportBatch(sqlContext: SQLContext, dataSchema: StructType): Boolean = {
+    false
+  }
+
+  /**
    * Returns a function that can be used to read a single file in as an Iterator of InternalRow.
    *
+   * @param dataSchema The global data schema. It can be either specified by the user, or
+   *                   reconciled/merged from all underlying data files. If any partition columns
+   *                   are contained in the files, they are preserved in this schema.
    * @param partitionSchema The schema of the partition column row that will be present in each
-   *                        PartitionedFile.  These columns should be prepended to the rows that
+   *                        PartitionedFile. These columns should be appended to the rows that
    *                        are produced by the iterator.
-   * @param dataSchema The schema of the data that should be output for each row.  This may be a
-   *                   subset of the columns that are present in the file if  column pruning has
-   *                   occurred.
+   * @param requiredSchema The schema of the data that should be output for each row.  This may be a
+   *                       subset of the columns that are present in the file if column pruning has
+   *                       occurred.
    * @param filters A set of filters than can optionally be used to reduce the number of rows output
    * @param options A set of string -> string configuration options.
    * @return
    */
   def buildReader(
       sqlContext: SQLContext,
-      partitionSchema: StructType,
       dataSchema: StructType,
+      partitionSchema: StructType,
+      requiredSchema: StructType,
       filters: Seq[Filter],
       options: Map[String, String]): PartitionedFile => Iterator[InternalRow] = {
     // TODO: Remove this default implementation when the other formats have been ported
@@ -550,10 +573,13 @@ class HDFSFileCatalog(
 
   override def listFiles(filters: Seq[Expression]): Seq[Partition] = {
     if (partitionSpec().partitionColumns.isEmpty) {
-      Partition(InternalRow.empty, allFiles()) :: Nil
+      Partition(InternalRow.empty, allFiles().filterNot(_.getPath.getName startsWith "_")) :: Nil
     } else {
       prunePartitions(filters, partitionSpec()).map {
-        case PartitionDirectory(values, path) => Partition(values, getStatus(path))
+        case PartitionDirectory(values, path) =>
+          Partition(
+            values,
+            getStatus(path).filterNot(_.getPath.getName startsWith "_"))
       }
     }
   }

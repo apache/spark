@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.plans.UsingJoin
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
 
@@ -75,7 +76,7 @@ trait CheckAnalysis {
           case g: GroupingID =>
             failAnalysis(s"grouping_id() can only be used with GroupingSets/Cube/Rollup")
 
-          case w @ WindowExpression(AggregateExpression(_, _, true), _) =>
+          case w @ WindowExpression(AggregateExpression(_, _, true, _), _) =>
             failAnalysis(s"Distinct window functions are not supported: $w")
 
           case w @ WindowExpression(_: OffsetWindowFunction, WindowSpecDefinition(_, order,
@@ -108,6 +109,12 @@ trait CheckAnalysis {
             failAnalysis(
               s"filter expression '${f.condition.sql}' " +
                 s"of type ${f.condition.dataType.simpleString} is not a boolean.")
+
+          case j @ Join(_, _, UsingJoin(_, cols), _) =>
+            val from = operator.inputSet.map(_.name).mkString(", ")
+            failAnalysis(
+              s"using columns [${cols.mkString(",")}] " +
+                s"can not be resolved given input columns: [$from] ")
 
           case j @ Join(_, _, _, Some(condition)) if condition.dataType != BooleanType =>
             failAnalysis(

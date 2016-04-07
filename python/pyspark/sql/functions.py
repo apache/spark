@@ -25,7 +25,7 @@ if sys.version < "3":
     from itertools import imap as map
 
 from pyspark import since, SparkContext
-from pyspark.rdd import _wrap_function, ignore_unicode_prefix
+from pyspark.rdd import _prepare_for_python_RDD, ignore_unicode_prefix
 from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
 from pyspark.sql.types import StringType
 from pyspark.sql.column import Column, _to_java_column, _to_seq
@@ -1053,6 +1053,55 @@ def to_utc_timestamp(timestamp, tz):
     return Column(sc._jvm.functions.to_utc_timestamp(_to_java_column(timestamp), tz))
 
 
+@since(2.0)
+@ignore_unicode_prefix
+def window(timeColumn, windowDuration, slideDuration=None, startTime=None):
+    """Bucketize rows into one or more time windows given a timestamp specifying column. Window
+    starts are inclusive but the window ends are exclusive, e.g. 12:05 will be in the window
+    [12:05,12:10) but not in [12:00,12:05). Windows can support microsecond precision. Windows in
+    the order of months are not supported.
+
+    The time column must be of TimestampType.
+
+    Durations are provided as strings, e.g. '1 second', '1 day 12 hours', '2 minutes'. Valid
+    interval strings are 'week', 'day', 'hour', 'minute', 'second', 'millisecond', 'microsecond'.
+    If the `slideDuration` is not provided, the windows will be tumbling windows.
+
+    The startTime is the offset with respect to 1970-01-01 00:00:00 UTC with which to start
+    window intervals. For example, in order to have hourly tumbling windows that start 15 minutes
+    past the hour, e.g. 12:15-13:15, 13:15-14:15... provide `startTime` as `15 minutes`.
+
+    The output column will be a struct called 'window' by default with the nested columns 'start'
+    and 'end', where 'start' and 'end' will be of `TimestampType`.
+
+    >>> df = sqlContext.createDataFrame([("2016-03-11 09:00:07", 1)]).toDF("date", "val")
+    >>> w = df.groupBy(window("date", "5 seconds")).agg(sum("val").alias("sum"))
+    >>> w.select(w.window.start.cast("string").alias("start"),
+    ...          w.window.end.cast("string").alias("end"), "sum").collect()
+    [Row(start=u'2016-03-11 09:00:05', end=u'2016-03-11 09:00:10', sum=1)]
+    """
+    def check_string_field(field, fieldName):
+        if not field or type(field) is not str:
+            raise TypeError("%s should be provided as a string" % fieldName)
+
+    sc = SparkContext._active_spark_context
+    time_col = _to_java_column(timeColumn)
+    check_string_field(windowDuration, "windowDuration")
+    if slideDuration and startTime:
+        check_string_field(slideDuration, "slideDuration")
+        check_string_field(startTime, "startTime")
+        res = sc._jvm.functions.window(time_col, windowDuration, slideDuration, startTime)
+    elif slideDuration:
+        check_string_field(slideDuration, "slideDuration")
+        res = sc._jvm.functions.window(time_col, windowDuration, slideDuration)
+    elif startTime:
+        check_string_field(startTime, "startTime")
+        res = sc._jvm.functions.window(time_col, windowDuration, windowDuration, startTime)
+    else:
+        res = sc._jvm.functions.window(time_col, windowDuration)
+    return Column(res)
+
+
 # ---------------------------- misc functions ----------------------------------
 
 @since(1.5)
@@ -1498,6 +1547,26 @@ def translate(srcCol, matching, replace):
 
 # ---------------------- Collection functions ------------------------------
 
+@ignore_unicode_prefix
+@since(2.0)
+def create_map(*cols):
+    """Creates a new map column.
+
+    :param cols: list of column names (string) or list of :class:`Column` expressions that grouped
+        as key-value pairs, e.g. (key1, value1, key2, value2, ...).
+
+    >>> df.select(create_map('name', 'age').alias("map")).collect()
+    [Row(map={u'Alice': 2}), Row(map={u'Bob': 5})]
+    >>> df.select(create_map([df.name, df.age]).alias("map")).collect()
+    [Row(map={u'Alice': 2}), Row(map={u'Bob': 5})]
+    """
+    sc = SparkContext._active_spark_context
+    if len(cols) == 1 and isinstance(cols[0], (list, set)):
+        cols = cols[0]
+    jc = sc._jvm.functions.map(_to_seq(sc, cols, _to_java_column))
+    return Column(jc)
+
+
 @since(1.4)
 def array(*cols):
     """Creates a new array column.
@@ -1628,6 +1697,13 @@ def sort_array(col, asc=True):
 
 # ---------------------------- User Defined Function ----------------------------------
 
+def _wrap_function(sc, func, returnType):
+    command = (func, returnType)
+    pickled_command, broadcast_vars, env, includes = _prepare_for_python_RDD(sc, command)
+    return sc._jvm.PythonFunction(bytearray(pickled_command), env, includes, sc.pythonExec,
+                                  sc.pythonVer, broadcast_vars, sc._javaAccumulator)
+
+
 class UserDefinedFunction(object):
     """
     User defined function in Python
@@ -1642,14 +1718,12 @@ class UserDefinedFunction(object):
 
     def _create_judf(self, name):
         from pyspark.sql import SQLContext
-        f, returnType = self.func, self.returnType  # put them in closure `func`
-        func = lambda _, it: map(lambda x: returnType.toInternal(f(*x)), it)
-        ser = AutoBatchedSerializer(PickleSerializer())
         sc = SparkContext.getOrCreate()
-        wrapped_func = _wrap_function(sc, func, ser, ser)
+        wrapped_func = _wrap_function(sc, self.func, self.returnType)
         ctx = SQLContext.getOrCreate(sc)
         jdt = ctx._ssql_ctx.parseDataType(self.returnType.json())
         if name is None:
+            f = self.func
             name = f.__name__ if hasattr(f, '__name__') else f.__class__.__name__
         judf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonFunction(
             name, wrapped_func, jdt)

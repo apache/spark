@@ -29,10 +29,10 @@ class AnalysisSuite extends AnalysisTest {
   import org.apache.spark.sql.catalyst.analysis.TestRelations._
 
   test("union project *") {
-    val plan = (1 to 100)
+    val plan = (1 to 120)
       .map(_ => testRelation)
       .fold[LogicalPlan](testRelation) { (a, b) =>
-        a.select(UnresolvedStar(None)).select('a).unionAll(b.select(UnresolvedStar(None)))
+        a.select(UnresolvedStar(None)).select('a).union(b.select(UnresolvedStar(None)))
       }
 
     assertAnalysisSuccess(plan)
@@ -161,14 +161,10 @@ class AnalysisSuite extends AnalysisTest {
   }
 
   test("resolve relations") {
-    assertAnalysisError(
-      UnresolvedRelation(TableIdentifier("tAbLe"), None), Seq("Table not found: tAbLe"))
-
+    assertAnalysisError(UnresolvedRelation(TableIdentifier("tAbLe"), None), Seq())
     checkAnalysis(UnresolvedRelation(TableIdentifier("TaBlE"), None), testRelation)
-
     checkAnalysis(
       UnresolvedRelation(TableIdentifier("tAbLe"), None), testRelation, caseSensitive = false)
-
     checkAnalysis(
       UnresolvedRelation(TableIdentifier("TaBlE"), None), testRelation, caseSensitive = false)
   }
