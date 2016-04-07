@@ -709,6 +709,8 @@ class Analyzer(
    * clause.  This rule detects such queries and adds the required attributes to the original
    * projection, so that they will be available during sorting. Another projection is added to
    * remove these attributes after sorting.
+   *
+   * The HAVING clause could also used a grouping columns that is not presented in the SELECT.
    */
   object ResolveMissingReferences extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
