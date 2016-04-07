@@ -25,6 +25,8 @@ import org.apache.parquet.io.api.Binary;
 
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.catalyst.InternalColumn;
+import org.apache.spark.sql.catalyst.expressions.MutableColumn;
 import org.apache.spark.sql.catalyst.util.ArrayData;
 import org.apache.spark.sql.catalyst.util.MapData;
 import org.apache.spark.sql.types.*;
@@ -56,7 +58,7 @@ import org.apache.spark.unsafe.types.UTF8String;
  *
  * ColumnVectors are intended to be reused.
  */
-public abstract class ColumnVector {
+public abstract class ColumnVector extends MutableColumn {
   /**
    * Allocates a column to store elements of `type` on or off heap.
    * Capacity is the initial capacity of the vector and it will grow as necessary. Capacity is
@@ -301,6 +303,72 @@ public abstract class ColumnVector {
   public abstract long nullsNativeAddress();
   public abstract long valuesNativeAddress();
 
+  // At MutableColumn
+  @Override
+  public void update(int ordinal, Object value) {
+    throw new NotImplementedException();
+  }
+
+  @Override
+  public void setNullAt(int i) {
+    throw new NotImplementedException();
+  }
+
+  // At InternalColumn
+  @Override
+  public boolean anyNull() {
+    return anyNullsSet();
+  }
+
+  @Override
+  public int numFields() {
+    throw new NotImplementedException();
+  }
+
+  @Override
+  public InternalColumn copy() {
+    throw new NotImplementedException();
+  }
+
+  // At SpecializedGetters
+  @Override
+  public boolean isNullAt(int ordinal) { return getIsNull(ordinal); }
+      
+  @Override
+  public Decimal getDecimal(int ordinal, int precision, int scale) {
+    throw new NotImplementedException();
+  }
+
+  @Override
+  public UTF8String getUTF8String(int ordinal) {
+    throw new NotImplementedException();
+  }
+
+  @Override
+  public byte[] getBinary(int ordinal) {
+    throw new NotImplementedException();
+  }
+
+  @Override
+  public CalendarInterval getInterval(int ordinal) {
+    throw new NotImplementedException();
+  }
+
+  @Override
+  public InternalRow getStruct(int ordinal, int numFields) {
+    throw new NotImplementedException();
+  }
+
+  @Override
+  public MapData getMap(int ordinal) {
+    throw new NotImplementedException();
+  }
+
+  @Override
+  public Object get(int ordinal, DataType dataType) {
+    throw new NotImplementedException();
+  }
+    
   /**
    * Sets the value at rowId to null/not null.
    */
