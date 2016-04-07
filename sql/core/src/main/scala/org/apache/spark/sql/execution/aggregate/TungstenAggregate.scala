@@ -261,6 +261,9 @@ case class TungstenAggregate(
     .map(_.asInstanceOf[DeclarativeAggregate])
   private val bufferSchema = StructType.fromAttributes(aggregateBufferAttributes)
 
+  // The name for AggregateHashMap
+  private var aggregateHashMapTerm: String = _
+
   // The name for HashMap
   private var hashMapTerm: String = _
   private var sorterTerm: String = _
@@ -438,10 +441,10 @@ case class TungstenAggregate(
     ctx.addMutableState("boolean", initAgg, s"$initAgg = false;")
 
     // create AggregateHashMap
-    val isAggregateHashMapEnabled: Boolean = false
+    val isAggregateHashMapEnabled: Boolean = true
     val isAggregateHashMapSupported: Boolean =
       (groupingKeySchema ++ bufferSchema).forall(_.dataType == LongType)
-    val aggregateHashMapTerm = ctx.freshName("aggregateHashMap")
+    aggregateHashMapTerm = ctx.freshName("aggregateHashMap")
     val aggregateHashMapClassName = ctx.freshName("GeneratedAggregateHashMap")
     val aggregateHashMapGenerator = new ColumnarAggMapCodeGenerator(ctx, aggregateHashMapClassName,
       groupingKeySchema, bufferSchema)
@@ -511,10 +514,11 @@ case class TungstenAggregate(
 
     // create grouping key
     ctx.currentVars = input
-    val keyCode = GenerateUnsafeProjection.createCode(
+    val (groupByKeys2, keyCode) = GenerateUnsafeProjection.createCode2(
       ctx, groupingExpressions.map(e => BindReferences.bindReference[Expression](e, child.output)))
     val key = keyCode.value
     val buffer = ctx.freshName("aggBuffer")
+    val aggregateRow = ctx.freshName("aggregateRow")
 
     // only have DeclarativeAggregate
     val updateExpr = aggregateExpressions.flatMap { e =>
@@ -541,7 +545,7 @@ case class TungstenAggregate(
       ctx.updateColumn(buffer, dt, i, ev, updateExpr(i).nullable)
     }
 
-    val (checkFallback, resetCoulter, incCounter) = if (testFallbackStartsAt.isDefined) {
+    val (checkFallback, resetCounter, incCounter) = if (testFallbackStartsAt.isDefined) {
       val countTerm = ctx.freshName("fallbackCounter")
       ctx.addMutableState("int", countTerm, s"$countTerm = 0;")
       (s"$countTerm < ${testFallbackStartsAt.get}", s"$countTerm = 0;", s"$countTerm += 1;")
@@ -557,18 +561,25 @@ case class TungstenAggregate(
      // generate grouping key
      ${keyCode.code.trim}
      ${hashEval.code.trim}
+
      UnsafeRow $buffer = null;
+     org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row $aggregateRow = null;
+
      if ($checkFallback) {
+       $aggregateRow =
+         $aggregateHashMapTerm.findOrInsert(${groupByKeys2.map(_.value).mkString(", ")});
        // try to get the buffer from hash map
-       $buffer = $hashMapTerm.getAggregationBufferFromUnsafeRow($key, ${hashEval.value});
+       if ($aggregateRow == null) {
+         $buffer = $hashMapTerm.getAggregationBufferFromUnsafeRow($key, ${hashEval.value});
+       }
      }
-     if ($buffer == null) {
+     if ($aggregateRow == null && $buffer == null) {
        if ($sorterTerm == null) {
          $sorterTerm = $hashMapTerm.destructAndCreateExternalSorter();
        } else {
          $sorterTerm.merge($hashMapTerm.destructAndCreateExternalSorter());
        }
-       $resetCoulter
+       $resetCounter
        // the hash map had be spilled, it should have enough memory now,
        // try  to allocate buffer again.
        $buffer = $hashMapTerm.getAggregationBufferFromUnsafeRow($key, ${hashEval.value});
@@ -579,6 +590,7 @@ case class TungstenAggregate(
      }
      $incCounter
 
+     /* ${evals.map(_.value).mkString(" |||||||||||| ")} */
      // evaluate aggregate function
      ${evaluateVariables(evals)}
      // update aggregate buffer

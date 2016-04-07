@@ -108,7 +108,8 @@ class TungstenAggregateHashMap(
               .mkString("\n")}
        |    buckets[idx] = numRows++;
        |  }
-       |  return batch.getRow(buckets[idx]);
+       |  if (idx != -1) return batch.getRow(buckets[idx]);
+       |  return null;
        |}
        |
        |private int find($groupingKeySignature) {

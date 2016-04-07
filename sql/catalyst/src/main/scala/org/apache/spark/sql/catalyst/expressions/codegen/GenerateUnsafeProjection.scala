@@ -292,6 +292,54 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     """
   }
 
+  def createCode2(
+      ctx: CodegenContext,
+      expressions: Seq[Expression],
+      useSubexprElimination: Boolean = false): (Seq[ExprCode], ExprCode) = {
+    val exprEvals = ctx.generateExpressions(expressions, useSubexprElimination)
+    val exprTypes = expressions.map(_.dataType)
+
+    val numVarLenFields = exprTypes.count {
+      case dt if UnsafeRow.isFixedLength(dt) => false
+      // TODO: consider large decimal and interval type
+      case _ => true
+    }
+
+    val result = ctx.freshName("result")
+    ctx.addMutableState("UnsafeRow", result, s"$result = new UnsafeRow(${expressions.length});")
+
+    val holder = ctx.freshName("holder")
+    val holderClass = classOf[BufferHolder].getName
+    ctx.addMutableState(holderClass, holder,
+      s"this.$holder = new $holderClass($result, ${numVarLenFields * 32});")
+
+    val resetBufferHolder = if (numVarLenFields == 0) {
+      ""
+    } else {
+      s"$holder.reset();"
+    }
+    val updateRowSize = if (numVarLenFields == 0) {
+      ""
+    } else {
+      s"$result.setTotalSize($holder.totalSize());"
+    }
+
+    // Evaluate all the subexpression.
+    val evalSubexpr = ctx.subexprFunctions.mkString("\n")
+
+    val writeExpressions =
+      writeExpressionsToBuffer(ctx, ctx.INPUT_ROW, exprEvals, exprTypes, holder, isTopLevel = true)
+
+    val code =
+      s"""
+        $resetBufferHolder
+        $evalSubexpr
+        $writeExpressions
+        $updateRowSize
+      """
+    (exprEvals, ExprCode(code, "false", result))
+  }
+
   def createCode(
       ctx: CodegenContext,
       expressions: Seq[Expression],
