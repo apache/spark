@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.{AnalysisException, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
@@ -31,7 +32,8 @@ import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReuseExchang
  * While this is not a public class, we should avoid changing the function names for the sake of
  * changing them, because a lot of developers use the feature for debugging.
  */
-class QueryExecution(val sqlContext: SQLContext, val logical: LogicalPlan) {
+class QueryExecution(val sqlContext: SQLContext, val logical: LogicalPlan)
+  extends UnsupportedOperationChecker {
 
   // TODO: Move the planner an optimizer into here from SessionState.
   protected def planner = sqlContext.sessionState.planner
@@ -43,10 +45,15 @@ class QueryExecution(val sqlContext: SQLContext, val logical: LogicalPlan) {
       throw ae
   }
 
+  def assertSupported(): Unit = {
+    checkUnsupportedOperations(analyzed, forIncremental = false)
+  }
+
   lazy val analyzed: LogicalPlan = sqlContext.sessionState.analyzer.execute(logical)
 
   lazy val withCachedData: LogicalPlan = {
     assertAnalyzed()
+    assertSupported()
     sqlContext.cacheManager.useCachedData(analyzed)
   }
 

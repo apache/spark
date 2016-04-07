@@ -462,9 +462,7 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   @Experimental
-  def isStreaming: Boolean = logicalPlan.find { n =>
-      n.isInstanceOf[StreamingRelation] || n.isInstanceOf[StreamingExecutionRelation]
-    }.isDefined
+  def isStreaming: Boolean = logicalPlan.needsIncrementalExcecution
 
   /**
    * Displays the [[Dataset]] in a tabular form. Strings more than 20 characters will be truncated,

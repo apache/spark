@@ -18,7 +18,9 @@
 package org.apache.spark.sql.catalyst.plans
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.types.IntegerType
 
 /**
  * This suite is used to test [[LogicalPlan]]'s `resolveOperators` and make sure it can correctly
@@ -67,5 +69,24 @@ class LogicalPlanSuite extends SparkFunSuite {
     plan2 resolveOperators function
 
     assert(invocationCount === 1)
+  }
+
+  test("needsIncrementalExecution") {
+    val relation = LocalRelation(AttributeReference("a", IntegerType, nullable = true)())
+    val incrementalRelation = new LocalRelation(
+      Seq(AttributeReference("a", IntegerType, nullable = true)())) {
+      override def needsIncrementalExcecution(): Boolean = true
+    }
+
+    case class TestBinaryRelation(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
+      override def output: Seq[Attribute] = left.output ++ right.output
+    }
+
+    require(relation.needsIncrementalExcecution === false)
+    require(incrementalRelation.needsIncrementalExcecution === true)
+    assert(TestBinaryRelation(relation, relation).needsIncrementalExcecution === false)
+    assert(TestBinaryRelation(incrementalRelation, relation).needsIncrementalExcecution === true)
+    assert(TestBinaryRelation(relation, incrementalRelation).needsIncrementalExcecution === true)
+    assert(TestBinaryRelation(incrementalRelation, incrementalRelation).needsIncrementalExcecution)
   }
 }

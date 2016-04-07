@@ -42,6 +42,9 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    */
   def analyzed: Boolean = _analyzed
 
+  /** Whether this logical plan requires incremental execution */
+  def needsIncrementalExcecution: Boolean = children.exists(_.needsIncrementalExcecution == true)
+
   /**
    * Returns a copy of this node where `rule` has been recursively applied first to all of its
    * children and then itself (post-order). When `rule` does not apply to a given node, it is left

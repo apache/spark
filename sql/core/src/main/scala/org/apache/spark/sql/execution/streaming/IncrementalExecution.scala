@@ -18,7 +18,8 @@
 package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SparkPlanner, UnaryNode}
 
@@ -69,4 +70,8 @@ class IncrementalExecution(
   }
 
   override def preparations: Seq[Rule[SparkPlan]] = state +: super.preparations
+
+  override def assertSupported(): Unit = {
+    checkUnsupportedOperations(analyzed, forIncremental = true)
+  }
 }
