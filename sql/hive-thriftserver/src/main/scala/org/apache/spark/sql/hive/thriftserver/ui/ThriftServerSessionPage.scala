@@ -162,7 +162,7 @@ private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
           formatDurationOption(Some(session.totalTime)),
           session.totalExecution.toString
         )
-      ).toSeq
+      )
       val headerRow = Seq("User", "IP", "Session ID", "Start Time", "Finish Time", "Duration",
         "Total Execute")
       Some(listingTable(headerRow, dataRows))

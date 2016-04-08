@@ -118,7 +118,7 @@ private[ui] class ExecutorsPage(
           <h4>Executors</h4>
           {execTable}
         </div>
-      </div>;
+      </div>
 
     UIUtils.headerSparkPage("Executors", content, parent)
   }
@@ -235,9 +235,9 @@ private[ui] class ExecutorsPage(
   private def execSummary(activeExecInfo: Seq[ExecutorSummary], deadExecInfo: Seq[ExecutorSummary]):
     Seq[Node] = {
     val totalExecInfo = activeExecInfo ++ deadExecInfo
-    val activeRow = execSummaryRow(activeExecInfo, "Active");
-    val deadRow = execSummaryRow(deadExecInfo, "Dead");
-    val totalRow = execSummaryRow(totalExecInfo, "Total");
+    val activeRow = execSummaryRow(activeExecInfo, "Active")
+    val deadRow = execSummaryRow(deadExecInfo, "Dead")
+    val totalRow = execSummaryRow(totalExecInfo, "Total")
 
     <table class={UIUtils.TABLE_CLASS_STRIPED}>
       <thead>
@@ -325,7 +325,7 @@ private[ui] class ExecutorsPage(
     }>
       {Utils.msDurationToString(totalDuration)}
       ({Utils.msDurationToString(totalGCTime)})
-    </td>;
+    </td>
 
     tableData
   }

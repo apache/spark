@@ -71,6 +71,7 @@ private[ui] abstract class ExecutionTable(
 
   protected def baseHeader: Seq[String] = Seq(
     "ID",
+    "User",
     "Description",
     "Submitted",
     "Duration")
@@ -93,6 +94,9 @@ private[ui] abstract class ExecutionTable(
     <tr>
       <td>
         {executionUIData.executionId.toString}
+      </td>
+      <td>
+        {executionUIData.efctvUser}
       </td>
       <td>
         {descriptionCell(executionUIData)}

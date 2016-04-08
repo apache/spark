@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution
 
 import java.util.concurrent.atomic.AtomicLong
 
+import org.apache.hadoop.security.UserGroupInformation
+
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLExecutionEnd,
@@ -46,9 +48,16 @@ private[sql] object SQLExecution {
       sc.setLocalProperty(EXECUTION_ID_KEY, executionId.toString)
       val r = try {
         val callSite = Utils.getCallSite()
-        sqlContext.sparkContext.listenerBus.post(SparkListenerSQLExecutionStart(
-          executionId, callSite.shortForm, callSite.longForm, queryExecution.toString,
-          SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan), System.currentTimeMillis()))
+        val efctvUser = UserGroupInformation.getCurrentUser.getShortUserName
+        sqlContext.sparkContext.listenerBus.post(
+          SparkListenerSQLExecutionStart(
+            executionId,
+            efctvUser,
+            callSite.shortForm,
+            callSite.longForm,
+            queryExecution.toString,
+            SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan),
+            System.currentTimeMillis()))
         try {
           body
         } finally {
