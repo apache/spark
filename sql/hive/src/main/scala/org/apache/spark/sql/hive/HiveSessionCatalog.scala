@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.hive
 
+import org.apache.spark.sql.catalyst.util._
+
+import scala.collection.immutable.Map.Map4
 import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
 
@@ -38,7 +41,7 @@ import org.apache.spark.sql.execution.datasources.BucketSpec
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{ArrayType, StructField, DataType, StructType}
 import org.apache.spark.util.Utils
 
 
@@ -241,10 +244,10 @@ private[sql] class HiveSessionCatalog(
       val info = new ExpressionInfo(clazz.getCanonicalName, functionName)
       createTempFunction(functionName, info, builder, ignoreIfExists = false)
   }
-  
+
   private def generateCreateTableHeader(
               ct: CatalogTable,
-              processedProps: scala.collection.mutable.ArrayBuffer[String]): String =  {
+              processedProps: scala.collection.mutable.ArrayBuffer[String]): String = {
     if (ct.tableType == CatalogTableType.EXTERNAL_TABLE) {
       processedProps += "EXTERNAL"
       "CREATE EXTERNAL TABLE " + ct.qualifiedName
@@ -255,19 +258,15 @@ private[sql] class HiveSessionCatalog(
 
   private def generateCols(ct: CatalogTable): String = {
     val cols = ct.schema map { col =>
-      col.name + " " + col.dataType + (col.comment.getOrElse("") match {
+      "`" + col.name + "` " + col.dataType + (col.comment.getOrElse("") match {
         case cmt: String if cmt.length > 0 => " COMMENT '" + escapeHiveCommand(cmt) + "'"
         case _ => ""
       })
     }
     cols.mkString("(", ", ", ")")
   }
-  
-  /**
-   * Generate Create table DDL string for the specified tableIdentifier
-   * that is from Hive metastore
-   */
-  override def generateHiveDDL(ct: CatalogTable): String = {
+
+  private def generateHiveDDL(ct: CatalogTable): String = {
     val sb = new StringBuilder("")
     val processedProperties = scala.collection.mutable.ArrayBuffer.empty[String]
 
@@ -304,7 +303,7 @@ private[sql] class HiveSessionCatalog(
         sb.append(" CLUSTERED BY ")
         sb.append(ct.bucketColumns.mkString("( ", ", ", " )"))
 
-        // TODO sort columns don't have the the right scala types yet. need to adapt to Hive Order
+        // TODO sort columns don't have the the right types yet. need to adapt to Hive Order
         if (ct.sortColumns.size > 0) {
           sb.append(" SORTED BY ")
           sb.append(ct.sortColumns.map(_.name).mkString("( ", ", ", " )"))
@@ -319,43 +318,19 @@ private[sql] class HiveSessionCatalog(
       sb.append(" ROW FORMAT ")
 
       val serdeProps = ct.storage.serdeProperties
-      val processedSerdeProps =
-        Seq("field.delim", "colelction.delim", "mapkey.delim", "line.delim",
-          "serialization.null.format")
-      val delimiterPrefixes =
-        Seq("FIELDS TERMINATED BY",
-          "COLLECTION ITEMS TERMINATED BY",
-          "MAP KEYS TERMINATED BY",
-          "LINES TERMINATED BY",
-          "NULL DEFINED AS")
+      // potentially for serde properties that should be ignored
+      val processedSerdeProps = Seq()
 
-      val delimiters = Seq(
-        serdeProps.get("field.delim"),
-        serdeProps.get("colelction.delim"),
-        serdeProps.get("mapkey.delim"),
-        serdeProps.get("line.delim"),
-        serdeProps.get("serialization.null.format")).zipWithIndex
-
-      val delimiterStrs = delimiters collect {
-        case (Some(ch), i) =>
-          delimiterPrefixes(i) + " '" +
-            escapeHiveCommand(ch) +
-            "' "
-      }
-      if (delimiterStrs.size > 0) {
-        sb.append("DELIMITED ")
-        sb.append(delimiterStrs.mkString(" ") + "\n")
-      } else {
-        sb.append("SERDE '")
-        sb.append(escapeHiveCommand(ct.storage.serde.getOrElse("")) + "' \n")
-      }
+      sb.append("SERDE '")
+      sb.append(escapeHiveCommand(ct.storage.serde.getOrElse("")) + "' \n")
 
       val leftOverSerdeProps = serdeProps.filter(e => !processedSerdeProps.contains(e._1))
       if (leftOverSerdeProps.size > 0) {
         sb.append("WITH SERDEPROPERTIES \n")
         sb.append(
-          leftOverSerdeProps.map(e => "'" + e._1 + "'='" + e._2 + "'").
-            mkString("( ", ", ", " )\n"))
+          leftOverSerdeProps.map { e =>
+            "'" + escapeHiveCommand(e._1) + "'='" + escapeHiveCommand(e._2) + "'"
+          }.mkString("( ", ", ", " )\n"))
       }
 
       sb.append("STORED AS INPUTFORMAT '" +
@@ -393,12 +368,8 @@ private[sql] class HiveSessionCatalog(
     // one, such as "col array<String>", because the metastore was created as spark sql
     // specific metastore (refer to HiveMetaStoreCatalog.createDataSourceTable.
     // newSparkSQLSpecificMetastoreTable). In such case, the column schema information
-    // is located in tblproperties in json format. However, the data types in the json string
-    // spark sql types, e.g.: Long type for hive's bigint. So if we do parse this json string
-    // and contruct the ddl with such spark sql column type, it may be not executable when it
-    // comes to hive native command. We may need to wait till spark sql native command to be ready
-    // in order to decide how to deal with this case.
-    sb.append(generateCols(ct) + "\n")
+    // is located in tblproperties in json format.
+    sb.append(generateColsDataSource(ct, processedProperties) + "\n")
     sb.append("USING " + ct.properties.get("spark.sql.sources.provider").get + "\n")
     sb.append("OPTIONS ")
     val options = scala.collection.mutable.ArrayBuffer.empty[String]
@@ -409,18 +380,46 @@ private[sql] class HiveSessionCatalog(
     sb.toString
   }
 
+  private def generateColsDataSource(
+              ct: CatalogTable,
+              processedProps: scala.collection.mutable.ArrayBuffer[String]): String = {
+    val schemaStringFromParts: Option[String] = {
+      ct.properties.get("spark.sql.sources.schema.numParts").map { numParts =>
+        val parts = (0 until numParts.toInt).map { index =>
+          val part = ct.properties.get(s"spark.sql.sources.schema.part.$index").orNull
+          if (part == null) {
+            throw new AnalysisException(
+              "Could not read schema from the metastore because it is corrupted " +
+                s"(missing part $index of the schema, $numParts parts are expected).")
+          }
+          part
+        }
+        // Stick all parts back to a single schema string.
+        parts.mkString
+      }
+    }
+
+    if (schemaStringFromParts.isDefined) {
+      (schemaStringFromParts.map(s => DataType.fromJson(s).asInstanceOf[StructType]).
+        get map { f => s"${quoteIdentifier(f.name)} ${f.dataType.sql}" })
+        .mkString("( ", ", ", " )")
+    } else {
+      ""
+    }
+  }
+
   /**
    * Generate Create table DDL string for the specified tableIdentifier
    * that is from Hive metastore
    */
   override def generateTableDDL(name: TableIdentifier): String = {
-    val ct = this.getTable(name)
-    if(ct.properties.get("spark.sql.sources.provider") == None) {
-      // CREATE [TEMPORARY] TABLE <tablename> ... ROW FORMAT.. TBLPROPERTIES (...)
-      generateHiveDDL(ct)
-    } else {
+    val ct = this.getTableMetadata(name)
+    if(ct.properties.get("spark.sql.sources.provider").isDefined) {
       // CREATE [TEMPORARY] TABLE <tablename> .... USING .... OPTIONS (...)
       generateDataSourceDDL(ct)
+    } else {
+      // CREATE [TEMPORARY] TABLE <tablename> ... ROW FORMAT.. TBLPROPERTIES (...)
+      generateHiveDDL(ct)
     }
   }
 

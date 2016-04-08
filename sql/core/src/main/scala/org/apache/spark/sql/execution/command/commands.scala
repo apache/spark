@@ -443,7 +443,6 @@ case class ShowCreateTableCommand(
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val catalog = sqlContext.sessionState.catalog
-    val db = databaseName.getOrElse(catalog.getCurrentDatabase)
     Seq(Row(catalog.generateTableDDL(TableIdentifier(tableName, databaseName))))
   }
 
