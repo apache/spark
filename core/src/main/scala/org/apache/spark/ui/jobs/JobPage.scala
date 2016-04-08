@@ -249,14 +249,10 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
       val summary: NodeSeq =
         <div>
           <ul class="unstyled">
-            {
-              if (jobData.efctvUser.isDefined) {
-                <li>
-                  <strong>User:</strong>
-                  {jobData.efctvUser.get}
-                </li>
-              }
-            }
+            <li>
+              <strong>User:</strong>
+              {jobData.user}
+            </li>
             <li>
               <strong>Status:</strong>
               {jobData.status}

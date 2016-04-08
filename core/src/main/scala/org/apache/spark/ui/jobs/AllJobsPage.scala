@@ -228,7 +228,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
           end - start
         }
       }
-      val efctvUser = job.efctvUser.getOrElse("Unknown")
+      val user = job.user
       val formattedDuration = duration.map(d => UIUtils.formatDuration(d)).getOrElse("Unknown")
       val formattedSubmissionTime = job.submissionTime.map(UIUtils.formatDate).getOrElse("Unknown")
       val basePathUri = UIUtils.prependBaseUri(parent.basePath)
@@ -240,8 +240,8 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
         <td sorttable_customkey={job.jobId.toString}>
           {job.jobId} {job.jobGroup.map(id => s"($id)").getOrElse("")}
         </td>
-        <td sorttable_customkey={efctvUser}>
-          {efctvUser}
+        <td sorttable_customkey={user}>
+          {user}
         </td>
         <td>
           {jobDescription}

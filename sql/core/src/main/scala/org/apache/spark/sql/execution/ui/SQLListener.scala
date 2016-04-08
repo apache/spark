@@ -30,7 +30,7 @@ import org.apache.spark.ui.SparkUI
 @DeveloperApi
 case class SparkListenerSQLExecutionStart(
     executionId: Long,
-    efctvUser: String,
+    user: String,
     description: String,
     details: String,
     physicalPlanDescription: String,
@@ -217,7 +217,7 @@ private[sql] class SQLListener(conf: SparkConf) extends SparkListener with Loggi
   }
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
-    case SparkListenerSQLExecutionStart(executionId, efctvUser, description, details,
+    case SparkListenerSQLExecutionStart(executionId, user, description, details,
       physicalPlanDescription, sparkPlanInfo, time) =>
       val physicalPlanGraph = SparkPlanGraph(sparkPlanInfo)
       val sqlPlanMetrics = physicalPlanGraph.allNodes.flatMap { node =>
@@ -225,7 +225,7 @@ private[sql] class SQLListener(conf: SparkConf) extends SparkListener with Loggi
       }
       val executionUIData = new SQLExecutionUIData(
         executionId,
-        efctvUser,
+        user,
         description,
         details,
         physicalPlanDescription,
@@ -364,7 +364,7 @@ private[spark] class SQLHistoryListener(conf: SparkConf, sparkUI: SparkUI)
  */
 private[ui] class SQLExecutionUIData(
     val executionId: Long,
-    val efctvUser: String,
+    val user: String,
     val description: String,
     val details: String,
     val physicalPlanDescription: String,

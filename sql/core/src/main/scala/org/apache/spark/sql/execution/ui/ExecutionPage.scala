@@ -43,7 +43,7 @@ private[sql] class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") 
         <div>
           <ul class="unstyled">
             <li>
-              <strong>User: </strong>{executionUIData.efctvUser}
+              <strong>User: </strong>{executionUIData.user}
             </li>
             <li>
               <strong>Submitted Time: </strong>{UIUtils.formatDate(executionUIData.submissionTime)}

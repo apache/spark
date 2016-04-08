@@ -48,11 +48,11 @@ private[sql] object SQLExecution {
       sc.setLocalProperty(EXECUTION_ID_KEY, executionId.toString)
       val r = try {
         val callSite = Utils.getCallSite()
-        val efctvUser = UserGroupInformation.getCurrentUser.getShortUserName
+        val user = UserGroupInformation.getCurrentUser.getShortUserName
         sqlContext.sparkContext.listenerBus.post(
           SparkListenerSQLExecutionStart(
             executionId,
-            efctvUser,
+            user,
             callSite.shortForm,
             callSite.longForm,
             queryExecution.toString,

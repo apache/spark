@@ -96,7 +96,7 @@ private[ui] abstract class ExecutionTable(
         {executionUIData.executionId.toString}
       </td>
       <td>
-        {executionUIData.efctvUser}
+        {executionUIData.user}
       </td>
       <td>
         {descriptionCell(executionUIData)}
