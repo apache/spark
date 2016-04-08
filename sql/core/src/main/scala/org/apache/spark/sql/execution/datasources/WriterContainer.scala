@@ -136,7 +136,7 @@ private[sql] abstract class BaseWriterContainer(
           // to tell the user to look for the actual error.
           throw new SparkException("The output file already exists but this could be due to a " +
             "failure from an earlier attempt. Look through the earlier logs or stage page for " +
-            "the first error.\n  File exists error: " + e.getLocalizedMessage, e)
+            "the first error.\n  File exists error: " + e, e)
         } else {
           throw e
         }
