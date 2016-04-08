@@ -150,7 +150,7 @@ attributes and methods.
 
 Macros
 ''''''
-Macros are a way to expose objects to your templates and live under the 
+Macros are a way to expose objects to your templates and live under the
 ``macros`` namespace in your templates.
 
 A few commonly used libraries and methods are made available.
