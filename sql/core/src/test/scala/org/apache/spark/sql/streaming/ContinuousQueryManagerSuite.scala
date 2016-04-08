@@ -185,8 +185,8 @@ class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with 
       val q2 = stopRandomQueryAsync(100 milliseconds, withError = true)
       testAwaitAnyTermination(
         ExpectException[SparkException],
-        awaitTimeout = 1 seconds,
-        testBehaviorFor = 2 seconds)
+        awaitTimeout = 4 seconds,
+        testBehaviorFor = 6 seconds)
       require(!q2.isActive) // should be inactive by the time the prev awaitAnyTerm returned
 
       // All subsequent calls to awaitAnyTermination should throw the exception

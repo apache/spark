@@ -354,7 +354,7 @@ object PermanentHiveUDFTest2 extends Logging {
       FunctionIdentifier("example_max"),
       "org.apache.hadoop.hive.contrib.udaf.example.UDAFExampleMax",
       ("JAR" -> jar) :: Nil)
-    hiveContext.sessionState.catalog.createFunction(function)
+    hiveContext.sessionState.catalog.createFunction(function, ignoreIfExists = false)
     val source =
       hiveContext.createDataFrame((1 to 10).map(i => (i, s"str$i"))).toDF("key", "val")
     source.registerTempTable("sourceTable")
