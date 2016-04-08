@@ -153,13 +153,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           executorRef.send(RegisterExecutorFailed("Duplicate executor ID: " + executorId))
           context.reply(true)
         } else {
-          // If the executor's rpc env is not listening for incoming connections, `hostPort`
-          // will be null, and the client connection should be used to contact the executor.
-          val executorAddress = if (executorRef.address != null) {
-              executorRef.address
-            } else {
-              context.senderAddress
-            }
+          val executorAddress = executorRef.address
           logInfo(s"Registered executor $executorRef ($executorAddress) with ID $executorId")
           addressToExecutorId(executorAddress) = executorId
           totalCoreCount.addAndGet(cores)
