@@ -66,7 +66,7 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext
       .setInputCol("words")
       .setOutputCol("features")
       .fit(df)
-    assert(cv.vocabulary === Array("a", "b", "c", "e", "d"))
+    assert(cv.vocabulary === Array("a", "b", "c", "d", "e"))
 
     cv.transform(df).select("features", "expected").collect().foreach {
       case Row(features: Vector, expected: Vector) =>

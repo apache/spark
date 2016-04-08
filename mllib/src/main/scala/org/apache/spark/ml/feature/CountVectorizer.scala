@@ -153,9 +153,15 @@ class CountVectorizer(override val uid: String)
     }.cache()
     val fullVocabSize = wordCounts.count()
 
-    val vocab: Array[String] = wordCounts.map(_.swap)
-      .top(Math.min(fullVocabSize, vocSize).toInt)
-      .map(_._2)
+    val wordCountOrdering = new Ordering[(String, Long)]{
+      override def compare(x: (String, Long), y: (String,Long)): Int = {
+        if (x._2 > y._2) +1 else -1
+      }
+    }
+    
+    val vocab: Array[String] = wordCounts
+      .top(math.min(fullVocabSize, vocSize).toInt)(wordCountOrdering)
+      .map(_._1)
 
     require(vocab.length > 0, "The vocabulary size should be > 0. Lower minDF as necessary.")
     copyValues(new CountVectorizerModel(uid, vocab).setParent(this))
