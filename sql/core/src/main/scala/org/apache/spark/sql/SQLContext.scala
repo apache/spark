@@ -120,7 +120,7 @@ class SQLContext private[sql](
    */
   @transient
   protected[sql] lazy val sessionState: SessionState = new SessionState(self)
-  protected[sql] def conf: SQLConf = sessionState.conf
+  protected[spark] def conf: SQLConf = sessionState.conf
 
   /**
    * An interface to register custom [[org.apache.spark.sql.util.QueryExecutionListener]]s

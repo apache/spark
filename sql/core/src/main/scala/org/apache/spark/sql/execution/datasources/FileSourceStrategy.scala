@@ -181,7 +181,7 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
       }
 
       val scan =
-        DataSourceScan(
+        DataSourceScan.create(
           readDataColumns ++ partitionColumns,
           new FileScanRDD(
             files.sqlContext,

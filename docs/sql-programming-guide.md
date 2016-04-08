@@ -1467,37 +1467,6 @@ Configuration of Parquet can be done using the `setConf` method on `SQLContext` 
   </td>
 </tr>
 <tr>
-  <td><code>spark.sql.parquet.output.committer.class</code></td>
-  <td><code>org.apache.parquet.hadoop.<br />ParquetOutputCommitter</code></td>
-  <td>
-    <p>
-      The output committer class used by Parquet. The specified class needs to be a subclass of
-      <code>org.apache.hadoop.<br />mapreduce.OutputCommitter</code>. Typically, it's also a
-      subclass of <code>org.apache.parquet.hadoop.ParquetOutputCommitter</code>.
-    </p>
-    <p>
-      <b>Note:</b>
-      <ul>
-        <li>
-          This option is automatically ignored if <code>spark.speculation</code> is turned on.
-        </li>
-        <li>
-          This option must be set via Hadoop <code>Configuration</code> rather than Spark
-          <code>SQLConf</code>.
-        </li>
-        <li>
-          This option overrides <code>spark.sql.sources.<br />outputCommitterClass</code>.
-        </li>
-      </ul>
-    </p>
-    <p>
-      Spark SQL comes with a builtin
-      <code>org.apache.spark.sql.<br />parquet.DirectParquetOutputCommitter</code>, which can be more
-      efficient then the default Parquet output committer when writing data to S3.
-    </p>
-  </td>
-</tr>
-<tr>
   <td><code>spark.sql.parquet.mergeSchema</code></td>
   <td><code>false</code></td>
   <td>
@@ -2165,8 +2134,6 @@ options.
  - In the `sql` dialect, floating point numbers are now parsed as decimal. HiveQL parsing remains
    unchanged.
  - The canonical name of SQL/DataFrame functions are now lower case (e.g. sum vs SUM).
- - It has been determined that using the DirectOutputCommitter when speculation is enabled is unsafe
-   and thus this output committer will not be used when speculation is on, independent of configuration.
  - JSON data source will not automatically load new files that are created by other applications
    (i.e. files that are not inserted to the dataset through Spark SQL).
    For a JSON persistent table (i.e. the metadata of the table is stored in Hive Metastore),

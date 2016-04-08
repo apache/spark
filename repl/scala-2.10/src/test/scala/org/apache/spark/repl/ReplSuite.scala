@@ -357,7 +357,7 @@ class ReplSuite extends SparkFunSuite {
         |
         |def sum[I, N : Numeric : Encoder](f: I => N): TypedColumn[I, N] = new SumOf(f).toColumn
         |val ds = Seq((1, 1, 2L), (1, 2, 3L), (1, 3, 4L), (2, 1, 5L)).toDS()
-        |ds.groupBy(_._1).agg(sum(_._2), sum(_._3)).collect()
+        |ds.groupByKey(_._1).agg(sum(_._2), sum(_._3)).collect()
       """.stripMargin)
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
