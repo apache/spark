@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive.execution
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.scalatest.exceptions.TestFailedException
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
@@ -110,20 +110,21 @@ class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton {
     assert(e.getMessage().contains("intentional exception"))
   }
 
-  test("some_non_existent_command") {
+  test("script transformation should fail when user specifies a bad script command") {
     val rowsDf = Seq("a", "b", "c").map(Tuple1.apply).toDF("a")
-    intercept[TestFailedException] {
-      checkAnswer(
-        rowsDf,
-        (child: SparkPlan) => new ScriptTransformation(
+
+    val e = intercept[SparkException] {
+      val plan =
+        new ScriptTransformation(
           input = Seq(rowsDf.col("a").expr),
           script = "some_non_existent_command",
           output = Seq(AttributeReference("a", StringType)()),
-          child = child,
+          child = rowsDf.queryExecution.sparkPlan,
           ioschema = serdeIOSchema
-        )(hiveContext),
-        rowsDf.collect())
+        )(hiveContext)
+      SparkPlanTest.executePlan(plan, hiveContext)
     }
+    assert(e.getMessage.contains("Subprocess exited with status"))
   }
 }
 
