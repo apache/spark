@@ -54,7 +54,7 @@ private[spark] abstract class Task[T](
     val stageAttemptId: Int,
     val partitionId: Int,
     val initialAccumulators: Seq[Accumulator[_]],
-    val localProperties: Properties) extends Serializable {
+    @transient var localProperties: Properties) extends Serializable {
 
   /**
    * Called by [[org.apache.spark.executor.Executor]] to run this task.
@@ -213,7 +213,7 @@ private[spark] object Task {
     // Write the task properties separately so it is available before full task deserialization.
     val propBytes = Utils.serialize(task.localProperties)
     dataOut.writeInt(propBytes.length)
-    dataOut.write(propBytes, 0, propBytes.length)
+    dataOut.write(propBytes)
 
     // Write the task itself and finish
     dataOut.flush()
