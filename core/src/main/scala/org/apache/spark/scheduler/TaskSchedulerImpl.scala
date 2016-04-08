@@ -358,7 +358,7 @@ private[spark] class TaskSchedulerImpl(
               // at sometime, before executor killed  by cluster, the task of running on this
               // executor is finished and return task success state to driver. However, this kinds
               // of task should be ignored, because the task on this executor is already re-queued
-              // by driver.
+              // by driver. For more details, can check in SPARK-14485.
               if (executorId.ne(null) && !executorIdToTaskCount.contains(executorId)) {
                 taskSet.removeRunningTask(tid)
                 logWarning(
