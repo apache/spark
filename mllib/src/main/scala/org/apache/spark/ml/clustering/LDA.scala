@@ -246,7 +246,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    * @group param
    */
   @Since("1.6.0")
-  final val subsamplingRate = new DoubleParam(this, "subsamplingRate",  "(For online optimizer)" +
+  final val subsamplingRate = new DoubleParam(this, "subsamplingRate", "(For online optimizer)" +
     " Fraction of the corpus to be sampled and used in each iteration of mini-batch" +
     " gradient descent, in range (0, 1].",
     ParamValidators.inRange(0.0, 1.0, lowerInclusive = false, upperInclusive = true))
