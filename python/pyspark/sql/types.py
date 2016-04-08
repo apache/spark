@@ -442,6 +442,15 @@ class StructType(DataType):
     """Struct type, consisting of a list of :class:`StructField`.
 
     This is the data type representing a :class:`Row`.
+
+    Iterating a :class:`StructType` will iterate its :class:`StructField`s.
+    A contained :class:`StructField` can be accessed by name or position.
+
+    >>> struct1 = StructType([StructField("f1", StringType(), True)])
+    >>> struct1["f1"]
+    StructField(f1,StringType,true)
+    >>> struct1[0]
+    StructField(f1,StringType,true)
     """
     def __init__(self, fields=None):
         """
