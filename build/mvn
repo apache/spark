@@ -70,7 +70,7 @@ install_app() {
 # Install maven under the build/ folder
 install_mvn() {
   local MVN_VERSION="3.3.9"
-  local APACHE_MIRROR=${APACHE_MIRROR:-https://archive.apache.org/dist}
+  local APACHE_MIRROR=${APACHE_MIRROR:-'https://www.apache.org/dyn/closer.lua?action=download&filename='}
 
   install_app \
     "${APACHE_MIRROR}/maven/maven-3/${MVN_VERSION}/binaries" \
