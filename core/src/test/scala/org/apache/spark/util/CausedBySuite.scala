@@ -22,26 +22,19 @@ import org.apache.spark.SparkFunSuite
 class CausedBySuite extends SparkFunSuite {
 
   test("For an error without a cause, should return the error") {
-
-    // Arrange
     val error = new Exception
 
-    // Act
     val causedBy = error match {
       case CausedBy(e) => e
     }
 
-    // Assert
     assert(causedBy === error)
   }
 
   test("For an error with a cause, should return the cause of the error") {
-
-    // Arrange
     val cause = new Exception
     val error = new Exception(cause)
 
-    // Act
     val causedBy = error match {
       case CausedBy(e) => e
     }
@@ -50,18 +43,14 @@ class CausedBySuite extends SparkFunSuite {
   }
 
   test("For an error with a cause that itself has a cause, return the root cause") {
-
-    // Arrange
     val causeOfCause = new Exception
     val cause = new Exception(causeOfCause)
     val error = new Exception(cause)
 
-    // Act
     val causedBy = error match {
       case CausedBy(e) => e
     }
 
-    // Assert
     assert(causedBy === causeOfCause)
   }
 }
