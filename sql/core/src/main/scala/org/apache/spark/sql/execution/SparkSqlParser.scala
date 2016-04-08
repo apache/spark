@@ -145,9 +145,6 @@ class SparkSqlAstBuilder extends AstBuilder {
     if (options.exists(_.FORMATTED != null)) {
       logWarning("Unsupported operation: EXPLAIN FORMATTED option")
     }
-    if (options.exists(_.LOGICAL != null)) {
-      logWarning("Unsupported operation: EXPLAIN LOGICAL option")
-    }
 
     // Create the explain comment.
     val statement = plan(ctx.statement)
