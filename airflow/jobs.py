@@ -603,7 +603,7 @@ class SchedulerJob(BaseJob):
         for pool, tis in list(d.items()):
             if not pool:
                 # Arbitrary:
-                # If queued outside of a pool, trigger no more than 32 per run
+                # If queued outside of a pool, trigger no more than 128 per run
                 open_slots = 128
             else:
                 open_slots = pools[pool].open_slots(session=session)
