@@ -435,6 +435,14 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
       checkFeatureSubsetStrategy(numTrees = 1, strategy, expected)
     }
 
+    val invalidStrategies = Array("-.1", "-.10", "-0.10", ".0", "0.0", "1.1", "0")
+    for (invalidStrategy <- invalidStrategies) {
+      intercept[MatchError]{
+        val metadata =
+          DecisionTreeMetadata.buildMetadata(rdd, strategy, numTrees = 1, invalidStrategy)
+      }
+    }
+
     checkFeatureSubsetStrategy(numTrees = 2, "all", numFeatures)
     checkFeatureSubsetStrategy(numTrees = 2, "auto", math.sqrt(numFeatures).ceil.toInt)
     checkFeatureSubsetStrategy(numTrees = 2, "sqrt", math.sqrt(numFeatures).ceil.toInt)
@@ -450,6 +458,12 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     for (strategy <- integerStrategies) {
       val expected = if (strategy.toInt < numFeatures) strategy.toInt else numFeatures
       checkFeatureSubsetStrategy(numTrees = 2, strategy, expected)
+    }
+    for (invalidStrategy <- invalidStrategies) {
+      intercept[MatchError]{
+        val metadata =
+          DecisionTreeMetadata.buildMetadata(rdd, strategy, numTrees = 2, invalidStrategy)
+      }
     }
   }
 

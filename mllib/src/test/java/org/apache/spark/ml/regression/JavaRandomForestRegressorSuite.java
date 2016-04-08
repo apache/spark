@@ -22,6 +22,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -88,6 +89,16 @@ public class JavaRandomForestRegressorSuite implements Serializable {
     for (String strategy: integerStrategies) {
       rf.setFeatureSubsetStrategy(strategy);
     }
+    String invalidStrategies[] = {"-.1", "-.10", "-0.10", ".0", "0.0", "1.1", "0"};
+    for (String strategy: invalidStrategies) {
+      try {
+        rf.setFeatureSubsetStrategy(strategy);
+        Assert.fail("Expected exception to be thrown for invalid strategies");
+      } catch (Exception e) {
+        Assert.assertTrue(e instanceof IllegalArgumentException);
+      }
+    }
+
     RandomForestRegressionModel model = rf.fit(dataFrame);
 
     model.transform(dataFrame);
