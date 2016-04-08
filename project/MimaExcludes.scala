@@ -625,6 +625,9 @@ object MimaExcludes {
         ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.ml.feature.NGram.createTransformFunc"),
         ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.ml.feature.Tokenizer.createTransformFunc"),
         ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.ml.feature.RegexTokenizer.createTransformFunc")
+      ) ++ Seq(
+        // [SPARK-13048][ML][MLLIB] keepLastCheckpoint option for LDA EM optimizer
+        ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.clustering.DistributedLDAModel.this")
       )
     case v if v.startsWith("1.6") =>
       Seq(
