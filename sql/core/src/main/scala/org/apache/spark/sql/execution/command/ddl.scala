@@ -323,7 +323,7 @@ case class AlterTableAddPartition(
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val catalog = sqlContext.sessionState.catalog
-    val table = catalog.getTable(tableName)
+    val table = catalog.getTableMetadata(tableName)
     if (DDLUtils.isDatasourceTable(table)) {
       throw new AnalysisException(
         "alter table add partition is not allowed for tables defined using the datasource API")
@@ -383,7 +383,7 @@ case class AlterTableDropPartition(
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val catalog = sqlContext.sessionState.catalog
-    val table = catalog.getTable(tableName)
+    val table = catalog.getTableMetadata(tableName)
     if (DDLUtils.isDatasourceTable(table)) {
       throw new AnalysisException(
         "alter table drop partition is not allowed for tables defined using the datasource API")
