@@ -443,8 +443,8 @@ case class TungstenAggregate(
       (groupingKeySchema ++ bufferSchema).forall(_.dataType == LongType)
     val aggregateHashMapTerm = ctx.freshName("aggregateHashMap")
     val aggregateHashMapClassName = ctx.freshName("GeneratedAggregateHashMap")
-    val aggregateHashMapGenerator =
-      new TungstenAggregateHashMap(ctx, aggregateHashMapClassName, groupingKeySchema, bufferSchema)
+    val aggregateHashMapGenerator = new ColumnarAggMapCodeGenerator(ctx, aggregateHashMapClassName,
+      groupingKeySchema, bufferSchema)
     if (isAggregateHashMapEnabled && isAggregateHashMapSupported) {
       ctx.addMutableState(aggregateHashMapClassName, aggregateHashMapTerm,
         s"$aggregateHashMapTerm = new $aggregateHashMapClassName();")
