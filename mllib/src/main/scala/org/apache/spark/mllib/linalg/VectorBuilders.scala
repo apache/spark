@@ -180,7 +180,7 @@ class DenseVectorBuilder(val size: Int, defaultValue: Double = 0) extends Vector
 
   override def clone(): DenseVectorBuilder = {
     val clone = new DenseVectorBuilder(size, defaultValue)
-    clone.addAll(this)
+    this.foreachActive((i, v) => clone.set(i, v))
     return clone
   }
 }
@@ -221,7 +221,7 @@ class SparseVectorBuilder(val size: Int, defaultValue: Double = 0) extends Vecto
 
   override def clone(): SparseVectorBuilder = {
     val clone = new SparseVectorBuilder(size, defaultValue)
-    clone.addAll(this)
+    this.foreachActive((i, v) => clone.set(i, v))
     return clone
   }
 }
