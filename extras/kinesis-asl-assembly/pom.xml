@@ -63,7 +63,7 @@
     <dependency>
       <groupId>com.google.protobuf</groupId>
       <artifactId>protobuf-java</artifactId>
-      <scope>provided</scope>
+      <scope>2.6.1</scope>
     </dependency>
     <dependency>
       <groupId>com.sun.jersey</groupId>
