@@ -139,7 +139,7 @@ object SamplePushDown extends Rule[LogicalPlan] {
  */
 object EliminateSerialization extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case d @ DeserializeToObject(_, s: SerializeFromObject)
+    case d @ DeserializeToObject(_, _, s: SerializeFromObject)
         if d.outputObjectType == s.inputObjectType =>
       // Adds an extra Project here, to preserve the output expr id of `DeserializeToObject`.
       val objAttr = Alias(s.child.output.head, "obj")(exprId = d.output.head.exprId)
@@ -337,7 +337,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
       a.copy(child = Expand(newProjects, newOutput, grandChild))
 
     // Prunes the unused columns from child of `DeserializeToObject`
-    case d @ DeserializeToObject(_, child) if (child.outputSet -- d.references).nonEmpty =>
+    case d @ DeserializeToObject(_, _, child) if (child.outputSet -- d.references).nonEmpty =>
       d.copy(child = prunedChild(child, d.references))
 
     // Prunes the unused columns from child of Aggregate/Expand/Generate
@@ -389,10 +389,6 @@ object ColumnPruning extends Rule[LogicalPlan] {
 
     // Can't prune the columns on LeafNode
     case p @ Project(_, l: LeafNode) => p
-
-    // `SerializeFromObject` is a special operator that use `BoundReference` to reference its input,
-    // so we can't do column pruning for it.
-    case p @ Project(_, s: SerializeFromObject) => p
 
     // for all other logical plans that inherits the output from it's children
     case p @ Project(_, child) =>
@@ -1345,7 +1341,7 @@ object EmbedSerializerInFilter extends Rule[LogicalPlan] {
         s
       } else {
         val newCondition = condition transform {
-          case a: Attribute if a == d.output.head => d.deserializer.child
+          case a: Attribute if a == d.output.head => d.deserializer
         }
         Filter(newCondition, d.child)
       }

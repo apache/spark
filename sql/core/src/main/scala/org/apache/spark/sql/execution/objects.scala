@@ -32,10 +32,12 @@ import org.apache.spark.sql.types.{DataType, ObjectType}
  * The output of this operator is a single-field safe row containing the deserialized object.
  */
 case class DeserializeToObject(
-    deserializer: Alias,
+    deserializer: Expression,
+    outputObjAttr: Attribute,
     child: SparkPlan) extends UnaryNode with CodegenSupport {
 
-  override def output: Seq[Attribute] = deserializer.toAttribute :: Nil
+  override def output: Seq[Attribute] = outputObjAttr :: Nil
+  override def producedAttributes: AttributeSet = AttributeSet(outputObjAttr)
 
   override def upstreams(): Seq[RDD[InternalRow]] = {
     child.asInstanceOf[CodegenSupport].upstreams()
@@ -97,8 +99,7 @@ case class SerializeFromObject(
 }
 
 /**
- * A trait for physical operators that produce domain objects as output.  It also provides some
- * helper functions to work with user defined objects.
+ * Helper functions for physical operators that work with user defined objects.
  */
 trait ObjectOperator extends SparkPlan {
   def deserializeRowToObject(
@@ -129,10 +130,6 @@ trait ObjectOperator extends SparkPlan {
   def unwrapObjectFromRow(objType: DataType): InternalRow => Any = {
     (i: InternalRow) => i.get(0, objType)
   }
-
-  protected def outputObjAttr: Attribute
-  override def output: Seq[Attribute] = outputObjAttr :: Nil
-  override def producedAttributes: AttributeSet = AttributeSet(outputObjAttr)
 }
 
 /**
@@ -143,6 +140,9 @@ case class MapPartitions(
     func: Iterator[Any] => Iterator[Any],
     outputObjAttr: Attribute,
     child: SparkPlan) extends UnaryNode with ObjectOperator {
+
+  override def output: Seq[Attribute] = outputObjAttr :: Nil
+  override def producedAttributes: AttributeSet = AttributeSet(outputObjAttr)
 
   override protected def doExecute(): RDD[InternalRow] = {
     child.execute().mapPartitionsInternal { iter =>
@@ -164,6 +164,9 @@ case class MapElements(
     func: AnyRef,
     outputObjAttr: Attribute,
     child: SparkPlan) extends UnaryNode with ObjectOperator with CodegenSupport {
+
+  override def output: Seq[Attribute] = outputObjAttr :: Nil
+  override def producedAttributes: AttributeSet = AttributeSet(outputObjAttr)
 
   override def upstreams(): Seq[RDD[InternalRow]] = {
     child.asInstanceOf[CodegenSupport].upstreams()
@@ -214,11 +217,6 @@ case class AppendColumns(
     serializer: Seq[NamedExpression],
     child: SparkPlan) extends UnaryNode with ObjectOperator {
 
-  // `AppendColumns` is the only exception that don't produce domain object as output.
-  override def outputObjAttr: Attribute =
-    throw new IllegalStateException("AppendColumns.outputObjAttr should never be called")
-  override def producedAttributes: AttributeSet = AttributeSet.empty
-
   override def output: Seq[Attribute] = child.output ++ serializer.map(_.toAttribute)
 
   private def newColumnSchema = serializer.map(_.toAttribute).toStructType
@@ -249,6 +247,9 @@ case class MapGroups(
     dataAttributes: Seq[Attribute],
     outputObjAttr: Attribute,
     child: SparkPlan) extends UnaryNode with ObjectOperator {
+
+  override def output: Seq[Attribute] = outputObjAttr :: Nil
+  override def producedAttributes: AttributeSet = AttributeSet(outputObjAttr)
 
   override def requiredChildDistribution: Seq[Distribution] =
     ClusteredDistribution(groupingAttributes) :: Nil
@@ -291,6 +292,9 @@ case class CoGroup(
     outputObjAttr: Attribute,
     left: SparkPlan,
     right: SparkPlan) extends BinaryNode with ObjectOperator {
+
+  override def output: Seq[Attribute] = outputObjAttr :: Nil
+  override def producedAttributes: AttributeSet = AttributeSet(outputObjAttr)
 
   override def requiredChildDistribution: Seq[Distribution] =
     ClusteredDistribution(leftGroup) :: ClusteredDistribution(rightGroup) :: Nil
