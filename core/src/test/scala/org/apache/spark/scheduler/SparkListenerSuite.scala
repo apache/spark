@@ -24,7 +24,7 @@ import scala.collection.JavaConverters._
 
 import org.scalatest.Matchers
 
-import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkException, SparkFunSuite}
+import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.util.{ResetSystemProperties, RpcUtils}
 
@@ -377,13 +377,18 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
   }
 
   test("registering listeners via spark.extraListeners") {
+    val listeners = Seq(
+      classOf[ListenerThatAcceptsSparkConf],
+      classOf[FirehoseListenerThatAcceptsSparkConf],
+      classOf[BasicJobCounter])
     val conf = new SparkConf().setMaster("local").setAppName("test")
-      .set("spark.extraListeners", classOf[ListenerThatAcceptsSparkConf].getName + "," +
-        classOf[BasicJobCounter].getName)
+      .set("spark.extraListeners", listeners.map(_.getName).mkString(","))
     sc = new SparkContext(conf)
     sc.listenerBus.listeners.asScala.count(_.isInstanceOf[BasicJobCounter]) should be (1)
     sc.listenerBus.listeners.asScala
       .count(_.isInstanceOf[ListenerThatAcceptsSparkConf]) should be (1)
+    sc.listenerBus.listeners.asScala
+        .count(_.isInstanceOf[FirehoseListenerThatAcceptsSparkConf]) should be (1)
   }
 
   /**
@@ -475,4 +480,12 @@ private class SparkContextStoppingListener(val sc: SparkContext) extends SparkLi
 private class ListenerThatAcceptsSparkConf(conf: SparkConf) extends SparkListener {
   var count = 0
   override def onJobEnd(job: SparkListenerJobEnd): Unit = count += 1
+}
+
+private class FirehoseListenerThatAcceptsSparkConf(conf: SparkConf) extends SparkFirehoseListener {
+  var count = 0
+  override def onEvent(event: SparkListenerEvent): Unit = event match {
+    case job: SparkListenerJobEnd => count += 1
+    case _ =>
+  }
 }

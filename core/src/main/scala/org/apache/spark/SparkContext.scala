@@ -1356,7 +1356,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Register a listener to receive up-calls from events that happen during execution.
    */
   @DeveloperApi
-  def addSparkListener(listener: SparkListener) {
+  def addSparkListener(listener: SparkListenerInterface) {
     listenerBus.addListener(listener)
   }
 
@@ -2007,7 +2007,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
         // Use reflection to find the right constructor
         val constructors = {
           val listenerClass = Utils.classForName(className)
-          listenerClass.getConstructors.asInstanceOf[Array[Constructor[_ <: SparkListener]]]
+          listenerClass
+              .getConstructors
+              .asInstanceOf[Array[Constructor[_ <: SparkListenerInterface]]]
         }
         val constructorTakingSparkConf = constructors.find { c =>
           c.getParameterTypes.sameElements(Array(classOf[SparkConf]))
@@ -2015,7 +2017,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
         lazy val zeroArgumentConstructor = constructors.find { c =>
           c.getParameterTypes.isEmpty
         }
-        val listener: SparkListener = {
+        val listener: SparkListenerInterface = {
           if (constructorTakingSparkConf.isDefined) {
             constructorTakingSparkConf.get.newInstance(conf)
           } else if (zeroArgumentConstructor.isDefined) {
