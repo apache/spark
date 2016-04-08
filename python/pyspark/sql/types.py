@@ -457,13 +457,10 @@ class StructType(DataType):
         """
         if not fields:
             self.fields = []
-            self.names = []
         else:
             self.fields = fields
-            self.names = [f.name for f in fields]
             assert all(isinstance(f, StructField) for f in fields),\
                 "fields should be a list of StructField"
-        self._needSerializeAnyField = any(f.needConversion() for f in self)
 
     def add(self, field, data_type=None, nullable=True, metadata=None):
         """
@@ -497,7 +494,6 @@ class StructType(DataType):
         """
         if isinstance(field, StructField):
             self.fields.append(field)
-            self.names.append(field.name)
         else:
             if isinstance(field, str) and data_type is None:
                 raise ValueError("Must specify DataType if passing name of struct_field to create.")
@@ -507,9 +503,17 @@ class StructType(DataType):
             else:
                 data_type_f = data_type
             self.fields.append(StructField(field, data_type_f, nullable, metadata))
-            self.names.append(field)
-        self._needSerializeAnyField = any(f.needConversion() for f in self)
         return self
+
+    @property
+    def names(self):
+        """Return a list of the field names"""
+        return [field.name for field in self]
+
+    @property
+    def _needSerializeAnyField(self):
+        """Determine if any field needs conversion"""
+        return any(field.needConversion() for field in self)
 
     def __iter__(self):
         """Iterate the fields"""

@@ -823,6 +823,9 @@ class SQLTests(ReusedPySparkTestCase):
         with self.assertRaises(TypeError):
             not_a_field = struct1[9.9]
 
+        struct1 = StructType().add("f1", StringType(), True).add("f2", StringType(), True, None)
+        self.assertEqual(struct1.names, ["f1", "f2"])
+
     def test_metadata_null(self):
         from pyspark.sql.types import StructType, StringType, StructField
         schema = StructType([StructField("f1", StringType(), True, None),
