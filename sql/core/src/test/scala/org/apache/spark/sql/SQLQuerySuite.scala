@@ -2230,6 +2230,88 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     assert(error.getMessage contains "grouping__id is deprecated; use grouping_id() instead")
   }
 
+  test("grouping and grouping_id in having") {
+    checkAnswer(
+      sql("select course, year from courseSales group by cube(course, year)" +
+        " having grouping(year) = 1 and grouping_id(course, year) > 0"),
+        Row("Java", null) ::
+        Row("dotNET", null) ::
+        Row(null, null) :: Nil
+    )
+
+    var error = intercept[AnalysisException] {
+      sql("select course, year from courseSales group by course, year" +
+        " having grouping(course) > 0")
+    }
+    assert(error.getMessage contains
+      "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
+    error = intercept[AnalysisException] {
+      sql("select course, year from courseSales group by course, year" +
+        " having grouping_id(course, year) > 0")
+    }
+    assert(error.getMessage contains
+      "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
+    error = intercept[AnalysisException] {
+      sql("select course, year from courseSales group by cube(course, year)" +
+        " having grouping__id > 0")
+    }
+    assert(error.getMessage contains "grouping__id is deprecated; use grouping_id() instead")
+  }
+
+  test("grouping and grouping_id in sort") {
+    checkAnswer(
+      sql("select course, year, grouping(course), grouping(year) from courseSales" +
+        " group by cube(course, year) order by grouping_id(course, year), course, year"),
+      Row("Java", 2012, 0, 0) ::
+        Row("Java", 2013, 0, 0) ::
+        Row("dotNET", 2012, 0, 0) ::
+        Row("dotNET", 2013, 0, 0) ::
+        Row("Java", null, 0, 1) ::
+        Row("dotNET", null, 0, 1) ::
+        Row(null, 2012, 1, 0) ::
+        Row(null, 2013, 1, 0) ::
+        Row(null, null, 1, 1) :: Nil
+    )
+
+    checkAnswer(
+      sql("select course, year, grouping_id(course, year) from courseSales" +
+        " group by cube(course, year) order by grouping(course), grouping(year), course, year"),
+      Row("Java", 2012, 0) ::
+        Row("Java", 2013, 0) ::
+        Row("dotNET", 2012, 0) ::
+        Row("dotNET", 2013, 0) ::
+        Row("Java", null, 1) ::
+        Row("dotNET", null, 1) ::
+        Row(null, 2012, 2) ::
+        Row(null, 2013, 2) ::
+        Row(null, null, 3) :: Nil
+    )
+
+    var error = intercept[AnalysisException] {
+      sql("select course, year from courseSales group by course, year" +
+        " order by grouping(course)")
+    }
+    assert(error.getMessage contains
+      "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
+    error = intercept[AnalysisException] {
+      sql("select course, year from courseSales group by course, year" +
+        " order by grouping_id(course, year)")
+    }
+    assert(error.getMessage contains
+      "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
+    error = intercept[AnalysisException] {
+      sql("select course, year from courseSales group by cube(course, year)" +
+        " order by grouping__id")
+    }
+    assert(error.getMessage contains "grouping__id is deprecated; use grouping_id() instead")
+  }
+
+  test("filter on a grouping column that is not presented in SELECT") {
+    checkAnswer(
+      sql("select count(1) from (select 1 as a) t group by a having a > 0"),
+      Row(1) :: Nil)
+  }
+
   test("SPARK-13056: Null in map value causes NPE") {
     val df = Seq(1 -> Map("abc" -> "somestring", "cba" -> null)).toDF("key", "value")
     withTempTable("maptest") {

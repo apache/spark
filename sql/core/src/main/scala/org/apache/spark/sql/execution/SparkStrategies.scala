@@ -346,6 +346,10 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         throw new IllegalStateException(
           "logical intersect operator should have been replaced by semi-join in the optimizer")
 
+      case logical.DeserializeToObject(deserializer, child) =>
+        execution.DeserializeToObject(deserializer, planLater(child)) :: Nil
+      case logical.SerializeFromObject(serializer, child) =>
+        execution.SerializeFromObject(serializer, planLater(child)) :: Nil
       case logical.MapPartitions(f, in, out, child) =>
         execution.MapPartitions(f, in, out, planLater(child)) :: Nil
       case logical.MapElements(f, in, out, child) =>
