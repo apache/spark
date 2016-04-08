@@ -248,9 +248,8 @@ object JdbcUtils extends Logging {
 
   /**
    * The utility to add quote to the column name based on its dialect
- *
-   * @param columnName the input column name
    * @param dialect the JDBC dialect
+   * @param columnName the input column name
    * @return the quoted column name
    */
   private def quoteColumnName(dialect: JdbcDialect, columnName: String): String = {
