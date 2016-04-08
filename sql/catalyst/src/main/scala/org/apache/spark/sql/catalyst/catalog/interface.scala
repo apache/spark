@@ -152,6 +152,8 @@ abstract class ExternalCatalog {
 
   def getFunction(db: String, funcName: String): CatalogFunction
 
+  def functionExists(db: String, funcName: String): Boolean
+
   def listFunctions(db: String, pattern: String): Seq[String]
 
 }
