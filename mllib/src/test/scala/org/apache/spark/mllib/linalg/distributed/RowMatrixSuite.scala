@@ -154,7 +154,7 @@ class RowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
             assert(V.numCols === k)
             assertColumnEqualUpToSign(U.toBreeze(), localU, k)
             assertColumnEqualUpToSign(V.toBreeze.asInstanceOf[BDM[Double]], localV, k)
-            assert(closeToZero(s.toBreeze.asInstanceOf[BDV[Double]] - localSigma(0 until k)))
+            assert(closeToZero(s.asBreeze.asInstanceOf[BDV[Double]] - localSigma(0 until k)))
           }
         }
         val svdWithoutU = mat.computeSVD(1, computeU = false, 1e-9, 300, 1e-10, mode)

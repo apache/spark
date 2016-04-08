@@ -211,7 +211,7 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
     val initialParameters = Vectors.zeros(numFeatures + 2)
 
     val states = optimizer.iterations(new CachedDiffFunction(costFun),
-      initialParameters.toBreeze.toDenseVector)
+      initialParameters.asBreeze.toDenseVector)
 
     val parameters = {
       val arrayBuilder = mutable.ArrayBuilder.make[Double]
@@ -469,7 +469,7 @@ private class AFTAggregator(parameters: BDV[Double], fitIntercept: Boolean)
 
     val interceptFlag = if (fitIntercept) 1.0 else 0.0
 
-    val xi = data.features.toBreeze
+    val xi = data.features.asBreeze
     val ti = data.label
     val delta = data.censor
     val epsilon = (math.log(ti) - coefficients.dot(xi) - intercept * interceptFlag ) / sigma

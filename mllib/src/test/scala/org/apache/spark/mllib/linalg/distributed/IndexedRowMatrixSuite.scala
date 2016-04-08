@@ -128,7 +128,7 @@ class IndexedRowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(svd.U.isInstanceOf[IndexedRowMatrix])
     val localA = A.toBreeze()
     val U = svd.U.toBreeze()
-    val s = svd.s.toBreeze.asInstanceOf[BDV[Double]]
+    val s = svd.s.asBreeze.asInstanceOf[BDV[Double]]
     val V = svd.V.toBreeze.asInstanceOf[BDM[Double]]
     assert(closeToZero(U.t * U - BDM.eye[Double](n)))
     assert(closeToZero(V.t * V - BDM.eye[Double](n)))

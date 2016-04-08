@@ -19,6 +19,8 @@ package org.apache.spark.mllib.linalg.distributed
 
 import java.util.Arrays
 
+import org.apache.spark.ml.linalg.EigenValueDecomposition
+
 import scala.collection.mutable.ListBuffer
 
 import breeze.linalg.{axpy => brzAxpy, inv, svd => brzSvd, DenseMatrix => BDM, DenseVector => BDV,
@@ -92,7 +94,7 @@ class RowMatrix @Since("1.0.0") (
     val vbr = rows.context.broadcast(v)
     rows.treeAggregate(BDV.zeros[Double](n))(
       seqOp = (U, r) => {
-        val rBrz = r.toBreeze
+        val rBrz = r.asBreeze
         val a = rBrz.dot(vbr.value)
         rBrz match {
           // use specialized axpy for better performance
@@ -329,7 +331,7 @@ class RowMatrix @Since("1.0.0") (
     checkNumColumns(n)
 
     val (m, mean) = rows.treeAggregate[(Long, BDV[Double])]((0L, BDV.zeros[Double](n)))(
-      seqOp = (s: (Long, BDV[Double]), v: Vector) => (s._1 + 1L, s._2 += v.toBreeze),
+      seqOp = (s: (Long, BDV[Double]), v: Vector) => (s._1 + 1L, s._2 += v.asBreeze),
       combOp = (s1: (Long, BDV[Double]), s2: (Long, BDV[Double])) =>
         (s1._1 + s2._1, s1._2 += s2._2)
     )
@@ -451,7 +453,7 @@ class RowMatrix @Since("1.0.0") (
         val v = BDV.zeros[Double](k)
         var i = 0
         while (i < k) {
-          v(i) = row.toBreeze.dot(new BDV(Bi, i * n, 1, n))
+          v(i) = row.asBreeze.dot(new BDV(Bi, i * n, 1, n))
           i += 1
         }
         Vectors.fromBreeze(v)
@@ -549,7 +551,7 @@ class RowMatrix @Since("1.0.0") (
       val bdm = BDM.zeros[Double](partRows.length, col)
       var i = 0
       partRows.foreach { row =>
-        bdm(i, ::) := row.toBreeze.t
+        bdm(i, ::) := row.asBreeze.t
         i += 1
       }
       breeze.linalg.qr.reduced(bdm).r

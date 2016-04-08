@@ -155,7 +155,7 @@ class MinMaxScalerModel private[ml] (
   def setMax(value: Double): this.type = set(max, value)
 
   override def transform(dataset: DataFrame): DataFrame = {
-    val originalRange = (originalMax.toBreeze - originalMin.toBreeze).toArray
+    val originalRange = (originalMax.asBreeze - originalMin.asBreeze).toArray
     val minArray = originalMin.toArray
 
     val reScale = udf { (vector: Vector) =>

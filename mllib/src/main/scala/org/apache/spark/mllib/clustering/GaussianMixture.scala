@@ -166,7 +166,7 @@ class GaussianMixture private (
     val sc = data.sparkContext
 
     // we will operate on the data as breeze data
-    val breezeData = data.map(_.toBreeze).cache()
+    val breezeData = data.map(_.asBreeze).cache()
 
     // Get length of the input vectors
     val d = breezeData.first().length

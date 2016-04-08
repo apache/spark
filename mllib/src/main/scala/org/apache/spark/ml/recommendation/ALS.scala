@@ -20,6 +20,8 @@ package org.apache.spark.ml.recommendation
 import java.{util => ju}
 import java.io.IOException
 
+import org.apache.spark.ml.linalg.CholeskyDecomposition
+
 import scala.collection.mutable
 import scala.reflect.ClassTag
 import scala.util.Sorting
@@ -37,7 +39,6 @@ import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.linalg.CholeskyDecomposition
 import org.apache.spark.mllib.optimization.NNLS
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame

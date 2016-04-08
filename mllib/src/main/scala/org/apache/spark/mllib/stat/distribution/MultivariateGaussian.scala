@@ -42,7 +42,7 @@ class MultivariateGaussian @Since("1.3.0") (
   require(sigma.numCols == sigma.numRows, "Covariance matrix must be square")
   require(mu.size == sigma.numCols, "Mean vector length must match covariance matrix size")
 
-  private val breezeMu = mu.toBreeze.toDenseVector
+  private val breezeMu = mu.asBreeze.toDenseVector
 
   /**
    * private[mllib] constructor
@@ -66,7 +66,7 @@ class MultivariateGaussian @Since("1.3.0") (
    */
    @Since("1.3.0")
   def pdf(x: Vector): Double = {
-    pdf(x.toBreeze)
+    pdf(x.asBreeze)
   }
 
   /**
@@ -74,7 +74,7 @@ class MultivariateGaussian @Since("1.3.0") (
    */
    @Since("1.3.0")
   def logpdf(x: Vector): Double = {
-    logpdf(x.toBreeze)
+    logpdf(x.asBreeze)
   }
 
   /** Returns density of this multivariate Gaussian at given point, x */

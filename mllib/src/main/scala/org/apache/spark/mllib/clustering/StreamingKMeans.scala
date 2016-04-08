@@ -135,8 +135,8 @@ class StreamingKMeansModel @Since("1.2.0") (
       while (j < dim) {
         val x = largestClusterCenter(j)
         val p = 1e-14 * math.max(math.abs(x), 1.0)
-        largestClusterCenter.toBreeze(j) = x + p
-        smallestClusterCenter.toBreeze(j) = x - p
+        largestClusterCenter.asBreeze(j) = x + p
+        smallestClusterCenter.asBreeze(j) = x - p
         j += 1
       }
     }

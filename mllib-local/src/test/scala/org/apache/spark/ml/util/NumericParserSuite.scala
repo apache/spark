@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.util
+package org.apache.spark.ml.util
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
 
 class NumericParserSuite extends SparkFunSuite {
 
@@ -31,7 +31,7 @@ class NumericParserSuite extends SparkFunSuite {
 
     val malformatted = Seq("a", "[1,,]", "0.123.4", "1 2", "3+4")
     malformatted.foreach { s =>
-      intercept[SparkException] {
+      intercept[IllegalArgumentException] {
         NumericParser.parse(s)
         throw new RuntimeException(s"Didn't detect malformatted string $s.")
       }

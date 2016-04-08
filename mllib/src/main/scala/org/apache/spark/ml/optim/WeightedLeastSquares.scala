@@ -19,6 +19,7 @@ package org.apache.spark.ml.optim
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.Instance
+import org.apache.spark.ml.linalg.CholeskyDecomposition
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.rdd.RDD
 
