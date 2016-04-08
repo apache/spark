@@ -1087,13 +1087,11 @@ abstract class RDD[T: ClassTag](
         val curNumPartitions = numPartitions
         partiallyAggregated = partiallyAggregated.mapPartitionsWithIndex {
           (i, iter) => iter.map((i % curNumPartitions, _))
-        }.reduceByKey(new HashPartitioner(curNumPartitions), cleanCombOp).values
-        // This fails:
-        // .foldByKey(zeroValue, new HashPartitioner(curNumPartitions))(cleanCombOp).values
+        }.foldByKey(zeroValue, new HashPartitioner(curNumPartitions))(cleanCombOp).values
       }
-      partiallyAggregated.reduce(cleanCombOp)
+      //partiallyAggregated.reduce(cleanCombOp)
       // This fails:
-      // partiallyAggregated.fold(zeroValue)(cleanCombOp)
+      partiallyAggregated.fold(zeroValue)(cleanCombOp)
     }
   }
 
