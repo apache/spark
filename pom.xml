@@ -182,6 +182,9 @@
     <test.java.home>${java.home}</test.java.home>
     <test.exclude.tags></test.exclude.tags>
 
+    <!-- Package to use when relocating shaded classes. -->
+    <spark.shade.packageName>org.spark_project</spark.shade.packageName>
+
     <!-- Modules that copy jars to the build directory should do so under this location. -->
     <jars.target.dir>${project.build.directory}/scala-${scala.binary.version}/jars</jars.target.dir>
 
@@ -2204,14 +2207,14 @@
           <relocations>
             <relocation>
               <pattern>org.eclipse.jetty</pattern>
-              <shadedPattern>org.spark-project.jetty</shadedPattern>
+              <shadedPattern>${spark.shade.packageName}.jetty</shadedPattern>
               <includes>
                 <include>org.eclipse.jetty.**</include>
               </includes>
             </relocation>
             <relocation>
               <pattern>com.google.common</pattern>
-              <shadedPattern>org.spark-project.guava</shadedPattern>
+              <shadedPattern>${spark.shade.packageName}.guava</shadedPattern>
             </relocation>
           </relocations>
         </configuration>

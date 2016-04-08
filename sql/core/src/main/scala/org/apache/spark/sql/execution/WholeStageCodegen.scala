@@ -29,6 +29,7 @@ import org.apache.spark.sql.execution.aggregate.TungstenAggregate
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, SortMergeJoin}
 import org.apache.spark.sql.execution.metric.{LongSQLMetricValue, SQLMetrics}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types._
 
 /**
  * An interface for those physical operators that support codegen.
@@ -152,7 +153,7 @@ trait CodegenSupport extends SparkPlan {
     s"""
        |
        |/*** CONSUME: ${toCommentSafeString(parent.simpleString)} */
-       |${evaluated}
+       |$evaluated
        |${parent.doConsume(ctx, inputVars, rowVar)}
      """.stripMargin
   }
@@ -169,20 +170,20 @@ trait CodegenSupport extends SparkPlan {
 
   /**
    * Returns source code to evaluate the variables for required attributes, and clear the code
-   * of evaluated variables, to prevent them to be evaluated twice..
+   * of evaluated variables, to prevent them to be evaluated twice.
    */
   protected def evaluateRequiredVariables(
       attributes: Seq[Attribute],
       variables: Seq[ExprCode],
       required: AttributeSet): String = {
-    var evaluateVars = ""
+    val evaluateVars = new StringBuilder
     variables.zipWithIndex.foreach { case (ev, i) =>
       if (ev.code != "" && required.contains(attributes(i))) {
-        evaluateVars += ev.code.trim + "\n"
+        evaluateVars.append(ev.code.trim + "\n")
         ev.code = ""
       }
     }
-    evaluateVars
+    evaluateVars.toString()
   }
 
   /**
@@ -305,15 +306,14 @@ case class WholeStageCodegen(child: SparkPlan) extends UnaryNode with CodegenSup
   def doCodeGen(): (CodegenContext, String) = {
     val ctx = new CodegenContext
     val code = child.asInstanceOf[CodegenSupport].produce(ctx, this)
-    val references = ctx.references.toArray
     val source = s"""
       public Object generate(Object[] references) {
         return new GeneratedIterator(references);
       }
 
       /** Codegened pipeline for:
-        * ${toCommentSafeString(child.treeString.trim)}
-        */
+       * ${toCommentSafeString(child.treeString.trim)}
+       */
       final class GeneratedIterator extends org.apache.spark.sql.execution.BufferedRowIterator {
 
         private Object[] references;
@@ -434,12 +434,20 @@ case class CollapseCodegenStages(conf: SQLConf) extends Rule[SparkPlan] {
     case _ => true
   }
 
+  private def numOfNestedFields(dataType: DataType): Int = dataType match {
+    case dt: StructType => dt.fields.map(f => numOfNestedFields(f.dataType)).sum
+    case m: MapType => numOfNestedFields(m.keyType) + numOfNestedFields(m.valueType)
+    case a: ArrayType => numOfNestedFields(a.elementType)
+    case u: UserDefinedType[_] => numOfNestedFields(u.sqlType)
+    case _ => 1
+  }
+
   private def supportCodegen(plan: SparkPlan): Boolean = plan match {
     case plan: CodegenSupport if plan.supportCodegen =>
       val willFallback = plan.expressions.exists(_.find(e => !supportCodegen(e)).isDefined)
       // the generated code will be huge if there are too many columns
-      val haveManyColumns = plan.output.length > 200
-      !willFallback && !haveManyColumns
+      val haveTooManyFields = numOfNestedFields(plan.schema) > conf.wholeStageMaxNumFields
+      !willFallback && !haveTooManyFields
     case _ => false
   }
 

@@ -433,7 +433,8 @@ abstract class CatalogTestCases extends SparkFunSuite with BeforeAndAfterEach {
   test("get function") {
     val catalog = newBasicCatalog()
     assert(catalog.getFunction("db2", "func1") ==
-      CatalogFunction(FunctionIdentifier("func1", Some("db2")), funcClass))
+      CatalogFunction(FunctionIdentifier("func1", Some("db2")), funcClass,
+        Seq.empty[(String, String)]))
     intercept[AnalysisException] {
       catalog.getFunction("db2", "does_not_exist")
     }
@@ -461,21 +462,6 @@ abstract class CatalogTestCases extends SparkFunSuite with BeforeAndAfterEach {
     val catalog = newBasicCatalog()
     intercept[AnalysisException] {
       catalog.renameFunction("does_not_exist", "func1", "func5")
-    }
-  }
-
-  test("alter function") {
-    val catalog = newBasicCatalog()
-    assert(catalog.getFunction("db2", "func1").className == funcClass)
-    catalog.alterFunction("db2", newFunc("func1").copy(className = "muhaha"))
-    assert(catalog.getFunction("db2", "func1").className == "muhaha")
-    intercept[AnalysisException] { catalog.alterFunction("db2", newFunc("funcky")) }
-  }
-
-  test("alter function when database does not exist") {
-    val catalog = newBasicCatalog()
-    intercept[AnalysisException] {
-      catalog.alterFunction("does_not_exist", newFunc())
     }
   }
 
@@ -557,7 +543,7 @@ abstract class CatalogTestUtils {
   }
 
   def newFunc(name: String, database: Option[String] = None): CatalogFunction = {
-    CatalogFunction(FunctionIdentifier(name, database), funcClass)
+    CatalogFunction(FunctionIdentifier(name, database), funcClass, Seq.empty[(String, String)])
   }
 
   /**

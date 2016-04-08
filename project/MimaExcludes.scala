@@ -611,6 +611,9 @@ object MimaExcludes {
         ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.util.random.PoissonSampler.this"),
         ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.util.random.PoissonSampler.this")
       ) ++ Seq(
+        // [SPARK-13430][ML] moved featureCol from LinearRegressionModelSummary to LinearRegressionSummary
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.ml.regression.LinearRegressionSummary.this")
+      ) ++ Seq(
         // [SPARK-14475] Propagate user-defined context from driver to executors
         ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.getLocalProperty")
       )
