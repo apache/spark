@@ -511,6 +511,30 @@ class StructType(DataType):
         self._needSerializeAnyField = any(f.needConversion() for f in self.fields)
         return self
 
+    def __iter__(self):
+        """Iterate the fields"""
+        return iter(self.fields)
+
+    def __len__(self):
+        """Return the number of fields."""
+        return len(self.fields)
+
+    def __getitem__(self, key):
+        """Access fields by name or slice."""
+        if isinstance(key, str):
+            _dict_fields = {field.name: field for field in self}
+            try:
+                return _dict_fields[key]
+            except KeyError:
+                raise KeyError('No StructField named {}'.format(key))
+        elif isinstance(key, (int, slice)):
+            try:
+                return self.fields[key]
+            except IndexError:
+                raise IndexError('StructType index out of range')
+        else:
+            raise TypeError('StructType keys should be strings, integers or slices')
+
     def simpleString(self):
         return 'struct<%s>' % (','.join(f.simpleString() for f in self.fields))
 
