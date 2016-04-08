@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.util
+package org.apache.spark.mllib.util
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
 
 class NumericParserSuite extends SparkFunSuite {
 

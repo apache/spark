@@ -258,7 +258,7 @@ streaming_flume_assembly = Module(
 
 mllib_local = Module(
     name="mllib-local",
-    dependencies=[sketch],
+    dependencies=[],
     source_file_regexes=[
         "mllib-local",
     ],

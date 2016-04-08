@@ -15,13 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.util
+package org.apache.spark.mllib.util
 
 import java.util.StringTokenizer
 
 import scala.collection.mutable.{ArrayBuilder, ListBuffer}
-
-import org.apache.spark.SparkException
 
 /**
  * Simple parser for a numeric structure consisting of three types:
@@ -30,7 +28,7 @@ import org.apache.spark.SparkException
  *  - array: an array of numbers stored as `[v0,v1,...,vn]`
  *  - tuple: a list of numbers, arrays, or tuples stored as `(...)`
  */
-private[spark] object NumericParser {
+private[mllib] object NumericParser {
 
   /** Parses a string into a Double, an Array[Double], or a Seq[Any]. */
   def parse(s: String): Any = {

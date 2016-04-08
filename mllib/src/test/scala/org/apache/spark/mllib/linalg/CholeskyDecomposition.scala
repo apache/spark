@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.linalg
+package org.apache.spark.mllib.linalg
 
 import com.github.fommil.netlib.LAPACK.{getInstance => lapack}
 import org.netlib.util.intW
@@ -23,7 +23,7 @@ import org.netlib.util.intW
 /**
  * Compute Cholesky decomposition.
  */
-private[spark] object CholeskyDecomposition {
+private[mllib] object CholeskyDecomposition {
 
   /**
    * Solves a symmetric positive definite linear system via Cholesky factorization.

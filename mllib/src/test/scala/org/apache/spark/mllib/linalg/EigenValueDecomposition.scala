@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.linalg
+package org.apache.spark.mllib.linalg
 
 import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV}
 import com.github.fommil.netlib.ARPACK
@@ -24,7 +24,7 @@ import org.netlib.util.{doubleW, intW}
 /**
  * Compute eigen-decomposition.
  */
-private[spark] object EigenValueDecomposition {
+private[mllib] object EigenValueDecomposition {
   /**
    * Compute the leading k eigenvalues and eigenvectors on a symmetric square matrix using ARPACK.
    * The caller needs to ensure that the input matrix is real symmetric. This function requires
