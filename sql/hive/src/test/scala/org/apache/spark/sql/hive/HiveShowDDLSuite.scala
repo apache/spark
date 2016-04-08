@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{CatalogTableType, CatalogTable}
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
@@ -51,7 +51,8 @@ class HiveShowDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
             |location '${tmpDir}'
           """.stripMargin)
         assert(compareCatalog(
-          TableIdentifier("t1"), sql("show create table t1").collect()(0).toSeq(0).toString))
+          TableIdentifier("t1"),
+          sql("show create table t1").collect()(0).toSeq(0).toString))
       }
     }
   }
@@ -67,7 +68,8 @@ class HiveShowDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
             |location '${tmpDir}'
           """.stripMargin)
         assert(compareCatalog(
-          TableIdentifier("t1"),sql("show create table t1").collect()(0).toSeq(0).toString))
+          TableIdentifier("t1"),
+          sql("show create table t1").collect()(0).toSeq(0).toString))
       }
     }
   }
@@ -86,7 +88,8 @@ class HiveShowDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
             |'my.property.three'='2', 'my.property.four'='false')
           """.stripMargin)
         assert(compareCatalog(
-          TableIdentifier("t1"),sql("show create table t1").collect()(0).toSeq(0).toString))
+          TableIdentifier("t1"),
+          sql("show create table t1").collect()(0).toSeq(0).toString))
       }
     }
   }
@@ -110,7 +113,8 @@ class HiveShowDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
             |'my.property.three'='2', 'my.property.four'='false')
           """.stripMargin)
         assert(compareCatalog(
-          TableIdentifier("t1"),sql("show create table t1").collect()(0).toSeq(0).toString))
+          TableIdentifier("t1"),
+          sql("show create table t1").collect()(0).toSeq(0).toString))
       }
     }
   }
@@ -126,7 +130,8 @@ class HiveShowDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
             |location '${tmpDir}'
           """.stripMargin)
         assert(compareCatalog(
-          TableIdentifier("t1"),sql("show create table t1").collect()(0).toSeq(0).toString))
+          TableIdentifier("t1"),
+          sql("show create table t1").collect()(0).toSeq(0).toString))
       }
     }
   }
@@ -142,7 +147,8 @@ class HiveShowDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
             |location '${tmpDir}'
           """.stripMargin)
         assert(compareCatalog(
-          TableIdentifier("t1"),sql("show create table t1").collect()(0).toSeq(0).toString))
+          TableIdentifier("t1"),
+          sql("show create table t1").collect()(0).toSeq(0).toString))
       }
     }
   }
@@ -163,7 +169,8 @@ class HiveShowDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
               |create view v1 as select * from t1
             """.stripMargin)
           assert(compareCatalog(
-            TableIdentifier("v1"),sql("show create table v1").collect()(0).toSeq(0).toString))
+            TableIdentifier("v1"),
+            sql("show create table v1").collect()(0).toSeq(0).toString))
         }
       }
     }
@@ -183,7 +190,8 @@ class HiveShowDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
              |location '${tmpDir}'
            """.stripMargin)
         assert(compareCatalog(
-          TableIdentifier("t1"),sql("show create table t1").collect()(0).toSeq(0).toString))
+          TableIdentifier("t1"),
+          sql("show create table t1").collect()(0).toSeq(0).toString))
       }
     }
   }
@@ -319,7 +327,6 @@ class HiveShowDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
             .replace(expectedTable.table.toLowerCase(), actualTable)
             .replaceAll("path.*,", s"path '${tmpDir}',")
         }
-        println(revisedActualDDL)
         sql(revisedActualDDL)
         actual = sqlContext.sessionState.catalog.getTableMetadata(TableIdentifier(actualTable))
       }
@@ -396,9 +403,6 @@ class HiveShowDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
           }
         }
       }
-      println(s"sameTableType: $sameTableType  sameTableName:$sameTableName  sameColumnSchema:$sameColmnSchema" +
-        s" samePartitionBy:$samePartitionBy  sameBuckets:$sameBuckets  sameStorageFormat:$sameStorageFormat" +
-        s" sameTblProperties:$sameTblProperties")
       sameTableType && sameTableName && sameColmnSchema &&
         samePartitionBy && sameBuckets && sameStorageFormat && sameTblProperties
     }

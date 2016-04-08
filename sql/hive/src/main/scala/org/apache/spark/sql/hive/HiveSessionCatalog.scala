@@ -17,9 +17,6 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.sql.catalyst.util._
-
-import scala.collection.immutable.Map.Map4
 import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
 
@@ -40,8 +37,8 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.Utils
-
 
 private[sql] class HiveSessionCatalog(
     externalCatalog: HiveExternalCatalog,
