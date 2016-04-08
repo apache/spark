@@ -469,6 +469,15 @@ trait FileFormat {
       options: Map[String, String]): RDD[InternalRow]
 
   /**
+   * Returns whether this format support returning columnar batch or not.
+   *
+   * TODO: we should just have different traits for the different formats.
+   */
+  def supportBatch(sqlContext: SQLContext, dataSchema: StructType): Boolean = {
+    false
+  }
+
+  /**
    * Returns a function that can be used to read a single file in as an Iterator of InternalRow.
    *
    * @param dataSchema The global data schema. It can be either specified by the user, or
