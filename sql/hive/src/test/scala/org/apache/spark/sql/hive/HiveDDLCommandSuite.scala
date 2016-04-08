@@ -277,7 +277,6 @@ class HiveDDLCommandSuite extends PlanTest {
       """
         |CREATE OR REPLACE VIEW IF NOT EXISTS view1
         |(col1, col3)
-        |COMMENT 'I cannot spell'
         |TBLPROPERTIES('prop1Key'="prop1Val")
         |AS SELECT * FROM tab1
       """.stripMargin
