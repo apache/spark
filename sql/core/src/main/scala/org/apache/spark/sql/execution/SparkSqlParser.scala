@@ -371,10 +371,10 @@ class SparkSqlAstBuilder extends AstBuilder {
    */
   override def visitDropTable(ctx: DropTableContext): LogicalPlan = withOrigin(ctx) {
     if (ctx.PURGE != null) {
-      logWarning("PURGE option is ignored.")
+      throw new ParseException("Unsupported operation: PURGE option", ctx)
     }
     if (ctx.REPLICATION != null) {
-      logWarning("REPLICATION clause is ignored.")
+      throw new ParseException("Unsupported operation: REPLICATION clause", ctx)
     }
     DropTable(
       visitTableIdentifier(ctx.tableIdentifier),

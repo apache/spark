@@ -17,28 +17,57 @@
 
 package org.apache.spark.sql.hive.execution
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 
 class HiveDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
+  // check if the directory for recording the data of the table exists.
+  private def tableDirectoryExists(tableIdentifier: TableIdentifier): Boolean = {
+    val expectedTablePath =
+      hiveContext.sessionState.catalog.hiveDefaultTableFilePath(tableIdentifier)
+    val filesystemPath = new Path(expectedTablePath)
+    val fs = filesystemPath.getFileSystem(sparkContext.hadoopConfiguration)
+    fs.exists(filesystemPath)
+  }
+
   test("drop tables") {
     withTable("tab1") {
-      sql("CREATE TABLE tab1(c1 int)")
-      sql("DROP TABLE tab1")
-      sql("DROP TABLE IF EXISTS tab1")
-      sql("DROP VIEW IF EXISTS tab1")
+      val tabName = "tab1"
+
+      assert(!tableDirectoryExists(TableIdentifier(tabName)))
+      sql(s"CREATE TABLE $tabName(c1 int)")
+
+      assert(tableDirectoryExists(TableIdentifier(tabName)))
+      sql(s"DROP TABLE $tabName")
+
+      assert(!tableDirectoryExists(TableIdentifier(tabName)))
+      sql(s"DROP TABLE IF EXISTS $tabName")
+      sql(s"DROP VIEW IF EXISTS $tabName")
     }
   }
 
   test("drop views") {
     withTable("tab1") {
+      val tabName = "tab1"
       sqlContext.range(10).write.saveAsTable("tab1")
       withView("view1") {
-        sql("CREATE VIEW view1 AS SELECT * FROM tab1")
-        sql("DROP VIEW view1")
-        sql("DROP VIEW IF EXISTS view1")
+        val viewName = "view1"
+
+        assert(tableDirectoryExists(TableIdentifier(tabName)))
+        assert(!tableDirectoryExists(TableIdentifier(viewName)))
+        sql(s"CREATE VIEW $viewName AS SELECT * FROM tab1")
+
+        assert(tableDirectoryExists(TableIdentifier(tabName)))
+        assert(!tableDirectoryExists(TableIdentifier(viewName)))
+        sql(s"DROP VIEW $viewName")
+
+        assert(tableDirectoryExists(TableIdentifier(tabName)))
+        sql(s"DROP VIEW IF EXISTS $viewName")
       }
     }
   }

@@ -664,7 +664,13 @@ class DDLCommandSuite extends PlanTest {
     comparePlans(parsed2, expected2)
   }
 
-  test("commands only available in HiveContext") {
+  test("unsupported operations") {
+    intercept[ParseException] {
+      parser.parsePlan("DROP TABLE tab PURGE")
+    }
+    intercept[ParseException] {
+      parser.parsePlan("DROP TABLE tab FOR REPLICATION('eventid')")
+    }
     intercept[ParseException] {
       parser.parsePlan("CREATE VIEW testView AS SELECT id FROM tab")
     }
