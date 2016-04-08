@@ -20,6 +20,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
@@ -182,8 +183,60 @@ class SparkSqlAstBuilder extends AstBuilder {
     }
   }
 
-  /** Type to keep track of a table header. */
+  /**
+   * Type to keep track of a table header: (identifier, isTemporary, ifNotExists, isExternal).
+   */
   type TableHeader = (TableIdentifier, Boolean, Boolean, Boolean)
+
+  /**
+   * Create a [[CreateTable]] command.
+   *
+   * For example:
+   * {{{
+   *   CREATE [TEMPORARY] [EXTERNAL] TABLE [IF NOT EXISTS] [db_name.]table_name
+   *   [(col1 data_type [COMMENT col_comment], ...)]
+   *   [COMMENT table_comment]
+   *   [PARTITIONED BY (col3 data_type [COMMENT col_comment], ...)]
+   *   [CLUSTERED BY (col1, ...) [SORTED BY (col1 [ASC|DESC], ...)] INTO num_buckets BUCKETS]
+   *   [SKEWED BY (col1, col2, ...) ON ((col_value, col_value, ...), ...)
+   *   [STORED AS DIRECTORIES]
+   *   [ROW FORMAT row_format]
+   *   [STORED AS file_format | STORED BY storage_handler_class [WITH SERDEPROPERTIES (...)]]
+   *   [LOCATION path]
+   *   [TBLPROPERTIES (property_name=property_value, ...)]
+   *   [AS select_statement];
+   * }}}
+   */
+  override def visitCreateTable(ctx: CreateTableContext): LogicalPlan = withOrigin(ctx) {
+    val (name, temp, ifNotExists, external) = visitCreateTableHeader(ctx.createTableHeader)
+    val comment = Option(ctx.STRING).map(string)
+    val columns = Option(ctx.columns).map(visitColTypeList).getOrElse(Seq())
+    val partitionColumns = Option(ctx.partitionColumns).map(visitColTypeList).getOrElse(Seq())
+    val bucketSpec = Option(ctx.bucketSpec).map(visitBucketSpec)
+    val skewSpec = Option(ctx.skewSpec).map(visitSkewSpec)
+    val rowFormat = Option(ctx.rowFormat).map(visitRowFormat)
+    val fileFormat = Option(ctx.createFileFormat).map(_.fileFormat).map(visitFileFormat)
+    val storageHandler = Option(ctx.createFileFormat).map(_.storageHandler).map(visitStorageHandler)
+    val location = Option(ctx.locationSpec).map(_.STRING).map(string)
+    val properties = Option(ctx.tablePropertyList).map(visitTablePropertyList).getOrElse(Map())
+    val selectQuery = Option(ctx.query).map(plan)
+    CreateTable(
+      name,
+      temp,
+      ifNotExists,
+      external,
+      comment,
+      columns,
+      partitionColumns,
+      bucketSpec,
+      skewSpec,
+      rowFormat,
+      fileFormat,
+      storageHandler,
+      location,
+      properties,
+      selectQuery)
+  }
 
   /**
    * Validate a create table statement and return the [[TableIdentifier]].
@@ -599,25 +652,10 @@ class SparkSqlAstBuilder extends AstBuilder {
    */
   override def visitSetTableFileFormat(
       ctx: SetTableFileFormatContext): LogicalPlan = withOrigin(ctx) {
-    // AlterTableSetFileFormat currently takes both a GenericFileFormat and a
-    // TableFileFormatContext. This is a bit weird because it should only take one. It also should
-    // use a CatalogFileFormat instead of either a String or a Sequence of Strings. We will address
-    // this in a follow-up PR.
-    val (fileFormat, genericFormat) = ctx.fileFormat match {
-      case s: GenericFileFormatContext =>
-        (Seq.empty[String], Option(s.identifier.getText))
-      case s: TableFileFormatContext =>
-        val elements = Seq(s.inFmt, s.outFmt) ++
-          Option(s.serdeCls).toSeq ++
-          Option(s.inDriver).toSeq ++
-          Option(s.outDriver).toSeq
-        (elements.map(string), None)
-    }
     AlterTableSetFileFormat(
       visitTableIdentifier(ctx.tableIdentifier),
       Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec),
-      fileFormat,
-      genericFormat)(
+      visitFileFormat(ctx.fileFormat))(
       command(ctx))
   }
 
@@ -780,14 +818,79 @@ class SparkSqlAstBuilder extends AstBuilder {
    * - Values for which are skewed. The size of each entry must match the number of skewed columns.
    * - A store in directory flag.
    */
-  override def visitSkewSpec(
-      ctx: SkewSpecContext): (Seq[String], Seq[Seq[String]], Boolean) = withOrigin(ctx) {
+  override def visitSkewSpec(ctx: SkewSpecContext): SkewSpec = withOrigin(ctx) {
     val skewedValues = if (ctx.constantList != null) {
       Seq(visitConstantList(ctx.constantList))
     } else {
       visitNestedConstantList(ctx.nestedConstantList)
     }
-    (visitIdentifierList(ctx.identifierList), skewedValues, ctx.DIRECTORIES != null)
+    SkewSpec(visitIdentifierList(ctx.identifierList), skewedValues, ctx.DIRECTORIES != null)
+  }
+
+  /**
+   * Create a [[RowFormat]] used for creating tables.
+   *
+   * Example format:
+   * {{{
+   *   SERDE serde_name [WITH SERDEPROPERTIES (k1=v1, k2=v2, ...)]
+   * }}}
+   *
+   * OR
+   *
+   * {{{
+   *   DELIMITED [FIELDS TERMINATED BY char [ESCAPED BY char]]
+   *   [COLLECTION ITEMS TERMINATED BY char]
+   *   [MAP KEYS TERMINATED BY char]
+   *   [LINES TERMINATED BY char]
+   *   [NULL DEFINED AS char]
+   * }}}
+   */
+  private def visitRowFormat(ctx: RowFormatContext): RowFormat = withOrigin(ctx) {
+    ctx match {
+      case serde: RowFormatSerdeContext =>
+        RowFormatSerde(
+          string(serde.name),
+          visitTablePropertyList(serde.props))
+      case delimited: RowFormatDelimitedContext =>
+        RowFormatDelimited(
+          fieldsTerminatedBy = Option(delimited.fieldsTerminatedBy).map(string),
+          fieldsEscapedBy = Option(delimited.escapedBy).map(string),
+          mapKeysTerminatedBy = Option(delimited.keysTerminatedBy).map(string),
+          linesTerminatedBy = Option(delimited.linesSeparatedBy).map(string),
+          nullDefinedAs = Option(delimited.nullDefinedAs).map(string))
+    }
+  }
+
+  /**
+   * Create a [[FileFormat]] for creating and altering tables.
+   *
+   * Example format:
+   * {{{
+   *   SEQUENCEFILE |
+   *   TEXTFILE |
+   *   RCFILE |
+   *   ORC |
+   *   PARQUET |
+   *   AVRO |
+   *   INPUTFORMAT input_format_classname OUTPUTFORMAT output_format_classname
+   * }}}
+   */
+  private def visitFileFormat(ctx: FileFormatContext): FileFormat = withOrigin(ctx) {
+    ctx match {
+      case s: GenericFileFormatContext =>
+        GenericFileFormat(s.identifier.getText)
+      case s: TableFileFormatContext =>
+        TableFileFormat(string(s.inFmt), string(s.outFmt), Option(s.serdeCls).map(string))
+    }
+  }
+
+  /**
+   * Create a [[StorageHandler]] for creating tables.
+   */
+  override def visitStorageHandler(ctx: StorageHandlerContext): StorageHandler = withOrigin(ctx) {
+    val handlerClassName = string(ctx.STRING)
+    val serdeProps = Option(ctx.tablePropertyList).map(visitTablePropertyList).getOrElse(Map())
+    StorageHandler(handlerClassName, serdeProps)
   }
 
   /**

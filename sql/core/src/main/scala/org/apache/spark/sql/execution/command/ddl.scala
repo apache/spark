@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable}
+import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable, FileFormat}
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalog.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.types._
@@ -173,29 +173,6 @@ case class DescribeDatabase(
     AttributeReference("database_description_item", StringType, nullable = false)() ::
       AttributeReference("database_description_value", StringType, nullable = false)() :: Nil
   }
-}
-
-/**
- * A command that renames a table/view.
- *
- * The syntax of this command is:
- * {{{
- *    ALTER TABLE table1 RENAME TO table2;
- *    ALTER VIEW view1 RENAME TO view2;
- * }}}
- */
-case class AlterTableRename(
-    oldName: TableIdentifier,
-    newName: TableIdentifier)
-  extends RunnableCommand {
-
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    val catalog = sqlContext.sessionState.catalog
-    catalog.invalidateTable(oldName)
-    catalog.renameTable(oldName, newName)
-    Seq.empty[Row]
-  }
-
 }
 
 /**
@@ -354,8 +331,7 @@ case class AlterTableUnarchivePartition(
 case class AlterTableSetFileFormat(
     tableName: TableIdentifier,
     partitionSpec: Option[TablePartitionSpec],
-    fileFormat: Seq[String],
-    genericFormat: Option[String])(sql: String)
+    fileFormat: FileFormat)(sql: String)
   extends NativeDDLCommand(sql) with Logging
 
 /**

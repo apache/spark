@@ -196,6 +196,13 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
 
   // TODO: test drop database in restrict mode
 
+  test("create table") {
+    val catalog = sqlContext.sessionState.catalog
+    val tableIdent1 = TableIdentifier("tab1", Some("dbx"))
+    createDatabase(catalog, "dbx")
+    sql("CREATE TABLE dbx.tab1 (id int, name string) partitioned by (nickname string)")
+  }
+
   test("alter table: rename") {
     val catalog = sqlContext.sessionState.catalog
     val tableIdent1 = TableIdentifier("tab1", Some("dbx"))
@@ -319,8 +326,6 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     assertUnsupported("ALTER TABLE dbx.tab1 NOT SKEWED")
     assertUnsupported("ALTER TABLE dbx.tab1 NOT STORED AS DIRECTORIES")
   }
-
-  // TODO: ADD a testcase for Drop Database in Restric when we can create tables in SQLContext
 
   test("show tables") {
     withTempTable("show1a", "show2b") {

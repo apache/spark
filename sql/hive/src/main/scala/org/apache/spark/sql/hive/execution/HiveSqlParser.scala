@@ -141,7 +141,7 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
     if (ctx.storageHandler == null) {
       typedVisit[CatalogStorageFormat](ctx.fileFormat)
     } else {
-      visitStorageHandler(ctx.storageHandler)
+      throw new ParseException("Storage Handlers are currently unsupported.", ctx)
     }
   }
 
@@ -363,19 +363,14 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
   private val EmptyStorageFormat = CatalogStorageFormat(None, None, None, None, Map.empty)
 
   /**
-   * Create a [[CatalogStorageFormat]]. The INPUTDRIVER and OUTPUTDRIVER clauses are currently
-   * ignored.
+   * Create a [[CatalogStorageFormat]].
    */
   override def visitTableFileFormat(
       ctx: TableFileFormatContext): CatalogStorageFormat = withOrigin(ctx) {
-    import ctx._
-    if (inDriver != null || outDriver != null) {
-      logWarning("INPUTDRIVER ... OUTPUTDRIVER ... clauses are ignored.")
-    }
     EmptyStorageFormat.copy(
-      inputFormat = Option(string(inFmt)),
-      outputFormat = Option(string(outFmt)),
-      serde = Option(serdeCls).map(string)
+      inputFormat = Option(string(ctx.inFmt)),
+      outputFormat = Option(string(ctx.outFmt)),
+      serde = Option(ctx.serdeCls).map(string)
     )
   }
 
@@ -394,14 +389,6 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
       case None =>
         throw new ParseException(s"Unrecognized file format in STORED AS clause: $source", ctx)
     }
-  }
-
-  /**
-   * Storage Handlers are currently not supported in the statements we support (CTAS).
-   */
-  override def visitStorageHandler(
-      ctx: StorageHandlerContext): CatalogStorageFormat = withOrigin(ctx) {
-    throw new ParseException("Storage Handlers are currently unsupported.", ctx)
   }
 
   /**

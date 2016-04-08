@@ -291,3 +291,55 @@ case class CatalogRelation(
   require(metadata.identifier.database == Some(db),
     "provided database does not match the one specified in the table definition")
 }
+
+
+/**
+ * Skew specifications for a table.
+ */
+case class SkewSpec(
+    // e.g. ['datetime', 'country']
+    columns: Seq[String],
+    // e.g. [['2008-08-08', 'us], ['2009-09-09', 'uk']]
+    values: Seq[Seq[String]],
+    storedAsDirs: Boolean) {
+
+  require(values.forall(_.size == columns.size),
+    "number of columns in skewed values do not match number of skewed columns provided")
+}
+
+
+/**
+ * Row format for creating tables, specified with ROW FORMAT [...].
+ */
+sealed trait RowFormat
+
+case class RowFormatSerde(serde: String, serdeProperties: Map[String, String])
+  extends RowFormat
+
+case class RowFormatDelimited(
+    fieldsTerminatedBy: Option[String],
+    fieldsEscapedBy: Option[String],
+    mapKeysTerminatedBy: Option[String],
+    linesTerminatedBy: Option[String],
+    nullDefinedAs: Option[String])
+  extends RowFormat
+
+
+/**
+ * File format for creating tables, specified with STORED AS [...].
+ */
+sealed trait FileFormat
+
+case class TableFileFormat(
+    inputFormat: String,
+    outputFormat: String,
+    serde: Option[String] = None)
+  extends FileFormat
+
+case class GenericFileFormat(format: String) extends FileFormat
+
+
+/**
+ * Storage handler for creating tables, specified with STORED BY [...].
+ */
+case class StorageHandler(handlerClass: String, serdeProps: Map[String, String])
