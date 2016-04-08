@@ -617,6 +617,12 @@ object MimaExcludes {
       ) ++ Seq(
         // [SPARK-13048][ML][MLLIB] keepLastCheckpoint option for LDA EM optimizer
         ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.clustering.DistributedLDAModel.this")
+      ) ++ Seq(
+        // [SPARK-14483][WEBUI] Display user name foreach job and query
+        ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.SparkListenerJobStart.copy"),
+        ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.SparkListenerJobStart.this"),
+        ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.scheduler.SparkListenerJobStart$"),
+        ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.SparkListenerJobStart.apply")
       )
     case v if v.startsWith("1.6") =>
       Seq(
