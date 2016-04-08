@@ -19,5 +19,5 @@ package org.apache.spark.ml
 
 // This is a private class testing if the new build works. To be removed soon.
 private[ml] object DummyTesting {
-  def add10(input: Double) = input + 10
+  private[ml] def add10(input: Double): Double = input + 10
 }
