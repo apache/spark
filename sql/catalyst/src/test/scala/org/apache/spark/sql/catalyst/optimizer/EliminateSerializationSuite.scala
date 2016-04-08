@@ -103,10 +103,10 @@ class EliminateSerializationSuite extends PlanTest {
 
   test("MapGroups under MapPartition") {
     val input = LocalRelation('_1.int, '_2.int)
-    val appended = AppendColumns((tuple: OtherTuple) => tuple._1, input)
+    val append = AppendColumns((tuple: OtherTuple) => tuple._1, input)
     val aggFunc: (Int, Iterator[OtherTuple]) => Iterator[OtherTuple] =
       (key, values) => Iterator(OtherTuple(1, 1))
-    val agg = MapGroups(aggFunc, appended.newColumns, input.output, appended)
+    val agg = MapGroups(aggFunc, append.newColumns, input.output, append)
     val map = MapPartitions(func2, agg)
 
     val optimized = Optimize.execute(map.analyze)
@@ -115,13 +115,31 @@ class EliminateSerializationSuite extends PlanTest {
 
   test("MapGroups under MapPartition with object change") {
     val input = LocalRelation('_1.int, '_2.int)
-    val appended = AppendColumns((tuple: OtherTuple) => tuple._1, input)
+    val append = AppendColumns((tuple: OtherTuple) => tuple._1, input)
     val aggFunc: (Int, Iterator[OtherTuple]) => Iterator[OtherTuple] =
       (key, values) => Iterator(OtherTuple(1, 1))
-    val agg = MapGroups(aggFunc, appended.newColumns, input.output, appended)
+    val agg = MapGroups(aggFunc, append.newColumns, input.output, append)
     val map = MapPartitions(func, agg)
 
     val optimized = Optimize.execute(map.analyze)
     assertNumSerializations(2, optimized)
+  }
+
+  test("MapPartitions under AppendColumns") {
+    val input = LocalRelation('_1.int, '_2.int)
+    val map = MapPartitions(func2, input)
+    val appendFunc = (tuple: OtherTuple) => tuple._1
+    val append = AppendColumns(appendFunc, map)
+
+    val optimized = Optimize.execute(append.analyze)
+
+    val mapWithoutSer = map.asInstanceOf[SerializeFromObject].child
+    val expected = AppendColumnsWithObject(
+      appendFunc.asInstanceOf[Any => Any],
+      productEncoder[OtherTuple].namedExpressions,
+      intEncoder.namedExpressions,
+      mapWithoutSer).analyze
+
+    comparePlans(optimized, expected)
   }
 }

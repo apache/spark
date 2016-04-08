@@ -144,6 +144,10 @@ object EliminateSerialization extends Rule[LogicalPlan] {
       // Adds an extra Project here, to preserve the output expr id of `DeserializeToObject`.
       val objAttr = Alias(s.child.output.head, "obj")(exprId = d.output.head.exprId)
       Project(objAttr :: Nil, s.child)
+
+    case a @ AppendColumns(_, _, _, s: SerializeFromObject)
+        if a.deserializer.dataType == s.inputObjectType =>
+      AppendColumnsWithObject(a.func, s.serializer, a.serializer, s.child)
   }
 }
 

@@ -236,6 +236,36 @@ case class AppendColumns(
 }
 
 /**
+ * An optimized version of [[AppendColumns]], that can be executed on deserialized object directly.
+ */
+case class AppendColumnsWithObject(
+    func: Any => Any,
+    inputSerializer: Seq[NamedExpression],
+    newColumnsSerializer: Seq[NamedExpression],
+    child: SparkPlan) extends UnaryNode with ObjectOperator {
+
+  override def output: Seq[Attribute] = (inputSerializer ++ newColumnsSerializer).map(_.toAttribute)
+
+  private def inputSchema = inputSerializer.map(_.toAttribute).toStructType
+  private def newColumnSchema = newColumnsSerializer.map(_.toAttribute).toStructType
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    child.execute().mapPartitionsInternal { iter =>
+      val getChildObject = unwrapObjectFromRow(child.output.head.dataType)
+      val outputChildObject = serializeObjectToRow(inputSerializer)
+      val outputNewColumnOjb = serializeObjectToRow(newColumnsSerializer)
+      val combiner = GenerateUnsafeRowJoiner.create(inputSchema, newColumnSchema)
+
+      iter.map { row =>
+        val childObj = getChildObject(row)
+        val newColumns = outputNewColumnOjb(func(childObj))
+        combiner.join(outputChildObject(childObj), newColumns): InternalRow
+      }
+    }
+  }
+}
+
+/**
  * Groups the input rows together and calls the function with each group and an iterator containing
  * all elements in the group.  The result of this function is flattened before being output.
  */

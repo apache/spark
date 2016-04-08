@@ -141,7 +141,7 @@ object AppendColumns {
 }
 
 /**
- * A relation produced by applying `func` to each partition of the `child`, concatenating the
+ * A relation produced by applying `func` to each element of the `child`, concatenating the
  * resulting columns at the end of the input row.
  *
  * @param deserializer used to extract the input to `func` from an input row.
@@ -156,6 +156,18 @@ case class AppendColumns(
   override def output: Seq[Attribute] = child.output ++ newColumns
 
   def newColumns: Seq[Attribute] = serializer.map(_.toAttribute)
+}
+
+/**
+ * An optimized version of [[AppendColumns]], that can be executed on deserialized object directly.
+ */
+case class AppendColumnsWithObject(
+    func: Any => Any,
+    childSerializer: Seq[NamedExpression],
+    newColumnsSerializer: Seq[NamedExpression],
+    child: LogicalPlan) extends UnaryNode with ObjectConsumer {
+
+  override def output: Seq[Attribute] = (childSerializer ++ newColumnsSerializer).map(_.toAttribute)
 }
 
 /** Factory for constructing new `MapGroups` nodes. */
