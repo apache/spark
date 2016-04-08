@@ -84,6 +84,16 @@ object ComplexBufferAgg extends Aggregator[AggData, (Int, AggData), Int] {
     (b1._1 + b2._1, b1._2)
 }
 
+object NameAgg extends Aggregator[AggData, String, String] {
+  def zero: String = ""
+
+  def reduce(b: String, a: AggData): String = a.b + b
+
+  def merge(b1: String, b2: String): String = b1 + b2
+
+  def finish(r: String): String = r
+}
+
 class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
 
   import testImplicits._
@@ -176,4 +186,13 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
         typed.avg(_._2), typed.count(_._2), typed.sum(_._2), typed.sumLong(_._2)),
       ("a", 2.0, 2L, 4.0, 4L), ("b", 3.0, 1L, 3.0, 3L))
   }
+
+  test("SPARK-12555 - result should not be corrupted after input columns are reordered") {
+    val ds = sql("SELECT 'Some String' AS b, 1279869254 AS a").as[AggData]
+
+    checkDataset(
+      ds.groupByKey(_.a).agg(NameAgg.toColumn),
+        (1279869254, "Some String"))
+  }
+
 }
