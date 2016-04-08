@@ -93,6 +93,8 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       EliminateSerialization) ::
     Batch("Decimal Optimizations", FixedPoint(100),
       DecimalAggregates) ::
+    Batch("Typed Filter Optimization", FixedPoint(100),
+      EmbedSerializerInFilter) ::
     Batch("LocalRelation", FixedPoint(100),
       ConvertToLocalRelation) ::
     Batch("Subquery", Once,
@@ -147,12 +149,18 @@ object EliminateSerialization extends Rule[LogicalPlan] {
         child = childWithoutSerialization)
 
     case m @ MapElements(_, deserializer, _, child: ObjectOperator)
-      if !deserializer.isInstanceOf[Attribute] &&
-        deserializer.dataType == child.outputObject.dataType =>
+        if !deserializer.isInstanceOf[Attribute] &&
+          deserializer.dataType == child.outputObject.dataType =>
       val childWithoutSerialization = child.withObjectOutput
       m.copy(
         deserializer = childWithoutSerialization.output.head,
         child = childWithoutSerialization)
+
+    case d @ DeserializeToObject(_, s: SerializeFromObject)
+        if d.outputObjectType == s.inputObjectType =>
+      // Adds an extra Project here, to preserve the output expr id of `DeserializeToObject`.
+      val objAttr = Alias(s.child.output.head, "obj")(exprId = d.output.head.exprId)
+      Project(objAttr :: Nil, s.child)
   }
 }
 
@@ -1327,5 +1335,32 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
       case CurrentDate() => currentDate
       case CurrentTimestamp() => currentTime
     }
+  }
+}
+
+/**
+ * Typed [[Filter]] is by default surrounded by a [[DeserializeToObject]] beneath it and a
+ * [[SerializeFromObject]] above it.  If these serializations can't be eliminated, we should embed
+ * the deserializer in filter condition to save the extra serialization at last.
+ */
+object EmbedSerializerInFilter extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case s @ SerializeFromObject(_, Filter(condition, d: DeserializeToObject)) =>
+      val numObjects = condition.collect {
+        case a: Attribute if a == d.output.head => a
+      }.length
+
+      if (numObjects > 1) {
+        // If the filter condition references the object more than one times, we should not embed
+        // deserializer in it as the deserialization will happen many times and slow down the
+        // execution.
+        // TODO: we can still embed it if we can make sure subexpression elimination works here.
+        s
+      } else {
+        val newCondition = condition transform {
+          case a: Attribute if a == d.output.head => d.deserializer.child
+        }
+        Filter(newCondition, d.child)
+      }
   }
 }

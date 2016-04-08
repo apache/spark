@@ -1879,7 +1879,13 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   @Experimental
-  def filter(func: T => Boolean): Dataset[T] = mapPartitions(_.filter(func))
+  def filter(func: T => Boolean): Dataset[T] = {
+    val deserialized = CatalystSerde.deserialize[T](logicalPlan)
+    val function = Literal.create(func, ObjectType(classOf[T => Boolean]))
+    val condition = Invoke(function, "apply", BooleanType, deserialized.output)
+    val filter = Filter(condition, deserialized)
+    withTypedPlan(CatalystSerde.serialize[T](filter))
+  }
 
   /**
    * :: Experimental ::
@@ -1890,7 +1896,13 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   @Experimental
-  def filter(func: FilterFunction[T]): Dataset[T] = filter(t => func.call(t))
+  def filter(func: FilterFunction[T]): Dataset[T] = {
+    val deserialized = CatalystSerde.deserialize[T](logicalPlan)
+    val function = Literal.create(func, ObjectType(classOf[FilterFunction[T]]))
+    val condition = Invoke(function, "call", BooleanType, deserialized.output)
+    val filter = Filter(condition, deserialized)
+    withTypedPlan(CatalystSerde.serialize[T](filter))
+  }
 
   /**
    * :: Experimental ::
