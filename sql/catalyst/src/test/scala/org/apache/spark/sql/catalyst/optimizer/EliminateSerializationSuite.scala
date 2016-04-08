@@ -22,8 +22,7 @@ import scala.reflect.runtime.universe.TypeTag
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.NewInstance
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, MapPartitions}
+import org.apache.spark.sql.catalyst.plans.logical.{DeserializeToObject, LocalRelation, LogicalPlan, MapPartitions}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
@@ -41,14 +40,14 @@ class EliminateSerializationSuite extends PlanTest {
   private val func2 = identity[Iterator[OtherTuple]] _
 
   def assertObjectCreations(count: Int, plan: LogicalPlan): Unit = {
-    val newInstances = plan.flatMap(_.expressions.collect {
-      case n: NewInstance => n
-    })
+    val serializations = plan.collect {
+      case d: DeserializeToObject => d
+    }
 
-    if (newInstances.size != count) {
+    if (serializations.size != count) {
       fail(
         s"""
-           |Wrong number of object creations in plan: ${newInstances.size} != $count
+           |Wrong number of object creations in plan: ${serializations.size} != $count
            |$plan
          """.stripMargin)
     }
