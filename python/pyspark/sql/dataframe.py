@@ -1348,7 +1348,7 @@ class DataFrame(object):
     @since(2.0)
     def approxQuantile(self, col, probabilities, relativeError):
         """
-        Calculates the approximate quantiles of a numerical column of a
+        Calculates the approximate quantiles of numerical columns of a
         DataFrame.
 
         The result of this algorithm has the following deterministic bound:
@@ -1374,7 +1374,11 @@ class DataFrame(object):
           (>= 0). If set to zero, the exact quantiles are computed, which
           could be very expensive. Note that values greater than 1 are
           accepted but give the same result as 1.
-        :return:  the approximate quantiles at the given probabilities
+        :return:  the approximate quantiles at the given probabilities. If
+          the input `col` is a string, the output is a list of float. If the
+          input `col` is a list or tuple of strings, the output is also a
+          list, but each element in it is a list of float (list of list of
+          float).
         """
         if not isinstance(col, (str, list, tuple)):
             raise ValueError("col should be a string or list or tuple.")
@@ -1403,9 +1407,7 @@ class DataFrame(object):
         relativeError = float(relativeError)
 
         jaqs = self._jdf.stat().approxQuantileMultiCols(col, probabilities, relativeError)
-        res = []
-        for jaq in jaqs:
-            res.append(list(jaq))
+        res = [list(jaq) for jaq in jaqs]
         if isStr:
             return res[0]
         return res
