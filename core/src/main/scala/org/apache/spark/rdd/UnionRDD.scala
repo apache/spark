@@ -20,6 +20,8 @@ package org.apache.spark.rdd
 import java.io.{IOException, ObjectOutputStream}
 
 import scala.collection.mutable.ArrayBuffer
+import scala.collection.parallel.ForkJoinTaskSupport
+import scala.concurrent.forkjoin.ForkJoinPool
 import scala.reflect.ClassTag
 
 import org.apache.spark.{Dependency, Partition, RangeDependency, SparkContext, TaskContext}
@@ -62,7 +64,21 @@ class UnionRDD[T: ClassTag](
     var rdds: Seq[RDD[T]])
   extends RDD[T](sc, Nil) {  // Nil since we implement getDependencies
 
+  // Evaluate partitions in parallel. Partitions of each rdd will be cached by the `partitions`
+  // val in `RDD`.
+  private lazy val evaluatePartitions: Unit = {
+    val threshold = conf.getInt("spark.rdd.parallelListingThreshold", 10)
+    if (threshold > 0 && rdds.length > threshold) {
+      val parArray = rdds.toParArray
+      parArray.tasksupport = new ForkJoinTaskSupport(new ForkJoinPool(threshold))
+      parArray.foreach(_.partitions)
+    } else {
+      rdds.foreach(_.partitions)
+    }
+  }
+
   override def getPartitions: Array[Partition] = {
+    evaluatePartitions
     val array = new Array[Partition](rdds.map(_.partitions.length).sum)
     var pos = 0
     for ((rdd, rddIndex) <- rdds.zipWithIndex; split <- rdd.partitions) {
