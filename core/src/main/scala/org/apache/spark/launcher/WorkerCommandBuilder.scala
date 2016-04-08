@@ -37,7 +37,6 @@ private[spark] class WorkerCommandBuilder(sparkHome: String, memoryMb: Int, comm
 
   override def buildCommand(env: JMap[String, String]): JList[String] = {
     val cmd = buildJavaCommand(command.classPathEntries.mkString(File.pathSeparator))
-    cmd.add(s"-Xms${memoryMb}M")
     cmd.add(s"-Xmx${memoryMb}M")
     command.javaOpts.foreach(cmd.add)
     CommandBuilderUtils.addPermGenSizeOpt(cmd)

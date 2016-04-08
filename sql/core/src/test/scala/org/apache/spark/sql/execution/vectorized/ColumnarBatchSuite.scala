@@ -68,7 +68,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(column.numNulls() == 4)
 
       reference.zipWithIndex.foreach { v =>
-        assert(v._1 == column.getIsNull(v._2))
+        assert(v._1 == column.isNullAt(v._2))
         if (memMode == MemoryMode.OFF_HEAP) {
           val addr = column.nullsNativeAddress()
           assert(v._1 == (Platform.getByte(null, addr + v._2) == 1), "index=" + v._2)
@@ -489,10 +489,10 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(batch.rowIterator().hasNext == true)
 
       assert(batch.column(0).getInt(0) == 1)
-      assert(batch.column(0).getIsNull(0) == false)
+      assert(batch.column(0).isNullAt(0) == false)
       assert(batch.column(1).getDouble(0) == 1.1)
-      assert(batch.column(1).getIsNull(0) == false)
-      assert(batch.column(2).getIsNull(0) == true)
+      assert(batch.column(1).isNullAt(0) == false)
+      assert(batch.column(2).isNullAt(0) == true)
       assert(batch.column(3).getUTF8String(0).toString == "Hello")
 
       // Verify the iterator works correctly.
@@ -754,6 +754,27 @@ class ColumnarBatchSuite extends SparkFunSuite {
         assert(k == NUM_ROWS)
         batch.close()
       }}
+    }
+  }
+
+  test("mutable ColumnarBatch rows") {
+    val NUM_ITERS = 10
+    val types = Array(
+      BooleanType, FloatType, DoubleType,
+      IntegerType, LongType, ShortType, DecimalType.IntDecimal, new DecimalType(30, 10))
+    for (i <- 0 to NUM_ITERS) {
+      val random = new Random(System.nanoTime())
+      val schema = RandomDataGenerator.randomSchema(random, numFields = 20, types)
+      val oldRow = RandomDataGenerator.randomRow(random, schema)
+      val newRow = RandomDataGenerator.randomRow(random, schema)
+
+      (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: Nil).foreach { memMode =>
+        val batch = ColumnVectorUtils.toBatch(schema, memMode, (oldRow :: Nil).iterator.asJava)
+        val columnarBatchRow = batch.getRow(0)
+        newRow.toSeq.zipWithIndex.foreach(i => columnarBatchRow.update(i._2, i._1))
+        compareStruct(schema, columnarBatchRow, newRow, 0)
+        batch.close()
+      }
     }
   }
 }

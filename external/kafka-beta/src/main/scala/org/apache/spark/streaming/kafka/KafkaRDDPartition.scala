@@ -22,11 +22,12 @@ import org.apache.kafka.common.TopicPartition
 import org.apache.spark.Partition
 
 
-/** @param topic kafka topic name
-  * @param partition kafka partition id
-  * @param fromOffset inclusive starting offset
-  * @param untilOffset exclusive ending offset
-  */
+/**
+ * @param topic kafka topic name
+ * @param partition kafka partition id
+ * @param fromOffset inclusive starting offset
+ * @param untilOffset exclusive ending offset
+ */
 private[kafka]
 class KafkaRDDPartition(
   val index: Int,

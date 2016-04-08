@@ -255,8 +255,8 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
-    * Returns the number of partitions of this RDD.
-    */
+   * Returns the number of partitions of this RDD.
+   */
   @Since("1.6.0")
   final def getNumPartitions: Int = partitions.length
 
@@ -326,7 +326,7 @@ abstract class RDD[T: ClassTag](
     val blockId = RDDBlockId(id, partition.index)
     var readCachedBlock = true
     // This method is called on executors, so we need call SparkEnv.get instead of sc.env.
-    SparkEnv.get.blockManager.getOrElseUpdate(blockId, storageLevel, () => {
+    SparkEnv.get.blockManager.getOrElseUpdate(blockId, storageLevel, elementClassTag, () => {
       readCachedBlock = false
       computeOrReadCheckpoint(partition, context)
     }) match {
@@ -568,11 +568,7 @@ abstract class RDD[T: ClassTag](
    * times (use `.distinct()` to eliminate them).
    */
   def union(other: RDD[T]): RDD[T] = withScope {
-    if (partitioner.isDefined && other.partitioner == partitioner) {
-      new PartitionerAwareUnionRDD(sc, Array(this, other))
-    } else {
-      new UnionRDD(sc, Array(this, other))
-    }
+    sc.union(this, other)
   }
 
   /**

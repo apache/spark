@@ -25,11 +25,11 @@ import com.univocity.parsers.csv.{CsvParser, CsvParserSettings, CsvWriter, CsvWr
 import org.apache.spark.internal.Logging
 
 /**
-  * Read and parse CSV-like input
-  *
-  * @param params Parameters object
-  * @param headers headers for the columns
-  */
+ * Read and parse CSV-like input
+ *
+ * @param params Parameters object
+ * @param headers headers for the columns
+ */
 private[sql] abstract class CsvReader(params: CSVOptions, headers: Seq[String]) {
 
   protected lazy val parser: CsvParser = {
@@ -47,6 +47,7 @@ private[sql] abstract class CsvReader(params: CSVOptions, headers: Seq[String]) 
     settings.setMaxColumns(params.maxColumns)
     settings.setNullValue(params.nullValue)
     settings.setMaxCharsPerColumn(params.maxCharsPerColumn)
+    settings.setParseUnescapedQuotesUntilDelimiter(true)
     if (headers != null) settings.setHeaders(headers: _*)
 
     new CsvParser(settings)
@@ -54,11 +55,11 @@ private[sql] abstract class CsvReader(params: CSVOptions, headers: Seq[String]) 
 }
 
 /**
-  * Converts a sequence of string to CSV string
-  *
-  * @param params Parameters object for configuration
-  * @param headers headers for columns
-  */
+ * Converts a sequence of string to CSV string
+ *
+ * @param params Parameters object for configuration
+ * @param headers headers for columns
+ */
 private[sql] class LineCsvWriter(params: CSVOptions, headers: Seq[String]) extends Logging {
   private val writerSettings = new CsvWriterSettings
   private val format = writerSettings.getFormat
@@ -90,18 +91,18 @@ private[sql] class LineCsvWriter(params: CSVOptions, headers: Seq[String]) exten
 }
 
 /**
-  * Parser for parsing a line at a time. Not efficient for bulk data.
-  *
-  * @param params Parameters object
-  */
+ * Parser for parsing a line at a time. Not efficient for bulk data.
+ *
+ * @param params Parameters object
+ */
 private[sql] class LineCsvReader(params: CSVOptions)
   extends CsvReader(params, null) {
   /**
-    * parse a line
-    *
-    * @param line a String with no newline at the end
-    * @return array of strings where each string is a field in the CSV record
-    */
+   * parse a line
+   *
+   * @param line a String with no newline at the end
+   * @return array of strings where each string is a field in the CSV record
+   */
   def parseLine(line: String): Array[String] = {
     parser.beginParsing(new StringReader(line))
     val parsed = parser.parseNext()
@@ -111,12 +112,12 @@ private[sql] class LineCsvReader(params: CSVOptions)
 }
 
 /**
-  * Parser for parsing lines in bulk. Use this when efficiency is desired.
-  *
-  * @param iter iterator over lines in the file
-  * @param params Parameters object
-  * @param headers headers for the columns
-  */
+ * Parser for parsing lines in bulk. Use this when efficiency is desired.
+ *
+ * @param iter iterator over lines in the file
+ * @param params Parameters object
+ * @param headers headers for the columns
+ */
 private[sql] class BulkCsvReader(
     iter: Iterator[String],
     params: CSVOptions,
@@ -128,9 +129,9 @@ private[sql] class BulkCsvReader(
   private var nextRecord = parser.parseNext()
 
   /**
-    * get the next parsed line.
-    * @return array of strings where each string is a field in the CSV record
-    */
+   * get the next parsed line.
+   * @return array of strings where each string is a field in the CSV record
+   */
   override def next(): Array[String] = {
     val curRecord = nextRecord
     if(curRecord != null) {
@@ -146,11 +147,11 @@ private[sql] class BulkCsvReader(
 }
 
 /**
-  * A Reader that "reads" from a sequence of lines. Spark's textFile method removes newlines at
-  * end of each line Univocity parser requires a Reader that provides access to the data to be
-  * parsed and needs the newlines to be present
-  * @param iter iterator over RDD[String]
-  */
+ * A Reader that "reads" from a sequence of lines. Spark's textFile method removes newlines at
+ * end of each line Univocity parser requires a Reader that provides access to the data to be
+ * parsed and needs the newlines to be present
+ * @param iter iterator over RDD[String]
+ */
 private class StringIteratorReader(val iter: Iterator[String]) extends java.io.Reader {
 
   private var next: Long = 0
@@ -159,9 +160,9 @@ private class StringIteratorReader(val iter: Iterator[String]) extends java.io.R
   private var str: String = null   // current string from iter
 
   /**
-    * fetch next string from iter, if done with current one
-    * pretend there is a new line at the end of every string we get from from iter
-    */
+   * fetch next string from iter, if done with current one
+   * pretend there is a new line at the end of every string we get from from iter
+   */
   private def refill(): Unit = {
     if (length == next) {
       if (iter.hasNext) {
@@ -175,8 +176,8 @@ private class StringIteratorReader(val iter: Iterator[String]) extends java.io.R
   }
 
   /**
-    * read the next character, if at end of string pretend there is a new line
-    */
+   * read the next character, if at end of string pretend there is a new line
+   */
   override def read(): Int = {
     refill()
     if (next >= length) {
@@ -189,8 +190,8 @@ private class StringIteratorReader(val iter: Iterator[String]) extends java.io.R
   }
 
   /**
-    * read from str into cbuf
-    */
+   * read from str into cbuf
+   */
   override def read(cbuf: Array[Char], off: Int, len: Int): Int = {
     refill()
     var n = 0

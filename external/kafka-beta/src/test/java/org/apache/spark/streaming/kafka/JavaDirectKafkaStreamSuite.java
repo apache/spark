@@ -34,7 +34,6 @@ import org.junit.Test;
 
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.api.java.function.Function0;
 import org.apache.spark.api.java.function.VoidFunction;
@@ -111,7 +110,7 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
     );
 
     JavaDStream<String> stream1 = istream1.transform(
-        // Make sure you can get offset ranges from the rdd
+      // Make sure you can get offset ranges from the rdd
       new Function<JavaRDD<ConsumerRecord<String, String>>,
         JavaRDD<ConsumerRecord<String, String>>>() {
           @Override
@@ -153,7 +152,7 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
     );
 
     JavaDStream<String> stream2 = istream2.transform(
-        // Make sure you can get offset ranges from the rdd
+      // Make sure you can get offset ranges from the rdd
       new Function<JavaRDD<ConsumerRecord<String, String>>,
         JavaRDD<ConsumerRecord<String, String>>>() {
           @Override

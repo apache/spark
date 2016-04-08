@@ -152,8 +152,8 @@ class DataFrameReader(object):
         You can set the following JSON-specific options to deal with non-standard JSON files:
             * ``primitivesAsString`` (default ``false``): infers all primitive values as a string \
                 type
-            * `floatAsBigDecimal` (default `false`): infers all floating-point values as a decimal \
-                type
+            * `prefersDecimal` (default `false`): infers all floating-point values as a decimal \
+                type. If the values do not fit in decimal, then it infers them as doubles.
             * ``allowComments`` (default ``false``): ignores Java/C++ style comment in JSON records
             * ``allowUnquotedFieldNames`` (default ``false``): allows unquoted JSON field names
             * ``allowSingleQuotes`` (default ``true``): allows single quotes in addition to double \
@@ -166,10 +166,13 @@ class DataFrameReader(object):
                 during parsing.
                 *  ``PERMISSIVE`` : sets other fields to ``null`` when it meets a corrupted \
                   record and puts the malformed string into a new field configured by \
-                 ``spark.sql.columnNameOfCorruptRecord``. When a schema is set by user, it sets \
+                 ``columnNameOfCorruptRecord``. When a schema is set by user, it sets \
                  ``null`` for extra fields.
                 *  ``DROPMALFORMED`` : ignores the whole corrupted records.
                 *  ``FAILFAST`` : throws an exception when it meets corrupted records.
+            *  ``columnNameOfCorruptRecord`` (default ``_corrupt_record``): allows renaming the \
+                 new field having malformed string created by ``PERMISSIVE`` mode. \
+                 This overrides ``spark.sql.columnNameOfCorruptRecord``.
 
         >>> df1 = sqlContext.read.json('python/test_support/sql/people.json')
         >>> df1.dtypes

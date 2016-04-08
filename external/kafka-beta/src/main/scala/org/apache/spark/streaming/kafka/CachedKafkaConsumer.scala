@@ -26,10 +26,11 @@ import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 
 
-/** Consumer of single topicpartition, intended for cached reuse.
-  * Underlying consumer is not threadsafe, so neither is this,
-  * but processing the same topicpartition and group id in multiple threads would be bad anyway.
-  */
+/**
+ * Consumer of single topicpartition, intended for cached reuse.
+ * Underlying consumer is not threadsafe, so neither is this,
+ * but processing the same topicpartition and group id in multiple threads would be bad anyway.
+ */
 private[kafka]
 class CachedKafkaConsumer[K, V] private(
   val groupId: String,
@@ -55,9 +56,10 @@ class CachedKafkaConsumer[K, V] private(
   protected var buffer = ju.Collections.emptyList[ConsumerRecord[K, V]]().iterator
   protected var nextOffset = -2L
 
-  /** Get the record for the given offset, waiting up to timeout ms if IO is necessary.
-    * Sequential forward access will use buffers, but random access will be horribly inefficient.
-    */
+  /**
+   * Get the record for the given offset, waiting up to timeout ms if IO is necessary.
+   * Sequential forward access will use buffers, but random access will be horribly inefficient.
+   */
   def get(offset: Long, timeout: Long): ConsumerRecord[K, V] = {
     log.debug(s"get $groupId $topic $partition nextOffset $nextOffset requested $offset")
     if (offset != nextOffset) {
@@ -131,9 +133,10 @@ object CachedKafkaConsumer extends Logging {
     }
   }
 
-  /** Get a cached consumer for groupId, assigned to topic and partition.
-    * If matching consumer doesn't already exist, will be created using kafkaParams.
-    */
+  /**
+   * Get a cached consumer for groupId, assigned to topic and partition.
+   * If matching consumer doesn't already exist, will be created using kafkaParams.
+   */
   def get[K, V](
     groupId: String,
     topic: String,

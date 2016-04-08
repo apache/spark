@@ -147,7 +147,6 @@ private[yarn] class ExecutorRunnable(
 
     // Set the JVM memory
     val executorMemoryString = executorMemory + "m"
-    javaOpts += "-Xms" + executorMemoryString
     javaOpts += "-Xmx" + executorMemoryString
 
     // Set extra Java options for the executor, if defined
@@ -289,8 +288,7 @@ private[yarn] class ExecutorRunnable(
 
   private def prepareEnvironment(container: Container): HashMap[String, String] = {
     val env = new HashMap[String, String]()
-    Client.populateClasspath(null, yarnConf, sparkConf, env, false,
-      sparkConf.get(EXECUTOR_CLASS_PATH))
+    Client.populateClasspath(null, yarnConf, sparkConf, env, sparkConf.get(EXECUTOR_CLASS_PATH))
 
     sparkConf.getExecutorEnv.foreach { case (key, value) =>
       // This assumes each executor environment variable set here is a path

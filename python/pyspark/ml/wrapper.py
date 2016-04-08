@@ -76,6 +76,17 @@ class JavaWrapper(Params):
                 pair = self._make_java_param_pair(param, paramMap[param])
                 self._java_obj.set(pair)
 
+    def _transfer_param_map_to_java(self, pyParamMap):
+        """
+        Transforms a Python ParamMap into a Java ParamMap.
+        """
+        paramMap = JavaWrapper._new_java_obj("org.apache.spark.ml.param.ParamMap")
+        for param in self.params:
+            if param in pyParamMap:
+                pair = self._make_java_param_pair(param, pyParamMap[param])
+                paramMap.put([pair])
+        return paramMap
+
     def _transfer_params_from_java(self):
         """
         Transforms the embedded params from the companion Java object.
@@ -88,6 +99,18 @@ class JavaWrapper(Params):
                     value = _java2py(sc, self._java_obj.getOrDefault(java_param))
                     self._paramMap[param] = value
 
+    def _transfer_param_map_from_java(self, javaParamMap):
+        """
+        Transforms a Java ParamMap into a Python ParamMap.
+        """
+        sc = SparkContext._active_spark_context
+        paramMap = dict()
+        for pair in javaParamMap.toList():
+            param = pair.param()
+            if self.hasParam(str(param.name())):
+                paramMap[self.getParam(param.name())] = _java2py(sc, pair.value())
+        return paramMap
+
     @staticmethod
     def _empty_java_param_map():
         """
@@ -95,12 +118,26 @@ class JavaWrapper(Params):
         """
         return _jvm().org.apache.spark.ml.param.ParamMap()
 
-    def _transfer_stage_to_java(self):
+    def _to_java(self):
+        """
+        Transfer this instance's Params to the wrapped Java object, and return the Java object.
+        Used for ML persistence.
+
+        Meta-algorithms such as Pipeline should override this method.
+
+        :return: Java object equivalent to this instance.
+        """
         self._transfer_params_to_java()
         return self._java_obj
 
     @staticmethod
-    def _transfer_stage_from_java(java_stage):
+    def _from_java(java_stage):
+        """
+        Given a Java object, create and return a Python wrapper of it.
+        Used for ML persistence.
+
+        Meta-algorithms such as Pipeline should override this method as a classmethod.
+        """
         def __get_class(clazz):
             """
             Loads Python class from its name.
@@ -113,13 +150,18 @@ class JavaWrapper(Params):
             return m
         stage_name = java_stage.getClass().getName().replace("org.apache.spark", "pyspark")
         # Generate a default new instance from the stage_name class.
-        py_stage = __get_class(stage_name)()
-        assert(isinstance(py_stage, JavaWrapper),
-               "Python side implementation is not supported in the meta-PipelineStage currently.")
-        # Load information from java_stage to the instance.
-        py_stage._java_obj = java_stage
-        py_stage._resetUid(java_stage.uid())
-        py_stage._transfer_params_from_java()
+        py_type = __get_class(stage_name)
+        if issubclass(py_type, JavaWrapper):
+            # Load information from java_stage to the instance.
+            py_stage = py_type()
+            py_stage._java_obj = java_stage
+            py_stage._resetUid(java_stage.uid())
+            py_stage._transfer_params_from_java()
+        elif hasattr(py_type, "_from_java"):
+            py_stage = py_type._from_java(java_stage)
+        else:
+            raise NotImplementedError("This Java stage cannot be loaded into Python currently: %r"
+                                      % stage_name)
         return py_stage
 
 
@@ -171,8 +213,30 @@ class JavaTransformer(Transformer, JavaWrapper):
         return DataFrame(self._java_obj.transform(dataset._jdf), dataset.sql_ctx)
 
 
+class JavaCallable(object):
+    """
+    Wrapper for a plain object in JVM to make Java calls, can be used
+    as a mixin to another class that defines a _java_obj wrapper
+    """
+    def __init__(self, java_obj=None, sc=None):
+        super(JavaCallable, self).__init__()
+        self._sc = sc if sc is not None else SparkContext._active_spark_context
+        # if this class is a mixin and _java_obj is already defined then don't initialize
+        if java_obj is not None or not hasattr(self, "_java_obj"):
+            self._java_obj = java_obj
+
+    def __del__(self):
+        if self._java_obj is not None:
+            self._sc._gateway.detach(self._java_obj)
+
+    def _call_java(self, name, *args):
+        m = getattr(self._java_obj, name)
+        java_args = [_py2java(self._sc, arg) for arg in args]
+        return _java2py(self._sc, m(*java_args))
+
+
 @inherit_doc
-class JavaModel(Model, JavaTransformer):
+class JavaModel(Model, JavaCallable, JavaTransformer):
     """
     Base class for :py:class:`Model`s that wrap Java/Scala
     implementations. Subclasses should inherit this class before
@@ -217,9 +281,3 @@ class JavaModel(Model, JavaTransformer):
             that._java_obj = self._java_obj.copy(self._empty_java_param_map())
             that._transfer_params_to_java()
         return that
-
-    def _call_java(self, name, *args):
-        m = getattr(self._java_obj, name)
-        sc = SparkContext._active_spark_context
-        java_args = [_py2java(sc, arg) for arg in args]
-        return _java2py(sc, m(*java_args))

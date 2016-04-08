@@ -31,7 +31,9 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{QueryTest, SQLContext}
+import org.apache.spark.sql.{QueryTest, Row, SQLContext}
+import org.apache.spark.sql.catalyst.catalog.CatalogFunction
+import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.hive.test.{TestHive, TestHiveContext}
 import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
@@ -53,6 +55,57 @@ class HiveSparkSubmitSuite
   override def beforeEach() {
     super.beforeEach()
     System.setProperty("spark.testing", "true")
+  }
+
+  test("temporary Hive UDF: define a UDF and use it") {
+    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+    val jar1 = TestUtils.createJarWithClasses(Seq("SparkSubmitClassA"))
+    val jar2 = TestUtils.createJarWithClasses(Seq("SparkSubmitClassB"))
+    val jarsString = Seq(jar1, jar2).map(j => j.toString).mkString(",")
+    val args = Seq(
+      "--class", TemporaryHiveUDFTest.getClass.getName.stripSuffix("$"),
+      "--name", "TemporaryHiveUDFTest",
+      "--master", "local-cluster[2,1,1024]",
+      "--conf", "spark.ui.enabled=false",
+      "--conf", "spark.master.rest.enabled=false",
+      "--driver-java-options", "-Dderby.system.durability=test",
+      "--jars", jarsString,
+      unusedJar.toString, "SparkSubmitClassA", "SparkSubmitClassB")
+    runSparkSubmit(args)
+  }
+
+  test("permanent Hive UDF: define a UDF and use it") {
+    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+    val jar1 = TestUtils.createJarWithClasses(Seq("SparkSubmitClassA"))
+    val jar2 = TestUtils.createJarWithClasses(Seq("SparkSubmitClassB"))
+    val jarsString = Seq(jar1, jar2).map(j => j.toString).mkString(",")
+    val args = Seq(
+      "--class", PermanentHiveUDFTest1.getClass.getName.stripSuffix("$"),
+      "--name", "PermanentHiveUDFTest1",
+      "--master", "local-cluster[2,1,1024]",
+      "--conf", "spark.ui.enabled=false",
+      "--conf", "spark.master.rest.enabled=false",
+      "--driver-java-options", "-Dderby.system.durability=test",
+      "--jars", jarsString,
+      unusedJar.toString, "SparkSubmitClassA", "SparkSubmitClassB")
+    runSparkSubmit(args)
+  }
+
+  test("permanent Hive UDF: use a already defined permanent function") {
+    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+    val jar1 = TestUtils.createJarWithClasses(Seq("SparkSubmitClassA"))
+    val jar2 = TestUtils.createJarWithClasses(Seq("SparkSubmitClassB"))
+    val jarsString = Seq(jar1, jar2).map(j => j.toString).mkString(",")
+    val args = Seq(
+      "--class", PermanentHiveUDFTest2.getClass.getName.stripSuffix("$"),
+      "--name", "PermanentHiveUDFTest2",
+      "--master", "local-cluster[2,1,1024]",
+      "--conf", "spark.ui.enabled=false",
+      "--conf", "spark.master.rest.enabled=false",
+      "--driver-java-options", "-Dderby.system.durability=test",
+      "--jars", jarsString,
+      unusedJar.toString, "SparkSubmitClassA", "SparkSubmitClassB")
+    runSparkSubmit(args)
   }
 
   test("SPARK-8368: includes jars passed in through --jars") {
@@ -135,6 +188,19 @@ class HiveSparkSubmitSuite
     runSparkSubmit(args)
   }
 
+  test("SPARK-14244 fix window partition size attribute binding failure") {
+    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+    val args = Seq(
+      "--class", SPARK_14244.getClass.getName.stripSuffix("$"),
+      "--name", "SparkSQLConfTest",
+      "--master", "local-cluster[2,1,1024]",
+      "--conf", "spark.ui.enabled=false",
+      "--conf", "spark.master.rest.enabled=false",
+      "--driver-java-options", "-Dderby.system.durability=test",
+      unusedJar.toString)
+    runSparkSubmit(args)
+  }
+
   // NOTE: This is an expensive operation in terms of time (10 seconds+). Use sparingly.
   // This is copied from org.apache.spark.deploy.SparkSubmitSuite
   private def runSparkSubmit(args: Seq[String]): Unit = {
@@ -192,6 +258,118 @@ class HiveSparkSubmitSuite
       // Ensure we still kill the process in case it timed out
       process.destroy()
     }
+  }
+}
+
+// This application is used to test defining a new Hive UDF (with an associated jar)
+// and use this UDF. We need to run this test in separate JVM to make sure we
+// can load the jar defined with the function.
+object TemporaryHiveUDFTest extends Logging {
+  def main(args: Array[String]) {
+    Utils.configTestLog4j("INFO")
+    val conf = new SparkConf()
+    conf.set("spark.ui.enabled", "false")
+    val sc = new SparkContext(conf)
+    val hiveContext = new TestHiveContext(sc)
+
+    // Load a Hive UDF from the jar.
+    logInfo("Registering a temporary Hive UDF provided in a jar.")
+    val jar = hiveContext.getHiveFile("hive-contrib-0.13.1.jar").getCanonicalPath
+    hiveContext.sql(
+      s"""
+         |CREATE TEMPORARY FUNCTION example_max
+         |AS 'org.apache.hadoop.hive.contrib.udaf.example.UDAFExampleMax'
+         |USING JAR '$jar'
+      """.stripMargin)
+    val source =
+      hiveContext.createDataFrame((1 to 10).map(i => (i, s"str$i"))).toDF("key", "val")
+    source.registerTempTable("sourceTable")
+    // Actually use the loaded UDF.
+    logInfo("Using the UDF.")
+    val result = hiveContext.sql(
+      "SELECT example_max(key) as key, val FROM sourceTable GROUP BY val")
+    logInfo("Running a simple query on the table.")
+    val count = result.orderBy("key", "val").count()
+    if (count != 10) {
+      throw new Exception(s"Result table should have 10 rows instead of $count rows")
+    }
+    hiveContext.sql("DROP temporary FUNCTION example_max")
+    logInfo("Test finishes.")
+    sc.stop()
+  }
+}
+
+// This application is used to test defining a new Hive UDF (with an associated jar)
+// and use this UDF. We need to run this test in separate JVM to make sure we
+// can load the jar defined with the function.
+object PermanentHiveUDFTest1 extends Logging {
+  def main(args: Array[String]) {
+    Utils.configTestLog4j("INFO")
+    val conf = new SparkConf()
+    conf.set("spark.ui.enabled", "false")
+    val sc = new SparkContext(conf)
+    val hiveContext = new TestHiveContext(sc)
+
+    // Load a Hive UDF from the jar.
+    logInfo("Registering a permanent Hive UDF provided in a jar.")
+    val jar = hiveContext.getHiveFile("hive-contrib-0.13.1.jar").getCanonicalPath
+    hiveContext.sql(
+      s"""
+         |CREATE FUNCTION example_max
+         |AS 'org.apache.hadoop.hive.contrib.udaf.example.UDAFExampleMax'
+         |USING JAR '$jar'
+      """.stripMargin)
+    val source =
+      hiveContext.createDataFrame((1 to 10).map(i => (i, s"str$i"))).toDF("key", "val")
+    source.registerTempTable("sourceTable")
+    // Actually use the loaded UDF.
+    logInfo("Using the UDF.")
+    val result = hiveContext.sql(
+      "SELECT example_max(key) as key, val FROM sourceTable GROUP BY val")
+    logInfo("Running a simple query on the table.")
+    val count = result.orderBy("key", "val").count()
+    if (count != 10) {
+      throw new Exception(s"Result table should have 10 rows instead of $count rows")
+    }
+    hiveContext.sql("DROP FUNCTION example_max")
+    logInfo("Test finishes.")
+    sc.stop()
+  }
+}
+
+// This application is used to test that a pre-defined permanent function with a jar
+// resources can be used. We need to run this test in separate JVM to make sure we
+// can load the jar defined with the function.
+object PermanentHiveUDFTest2 extends Logging {
+  def main(args: Array[String]) {
+    Utils.configTestLog4j("INFO")
+    val conf = new SparkConf()
+    conf.set("spark.ui.enabled", "false")
+    val sc = new SparkContext(conf)
+    val hiveContext = new TestHiveContext(sc)
+    // Load a Hive UDF from the jar.
+    logInfo("Write the metadata of a permanent Hive UDF into metastore.")
+    val jar = hiveContext.getHiveFile("hive-contrib-0.13.1.jar").getCanonicalPath
+    val function = CatalogFunction(
+      FunctionIdentifier("example_max"),
+      "org.apache.hadoop.hive.contrib.udaf.example.UDAFExampleMax",
+      ("JAR" -> jar) :: Nil)
+    hiveContext.sessionState.catalog.createFunction(function, ignoreIfExists = false)
+    val source =
+      hiveContext.createDataFrame((1 to 10).map(i => (i, s"str$i"))).toDF("key", "val")
+    source.registerTempTable("sourceTable")
+    // Actually use the loaded UDF.
+    logInfo("Using the UDF.")
+    val result = hiveContext.sql(
+      "SELECT example_max(key) as key, val FROM sourceTable GROUP BY val")
+    logInfo("Running a simple query on the table.")
+    val count = result.orderBy("key", "val").count()
+    if (count != 10) {
+      throw new Exception(s"Result table should have 10 rows instead of $count rows")
+    }
+    hiveContext.sql("DROP FUNCTION example_max")
+    logInfo("Test finishes.")
+    sc.stop()
   }
 }
 
@@ -373,6 +551,35 @@ object SPARK_11009 extends QueryTest {
       if (df3.rdd.count() != 0) {
         throw new Exception("df3 should have 0 output row.")
       }
+    } finally {
+      sparkContext.stop()
+    }
+  }
+}
+
+object SPARK_14244 extends QueryTest {
+  import org.apache.spark.sql.expressions.Window
+  import org.apache.spark.sql.functions._
+
+  protected var sqlContext: SQLContext = _
+
+  def main(args: Array[String]): Unit = {
+    Utils.configTestLog4j("INFO")
+
+    val sparkContext = new SparkContext(
+      new SparkConf()
+        .set("spark.ui.enabled", "false")
+        .set("spark.sql.shuffle.partitions", "100"))
+
+    val hiveContext = new TestHiveContext(sparkContext)
+    sqlContext = hiveContext
+
+    import hiveContext.implicits._
+
+    try {
+      val window = Window.orderBy('id)
+      val df = sqlContext.range(2).select(cume_dist().over(window).as('cdist)).orderBy('cdist)
+      checkAnswer(df, Seq(Row(0.5D), Row(1.0D)))
     } finally {
       sparkContext.stop()
     }
