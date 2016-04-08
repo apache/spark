@@ -1181,15 +1181,18 @@ class DataFrame(object):
         Space-efficient Online Computation of Quantile Summaries]]
         by Greenwald and Khanna.
 
-        :param cols: the name(s) of the numerical column(s)
+        :param cols: str, list.
+            The name(s) of the numerical column(s). Can be a string of the name
+            of a single column or the list of the names of multiple columns.
         :param probabilities: a list of quantile probabilities
-          Each number must belong to [0, 1].
-          For example 0 is the minimum, 0.5 is the median, 1 is the maximum.
-        :param relativeError:  The relative target precision to achieve
-          (>= 0). If set to zero, the exact quantiles are computed, which
-          could be very expensive. Note that values greater than 1 are
-          accepted but give the same result as 1.
-        :return:  the approximate quantiles at the given probabilities
+            Each number must belong to [0, 1].
+            For example 0 is the minimum, 0.5 is the median, 1 is the maximum.
+        :param relativeError: The relative target precision to achieve
+            (>= 0). If set to zero, the exact quantiles are computed, which
+            could be very expensive. Note that values greater than 1 are
+            accepted but give the same result as 1.
+        :return: the approximate quantiles at the given probabilities for
+            the given column or columns.
         """
         if not isinstance(cols, (str, list, tuple)):
             raise ValueError("col should be a string, list or tuple.")
