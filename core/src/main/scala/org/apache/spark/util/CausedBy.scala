@@ -22,8 +22,7 @@ package org.apache.spark.util
  * If the error contains no cause, it will return the error itself.
  *
  * Usage:
- * try
- * {
+ * try {
  *   ...
  * }
  * catch {
