@@ -540,9 +540,13 @@ case class TungstenAggregate(
     ctx.INPUT_ROW = buffer
     // TODO: support subexpression elimination
     val evals = updateExpr.map(BindReferences.bindReference(_, inputAttr).gen(ctx))
-    val updates = evals.zipWithIndex.map { case (ev, i) =>
+    val updateAggregateBuffer = evals.zipWithIndex.map { case (ev, i) =>
       val dt = updateExpr(i).dataType
       ctx.updateColumn(buffer, dt, i, ev, updateExpr(i).nullable)
+    }
+    val updateAggregateRow = evals.zipWithIndex.map { case (ev, i) =>
+      val dt = updateExpr(i).dataType
+      ctx.updateColumn(aggregateRow, dt, groupingKeySchema.length + i, ev, updateExpr(i).nullable)
     }
 
     val (checkFallback, resetCounter, incCounter) = if (testFallbackStartsAt.isDefined) {
@@ -590,11 +594,16 @@ case class TungstenAggregate(
      }
      $incCounter
 
-     /* ${evals.map(_.value).mkString(" |||||||||||| ")} */
      // evaluate aggregate function
      ${evaluateVariables(evals)}
-     // update aggregate buffer
-     ${updates.mkString("\n").trim}
+
+     if ($aggregateRow != null) {
+       // update aggregate row
+       ${updateAggregateRow.mkString("\n").trim}
+     } else {
+       // update aggregate buffer
+       ${updateAggregateBuffer.mkString("\n").trim}
+     }
      """
   }
 
