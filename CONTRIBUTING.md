@@ -26,7 +26,7 @@ little bit helps, and credit will always be given.
 
 Report bugs through Github
 
-We now provide a [templated issue form](https://github.com/airbnb/airflow/blob/master/ISSUE_TEMPLATE.md). You must provide information for all required fields else the bug will be closed.
+We now provide a [templated issue form](https://github.com/airbnb/airflow/blob/master/.github/ISSUE_TEMPLATE.md). You must provide information for all required fields else the bug will be closed.
 
 
 ### Fix Bugs
