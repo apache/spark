@@ -267,7 +267,7 @@ class ReplSuite extends SparkFunSuite {
     val output = runInterpreter("local",
       """
         |import org.apache.spark.sql.functions._
-        |import org.apache.spark.sql.Encoder
+        |import org.apache.spark.sql.{Encoder, Encoders}
         |import org.apache.spark.sql.expressions.Aggregator
         |import org.apache.spark.sql.TypedColumn
         |val simpleSum = new Aggregator[Int, Int, Int] {
