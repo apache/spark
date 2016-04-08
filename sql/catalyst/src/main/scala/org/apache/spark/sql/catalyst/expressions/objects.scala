@@ -524,22 +524,26 @@ case class CreateExternalRow(children: Seq[Expression], schema: StructType)
   override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     val rowClass = classOf[GenericRowWithSchema].getName
     val values = ctx.freshName("values")
-    val schemaField = ctx.addReferenceObj("schema", schema)
-    s"""
-      boolean ${ev.isNull} = false;
-      final Object[] $values = new Object[${children.size}];
-    """ +
-      children.zipWithIndex.map { case (e, i) =>
-        val eval = e.gen(ctx)
-        eval.code + s"""
+    ctx.addMutableState("Object[]", values, "")
+
+    val childrenCodes = children.zipWithIndex.map { case (e, i) =>
+      val eval = e.gen(ctx)
+      eval.code + s"""
           if (${eval.isNull}) {
             $values[$i] = null;
           } else {
             $values[$i] = ${eval.value};
           }
          """
-      }.mkString("\n") +
-      s"final ${classOf[Row].getName} ${ev.value} = new $rowClass($values, this.$schemaField);"
+    }
+    val childrenCode = ctx.splitExpressions(ctx.INPUT_ROW, childrenCodes)
+    val schemaField = ctx.addReferenceObj("schema", schema)
+    s"""
+      boolean ${ev.isNull} = false;
+      $values = new Object[${children.size}];
+      $childrenCode
+      final ${classOf[Row].getName} ${ev.value} = new $rowClass($values, this.$schemaField);
+      """
   }
 }
 
