@@ -21,6 +21,8 @@ import java.util.StringTokenizer
 
 import scala.collection.mutable.{ArrayBuilder, ListBuffer}
 
+import org.apache.spark.SparkException
+
 /**
  * Simple parser for a numeric structure consisting of three types:
  *

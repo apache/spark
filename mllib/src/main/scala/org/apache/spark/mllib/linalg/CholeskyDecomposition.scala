@@ -23,7 +23,7 @@ import org.netlib.util.intW
 /**
  * Compute Cholesky decomposition.
  */
-private[mllib] object CholeskyDecomposition {
+private[spark] object CholeskyDecomposition {
 
   /**
    * Solves a symmetric positive definite linear system via Cholesky factorization.

@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.util
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 
 class NumericParserSuite extends SparkFunSuite {
 
