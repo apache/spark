@@ -773,6 +773,28 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     )
   }
 
+  test("Find compatible types even if inferred DecimalType is not capable of other IntegralType") {
+    val mixedIntegerAndDoubleRecords = sparkContext.parallelize(
+      """{"a": 3, "b": 1.1}""" ::
+      s"""{"a": 3.1, "b": 0.${"0" * 38}1}""" :: Nil)
+    val jsonDF = sqlContext.read
+      .option("prefersDecimal", "true")
+      .json(mixedIntegerAndDoubleRecords)
+
+    // The values in `a` field will be decimals as they fit in decimal. For `b` field,
+    // they will be doubles as `1.0E-39D` does not fit.
+    val expectedSchema = StructType(
+      StructField("a", DecimalType(21, 1), true) ::
+      StructField("b", DoubleType, true) :: Nil)
+
+    assert(expectedSchema === jsonDF.schema)
+    checkAnswer(
+      jsonDF,
+      Row(BigDecimal("3"), 1.1D) ::
+      Row(BigDecimal("3.1"), 1.0E-39D) :: Nil
+    )
+  }
+
   test("Infer big integers correctly even when it does not fit in decimal") {
     val jsonDF = sqlContext.read
       .json(bigIntegerRecords)
