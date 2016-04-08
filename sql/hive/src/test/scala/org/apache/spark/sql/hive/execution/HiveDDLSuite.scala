@@ -47,7 +47,7 @@ class HiveDDLSuite
     assert (!fs.exists(dbPath))
 
     sql("CREATE DATABASE db1")
-    val db1 = catalog.getDatabase(dbName)
+    val db1 = catalog.getDatabaseMetadata(dbName)
     assert(db1 == CatalogDatabase(
       dbName,
       "",

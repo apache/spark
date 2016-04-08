@@ -116,7 +116,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       try {
         val dbNameWithoutBackTicks = cleanIdentifier(dbName)
         sql(s"CREATE DATABASE $dbName Location '${System.getProperty("java.io.tmpdir")}'")
-        val db1 = catalog.getDatabase(dbNameWithoutBackTicks)
+        val db1 = catalog.getDatabaseMetadata(dbNameWithoutBackTicks)
         assert(db1 == CatalogDatabase(
           dbNameWithoutBackTicks,
           "",
