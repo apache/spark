@@ -29,19 +29,14 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods.{compact, parse => parseJson, render}
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.{AlphaComponent, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.util.NumericParser
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
-import org.apache.spark.sql.catalyst.util.GenericArrayData
-import org.apache.spark.sql.types._
 
 /**
  * Represents a numeric vector, whose index type is Int and value type is Double.
  *
  * Note: Users should not implement this interface.
  */
-@SQLUserDefinedType(udt = classOf[VectorUDT])
 @Since("1.0.0")
 sealed trait Vector extends Serializable {
 
@@ -180,84 +175,6 @@ sealed trait Vector extends Serializable {
    */
   @Since("1.6.0")
   def toJson: String
-}
-
-/**
- * :: AlphaComponent ::
- *
- * User-defined type for [[Vector]] which allows easy interaction with SQL
- * via [[org.apache.spark.sql.DataFrame]].
- */
-@AlphaComponent
-class VectorUDT extends UserDefinedType[Vector] {
-
-  override def sqlType: StructType = {
-    // type: 0 = sparse, 1 = dense
-    // We only use "values" for dense vectors, and "size", "indices", and "values" for sparse
-    // vectors. The "values" field is nullable because we might want to add binary vectors later,
-    // which uses "size" and "indices", but not "values".
-    StructType(Seq(
-      StructField("type", ByteType, nullable = false),
-      StructField("size", IntegerType, nullable = true),
-      StructField("indices", ArrayType(IntegerType, containsNull = false), nullable = true),
-      StructField("values", ArrayType(DoubleType, containsNull = false), nullable = true)))
-  }
-
-  override def serialize(obj: Vector): InternalRow = {
-    obj match {
-      case SparseVector(size, indices, values) =>
-        val row = new GenericMutableRow(4)
-        row.setByte(0, 0)
-        row.setInt(1, size)
-        row.update(2, new GenericArrayData(indices.map(_.asInstanceOf[Any])))
-        row.update(3, new GenericArrayData(values.map(_.asInstanceOf[Any])))
-        row
-      case DenseVector(values) =>
-        val row = new GenericMutableRow(4)
-        row.setByte(0, 1)
-        row.setNullAt(1)
-        row.setNullAt(2)
-        row.update(3, new GenericArrayData(values.map(_.asInstanceOf[Any])))
-        row
-    }
-  }
-
-  override def deserialize(datum: Any): Vector = {
-    datum match {
-      case row: InternalRow =>
-        require(row.numFields == 4,
-          s"VectorUDT.deserialize given row with length ${row.numFields} but requires length == 4")
-        val tpe = row.getByte(0)
-        tpe match {
-          case 0 =>
-            val size = row.getInt(1)
-            val indices = row.getArray(2).toIntArray()
-            val values = row.getArray(3).toDoubleArray()
-            new SparseVector(size, indices, values)
-          case 1 =>
-            val values = row.getArray(3).toDoubleArray()
-            new DenseVector(values)
-        }
-    }
-  }
-
-  override def pyUDT: String = "pyspark.mllib.linalg.VectorUDT"
-
-  override def userClass: Class[Vector] = classOf[Vector]
-
-  override def equals(o: Any): Boolean = {
-    o match {
-      case v: VectorUDT => true
-      case _ => false
-    }
-  }
-
-  // see [SPARK-8647], this achieves the needed constant hash code without constant no.
-  override def hashCode(): Int = classOf[VectorUDT].getName.hashCode()
-
-  override def typeName: String = "vector"
-
-  private[spark] override def asNullable: VectorUDT = this
 }
 
 /**
@@ -579,7 +496,6 @@ object Vectors {
  * A dense vector represented by a value array.
  */
 @Since("1.0.0")
-@SQLUserDefinedType(udt = classOf[VectorUDT])
 class DenseVector @Since("1.0.0") (
     @Since("1.0.0") val values: Array[Double]) extends Vector {
 
@@ -704,7 +620,6 @@ object DenseVector {
  * @param values value array, must have the same length as the index array.
  */
 @Since("1.0.0")
-@SQLUserDefinedType(udt = classOf[VectorUDT])
 class SparseVector @Since("1.0.0") (
     @Since("1.0.0") override val size: Int,
     @Since("1.0.0") val indices: Array[Int],

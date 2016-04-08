@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
@@ -378,10 +379,28 @@ object ScalaReflection extends ScalaReflection {
         Utils.classForName(className).isAnnotationPresent(classOf[SQLUserDefinedType]) =>
         val udt = Utils.classForName(className)
           .getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance()
+        val annotation = udt.userClass.getAnnotation(classOf[SQLUserDefinedType])
+        val udtClass: Class[_] = if (annotation != null) {
+          annotation.udt()
+        } else {
+          UDTRegistration.getUDTFor(udt.userClass).getOrElse {
+            throw new SparkException(s"${udt.userClass.getName} is not annotated with " +
+              "SQLUserDefinedType nor registered with UDTRegistration.}")
+          }
+        }
         val obj = NewInstance(
-          udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt(),
+          udtClass,
           Nil,
-          dataType = ObjectType(udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt()))
+          dataType = ObjectType(udtClass))
+        Invoke(obj, "deserialize", ObjectType(udt.userClass), getPath :: Nil)
+
+      case t if UDTRegistration.exists(Utils.classForName(className)) =>
+        val udt = UDTRegistration.getUDTFor(Utils.classForName(className)).get.newInstance()
+          .asInstanceOf[UserDefinedType[_]]
+        val obj = NewInstance(
+          udt.getClass,
+          Nil,
+          dataType = ObjectType(udt.getClass))
         Invoke(obj, "deserialize", ObjectType(udt.userClass), getPath :: Nil)
     }
   }
@@ -593,10 +612,28 @@ object ScalaReflection extends ScalaReflection {
           Utils.classForName(className).isAnnotationPresent(classOf[SQLUserDefinedType]) =>
           val udt = Utils.classForName(className)
             .getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance()
+          val annotation = udt.userClass.getAnnotation(classOf[SQLUserDefinedType])
+          val udtClass: Class[_] = if (annotation != null) {
+            annotation.udt()
+          } else {
+            UDTRegistration.getUDTFor(udt.userClass).getOrElse {
+              throw new SparkException(s"${udt.userClass.getName} is not annotated with " +
+                "SQLUserDefinedType nor registered with UDTRegistration.}")
+            }
+          }
           val obj = NewInstance(
-            udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt(),
+            udtClass,
             Nil,
-            dataType = ObjectType(udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt()))
+            dataType = ObjectType(udtClass))
+          Invoke(obj, "serialize", udt.sqlType, inputObject :: Nil)
+
+        case t if UDTRegistration.exists(Utils.classForName(className)) =>
+          val udt = UDTRegistration.getUDTFor(Utils.classForName(className)).get.newInstance()
+            .asInstanceOf[UserDefinedType[_]]
+          val obj = NewInstance(
+            udt.getClass,
+            Nil,
+            dataType = ObjectType(udt.getClass))
           Invoke(obj, "serialize", udt.sqlType, inputObject :: Nil)
 
         case other =>
@@ -698,6 +735,10 @@ trait ScalaReflection {
         //       Java appends a '$' to the object name but Scala does not).
         val udt = Utils.classForName(className)
           .getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance()
+        Schema(udt, nullable = true)
+      case t if UDTRegistration.exists(Utils.classForName(className)) =>
+        val udt = UDTRegistration.getUDTFor(Utils.classForName(className)).get.newInstance()
+          .asInstanceOf[UserDefinedType[_]]
         Schema(udt, nullable = true)
       case t if t <:< localTypeOf[Option[_]] =>
         val TypeRef(_, _, Seq(optType)) = t

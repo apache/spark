@@ -21,14 +21,17 @@ import scala.beans.{BeanInfo, BeanProperty}
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
-@SQLUserDefinedType(udt = classOf[MyDenseVectorUDT])
-private[sql] class MyDenseVector(val data: Array[Double]) extends Serializable {
+private[sql] trait DenseVector extends Serializable
+
+private[sql] class MyDenseVector(val data: Array[Double]) extends DenseVector with Serializable {
   override def equals(other: Any): Boolean = other match {
     case v: MyDenseVector =>
       java.util.Arrays.equals(this.data, v.data)
@@ -36,27 +39,67 @@ private[sql] class MyDenseVector(val data: Array[Double]) extends Serializable {
   }
 }
 
+private[sql] class MyDenseVector2(val data: Array[Double]) extends DenseVector with Serializable {
+  override def equals(other: Any): Boolean = other match {
+    case v: MyDenseVector =>
+      java.util.Arrays.equals(this.data, v.data)
+    case _ => false
+  }
+}
+
+object MyDenseVector {
+  def unapply(dv: MyDenseVector): Option[Array[Double]] = Some(dv.data)
+}
+
+object MyDenseVector2 {
+  def unapply(dv: MyDenseVector2): Option[Array[Double]] = Some(dv.data)
+}
+
 @BeanInfo
 private[sql] case class MyLabeledPoint(
     @BeanProperty label: Double,
-    @BeanProperty features: MyDenseVector)
+    @BeanProperty features: DenseVector)
 
-private[sql] class MyDenseVectorUDT extends UserDefinedType[MyDenseVector] {
+private[sql] class MyDenseVectorUDT extends UserDefinedType[DenseVector] {
 
-  override def sqlType: DataType = ArrayType(DoubleType, containsNull = false)
-
-  override def serialize(features: MyDenseVector): ArrayData = {
-    new GenericArrayData(features.data.map(_.asInstanceOf[Any]))
+  override def sqlType: DataType = {
+    // type: 0 = MyDenseVector, 1 = MyDenseVector2
+    StructType(Seq(
+      StructField("type", ByteType, nullable = false),
+      StructField("values", ArrayType(DoubleType, containsNull = false), nullable = false)))
   }
 
-  override def deserialize(datum: Any): MyDenseVector = {
+  override def serialize(features: DenseVector): InternalRow = {
+    val row = new GenericMutableRow(2)
+    features match {
+      case MyDenseVector(data) =>
+        row.setByte(0, 0)
+        row.update(1, new GenericArrayData(data.map(_.asInstanceOf[Any])))
+      case MyDenseVector2(data) =>
+        row.setByte(0, 1)
+        row.update(1, new GenericArrayData(data.map(_.asInstanceOf[Any])))
+    }
+    row
+  }
+
+  override def deserialize(datum: Any): DenseVector = {
     datum match {
-      case data: ArrayData =>
-        new MyDenseVector(data.toDoubleArray())
+      case row: InternalRow =>
+        require(row.numFields == 2, "MyDenseVectorUDT.deserialize given row with length " +
+          s"${row.numFields} but requires length == 2")
+        val tpe = row.getByte(0)
+        tpe match {
+          case 0 =>
+            val values = row.getArray(1).toDoubleArray()
+            new MyDenseVector(values)
+          case 1 =>
+            val values = row.getArray(1).toDoubleArray()
+            new MyDenseVector2(values)
+        }
     }
   }
 
-  override def userClass: Class[MyDenseVector] = classOf[MyDenseVector]
+  override def userClass: Class[DenseVector] = classOf[DenseVector]
 
   private[spark] override def asNullable: MyDenseVectorUDT = this
 
@@ -68,6 +111,10 @@ private[sql] class MyDenseVectorUDT extends UserDefinedType[MyDenseVector] {
 
 class UserDefinedTypeSuite extends QueryTest with SharedSQLContext with ParquetTest {
   import testImplicits._
+
+  UDTRegistration.register(classOf[DenseVector], classOf[MyDenseVectorUDT])
+  UDTRegistration.register(classOf[MyDenseVector], classOf[MyDenseVectorUDT])
+  UDTRegistration.register(classOf[MyDenseVector2], classOf[MyDenseVectorUDT])
 
   private lazy val pointsRDD = Seq(
     MyLabeledPoint(1.0, new MyDenseVector(Array(0.1, 1.0))),
@@ -131,8 +178,8 @@ class UserDefinedTypeSuite extends QueryTest with SharedSQLContext with ParquetT
 
   test("UDTs with JSON") {
     val data = Seq(
-      "{\"id\":1,\"vec\":[1.1,2.2,3.3,4.4]}",
-      "{\"id\":2,\"vec\":[2.25,4.5,8.75]}"
+      "{\"id\":1,\"vec\":{\"type\":0, \"values\":[1.1,2.2,3.3,4.4]}}",
+      "{\"id\":2,\"vec\":{\"tyep\":0, \"values\":[2.25,4.5,8.75]}}"
     )
     val schema = StructType(Seq(
       StructField("id", IntegerType, false),
