@@ -68,6 +68,10 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       schema = Seq()), ignoreIfExists = false)
   }
 
+  private def dropTable(catalog: SessionCatalog, name: TableIdentifier): Unit = {
+    catalog.dropTable(name, ignoreIfNotExists = false)
+  }
+
   private def createTablePartition(
       catalog: SessionCatalog,
       spec: TablePartitionSpec,
@@ -218,7 +222,38 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
-  // TODO: test drop database in restrict mode
+  test("drop non-empty database in restrict mode") {
+    val catalog = sqlContext.sessionState.catalog
+    val dbName = "db1"
+    sql(s"CREATE DATABASE $dbName")
+
+    // create a table in database
+    val tableIdent1 = TableIdentifier("tab1", Some(dbName))
+    createTable(catalog, tableIdent1)
+
+    // drop a non-empty database in Restrict mode
+    val message = intercept[AnalysisException] {
+      sql(s"DROP DATABASE $dbName RESTRICT")
+    }.getMessage
+    assert(message.contains(s"Database '$dbName' is not empty. One or more tables exist"))
+
+    dropTable(catalog, tableIdent1)
+    sql(s"DROP DATABASE $dbName RESTRICT")
+  }
+
+  test("drop non-empty database in cascade mode") {
+    val catalog = sqlContext.sessionState.catalog
+    val dbName = "db1"
+    sql(s"CREATE DATABASE $dbName")
+
+    // create a table in database
+    val tableIdent1 = TableIdentifier("tab1", Some(dbName))
+    createTable(catalog, tableIdent1)
+
+    // drop a non-empty database in CASCADE mode
+    dropTable(catalog, tableIdent1)
+    sql(s"DROP DATABASE $dbName CASCADE")
+  }
 
   test("alter table: rename") {
     val catalog = sqlContext.sessionState.catalog
@@ -342,8 +377,6 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     assertUnsupported("ALTER TABLE dbx.tab1 NOT SKEWED")
     assertUnsupported("ALTER TABLE dbx.tab1 NOT STORED AS DIRECTORIES")
   }
-
-  // TODO: ADD a testcase for Drop Database in Restric when we can create tables in SQLContext
 
   test("show tables") {
     withTempTable("show1a", "show2b") {
