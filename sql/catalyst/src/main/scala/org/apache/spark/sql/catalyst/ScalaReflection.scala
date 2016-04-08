@@ -394,7 +394,8 @@ object ScalaReflection extends ScalaReflection {
           dataType = ObjectType(udtClass))
         Invoke(obj, "deserialize", ObjectType(udt.userClass), getPath :: Nil)
 
-      case t if UDTRegistration.exists(Utils.classForName(className)) =>
+      case t if Utils.classIsLoadable(className) &&
+        UDTRegistration.exists(Utils.classForName(className)) =>
         val udt = UDTRegistration.getUDTFor(Utils.classForName(className)).get.newInstance()
           .asInstanceOf[UserDefinedType[_]]
         val obj = NewInstance(
@@ -627,7 +628,8 @@ object ScalaReflection extends ScalaReflection {
             dataType = ObjectType(udtClass))
           Invoke(obj, "serialize", udt.sqlType, inputObject :: Nil)
 
-        case t if UDTRegistration.exists(Utils.classForName(className)) =>
+        case t if Utils.classIsLoadable(className) &&
+          UDTRegistration.exists(Utils.classForName(className)) =>
           val udt = UDTRegistration.getUDTFor(Utils.classForName(className)).get.newInstance()
             .asInstanceOf[UserDefinedType[_]]
           val obj = NewInstance(
@@ -736,7 +738,8 @@ trait ScalaReflection {
         val udt = Utils.classForName(className)
           .getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance()
         Schema(udt, nullable = true)
-      case t if UDTRegistration.exists(Utils.classForName(className)) =>
+      case t if Utils.classIsLoadable(className) &&
+        UDTRegistration.exists(Utils.classForName(className)) =>
         val udt = UDTRegistration.getUDTFor(Utils.classForName(className)).get.newInstance()
           .asInstanceOf[UserDefinedType[_]]
         Schema(udt, nullable = true)
