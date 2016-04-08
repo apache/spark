@@ -19,7 +19,7 @@ package org.apache.spark.ml.classification
 
 import scala.collection.mutable
 
-import breeze.linalg.{DenseVector => BDV}
+import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, Vector => BV}
 import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS, OWLQN => BreezeOWLQN}
 import org.apache.hadoop.fs.Path
 
@@ -257,6 +257,26 @@ class LogisticRegression @Since("1.2.0") (
     this
   }
 
+  /**
+   * Whether to use sparse data structures when aggregating feature info. This is {@code false} by default. It should
+   * be set to {@code true} if the number of actual features which exist across your whole training set is much less
+   * than the size of your feature vectors.
+   *
+   * @group param
+   */
+  @Since("TBD")
+  final val useSparseAgg: BooleanParam = new BooleanParam(this, "useSparseAgg", "use sparse data structure when aggregating feature stats?")
+
+  /** @group getParam */
+  @Since("TBD")
+  def getUseSparseAgg: Boolean = $(useSparseAgg)
+
+  /** @group setParam */
+  @Since("TBD")
+  def setUseSparseAgg(value: Boolean): this.type = set(useSparseAgg, value)
+
+  setDefault(useSparseAgg -> false)
+
   override protected[spark] def train(dataset: DataFrame): LogisticRegressionModel = {
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
     train(dataset, handlePersistence)
@@ -283,7 +303,7 @@ class LogisticRegression @Since("1.2.0") (
           (c1._1.merge(c2._1), c1._2.merge(c2._2))
 
       instances.treeAggregate(
-        new MultivariateOnlineSummarizer, new MultiClassSummarizer)(seqOp, combOp)
+        new MultivariateOnlineSummarizer($(useSparseAgg)), new MultiClassSummarizer)(seqOp, combOp)
     }
 
     val histogram = labelSummarizer.histogram
@@ -323,17 +343,17 @@ class LogisticRegression @Since("1.2.0") (
             s"so the algorithm may not converge.")
         }
 
-        val featuresMean = summarizer.mean.toArray
-        val featuresStd = summarizer.variance.toArray.map(math.sqrt)
+    val featuresStd: Vector = VectorBuilders.fromVector(summarizer.variance)
+        .mapActive((i, v) => math.sqrt(v)).toVector
 
         val regParamL1 = $(elasticNetParam) * $(regParam)
         val regParamL2 = (1.0 - $(elasticNetParam)) * $(regParam)
 
-        val costFun = new LogisticCostFun(instances, numClasses, $(fitIntercept),
-          $(standardization), featuresStd, featuresMean, regParamL2)
+    val costFun = new LogisticCostFun(instances, numClasses, $(fitIntercept), $(standardization),
+      featuresStd, regParamL2, $(useSparseAgg))
 
         val optimizer = if ($(elasticNetParam) == 0.0 || $(regParam) == 0.0) {
-          new BreezeLBFGS[BDV[Double]]($(maxIter), 10, $(tol))
+          new BreezeLBFGS[BV[Double]]($(maxIter), 10, $(tol))
         } else {
           val standardizationParam = $(standardization)
           def regParamL1Fun = (index: Int) => {
@@ -353,11 +373,13 @@ class LogisticRegression @Since("1.2.0") (
               }
             }
           }
-          new BreezeOWLQN[Int, BDV[Double]]($(maxIter), 10, regParamL1Fun, $(tol))
+          new BreezeOWLQN[Int, BV[Double]]($(maxIter), 10, regParamL1Fun, $(tol))
         }
 
-        val initialCoefficientsWithIntercept =
-          Vectors.zeros(if ($(fitIntercept)) numFeatures + 1 else numFeatures)
+        val initialCoefficientsWithIntercept = {
+          val size = if ($(fitIntercept)) numFeatures + 1 else numFeatures
+          VectorBuilders.create(size, $(useSparseAgg))
+        }
 
         if (optInitialModel.isDefined && optInitialModel.get.coefficients.size != numFeatures) {
           val vec = optInitialModel.get.coefficients
@@ -366,12 +388,11 @@ class LogisticRegression @Since("1.2.0") (
         }
 
         if (optInitialModel.isDefined && optInitialModel.get.coefficients.size == numFeatures) {
-          val initialCoefficientsWithInterceptArray = initialCoefficientsWithIntercept.toArray
           optInitialModel.get.coefficients.foreachActive { case (index, value) =>
-            initialCoefficientsWithInterceptArray(index) = value
+            initialCoefficientsWithIntercept.set(index, value)
           }
           if ($(fitIntercept)) {
-            initialCoefficientsWithInterceptArray(numFeatures) == optInitialModel.get.intercept
+            initialCoefficientsWithIntercept(numFeatures) == optInitialModel.get.intercept
           }
         } else if ($(fitIntercept)) {
           /*
@@ -387,12 +408,12 @@ class LogisticRegression @Since("1.2.0") (
                b = \log{P(1) / P(0)} = \log{count_1 / count_0}
              }}}
            */
-          initialCoefficientsWithIntercept.toArray(numFeatures) = math.log(
-            histogram(1) / histogram(0))
+          initialCoefficientsWithIntercept.set(numFeatures, math.log(
+            histogram(1) / histogram(0)))
         }
 
         val states = optimizer.iterations(new CachedDiffFunction(costFun),
-          initialCoefficientsWithIntercept.toBreeze.toDenseVector)
+            initialCoefficientsWithIntercept.toVector.toBreeze)
 
         /*
            Note that in Logistic Regression, the objective history (loss + regularization)
@@ -418,18 +439,17 @@ class LogisticRegression @Since("1.2.0") (
            Note that the intercept in scaled space and original space is the same;
            as a result, no scaling is needed.
          */
-        val rawCoefficients = state.x.toArray.clone()
-        var i = 0
-        while (i < numFeatures) {
-          rawCoefficients(i) *= { if (featuresStd(i) != 0.0) 1.0 / featuresStd(i) else 0.0 }
-          i += 1
+        val rawCoefficients: VectorBuilder = VectorBuilders.fromVector(Vectors.fromBreeze(state.x))
+        rawCoefficients.foreachActive { (i, v) =>
+          if (i < featuresStd.size) {
+            rawCoefficients.set(i, v * (if (featuresStd(i) != 0.0) 1.0 / featuresStd(i) else 0.0))
+          }
         }
 
         if ($(fitIntercept)) {
-          (Vectors.dense(rawCoefficients.dropRight(1)).compressed, rawCoefficients.last,
-            arrayBuilder.result())
+          (rawCoefficients.dropRight(1).toVector, rawCoefficients.last, arrayBuilder.result())
         } else {
-          (Vectors.dense(rawCoefficients).compressed, 0.0, arrayBuilder.result())
+          (rawCoefficients.toVector, 0.0, arrayBuilder.result())
         }
       }
     }
@@ -928,28 +948,21 @@ class BinaryLogisticRegressionSummary private[classification] (
  *                   Multinomial Logistic Regression.
  * @param fitIntercept Whether to fit an intercept term.
  * @param featuresStd The standard deviation values of the features.
- * @param featuresMean The mean values of the features.
+ * @param useSparseAgg Whether to aggregate into data structures optimized for sparse or dense data
  */
 private class LogisticAggregator(
     coefficients: Vector,
     numClasses: Int,
     fitIntercept: Boolean,
-    featuresStd: Array[Double],
-    featuresMean: Array[Double]) extends Serializable {
+    featuresStd: Vector,
+    useSparseAgg: Boolean) extends Serializable {
 
   private var weightSum = 0.0
   private var lossSum = 0.0
 
-  private val coefficientsArray = coefficients match {
-    case dv: DenseVector => dv.values
-    case _ =>
-      throw new IllegalArgumentException(
-        s"coefficients only supports dense vector but got type ${coefficients.getClass}.")
-  }
+  private val dim = if (fitIntercept) coefficients.size - 1 else coefficients.size
 
-  private val dim = if (fitIntercept) coefficientsArray.length - 1 else coefficientsArray.length
-
-  private val gradientSumArray = Array.ofDim[Double](coefficientsArray.length)
+  private val gradientSums = if (useSparseAgg) new SparseVectorBuilder(coefficients.size) else new DenseVectorBuilder(coefficients.size)
 
   /**
    * Add a new training instance to this LogisticAggregator, and update the loss and gradient
@@ -966,8 +979,8 @@ private class LogisticAggregator(
 
       if (weight == 0.0) return this
 
-      val localCoefficientsArray = coefficientsArray
-      val localGradientSumArray = gradientSumArray
+      val localCoefficients = coefficients
+      val localGradientSums = gradientSums
 
       numClasses match {
         case 2 =>
@@ -976,11 +989,11 @@ private class LogisticAggregator(
             var sum = 0.0
             features.foreachActive { (index, value) =>
               if (featuresStd(index) != 0.0 && value != 0.0) {
-                sum += localCoefficientsArray(index) * (value / featuresStd(index))
+                sum += localCoefficients(index) * (value / featuresStd(index))
               }
             }
             sum + {
-              if (fitIntercept) localCoefficientsArray(dim) else 0.0
+              if (fitIntercept) localCoefficients(dim) else 0.0
             }
           }
 
@@ -988,12 +1001,12 @@ private class LogisticAggregator(
 
           features.foreachActive { (index, value) =>
             if (featuresStd(index) != 0.0 && value != 0.0) {
-              localGradientSumArray(index) += multiplier * (value / featuresStd(index))
+              localGradientSums.add(index, multiplier * (value / featuresStd(index)))
             }
           }
 
           if (fitIntercept) {
-            localGradientSumArray(dim) += multiplier
+            localGradientSums.add(dim, multiplier)
           }
 
           if (label > 0) {
@@ -1028,13 +1041,9 @@ private class LogisticAggregator(
       lossSum += other.lossSum
 
       var i = 0
-      val localThisGradientSumArray = this.gradientSumArray
-      val localOtherGradientSumArray = other.gradientSumArray
-      val len = localThisGradientSumArray.length
-      while (i < len) {
-        localThisGradientSumArray(i) += localOtherGradientSumArray(i)
-        i += 1
-      }
+      val localThisGradientSums = this.gradientSums
+      val localOtherGradientSums = other.gradientSums
+      localThisGradientSums.addAll(localOtherGradientSums)
     }
     this
   }
@@ -1048,7 +1057,7 @@ private class LogisticAggregator(
   def gradient: Vector = {
     require(weightSum > 0.0, s"The effective number of instances should be " +
       s"greater than 0.0, but $weightSum.")
-    val result = Vectors.dense(gradientSumArray.clone())
+    val result = gradientSums.toVector
     scal(1.0 / weightSum, result)
     result
   }
@@ -1065,12 +1074,12 @@ private class LogisticCostFun(
     numClasses: Int,
     fitIntercept: Boolean,
     standardization: Boolean,
-    featuresStd: Array[Double],
-    featuresMean: Array[Double],
-    regParamL2: Double) extends DiffFunction[BDV[Double]] {
+    featuresStd: Vector,
+    regParamL2: Double,
+    useSparseAgg: Boolean) extends DiffFunction[BV[Double]] {
 
-  override def calculate(coefficients: BDV[Double]): (Double, BDV[Double]) = {
-    val numFeatures = featuresStd.length
+  override def calculate(coefficients: BV[Double]): (Double, BV[Double]) = {
+    val numFeatures = featuresStd.size
     val coeffs = Vectors.fromBreeze(coefficients)
 
     val logisticAggregator = {
@@ -1078,11 +1087,11 @@ private class LogisticCostFun(
       val combOp = (c1: LogisticAggregator, c2: LogisticAggregator) => c1.merge(c2)
 
       instances.treeAggregate(
-        new LogisticAggregator(coeffs, numClasses, fitIntercept, featuresStd, featuresMean)
+        new LogisticAggregator(coeffs, numClasses, fitIntercept, featuresStd, useSparseAgg)
       )(seqOp, combOp)
     }
 
-    val totalGradientArray = logisticAggregator.gradient.toArray
+    val totalGradients = VectorBuilders.fromVector(logisticAggregator.gradient)
 
     // regVal is the sum of coefficients squares excluding intercept for L2 regularization.
     val regVal = if (regParamL2 == 0.0) {
@@ -1094,10 +1103,10 @@ private class LogisticCostFun(
         // contribute to the regularization.
         if (index != numFeatures) {
           // The following code will compute the loss of the regularization; also
-          // the gradient of the regularization, and add back to totalGradientArray.
+          // the gradient of the regularization, and add back to totalGradients.
           sum += {
             if (standardization) {
-              totalGradientArray(index) += regParamL2 * value
+              totalGradients.add(index, regParamL2 * value)
               value * value
             } else {
               if (featuresStd(index) != 0.0) {
@@ -1107,7 +1116,7 @@ private class LogisticCostFun(
                 // differently to get effectively the same objective function when
                 // the training dataset is not standardized.
                 val temp = value / (featuresStd(index) * featuresStd(index))
-                totalGradientArray(index) += regParamL2 * temp
+                totalGradients.add(index, regParamL2 * temp)
                 value * temp
               } else {
                 0.0
@@ -1119,6 +1128,6 @@ private class LogisticCostFun(
       0.5 * regParamL2 * sum
     }
 
-    (logisticAggregator.loss + regVal, new BDV(totalGradientArray))
+    (logisticAggregator.loss + regVal, totalGradients.toVector.toBreeze)
   }
 }

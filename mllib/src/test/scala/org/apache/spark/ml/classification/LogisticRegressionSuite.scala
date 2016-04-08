@@ -84,6 +84,7 @@ class LogisticRegressionSuite
     assert(lr.getWeightCol === "")
     assert(lr.getFitIntercept)
     assert(lr.getStandardization)
+    assert(!lr.getUseSparseAgg)
     val model = lr.fit(dataset)
     model.transform(dataset)
       .select("label", "probability", "prediction", "rawPrediction")
@@ -942,6 +943,21 @@ class LogisticRegressionSuite
         assert(expected.intercept === actual.intercept)
         assert(expected.coefficients.toArray === actual.coefficients.toArray)
       }
+  }
+  
+  test("sparse aggregation should not affect the outcome") {
+    val aucDense = {
+      val modelDense = new LogisticRegression().setMaxIter(2).setUseSparseAgg(false).fit(dataset)
+      val summaryDense = modelDense.summary.asInstanceOf[BinaryLogisticRegressionTrainingSummary]
+      summaryDense.areaUnderROC
+    }
+    val aucSparse = {
+      val modelSparse = new LogisticRegression().setMaxIter(2).setUseSparseAgg(true).fit(dataset)
+      val summarySparse = modelSparse.summary.asInstanceOf[BinaryLogisticRegressionTrainingSummary]
+      summarySparse.areaUnderROC
+    }
+    
+    assert(aucDense === aucSparse)
   }
 }
 
