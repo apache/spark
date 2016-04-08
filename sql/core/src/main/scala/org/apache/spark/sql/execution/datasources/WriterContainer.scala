@@ -255,15 +255,13 @@ private[sql] class DefaultWriterContainer(
 
     // If anything below fails, we should abort the task.
     try {
-      Utils.tryWithSafeCatchAndFailureCallbacks {
+      Utils.tryWithSafeFinallyAndFailureCallbacks {
         while (iterator.hasNext) {
           val internalRow = iterator.next()
           writer.writeInternal(internalRow)
         }
         commitTask()
-      } {
-        abortTask()
-      }
+      }(catchBlock = abortTask())
     } catch {
       case t: Throwable =>
         throw new SparkException("Task failed while writing rows", t)
@@ -420,7 +418,7 @@ private[sql] class DynamicPartitionWriterContainer(
     // If anything below fails, we should abort the task.
     var currentWriter: OutputWriter = null
     try {
-      Utils.tryWithSafeCatchAndFailureCallbacks {
+      Utils.tryWithSafeFinallyAndFailureCallbacks {
         var currentKey: UnsafeRow = null
         while (sortedIterator.next()) {
           val nextKey = getBucketingKey(sortedIterator.getKey).asInstanceOf[UnsafeRow]
@@ -442,12 +440,12 @@ private[sql] class DynamicPartitionWriterContainer(
         }
 
         commitTask()
-      } {
+      }(catchBlock = {
         if (currentWriter != null) {
           currentWriter.close()
         }
         abortTask()
-      }
+      })
     } catch {
       case t: Throwable =>
         throw new SparkException("Task failed while writing rows", t)
