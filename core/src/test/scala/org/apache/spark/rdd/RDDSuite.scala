@@ -246,7 +246,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     }
     for (depth <- 1 until 10) {
       val sum = rdd.treeAggregate(Array(0))(op, op, depth)
-      assert(sum === -1000)
+      assert(sum(0) === -1000)
     }
   }
 
