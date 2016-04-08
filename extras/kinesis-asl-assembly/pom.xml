@@ -148,13 +148,13 @@
           </includes>
         </artifactSet>
         <relocations>
-            <relocation>
-              <pattern>com.google.protobuf</pattern>
-              <shadedPattern>kinesis.protobuf</shadedPattern>
-              <includes>
-                <include>com.google.protobuf.**</include>
-              </includes>
-            </relocation>
+          <relocation>
+            <pattern>com.google.protobuf</pattern>
+            <shadedPattern>kinesis.protobuf</shadedPattern>
+            <includes>
+              <include>com.google.protobuf.**</include>
+            </includes>
+          </relocation>
         </relocations>
         <filters>
           <filter>
