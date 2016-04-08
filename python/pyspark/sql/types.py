@@ -463,7 +463,7 @@ class StructType(DataType):
             self.names = [f.name for f in fields]
             assert all(isinstance(f, StructField) for f in fields),\
                 "fields should be a list of StructField"
-        self._needSerializeAnyField = any(f.needConversion() for f in self.fields)
+        self._needSerializeAnyField = any(f.needConversion() for f in self)
 
     def add(self, field, data_type=None, nullable=True, metadata=None):
         """
@@ -508,7 +508,7 @@ class StructType(DataType):
                 data_type_f = data_type
             self.fields.append(StructField(field, data_type_f, nullable, metadata))
             self.names.append(field)
-        self._needSerializeAnyField = any(f.needConversion() for f in self.fields)
+        self._needSerializeAnyField = any(f.needConversion() for f in self)
         return self
 
     def __iter__(self):
@@ -536,15 +536,15 @@ class StructType(DataType):
             raise TypeError('StructType keys should be strings, integers or slices')
 
     def simpleString(self):
-        return 'struct<%s>' % (','.join(f.simpleString() for f in self.fields))
+        return 'struct<%s>' % (','.join(f.simpleString() for f in self))
 
     def __repr__(self):
         return ("StructType(List(%s))" %
-                ",".join(str(field) for field in self.fields))
+                ",".join(str(field) for field in self))
 
     def jsonValue(self):
         return {"type": self.typeName(),
-                "fields": [f.jsonValue() for f in self.fields]}
+                "fields": [f.jsonValue() for f in self]}
 
     @classmethod
     def fromJson(cls, json):
