@@ -232,6 +232,11 @@ private[hive] trait HiveClient {
   /** Return an existing function in the database, or None if it doesn't exist. */
   def getFunctionOption(db: String, name: String): Option[CatalogFunction]
 
+  /** Return whether a function exists in the specified database. */
+  final def functionExists(db: String, name: String): Boolean = {
+    getFunctionOption(db, name).isDefined
+  }
+
   /** Return the names of all functions that match the given pattern in the database. */
   def listFunctions(db: String, pattern: String): Seq[String]
 

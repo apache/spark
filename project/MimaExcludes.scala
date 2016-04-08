@@ -68,6 +68,7 @@ object MimaExcludes {
         ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.SparkContext.emptyRDD"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.broadcast.HttpBroadcastFactory"),
         // SPARK-14358 SparkListener from trait to abstract class
+        ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.SparkContext.addSparkListener"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.JavaSparkListener"),
         ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.SparkFirehoseListener"),
         ProblemFilters.exclude[IncompatibleTemplateDefProblem]("org.apache.spark.scheduler.SparkListener"),
@@ -616,6 +617,9 @@ object MimaExcludes {
       ) ++ Seq(
         // [SPARK-14437][Core] Use the address that NettyBlockTransferService listens to create BlockManagerId
         ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.network.netty.NettyBlockTransferService.this")
+      ) ++ Seq(
+        // [SPARK-13048][ML][MLLIB] keepLastCheckpoint option for LDA EM optimizer
+        ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.clustering.DistributedLDAModel.this")
       )
     case v if v.startsWith("1.6") =>
       Seq(
