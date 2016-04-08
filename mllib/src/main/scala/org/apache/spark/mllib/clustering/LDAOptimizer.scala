@@ -80,9 +80,29 @@ final class EMLDAOptimizer extends LDAOptimizer {
 
   import LDA._
 
+  // Adjustable parameters
+  private var keepLastCheckpoint: Boolean = true
+
   /**
-   * The following fields will only be initialized through the initialize() method
+   * If using checkpointing, this indicates whether to keep the last checkpoint (vs clean up).
    */
+  @Since("2.0.0")
+  def getKeepLastCheckpoint: Boolean = this.keepLastCheckpoint
+
+  /**
+   * If using checkpointing, this indicates whether to keep the last checkpoint (vs clean up).
+   * Deleting the checkpoint can cause failures if a data partition is lost, so set this bit with
+   * care.  Note that checkpoints will be cleaned up via reference counting, regardless.
+   *
+   * Default: true
+   */
+  @Since("2.0.0")
+  def setKeepLastCheckpoint(keepLastCheckpoint: Boolean): this.type = {
+    this.keepLastCheckpoint = keepLastCheckpoint
+    this
+  }
+
+  // The following fields will only be initialized through the initialize() method
   private[clustering] var graph: Graph[TopicCounts, TokenCount] = null
   private[clustering] var k: Int = 0
   private[clustering] var vocabSize: Int = 0
@@ -208,12 +228,18 @@ final class EMLDAOptimizer extends LDAOptimizer {
 
   override private[clustering] def getLDAModel(iterationTimes: Array[Double]): LDAModel = {
     require(graph != null, "graph is null, EMLDAOptimizer not initialized.")
-    this.graphCheckpointer.deleteAllCheckpoints()
+    val checkpointFiles: Array[String] = if (keepLastCheckpoint) {
+      this.graphCheckpointer.deleteAllCheckpointsButLast()
+      this.graphCheckpointer.getAllCheckpointFiles
+    } else {
+      this.graphCheckpointer.deleteAllCheckpoints()
+      Array.empty[String]
+    }
     // The constructor's default arguments assume gammaShape = 100 to ensure equivalence in
-    // LDAModel.toLocal conversion
+    // LDAModel.toLocal conversion.
     new DistributedLDAModel(this.graph, this.globalTopicTotals, this.k, this.vocabSize,
       Vectors.dense(Array.fill(this.k)(this.docConcentration)), this.topicConcentration,
-      iterationTimes)
+      iterationTimes, DistributedLDAModel.defaultGammaShape, checkpointFiles)
   }
 }
 
