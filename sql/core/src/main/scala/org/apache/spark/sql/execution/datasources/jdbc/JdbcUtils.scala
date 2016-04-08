@@ -97,7 +97,7 @@ object JdbcUtils extends Logging {
    * Returns a PreparedStatement that inserts a row into table via conn.
    */
   def insertStatement(conn: Connection, table: String, rddSchema: StructType): PreparedStatement = {
-    val columns = rddSchema.fields.map(_.name).mkString(",")
+    val columns = rddSchema.fields.map(f => escapeColumnName(f.name)).mkString(",")
     val placeholders = rddSchema.fields.map(_ => "?").mkString(",")
     val sql = s"INSERT INTO $table ($columns) VALUES ($placeholders)"
     conn.prepareStatement(sql)
@@ -246,13 +246,22 @@ object JdbcUtils extends Logging {
   }
 
   /**
+   * The utility to add backtick if the column name has space
+   * @param columnName the input column name
+   * @return the escaped column name, add backtick if name contains space
+   */
+  private def escapeColumnName(columnName: String): String = {
+    if (columnName.contains(" ")) s"`$columnName`" else columnName
+  }
+
+  /**
    * Compute the schema string for this RDD.
    */
   def schemaString(df: DataFrame, url: String): String = {
     val sb = new StringBuilder()
     val dialect = JdbcDialects.get(url)
     df.schema.fields foreach { field => {
-      val name = field.name
+      val name = escapeColumnName(field.name)
       val typ: String = getJdbcType(field.dataType, dialect).databaseTypeDefinition
       val nullable = if (field.nullable) "" else "NOT NULL"
       sb.append(s", $name $typ $nullable")
