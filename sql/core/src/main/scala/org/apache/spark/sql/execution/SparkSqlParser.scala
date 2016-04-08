@@ -143,10 +143,10 @@ class SparkSqlAstBuilder extends AstBuilder {
   override def visitExplain(ctx: ExplainContext): LogicalPlan = withOrigin(ctx) {
     val options = ctx.explainOption.asScala
     if (options.exists(_.FORMATTED != null)) {
-      throw new ParseException("Unsupported operation: EXPLAIN FORMATTED option", ctx)
+      logWarning("Unsupported operation: EXPLAIN FORMATTED option")
     }
     if (options.exists(_.LOGICAL != null)) {
-      throw new ParseException("Unsupported operation: EXPLAIN LOGICAL option", ctx)
+      logWarning("Unsupported operation: EXPLAIN LOGICAL option")
     }
 
     // Create the explain comment.
