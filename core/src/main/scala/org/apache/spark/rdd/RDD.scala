@@ -1148,9 +1148,8 @@ abstract class RDD[T: ClassTag](
           (i, iter) => iter.map((i % curNumPartitions, _))
         }.foldByKey(zeroValue, new HashPartitioner(curNumPartitions))(cleanCombOp).values
       }
-      //partiallyAggregated.reduce(cleanCombOp)
-      // This fails:
-      partiallyAggregated.fold(zeroValue)(cleanCombOp)
+      val copiedZeroValue = Utils.clone(zeroValue, sc.env.closureSerializer.newInstance())
+      partiallyAggregated.fold(copiedZeroValue)(cleanCombOp)
     }
   }
 
