@@ -26,7 +26,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.cli.CliSessionState
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.metastore.{TableType => HiveTableType}
+import org.apache.hadoop.hive.metastore.{PartitionDropOptions, TableType => HiveTableType}
 import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, FieldSchema, Function => HiveFunction, FunctionType, PrincipalType, ResourceType, ResourceUri}
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition, Table => HiveTable}
@@ -368,6 +368,7 @@ private[hive] class HiveClientImpl(
       db: String,
       table: String,
       specs: Seq[ExternalCatalog.TablePartitionSpec],
+      ignoreIfNotExists: Boolean,
       purge: Boolean): Unit = withHiveState {
     // TODO: figure out how to drop multiple partitions in one call
     val hiveTable = client.getTable(db, table, true /* throw exception */)
@@ -376,12 +377,15 @@ private[hive] class HiveClientImpl(
       // whose specs are supersets of this partial spec. E.g. If a table has partitions
       // (b='1', c='1') and (b='1', c='2'), a partial spec of (b='1') will match both.
       val matchingParts = client.getPartitions(hiveTable, s.asJava).asScala
-      if (matchingParts.isEmpty) {
+      if (matchingParts.isEmpty && !ignoreIfNotExists) {
         throw new AnalysisException(
           s"partition to drop '$s' does not exist in table '$table' database '$db'")
       }
       matchingParts.foreach { hivePartition =>
-        client.dropPartition(db, table, hivePartition.getValues, purge)
+        val dropOptions = new PartitionDropOptions
+        dropOptions.ifExists = ignoreIfNotExists
+        dropOptions.purgeData = purge
+        client.dropPartition(db, table, hivePartition.getValues, dropOptions)
       }
     }
   }

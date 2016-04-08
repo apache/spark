@@ -121,15 +121,12 @@ private[hive] trait HiveClient {
 
   /**
    * Drop one or many partitions in the given table, assuming they exist.
-   *
-   * Note: Unfortunately, Hive does not currently provide a way to ignore this call if the
-   * partitions do not already exist. The seemingly relevant flag `ifExists` in
-   * [[org.apache.hadoop.hive.metastore.PartitionDropOptions]] is not read anywhere.
    */
   def dropPartitions(
       db: String,
       table: String,
       specs: Seq[ExternalCatalog.TablePartitionSpec],
+      ignoreIfNotExists: Boolean,
       purge: Boolean): Unit
 
   /**
