@@ -20,7 +20,9 @@ package org.apache.spark.sql
 import java.util.Properties
 
 import scala.collection.JavaConverters._
+
 import org.apache.hadoop.fs.Path
+
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
