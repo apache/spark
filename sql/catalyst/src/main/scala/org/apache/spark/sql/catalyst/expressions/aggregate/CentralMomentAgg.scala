@@ -39,7 +39,8 @@ import org.apache.spark.sql.types._
  *
  * @see [[https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
  *     Algorithms for calculating variance (Wikipedia)]]
-  * @param child to compute central moments of.
+ *
+ * @param child to compute central moments of.
  */
 abstract class CentralMomentAgg(child: Expression) extends DeclarativeAggregate {
 

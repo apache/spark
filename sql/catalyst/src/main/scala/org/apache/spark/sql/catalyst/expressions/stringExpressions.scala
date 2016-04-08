@@ -1020,10 +1020,9 @@ case class Encode(value: Expression, charset: Expression)
  * fractional part.
  */
 @ExpressionDescription(
-  usage =
-    """_FUNC_(X, D) - Formats the number X like '#,###,###.##', rounded to D decimal places.
-      If D is 0, the result has no decimal point or fractional part.
-      This is supposed to function like MySQL's FORMAT.""",
+  usage = """_FUNC_(X, D) - Formats the number X like '#,###,###.##', rounded to D decimal places.
+    If D is 0, the result has no decimal point or fractional part.
+    This is supposed to function like MySQL's FORMAT.""",
   extended = "> SELECT _FUNC_(12332.123456, 4);\n '12,332.1235'")
 case class FormatNumber(x: Expression, d: Expression)
   extends BinaryExpression with ExpectsInputTypes {

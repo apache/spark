@@ -171,7 +171,7 @@ case class RLike(left: Expression, right: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(str, regex) - Splits str around occurrences that match regex",
-  extended = "> SELECT split('oneAtwoBthreeC', '[ABC]');\n ['one', 'two', 'three']")
+  extended = "> SELECT _FUNC_('oneAtwoBthreeC', '[ABC]');\n ['one', 'two', 'three']")
 case class StringSplit(str: Expression, pattern: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 

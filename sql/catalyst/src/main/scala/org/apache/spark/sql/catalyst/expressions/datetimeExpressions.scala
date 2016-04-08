@@ -925,7 +925,7 @@ case class ToDate(child: Expression) extends UnaryExpression with ImplicitCastIn
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(date, fmt) - Returns returns date with the time portion of the day truncated to the unit specified by the format model fmt.",
-  extended = "> SELECT _FUNC_('2009-02-12', 'MM')\n '2009-02-01'\n> SELECT trunc('2015-10-27', 'YEAR');\n '2015-01-01'")
+  extended = "> SELECT _FUNC_('2009-02-12', 'MM')\n '2009-02-01'\n> SELECT _FUNC_('2015-10-27', 'YEAR');\n '2015-01-01'")
 // scalastyle:on line.size.limit
 case class TruncDate(date: Expression, format: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
