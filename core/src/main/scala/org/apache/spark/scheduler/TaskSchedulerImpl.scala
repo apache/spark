@@ -343,17 +343,31 @@ private[spark] class TaskSchedulerImpl(
         }
         taskIdToTaskSetManager.get(tid) match {
           case Some(taskSet) =>
+            var executorId: String = null
             if (TaskState.isFinished(state)) {
               taskIdToTaskSetManager.remove(tid)
               taskIdToExecutorId.remove(tid).foreach { execId =>
+                executorId = execId
                 if (executorIdToTaskCount.contains(execId)) {
                   executorIdToTaskCount(execId) -= 1
                 }
               }
             }
             if (state == TaskState.FINISHED) {
-              taskSet.removeRunningTask(tid)
-              taskResultGetter.enqueueSuccessfulTask(taskSet, tid, serializedData)
+              // In some case, executor has already removed by driver for heartbeats timeout, but
+              // at sometime, before executor killed  by cluster, the task of running on this
+              // executor is finished and return task success state to driver. However, this kinds
+              // of task should be ignored, because the task on this executor is already re-queued
+              // by driver.
+              if (executorId.ne(null) && !executorIdToTaskCount.contains(executorId)) {
+                taskSet.removeRunningTask(tid)
+                logWarning(
+                  ("Ignoring update with state %s for TID %s because its executor has already removed " +
+                    "by driver, and the task of this executor has re-queued").format(state, tid))
+              } else {
+                taskSet.removeRunningTask(tid)
+                taskResultGetter.enqueueSuccessfulTask(taskSet, tid, serializedData)
+              }
             } else if (Set(TaskState.FAILED, TaskState.KILLED, TaskState.LOST).contains(state)) {
               taskSet.removeRunningTask(tid)
               taskResultGetter.enqueueFailedTask(taskSet, tid, state, serializedData)
