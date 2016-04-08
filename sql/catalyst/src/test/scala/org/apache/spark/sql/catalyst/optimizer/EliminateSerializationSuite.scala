@@ -22,7 +22,7 @@ import scala.reflect.runtime.universe.TypeTag
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.plans.logical.{DeserializeToObject, LocalRelation, LogicalPlan, MapPartitions}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
@@ -36,18 +36,28 @@ class EliminateSerializationSuite extends PlanTest {
   }
 
   implicit private def productEncoder[T <: Product : TypeTag] = ExpressionEncoder[T]()
+  implicit private def intEncoder = ExpressionEncoder[Int]()
   private val func = identity[Iterator[(Int, Int)]] _
   private val func2 = identity[Iterator[OtherTuple]] _
 
-  def assertObjectCreations(count: Int, plan: LogicalPlan): Unit = {
-    val serializations = plan.collect {
-      case d: DeserializeToObject => d
+  def assertNumSerializations(count: Int, plan: LogicalPlan): Unit = {
+    val serializations = plan collect {
+      case s: SerializeFromObject => s
     }
+
+    val deserializations = plan collect {
+      case d: DeserializeToObject => d
+      // `MapGroups` takes input row and outputs domain object, it's also kind if deserialization.
+      case m: MapGroups => m
+    }
+
+    assert(serializations.length == deserializations.length,
+      "serializations and deserializations must appear in pair")
 
     if (serializations.size != count) {
       fail(
         s"""
-           |Wrong number of object creations in plan: ${serializations.size} != $count
+           |Wrong number of serializations in plan: ${serializations.size} != $count
            |$plan
          """.stripMargin)
     }
@@ -60,7 +70,7 @@ class EliminateSerializationSuite extends PlanTest {
         MapPartitions(func, input))
 
     val optimized = Optimize.execute(plan.analyze)
-    assertObjectCreations(1, optimized)
+    assertNumSerializations(1, optimized)
   }
 
   test("back to back with object change") {
@@ -70,6 +80,48 @@ class EliminateSerializationSuite extends PlanTest {
         MapPartitions(func2, input))
 
     val optimized = Optimize.execute(plan.analyze)
-    assertObjectCreations(2, optimized)
+    assertNumSerializations(2, optimized)
+  }
+
+  test("Filter under MapPartition") {
+    val input = LocalRelation('_1.int, '_2.int)
+    val filter = input.filter((tuple: (Int, Int)) => tuple._1 > 1)
+    val map = MapPartitions(func, filter)
+
+    val optimized = Optimize.execute(map.analyze)
+    assertNumSerializations(1, optimized)
+  }
+
+  test("Filter under MapPartition with object change") {
+    val input = LocalRelation('_1.int, '_2.int)
+    val filter = input.filter((tuple: OtherTuple) => tuple._1 > 1)
+    val map = MapPartitions(func, filter)
+
+    val optimized = Optimize.execute(map.analyze)
+    assertNumSerializations(2, optimized)
+  }
+
+  test("MapGroups under MapPartition") {
+    val input = LocalRelation('_1.int, '_2.int)
+    val appended = AppendColumns((tuple: OtherTuple) => tuple._1, input)
+    val aggFunc: (Int, Iterator[OtherTuple]) => Iterator[OtherTuple] =
+      (key, values) => Iterator(OtherTuple(1, 1))
+    val agg = MapGroups(aggFunc, appended.newColumns, input.output, appended)
+    val map = MapPartitions(func2, agg)
+
+    val optimized = Optimize.execute(map.analyze)
+    assertNumSerializations(1, optimized)
+  }
+
+  test("MapGroups under MapPartition with object change") {
+    val input = LocalRelation('_1.int, '_2.int)
+    val appended = AppendColumns((tuple: OtherTuple) => tuple._1, input)
+    val aggFunc: (Int, Iterator[OtherTuple]) => Iterator[OtherTuple] =
+      (key, values) => Iterator(OtherTuple(1, 1))
+    val agg = MapGroups(aggFunc, appended.newColumns, input.output, appended)
+    val map = MapPartitions(func, agg)
+
+    val optimized = Optimize.execute(map.analyze)
+    assertNumSerializations(2, optimized)
   }
 }
