@@ -150,7 +150,7 @@
         <relocations>
             <relocation>
               <pattern>com.google.protobuf</pattern>
-              <shadedPattern>kcl.protobuf</shadedPattern>
+              <shadedPattern>kinesis.protobuf</shadedPattern>
               <includes>
                 <include>com.google.protobuf.**</include>
               </includes>
