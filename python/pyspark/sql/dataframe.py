@@ -1378,12 +1378,14 @@ class DataFrame(object):
         """
         if not isinstance(col, (str, list, tuple)):
             raise ValueError("col should be a string or list or tuple.")
+        isStr = False
         if isinstance(col, str):
+            isStr = True
             col = [col]
         if isinstance(col, tuple):
             col = list(col)
         for c in col:
-            if not isinstance(col, str):
+            if not isinstance(c, str):
                 raise ValueError("columns should be strings.")
         col = _to_list(self._sc, col)
 
@@ -1404,7 +1406,7 @@ class DataFrame(object):
         res = []
         for jaq in jaqs:
             res.append(list(jaq))
-        if len(res) == 1:
+        if isStr:
             return res[0]
         return res
 
