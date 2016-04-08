@@ -18,7 +18,7 @@
 package org.apache.spark.mllib.stat
 
 import org.apache.spark.annotation.{DeveloperApi, Since}
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.mllib.linalg.{DenseVectorBuilder, SparseVectorBuilder, Vector, VectorBuilder, VectorBuilders, Vectors}
 
 /**
  * :: DeveloperApi ::
@@ -36,22 +36,25 @@ import org.apache.spark.mllib.linalg.{Vector, Vectors}
  *
  * For weighted instances, the unbiased estimation of variance is defined by the reliability
  * weights: [[https://en.wikipedia.org/wiki/Weighted_arithmetic_mean#Reliability_weights]].
+ *
+ * @param sparse whether the features are sparse; if `true`, data structures are used which are optimized for sparse
+ *               data (default `false`)
  */
 @Since("1.1.0")
 @DeveloperApi
-class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with Serializable {
+class MultivariateOnlineSummarizer(sparse: Boolean = false) extends MultivariateStatisticalSummary with Serializable {
 
   private var n = 0
-  private var currMean: Array[Double] = _
-  private var currM2n: Array[Double] = _
-  private var currM2: Array[Double] = _
-  private var currL1: Array[Double] = _
+  private var currMean: VectorBuilder = _
+  private var currM2n: VectorBuilder = _
+  private var currM2: VectorBuilder = _
+  private var currL1: VectorBuilder = _
   private var totalCnt: Long = 0
   private var weightSum: Double = 0.0
   private var weightSquareSum: Double = 0.0
-  private var nnz: Array[Double] = _
-  private var currMax: Array[Double] = _
-  private var currMin: Array[Double] = _
+  private var nnz: VectorBuilder = _
+  private var currMax: VectorBuilder = _
+  private var currMin: VectorBuilder = _
 
   /**
    * Add a new sample to this summarizer, and update the statistical summary.
@@ -70,13 +73,13 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
       require(instance.size > 0, s"Vector should have dimension larger than zero.")
       n = instance.size
 
-      currMean = Array.ofDim[Double](n)
-      currM2n = Array.ofDim[Double](n)
-      currM2 = Array.ofDim[Double](n)
-      currL1 = Array.ofDim[Double](n)
-      nnz = Array.ofDim[Double](n)
-      currMax = Array.fill[Double](n)(Double.MinValue)
-      currMin = Array.fill[Double](n)(Double.MaxValue)
+      currMean = VectorBuilders.create(n, sparse)
+      currM2n = VectorBuilders.create(n, sparse)
+      currM2 = VectorBuilders.create(n, sparse)
+      currL1 = VectorBuilders.create(n, sparse)
+      nnz = VectorBuilders.create(n, sparse)
+      currMax = VectorBuilders.create(n, sparse, Double.MinValue)
+      currMin = VectorBuilders.create(n, sparse, Double.MaxValue)
     }
 
     require(n == instance.size, s"Dimensions mismatch when adding new sample." +
@@ -92,20 +95,20 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
     instance.foreachActive { (index, value) =>
       if (value != 0.0) {
         if (localCurrMax(index) < value) {
-          localCurrMax(index) = value
+          localCurrMax.set(index, value)
         }
         if (localCurrMin(index) > value) {
-          localCurrMin(index) = value
+          localCurrMin.set(index, value)
         }
 
         val prevMean = localCurrMean(index)
         val diff = value - prevMean
-        localCurrMean(index) = prevMean + weight * diff / (localNnz(index) + weight)
-        localCurrM2n(index) += weight * (value - localCurrMean(index)) * diff
-        localCurrM2(index) += weight * value * value
-        localCurrL1(index) += weight * math.abs(value)
+        localCurrMean.set(index, prevMean + weight * diff / (localNnz(index) + weight))
+        localCurrM2n.add(index, weight * (value - localCurrMean(index)) * diff)
+        localCurrM2.add(index, weight * value * value)
+        localCurrL1.add(index, weight * math.abs(value))
 
-        localNnz(index) += weight
+        localNnz.add(index, weight)
       }
     }
 
@@ -138,18 +141,18 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
         if (totalNnz != 0.0) {
           val deltaMean = other.currMean(i) - currMean(i)
           // merge mean together
-          currMean(i) += deltaMean * otherNnz / totalNnz
+          currMean.add(i, deltaMean * otherNnz / totalNnz)
           // merge m2n together
-          currM2n(i) += other.currM2n(i) + deltaMean * deltaMean * thisNnz * otherNnz / totalNnz
+          currM2n.add(i, other.currM2n(i) + deltaMean * deltaMean * thisNnz * otherNnz / totalNnz)
           // merge m2 together
-          currM2(i) += other.currM2(i)
+          currM2.add(i, other.currM2(i))
           // merge l1 together
-          currL1(i) += other.currL1(i)
+          currL1.add(i, other.currL1(i))
           // merge max and min
-          currMax(i) = math.max(currMax(i), other.currMax(i))
-          currMin(i) = math.min(currMin(i), other.currMin(i))
+          currMax.set(i, math.max(currMax(i), other.currMax(i)))
+          currMin.set(i, math.min(currMin(i), other.currMin(i)))
         }
-        nnz(i) = totalNnz
+        if (nnz(i) != totalNnz) nnz.set(i, totalNnz)
         i += 1
       }
     } else if (weightSum == 0.0 && other.weightSum != 0.0) {
@@ -176,13 +179,9 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
   override def mean: Vector = {
     require(weightSum > 0, s"Nothing has been added to this summarizer.")
 
-    val realMean = Array.ofDim[Double](n)
-    var i = 0
-    while (i < n) {
-      realMean(i) = currMean(i) * (nnz(i) / weightSum)
-      i += 1
-    }
-    Vectors.dense(realMean)
+    val realMean = VectorBuilders.create(n, sparse)
+    currMean.foreachActive((i, m) => realMean.set(i, m * (nnz(i) / weightSum)))
+    realMean.toVector
   }
 
   /**
@@ -193,22 +192,20 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
   override def variance: Vector = {
     require(weightSum > 0, s"Nothing has been added to this summarizer.")
 
-    val realVariance = Array.ofDim[Double](n)
+    val realVariance = VectorBuilders.create(n, sparse)
 
     val denominator = weightSum - (weightSquareSum / weightSum)
 
     // Sample variance is computed, if the denominator is less than 0, the variance is just 0.
     if (denominator > 0.0) {
       val deltaMean = currMean
-      var i = 0
-      val len = currM2n.length
-      while (i < len) {
-        realVariance(i) = (currM2n(i) + deltaMean(i) * deltaMean(i) * nnz(i) *
+      currM2n.foreachActive { (i, m2n) =>
+        val varianceAtI = (m2n + deltaMean(i) * deltaMean(i) * nnz(i) *
           (weightSum - nnz(i)) / weightSum) / denominator
-        i += 1
+        if (varianceAtI != 0) realVariance.set(i, varianceAtI)
       }
     }
-    Vectors.dense(realVariance)
+    realVariance.toVector
   }
 
   /**
@@ -226,7 +223,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
   override def numNonzeros: Vector = {
     require(weightSum > 0, s"Nothing has been added to this summarizer.")
 
-    Vectors.dense(nnz)
+    nnz.toVector
   }
 
   /**
@@ -237,12 +234,8 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
   override def max: Vector = {
     require(weightSum > 0, s"Nothing has been added to this summarizer.")
 
-    var i = 0
-    while (i < n) {
-      if ((nnz(i) < weightSum) && (currMax(i) < 0.0)) currMax(i) = 0.0
-      i += 1
-    }
-    Vectors.dense(currMax)
+    currMax.foreachActive((i, v) => if ((nnz(i) < weightSum) && (v < 0.0)) currMax.set(i, 0.0))
+    currMax.toVector
   }
 
   /**
@@ -253,12 +246,8 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
   override def min: Vector = {
     require(weightSum > 0, s"Nothing has been added to this summarizer.")
 
-    var i = 0
-    while (i < n) {
-      if ((nnz(i) < weightSum) && (currMin(i) > 0.0)) currMin(i) = 0.0
-      i += 1
-    }
-    Vectors.dense(currMin)
+    currMin.foreachActive((i, v) => if ((nnz(i) < weightSum) && (v > 0.0)) currMin.set(i, 0.0))
+    currMin.toVector
   }
 
   /**
@@ -269,15 +258,10 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
   override def normL2: Vector = {
     require(weightSum > 0, s"Nothing has been added to this summarizer.")
 
-    val realMagnitude = Array.ofDim[Double](n)
+    val realMagnitude = VectorBuilders.create(n, sparse)
 
-    var i = 0
-    val len = currM2.length
-    while (i < len) {
-      realMagnitude(i) = math.sqrt(currM2(i))
-      i += 1
-    }
-    Vectors.dense(realMagnitude)
+    currM2.foreachActive((i, v) => realMagnitude.set(i, math.sqrt(v)))
+    realMagnitude.toVector
   }
 
   /**
@@ -288,6 +272,6 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
   override def normL1: Vector = {
     require(weightSum > 0, s"Nothing has been added to this summarizer.")
 
-    Vectors.dense(currL1)
+    currL1.toVector
   }
 }
