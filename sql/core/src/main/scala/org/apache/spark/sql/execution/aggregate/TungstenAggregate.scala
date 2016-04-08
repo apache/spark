@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{LongType, StructType}
 import org.apache.spark.unsafe.KVIterator
 
 case class TungstenAggregate(
@@ -64,8 +64,8 @@ case class TungstenAggregate(
 
   override def requiredChildDistribution: List[Distribution] = {
     requiredChildDistributionExpressions match {
-      case Some(exprs) if exprs.length == 0 => AllTuples :: Nil
-      case Some(exprs) if exprs.length > 0 => ClusteredDistribution(exprs) :: Nil
+      case Some(exprs) if exprs.isEmpty => AllTuples :: Nil
+      case Some(exprs) if exprs.nonEmpty => ClusteredDistribution(exprs) :: Nil
       case None => UnspecifiedDistribution :: Nil
     }
   }
@@ -437,6 +437,19 @@ case class TungstenAggregate(
     val initAgg = ctx.freshName("initAgg")
     ctx.addMutableState("boolean", initAgg, s"$initAgg = false;")
 
+    // create AggregateHashMap
+    val isAggregateHashMapEnabled: Boolean = false
+    val isAggregateHashMapSupported: Boolean =
+      (groupingKeySchema ++ bufferSchema).forall(_.dataType == LongType)
+    val aggregateHashMapTerm = ctx.freshName("aggregateHashMap")
+    val aggregateHashMapClassName = ctx.freshName("GeneratedAggregateHashMap")
+    val aggregateHashMapGenerator = new ColumnarAggMapCodeGenerator(ctx, aggregateHashMapClassName,
+      groupingKeySchema, bufferSchema)
+    if (isAggregateHashMapEnabled && isAggregateHashMapSupported) {
+      ctx.addMutableState(aggregateHashMapClassName, aggregateHashMapTerm,
+        s"$aggregateHashMapTerm = new $aggregateHashMapClassName();")
+    }
+
     // create hashMap
     val thisPlan = ctx.addReferenceObj("plan", this)
     hashMapTerm = ctx.freshName("hashMap")
@@ -452,6 +465,7 @@ case class TungstenAggregate(
     val doAgg = ctx.freshName("doAggregateWithKeys")
     ctx.addNewFunction(doAgg,
       s"""
+        ${if (isAggregateHashMapSupported) aggregateHashMapGenerator.generate() else ""}
         private void $doAgg() throws java.io.IOException {
           ${child.asInstanceOf[CodegenSupport].produce(ctx, this)}
 
