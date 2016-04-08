@@ -27,7 +27,6 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 class UnsupportedOperationsSuite extends SparkFunSuite {
 
-  private val checker = new UnsupportedOperationChecker { }
   testSupported(
     "local relation",
     testRelation,
@@ -45,25 +44,25 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     forIncremental = false,
     "startStream" :: "streaming" :: "source" :: Nil)
 
-  testNotSupportedForIncremental(
+  testNotSupportedForStreaming(
     "stream-stream join",
     testStreamingRelation.join(testStreamingRelation, condition = Some(Literal(1))),
-    "Stream-stream join" :: Nil)
+    "Joining between two streaming" :: Nil)
 
-  testSupportedForIncremental(
+  testSupportedForStreaming(
     "stream-batch join",
     testStreamingRelation.join(testRelation, condition = Some(Literal(1))))
 
-  testSupportedForIncremental(
+  testSupportedForStreaming(
     "batch-stream join",
     testRelation.join(testStreamingRelation, condition = Some(Literal(1))))
 
-  testSupportedForIncremental(
+  testSupportedForStreaming(
     "batch-batch join",
     testRelation.join(testRelation, condition = Some(Literal(1))))
 
 
-  def testNotSupportedForIncremental(
+  def testNotSupportedForStreaming(
     name: String,
     plan: LogicalPlan,
     expectedMsgs: Seq[String] = Nil): Unit = {
@@ -71,10 +70,10 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
       name,
       plan,
       forIncremental = true,
-      expectedMsgs :+ "ContinuousQueries" :+ "not supported")
+      expectedMsgs :+ "streaming" :+ "DataFrame" :+ "Dataset" :+ "not supported")
   }
 
-  def testSupportedForIncremental(
+  def testSupportedForStreaming(
     name: String,
     plan: LogicalPlan): Unit = {
     testSupported(name, plan, forIncremental = true)
@@ -86,14 +85,14 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     forIncremental: Boolean,
     expectedMsgs: Seq[String]): Unit = {
     val testName = if (forIncremental) {
-      s"incremental plan - $name"
+      s"streaming plan - $name"
     } else {
-      s"non-incremental plan - $name"
+      s"batch plan - $name"
     }
 
     test(testName) {
       val e = intercept[AnalysisException] {
-        checker.checkUnsupportedOperations(plan, forIncremental)
+        UnsupportedOperationChecker.check(plan, forIncremental)
       }
 
       if (!expectedMsgs.map(_.toLowerCase).forall(e.getMessage.toLowerCase.contains)) {
@@ -121,7 +120,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     }
 
     test(testName) {
-      checker.checkUnsupportedOperations(plan, forIncremental) // should not throw exception
+      UnsupportedOperationChecker.check(plan, forIncremental) // should not throw exception
     }
   }
 }

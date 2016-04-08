@@ -32,8 +32,7 @@ import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReuseExchang
  * While this is not a public class, we should avoid changing the function names for the sake of
  * changing them, because a lot of developers use the feature for debugging.
  */
-class QueryExecution(val sqlContext: SQLContext, val logical: LogicalPlan)
-  extends UnsupportedOperationChecker {
+class QueryExecution(val sqlContext: SQLContext, val logical: LogicalPlan) {
 
   // TODO: Move the planner an optimizer into here from SessionState.
   protected def planner = sqlContext.sessionState.planner
@@ -46,7 +45,7 @@ class QueryExecution(val sqlContext: SQLContext, val logical: LogicalPlan)
   }
 
   def assertSupported(): Unit = {
-    checkUnsupportedOperations(analyzed, forIncremental = false)
+    UnsupportedOperationChecker.check(analyzed, forIncremental = false)
   }
 
   lazy val analyzed: LogicalPlan = sqlContext.sessionState.analyzer.execute(logical)

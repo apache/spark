@@ -23,61 +23,75 @@ import org.apache.spark.sql.catalyst.plans.logical._
 /**
  * Analyzes the presence of unsupported operations in a logical plan.
  */
-trait UnsupportedOperationChecker {
-  def checkUnsupportedOperations(logicalPlan: LogicalPlan, forIncremental: Boolean): Unit = {
+object UnsupportedOperationChecker {
+  def check(logicalPlan: LogicalPlan, forIncremental: Boolean): Unit = {
     if (forIncremental) {
-      checkUnsupportedOperationsForIncremental(logicalPlan)
+      checkForStreaming(logicalPlan)
     } else {
       logicalPlan.foreachUp {
-        case p if p.needsIncrementalExcecution =>
+        case p if p.isStreaming =>
           notSupported(
-            logicalPlan,
-            "Queries with a streaming source must by executed with write.startStream()")
+            "Queries with streaming sources must be executed with write.startStream()")(p)
 
         case _ =>
       }
     }
   }
 
-  private def checkUnsupportedOperationsForIncremental(logicalPlan: LogicalPlan): Unit = {
-    logicalPlan.foreachUp {
+  private def checkForStreaming(logicalPlan: LogicalPlan): Unit = {
+    logicalPlan.foreachUp { implicit plan =>
 
-      case j@Join(left, right, _, _)
-        if (left.needsIncrementalExcecution && right.needsIncrementalExcecution) =>
-        notSupported(j, "Stream-stream joins are not supported in ContinuousQueries")
+      // Operations that cannot exists anywhere in a streaming plan
+      plan match {
+        case _: Command =>
+          notSupported("Commands like CreateTable*, AlterTable*, Show* are not supported with " +
+            "streaming DataFrames/Datasets")
 
-      case UnsupportedForIncrementalExecution(op) if op.needsIncrementalExcecution =>
-        notSupportedForIncremental(op)
+        case _: InsertIntoTable =>
+          notSupported("InsertIntoTable is not supported with streaming DataFrames/Datasets")
 
-      case _ =>
+        case Join(left, right, _, _) if left.isStreaming && right.isStreaming =>
+          notSupported("Joining between two streaming DataFrames/Datasets is not supported")
+
+        case CoGroup(_, _, _, _, _, _, _, _, _, left, right)
+          if left.isStreaming && right.isStreaming =>
+          notSupported("CoGrouping between two streaming DataFrames/Datasets is not supported")
+
+        case SetOperation(left, right) if right.isStreaming =>
+          notSupported("Intersecting with a streaming DataFrame/Dataset is not supported")
+
+        case u: Union if u.children.count(_.isStreaming) == 1 =>
+          notSupported("Union between streaming and batch DataFrames/Datasets is not supported")
+
+        case GroupingSets(_, _, child, _) if child.isStreaming =>
+          notSupported("GroupingSets is not supported on streaming DataFrames/Datasets")
+
+        case GlobalLimit(_, _) | LocalLimit(_, _) if plan.children.forall(_.isStreaming) =>
+          notSupported("Limits are not supported on streaming DataFrames/Datasets")
+
+        case Distinct(child) if child.isStreaming =>
+          notSupported("Distinct is not supported on streaming DataFrames/Datasets")
+
+        case Sort(_, _, _) | SortPartitions(_, _) if plan.children.forall(_.isStreaming) =>
+          notSupported("Sorting is not supported on streaming DataFrames/Datasets")
+
+        case Sample(_, _, _, _, child) if child.isStreaming =>
+          notSupported("Sampling is not supported on streaming DataFrames/Datasets")
+
+        case Window(_, _, _, child) if child.isStreaming =>
+          notSupported("Non-time-based windows are not supported on streaming DataFrames/Datasets")
+
+        case ReturnAnswer(child) if child.isStreaming =>
+          notSupported("Cannot return immediate result on streaming DataFrames/Dataset. Queries " +
+            "with streaming DataFrames/Datasets must be executed with write.startStream().")
+
+        case _ =>
+      }
     }
   }
 
-  private def notSupportedForIncremental(operator: LogicalPlan): Nothing = {
-    notSupported(
-      operator, s"${operator.getClass.getSimpleName} is not supported in ContinuousQueries")
-  }
-
-  private def notSupported(operator: LogicalPlan, msg: String): Nothing = {
+  private def notSupported(msg: String)(implicit operator: LogicalPlan): Nothing = {
     throw new AnalysisException(
       msg, operator.origin.line, operator.origin.startPosition, Some(operator))
-  }
-
-  object UnsupportedForIncrementalExecution {
-    def unapply(plan: LogicalPlan): Option[LogicalPlan] = plan match {
-      case _: Command =>
-        Some(plan)
-
-      case
-        GlobalLimit(_, _) |
-        LocalLimit(_, _) |
-        Distinct(_) |
-        Sort(_, _, _) =>
-
-        Some(plan)
-
-      case _ =>
-        None
-    }
   }
 }

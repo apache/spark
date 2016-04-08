@@ -75,18 +75,18 @@ class LogicalPlanSuite extends SparkFunSuite {
     val relation = LocalRelation(AttributeReference("a", IntegerType, nullable = true)())
     val incrementalRelation = new LocalRelation(
       Seq(AttributeReference("a", IntegerType, nullable = true)())) {
-      override def needsIncrementalExcecution(): Boolean = true
+      override def isStreaming(): Boolean = true
     }
 
     case class TestBinaryRelation(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
       override def output: Seq[Attribute] = left.output ++ right.output
     }
 
-    require(relation.needsIncrementalExcecution === false)
-    require(incrementalRelation.needsIncrementalExcecution === true)
-    assert(TestBinaryRelation(relation, relation).needsIncrementalExcecution === false)
-    assert(TestBinaryRelation(incrementalRelation, relation).needsIncrementalExcecution === true)
-    assert(TestBinaryRelation(relation, incrementalRelation).needsIncrementalExcecution === true)
-    assert(TestBinaryRelation(incrementalRelation, incrementalRelation).needsIncrementalExcecution)
+    require(relation.isStreaming === false)
+    require(incrementalRelation.isStreaming === true)
+    assert(TestBinaryRelation(relation, relation).isStreaming === false)
+    assert(TestBinaryRelation(incrementalRelation, relation).isStreaming === true)
+    assert(TestBinaryRelation(relation, incrementalRelation).isStreaming === true)
+    assert(TestBinaryRelation(incrementalRelation, incrementalRelation).isStreaming)
   }
 }

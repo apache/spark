@@ -60,6 +60,6 @@ object TestRelations {
 
   val testStreamingRelation = new LocalRelation(
     Seq(AttributeReference("a", IntegerType, nullable = true)())) {
-    override def needsIncrementalExcecution: Boolean = true
+    override def isStreaming: Boolean = true
   }
 }
