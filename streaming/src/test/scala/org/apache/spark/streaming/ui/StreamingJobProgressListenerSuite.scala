@@ -48,6 +48,7 @@ class StreamingJobProgressListenerSuite extends TestSuiteBase with Matchers {
     SparkListenerJobStart(jobId = jobId,
       0L, // unused
       Nil, // unused
+      "testUser",
       properties)
   }
 

@@ -212,6 +212,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
 
     val columns: Seq[Node] = {
       <th>{if (someJobHasJobGroup) "Job Id (Job Group)" else "Job Id"}</th>
+      <th>User</th>
       <th>Description</th>
       <th>Submitted</th>
       <th>Duration</th>
@@ -227,6 +228,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
           end - start
         }
       }
+      val efctvUser = job.efctvUser.getOrElse("Unknown")
       val formattedDuration = duration.map(d => UIUtils.formatDuration(d)).getOrElse("Unknown")
       val formattedSubmissionTime = job.submissionTime.map(UIUtils.formatDate).getOrElse("Unknown")
       val basePathUri = UIUtils.prependBaseUri(parent.basePath)
@@ -237,6 +239,9 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
       <tr id={"job-" + job.jobId}>
         <td sorttable_customkey={job.jobId.toString}>
           {job.jobId} {job.jobGroup.map(id => s"($id)").getOrElse("")}
+        </td>
+        <td sorttable_customkey={efctvUser}>
+          {efctvUser}
         </td>
         <td>
           {jobDescription}
@@ -296,10 +301,6 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
       val summary: NodeSeq =
         <div>
           <ul class="unstyled">
-            <li>
-              <strong>User:</strong>
-              {parent.getSparkUser}
-            </li>
             <li>
               <strong>Total Uptime:</strong>
               {

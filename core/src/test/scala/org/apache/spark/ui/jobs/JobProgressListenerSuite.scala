@@ -57,7 +57,7 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
       props.setProperty(SparkContext.SPARK_JOB_GROUP_ID, groupId)
       props
     }
-    SparkListenerJobStart(jobId, jobSubmissionTime, stageInfos, properties.orNull)
+    SparkListenerJobStart(jobId, jobSubmissionTime, stageInfos, "testUser", properties.orNull)
   }
 
   private def createJobEndEvent(jobId: Int, failed: Boolean = false) = {

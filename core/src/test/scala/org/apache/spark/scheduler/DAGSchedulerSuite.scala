@@ -291,7 +291,16 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
       listener: JobListener = jobListener,
       properties: Properties = null): Int = {
     val jobId = scheduler.nextJobId.getAndIncrement()
-    runEvent(JobSubmitted(jobId, rdd, func, partitions, CallSite("", ""), listener, properties))
+    runEvent(
+      JobSubmitted(
+        jobId,
+        rdd,
+        func,
+        partitions,
+        CallSite("", ""),
+        listener,
+        "testUser",
+        properties))
     jobId
   }
 
@@ -300,7 +309,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
       shuffleDep: ShuffleDependency[_, _, _],
       listener: JobListener = jobListener): Int = {
     val jobId = scheduler.nextJobId.getAndIncrement()
-    runEvent(MapStageSubmitted(jobId, shuffleDep, CallSite("", ""), listener))
+    runEvent(MapStageSubmitted(jobId, shuffleDep, CallSite("", ""), listener, "testUser"))
     jobId
   }
 

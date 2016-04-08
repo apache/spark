@@ -180,6 +180,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
     val jobData: JobUIData =
       new JobUIData(
         jobId = jobStart.jobId,
+        efctvUser = Option(jobStart.efctvUser),
         submissionTime = Option(jobStart.time).filter(_ >= 0),
         stageIds = jobStart.stageIds,
         jobGroup = jobGroup,

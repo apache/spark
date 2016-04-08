@@ -45,6 +45,7 @@ private[spark] object UIData {
 
   class JobUIData(
     var jobId: Int = -1,
+    var efctvUser: Option[String] = None,
     var submissionTime: Option[Long] = None,
     var completionTime: Option[Long] = None,
     var stageIds: Seq[Int] = Seq.empty,

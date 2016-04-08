@@ -71,6 +71,7 @@ case class SparkListenerJobStart(
     jobId: Int,
     time: Long,
     stageInfos: Seq[StageInfo],
+    efctvUser: String,
     properties: Properties = null)
   extends SparkListenerEvent {
   // Note: this is here for backwards-compatibility with older versions of this event which

@@ -123,6 +123,7 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
         createStageInfo(0, 0),
         createStageInfo(1, 0)
       ),
+      "testUser",
       createProperties(executionId)))
     listener.onStageSubmitted(SparkListenerStageSubmitted(createStageInfo(0, 0)))
 
@@ -247,6 +248,7 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
       jobId = 0,
       time = System.currentTimeMillis(),
       stageInfos = Nil,
+      "testUser",
       createProperties(executionId)))
     listener.onOtherEvent(SparkListenerSQLExecutionEnd(
       executionId, System.currentTimeMillis()))
@@ -277,6 +279,7 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
       jobId = 0,
       time = System.currentTimeMillis(),
       stageInfos = Nil,
+      "testUser",
       createProperties(executionId)))
     listener.onJobEnd(SparkListenerJobEnd(
         jobId = 0,
@@ -288,6 +291,7 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
       jobId = 1,
       time = System.currentTimeMillis(),
       stageInfos = Nil,
+      "testUser",
       createProperties(executionId)))
     listener.onOtherEvent(SparkListenerSQLExecutionEnd(
       executionId, System.currentTimeMillis()))
@@ -318,6 +322,7 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
       jobId = 0,
       time = System.currentTimeMillis(),
       stageInfos = Seq.empty,
+      "testUser",
       createProperties(executionId)))
     listener.onOtherEvent(SparkListenerSQLExecutionEnd(
       executionId, System.currentTimeMillis()))
@@ -354,7 +359,7 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
     val executionStart = SparkListenerSQLExecutionStart(
       0, "", "", "", SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan), 0)
     val stageInfo = createStageInfo(0, 0)
-    val jobStart = SparkListenerJobStart(0, 0, Seq(stageInfo), createProperties(0))
+    val jobStart = SparkListenerJobStart(0, 0, Seq(stageInfo), "testUser", createProperties(0))
     val stageSubmitted = SparkListenerStageSubmitted(stageInfo)
     // This task has both accumulators that are SQL metrics and accumulators that are not.
     // The listener should only track the ones that are actually SQL metrics.
