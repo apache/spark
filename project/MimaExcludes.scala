@@ -610,6 +610,9 @@ object MimaExcludes {
         // [SPARK-13674][SQL] Add wholestage codegen support to Sample
         ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.util.random.PoissonSampler.this"),
         ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.util.random.PoissonSampler.this")
+      ) ++ Seq(
+        // [SPARK-14475] Propagate user-defined context from driver to executors
+        ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.getLocalProperty")
       )
     case v if v.startsWith("1.6") =>
       Seq(
