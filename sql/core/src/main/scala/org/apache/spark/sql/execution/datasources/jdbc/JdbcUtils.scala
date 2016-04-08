@@ -96,8 +96,9 @@ object JdbcUtils extends Logging {
   /**
    * Returns a PreparedStatement that inserts a row into table via conn.
    */
-  def insertStatement(conn: Connection, table: String, rddSchema: StructType): PreparedStatement = {
-    val columns = rddSchema.fields.map(f => escapeColumnName(f.name)).mkString(",")
+  def insertStatement(dialect: JdbcDialect, conn: Connection, table: String, rddSchema: StructType)
+      : PreparedStatement = {
+    val columns = rddSchema.fields.map(f => quoteColumnName(dialect, f.name)).mkString(",")
     val placeholders = rddSchema.fields.map(_ => "?").mkString(",")
     val sql = s"INSERT INTO $table ($columns) VALUES ($placeholders)"
     conn.prepareStatement(sql)
@@ -169,7 +170,7 @@ object JdbcUtils extends Logging {
       if (supportsTransactions) {
         conn.setAutoCommit(false) // Everything in the same db transaction.
       }
-      val stmt = insertStatement(conn, table, rddSchema)
+      val stmt = insertStatement(dialect, conn, table, rddSchema)
       try {
         var rowCount = 0
         while (iterator.hasNext) {
@@ -246,22 +247,24 @@ object JdbcUtils extends Logging {
   }
 
   /**
-   * The utility to add backtick if the column name has space
+   * The utility to add quote to the column name based on its dialect
+ *
    * @param columnName the input column name
-   * @return the escaped column name, add backtick if name contains space
+   * @param dialect the JDBC dialect
+   * @return the quoted column name
    */
-  private def escapeColumnName(columnName: String): String = {
-    if (columnName.contains(" ")) s"`$columnName`" else columnName
+  private def quoteColumnName(dialect: JdbcDialect, columnName: String): String = {
+    dialect.quoteIdentifier(columnName)
   }
 
   /**
    * Compute the schema string for this RDD.
    */
-  def schemaString(df: DataFrame, url: String): String = {
+  def schemaString(dialect: JdbcDialect, df: DataFrame, url: String): String = {
     val sb = new StringBuilder()
     val dialect = JdbcDialects.get(url)
     df.schema.fields foreach { field => {
-      val name = escapeColumnName(field.name)
+      val name = quoteColumnName(dialect, field.name)
       val typ: String = getJdbcType(field.dataType, dialect).databaseTypeDefinition
       val nullable = if (field.nullable) "" else "NOT NULL"
       sb.append(s", $name $typ $nullable")
