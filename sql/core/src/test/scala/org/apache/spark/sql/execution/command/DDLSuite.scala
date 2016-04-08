@@ -332,12 +332,20 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     testAddPartitions(isDatasourceTable = true)
   }
 
+  test("alter table: add partition is not supported for views") {
+    assertUnsupported("ALTER VIEW dbx.tab1 ADD IF NOT EXISTS PARTITION (b='2')")
+  }
+
   test("alter table: drop partition") {
     testDropPartitions(isDatasourceTable = false)
   }
 
   test("alter table: drop partition (datasource table)") {
     testDropPartitions(isDatasourceTable = true)
+  }
+
+  test("alter table: drop partition is not supported for views") {
+    assertUnsupported("ALTER VIEW dbx.tab1 DROP IF EXISTS PARTITION (b='2')")
   }
 
   test("alter table: rename partition") {

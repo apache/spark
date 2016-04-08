@@ -480,7 +480,9 @@ class SparkSqlAstBuilder extends AstBuilder {
    */
   override def visitAddTablePartition(
       ctx: AddTablePartitionContext): LogicalPlan = withOrigin(ctx) {
-    if (ctx.VIEW != null) throw new ParseException(s"Operation not allowed: partitioned views", ctx)
+    if (ctx.VIEW != null) {
+      throw new AnalysisException(s"Operation not allowed: partitioned views")
+    }
     // Create partition spec to location mapping.
     val specsAndLocs = if (ctx.partitionSpec.isEmpty) {
       ctx.partitionSpecLocation.asScala.map {
@@ -543,7 +545,9 @@ class SparkSqlAstBuilder extends AstBuilder {
    */
   override def visitDropTablePartitions(
       ctx: DropTablePartitionsContext): LogicalPlan = withOrigin(ctx) {
-    if (ctx.VIEW != null) throw new ParseException(s"Operation not allowed: partitioned views", ctx)
+    if (ctx.VIEW != null) {
+      throw new AnalysisException(s"Operation not allowed: partitioned views")
+    }
     AlterTableDropPartition(
       visitTableIdentifier(ctx.tableIdentifier),
       ctx.partitionSpec.asScala.map(visitNonOptionalPartitionSpec),

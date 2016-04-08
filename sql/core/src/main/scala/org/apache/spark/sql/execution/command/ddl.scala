@@ -304,7 +304,8 @@ case class AlterTableSerDeProperties(
 }
 
 /**
- * Add Partition in ALTER TABLE/VIEW: add the table/view partitions.
+ * Add Partition in ALTER TABLE: add the table partitions.
+ *
  * 'partitionSpecsAndLocs': the syntax of ALTER VIEW is identical to ALTER TABLE,
  * EXCEPT that it is ILLEGAL to specify a LOCATION clause.
  * An error message will be issued if the partition exists, unless 'ifNotExists' is true.
@@ -312,7 +313,6 @@ case class AlterTableSerDeProperties(
  * The syntax of this command is:
  * {{{
  *   ALTER TABLE table ADD [IF NOT EXISTS] PARTITION spec [LOCATION 'loc1']
- *   ALTER VIEW view ADD [IF NOT EXISTS] PARTITION spec
  * }}}
  */
 case class AlterTableAddPartition(
@@ -361,7 +361,8 @@ case class AlterTableRenamePartition(
 }
 
 /**
- * Drop Partition in ALTER TABLE/VIEW: to drop a particular partition for a table/view.
+ * Drop Partition in ALTER TABLE: to drop a particular partition for a table.
+ *
  * This removes the data and metadata for this partition.
  * The data is actually moved to the .Trash/Current directory if Trash is configured,
  * unless 'purge' is true, but the metadata is completely lost.
@@ -371,7 +372,6 @@ case class AlterTableRenamePartition(
  * The syntax of this command is:
  * {{{
  *   ALTER TABLE table DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...] [PURGE];
- *   ALTER VIEW view DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...];
  * }}}
  */
 case class AlterTableDropPartition(
