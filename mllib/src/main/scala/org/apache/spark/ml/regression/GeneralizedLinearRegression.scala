@@ -233,7 +233,8 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
         predictionColName,
         model,
         wlsModel.diagInvAtWA.toArray,
-        1)
+        1,
+        getSolver)
       return model.setSummary(trainingSummary)
     }
 
@@ -253,7 +254,8 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
       predictionColName,
       model,
       irlsModel.diagInvAtWA.toArray,
-      irlsModel.numIterations)
+      irlsModel.numIterations,
+      getSolver)
 
     model.setSummary(trainingSummary)
   }
@@ -777,6 +779,7 @@ object GeneralizedLinearRegressionModel extends MLReadable[GeneralizedLinearRegr
  * @param model the model that should be summarized
  * @param diagInvAtWA diagonal of matrix (A^T * W * A)^-1 in the last iteration
  * @param numIterations number of iterations
+ * @param solver the solver algorithm used for model training
  */
 @Since("2.0.0")
 @Experimental
@@ -785,7 +788,8 @@ class GeneralizedLinearRegressionSummary private[regression] (
     @Since("2.0.0") val predictionCol: String,
     @Since("2.0.0") val model: GeneralizedLinearRegressionModel,
     private val diagInvAtWA: Array[Double],
-    @Since("2.0.0") val numIterations: Int) extends Serializable {
+    @Since("2.0.0") val numIterations: Int,
+    @Since("2.0.0") val solver: String) extends Serializable {
 
   import GeneralizedLinearRegression._
 
