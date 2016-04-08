@@ -211,10 +211,15 @@ object KafkaRDD extends Logging {
     log.warn(s"overriding ${ConsumerConfig.AUTO_OFFSET_RESET_CONFIG} to none for executor")
     kafkaParams.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "none")
 
+    // driver and executor should be in different consumer groups
+    val groupId = "spark-executor-" + kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG)
+    log.warn(s"overriding executor ${ConsumerConfig.GROUP_ID_CONFIG} to ${groupId}")
+    kafkaParams.put(ConsumerConfig.GROUP_ID_CONFIG, groupId)
+
     // possible workaround for KAFKA-3135
     val rbb = kafkaParams.get(ConsumerConfig.RECEIVE_BUFFER_CONFIG)
     if (null == rbb || rbb.asInstanceOf[java.lang.Integer] < 65536) {
-      log.warn(s"overriding ${ConsumerConfig.RECEIVE_BUFFER_CONFIG} to 65536 for KAFKA-3135")
+      log.warn(s"overriding ${ConsumerConfig.RECEIVE_BUFFER_CONFIG} to 65536 see KAFKA-3135")
       kafkaParams.put(ConsumerConfig.RECEIVE_BUFFER_CONFIG, 65536: java.lang.Integer)
     }
   }
