@@ -26,7 +26,7 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     super.beforeAll()
     sql(
       """
-        |CREATE EXTERNAL TABLE parquet_tab1 (c1 INT, c2 STRING)
+        |CREATE TABLE parquet_tab1 (c1 INT, c2 STRING)
         |USING org.apache.spark.sql.parquet.DefaultSource
       """.stripMargin)
 
