@@ -57,7 +57,7 @@ object StringUtils {
    * This utility can be used for filtering pattern in the "Like" of "Show Tables / Functions" DDL
    * @param names the names list to be filtered
    * @param pattern the filter pattern, only '*' and '|' are allowed as wildcards, others will
-   *                follows regular expression convention, case insensitive match and white spaces
+   *                follow regular expression convention, case insensitive match and white spaces
    *                on both ends will be ignored
    * @return the filtered names list in order
    */
