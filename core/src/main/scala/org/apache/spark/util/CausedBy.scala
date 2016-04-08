@@ -24,8 +24,7 @@ package org.apache.spark.util
  * Usage:
  * try {
  *   ...
- * }
- * catch {
+ * } catch {
  *   case CausedBy(ex: CommitDeniedException) => ...
  * }
  */
