@@ -36,27 +36,7 @@ object DatasetBenchmark {
 
     val df = sqlContext.range(1, numRows).select($"id".as("l"), $"id".cast(StringType).as("s"))
     val benchmark = new Benchmark("back-to-back map", numRows)
-
     val func = (d: Data) => Data(d.l + 1, d.s)
-    benchmark.addCase("Dataset") { iter =>
-      var res = df.as[Data]
-      var i = 0
-      while (i < numChains) {
-        res = res.map(func)
-        i += 1
-      }
-      res.queryExecution.toRdd.foreach(_ => Unit)
-    }
-
-    benchmark.addCase("DataFrame") { iter =>
-      var res = df
-      var i = 0
-      while (i < numChains) {
-        res = res.select($"l" + 1 as "l")
-        i += 1
-      }
-      res.queryExecution.toRdd.foreach(_ => Unit)
-    }
 
     val rdd = sqlContext.sparkContext.range(1, numRows).map(l => Data(l, l.toString))
     benchmark.addCase("RDD") { iter =>
@@ -69,6 +49,26 @@ object DatasetBenchmark {
       res.foreach(_ => Unit)
     }
 
+    benchmark.addCase("DataFrame") { iter =>
+      var res = df
+      var i = 0
+      while (i < numChains) {
+        res = res.select($"l" + 1 as "l")
+        i += 1
+      }
+      res.queryExecution.toRdd.foreach(_ => Unit)
+    }
+
+    benchmark.addCase("Dataset") { iter =>
+      var res = df.as[Data]
+      var i = 0
+      while (i < numChains) {
+        res = res.map(func)
+        i += 1
+      }
+      res.queryExecution.toRdd.foreach(_ => Unit)
+    }
+
     benchmark
   }
 
@@ -77,19 +77,20 @@ object DatasetBenchmark {
 
     val df = sqlContext.range(1, numRows).select($"id".as("l"), $"id".cast(StringType).as("s"))
     val benchmark = new Benchmark("back-to-back filter", numRows)
-
     val func = (d: Data, i: Int) => d.l % (100L + i) == 0L
     val funcs = 0.until(numChains).map { i =>
       (d: Data) => func(d, i)
     }
-    benchmark.addCase("Dataset") { iter =>
-      var res = df.as[Data]
+
+    val rdd = sqlContext.sparkContext.range(1, numRows).map(l => Data(l, l.toString))
+    benchmark.addCase("RDD") { iter =>
+      var res = rdd
       var i = 0
       while (i < numChains) {
-        res = res.filter(funcs(i))
+        res = rdd.filter(funcs(i))
         i += 1
       }
-      res.queryExecution.toRdd.foreach(_ => Unit)
+      res.foreach(_ => Unit)
     }
 
     benchmark.addCase("DataFrame") { iter =>
@@ -102,15 +103,14 @@ object DatasetBenchmark {
       res.queryExecution.toRdd.foreach(_ => Unit)
     }
 
-    val rdd = sqlContext.sparkContext.range(1, numRows).map(l => Data(l, l.toString))
-    benchmark.addCase("RDD") { iter =>
-      var res = rdd
+    benchmark.addCase("Dataset") { iter =>
+      var res = df.as[Data]
       var i = 0
       while (i < numChains) {
-        res = rdd.filter(funcs(i))
+        res = res.filter(funcs(i))
         i += 1
       }
-      res.foreach(_ => Unit)
+      res.queryExecution.toRdd.foreach(_ => Unit)
     }
 
     benchmark
@@ -132,13 +132,13 @@ object DatasetBenchmark {
     val df = sqlContext.range(1, numRows).select($"id".as("l"), $"id".cast(StringType).as("s"))
     val benchmark = new Benchmark("aggregate", numRows)
 
-    benchmark.addCase("DataFrame sum") { iter =>
-      df.select(sum($"l")).queryExecution.toRdd.foreach(_ => Unit)
-    }
-
     val rdd = sqlContext.sparkContext.range(1, numRows).map(l => Data(l, l.toString))
     benchmark.addCase("RDD sum") { iter =>
       rdd.aggregate(0L)(_ + _.l, _ + _)
+    }
+
+    benchmark.addCase("DataFrame sum") { iter =>
+      df.select(sum($"l")).queryExecution.toRdd.foreach(_ => Unit)
     }
 
     benchmark.addCase("Dataset sum using Aggregator") { iter =>
@@ -156,7 +156,7 @@ object DatasetBenchmark {
     val sparkContext = new SparkContext("local[*]", "Dataset benchmark")
     val sqlContext = new SQLContext(sparkContext)
 
-    val numRows = 10000000
+    val numRows = 100000000
     val numChains = 10
 
     val benchmark = backToBackMap(sqlContext, numRows, numChains)
@@ -168,9 +168,9 @@ object DatasetBenchmark {
     Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
     back-to-back map:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -------------------------------------------------------------------------------------------
-    Dataset                                   902 /  995         11.1          90.2       1.0X
-    DataFrame                                 132 /  167         75.5          13.2       6.8X
-    RDD                                       216 /  237         46.3          21.6       4.2X
+    RDD                                      1935 / 2105         51.7          19.3       1.0X
+    DataFrame                                 756 /  799        132.3           7.6       2.6X
+    Dataset                                  7359 / 7506         13.6          73.6       0.3X
     */
     benchmark.run()
 
@@ -179,9 +179,9 @@ object DatasetBenchmark {
     Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
     back-to-back filter:                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -------------------------------------------------------------------------------------------
-    Dataset                                   585 /  628         17.1          58.5       1.0X
-    DataFrame                                  62 /   80        160.7           6.2       9.4X
-    RDD                                       205 /  220         48.7          20.5       2.8X
+    RDD                                      1974 / 2036         50.6          19.7       1.0X
+    DataFrame                                 103 /  127        967.4           1.0      19.1X
+    Dataset                                  4343 / 4477         23.0          43.4       0.5X
     */
     benchmark2.run()
 
@@ -190,10 +190,10 @@ object DatasetBenchmark {
     Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
     aggregate:                          Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -------------------------------------------------------------------------------------------
-    DataFrame sum                             137 /  314         72.7          13.7       1.0X
-    RDD sum                                   203 /  217         49.2          20.3       0.7X
-    Dataset sum using Aggregator              506 /  542         19.8          50.6       0.3X
-    Dataset complex Aggregator                959 / 1051         10.4          95.9       0.1X
+    RDD sum                                  2130 / 2166         46.9          21.3       1.0X
+    DataFrame sum                              92 /  128       1085.3           0.9      23.1X
+    Dataset sum using Aggregator             4111 / 4282         24.3          41.1       0.5X
+    Dataset complex Aggregator               8782 / 9036         11.4          87.8       0.2X
     */
     benchmark3.run()
   }
