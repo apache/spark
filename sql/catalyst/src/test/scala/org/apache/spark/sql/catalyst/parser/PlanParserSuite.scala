@@ -334,7 +334,7 @@ class PlanParserSuite extends PlanTest {
         table("t").join(table("u"), UsingJoin(jt, Seq('a.attr, 'b.attr)), None).select(star()))
     }
     val testAll = Seq(testUnconditionalJoin, testConditionalJoin, testNaturalJoin, testUsingJoin)
-
+    val testExistence = Seq(testUnconditionalJoin, testConditionalJoin, testUsingJoin)
     def test(sql: String, jt: JoinType, tests: Seq[(String, JoinType) => Unit]): Unit = {
       tests.foreach(_(sql, jt))
     }
@@ -348,6 +348,9 @@ class PlanParserSuite extends PlanTest {
     test("right outer join", RightOuter, testAll)
     test("full join", FullOuter, testAll)
     test("full outer join", FullOuter, testAll)
+    test("left semi join", LeftSemi, testExistence)
+    test("left anti join", LeftAnti, testExistence)
+    test("anti join", LeftAnti, testExistence)
 
     // Test multiple consecutive joins
     assertEqual(
