@@ -614,6 +614,9 @@ object MimaExcludes {
       ) ++ Seq(
         // [SPARK-13430][ML] moved featureCol from LinearRegressionModelSummary to LinearRegressionSummary
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.ml.regression.LinearRegressionSummary.this")
+      ) ++ Seq(
+        // [SPARK-13048][ML][MLLIB] keepLastCheckpoint option for LDA EM optimizer
+        ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.clustering.DistributedLDAModel.this")
       )
     case v if v.startsWith("1.6") =>
       Seq(
