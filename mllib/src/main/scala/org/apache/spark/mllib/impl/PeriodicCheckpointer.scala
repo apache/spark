@@ -51,7 +51,8 @@ import org.apache.spark.storage.StorageLevel
  *  - This class removes checkpoint files once later Datasets have been checkpointed.
  *    However, references to the older Datasets will still return isCheckpointed = true.
  *
- * @param checkpointInterval  Datasets will be checkpointed at this interval
+ * @param checkpointInterval  Datasets will be checkpointed at this interval.
+ *                            If this interval was set as -1, then checkpointing will be disabled.
  * @param sc  SparkContext for the Datasets given to this checkpointer
  * @tparam T  Dataset type, such as RDD[Double]
  */
@@ -88,7 +89,8 @@ private[mllib] abstract class PeriodicCheckpointer[T](
     updateCount += 1
 
     // Handle checkpointing (after persisting)
-    if ((updateCount % checkpointInterval) == 0 && sc.getCheckpointDir.nonEmpty) {
+    if (checkpointInterval != -1 && (updateCount % checkpointInterval) == 0
+      && sc.getCheckpointDir.nonEmpty) {
       // Add new checkpoint before removing old checkpoints.
       checkpoint(newData)
       checkpointQueue.enqueue(newData)
