@@ -227,14 +227,6 @@
         <enabled>false</enabled>
       </snapshots>
     </repository>
-    <repository>
-      <id>spark-hive-staging</id>
-      <name>Staging Repo for Hive 1.2.1 (Spark Version)</name>
-      <url>https://oss.sonatype.org/content/repositories/orgspark-project-1122</url>
-      <releases>
-        <enabled>true</enabled>
-      </releases>
-    </repository>
   </repositories>
   <pluginRepositories>
     <pluginRepository>
