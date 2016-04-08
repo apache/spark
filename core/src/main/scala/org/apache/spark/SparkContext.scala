@@ -605,7 +605,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Set a local property that affects jobs submitted from this thread, such as the Spark fair
    * scheduler pool. User-defined properties may also be set here. These properties are propagated
    * through to worker tasks and can be accessed there via
-   * [[org.apache.spark.TaskContext.getLocalProperty]].
+   * [[org.apache.spark.TaskContext#getLocalProperty]].
    */
   def setLocalProperty(key: String, value: String) {
     if (value == null) {
