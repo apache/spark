@@ -100,6 +100,21 @@ private[feature] trait CountVectorizerParams extends Params with HasInputCol wit
 
   /** @group getParam */
   def getMinTF: Double = $(minTF)
+
+  /**
+   * Binary toggle to control the output vector values.
+   * If True, all nonzero counts (after minTF filter applied) are set to 1. This is useful for
+   * discrete probabilistic models that model binary events rather than integer counts.
+   * Default: false
+   * @group param
+   */
+  val binary: BooleanParam =
+    new BooleanParam(this, "binary", "If True, all non zero counts are set to 1.")
+
+  /** @group getParam */
+  def getBinary: Boolean = $(binary)
+
+  setDefault(binary -> false)
 }
 
 /**
@@ -126,6 +141,9 @@ class CountVectorizer(override val uid: String)
 
   /** @group setParam */
   def setMinTF(value: Double): this.type = set(minTF, value)
+
+  /** @group setParam */
+  def setBinary(value: Boolean): this.type = set(binary, value)
 
   setDefault(vocabSize -> (1 << 18), minDF -> 1)
 
@@ -206,25 +224,8 @@ class CountVectorizerModel(override val uid: String, val vocabulary: Array[Strin
   /** @group setParam */
   def setMinTF(value: Double): this.type = set(minTF, value)
 
-  /**
-   * Binary toggle to control the output vector values.
-   * If True, all nonzero counts (after minTF filter applied) are set to 1. This is useful for
-   * discrete probabilistic models that model binary events rather than integer counts.
-   * Default: false
-   * @group param
-   */
-  val binary: BooleanParam =
-    new BooleanParam(this, "binary", "If True, all non zero counts are set to 1. " +
-      "This is useful for discrete probabilistic models that model binary events rather " +
-      "than integer counts")
-
-  /** @group getParam */
-  def getBinary: Boolean = $(binary)
-
   /** @group setParam */
   def setBinary(value: Boolean): this.type = set(binary, value)
-
-  setDefault(binary -> false)
 
   /** Dictionary created from [[vocabulary]] and its indices, broadcast once for [[transform()]] */
   private var broadcastDict: Option[Broadcast[Map[String, Int]]] = None
