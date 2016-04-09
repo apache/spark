@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import scala.language.postfixOps
 
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.expressions.scala.typed
 import org.apache.spark.sql.functions._
@@ -26,73 +27,64 @@ import org.apache.spark.sql.test.SharedSQLContext
 
 
 object ComplexResultAgg extends Aggregator[(String, Int), (Long, Long), (Long, Long)] {
-
   override def zero: (Long, Long) = (0, 0)
-
   override def reduce(countAndSum: (Long, Long), input: (String, Int)): (Long, Long) = {
     (countAndSum._1 + 1, countAndSum._2 + input._2)
   }
-
   override def merge(b1: (Long, Long), b2: (Long, Long)): (Long, Long) = {
     (b1._1 + b2._1, b1._2 + b2._2)
   }
-
   override def finish(reduction: (Long, Long)): (Long, Long) = reduction
+  override def bufferEncoder: Encoder[(Long, Long)] = Encoders.product[(Long, Long)]
+  override def outputEncoder: Encoder[(Long, Long)] = Encoders.product[(Long, Long)]
 }
+
 
 case class AggData(a: Int, b: String)
+
 object ClassInputAgg extends Aggregator[AggData, Int, Int] {
-  /** A zero value for this aggregation. Should satisfy the property that any b + zero = b */
   override def zero: Int = 0
-
-  /**
-   * Combine two values to produce a new value.  For performance, the function may modify `b` and
-   * return it instead of constructing new object for b.
-   */
   override def reduce(b: Int, a: AggData): Int = b + a.a
-
-  /**
-   * Transform the output of the reduction.
-   */
   override def finish(reduction: Int): Int = reduction
-
-  /**
-   * Merge two intermediate values
-   */
   override def merge(b1: Int, b2: Int): Int = b1 + b2
+  override def bufferEncoder: Encoder[Int] = Encoders.scalaInt
+  override def outputEncoder: Encoder[Int] = Encoders.scalaInt
 }
+
 
 object ComplexBufferAgg extends Aggregator[AggData, (Int, AggData), Int] {
-  /** A zero value for this aggregation. Should satisfy the property that any b + zero = b */
   override def zero: (Int, AggData) = 0 -> AggData(0, "0")
-
-  /**
-   * Combine two values to produce a new value.  For performance, the function may modify `b` and
-   * return it instead of constructing new object for b.
-   */
   override def reduce(b: (Int, AggData), a: AggData): (Int, AggData) = (b._1 + 1, a)
-
-  /**
-   * Transform the output of the reduction.
-   */
   override def finish(reduction: (Int, AggData)): Int = reduction._1
-
-  /**
-   * Merge two intermediate values
-   */
   override def merge(b1: (Int, AggData), b2: (Int, AggData)): (Int, AggData) =
     (b1._1 + b2._1, b1._2)
+  override def bufferEncoder: Encoder[(Int, AggData)] = Encoders.product[(Int, AggData)]
+  override def outputEncoder: Encoder[Int] = Encoders.scalaInt
 }
+
 
 object NameAgg extends Aggregator[AggData, String, String] {
   def zero: String = ""
-
   def reduce(b: String, a: AggData): String = a.b + b
-
   def merge(b1: String, b2: String): String = b1 + b2
-
   def finish(r: String): String = r
+  override def bufferEncoder: Encoder[String] = Encoders.STRING
+  override def outputEncoder: Encoder[String] = Encoders.STRING
 }
+
+
+class ParameterizedTypeSum[IN, OUT : Numeric : Encoder](f: IN => OUT)
+  extends Aggregator[IN, OUT, OUT] {
+
+  private val numeric = implicitly[Numeric[OUT]]
+  override def zero: OUT = numeric.zero
+  override def reduce(b: OUT, a: IN): OUT = numeric.plus(b, f(a))
+  override def merge(b1: OUT, b2: OUT): OUT = numeric.plus(b1, b2)
+  override def finish(reduction: OUT): OUT = reduction
+  override def bufferEncoder: Encoder[OUT] = implicitly[Encoder[OUT]]
+  override def outputEncoder: Encoder[OUT] = implicitly[Encoder[OUT]]
+}
+
 
 class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
 
@@ -185,6 +177,19 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
       ds.groupByKey(_._1).agg(
         typed.avg(_._2), typed.count(_._2), typed.sum(_._2), typed.sumLong(_._2)),
       ("a", 2.0, 2L, 4.0, 4L), ("b", 3.0, 1L, 3.0, 3L))
+  }
+
+  test("generic typed sum") {
+    val ds = Seq("a" -> 1, "a" -> 3, "b" -> 3).toDS()
+    checkDataset(
+      ds.groupByKey(_._1)
+        .agg(new ParameterizedTypeSum[(String, Int), Double](_._2.toDouble).toColumn),
+      ("a", 4.0), ("b", 3.0))
+
+    checkDataset(
+      ds.groupByKey(_._1)
+        .agg(new ParameterizedTypeSum((x: (String, Int)) => x._2.toInt).toColumn),
+      ("a", 4), ("b", 3))
   }
 
   test("SPARK-12555 - result should not be corrupted after input columns are reordered") {
