@@ -110,9 +110,7 @@ class ReceiverTrackerSuite extends TestSuiteBase {
       val output = new TestOutputStream(input)
       output.register()
       ssc.start()
-      eventually(timeout(10 seconds), interval(10 millis)) {
-        assert(ssc.scheduler.receiverTracker.allocatedExecutors().size === 1)
-      }
+      assert(ssc.scheduler.receiverTracker.allocatedExecutors().size === 1)
     }
 
     // Test get allocated executors when there's no receiver registered
@@ -122,9 +120,7 @@ class ReceiverTrackerSuite extends TestSuiteBase {
       val output = new TestOutputStream(input)
       output.register()
       ssc.start()
-      eventually(timeout(10 seconds), interval(10 millis)) {
-        assert(ssc.scheduler.receiverTracker.allocatedExecutors() === Map.empty)
-      }
+      assert(ssc.scheduler.receiverTracker.allocatedExecutors() === Map.empty)
     }
   }
 }
