@@ -54,7 +54,7 @@ class TungstenAggregateHashMap(
        """.stripMargin
 
     s"""
-       |  private org.apache.spark.sql.execution.vectorized.ColumnarBatch batch;
+       |  org.apache.spark.sql.execution.vectorized.ColumnarBatch batch;
        |  private int[] buckets;
        |  private int numBuckets;
        |  private int maxSteps;

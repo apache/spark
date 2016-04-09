@@ -453,6 +453,13 @@ case class TungstenAggregate(
         s"$aggregateHashMapTerm = new $aggregateHashMapClassName();")
     }
 
+    // Create a name for iterator from AggregateHashMap
+    val iterTermforGeneratedHashMap = ctx.freshName("genMapIter")
+    ctx.addMutableState(
+      "java.util.Iterator<org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row>",
+      iterTermforGeneratedHashMap, "")
+
+
     // create hashMap
     val thisPlan = ctx.addReferenceObj("plan", this)
     hashMapTerm = ctx.freshName("hashMap")
@@ -472,7 +479,7 @@ case class TungstenAggregate(
         private void $doAgg() throws java.io.IOException {
           $hashMapTerm = $thisPlan.createHashMap();
           ${child.asInstanceOf[CodegenSupport].produce(ctx, this)}
-
+          $iterTermforGeneratedHashMap = $aggregateHashMapTerm.batch.rowIterator();
           $iterTerm = $thisPlan.finishAggregate($hashMapTerm, $sorterTerm);
         }
        """)
@@ -480,6 +487,7 @@ case class TungstenAggregate(
     // generate code for output
     val keyTerm = ctx.freshName("aggKey")
     val bufferTerm = ctx.freshName("aggBuffer")
+    val outputCode1 = generateResultCode(ctx, keyTerm, bufferTerm, thisPlan)
     val outputCode = generateResultCode(ctx, keyTerm, bufferTerm, thisPlan)
     val numOutput = metricTerm(ctx, "numOutputRows")
 
@@ -494,6 +502,17 @@ case class TungstenAggregate(
      }
 
      // output the result
+     while ($iterTermforGeneratedHashMap.next()) {
+       $numOutput.add(1);
+       // UnsafeRow $keyTerm = (UnsafeRow) $iterTermforGeneratedHashMap.getKey();
+       // UnsafeRow $bufferTerm = (UnsafeRow) $iterTermforGeneratedHashMap.getValue();
+       $outputCode
+
+       if (shouldStop()) return;
+     }
+
+     $iterTermforGeneratedHashMap.close();
+
      while ($iterTerm.next()) {
        $numOutput.add(1);
        UnsafeRow $keyTerm = (UnsafeRow) $iterTerm.getKey();
