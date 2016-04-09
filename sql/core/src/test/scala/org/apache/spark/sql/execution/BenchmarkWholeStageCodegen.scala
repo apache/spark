@@ -611,7 +611,8 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     LongToUnsafeRowMap (opt=true)             144 /  152        145.2           6.9       1.9X
     BytesToBytesMap (off Heap)               1300 / 1616         16.1          62.0       0.2X
     BytesToBytesMap (on Heap)                1165 / 1202         18.0          55.5       0.2X
-    Aggregate HashMap                         121 /  131        173.3           5.8       2.2X      */
+    Aggregate HashMap                         121 /  131        173.3           5.8       2.2X
+    */
     benchmark.run()
   }
 
