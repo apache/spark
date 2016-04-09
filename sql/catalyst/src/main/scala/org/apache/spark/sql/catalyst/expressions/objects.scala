@@ -119,18 +119,18 @@ case class Invoke(
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
 
-  lazy val method = targetObject.dataType match {
+  @transient lazy val method = targetObject.dataType match {
     case ObjectType(cls) =>
-      cls
-        .getMethods
-        .find(_.getName == functionName)
-        .getOrElse(sys.error(s"Couldn't find $functionName on $cls"))
-        .getReturnType
-        .getName
-    case _ => ""
+      val m = cls.getMethods.find(_.getName == functionName)
+      if (m.isEmpty) {
+        sys.error(s"Couldn't find $functionName on $cls")
+      } else {
+        m
+      }
+    case _ => None
   }
 
-  lazy val unboxer = (dataType, method) match {
+  lazy val unboxer = (dataType, method.map(_.getReturnType.getName).getOrElse("")) match {
     case (IntegerType, "java.lang.Object") => (s: String) =>
       s"((java.lang.Integer)$s).intValue()"
     case (LongType, "java.lang.Object") => (s: String) =>
@@ -157,21 +157,31 @@ case class Invoke(
     // If the function can return null, we do an extra check to make sure our null bit is still set
     // correctly.
     val objNullCheck = if (ctx.defaultValue(dataType) == "null") {
-      s"${ev.isNull} = ${ev.value} == null;"
+      s"boolean ${ev.isNull} = ${ev.value} == null;"
     } else {
+      ev.isNull = obj.isNull
       ""
     }
 
     val value = unboxer(s"${obj.value}.$functionName($argString)")
 
+    val evaluate = if (method.forall(_.getExceptionTypes.isEmpty)) {
+      s"$javaType ${ev.value} = ${obj.isNull} ? ${ctx.defaultValue(dataType)} : ($javaType) $value;"
+    } else {
+      s"""
+        $javaType ${ev.value} = ${ctx.defaultValue(javaType)};
+        try {
+          ${ev.value} = ${obj.isNull} ? ${ctx.defaultValue(javaType)} : ($javaType) $value;
+        } catch (Exception e) {
+          org.apache.spark.unsafe.Platform.throwException(e);
+        }
+      """
+    }
+
     s"""
       ${obj.code}
       ${argGen.map(_.code).mkString("\n")}
-
-      boolean ${ev.isNull} = ${obj.isNull};
-      $javaType ${ev.value} =
-        ${ev.isNull} ?
-        ${ctx.defaultValue(dataType)} : ($javaType) $value;
+      $evaluate
       $objNullCheck
     """
   }
@@ -514,22 +524,26 @@ case class CreateExternalRow(children: Seq[Expression], schema: StructType)
   override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     val rowClass = classOf[GenericRowWithSchema].getName
     val values = ctx.freshName("values")
-    val schemaField = ctx.addReferenceObj("schema", schema)
-    s"""
-      boolean ${ev.isNull} = false;
-      final Object[] $values = new Object[${children.size}];
-    """ +
-      children.zipWithIndex.map { case (e, i) =>
-        val eval = e.gen(ctx)
-        eval.code + s"""
+    ctx.addMutableState("Object[]", values, "")
+
+    val childrenCodes = children.zipWithIndex.map { case (e, i) =>
+      val eval = e.gen(ctx)
+      eval.code + s"""
           if (${eval.isNull}) {
             $values[$i] = null;
           } else {
             $values[$i] = ${eval.value};
           }
          """
-      }.mkString("\n") +
-      s"final ${classOf[Row].getName} ${ev.value} = new $rowClass($values, this.$schemaField);"
+    }
+    val childrenCode = ctx.splitExpressions(ctx.INPUT_ROW, childrenCodes)
+    val schemaField = ctx.addReferenceObj("schema", schema)
+    s"""
+      boolean ${ev.isNull} = false;
+      $values = new Object[${children.size}];
+      $childrenCode
+      final ${classOf[Row].getName} ${ev.value} = new $rowClass($values, this.$schemaField);
+      """
   }
 }
 

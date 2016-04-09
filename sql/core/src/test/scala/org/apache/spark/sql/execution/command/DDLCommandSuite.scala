@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.execution.datasources.BucketSpec
 import org.apache.spark.sql.types._
@@ -351,22 +352,12 @@ class DDLCommandSuite extends PlanTest {
       |(col1=NULL, cOL2='f', col3=5, COL4=true)
     """.stripMargin
 
-    val parsed1 = parser.parsePlan(sql1)
-    val parsed2 = parser.parsePlan(sql2)
-
-    val expected1 = AlterTableAddPartition(
-      TableIdentifier("view_name", None),
-      Seq(
-        (Map("dt" -> "2008-08-08", "country" -> "us"), None),
-        (Map("dt" -> "2009-09-09", "country" -> "uk"), None)),
-      ifNotExists = true)(sql1)
-    val expected2 = AlterTableAddPartition(
-      TableIdentifier("view_name", None),
-      Seq((Map("col1" -> "NULL", "col2" -> "f", "col3" -> "5", "col4" -> "true"), None)),
-      ifNotExists = false)(sql2)
-
-    comparePlans(parsed1, expected1)
-    comparePlans(parsed2, expected2)
+    intercept[ParseException] {
+      parser.parsePlan(sql1)
+    }
+    intercept[ParseException] {
+      parser.parsePlan(sql2)
+    }
   }
 
   test("alter table: rename partition") {
@@ -416,8 +407,13 @@ class DDLCommandSuite extends PlanTest {
 
     val parsed1_table = parser.parsePlan(sql1_table)
     val parsed2_table = parser.parsePlan(sql2_table)
-    val parsed1_view = parser.parsePlan(sql1_view)
-    val parsed2_view = parser.parsePlan(sql2_view)
+
+    intercept[ParseException] {
+      parser.parsePlan(sql1_view)
+    }
+    intercept[ParseException] {
+      parser.parsePlan(sql2_view)
+    }
 
     val tableIdent = TableIdentifier("table_name", None)
     val expected1_table = AlterTableDropPartition(
@@ -435,25 +431,8 @@ class DDLCommandSuite extends PlanTest {
       ifExists = false,
       purge = true)(sql2_table)
 
-    val expected1_view = AlterTableDropPartition(
-      tableIdent,
-      Seq(
-        Map("dt" -> "2008-08-08", "country" -> "us"),
-        Map("dt" -> "2009-09-09", "country" -> "uk")),
-      ifExists = true,
-      purge = false)(sql1_view)
-    val expected2_view = AlterTableDropPartition(
-      tableIdent,
-      Seq(
-        Map("dt" -> "2008-08-08", "country" -> "us"),
-        Map("dt" -> "2009-09-09", "country" -> "uk")),
-      ifExists = false,
-      purge = false)(sql2_table)
-
     comparePlans(parsed1_table, expected1_table)
     comparePlans(parsed2_table, expected2_table)
-    comparePlans(parsed1_view, expected1_view)
-    comparePlans(parsed2_view, expected2_view)
   }
 
   test("alter table: archive partition") {
@@ -706,5 +685,11 @@ class DDLCommandSuite extends PlanTest {
     intercept[ParseException] {
       parser.parsePlan("SELECT TRANSFORM (key, value) USING 'cat' AS (tKey, tValue) FROM testData")
     }
+  }
+
+  test("SPARK-14383: DISTRIBUTE and UNSET as non-keywords") {
+    val sql = "SELECT distribute, unset FROM x"
+    val parsed = parser.parsePlan(sql)
+    assert(parsed.isInstanceOf[Project])
   }
 }

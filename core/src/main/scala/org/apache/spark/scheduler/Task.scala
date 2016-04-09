@@ -80,10 +80,16 @@ private[spark] abstract class Task[T](
     }
     try {
       runTask(context)
-    } catch { case e: Throwable =>
-      // Catch all errors; run task failure callbacks, and rethrow the exception.
-      context.markTaskFailed(e)
-      throw e
+    } catch {
+      case e: Throwable =>
+        // Catch all errors; run task failure callbacks, and rethrow the exception.
+        try {
+          context.markTaskFailed(e)
+        } catch {
+          case t: Throwable =>
+            e.addSuppressed(t)
+        }
+        throw e
     } finally {
       // Call the task completion callbacks.
       context.markTaskCompleted()

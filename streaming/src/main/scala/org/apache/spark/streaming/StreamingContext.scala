@@ -43,7 +43,7 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContextState._
 import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.receiver.Receiver
-import org.apache.spark.streaming.scheduler.{JobScheduler, StreamingListener}
+import org.apache.spark.streaming.scheduler.{ExecutorAllocationManager, JobScheduler, StreamingListener}
 import org.apache.spark.streaming.ui.{StreamingJobProgressListener, StreamingTab}
 import org.apache.spark.util.{CallSite, ShutdownHookManager, ThreadUtils, Utils}
 
@@ -106,7 +106,7 @@ class StreamingContext private[streaming] (
    *                   HDFS compatible filesystems
    */
   def this(path: String, hadoopConf: Configuration) =
-    this(null, CheckpointReader.read(path, new SparkConf(), hadoopConf).get, null)
+    this(null, CheckpointReader.read(path, new SparkConf(), hadoopConf).orNull, null)
 
   /**
    * Recreate a StreamingContext from a checkpoint file.
@@ -122,15 +122,12 @@ class StreamingContext private[streaming] (
   def this(path: String, sparkContext: SparkContext) = {
     this(
       sparkContext,
-      CheckpointReader.read(path, sparkContext.conf, sparkContext.hadoopConfiguration).get,
+      CheckpointReader.read(path, sparkContext.conf, sparkContext.hadoopConfiguration).orNull,
       null)
   }
 
-
-  if (_sc == null && _cp == null) {
-    throw new Exception("Spark Streaming cannot be initialized with " +
-      "both SparkContext and checkpoint as null")
-  }
+  require(_sc != null || _cp != null,
+    "Spark Streaming cannot be initialized with both SparkContext and checkpoint as null")
 
   private[streaming] val isCheckpointPresent: Boolean = _cp != null
 
@@ -530,11 +527,12 @@ class StreamingContext private[streaming] (
       }
     }
 
-    if (Utils.isDynamicAllocationEnabled(sc.conf)) {
+    if (Utils.isDynamicAllocationEnabled(sc.conf) ||
+        ExecutorAllocationManager.isDynamicAllocationEnabled(conf)) {
       logWarning("Dynamic Allocation is enabled for this application. " +
         "Enabling Dynamic allocation for Spark Streaming applications can cause data loss if " +
         "Write Ahead Log is not enabled for non-replayable sources like Flume. " +
-        "See the programming guide for details on how to enable the Write Ahead Log")
+        "See the programming guide for details on how to enable the Write Ahead Log.")
     }
   }
 
