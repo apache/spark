@@ -352,11 +352,9 @@ class Word2Vec extends Serializable with Logging {
             var wc = wordCount
             if (wordCount - lastWordCount > 10000) {
               lwc = wordCount
-              // alpha = learningRate * (1 - progress) where progress increases from 0
-              // to (numIterations * trainWordsCount) / (numIterations * trainWordsCount + 1)
-              val progress = (numPartitions * wordCount.toDouble + (k-1) * trainWordsCount) /
-                (trainWordsCount * numIterations + 1)
-              alpha = learningRate * (1 - progress)
+              // TODO: discount by iteration?
+              alpha =
+                learningRate * (1 - numPartitions * wordCount.toDouble / (trainWordsCount + 1))
               if (alpha < learningRate * 0.0001) alpha = learningRate * 0.0001
               logInfo("wordCount = " + wordCount + ", alpha = " + alpha)
             }
