@@ -49,7 +49,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTable
 case class CreateTable(table: CatalogTable, ifNotExists: Boolean) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
-    // TODO: implement me
+    sqlContext.sessionState.catalog.createTable(table, ifNotExists)
     Seq.empty[Row]
   }
 
