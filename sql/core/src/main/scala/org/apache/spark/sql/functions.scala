@@ -154,6 +154,8 @@ object functions {
   /**
    * Aggregate function: returns the approximate number of distinct items in a group.
    *
+   * @param rsd maximum estimation error allowed (default = 0.05)
+   *
    * @group agg_funcs
    * @since 1.3.0
    */
@@ -163,6 +165,8 @@ object functions {
 
   /**
    * Aggregate function: returns the approximate number of distinct items in a group.
+   *
+   * @param rsd maximum estimation error allowed (default = 0.05)
    *
    * @group agg_funcs
    * @since 1.3.0

@@ -588,6 +588,8 @@ class TrainValidationSplit(Estimator, ValidatorParams, MLReadable, MLWritable):
 class TrainValidationSplitModel(Model, ValidatorParams, MLReadable, MLWritable):
     """
     Model from train validation split.
+
+    .. versionadded:: 2.0.0
     """
 
     def __init__(self, bestModel):

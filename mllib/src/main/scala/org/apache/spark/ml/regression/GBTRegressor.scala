@@ -41,6 +41,18 @@ import org.apache.spark.sql.functions._
  * [[http://en.wikipedia.org/wiki/Gradient_boosting Gradient-Boosted Trees (GBTs)]]
  * learning algorithm for regression.
  * It supports both continuous and categorical features.
+ *
+ * The implementation is based upon: J.H. Friedman. "Stochastic Gradient Boosting." 1999.
+ *
+ * Notes on Gradient Boosting vs. TreeBoost:
+ *  - This implementation is for Stochastic Gradient Boosting, not for TreeBoost.
+ *  - Both algorithms learn tree ensembles by minimizing loss functions.
+ *  - TreeBoost (Friedman, 1999) additionally modifies the outputs at tree leaf nodes
+ *    based on the loss function, whereas the original gradient boosting method does not.
+ *     - When the loss is SquaredError, these methods give the same result, but they could differ
+ *       for other loss functions.
+ *  - We expect to implement TreeBoost in the future:
+ *    [https://issues.apache.org/jira/browse/SPARK-4240]
  */
 @Since("1.4.0")
 @Experimental

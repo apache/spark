@@ -249,7 +249,7 @@ class JavaModel(Model, JavaCallable, JavaTransformer):
         """
         Initialize this instance with a Java model object.
         Subclasses should call this constructor, initialize params,
-        and then call _transformer_params_from_java.
+        and then call _transfer_params_from_java.
 
         This instance can be instantiated without specifying java_model,
         it will be assigned after that, but this scenario only used by

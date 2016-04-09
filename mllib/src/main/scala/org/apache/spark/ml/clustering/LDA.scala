@@ -190,6 +190,8 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
   def getTopicDistributionCol: String = $(topicDistributionCol)
 
   /**
+   * For Online optimizer only: [[optimizer]] = "online".
+   *
    * A (positive) learning parameter that downweights early iterations. Larger values make early
    * iterations count less.
    * This is called "tau0" in the Online LDA paper (Hoffman et al., 2010)
@@ -198,8 +200,9 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    * @group expertParam
    */
   @Since("1.6.0")
-  final val learningOffset = new DoubleParam(this, "learningOffset", "A (positive) learning" +
-    " parameter that downweights early iterations. Larger values make early iterations count less.",
+  final val learningOffset = new DoubleParam(this, "learningOffset", "(For online optimizer)" +
+    " A (positive) learning parameter that downweights early iterations. Larger values make early" +
+    " iterations count less.",
     ParamValidators.gt(0))
 
   /** @group expertGetParam */
@@ -207,6 +210,8 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
   def getLearningOffset: Double = $(learningOffset)
 
   /**
+   * For Online optimizer only: [[optimizer]] = "online".
+   *
    * Learning rate, set as an exponential decay rate.
    * This should be between (0.5, 1.0] to guarantee asymptotic convergence.
    * This is called "kappa" in the Online LDA paper (Hoffman et al., 2010).
@@ -215,15 +220,17 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    * @group expertParam
    */
   @Since("1.6.0")
-  final val learningDecay = new DoubleParam(this, "learningDecay", "Learning rate, set as an" +
-    " exponential decay rate. This should be between (0.5, 1.0] to guarantee asymptotic" +
-    " convergence.", ParamValidators.gt(0))
+  final val learningDecay = new DoubleParam(this, "learningDecay", "(For online optimizer)" +
+    " Learning rate, set as an exponential decay rate. This should be between (0.5, 1.0] to" +
+    " guarantee asymptotic convergence.", ParamValidators.gt(0))
 
   /** @group expertGetParam */
   @Since("1.6.0")
   def getLearningDecay: Double = $(learningDecay)
 
   /**
+   * For Online optimizer only: [[optimizer]] = "online".
+   *
    * Fraction of the corpus to be sampled and used in each iteration of mini-batch gradient descent,
    * in range (0, 1].
    *
@@ -239,8 +246,9 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    * @group param
    */
   @Since("1.6.0")
-  final val subsamplingRate = new DoubleParam(this, "subsamplingRate", "Fraction of the corpus" +
-    " to be sampled and used in each iteration of mini-batch gradient descent, in range (0, 1].",
+  final val subsamplingRate = new DoubleParam(this, "subsamplingRate", "(For online optimizer)" +
+    " Fraction of the corpus to be sampled and used in each iteration of mini-batch" +
+    " gradient descent, in range (0, 1].",
     ParamValidators.inRange(0.0, 1.0, lowerInclusive = false, upperInclusive = true))
 
   /** @group getParam */
@@ -248,6 +256,8 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
   def getSubsamplingRate: Double = $(subsamplingRate)
 
   /**
+   * For Online optimizer only (currently): [[optimizer]] = "online".
+   *
    * Indicates whether the docConcentration (Dirichlet parameter for
    * document-topic distribution) will be optimized during training.
    * Setting this to true will make the model more expressive and fit the training data better.
@@ -257,15 +267,17 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    */
   @Since("1.6.0")
   final val optimizeDocConcentration = new BooleanParam(this, "optimizeDocConcentration",
-    "Indicates whether the docConcentration (Dirichlet parameter for document-topic" +
-      " distribution) will be optimized during training.")
+    "(For online optimizer only, currently) Indicates whether the docConcentration" +
+      " (Dirichlet parameter for document-topic distribution) will be optimized during training.")
 
   /** @group expertGetParam */
   @Since("1.6.0")
   def getOptimizeDocConcentration: Boolean = $(optimizeDocConcentration)
 
   /**
-   * For EM optimizer, if using checkpointing, this indicates whether to keep the last
+   * For EM optimizer only: [[optimizer]] = "em".
+   *
+   * If using checkpointing, this indicates whether to keep the last
    * checkpoint. If false, then the checkpoint will be deleted. Deleting the checkpoint can
    * cause failures if a data partition is lost, so set this bit with care.
    * Note that checkpoints will be cleaned up via reference counting, regardless.
@@ -279,7 +291,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    */
   @Since("2.0.0")
   final val keepLastCheckpoint = new BooleanParam(this, "keepLastCheckpoint",
-    "For EM optimizer, if using checkpointing, this indicates whether to keep the last" +
+    "(For EM optimizer) If using checkpointing, this indicates whether to keep the last" +
       " checkpoint. If false, then the checkpoint will be deleted. Deleting the checkpoint can" +
       " cause failures if a data partition is lost, so set this bit with care.")
 
