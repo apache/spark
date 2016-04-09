@@ -280,7 +280,7 @@ object StringTranslate {
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """_FUNC_(input, from, to) - Translates the input string by replacing the characters present in the from string with the corresponding characters in the to string""",
-  extended = "> SELECT _FUNC_('AaBbCc', 'abc', '123');\n 'A1B1C1'")
+  extended = "> SELECT _FUNC_('AaBbCc', 'abc', '123');\n 'A1B2C3'")
 // scalastyle:on line.size.limit
 case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replaceExpr: Expression)
   extends TernaryExpression with ImplicitCastInputTypes {
@@ -337,11 +337,12 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
  * delimited list (right). Returns 0, if the string wasn't found or if the given
  * string (left) contains a comma.
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = """_FUNC_(str, str_array) - Returns the first occurrence of str in str_array.
-    where str_array is a comma-delimited string. Returns null if either argument is null.
-    Returns 0 if the first argument has any commas.""",
+  usage = """_FUNC_(str, str_array) - Returns the index (1-based) of the given string (left) in the comma-delimited list (right).
+    Returns 0, if the string wasn't found or if the given string (left) contains a comma.""",
   extended = "> SELECT _FUNC_('ab','abc,b,ab,c,def');\n 3")
+// scalastyle:on
 case class FindInSet(left: Expression, right: Expression) extends BinaryExpression
     with ImplicitCastInputTypes {
 
@@ -423,7 +424,7 @@ case class StringTrimRight(child: Expression)
  * NOTE: that this is not zero based, but 1-based index. The first character in str has index 1.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(str, substr) - Returns the index of the first occurrence of substr in str.",
+  usage = "_FUNC_(str, substr) - Returns the (1-based) index of the first occurrence of substr in str.",
   extended = "> SELECT _FUNC_('SparkSQL', 'SQL');\n 6")
 case class StringInstr(str: Expression, substr: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
@@ -485,7 +486,8 @@ case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr:
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(substr, str[, pos]) - Returns the position of the first occurrence of substr in str after position pos.",
+  usage = """_FUNC_(substr, str[, pos]) - Returns the position of the first occurrence of substr in str after position pos.
+    The given pos and return value are 1-based.""",
   extended = "> SELECT _FUNC_('bar', 'foobarbar', 5);\n 7")
 // scalastyle:on line.size.limit
 case class StringLocate(substr: Expression, str: Expression, start: Expression)

@@ -47,7 +47,9 @@ import org.apache.spark.sql.types._
  */
 // scalastyle:on
 @ExpressionDescription(
-  usage = "_FUNC_(expr, relativeSD) - Returns the estimated cardinality by HyperLogLog++.")
+  usage = """_FUNC_(expr) - Returns the estimated cardinality by HyperLogLog++.
+    _FUNC_(expr, relativeSD=0.05) - Returns the estimated cardinality by HyperLogLog++.
+    """)
 case class HyperLogLogPlusPlus(
     child: Expression,
     relativeSD: Double = 0.05,

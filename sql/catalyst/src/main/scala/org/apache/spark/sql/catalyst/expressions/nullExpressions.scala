@@ -35,7 +35,7 @@ import org.apache.spark.sql.types._
  * }}}
  */
 @ExpressionDescription(
-  usage = "_FUNC_(a1, a2, ...) - Returns the first non-null argument.",
+  usage = "_FUNC_(a1, a2, ...) - Returns the first non-null argument if exists. Otherwise, NULL.",
   extended = "> SELECT _FUNC_(NULL, 1, NULL);\n 1")
 case class Coalesce(children: Seq[Expression]) extends Expression {
 

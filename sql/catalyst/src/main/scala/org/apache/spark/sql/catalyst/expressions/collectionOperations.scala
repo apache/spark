@@ -27,7 +27,7 @@ import org.apache.spark.sql.types._
  * Given an array or map, returns its size.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(a) - Returns the size of a.")
+  usage = "_FUNC_(expr) - Returns the size of an array or a map.")
 case class Size(child: Expression) extends UnaryExpression with ExpectsInputTypes {
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(ArrayType, MapType))
