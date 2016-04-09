@@ -545,14 +545,10 @@ private[execution] final class LongToUnsafeRowMap(var mm: TaskMemoryManager, cap
         growArray()
       }
     } else {
-      // there is another value for this key, put the address at the end of final value.
-      var addr = array(pos + 1)
-      var pointer = (addr >>> 32) + (addr & 0xffffffffL)
-      while (Platform.getLong(page, pointer) != 0) {
-        addr = Platform.getLong(page, pointer)
-        pointer = (addr >>> 32) + (addr & 0xffffffffL)
-      }
-      Platform.putLong(page, pointer, address)
+      // there are some values for this key, put the address in the front of them.
+      val pointer = (address >>> 32) + (address & 0xffffffffL)
+      Platform.putLong(page, pointer, array(pos + 1))
+      array(pos + 1) = address
     }
   }
 

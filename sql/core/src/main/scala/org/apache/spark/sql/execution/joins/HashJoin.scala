@@ -17,16 +17,12 @@
 
 package org.apache.spark.sql.execution.joins
 
-import java.util.NoSuchElementException
-
-import org.apache.spark.TaskContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.execution.{RowIterator, SparkPlan}
 import org.apache.spark.sql.execution.metric.LongSQLMetric
-import org.apache.spark.sql.types.{IntegerType, IntegralType, LongType}
-import org.apache.spark.util.collection.CompactBuffer
+import org.apache.spark.sql.types.{IntegralType, LongType}
 
 trait HashJoin {
   self: SparkPlan =>
@@ -60,6 +56,8 @@ trait HashJoin {
   }
 
   protected lazy val (buildKeys, streamedKeys) = {
+    require(leftKeys.map(_.dataType) == rightKeys.map(_.dataType),
+      "Join keys from two sides should have same types")
     val lkeys = rewriteKeyExpr(leftKeys).map(BindReferences.bindReference(_, left.output))
     val rkeys = rewriteKeyExpr(rightKeys).map(BindReferences.bindReference(_, right.output))
     buildSide match {
@@ -73,7 +71,7 @@ trait HashJoin {
    *
    * If not, returns the original expressions.
    */
-  def rewriteKeyExpr(keys: Seq[Expression]): Seq[Expression] = {
+  private def rewriteKeyExpr(keys: Seq[Expression]): Seq[Expression] = {
     var keyExpr: Expression = null
     var width = 0
     keys.foreach { e =>
