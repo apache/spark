@@ -170,7 +170,7 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
           "CLUSTERED BY ... [ORDERED BY ...] INTO ... BUCKETS clause.", ctx)
       }
       if (ctx.skewSpec != null) {
-        throw new ParseException("Unsupported operation: " +
+        throw new ParseException("Operation not allowed: " +
           "SKEWED BY ... ON ... [STORED AS DIRECTORIES] clause.", ctx)
       }
 
@@ -374,7 +374,7 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
     import ctx._
     if (inDriver != null || outDriver != null) {
       throw new ParseException(
-        s"Unsupported operation: INPUTDRIVER ... OUTPUTDRIVER ... clauses", ctx)
+        s"Operation not allowed: INPUTDRIVER ... OUTPUTDRIVER ... clauses", ctx)
     }
     EmptyStorageFormat.copy(
       inputFormat = Option(string(inFmt)),
