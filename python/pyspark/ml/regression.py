@@ -331,6 +331,9 @@ class LinearRegressionSummary(JavaCallable):
         Standard error of estimated coefficients and intercept.
         This value is only available when using the "normal" solver.
 
+        If :py:attr:`LinearRegression.fitIntercept` is set to True,
+        then the last element returned corresponds to the intercept.
+
         .. seealso:: :py:attr:`LinearRegression.solver`
         """
         return self._call_java("coefficientStandardErrors")
@@ -342,6 +345,9 @@ class LinearRegressionSummary(JavaCallable):
         T-statistic of estimated coefficients and intercept.
         This value is only available when using the "normal" solver.
 
+        If :py:attr:`LinearRegression.fitIntercept` is set to True,
+        then the last element returned corresponds to the intercept.
+
         .. seealso:: :py:attr:`LinearRegression.solver`
         """
         return self._call_java("tValues")
@@ -352,6 +358,9 @@ class LinearRegressionSummary(JavaCallable):
         """
         Two-sided p-value of estimated coefficients and intercept.
         This value is only available when using the "normal" solver.
+
+        If :py:attr:`LinearRegression.fitIntercept` is set to True,
+        then the last element returned corresponds to the intercept.
 
         .. seealso:: :py:attr:`LinearRegression.solver`
         """
