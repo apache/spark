@@ -49,6 +49,7 @@ from pyspark.broadcast import Broadcast
 from pyspark.serializers import MarshalSerializer, PickleSerializer
 from pyspark.status import *
 from pyspark.profiler import Profiler, BasicProfiler
+from pyspark.numpyconverter import numpy_to_python, python_to_numpy
 
 
 def since(version):
