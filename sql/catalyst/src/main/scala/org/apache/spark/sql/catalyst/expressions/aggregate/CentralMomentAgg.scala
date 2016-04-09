@@ -130,8 +130,10 @@ abstract class CentralMomentAgg(child: Expression) extends DeclarativeAggregate 
 }
 
 // Compute the population standard deviation of a column
+// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(x) - Returns the population standard deviation calculated from values of a group.")
+// scalastyle:on line.size.limit
 case class StddevPop(child: Expression) extends CentralMomentAgg(child) {
 
   override protected def momentOrder = 2
