@@ -26,7 +26,7 @@ import org.apache.spark.ml.tree._
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Dataset, SQLContext}
+import org.apache.spark.sql.{DataFrame, SQLContext}
 
 private[ml] object TreeTests extends SparkFunSuite {
 
