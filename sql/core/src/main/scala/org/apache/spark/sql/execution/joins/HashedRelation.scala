@@ -291,27 +291,6 @@ private[joins] object UnsafeHashedRelation {
   }
 }
 
-private[joins] object LongToUnsafeRowMap {
-  // the largest prime that below 2^n
-  val LARGEST_PRIMES = {
-    // https://primes.utm.edu/lists/2small/0bit.html
-    val diffs = Seq(
-      0, 1, 1, 3, 1, 3, 1, 5,
-      3, 3, 9, 3, 1, 3, 19, 15,
-      1, 5, 1, 3, 9, 3, 15, 3,
-      39, 5, 39, 57, 3, 35, 1, 5
-    )
-    val primes = new Array[Int](32)
-    primes(0) = 1
-    var power2 = 1
-    (1 until 32).foreach { i =>
-      power2 *= 2
-      primes(i) = power2 - diffs(i)
-    }
-    primes
-  }
-}
-
 /**
  * An append-only hash map mapping from key of Long to UnsafeRow.
  *
@@ -343,28 +322,27 @@ private[joins] object LongToUnsafeRowMap {
  * The map is created as sparse mode, then key-value could be appended into it. Once finish
  * appending, caller could all optimize() to try to turn the map into dense mode, which is faster
  * to probe.
+ *
+ * see http://java-performance.info/implementing-world-fastest-java-int-to-int-hash-map/
  */
 private[execution] final class LongToUnsafeRowMap(var mm: TaskMemoryManager, capacity: Int)
   extends MemoryConsumer(mm) with Externalizable {
-  import org.apache.spark.sql.execution.joins.LongToUnsafeRowMap._
 
   // Whether the keys are stored in dense mode or not.
   private var isDense = false
 
-  // The minimum value of keys.
+  // The minimum key
   private var minKey = Long.MaxValue
 
-  // The Maxinum value of keys.
+  // The maxinum key
   private var maxKey = Long.MinValue
-
-  // Sparse mode: the actual capacity of map, is a prime number.
-  private var cap: Int = 0
 
   // The array to store the key and offset of UnsafeRow in the page.
   //
   // Sparse mode: [key1] [offset1 | size1] [key2] [offset | size2] ...
   // Dense mode: [offset1 | size1] [offset2 | size2]
   private var array: Array[Long] = null
+  private var mask: Int = 0
 
   // The page to store all bytes of UnsafeRow and the pointer to next rows.
   // [row1][pointer1] [row2][pointer2]
@@ -407,11 +385,11 @@ private[execution] final class LongToUnsafeRowMap(var mm: TaskMemoryManager, cap
 
   private def init(): Unit = {
     if (mm != null) {
-      cap = LARGEST_PRIMES.find(_ > capacity).getOrElse{
-        sys.error(s"Can't create map with capacity $capacity")
-      }
-      acquireMemory(cap * 2 * 8 + (1 << 20))
-      array = new Array[Long](cap * 2)
+      var n = 1
+      while (n < capacity) n *= 2
+      acquireMemory(n * 2 * 8 + (1 << 20))
+      array = new Array[Long](n * 2)
+      mask = n * 2 - 2
       page = new Array[Byte](1 << 20)  // 1M bytes
     }
   }
@@ -435,14 +413,18 @@ private[execution] final class LongToUnsafeRowMap(var mm: TaskMemoryManager, cap
   }
 
   /**
-   * Returns the slot of array that store the keys (sparse mode).
+   * Returns the first slot of array that store the keys (sparse mode).
    */
-  private def getSlot(key: Long): Int = {
-    var s = (key % cap).toInt
-    if (s < 0) {
-      s += cap
-    }
-    s * 2
+  private def firstSlot(key: Long): Int = {
+    val h = key * 0x9E3779B9L
+    (h ^ (h >> 32)).toInt & mask
+  }
+
+  /**
+   * Returns the next probe in the array.
+   */
+  private def nextSlot(pos: Int): Int = {
+    (pos + 2) & mask
   }
 
   private def getRow(address: Long, resultRow: UnsafeRow): UnsafeRow = {
@@ -462,17 +444,12 @@ private[execution] final class LongToUnsafeRowMap(var mm: TaskMemoryManager, cap
         return getRow(array(idx), resultRow)
       }
     } else {
-      var pos = getSlot(key)
-      var step = 1
+      var pos = firstSlot(key)
       while (array(pos + 1) != 0) {
         if (array(pos) == key) {
           return getRow(array(pos + 1), resultRow)
         }
-        pos += 2 * step
-        step += 1
-        if (pos >= array.length) {
-          pos -= array.length
-        }
+        pos = nextSlot(pos)
       }
     }
     null
@@ -505,17 +482,12 @@ private[execution] final class LongToUnsafeRowMap(var mm: TaskMemoryManager, cap
         return valueIter(array(idx), resultRow)
       }
     } else {
-      var pos = getSlot(key)
-      var step = 1
+      var pos = firstSlot(key)
       while (array(pos + 1) != 0) {
         if (array(pos) == key) {
           return valueIter(array(pos + 1), resultRow)
         }
-        pos += 2 * step
-        step += 1
-        if (pos >= array.length) {
-          pos -= array.length
-        }
+        pos = nextSlot(pos)
       }
     }
     null
@@ -559,21 +531,16 @@ private[execution] final class LongToUnsafeRowMap(var mm: TaskMemoryManager, cap
    * Update the address in array for given key.
    */
   private def updateIndex(key: Long, address: Long): Unit = {
-    var pos = getSlot(key)
-    var step = 1
-    while (array(pos + 1) != 0 && array(pos) != key) {
-      pos += 2 * step
-      step += 1
-      if (pos >= array.length) {
-        pos -= array.length
-      }
+    var pos = firstSlot(key)
+    while (array(pos) != key && array(pos + 1) != 0) {
+      pos = nextSlot(pos)
     }
     if (array(pos + 1) == 0) {
       // this is the first value for this key, put the address in array.
       array(pos) = key
       array(pos + 1) = address
       numKeys += 1
-      if (numKeys * 2 > cap) {
+      if (numKeys * 4 > array.length) {
         // reach half of the capacity
         growArray()
       }
@@ -590,14 +557,12 @@ private[execution] final class LongToUnsafeRowMap(var mm: TaskMemoryManager, cap
   }
 
   private def growArray(): Unit = {
-    val old_cap = cap
     var old_array = array
-    cap = LARGEST_PRIMES.find(_ > cap).getOrElse{
-      sys.error(s"Can't grow map any more than $cap")
-    }
+    val n = array.length
     numKeys = 0
-    acquireMemory(cap * 2 * 8)
-    array = new Array[Long](cap * 2)
+    acquireMemory(n * 2 * 8)
+    array = new Array[Long](n * 2)
+    mask = n * 2 - 2
     var i = 0
     while (i < old_array.length) {
       if (old_array(i + 1) > 0) {
@@ -606,7 +571,7 @@ private[execution] final class LongToUnsafeRowMap(var mm: TaskMemoryManager, cap
       i += 2
     }
     old_array = null  // release the reference to old array
-    freeMemory(old_cap * 2 * 8)
+    freeMemory(n * 8)
   }
 
   /**
@@ -659,7 +624,6 @@ private[execution] final class LongToUnsafeRowMap(var mm: TaskMemoryManager, cap
     out.writeLong(maxKey)
     out.writeInt(numKeys)
     out.writeInt(numValues)
-    out.writeInt(cap)
 
     out.writeInt(array.length)
     val buffer = new Array[Byte](4 << 10)
@@ -683,10 +647,10 @@ private[execution] final class LongToUnsafeRowMap(var mm: TaskMemoryManager, cap
     maxKey = in.readLong()
     numKeys = in.readInt()
     numValues = in.readInt()
-    cap = in.readInt()
 
     val length = in.readInt()
     array = new Array[Long](length)
+    mask = length - 2
     val buffer = new Array[Byte](4 << 10)
     var offset = Platform.LONG_ARRAY_OFFSET
     val end = length * 8 + Platform.LONG_ARRAY_OFFSET
