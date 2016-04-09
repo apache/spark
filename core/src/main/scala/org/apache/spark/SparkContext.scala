@@ -2192,8 +2192,8 @@ object SparkContext extends Logging {
       sc: SparkContext,
       allowMultipleContexts: Boolean): Unit = {
     SPARK_CONTEXT_CONSTRUCTOR_LOCK.synchronized {
-      assertNoOtherContextIsRunning(sc, allowMultipleContexts)
       contextBeingConstructed = Some(sc)
+      assertNoOtherContextIsRunning(sc, allowMultipleContexts)
     }
   }
 
