@@ -316,7 +316,8 @@ class DataPropertyAccumulatorSuite extends SparkFunSuite with Matchers with Loca
     // We want to ensure that two data property jobs with a shared parent
     // work with data property accumulators.
     sc = new SparkContext("local[2]", "test")
-    val List(acc1, acc2, acc3, acc4) = 1.to(4).map(x => sc.accumulator(0, dataProperty = true)).toList
+    val List(acc1, acc2, acc3, acc4) = 1.to(4).map(x =>
+      sc.accumulator(0, dataProperty = true)).toList
     val a = sc.parallelize(1 to 20, 10)
     val b = a.map{x => acc1 += x; acc2 += x; 2 * x}
     val c = b.map{x => acc3 += x; acc2 += x}
