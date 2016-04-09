@@ -531,18 +531,22 @@ class ALSCleanerSuite extends SparkFunSuite {
       conf.set("spark.local.dir", localDir.getAbsolutePath)
       conf.set("spark.shuffle.manager", "sort")
       val sc = new SparkContext("local[2]", "test", conf)
-      sc.setCheckpointDir(tempDir.getAbsolutePath)
-      // Test checkpoint and clean parents
-      val filesBefore = getAllFiles
-      val input = sc.parallelize(1 to 1000)
-      val keyed = input.map(x => (x % 20, 1))
-      val shuffled = keyed.reduceByKey(_ + _)
-      val keysOnly = shuffled.map{case (x, _) => x}
-      ALS.checkpointAndCleanParents(keysOnly, true)
-      keysOnly.count()
-      assert(keysOnly.isCheckpointed)
-      val resultingFiles = getAllFiles -- filesBefore
-      assert(resultingFiles === Set())
+      try {
+        sc.setCheckpointDir(tempDir.getAbsolutePath)
+        // Test checkpoint and clean parents
+        val filesBefore = getAllFiles
+        val input = sc.parallelize(1 to 1000)
+        val keyed = input.map(x => (x % 20, 1))
+        val shuffled = keyed.reduceByKey(_ + _)
+        val keysOnly = shuffled.map{case (x, _) => x}
+        ALS.checkpointAndCleanParents(keysOnly, true)
+        keysOnly.count()
+        assert(keysOnly.isCheckpointed)
+        val resultingFiles = getAllFiles -- filesBefore
+        assert(resultingFiles === Set())
+      } finally {
+        sc.stop()
+      }
     } finally {
       Utils.deleteRecursively(localDir)
       Utils.deleteRecursively(tempDir)
