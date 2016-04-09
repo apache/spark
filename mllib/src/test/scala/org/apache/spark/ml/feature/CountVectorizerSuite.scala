@@ -56,8 +56,8 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext
 
   test("CountVectorizer common cases") {
     val df = sqlContext.createDataFrame(Seq(
-      (0, split("a b c d e"),
-        Vectors.sparse(5, Seq((0, 1.0), (1, 1.0), (2, 1.0), (3, 1.0), (4, 1.0)))),
+      (0, split("a b c d d e"),
+        Vectors.sparse(5, Seq((0, 1.0), (1, 1.0), (2, 1.0), (3, 2.0), (4, 1.0)))),
       (1, split("a a a a a a"), Vectors.sparse(5, Seq((0, 6.0)))),
       (2, split("c"), Vectors.sparse(5, Seq((2, 1.0)))),
       (3, split("b b b b b"), Vectors.sparse(5, Seq((1, 5.0)))))
@@ -66,7 +66,7 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext
       .setInputCol("words")
       .setOutputCol("features")
       .fit(df)
-    assert(cv.vocabulary === Array("a", "b", "c", "d", "e"))
+    assert(cv.vocabulary.toSet === Set("a", "b", "c", "d", "e"))
 
     cv.transform(df).select("features", "expected").collect().foreach {
       case Row(features: Vector, expected: Vector) =>
