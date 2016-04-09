@@ -20,6 +20,7 @@ package org.apache.spark.ml.tuning
 import java.util.{List => JList}
 
 import scala.collection.JavaConverters._
+import scala.language.existentials
 
 import org.apache.hadoop.fs.Path
 import org.json4s.DefaultFormats

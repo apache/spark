@@ -23,10 +23,10 @@ import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute.NominalAttribute
-import org.apache.spark.ml.param.{IntParam, _}
+import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol, HasSeed}
 import org.apache.spark.ml.util._
-import org.apache.spark.sql.{DataFrame, Dataset, Row}
+import org.apache.spark.sql.{Dataset, Row}
 import org.apache.spark.sql.types.{DoubleType, StructType}
 import org.apache.spark.util.random.XORShiftRandom
 
@@ -112,13 +112,15 @@ object QuantileDiscretizer extends DefaultParamsReadable[QuantileDiscretizer] wi
   /**
    * Sampling from the given dataset to collect quantile statistics.
    */
-  private[feature] def getSampledInput(dataset: Dataset[_], numBins: Int, seed: Long): Array[Row] = {
+  private[feature]
+  def getSampledInput(dataset: Dataset[_], numBins: Int, seed: Long): Array[Row] = {
     val totalSamples = dataset.count()
     require(totalSamples > 0,
       "QuantileDiscretizer requires non-empty input dataset but was given an empty input.")
     val requiredSamples = math.max(numBins * numBins, minSamplesRequired)
     val fraction = math.min(requiredSamples.toDouble / totalSamples, 1.0)
-    dataset.sample(withReplacement = false, fraction, new XORShiftRandom(seed).nextInt()).collect()
+    dataset.toDF.sample(withReplacement = false, fraction, new XORShiftRandom(seed).nextInt())
+      .collect()
   }
 
   /**

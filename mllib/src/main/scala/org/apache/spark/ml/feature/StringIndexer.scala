@@ -148,7 +148,7 @@ class StringIndexerModel (
     if (!dataset.schema.fieldNames.contains($(inputCol))) {
       logInfo(s"Input column ${$(inputCol)} does not exist during transformation. " +
         "Skip StringIndexerModel.")
-      return dataset
+      return dataset.toDF
     }
     validateAndTransformSchema(dataset.schema)
 

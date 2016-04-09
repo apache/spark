@@ -178,7 +178,7 @@ abstract class PredictionModel[FeaturesType, M <: PredictionModel[FeaturesType, 
     } else {
       this.logWarning(s"$uid: Predictor.transform() was called as NOOP" +
         " since no output columns were set.")
-      dataset
+      dataset.toDF
     }
   }
 

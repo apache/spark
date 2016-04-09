@@ -50,7 +50,7 @@ class VectorAssembler(override val uid: String)
   override def transform(dataset: Dataset[_]): DataFrame = {
     // Schema transformation.
     val schema = dataset.schema
-    lazy val first = dataset.first()
+    lazy val first = dataset.toDF.first()
     val attrs = $(inputCols).flatMap { c =>
       val field = schema(c)
       val index = schema.fieldIndex(c)

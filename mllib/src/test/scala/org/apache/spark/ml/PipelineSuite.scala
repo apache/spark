@@ -213,7 +213,7 @@ class WritableStage(override val uid: String) extends Transformer with MLWritabl
 
   override def write: MLWriter = new DefaultParamsWriter(this)
 
-  override def transform(dataset: Dataset[_]): DataFrame = dataset
+  override def transform(dataset: Dataset[_]): DataFrame = dataset.toDF
 
   override def transformSchema(schema: StructType): StructType = schema
 }
@@ -234,7 +234,7 @@ class UnWritableStage(override val uid: String) extends Transformer {
 
   override def copy(extra: ParamMap): UnWritableStage = defaultCopy(extra)
 
-  override def transform(dataset: Dataset[_]): DataFrame = dataset
+  override def transform(dataset: Dataset[_]): DataFrame = dataset.toDF
 
   override def transformSchema(schema: StructType): StructType = schema
 }
