@@ -331,6 +331,9 @@ class LinearRegressionSummary(JavaCallable):
         Standard error of estimated coefficients and intercept.
         This value is only available when using the "normal" solver.
 
+        If :py:attr:`LinearRegression.fitIntercept` is set to True,
+        then the last element returned corresponds to the intercept.
+
         .. seealso:: :py:attr:`LinearRegression.solver`
         """
         return self._call_java("coefficientStandardErrors")
@@ -342,6 +345,9 @@ class LinearRegressionSummary(JavaCallable):
         T-statistic of estimated coefficients and intercept.
         This value is only available when using the "normal" solver.
 
+        If :py:attr:`LinearRegression.fitIntercept` is set to True,
+        then the last element returned corresponds to the intercept.
+
         .. seealso:: :py:attr:`LinearRegression.solver`
         """
         return self._call_java("tValues")
@@ -352,6 +358,9 @@ class LinearRegressionSummary(JavaCallable):
         """
         Two-sided p-value of estimated coefficients and intercept.
         This value is only available when using the "normal" solver.
+
+        If :py:attr:`LinearRegression.fitIntercept` is set to True,
+        then the last element returned corresponds to the intercept.
 
         .. seealso:: :py:attr:`LinearRegression.solver`
         """
@@ -630,7 +639,7 @@ class GBTParams(TreeEnsembleParams):
 @inherit_doc
 class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
                             DecisionTreeParams, TreeRegressorParams, HasCheckpointInterval,
-                            HasSeed, JavaMLWritable, JavaMLReadable):
+                            HasSeed, JavaMLWritable, JavaMLReadable, HasVarianceCol):
     """
     `http://en.wikipedia.org/wiki/Decision_tree_learning Decision tree`
     learning algorithm for regression.
@@ -640,7 +649,7 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     >>> df = sqlContext.createDataFrame([
     ...     (1.0, Vectors.dense(1.0)),
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
-    >>> dt = DecisionTreeRegressor(maxDepth=2)
+    >>> dt = DecisionTreeRegressor(maxDepth=2, varianceCol="variance")
     >>> model = dt.fit(df)
     >>> model.depth
     1
@@ -666,6 +675,8 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     True
     >>> model.depth == model2.depth
     True
+    >>> model.transform(test1).head().variance
+    0.0
 
     .. versionadded:: 1.4.0
     """
@@ -674,12 +685,12 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="variance",
-                 seed=None):
+                 seed=None, varianceCol=None):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
-                 impurity="variance", seed=None)
+                 impurity="variance", seed=None, varianceCol=None)
         """
         super(DecisionTreeRegressor, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -695,12 +706,12 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
-                  impurity="variance", seed=None):
+                  impurity="variance", seed=None, varianceCol=None):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
-                  impurity="variance", seed=None)
+                  impurity="variance", seed=None, varianceCol=None)
         Sets params for the DecisionTreeRegressor.
         """
         kwargs = self.setParams._input_kwargs
@@ -782,7 +793,8 @@ class DecisionTreeRegressionModel(DecisionTreeModel, JavaMLWritable, JavaMLReada
 
 @inherit_doc
 class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasSeed,
-                            RandomForestParams, TreeRegressorParams, HasCheckpointInterval):
+                            RandomForestParams, TreeRegressorParams, HasCheckpointInterval,
+                            JavaMLWritable, JavaMLReadable):
     """
     `http://en.wikipedia.org/wiki/Random_forest  Random Forest`
     learning algorithm for regression.
@@ -805,6 +817,16 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     >>> test1 = sqlContext.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
     >>> model.transform(test1).head().prediction
     0.5
+    >>> rfr_path = temp_path + "/rfr"
+    >>> rf.save(rfr_path)
+    >>> rf2 = RandomForestRegressor.load(rfr_path)
+    >>> rf2.getNumTrees()
+    2
+    >>> model_path = temp_path + "/rfr_model"
+    >>> model.save(model_path)
+    >>> model2 = RandomForestRegressionModel.load(model_path)
+    >>> model.featureImportances == model2.featureImportances
+    True
 
     .. versionadded:: 1.4.0
     """
@@ -854,7 +876,7 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         return RandomForestRegressionModel(java_model)
 
 
-class RandomForestRegressionModel(TreeEnsembleModels):
+class RandomForestRegressionModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable):
     """
     Model fitted by RandomForestRegressor.
 

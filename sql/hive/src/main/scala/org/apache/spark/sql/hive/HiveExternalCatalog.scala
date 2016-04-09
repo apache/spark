@@ -292,6 +292,10 @@ private[spark] class HiveExternalCatalog(client: HiveClient) extends ExternalCat
     client.getFunction(db, funcName)
   }
 
+  override def functionExists(db: String, funcName: String): Boolean = withClient {
+    client.functionExists(db, funcName)
+  }
+
   override def listFunctions(db: String, pattern: String): Seq[String] = withClient {
     client.listFunctions(db, pattern)
   }

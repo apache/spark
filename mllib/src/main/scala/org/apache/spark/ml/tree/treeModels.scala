@@ -133,8 +133,8 @@ private[ml] object TreeEnsembleModel {
    * following the explanation of Gini importance from "Random Forests" documentation
    * by Leo Breiman and Adele Cutler, and following the implementation from scikit-learn.
    *
-   *  For collections of trees, including boosting and bagging, Hastie et al.
-   *  propose to use the average of single tree importances across all trees in the ensemble.
+   * For collections of trees, including boosting and bagging, Hastie et al.
+   * propose to use the average of single tree importances across all trees in the ensemble.
    *
    * This feature importance is calculated as follows:
    *  - Average over trees:
