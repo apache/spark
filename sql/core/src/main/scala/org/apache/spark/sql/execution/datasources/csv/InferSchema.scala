@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
-private[csv] object CSVInferSchema {
+private[csv] object InferSchema {
 
   /**
    * Similar to the JSON schema inference

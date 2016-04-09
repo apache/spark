@@ -17,142 +17,203 @@
 
 package org.apache.spark.sql.execution.datasources.csv
 
-import scala.util.control.NonFatal
+import java.io.CharArrayWriter
+import java.nio.charset.{Charset, StandardCharsets}
 
-import org.apache.hadoop.fs.Path
-import org.apache.hadoop.io.{NullWritable, Text}
-import org.apache.hadoop.mapreduce.RecordWriter
-import org.apache.hadoop.mapreduce.TaskAttemptContext
+import com.univocity.parsers.csv.CsvWriter
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.io.{LongWritable, NullWritable, Text}
+import org.apache.hadoop.mapred.TextInputFormat
+import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
 
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
-import org.apache.spark.sql.execution.datasources.PartitionedFile
+import org.apache.spark.sql.catalyst.expressions.{JoinedRow, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.execution.datasources.{CompressionCodecs, HadoopFileLinesReader, PartitionedFile}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
+import org.apache.spark.util.SerializableConfiguration
+import org.apache.spark.util.collection.BitSet
 
-object CSVRelation extends Logging {
+/**
+ * Provides access to CSV data from pure SQL statements.
+ */
+class DefaultSource extends FileFormat with DataSourceRegister {
 
-  def univocityTokenizer(
-      file: RDD[String],
-      header: Seq[String],
-      firstLine: String,
-      params: CSVOptions): RDD[Array[String]] = {
-    // If header is set, make sure firstLine is materialized before sending to executors.
-    file.mapPartitions { iter =>
-      new BulkCsvReader(
-        if (params.headerFlag) iter.filterNot(_ == firstLine) else iter,
-        params,
-        headers = header)
-    }
-  }
+  override def shortName(): String = "csv"
 
-  def csvParser(
-      schema: StructType,
-      requiredColumns: Array[String],
-      params: CSVOptions): Array[String] => Option[InternalRow] = {
-    val schemaFields = schema.fields
-    val requiredFields = StructType(requiredColumns.map(schema(_))).fields
-    val safeRequiredFields = if (params.dropMalformed) {
-      // If `dropMalformed` is enabled, then it needs to parse all the values
-      // so that we can decide which row is malformed.
-      requiredFields ++ schemaFields.filterNot(requiredFields.contains(_))
+  override def toString: String = "CSV"
+
+  override def equals(other: Any): Boolean = other.isInstanceOf[DefaultSource]
+
+  override def inferSchema(
+      sqlContext: SQLContext,
+      options: Map[String, String],
+      files: Seq[FileStatus]): Option[StructType] = {
+    val csvOptions = new CSVOptions(options)
+
+    // TODO: Move filtering.
+    val paths = files.filterNot(_.getPath.getName startsWith "_").map(_.getPath.toString)
+    val rdd = createBaseRdd(sqlContext, csvOptions, paths)
+    val filteredRdd = rdd.mapPartitions(CSVUtils.filterCommentAndEmpty(_, csvOptions))
+    val firstLine = filteredRdd.first()
+    val firstRow = UnivocityParser.tokenizeSingleLine(firstLine, csvOptions)
+
+    val header = if (csvOptions.headerFlag) {
+      firstRow
     } else {
-      requiredFields
+      firstRow.zipWithIndex.map { case (value, index) => s"C$index" }
     }
-    val safeRequiredIndices = new Array[Int](safeRequiredFields.length)
-    schemaFields.zipWithIndex.filter {
-      case (field, _) => safeRequiredFields.contains(field)
-    }.foreach {
-      case (field, index) => safeRequiredIndices(safeRequiredFields.indexOf(field)) = index
-    }
-    val requiredSize = requiredFields.length
-    val row = new GenericMutableRow(requiredSize)
 
-    (tokens: Array[String]) => {
-      if (params.dropMalformed && schemaFields.length != tokens.length) {
-        logWarning(s"Dropping malformed line: ${tokens.mkString(params.delimiter.toString)}")
-        None
-      } else if (params.failFast && schemaFields.length != tokens.length) {
-        throw new RuntimeException(s"Malformed line in FAILFAST mode: " +
-          s"${tokens.mkString(params.delimiter.toString)}")
+    val schema = if (csvOptions.inferSchemaFlag) {
+      val dropHeaderRdd = if (csvOptions.headerFlag) {
+        filteredRdd.filter(_ != firstLine)
       } else {
-        val indexSafeTokens = if (params.permissive && schemaFields.length > tokens.length) {
-          tokens ++ new Array[String](schemaFields.length - tokens.length)
-        } else if (params.permissive && schemaFields.length < tokens.length) {
-          tokens.take(schemaFields.length)
-        } else {
-          tokens
+        filteredRdd
+      }
+      val dataRdd = UnivocityParser.tokenize(dropHeaderRdd, csvOptions)
+      InferSchema.infer(dataRdd, header, csvOptions.nullValue)
+    } else {
+      // By default fields are assumed to be StringType
+      val schemaFields = header.map { fieldName =>
+        StructField(fieldName.toString, StringType, nullable = true)
+      }
+      StructType(schemaFields)
+    }
+    Some(schema)
+  }
+
+  override def prepareWrite(
+      sqlContext: SQLContext,
+      job: Job,
+      options: Map[String, String],
+      dataSchema: StructType): OutputWriterFactory = {
+    val conf = job.getConfiguration
+    val csvOptions = new CSVOptions(options)
+    csvOptions.compressionCodec.foreach { codec =>
+      CompressionCodecs.setCodecConfiguration(conf, codec)
+    }
+
+    new CSVOutputWriterFactory(csvOptions)
+  }
+
+  override def buildReader(
+      sqlContext: SQLContext,
+      dataSchema: StructType,
+      partitionSchema: StructType,
+      requiredSchema: StructType,
+      filters: Seq[Filter],
+      options: Map[String, String]): (PartitionedFile) => Iterator[InternalRow] = {
+    val csvOptions = new CSVOptions(options)
+    val headers = requiredSchema.fields.map(_.name)
+
+    val conf = new Configuration(sqlContext.sparkContext.hadoopConfiguration)
+    val broadcastedConf = sqlContext.sparkContext.broadcast(new SerializableConfiguration(conf))
+
+    (file: PartitionedFile) => {
+      val lines = {
+        val conf = broadcastedConf.value.value
+        new HadoopFileLinesReader(file, conf).map { line =>
+          new String(line.getBytes, 0, line.getLength, csvOptions.charset)
         }
-        try {
-          var index: Int = 0
-          var subIndex: Int = 0
-          while (subIndex < safeRequiredIndices.length) {
-            index = safeRequiredIndices(subIndex)
-            val field = schemaFields(index)
-            // It anyway needs to try to parse since it decides if this row is malformed
-            // or not after trying to cast in `DROPMALFORMED` mode even if the casted
-            // value is not stored in the row.
-            val value = CSVTypeCast.castTo(
-              indexSafeTokens(index),
-              field.dataType,
-              field.nullable,
-              params.nullValue)
-            if (subIndex < requiredSize) {
-              row(subIndex) = value
-            }
-            subIndex = subIndex + 1
-          }
-          Some(row)
-        } catch {
-          case NonFatal(e) if params.dropMalformed =>
-            logWarning("Parse exception. " +
-              s"Dropping malformed line: ${tokens.mkString(params.delimiter.toString)}")
-            None
-        }
+      }
+
+      CSVUtils.dropHeaderLine(lines, csvOptions)
+      val filteredLines = CSVUtils.filterCommentAndEmpty(lines, csvOptions)
+
+      // Appends partition values
+      val fullOutput = requiredSchema.toAttributes ++ partitionSchema.toAttributes
+      val joinedRow = new JoinedRow()
+
+      val rows = UnivocityParser.parseCsv(
+        filteredLines,
+        dataSchema,
+        requiredSchema,
+        headers,
+        csvOptions)
+
+      val appendPartitionColumns = GenerateUnsafeProjection.generate(fullOutput, fullOutput)
+      rows.map { row =>
+        appendPartitionColumns(joinedRow(row, file.partitionValues))
       }
     }
   }
 
-  def parseCsv(
-      tokenizedRDD: RDD[Array[String]],
-      schema: StructType,
-      requiredColumns: Array[String],
-      options: CSVOptions): RDD[InternalRow] = {
-    val parser = csvParser(schema, requiredColumns, options)
-    tokenizedRDD.flatMap(parser(_).toSeq)
+  /**
+   * This supports to eliminate unneeded columns before producing an RDD
+   * containing all of its tuples as Row objects. This reads all the tokens of each line
+   * and then drop unneeded tokens without casting and type-checking by mapping
+   * both the indices produced by `requiredColumns` and the ones of tokens.
+   */
+  override def buildInternalScan(
+       sqlContext: SQLContext,
+       dataSchema: StructType,
+       requiredColumns: Array[String],
+       filters: Array[Filter],
+       bucketSet: Option[BitSet],
+       inputFiles: Seq[FileStatus],
+       broadcastedConf: Broadcast[SerializableConfiguration],
+       options: Map[String, String]): RDD[InternalRow] = {
+    // TODO: Filter before calling buildInternalScan.
+    val csvFiles = inputFiles.filterNot(_.getPath.getName startsWith "_")
+    val csvOptions = new CSVOptions(options)
+    val pathsString = csvFiles.map(_.getPath.toUri.toString)
+    val header = dataSchema.fields.map(_.name)
+
+    val rdd = createBaseRdd(sqlContext, csvOptions, pathsString)
+    val filteredRdd = rdd.mapPartitions(CSVUtils.filterCommentAndEmpty(_, csvOptions))
+    val firstLine = filteredRdd.first()
+    val firstRow = UnivocityParser.tokenizeSingleLine(firstLine, csvOptions)
+    val dropHeaderRdd = if (csvOptions.headerFlag) {
+      filteredRdd.filter(_ != firstLine)
+    } else {
+      filteredRdd
+    }
+
+    val requiredDataSchema = StructType(requiredColumns.map(dataSchema(_)))
+    val rows = UnivocityParser.parse(
+      dropHeaderRdd,
+      dataSchema,
+      requiredDataSchema,
+      header,
+      csvOptions)
+
+    rows.mapPartitions { iterator =>
+      val unsafeProjection = UnsafeProjection.create(requiredDataSchema)
+      iterator.map(unsafeProjection)
+    }
   }
 
-  // Skips the header line of each file if the `header` option is set to true.
-  def dropHeaderLine(
-      file: PartitionedFile, lines: Iterator[String], csvOptions: CSVOptions): Unit = {
-    // TODO What if the first partitioned file consists of only comments and empty lines?
-    if (csvOptions.headerFlag && file.start == 0) {
-      val nonEmptyLines = if (csvOptions.isCommentSet) {
-        val commentPrefix = csvOptions.comment.toString
-        lines.dropWhile { line =>
-          line.trim.isEmpty || line.trim.startsWith(commentPrefix)
-        }
-      } else {
-        lines.dropWhile(_.trim.isEmpty)
-      }
-
-      if (nonEmptyLines.hasNext) nonEmptyLines.drop(1)
+  private def createBaseRdd(
+      sqlContext: SQLContext,
+      options: CSVOptions,
+      inputPaths: Seq[String]): RDD[String] = {
+    val location = inputPaths.mkString(",")
+    if (Charset.forName(options.charset) == StandardCharsets.UTF_8) {
+      sqlContext.sparkContext.textFile(location)
+    } else {
+      val charset = options.charset
+      sqlContext.sparkContext
+        .hadoopFile[LongWritable, Text, TextInputFormat](location)
+        .mapPartitions(_.map(pair => new String(pair._2.getBytes, 0, pair._2.getLength, charset)))
     }
   }
 }
 
-private[sql] class CSVOutputWriterFactory(params: CSVOptions) extends OutputWriterFactory {
+private[sql] class CSVOutputWriterFactory(options: CSVOptions) extends OutputWriterFactory {
   override def newInstance(
       path: String,
       bucketId: Option[Int],
       dataSchema: StructType,
       context: TaskAttemptContext): OutputWriter = {
     if (bucketId.isDefined) sys.error("csv doesn't support bucketing")
-    new CsvOutputWriter(path, dataSchema, context, params)
+    new CsvOutputWriter(path, dataSchema, context, options)
   }
 }
 
@@ -160,10 +221,10 @@ private[sql] class CsvOutputWriter(
     path: String,
     dataSchema: StructType,
     context: TaskAttemptContext,
-    params: CSVOptions) extends OutputWriter with Logging {
+    options: CSVOptions) extends OutputWriter with Logging {
 
   // create the Generator without separator inserted between 2 records
-  private[this] val text = new Text()
+  private[this] val result = new Text()
 
   private val recordWriter: RecordWriter[NullWritable, Text] = {
     new TextOutputFormat[NullWritable, Text]() {
@@ -177,31 +238,30 @@ private[sql] class CsvOutputWriter(
     }.getRecordWriter(context)
   }
 
-  private var firstRow: Boolean = params.headerFlag
+  private val writerSettings = UnivocityGenerator.getSettings(options)
+  private val headers = dataSchema.fieldNames
+  writerSettings.setHeaders(headers: _*)
 
-  private val csvWriter = new LineCsvWriter(params, dataSchema.fieldNames.toSeq)
-
-  private def rowToString(row: Seq[Any]): Seq[String] = row.map { field =>
-    if (field != null) {
-      field.toString
-    } else {
-      params.nullValue
-    }
-  }
+  private[this] val writer = new CharArrayWriter()
+  private[this] val csvWriter = new CsvWriter(writer, writerSettings)
+  private[this] var writeHeader = options.headerFlag
 
   override def write(row: Row): Unit = throw new UnsupportedOperationException("call writeInternal")
 
   override protected[sql] def writeInternal(row: InternalRow): Unit = {
     // TODO: Instead of converting and writing every row, we should use the univocity buffer
-    val resultString = csvWriter.writeRow(rowToString(row.toSeq(dataSchema)), firstRow)
-    if (firstRow) {
-      firstRow = false
-    }
-    text.set(resultString)
-    recordWriter.write(NullWritable.get(), text)
+    UnivocityGenerator(dataSchema, csvWriter, headers, writeHeader, options)(row)
+    csvWriter.flush()
+
+    result.set(writer.toString)
+    writer.reset()
+
+    writeHeader = false
+    recordWriter.write(NullWritable.get(), result)
   }
 
   override def close(): Unit = {
+    csvWriter.close()
     recordWriter.close(context)
   }
 }
