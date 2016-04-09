@@ -19,9 +19,9 @@ package org.apache.spark.sql.execution
 
 import java.util.HashMap
 
-import org.apache.spark.sql.execution.joins.LongToUnsafeRowMap
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.memory.{StaticMemoryManager, TaskMemoryManager}
+import org.apache.spark.sql.execution.joins.LongToUnsafeRowMap
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.vectorized.AggregateHashMap
