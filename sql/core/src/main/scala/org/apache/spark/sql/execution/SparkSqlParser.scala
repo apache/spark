@@ -475,7 +475,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    *   ALTER VIEW view ADD [IF NOT EXISTS] PARTITION spec
    * }}}
    *
-   * ALTER VIEW ... DROP PARTITION ... is not supported because the concept of partitioning
+   * ALTER VIEW ... ADD PARTITION ... is not supported because the concept of partitioning
    * is associated with physical tables
    */
   override def visitAddTablePartition(

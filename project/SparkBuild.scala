@@ -47,9 +47,9 @@ object BuildCommons {
   ).map(ProjectRef(buildLocation, _))
 
   val allProjects@Seq(
-    core, graphx, mllib, repl, networkCommon, networkShuffle, launcher, unsafe, testTags, sketch, _*
+    core, graphx, mllib, mllibLocal, repl, networkCommon, networkShuffle, launcher, unsafe, testTags, sketch, _*
   ) = Seq(
-    "core", "graphx", "mllib", "repl", "network-common", "network-shuffle", "launcher", "unsafe",
+    "core", "graphx", "mllib", "mllib-local", "repl", "network-common", "network-shuffle", "launcher", "unsafe",
     "test-tags", "sketch"
   ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects
 
@@ -254,7 +254,7 @@ object SparkBuild extends PomBuild {
   val mimaProjects = allProjects.filterNot { x =>
     Seq(
       spark, hive, hiveThriftServer, catalyst, repl, networkCommon, networkShuffle, networkYarn,
-      unsafe, testTags, sketch
+      unsafe, testTags, sketch, mllibLocal
     ).contains(x)
   }
 
