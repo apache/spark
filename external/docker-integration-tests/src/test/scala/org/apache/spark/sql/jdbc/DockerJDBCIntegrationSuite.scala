@@ -60,8 +60,8 @@ abstract class DatabaseOnDocker {
   def getJdbcUrl(ip: String, port: Int): String
 
   /**
-    * Optional process to run when container starts
-    */
+   * Optional process to run when container starts
+   */
   def getStartupProcessName: Option[String]
 }
 
