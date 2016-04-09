@@ -51,6 +51,12 @@ class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     val dataset3 = mock[DataFrame]
     val dataset4 = mock[DataFrame]
 
+    when(dataset0.toDF).thenReturn(dataset0)
+    when(dataset1.toDF).thenReturn(dataset1)
+    when(dataset2.toDF).thenReturn(dataset2)
+    when(dataset3.toDF).thenReturn(dataset3)
+    when(dataset4.toDF).thenReturn(dataset4)
+
     when(estimator0.copy(any[ParamMap])).thenReturn(estimator0)
     when(model0.copy(any[ParamMap])).thenReturn(model0)
     when(transformer1.copy(any[ParamMap])).thenReturn(transformer1)
