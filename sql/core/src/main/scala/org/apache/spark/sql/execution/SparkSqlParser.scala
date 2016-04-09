@@ -143,10 +143,7 @@ class SparkSqlAstBuilder extends AstBuilder {
   override def visitExplain(ctx: ExplainContext): LogicalPlan = withOrigin(ctx) {
     val options = ctx.explainOption.asScala
     if (options.exists(_.FORMATTED != null)) {
-      logWarning("EXPLAIN FORMATTED option is ignored.")
-    }
-    if (options.exists(_.LOGICAL != null)) {
-      logWarning("EXPLAIN LOGICAL option is ignored.")
+      logWarning("Unsupported operation: EXPLAIN FORMATTED option")
     }
 
     // Create the explain comment.
@@ -206,7 +203,7 @@ class SparkSqlAstBuilder extends AstBuilder {
   override def visitCreateTableUsing(ctx: CreateTableUsingContext): LogicalPlan = withOrigin(ctx) {
     val (table, temp, ifNotExists, external) = visitCreateTableHeader(ctx.createTableHeader)
     if (external) {
-      logWarning("EXTERNAL option is not supported.")
+      throw new ParseException("Unsupported operation: EXTERNAL option", ctx)
     }
     val options = Option(ctx.tablePropertyList).map(visitTablePropertyList).getOrElse(Map.empty)
     val provider = ctx.tableProvider.qualifiedName.getText

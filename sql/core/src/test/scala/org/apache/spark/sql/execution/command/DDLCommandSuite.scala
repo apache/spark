@@ -665,7 +665,7 @@ class DDLCommandSuite extends PlanTest {
     comparePlans(parsed2, expected2)
   }
 
-  test("commands only available in HiveContext") {
+  test("unsupported operations") {
     intercept[ParseException] {
       parser.parsePlan("DROP TABLE D1.T1")
     }
@@ -680,6 +680,14 @@ class DDLCommandSuite extends PlanTest {
         """
           |CREATE EXTERNAL TABLE parquet_tab2(c1 INT, c2 STRING)
           |TBLPROPERTIES('prop1Key '= "prop1Val", ' `prop2Key` '= "prop2Val")
+        """.stripMargin)
+    }
+    intercept[ParseException] {
+      parser.parsePlan(
+        """
+          |CREATE EXTERNAL TABLE oneToTenDef
+          |USING org.apache.spark.sql.sources
+          |OPTIONS (from '1', to '10')
         """.stripMargin)
     }
     intercept[ParseException] {
