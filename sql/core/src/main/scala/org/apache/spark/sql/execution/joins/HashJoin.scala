@@ -59,9 +59,13 @@ trait HashJoin {
     case BuildRight => (right, left)
   }
 
-  protected lazy val (buildKeys, streamedKeys) = buildSide match {
-    case BuildLeft => (leftKeys, rightKeys)
-    case BuildRight => (rightKeys, leftKeys)
+  protected lazy val (buildKeys, streamedKeys) = {
+    val lkeys = rewriteKeyExpr(leftKeys).map(BindReferences.bindReference(_, left.output))
+    val rkeys = rewriteKeyExpr(rightKeys).map(BindReferences.bindReference(_, right.output))
+    buildSide match {
+      case BuildLeft => (lkeys, rkeys)
+      case BuildRight => (rkeys, lkeys)
+    }
   }
 
   /**
@@ -96,17 +100,11 @@ trait HashJoin {
     keyExpr :: Nil
   }
 
-  protected lazy val canJoinKeyFitWithinLong: Boolean = {
-    val sameTypes = buildKeys.map(_.dataType) == streamedKeys.map(_.dataType)
-    val key = rewriteKeyExpr(buildKeys)
-    sameTypes && key.length == 1 && key.head.dataType.isInstanceOf[LongType]
-  }
-
   protected def buildSideKeyGenerator(): Projection =
-    UnsafeProjection.create(rewriteKeyExpr(buildKeys), buildPlan.output)
+    UnsafeProjection.create(buildKeys)
 
   protected def streamSideKeyGenerator(): UnsafeProjection =
-    UnsafeProjection.create(rewriteKeyExpr(streamedKeys), streamedPlan.output)
+    UnsafeProjection.create(streamedKeys)
 
   @transient private[this] lazy val boundCondition = if (condition.isDefined) {
     newPredicate(condition.get, streamedPlan.output ++ buildPlan.output)

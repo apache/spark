@@ -55,10 +55,9 @@ case class ShuffledHashJoin(
   override def requiredChildDistribution: Seq[Distribution] =
     ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
 
-  private def buildHashedRelation(iter: Iterator[UnsafeRow]): HashedRelation = {
+  private def buildHashedRelation(iter: Iterator[InternalRow]): HashedRelation = {
     val context = TaskContext.get()
-    val key = rewriteKeyExpr(buildKeys).map(BindReferences.bindReference(_, buildPlan.output))
-    val relation = HashedRelation(iter, key, taskMemoryManager = context.taskMemoryManager())
+    val relation = HashedRelation(iter, buildKeys, taskMemoryManager = context.taskMemoryManager())
     // This relation is usually used until the end of task.
     context.addTaskCompletionListener((t: TaskContext) =>
       relation.close()
@@ -69,7 +68,7 @@ case class ShuffledHashJoin(
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
     streamedPlan.execute().zipPartitions(buildPlan.execute()) { (streamIter, buildIter) =>
-      val hashed = buildHashedRelation(buildIter.asInstanceOf[Iterator[UnsafeRow]])
+      val hashed = buildHashedRelation(buildIter)
       join(streamIter, hashed, numOutputRows)
     }
   }
