@@ -155,10 +155,10 @@ class CountVectorizer(override val uid: String)
 
     val wordCountOrdering = new Ordering[(String, Long)]{
       override def compare(x: (String, Long), y: (String,Long)): Int = {
-        if (x._2 > y._2) +1 else -1
+        if (x._2 > y._2) +1 else if (x._2 < y._2) -1 else 0
       }
     }
-    
+
     val vocab: Array[String] = wordCounts
       .top(math.min(fullVocabSize, vocSize).toInt)(wordCountOrdering)
       .map(_._1)
