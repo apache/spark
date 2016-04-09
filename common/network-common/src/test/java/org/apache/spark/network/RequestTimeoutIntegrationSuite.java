@@ -44,7 +44,7 @@ import java.util.concurrent.TimeUnit;
  * Suite which ensures that requests that go without a response for the network timeout period are
  * failed, and the connection closed.
  *
- * In this suite, we use 2 seconds as the connection timeout, with some slack given in the tests,
+ * In this suite, we use 10 seconds as the connection timeout, with some slack given in the tests,
  * to ensure stability in different test environments.
  */
 public class RequestTimeoutIntegrationSuite {
@@ -61,7 +61,7 @@ public class RequestTimeoutIntegrationSuite {
   @Before
   public void setUp() throws Exception {
     Map<String, String> configMap = Maps.newHashMap();
-    configMap.put("spark.shuffle.io.connectionTimeout", "2s");
+    configMap.put("spark.shuffle.io.connectionTimeout", "10s");
     conf = new TransportConf("shuffle", new MapConfigProvider(configMap));
 
     defaultManager = new StreamManager() {
@@ -118,10 +118,10 @@ public class RequestTimeoutIntegrationSuite {
     callback0.latch.await();
     assertEquals(responseSize, callback0.successLength);
 
-    // Second times out after 2 seconds, with slack. Must be IOException.
+    // Second times out after 10 seconds, with slack. Must be IOException.
     TestCallback callback1 = new TestCallback();
     client.sendRpc(ByteBuffer.allocate(0), callback1);
-    callback1.latch.await(4, TimeUnit.SECONDS);
+    callback1.latch.await(60, TimeUnit.SECONDS);
     assertNotNull(callback1.failure);
     assertTrue(callback1.failure instanceof IOException);
 
@@ -223,7 +223,7 @@ public class RequestTimeoutIntegrationSuite {
     // not complete yet, but should complete soon
     assertEquals(-1, callback0.successLength);
     assertNull(callback0.failure);
-    callback0.latch.await(2, TimeUnit.SECONDS);
+    callback0.latch.await(60, TimeUnit.SECONDS);
     assertTrue(callback0.failure instanceof IOException);
 
     // failed at same time as previous

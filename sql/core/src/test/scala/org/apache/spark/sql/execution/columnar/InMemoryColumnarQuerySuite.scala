@@ -126,7 +126,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
   test("decimal type") {
     // Casting is required here because ScalaReflection can't capture decimal precision information.
     val df = (1 to 10)
-      .map(i => Tuple1(Decimal(i, 15, 10)))
+      .map(i => Tuple1(Decimal(i, 15, 10).toJavaBigDecimal))
       .toDF("dec")
       .select($"dec" cast DecimalType(15, 10))
 
@@ -219,5 +219,15 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
     data.cache()
     assert(data.count() === 10)
     assert(data.filter($"s" === "3").count() === 1)
+  }
+
+  test("SPARK-14138: Generated SpecificColumnarIterator can exceed JVM size limit for cached DF") {
+    val length1 = 3999
+    val columnTypes1 = List.fill(length1)(IntegerType)
+    val columnarIterator1 = GenerateColumnAccessor.generate(columnTypes1)
+
+    val length2 = 10000
+    val columnTypes2 = List.fill(length2)(IntegerType)
+    val columnarIterator2 = GenerateColumnAccessor.generate(columnTypes2)
   }
 }

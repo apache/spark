@@ -208,9 +208,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
 
               val bucketedRDD = new UnionRDD(t.sqlContext.sparkContext,
                 (0 until spec.numBuckets).map { bucketId =>
-                  bucketedDataMap.get(bucketId).getOrElse {
-                    t.sqlContext.emptyResult: RDD[InternalRow]
-                  }
+                  bucketedDataMap.getOrElse(bucketId, t.sqlContext.emptyResult: RDD[InternalRow])
                 })
               bucketedRDD
             }
@@ -240,7 +238,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       }
 
     case l @ LogicalRelation(baseRelation: TableScan, _, _) =>
-      execution.DataSourceScan(
+      execution.DataSourceScan.create(
         l.output, toCatalystRDD(l, baseRelation.buildScan()), baseRelation) :: Nil
 
     case i @ logical.InsertIntoTable(l @ LogicalRelation(t: InsertableRelation, _, _),
@@ -387,7 +385,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         result.setColumn(resultIdx, input.column(inputIdx))
         inputIdx += 1
       } else {
-        require(partitionColumnSchema.fields.filter(_.name.equals(attr.name)).length == 1)
+        require(partitionColumnSchema.fields.count(_.name == attr.name) == 1)
         var partitionIdx = 0
         partitionColumnSchema.fields.foreach { f => {
           if (f.name.equals(attr.name)) {
@@ -612,7 +610,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         // Don't request columns that are only referenced by pushed filters.
         .filterNot(handledSet.contains)
 
-      val scan = execution.DataSourceScan(
+      val scan = execution.DataSourceScan.create(
         projects.map(_.toAttribute),
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
         relation.relation, metadata)
@@ -622,7 +620,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       val requestedColumns =
         (projectSet ++ filterSet -- handledSet).map(relation.attributeMap).toSeq
 
-      val scan = execution.DataSourceScan(
+      val scan = execution.DataSourceScan.create(
         requestedColumns,
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
         relation.relation, metadata)

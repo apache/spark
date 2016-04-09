@@ -94,7 +94,7 @@ case class Generate(
   def output: Seq[Attribute] = {
     val qualified = qualifier.map(q =>
       // prepend the new qualifier to the existed one
-      generatorOutput.map(a => a.withQualifiers(q +: a.qualifiers))
+      generatorOutput.map(a => a.withQualifier(Some(q)))
     ).getOrElse(generatorOutput)
 
     if (join) child.output ++ qualified else qualified
@@ -252,7 +252,7 @@ case class Join(
 
   override def output: Seq[Attribute] = {
     joinType match {
-      case LeftSemi =>
+      case LeftExistence(_) =>
         left.output
       case LeftOuter =>
         left.output ++ right.output.map(_.withNullability(true))
@@ -276,7 +276,7 @@ case class Join(
           .union(splitConjunctivePredicates(condition.get).toSet)
       case Inner =>
         left.constraints.union(right.constraints)
-      case LeftSemi =>
+      case LeftExistence(_) =>
         left.constraints
       case LeftOuter =>
         left.constraints
@@ -519,7 +519,6 @@ case class Expand(
     projections: Seq[Seq[Expression]],
     output: Seq[Attribute],
     child: LogicalPlan) extends UnaryNode {
-
   override def references: AttributeSet =
     AttributeSet(projections.flatten.flatMap(_.references))
 
@@ -527,6 +526,10 @@ case class Expand(
     val sizeInBytes = super.statistics.sizeInBytes * projections.length
     Statistics(sizeInBytes = sizeInBytes)
   }
+
+  // This operator can reuse attributes (for example making them null when doing a roll up) so
+  // the contraints of the child may no longer be valid.
+  override protected def validConstraints: Set[Expression] = Set.empty[Expression]
 }
 
 /**
@@ -615,7 +618,7 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNo
 
 case class SubqueryAlias(alias: String, child: LogicalPlan) extends UnaryNode {
 
-  override def output: Seq[Attribute] = child.output.map(_.withQualifiers(alias :: Nil))
+  override def output: Seq[Attribute] = child.output.map(_.withQualifier(Some(alias)))
 }
 
 /**

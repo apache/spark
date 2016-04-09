@@ -21,7 +21,8 @@ import java.sql.{Date, Timestamp}
 
 import scala.language.implicitConversions
 
-import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, UnresolvedAttribute, UnresolvedExtractValue}
+import org.apache.spark.sql.Encoder
+import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
@@ -161,6 +162,18 @@ package object dsl {
     def lower(e: Expression): Expression = Lower(e)
     def sqrt(e: Expression): Expression = Sqrt(e)
     def abs(e: Expression): Expression = Abs(e)
+    def star(names: String*): Expression = names match {
+      case Seq() => UnresolvedStar(None)
+      case target => UnresolvedStar(Option(target))
+    }
+
+    def callFunction[T, U](
+        func: T => U,
+        returnType: DataType,
+        argument: Expression): Expression = {
+      val function = Literal.create(func, ObjectType(classOf[T => U]))
+      Invoke(function, "apply", returnType, argument :: Nil)
+    }
 
     implicit class DslSymbol(sym: Symbol) extends ImplicitAttribute { def s: String = sym.name }
     // TODO more implicit class for literal?
@@ -231,6 +244,12 @@ package object dsl {
         AttributeReference(s, structType, nullable = true)()
       def struct(attrs: AttributeReference*): AttributeReference =
         struct(StructType.fromAttributes(attrs))
+
+      /** Create a function. */
+      def function(exprs: Expression*): UnresolvedFunction =
+        UnresolvedFunction(s, exprs, isDistinct = false)
+      def distinctFunction(exprs: Expression*): UnresolvedFunction =
+        UnresolvedFunction(s, exprs, isDistinct = true)
     }
 
     implicit class DslAttribute(a: AttributeReference) {
@@ -243,10 +262,32 @@ package object dsl {
   object expressions extends ExpressionConversions  // scalastyle:ignore
 
   object plans {  // scalastyle:ignore
+    def table(ref: String): LogicalPlan =
+      UnresolvedRelation(TableIdentifier(ref), None)
+
+    def table(db: String, ref: String): LogicalPlan =
+      UnresolvedRelation(TableIdentifier(ref, Option(db)), None)
+
     implicit class DslLogicalPlan(val logicalPlan: LogicalPlan) {
-      def select(exprs: NamedExpression*): LogicalPlan = Project(exprs, logicalPlan)
+      def select(exprs: Expression*): LogicalPlan = {
+        val namedExpressions = exprs.map {
+          case e: NamedExpression => e
+          case e => UnresolvedAlias(e)
+        }
+        Project(namedExpressions, logicalPlan)
+      }
 
       def where(condition: Expression): LogicalPlan = Filter(condition, logicalPlan)
+
+      def filter[T : Encoder](func: T => Boolean): LogicalPlan = {
+        val deserialized = logicalPlan.deserialize[T]
+        val condition = expressions.callFunction(func, BooleanType, deserialized.output.head)
+        Filter(condition, deserialized).serialize[T]
+      }
+
+      def serialize[T : Encoder]: LogicalPlan = CatalystSerde.serialize[T](logicalPlan)
+
+      def deserialize[T : Encoder]: LogicalPlan = CatalystSerde.deserialize[T](logicalPlan)
 
       def limit(limitExpr: Expression): LogicalPlan = Limit(limitExpr, logicalPlan)
 
@@ -280,7 +321,7 @@ package object dsl {
 
       def intersect(otherPlan: LogicalPlan): LogicalPlan = Intersect(logicalPlan, otherPlan)
 
-      def unionAll(otherPlan: LogicalPlan): LogicalPlan = Union(logicalPlan, otherPlan)
+      def union(otherPlan: LogicalPlan): LogicalPlan = Union(logicalPlan, otherPlan)
 
       def generate(
         generator: Generator,
@@ -295,6 +336,14 @@ package object dsl {
         InsertIntoTable(
           analysis.UnresolvedRelation(TableIdentifier(tableName)),
           Map.empty, logicalPlan, overwrite, false)
+
+      def as(alias: String): LogicalPlan = logicalPlan match {
+        case UnresolvedRelation(tbl, _) => UnresolvedRelation(tbl, Option(alias))
+        case plan => SubqueryAlias(alias, plan)
+      }
+
+      def distribute(exprs: Expression*): LogicalPlan =
+        RepartitionByExpression(exprs, logicalPlan)
 
       def analyze: LogicalPlan =
         EliminateSubqueryAliases(analysis.SimpleAnalyzer.execute(logicalPlan))

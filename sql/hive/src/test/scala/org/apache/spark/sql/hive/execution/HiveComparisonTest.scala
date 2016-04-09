@@ -132,25 +132,7 @@ abstract class HiveComparisonTest
     new java.math.BigInteger(1, digest.digest).toString(16)
   }
 
-  /** Used for testing [[SQLBuilder]] */
-  private var numConvertibleQueries: Int = 0
-  private var numTotalQueries: Int = 0
-
   override protected def afterAll(): Unit = {
-    logInfo({
-      val percentage = if (numTotalQueries > 0) {
-        numConvertibleQueries.toDouble / numTotalQueries * 100
-      } else {
-        0D
-      }
-
-      s"""SQLBuilder statistics:
-         |- Total query number:                $numTotalQueries
-         |- Number of convertible queries:     $numConvertibleQueries
-         |- Percentage of convertible queries: $percentage%
-       """.stripMargin
-    })
-
     try {
       TestHive.reset()
     } finally {
@@ -412,32 +394,38 @@ abstract class HiveComparisonTest
               if (containsCommands) {
                 originalQuery
               } else {
-                numTotalQueries += 1
+                val convertedSQL = try {
+                  new SQLBuilder(originalQuery.analyzed, TestHive).toSQL
+                } catch {
+                  case NonFatal(e) => fail(
+                    s"""Cannot convert the following HiveQL query plan back to SQL query string:
+                        |
+                        |# Original HiveQL query string:
+                        |$queryString
+                        |
+                        |# Resolved query plan:
+                        |${originalQuery.analyzed.treeString}
+                     """.stripMargin, e)
+                }
+
                 try {
-                  val sql = new SQLBuilder(originalQuery.analyzed, TestHive).toSQL
-                  numConvertibleQueries += 1
-                  logInfo(
-                    s"""
-                      |### Running SQL generation round-trip test {{{
-                      |${originalQuery.analyzed.treeString}
-                      |Original SQL:
-                      |$queryString
-                      |
-                      |Generated SQL:
-                      |$sql
-                      |}}}
-                   """.stripMargin.trim)
-                  new TestHive.QueryExecution(sql)
-                } catch { case NonFatal(e) =>
-                  logInfo(
-                    s"""
-                       |### Cannot convert the following logical plan back to SQL {{{
-                       |${originalQuery.analyzed.treeString}
-                       |Original SQL:
-                       |$queryString
-                       |}}}
-                   """.stripMargin.trim)
-                  originalQuery
+                  val queryExecution = new TestHive.QueryExecution(convertedSQL)
+                  // Trigger the analysis of this converted SQL query.
+                  queryExecution.analyzed
+                  queryExecution
+                } catch {
+                  case NonFatal(e) => fail(
+                    s"""Failed to analyze the converted SQL string:
+                        |
+                        |# Original HiveQL query string:
+                        |$queryString
+                        |
+                        |# Resolved query plan:
+                        |${originalQuery.analyzed.treeString}
+                        |
+                        |# Converted SQL query string:
+                        |$convertedSQL
+                     """.stripMargin, e)
                 }
               }
             }
@@ -492,7 +480,11 @@ abstract class HiveComparisonTest
                 val executions = queryList.map(new TestHive.QueryExecution(_))
                 executions.foreach(_.toRdd)
                 val tablesGenerated = queryList.zip(executions).flatMap {
-                  case (q, e) => e.sparkPlan.collect {
+                  // We should take executedPlan instead of sparkPlan, because in following codes we
+                  // will run the collected plans. As we will do extra processing for sparkPlan such
+                  // as adding exchange, collapsing codegen stages, etc., collecting sparkPlan here
+                  // will cause some errors when running these plans later.
+                  case (q, e) => e.executedPlan.collect {
                     case i: InsertIntoHiveTable if tablesRead contains i.table.tableName =>
                       (q, e, i)
                   }

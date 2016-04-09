@@ -25,9 +25,8 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
   private lazy val df = sqlContext.range(10).coalesce(1).toDF()
 
   private def checkTablePath(dbName: String, tableName: String): Unit = {
-    val metastoreTable = hiveContext.sessionState.catalog.client.getTable(dbName, tableName)
-    val expectedPath =
-      hiveContext.sessionState.catalog.client.getDatabase(dbName).locationUri + "/" + tableName
+    val metastoreTable = hiveContext.hiveCatalog.getTable(dbName, tableName)
+    val expectedPath = hiveContext.hiveCatalog.getDatabase(dbName).locationUri + "/" + tableName
 
     assert(metastoreTable.storage.serdeProperties("path") === expectedPath)
   }
@@ -113,11 +112,11 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
         df.write.mode(SaveMode.Overwrite).saveAsTable("t")
         df.write.mode(SaveMode.Append).saveAsTable("t")
         assert(sqlContext.tableNames().contains("t"))
-        checkAnswer(sqlContext.table("t"), df.unionAll(df))
+        checkAnswer(sqlContext.table("t"), df.union(df))
       }
 
       assert(sqlContext.tableNames(db).contains("t"))
-      checkAnswer(sqlContext.table(s"$db.t"), df.unionAll(df))
+      checkAnswer(sqlContext.table(s"$db.t"), df.union(df))
 
       checkTablePath(db, "t")
     }
@@ -128,7 +127,7 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
       df.write.mode(SaveMode.Overwrite).saveAsTable(s"$db.t")
       df.write.mode(SaveMode.Append).saveAsTable(s"$db.t")
       assert(sqlContext.tableNames(db).contains("t"))
-      checkAnswer(sqlContext.table(s"$db.t"), df.unionAll(df))
+      checkAnswer(sqlContext.table(s"$db.t"), df.union(df))
 
       checkTablePath(db, "t")
     }
@@ -141,7 +140,7 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
         assert(sqlContext.tableNames().contains("t"))
 
         df.write.insertInto(s"$db.t")
-        checkAnswer(sqlContext.table(s"$db.t"), df.unionAll(df))
+        checkAnswer(sqlContext.table(s"$db.t"), df.union(df))
       }
     }
   }
@@ -156,7 +155,7 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
       assert(sqlContext.tableNames(db).contains("t"))
 
       df.write.insertInto(s"$db.t")
-      checkAnswer(sqlContext.table(s"$db.t"), df.unionAll(df))
+      checkAnswer(sqlContext.table(s"$db.t"), df.union(df))
     }
   }
 
@@ -220,7 +219,7 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
           hiveContext.refreshTable("t")
           checkAnswer(
             sqlContext.table("t"),
-            df.withColumn("p", lit(1)).unionAll(df.withColumn("p", lit(2))))
+            df.withColumn("p", lit(1)).union(df.withColumn("p", lit(2))))
         }
       }
     }
@@ -252,7 +251,7 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
         hiveContext.refreshTable(s"$db.t")
         checkAnswer(
           sqlContext.table(s"$db.t"),
-          df.withColumn("p", lit(1)).unionAll(df.withColumn("p", lit(2))))
+          df.withColumn("p", lit(1)).union(df.withColumn("p", lit(2))))
       }
     }
   }

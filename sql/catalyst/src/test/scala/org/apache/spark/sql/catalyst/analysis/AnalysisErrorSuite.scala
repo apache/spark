@@ -190,6 +190,11 @@ class AnalysisErrorSuite extends AnalysisTest {
     "cannot resolve" :: "havingCondition" :: Nil)
 
   errorTest(
+    "unresolved star expansion in max",
+    testRelation2.groupBy('a)(sum(UnresolvedStar(None))),
+    "Invalid usage of '*'" :: "in expression 'sum'" :: Nil)
+
+  errorTest(
     "bad casts",
     testRelation.select(Literal(1).cast(BinaryType).as('badCast)),
   "cannot cast" :: Literal(1).dataType.simpleString :: BinaryType.simpleString :: Nil)
@@ -245,7 +250,7 @@ class AnalysisErrorSuite extends AnalysisTest {
 
   errorTest(
     "union with unequal number of columns",
-    testRelation.unionAll(testRelation2),
+    testRelation.union(testRelation2),
     "union" :: "number of columns" :: testRelation2.output.length.toString ::
       testRelation.output.length.toString :: Nil)
 
@@ -266,6 +271,62 @@ class AnalysisErrorSuite extends AnalysisTest {
     // When parse SQL string, we will wrap aggregate expressions with UnresolvedAlias.
     testRelation2.where('bad_column > 1).groupBy('a)(UnresolvedAlias(max('b))),
     "cannot resolve '`bad_column`'" :: Nil)
+
+  errorTest(
+    "slide duration greater than window in time window",
+    testRelation2.select(
+      TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "2 second", "0 second").as("window")),
+      s"The slide duration " :: " must be less than or equal to the windowDuration " :: Nil
+  )
+
+  errorTest(
+    "start time greater than slide duration in time window",
+    testRelation.select(
+      TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "1 second", "1 minute").as("window")),
+      "The start time " :: " must be less than the slideDuration " :: Nil
+  )
+
+  errorTest(
+    "start time equal to slide duration in time window",
+    testRelation.select(
+      TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "1 second", "1 second").as("window")),
+      "The start time " :: " must be less than the slideDuration " :: Nil
+  )
+
+  errorTest(
+    "negative window duration in time window",
+    testRelation.select(
+      TimeWindow(Literal("2016-01-01 01:01:01"), "-1 second", "1 second", "0 second").as("window")),
+      "The window duration " :: " must be greater than 0." :: Nil
+  )
+
+  errorTest(
+    "zero window duration in time window",
+    testRelation.select(
+      TimeWindow(Literal("2016-01-01 01:01:01"), "0 second", "1 second", "0 second").as("window")),
+      "The window duration " :: " must be greater than 0." :: Nil
+  )
+
+  errorTest(
+    "negative slide duration in time window",
+    testRelation.select(
+      TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "-1 second", "0 second").as("window")),
+      "The slide duration " :: " must be greater than 0." :: Nil
+  )
+
+  errorTest(
+    "zero slide duration in time window",
+    testRelation.select(
+      TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "0 second", "0 second").as("window")),
+      "The slide duration" :: " must be greater than 0." :: Nil
+  )
+
+  errorTest(
+    "negative start time in time window",
+    testRelation.select(
+      TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "1 second", "-5 second").as("window")),
+      "The start time" :: "must be greater than or equal to 0." :: Nil
+  )
 
   test("SPARK-6452 regression test") {
     // CheckAnalysis should throw AnalysisException when Aggregate contains missing attribute(s)

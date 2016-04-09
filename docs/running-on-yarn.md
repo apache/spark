@@ -49,8 +49,8 @@ In `cluster` mode, the driver runs on a different machine than the client, so `S
     $ ./bin/spark-submit --class my.main.Class \
         --master yarn \
         --deploy-mode cluster \
-        --jars my-other-jar.jar,my-other-other-jar.jar
-        my-main-jar.jar
+        --jars my-other-jar.jar,my-other-other-jar.jar \
+        my-main-jar.jar \
         app_arg1 app_arg2
 
 
@@ -160,6 +160,13 @@ If you need a reference to the proper location to put log files in the YARN so t
   </td>
 </tr>
 <tr>
+  <td><code>spark.yarn.stagingDir</code></td>
+  <td>Current user's home directory in the filesystem</td>
+  <td>
+    Staging directory used while submitting applications.
+  </td>
+</tr>
+<tr>
   <td><code>spark.yarn.preserve.staging.files</code></td>
   <td><code>false</code></td>
   <td>
@@ -213,6 +220,13 @@ If you need a reference to the proper location to put log files in the YARN so t
   <td>(none)</td>
   <td>
     Comma-separated list of files to be placed in the working directory of each executor.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.dist.jars</code></td>
+  <td>(none)</td>
+  <td>
+    Comma-separated list of jars to be placed in the working directory of each executor.
   </td>
 </tr>
 <tr>

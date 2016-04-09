@@ -39,7 +39,7 @@ class WindowSpec private[sql](
    * Defines the partitioning columns in a [[WindowSpec]].
    * @since 1.4.0
    */
-  @scala.annotation.varargs
+  @_root_.scala.annotation.varargs
   def partitionBy(colName: String, colNames: String*): WindowSpec = {
     partitionBy((colName +: colNames).map(Column(_)): _*)
   }
@@ -48,7 +48,7 @@ class WindowSpec private[sql](
    * Defines the partitioning columns in a [[WindowSpec]].
    * @since 1.4.0
    */
-  @scala.annotation.varargs
+  @_root_.scala.annotation.varargs
   def partitionBy(cols: Column*): WindowSpec = {
     new WindowSpec(cols.map(_.expr), orderSpec, frame)
   }
@@ -57,7 +57,7 @@ class WindowSpec private[sql](
    * Defines the ordering columns in a [[WindowSpec]].
    * @since 1.4.0
    */
-  @scala.annotation.varargs
+  @_root_.scala.annotation.varargs
   def orderBy(colName: String, colNames: String*): WindowSpec = {
     orderBy((colName +: colNames).map(Column(_)): _*)
   }
@@ -66,7 +66,7 @@ class WindowSpec private[sql](
    * Defines the ordering columns in a [[WindowSpec]].
    * @since 1.4.0
    */
-  @scala.annotation.varargs
+  @_root_.scala.annotation.varargs
   def orderBy(cols: Column*): WindowSpec = {
     val sortOrder: Seq[SortOrder] = cols.map { col =>
       col.expr match {

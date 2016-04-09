@@ -26,6 +26,7 @@ class ExpressionToSQLSuite extends SQLBuilderTest with SQLTestUtils {
   import testImplicits._
 
   protected override def beforeAll(): Unit = {
+    super.beforeAll()
     sql("DROP TABLE IF EXISTS t0")
     sql("DROP TABLE IF EXISTS t1")
     sql("DROP TABLE IF EXISTS t2")
@@ -43,9 +44,13 @@ class ExpressionToSQLSuite extends SQLBuilderTest with SQLTestUtils {
   }
 
   override protected def afterAll(): Unit = {
-    sql("DROP TABLE IF EXISTS t0")
-    sql("DROP TABLE IF EXISTS t1")
-    sql("DROP TABLE IF EXISTS t2")
+    try {
+      sql("DROP TABLE IF EXISTS t0")
+      sql("DROP TABLE IF EXISTS t1")
+      sql("DROP TABLE IF EXISTS t2")
+    } finally {
+      super.afterAll()
+    }
   }
 
   private def checkSqlGeneration(hiveQl: String): Unit = {
@@ -95,6 +100,7 @@ class ExpressionToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     checkSqlGeneration("SELECT isnull(null), isnull('a')")
     checkSqlGeneration("SELECT isnotnull(null), isnotnull('a')")
     checkSqlGeneration("SELECT least(1,null,3)")
+    checkSqlGeneration("SELECT map(1, 'a', 2, 'b')")
     checkSqlGeneration("SELECT named_struct('c1',1,'c2',2,'c3',3)")
     checkSqlGeneration("SELECT nanvl(a, 5), nanvl(b, 10), nanvl(d, c) from t2")
     checkSqlGeneration("SELECT nvl(null, 1, 2)")
@@ -207,8 +213,8 @@ class ExpressionToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     checkSqlGeneration("SELECT space(2)")
     checkSqlGeneration("SELECT split('aa2bb3cc', '[1-9]+')")
     checkSqlGeneration("SELECT space(2)")
-    checkSqlGeneration("SELECT substr('This is a test', 'is')")
-    checkSqlGeneration("SELECT substring('This is a test', 'is')")
+    checkSqlGeneration("SELECT substr('This is a test', 1)")
+    checkSqlGeneration("SELECT substring('This is a test', 1)")
     checkSqlGeneration("SELECT substring_index('www.apache.org','.',1)")
     checkSqlGeneration("SELECT translate('translate', 'rnlt', '123')")
     checkSqlGeneration("SELECT trim('  SparkSql ')")

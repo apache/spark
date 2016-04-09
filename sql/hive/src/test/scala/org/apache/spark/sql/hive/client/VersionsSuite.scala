@@ -148,7 +148,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
     test(s"$version: createTable") {
       val table =
         CatalogTable(
-          name = TableIdentifier("src", Some("default")),
+          identifier = TableIdentifier("src", Some("default")),
           tableType = CatalogTableType.MANAGED_TABLE,
           schema = Seq(CatalogColumn("key", "int")),
           storage = CatalogStorageFormat(
@@ -169,10 +169,6 @@ class VersionsSuite extends SparkFunSuite with Logging {
 
     test(s"$version: listTables") {
       assert(client.listTables("default") === Seq("src"))
-    }
-
-    test(s"$version: currentDatabase") {
-      assert(client.currentDatabase === "default")
     }
 
     test(s"$version: getDatabase") {

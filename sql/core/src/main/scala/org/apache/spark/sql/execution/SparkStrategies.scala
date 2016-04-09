@@ -17,11 +17,10 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.execution.exchange.ShuffleExchange
 import org.apache.spark.sql.Strategy
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{BroadcastHint, LogicalPlan}
@@ -29,8 +28,10 @@ import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution
 import org.apache.spark.sql.execution.columnar.{InMemoryColumnarTableScan, InMemoryRelation}
 import org.apache.spark.sql.execution.command.{DescribeCommand => RunnableDescribeCommand, _}
-import org.apache.spark.sql.execution.datasources.{CreateTableUsing, CreateTempTableUsing, DescribeCommand => LogicalDescribeCommand, _}
+import org.apache.spark.sql.execution.datasources.{DescribeCommand => LogicalDescribeCommand, _}
+import org.apache.spark.sql.execution.exchange.ShuffleExchange
 import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight}
+import org.apache.spark.sql.execution.streaming.MemoryPlan
 import org.apache.spark.sql.internal.SQLConf
 
 private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
@@ -61,16 +62,17 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 
-  object LeftSemiJoin extends Strategy with PredicateHelper {
+  object ExistenceJoin extends Strategy with PredicateHelper {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case ExtractEquiJoinKeys(
-             LeftSemi, leftKeys, rightKeys, condition, left, CanBroadcast(right)) =>
+             LeftExistence(jt), leftKeys, rightKeys, condition, left, CanBroadcast(right)) =>
         Seq(joins.BroadcastHashJoin(
-          leftKeys, rightKeys, LeftSemi, BuildRight, condition, planLater(left), planLater(right)))
+          leftKeys, rightKeys, jt, BuildRight, condition, planLater(left), planLater(right)))
       // Find left semi joins where at least some predicates can be evaluated by matching join keys
-      case ExtractEquiJoinKeys(LeftSemi, leftKeys, rightKeys, condition, left, right) =>
-        joins.LeftSemiJoinHash(
-          leftKeys, rightKeys, planLater(left), planLater(right), condition) :: Nil
+      case ExtractEquiJoinKeys(
+             LeftExistence(jt), leftKeys, rightKeys, condition, left, right) =>
+        Seq(joins.ShuffledHashJoin(
+          leftKeys, rightKeys, jt, BuildRight, condition, planLater(left), planLater(right)))
       case _ => Nil
     }
   }
@@ -80,8 +82,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    */
   object CanBroadcast {
     def unapply(plan: LogicalPlan): Option[LogicalPlan] = {
-      if (conf.autoBroadcastJoinThreshold > 0 &&
-          plan.statistics.sizeInBytes <= conf.autoBroadcastJoinThreshold) {
+      if (plan.statistics.sizeInBytes <= conf.autoBroadcastJoinThreshold) {
         Some(plan)
       } else {
         None
@@ -101,9 +102,44 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    *     [[org.apache.spark.sql.functions.broadcast()]] function to a DataFrame), then that side
    *     of the join will be broadcasted and the other side will be streamed, with no shuffling
    *     performed. If both sides of the join are eligible to be broadcasted then the
+   * - Shuffle hash join: if the average size of a single partition is small enough to build a hash
+   *     table.
    * - Sort merge: if the matching join keys are sortable.
    */
   object EquiJoinSelection extends Strategy with PredicateHelper {
+
+    /**
+     * Matches a plan whose single partition should be small enough to build a hash table.
+     *
+     * Note: this assume that the number of partition is fixed, requires additional work if it's
+     * dynamic.
+     */
+    def canBuildHashMap(plan: LogicalPlan): Boolean = {
+      plan.statistics.sizeInBytes < conf.autoBroadcastJoinThreshold * conf.numShufflePartitions
+    }
+
+    /**
+     * Returns whether plan a is much smaller (3X) than plan b.
+     *
+     * The cost to build hash map is higher than sorting, we should only build hash map on a table
+     * that is much smaller than other one. Since we does not have the statistic for number of rows,
+     * use the size of bytes here as estimation.
+     */
+    private def muchSmaller(a: LogicalPlan, b: LogicalPlan): Boolean = {
+      a.statistics.sizeInBytes * 3 <= b.statistics.sizeInBytes
+    }
+
+    /**
+     * Returns whether we should use shuffle hash join or not.
+     *
+     * We should only use shuffle hash join when:
+     *  1) any single partition of a small table could fit in memory.
+     *  2) the smaller table is much smaller (3X) than the other one.
+     */
+    private def shouldShuffleHashJoin(left: LogicalPlan, right: LogicalPlan): Boolean = {
+      canBuildHashMap(left) && muchSmaller(left, right) ||
+        canBuildHashMap(right) && muchSmaller(right, left)
+    }
 
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
 
@@ -116,6 +152,18 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, CanBroadcast(left), right) =>
         Seq(joins.BroadcastHashJoin(
           leftKeys, rightKeys, Inner, BuildLeft, condition, planLater(left), planLater(right)))
+
+      case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right)
+        if !conf.preferSortMergeJoin && shouldShuffleHashJoin(left, right) ||
+          !RowOrdering.isOrderable(leftKeys) =>
+        val buildSide =
+          if (right.statistics.sizeInBytes <= left.statistics.sizeInBytes) {
+            BuildRight
+          } else {
+            BuildLeft
+          }
+        Seq(joins.ShuffledHashJoin(
+          leftKeys, rightKeys, Inner, buildSide, condition, planLater(left), planLater(right)))
 
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right)
         if RowOrdering.isOrderable(leftKeys) =>
@@ -134,6 +182,18 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         Seq(joins.BroadcastHashJoin(
           leftKeys, rightKeys, RightOuter, BuildLeft, condition, planLater(left), planLater(right)))
 
+      case ExtractEquiJoinKeys(LeftOuter, leftKeys, rightKeys, condition, left, right)
+         if !conf.preferSortMergeJoin && canBuildHashMap(right) && muchSmaller(right, left) ||
+           !RowOrdering.isOrderable(leftKeys) =>
+        Seq(joins.ShuffledHashJoin(
+          leftKeys, rightKeys, LeftOuter, BuildRight, condition, planLater(left), planLater(right)))
+
+      case ExtractEquiJoinKeys(RightOuter, leftKeys, rightKeys, condition, left, right)
+         if !conf.preferSortMergeJoin && canBuildHashMap(left) && muchSmaller(left, right) ||
+           !RowOrdering.isOrderable(leftKeys) =>
+        Seq(joins.ShuffledHashJoin(
+          leftKeys, rightKeys, RightOuter, BuildLeft, condition, planLater(left), planLater(right)))
+
       case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right)
         if RowOrdering.isOrderable(leftKeys) =>
         joins.SortMergeJoin(
@@ -146,28 +206,32 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   }
 
   /**
+   * Used to plan aggregation queries that are computed incrementally as part of a
+   * [[org.apache.spark.sql.ContinuousQuery]]. Currently this rule is injected into the planner
+   * on-demand, only when planning in a [[org.apache.spark.sql.execution.streaming.StreamExecution]]
+   */
+  object StatefulAggregationStrategy extends Strategy {
+    override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case PhysicalAggregation(
+        namedGroupingExpressions, aggregateExpressions, rewrittenResultExpressions, child) =>
+
+        aggregate.Utils.planStreamingAggregation(
+          namedGroupingExpressions,
+          aggregateExpressions,
+          rewrittenResultExpressions,
+          planLater(child))
+
+      case _ => Nil
+    }
+  }
+
+  /**
    * Used to plan the aggregate operator for expressions based on the AggregateFunction2 interface.
    */
   object Aggregation extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case logical.Aggregate(groupingExpressions, resultExpressions, child) =>
-        // A single aggregate expression might appear multiple times in resultExpressions.
-        // In order to avoid evaluating an individual aggregate function multiple times, we'll
-        // build a set of the distinct aggregate expressions and build a function which can
-        // be used to re-write expressions so that they reference the single copy of the
-        // aggregate function which actually gets computed.
-        val aggregateExpressions = resultExpressions.flatMap { expr =>
-          expr.collect {
-            case agg: AggregateExpression => agg
-          }
-        }.distinct
-        // For those distinct aggregate expressions, we create a map from the
-        // aggregate function to the corresponding attribute of the function.
-        val aggregateFunctionToAttribute = aggregateExpressions.map { agg =>
-          val aggregateFunction = agg.aggregateFunction
-          val attribute = Alias(aggregateFunction, aggregateFunction.toString)().toAttribute
-          (aggregateFunction, agg.isDistinct) -> attribute
-        }.toMap
+      case PhysicalAggregation(
+          groupingExpressions, aggregateExpressions, resultExpressions, child) =>
 
         val (functionsWithDistinct, functionsWithoutDistinct) =
           aggregateExpressions.partition(_.isDistinct)
@@ -175,41 +239,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           // This is a sanity check. We should not reach here when we have multiple distinct
           // column sets. Our MultipleDistinctRewriter should take care this case.
           sys.error("You hit a query analyzer bug. Please report your query to " +
-            "Spark user mailing list.")
-        }
-
-        val namedGroupingExpressions = groupingExpressions.map {
-          case ne: NamedExpression => ne -> ne
-          // If the expression is not a NamedExpressions, we add an alias.
-          // So, when we generate the result of the operator, the Aggregate Operator
-          // can directly get the Seq of attributes representing the grouping expressions.
-          case other =>
-            val withAlias = Alias(other, other.toString)()
-            other -> withAlias
-        }
-        val groupExpressionMap = namedGroupingExpressions.toMap
-
-        // The original `resultExpressions` are a set of expressions which may reference
-        // aggregate expressions, grouping column values, and constants. When aggregate operator
-        // emits output rows, we will use `resultExpressions` to generate an output projection
-        // which takes the grouping columns and final aggregate result buffer as input.
-        // Thus, we must re-write the result expressions so that their attributes match up with
-        // the attributes of the final result projection's input row:
-        val rewrittenResultExpressions = resultExpressions.map { expr =>
-          expr.transformDown {
-            case AggregateExpression(aggregateFunction, _, isDistinct) =>
-              // The final aggregation buffer's attributes will be `finalAggregationAttributes`,
-              // so replace each aggregate expression by its corresponding attribute in the set:
-              aggregateFunctionToAttribute(aggregateFunction, isDistinct)
-            case expression =>
-              // Since we're using `namedGroupingAttributes` to extract the grouping key
-              // columns, we need to replace grouping key expressions with their corresponding
-              // attributes. We do not rely on the equality check at here since attributes may
-              // differ cosmetically. Instead, we use semanticEquals.
-              groupExpressionMap.collectFirst {
-                case (expr, ne) if expr semanticEquals expression => ne.toAttribute
-              }.getOrElse(expression)
-          }.asInstanceOf[NamedExpression]
+              "Spark user mailing list.")
         }
 
         val aggregateOperator =
@@ -219,26 +249,23 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
                 "aggregate functions which don't support partial aggregation.")
             } else {
               aggregate.Utils.planAggregateWithoutPartial(
-                namedGroupingExpressions.map(_._2),
+                groupingExpressions,
                 aggregateExpressions,
-                aggregateFunctionToAttribute,
-                rewrittenResultExpressions,
+                resultExpressions,
                 planLater(child))
             }
           } else if (functionsWithDistinct.isEmpty) {
             aggregate.Utils.planAggregateWithoutDistinct(
-              namedGroupingExpressions.map(_._2),
+              groupingExpressions,
               aggregateExpressions,
-              aggregateFunctionToAttribute,
-              rewrittenResultExpressions,
+              resultExpressions,
               planLater(child))
           } else {
             aggregate.Utils.planAggregateWithOneDistinct(
-              namedGroupingExpressions.map(_._2),
+              groupingExpressions,
               functionsWithDistinct,
               functionsWithoutDistinct,
-              aggregateFunctionToAttribute,
-              rewrittenResultExpressions,
+              resultExpressions,
               planLater(child))
           }
 
@@ -308,6 +335,10 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case r: RunnableCommand => ExecutedCommand(r) :: Nil
 
+      case MemoryPlan(sink, output) =>
+        val encoder = RowEncoder(sink.schema)
+        LocalTableScan(output, sink.allData.map(r => encoder.toRow(r).copy())) :: Nil
+
       case logical.Distinct(child) =>
         throw new IllegalStateException(
           "logical distinct operator should have been replaced by aggregate in the optimizer")
@@ -315,8 +346,14 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         throw new IllegalStateException(
           "logical intersect operator should have been replaced by semi-join in the optimizer")
 
+      case logical.DeserializeToObject(deserializer, child) =>
+        execution.DeserializeToObject(deserializer, planLater(child)) :: Nil
+      case logical.SerializeFromObject(serializer, child) =>
+        execution.SerializeFromObject(serializer, planLater(child)) :: Nil
       case logical.MapPartitions(f, in, out, child) =>
         execution.MapPartitions(f, in, out, planLater(child)) :: Nil
+      case logical.MapElements(f, in, out, child) =>
+        execution.MapElements(f, in, out, planLater(child)) :: Nil
       case logical.AppendColumns(f, in, out, child) =>
         execution.AppendColumns(f, in, out, planLater(child)) :: Nil
       case logical.MapGroups(f, key, in, out, grouping, data, child) =>
@@ -368,8 +405,6 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.RepartitionByExpression(expressions, child, nPartitions) =>
         exchange.ShuffleExchange(HashPartitioning(
           expressions, nPartitions.getOrElse(numPartitions)), planLater(child)) :: Nil
-      case e @ python.EvaluatePython(udf, child, _) =>
-        python.BatchPythonEvaluation(udf, e.output, planLater(child)) :: Nil
       case LogicalRDD(output, rdd) => PhysicalRDD(output, rdd, "ExistingRDD") :: Nil
       case BroadcastHint(child) => planLater(child) :: Nil
       case _ => Nil
