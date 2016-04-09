@@ -256,21 +256,9 @@ streaming_flume_assembly = Module(
 )
 
 
-mllib_local = Module(
-    name="mllib-local",
-    dependencies=[],
-    source_file_regexes=[
-        "mllib-local",
-    ],
-    sbt_test_goals=[
-        "mllib-local/test",
-    ]
-)
-
-
 mllib = Module(
     name="mllib",
-    dependencies=[mllib_local, streaming, sql],
+    dependencies=[streaming, sql],
     source_file_regexes=[
         "data/mllib/",
         "mllib/",
