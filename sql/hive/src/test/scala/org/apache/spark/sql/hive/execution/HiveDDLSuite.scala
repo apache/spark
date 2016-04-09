@@ -51,6 +51,24 @@ class HiveDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
+  test("drop external table") {
+    withTempDir { tmpDir =>
+      val tabName = "tab1"
+      withTable(tabName) {
+        sql(
+          s"""
+             |create external table $tabName(c1 int COMMENT 'abc', c2 string)
+             |stored as parquet
+             |location '$tmpDir'
+             |as select 1, '3'
+          """.stripMargin)
+        assert(tmpDir.listFiles.nonEmpty)
+        sql(s"DROP TABLE $tabName")
+        assert(tmpDir.listFiles == null)
+      }
+    }
+  }
+
   test("drop views") {
     withTable("tab1") {
       val tabName = "tab1"
@@ -78,7 +96,7 @@ class HiveDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       val message = intercept[AnalysisException] {
         sql("DROP VIEW tab1")
       }.getMessage
-      assert(message.contains("Cannot drop a table with DROP VIEW"))
+      assert(message.contains("Cannot drop a table with DROP VIEW. Please use DROP TABLE instead"))
     }
   }
 
@@ -90,7 +108,7 @@ class HiveDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         val message = intercept[AnalysisException] {
           sql("DROP TABLE view1")
         }.getMessage
-        assert(message.contains("Cannot drop a view with DROP TABLE"))
+        assert(message.contains("Cannot drop a view with DROP TABLE. Please use DROP VIEW instead"))
       }
     }
   }

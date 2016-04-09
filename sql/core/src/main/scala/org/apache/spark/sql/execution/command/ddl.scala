@@ -198,11 +198,13 @@ case class DropTable(
     }
     // If the command DROP VIEW is to drop a table or DROP TABLE is to drop a view
     // issue an exception.
-    catalog.getTableOption(tableName).map(_.tableType match {
+    catalog.getTableMetadataOption(tableName).map(_.tableType match {
       case CatalogTableType.VIRTUAL_VIEW if !isView =>
-        throw new AnalysisException(s"Cannot drop a view with DROP TABLE")
+        throw new AnalysisException(
+          "Cannot drop a view with DROP TABLE. Please use DROP VIEW instead")
       case o if o != CatalogTableType.VIRTUAL_VIEW && isView =>
-        throw new AnalysisException(s"Cannot drop a table with DROP VIEW")
+        throw new AnalysisException(
+          s"Cannot drop a table with DROP VIEW. Please use DROP TABLE instead")
       case _ =>
     })
 
@@ -218,17 +220,7 @@ case class DropTable(
       case e: Throwable => log.warn(s"${e.getMessage}", e)
     }
     catalog.invalidateTable(tableName)
-
-    try {
-      catalog.dropTable(tableName, ifExists)
-    } catch {
-      // Quiesce the exception issued from Hive. Log it as an error message
-      // This is just to make it consistent with Hive Native Command; Otherwise, many test cases
-      // in HiveCompatibilitySuite fail. In Hive, the orders of test cases matter. That is, the
-      // test cases are not independent.
-      case e: org.apache.spark.sql.AnalysisException
-        if e.getMessage.contains("NoSuchObjectException") => logError(s"${e.getMessage}", e)
-    }
+    catalog.dropTable(tableName, ifExists)
     Seq.empty[Row]
   }
 }

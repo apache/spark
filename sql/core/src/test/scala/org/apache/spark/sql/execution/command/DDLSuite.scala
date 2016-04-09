@@ -428,10 +428,8 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     sql("DROP TABLE dbx.tab1")
     assert(catalog.listTables("dbx") == Nil)
     sql("DROP TABLE IF EXISTS dbx.tab1")
-    val e = intercept[AnalysisException] {
-      sql("DROP TABLE dbx.tab1")
-    }
-    assert(e.getMessage.contains("Table 'tab1' does not exist in database 'dbx'"))
+    // no exception will be thrown
+    sql("DROP TABLE dbx.tab1")
   }
 
   test("drop view") {
