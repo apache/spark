@@ -932,6 +932,13 @@ public abstract class ColumnVector {
   }
 
   /**
+   * Returns the underlying integer column for ids of dictionary.
+   */
+  public ColumnVector getDictionaryIds() {
+    return dictionaryIds;
+  }
+
+  /**
    * Sets up the common state and also handles creating the child columns if this is a nested
    * type.
    */

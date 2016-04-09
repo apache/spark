@@ -151,12 +151,12 @@ public class VectorizedColumnReader {
         defColumn.readIntegers(
             num, dictionaryIds, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
 
-        if ((column.hasDictionary() || rowId == 0) && (
-            descriptor.getType() == PrimitiveType.PrimitiveTypeName.INT32 ||
+        if (column.hasDictionary() || (rowId == 0 &&
+            (descriptor.getType() == PrimitiveType.PrimitiveTypeName.INT32 ||
             descriptor.getType() == PrimitiveType.PrimitiveTypeName.INT64 ||
             descriptor.getType() == PrimitiveType.PrimitiveTypeName.FLOAT ||
             descriptor.getType() == PrimitiveType.PrimitiveTypeName.DOUBLE ||
-            descriptor.getType() == PrimitiveType.PrimitiveTypeName.BINARY)) {
+            descriptor.getType() == PrimitiveType.PrimitiveTypeName.BINARY))) {
           // Column vector supports lazy decoding of dictionary values so just set the dictionary.
           // We can't do this if rowId != 0 AND the column doesn't have a dictionary (i.e. some
           // non-dictionary encoded values have already been added).
@@ -168,10 +168,9 @@ public class VectorizedColumnReader {
         if (column.hasDictionary() && rowId != 0) {
           // This batch already has dictionary encoded values but this new page is not. The batch
           // does not support a mix of dictionary and not so we will decode the dictionary.
-          ColumnVector dictionaryIds = column.reserveDictionaryIds(total);
-          decodeDictionaryIds(0, rowId, column, dictionaryIds);
-          column.setDictionary(null);
+          decodeDictionaryIds(0, rowId, column, column.getDictionaryIds());
         }
+        column.setDictionary(null);
         switch (descriptor.getType()) {
           case BOOLEAN:
             readBooleanBatch(rowId, num, column);
@@ -215,7 +214,8 @@ public class VectorizedColumnReader {
                                    ColumnVector dictionaryIds) {
     switch (descriptor.getType()) {
       case INT32:
-        if (column.dataType() == DataTypes.IntegerType) {
+        if (column.dataType() == DataTypes.IntegerType ||
+            DecimalType.is32BitDecimalType(column.dataType())) {
           for (int i = rowId; i < rowId + num; ++i) {
             column.putInt(i, dictionary.decodeToInt(dictionaryIds.getInt(i)));
           }
@@ -226,10 +226,6 @@ public class VectorizedColumnReader {
         } else if (column.dataType() == DataTypes.ShortType) {
           for (int i = rowId; i < rowId + num; ++i) {
             column.putShort(i, (short) dictionary.decodeToInt(dictionaryIds.getInt(i)));
-          }
-        } else if (DecimalType.is64BitDecimalType(column.dataType())) {
-          for (int i = rowId; i < rowId + num; ++i) {
-            column.putInt(i, dictionary.decodeToInt(dictionaryIds.getInt(i)));
           }
         } else {
           throw new NotImplementedException("Unimplemented type: " + column.dataType());
