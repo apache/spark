@@ -193,7 +193,7 @@ object SQLConf {
     .stringConf
     .transform(_.toLowerCase())
     .checkValues(Set("uncompressed", "snappy", "gzip", "lzo"))
-    .createWithDefault("gzip")
+    .createWithDefault("snappy")
 
   val PARQUET_FILTER_PUSHDOWN_ENABLED = SQLConfigBuilder("spark.sql.parquet.filterPushdown")
     .doc("Enables Parquet filter push-down optimization when set to true.")
