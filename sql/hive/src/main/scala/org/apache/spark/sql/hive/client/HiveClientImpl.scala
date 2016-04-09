@@ -672,6 +672,7 @@ private[hive] class HiveClientImpl(
       case CatalogTableType.INDEX_TABLE => HiveTableType.INDEX_TABLE
       case CatalogTableType.VIRTUAL_VIEW => HiveTableType.VIRTUAL_VIEW
     })
+    // TODO: pass the comment to Hive somehow
     // Note: In Hive the schema and partition columns must be disjoint sets
     val (partCols, schema) = table.schema.map(toHiveColumn).partition { c =>
       table.partitionColumnNames.contains(c.getName)

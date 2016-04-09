@@ -19,10 +19,7 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{FileFormat, RowFormat, SkewSpec, StorageHandler}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.datasources.BucketSpec
-import org.apache.spark.sql.types.StructField
+import org.apache.spark.sql.catalyst.catalog.CatalogTable
 
 
 // TODO: move the rest of the table commands from ddl.scala to this file
@@ -30,9 +27,12 @@ import org.apache.spark.sql.types.StructField
 /**
  * A command to create a table.
  *
+ * Note: This is currently used only for creating Hive tables.
+ * This is not intended for temporary tables.
+ *
  * The syntax of using this command in SQL is:
  * {{{
- *   CREATE [TEMPORARY] [EXTERNAL] TABLE [IF NOT EXISTS] [db_name.]table_name
+ *   CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [db_name.]table_name
  *   [(col1 data_type [COMMENT col_comment], ...)]
  *   [COMMENT table_comment]
  *   [PARTITIONED BY (col3 data_type [COMMENT col_comment], ...)]
@@ -46,29 +46,15 @@ import org.apache.spark.sql.types.StructField
  *   [AS select_statement];
  * }}}
  */
-case class CreateTable(
-    name: TableIdentifier,
-    isTemp: Boolean,
-    ifNotExists: Boolean,
-    isExternal: Boolean,
-    comment: Option[String],
-    columns: Seq[StructField],
-    partitionedColumns: Seq[StructField],
-    bucketSpec: Option[BucketSpec],
-    skewSpec: Option[SkewSpec],
-    rowFormat: Option[RowFormat],
-    fileFormat: Option[FileFormat],
-    storageHandler: Option[StorageHandler],
-    location: Option[String],
-    properties: Map[String, String],
-    selectQuery: Option[LogicalPlan])
-  extends RunnableCommand {
+case class CreateTable(table: CatalogTable, ifNotExists: Boolean) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
+    // TODO: implement me
     Seq.empty[Row]
   }
 
 }
+
 
 /**
  * A command that renames a table/view.

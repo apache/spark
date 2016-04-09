@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable, FileFormat}
+import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalog.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.types._
@@ -331,7 +331,8 @@ case class AlterTableUnarchivePartition(
 case class AlterTableSetFileFormat(
     tableName: TableIdentifier,
     partitionSpec: Option[TablePartitionSpec],
-    fileFormat: FileFormat)(sql: String)
+    fileFormat: Seq[String],
+    genericFormat: Option[String])(sql: String)
   extends NativeDDLCommand(sql) with Logging
 
 /**
