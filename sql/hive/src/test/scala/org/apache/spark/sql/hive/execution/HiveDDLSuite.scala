@@ -19,12 +19,15 @@ package org.apache.spark.sql.hive.execution
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.sql.{AnalysisException, QueryTest, SaveMode}
+import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 
 class HiveDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
+  import hiveContext.implicits._
 
   // check if the directory for recording the data of the table exists.
   private def tableDirectoryExists(tableIdentifier: TableIdentifier): Boolean = {
@@ -51,10 +54,11 @@ class HiveDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
-  test("drop external table") {
+  test("drop managed tables") {
     withTempDir { tmpDir =>
       val tabName = "tab1"
       withTable(tabName) {
+        assert(tmpDir.listFiles.isEmpty)
         sql(
           s"""
              |create external table $tabName(c1 int COMMENT 'abc', c2 string)
@@ -62,9 +66,46 @@ class HiveDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
              |location '$tmpDir'
              |as select 1, '3'
           """.stripMargin)
+
+        val hiveTable =
+          hiveContext.sessionState.catalog
+            .getTableMetadata(TableIdentifier(tabName, Some("default")))
+        // It is a managed table, although it uses external in SQL
+        assert(hiveTable.tableType == CatalogTableType.MANAGED_TABLE)
+
         assert(tmpDir.listFiles.nonEmpty)
         sql(s"DROP TABLE $tabName")
+        // The data are deleted since the table type is not EXTERNAL
         assert(tmpDir.listFiles == null)
+      }
+    }
+  }
+
+  test("drop external data source table") {
+    withTempDir { tmpDir =>
+      val tabName = "tab1"
+      withTable(tabName) {
+        assert(tmpDir.listFiles.isEmpty)
+
+        withSQLConf(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key -> "true") {
+          Seq(1 -> "a").toDF("i", "j")
+            .write
+            .mode(SaveMode.Overwrite)
+            .format("parquet")
+            .option("path", tmpDir.toString)
+            .saveAsTable(tabName)
+        }
+
+        val hiveTable =
+          hiveContext.sessionState.catalog
+            .getTableMetadata(TableIdentifier(tabName, Some("default")))
+        // This data source table is external table
+        assert(hiveTable.tableType == CatalogTableType.EXTERNAL_TABLE)
+
+        assert(tmpDir.listFiles.nonEmpty)
+        sql(s"DROP TABLE $tabName")
+        // The data are not deleted since the table type is EXTERNAL
+        assert(tmpDir.listFiles.nonEmpty)
       }
     }
   }
