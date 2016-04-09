@@ -31,7 +31,7 @@ import org.apache.spark.mllib.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Dataset, DataFrameReader, Row, SQLContext}
+import org.apache.spark.sql.{DataFrame, DataFrameReader, Row, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, JoinedRow}
