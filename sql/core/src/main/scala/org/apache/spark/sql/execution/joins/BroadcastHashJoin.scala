@@ -27,7 +27,6 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{BroadcastDistribution, Distribution, Partitioning, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.{BinaryNode, CodegenSupport, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.types.LongType
 
 /**
  * Performs an inner hash join of two child relations.  When the output RDD of this operator is
@@ -51,7 +50,10 @@ case class BroadcastHashJoin(
   override def outputPartitioning: Partitioning = streamedPlan.outputPartitioning
 
   override def requiredChildDistribution: Seq[Distribution] = {
-    val mode = HashedRelationBroadcastMode(buildKeys)
+    val mode = HashedRelationBroadcastMode(
+      canJoinKeyFitWithinLong,
+      rewriteKeyExpr(buildKeys),
+      buildPlan.output)
     buildSide match {
       case BuildLeft =>
         BroadcastDistribution(mode) :: UnspecifiedDistribution :: Nil
@@ -66,7 +68,7 @@ case class BroadcastHashJoin(
     val broadcastRelation = buildPlan.executeBroadcast[HashedRelation]()
     streamedPlan.execute().mapPartitions { streamedIter =>
       val hashed = broadcastRelation.value.asReadOnlyCopy()
-      TaskContext.get().taskMetrics().incPeakExecutionMemory(hashed.estimatedSize)
+      TaskContext.get().taskMetrics().incPeakExecutionMemory(hashed.getMemorySize)
       join(streamedIter, hashed, numOutputRows)
     }
   }
@@ -103,7 +105,7 @@ case class BroadcastHashJoin(
     ctx.addMutableState(clsName, relationTerm,
       s"""
          | $relationTerm = (($clsName) $broadcast.value()).asReadOnlyCopy();
-         | incPeakExecutionMemory($relationTerm.estimatedSize());
+         | incPeakExecutionMemory($relationTerm.getMemorySize());
        """.stripMargin)
     (broadcastRelation, relationTerm)
   }
@@ -116,13 +118,15 @@ case class BroadcastHashJoin(
       ctx: CodegenContext,
       input: Seq[ExprCode]): (ExprCode, String) = {
     ctx.currentVars = input
-    if (streamedKeys.length == 1 && streamedKeys.head.dataType == LongType) {
+    if (canJoinKeyFitWithinLong) {
       // generate the join key as Long
-      val ev = streamedKeys.head.gen(ctx)
+      val expr = rewriteKeyExpr(streamedKeys).head
+      val ev = BindReferences.bindReference(expr, streamedPlan.output).gen(ctx)
       (ev, ev.isNull)
     } else {
       // generate the join key as UnsafeRow
-      val ev = GenerateUnsafeProjection.createCode(ctx, streamedKeys)
+      val keyExpr = streamedKeys.map(BindReferences.bindReference(_, streamedPlan.output))
+      val ev = GenerateUnsafeProjection.createCode(ctx, keyExpr)
       (ev, s"${ev.value}.anyNull()")
     }
   }

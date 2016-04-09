@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.execution.joins
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{SparkException, TaskContext}
+import org.apache.spark.memory.MemoryMode
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{BindReferences, Expression, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Expression, JoinedRow, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
@@ -56,20 +57,54 @@ case class ShuffledHashJoin(
   override def requiredChildDistribution: Seq[Distribution] =
     ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
 
-  private def buildHashedRelation(iter: Iterator[InternalRow]): HashedRelation = {
+  private def buildHashedRelation(iter: Iterator[UnsafeRow]): HashedRelation = {
     val context = TaskContext.get()
-    val relation = HashedRelation(iter, buildKeys, taskMemoryManager = context.taskMemoryManager())
-    // This relation is usually used until the end of task.
+    if (!canJoinKeyFitWithinLong) {
+      // build BytesToBytesMap
+      val relation = HashedRelation(canJoinKeyFitWithinLong, iter, buildSideKeyGenerator)
+      // This relation is usually used until the end of task.
+      context.addTaskCompletionListener((t: TaskContext) =>
+        relation.close()
+      )
+      return relation
+    }
+
+    // try to acquire some memory for the hash table, it could trigger other operator to free some
+    // memory. The memory acquired here will mostly be used until the end of task.
+    val memoryManager = context.taskMemoryManager()
+    var acquired = 0L
+    var used = 0L
     context.addTaskCompletionListener((t: TaskContext) =>
-      relation.close()
+      memoryManager.releaseExecutionMemory(acquired, MemoryMode.ON_HEAP, null)
     )
-    relation
+
+    val copiedIter = iter.map { row =>
+      // It's hard to guess what's exactly memory will be used, we have a rough guess here.
+      // TODO: use LongToBytesMap instead of HashMap for memory efficiency
+      // Each pair in HashMap will have UnsafeRow, CompactBuffer, maybe 10+ pointers
+      val needed = 150 + row.getSizeInBytes
+      if (needed > acquired - used) {
+        val got = memoryManager.acquireExecutionMemory(
+          Math.max(memoryManager.pageSizeBytes(), needed), MemoryMode.ON_HEAP, null)
+        acquired += got
+        if (got < needed) {
+          throw new SparkException("Can't acquire enough memory to build hash map in shuffled" +
+            "hash join, please use sort merge join by setting " +
+            "spark.sql.join.preferSortMergeJoin=true")
+        }
+      }
+      used += needed
+      // HashedRelation requires that the UnsafeRow should be separate objects.
+      row.copy()
+    }
+
+    HashedRelation(canJoinKeyFitWithinLong, copiedIter, buildSideKeyGenerator)
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
     streamedPlan.execute().zipPartitions(buildPlan.execute()) { (streamIter, buildIter) =>
-      val hashed = buildHashedRelation(buildIter)
+      val hashed = buildHashedRelation(buildIter.asInstanceOf[Iterator[UnsafeRow]])
       join(streamIter, hashed, numOutputRows)
     }
   }
