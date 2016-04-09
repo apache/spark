@@ -25,10 +25,10 @@ import org.scalatest.Matchers
 import org.apache.spark.scheduler._
 
 
-class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContext {
+class DataPropertyAccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContext {
   test("single partition") {
     sc = new SparkContext("local[2]", "test")
-    val acc : Accumulator[Int] = sc.accumulator(0, consistent = true)
+    val acc : Accumulator[Int] = sc.accumulator(0, dataProperty = true)
 
     val a = sc.parallelize(1 to 20, 1)
     val b = a.map{x => acc += x; x}
@@ -39,7 +39,7 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
 
   test("adding only the first element per partition should work even if partition is empty") {
     sc = new SparkContext("local[2]", "test")
-    val acc: Accumulator[Int] = sc.accumulator(0, consistent = true)
+    val acc: Accumulator[Int] = sc.accumulator(0, dataProperty = true)
     val a = sc.parallelize(1 to 20, 30)
     val b = a.mapPartitions{itr =>
       acc += 1
@@ -58,8 +58,8 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
     val mapSideCombines = List(true, false)
     inputs.foreach { input =>
       mapSideCombines.foreach { mapSideCombine =>
-        val accs = (1 to 4).map(x => sc.accumulator(0, consistent = true)).toList
-        val raccs = (1 to 4).map(x => sc.accumulator(0, consistent = false)).toList
+        val accs = (1 to 4).map(x => sc.accumulator(0, dataProperty = true)).toList
+        val raccs = (1 to 4).map(x => sc.accumulator(0, dataProperty = false)).toList
         val List(acc, acc1, acc2, acc3) = accs
         val List(racc, racc1, racc2, racc3) = raccs
         val c = input.combineByKey(
@@ -94,7 +94,7 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
         }
         acc.value should be (acc1.value + acc2.value + acc3.value)
         val oldValues = accs.map(_.value)
-        // For one action the consistent accumulators and regular should have the same value.
+        // For one action the data property accumulators and regular should have the same value.
         accs.map(_.value) should be (raccs.map(_.value))
         c.count()
         accs.map(_.value) should be (oldValues)
@@ -112,7 +112,7 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
 
   test("map + cache + first + count") {
     sc = new SparkContext("local[2]", "test")
-    val acc : Accumulator[Int] = sc.accumulator(0, consistent = true)
+    val acc : Accumulator[Int] = sc.accumulator(0, dataProperty = true)
 
     val a = sc.parallelize(1 to 20, 10)
     val b = a.map{x => acc += x; x}
@@ -125,7 +125,7 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
 
   test("coalesce acc on either side") {
     sc = new SparkContext("local[2]", "test")
-    val List(acc1, acc2, acc3) = (1 to 3).map(x => sc.accumulator(0, consistent = true)).toList
+    val List(acc1, acc2, acc3) = (1 to 3).map(x => sc.accumulator(0, dataProperty = true)).toList
     val a = sc.parallelize(1 to 20, 10)
     val b = a.map{x => acc1 += x; acc2 += x; 2 * x}
     val c = b.coalesce(2).map{x => acc1 += x; acc3 += x; x}
@@ -137,7 +137,7 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
 
   test("map + cache + map + first + count") {
     sc = new SparkContext("local[2]", "test")
-    val acc : Accumulator[Int] = sc.accumulator(0, consistent = true)
+    val acc : Accumulator[Int] = sc.accumulator(0, dataProperty = true)
 
     val a = sc.parallelize(1 to 20, 10)
     val b = a.map{x => acc += x; x}
@@ -151,7 +151,7 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
 
   test("filter + cache + first + count") {
     sc = new SparkContext("local[2]", "test")
-    val acc : Accumulator[Int] = sc.accumulator(0, consistent = true)
+    val acc : Accumulator[Int] = sc.accumulator(0, dataProperty = true)
 
     val a = sc.parallelize(1 to 20, 10)
     val b = a.filter{x =>
@@ -171,13 +171,13 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
 
   test ("basic accumulation") {
     sc = new SparkContext("local[2]", "test")
-    val acc : Accumulator[Int] = sc.accumulator(0, consistent = true)
+    val acc : Accumulator[Int] = sc.accumulator(0, dataProperty = true)
 
     val d = sc.parallelize(1 to 20)
     d.map{x => acc += x}.count()
     acc.value should be (210)
 
-    val longAcc = sc.accumulator(0L, consistent = true)
+    val longAcc = sc.accumulator(0L, dataProperty = true)
     val maxInt = Integer.MAX_VALUE.toLong
     d.map{x => longAcc += maxInt + x; x}.count()
     longAcc.value should be (210L + maxInt * 20)
@@ -185,13 +185,13 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
 
   test ("basic accumulation flatMap") {
     sc = new SparkContext("local[2]", "test")
-    val acc : Accumulator[Int] = sc.accumulator(0, consistent = true)
+    val acc : Accumulator[Int] = sc.accumulator(0, dataProperty = true)
 
     val d = sc.parallelize(1 to 20)
     d.map{x => acc += x}.count()
     acc.value should be (210)
 
-    val longAcc = sc.accumulator(0L, consistent = true)
+    val longAcc = sc.accumulator(0L, dataProperty = true)
     val maxInt = Integer.MAX_VALUE.toLong
     val c = d.flatMap{x =>
       longAcc += maxInt + x
@@ -207,7 +207,7 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
 
   test("map + map + count") {
     sc = new SparkContext("local[2]", "test")
-    val acc : Accumulator[Int] = sc.accumulator(0, consistent = true)
+    val acc : Accumulator[Int] = sc.accumulator(0, dataProperty = true)
 
     val a = sc.parallelize(1 to 20, 10)
     val b = a.map{x => acc += x; x}
@@ -218,7 +218,7 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
 
   test("first + count") {
     sc = new SparkContext("local[2]", "test")
-    val acc : Accumulator[Int] = sc.accumulator(0, consistent = true)
+    val acc : Accumulator[Int] = sc.accumulator(0, dataProperty = true)
 
     val a = sc.parallelize(1 to 20, 10)
     val b = a.map{x => acc += x; x}
@@ -229,7 +229,7 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
 
   test("map + count + count + map + count") {
     sc = new SparkContext("local[2]", "test")
-    val acc : Accumulator[Int] = sc.accumulator(0, consistent = true)
+    val acc : Accumulator[Int] = sc.accumulator(0, dataProperty = true)
 
     val a = sc.parallelize(1 to 20, 10)
     val b = a.map{x => acc += x; x}
@@ -244,7 +244,7 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
 
   test ("map + toLocalIterator + count") {
     sc = new SparkContext("local[2]", "test")
-    val acc : Accumulator[Int] = sc.accumulator(0, consistent = true)
+    val acc : Accumulator[Int] = sc.accumulator(0, dataProperty = true)
 
     val a = sc.parallelize(1 to 100, 10)
     val b = a.map{x => acc += x; x}
@@ -267,9 +267,9 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
   test("coalesce with partial partition reading") {
     // when coalescing, one task can completely read partitions of the input RDDs while not reading
     // complete partitions of the post-coalesce RDD.  We make sure that the accumulator has
-    // consistent semantics in these cases.
+    // data property semantics in these cases.
     sc = new SparkContext("local[2]", "test")
-    val List(acc1, acc2, acc3) = 1.to(3).map(x => sc.accumulator(0, consistent = true)).toList
+    val List(acc1, acc2, acc3) = 1.to(3).map(x => sc.accumulator(0, dataProperty = true)).toList
     val a = sc.parallelize(1 to 20, 10)
     val b = a.map{x => acc1 += x; acc2 += x; 2 * x}
     val c = b.coalesce(2).map{x => acc1 += x; acc3 += x; x}
@@ -301,9 +301,9 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
     acc3.value should be (420)
   }
 
-  test("async jobs same rdd with consistent accumulator") {
+  test("async jobs same rdd with data property accumulator") {
     sc = new SparkContext("local[2]", "test")
-    val acc = sc.accumulator(0, consistent = true)
+    val acc = sc.accumulator(0, dataProperty = true)
     val a = sc.parallelize(1 to 20, 10)
     val b = a.map{x => acc += x}
     val futures = List(b, b).map(_.countAsync)
@@ -312,11 +312,11 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
     acc.value should be (210)
   }
 
-  test("async jobs shared parent with consistent accumulators") {
-    // We want to ensure that two consistent jobs with a shared parent
-    // work with consistent accumulators.
+  test("async jobs shared parent with data property accumulators") {
+    // We want to ensure that two data property jobs with a shared parent
+    // work with data property accumulators.
     sc = new SparkContext("local[2]", "test")
-    val List(acc1, acc2, acc3, acc4) = 1.to(4).map(x => sc.accumulator(0, consistent = true)).toList
+    val List(acc1, acc2, acc3, acc4) = 1.to(4).map(x => sc.accumulator(0, dataProperty = true)).toList
     val a = sc.parallelize(1 to 20, 10)
     val b = a.map{x => acc1 += x; acc2 += x; 2 * x}
     val c = b.map{x => acc3 += x; acc2 += x}
@@ -342,7 +342,7 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
   test ("garbage collection") {
     // Create an accumulator and let it go out of scope to test that it's properly garbage collected
     sc = new SparkContext("local[2]", "test")
-    var acc: Accumulator[Int] = sc.accumulator(0, consistent = true)
+    var acc: Accumulator[Int] = sc.accumulator(0, dataProperty = true)
     val accId = acc.id
     val ref = WeakReference(acc)
 

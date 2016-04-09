@@ -54,12 +54,12 @@ import org.apache.spark.util.Utils
  *                          for system and time metrics like serialization time or bytes spilled,
  *                          and false for things with absolute values like number of input rows.
  *                          This should be used for internal metrics only.
- * @param consistent if this [[Accumulable]] is consistent. Consistent [[Accumulable]]s will only
- *                   have values added once for each RDD/Partition/Shuffle combination. This
- *                   prevents double counting on reevaluation. Partial evaluation of a partition
- *                   will not increment a consistent [[Accumulable]]. Consistent [[Accumulable]]s
- *                   are currently experimental and the behaviour may change in future versions.
- *                   Consistent [[Accumulable]]s are designed for counting "data properties".
+ * @param dataProperty if this [[Accumulable]] is for a data property. Data property
+ *                     [[Accumulable]]s will only have values added once for each
+ *                     RDD/Partition/Shuffle combination. This prevents double counting on
+ *                     reevaluation. Partial evaluation of a partition will not increment a data
+ *                     property [[Accumulable]]. Data property [[Accumulable]]s are currently
+ *                     experimental and the behaviour may change in future versions.
  * @tparam R the full accumulated data
  * @tparam T partial data that can be added in
  */
@@ -71,7 +71,7 @@ class Accumulable[R, T] private[spark] (
     val name: Option[String],
     internal: Boolean,
     private[spark] val countFailedValues: Boolean,
-    private[spark] val consistent: Boolean)
+    private[spark] val dataProperty: Boolean)
   extends Serializable {
 
   private[spark] def this(
@@ -79,8 +79,8 @@ class Accumulable[R, T] private[spark] (
       param: AccumulableParam[R, T],
       internal: Boolean,
       countFailedValues: Boolean,
-      consistent: Boolean) = {
-    this(Accumulators.newId(), initialValue, param, None, internal, countFailedValues, consistent)
+      dataProperty: Boolean) = {
+    this(Accumulators.newId(), initialValue, param, None, internal, countFailedValues, dataProperty)
   }
 
   def this(
@@ -90,7 +90,7 @@ class Accumulable[R, T] private[spark] (
       internal: Boolean,
       countFailedValues: Boolean) = {
     this(Accumulators.newId(), initialValue, param, name, internal, countFailedValues,
-      false /* consistent */)
+      false /* dataProperty */)
   }
 
   def this(
@@ -99,8 +99,8 @@ class Accumulable[R, T] private[spark] (
       name: Option[String],
       internal: Boolean,
       countFailedValues: Boolean,
-      consistent: Boolean) = {
-    this(Accumulators.newId(), initialValue, param, name, internal, countFailedValues, consistent)
+      dataProperty: Boolean) = {
+    this(Accumulators.newId(), initialValue, param, name, internal, countFailedValues, dataProperty)
   }
 
   def this(
@@ -127,15 +127,15 @@ class Accumulable[R, T] private[spark] (
   private var deserialized = false
 
   /**
-   * The following values are used for consistent [[Accumulable]]s. Consistent accumulables are
-   * intended to track data properties, so have only-once semantics. These semantics are implemented
+   * The following values are used for data property [[Accumulable]]s.
+   * Data property [[Accumulable]]s have only-once semantics. These semantics are implemented
    * by keeping track of which RDD id, shuffle id, and partition id the current function is
    * processing in. If a partition is fully processed the results for that partition/shuffle/rdd
    * combination are sent back to the driver. The driver keeps track of which rdd/shuffle/partitions
    * already have been applied, and only combines values into value_ if the rdd/shuffle/partition
    * has not already been aggregated on the driver program
    */
-  // For consistent accumulators pending and processed updates.
+  // For data property accumulators pending and processed updates.
   // Pending and processed are keyed by (rdd id, shuffle id, partition id)
   @transient private[spark] lazy val pending = new mutable.HashMap[(Int, Int, Int), R]()
   // Completed contains the set of (rdd id, shuffle id, partition id) that have been
@@ -161,11 +161,11 @@ class Accumulable[R, T] private[spark] (
   private[spark] def isInternal: Boolean = internal
 
   /**
-   * If this [[Accumulable]] is consistent.
-   * Consistent [[Accumulable]]s track pending updates and reconcile them on the driver to avoid
+   * If this [[Accumulable]] is for a data property.
+   * Data property [[Accumulable]]s track pending updates and reconcile them on the driver to avoid
    * applying duplicate updates for the same RDD and partition.
    */
-  private[spark] def isConsistent: Boolean = consistent
+  private[spark] def isDataProperty: Boolean = dataProperty
 
   /**
    * Return a copy of this [[Accumulable]].
@@ -175,7 +175,7 @@ class Accumulable[R, T] private[spark] (
    * same mutable instance around.
    */
   private[spark] def copy(): Accumulable[R, T] = {
-    new Accumulable[R, T](id, initialValue, param, name, internal, countFailedValues, consistent)
+    new Accumulable[R, T](id, initialValue, param, name, internal, countFailedValues, dataProperty)
   }
 
   /**
@@ -190,7 +190,7 @@ class Accumulable[R, T] private[spark] (
    */
   def add(term: T) {
     value_ = param.addAccumulator(value_, term)
-    if (consistent) {
+    if (dataProperty) {
       val updateInfo = TaskContext.get().getRDDPartitionInfo()
       val base = pending.getOrElse(updateInfo, zero)
       pending(updateInfo) = param.addAccumulator(base, term)
@@ -199,10 +199,10 @@ class Accumulable[R, T] private[spark] (
 
   /**
    * Mark a specific rdd/shuffle/partition as completely processed. This is a noop for
-   * non-consistent accumuables.
+   * non-data property accumuables.
    */
   private[spark] def markFullyProcessed(rddId: Int, shuffleWriteId: Int, partitionId: Int): Unit = {
-    if (consistent) {
+    if (dataProperty) {
       completed += ((rddId, shuffleWriteId, partitionId))
     }
   }
@@ -224,11 +224,11 @@ class Accumulable[R, T] private[spark] (
   def merge(term: R) { value_ = param.addInPlace(value_, term)}
 
   /**
-   * Merge in pending updates for ac consistent accumulators or merge accumulated values for
+   * Merge in pending updates for ac data property accumulators or merge accumulated values for
    * regular accumulators. This is only called on the driver when merging task results together.
    */
   private[spark] def internalMerge(term: Any) {
-    if (!consistent) {
+    if (!dataProperty) {
       merge(term.asInstanceOf[R])
     } else {
       mergePending(term.asInstanceOf[mutable.HashMap[(Int, Int, Int), R]])
@@ -272,12 +272,12 @@ class Accumulable[R, T] private[spark] (
   def localValue: R = value_
 
   /**
-   * Get the updates for this accumulator that should be sent to the driver. For consistent
+   * Get the updates for this accumulator that should be sent to the driver. For data property
    * accumulators this consists of the pending updates, for regular accumulators this is the same as
    * `localValue`.
    */
   private[spark] def updateValue: Any = {
-    if (consistent) {
+    if (dataProperty) {
       pending.filter{case (k, v) => completed.contains(k)}
     } else {
       localValue
@@ -285,14 +285,15 @@ class Accumulable[R, T] private[spark] (
   }
 
   /**
-   * Set the accumulator's value; only allowed on driver and only for non-consistent accumulators.
+   * Set the accumulator's value; only allowed on driver and only for non-data property
+   * accumulators.
    */
   def value_= (newValue: R) {
     if (!deserialized) {
-      if (!consistent) {
+      if (!dataProperty) {
         value_ = newValue
       } else {
-        throw new UnsupportedOperationException("Can't assign value to a consistent accumulator.")
+        throw new UnsupportedOperationException("Can't assign value to data property accumulator.")
       }
     } else {
       throw new UnsupportedOperationException("Can't assign accumulator value in task")
@@ -313,7 +314,7 @@ class Accumulable[R, T] private[spark] (
    * Create an [[AccumulableInfo]] representation of this [[Accumulable]] with the provided values.
    */
   private[spark] def toInfo(update: Option[Any], value: Option[Any]): AccumulableInfo = {
-    new AccumulableInfo(id, name, update, value, internal, countFailedValues, consistent)
+    new AccumulableInfo(id, name, update, value, internal, countFailedValues, dataProperty)
   }
 
   // Called by Java when deserializing an object

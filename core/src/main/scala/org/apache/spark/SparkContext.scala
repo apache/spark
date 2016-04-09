@@ -1217,21 +1217,22 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   def accumulator[T](initialValue: T)(implicit param: AccumulatorParam[T]): Accumulator[T] =
   {
-    accumulator(initialValue, consistent = false)
+    accumulator(initialValue, dataProperty = false)
   }
 
   /**
    * Create an [[org.apache.spark.Accumulator]] variable of a given type, which tasks can "add"
    * values to using the `+=` method. Only the driver can access the accumulator's `value`.
    *
-   * @param consistent If the accumulator should avoid re-counting multiple evaluations on the same
-   * RDD/partition. This adds some additional overhead for tracking and is an experimental feature.
+   * @param dataProperty If the accumulator should avoid re-counting multiple evaluations on the
+   *                     same RDD/partition. This adds some additional overhead for tracking and
+   *                     is an experimental feature.
    */
-  def accumulator[T](initialValue: T, consistent: Boolean)(implicit param: AccumulatorParam[T])
+  def accumulator[T](initialValue: T, dataProperty: Boolean)(implicit param: AccumulatorParam[T])
       : Accumulator[T] =
   {
     val acc = new Accumulator(initialValue, param, name = None, internal = false,
-      consistent = consistent)
+      dataProperty = dataProperty)
     cleaner.foreach(_.registerAccumulatorForCleanup(acc))
     acc
   }
@@ -1243,7 +1244,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   def accumulator[T](initialValue: T, name: String)(implicit param: AccumulatorParam[T])
     : Accumulator[T] = {
-    accumulator(initialValue, name, consistent = false)
+    accumulator(initialValue, name, dataProperty = false)
   }
 
   /**
@@ -1251,13 +1252,14 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * in the Spark UI. Tasks can "add" values to the accumulator using the `+=` method. Only the
    * driver can access the accumulator's `value`.
    *
-   * @param consistent If the accumulator should avoid re-counting multiple evaluations on the same
-   * RDD/partition. This adds some additional overhead for tracking and is an experimental feature.
+   * @param dataProperty If the accumulator should avoid re-counting multiple evaluations on the
+   *                     same RDD/partition. This adds some additional overhead for tracking and is
+   *                     an experimental feature.
    */
-  def accumulator[T](initialValue: T, name: String, consistent: Boolean)
+  def accumulator[T](initialValue: T, name: String, dataProperty: Boolean)
     (implicit param: AccumulatorParam[T]) : Accumulator[T] = {
     val acc = new Accumulator(initialValue, param, Some(name), internal = false,
-      consistent = consistent)
+      dataProperty = dataProperty)
     cleaner.foreach(_.registerAccumulatorForCleanup(acc))
     acc
   }

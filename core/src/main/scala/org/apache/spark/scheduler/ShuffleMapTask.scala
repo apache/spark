@@ -77,9 +77,9 @@ private[spark] class ShuffleMapTask(
       val manager = SparkEnv.get.shuffleManager
       writer = manager.getWriter[Any, Any](dep.shuffleHandle, partitionId, context)
       val input = rdd.iterator(partition, context).asInstanceOf[Iterator[_ <: Product2[Any, Any]]]
-      // If our task has consistent accumulators we wrap the iterator to keep track of
+      // If our task has data property accumulators we wrap the iterator to keep track of
       // the rdd/shuffle/and partition being processed and signal when/if fully processed.
-      val data = if (context.taskMetrics.hasConsistentAccumulators()) {
+      val data = if (context.taskMetrics.hasDataPropertyAccumulators()) {
         val shuffleWriteId = dep.shuffleHandle.shuffleId
         val data = input.map { x =>
           context.setRDDPartitionInfo(rdd.id, shuffleWriteId, partition.index)

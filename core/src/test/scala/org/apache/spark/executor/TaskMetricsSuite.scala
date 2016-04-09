@@ -471,7 +471,7 @@ class TaskMetricsSuite extends SparkFunSuite {
 
   test("from accumulator updates") {
     val accumUpdates1 = InternalAccumulator.createAll().map { a =>
-      AccumulableInfo(a.id, a.name, Some(3L), None, a.isInternal, a.countFailedValues, a.consistent)
+      AccumulableInfo(a.id, a.name, Some(3L), None, a.isInternal, a.countFailedValues, a.dataProperty)
     }
     val metrics1 = TaskMetrics.fromAccumulatorUpdates(accumUpdates1)
     assertUpdatesEquals(metrics1.accumulatorUpdates(), accumUpdates1)

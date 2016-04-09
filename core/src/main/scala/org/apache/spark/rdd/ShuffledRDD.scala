@@ -104,9 +104,9 @@ class ShuffledRDD[K: ClassTag, V: ClassTag, C: ClassTag](
   override def compute(split: Partition, context: TaskContext): Iterator[(K, C)] = {
     // Use -1 for our Shuffle ID since we are on the read side of the shuffle.
     val shuffleWriteId = -1
-    // If our task has consistent accumulators we need to keep track of which partitions
+    // If our task has data property accumulators we need to keep track of which partitions
     // we are processing.
-    if (context.taskMetrics.hasConsistentAccumulators()) {
+    if (context.taskMetrics.hasDataPropertyAccumulators()) {
       context.setRDDPartitionInfo(id, shuffleWriteId, split.index)
     }
     val dep = dependencies.head.asInstanceOf[ShuffleDependency[K, V, C]]
@@ -114,9 +114,9 @@ class ShuffledRDD[K: ClassTag, V: ClassTag, C: ClassTag](
       context)
       .read()
       .asInstanceOf[Iterator[(K, C)]]
-    // If our task has consistent accumulators we need to keep track of which partitions
+    // If our task has data property accumulators we need to keep track of which partitions
     // are fully processed.
-    if (context.taskMetrics.hasConsistentAccumulators()) {
+    if (context.taskMetrics.hasDataPropertyAccumulators()) {
       Utils.signalWhenEmpty(itr,
         () => context.taskMetrics.markFullyProcessed(id, shuffleWriteId, split.index))
     } else {

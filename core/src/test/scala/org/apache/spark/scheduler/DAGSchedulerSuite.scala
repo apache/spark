@@ -279,7 +279,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
           result._2,
           Seq(new AccumulableInfo(
             accumId, Some(""), Some(1), None, internal = false, countFailedValues = false,
-            consistent = false))))
+            dataProperty = false))))
       }
     }
   }
@@ -358,13 +358,13 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
   test("equals and hashCode AccumulableInfo") {
     val accInfo1 = new AccumulableInfo(
       1, Some("a1"), Some("delta1"), Some("val1"), internal = true, countFailedValues = false,
-      consistent = false)
+      dataProperty = false)
     val accInfo2 = new AccumulableInfo(
       1, Some("a1"), Some("delta1"), Some("val1"), internal = false, countFailedValues = false,
-      consistent = false)
+      dataProperty = false)
     val accInfo3 = new AccumulableInfo(
       1, Some("a1"), Some("delta1"), Some("val1"), internal = false, countFailedValues = false,
-      consistent = false)
+      dataProperty = false)
     assert(accInfo1 !== accInfo2)
     assert(accInfo2 === accInfo3)
     assert(accInfo2.hashCode() === accInfo3.hashCode())

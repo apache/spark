@@ -908,7 +908,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Value": "val2",
       |        "Internal": false,
       |        "Count Failed Values": false,
-      |        "Consistent": false
+      |        "DataProperty": false
       |      },
       |      {
       |        "ID": 1,
@@ -917,7 +917,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Value": "val1",
       |        "Internal": false,
       |        "Count Failed Values": false,
-      |        "Consistent": false
+      |        "DataProperty": false
       |      }
       |    ]
       |  },
@@ -967,7 +967,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Value": "val2",
       |        "Internal": false,
       |        "Count Failed Values": false,
-      |        "Consistent": false
+      |        "DataProperty": false
       |      },
       |      {
       |        "ID": 1,
@@ -976,7 +976,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Value": "val1",
       |        "Internal": false,
       |        "Count Failed Values": false,
-      |        "Consistent": false
+      |        "DataProperty": false
       |      }
       |    ]
       |  }
@@ -1009,7 +1009,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Value": "val1",
       |        "Internal": false,
       |        "Count Failed Values": false,
-      |        "Consistent": false
+      |        "DataProperty": false
       |      },
       |      {
       |        "ID": 2,
@@ -1018,7 +1018,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Value": "val2",
       |        "Internal": false,
       |        "Count Failed Values": false,
-      |        "Consistent": false
+      |        "DataProperty": false
       |      },
       |      {
       |        "ID": 3,
@@ -1027,7 +1027,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Value": "val3",
       |        "Internal": true,
       |        "Count Failed Values": false,
-      |        "Consistent": false
+      |        "DataProperty": false
       |      }
       |    ]
       |  }
@@ -1058,7 +1058,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Value": "val1",
       |        "Internal": false,
       |        "Count Failed Values": false,
-      |        "Consistent": false
+      |        "DataProperty": false
       |      },
       |      {
       |        "ID": 2,
@@ -1067,7 +1067,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Value": "val2",
       |        "Internal": false,
       |        "Count Failed Values": false,
-      |        "Consistent": false
+      |        "DataProperty": false
       |      },
       |      {
       |        "ID": 3,
@@ -1076,7 +1076,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Value": "val3",
       |        "Internal": true,
       |        "Count Failed Values": false,
-      |        "Consistent": false
+      |        "DataProperty": false
       |      }
       |    ]
       |  }
@@ -1113,7 +1113,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Value": "val1",
       |        "Internal": false,
       |        "Count Failed Values": false,
-      |        "Consistent": false
+      |        "DataProperty": false
       |      },
       |      {
       |        "ID": 2,
@@ -1122,7 +1122,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Value": "val2",
       |        "Internal": false,
       |        "Count Failed Values": false,
-      |        "Consistent": false
+      |        "DataProperty": false
       |      },
       |      {
       |        "ID": 3,
@@ -1131,7 +1131,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Value": "val3",
       |        "Internal": true,
       |        "Count Failed Values": false,
-      |        "Consistent": false
+      |        "DataProperty": false
       |      }
       |    ]
       |  },
@@ -1205,7 +1205,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Value": "val1",
       |        "Internal": false,
       |        "Count Failed Values": false,
-      |        "Consistent": false
+      |        "DataProperty": false
       |      },
       |      {
       |        "ID": 2,
@@ -1214,7 +1214,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Value": "val2",
       |        "Internal": false,
       |        "Count Failed Values": false,
-      |        "Consistent": false
+      |        "DataProperty": false
       |      },
       |      {
       |        "ID": 3,
@@ -1223,7 +1223,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Value": "val3",
       |        "Internal": true,
       |        "Count Failed Values": false,
-      |        "Consistent": false
+      |        "DataProperty": false
       |      }
       |    ]
       |  },
@@ -1294,7 +1294,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Value": "val1",
       |        "Internal": false,
       |        "Count Failed Values": false,
-      |        "Consistent": false
+      |        "DataProperty": false
       |      },
       |      {
       |        "ID": 2,
@@ -1303,7 +1303,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Value": "val2",
       |        "Internal": false,
       |        "Count Failed Values": false,
-      |        "Consistent": false
+      |        "DataProperty": false
       |      },
       |      {
       |        "ID": 3,
@@ -1312,7 +1312,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Value": "val3",
       |        "Internal": true,
       |        "Count Failed Values": false,
-      |        "Consistent": false
+      |        "DataProperty": false
       |      }
       |    ]
       |  },
@@ -1393,7 +1393,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Value": "val2",
       |          "Internal": false,
       |          "Count Failed Values": false,
-      |          "Consistent": false
+      |          "DataProperty": false
       |        },
       |        {
       |          "ID": 1,
@@ -1402,7 +1402,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Value": "val1",
       |          "Internal": false,
       |          "Count Failed Values": false,
-      |          "Consistent": false
+      |          "DataProperty": false
       |        }
       |      ]
       |    },
@@ -1455,7 +1455,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Value": "val2",
       |          "Internal": false,
       |          "Count Failed Values": false,
-      |          "Consistent": false
+      |          "DataProperty": false
       |        },
       |        {
       |          "ID": 1,
@@ -1464,7 +1464,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Value": "val1",
       |          "Internal": false,
       |          "Count Failed Values": false,
-      |          "Consistent": false
+      |          "DataProperty": false
       |        }
       |      ]
       |    },
@@ -1533,7 +1533,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Value": "val2",
       |          "Internal": false,
       |          "Count Failed Values": false,
-      |          "Consistent": false
+      |          "DataProperty": false
       |        },
       |        {
       |          "ID": 1,
@@ -1542,7 +1542,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Value": "val1",
       |          "Internal": false,
       |          "Count Failed Values": false,
-      |          "Consistent": false
+      |          "DataProperty": false
       |        }
       |      ]
       |    },
@@ -1627,7 +1627,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Value": "val2",
       |          "Internal": false,
       |          "Count Failed Values": false,
-      |          "Consistent": false
+      |          "DataProperty": false
       |        },
       |        {
       |          "ID": 1,
@@ -1636,7 +1636,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Value": "val1",
       |          "Internal": false,
       |          "Count Failed Values": false,
-      |          "Consistent": false
+      |          "DataProperty": false
       |        }
       |      ]
       |    }
@@ -1804,7 +1804,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Update": 300,
       |          "Internal": true,
       |          "Count Failed Values": true,
-      |          "Consistent": false
+      |          "DataProperty": false
       |        },
       |        {
       |          "ID": 1,
@@ -1812,7 +1812,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Update": 400,
       |          "Internal": true,
       |          "Count Failed Values": true,
-      |          "Consistent": false
+      |          "DataProperty": false
       |        },
       |        {
       |          "ID": 2,
@@ -1820,7 +1820,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Update": 500,
       |          "Internal": true,
       |          "Count Failed Values": true,
-      |          "Consistent": false
+      |          "DataProperty": false
       |        },
       |        {
       |          "ID": 3,
@@ -1828,7 +1828,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Update": 600,
       |          "Internal": true,
       |          "Count Failed Values": true,
-      |          "Consistent": false
+      |          "DataProperty": false
       |        },
       |        {
       |          "ID": 4,
@@ -1836,7 +1836,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Update": 700,
       |          "Internal": true,
       |          "Count Failed Values": true,
-      |          "Consistent": false
+      |          "DataProperty": false
       |        },
       |        {
       |          "ID": 5,
@@ -1844,7 +1844,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Update": 800,
       |          "Internal": true,
       |          "Count Failed Values": true,
-      |          "Consistent": false
+      |          "DataProperty": false
       |        },
       |        {
       |          "ID": 6,
@@ -1852,7 +1852,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true,
-      |          "Consistent": false
+      |          "DataProperty": false
       |        },
       |        {
       |          "ID": 7,
@@ -1860,7 +1860,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true,
-      |          "Consistent": false
+      |          "DataProperty": false
       |        },
       |        {
       |          "ID": 8,
@@ -1882,7 +1882,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          ],
       |          "Internal": true,
       |          "Count Failed Values": true,
-      |          "Consistent": false
+      |          "DataProperty": false
       |        },
       |        {
       |          "ID": 9,
@@ -1890,7 +1890,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true,
-      |          "Consistent": false
+      |          "DataProperty": false
       |        },
       |        {
       |          "ID": 10,
@@ -1898,7 +1898,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true,
-      |          "Consistent": false
+      |          "DataProperty": false
       |        },
       |        {
       |          "ID": 11,
@@ -1906,7 +1906,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true,
-      |          "Consistent": false
+      |          "DataProperty": false
       |        },
       |        {
       |          "ID": 12,
@@ -1914,7 +1914,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true,
-      |          "Consistent": false
+      |          "DataProperty": false
       |        },
       |        {
       |          "ID": 13,
@@ -1922,7 +1922,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true,
-      |          "Consistent": false
+      |          "DataProperty": false
       |        },
       |        {
       |          "ID": 14,
@@ -1930,7 +1930,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true,
-      |          "Consistent": false
+      |          "DataProperty": false
       |        },
       |        {
       |          "ID": 15,
@@ -1938,7 +1938,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true,
-      |          "Consistent": false
+      |          "DataProperty": false
       |        },
       |        {
       |          "ID": 16,
@@ -1946,7 +1946,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true,
-      |          "Consistent": false
+      |          "DataProperty": false
       |        },
       |        {
       |          "ID": 17,
@@ -1954,7 +1954,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true,
-      |          "Consistent": false
+      |          "DataProperty": false
       |        },
       |        {
       |          "ID": 18,
@@ -1962,7 +1962,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Update": "Hadoop",
       |          "Internal": true,
       |          "Count Failed Values": true,
-      |          "Consistent": false
+      |          "DataProperty": false
       |        },
       |        {
       |          "ID": 19,
@@ -1970,7 +1970,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Update": 2100,
       |          "Internal": true,
       |          "Count Failed Values": true,
-      |          "Consistent": false
+      |          "DataProperty": false
       |        },
       |        {
       |          "ID": 20,
@@ -1978,7 +1978,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Update": 21,
       |          "Internal": true,
       |          "Count Failed Values": true,
-      |          "Consistent": false
+      |          "DataProperty": false
       |        },
       |        {
       |          "ID": 21,
@@ -1986,7 +1986,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Update": "Hadoop",
       |          "Internal": true,
       |          "Count Failed Values": true,
-      |          "Consistent": false
+      |          "DataProperty": false
       |        },
       |        {
       |          "ID": 22,
@@ -1994,7 +1994,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Update": 1200,
       |          "Internal": true,
       |          "Count Failed Values": true,
-      |          "Consistent": false
+      |          "DataProperty": false
       |        },
       |        {
       |          "ID": 23,
@@ -2002,7 +2002,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Update": 12,
       |          "Internal": true,
       |          "Count Failed Values": true,
-      |          "Consistent": false
+      |          "DataProperty": false
       |        },
       |        {
       |          "ID": 24,
@@ -2010,7 +2010,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true,
-      |          "Consistent": false
+      |          "DataProperty": false
       |        }
       |      ]
       |    }

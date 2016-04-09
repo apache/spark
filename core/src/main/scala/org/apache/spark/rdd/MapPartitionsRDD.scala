@@ -37,9 +37,9 @@ private[spark] class MapPartitionsRDD[U: ClassTag, T: ClassTag](
 
   override def compute(split: Partition, context: TaskContext): Iterator[U] = {
     val input = firstParent[T].iterator(split, context)
-    // If our task has consistent accumulators we need to keep track of which partitions
+    // If our task has data property accumulators we need to keep track of which partitions
     // are fully processed and what we are currently processing.
-    if (context.taskMetrics.hasConsistentAccumulators()) {
+    if (context.taskMetrics.hasDataPropertyAccumulators()) {
       // Use -1 for shuffle id since we are not in a shuffle.
       val shuffleWriteId = -1
       // Set the ID of the RDD and partition being processed. We need to do this per
@@ -51,7 +51,7 @@ private[spark] class MapPartitionsRDD[U: ClassTag, T: ClassTag](
       val wrappedData = Utils.signalWhenEmpty(data,
         () => context.taskMetrics.markFullyProcessed(id, shuffleWriteId, split.index))
       // We also set it before the first call to the user function in case the user provides a
-      // function which access a consistent accumulator before accessing any elements.
+      // function which access a data property accumulator before accessing any elements.
       context.setRDDPartitionInfo(id, shuffleWriteId, split.index)
       f(context, split.index, wrappedData)
     } else {
