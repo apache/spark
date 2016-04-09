@@ -72,11 +72,11 @@ class ExecutorClassLoader(
   override def findClass(name: String): Class[_] = {
     userClassPathFirst match {
       case true => findClassLocally(name).getOrElse(parentLoader.loadClass(name))
-      case false => {
+      case false =>
         try {
           parentLoader.loadClass(name)
         } catch {
-          case e: ClassNotFoundException => {
+          case e: ClassNotFoundException =>
             val classOption = findClassLocally(name)
             classOption match {
               case None =>
@@ -88,9 +88,7 @@ class ExecutorClassLoader(
                 throw new ClassNotFoundException(name)
               case Some(a) => a
             }
-          }
         }
-      }
     }
   }
 

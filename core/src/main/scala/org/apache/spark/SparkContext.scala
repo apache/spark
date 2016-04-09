@@ -2395,9 +2395,8 @@ object SparkContext extends Logging {
         } catch {
           // TODO: Enumerate the exact reasons why it can fail
           // But irrespective of it, it means we cannot proceed !
-          case e: Exception => {
+          case e: Exception =>
             throw new SparkException("YARN mode not available ?", e)
-          }
         }
         val backend = try {
           val clazz =
@@ -2405,9 +2404,8 @@ object SparkContext extends Logging {
           val cons = clazz.getConstructor(classOf[TaskSchedulerImpl], classOf[SparkContext])
           cons.newInstance(scheduler, sc).asInstanceOf[CoarseGrainedSchedulerBackend]
         } catch {
-          case e: Exception => {
+          case e: Exception =>
             throw new SparkException("YARN mode not available ?", e)
-          }
         }
         scheduler.initialize(backend)
         (backend, scheduler)
@@ -2419,9 +2417,8 @@ object SparkContext extends Logging {
           cons.newInstance(sc).asInstanceOf[TaskSchedulerImpl]
 
         } catch {
-          case e: Exception => {
+          case e: Exception =>
             throw new SparkException("YARN mode not available ?", e)
-          }
         }
 
         val backend = try {
@@ -2430,9 +2427,8 @@ object SparkContext extends Logging {
           val cons = clazz.getConstructor(classOf[TaskSchedulerImpl], classOf[SparkContext])
           cons.newInstance(scheduler, sc).asInstanceOf[CoarseGrainedSchedulerBackend]
         } catch {
-          case e: Exception => {
+          case e: Exception =>
             throw new SparkException("YARN mode not available ?", e)
-          }
         }
 
         scheduler.initialize(backend)
