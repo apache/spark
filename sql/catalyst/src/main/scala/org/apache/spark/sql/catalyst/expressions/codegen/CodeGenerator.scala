@@ -626,15 +626,15 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
 
 object CodeGenerator extends Logging {
   /**
-    * Compile the Java source code into a Java class, using Janino.
-    */
+   * Compile the Java source code into a Java class, using Janino.
+   */
   def compile(code: String): GeneratedClass = {
     cache.get(code)
   }
 
   /**
-    * Compile the Java source code into a Java class, using Janino.
-    */
+   * Compile the Java source code into a Java class, using Janino.
+   */
   private[this] def doCompile(code: String): GeneratedClass = {
     val evaluator = new ClassBodyEvaluator()
     evaluator.setParentClassLoader(Utils.getContextOrSparkClassLoader)

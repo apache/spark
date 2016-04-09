@@ -27,9 +27,10 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.cli.CliSessionState
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.{TableType => HiveTableType}
-import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, FieldSchema, Function => HiveFunction, FunctionType, PrincipalType, ResourceUri}
+import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, FieldSchema, Function => HiveFunction, FunctionType, PrincipalType, ResourceType, ResourceUri}
 import org.apache.hadoop.hive.ql.Driver
-import org.apache.hadoop.hive.ql.metadata.{Hive, Partition => HivePartition, Table => HiveTable}
+import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition, Table => HiveTable}
+import org.apache.hadoop.hive.ql.metadata.{Hive, HiveException}
 import org.apache.hadoop.hive.ql.plan.AddPartitionDesc
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
@@ -37,6 +38,7 @@ import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchPartitionException}
 import org.apache.spark.sql.catalyst.catalog._
@@ -557,7 +559,11 @@ private[hive] class HiveClientImpl(
   override def getFunctionOption(
       db: String,
       name: String): Option[CatalogFunction] = withHiveState {
-    Option(client.getFunction(db, name)).map(fromHiveFunction)
+    try {
+      Option(client.getFunction(db, name)).map(fromHiveFunction)
+    } catch {
+      case he: HiveException => None
+    }
   }
 
   override def listFunctions(db: String, pattern: String): Seq[String] = withHiveState {
@@ -611,6 +617,9 @@ private[hive] class HiveClientImpl(
       .asInstanceOf[Class[_ <: org.apache.hadoop.hive.ql.io.HiveOutputFormat[_, _]]]
 
   private def toHiveFunction(f: CatalogFunction, db: String): HiveFunction = {
+    val resourceUris = f.resources.map { case (resourceType, resourcePath) =>
+      new ResourceUri(ResourceType.valueOf(resourceType.toUpperCase), resourcePath)
+    }
     new HiveFunction(
       f.identifier.funcName,
       db,
@@ -619,12 +628,21 @@ private[hive] class HiveClientImpl(
       PrincipalType.USER,
       (System.currentTimeMillis / 1000).toInt,
       FunctionType.JAVA,
-      List.empty[ResourceUri].asJava)
+      resourceUris.asJava)
   }
 
   private def fromHiveFunction(hf: HiveFunction): CatalogFunction = {
     val name = FunctionIdentifier(hf.getFunctionName, Option(hf.getDbName))
-    new CatalogFunction(name, hf.getClassName)
+    val resources = hf.getResourceUris.asScala.map { uri =>
+      val resourceType = uri.getResourceType() match {
+        case ResourceType.ARCHIVE => "archive"
+        case ResourceType.FILE => "file"
+        case ResourceType.JAR => "jar"
+        case r => throw new AnalysisException(s"Unknown resource type: $r")
+      }
+      (resourceType, uri.getUri())
+    }
+    new CatalogFunction(name, hf.getClassName, resources)
   }
 
   private def toHiveColumn(c: CatalogColumn): FieldSchema = {

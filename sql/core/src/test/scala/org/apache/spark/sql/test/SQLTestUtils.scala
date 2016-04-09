@@ -29,6 +29,7 @@ import org.scalatest.BeforeAndAfterAll
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.Filter
@@ -129,6 +130,27 @@ private[sql] trait SQLTestUtils
   protected def withTempDir(f: File => Unit): Unit = {
     val dir = Utils.createTempDir().getCanonicalFile
     try f(dir) finally Utils.deleteRecursively(dir)
+  }
+
+  /**
+   * Drops functions after calling `f`. A function is represented by (functionName, isTemporary).
+   */
+  protected def withUserDefinedFunction(functions: (String, Boolean)*)(f: => Unit): Unit = {
+    try {
+      f
+    } catch {
+      case cause: Throwable => throw cause
+    } finally {
+      // If the test failed part way, we don't want to mask the failure by failing to remove
+      // temp tables that never got created.
+      try functions.foreach { case (functionName, isTemporary) =>
+        val withTemporary = if (isTemporary) "TEMPORARY" else ""
+        sqlContext.sql(s"DROP $withTemporary FUNCTION IF EXISTS $functionName")
+        assert(
+          !sqlContext.sessionState.catalog.functionExists(FunctionIdentifier(functionName)),
+          s"Function $functionName should have been dropped. But, it still exists.")
+      }
+    }
   }
 
   /**

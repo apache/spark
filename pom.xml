@@ -131,7 +131,7 @@
     <curator.version>2.4.0</curator.version>
     <hive.group>org.spark-project.hive</hive.group>
     <!-- Version used in Maven Hive dependency -->
-    <hive.version>1.2.1.spark</hive.version>
+    <hive.version>1.2.1.spark2</hive.version>
     <!-- Version used for internal directory structure -->
     <hive.version.short>1.2.1</hive.version.short>
     <derby.version>10.10.1.1</derby.version>
@@ -139,7 +139,7 @@
     <hive.parquet.version>1.6.0</hive.parquet.version>
     <jetty.version>8.1.14.v20131031</jetty.version>
     <orbit.version>3.0.0.v201112011016</orbit.version>
-    <chill.version>0.7.4</chill.version>
+    <chill.version>0.8.0</chill.version>
     <ivy.version>2.4.0</ivy.version>
     <oro.version>2.0.8</oro.version>
     <codahale.metrics.version>3.1.2</codahale.metrics.version>
@@ -151,6 +151,7 @@
     <aws.kinesis.producer.version>0.10.2</aws.kinesis.producer.version>
     <!--  org.apache.httpcomponents/httpclient-->
     <commons.httpclient.version>4.3.2</commons.httpclient.version>
+    <commons.httpcore.version>4.3.2</commons.httpcore.version>
     <!--  commons-httpclient/commons-httpclient-->
     <httpclient.classic.version>3.1</httpclient.classic.version>
     <commons.math3.version>3.4.1</commons.math3.version>
@@ -182,8 +183,15 @@
     <test.java.home>${java.home}</test.java.home>
     <test.exclude.tags></test.exclude.tags>
 
+    <!-- Package to use when relocating shaded classes. -->
+    <spark.shade.packageName>org.spark_project</spark.shade.packageName>
+
     <!-- Modules that copy jars to the build directory should do so under this location. -->
     <jars.target.dir>${project.build.directory}/scala-${scala.binary.version}/jars</jars.target.dir>
+
+    <!-- Allow modules to enable / disable certain build plugins easily. -->
+    <build.testJarPhase>prepare-package</build.testJarPhase>
+    <build.copyDependenciesPhase>none</build.copyDependenciesPhase>
 
     <!--
       Dependency scopes that can be overridden by enabling certain profiles. These profiles are
@@ -238,15 +246,6 @@
   </pluginRepositories>
   <dependencies>
     <!--
-      This is a dummy dependency that is used along with the shading plug-in
-      to create effective poms on publishing (see SPARK-3812).
-    -->
-    <dependency>
-      <groupId>org.spark-project.spark</groupId>
-      <artifactId>unused</artifactId>
-      <version>1.0.0</version>
-    </dependency>
-    <!--
          This is needed by the scalatest plugin, and so is declared here to be available in
          all child modules, just as scalatest is run in all children
     -->
@@ -278,31 +277,11 @@
         <groupId>com.twitter</groupId>
         <artifactId>chill_${scala.binary.version}</artifactId>
         <version>${chill.version}</version>
-        <exclusions>
-          <exclusion>
-            <groupId>org.ow2.asm</groupId>
-            <artifactId>asm</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.ow2.asm</groupId>
-            <artifactId>asm-commons</artifactId>
-          </exclusion>
-        </exclusions>
       </dependency>
       <dependency>
         <groupId>com.twitter</groupId>
         <artifactId>chill-java</artifactId>
         <version>${chill.version}</version>
-        <exclusions>
-          <exclusion>
-            <groupId>org.ow2.asm</groupId>
-            <artifactId>asm</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.ow2.asm</groupId>
-            <artifactId>asm-commons</artifactId>
-          </exclusion>
-        </exclusions>
       </dependency>
       <!-- This artifact is a shaded version of ASM 5.0.4. The POM that was used to produce this
            is at https://github.com/apache/geronimo-xbean/tree/xbean-4.4/xbean-asm5-shaded
@@ -414,7 +393,7 @@
       <dependency>
         <groupId>org.apache.httpcomponents</groupId>
         <artifactId>httpcore</artifactId>
-        <version>${commons.httpclient.version}</version>
+        <version>${commons.httpcore.version}</version>
       </dependency>
       <dependency>
         <groupId>org.seleniumhq.selenium</groupId>
@@ -832,6 +811,14 @@
             <artifactId>velocity</artifactId>
           </exclusion>
         </exclusions>
+      </dependency>
+      <!-- avro-mapred for some reason depends on avro-ipc's test jar, so undo that. -->
+      <dependency>
+        <groupId>org.apache.avro</groupId>
+        <artifactId>avro-ipc</artifactId>
+        <classifier>tests</classifier>
+        <version>${avro.version}</version>
+        <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>org.apache.avro</groupId>
@@ -1521,6 +1508,10 @@
             <groupId>org.codehaus.groovy</groupId>
             <artifactId>groovy-all</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>javax.servlet</groupId>
+            <artifactId>servlet-api</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
 
@@ -1916,6 +1907,7 @@
               -->
               <SPARK_DIST_CLASSPATH>${test_classpath}</SPARK_DIST_CLASSPATH>
               <SPARK_PREPEND_CLASSES>1</SPARK_PREPEND_CLASSES>
+              <SPARK_SCALA_VERSION>${scala.binary.version}</SPARK_SCALA_VERSION>
               <SPARK_TESTING>1</SPARK_TESTING>
               <JAVA_HOME>${test.java.home}</JAVA_HOME>
             </environmentVariables>
@@ -1964,6 +1956,7 @@
               -->
               <SPARK_DIST_CLASSPATH>${test_classpath}</SPARK_DIST_CLASSPATH>
               <SPARK_PREPEND_CLASSES>1</SPARK_PREPEND_CLASSES>
+              <SPARK_SCALA_VERSION>${scala.binary.version}</SPARK_SCALA_VERSION>
               <SPARK_TESTING>1</SPARK_TESTING>
               <JAVA_HOME>${test.java.home}</JAVA_HOME>
             </environmentVariables>
@@ -2146,6 +2139,7 @@
         <version>2.10</version>
         <executions>
           <execution>
+            <id>generate-test-classpath</id>
             <phase>test-compile</phase>
             <goals>
               <goal>build-classpath</goal>
@@ -2153,6 +2147,17 @@
             <configuration>
               <includeScope>test</includeScope>
               <outputProperty>test_classpath</outputProperty>
+            </configuration>
+          </execution>
+          <execution>
+            <id>copy-module-dependencies</id>
+            <phase>${build.copyDependenciesPhase}</phase>
+            <goals>
+              <goal>copy-dependencies</goal>
+            </goals>
+            <configuration>
+              <includeScope>runtime</includeScope>
+              <outputDirectory>${jars.target.dir}</outputDirectory>
             </configuration>
           </execution>
         </executions>
@@ -2169,9 +2174,6 @@
           <shadedArtifactAttached>false</shadedArtifactAttached>
           <artifactSet>
             <includes>
-              <!-- At a minimum we must include this to force effective pom generation -->
-              <include>org.spark-project.spark:unused</include>
-
               <include>org.eclipse.jetty:jetty-io</include>
               <include>org.eclipse.jetty:jetty-http</include>
               <include>org.eclipse.jetty:jetty-continuation</include>
@@ -2186,14 +2188,14 @@
           <relocations>
             <relocation>
               <pattern>org.eclipse.jetty</pattern>
-              <shadedPattern>org.spark-project.jetty</shadedPattern>
+              <shadedPattern>${spark.shade.packageName}.jetty</shadedPattern>
               <includes>
                 <include>org.eclipse.jetty.**</include>
               </includes>
             </relocation>
             <relocation>
               <pattern>com.google.common</pattern>
-              <shadedPattern>org.spark-project.guava</shadedPattern>
+              <shadedPattern>${spark.shade.packageName}.guava</shadedPattern>
             </relocation>
           </relocations>
         </configuration>
@@ -2302,7 +2304,7 @@
         <executions>
           <execution>
             <id>prepare-test-jar</id>
-            <phase>prepare-package</phase>
+            <phase>${build.testJarPhase}</phase>
             <goals>
               <goal>test-jar</goal>
             </goals>

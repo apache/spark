@@ -97,13 +97,6 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
 
   @transient protected val jobId = new JobID(jobTrackerId, id)
 
-  // If true, enable using the custom RecordReader for parquet. This only works for
-  // a subset of the types (no complex types).
-  protected val enableVectorizedParquetReader: Boolean =
-    sqlContext.getConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key).toBoolean
-  protected val enableWholestageCodegen: Boolean =
-    sqlContext.getConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key).toBoolean
-
   override def getPartitions: Array[SparkPartition] = {
     val conf = getConf(isDriverSide = true)
     val inputFormat = inputFormatClass.newInstance
@@ -165,32 +158,9 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
       }
       val attemptId = new TaskAttemptID(jobTrackerId, id, TaskType.MAP, split.index, 0)
       val hadoopAttemptContext = new TaskAttemptContextImpl(conf, attemptId)
-      private[this] var reader: RecordReader[Void, V] = null
-
-      /**
-       * If the format is ParquetInputFormat, try to create the optimized RecordReader. If this
-       * fails (for example, unsupported schema), try with the normal reader.
-       * TODO: plumb this through a different way?
-       */
-      if (enableVectorizedParquetReader &&
-        format.getClass.getName == "org.apache.parquet.hadoop.ParquetInputFormat") {
-        val parquetReader: VectorizedParquetRecordReader = new VectorizedParquetRecordReader()
-        if (!parquetReader.tryInitialize(
-            split.serializableHadoopSplit.value, hadoopAttemptContext)) {
-          parquetReader.close()
-        } else {
-          reader = parquetReader.asInstanceOf[RecordReader[Void, V]]
-          parquetReader.resultBatch()
-          // Whole stage codegen (PhysicalRDD) is able to deal with batches directly
-          if (enableWholestageCodegen) parquetReader.enableReturningBatches()
-        }
-      }
-
-      if (reader == null) {
-        reader = format.createRecordReader(
+      private[this] var reader: RecordReader[Void, V] = format.createRecordReader(
           split.serializableHadoopSplit.value, hadoopAttemptContext)
-        reader.initialize(split.serializableHadoopSplit.value, hadoopAttemptContext)
-      }
+      reader.initialize(split.serializableHadoopSplit.value, hadoopAttemptContext)
 
       // Register an on-task-completion callback to close the input stream.
       context.addTaskCompletionListener(context => close())

@@ -61,15 +61,17 @@ class MultivariateGaussian @Since("1.3.0") (
    */
   private val (rootSigmaInv: DBM[Double], u: Double) = calculateCovarianceConstants
 
-  /** Returns density of this multivariate Gaussian at given point, x
-    */
+  /**
+   * Returns density of this multivariate Gaussian at given point, x
+   */
    @Since("1.3.0")
   def pdf(x: Vector): Double = {
     pdf(x.toBreeze)
   }
 
-  /** Returns the log-density of this multivariate Gaussian at given point, x
-    */
+  /**
+   * Returns the log-density of this multivariate Gaussian at given point, x
+   */
    @Since("1.3.0")
   def logpdf(x: Vector): Double = {
     logpdf(x.toBreeze)

@@ -774,13 +774,13 @@ sealed trait LogisticRegressionTrainingSummary extends LogisticRegressionSummary
  */
 sealed trait LogisticRegressionSummary extends Serializable {
 
-  /** Dataframe outputted by the model's `transform` method. */
+  /** Dataframe output by the model's `transform` method. */
   def predictions: DataFrame
 
-  /** Field in "predictions" which gives the calibrated probability of each instance as a vector. */
+  /** Field in "predictions" which gives the probability of each class as a vector. */
   def probabilityCol: String
 
-  /** Field in "predictions" which gives the true label of each instance. */
+  /** Field in "predictions" which gives the true label of each instance (if available). */
   def labelCol: String
 
   /** Field in "predictions" which gives the features of each instance as a vector. */
@@ -792,9 +792,9 @@ sealed trait LogisticRegressionSummary extends Serializable {
  * :: Experimental ::
  * Logistic regression training results.
  *
- * @param predictions dataframe outputted by the model's `transform` method.
- * @param probabilityCol field in "predictions" which gives the calibrated probability of
- *                       each instance as a vector.
+ * @param predictions dataframe output by the model's `transform` method.
+ * @param probabilityCol field in "predictions" which gives the probability of
+ *                       each class as a vector.
  * @param labelCol field in "predictions" which gives the true label of each instance.
  * @param featuresCol field in "predictions" which gives the features of each instance as a vector.
  * @param objectiveHistory objective function (scaled loss + regularization) at each iteration.
@@ -816,9 +816,9 @@ class BinaryLogisticRegressionTrainingSummary private[classification] (
  * :: Experimental ::
  * Binary Logistic regression results for a given model.
  *
- * @param predictions dataframe outputted by the model's `transform` method.
- * @param probabilityCol field in "predictions" which gives the calibrated probability of
- *                       each instance.
+ * @param predictions dataframe output by the model's `transform` method.
+ * @param probabilityCol field in "predictions" which gives the probability of
+ *                       each class as a vector.
  * @param labelCol field in "predictions" which gives the true label of each instance.
  * @param featuresCol field in "predictions" which gives the features of each instance as a vector.
  */

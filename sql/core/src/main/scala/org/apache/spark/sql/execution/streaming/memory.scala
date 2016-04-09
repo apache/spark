@@ -22,11 +22,11 @@ import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
-import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, Encoder, Row, SQLContext}
-import org.apache.spark.sql.catalyst.encoders.{encoderFor, RowEncoder}
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.encoders.encoderFor
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.plans.logical.LeafNode
 import org.apache.spark.sql.types.StructType
 
 object MemoryStream {
@@ -45,7 +45,7 @@ object MemoryStream {
 case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
     extends Source with Logging {
   protected val encoder = encoderFor[A]
-  protected val logicalPlan = StreamingRelation(this)
+  protected val logicalPlan = StreamingExecutionRelation(this)
   protected val output = logicalPlan.output
   protected val batches = new ArrayBuffer[Dataset[A]]
 
@@ -138,3 +138,9 @@ class MemorySink(val schema: StructType) extends Sink with Logging {
   }
 }
 
+/**
+ * Used to query the data that has been written into a [[MemorySink]].
+ */
+case class MemoryPlan(sink: MemorySink, output: Seq[Attribute]) extends LeafNode {
+  def this(sink: MemorySink) = this(sink, sink.schema.toAttributes)
+}

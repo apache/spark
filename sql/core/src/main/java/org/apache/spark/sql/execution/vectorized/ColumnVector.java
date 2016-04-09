@@ -56,7 +56,7 @@ import org.apache.spark.unsafe.types.UTF8String;
  *
  * ColumnVectors are intended to be reused.
  */
-public abstract class ColumnVector {
+public abstract class ColumnVector implements AutoCloseable {
   /**
    * Allocates a column to store elements of `type` on or off heap.
    * Capacity is the initial capacity of the vector and it will grow as necessary. Capacity is
@@ -563,6 +563,18 @@ public abstract class ColumnVector {
       BigInteger bigInteger = new BigInteger(bytes);
       BigDecimal javaDecimal = new BigDecimal(bigInteger, scale);
       return Decimal.apply(javaDecimal, precision, scale);
+    }
+  }
+
+
+  public final void putDecimal(int rowId, Decimal value, int precision) {
+    if (precision <= Decimal.MAX_INT_DIGITS()) {
+      putInt(rowId, value.toInt());
+    } else if (precision <= Decimal.MAX_LONG_DIGITS()) {
+      putLong(rowId, value.toLong());
+    } else {
+      BigInteger bigInteger = value.toJavaBigDecimal().unscaledValue();
+      putByteArray(rowId, bigInteger.toByteArray());
     }
   }
 
