@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.Project
@@ -456,8 +455,8 @@ class DDLCommandSuite extends PlanTest {
   test("alter table: set file format") {
     val sql1 =
       """
-        |ALTER TABLE table_name SET FILEFORMAT INPUTFORMAT 'test'
-        |OUTPUTFORMAT 'test' SERDE 'test' INPUTDRIVER 'test' OUTPUTDRIVER 'test'
+       |ALTER TABLE table_name SET FILEFORMAT INPUTFORMAT 'test'
+       |OUTPUTFORMAT 'test' SERDE 'test' INPUTDRIVER 'test' OUTPUTDRIVER 'test'
       """.stripMargin
     val sql2 = "ALTER TABLE table_name SET FILEFORMAT INPUTFORMAT 'test' " +
       "OUTPUTFORMAT 'test' SERDE 'test'"
