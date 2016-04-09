@@ -180,11 +180,9 @@ case class DescribeDatabase(
  *
  * The syntax of this command is:
  * {{{
- *   DROP TABLE [IF EXISTS] table_name [PURGE] [FOR REPLICATION(event_id)];
+ *   DROP TABLE [IF EXISTS] table_name;
  *   DROP VIEW [IF EXISTS] [db_name.]view_name;
  * }}}
- *
- * Note, PURGE and replication clauses are not supported
  */
 case class DropTable(
     tableName: TableIdentifier,

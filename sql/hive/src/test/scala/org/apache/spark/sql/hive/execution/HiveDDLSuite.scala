@@ -61,7 +61,7 @@ class HiveDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         assert(tmpDir.listFiles.isEmpty)
         sql(
           s"""
-             |create external table $tabName(c1 int COMMENT 'abc', c2 string)
+             |create table $tabName
              |stored as parquet
              |location '$tmpDir'
              |as select 1, '3'
