@@ -162,14 +162,16 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
 
       // Unsupported clauses.
       if (temp) {
-        logWarning("TEMPORARY clause is ignored.")
+        throw new ParseException(s"Unsupported operation: TEMPORARY clause.", ctx)
       }
       if (ctx.bucketSpec != null) {
         // TODO add this - we need cluster columns in the CatalogTable for this to work.
-        logWarning("CLUSTERED BY ... [ORDERED BY ...] INTO ... BUCKETS clause is ignored.")
+        throw new ParseException("Unsupported operation: " +
+          "CLUSTERED BY ... [ORDERED BY ...] INTO ... BUCKETS clause.", ctx)
       }
       if (ctx.skewSpec != null) {
-        logWarning("SKEWED BY ... ON ... [STORED AS DIRECTORIES] clause is ignored.")
+        throw new ParseException("Operation not allowed: " +
+          "SKEWED BY ... ON ... [STORED AS DIRECTORIES] clause.", ctx)
       }
 
       // Create the schema.
@@ -230,7 +232,7 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
       throw new ParseException(s"Operation not allowed: partitioned views", ctx)
     } else {
       if (ctx.STRING != null) {
-        logWarning("COMMENT clause is ignored.")
+        throw new ParseException("Unsupported operation: COMMENT clause", ctx)
       }
       val identifiers = Option(ctx.identifierCommentList).toSeq.flatMap(_.identifierComment.asScala)
       val schema = identifiers.map { ic =>
@@ -296,7 +298,8 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
       recordReader: Token,
       schemaLess: Boolean): HiveScriptIOSchema = {
     if (recordWriter != null || recordReader != null) {
-      logWarning("Used defined record reader/writer classes are currently ignored.")
+      throw new ParseException(
+        "Unsupported operation: Used defined record reader/writer classes.", ctx)
     }
 
     // Decode and input/output format.
@@ -370,7 +373,8 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
       ctx: TableFileFormatContext): CatalogStorageFormat = withOrigin(ctx) {
     import ctx._
     if (inDriver != null || outDriver != null) {
-      logWarning("INPUTDRIVER ... OUTPUTDRIVER ... clauses are ignored.")
+      throw new ParseException(
+        s"Operation not allowed: INPUTDRIVER ... OUTPUTDRIVER ... clauses", ctx)
     }
     EmptyStorageFormat.copy(
       inputFormat = Option(string(inFmt)),

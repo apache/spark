@@ -180,6 +180,65 @@ class HiveDDLCommandSuite extends PlanTest {
     assert(desc.properties == Map(("tbl_p1" -> "p11"), ("tbl_p2" -> "p22")))
   }
 
+  test("unsupported operations") {
+    intercept[ParseException] {
+      parser.parsePlan(
+        """
+          |CREATE TEMPORARY TABLE ctas2
+          |ROW FORMAT SERDE "org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe"
+          |WITH SERDEPROPERTIES("serde_p1"="p1","serde_p2"="p2")
+          |STORED AS RCFile
+          |TBLPROPERTIES("tbl_p1"="p11", "tbl_p2"="p22")
+          |AS SELECT key, value FROM src ORDER BY key, value
+        """.stripMargin)
+    }
+    intercept[ParseException] {
+      parser.parsePlan(
+        """CREATE TABLE ctas2
+          |STORED AS
+          |INPUTFORMAT "org.apache.hadoop.mapred.TextInputFormat"
+          |OUTPUTFORMAT "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"
+          |INPUTDRIVER "org.apache.hadoop.hive.howl.rcfile.RCFileInputDriver"
+          |OUTPUTDRIVER "org.apache.hadoop.hive.howl.rcfile.RCFileOutputDriver"
+          |AS SELECT key, value FROM src ORDER BY key, value
+        """.stripMargin)
+    }
+    intercept[ParseException] {
+      parser.parsePlan(
+        """
+          |CREATE TABLE user_info_bucketed(user_id BIGINT, firstname STRING, lastname STRING)
+          |CLUSTERED BY(user_id) INTO 256 BUCKETS
+          |AS SELECT key, value FROM src ORDER BY key, value
+        """.stripMargin)
+    }
+    intercept[ParseException] {
+      parser.parsePlan(
+        """
+          |CREATE TABLE user_info_bucketed(user_id BIGINT, firstname STRING, lastname STRING)
+          |SKEWED BY (key) ON (1,5,6)
+          |AS SELECT key, value FROM src ORDER BY key, value
+        """.stripMargin)
+    }
+    intercept[ParseException] {
+      parser.parsePlan(
+        """
+          |SELECT TRANSFORM (key, value) USING 'cat' AS (tKey, tValue)
+          |ROW FORMAT SERDE 'org.apache.hadoop.hive.contrib.serde2.TypedBytesSerDe'
+          |RECORDREADER 'org.apache.hadoop.hive.contrib.util.typedbytes.TypedBytesRecordReader'
+          |FROM testData
+        """.stripMargin)
+    }
+    intercept[ParseException] {
+      parser.parsePlan(
+        """
+          |CREATE OR REPLACE VIEW IF NOT EXISTS view1 (col1, col3)
+          |COMMENT 'blabla'
+          |TBLPROPERTIES('prop1Key'="prop1Val")
+          |AS SELECT * FROM tab1
+        """.stripMargin)
+    }
+  }
+
   test("Invalid interval term should throw AnalysisException") {
     def assertError(sql: String, errorMessage: String): Unit = {
       val e = intercept[AnalysisException] {
@@ -277,7 +336,6 @@ class HiveDDLCommandSuite extends PlanTest {
       """
         |CREATE OR REPLACE VIEW IF NOT EXISTS view1
         |(col1, col3)
-        |COMMENT 'I cannot spell'
         |TBLPROPERTIES('prop1Key'="prop1Val")
         |AS SELECT * FROM tab1
       """.stripMargin
