@@ -18,7 +18,7 @@
 package org.apache.spark.ml
 
 import org.apache.spark.ml.feature.{HashingTF, IDF, IDFModel, VectorAssembler}
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Dataset}
 
 /**
  * == Feature transformers ==

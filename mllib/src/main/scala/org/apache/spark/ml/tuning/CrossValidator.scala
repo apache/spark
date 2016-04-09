@@ -33,7 +33,7 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.HasSeed
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -91,7 +91,7 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
   def setSeed(value: Long): this.type = set(seed, value)
 
   @Since("1.4.0")
-  override def fit(dataset: DataFrame): CrossValidatorModel = {
+  override def fit(dataset: Dataset[_]): CrossValidatorModel = {
     val schema = dataset.schema
     transformSchema(schema, logging = true)
     val sqlCtx = dataset.sqlContext
@@ -210,7 +210,7 @@ class CrossValidatorModel private[ml] (
   }
 
   @Since("1.4.0")
-  override def transform(dataset: DataFrame): DataFrame = {
+  override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     bestModel.transform(dataset)
   }

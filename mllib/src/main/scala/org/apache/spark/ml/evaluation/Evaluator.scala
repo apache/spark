@@ -19,7 +19,7 @@ package org.apache.spark.ml.evaluation
 
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.ml.param.{ParamMap, Params}
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Dataset}
 
 /**
  * :: DeveloperApi ::
@@ -37,7 +37,7 @@ abstract class Evaluator extends Params {
    * @return metric
    */
   @Since("1.5.0")
-  def evaluate(dataset: DataFrame, paramMap: ParamMap): Double = {
+  def evaluate(dataset: Dataset[_], paramMap: ParamMap): Double = {
     this.copy(paramMap).evaluate(dataset)
   }
 
@@ -47,7 +47,7 @@ abstract class Evaluator extends Params {
    * @return metric
    */
   @Since("1.5.0")
-  def evaluate(dataset: DataFrame): Double
+  def evaluate(dataset: Dataset[_]): Double
 
   /**
    * Indicates whether the metric returned by [[evaluate()]] should be maximized (true, default)

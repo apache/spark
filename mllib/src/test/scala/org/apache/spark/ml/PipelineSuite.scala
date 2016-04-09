@@ -31,7 +31,7 @@ import org.apache.spark.ml.param.{IntParam, ParamMap}
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types.StructType
 
 class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
@@ -213,7 +213,7 @@ class WritableStage(override val uid: String) extends Transformer with MLWritabl
 
   override def write: MLWriter = new DefaultParamsWriter(this)
 
-  override def transform(dataset: DataFrame): DataFrame = dataset
+  override def transform(dataset: Dataset[_]): DataFrame = dataset
 
   override def transformSchema(schema: StructType): StructType = schema
 }
@@ -234,7 +234,7 @@ class UnWritableStage(override val uid: String) extends Transformer {
 
   override def copy(extra: ParamMap): UnWritableStage = defaultCopy(extra)
 
-  override def transform(dataset: DataFrame): DataFrame = dataset
+  override def transform(dataset: Dataset[_]): DataFrame = dataset
 
   override def transformSchema(schema: StructType): StructType = schema
 }
