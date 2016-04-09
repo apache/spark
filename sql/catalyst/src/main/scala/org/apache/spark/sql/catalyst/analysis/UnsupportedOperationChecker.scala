@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 
 /**
@@ -50,18 +51,50 @@ object UnsupportedOperationChecker {
         case _: InsertIntoTable =>
           notSupported("InsertIntoTable is not supported with streaming DataFrames/Datasets")
 
-        case Join(left, right, _, _) if left.isStreaming && right.isStreaming =>
-          notSupported("Joining between two streaming DataFrames/Datasets is not supported")
+        case Join(left, right, joinType, _) =>
+
+          joinType match {
+
+            case Inner =>
+              notSupportedIf(
+                left.isStreaming && right.isStreaming,
+                "Inner join between two streaming DataFrames/Datasets is not supported")
+
+            case FullOuter =>
+              notSupportedIf(
+                left.isStreaming || right.isStreaming,
+                "Full outer joins with streaming DataFrames/Datasets are not supported")
+
+            case LeftOuter | LeftSemi | LeftAnti =>
+              notSupportedIf(
+                right.isStreaming,
+                "Left outer/semi/anti joins with a streaming DataFrame/Dataset " +
+                "on the right is not supported")
+
+            case RightOuter =>
+              notSupportedIf(
+                left.isStreaming,
+                "Right outer join with a streaming DataFrame/Dataset on the left is not supported")
+
+            case NaturalJoin(_) | UsingJoin(_, _) =>
+              // They should not appear in an analyzed plan.
+
+            case _ =>
+              notSupported(s"Join type $joinType is not supported with streaming DataFrame/Dataset")
+          }
 
         case CoGroup(_, _, _, _, _, _, _, _, _, left, right)
-          if left.isStreaming && right.isStreaming =>
+          if left.isStreaming || right.isStreaming =>
           notSupported("CoGrouping between two streaming DataFrames/Datasets is not supported")
-
-        case SetOperation(left, right) if right.isStreaming =>
-          notSupported("Intersecting with a streaming DataFrame/Dataset is not supported")
 
         case u: Union if u.children.count(_.isStreaming) == 1 =>
           notSupported("Union between streaming and batch DataFrames/Datasets is not supported")
+
+        case Except(left, right) if right.isStreaming =>
+          notSupported("Except with a streaming DataFrame/Dataset on the right is not supported")
+
+        case Intersect(left, right) if left.isStreaming && right.isStreaming =>
+          notSupported("Intersect between two streaming DataFrames/Datasets is not supported")
 
         case GroupingSets(_, _, child, _) if child.isStreaming =>
           notSupported("GroupingSets is not supported on streaming DataFrames/Datasets")
@@ -87,6 +120,14 @@ object UnsupportedOperationChecker {
 
         case _ =>
       }
+    }
+  }
+
+  private def notSupportedIf(
+      condition: Boolean,
+      msg: String)(implicit operator: LogicalPlan): Unit = {
+    if (condition) {
+      notSupported(msg)
     }
   }
 

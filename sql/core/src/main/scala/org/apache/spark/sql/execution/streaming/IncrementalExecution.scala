@@ -72,6 +72,6 @@ class IncrementalExecution(
   override def preparations: Seq[Rule[SparkPlan]] = state +: super.preparations
 
   override def assertSupported(): Unit = {
-    checkUnsupportedOperations(analyzed, forIncremental = true)
+    UnsupportedOperationChecker.check(analyzed, forIncremental = true)
   }
 }

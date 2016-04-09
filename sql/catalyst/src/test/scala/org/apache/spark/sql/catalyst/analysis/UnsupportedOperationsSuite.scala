@@ -19,72 +19,234 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.TestRelations._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.plans._
+import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.types.IntegerType
 
 class UnsupportedOperationsSuite extends SparkFunSuite {
 
+  val batchRelation = LocalRelation(AttributeReference("a", IntegerType, nullable = true)())
+
+  val streamRelation = new LocalRelation(
+    Seq(AttributeReference("a", IntegerType, nullable = true)())) {
+    override def isStreaming: Boolean = true
+  }
+
+  // Non-streaming queries
+
   testSupported(
     "local relation",
-    testRelation,
-    forIncremental = false)
+    batchRelation,
+    forStreaming = false)
 
   testNonSupported(
     "streaming source",
-    testStreamingRelation,
-    forIncremental = false,
+    streamRelation,
+    forStreaming = false,
     Seq("startStream", "streaming", "source"))
 
   testNonSupported(
     "select on streaming source",
-    testStreamingRelation.select($"count(*)"),
-    forIncremental = false,
+    streamRelation.select($"count(*)"),
+    forStreaming = false,
     "startStream" :: "streaming" :: "source" :: Nil)
 
-  testNotSupportedForStreaming(
-    "stream-stream join",
-    testStreamingRelation.join(testStreamingRelation, condition = Some(Literal(1))),
-    "Joining between two streaming" :: Nil)
 
-  testSupportedForStreaming(
-    "stream-batch join",
-    testStreamingRelation.join(testRelation, condition = Some(Literal(1))))
+  // Inner joins
+  testBinaryOperationForStreaming(
+    "inner join",
+    _.join(_, joinType = Inner),
+    streamStreamSupported = false)
 
-  testSupportedForStreaming(
-    "batch-stream join",
-    testRelation.join(testStreamingRelation, condition = Some(Literal(1))))
+  // Full outer joins: only batch-batch is allowed
+  testBinaryOperationForStreaming(
+    "full outer join",
+    _.join(_, joinType = FullOuter),
+    streamStreamSupported = false,
+    batchStreamSupported = false,
+    streamBatchSupported = false)
 
-  testSupportedForStreaming(
-    "batch-batch join",
-    testRelation.join(testRelation, condition = Some(Literal(1))))
+  // Left outer joins: *-stream not allowed
+  testBinaryOperationForStreaming(
+    "left outer join",
+    _.join(_, joinType = LeftOuter),
+    streamStreamSupported = false,
+    batchStreamSupported = false,
+    expectedMsg = "left outer/semi/anti joins")
 
+  // Left semi joins: stream-* not allowed
+  testBinaryOperationForStreaming(
+    "left semi join",
+    _.join(_, joinType = LeftSemi),
+    streamStreamSupported = false,
+    batchStreamSupported = false,
+    expectedMsg = "left outer/semi/anti joins")
+
+  // Left anti joins: stream-* not allowed
+  testBinaryOperationForStreaming(
+    "left anti join",
+    _.join(_, joinType = LeftAnti),
+    streamStreamSupported = false,
+    batchStreamSupported = false,
+    expectedMsg = "left outer/semi/anti joins")
+
+  // Right outer joins: stream-* not allowed
+  testBinaryOperationForStreaming(
+    "right outer join",
+    _.join(_, joinType = RightOuter),
+    streamStreamSupported = false,
+    streamBatchSupported = false)
+
+  // Cogroup: only batch-batch is allowed
+
+  testBinaryOperationForStreaming(
+    "cogroup",
+    genCogroup,
+    streamStreamSupported = false,
+    batchStreamSupported = false,
+    streamBatchSupported = false)
+
+  def genCogroup(left: LogicalPlan, right: LogicalPlan): LogicalPlan = {
+    def func(k: Int, left: Iterator[Int], right: Iterator[Int]): Iterator[Int] = {
+      Iterator.empty
+    }
+    implicit val intEncoder = ExpressionEncoder[Int]
+    CoGroup[Int, Int, Int, Int](
+      func,
+      AppendColumns[Int, Int]((x: Int) => x, left).newColumns,
+      AppendColumns[Int, Int]((x: Int) => x, right).newColumns,
+      left.output,
+      right.output,
+      left,
+      right
+    )
+  }
+
+  // Union
+  testBinaryOperationForStreaming(
+    "union",
+    _.union(_),
+    streamBatchSupported = false,
+    batchStreamSupported = false)
+
+  // Except: *-stream not supported
+  testBinaryOperationForStreaming(
+    "except",
+    _.except(_),
+    streamStreamSupported = false,
+    batchStreamSupported = false)
+
+  // Intersect: stream-stream not supported
+  testBinaryOperationForStreaming(
+    "intersect",
+    _.intersect(_),
+    streamStreamSupported = false)
+
+
+  // Unary operations
+
+  testUnaryOperationForStreaming("distinct", Distinct(_))
+  testUnaryOperationForStreaming("sort", Sort(Nil, true, _))
+  testUnaryOperationForStreaming("sort partitions", SortPartitions(Nil, _), "sort")
+  testUnaryOperationForStreaming("sample", Sample(0.1, 1.0, true, 1L, _)(), "sampling")
+  testUnaryOperationForStreaming("window", Window(Nil, Nil, Nil, _), "non-time-based windows")
+
+
+  // Utility functions
+
+  def testUnaryOperationForStreaming(
+    operationName: String,
+    logicalPlanGenerator: LogicalPlan => LogicalPlan,
+    expectedMsg: String = ""): Unit = {
+
+    val expectedMsgs = if (expectedMsg.isEmpty) Seq(operationName) else Seq(expectedMsg)
+
+    testNotSupportedForStreaming(
+      s"$operationName - batch supported",
+      logicalPlanGenerator(streamRelation),
+      expectedMsgs)
+
+    testSupportedForStreaming(
+      s"$operationName - stream not supported",
+      logicalPlanGenerator(batchRelation))
+  }
+
+
+  def testBinaryOperationForStreaming(
+      operationName: String,
+      logicalPlanGenerator: (LogicalPlan, LogicalPlan) => LogicalPlan,
+      streamStreamSupported: Boolean = true,
+      streamBatchSupported: Boolean = true,
+      batchStreamSupported: Boolean = true,
+      expectedMsg: String = ""): Unit = {
+
+    val expectedMsgs = if (expectedMsg.isEmpty) Seq(operationName) else Seq(expectedMsg)
+
+    if (streamStreamSupported) {
+      testSupportedForStreaming(
+        s"$operationName - stream-stream supported",
+        logicalPlanGenerator(streamRelation, streamRelation))
+    } else {
+      testNotSupportedForStreaming(
+        s"$operationName - stream-stream not supported",
+        logicalPlanGenerator(streamRelation, streamRelation),
+        expectedMsgs)
+    }
+
+    if (streamBatchSupported) {
+      testSupportedForStreaming(
+        s"$operationName - stream-batch supported",
+        logicalPlanGenerator(streamRelation, batchRelation))
+    } else {
+      testNotSupportedForStreaming(
+        s"$operationName - stream-batch not supported",
+        logicalPlanGenerator(streamRelation, batchRelation),
+        expectedMsgs)
+    }
+
+    if (batchStreamSupported) {
+      testSupportedForStreaming(
+        s"$operationName - batch-stream supported",
+        logicalPlanGenerator(batchRelation, streamRelation))
+    } else {
+      testNotSupportedForStreaming(
+        s"$operationName - batch-stream not supported",
+        logicalPlanGenerator(batchRelation, streamRelation),
+        expectedMsgs)
+    }
+
+    testSupportedForStreaming(
+      s"$operationName - batch-batch supported",
+      logicalPlanGenerator(batchRelation, batchRelation))
+  }
 
   def testNotSupportedForStreaming(
     name: String,
     plan: LogicalPlan,
-    expectedMsgs: Seq[String] = Nil): Unit = {
+    expectedMsgs: Seq[String]): Unit = {
     testNonSupported(
       name,
       plan,
-      forIncremental = true,
+      forStreaming = true,
       expectedMsgs :+ "streaming" :+ "DataFrame" :+ "Dataset" :+ "not supported")
   }
 
   def testSupportedForStreaming(
     name: String,
     plan: LogicalPlan): Unit = {
-    testSupported(name, plan, forIncremental = true)
+    testSupported(name, plan, forStreaming = true)
   }
 
   def testNonSupported(
     name: String,
     plan: LogicalPlan,
-    forIncremental: Boolean,
+    forStreaming: Boolean,
     expectedMsgs: Seq[String]): Unit = {
-    val testName = if (forIncremental) {
+    val testName = if (forStreaming) {
       s"streaming plan - $name"
     } else {
       s"batch plan - $name"
@@ -92,7 +254,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
 
     test(testName) {
       val e = intercept[AnalysisException] {
-        UnsupportedOperationChecker.check(plan, forIncremental)
+        UnsupportedOperationChecker.check(plan, forStreaming)
       }
 
       if (!expectedMsgs.map(_.toLowerCase).forall(e.getMessage.toLowerCase.contains)) {
@@ -112,15 +274,15 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
   def testSupported(
       name: String,
       plan: LogicalPlan,
-      forIncremental: Boolean): Unit = {
-    val testName = if (forIncremental) {
-      s"incremental plan - $name"
+      forStreaming: Boolean): Unit = {
+    val testName = if (forStreaming) {
+      s"streaming plan - $name"
     } else {
-      s"non-incremental plan - $name"
+      s"batch plan - $name"
     }
 
     test(testName) {
-      UnsupportedOperationChecker.check(plan, forIncremental) // should not throw exception
+      UnsupportedOperationChecker.check(plan, forStreaming) // should not throw exception
     }
   }
 }

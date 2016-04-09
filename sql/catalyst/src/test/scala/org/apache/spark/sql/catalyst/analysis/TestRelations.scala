@@ -57,9 +57,4 @@ object TestRelations {
 
   val mapRelation = LocalRelation(
     AttributeReference("map", MapType(IntegerType, IntegerType))())
-
-  val testStreamingRelation = new LocalRelation(
-    Seq(AttributeReference("a", IntegerType, nullable = true)())) {
-    override def isStreaming: Boolean = true
-  }
 }
