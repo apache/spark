@@ -450,7 +450,7 @@ class GeneralizedLinearRegressionSuite
               val linkPrediction2 = eta
               assert(prediction1 ~= prediction2 relTol 1E-5, "Prediction mismatch: GLM with " +
                 s"poisson family, $link link and fitIntercept = $fitIntercept.")
-              assert(linkPrediction1 ~= linkPrediction2 relTol 1E-5, "Prediction mismatch: " +
+              assert(linkPrediction1 ~= linkPrediction2 relTol 1E-5, "Link Prediction mismatch: " +
                 s"GLM with poisson family, $link link and fitIntercept = $fitIntercept.")
           }
 
@@ -522,7 +522,7 @@ class GeneralizedLinearRegressionSuite
               val linkPrediction2 = eta
               assert(prediction1 ~= prediction2 relTol 1E-5, "Prediction mismatch: GLM with " +
                 s"gamma family, $link link and fitIntercept = $fitIntercept.")
-              assert(linkPrediction1 ~= linkPrediction2 relTol 1E-5, "Prediction mismatch: " +
+              assert(linkPrediction1 ~= linkPrediction2 relTol 1E-5, "Link Prediction mismatch: " +
                 s"GLM with gamma family, $link link and fitIntercept = $fitIntercept.")
           }
 
