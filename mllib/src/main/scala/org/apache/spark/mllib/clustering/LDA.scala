@@ -261,10 +261,11 @@ class LDA private (
   def getCheckpointInterval: Int = checkpointInterval
 
   /**
-   * Period (in iterations) between checkpoints (default = 10). Checkpointing helps with recovery
+   * Parameter for set checkpoint interval (>= 1) or disable checkpoint (-1). E.g. 10 means that
+   * the cache will get checkpointed every 10 iterations. Checkpointing helps with recovery
    * (when nodes fail). It also helps with eliminating temporary shuffle files on disk, which can be
    * important when LDA is run for many iterations. If the checkpoint directory is not set in
-   * [[org.apache.spark.SparkContext]], this setting is ignored.
+   * [[org.apache.spark.SparkContext]], this setting is ignored. (default = 10)
    *
    * @see [[org.apache.spark.SparkContext#setCheckpointDir]]
    */
