@@ -51,7 +51,7 @@ object NaiveBayesExample {
       .setPredictionCol("prediction")
       .setMetricName("precision")
     val accuracy = evaluator.evaluate(predictions)
-    println("Test Error = " + (1.0 - accuracy))
+    println("Precision:" + accuracy)
     // $example off$
   }
 }

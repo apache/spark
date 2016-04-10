@@ -39,10 +39,10 @@ if __name__ == "__main__":
     test = splits[1]
 
     # create the trainer and set its parameters
-    trainer = NaiveBayes(smoothing=1.0, modelType="multinomial")
+    nb = NaiveBayes(smoothing=1.0, modelType="multinomial")
 
     # train the model
-    model = trainer.fit(train)
+    model = nb.fit(train)
     # compute precision on the test set
     result = model.transform(test)
     predictionAndLabels = result.select("prediction", "label")
