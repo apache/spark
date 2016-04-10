@@ -61,26 +61,18 @@ class DefaultSource extends FileFormat with DataSourceRegister {
     // TODO: Move filtering.
     val paths = files.filterNot(_.getPath.getName startsWith "_").map(_.getPath.toString)
     val rdd = createBaseRdd(sqlContext, csvOptions, paths)
-    val filteredRdd = rdd.mapPartitions(CSVUtils.filterCommentAndEmpty(_, csvOptions))
-    val firstLine = filteredRdd.first()
-    val firstRow = UnivocityParser.tokenizeSingleLine(firstLine, csvOptions)
-
-    val header = if (csvOptions.headerFlag) {
-      firstRow
-    } else {
-      firstRow.zipWithIndex.map { case (value, index) => s"C$index" }
-    }
-
     val schema = if (csvOptions.inferSchemaFlag) {
-      val dropHeaderRdd = if (csvOptions.headerFlag) {
-        filteredRdd.filter(_ != firstLine)
-      } else {
-        filteredRdd
-      }
-      val dataRdd = UnivocityParser.tokenize(dropHeaderRdd, csvOptions)
-      InferSchema.infer(dataRdd, header, csvOptions.nullValue)
+      InferSchema.infer(rdd, csvOptions)
     } else {
       // By default fields are assumed to be StringType
+      val filteredRdd = rdd.mapPartitions(CSVUtils.filterCommentAndEmpty(_, csvOptions))
+      val firstLine = filteredRdd.first()
+      val firstRow = UnivocityParser.tokenizeSingleLine(firstLine, csvOptions)
+      val header = if (csvOptions.headerFlag) {
+        firstRow
+      } else {
+        firstRow.zipWithIndex.map { case (value, index) => s"C$index" }
+      }
       val schemaFields = header.map { fieldName =>
         StructField(fieldName.toString, StringType, nullable = true)
       }
@@ -124,15 +116,12 @@ class DefaultSource extends FileFormat with DataSourceRegister {
         }
       }
 
-      CSVUtils.dropHeaderLine(lines, csvOptions)
-      val filteredLines = CSVUtils.filterCommentAndEmpty(lines, csvOptions)
-
       // Appends partition values
       val fullOutput = requiredSchema.toAttributes ++ partitionSchema.toAttributes
       val joinedRow = new JoinedRow()
 
       val rows = UnivocityParser.parseCsv(
-        filteredLines,
+        lines,
         dataSchema,
         requiredSchema,
         headers,
@@ -165,20 +154,11 @@ class DefaultSource extends FileFormat with DataSourceRegister {
     val csvOptions = new CSVOptions(options)
     val pathsString = csvFiles.map(_.getPath.toUri.toString)
     val header = dataSchema.fields.map(_.name)
-
     val rdd = createBaseRdd(sqlContext, csvOptions, pathsString)
-    val filteredRdd = rdd.mapPartitions(CSVUtils.filterCommentAndEmpty(_, csvOptions))
-    val firstLine = filteredRdd.first()
-    val firstRow = UnivocityParser.tokenizeSingleLine(firstLine, csvOptions)
-    val dropHeaderRdd = if (csvOptions.headerFlag) {
-      filteredRdd.filter(_ != firstLine)
-    } else {
-      filteredRdd
-    }
-
     val requiredDataSchema = StructType(requiredColumns.map(dataSchema(_)))
+
     val rows = UnivocityParser.parse(
-      dropHeaderRdd,
+      rdd,
       dataSchema,
       requiredDataSchema,
       header,

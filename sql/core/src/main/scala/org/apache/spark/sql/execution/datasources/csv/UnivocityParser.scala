@@ -35,26 +35,23 @@ private[csv] object UnivocityParser extends Logging{
    * Convert the input RDD to a tokenized RDD by Univocity
    */
   def tokenize(
-      input: RDD[String],
+      csv: RDD[String],
       options: CSVOptions,
       headers: Array[String] = Array.empty): RDD[Array[String]] = {
-    input.mapPartitions { iter =>
-      tokenizeCsv(iter, options, headers)
+    csv.mapPartitions { iter =>
+      tokenizeData(iter, options, headers)
     }
   }
 
-  /**
-   * Convert the input iterator to a tokenized iterator by Univocity
-   */
-  def tokenizeCsv(
-      iter: Iterator[String],
+  private def tokenizeData(
+      csv: Iterator[String],
       options: CSVOptions,
       headers: Array[String] = Array.empty): Iterator[Array[String]] = {
     val settings = getSettings(options)
     if (headers != null) settings.setHeaders(headers: _*)
     val parser = new CsvParser(settings)
 
-    iter.map { record =>
+    csv.map { record =>
       parser.parseLine(record)
     }
   }
@@ -63,12 +60,19 @@ private[csv] object UnivocityParser extends Logging{
    * Convert the input RDD to a RDD having [[InternalRow]]
    */
   def parse(
-      input: RDD[String],
+      csv: RDD[String],
       schema: StructType,
       requiredSchema: StructType,
       headers: Array[String],
       options: CSVOptions): RDD[InternalRow] = {
-    input.mapPartitions { iter =>
+    val filteredRdd = csv.mapPartitions(CSVUtils.filterCommentAndEmpty(_, options))
+    val firstLine = filteredRdd.first()
+    val dropHeaderRdd = if (options.headerFlag) {
+      filteredRdd.filter(_ != firstLine)
+    } else {
+      filteredRdd
+    }
+    csv.mapPartitions { iter =>
       parseCsv(iter, schema, requiredSchema, headers, options)
     }
   }
@@ -77,11 +81,22 @@ private[csv] object UnivocityParser extends Logging{
    * Convert the input iterator to a iterator having [[InternalRow]]
    */
   def parseCsv(
-       input: Iterator[String],
+       csv: Iterator[String],
        schema: StructType,
        requiredSchema: StructType,
        headers: Array[String],
        options: CSVOptions): Iterator[InternalRow] = {
+    CSVUtils.dropHeaderLine(csv, options)
+    val filteredLines = CSVUtils.filterCommentAndEmpty(csv, options)
+    parseData(filteredLines, schema, requiredSchema, headers, options)
+  }
+
+  private def parseData(
+      csv: Iterator[String],
+      schema: StructType,
+      requiredSchema: StructType,
+      headers: Array[String],
+      options: CSVOptions): Iterator[InternalRow] = {
     val schemaFields = schema.fields
     val requiredFields = requiredSchema.fields
     val safeRequiredFields = if (options.dropMalformed) {
@@ -99,7 +114,7 @@ private[csv] object UnivocityParser extends Logging{
     }
     val requiredSize = requiredFields.length
 
-    tokenizeCsv(input, options, headers).flatMap { tokens =>
+    tokenizeData(csv, options, headers).flatMap { tokens =>
       if (options.dropMalformed && schemaFields.length != tokens.length) {
         logWarning(s"Dropping malformed line: ${tokens.mkString(options.delimiter.toString)}")
         None
