@@ -34,9 +34,7 @@ import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
 
 /**
- * A simple text classification pipeline that recognizes "spark" from input text. It uses the Java
- * bean classes {@link LabeledDocument} and {@link Document} defined in the Scala counterpart of
- * this example {@link SimpleTextClassificationPipeline}. Run with
+ * A simple text classification pipeline that recognizes "spark" from input text. Run with
  * <pre>
  * bin/run-example ml.JavaSimpleTextClassificationPipeline
  * </pre>
@@ -49,13 +47,13 @@ public class JavaSimpleTextClassificationPipeline {
     SQLContext jsql = new SQLContext(jsc);
 
     // Prepare training documents, which are labeled.
-    List<LabeledDocument> localTraining = Lists.newArrayList(
-      new LabeledDocument(0L, "a b c d e spark", 1.0),
-      new LabeledDocument(1L, "b d", 0.0),
-      new LabeledDocument(2L, "spark f g h", 1.0),
-      new LabeledDocument(3L, "hadoop mapreduce", 0.0));
+    List<JavaLabeledDocument> localTraining = Lists.newArrayList(
+      new JavaLabeledDocument(0L, "a b c d e spark", 1.0),
+      new JavaLabeledDocument(1L, "b d", 0.0),
+      new JavaLabeledDocument(2L, "spark f g h", 1.0),
+      new JavaLabeledDocument(3L, "hadoop mapreduce", 0.0));
     Dataset<Row> training =
-        jsql.createDataFrame(jsc.parallelize(localTraining), LabeledDocument.class);
+        jsql.createDataFrame(jsc.parallelize(localTraining), JavaLabeledDocument.class);
 
     // Configure an ML pipeline, which consists of three stages: tokenizer, hashingTF, and lr.
     Tokenizer tokenizer = new Tokenizer()
@@ -75,12 +73,12 @@ public class JavaSimpleTextClassificationPipeline {
     PipelineModel model = pipeline.fit(training);
 
     // Prepare test documents, which are unlabeled.
-    List<Document> localTest = Lists.newArrayList(
-      new Document(4L, "spark i j k"),
-      new Document(5L, "l m n"),
-      new Document(6L, "spark hadoop spark"),
-      new Document(7L, "apache hadoop"));
-    Dataset<Row> test = jsql.createDataFrame(jsc.parallelize(localTest), Document.class);
+    List<JavaDocument> localTest = Lists.newArrayList(
+      new JavaDocument(4L, "spark i j k"),
+      new JavaDocument(5L, "l m n"),
+      new JavaDocument(6L, "spark hadoop spark"),
+      new JavaDocument(7L, "apache hadoop"));
+    Dataset<Row> test = jsql.createDataFrame(jsc.parallelize(localTest), JavaDocument.class);
 
     // Make predictions on test documents.
     Dataset<Row> predictions = model.transform(test);
