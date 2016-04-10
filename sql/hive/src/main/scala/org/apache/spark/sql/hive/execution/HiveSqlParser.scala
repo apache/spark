@@ -104,19 +104,6 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
   }
 
   /**
-   * Create a [[DropTable]] command.
-   */
-  override def visitDropTable(ctx: DropTableContext): LogicalPlan = withOrigin(ctx) {
-    if (ctx.PURGE != null) {
-      logWarning("PURGE option is ignored.")
-    }
-    if (ctx.REPLICATION != null) {
-      logWarning("REPLICATION clause is ignored.")
-    }
-    DropTable(visitTableIdentifier(ctx.tableIdentifier).toString, ctx.EXISTS != null)
-  }
-
-  /**
    * Create an [[AnalyzeTable]] command. This currently only implements the NOSCAN option (other
    * options are passed on to Hive) e.g.:
    * {{{
