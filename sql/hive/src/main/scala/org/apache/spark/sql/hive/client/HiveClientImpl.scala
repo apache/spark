@@ -659,9 +659,18 @@ private[hive] class HiveClientImpl(
 
   private def toHiveTable(table: CatalogTable): HiveTable = {
     val hiveTable = new HiveTable(table.database, table.identifier.table)
+    // For EXTERNAL_TABLE/MANAGED_TABLE, we also need to set EXTERNAL field in
+    // the table properties accodringly. Otherwise, if EXTERNAL_TABLE is the table type
+    // but EXTERNAL field is not set, Hive metastore will change the type to
+    // MANAGED_TABLE (see
+    // metastore/src/java/org/apache/hadoop/hive/metastore/ObjectStore.java#L1095-L1105)
     hiveTable.setTableType(table.tableType match {
-      case CatalogTableType.EXTERNAL_TABLE => HiveTableType.EXTERNAL_TABLE
-      case CatalogTableType.MANAGED_TABLE => HiveTableType.MANAGED_TABLE
+      case CatalogTableType.EXTERNAL_TABLE =>
+        hiveTable.setProperty("EXTERNAL", "TRUE")
+        HiveTableType.EXTERNAL_TABLE
+      case CatalogTableType.MANAGED_TABLE =>
+        hiveTable.setProperty("EXTERNAL", "FALSE")
+        HiveTableType.MANAGED_TABLE
       case CatalogTableType.INDEX_TABLE => HiveTableType.INDEX_TABLE
       case CatalogTableType.VIRTUAL_VIEW => HiveTableType.VIRTUAL_VIEW
     })

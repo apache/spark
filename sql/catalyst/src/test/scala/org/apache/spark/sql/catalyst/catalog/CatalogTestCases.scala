@@ -149,6 +149,15 @@ abstract class CatalogTestCases extends SparkFunSuite with BeforeAndAfterEach {
   // Tables
   // --------------------------------------------------------------------------
 
+  test("the table type of an external table should be EXTERNAL_TABLE") {
+    val catalog = newBasicCatalog()
+    val table =
+      newTable("external_table1", "db2").copy(tableType = CatalogTableType.EXTERNAL_TABLE)
+    catalog.createTable("db2", table, ignoreIfExists = false)
+    val actual = catalog.getTable("db2", "external_table1")
+    assert(actual.tableType === CatalogTableType.EXTERNAL_TABLE)
+  }
+
   test("drop table") {
     val catalog = newBasicCatalog()
     assert(catalog.listTables("db2").toSet == Set("tbl1", "tbl2"))
