@@ -26,16 +26,12 @@ import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 
-import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkSqlAstBuilder
-import org.apache.spark.sql.hive.{CreateTableAsSelect => CTAS, CreateViewAsSelect => CreateView}
-import org.apache.spark.sql.hive.{HiveGenericUDTF, HiveSerDe}
-import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
+import org.apache.spark.sql.hive.{CreateTableAsSelect => CTAS, CreateViewAsSelect => CreateView, HiveSerDe}
 
 /**
  * Concrete parser for HiveQl statements.
@@ -218,9 +214,6 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
     if (ctx.identifierList != null) {
       throw new ParseException(s"Operation not allowed: partitioned views", ctx)
     } else {
-      if (ctx.STRING != null) {
-        throw new ParseException("Unsupported operation: COMMENT clause", ctx)
-      }
       val identifiers = Option(ctx.identifierCommentList).toSeq.flatMap(_.identifierComment.asScala)
       val schema = identifiers.map { ic =>
         CatalogColumn(ic.identifier.getText, null, nullable = true, Option(ic.STRING).map(string))
@@ -228,6 +221,7 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
       createView(
         ctx,
         ctx.tableIdentifier,
+        Option(ctx.STRING).map(string),
         schema,
         ctx.query,
         Option(ctx.tablePropertyList).map(visitTablePropertyList).getOrElse(Map.empty),
@@ -244,6 +238,7 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
     createView(
       ctx,
       ctx.tableIdentifier,
+      None,
       Seq.empty,
       ctx.query,
       Map.empty,
@@ -257,18 +252,20 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
   private def createView(
       ctx: ParserRuleContext,
       name: TableIdentifierContext,
+      description: Option[String],
       schema: Seq[CatalogColumn],
       query: QueryContext,
       properties: Map[String, String],
       allowExist: Boolean,
       replace: Boolean): LogicalPlan = {
     val sql = Option(source(query))
+    val comment = description.map("comment" -> _)
     val tableDesc = CatalogTable(
       identifier = visitTableIdentifier(name),
       tableType = CatalogTableType.VIRTUAL_VIEW,
       schema = schema,
       storage = EmptyStorageFormat,
-      properties = properties,
+      properties = properties ++ comment,
       viewOriginalText = sql,
       viewText = sql)
     CreateView(tableDesc, plan(query), allowExist, replace, command(ctx))
