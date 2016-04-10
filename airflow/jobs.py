@@ -850,7 +850,6 @@ class BackfillJob(BaseJob):
 
                 # Mark the task as not ready to run
                 elif ti.state in (State.NONE, State.UPSTREAM_FAILED):
-                    self.logger.debug('Added {} to not_ready'.format(ti))
                     not_ready.add(key)
 
             self.heartbeat()

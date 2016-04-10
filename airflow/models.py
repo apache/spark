@@ -223,7 +223,7 @@ class DagBag(LoggingMixin):
                 filepath not in self.file_last_changed or
                 dttm != self.file_last_changed[filepath]):
             try:
-                self.logger.info("Importing " + filepath)
+                self.logger.debug("Importing " + filepath)
                 if mod_name in sys.modules:
                     del sys.modules[mod_name]
                 with timeout(
@@ -315,7 +315,7 @@ class DagBag(LoggingMixin):
             subdag.fileloc = root_dag.full_filepath
             subdag.is_subdag = True
             self.bag_dag(subdag, parent_dag=dag, root_dag=root_dag)
-        self.logger.info('Loaded DAG {dag}'.format(**locals()))
+        self.logger.debug('Loaded DAG {dag}'.format(**locals()))
 
     def collect_dags(
             self,
