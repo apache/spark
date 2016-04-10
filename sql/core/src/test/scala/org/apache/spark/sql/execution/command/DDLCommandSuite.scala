@@ -20,9 +20,8 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.execution.SparkSqlParser
-import org.apache.spark.sql.execution.datasources.BucketSpec
 import org.apache.spark.sql.types._
 
 class DDLCommandSuite extends PlanTest {
@@ -667,7 +666,10 @@ class DDLCommandSuite extends PlanTest {
 
   test("unsupported operations") {
     intercept[ParseException] {
-      parser.parsePlan("DROP TABLE D1.T1")
+      parser.parsePlan("DROP TABLE tab PURGE")
+    }
+    intercept[ParseException] {
+      parser.parsePlan("DROP TABLE tab FOR REPLICATION('eventid')")
     }
     intercept[ParseException] {
       parser.parsePlan("CREATE VIEW testView AS SELECT id FROM tab")
@@ -699,5 +701,53 @@ class DDLCommandSuite extends PlanTest {
     val sql = "SELECT distribute, unset FROM x"
     val parsed = parser.parsePlan(sql)
     assert(parsed.isInstanceOf[Project])
+  }
+
+  test("drop table") {
+    val tableName1 = "db.tab"
+    val tableName2 = "tab"
+
+    val parsed1 = parser.parsePlan(s"DROP TABLE $tableName1")
+    val parsed2 = parser.parsePlan(s"DROP TABLE IF EXISTS $tableName1")
+    val parsed3 = parser.parsePlan(s"DROP TABLE $tableName2")
+    val parsed4 = parser.parsePlan(s"DROP TABLE IF EXISTS $tableName2")
+
+    val expected1 =
+      DropTable(TableIdentifier("tab", Option("db")), ifExists = false, isView = false)
+    val expected2 =
+      DropTable(TableIdentifier("tab", Option("db")), ifExists = true, isView = false)
+    val expected3 =
+      DropTable(TableIdentifier("tab", None), ifExists = false, isView = false)
+    val expected4 =
+      DropTable(TableIdentifier("tab", None), ifExists = true, isView = false)
+
+    comparePlans(parsed1, expected1)
+    comparePlans(parsed2, expected2)
+    comparePlans(parsed3, expected3)
+    comparePlans(parsed4, expected4)
+  }
+
+  test("drop view") {
+    val viewName1 = "db.view"
+    val viewName2 = "view"
+
+    val parsed1 = parser.parsePlan(s"DROP VIEW $viewName1")
+    val parsed2 = parser.parsePlan(s"DROP VIEW IF EXISTS $viewName1")
+    val parsed3 = parser.parsePlan(s"DROP VIEW $viewName2")
+    val parsed4 = parser.parsePlan(s"DROP VIEW IF EXISTS $viewName2")
+
+    val expected1 =
+      DropTable(TableIdentifier("view", Option("db")), ifExists = false, isView = true)
+    val expected2 =
+      DropTable(TableIdentifier("view", Option("db")), ifExists = true, isView = true)
+    val expected3 =
+      DropTable(TableIdentifier("view", None), ifExists = false, isView = true)
+    val expected4 =
+      DropTable(TableIdentifier("view", None), ifExists = true, isView = true)
+
+    comparePlans(parsed1, expected1)
+    comparePlans(parsed2, expected2)
+    comparePlans(parsed3, expected3)
+    comparePlans(parsed4, expected4)
   }
 }

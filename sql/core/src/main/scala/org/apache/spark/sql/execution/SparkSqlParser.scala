@@ -364,6 +364,22 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   /**
+   * Create a [[DropTable]] command.
+   */
+  override def visitDropTable(ctx: DropTableContext): LogicalPlan = withOrigin(ctx) {
+    if (ctx.PURGE != null) {
+      throw new ParseException("Unsupported operation: PURGE option", ctx)
+    }
+    if (ctx.REPLICATION != null) {
+      throw new ParseException("Unsupported operation: REPLICATION clause", ctx)
+    }
+    DropTable(
+      visitTableIdentifier(ctx.tableIdentifier),
+      ctx.EXISTS != null,
+      ctx.VIEW != null)
+  }
+
+  /**
    * Create a [[AlterTableRename]] command.
    *
    * For example:

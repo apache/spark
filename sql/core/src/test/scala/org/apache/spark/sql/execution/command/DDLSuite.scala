@@ -391,6 +391,54 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       Nil)
   }
 
+  test("drop table - temporary table") {
+    val catalog = sqlContext.sessionState.catalog
+    sql(
+      """
+        |CREATE TEMPORARY TABLE tab1
+        |USING org.apache.spark.sql.sources.DDLScanSource
+        |OPTIONS (
+        |  From '1',
+        |  To '10',
+        |  Table 'test1'
+        |)
+      """.stripMargin)
+    assert(catalog.listTables("default") == Seq(TableIdentifier("tab1")))
+    sql("DROP TABLE tab1")
+    assert(catalog.listTables("default") == Nil)
+  }
+
+  test("drop table") {
+    testDropTable(isDatasourceTable = false)
+  }
+
+  test("drop table - data source table") {
+    testDropTable(isDatasourceTable = true)
+  }
+
+  private def testDropTable(isDatasourceTable: Boolean): Unit = {
+    val catalog = sqlContext.sessionState.catalog
+    val tableIdent = TableIdentifier("tab1", Some("dbx"))
+    createDatabase(catalog, "dbx")
+    createTable(catalog, tableIdent)
+    if (isDatasourceTable) {
+      convertToDatasourceTable(catalog, tableIdent)
+    }
+    assert(catalog.listTables("dbx") == Seq(tableIdent))
+    sql("DROP TABLE dbx.tab1")
+    assert(catalog.listTables("dbx") == Nil)
+    sql("DROP TABLE IF EXISTS dbx.tab1")
+    // no exception will be thrown
+    sql("DROP TABLE dbx.tab1")
+  }
+
+  test("drop view") {
+    val e = intercept[AnalysisException] {
+      sql("DROP VIEW dbx.tab1")
+    }
+    assert(e.getMessage.contains("Not supported object: views"))
+  }
+
   private def convertToDatasourceTable(
       catalog: SessionCatalog,
       tableIdent: TableIdentifier): Unit = {
