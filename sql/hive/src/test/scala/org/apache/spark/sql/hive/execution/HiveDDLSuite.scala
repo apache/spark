@@ -17,18 +17,30 @@
 
 package org.apache.spark.sql.hive.execution
 
+import org.scalatest.BeforeAndAfterEach
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, SaveMode}
-import org.apache.spark.sql.catalyst.catalog.CatalogTableType
+import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTableType}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 
-class HiveDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
+
+class HiveDDLSuite
+  extends QueryTest with SQLTestUtils with TestHiveSingleton with BeforeAndAfterEach {
   import hiveContext.implicits._
 
+  override def afterEach(): Unit = {
+    try {
+      // drop all databases, tables and functions after each test
+      sqlContext.sessionState.catalog.reset()
+    } finally {
+      super.afterEach()
+    }
+  }
   // check if the directory for recording the data of the table exists.
   private def tableDirectoryExists(tableIdentifier: TableIdentifier): Boolean = {
     val expectedTablePath =
@@ -152,5 +164,28 @@ class HiveDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         assert(message.contains("Cannot drop a view with DROP TABLE. Please use DROP VIEW instead"))
       }
     }
+  }
+
+  test("create/drop database - checking directory") {
+    val catalog = sqlContext.sessionState.catalog
+    val dbName = "db1"
+    val path = catalog.getDatabasePath(dbName, None)
+    val dbPath = new Path(path)
+    val fs = dbPath.getFileSystem(hiveContext.hiveconf)
+    // the database directory does not exist
+    assert (!fs.exists(dbPath))
+
+    sql("CREATE DATABASE db1")
+    val db1 = catalog.getDatabaseMetadata(dbName)
+    assert(db1 == CatalogDatabase(
+      dbName,
+      "",
+      path,
+      Map.empty))
+    // the database directory was created
+    assert (fs.exists(dbPath) && fs.isDirectory(dbPath))
+    sql("DROP DATABASE db1")
+    // the database directory was removed
+    assert (!fs.exists(dbPath))
   }
 }

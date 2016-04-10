@@ -28,7 +28,6 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkException, SparkFiles}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
-import org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
 import org.apache.spark.sql.catalyst.expressions.Cast
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.execution.joins.BroadcastNestedLoopJoin
@@ -1181,10 +1180,25 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
   test("current_database with multiple sessions") {
     sql("create database a")
+    // TestHiveContex
+    // scalastyle:off println
+    println("location of database a:" + hiveCatalog.getDatabase("a").locationUri)
+    println("list of databases:" + hiveCatalog.listDatabases())
+    // scalastyle:on println
+    sql("select current_database()").show()
     sql("use a")
+    sql("select current_database()").show()
     val s2 = newSession()
     s2.sql("create database b")
+    // scalastyle:off println
+    println("location of database a:" + hiveCatalog.getDatabase("a").locationUri)
+    println("location of database b:" + hiveCatalog.getDatabase("b").locationUri)
+    println("list of databases:" + hiveCatalog.listDatabases())
+    // scalastyle:on println
+    sql("select current_database()").show()
     s2.sql("use b")
+    sql("select current_database()").show()
+    s2.sql("select current_database()").show()
 
     assert(sql("select current_database()").first() === Row("a"))
     assert(s2.sql("select current_database()").first() === Row("b"))
