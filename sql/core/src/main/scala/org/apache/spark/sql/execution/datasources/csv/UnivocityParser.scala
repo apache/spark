@@ -67,13 +67,14 @@ private[csv] object UnivocityParser extends Logging{
       options: CSVOptions): RDD[InternalRow] = {
     val filteredRdd = csv.mapPartitions(CSVUtils.filterCommentAndEmpty(_, options))
     val firstLine = filteredRdd.first()
+    // TODO: If there are data same with header, then it will be skipped too.
     val dropHeaderRdd = if (options.headerFlag) {
       filteredRdd.filter(_ != firstLine)
     } else {
       filteredRdd
     }
     dropHeaderRdd.mapPartitions { iter =>
-      parseCsv(iter, schema, requiredSchema, headers, options)
+      parseCsvData(iter, schema, requiredSchema, headers, options)
     }
   }
 
@@ -85,13 +86,16 @@ private[csv] object UnivocityParser extends Logging{
        schema: StructType,
        requiredSchema: StructType,
        headers: Array[String],
+       shouldDropHeader: Boolean,
        options: CSVOptions): Iterator[InternalRow] = {
-    CSVUtils.dropHeaderLine(csv, options)
+    if (shouldDropHeader) {
+      CSVUtils.dropHeaderLine(csv, options)
+    }
     val filteredLines = CSVUtils.filterCommentAndEmpty(csv, options)
-    parseData(filteredLines, schema, requiredSchema, headers, options)
+    parseCsvData(filteredLines, schema, requiredSchema, headers, options)
   }
 
-  private def parseData(
+  private def parseCsvData(
       csv: Iterator[String],
       schema: StructType,
       requiredSchema: StructType,

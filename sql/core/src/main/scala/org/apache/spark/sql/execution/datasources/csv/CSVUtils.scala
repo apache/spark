@@ -37,18 +37,16 @@ private[csv] object CSVUtils {
   /**
    * Drop header line so that only data can remain.
    */
-  def dropHeaderLine(iter: Iterator[String], options: CSVOptions): Unit = {
-    if (options.headerFlag) {
-      val nonEmptyLines = if (options.isCommentSet) {
-        val commentPrefix = options.comment.toString
-        iter.dropWhile { line =>
-          line.trim.isEmpty || line.trim.startsWith(commentPrefix)
-        }
-      } else {
-        iter.dropWhile(_.trim.isEmpty)
+  def dropHeaderLine(lines: Iterator[String], csvOptions: CSVOptions): Unit = {
+    val nonEmptyLines = if (csvOptions.isCommentSet) {
+      val commentPrefix = csvOptions.comment.toString
+      lines.dropWhile { line =>
+        line.trim.isEmpty || line.trim.startsWith(commentPrefix)
       }
-
-      if (nonEmptyLines.hasNext) nonEmptyLines.drop(1)
+    } else {
+      lines.dropWhile(_.trim.isEmpty)
     }
+
+    if (nonEmptyLines.hasNext) nonEmptyLines.drop(1)
   }
 }
