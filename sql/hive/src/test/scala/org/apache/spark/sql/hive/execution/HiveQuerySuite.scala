@@ -1188,6 +1188,10 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     sql("select current_database()").show()
     sql("use a")
     sql("select current_database()").show()
+    sql("use a")
+    sql("select current_database()").show()
+    sql("use a")
+    sql("select current_database()").show()
     val s2 = newSession()
     s2.sql("create database b")
     // scalastyle:off println
