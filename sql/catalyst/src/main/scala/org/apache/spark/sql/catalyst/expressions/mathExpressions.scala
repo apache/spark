@@ -50,6 +50,7 @@ abstract class LeafMathExpression(c: Double, name: String)
 /**
  * A unary expression specifically for math functions. Math Functions expect a specific type of
  * input format, therefore these functions extend `ExpectsInputTypes`.
+ *
  * @param f The math function.
  * @param name The short name of the function
  */
@@ -103,6 +104,7 @@ abstract class UnaryLogExpression(f: Double => Double, name: String)
 /**
  * A binary expression specifically for math functions that take two `Double`s as input and returns
  * a `Double`.
+ *
  * @param f The math function.
  * @param name The short name of the function
  */
@@ -136,12 +138,18 @@ abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
  * Euler's number. Note that there is no code generation because this is only
  * evaluated by the optimizer during constant folding.
  */
+@ExpressionDescription(
+  usage = "_FUNC_() - Returns Euler's number, E.",
+  extended = "> SELECT _FUNC_();\n 2.718281828459045")
 case class EulerNumber() extends LeafMathExpression(math.E, "E")
 
 /**
  * Pi. Note that there is no code generation because this is only
  * evaluated by the optimizer during constant folding.
  */
+@ExpressionDescription(
+  usage = "_FUNC_() - Returns PI.",
+  extended = "> SELECT _FUNC_();\n 3.141592653589793")
 case class Pi() extends LeafMathExpression(math.Pi, "PI")
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -150,14 +158,29 @@ case class Pi() extends LeafMathExpression(math.Pi, "PI")
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+@ExpressionDescription(
+  usage = "_FUNC_(x) - Returns the arc cosine of x if -1<=x<=1 or NaN otherwise.",
+  extended = "> SELECT _FUNC_(1);\n 0.0\n> SELECT _FUNC_(2);\n NaN")
 case class Acos(child: Expression) extends UnaryMathExpression(math.acos, "ACOS")
 
+@ExpressionDescription(
+  usage = "_FUNC_(x) - Returns the arc sin of x if -1<=x<=1 or NaN otherwise.",
+  extended = "> SELECT _FUNC_(0);\n 0.0\n> SELECT _FUNC_(2);\n NaN")
 case class Asin(child: Expression) extends UnaryMathExpression(math.asin, "ASIN")
 
+@ExpressionDescription(
+  usage = "_FUNC_(x) - Returns the arc tangent.",
+  extended = "> SELECT _FUNC_(0);\n 0.0")
 case class Atan(child: Expression) extends UnaryMathExpression(math.atan, "ATAN")
 
+@ExpressionDescription(
+  usage = "_FUNC_(x) - Returns the cube root of a double value.",
+  extended = "> SELECT _FUNC_(27.0);\n 3.0")
 case class Cbrt(child: Expression) extends UnaryMathExpression(math.cbrt, "CBRT")
 
+@ExpressionDescription(
+  usage = "_FUNC_(x) - Returns the smallest integer not smaller than x.",
+  extended = "> SELECT _FUNC_(-0.1);\n 0\n> SELECT _FUNC_(5);\n 5")
 case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL") {
   override def dataType: DataType = child.dataType match {
     case dt @ DecimalType.Fixed(_, 0) => dt
@@ -184,16 +207,26 @@ case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL"
   }
 }
 
+@ExpressionDescription(
+  usage = "_FUNC_(x) - Returns the cosine of x.",
+  extended = "> SELECT _FUNC_(0);\n 1.0")
 case class Cos(child: Expression) extends UnaryMathExpression(math.cos, "COS")
 
+@ExpressionDescription(
+  usage = "_FUNC_(x) - Returns the hyperbolic cosine of x.",
+  extended = "> SELECT _FUNC_(0);\n 1.0")
 case class Cosh(child: Expression) extends UnaryMathExpression(math.cosh, "COSH")
 
 /**
  * Convert a num from one base to another
+ *
  * @param numExpr the number to be converted
  * @param fromBaseExpr from which base
  * @param toBaseExpr to which base
  */
+@ExpressionDescription(
+  usage = "_FUNC_(num, from_base, to_base) - Convert num from from_base to to_base.",
+  extended = "> SELECT _FUNC_('100', 2, 10);\n '4'\n> SELECT _FUNC_(-10, 16, -10);\n '16'")
 case class Conv(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expression)
   extends TernaryExpression with ImplicitCastInputTypes {
 
@@ -222,10 +255,19 @@ case class Conv(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expre
   }
 }
 
+@ExpressionDescription(
+  usage = "_FUNC_(x) - Returns e to the power of x.",
+  extended = "> SELECT _FUNC_(0);\n 1.0")
 case class Exp(child: Expression) extends UnaryMathExpression(math.exp, "EXP")
 
+@ExpressionDescription(
+  usage = "_FUNC_(x) - Returns exp(x) - 1.",
+  extended = "> SELECT _FUNC_(0);\n 0.0")
 case class Expm1(child: Expression) extends UnaryMathExpression(math.expm1, "EXPM1")
 
+@ExpressionDescription(
+  usage = "_FUNC_(x) - Returns the largest integer not greater than x.",
+  extended = "> SELECT _FUNC_(-0.1);\n -1\n> SELECT _FUNC_(5);\n 5")
 case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLOOR") {
   override def dataType: DataType = child.dataType match {
     case dt @ DecimalType.Fixed(_, 0) => dt
@@ -283,6 +325,9 @@ object Factorial {
   )
 }
 
+@ExpressionDescription(
+  usage = "_FUNC_(n) - Returns n factorial for n is [0..20]. Otherwise, NULL.",
+  extended = "> SELECT _FUNC_(5);\n 120")
 case class Factorial(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[DataType] = Seq(IntegerType)
@@ -315,8 +360,14 @@ case class Factorial(child: Expression) extends UnaryExpression with ImplicitCas
   }
 }
 
+@ExpressionDescription(
+  usage = "_FUNC_(x) - Returns the natural logarithm of x with base e.",
+  extended = "> SELECT _FUNC_(1);\n 0.0")
 case class Log(child: Expression) extends UnaryLogExpression(math.log, "LOG")
 
+@ExpressionDescription(
+  usage = "_FUNC_(x) - Returns the logarithm of x with base 2.",
+  extended = "> SELECT _FUNC_(2);\n 1.0")
 case class Log2(child: Expression)
   extends UnaryLogExpression((x: Double) => math.log(x) / math.log(2), "LOG2") {
   override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
@@ -332,36 +383,72 @@ case class Log2(child: Expression)
   }
 }
 
+@ExpressionDescription(
+  usage = "_FUNC_(x) - Returns the logarithm of x with base 10.",
+  extended = "> SELECT _FUNC_(10);\n 1.0")
 case class Log10(child: Expression) extends UnaryLogExpression(math.log10, "LOG10")
 
+@ExpressionDescription(
+  usage = "_FUNC_(x) - Returns log(1 + x).",
+  extended = "> SELECT _FUNC_(0);\n 0.0")
 case class Log1p(child: Expression) extends UnaryLogExpression(math.log1p, "LOG1P") {
   protected override val yAsymptote: Double = -1.0
 }
 
+@ExpressionDescription(
+  usage = "_FUNC_(x, d) - Return the rounded x at d decimal places.",
+  extended = "> SELECT _FUNC_(12.3456, 1);\n 12.3")
 case class Rint(child: Expression) extends UnaryMathExpression(math.rint, "ROUND") {
   override def funcName: String = "rint"
 }
 
+@ExpressionDescription(
+  usage = "_FUNC_(x) - Returns the sign of x.",
+  extended = "> SELECT _FUNC_(40);\n 1.0")
 case class Signum(child: Expression) extends UnaryMathExpression(math.signum, "SIGNUM")
 
+@ExpressionDescription(
+  usage = "_FUNC_(x) - Returns the sine of x.",
+  extended = "> SELECT _FUNC_(0);\n 0.0")
 case class Sin(child: Expression) extends UnaryMathExpression(math.sin, "SIN")
 
+@ExpressionDescription(
+  usage = "_FUNC_(x) - Returns the hyperbolic sine of x.",
+  extended = "> SELECT _FUNC_(0);\n 0.0")
 case class Sinh(child: Expression) extends UnaryMathExpression(math.sinh, "SINH")
 
+@ExpressionDescription(
+  usage = "_FUNC_(x) - Returns the square root of x.",
+  extended = "> SELECT _FUNC_(4);\n 2.0")
 case class Sqrt(child: Expression) extends UnaryMathExpression(math.sqrt, "SQRT")
 
+@ExpressionDescription(
+  usage = "_FUNC_(x) - Returns the tangent of x.",
+  extended = "> SELECT _FUNC_(0);\n 0.0")
 case class Tan(child: Expression) extends UnaryMathExpression(math.tan, "TAN")
 
+@ExpressionDescription(
+  usage = "_FUNC_(x) - Returns the hyperbolic tangent of x.",
+  extended = "> SELECT _FUNC_(0);\n 0.0")
 case class Tanh(child: Expression) extends UnaryMathExpression(math.tanh, "TANH")
 
+@ExpressionDescription(
+  usage = "_FUNC_(x) - Converts radians to degrees.",
+  extended = "> SELECT _FUNC_(3.141592653589793);\n 180.0")
 case class ToDegrees(child: Expression) extends UnaryMathExpression(math.toDegrees, "DEGREES") {
   override def funcName: String = "toDegrees"
 }
 
+@ExpressionDescription(
+  usage = "_FUNC_(x) - Converts degrees to radians.",
+  extended = "> SELECT _FUNC_(180);\n 3.141592653589793")
 case class ToRadians(child: Expression) extends UnaryMathExpression(math.toRadians, "RADIANS") {
   override def funcName: String = "toRadians"
 }
 
+@ExpressionDescription(
+  usage = "_FUNC_(x) - Returns x in binary.",
+  extended = "> SELECT _FUNC_(13);\n '1101'")
 case class Bin(child: Expression)
   extends UnaryExpression with Serializable with ImplicitCastInputTypes {
 
@@ -453,6 +540,9 @@ object Hex {
  * Otherwise if the number is a STRING, it converts each character into its hex representation
  * and returns the resulting STRING. Negative numbers would be treated as two's complement.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(x) - Convert the argument to hexadecimal.",
+  extended = "> SELECT _FUNC_(17);\n '11'\n> SELECT _FUNC_('Spark SQL');\n '537061726B2053514C'")
 case class Hex(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] =
@@ -481,6 +571,9 @@ case class Hex(child: Expression) extends UnaryExpression with ImplicitCastInput
  * Performs the inverse operation of HEX.
  * Resulting characters are returned as a byte array.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(x) - Converts hexadecimal argument to binary.",
+  extended = "> SELECT decode(_FUNC_('537061726B2053514C'),'UTF-8');\n 'Spark SQL'")
 case class Unhex(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
@@ -509,7 +602,9 @@ case class Unhex(child: Expression) extends UnaryExpression with ImplicitCastInp
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-
+@ExpressionDescription(
+  usage = "_FUNC_(x,y) - Returns the arc tangent2.",
+  extended = "> SELECT _FUNC_(0, 0);\n 0.0")
 case class Atan2(left: Expression, right: Expression)
   extends BinaryMathExpression(math.atan2, "ATAN2") {
 
@@ -523,6 +618,9 @@ case class Atan2(left: Expression, right: Expression)
   }
 }
 
+@ExpressionDescription(
+  usage = "_FUNC_(x1, x2) - Raise x1 to the power of x2.",
+  extended = "> SELECT _FUNC_(2, 3);\n 8.0")
 case class Pow(left: Expression, right: Expression)
   extends BinaryMathExpression(math.pow, "POWER") {
   override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
@@ -532,10 +630,14 @@ case class Pow(left: Expression, right: Expression)
 
 
 /**
- * Bitwise unsigned left shift.
+ * Bitwise left shift.
+ *
  * @param left the base number to shift.
  * @param right number of bits to left shift.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(a, b) - Bitwise left shift.",
+  extended = "> SELECT _FUNC_(2, 1);\n 4")
 case class ShiftLeft(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
@@ -558,10 +660,14 @@ case class ShiftLeft(left: Expression, right: Expression)
 
 
 /**
- * Bitwise unsigned left shift.
+ * Bitwise right shift.
+ *
  * @param left the base number to shift.
- * @param right number of bits to left shift.
+ * @param right number of bits to right shift.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(a, b) - Bitwise right shift.",
+  extended = "> SELECT _FUNC_(4, 1);\n 2")
 case class ShiftRight(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
@@ -585,9 +691,13 @@ case class ShiftRight(left: Expression, right: Expression)
 
 /**
  * Bitwise unsigned right shift, for integer and long data type.
+ *
  * @param left the base number.
  * @param right the number of bits to right shift.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(a, b) - Bitwise unsigned right shift.",
+  extended = "> SELECT _FUNC_(4, 1);\n 2")
 case class ShiftRightUnsigned(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
@@ -608,16 +718,22 @@ case class ShiftRightUnsigned(left: Expression, right: Expression)
   }
 }
 
-
+@ExpressionDescription(
+  usage = "_FUNC_(a, b) - Returns sqrt(a**2 + b**2).",
+  extended = "> SELECT _FUNC_(3, 4);\n 5.0")
 case class Hypot(left: Expression, right: Expression)
   extends BinaryMathExpression(math.hypot, "HYPOT")
 
 
 /**
  * Computes the logarithm of a number.
+ *
  * @param left the logarithm base, default to e.
  * @param right the number to compute the logarithm of.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(b, x) - Returns the logarithm of x with base b.",
+  extended = "> SELECT _FUNC_(10, 100);\n 2.0")
 case class Logarithm(left: Expression, right: Expression)
   extends BinaryMathExpression((c1, c2) => math.log(c2) / math.log(c1), "LOG") {
 
@@ -674,6 +790,9 @@ case class Logarithm(left: Expression, right: Expression)
  * @param child expr to be round, all [[NumericType]] is allowed as Input
  * @param scale new scale to be round to, this should be a constant int at runtime
  */
+@ExpressionDescription(
+  usage = "_FUNC_(x, d) - Round x to d decimal places.",
+  extended = "> SELECT _FUNC_(12.3456, 1);\n 12.3")
 case class Round(child: Expression, scale: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 

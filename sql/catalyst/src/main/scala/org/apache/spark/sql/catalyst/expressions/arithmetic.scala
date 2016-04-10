@@ -23,7 +23,8 @@ import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
-
+@ExpressionDescription(
+  usage = "_FUNC_(a) - Returns -a.")
 case class UnaryMinus(child: Expression) extends UnaryExpression
     with ExpectsInputTypes with NullIntolerant {
 
@@ -59,6 +60,8 @@ case class UnaryMinus(child: Expression) extends UnaryExpression
   override def sql: String = s"(-${child.sql})"
 }
 
+@ExpressionDescription(
+  usage = "_FUNC_(a) - Returns a.")
 case class UnaryPositive(child: Expression)
     extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
   override def prettyName: String = "positive"
@@ -79,8 +82,8 @@ case class UnaryPositive(child: Expression)
  * A function that get the absolute value of the numeric value.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the absolute value of the numeric value",
-  extended = "> SELECT _FUNC_('-1');\n1")
+  usage = "_FUNC_(expr) - Returns the absolute value of the numeric value.",
+  extended = "> SELECT _FUNC_('-1');\n 1")
 case class Abs(child: Expression)
     extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
 
@@ -126,6 +129,8 @@ private[sql] object BinaryArithmetic {
   def unapply(e: BinaryArithmetic): Option[(Expression, Expression)] = Some((e.left, e.right))
 }
 
+@ExpressionDescription(
+  usage = "a _FUNC_ b - Returns a+b.")
 case class Add(left: Expression, right: Expression) extends BinaryArithmetic with NullIntolerant {
 
   override def inputType: AbstractDataType = TypeCollection.NumericAndInterval
@@ -155,6 +160,8 @@ case class Add(left: Expression, right: Expression) extends BinaryArithmetic wit
   }
 }
 
+@ExpressionDescription(
+  usage = "a _FUNC_ b - Returns a-b.")
 case class Subtract(left: Expression, right: Expression)
     extends BinaryArithmetic with NullIntolerant {
 
@@ -185,6 +192,8 @@ case class Subtract(left: Expression, right: Expression)
   }
 }
 
+@ExpressionDescription(
+  usage = "a _FUNC_ b - Multiplies a by b.")
 case class Multiply(left: Expression, right: Expression)
     extends BinaryArithmetic with NullIntolerant {
 
@@ -198,6 +207,9 @@ case class Multiply(left: Expression, right: Expression)
   protected override def nullSafeEval(input1: Any, input2: Any): Any = numeric.times(input1, input2)
 }
 
+@ExpressionDescription(
+  usage = "a _FUNC_ b - Divides a by b.",
+  extended = "> SELECT 3 _FUNC_ 2;\n 1.5")
 case class Divide(left: Expression, right: Expression)
     extends BinaryArithmetic with NullIntolerant {
 
@@ -275,6 +287,8 @@ case class Divide(left: Expression, right: Expression)
   }
 }
 
+@ExpressionDescription(
+  usage = "a _FUNC_ b - Returns the remainder when dividing a by b.")
 case class Remainder(left: Expression, right: Expression)
     extends BinaryArithmetic with NullIntolerant {
 
@@ -464,6 +478,9 @@ case class MinOf(left: Expression, right: Expression)
   override def symbol: String = "min"
 }
 
+@ExpressionDescription(
+  usage = "_FUNC_(a, b) - Returns the positive modulo",
+  extended = "> SELECT _FUNC_(10,3);\n 1")
 case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic with NullIntolerant {
 
   override def toString: String = s"pmod($left, $right)"

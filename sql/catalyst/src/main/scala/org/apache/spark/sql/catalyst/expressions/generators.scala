@@ -99,6 +99,10 @@ case class UserDefinedGenerator(
 /**
  * Given an input array produces a sequence of rows for each value in the array.
  */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(a) - Separates the elements of array a into multiple rows, or the elements of a map into multiple rows and columns.")
+// scalastyle:on line.size.limit
 case class Explode(child: Expression) extends UnaryExpression with Generator with CodegenFallback {
 
   override def children: Seq[Expression] = child :: Nil

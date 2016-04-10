@@ -27,6 +27,8 @@ import org.apache.spark.unsafe.types.UTF8String
 /**
  * Returns an Array containing the evaluation of all children expressions.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(n0, ...) - Returns an array with the given elements.")
 case class CreateArray(children: Seq[Expression]) extends Expression {
 
   override def foldable: Boolean = children.forall(_.foldable)
@@ -73,6 +75,8 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
  * Returns a catalyst Map containing the evaluation of all children expressions as keys and values.
  * The children are a flatted sequence of kv pairs, e.g. (key1, value1, key2, value2, ...)
  */
+@ExpressionDescription(
+  usage = "_FUNC_(key0, value0, key1, value1...) - Creates a map with the given key/value pairs.")
 case class CreateMap(children: Seq[Expression]) extends Expression {
   private[sql] lazy val keys = children.indices.filter(_ % 2 == 0).map(children)
   private[sql] lazy val values = children.indices.filter(_ % 2 != 0).map(children)
@@ -153,6 +157,8 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
 /**
  * Returns a Row containing the evaluation of all children expressions.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(col1, col2, col3, ...) - Creates a struct with the given field values.")
 case class CreateStruct(children: Seq[Expression]) extends Expression {
 
   override def foldable: Boolean = children.forall(_.foldable)
@@ -204,6 +210,10 @@ case class CreateStruct(children: Seq[Expression]) extends Expression {
  *
  * @param children Seq(name1, val1, name2, val2, ...)
  */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(name1, val1, name2, val2, ...) - Creates a struct with the given field names and values.")
+// scalastyle:on line.size.limit
 case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
 
   /**
