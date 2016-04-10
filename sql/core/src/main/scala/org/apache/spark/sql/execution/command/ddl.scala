@@ -191,14 +191,16 @@ case class DropTable(
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val catalog = sqlContext.sessionState.catalog
-    // If the command DROP VIEW is to drop a table or DROP TABLE is to drop a view
-    // issue an exception.
     if (!catalog.tableExists(tableName)) {
       if (!ifExists) {
+        // When ifExists is false, no exception is issued when the table does not exist.
+        // Instead, log it as an error message.
         val objectName = if (isView) "View" else "Table"
         logError(s"$objectName '${tableName.quotedString}' does not exist")
       }
     } else {
+      // If the command DROP VIEW is to drop a table or DROP TABLE is to drop a view
+      // issue an exception.
       catalog.getTableMetadataOption(tableName).map(_.tableType match {
         case CatalogTableType.VIRTUAL_VIEW if !isView =>
           throw new AnalysisException(

@@ -242,7 +242,7 @@ class SessionCatalog(
     val table = formatTableName(name.table)
     if (name.database.isDefined || !tempTables.contains(table)) {
       // When ignoreIfNotExists is false, no exception is issued when the table does not exist.
-      // Instead, log it as an error message. This is consistent with Hive.
+      // Instead, log it as an error message.
       if (externalCatalog.tableExists(db, table)) {
         externalCatalog.dropTable(db, table, ignoreIfNotExists = true)
       } else if (!ignoreIfNotExists) {
