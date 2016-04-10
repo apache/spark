@@ -67,7 +67,7 @@ private[csv] object UnivocityParser extends Logging{
       options: CSVOptions): RDD[InternalRow] = {
     val filteredRdd = csv.mapPartitions(CSVUtils.filterCommentAndEmpty(_, options))
     val firstLine = filteredRdd.first()
-    // TODO: If there are data same with header, then it will be skipped too.
+    // TODO: If there is data same with header, then it will be skipped too.
     val dropHeaderRdd = if (options.headerFlag) {
       filteredRdd.filter(_ != firstLine)
     } else {

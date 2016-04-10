@@ -43,7 +43,7 @@ private[csv] object InferSchema {
     val filteredRdd = csv.mapPartitions(CSVUtils.filterCommentAndEmpty(_, options))
     val firstLine = filteredRdd.first()
     // Filter the header if exists
-    // TODO: If there are data same with header, then it will be skipped too.
+    // TODO: If there is data same with header, then it will be skipped too.
     val dropHeaderRdd = if (options.headerFlag) {
       filteredRdd.filter(_ != firstLine)
     } else {
