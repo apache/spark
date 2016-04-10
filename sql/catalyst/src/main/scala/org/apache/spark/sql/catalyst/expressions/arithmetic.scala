@@ -82,7 +82,7 @@ case class UnaryPositive(child: Expression)
  * A function that get the absolute value of the numeric value.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the absolute value of the numeric value",
+  usage = "_FUNC_(expr) - Returns the absolute value of the numeric value.",
   extended = "> SELECT _FUNC_('-1');\n 1")
 case class Abs(child: Expression)
     extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
@@ -129,6 +129,8 @@ private[sql] object BinaryArithmetic {
   def unapply(e: BinaryArithmetic): Option[(Expression, Expression)] = Some((e.left, e.right))
 }
 
+@ExpressionDescription(
+  usage = "a _FUNC_ b - Returns a+b.")
 case class Add(left: Expression, right: Expression) extends BinaryArithmetic with NullIntolerant {
 
   override def inputType: AbstractDataType = TypeCollection.NumericAndInterval
@@ -158,6 +160,8 @@ case class Add(left: Expression, right: Expression) extends BinaryArithmetic wit
   }
 }
 
+@ExpressionDescription(
+  usage = "a _FUNC_ b - Returns a-b.")
 case class Subtract(left: Expression, right: Expression)
     extends BinaryArithmetic with NullIntolerant {
 
@@ -188,6 +192,8 @@ case class Subtract(left: Expression, right: Expression)
   }
 }
 
+@ExpressionDescription(
+  usage = "a _FUNC_ b - Multiplies a by b.")
 case class Multiply(left: Expression, right: Expression)
     extends BinaryArithmetic with NullIntolerant {
 
@@ -201,6 +207,9 @@ case class Multiply(left: Expression, right: Expression)
   protected override def nullSafeEval(input1: Any, input2: Any): Any = numeric.times(input1, input2)
 }
 
+@ExpressionDescription(
+  usage = "a _FUNC_ b - Divides a by b.",
+  extended = "> SELECT 3 _FUNC_ 2;\n 1.5")
 case class Divide(left: Expression, right: Expression)
     extends BinaryArithmetic with NullIntolerant {
 
@@ -278,6 +287,8 @@ case class Divide(left: Expression, right: Expression)
   }
 }
 
+@ExpressionDescription(
+  usage = "a _FUNC_ b - Returns the remainder when dividing a by b.")
 case class Remainder(left: Expression, right: Expression)
     extends BinaryArithmetic with NullIntolerant {
 

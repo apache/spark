@@ -67,6 +67,8 @@ trait StringRegexExpression extends ImplicitCastInputTypes {
 /**
  * Simple RegEx pattern matching function
  */
+@ExpressionDescription(
+  usage = "str _FUNC_ pattern - Returns true if str matches pattern and false otherwise.")
 case class Like(left: Expression, right: Expression)
   extends BinaryExpression with StringRegexExpression {
 
@@ -117,7 +119,8 @@ case class Like(left: Expression, right: Expression)
   }
 }
 
-
+@ExpressionDescription(
+  usage = "str _FUNC_ regexp - Returns true if str matches regexp and false otherwise.")
 case class RLike(left: Expression, right: Expression)
   extends BinaryExpression with StringRegexExpression {
 

@@ -88,6 +88,10 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
  * @param branches seq of (branch condition, branch value)
  * @param elseValue optional value for the else branch
  */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "CASE WHEN a THEN b [WHEN c THEN d]* [ELSE e] END - When a = true, returns b; when c = true, return d; else return e.")
+// scalastyle:on line.size.limit
 case class CaseWhen(branches: Seq[(Expression, Expression)], elseValue: Option[Expression] = None)
   extends Expression with CodegenFallback {
 

@@ -92,7 +92,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   test("SPARK-14415: All functions should have own descriptions") {
     for (f <- sqlContext.sessionState.functionRegistry.listFunction()) {
       if (!Seq("cube", "grouping", "grouping_id", "rollup", "window").contains(f)) {
-        checkExistence(sql("describe function `$f`"), false, "To be added.")
+        checkExistence(sql(s"describe function `$f`"), false, "To be added.")
       }
     }
   }
