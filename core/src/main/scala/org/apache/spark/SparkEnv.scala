@@ -157,14 +157,6 @@ object SparkEnv extends Logging {
   }
 
   /**
-   * Returns the ThreadLocal SparkEnv.
-   */
-  @deprecated("Use SparkEnv.get instead", "1.2.0")
-  def getThreadLocal: SparkEnv = {
-    env
-  }
-
-  /**
    * Create a SparkEnv for the driver.
    */
   private[spark] def createDriverEnv(
@@ -322,7 +314,8 @@ object SparkEnv extends Logging {
         UnifiedMemoryManager(conf, numUsableCores)
       }
 
-    val blockTransferService = new NettyBlockTransferService(conf, securityManager, numUsableCores)
+    val blockTransferService =
+      new NettyBlockTransferService(conf, securityManager, hostname, numUsableCores)
 
     val blockManagerMaster = new BlockManagerMaster(registerOrLookupEndpoint(
       BlockManagerMaster.DRIVER_ENDPOINT_NAME,

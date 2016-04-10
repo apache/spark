@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
 import org.apache.spark.sql.catalyst.util.ArrayData
-import org.apache.spark.sql.types.{ArrayType, ObjectType, StructType}
+import org.apache.spark.sql.types.{ArrayType, Decimal, ObjectType, StructType}
 
 case class RepeatedStruct(s: Seq[PrimitiveData])
 
@@ -100,6 +100,8 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
 
   encodeDecodeTest(BigDecimal("32131413.211321313"), "scala decimal")
   // encodeDecodeTest(new java.math.BigDecimal("231341.23123"), "java decimal")
+
+  encodeDecodeTest(Decimal("32131413.211321313"), "catalyst decimal")
 
   encodeDecodeTest("hello", "string")
   encodeDecodeTest(Date.valueOf("2012-12-23"), "date")
@@ -313,7 +315,7 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
       val attr = AttributeReference("obj", ObjectType(encoder.clsTag.runtimeClass))()
       val inputPlan = LocalRelation(attr)
       val plan =
-        Project(Alias(encoder.fromRowExpression, "obj")() :: Nil,
+        Project(Alias(encoder.deserializer, "obj")() :: Nil,
           Project(encoder.namedExpressions,
             inputPlan))
       assertAnalysisSuccess(plan)
@@ -358,7 +360,7 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
              |${encoder.schema.treeString}
              |
              |fromRow Expressions:
-             |${boundEncoder.fromRowExpression.treeString}
+             |${boundEncoder.deserializer.treeString}
          """.stripMargin)
       }
     }

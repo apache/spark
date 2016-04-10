@@ -194,11 +194,12 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     val blockId = blockIds(0)
     val blockManager = SparkEnv.get.blockManager
     val blockTransfer = SparkEnv.get.blockTransferService
+    val serializerManager = SparkEnv.get.serializerManager
     blockManager.master.getLocations(blockId).foreach { cmId =>
       val bytes = blockTransfer.fetchBlockSync(cmId.host, cmId.port, cmId.executorId,
         blockId.toString)
-      val deserialized = blockManager.dataDeserialize[Int](blockId,
-        new ChunkedByteBuffer(bytes.nioByteBuffer())).toList
+      val deserialized = serializerManager.dataDeserializeStream[Int](blockId,
+        new ChunkedByteBuffer(bytes.nioByteBuffer()).toInputStream()).toList
       assert(deserialized === (1 to 100).toList)
     }
   }

@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql.streaming.test
 
+import java.util.concurrent.TimeUnit
+
+import scala.concurrent.duration._
+
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql._
@@ -69,7 +73,8 @@ class DefaultSource extends StreamSourceProvider with StreamSinkProvider {
 class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with BeforeAndAfter {
   import testImplicits._
 
-  private def newMetadataDir = Utils.createTempDir("streaming.metadata").getCanonicalPath
+  private def newMetadataDir =
+    Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
 
   after {
     sqlContext.streams.active.foreach(_.stop())
@@ -273,5 +278,29 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
     val q5 = startQueryWithName("name")
     assert(activeStreamNames.contains("name"))
     sqlContext.streams.active.foreach(_.stop())
+  }
+
+  test("trigger") {
+    val df = sqlContext.read
+      .format("org.apache.spark.sql.streaming.test")
+      .stream("/test")
+
+    var q = df.write
+      .format("org.apache.spark.sql.streaming.test")
+      .option("checkpointLocation", newMetadataDir)
+      .trigger(ProcessingTime(10.seconds))
+      .startStream()
+    q.stop()
+
+    assert(q.asInstanceOf[StreamExecution].trigger == ProcessingTime(10000))
+
+    q = df.write
+      .format("org.apache.spark.sql.streaming.test")
+      .option("checkpointLocation", newMetadataDir)
+      .trigger(ProcessingTime.create(100, TimeUnit.SECONDS))
+      .startStream()
+    q.stop()
+
+    assert(q.asInstanceOf[StreamExecution].trigger == ProcessingTime(100000))
   }
 }

@@ -51,7 +51,7 @@ from pyspark.sql.types import UserDefinedType, _infer_type
 from pyspark.tests import ReusedPySparkTestCase
 from pyspark.sql.functions import UserDefinedFunction, sha2
 from pyspark.sql.window import Window
-from pyspark.sql.utils import AnalysisException, IllegalArgumentException
+from pyspark.sql.utils import AnalysisException, ParseException, IllegalArgumentException
 
 
 class UTCOffsetTimezone(datetime.tzinfo):
@@ -305,6 +305,25 @@ class SQLTests(ReusedPySparkTestCase):
         [res] = self.sqlCtx.sql("SELECT strlen(a) FROM test WHERE strlen(a) > 1").collect()
         self.assertEqual(4, res[0])
 
+    def test_chained_udf(self):
+        self.sqlCtx.registerFunction("double", lambda x: x + x, IntegerType())
+        [row] = self.sqlCtx.sql("SELECT double(1)").collect()
+        self.assertEqual(row[0], 2)
+        [row] = self.sqlCtx.sql("SELECT double(double(1))").collect()
+        self.assertEqual(row[0], 4)
+        [row] = self.sqlCtx.sql("SELECT double(double(1) + 1)").collect()
+        self.assertEqual(row[0], 6)
+
+    def test_multiple_udfs(self):
+        self.sqlCtx.registerFunction("double", lambda x: x * 2, IntegerType())
+        [row] = self.sqlCtx.sql("SELECT double(1), double(2)").collect()
+        self.assertEqual(tuple(row), (2, 4))
+        [row] = self.sqlCtx.sql("SELECT double(double(1)), double(double(2) + 2)").collect()
+        self.assertEqual(tuple(row), (4, 12))
+        self.sqlCtx.registerFunction("add", lambda x, y: x + y, IntegerType())
+        [row] = self.sqlCtx.sql("SELECT double(add(1, 2)), add(double(2), 1)").collect()
+        self.assertEqual(tuple(row), (6, 5))
+
     def test_udf_with_array_type(self):
         d = [Row(l=list(range(3)), d={"key": list(range(5))})]
         rdd = self.sc.parallelize(d)
@@ -323,6 +342,15 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual("abc", res[0])
         [res] = self.sqlCtx.sql("SELECT MYUDF('')").collect()
         self.assertEqual("", res[0])
+
+    def test_udf_with_aggregate_function(self):
+        df = self.sqlCtx.createDataFrame([(1, "1"), (2, "2"), (1, "2"), (1, "2")], ["key", "value"])
+        from pyspark.sql.functions import udf, col
+        from pyspark.sql.types import BooleanType
+
+        my_filter = udf(lambda a: a == 1, BooleanType())
+        sel = df.select(col("key")).distinct().filter(my_filter(col("key")))
+        self.assertEqual(sel.collect(), [Row(key=1)])
 
     def test_basic_functions(self):
         rdd = self.sc.parallelize(['{"foo":"bar"}', '{"foo":"baz"}'])
@@ -599,7 +627,7 @@ class SQLTests(ReusedPySparkTestCase):
         point = df1.head().point
         self.assertEqual(point, PythonOnlyPoint(1.0, 2.0))
 
-    def test_unionAll_with_udt(self):
+    def test_union_with_udt(self):
         from pyspark.sql.tests import ExamplePoint, ExamplePointUDT
         row1 = (1.0, ExamplePoint(1.0, 2.0))
         row2 = (2.0, ExamplePoint(3.0, 4.0))
@@ -608,7 +636,7 @@ class SQLTests(ReusedPySparkTestCase):
         df1 = self.sqlCtx.createDataFrame([row1], schema)
         df2 = self.sqlCtx.createDataFrame([row2], schema)
 
-        result = df1.unionAll(df2).orderBy("label").collect()
+        result = df1.union(df2).orderBy("label").collect()
         self.assertEqual(
             result,
             [
@@ -1130,7 +1158,9 @@ class SQLTests(ReusedPySparkTestCase):
     def test_capture_analysis_exception(self):
         self.assertRaises(AnalysisException, lambda: self.sqlCtx.sql("select abc"))
         self.assertRaises(AnalysisException, lambda: self.df.selectExpr("a + b"))
-        self.assertRaises(AnalysisException, lambda: self.sqlCtx.sql("abc"))
+
+    def test_capture_parse_exception(self):
+        self.assertRaises(ParseException, lambda: self.sqlCtx.sql("abc"))
 
     def test_capture_illegalargument_exception(self):
         self.assertRaisesRegexp(IllegalArgumentException, "Setting negative mapred.reduce.tasks",

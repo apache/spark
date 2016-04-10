@@ -39,9 +39,12 @@ private[spark] abstract class YarnSchedulerBackend(
     sc: SparkContext)
   extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv) {
 
-  if (conf.getOption("spark.scheduler.minRegisteredResourcesRatio").isEmpty) {
-    minRegisteredRatio = 0.8
-  }
+  override val minRegisteredRatio =
+    if (conf.getOption("spark.scheduler.minRegisteredResourcesRatio").isEmpty) {
+      0.8
+    } else {
+      super.minRegisteredRatio
+    }
 
   protected var totalExpectedExecutors = 0
 
@@ -292,6 +295,9 @@ private[spark] abstract class YarnSchedulerBackend(
             logWarning("Attempted to kill executors before the AM has registered!")
             context.reply(false)
         }
+
+      case RetrieveLastAllocatedExecutorId =>
+        context.reply(currentExecutorIdCounter)
     }
 
     override def onDisconnected(remoteAddress: RpcAddress): Unit = {

@@ -22,11 +22,11 @@ import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
-import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, Encoder, Row, SQLContext}
-import org.apache.spark.sql.catalyst.encoders.{encoderFor, RowEncoder}
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.encoders.encoderFor
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.plans.logical.LeafNode
 import org.apache.spark.sql.types.StructType
 
 object MemoryStream {
@@ -45,7 +45,7 @@ object MemoryStream {
 case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
     extends Source with Logging {
   protected val encoder = encoderFor[A]
-  protected val logicalPlan = StreamingRelation(this)
+  protected val logicalPlan = StreamingExecutionRelation(this)
   protected val output = logicalPlan.output
   protected val batches = new ArrayBuffer[Dataset[A]]
 
@@ -58,7 +58,7 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
   }
 
   def toDF()(implicit sqlContext: SQLContext): DataFrame = {
-    Dataset.newDataFrame(sqlContext, logicalPlan)
+    Dataset.ofRows(sqlContext, logicalPlan)
   }
 
   def addData(data: A*): Offset = {
@@ -97,7 +97,7 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
       s"MemoryBatch [$startOrdinal, $endOrdinal]: ${newBlocks.flatMap(_.collect()).mkString(", ")}")
     newBlocks
       .map(_.toDF())
-      .reduceOption(_ unionAll _)
+      .reduceOption(_ union _)
       .getOrElse {
         sys.error("No data selected!")
       }
@@ -108,7 +108,7 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
  * A sink that stores the results in memory. This [[Sink]] is primarily intended for use in unit
  * tests and does not provide durability.
  */
-class MemorySink(schema: StructType) extends Sink with Logging {
+class MemorySink(val schema: StructType) extends Sink with Logging {
   /** An order list of batches that have been written to this [[Sink]]. */
   private val batches = new ArrayBuffer[Array[Row]]()
 
@@ -116,6 +116,8 @@ class MemorySink(schema: StructType) extends Sink with Logging {
   def allData: Seq[Row] = synchronized {
     batches.flatten
   }
+
+  def lastBatch: Seq[Row] = batches.last
 
   def toDebugString: String = synchronized {
     batches.zipWithIndex.map { case (b, i) =>
@@ -136,3 +138,9 @@ class MemorySink(schema: StructType) extends Sink with Logging {
   }
 }
 
+/**
+ * Used to query the data that has been written into a [[MemorySink]].
+ */
+case class MemoryPlan(sink: MemorySink, output: Seq[Attribute]) extends LeafNode {
+  def this(sink: MemorySink) = this(sink, sink.schema.toAttributes)
+}

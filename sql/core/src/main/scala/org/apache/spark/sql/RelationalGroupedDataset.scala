@@ -52,17 +52,17 @@ class RelationalGroupedDataset protected[sql](
 
     groupType match {
       case RelationalGroupedDataset.GroupByType =>
-        Dataset.newDataFrame(
+        Dataset.ofRows(
           df.sqlContext, Aggregate(groupingExprs, aliasedAgg, df.logicalPlan))
       case RelationalGroupedDataset.RollupType =>
-        Dataset.newDataFrame(
+        Dataset.ofRows(
           df.sqlContext, Aggregate(Seq(Rollup(groupingExprs)), aliasedAgg, df.logicalPlan))
       case RelationalGroupedDataset.CubeType =>
-        Dataset.newDataFrame(
+        Dataset.ofRows(
           df.sqlContext, Aggregate(Seq(Cube(groupingExprs)), aliasedAgg, df.logicalPlan))
       case RelationalGroupedDataset.PivotType(pivotCol, values) =>
         val aliasedGrps = groupingExprs.map(alias)
-        Dataset.newDataFrame(
+        Dataset.ofRows(
           df.sqlContext, Pivot(aliasedGrps, pivotCol, values, aggExprs, df.logicalPlan))
     }
   }
@@ -408,7 +408,7 @@ private[sql] object RelationalGroupedDataset {
   private[sql] object RollupType extends GroupType
 
   /**
-    * To indicate it's the PIVOT
-    */
+   * To indicate it's the PIVOT
+   */
   private[sql] case class PivotType(pivotCol: Expression, values: Seq[Literal]) extends GroupType
 }

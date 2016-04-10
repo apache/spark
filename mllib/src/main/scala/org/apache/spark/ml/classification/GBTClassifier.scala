@@ -24,8 +24,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{PredictionModel, Predictor}
 import org.apache.spark.ml.param.{Param, ParamMap}
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
-import org.apache.spark.ml.tree.{DecisionTreeModel, GBTParams, TreeClassifierParams,
-  TreeEnsembleModel}
+import org.apache.spark.ml.tree.{GBTParams, TreeClassifierParams, TreeEnsembleModel}
 import org.apache.spark.ml.tree.impl.GradientBoostedTrees
 import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
 import org.apache.spark.mllib.linalg.Vector
@@ -43,6 +42,16 @@ import org.apache.spark.sql.functions._
  * learning algorithm for classification.
  * It supports binary labels, as well as both continuous and categorical features.
  * Note: Multiclass labels are not currently supported.
+ *
+ * The implementation is based upon: J.H. Friedman. "Stochastic Gradient Boosting." 1999.
+ *
+ * Notes on Gradient Boosting vs. TreeBoost:
+ *  - This implementation is for Stochastic Gradient Boosting, not for TreeBoost.
+ *  - Both algorithms learn tree ensembles by minimizing loss functions.
+ *  - TreeBoost (Friedman, 1999) additionally modifies the outputs at tree leaf nodes
+ *    based on the loss function, whereas the original gradient boosting method does not.
+ *  - We expect to implement TreeBoost in the future:
+ *    [https://issues.apache.org/jira/browse/SPARK-4240]
  */
 @Since("1.4.0")
 @Experimental
@@ -96,10 +105,7 @@ final class GBTClassifier @Since("1.4.0") (
   override def setSubsamplingRate(value: Double): this.type = super.setSubsamplingRate(value)
 
   @Since("1.4.0")
-  override def setSeed(value: Long): this.type = {
-    logWarning("The 'seed' parameter is currently ignored by Gradient Boosting.")
-    super.setSeed(value)
-  }
+  override def setSeed(value: Long): this.type = super.setSeed(value)
 
   // Parameters from GBTParams:
 
@@ -158,7 +164,8 @@ final class GBTClassifier @Since("1.4.0") (
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
     val numFeatures = oldDataset.first().features.size
     val boostingStrategy = super.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Classification)
-    val (baseLearners, learnerWeights) = GradientBoostedTrees.run(oldDataset, boostingStrategy)
+    val (baseLearners, learnerWeights) = GradientBoostedTrees.run(oldDataset, boostingStrategy,
+      $(seed))
     new GBTClassificationModel(uid, baseLearners, learnerWeights, numFeatures)
   }
 
@@ -192,9 +199,9 @@ final class GBTClassificationModel private[ml](
     private val _treeWeights: Array[Double],
     @Since("1.6.0") override val numFeatures: Int)
   extends PredictionModel[Vector, GBTClassificationModel]
-  with TreeEnsembleModel with Serializable {
+  with TreeEnsembleModel[DecisionTreeRegressionModel] with Serializable {
 
-  require(numTrees > 0, "GBTClassificationModel requires at least 1 tree.")
+  require(_trees.nonEmpty, "GBTClassificationModel requires at least 1 tree.")
   require(_trees.length == _treeWeights.length, "GBTClassificationModel given trees, treeWeights" +
     s" of non-matching lengths (${_trees.length}, ${_treeWeights.length}, respectively).")
 
@@ -208,7 +215,7 @@ final class GBTClassificationModel private[ml](
     this(uid, _trees, _treeWeights, -1)
 
   @Since("1.4.0")
-  override def trees: Array[DecisionTreeModel] = _trees.asInstanceOf[Array[DecisionTreeModel]]
+  override def trees: Array[DecisionTreeRegressionModel] = _trees
 
   @Since("1.4.0")
   override def treeWeights: Array[Double] = _treeWeights
@@ -229,6 +236,9 @@ final class GBTClassificationModel private[ml](
     if (prediction > 0.0) 1.0 else 0.0
   }
 
+  /** Number of trees in ensemble */
+  val numTrees: Int = trees.length
+
   @Since("1.4.0")
   override def copy(extra: ParamMap): GBTClassificationModel = {
     copyValues(new GBTClassificationModel(uid, _trees, _treeWeights, numFeatures),
@@ -239,6 +249,19 @@ final class GBTClassificationModel private[ml](
   override def toString: String = {
     s"GBTClassificationModel (uid=$uid) with $numTrees trees"
   }
+
+  /**
+   * Estimate of the importance of each feature.
+   *
+   * Each feature's importance is the average of its importance across all trees in the ensemble
+   * The importance vector is normalized to sum to 1. This method is suggested by Hastie et al.
+   * (Hastie, Tibshirani, Friedman. "The Elements of Statistical Learning, 2nd Edition." 2001.)
+   * and follows the implementation from scikit-learn.
+   *
+   * @see [[DecisionTreeClassificationModel.featureImportances]]
+   */
+  @Since("2.0.0")
+  lazy val featureImportances: Vector = TreeEnsembleModel.featureImportances(trees, numFeatures)
 
   /** (private[ml]) Convert to a model in the old API */
   private[ml] def toOld: OldGBTModel = {
@@ -261,6 +284,6 @@ private[ml] object GBTClassificationModel {
       DecisionTreeRegressionModel.fromOld(tree, null, categoricalFeatures)
     }
     val uid = if (parent != null) parent.uid else Identifiable.randomUID("gbtc")
-    new GBTClassificationModel(parent.uid, newTrees, oldModel.treeWeights, numFeatures)
+    new GBTClassificationModel(uid, newTrees, oldModel.treeWeights, numFeatures)
   }
 }

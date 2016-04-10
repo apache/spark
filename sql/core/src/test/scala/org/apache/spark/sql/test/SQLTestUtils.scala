@@ -29,6 +29,7 @@ import org.scalatest.BeforeAndAfterAll
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.Filter
@@ -132,6 +133,27 @@ private[sql] trait SQLTestUtils
   }
 
   /**
+   * Drops functions after calling `f`. A function is represented by (functionName, isTemporary).
+   */
+  protected def withUserDefinedFunction(functions: (String, Boolean)*)(f: => Unit): Unit = {
+    try {
+      f
+    } catch {
+      case cause: Throwable => throw cause
+    } finally {
+      // If the test failed part way, we don't want to mask the failure by failing to remove
+      // temp tables that never got created.
+      try functions.foreach { case (functionName, isTemporary) =>
+        val withTemporary = if (isTemporary) "TEMPORARY" else ""
+        sqlContext.sql(s"DROP $withTemporary FUNCTION IF EXISTS $functionName")
+        assert(
+          !sqlContext.sessionState.catalog.functionExists(FunctionIdentifier(functionName)),
+          s"Function $functionName should have been dropped. But, it still exists.")
+      }
+    }
+  }
+
+  /**
    * Drops temporary table `tableName` after calling `f`.
    */
   protected def withTempTable(tableNames: String*)(f: => Unit): Unit = {
@@ -189,8 +211,8 @@ private[sql] trait SQLTestUtils
    * `f` returns.
    */
   protected def activateDatabase(db: String)(f: => Unit): Unit = {
-    sqlContext.sql(s"USE $db")
-    try f finally sqlContext.sql(s"USE default")
+    sqlContext.sessionState.catalog.setCurrentDatabase(db)
+    try f finally sqlContext.sessionState.catalog.setCurrentDatabase("default")
   }
 
   /**
@@ -214,7 +236,7 @@ private[sql] trait SQLTestUtils
    * way to construct [[DataFrame]] directly out of local data without relying on implicits.
    */
   protected implicit def logicalPlanToSparkQuery(plan: LogicalPlan): DataFrame = {
-    Dataset.newDataFrame(sqlContext, plan)
+    Dataset.ofRows(sqlContext, plan)
   }
 
   /**

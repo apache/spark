@@ -172,18 +172,18 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       "SELECT COUNT(*) FROM hive_test;"
         -> "5",
       "DROP TABLE hive_test;"
-        -> "OK"
+        -> ""
     )
   }
 
   test("Single command with -e") {
-    runCliWithin(2.minute, Seq("-e", "SHOW DATABASES;"))("" -> "OK")
+    runCliWithin(2.minute, Seq("-e", "SHOW DATABASES;"))("" -> "")
   }
 
   test("Single command with --database") {
     runCliWithin(2.minute)(
       "CREATE DATABASE hive_test_db;"
-        -> "OK",
+        -> "",
       "USE hive_test_db;"
         -> "",
       "CREATE TABLE hive_test(key INT, val STRING);"
@@ -193,10 +193,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     )
 
     runCliWithin(2.minute, Seq("--database", "hive_test_db", "-e", "SHOW TABLES;"))(
-      ""
-        -> "OK",
-      ""
-        -> "hive_test"
+      "" -> "hive_test"
     )
   }
 
@@ -223,9 +220,9 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       "SELECT count(key) FROM t1;"
         -> "5",
       "DROP TABLE t1;"
-        -> "OK",
+        -> "",
       "DROP TABLE sourceTable;"
-        -> "OK"
+        -> ""
     )
   }
 
