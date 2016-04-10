@@ -20,20 +20,17 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.zip.Checksum;
 
-import net.jpountz.lz4.LZ4BlockOutputStream;
 import net.jpountz.lz4.LZ4Exception;
 import net.jpountz.lz4.LZ4Factory;
 import net.jpountz.lz4.LZ4FastDecompressor;
 import net.jpountz.util.SafeUtils;
-import net.jpountz.xxhash.StreamingXXHash32;
-import net.jpountz.xxhash.XXHash32;
 import net.jpountz.xxhash.XXHashFactory;
 
 /**
  * {@link InputStream} implementation to decode data written with
- * {@link LZ4BlockOutputStream}. This class is not thread-safe and does not
+ * {@link net.jpountz.lz4.LZ4BlockOutputStream}. This class is not thread-safe and does not
  * support {@link #mark(int)}/{@link #reset()}.
- * @see LZ4BlockOutputStream
+ * @see net.jpountz.lz4.LZ4BlockOutputStream
  *
  * This is based on net.jpountz.lz4.LZ4BlockInputStream
  *
@@ -90,12 +87,13 @@ public final class LZ4BlockInputStream extends FilterInputStream {
   }
 
   /**
-   * Create a new instance using {@link XXHash32} for checksuming.
+   * Create a new instance using {@link net.jpountz.xxhash.XXHash32} for checksuming.
    * @see #LZ4BlockInputStream(InputStream, LZ4FastDecompressor, Checksum)
-   * @see StreamingXXHash32#asChecksum()
+   * @see net.jpountz.xxhash.StreamingXXHash32#asChecksum()
    */
   public LZ4BlockInputStream(InputStream in, LZ4FastDecompressor decompressor) {
-    this(in, decompressor, XXHashFactory.fastestInstance().newStreamingHash32(DEFAULT_SEED).asChecksum());
+    this(in, decompressor,
+      XXHashFactory.fastestInstance().newStreamingHash32(DEFAULT_SEED).asChecksum());
   }
 
   /**
