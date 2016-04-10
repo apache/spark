@@ -122,12 +122,11 @@ private[joins] class UnsafeHashedRelation(
 
   override def keyIsUnique: Boolean = binaryMap.numKeys() == binaryMap.numValues()
 
-  override def asReadOnlyCopy(): UnsafeHashedRelation =
+  override def asReadOnlyCopy(): UnsafeHashedRelation = {
     new UnsafeHashedRelation(numFields, binaryMap)
-
-  override def estimatedSize: Long = {
-    binaryMap.getTotalMemoryConsumption
   }
+
+  override def estimatedSize: Long = binaryMap.getTotalMemoryConsumption
 
   // re-used in get()/getValue()
   var resultRow = new UnsafeRow(numFields)
@@ -374,8 +373,9 @@ private[execution] final class LongToUnsafeRowMap(var mm: TaskMemoryManager, cap
     // do not support spilling
     val got = mm.acquireExecutionMemory(size, MemoryMode.ON_HEAP, this)
     if (got < size) {
-      mm.releaseExecutionMemory(got, MemoryMode.ON_HEAP, this)
-      throw new SparkException(s"Can't acquire $size bytes memory to build hash relation")
+      freeMemory(got)
+      throw new SparkException(s"Can't acquire $size bytes memory to build hash relation, " +
+        s"got $got bytes")
     }
   }
 
@@ -396,9 +396,7 @@ private[execution] final class LongToUnsafeRowMap(var mm: TaskMemoryManager, cap
 
   init()
 
-  def spill(size: Long, trigger: MemoryConsumer): Long = {
-    0L
-  }
+  def spill(size: Long, trigger: MemoryConsumer): Long = 0L
 
   /**
    * Returns whether all the keys are unique.
@@ -408,9 +406,7 @@ private[execution] final class LongToUnsafeRowMap(var mm: TaskMemoryManager, cap
   /**
    * Returns total memory consumption.
    */
-  def getTotalMemoryConsumption: Long = {
-    array.length * 8 + page.length
-  }
+  def getTotalMemoryConsumption: Long = array.length * 8 + page.length
 
   /**
    * Returns the first slot of array that store the keys (sparse mode).
@@ -423,9 +419,7 @@ private[execution] final class LongToUnsafeRowMap(var mm: TaskMemoryManager, cap
   /**
    * Returns the next probe in the array.
    */
-  private def nextSlot(pos: Int): Int = {
-    (pos + 2) & mask
-  }
+  private def nextSlot(pos: Int): Int = (pos + 2) & mask
 
   private def getRow(address: Long, resultRow: UnsafeRow): UnsafeRow = {
     val offset = address >>> 32
@@ -674,9 +668,7 @@ private[joins] class LongHashedRelation(
 
   override def asReadOnlyCopy(): LongHashedRelation = new LongHashedRelation(nFields, map)
 
-  override def estimatedSize: Long = {
-    map.getTotalMemoryConsumption
-  }
+  override def estimatedSize: Long = map.getTotalMemoryConsumption
 
   override def get(key: InternalRow): Iterator[InternalRow] = {
     if (key.isNullAt(0)) {
@@ -694,12 +686,9 @@ private[joins] class LongHashedRelation(
     }
   }
 
-  override def get(key: Long): Iterator[InternalRow] =
-    map.get(key, resultRow)
+  override def get(key: Long): Iterator[InternalRow] = map.get(key, resultRow)
 
-  override def getValue(key: Long): InternalRow = {
-    map.getValue(key, resultRow)
-  }
+  override def getValue(key: Long): InternalRow = map.getValue(key, resultRow)
 
   override def keyIsUnique: Boolean = map.keyIsUnique
 
