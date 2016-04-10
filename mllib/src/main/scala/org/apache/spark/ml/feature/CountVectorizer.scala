@@ -153,9 +153,9 @@ class CountVectorizer(override val uid: String)
     }.cache()
     val fullVocabSize = wordCounts.count()
 
-    val vocab: Array[String] = wordCounts
-    .top(math.min(fullVocabSize, vocSize).toInt)(Ordering.by(_._2))
-    .map(_._1)
+    val vocab = wordCounts
+      .top(math.min(fullVocabSize, vocSize).toInt)(Ordering.by(_._2))
+      .map(_._1)
 
     require(vocab.length > 0, "The vocabulary size should be > 0. Lower minDF as necessary.")
     copyValues(new CountVectorizerModel(uid, vocab).setParent(this))
