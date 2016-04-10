@@ -304,10 +304,10 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/classification/OneVsRe
 
 ## Naive Bayes
 
-[OneVsRest](http://en.wikipedia.org/wiki/Multiclass_classification#One-vs.-rest) are a family of simple 
-probabilistic classifiers based on applying Bayes' theorem with strong (naive) independence assumptions 
-between the features. More information about the spark.ml implementation can be found further in the 
-section on [Naive Bayes in MLlib](mllib-naive-bayes.html#naive-bayes-sparkmllib).
+[Naive Bayes](http://en.wikipedia.org/wiki/Naive_Bayes_classifier) are a family of simple 
+probabilistic classifiers based on applying Bayes' theorem with strong (naive) independence 
+assumptions between the features. More information about the spark.ml implementation can be 
+found further in the section on [Naive Bayes in MLlib](mllib-naive-bayes.html#naive-bayes-sparkmllib).
 
 **Example**
 
@@ -321,9 +321,16 @@ Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.classific
 
 <div data-lang="java" markdown="1">
 
-Refer to the [Java API docs](api/java/org/apache/spark/ml/classification/OneVsRest.html) for more details.
+Refer to the [Java API docs](api/java/org/apache/spark/ml/classification/NaiveBayes.html) for more details.
 
-{% include_example java/org/apache/spark/examples/ml/JavaOneVsRestExample.java %}
+{% include_example java/org/apache/spark/examples/ml/JavaNaiveBayesExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.classification.NaiveBayes) for more details.
+
+{% include_example python/ml/naive_bayes_example.py %}
 </div>
 </div>
 
