@@ -305,11 +305,6 @@ class SessionCatalog(
   }
 
   /**
-   * Return whether View is supported
-   */
-  def isViewSupported: Boolean = false
-
-  /**
    * List all tables in the specified database, including temporary tables.
    */
   def listTables(db: String): Seq[TableIdentifier] = listTables(db, "*")
