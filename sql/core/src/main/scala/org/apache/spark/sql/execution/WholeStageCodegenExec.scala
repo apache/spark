@@ -69,8 +69,8 @@ trait CodegenSupport extends SparkPlan {
   protected var parent: CodegenSupport = null
 
   /**
-    * Whether this SparkPlan prefers to accept UnsafeRow as input in doConsume
-    */
+   * Whether this SparkPlan prefers to accept UnsafeRow as input in doConsume
+   */
   def preferUnsafeRow: Boolean = false
 
   /**
