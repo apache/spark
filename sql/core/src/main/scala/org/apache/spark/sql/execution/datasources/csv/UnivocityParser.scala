@@ -181,7 +181,7 @@ private[csv] object UnivocityParser extends Logging{
   /**
    * Tokenize only single line by Univocity.
    */
-  def tokenizeSingleLine(
+  def tokenizeLine(
       line: String,
       options: CSVOptions): Array[String] = {
     val settings = getSettings(options)

@@ -49,7 +49,7 @@ private[csv] object InferSchema {
       filteredRdd
     }
     // Read header
-    val firstRow = UnivocityParser.tokenizeSingleLine(firstLine, options)
+    val firstRow = UnivocityParser.tokenizeLine(firstLine, options)
     val header = if (options.headerFlag) {
       firstRow
     } else {

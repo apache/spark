@@ -67,7 +67,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       // By default fields are assumed to be StringType
       val filteredRdd = rdd.mapPartitions(CSVUtils.filterCommentAndEmpty(_, csvOptions))
       val firstLine = filteredRdd.first()
-      val firstRow = UnivocityParser.tokenizeSingleLine(firstLine, csvOptions)
+      val firstRow = UnivocityParser.tokenizeLine(firstLine, csvOptions)
       val header = if (csvOptions.headerFlag) {
         firstRow
       } else {
