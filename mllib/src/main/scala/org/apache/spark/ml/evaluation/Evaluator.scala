@@ -19,7 +19,7 @@ package org.apache.spark.ml.evaluation
 
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.ml.param.{ParamMap, Params}
-import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.Dataset
 
 /**
  * :: DeveloperApi ::
@@ -36,7 +36,7 @@ abstract class Evaluator extends Params {
    * @param paramMap parameter map that specifies the input columns and output metrics
    * @return metric
    */
-  @Since("1.5.0")
+  @Since("2.0.0")
   def evaluate(dataset: Dataset[_], paramMap: ParamMap): Double = {
     this.copy(paramMap).evaluate(dataset)
   }
@@ -46,7 +46,7 @@ abstract class Evaluator extends Params {
    * @param dataset a dataset that contains labels/observations and predictions.
    * @return metric
    */
-  @Since("1.5.0")
+  @Since("2.0.0")
   def evaluate(dataset: Dataset[_]): Double
 
   /**

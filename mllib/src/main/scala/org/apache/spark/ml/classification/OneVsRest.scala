@@ -140,7 +140,7 @@ final class OneVsRestModel private[ml] (
     validateAndTransformSchema(schema, fitting = false, getClassifier.featuresDataType)
   }
 
-  @Since("1.4.0")
+  @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     // Check schema
     transformSchema(dataset.schema, logging = true)
@@ -293,7 +293,7 @@ final class OneVsRest @Since("1.4.0") (
     validateAndTransformSchema(schema, fitting = true, getClassifier.featuresDataType)
   }
 
-  @Since("1.4.0")
+  @Since("2.0.0")
   override def fit(dataset: Dataset[_]): OneVsRestModel = {
     transformSchema(dataset.schema)
 

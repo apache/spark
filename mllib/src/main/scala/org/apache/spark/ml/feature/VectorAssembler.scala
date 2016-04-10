@@ -47,6 +47,7 @@ class VectorAssembler(override val uid: String)
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
+  @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     // Schema transformation.
     val schema = dataset.schema

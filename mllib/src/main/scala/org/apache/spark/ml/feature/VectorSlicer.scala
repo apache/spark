@@ -89,6 +89,7 @@ final class VectorSlicer(override val uid: String)
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
+  @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     // Validity checks
     transformSchema(dataset.schema)

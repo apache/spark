@@ -125,6 +125,7 @@ class StopWordsRemover(override val uid: String)
 
   setDefault(stopWords -> StopWords.English, caseSensitive -> false)
 
+  @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema)
     val t = if ($(caseSensitive)) {

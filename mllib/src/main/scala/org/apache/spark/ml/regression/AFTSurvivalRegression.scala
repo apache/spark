@@ -191,7 +191,7 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
       }
   }
 
-  @Since("1.6.0")
+  @Since("2.0.0")
   override def fit(dataset: Dataset[_]): AFTSurvivalRegressionModel = {
     validateAndTransformSchema(dataset.schema, fitting = true)
     val instances = extractAFTPoints(dataset)
@@ -299,7 +299,7 @@ class AFTSurvivalRegressionModel private[ml] (
     math.exp(BLAS.dot(coefficients, features) + intercept)
   }
 
-  @Since("1.6.0")
+  @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema)
     val predictUDF = udf { features: Vector => predict(features) }

@@ -87,6 +87,7 @@ final class QuantileDiscretizer(override val uid: String)
     StructType(outputFields)
   }
 
+  @Since("2.0.0")
   override def fit(dataset: Dataset[_]): Bucketizer = {
     val samples = QuantileDiscretizer
       .getSampledInput(dataset.select($(inputCol)), $(numBuckets), $(seed))

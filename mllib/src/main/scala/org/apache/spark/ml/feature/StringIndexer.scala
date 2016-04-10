@@ -80,6 +80,7 @@ class StringIndexer(override val uid: String) extends Estimator[StringIndexerMod
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
 
+  @Since("2.0.0")
   override def fit(dataset: Dataset[_]): StringIndexerModel = {
     val counts = dataset.select(col($(inputCol)).cast(StringType))
       .rdd
@@ -144,6 +145,7 @@ class StringIndexerModel (
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
+  @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     if (!dataset.schema.fieldNames.contains($(inputCol))) {
       logInfo(s"Input column ${$(inputCol)} does not exist during transformation. " +
@@ -286,6 +288,7 @@ class IndexToString private[ml] (override val uid: String)
     StructType(outputFields)
   }
 
+  @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     val inputColSchema = dataset.schema($(inputCol))
     // If the labels array is empty use column metadata

@@ -77,6 +77,7 @@ class HashingTF(override val uid: String)
   /** @group setParam */
   def setBinary(value: Boolean): this.type = set(binary, value)
 
+  @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema)
     val hashingTF = new feature.HashingTF($(numFeatures)).setBinary($(binary))

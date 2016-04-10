@@ -90,7 +90,7 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
   @Since("2.0.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
-  @Since("1.5.0")
+  @Since("2.0.0")
   override def fit(dataset: Dataset[_]): TrainValidationSplitModel = {
     val schema = dataset.schema
     transformSchema(schema, logging = true)
@@ -208,7 +208,7 @@ class TrainValidationSplitModel private[ml] (
     this(uid, bestModel, validationMetrics.asScala.toArray)
   }
 
-  @Since("1.5.0")
+  @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     bestModel.transform(dataset)

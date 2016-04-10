@@ -103,6 +103,7 @@ class RFormula(override val uid: String)
     RFormulaParser.parse($(formula)).hasIntercept
   }
 
+  @Since("2.0.0")
   override def fit(dataset: Dataset[_]): RFormulaModel = {
     require(isDefined(formula), "Formula must be defined first.")
     val parsedFormula = RFormulaParser.parse($(formula))
@@ -204,6 +205,7 @@ class RFormulaModel private[feature](
     private[ml] val pipelineModel: PipelineModel)
   extends Model[RFormulaModel] with RFormulaBase with MLWritable {
 
+  @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     checkCanTransform(dataset.schema)
     transformLabel(pipelineModel.transform(dataset))

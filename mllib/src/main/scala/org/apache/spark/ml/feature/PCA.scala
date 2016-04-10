@@ -68,6 +68,7 @@ class PCA (override val uid: String) extends Estimator[PCAModel] with PCAParams
   /**
    * Computes a [[PCAModel]] that contains the principal components of the input vectors.
    */
+  @Since("2.0.0")
   override def fit(dataset: Dataset[_]): PCAModel = {
     transformSchema(dataset.schema, logging = true)
     val input = dataset.select($(inputCol)).rdd.map { case Row(v: Vector) => v}
@@ -124,6 +125,7 @@ class PCAModel private[ml] (
    * NOTE: Vectors to be transformed must be the same length
    * as the source vectors given to [[PCA.fit()]].
    */
+  @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     val pcaModel = new feature.PCAModel($(k), pc, explainedVariance)

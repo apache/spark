@@ -90,7 +90,7 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
   @Since("2.0.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
-  @Since("1.4.0")
+  @Since("2.0.0")
   override def fit(dataset: Dataset[_]): CrossValidatorModel = {
     val schema = dataset.schema
     transformSchema(schema, logging = true)
@@ -209,7 +209,7 @@ class CrossValidatorModel private[ml] (
     this(uid, bestModel, avgMetrics.asScala.toArray)
   }
 
-  @Since("1.4.0")
+  @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     bestModel.transform(dataset)

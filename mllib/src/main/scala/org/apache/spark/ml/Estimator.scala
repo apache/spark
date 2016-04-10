@@ -19,9 +19,9 @@ package org.apache.spark.ml
 
 import scala.annotation.varargs
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.ml.param.{ParamMap, ParamPair}
-import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.Dataset
 
 /**
  * :: DeveloperApi ::
@@ -39,6 +39,7 @@ abstract class Estimator[M <: Model[M]] extends PipelineStage {
    *                        Estimator's embedded ParamMap.
    * @return fitted model
    */
+  @Since("2.0.0")
   @varargs
   def fit(dataset: Dataset[_], firstParamPair: ParamPair[_], otherParamPairs: ParamPair[_]*): M = {
     val map = new ParamMap()
@@ -55,6 +56,7 @@ abstract class Estimator[M <: Model[M]] extends PipelineStage {
    *                 These values override any specified in this Estimator's embedded ParamMap.
    * @return fitted model
    */
+  @Since("2.0.0")
   def fit(dataset: Dataset[_], paramMap: ParamMap): M = {
     copy(paramMap).fit(dataset)
   }
@@ -62,6 +64,7 @@ abstract class Estimator[M <: Model[M]] extends PipelineStage {
   /**
    * Fits a model to the input data.
    */
+  @Since("2.0.0")
   def fit(dataset: Dataset[_]): M
 
   /**
@@ -74,6 +77,7 @@ abstract class Estimator[M <: Model[M]] extends PipelineStage {
    *                  These values override any specified in this Estimator's embedded ParamMap.
    * @return fitted models, matching the input parameter maps
    */
+  @Since("2.0.0")
   def fit(dataset: Dataset[_], paramMaps: Array[ParamMap]): Seq[M] = {
     paramMaps.map(fit(dataset, _))
   }

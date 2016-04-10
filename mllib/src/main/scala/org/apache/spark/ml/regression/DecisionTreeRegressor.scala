@@ -158,6 +158,7 @@ final class DecisionTreeRegressionModel private[ml] (
     rootNode.predictImpl(features).impurityStats.calculate()
   }
 
+  @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     transformImpl(dataset)

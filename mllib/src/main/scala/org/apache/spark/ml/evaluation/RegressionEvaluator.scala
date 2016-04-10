@@ -70,7 +70,7 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
 
   setDefault(metricName -> "rmse")
 
-  @Since("1.4.0")
+  @Since("2.0.0")
   override def evaluate(dataset: Dataset[_]): Double = {
     val schema = dataset.schema
     val predictionColName = $(predictionCol)

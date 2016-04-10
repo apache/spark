@@ -108,6 +108,7 @@ class VectorIndexer(override val uid: String) extends Estimator[VectorIndexerMod
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
+  @Since("2.0.0")
   override def fit(dataset: Dataset[_]): VectorIndexerModel = {
     transformSchema(dataset.schema, logging = true)
     val firstRow = dataset.select($(inputCol)).take(1)
@@ -345,6 +346,7 @@ class VectorIndexerModel private[ml] (
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
+  @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     val newField = prepOutputField(dataset.schema)

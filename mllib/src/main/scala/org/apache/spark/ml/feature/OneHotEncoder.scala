@@ -121,6 +121,7 @@ class OneHotEncoder(override val uid: String) extends Transformer
     StructType(outputFields)
   }
 
+  @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     // schema transformation
     val inputColName = $(inputCol)

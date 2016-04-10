@@ -123,7 +123,7 @@ class Pipeline @Since("1.4.0") (
    * @param dataset input dataset
    * @return fitted pipeline
    */
-  @Since("1.2.0")
+  @Since("2.0.0")
   override def fit(dataset: Dataset[_]): PipelineModel = {
     transformSchema(dataset.schema, logging = true)
     val theStages = $(stages)
@@ -291,7 +291,7 @@ class PipelineModel private[ml] (
     this(uid, stages.asScala.toArray)
   }
 
-  @Since("1.2.0")
+  @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     stages.foldLeft(dataset.toDF)((cur, transformer) => transformer.transform(cur))

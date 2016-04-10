@@ -147,6 +147,7 @@ class CountVectorizer(override val uid: String)
 
   setDefault(vocabSize -> (1 << 18), minDF -> 1)
 
+  @Since("2.0.0")
   override def fit(dataset: Dataset[_]): CountVectorizerModel = {
     transformSchema(dataset.schema, logging = true)
     val vocSize = $(vocabSize)
@@ -230,6 +231,7 @@ class CountVectorizerModel(override val uid: String, val vocabulary: Array[Strin
   /** Dictionary created from [[vocabulary]] and its indices, broadcast once for [[transform()]] */
   private var broadcastDict: Option[Broadcast[Map[String, Int]]] = None
 
+  @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     if (broadcastDict.isEmpty) {

@@ -164,7 +164,7 @@ class IsotonicRegression @Since("1.5.0") (@Since("1.5.0") override val uid: Stri
   @Since("1.5.0")
   override def copy(extra: ParamMap): IsotonicRegression = defaultCopy(extra)
 
-  @Since("1.5.0")
+  @Since("2.0.0")
   override def fit(dataset: Dataset[_]): IsotonicRegressionModel = {
     validateAndTransformSchema(dataset.schema, fitting = true)
     // Extract columns from data.  If dataset is persisted, do not persist oldDataset.
@@ -236,7 +236,7 @@ class IsotonicRegressionModel private[ml] (
     copyValues(new IsotonicRegressionModel(uid, oldModel), extra).setParent(parent)
   }
 
-  @Since("1.5.0")
+  @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     val predict = dataset.schema($(featuresCol)).dataType match {
       case DoubleType =>

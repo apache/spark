@@ -68,7 +68,7 @@ class Interaction @Since("1.6.0") (override val uid: String) extends Transformer
     StructType(schema.fields :+ StructField($(outputCol), new VectorUDT, false))
   }
 
-  @Since("1.6.0")
+  @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     val inputFeatures = $(inputCols).map(c => dataset.schema(c))
     val featureEncoders = getFeatureEncoders(inputFeatures)

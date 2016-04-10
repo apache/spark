@@ -135,6 +135,7 @@ final class Word2Vec(override val uid: String) extends Estimator[Word2VecModel] 
   /** @group setParam */
   def setMinCount(value: Int): this.type = set(minCount, value)
 
+  @Since("2.0.0")
   override def fit(dataset: Dataset[_]): Word2VecModel = {
     transformSchema(dataset.schema, logging = true)
     val input = dataset.select($(inputCol)).rdd.map(_.getAs[Seq[String]](0))
@@ -219,6 +220,7 @@ class Word2VecModel private[ml] (
    * Transform a sentence column to a vector column to represent the whole sentence. The transform
    * is performed by averaging all word vectors it contains.
    */
+  @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     val vectors = wordVectors.getVectors
