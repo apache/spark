@@ -118,6 +118,9 @@ class SessionCatalog(
     if (!databaseExists(db)) {
       throw new AnalysisException(s"cannot set current database to non-existent '$db'")
     }
+    // scalastyle:off println
+    println(s"setCurrentDatabase - from '$currentDb' to '$db'")
+    // scalastyle:on println
     currentDb = db
   }
 

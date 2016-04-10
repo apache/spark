@@ -65,6 +65,9 @@ class SparkSqlAstBuilder extends AstBuilder {
    * Create a [[SetDatabaseCommand]] logical plan.
    */
   override def visitUse(ctx: UseContext): LogicalPlan = withOrigin(ctx) {
+    // scalastyle:off println
+    println("visitUse - db:" + ctx.db.getText)
+    // scalastyle:on println
     SetDatabaseCommand(ctx.db.getText)
   }
 

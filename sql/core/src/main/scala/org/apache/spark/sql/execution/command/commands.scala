@@ -522,6 +522,9 @@ case class DescribeFunction(
 case class SetDatabaseCommand(databaseName: String) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
+    // scalastyle:off println
+    println("SetDatabaseCommand - db:" + databaseName)
+    // scalastyle:on println
     sqlContext.sessionState.catalog.setCurrentDatabase(databaseName)
     Seq.empty[Row]
   }
