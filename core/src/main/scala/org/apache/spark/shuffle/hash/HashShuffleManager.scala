@@ -18,6 +18,7 @@
 package org.apache.spark.shuffle.hash
 
 import org.apache.spark._
+import org.apache.spark.internal.Logging
 import org.apache.spark.shuffle._
 
 /**

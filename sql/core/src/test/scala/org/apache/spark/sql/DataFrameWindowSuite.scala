@@ -312,4 +312,46 @@ class DataFrameWindowSuite extends QueryTest with SharedSQLContext {
         Row("b", 3, null, null),
         Row("b", 2, null, null)))
   }
+
+  test("last/first with ignoreNulls") {
+    val nullStr: String = null
+    val df = Seq(
+      ("a", 0, nullStr),
+      ("a", 1, "x"),
+      ("a", 2, "y"),
+      ("a", 3, "z"),
+      ("a", 4, nullStr),
+      ("b", 1, nullStr),
+      ("b", 2, nullStr)).
+      toDF("key", "order", "value")
+    val window = Window.partitionBy($"key").orderBy($"order")
+    checkAnswer(
+      df.select(
+        $"key",
+        $"order",
+        first($"value").over(window),
+        first($"value", ignoreNulls = false).over(window),
+        first($"value", ignoreNulls = true).over(window),
+        last($"value").over(window),
+        last($"value", ignoreNulls = false).over(window),
+        last($"value", ignoreNulls = true).over(window)),
+      Seq(
+        Row("a", 0, null, null, null, null, null, null),
+        Row("a", 1, null, null, "x", "x", "x", "x"),
+        Row("a", 2, null, null, "x", "y", "y", "y"),
+        Row("a", 3, null, null, "x", "z", "z", "z"),
+        Row("a", 4, null, null, "x", null, null, "z"),
+        Row("b", 1, null, null, null, null, null, null),
+        Row("b", 2, null, null, null, null, null, null)))
+  }
+
+  test("SPARK-12989 ExtractWindowExpressions treats alias as regular attribute") {
+    val src = Seq((0, 3, 5)).toDF("a", "b", "c")
+      .withColumn("Data", struct("a", "b"))
+      .drop("a")
+      .drop("b")
+    val winSpec = Window.partitionBy("Data.a", "Data.b").orderBy($"c".desc)
+    val df = src.select($"*", max("c").over(winSpec) as "max")
+    checkAnswer(df, Row(5, Row(0, 3), 5))
+  }
 }

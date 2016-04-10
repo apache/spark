@@ -44,6 +44,12 @@ private[sql] object JDBCRelation {
    * exactly once.  The parameters minValue and maxValue are advisory in that
    * incorrect values may cause the partitioning to be poor, but no data
    * will fail to be represented.
+   *
+   * Null value predicate is added to the first partition where clause to include
+   * the rows with null value for the partitions column.
+   *
+   * @param partitioning partition information to generate the where clause for each partition
+   * @return an array of partitions with where clause for each partition
    */
   def columnPartition(partitioning: JDBCPartitioningInfo): Array[Partition] = {
     if (partitioning == null) return Array[Partition](JDBCPartition(null, 0))
@@ -66,7 +72,7 @@ private[sql] object JDBCRelation {
         if (upperBound == null) {
           lowerBound
         } else if (lowerBound == null) {
-          upperBound
+          s"$upperBound or $column is null"
         } else {
           s"$lowerBound AND $upperBound"
         }
@@ -89,6 +95,11 @@ private[sql] case class JDBCRelation(
   override val needConversion: Boolean = false
 
   override val schema: StructType = JDBCRDD.resolveTable(url, table, properties)
+
+  // Check if JDBCRDD.compileFilter can accept input filters
+  override def unhandledFilters(filters: Array[Filter]): Array[Filter] = {
+    filters.filter(JDBCRDD.compileFilter(_).isEmpty)
+  }
 
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
     // Rely on a type erasure hack to pass RDD[InternalRow] back as RDD[Row]

@@ -17,8 +17,10 @@
 
 package org.apache.spark.streaming
 
+import java.util.concurrent.ConcurrentLinkedQueue
+
+import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
 import scala.language.existentials
 import scala.reflect.ClassTag
 
@@ -74,7 +76,7 @@ class BasicOperationsSuite extends TestSuiteBase {
     assert(numInputPartitions === 2, "Number of input partitions has been changed from 2")
     val input = Seq(1 to 4, 5 to 8, 9 to 12)
     val output = Seq(Seq(3, 7), Seq(11, 15), Seq(19, 23))
-    val operation = (r: DStream[Int]) => r.mapPartitions(x => Iterator(x.reduce(_ + _)))
+    val operation = (r: DStream[Int]) => r.mapPartitions(x => Iterator(x.sum))
     testOperation(input, operation, output, true)
   }
 
@@ -84,9 +86,10 @@ class BasicOperationsSuite extends TestSuiteBase {
     withStreamingContext(setupStreams(input, operation, 2)) { ssc =>
       val output = runStreamsWithPartitions(ssc, 3, 3)
       assert(output.size === 3)
-      val first = output(0)
-      val second = output(1)
-      val third = output(2)
+      val outputArray = output.toArray
+      val first = outputArray(0)
+      val second = outputArray(1)
+      val third = outputArray(2)
 
       assert(first.size === 5)
       assert(second.size === 5)
@@ -104,9 +107,10 @@ class BasicOperationsSuite extends TestSuiteBase {
     withStreamingContext(setupStreams(input, operation, 5)) { ssc =>
       val output = runStreamsWithPartitions(ssc, 3, 3)
       assert(output.size === 3)
-      val first = output(0)
-      val second = output(1)
-      val third = output(2)
+      val outputArray = output.toArray
+      val first = outputArray(0)
+      val second = outputArray(1)
+      val third = outputArray(2)
 
       assert(first.size === 2)
       assert(second.size === 2)
@@ -645,8 +649,8 @@ class BasicOperationsSuite extends TestSuiteBase {
         val networkStream =
           ssc.socketTextStream("localhost", testServer.port, StorageLevel.MEMORY_AND_DISK)
         val mappedStream = networkStream.map(_ + ".").persist()
-        val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
-        val outputStream = new TestOutputStream(mappedStream, outputBuffer)
+        val outputQueue = new ConcurrentLinkedQueue[Seq[String]]
+        val outputStream = new TestOutputStream(mappedStream, outputQueue)
 
         outputStream.register()
         ssc.start()
@@ -685,7 +689,7 @@ class BasicOperationsSuite extends TestSuiteBase {
         testServer.stop()
 
         // verify data has been received
-        assert(outputBuffer.size > 0)
+        assert(!outputQueue.isEmpty)
         assert(blockRdds.size > 0)
         assert(persistentRddIds.size > 0)
 

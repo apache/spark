@@ -23,8 +23,9 @@ import scala.collection.mutable
 import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
 
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.SparkConf
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.BlockManagerMessages._
@@ -452,7 +453,7 @@ private[spark] class BlockManagerInfo(
     }
 
     if (storageLevel.isValid) {
-      /* isValid means it is either stored in-memory, on-disk or on-externalBlockStore.
+      /* isValid means it is either stored in-memory or on-disk.
        * The memSize here indicates the data size in or dropped from memory,
        * externalBlockStoreSize here indicates the data size in or dropped from externalBlockStore,
        * and the diskSize here indicates the data size in or dropped to disk.

@@ -252,7 +252,7 @@ Nodes in the output layer use softmax function:
 \]`
 The number of nodes `$N$` in the output layer corresponds to the number of classes. 
 
-MLPC employes backpropagation for learning the model. We use logistic loss function for optimization and L-BFGS as optimization routine.
+MLPC employs backpropagation for learning the model. We use logistic loss function for optimization and L-BFGS as optimization routine.
 
 **Example**
 
@@ -289,7 +289,7 @@ The example below demonstrates how to load the
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.classifier.OneVsRest) for more details.
+Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.classification.OneVsRest) for more details.
 
 {% include_example scala/org/apache/spark/examples/ml/OneVsRestExample.scala %}
 </div>

@@ -153,7 +153,7 @@ sparkR.init <- function(
     if (!file.exists(path)) {
       stop("JVM is not ready after 10 seconds")
     }
-    f <- file(path, open="rb")
+    f <- file(path, open = "rb")
     backendPort <- readInt(f)
     monitorPort <- readInt(f)
     rLibPath <- readString(f)
@@ -185,9 +185,9 @@ sparkR.init <- function(
   }
 
   sparkExecutorEnvMap <- convertNamedListToEnv(sparkExecutorEnv)
-  if(is.null(sparkExecutorEnvMap$LD_LIBRARY_PATH)) {
+  if (is.null(sparkExecutorEnvMap$LD_LIBRARY_PATH)) {
     sparkExecutorEnvMap[["LD_LIBRARY_PATH"]] <-
-      paste0("$LD_LIBRARY_PATH:",Sys.getenv("LD_LIBRARY_PATH"))
+      paste0("$LD_LIBRARY_PATH:", Sys.getenv("LD_LIBRARY_PATH"))
   }
 
   # Classpath separator is ";" on Windows
@@ -299,7 +299,7 @@ sparkRHive.init <- function(jsc = NULL) {
 #'
 #' @param sc existing spark context
 #' @param groupid the ID to be assigned to job groups
-#' @param description description for the the job group ID
+#' @param description description for the job group ID
 #' @param interruptOnCancel flag to indicate if the job is interrupted on job cancellation
 #' @examples
 #'\dontrun{

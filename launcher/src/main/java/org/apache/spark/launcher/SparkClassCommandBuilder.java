@@ -17,12 +17,10 @@
 
 package org.apache.spark.launcher;
 
-import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Pattern;
 
 import static org.apache.spark.launcher.CommandBuilderUtils.*;
 
@@ -43,13 +41,14 @@ class SparkClassCommandBuilder extends AbstractCommandBuilder {
   }
 
   @Override
-  public List<String> buildCommand(Map<String, String> env) throws IOException {
-    List<String> javaOptsKeys = new ArrayList<String>();
+  public List<String> buildCommand(Map<String, String> env)
+      throws IOException, IllegalArgumentException {
+    List<String> javaOptsKeys = new ArrayList<>();
     String memKey = null;
     String extraClassPath = null;
 
-    // Master, Worker, and HistoryServer use SPARK_DAEMON_JAVA_OPTS (and specific opts) +
-    // SPARK_DAEMON_MEMORY.
+    // Master, Worker, HistoryServer, ExternalShuffleService, MesosClusterDispatcher use
+    // SPARK_DAEMON_JAVA_OPTS (and specific opts) + SPARK_DAEMON_MEMORY.
     if (className.equals("org.apache.spark.deploy.master.Master")) {
       javaOptsKeys.add("SPARK_DAEMON_JAVA_OPTS");
       javaOptsKeys.add("SPARK_MASTER_OPTS");
@@ -69,43 +68,31 @@ class SparkClassCommandBuilder extends AbstractCommandBuilder {
     } else if (className.equals("org.apache.spark.executor.MesosExecutorBackend")) {
       javaOptsKeys.add("SPARK_EXECUTOR_OPTS");
       memKey = "SPARK_EXECUTOR_MEMORY";
+    } else if (className.equals("org.apache.spark.deploy.mesos.MesosClusterDispatcher")) {
+      javaOptsKeys.add("SPARK_DAEMON_JAVA_OPTS");
     } else if (className.equals("org.apache.spark.deploy.ExternalShuffleService") ||
         className.equals("org.apache.spark.deploy.mesos.MesosExternalShuffleService")) {
       javaOptsKeys.add("SPARK_DAEMON_JAVA_OPTS");
       javaOptsKeys.add("SPARK_SHUFFLE_OPTS");
       memKey = "SPARK_DAEMON_MEMORY";
-    } else if (className.startsWith("org.apache.spark.tools.")) {
-      String sparkHome = getSparkHome();
-      File toolsDir = new File(join(File.separator, sparkHome, "tools", "target",
-        "scala-" + getScalaVersion()));
-      checkState(toolsDir.isDirectory(), "Cannot find tools build directory.");
-
-      Pattern re = Pattern.compile("spark-tools_.*\\.jar");
-      for (File f : toolsDir.listFiles()) {
-        if (re.matcher(f.getName()).matches()) {
-          extraClassPath = f.getAbsolutePath();
-          break;
-        }
-      }
-
-      checkState(extraClassPath != null,
-        "Failed to find Spark Tools Jar in %s.\n" +
-        "You need to run \"build/sbt tools/package\" before running %s.",
-        toolsDir.getAbsolutePath(), className);
-
-      javaOptsKeys.add("SPARK_JAVA_OPTS");
     } else {
       javaOptsKeys.add("SPARK_JAVA_OPTS");
       memKey = "SPARK_DRIVER_MEMORY";
     }
 
     List<String> cmd = buildJavaCommand(extraClassPath);
+
     for (String key : javaOptsKeys) {
-      addOptionString(cmd, System.getenv(key));
+      String envValue = System.getenv(key);
+      if (!isEmpty(envValue) && envValue.contains("Xmx")) {
+        String msg = String.format("%s is not allowed to specify max heap(Xmx) memory settings " +
+                "(was %s). Use the corresponding configuration instead.", key, envValue);
+        throw new IllegalArgumentException(msg);
+      }
+      addOptionString(cmd, envValue);
     }
 
     String mem = firstNonEmpty(memKey != null ? System.getenv(memKey) : null, DEFAULT_MEM);
-    cmd.add("-Xms" + mem);
     cmd.add("-Xmx" + mem);
     addPermGenSizeOpt(cmd);
     cmd.add(className);

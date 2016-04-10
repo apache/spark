@@ -122,7 +122,7 @@ private class LongSQLMetricParam(val stringValue: Seq[Long] => String, initialVa
 
 private object LongSQLMetricParam extends LongSQLMetricParam(_.sum.toString, 0L)
 
-private object StaticsLongSQLMetricParam extends LongSQLMetricParam(
+private object StatisticsBytesSQLMetricParam extends LongSQLMetricParam(
   (values: Seq[Long]) => {
     // This is a workaround for SPARK-11013.
     // We use -1 as initial value of the accumulator, if the accumulator is valid, we will update
@@ -136,6 +136,24 @@ private object StaticsLongSQLMetricParam extends LongSQLMetricParam(
         Seq(sorted.sum, sorted(0), sorted(validValues.length / 2), sorted(validValues.length - 1))
       }
       metric.map(Utils.bytesToString)
+    }
+    s"\n$sum ($min, $med, $max)"
+  }, -1L)
+
+private object StatisticsTimingSQLMetricParam extends LongSQLMetricParam(
+  (values: Seq[Long]) => {
+    // This is a workaround for SPARK-11013.
+    // We use -1 as initial value of the accumulator, if the accumulator is valid, we will update
+    // it at the end of task and the value will be at least 0.
+    val validValues = values.filter(_ >= 0)
+    val Seq(sum, min, med, max) = {
+      val metric = if (validValues.length == 0) {
+        Seq.fill(4)(0L)
+      } else {
+        val sorted = validValues.sorted
+        Seq(sorted.sum, sorted(0), sorted(validValues.length / 2), sorted(validValues.length - 1))
+      }
+      metric.map(Utils.msDurationToString)
     }
     s"\n$sum ($min, $med, $max)"
   }, -1L)
@@ -168,15 +186,24 @@ private[sql] object SQLMetrics {
     // The final result of this metric in physical operator UI may looks like:
     // data size total (min, med, max):
     // 100GB (100MB, 1GB, 10GB)
-    createLongMetric(sc, s"$name total (min, med, max)", StaticsLongSQLMetricParam)
+    createLongMetric(sc, s"$name total (min, med, max)", StatisticsBytesSQLMetricParam)
+  }
+
+  def createTimingMetric(sc: SparkContext, name: String): LongSQLMetric = {
+    // The final result of this metric in physical operator UI may looks like:
+    // duration(min, med, max):
+    // 5s (800ms, 1s, 2s)
+    createLongMetric(sc, s"$name total (min, med, max)", StatisticsTimingSQLMetricParam)
   }
 
   def getMetricParam(metricParamName: String): SQLMetricParam[SQLMetricValue[Any], Any] = {
     val longSQLMetricParam = Utils.getFormattedClassName(LongSQLMetricParam)
-    val staticsSQLMetricParam = Utils.getFormattedClassName(StaticsLongSQLMetricParam)
+    val bytesSQLMetricParam = Utils.getFormattedClassName(StatisticsBytesSQLMetricParam)
+    val timingsSQLMetricParam = Utils.getFormattedClassName(StatisticsTimingSQLMetricParam)
     val metricParam = metricParamName match {
       case `longSQLMetricParam` => LongSQLMetricParam
-      case `staticsSQLMetricParam` => StaticsLongSQLMetricParam
+      case `bytesSQLMetricParam` => StatisticsBytesSQLMetricParam
+      case `timingsSQLMetricParam` => StatisticsTimingSQLMetricParam
     }
     metricParam.asInstanceOf[SQLMetricParam[SQLMetricValue[Any], Any]]
   }

@@ -205,7 +205,7 @@ class HiveTypeCoercionSuite extends PlanTest {
       Project(Seq(Alias(transformed, "a")()), testRelation))
   }
 
-  test("cast NullType for expresions that implement ExpectsInputTypes") {
+  test("cast NullType for expressions that implement ExpectsInputTypes") {
     import HiveTypeCoercionSuite._
 
     ruleTest(HiveTypeCoercion.ImplicitTypeCasts,
@@ -247,6 +247,67 @@ class HiveTypeCoercionSuite extends PlanTest {
       Coalesce(Cast(Literal(1L), DecimalType(22, 0))
         :: Cast(Literal(1), DecimalType(22, 0))
         :: Cast(Literal(new java.math.BigDecimal("1000000000000000000000")), DecimalType(22, 0))
+        :: Nil))
+  }
+
+  test("CreateArray casts") {
+    ruleTest(HiveTypeCoercion.FunctionArgumentConversion,
+      CreateArray(Literal(1.0)
+        :: Literal(1)
+        :: Literal.create(1.0, FloatType)
+        :: Nil),
+      CreateArray(Cast(Literal(1.0), DoubleType)
+        :: Cast(Literal(1), DoubleType)
+        :: Cast(Literal.create(1.0, FloatType), DoubleType)
+        :: Nil))
+
+    ruleTest(HiveTypeCoercion.FunctionArgumentConversion,
+      CreateArray(Literal(1.0)
+        :: Literal(1)
+        :: Literal("a")
+        :: Nil),
+      CreateArray(Cast(Literal(1.0), StringType)
+        :: Cast(Literal(1), StringType)
+        :: Cast(Literal("a"), StringType)
+        :: Nil))
+  }
+
+  test("CreateMap casts") {
+    // type coercion for map keys
+    ruleTest(HiveTypeCoercion.FunctionArgumentConversion,
+      CreateMap(Literal(1)
+        :: Literal("a")
+        :: Literal.create(2.0, FloatType)
+        :: Literal("b")
+        :: Nil),
+      CreateMap(Cast(Literal(1), FloatType)
+        :: Literal("a")
+        :: Cast(Literal.create(2.0, FloatType), FloatType)
+        :: Literal("b")
+        :: Nil))
+    // type coercion for map values
+    ruleTest(HiveTypeCoercion.FunctionArgumentConversion,
+      CreateMap(Literal(1)
+        :: Literal("a")
+        :: Literal(2)
+        :: Literal(3.0)
+        :: Nil),
+      CreateMap(Literal(1)
+        :: Cast(Literal("a"), StringType)
+        :: Literal(2)
+        :: Cast(Literal(3.0), StringType)
+        :: Nil))
+    // type coercion for both map keys and values
+    ruleTest(HiveTypeCoercion.FunctionArgumentConversion,
+      CreateMap(Literal(1)
+        :: Literal("a")
+        :: Literal(2.0)
+        :: Literal(3.0)
+        :: Nil),
+      CreateMap(Cast(Literal(1), DoubleType)
+        :: Cast(Literal("a"), StringType)
+        :: Cast(Literal(2.0), DoubleType)
+        :: Cast(Literal(3.0), StringType)
         :: Nil))
   }
 

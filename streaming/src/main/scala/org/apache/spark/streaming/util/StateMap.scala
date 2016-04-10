@@ -177,7 +177,7 @@ private[streaming] class OpenHashMapBasedStateMap[K, S](
     new OpenHashMapBasedStateMap[K, S](this, deltaChainThreshold = deltaChainThreshold)
   }
 
-  /** Whether the delta chain lenght is long enough that it should be compacted */
+  /** Whether the delta chain length is long enough that it should be compacted */
   def shouldCompact: Boolean = {
     deltaChainLength >= deltaChainThreshold
   }
@@ -364,7 +364,7 @@ private[streaming] object OpenHashMapBasedStateMap {
   }
 
   /**
-   * Internal class to represent a marker the demarkate the the end of all state data in the
+   * Internal class to represent a marker the demarkate the end of all state data in the
    * serialized bytes.
    */
   class LimitMarker(val num: Int) extends Serializable

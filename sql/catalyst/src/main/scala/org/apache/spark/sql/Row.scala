@@ -20,7 +20,6 @@ package org.apache.spark.sql
 import scala.collection.JavaConverters._
 import scala.util.hashing.MurmurHash3
 
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.types.StructType
 
@@ -306,7 +305,7 @@ trait Row extends Serializable {
    * @throws ClassCastException when data type does not match.
    */
   def getStruct(i: Int): Row = {
-    // Product and Row both are recoginized as StructType in a Row
+    // Product and Row both are recognized as StructType in a Row
     val t = get(i)
     if (t.isInstanceOf[Product]) {
       Row.fromTuple(t.asInstanceOf[Product])
