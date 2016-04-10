@@ -64,6 +64,8 @@ class AssociationRules private[fpm] (
    */
   @Since("2.0.0")
   def setMaxConsequent(maxConsequent: Int): this.type = {
+    require(maxConsequent > 0,
+      s"Maximum consequent must be positive but got ${maxConsequent}")
     this.maxConsequent = maxConsequent
     this
   }
