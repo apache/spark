@@ -246,7 +246,7 @@ class SessionCatalog(
       if (externalCatalog.tableExists(db, table)) {
         externalCatalog.dropTable(db, table, ignoreIfNotExists = true)
       } else if (!ignoreIfNotExists) {
-        logError(s"Table '${name.quotedString}' does not exist")
+        logError(s"Table or View '${name.quotedString}' does not exist")
       }
     } else {
       tempTables.remove(table)
