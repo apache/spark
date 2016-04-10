@@ -221,7 +221,7 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
       createView(
         ctx,
         ctx.tableIdentifier,
-        Option(ctx.STRING).map(string),
+        comment = Option(ctx.STRING).map(string),
         schema,
         ctx.query,
         Option(ctx.tablePropertyList).map(visitTablePropertyList).getOrElse(Map.empty),
@@ -238,7 +238,7 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
     createView(
       ctx,
       ctx.tableIdentifier,
-      None,
+      comment = None,
       Seq.empty,
       ctx.query,
       Map.empty,
@@ -252,20 +252,19 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
   private def createView(
       ctx: ParserRuleContext,
       name: TableIdentifierContext,
-      description: Option[String],
+      comment: Option[String],
       schema: Seq[CatalogColumn],
       query: QueryContext,
       properties: Map[String, String],
       allowExist: Boolean,
       replace: Boolean): LogicalPlan = {
     val sql = Option(source(query))
-    val comment = description.map("comment" -> _)
     val tableDesc = CatalogTable(
       identifier = visitTableIdentifier(name),
       tableType = CatalogTableType.VIRTUAL_VIEW,
       schema = schema,
       storage = EmptyStorageFormat,
-      properties = properties ++ comment,
+      properties = properties ++ comment.map("comment" -> _),
       viewOriginalText = sql,
       viewText = sql)
     CreateView(tableDesc, plan(query), allowExist, replace, command(ctx))
