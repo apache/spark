@@ -98,7 +98,7 @@ abstract class AbstractSqlParser extends ParserInterface with Logging {
       case e: ParseException =>
         throw e.withCommand(command)
       case e: AnalysisException =>
-        val position = Origin(e.line, e.startPosition)
+        val position = Origin(None, e.line, e.startPosition)
         throw new ParseException(Option(command), e.message, position, position)
     }
   }
@@ -150,7 +150,7 @@ case object ParseErrorListener extends BaseErrorListener {
       charPositionInLine: Int,
       msg: String,
       e: RecognitionException): Unit = {
-    val position = Origin(Some(line), Some(charPositionInLine))
+    val position = Origin(None, Some(line), Some(charPositionInLine))
     throw new ParseException(None, msg, position, position)
   }
 }
@@ -176,7 +176,7 @@ class ParseException(
     val builder = new StringBuilder
     builder ++= "\n" ++= message
     start match {
-      case Origin(Some(l), Some(p)) =>
+      case Origin(None, Some(l), Some(p)) =>
         builder ++= s"(line $l, pos $p)\n"
         command.foreach { cmd =>
           val (above, below) = cmd.split("\n").splitAt(l)
