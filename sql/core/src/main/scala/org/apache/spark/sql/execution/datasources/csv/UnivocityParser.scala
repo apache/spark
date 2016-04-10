@@ -72,7 +72,7 @@ private[csv] object UnivocityParser extends Logging{
     } else {
       filteredRdd
     }
-    csv.mapPartitions { iter =>
+    dropHeaderRdd.mapPartitions { iter =>
       parseCsv(iter, schema, requiredSchema, headers, options)
     }
   }
