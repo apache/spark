@@ -210,7 +210,6 @@ case class DropTable(
             s"Cannot drop a table with DROP VIEW. Please use DROP TABLE instead")
         case _ =>
       })
-
       try {
         sqlContext.cacheManager.tryUncacheQuery(sqlContext.table(tableName.quotedString))
       } catch {
