@@ -532,6 +532,9 @@ private[clustering] object OnlineLDAOptimizer {
    * An optimization (Lee, Seung: Algorithms for non-negative matrix factorization, NIPS 2001)
    * avoids explicit computation of variational parameter `phi`.
    * @see [[http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.31.7566]]
+   *
+   * @return A tuple of topic distribution `gammad`, `sstatsd` and `ids`. Latter two are the
+   *         statistics required by the [[OnlineLDAOptimizer.submitMiniBatch()]] method.
    */
   private[clustering] def variationalTopicInference(
       termCounts: Vector,
