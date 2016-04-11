@@ -183,8 +183,7 @@ case class CatalogStorageFormat(
     inputFormat: Option[String],
     outputFormat: Option[String],
     serde: Option[String],
-    serdeProperties: Map[String, String],
-    storedAsDirs: Boolean = false)
+    serdeProperties: Map[String, String])
 
 
 /**
@@ -224,10 +223,6 @@ case class CatalogTable(
     partitionColumnNames: Seq[String] = Seq.empty,
     sortColumnNames: Seq[String] = Seq.empty,
     bucketColumnNames: Seq[String] = Seq.empty,
-    // e.g. (date, country)
-    skewColumnNames: Seq[String] = Seq.empty,
-    // e.g. ('2008-08-08', 'us), ('2009-09-09', 'uk')
-    skewColumnValues: Seq[Seq[String]] = Seq.empty,
     numBuckets: Int = 0,
     createTime: Long = System.currentTimeMillis,
     lastAccessTime: Long = System.currentTimeMillis,
@@ -245,7 +240,6 @@ case class CatalogTable(
   requireSubsetOfSchema(partitionColumnNames, "partition")
   requireSubsetOfSchema(sortColumnNames, "sort")
   requireSubsetOfSchema(bucketColumnNames, "bucket")
-  requireSubsetOfSchema(skewColumnNames, "skew")
 
   /** Columns this table is partitioned by. */
   def partitionColumns: Seq[CatalogColumn] =
@@ -314,19 +308,4 @@ case class CatalogRelation(
 
   require(metadata.identifier.database == Some(db),
     "provided database does not match the one specified in the table definition")
-}
-
-
-/**
- * Skew specifications for a table.
- */
-case class SkewSpec(
-    // e.g. ['datetime', 'country']
-    columns: Seq[String],
-    // e.g. [['2008-08-08', 'us], ['2009-09-09', 'uk']]
-    values: Seq[Seq[String]],
-    storedAsDirs: Boolean) {
-
-  require(values.forall(_.size == columns.size),
-    "number of columns in skewed values do not match number of skewed columns provided")
 }

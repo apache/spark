@@ -315,8 +315,6 @@ private[hive] class HiveClientImpl(
         partitionColumnNames = partCols.map(_.name),
         sortColumnNames = Seq(), // TODO: populate this
         bucketColumnNames = h.getBucketCols.asScala,
-        skewColumnNames = h.getSkewedColNames.asScala,
-        skewColumnValues = h.getSkewedColValues.asScala.map(_.asScala),
         numBuckets = h.getNumBuckets,
         createTime = h.getTTable.getCreateTime.toLong * 1000,
         lastAccessTime = h.getLastAccessTime.toLong * 1000,
@@ -681,7 +679,6 @@ private[hive] class HiveClientImpl(
       case CatalogTableType.INDEX_TABLE => HiveTableType.INDEX_TABLE
       case CatalogTableType.VIRTUAL_VIEW => HiveTableType.VIRTUAL_VIEW
     })
-    // TODO: pass the comment to Hive somehow
     // Note: In Hive the schema and partition columns must be disjoint sets
     val (partCols, schema) = table.schema.map(toHiveColumn).partition { c =>
       table.partitionColumnNames.contains(c.getName)
@@ -690,8 +687,6 @@ private[hive] class HiveClientImpl(
     hiveTable.setPartCols(partCols.asJava)
     // TODO: set sort columns here too
     hiveTable.setBucketCols(table.bucketColumnNames.asJava)
-    hiveTable.setSkewedColNames(table.skewColumnNames.asJava)
-    hiveTable.setSkewedColValues(table.skewColumnValues.map(_.asJava).asJava)
     hiveTable.setOwner(conf.getUser)
     hiveTable.setNumBuckets(table.numBuckets)
     hiveTable.setCreateTime((table.createTime / 1000).toInt)
@@ -702,6 +697,7 @@ private[hive] class HiveClientImpl(
     table.storage.serde.foreach(hiveTable.setSerializationLib)
     table.storage.serdeProperties.foreach { case (k, v) => hiveTable.setSerdeParam(k, v) }
     table.properties.foreach { case (k, v) => hiveTable.setProperty(k, v) }
+    table.comment.foreach { c => hiveTable.setProperty("comment", c) }
     table.viewOriginalText.foreach { t => hiveTable.setViewOriginalText(t) }
     table.viewText.foreach { t => hiveTable.setViewExpandedText(t) }
     hiveTable

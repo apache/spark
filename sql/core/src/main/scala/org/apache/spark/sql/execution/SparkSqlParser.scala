@@ -20,7 +20,6 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.SkewSpec
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
@@ -785,21 +784,6 @@ class SparkSqlAstBuilder extends AstBuilder {
       Option(ctx.orderedIdentifierList).toSeq
         .flatMap(_.orderedIdentifier.asScala)
         .map(_.identifier.getText))
-  }
-
-  /**
-   * Create a skew specification. This contains three components:
-   * - The Skewed Columns
-   * - Values for which are skewed. The size of each entry must match the number of skewed columns.
-   * - A store in directory flag.
-   */
-  override def visitSkewSpec(ctx: SkewSpecContext): SkewSpec = withOrigin(ctx) {
-    val skewedValues = if (ctx.constantList != null) {
-      Seq(visitConstantList(ctx.constantList))
-    } else {
-      visitNestedConstantList(ctx.nestedConstantList)
-    }
-    SkewSpec(visitIdentifierList(ctx.identifierList), skewedValues, ctx.DIRECTORIES != null)
   }
 
   /**

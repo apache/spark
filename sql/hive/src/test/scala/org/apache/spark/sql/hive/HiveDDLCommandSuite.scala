@@ -69,9 +69,12 @@ class HiveDDLCommandSuite extends PlanTest {
       CatalogColumn("page_url", "string") ::
       CatalogColumn("referrer_url", "string") ::
       CatalogColumn("ip", "string", comment = Some("IP Address of the User")) ::
-      CatalogColumn("country", "string", comment = Some("country of origination")) :: Nil)
+      CatalogColumn("country", "string", comment = Some("country of origination")) ::
+      CatalogColumn("dt", "string", comment = Some("date type")) ::
+      CatalogColumn("hour", "string", comment = Some("hour of the day")) :: Nil)
+    assert(desc.comment == Some("This is the staging page view table"))
     // TODO will be SQLText
-    assert(desc.viewText == Option("This is the staging page view table"))
+    assert(desc.viewText.isEmpty)
     assert(desc.viewOriginalText.isEmpty)
     assert(desc.partitionColumns ==
       CatalogColumn("dt", "string", comment = Some("date type")) ::
@@ -116,9 +119,12 @@ class HiveDDLCommandSuite extends PlanTest {
       CatalogColumn("page_url", "string") ::
       CatalogColumn("referrer_url", "string") ::
       CatalogColumn("ip", "string", comment = Some("IP Address of the User")) ::
-      CatalogColumn("country", "string", comment = Some("country of origination")) :: Nil)
+      CatalogColumn("country", "string", comment = Some("country of origination")) ::
+      CatalogColumn("dt", "string", comment = Some("date type")) ::
+      CatalogColumn("hour", "string", comment = Some("hour of the day")) :: Nil)
     // TODO will be SQLText
-    assert(desc.viewText == Option("This is the staging page view table"))
+    assert(desc.comment == Some("This is the staging page view table"))
+    assert(desc.viewText.isEmpty)
     assert(desc.viewOriginalText.isEmpty)
     assert(desc.partitionColumns ==
       CatalogColumn("dt", "string", comment = Some("date type")) ::
@@ -193,17 +199,6 @@ class HiveDDLCommandSuite extends PlanTest {
           |WITH SERDEPROPERTIES("serde_p1"="p1","serde_p2"="p2")
           |STORED AS RCFile
           |TBLPROPERTIES("tbl_p1"="p11", "tbl_p2"="p22")
-          |AS SELECT key, value FROM src ORDER BY key, value
-        """.stripMargin)
-    }
-    intercept[ParseException] {
-      parser.parsePlan(
-        """CREATE TABLE ctas2
-          |STORED AS
-          |INPUTFORMAT "org.apache.hadoop.mapred.TextInputFormat"
-          |OUTPUTFORMAT "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"
-          |INPUTDRIVER "org.apache.hadoop.hive.howl.rcfile.RCFileInputDriver"
-          |OUTPUTDRIVER "org.apache.hadoop.hive.howl.rcfile.RCFileOutputDriver"
           |AS SELECT key, value FROM src ORDER BY key, value
         """.stripMargin)
     }

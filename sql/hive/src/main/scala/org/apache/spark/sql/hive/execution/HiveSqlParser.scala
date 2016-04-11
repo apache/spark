@@ -128,17 +128,14 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
   override def visitCreateFileFormat(
       ctx: CreateFileFormatContext): CatalogStorageFormat = withOrigin(ctx) {
     (ctx.fileFormat, ctx.storageHandler) match {
-      case (fileFormat, null) if fileFormat != null =>
-        fileFormat match {
-          // Expected format: INPUTFORMAT input_format OUTPUTFORMAT output_format
-          case c: TableFileFormatContext => visitTableFileFormat(c)
-          // Expected format: SEQUENCEFILE | TEXTFILE | RCFILE | ORC | PARQUET | AVRO
-          case c: GenericFileFormatContext => visitGenericFileFormat(c)
-        }
-      case (null, storageHandler) if storageHandler != null =>
+      // Expected format: INPUTFORMAT input_format OUTPUTFORMAT output_format
+      case (c: TableFileFormatContext, null) =>
+          visitTableFileFormat(c)
+      // Expected format: SEQUENCEFILE | TEXTFILE | RCFILE | ORC | PARQUET | AVRO
+      case (c: GenericFileFormatContext, null) =>
+        visitGenericFileFormat(c)
+      case (null, storageHandler) =>
         throw new ParseException("Operation not allowed: ... STORED BY storage_handler ...", ctx)
-      case (null, null) =>
-        throw new ParseException("expected one of STORED AS or STORED BY", ctx)
       case _ =>
         throw new ParseException("expected either STORED AS or STORED BY, not both", ctx)
     }
@@ -163,13 +160,19 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
    *   [AS select_statement];
    * }}}
    */
-  override def visitCreateTable(ctx: CreateTableContext): LogicalPlan = {
+  override def visitCreateTable(ctx: CreateTableContext): LogicalPlan = withOrigin(ctx) {
     val (name, temp, ifNotExists, external) = visitCreateTableHeader(ctx.createTableHeader)
     // TODO: implement temporary tables
     if (temp) {
-      throw new AnalysisException(
+      throw new ParseException(
         "CREATE TEMPORARY TABLE is not supported yet. " +
-        "Please use registerTempTable as an alternative.")
+        "Please use registerTempTable as an alternative.", ctx)
+    }
+    if (ctx.skewSpec != null) {
+      throw new ParseException("Operation not allowed: CREATE TABLE ... SKEWED BY ...", ctx)
+    }
+    if (ctx.bucketSpec != null) {
+      throw new ParseException("Operation not allowed: CREATE TABLE ... CLUSTERED BY ...", ctx)
     }
     val tableType = if (external) {
       CatalogTableType.EXTERNAL_TABLE
@@ -179,14 +182,6 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
     val comment = Option(ctx.STRING).map(string)
     val partitionCols = Option(ctx.partitionColumns).toSeq.flatMap(visitCatalogColumns(_))
     val cols = Option(ctx.columns).toSeq.flatMap(visitCatalogColumns(_, _.toLowerCase))
-    val bucketSpec = Option(ctx.bucketSpec).map(visitBucketSpec)
-    val sortColNames = bucketSpec.map(_.sortColumnNames).getOrElse(Seq())
-    val bucketColNames = bucketSpec.map(_.bucketColumnNames).getOrElse(Seq())
-    val numBuckets = bucketSpec.map(_.numBuckets).getOrElse(0)
-    val skewSpec = Option(ctx.skewSpec).map(visitSkewSpec)
-    val skewedColNames = skewSpec.map(_.columns).getOrElse(Seq())
-    val skewedColValues = skewSpec.map(_.values).getOrElse(Seq())
-    val storedAsDirs = skewSpec.exists(_.storedAsDirs)
     val properties = Option(ctx.tablePropertyList).map(visitTablePropertyList).getOrElse(Map.empty)
     val selectQuery = Option(ctx.query).map(plan)
 
@@ -195,40 +190,37 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
     val schema = cols ++ partitionCols
 
     // Storage format
-    val defaultStorageType = hiveConf.getVar(HiveConf.ConfVars.HIVEDEFAULTFILEFORMAT)
-    val defaultHiveSerde = HiveSerDe.sourceToSerDe(defaultStorageType, hiveConf).getOrElse {
-      HiveSerDe(
-        inputFormat = Option("org.apache.hadoop.mapred.TextInputFormat"),
-        outputFormat = Option("org.apache.hadoop.hive.ql.io.IgnoreKeyTextOutputFormat"))
+    val defaultStorage: CatalogStorageFormat = {
+      val defaultStorageType = hiveConf.getVar(HiveConf.ConfVars.HIVEDEFAULTFILEFORMAT)
+      val defaultHiveSerde = HiveSerDe.sourceToSerDe(defaultStorageType, hiveConf)
+      CatalogStorageFormat(
+        locationUri = None,
+        inputFormat = defaultHiveSerde.flatMap(_.inputFormat)
+          .orElse(Option("org.apache.hadoop.mapred.TextInputFormat")),
+        outputFormat = defaultHiveSerde.flatMap(_.outputFormat)
+          .orElse(Option("org.apache.hadoop.hive.ql.io.IgnoreKeyTextOutputFormat")),
+        serde = defaultHiveSerde.flatMap(_.serde),
+        serdeProperties = Map())
     }
     val fileStorage = Option(ctx.createFileFormat).map(visitCreateFileFormat)
-    val rowStorage = Option(ctx.rowFormat).map(visitRowFormat)
+      .getOrElse(EmptyStorageFormat)
+    val rowStorage = Option(ctx.rowFormat).map(visitRowFormat).getOrElse(EmptyStorageFormat)
     val location = Option(ctx.locationSpec).map(visitLocationSpec)
     val storage = CatalogStorageFormat(
       locationUri = location,
-      inputFormat = fileStorage.map(_.inputFormat).getOrElse(defaultHiveSerde.inputFormat),
-      outputFormat = fileStorage.map(_.outputFormat).getOrElse(defaultHiveSerde.outputFormat),
-      serde = rowStorage.map(_.serde)
-        .orElse(fileStorage.map(_.serde))
-        .getOrElse(defaultHiveSerde.serde),
-      serdeProperties =
-        rowStorage.map(_.serdeProperties).getOrElse(Map()) ++
-        fileStorage.map(_.serdeProperties).getOrElse(Map()),
-      storedAsDirs = storedAsDirs)
+      inputFormat = fileStorage.inputFormat.orElse(defaultStorage.inputFormat),
+      outputFormat = fileStorage.outputFormat.orElse(defaultStorage.outputFormat),
+      serde = rowStorage.serde.orElse(fileStorage.serde).orElse(defaultStorage.serde),
+      serdeProperties = rowStorage.serdeProperties ++ fileStorage.serdeProperties)
 
+    // TODO support the sql text - have a proper location for this!
     val tableDesc = CatalogTable(
       identifier = name,
       tableType = tableType,
       storage = storage,
       schema = schema,
       partitionColumnNames = partitionCols.map(_.name),
-      sortColumnNames = sortColNames,
-      bucketColumnNames = bucketColNames,
-      skewColumnNames = skewedColNames,
-      skewColumnValues = skewedColValues,
-      numBuckets = numBuckets,
       properties = properties,
-      // TODO support the sql text - have a proper location for this!
       comment = comment)
 
     selectQuery match {
@@ -345,7 +337,7 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
 
       case c: RowFormatSerdeContext =>
         // Use a serde format.
-        val CatalogStorageFormat(None, None, None, Some(name), props, _) = visitRowFormatSerde(c)
+        val CatalogStorageFormat(None, None, None, Some(name), props) = visitRowFormatSerde(c)
 
         // SPARK-10310: Special cases LazySimpleSerDe
         val recordHandler = if (name == classOf[LazySimpleSerDe].getCanonicalName) {
