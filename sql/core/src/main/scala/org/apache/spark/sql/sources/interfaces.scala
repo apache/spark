@@ -21,8 +21,7 @@ import scala.collection.mutable
 import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileStatus, FileSystem, LocatedFileStatus, Path}
-import org.apache.hadoop.fs.s3.S3FileSystem
+import org.apache.hadoop.fs._
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
@@ -32,7 +31,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.{expressions, CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, expressions}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.FileRelation
 import org.apache.spark.sql.execution.datasources._
@@ -622,6 +621,14 @@ class HDFSFileCatalog(
 
   def getStatus(path: Path): Array[FileStatus] = leafDirToChildrenFiles(path)
 
+  private implicit class LocatedFileStatusIterator(iterator: RemoteIterator[LocatedFileStatus])
+    extends Iterator[LocatedFileStatus] {
+
+    override def hasNext: Boolean = iterator.hasNext
+
+    override def next(): LocatedFileStatus = iterator.next()
+  }
+
   private def listLeafFiles(paths: Seq[Path]): mutable.LinkedHashSet[FileStatus] = {
     if (paths.length >= sqlContext.conf.parallelPartitionDiscoveryThreshold) {
       HadoopFsRelation.listLeafFilesInParallel(paths, hadoopConf, sqlContext.sparkContext)
@@ -632,18 +639,22 @@ class HDFSFileCatalog(
         // Dummy jobconf to get to the pathFilter defined in configuration
         val jobConf = new JobConf(hadoopConf, this.getClass)
         val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
-        val statuses = if (pathFilter != null) {
-          Try(fs.listStatus(path, pathFilter)).getOrElse(Array.empty)
-        } else {
-          Try(fs.listStatus(path)).getOrElse(Array.empty)
-        }
 
-        // Note that although S3/S3A/S3N file system doesn't provide valid locality information,
-        // calling `getFileBlockLocations` does no harm here since these file system implementations
-        // don't issue RPC for this method.
-        statuses.map {
-          case f: LocatedFileStatus => f
-          case f => new LocatedFileStatus(f, fs.getFileBlockLocations(f, 0, f.getLen))
+        // NOTE:
+        //
+        //  - `FileSystem.listLocatedStatus` returns a `RemoteIterator`. Hadoop has optimized this
+        //    method so that `LocatedFileStatus`es are fetched in batch. So it's OK to use it
+        //    here. It would be problematic for Spark versions older than 2.0 since we needed to
+        //    support Hadoop 1.x back then.
+        //
+        //  - Although S3/S3A/S3N file system can be quite slow for remote file metadata
+        //    operations, calling `listLocatedStatus` does no harm here since these file system
+        //    implementations don't actually issue RPC for this method.
+        val stats = Try(fs.listLocatedStatus(path).toArray).getOrElse(Array.empty)
+        if (pathFilter != null) {
+          stats.filter(f => pathFilter.accept(f.getPath))
+        } else {
+          stats
         }
       }.filterNot { status =>
         val name = status.getPath.getName
