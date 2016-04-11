@@ -454,7 +454,7 @@ case class TungstenAggregate(
     val thisPlan = ctx.addReferenceObj("plan", this)
     hashMapTerm = ctx.freshName("hashMap")
     val hashMapClassName = classOf[UnsafeFixedWidthAggregationMap].getName
-    ctx.addMutableState(hashMapClassName, hashMapTerm, s"")
+    ctx.addMutableState(hashMapClassName, hashMapTerm, "")
     sorterTerm = ctx.freshName("sorter")
     ctx.addMutableState(classOf[UnsafeKVExternalSorter].getName, sorterTerm, "")
 
