@@ -432,11 +432,21 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     sql("DROP TABLE dbx.tab1")
   }
 
-  test("drop view") {
+  test("drop view in SQLContext") {
+    // SQLContext does not support create view. Log an error message, if tab1 does not exists
+    sql("DROP VIEW tab1")
+
+    val catalog = sqlContext.sessionState.catalog
+    val tableIdent = TableIdentifier("tab1", Some("dbx"))
+    createDatabase(catalog, "dbx")
+    createTable(catalog, tableIdent)
+    assert(catalog.listTables("dbx") == Seq(tableIdent))
+
     val e = intercept[AnalysisException] {
       sql("DROP VIEW dbx.tab1")
     }
-    assert(e.getMessage.contains("Not supported object: views"))
+    assert(
+      e.getMessage.contains("Cannot drop a table with DROP VIEW. Please use DROP TABLE instead"))
   }
 
   private def convertToDatasourceTable(

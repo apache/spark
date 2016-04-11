@@ -70,8 +70,6 @@ private[sql] class HiveSessionCatalog(
     }
   }
 
-  override def isViewSupported: Boolean = true
-
   // ----------------------------------------------------------------
   // | Methods and fields for interacting with HiveMetastoreCatalog |
   // ----------------------------------------------------------------
