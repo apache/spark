@@ -41,12 +41,8 @@ class NonNullableBinaryComparisonSimplificationSuite extends PlanTest with Predi
         PruneFilters) :: Nil
   }
 
-  val nullableRelation = LocalRelation.fromExternalRows(
-    Seq('a.int.withNullability(true)),
-    Seq(null, null, null, null).map(x => Row(x)))
-  val nonNullableRelation = LocalRelation.fromExternalRows(
-    Seq('a.int.withNullability(false)),
-    Seq(1, 2, 3, 4).map(x => Row(x)))
+  val nullableRelation = LocalRelation('a.int.withNullability(true))
+  val nonNullableRelation = LocalRelation('a.int.withNullability(false))
 
   test("Preserve nullable or non-deterministic exprs") {
     for (e <- Seq('a === 'a, Rand(0) === Rand(0))) {
