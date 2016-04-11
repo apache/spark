@@ -17,12 +17,7 @@
 
 # mllib.R: Provides methods for MLlib integration
 
-#' @title S4 class that represents a PipelineModel
-#' @param model A Java object reference to the backing Scala PipelineModel
-#' @export
-setClass("PipelineModel", representation(model = "jobj"))
-
-#' @title S4 class that represents a GeneralizedLinearRegressionModel
+#' @title S4 class that represents a generalized linear model
 #' @param jobj a Java object reference to the backing Scala GeneralizedLinearRegressionWrapper
 #' @export
 setClass("GeneralizedLinearRegressionModel", representation(jobj = "jobj"))
@@ -44,21 +39,17 @@ setClass("KMeansModel", representation(jobj = "jobj"))
 
 #' Fits a generalized linear model
 #'
-#' Fits a generalized linear model, similarly to R's glm(). Also see the glmnet package.
+#' Fits a generalized linear model, similarly to R's glm().
 #'
 #' @param formula A symbolic description of the model to be fitted. Currently only a few formula
 #'                operators are supported, including '~', '.', ':', '+', and '-'.
-#' @param data DataFrame for training
-#' @param family Error distribution. "gaussian" -> linear regression, "binomial" -> logistic reg.
-#' @param lambda Regularization parameter
-#' @param alpha Elastic-net mixing parameter (see glmnet's documentation for details)
-#' @param standardize Whether to standardize features before training
-#' @param solver The solver algorithm used for optimization, this can be "l-bfgs", "normal" and
-#'               "auto". "l-bfgs" denotes Limited-memory BFGS which is a limited-memory
-#'               quasi-Newton optimization method. "normal" denotes using Normal Equation as an
-#'               analytical solution to the linear regression problem. The default value is "auto"
-#'               which means that the solver algorithm is selected automatically.
-#' @return a fitted MLlib model
+#' @param data DataFrame for training.
+#' @param family A description of the error distribution and link function to be used in the model.
+#'               This can be a character string naming a family function, a family function or
+#'               the result of a call to a family function.
+#' @param epsilon Positive convergence tolerance of iterations.
+#' @param maxit Integer giving the maximal number of IRLS iterations.
+#' @return a fitted generalized linear model
 #' @rdname glm
 #' @export
 #' @examples
@@ -69,7 +60,7 @@ setClass("KMeansModel", representation(jobj = "jobj"))
 #' df <- createDataFrame(sqlContext, iris)
 #' model <- glm(Sepal_Length ~ Sepal_Width, df, family="gaussian")
 #' summary(model)
-#'}
+#' }
 setMethod("glm", signature(formula = "formula", family = "ANY", data = "DataFrame"),
           function(formula, family = gaussian, data, epsilon = 1e-06, maxit = 25) {
             if (is.character(family)) {
@@ -86,24 +77,17 @@ setMethod("glm", signature(formula = "formula", family = "ANY", data = "DataFram
             formula <- paste(deparse(formula), collapse = "")
 
             jobj <- callJStatic("org.apache.spark.ml.r.GeneralizedLinearRegressionWrapper",
-                                 "fit", formula, data@sdf, family$family, family$link,
-                                 epsilon, maxit)
+                                "fit", formula, data@sdf, family$family, family$link,
+                                epsilon, as.integer(maxit))
             return(new("GeneralizedLinearRegressionModel", jobj = jobj))
           })
 
-#' Get the summary of a model
+#' Get the summary of a generalized linear model
 #'
 #' Returns the summary of a model produced by glm(), similarly to R's summary().
 #'
-#' @param object A fitted MLlib model
-#' @return a list with 'devianceResiduals' and 'coefficients' components for gaussian family
-#'         or a list with 'coefficients' component for binomial family. \cr
-#'         For gaussian family: the 'devianceResiduals' gives the min/max deviance residuals
-#'         of the estimation, the 'coefficients' gives the estimated coefficients and their
-#'         estimated standard errors, t values and p-values. (It only available when model
-#'         fitted by normal solver.) \cr
-#'         For binomial family: the 'coefficients' gives the estimated coefficients.
-#'         See summary.glm for more information. \cr
+#' @param object A fitted generalized linear model
+#' @return coefficients the model's coefficients, intercept
 #' @rdname summary
 #' @export
 #' @examples
@@ -117,18 +101,18 @@ setMethod("summary", signature(object = "GeneralizedLinearRegressionModel"),
             features <- callJMethod(jobj, "rFeatures")
             coefficients <- callJMethod(jobj, "rCoefficients")
             coefficients <- as.matrix(unlist(coefficients))
-            colnames(coefficients) <- c("Value")
+            colnames(coefficients) <- c("Estimate")
             rownames(coefficients) <- unlist(features)
             return(list(coefficients = coefficients))
           })
 
-#' Make predictions from a model
+#' Make predictions from a generalized linear model
 #'
-#' Makes predictions from a model produced by glm(), similarly to R's predict().
+#' Makes predictions from a generalized linear model produced by glm(), similarly to R's predict().
 #'
-#' @param object A fitted MLlib model
+#' @param object A fitted generalized linear model
 #' @param newData DataFrame for testing
-#' @return DataFrame containing predicted values
+#' @return DataFrame containing predicted labels in a column named "prediction"
 #' @rdname predict
 #' @export
 #' @examples
@@ -136,7 +120,7 @@ setMethod("summary", signature(object = "GeneralizedLinearRegressionModel"),
 #' model <- glm(y ~ x, trainingData)
 #' predicted <- predict(model, testData)
 #' showDF(predicted)
-#'}
+#' }
 setMethod("predict", signature(object = "GeneralizedLinearRegressionModel"),
           function(object, newData) {
             return(dataFrame(callJMethod(object@jobj, "transform", newData@sdf)))

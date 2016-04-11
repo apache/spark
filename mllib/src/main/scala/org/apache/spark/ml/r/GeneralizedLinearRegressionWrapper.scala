@@ -56,11 +56,9 @@ private[r] object GeneralizedLinearRegressionWrapper {
       link: String,
       epsilon: Double,
       maxit: Int): GeneralizedLinearRegressionWrapper = {
-
     val rFormula = new RFormula()
       .setFormula(formula)
     val rFormulaModel = rFormula.fit(data)
-
     // get labels and feature names from output schema
     val schema = rFormulaModel.transform(data).schema
     val featureAttrs = AttributeGroup.fromStructField(schema(rFormula.getFeaturesCol))
@@ -73,11 +71,9 @@ private[r] object GeneralizedLinearRegressionWrapper {
       .setFitIntercept(rFormula.hasIntercept)
       .setTol(epsilon)
       .setMaxIter(maxit)
-
     val pipeline = new Pipeline()
       .setStages(Array(rFormula, glm))
       .fit(data)
-
     new GeneralizedLinearRegressionWrapper(pipeline, features)
   }
 }
