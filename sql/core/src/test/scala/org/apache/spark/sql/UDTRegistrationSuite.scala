@@ -31,7 +31,6 @@ import org.apache.spark.sql.types._
 
 private[sql] trait DenseVector extends Serializable
 
-@SQLUserDefinedType(udt = classOf[MyDVectorUDT])
 private[sql] class MyDVector(val data: Array[Double]) extends DenseVector with Serializable {
   override def equals(other: Any): Boolean = other match {
     case v: MyDVector =>
@@ -114,6 +113,7 @@ class UDTRegistrationSuite extends QueryTest with SharedSQLContext with ParquetT
   import testImplicits._
 
   UDTRegistration.register(classOf[DenseVector], classOf[MyDVectorUDT])
+  UDTRegistration.register(classOf[MyDVector], classOf[MyDVectorUDT])
   UDTRegistration.register(classOf[MyDVector2], classOf[MyDVectorUDT])
 
   private lazy val pointsRDD = Seq(
