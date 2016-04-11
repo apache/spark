@@ -122,8 +122,12 @@ class SessionCatalog(
   }
 
   def getDatabasePath(dbName: String, path: Option[String]): String = {
-    val dbPath = path.getOrElse(System.getProperty("java.io.tmpdir"))
-    new Path(new Path(dbPath), dbName.toLowerCase() + ".db").toString
+    val dbPath =
+      path.map(new Path(_))
+        .getOrElse(
+          new Path(new Path(System.getProperty("java.io.tmpdir")), dbName.toLowerCase() + ".db"))
+
+    org.apache.commons.lang.StringUtils.removeEnd(dbPath.toString, "/")
   }
 
   // ----------------------------------------------------------------------------

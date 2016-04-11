@@ -86,7 +86,6 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
 
   test("Create/Drop Database") {
     val catalog = sqlContext.sessionState.catalog
-
     val databaseNames = Seq("db1", "`database`")
 
     databaseNames.foreach { dbName =>
@@ -120,7 +119,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         assert(db1 == CatalogDatabase(
           dbNameWithoutBackTicks,
           "",
-          appendTrailingSlash(System.getProperty("java.io.tmpdir")) + s"$dbNameWithoutBackTicks.db",
+          org.apache.commons.lang.StringUtils.removeEnd(System.getProperty("java.io.tmpdir"), "/"),
           Map.empty))
         sql(s"DROP DATABASE $dbName CASCADE")
         assert(!catalog.databaseExists(dbNameWithoutBackTicks))
