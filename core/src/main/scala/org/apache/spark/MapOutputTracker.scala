@@ -431,6 +431,7 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
   def getSerializedMapOutputStatuses(shuffleId: Int): Array[Byte] = {
     var statuses: Array[MapStatus] = null
     var epochGotten: Long = -1
+    var byteArr: Array[Byte] = null
     epochLock.synchronized {
       if (epoch > cacheEpoch) {
         cachedSerializedStatuses.clear()
@@ -442,17 +443,17 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
         case None =>
           statuses = mapStatuses.getOrElse(shuffleId, Array[MapStatus]())
           epochGotten = epoch
+          // If we got here, we failed to find the serialized locations in the cache, so we pulled
+          // out a snapshot of the locations as "statuses"; let's serialize and return that
+          byteArr = MapOutputTracker.serializeMapStatuses(statuses)
+          logInfo("Size of output statuses for shuffle %d is %d bytes".format(shuffleId, byteArr.length))
       }
       
-      // If we got here, we failed to find the serialized locations in the cache, so we pulled
-      // out a snapshot of the locations as "statuses"; let's serialize and return that
-      val bytes = MapOutputTracker.serializeMapStatuses(statuses)
-      logInfo("Size of output statuses for shuffle %d is %d bytes".format(shuffleId, bytes.length))
       // Add them into the table only if the epoch hasn't changed while we were working
       if (epoch == epochGotten) {
-        cachedSerializedStatuses(shuffleId) = bytes
+        cachedSerializedStatuses(shuffleId) = byteArr
       }
-      bytes
+      byteArr
     }
   }
 
