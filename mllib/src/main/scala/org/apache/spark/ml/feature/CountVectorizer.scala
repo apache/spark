@@ -170,16 +170,10 @@ class CountVectorizer(override val uid: String)
       (word, count)
     }.cache()
     val fullVocabSize = wordCounts.count()
-    val vocab: Array[String] = {
-      val tmpSortedWC: Array[(String, Long)] = if (fullVocabSize <= vocSize) {
-        // Use all terms
-        wordCounts.collect().sortBy(-_._2)
-      } else {
-        // Sort terms to select vocab
-        wordCounts.sortBy(_._2, ascending = false).take(vocSize)
-      }
-      tmpSortedWC.map(_._1)
-    }
+
+    val vocab = wordCounts
+      .top(math.min(fullVocabSize, vocSize).toInt)(Ordering.by(_._2))
+      .map(_._1)
 
     require(vocab.length > 0, "The vocabulary size should be > 0. Lower minDF as necessary.")
     copyValues(new CountVectorizerModel(uid, vocab).setParent(this))
