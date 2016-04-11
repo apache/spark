@@ -328,43 +328,43 @@ class RowMatrix @Since("1.0.0") (
     val n = numCols().toInt
     checkNumColumns(n)
 
-    val (m, mean) = rows.treeAggregate[(Long, BDV[Double])]((0L, BDV.zeros[Double](n)))(
-      seqOp = (s: (Long, BDV[Double]), v: Vector) => (s._1 + 1L, s._2 += v.toBreeze),
-      combOp = (s1: (Long, BDV[Double]), s2: (Long, BDV[Double])) =>
-        (s1._1 + s2._1, s1._2 += s2._2)
-    )
+    val summary = computeColumnSummaryStatistics()
+    val m = summary.count
+    require(m > 1, s"RowMatrix.computeCovariance called on matrix with only $m rows." +
+      "  Cannot compute the covariance of a RowMatrix with <= 1 row.")
+    val mean = summary.mean.toBreeze
 
-    if (m <= 1) {
-      sys.error(s"RowMatrix.computeCovariance called on matrix with only $m rows." +
-        "  Cannot compute the covariance of a RowMatrix with <= 1 row.")
+    rows.first() match {
+      case _: SparseVector =>
+        // We use the formula Cov(X, Y) = E[X * Y] - E[X] E[Y], which is not accurate if E[X * Y] is
+        // large but Cov(X, Y) is small, but it is good for sparse computation.
+        // TODO: find a fast and stable way for sparse data.
+        val G = computeGramianMatrix().toBreeze
+        var i = 0
+        var j = 0
+        val m1 = m - 1.0
+        var alpha = 0.0
+        while (i < n) {
+          alpha = m / m1 * mean(i)
+          j = i
+          while (j < n) {
+            val Gij = G(i, j) / m1 - alpha * mean(j)
+            G(i, j) = Gij
+            G(j, i) = Gij
+            j += 1
+          }
+          i += 1
+        }
+        Matrices.fromBreeze(G)
+
+      case _: DenseVector =>
+        // For dense, go ahead and subtract off mean to avoid round-off problem above
+        val centeredRows = rows.map(row => Vectors.fromBreeze(row.toBreeze - mean))
+        // Then all that's needed is to divide the Gramian by m-1
+        new RowMatrix(centeredRows, nRows, nCols).computeGramianMatrix().map(_ / (m - 1.0))
+
+      case _ => throw new IllegalArgumentException("Unsupported vector type")
     }
-    updateNumRows(m)
-
-    mean :/= m.toDouble
-
-    // We use the formula Cov(X, Y) = E[X * Y] - E[X] E[Y], which is not accurate if E[X * Y] is
-    // large but Cov(X, Y) is small, but it is good for sparse computation.
-    // TODO: find a fast and stable way for sparse data.
-
-    val G = computeGramianMatrix().toBreeze.asInstanceOf[BDM[Double]]
-
-    var i = 0
-    var j = 0
-    val m1 = m - 1.0
-    var alpha = 0.0
-    while (i < n) {
-      alpha = m / m1 * mean(i)
-      j = i
-      while (j < n) {
-        val Gij = G(i, j) / m1 - alpha * mean(j)
-        G(i, j) = Gij
-        G(j, i) = Gij
-        j += 1
-      }
-      i += 1
-    }
-
-    Matrices.fromBreeze(G)
   }
 
   /**
