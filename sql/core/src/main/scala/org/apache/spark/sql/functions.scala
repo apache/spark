@@ -27,8 +27,8 @@ import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.parser.CatalystQl
 import org.apache.spark.sql.catalyst.plans.logical.BroadcastHint
+import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -154,6 +154,8 @@ object functions {
   /**
    * Aggregate function: returns the approximate number of distinct items in a group.
    *
+   * @param rsd maximum estimation error allowed (default = 0.05)
+   *
    * @group agg_funcs
    * @since 1.3.0
    */
@@ -163,6 +165,8 @@ object functions {
 
   /**
    * Aggregate function: returns the approximate number of distinct items in a group.
+   *
+   * @param rsd maximum estimation error allowed (default = 0.05)
    *
    * @group agg_funcs
    * @since 1.3.0
@@ -332,95 +336,94 @@ object functions {
   }
 
   /**
-    * Aggregate function: returns the first value in a group.
-    *
-    * The function by default returns the first values it sees. It will return the first non-null
-    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
-    *
-    * @group agg_funcs
-    * @since 2.0.0
-    */
+   * Aggregate function: returns the first value in a group.
+   *
+   * The function by default returns the first values it sees. It will return the first non-null
+   * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+   *
+   * @group agg_funcs
+   * @since 2.0.0
+   */
   def first(e: Column, ignoreNulls: Boolean): Column = withAggregateFunction {
     new First(e.expr, Literal(ignoreNulls))
   }
 
   /**
-    * Aggregate function: returns the first value of a column in a group.
-    *
-    * The function by default returns the first values it sees. It will return the first non-null
-    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
-    *
-    * @group agg_funcs
-    * @since 2.0.0
-    */
+   * Aggregate function: returns the first value of a column in a group.
+   *
+   * The function by default returns the first values it sees. It will return the first non-null
+   * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+   *
+   * @group agg_funcs
+   * @since 2.0.0
+   */
   def first(columnName: String, ignoreNulls: Boolean): Column = {
     first(Column(columnName), ignoreNulls)
   }
 
   /**
-    * Aggregate function: returns the first value in a group.
-    *
-    * The function by default returns the first values it sees. It will return the first non-null
-    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
-    *
-    * @group agg_funcs
-    * @since 1.3.0
-    */
+   * Aggregate function: returns the first value in a group.
+   *
+   * The function by default returns the first values it sees. It will return the first non-null
+   * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+   *
+   * @group agg_funcs
+   * @since 1.3.0
+   */
   def first(e: Column): Column = first(e, ignoreNulls = false)
 
   /**
-    * Aggregate function: returns the first value of a column in a group.
-    *
-    * The function by default returns the first values it sees. It will return the first non-null
-    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
-    *
-    * @group agg_funcs
-    * @since 1.3.0
-    */
+   * Aggregate function: returns the first value of a column in a group.
+   *
+   * The function by default returns the first values it sees. It will return the first non-null
+   * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+   *
+   * @group agg_funcs
+   * @since 1.3.0
+   */
   def first(columnName: String): Column = first(Column(columnName))
 
-
   /**
-    * Aggregate function: indicates whether a specified column in a GROUP BY list is aggregated
-    * or not, returns 1 for aggregated or 0 for not aggregated in the result set.
-    *
-    * @group agg_funcs
-    * @since 2.0.0
-    */
+   * Aggregate function: indicates whether a specified column in a GROUP BY list is aggregated
+   * or not, returns 1 for aggregated or 0 for not aggregated in the result set.
+   *
+   * @group agg_funcs
+   * @since 2.0.0
+   */
   def grouping(e: Column): Column = Column(Grouping(e.expr))
 
   /**
-    * Aggregate function: indicates whether a specified column in a GROUP BY list is aggregated
-    * or not, returns 1 for aggregated or 0 for not aggregated in the result set.
-    *
-    * @group agg_funcs
-    * @since 2.0.0
-    */
+   * Aggregate function: indicates whether a specified column in a GROUP BY list is aggregated
+   * or not, returns 1 for aggregated or 0 for not aggregated in the result set.
+   *
+   * @group agg_funcs
+   * @since 2.0.0
+   */
   def grouping(columnName: String): Column = grouping(Column(columnName))
 
   /**
-    * Aggregate function: returns the level of grouping, equals to
-    *
-    *   (grouping(c1) << (n-1)) + (grouping(c2) << (n-2)) + ... + grouping(cn)
-    *
-    * Note: the list of columns should match with grouping columns exactly, or empty (means all the
-    * grouping columns).
-    *
-    * @group agg_funcs
-    * @since 2.0.0
-    */
+   * Aggregate function: returns the level of grouping, equals to
+   *
+   *   (grouping(c1) << (n-1)) + (grouping(c2) << (n-2)) + ... + grouping(cn)
+   *
+   * Note: the list of columns should match with grouping columns exactly, or empty (means all the
+   * grouping columns).
+   *
+   * @group agg_funcs
+   * @since 2.0.0
+   */
   def grouping_id(cols: Column*): Column = Column(GroupingID(cols.map(_.expr)))
 
   /**
-    * Aggregate function: returns the level of grouping, equals to
-    *
-    *   (grouping(c1) << (n-1)) + (grouping(c2) << (n-2)) + ... + grouping(cn)
-    *
-    * Note: the list of columns should match with grouping columns exactly.
-    *
-    * @group agg_funcs
-    * @since 2.0.0
-    */
+   * Aggregate function: returns the level of grouping, equals to
+   *
+   *   (grouping(c1) << (n-1)) + (grouping(c2) << (n-2)) + ... + grouping(cn)
+   *
+   * Note: the list of columns should match with grouping columns exactly.
+   *
+   * @group agg_funcs
+   * @since 2.0.0
+   */
   def grouping_id(colName: String, colNames: String*): Column = {
     grouping_id((Seq(colName) ++ colNames).map(n => Column(n)) : _*)
   }
@@ -442,51 +445,51 @@ object functions {
   def kurtosis(columnName: String): Column = kurtosis(Column(columnName))
 
   /**
-    * Aggregate function: returns the last value in a group.
-    *
-    * The function by default returns the last values it sees. It will return the last non-null
-    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
-    *
-    * @group agg_funcs
-    * @since 2.0.0
-    */
+   * Aggregate function: returns the last value in a group.
+   *
+   * The function by default returns the last values it sees. It will return the last non-null
+   * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+   *
+   * @group agg_funcs
+   * @since 2.0.0
+   */
   def last(e: Column, ignoreNulls: Boolean): Column = withAggregateFunction {
     new Last(e.expr, Literal(ignoreNulls))
   }
 
   /**
-    * Aggregate function: returns the last value of the column in a group.
-    *
-    * The function by default returns the last values it sees. It will return the last non-null
-    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
-    *
-    * @group agg_funcs
-    * @since 2.0.0
-    */
+   * Aggregate function: returns the last value of the column in a group.
+   *
+   * The function by default returns the last values it sees. It will return the last non-null
+   * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+   *
+   * @group agg_funcs
+   * @since 2.0.0
+   */
   def last(columnName: String, ignoreNulls: Boolean): Column = {
     last(Column(columnName), ignoreNulls)
   }
 
   /**
-    * Aggregate function: returns the last value in a group.
-    *
-    * The function by default returns the last values it sees. It will return the last non-null
-    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
-    *
-    * @group agg_funcs
-    * @since 1.3.0
-    */
+   * Aggregate function: returns the last value in a group.
+   *
+   * The function by default returns the last values it sees. It will return the last non-null
+   * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+   *
+   * @group agg_funcs
+   * @since 1.3.0
+   */
   def last(e: Column): Column = last(e, ignoreNulls = false)
 
   /**
-    * Aggregate function: returns the last value of the column in a group.
-    *
-    * The function by default returns the last values it sees. It will return the last non-null
-    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
-    *
-    * @group agg_funcs
-    * @since 1.3.0
-    */
+   * Aggregate function: returns the last value of the column in a group.
+   *
+   * The function by default returns the last values it sees. It will return the last non-null
+   * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+   *
+   * @group agg_funcs
+   * @since 1.3.0
+   */
   def last(columnName: String): Column = last(Column(columnName), ignoreNulls = false)
 
   /**
@@ -905,6 +908,17 @@ object functions {
   }
 
   /**
+   * Creates a new map column. The input columns must be grouped as key-value pairs, e.g.
+   * (key1, value1, key2, value2, ...). The key columns must all have the same data type, and can't
+   * be null. The value columns must all have the same data type.
+   *
+   * @group normal_funcs
+   * @since 2.0
+   */
+  @scala.annotation.varargs
+  def map(cols: Column*): Column = withExpr { CreateMap(cols.map(_.expr)) }
+
+  /**
    * Marks a DataFrame as small enough for use in broadcast joins.
    *
    * The following example marks the right DataFrame for broadcast hash join using `joinKey`.
@@ -917,7 +931,7 @@ object functions {
    * @since 1.5.0
    */
   def broadcast(df: DataFrame): DataFrame = {
-    Dataset.newDataFrame(df.sqlContext, BroadcastHint(df.logicalPlan))
+    Dataset.ofRows(df.sqlContext, BroadcastHint(df.logicalPlan))
   }
 
   /**
@@ -1161,8 +1175,7 @@ object functions {
    * @group normal_funcs
    */
   def expr(expr: String): Column = {
-    val parser = SQLContext.getActive().map(_.sessionState.sqlParser).getOrElse(new CatalystQl())
-    Column(parser.parseExpression(expr))
+    Column(SparkSqlParser.parseExpression(expr))
   }
 
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -2222,7 +2235,7 @@ object functions {
 
   /**
    * Splits str around pattern (pattern is a regular expression).
-   * NOTE: pattern is a string represent the regular expression.
+   * NOTE: pattern is a string representation of the regular expression.
    *
    * @group string_funcs
    * @since 1.5.0
@@ -2257,9 +2270,9 @@ object functions {
 
   /**
    * Translate any character in the src by a character in replaceString.
-   * The characters in replaceString is corresponding to the characters in matchingString.
-   * The translate will happen when any character in the string matching with the character
-   * in the matchingString.
+   * The characters in replaceString correspond to the characters in matchingString.
+   * The translate will happen when any character in the string matches the character
+   * in the `matchingString`.
    *
    * @group string_funcs
    * @since 1.5.0
@@ -2540,12 +2553,146 @@ object functions {
     ToUTCTimestamp(ts.expr, Literal(tz))
   }
 
+  /**
+   * Bucketize rows into one or more time windows given a timestamp specifying column. Window
+   * starts are inclusive but the window ends are exclusive, e.g. 12:05 will be in the window
+   * [12:05,12:10) but not in [12:00,12:05). Windows can support microsecond precision. Windows in
+   * the order of months are not supported. The following example takes the average stock price for
+   * a one minute window every 10 seconds starting 5 seconds after the hour:
+   *
+   * {{{
+   *   val df = ... // schema => timestamp: TimestampType, stockId: StringType, price: DoubleType
+   *   df.groupBy(window($"time", "1 minute", "10 seconds", "5 seconds"), $"stockId")
+   *     .agg(mean("price"))
+   * }}}
+   *
+   * The windows will look like:
+   *
+   * {{{
+   *   09:00:05-09:01:05
+   *   09:00:15-09:01:15
+   *   09:00:25-09:01:25 ...
+   * }}}
+   *
+   * For a continuous query, you may use the function `current_timestamp` to generate windows on
+   * processing time.
+   *
+   * @param timeColumn The column or the expression to use as the timestamp for windowing by time.
+   *                   The time column must be of TimestampType.
+   * @param windowDuration A string specifying the width of the window, e.g. `10 minutes`,
+   *                       `1 second`. Check [[org.apache.spark.unsafe.types.CalendarInterval]] for
+   *                       valid duration identifiers.
+   * @param slideDuration A string specifying the sliding interval of the window, e.g. `1 minute`.
+   *                      A new window will be generated every `slideDuration`. Must be less than
+   *                      or equal to the `windowDuration`. Check
+   *                      [[org.apache.spark.unsafe.types.CalendarInterval]] for valid duration
+   *                      identifiers.
+   * @param startTime The offset with respect to 1970-01-01 00:00:00 UTC with which to start
+   *                  window intervals. For example, in order to have hourly tumbling windows that
+   *                  start 15 minutes past the hour, e.g. 12:15-13:15, 13:15-14:15... provide
+   *                  `startTime` as `15 minutes`.
+   *
+   * @group datetime_funcs
+   * @since 2.0.0
+   */
+  @Experimental
+  def window(
+      timeColumn: Column,
+      windowDuration: String,
+      slideDuration: String,
+      startTime: String): Column = {
+    withExpr {
+      TimeWindow(timeColumn.expr, windowDuration, slideDuration, startTime)
+    }.as("window")
+  }
+
+
+  /**
+   * Bucketize rows into one or more time windows given a timestamp specifying column. Window
+   * starts are inclusive but the window ends are exclusive, e.g. 12:05 will be in the window
+   * [12:05,12:10) but not in [12:00,12:05). Windows can support microsecond precision. Windows in
+   * the order of months are not supported. The windows start beginning at 1970-01-01 00:00:00 UTC.
+   * The following example takes the average stock price for a one minute window every 10 seconds:
+   *
+   * {{{
+   *   val df = ... // schema => timestamp: TimestampType, stockId: StringType, price: DoubleType
+   *   df.groupBy(window($"time", "1 minute", "10 seconds"), $"stockId")
+   *     .agg(mean("price"))
+   * }}}
+   *
+   * The windows will look like:
+   *
+   * {{{
+   *   09:00:00-09:01:00
+   *   09:00:10-09:01:10
+   *   09:00:20-09:01:20 ...
+   * }}}
+   *
+   * For a continuous query, you may use the function `current_timestamp` to generate windows on
+   * processing time.
+   *
+   * @param timeColumn The column or the expression to use as the timestamp for windowing by time.
+   *                   The time column must be of TimestampType.
+   * @param windowDuration A string specifying the width of the window, e.g. `10 minutes`,
+   *                       `1 second`. Check [[org.apache.spark.unsafe.types.CalendarInterval]] for
+   *                       valid duration identifiers.
+   * @param slideDuration A string specifying the sliding interval of the window, e.g. `1 minute`.
+   *                      A new window will be generated every `slideDuration`. Must be less than
+   *                      or equal to the `windowDuration`. Check
+   *                      [[org.apache.spark.unsafe.types.CalendarInterval]] for valid duration.
+   *
+   * @group datetime_funcs
+   * @since 2.0.0
+   */
+  @Experimental
+  def window(timeColumn: Column, windowDuration: String, slideDuration: String): Column = {
+    window(timeColumn, windowDuration, slideDuration, "0 second")
+  }
+
+  /**
+   * Generates tumbling time windows given a timestamp specifying column. Window
+   * starts are inclusive but the window ends are exclusive, e.g. 12:05 will be in the window
+   * [12:05,12:10) but not in [12:00,12:05). Windows can support microsecond precision. Windows in
+   * the order of months are not supported. The windows start beginning at 1970-01-01 00:00:00 UTC.
+   * The following example takes the average stock price for a one minute tumbling window:
+   *
+   * {{{
+   *   val df = ... // schema => timestamp: TimestampType, stockId: StringType, price: DoubleType
+   *   df.groupBy(window($"time", "1 minute"), $"stockId")
+   *     .agg(mean("price"))
+   * }}}
+   *
+   * The windows will look like:
+   *
+   * {{{
+   *   09:00:00-09:01:00
+   *   09:01:00-09:02:00
+   *   09:02:00-09:03:00 ...
+   * }}}
+   *
+   * For a continuous query, you may use the function `current_timestamp` to generate windows on
+   * processing time.
+   *
+   * @param timeColumn The column or the expression to use as the timestamp for windowing by time.
+   *                   The time column must be of TimestampType.
+   * @param windowDuration A string specifying the width of the window, e.g. `10 minutes`,
+   *                       `1 second`. Check [[org.apache.spark.unsafe.types.CalendarInterval]] for
+   *                       valid duration identifiers.
+   *
+   * @group datetime_funcs
+   * @since 2.0.0
+   */
+  @Experimental
+  def window(timeColumn: Column, windowDuration: String): Column = {
+    window(timeColumn, windowDuration, windowDuration, "0 second")
+  }
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Collection functions
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
-   * Returns true if the array contain the value
+   * Returns true if the array contains `value`
    * @group collection_funcs
    * @since 1.5.0
    */
@@ -2773,7 +2920,7 @@ object functions {
 
   /**
    * Defines a user-defined function (UDF) using a Scala closure. For this variant, the caller must
-   * specifcy the output data type, and there is no automatic input type coercion.
+   * specify the output data type, and there is no automatic input type coercion.
    *
    * @param f  A closure in Scala
    * @param dataType  The output data type of the UDF

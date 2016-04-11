@@ -129,7 +129,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
         userSpecifiedSchema = userSpecifiedSchema,
         className = source,
         options = extraOptions.toMap)
-    Dataset.newDataFrame(sqlContext, LogicalRelation(dataSource.resolveRelation()))
+    Dataset.ofRows(sqlContext, LogicalRelation(dataSource.resolveRelation()))
   }
 
   /**
@@ -176,7 +176,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
         userSpecifiedSchema = userSpecifiedSchema,
         className = source,
         options = extraOptions.toMap)
-    Dataset.newDataFrame(sqlContext, StreamingRelation(dataSource.createSource()))
+    Dataset.ofRows(sqlContext, StreamingRelation(dataSource))
   }
 
   /**
@@ -315,8 +315,8 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    *
    * You can set the following JSON-specific options to deal with non-standard JSON files:
    * <li>`primitivesAsString` (default `false`): infers all primitive values as a string type</li>
-   * <li>`floatAsBigDecimal` (default `false`): infers all floating-point values as a decimal
-   * type</li>
+   * <li>`prefersDecimal` (default `false`): infers all floating-point values as a decimal
+   * type. If the values do not fit in decimal, then it infers them as doubles.</li>
    * <li>`allowComments` (default `false`): ignores Java/C++ style comment in JSON records</li>
    * <li>`allowUnquotedFieldNames` (default `false`): allows unquoted JSON field names</li>
    * <li>`allowSingleQuotes` (default `true`): allows single quotes in addition to double quotes
@@ -376,7 +376,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
         parsedOptions)
     }
 
-    Dataset.newDataFrame(
+    Dataset.ofRows(
       sqlContext,
       LogicalRDD(
         schema.toAttributes,
@@ -424,7 +424,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * @since 1.4.0
    */
   def table(tableName: String): DataFrame = {
-    Dataset.newDataFrame(sqlContext,
+    Dataset.ofRows(sqlContext,
       sqlContext.sessionState.catalog.lookupRelation(
         sqlContext.sessionState.sqlParser.parseTableIdentifier(tableName)))
   }

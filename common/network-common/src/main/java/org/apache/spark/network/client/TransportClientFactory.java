@@ -94,7 +94,7 @@ public class TransportClientFactory implements Closeable {
     this.context = Preconditions.checkNotNull(context);
     this.conf = context.getConf();
     this.clientBootstraps = Lists.newArrayList(Preconditions.checkNotNull(clientBootstraps));
-    this.connectionPool = new ConcurrentHashMap<SocketAddress, ClientPool>();
+    this.connectionPool = new ConcurrentHashMap<>();
     this.numConnectionsPerPeer = conf.numConnectionsPerPeer();
     this.rand = new Random();
 
@@ -123,7 +123,10 @@ public class TransportClientFactory implements Closeable {
   public TransportClient createClient(String remoteHost, int remotePort) throws IOException {
     // Get connection from the connection pool first.
     // If it is not found or not active, create a new one.
+    long preResolveHost = System.nanoTime();
     final InetSocketAddress address = new InetSocketAddress(remoteHost, remotePort);
+    long hostResolveTimeMs = (System.nanoTime() - preResolveHost) / 1000000;
+    logger.info("Spent {} ms to resolve {}", hostResolveTimeMs, address);
 
     // Create the ClientPool if we don't have it yet.
     ClientPool clientPool = connectionPool.get(address);
@@ -235,7 +238,7 @@ public class TransportClientFactory implements Closeable {
     }
     long postBootstrap = System.nanoTime();
 
-    logger.debug("Successfully created connection to {} after {} ms ({} ms spent in bootstraps)",
+    logger.info("Successfully created connection to {} after {} ms ({} ms spent in bootstraps)",
       address, (postBootstrap - preConnect) / 1000000, (postBootstrap - preBootstrap) / 1000000);
 
     return client;

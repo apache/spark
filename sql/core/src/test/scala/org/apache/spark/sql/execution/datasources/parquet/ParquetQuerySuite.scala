@@ -51,7 +51,8 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
       sql("INSERT INTO TABLE t SELECT * FROM tmp")
       checkAnswer(sqlContext.table("t"), (data ++ data).map(Row.fromTuple))
     }
-    sqlContext.sessionState.catalog.unregisterTable(TableIdentifier("tmp"))
+    sqlContext.sessionState.catalog.dropTable(
+      TableIdentifier("tmp"), ignoreIfNotExists = true)
   }
 
   test("overwriting") {
@@ -61,7 +62,8 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
       sql("INSERT OVERWRITE TABLE t SELECT * FROM tmp")
       checkAnswer(sqlContext.table("t"), data.map(Row.fromTuple))
     }
-    sqlContext.sessionState.catalog.unregisterTable(TableIdentifier("tmp"))
+    sqlContext.sessionState.catalog.dropTable(
+      TableIdentifier("tmp"), ignoreIfNotExists = true)
   }
 
   test("self-join") {
@@ -576,6 +578,16 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
       nullable = true)
 
     assert(CatalystReadSupport.expandUDT(schema) === expected)
+  }
+
+  test("read/write wide table") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+
+      val df = sqlContext.range(1000).select(Seq.tabulate(1000) {i => ('id + i).as(s"c$i")} : _*)
+      df.write.mode(SaveMode.Overwrite).parquet(path)
+      checkAnswer(sqlContext.read.parquet(path), df)
+    }
   }
 }
 

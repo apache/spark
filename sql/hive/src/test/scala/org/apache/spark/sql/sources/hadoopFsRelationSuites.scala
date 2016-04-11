@@ -60,7 +60,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
     p2 <- Seq("foo", "bar")
   } yield (i, s"val_$i", 2, p2)).toDF("a", "b", "p1", "p2")
 
-  lazy val partitionedTestDF = partitionedTestDF1.unionAll(partitionedTestDF2)
+  lazy val partitionedTestDF = partitionedTestDF1.union(partitionedTestDF2)
 
   def checkQueries(df: DataFrame): Unit = {
     // Selects everything
@@ -116,44 +116,56 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
     new MyDenseVectorUDT()
   ).filter(supportsDataType)
 
-  for (dataType <- supportedDataTypes) {
-    test(s"test all data types - $dataType") {
-      withTempPath { file =>
-        val path = file.getCanonicalPath
+  try {
+    for (dataType <- supportedDataTypes) {
+      for (parquetDictionaryEncodingEnabled <- Seq(true, false)) {
+        test(s"test all data types - $dataType with parquet.enable.dictionary = " +
+          s"$parquetDictionaryEncodingEnabled") {
 
-        val dataGenerator = RandomDataGenerator.forType(
-          dataType = dataType,
-          nullable = true,
-          new Random(System.nanoTime())
-        ).getOrElse {
-          fail(s"Failed to create data generator for schema $dataType")
+          hadoopConfiguration.setBoolean("parquet.enable.dictionary",
+            parquetDictionaryEncodingEnabled)
+
+          withTempPath { file =>
+            val path = file.getCanonicalPath
+
+            val dataGenerator = RandomDataGenerator.forType(
+              dataType = dataType,
+              nullable = true,
+              new Random(System.nanoTime())
+            ).getOrElse {
+              fail(s"Failed to create data generator for schema $dataType")
+            }
+
+            // Create a DF for the schema with random data. The index field is used to sort the
+            // DataFrame.  This is a workaround for SPARK-10591.
+            val schema = new StructType()
+              .add("index", IntegerType, nullable = false)
+              .add("col", dataType, nullable = true)
+            val rdd =
+              sqlContext.sparkContext.parallelize((1 to 10).map(i => Row(i, dataGenerator())))
+            val df = sqlContext.createDataFrame(rdd, schema).orderBy("index").coalesce(1)
+
+            df.write
+              .mode("overwrite")
+              .format(dataSourceName)
+              .option("dataSchema", df.schema.json)
+              .save(path)
+
+            val loadedDF = sqlContext
+              .read
+              .format(dataSourceName)
+              .option("dataSchema", df.schema.json)
+              .schema(df.schema)
+              .load(path)
+              .orderBy("index")
+
+            checkAnswer(loadedDF, df)
+          }
         }
-
-        // Create a DF for the schema with random data. The index field is used to sort the
-        // DataFrame.  This is a workaround for SPARK-10591.
-        val schema = new StructType()
-          .add("index", IntegerType, nullable = false)
-          .add("col", dataType, nullable = true)
-        val rdd = sqlContext.sparkContext.parallelize((1 to 10).map(i => Row(i, dataGenerator())))
-        val df = sqlContext.createDataFrame(rdd, schema).orderBy("index").coalesce(1)
-
-        df.write
-          .mode("overwrite")
-          .format(dataSourceName)
-          .option("dataSchema", df.schema.json)
-          .save(path)
-
-        val loadedDF = sqlContext
-          .read
-          .format(dataSourceName)
-          .option("dataSchema", df.schema.json)
-          .schema(df.schema)
-          .load(path)
-          .orderBy("index")
-
-        checkAnswer(loadedDF, df)
       }
     }
+  } finally {
+    hadoopConfiguration.unset("parquet.enable.dictionary")
   }
 
   test("save()/load() - non-partitioned table - Overwrite") {
@@ -179,7 +191,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         sqlContext.read.format(dataSourceName)
           .option("dataSchema", dataSchema.json)
           .load(file.getCanonicalPath).orderBy("a"),
-        testDF.unionAll(testDF).orderBy("a").collect())
+        testDF.union(testDF).orderBy("a").collect())
     }
   }
 
@@ -256,7 +268,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         sqlContext.read.format(dataSourceName)
           .option("dataSchema", dataSchema.json)
           .load(file.getCanonicalPath),
-        partitionedTestDF.unionAll(partitionedTestDF).collect())
+        partitionedTestDF.union(partitionedTestDF).collect())
     }
   }
 
@@ -320,7 +332,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
     testDF.write.format(dataSourceName).mode(SaveMode.Append).saveAsTable("t")
 
     withTable("t") {
-      checkAnswer(sqlContext.table("t"), testDF.unionAll(testDF).orderBy("a").collect())
+      checkAnswer(sqlContext.table("t"), testDF.union(testDF).orderBy("a").collect())
     }
   }
 
@@ -403,7 +415,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       .saveAsTable("t")
 
     withTable("t") {
-      checkAnswer(sqlContext.table("t"), partitionedTestDF.unionAll(partitionedTestDF).collect())
+      checkAnswer(sqlContext.table("t"), partitionedTestDF.union(partitionedTestDF).collect())
     }
   }
 
@@ -613,7 +625,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
             .format(dataSourceName)
             .option("dataSchema", df.schema.json)
             .load(dir.getCanonicalPath),
-          df.unionAll(df))
+          df.union(df))
 
         // This will fail because AlwaysFailOutputCommitter is used when we do append.
         intercept[Exception] {
@@ -654,40 +666,6 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
     }
     intercept[AnalysisException] {
       df.write.format(dataSourceName).partitionBy("c", "d", "e").saveAsTable("t")
-    }
-  }
-
-  test("SPARK-9899 Disable customized output committer when speculation is on") {
-    val clonedConf = new Configuration(hadoopConfiguration)
-    val speculationEnabled =
-      sqlContext.sparkContext.conf.getBoolean("spark.speculation", defaultValue = false)
-
-    try {
-      withTempPath { dir =>
-        // Enables task speculation
-        sqlContext.sparkContext.conf.set("spark.speculation", "true")
-
-        // Uses a customized output committer which always fails
-        hadoopConfiguration.set(
-          SQLConf.OUTPUT_COMMITTER_CLASS.key,
-          classOf[AlwaysFailOutputCommitter].getName)
-
-        // Code below shouldn't throw since customized output committer should be disabled.
-        val df = sqlContext.range(10).toDF().coalesce(1)
-        df.write.format(dataSourceName).save(dir.getCanonicalPath)
-        checkAnswer(
-          sqlContext
-            .read
-            .format(dataSourceName)
-            .option("dataSchema", df.schema.json)
-            .load(dir.getCanonicalPath),
-          df)
-      }
-    } finally {
-      // Hadoop 1 doesn't have `Configuration.unset`
-      hadoopConfiguration.clear()
-      clonedConf.asScala.foreach(entry => hadoopConfiguration.set(entry.getKey, entry.getValue))
-      sqlContext.sparkContext.conf.set("spark.speculation", speculationEnabled.toString)
     }
   }
 }
