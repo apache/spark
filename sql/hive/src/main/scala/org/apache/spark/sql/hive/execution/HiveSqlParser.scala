@@ -106,19 +106,6 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
   }
 
   /**
-   * Create a [[DropTable]] command.
-   */
-  override def visitDropTable(ctx: DropTableContext): LogicalPlan = withOrigin(ctx) {
-    if (ctx.PURGE != null) {
-      logWarning("PURGE option is ignored.")
-    }
-    if (ctx.REPLICATION != null) {
-      logWarning("REPLICATION clause is ignored.")
-    }
-    DropTable(visitTableIdentifier(ctx.tableIdentifier).toString, ctx.EXISTS != null)
-  }
-
-  /**
    * Create an [[AnalyzeTable]] command. This currently only implements the NOSCAN option (other
    * options are passed on to Hive) e.g.:
    * {{{
@@ -267,7 +254,7 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
       throw new ParseException(s"Operation not allowed: partitioned views", ctx)
     } else {
       if (ctx.STRING != null) {
-        logWarning("COMMENT clause is ignored.")
+        throw new ParseException("Unsupported operation: COMMENT clause", ctx)
       }
       val identifiers = Option(ctx.identifierCommentList).toSeq.flatMap(_.identifierComment.asScala)
       val schema = identifiers.map { ic =>
@@ -333,7 +320,8 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
       recordReader: Token,
       schemaLess: Boolean): HiveScriptIOSchema = {
     if (recordWriter != null || recordReader != null) {
-      logWarning("Used defined record reader/writer classes are currently ignored.")
+      throw new ParseException(
+        "Unsupported operation: Used defined record reader/writer classes.", ctx)
     }
 
     // Decode and input/output format.

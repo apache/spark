@@ -29,7 +29,7 @@ import org.apache.spark.ml.param.shared.{HasMaxIter, HasSeed, HasStepSize, HasTo
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Dataset}
 
 /** Params for Multilayer Perceptron. */
 private[ml] trait MultilayerPerceptronParams extends PredictorParams
@@ -199,7 +199,7 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
    * @param dataset Training dataset
    * @return Fitted model
    */
-  override protected def train(dataset: DataFrame): MultilayerPerceptronClassificationModel = {
+  override protected def train(dataset: Dataset[_]): MultilayerPerceptronClassificationModel = {
     val myLayers = $(layers)
     val labels = myLayers.last
     val lpData = extractLabeledPoints(dataset)

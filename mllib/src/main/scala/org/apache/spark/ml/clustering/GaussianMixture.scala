@@ -27,7 +27,7 @@ import org.apache.spark.ml.util._
 import org.apache.spark.mllib.clustering.{GaussianMixture => MLlibGM, GaussianMixtureModel => MLlibGMModel}
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.stat.distribution.MultivariateGaussian
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{IntegerType, StructType}
 
@@ -80,7 +80,7 @@ class GaussianMixtureModel private[ml] (
   }
 
   @Since("2.0.0")
-  override def transform(dataset: DataFrame): DataFrame = {
+  override def transform(dataset: Dataset[_]): DataFrame = {
     val predUDF = udf((vector: Vector) => predict(vector))
     val probUDF = udf((vector: Vector) => predictProbability(vector))
     dataset.withColumn($(predictionCol), predUDF(col($(featuresCol))))
@@ -238,7 +238,7 @@ class GaussianMixture @Since("2.0.0") (
   def setSeed(value: Long): this.type = set(seed, value)
 
   @Since("2.0.0")
-  override def fit(dataset: DataFrame): GaussianMixtureModel = {
+  override def fit(dataset: Dataset[_]): GaussianMixtureModel = {
     val rdd = dataset.select(col($(featuresCol))).rdd.map { case Row(point: Vector) => point }
 
     val algo = new MLlibGM()
