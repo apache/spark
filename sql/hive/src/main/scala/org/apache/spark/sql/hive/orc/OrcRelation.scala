@@ -120,8 +120,49 @@ private[sql] class DefaultSource
       inputFiles: Seq[FileStatus],
       broadcastedConf: Broadcast[SerializableConfiguration],
       options: Map[String, String]): RDD[InternalRow] = {
-    val output = StructType(requiredColumns.map(dataSchema(_))).toAttributes
-    OrcTableScan(sqlContext, output, filters, inputFiles).execute()
+    val output = StructType(requiredColumns.map(dataSchema(_)))
+
+    val orcFormat = new DefaultSource
+    val physicalSchema = orcFormat
+        .inferSchema(sqlContext, Map.empty, inputFiles)
+        .getOrElse(sys.error("Failed to read schema from target ORC files."))
+
+    val job = Job.getInstance(sqlContext.sparkContext.hadoopConfiguration)
+    val conf = job.getConfiguration
+    // Map required columns to physical schema. This is for hive backward compatibility
+    val mappedOutput = mapRequiredColumns(conf, dataSchema, physicalSchema, output)
+
+    OrcTableScan(sqlContext, mappedOutput.toAttributes,
+      filters, inputFiles).execute()
+  }
+
+  def mapRequiredColumns(conf: Configuration, dataSchema: StructType,
+     physicalSchema: StructType, requiredSchema: StructType): StructType = {
+    /**
+      * requiredSchema names might not match with physical schema names.
+      *
+      * This is especially true when data is generated via Hive wherein
+      * orc files would have column names as _col0, _col1 etc. This is
+      * fixed in Hive 2.0, where in physical col names would match that
+      * of metastore.
+      *
+      * To make it backward compatible, it is required to map physical
+      * names to that of requiredSchema.
+      */
+
+    // for requiredSchema, get the ordinal from dataSchema
+    val ids = requiredSchema.map(a => dataSchema.fieldIndex(a.name): Integer).sorted
+
+    // for ids, get corresponding name from physicalSchema (e.g _col1 in
+    // case of hive. otherwise it would match physical name)
+    val names = ids.map(i => physicalSchema.fieldNames(i))
+
+    HiveShim.appendReadColumns(conf, ids, names)
+
+    val mappedReqPhysicalSchemaStruct =
+      StructType(physicalSchema.filter(struct => names.contains(struct.name)))
+
+    mappedReqPhysicalSchemaStruct
   }
 
   override def buildReader(
@@ -154,7 +195,10 @@ private[sql] class DefaultSource
         Iterator.empty
       } else {
         val physicalSchema = maybePhysicalSchema.get
-        OrcRelation.setRequiredColumns(conf, physicalSchema, requiredSchema)
+
+        // Get StructType for newly mapped schema
+        val mappedReqPhysicalSchema =
+          mapRequiredColumns(conf, dataSchema, physicalSchema, requiredSchema)
 
         val orcRecordReader = {
           val job = Job.getInstance(conf)
@@ -172,7 +216,8 @@ private[sql] class DefaultSource
 
         // Unwraps `OrcStruct`s to `UnsafeRow`s
         val unsafeRowIterator = OrcRelation.unwrapOrcStructs(
-          file.filePath, conf, requiredSchema, new RecordReaderIterator[OrcStruct](orcRecordReader)
+          file.filePath, conf, mappedReqPhysicalSchema,
+          new RecordReaderIterator[OrcStruct](orcRecordReader)
         )
 
         // Appends partition values
@@ -306,16 +351,6 @@ private[orc] case class OrcTableScan(
       }
     }
 
-    // Figure out the actual schema from the ORC source (without partition columns) so that we
-    // can pick the correct ordinals.  Note that this assumes that all files have the same schema.
-    val orcFormat = new DefaultSource
-    val dataSchema =
-      orcFormat
-        .inferSchema(sqlContext, Map.empty, inputPaths)
-        .getOrElse(sys.error("Failed to read schema from target ORC files."))
-    // Sets requested columns
-    OrcRelation.setRequiredColumns(conf, dataSchema, StructType.fromAttributes(attributes))
-
     if (inputPaths.isEmpty) {
       // the input path probably be pruned, return an empty RDD.
       return sqlContext.sparkContext.emptyRDD[InternalRow]
@@ -386,10 +421,12 @@ private[orc] object OrcRelation extends HiveInspectors {
 
       val unwrappers = fieldRefs.map(unwrapperFor)
 
+      var i = 0
+      val fieldLen = fieldRefs.length
       iterator.map { value =>
         val raw = deserializer.deserialize(value)
         var i = 0
-        while (i < fieldRefs.length) {
+        while (i < fieldLen) {
           val fieldValue = oi.getStructFieldData(raw, fieldRefs(i))
           if (fieldValue == null) {
             mutableRow.setNullAt(fieldOrdinals(i))
@@ -404,11 +441,5 @@ private[orc] object OrcRelation extends HiveInspectors {
 
     maybeStructOI.map(unwrap).getOrElse(Iterator.empty)
   }
-
-  def setRequiredColumns(
-      conf: Configuration, physicalSchema: StructType, requestedSchema: StructType): Unit = {
-    val ids = requestedSchema.map(a => physicalSchema.fieldIndex(a.name): Integer)
-    val (sortedIDs, sortedNames) = ids.zip(requestedSchema.fieldNames).sorted.unzip
-    HiveShim.appendReadColumns(conf, sortedIDs, sortedNames)
-  }
 }
+
