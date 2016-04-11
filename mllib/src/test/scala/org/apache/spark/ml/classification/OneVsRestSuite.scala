@@ -30,12 +30,12 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types.Metadata
 
 class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
-  @transient var dataset: DataFrame = _
+  @transient var dataset: Dataset[_] = _
   @transient var rdd: RDD[LabeledPoint] = _
 
   override def beforeAll(): Unit = {
@@ -246,7 +246,7 @@ private class MockLogisticRegression(uid: String) extends LogisticRegression(uid
 
   setMaxIter(1)
 
-  override protected[spark] def train(dataset: DataFrame): LogisticRegressionModel = {
+  override protected[spark] def train(dataset: Dataset[_]): LogisticRegressionModel = {
     val labelSchema = dataset.schema($(labelCol))
     // check for label attribute propagation.
     assert(MetadataUtils.getNumClasses(labelSchema).forall(_ == 2))

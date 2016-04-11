@@ -33,7 +33,7 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.HasSeed
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -90,8 +90,8 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
   @Since("2.0.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
-  @Since("1.4.0")
-  override def fit(dataset: DataFrame): CrossValidatorModel = {
+  @Since("2.0.0")
+  override def fit(dataset: Dataset[_]): CrossValidatorModel = {
     val schema = dataset.schema
     transformSchema(schema, logging = true)
     val sqlCtx = dataset.sqlContext
@@ -100,7 +100,7 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
     val epm = $(estimatorParamMaps)
     val numModels = epm.length
     val metrics = new Array[Double](epm.length)
-    val splits = MLUtils.kFold(dataset.rdd, $(numFolds), $(seed))
+    val splits = MLUtils.kFold(dataset.toDF.rdd, $(numFolds), $(seed))
     splits.zipWithIndex.foreach { case ((training, validation), splitIndex) =>
       val trainingDataset = sqlCtx.createDataFrame(training, schema).cache()
       val validationDataset = sqlCtx.createDataFrame(validation, schema).cache()
@@ -209,8 +209,8 @@ class CrossValidatorModel private[ml] (
     this(uid, bestModel, avgMetrics.asScala.toArray)
   }
 
-  @Since("1.4.0")
-  override def transform(dataset: DataFrame): DataFrame = {
+  @Since("2.0.0")
+  override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     bestModel.transform(dataset)
   }

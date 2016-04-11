@@ -33,7 +33,7 @@ import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.loss.{LogLoss => OldLogLoss, Loss => OldLoss}
 import org.apache.spark.mllib.tree.model.{GradientBoostedTreesModel => OldGBTModel}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 
 /**
@@ -149,7 +149,7 @@ final class GBTClassifier @Since("1.4.0") (
     }
   }
 
-  override protected def train(dataset: DataFrame): GBTClassificationModel = {
+  override protected def train(dataset: Dataset[_]): GBTClassificationModel = {
     val categoricalFeatures: Map[Int, Int] =
       MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
     val numClasses: Int = MetadataUtils.getNumClasses(dataset.schema($(labelCol))) match {
@@ -220,7 +220,7 @@ final class GBTClassificationModel private[ml](
   @Since("1.4.0")
   override def treeWeights: Array[Double] = _treeWeights
 
-  override protected def transformImpl(dataset: DataFrame): DataFrame = {
+  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     val bcastModel = dataset.sqlContext.sparkContext.broadcast(this)
     val predictUDF = udf { (features: Any) =>
       bcastModel.value.predict(features.asInstanceOf[Vector])

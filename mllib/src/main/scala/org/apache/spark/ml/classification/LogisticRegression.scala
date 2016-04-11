@@ -36,7 +36,7 @@ import org.apache.spark.mllib.linalg.BLAS._
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions.{col, lit}
 import org.apache.spark.sql.types.DoubleType
 import org.apache.spark.storage.StorageLevel
@@ -257,12 +257,12 @@ class LogisticRegression @Since("1.2.0") (
     this
   }
 
-  override protected[spark] def train(dataset: DataFrame): LogisticRegressionModel = {
+  override protected[spark] def train(dataset: Dataset[_]): LogisticRegressionModel = {
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
     train(dataset, handlePersistence)
   }
 
-  protected[spark] def train(dataset: DataFrame, handlePersistence: Boolean):
+  protected[spark] def train(dataset: Dataset[_], handlePersistence: Boolean):
       LogisticRegressionModel = {
     val w = if ($(weightCol).isEmpty) lit(1.0) else col($(weightCol))
     val instances: RDD[Instance] =
@@ -544,7 +544,7 @@ class LogisticRegressionModel private[spark] (
    * @param dataset Test dataset to evaluate model on.
    */
   @Since("2.0.0")
-  def evaluate(dataset: DataFrame): LogisticRegressionSummary = {
+  def evaluate(dataset: Dataset[_]): LogisticRegressionSummary = {
     // Handle possible missing or invalid prediction columns
     val (summaryModel, probabilityColName) = findSummaryModelAndProbabilityCol()
     new BinaryLogisticRegressionSummary(summaryModel.transform(dataset),

@@ -24,7 +24,7 @@ import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
-import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+import org.apache.spark.sql.{DataFrame, Dataset, Row, SQLContext}
 
 
 object LDASuite {
@@ -64,7 +64,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
 
   val k: Int = 5
   val vocabSize: Int = 30
-  @transient var dataset: DataFrame = _
+  @transient var dataset: Dataset[_] = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()

@@ -21,7 +21,7 @@ import org.apache.spark.ml.{Pipeline, PipelineModel}
 import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.clustering.{KMeans, KMeansModel}
 import org.apache.spark.ml.feature.VectorAssembler
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Dataset}
 
 private[r] class KMeansWrapper private (
     pipeline: PipelineModel) {
@@ -52,7 +52,7 @@ private[r] class KMeansWrapper private (
     }
   }
 
-  def transform(dataset: DataFrame): DataFrame = {
+  def transform(dataset: Dataset[_]): DataFrame = {
     pipeline.transform(dataset).drop(kMeansModel.getFeaturesCol)
   }
 

@@ -85,7 +85,8 @@ class StandardScaler(override val uid: String) extends Estimator[StandardScalerM
   /** @group setParam */
   def setWithStd(value: Boolean): this.type = set(withStd, value)
 
-  override def fit(dataset: DataFrame): StandardScalerModel = {
+  @Since("2.0.0")
+  override def fit(dataset: Dataset[_]): StandardScalerModel = {
     transformSchema(dataset.schema, logging = true)
     val input = dataset.select($(inputCol)).rdd.map { case Row(v: Vector) => v }
     val scaler = new feature.StandardScaler(withMean = $(withMean), withStd = $(withStd))
@@ -135,7 +136,8 @@ class StandardScalerModel private[ml] (
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
-  override def transform(dataset: DataFrame): DataFrame = {
+  @Since("2.0.0")
+  override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     val scaler = new feature.StandardScalerModel(std, mean, $(withStd), $(withMean))
     val scale = udf { scaler.transform _ }
