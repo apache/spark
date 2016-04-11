@@ -15,15 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.util
+package org.apache.spark.ml.util
 
 import org.scalatest.exceptions.TestFailedException
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.ml.SparkMLFunSuite
+import org.apache.spark.ml.linalg.Vectors
+import org.apache.spark.ml.util.TestingUtils._
 
-class TestingUtilsSuite extends SparkFunSuite {
+class TestingUtilsSuite extends SparkMLFunSuite {
 
   test("Comparing doubles using relative error.") {
 

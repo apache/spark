@@ -15,16 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.linalg
+package org.apache.spark.ml.linalg
 
 import breeze.linalg.{DenseVector => BDV, SparseVector => BSV}
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.SparkMLFunSuite
 
 /**
  * Test Breeze vector conversions.
  */
-class BreezeVectorConversionSuite extends SparkFunSuite {
+class BreezeVectorConversionSuite extends SparkMLFunSuite {
 
   val arr = Array(0.1, 0.2, 0.3, 0.4)
   val n = 20

@@ -15,18 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.linalg
+package org.apache.spark.ml.linalg
 
 import scala.util.Random
 
 import breeze.linalg.{squaredDistance => breezeSquaredDistance, DenseMatrix => BDM}
 import org.json4s.jackson.JsonMethods.{parse => parseJson}
 
-import org.apache.spark.{SparkException, SparkFunSuite}
-import org.apache.spark.internal.Logging
-import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.ml.SparkMLFunSuite
+import org.apache.spark.ml.util.TestingUtils._
 
-class VectorsSuite extends SparkFunSuite with Logging {
+class VectorsSuite extends SparkMLFunSuite {
 
   val arr = Array(0.1, 0.0, 0.3, 0.4)
   val n = 4

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.linalg
+package org.apache.spark.ml.linalg
 
 import java.util.Random
 
@@ -24,10 +24,10 @@ import org.mockito.Mockito.when
 import org.scalatest.mock.MockitoSugar._
 import scala.collection.mutable.{Map => MutableMap}
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.ml.SparkMLFunSuite
+import org.apache.spark.ml.util.TestingUtils._
 
-class MatricesSuite extends SparkFunSuite {
+class MatricesSuite extends SparkMLFunSuite {
   test("dense matrix construction") {
     val m = 3
     val n = 2

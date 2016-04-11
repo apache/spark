@@ -15,11 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.util
+package org.apache.spark.ml.util
 
 import org.scalatest.exceptions.TestFailedException
 
-import org.apache.spark.mllib.linalg.{Matrix, Vector}
+import org.apache.spark.ml.linalg.{Matrix, Vector}
 
 object TestingUtils {
 

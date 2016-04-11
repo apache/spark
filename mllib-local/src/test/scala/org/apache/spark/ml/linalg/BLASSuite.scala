@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.linalg
+package org.apache.spark.ml.linalg
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.mllib.linalg.BLAS._
-import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.ml.SparkMLFunSuite
+import org.apache.spark.ml.linalg.BLAS._
+import org.apache.spark.ml.util.TestingUtils._
 
-class BLASSuite extends SparkFunSuite {
+class BLASSuite extends SparkMLFunSuite {
 
   test("copy") {
     val sx = Vectors.sparse(4, Array(0, 2), Array(1.0, -2.0))
