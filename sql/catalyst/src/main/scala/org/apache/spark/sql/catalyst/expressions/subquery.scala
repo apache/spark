@@ -78,20 +78,23 @@ case class ScalarSubquery(
   override def toString: String = s"subquery#${exprId.id}"
 }
 
-
-case class InSubQuery(query: LogicalPlan)
-  extends SubqueryExpression with Unevaluable  {
+/**
+ * Base interface for correlated subquery expressions.
+ */
+abstract class CorrelatedSubqueryExpression extends SubqueryExpression{
   override lazy val resolved: Boolean = false  // can't be resolved
+  override def plan: LogicalPlan = SubqueryAlias(toString, query)
+}
+
+case class InSubQuery(query: LogicalPlan) extends CorrelatedSubqueryExpression with Unevaluable  {
   override def dataType: DataType = ArrayType(NullType)
   override def nullable: Boolean = true
-  override def plan: LogicalPlan = SubqueryAlias(toString, query)
   override def withNewPlan(plan: LogicalPlan): InSubQuery = InSubQuery(plan)
 }
 
-case class Exists(query: LogicalPlan) extends SubqueryExpression with Unevaluable {
-  override lazy val resolved: Boolean = false  // can't be resolved
+case class Exists(
+    query: LogicalPlan) extends CorrelatedSubqueryExpression with Unevaluable with Predicate {
   override def dataType: DataType = BooleanType
   override def nullable: Boolean = false
-  override def plan: LogicalPlan = SubqueryAlias(toString, query)
   override def withNewPlan(plan: LogicalPlan): Exists = Exists(plan)
 }

@@ -391,9 +391,13 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
 
         // Having
         val withHaving = withProject.optional(having) {
-          // Note that we added a cast to boolean. If the expression itself is already boolean,
-          // the optimizer will get rid of the unnecessary cast.
-          Filter(Cast(expression(having), BooleanType), withProject)
+          // Note that we add a cast to non-predicate expressions. If the expression itself is
+          // already boolean, the optimizer will get rid of the unnecessary cast.
+          val predicate = expression(having) match {
+            case p: Predicate => p
+            case e => Cast(e, BooleanType)
+          }
+          Filter(predicate, withProject)
         }
 
         // Distinct
