@@ -628,6 +628,9 @@ object MimaExcludes {
       ) ++ Seq(
         // [SPARK-14475] Propagate user-defined context from driver to executors
         ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.getLocalProperty")
+      ) ++ Seq(
+        // [SPARK-14390][GraphX] Make initialization step in Pregel optional
+        ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.graphx.Pregel.apply")
       )
     case v if v.startsWith("1.6") =>
       Seq(

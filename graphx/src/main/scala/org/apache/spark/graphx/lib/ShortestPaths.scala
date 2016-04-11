@@ -67,6 +67,6 @@ object ShortestPaths {
       else Iterator.empty
     }
 
-    Pregel(spGraph, initialMessage)(vertexProgram, sendMessage, addMaps)
+    Pregel(spGraph, Some(initialMessage))(vertexProgram, sendMessage, addMaps)
   }
 }
