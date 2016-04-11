@@ -17,10 +17,10 @@
 
 package org.apache.spark.ml
 
-import org.apache.spark.SparkFunSuite
+import org.scalatest.FunSuite // scalastyle:ignore funsuite
 
 // This is testing if the new build works. To be removed soon.
-class DummyTestingSuite extends SparkFunSuite {
+class DummyTestingSuite extends FunSuite { // scalastyle:ignore funsuite
 
   test("This is testing if the new build works.") {
     assert(DummyTesting.add10(15) === 25)
