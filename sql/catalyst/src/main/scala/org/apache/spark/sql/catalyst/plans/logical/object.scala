@@ -54,7 +54,7 @@ trait ObjectProducer extends LogicalPlan {
 }
 
 /**
- * A trait for logical operators that consumes domain objects as output.
+ * A trait for logical operators that consumes domain objects as input.
  * The output of its child must be a single-field row containing the input object.
  */
 trait ObjectConsumer extends UnaryNode {
@@ -75,7 +75,7 @@ case class DeserializeToObject(
     child: LogicalPlan) extends UnaryNode with ObjectProducer
 
 /**
- * Takes the input object from child and turns in into unsafe row using the given serializer
+ * Takes the input object from child and turns it into unsafe row using the given serializer
  * expression.
  */
 case class SerializeFromObject(
