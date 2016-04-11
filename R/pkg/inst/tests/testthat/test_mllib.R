@@ -77,46 +77,6 @@ test_that("glm and predict", {
   expect_equal(length(predict(lm(y ~ x))), 15)
 })
 
-#test_that("summary coefficients match with native glm", {
-#  training <- suppressWarnings(createDataFrame(sqlContext, iris))
-#  stats <- summary(glm(Sepal_Width ~ Sepal_Length + Species, data = training, solver = "normal"))
-#  coefs <- unlist(stats$coefficients)
-#  devianceResiduals <- unlist(stats$devianceResiduals)
-#
-#  rStats <- summary(glm(Sepal.Width ~ Sepal.Length + Species, data = iris))
-#  rCoefs <- unlist(rStats$coefficients)
-#  rDevianceResiduals <- c(-0.95096, 0.72918)
-#
-#  expect_true(all(abs(rCoefs - coefs) < 1e-5))
-#  expect_true(all(abs(rDevianceResiduals - devianceResiduals) < 1e-5))
-#  expect_true(all(
-#    rownames(stats$coefficients) ==
-#    c("(Intercept)", "Sepal_Length", "Species_versicolor", "Species_virginica")))
-#})
-#
-#test_that("summary coefficients match with native glm of family 'binomial'", {
-#  df <- suppressWarnings(createDataFrame(sqlContext, iris))
-#  training <- filter(df, df$Species != "setosa")
-#  stats <- summary(glm(Species ~ Sepal_Length + Sepal_Width, data = training,
-#    family = "binomial"))
-#  coefs <- as.vector(stats$coefficients[, 1])
-#
-#  rTraining <- iris[iris$Species %in% c("versicolor", "virginica"), ]
-#  rCoefs <- as.vector(coef(glm(Species ~ Sepal.Length + Sepal.Width, data = rTraining,
-#    family = binomial(link = "logit"))))
-#
-#  expect_true(all(abs(rCoefs - coefs) < 1e-4))
-#  expect_true(all(
-#    rownames(stats$coefficients) ==
-#    c("(Intercept)", "Sepal_Length", "Sepal_Width")))
-#})
-#
-#test_that("summary works on base GLM models", {
-#  baseModel <- stats::glm(Sepal.Width ~ Sepal.Length + Species, data = iris)
-#  baseSummary <- summary(baseModel)
-#  expect_true(abs(baseSummary$deviance - 12.19313) < 1e-4)
-#})
-
 test_that("kmeans", {
   newIris <- iris
   newIris$Species <- NULL
