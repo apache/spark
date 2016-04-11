@@ -1182,8 +1182,7 @@ class DataFrame(object):
         by Greenwald and Khanna.
 
         :param cols: str, list.
-            The name(s) of the numerical column(s). Can be a string of the name
-            of a single column or the list of the names of multiple columns.
+            Can be a single column name, or a list of names for multiple columns.
         :param probabilities: a list of quantile probabilities
             Each number must belong to [0, 1].
             For example 0 is the minimum, 0.5 is the median, 1 is the maximum.
