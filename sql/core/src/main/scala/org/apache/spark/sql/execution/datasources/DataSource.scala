@@ -123,6 +123,28 @@ case class DataSource(
     }
   }
 
+  private def inferFileFormatSchema(format: FileFormat): StructType = {
+    val caseInsensitiveOptions = new CaseInsensitiveMap(options)
+    val allPaths = caseInsensitiveOptions.get("path")
+    val globbedPaths = allPaths.toSeq.flatMap { path =>
+      val hdfsPath = new Path(path)
+      val fs = hdfsPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
+      val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+      SparkHadoopUtil.get.globPathIfNecessary(qualified)
+    }.toArray
+
+    val fileCatalog: FileCatalog = new HDFSFileCatalog(sqlContext, options, globbedPaths, None)
+    userSpecifiedSchema.orElse {
+      format.inferSchema(
+        sqlContext,
+        caseInsensitiveOptions,
+        fileCatalog.allFiles())
+    }.getOrElse {
+      throw new AnalysisException("Unable to infer schema.  It must be specified manually.")
+    }
+  }
+
+  /** Returns the name and schema of the source that can be used to continually read data. */
   def sourceSchema(): (String, StructType) = {
     providingClass.newInstance() match {
       case s: StreamSourceProvider =>
@@ -133,39 +155,14 @@ case class DataSource(
         val path = caseInsensitiveOptions.getOrElse("path", {
           throw new IllegalArgumentException("'path' is not specified")
         })
-
-        val allPaths = caseInsensitiveOptions.get("path")
-        val globbedPaths = allPaths.toSeq.flatMap { path =>
-          val hdfsPath = new Path(path)
-          val fs = hdfsPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
-          val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-          SparkHadoopUtil.get.globPathIfNecessary(qualified)
-        }.toArray
-
-        val fileCatalog: FileCatalog = new HDFSFileCatalog(sqlContext, options, globbedPaths, None)
-        val dataSchema = userSpecifiedSchema.orElse {
-          format.inferSchema(
-            sqlContext,
-            caseInsensitiveOptions,
-            fileCatalog.allFiles())
-        }.getOrElse {
-          throw new AnalysisException("Unable to infer schema.  It must be specified manually.")
-        }
-
-        (s"FileSource[$path]", dataSchema)
+        (s"FileSource[$path]", inferFileFormatSchema(format))
       case _ =>
         throw new UnsupportedOperationException(
           s"Data source $className does not support streamed reading")
     }
   }
 
-  /**
-   * Returns a source that can be used to continually read data.
-   *
-   * Before running a real query (e.g., df.explain), `sourceId` and `checkpointLocation` is None
-   * as they are unknown. [[ContinuousQueryManager]] should set `sourceId` and `checkpointLocation`
-   * before starting a query.
-   */
+  /** Returns a source that can be used to continually read data. */
   def createSource(sourceId: Long, checkpointLocation: String): Source = {
     providingClass.newInstance() match {
       case s: StreamSourceProvider =>
@@ -178,24 +175,7 @@ case class DataSource(
         })
 
         val metadataPath = s"$checkpointLocation/sources/$sourceId"
-
-        val allPaths = caseInsensitiveOptions.get("path")
-        val globbedPaths = allPaths.toSeq.flatMap { path =>
-          val hdfsPath = new Path(path)
-          val fs = hdfsPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
-          val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-          SparkHadoopUtil.get.globPathIfNecessary(qualified)
-        }.toArray
-
-        val fileCatalog: FileCatalog = new HDFSFileCatalog(sqlContext, options, globbedPaths, None)
-        val dataSchema = userSpecifiedSchema.orElse {
-          format.inferSchema(
-            sqlContext,
-            caseInsensitiveOptions,
-            fileCatalog.allFiles())
-        }.getOrElse {
-          throw new AnalysisException("Unable to infer schema.  It must be specified manually.")
-        }
+        val dataSchema = inferFileFormatSchema(format)
 
         def dataFrameBuilder(files: Array[String]): DataFrame = {
           Dataset.ofRows(

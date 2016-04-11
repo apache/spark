@@ -130,6 +130,7 @@ trait SchemaRelationProvider {
  */
 trait StreamSourceProvider {
 
+  /** Returns the name and schema of the source that can be used to continually read data. */
   def sourceSchema(
       sqlContext: SQLContext,
       schema: Option[StructType],
