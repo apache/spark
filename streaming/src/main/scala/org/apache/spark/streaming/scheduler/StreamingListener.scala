@@ -30,6 +30,12 @@ import org.apache.spark.util.Distribution
 sealed trait StreamingListenerEvent
 
 @DeveloperApi
+case class StreamingListenerBatchGenerateStarted(time: Long) extends StreamingListenerEvent
+
+@DeveloperApi
+case class StreamingListenerBatchGenerateCompleted(time: Long) extends StreamingListenerEvent
+
+@DeveloperApi
 case class StreamingListenerBatchSubmitted(batchInfo: BatchInfo) extends StreamingListenerEvent
 
 @DeveloperApi
@@ -68,6 +74,12 @@ trait StreamingListener {
 
   /** Called when a receiver has been started */
   def onReceiverStarted(receiverStarted: StreamingListenerReceiverStarted) { }
+
+  /** Called when a batch generate has been started */
+  def onBatchGenerateStarted(batchGenerateStarted: StreamingListenerBatchGenerateStarted) { }
+
+  /** Called when a batch generate has been completed */
+  def onBatchGenerateCompleted(batchGenerateCompleted: StreamingListenerBatchGenerateCompleted) { }
 
   /** Called when a receiver has reported an error */
   def onReceiverError(receiverError: StreamingListenerReceiverError) { }

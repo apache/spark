@@ -49,6 +49,10 @@ private[streaming] class StreamingListenerBus(sparkListenerBus: LiveListenerBus)
       listener: StreamingListener,
       event: StreamingListenerEvent): Unit = {
     event match {
+      case batchGenerateStarted:StreamingListenerBatchGenerateStarted =>
+        listener.onBatchGenerateStarted(batchGenerateStarted)
+      case batchGenerateCompleted: StreamingListenerBatchGenerateCompleted =>
+        listener.onBatchGenerateCompleted(batchGenerateCompleted)
       case receiverStarted: StreamingListenerReceiverStarted =>
         listener.onReceiverStarted(receiverStarted)
       case receiverError: StreamingListenerReceiverError =>

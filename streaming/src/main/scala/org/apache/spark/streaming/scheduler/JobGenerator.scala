@@ -44,6 +44,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   private val ssc = jobScheduler.ssc
   private val conf = ssc.conf
   private val graph = ssc.graph
+  val listenerBus =  new StreamingListenerBus(ssc.sparkContext.listenerBus)
 
   val clock = {
     val clockClass = ssc.sc.conf.get(
@@ -241,6 +242,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
 
   /** Generate jobs and perform checkpoint for the given `time`.  */
   private def generateJobs(time: Time) {
+    listenerBus.post(StreamingListenerBatchGenerateStarted(clock.getTimeMillis()))
     // Set the SparkEnv in this thread, so that job generation code can access the environment
     // Example: BlockRDDs are created in this thread, and it needs to access BlockManager
     // Update: This is probably redundant after threadlocal stuff in SparkEnv has been removed.
@@ -254,6 +256,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
       graph.generateJobs(time) // generate jobs using allocated block
     } match {
       case Success(jobs) =>
+        listenerBus.post(StreamingListenerBatchGenerateCompleted(clock.getTimeMillis()))
         val streamIdToInputInfos = jobScheduler.inputInfoTracker.getInfo(time)
         jobScheduler.submitJobSet(JobSet(time, jobs, streamIdToInputInfos))
       case Failure(e) =>
