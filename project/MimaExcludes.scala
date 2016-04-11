@@ -329,6 +329,11 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.GroupedDataset"),
         ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.Dataset.subtract"),
 
+        // [SPARK-14451][SQL] Move encoder definition into Aggregator interface
+        ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.expressions.Aggregator.toColumn"),
+        ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.expressions.Aggregator.bufferEncoder"),
+        ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.expressions.Aggregator.outputEncoder"),
+
         ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.mllib.evaluation.MultilabelMetrics.this"),
         ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.ml.classification.LogisticRegressionSummary.predictions"),
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.ml.classification.LogisticRegressionSummary.predictions")
@@ -615,16 +620,8 @@ object MimaExcludes {
         // [SPARK-13430][ML] moved featureCol from LinearRegressionModelSummary to LinearRegressionSummary
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.ml.regression.LinearRegressionSummary.this")
       ) ++ Seq(
-        // [SPARK-11593][SQL] Replace catalyst converter with RowEncoder in ScalaUDF
-        ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.ml.UnaryTransformer.createTransformFunc"),
-        ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.ml.UnaryTransformer.createTransformFunc"),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.ml.feature.DCT.createTransformFunc"),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.ml.feature.ElementwiseProduct.createTransformFunc"),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.ml.feature.Normalizer.createTransformFunc"),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.ml.feature.PolynomialExpansion.createTransformFunc"),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.ml.feature.NGram.createTransformFunc"),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.ml.feature.Tokenizer.createTransformFunc"),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.ml.feature.RegexTokenizer.createTransformFunc")
+        // [SPARK-14437][Core] Use the address that NettyBlockTransferService listens to create BlockManagerId
+        ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.network.netty.NettyBlockTransferService.this")
       ) ++ Seq(
         // [SPARK-13048][ML][MLLIB] keepLastCheckpoint option for LDA EM optimizer
         ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.clustering.DistributedLDAModel.this")

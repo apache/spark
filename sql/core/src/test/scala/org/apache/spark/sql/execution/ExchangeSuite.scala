@@ -38,8 +38,8 @@ class ExchangeSuite extends SparkPlanTest with SharedSQLContext {
 
   test("compatible BroadcastMode") {
     val mode1 = IdentityBroadcastMode
-    val mode2 = HashedRelationBroadcastMode(true, Literal(1) :: Nil, Seq())
-    val mode3 = HashedRelationBroadcastMode(false, Literal("s") :: Nil, Seq())
+    val mode2 = HashedRelationBroadcastMode(Literal(1L) :: Nil)
+    val mode3 = HashedRelationBroadcastMode(Literal("s") :: Nil)
 
     assert(mode1.compatibleWith(mode1))
     assert(!mode1.compatibleWith(mode2))
@@ -56,10 +56,10 @@ class ExchangeSuite extends SparkPlanTest with SharedSQLContext {
     assert(plan sameResult plan)
 
     val exchange1 = BroadcastExchange(IdentityBroadcastMode, plan)
-    val hashMode = HashedRelationBroadcastMode(true, output, plan.output)
+    val hashMode = HashedRelationBroadcastMode(output)
     val exchange2 = BroadcastExchange(hashMode, plan)
     val hashMode2 =
-      HashedRelationBroadcastMode(true, Alias(output.head, "id2")() :: Nil, plan.output)
+      HashedRelationBroadcastMode(Alias(output.head, "id2")() :: Nil)
     val exchange3 = BroadcastExchange(hashMode2, plan)
     val exchange4 = ReusedExchange(output, exchange3)
 

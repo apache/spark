@@ -483,20 +483,38 @@ case class DescribeFunction(
   }
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.sessionState.functionRegistry.lookupFunction(functionName) match {
-      case Some(info) =>
-        val result =
-          Row(s"Function: ${info.getName}") ::
-          Row(s"Class: ${info.getClassName}") ::
-          Row(s"Usage: ${replaceFunctionName(info.getUsage(), info.getName)}") :: Nil
+    // Hard code "<>", "!=", "between", and "case" for now as there is no corresponding functions.
+    functionName.toLowerCase match {
+      case "<>" =>
+        Row(s"Function: $functionName") ::
+        Row(s"Usage: a <> b - Returns TRUE if a is not equal to b") :: Nil
+      case "!=" =>
+        Row(s"Function: $functionName") ::
+        Row(s"Usage: a != b - Returns TRUE if a is not equal to b") :: Nil
+      case "between" =>
+        Row(s"Function: between") ::
+        Row(s"Usage: a [NOT] BETWEEN b AND c - " +
+          s"evaluate if a is [not] in between b and c") :: Nil
+      case "case" =>
+        Row(s"Function: case") ::
+        Row(s"Usage: CASE a WHEN b THEN c [WHEN d THEN e]* [ELSE f] END - " +
+          s"When a = b, returns c; when a = d, return e; else return f") :: Nil
+      case _ => sqlContext.sessionState.functionRegistry.lookupFunction(functionName) match {
+        case Some(info) =>
+          val result =
+            Row(s"Function: ${info.getName}") ::
+            Row(s"Class: ${info.getClassName}") ::
+            Row(s"Usage: ${replaceFunctionName(info.getUsage(), info.getName)}") :: Nil
 
-        if (isExtended) {
-          result :+ Row(s"Extended Usage:\n${replaceFunctionName(info.getExtended, info.getName)}")
-        } else {
-          result
-        }
+          if (isExtended) {
+            result :+
+              Row(s"Extended Usage:\n${replaceFunctionName(info.getExtended, info.getName)}")
+          } else {
+            result
+          }
 
-      case None => Seq(Row(s"Function: $functionName not found."))
+        case None => Seq(Row(s"Function: $functionName not found."))
+      }
     }
   }
 }
