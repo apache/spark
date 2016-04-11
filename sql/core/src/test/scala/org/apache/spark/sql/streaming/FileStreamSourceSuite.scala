@@ -19,9 +19,6 @@ package org.apache.spark.sql.streaming
 
 import java.io.File
 
-import org.apache.hadoop.fs.Path
-import org.scalatest.PrivateMethodTester
-
 import org.apache.spark.sql.{AnalysisException, StreamTest}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.streaming._
@@ -84,8 +81,7 @@ class FileStreamSourceTest extends StreamTest with SharedSQLContext {
   val valueSchema = new StructType().add("value", StringType)
 }
 
-class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext
-  with PrivateMethodTester {
+class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
 
   import testImplicits._
 
@@ -357,17 +353,10 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext
       .startStream()
 
     val source = query.asInstanceOf[StreamExecution].logicalPlan.collect {
-      case StreamingExecutionRelation(source, _) => source
+      case StreamingExecutionRelation(source, _) => source.asInstanceOf[FileStreamSource]
     }.head
-
-    // Use reflection to get the metadata path of FileStreamSource
-    val metadataLogMethod = PrivateMethod[MetadataLog[Seq[String]]]('metadataLog)
-    val metadataLog =
-      source.invokePrivate(metadataLogMethod()).asInstanceOf[HDFSMetadataLog[_]]
-    val metadataPathMethod = PrivateMethod[Path]('metadataPath)
-    val path = metadataLog.invokePrivate(metadataPathMethod())
     val expectedPath = s"$location/sources/0"
-    assert(expectedPath === path.toString)
+    assert(expectedPath === source.metadataPath)
 
     query.stop()
     Utils.deleteRecursively(location)
