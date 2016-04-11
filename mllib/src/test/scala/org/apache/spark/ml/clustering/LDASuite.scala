@@ -289,4 +289,15 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
 
     assert(model.getCheckpointFiles.isEmpty)
   }
+
+  test("EM LDA disable checkpointing") {
+    // Checkpoint dir is set by MLlibTestSparkContext
+    val lda = new LDA().setK(2).setSeed(1).setOptimizer("em").setMaxIter(3)
+      .setCheckpointInterval(-1)
+    val model_ = lda.fit(dataset)
+    assert(model_.isInstanceOf[DistributedLDAModel])
+    val model = model_.asInstanceOf[DistributedLDAModel]
+
+    assert(model.getCheckpointFiles.isEmpty)
+  }
 }
