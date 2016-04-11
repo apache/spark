@@ -228,7 +228,7 @@ private[spark] object JsonProtocol {
 
   def logStartToJson(logStart: SparkListenerLogStart): JValue = {
     ("Event" -> Utils.getFormattedClassName(logStart)) ~
-    ("Spark Version" -> SPARK_VERSION)
+    ("Spark Version" -> VersionInfo.getVersion)
   }
 
   def executorMetricsUpdateToJson(metricsUpdate: SparkListenerExecutorMetricsUpdate): JValue = {

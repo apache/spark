@@ -187,7 +187,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     this(master, appName, sparkHome, jars, Map())
 
   // log out Spark Version in Spark driver log
-  logInfo(s"Running Spark version $SPARK_VERSION")
+  logInfo("Running Spark version " + VersionInfo.getVersion)
 
   /* ------------------------------------------------------------------------------------- *
    | Private variables. These variables keep the internal state of the context, and are    |
@@ -1475,7 +1475,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /** The version of Spark on which this application is running. */
-  def version: String = SPARK_VERSION
+  def version: String = VersionInfo.getVersion
 
   /**
    * Return a map from the slave to the max memory available for caching and the remaining

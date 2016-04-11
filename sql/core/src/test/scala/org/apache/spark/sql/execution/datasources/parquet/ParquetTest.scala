@@ -126,7 +126,7 @@ private[sql] trait ParquetTest extends SQLTestUtils {
       schema: StructType, path: Path, configuration: Configuration): Unit = {
     val parquetSchema = new CatalystSchemaConverter().convert(schema)
     val extraMetadata = Map(CatalystReadSupport.SPARK_METADATA_KEY -> schema.json).asJava
-    val createdBy = s"Apache Spark ${org.apache.spark.SPARK_VERSION}"
+    val createdBy = s"Apache Spark ${org.apache.spark.VersionInfo.getVersion}"
     val fileMetadata = new FileMetaData(parquetSchema, extraMetadata, createdBy)
     val parquetMetadata = new ParquetMetadata(fileMetadata, Seq.empty[BlockMetaData].asJava)
     val footer = new Footer(path, parquetMetadata)
@@ -141,7 +141,7 @@ private[sql] trait ParquetTest extends SQLTestUtils {
       parquetSchema: MessageType, path: Path, configuration: Configuration,
       extraMetadata: Map[String, String] = Map.empty[String, String]): Unit = {
     val extraMetadataAsJava = extraMetadata.asJava
-    val createdBy = s"Apache Spark ${org.apache.spark.SPARK_VERSION}"
+    val createdBy = s"Apache Spark ${org.apache.spark.VersionInfo.getVersion}"
     val fileMetadata = new FileMetaData(parquetSchema, extraMetadataAsJava, createdBy)
     val parquetMetadata = new ParquetMetadata(fileMetadata, Seq.empty[BlockMetaData].asJava)
     val footer = new Footer(path, parquetMetadata)

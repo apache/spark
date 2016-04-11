@@ -29,7 +29,7 @@ import org.eclipse.jetty.util.thread.QueuedThreadPool
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf}
+import org.apache.spark.{VersionInfo, SparkConf}
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
@@ -151,7 +151,7 @@ private[rest] abstract class RestServlet extends HttpServlet with Logging {
   /** Construct an error message to signal the fact that an exception has been thrown. */
   protected def handleError(message: String): ErrorResponse = {
     val e = new ErrorResponse
-    e.serverSparkVersion = sparkVersion
+    e.serverSparkVersion = VersionInfo.getVersion
     e.message = message
     e
   }

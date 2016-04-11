@@ -30,7 +30,7 @@ import scala.io.Source
 
 import com.fasterxml.jackson.core.JsonProcessingException
 
-import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf}
+import org.apache.spark.{VersionInfo, SparkConf}
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
@@ -175,7 +175,7 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
       sparkProperties: Map[String, String],
       environmentVariables: Map[String, String]): CreateSubmissionRequest = {
     val message = new CreateSubmissionRequest
-    message.clientSparkVersion = sparkVersion
+    message.clientSparkVersion = VersionInfo.getVersion
     message.appResource = appResource
     message.mainClass = mainClass
     message.appArgs = appArgs

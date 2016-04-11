@@ -20,7 +20,7 @@ package org.apache.spark.deploy.rest
 import java.io.File
 import javax.servlet.http.HttpServletResponse
 
-import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf}
+import org.apache.spark.{VersionInfo, SparkConf}
 import org.apache.spark.deploy.{Command, DeployMessages, DriverDescription}
 import org.apache.spark.deploy.ClientArguments._
 import org.apache.spark.rpc.RpcEndpointRef
@@ -74,7 +74,7 @@ private[rest] class StandaloneKillRequestServlet(masterEndpoint: RpcEndpointRef,
     val response = masterEndpoint.askWithRetry[DeployMessages.KillDriverResponse](
       DeployMessages.RequestKillDriver(submissionId))
     val k = new KillSubmissionResponse
-    k.serverSparkVersion = sparkVersion
+    k.serverSparkVersion = VersionInfo.getVersion
     k.message = response.message
     k.submissionId = submissionId
     k.success = response.success
@@ -93,7 +93,7 @@ private[rest] class StandaloneStatusRequestServlet(masterEndpoint: RpcEndpointRe
       DeployMessages.RequestDriverStatus(submissionId))
     val message = response.exception.map { s"Exception from the cluster:\n" + formatException(_) }
     val d = new SubmissionStatusResponse
-    d.serverSparkVersion = sparkVersion
+    d.serverSparkVersion = VersionInfo.getVersion
     d.submissionId = submissionId
     d.success = response.found
     d.driverState = response.state.map(_.toString).orNull
@@ -177,7 +177,7 @@ private[rest] class StandaloneSubmitRequestServlet(
         val response = masterEndpoint.askWithRetry[DeployMessages.SubmitDriverResponse](
           DeployMessages.RequestSubmitDriver(driverDescription))
         val submitResponse = new CreateSubmissionResponse
-        submitResponse.serverSparkVersion = sparkVersion
+        submitResponse.serverSparkVersion = VersionInfo.getVersion
         submitResponse.message = response.message
         submitResponse.success = response.success
         submitResponse.submissionId = response.driverId.orNull

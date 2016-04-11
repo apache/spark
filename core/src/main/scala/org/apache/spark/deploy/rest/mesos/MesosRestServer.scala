@@ -23,7 +23,7 @@ import java.util.Date
 import java.util.concurrent.atomic.AtomicLong
 import javax.servlet.http.HttpServletResponse
 
-import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf}
+import org.apache.spark.{VersionInfo, SparkConf}
 import org.apache.spark.deploy.Command
 import org.apache.spark.deploy.mesos.MesosDriverDescription
 import org.apache.spark.deploy.rest._
@@ -124,7 +124,7 @@ private[mesos] class MesosSubmitRequestServlet(
       case submitRequest: CreateSubmissionRequest =>
         val driverDescription = buildDriverDescription(submitRequest)
         val s = scheduler.submitDriver(driverDescription)
-        s.serverSparkVersion = sparkVersion
+        s.serverSparkVersion = VersionInfo.getVersion
         val unknownFields = findUnknownFields(requestMessageJson, requestMessage)
         if (unknownFields.nonEmpty) {
           // If there are fields that the server does not know about, warn the client
@@ -142,7 +142,7 @@ private[mesos] class MesosKillRequestServlet(scheduler: MesosClusterScheduler, c
   extends KillRequestServlet {
   protected override def handleKill(submissionId: String): KillSubmissionResponse = {
     val k = scheduler.killDriver(submissionId)
-    k.serverSparkVersion = sparkVersion
+    k.serverSparkVersion = VersionInfo.getVersion
     k
   }
 }
@@ -151,7 +151,7 @@ private[mesos] class MesosStatusRequestServlet(scheduler: MesosClusterScheduler,
   extends StatusRequestServlet {
   protected override def handleStatus(submissionId: String): SubmissionStatusResponse = {
     val d = scheduler.getDriverStatus(submissionId)
-    d.serverSparkVersion = sparkVersion
+    d.serverSparkVersion = VersionInfo.getVersion
     d
   }
 }

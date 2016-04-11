@@ -180,7 +180,7 @@ private[deploy] class Worker(
     assert(!registered)
     logInfo("Starting Spark worker %s:%d with %d cores, %s RAM".format(
       host, port, cores, Utils.megabytesToString(memory)))
-    logInfo(s"Running Spark version ${org.apache.spark.SPARK_VERSION}")
+    logInfo(s"Running Spark version ${org.apache.spark.VersionInfo.getVersion}")
     logInfo("Spark home: " + sparkHome)
     createWorkDir()
     shuffleService.startIfEnabled()

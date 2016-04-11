@@ -30,7 +30,7 @@ import org.apache.hadoop.fs.permission.FsPermission
 import org.json4s.JsonAST.JValue
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.{SPARK_VERSION, SparkConf}
+import org.apache.spark.{VersionInfo, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.io.CompressionCodec
@@ -253,7 +253,7 @@ private[spark] object EventLoggingListener extends Logging {
    * @param logStream Raw output stream to the event log file.
    */
   def initEventLog(logStream: OutputStream): Unit = {
-    val metadata = SparkListenerLogStart(SPARK_VERSION)
+    val metadata = SparkListenerLogStart(VersionInfo.getVersion)
     val metadataJson = compact(JsonProtocol.logStartToJson(metadata)) + "\n"
     logStream.write(metadataJson.getBytes(StandardCharsets.UTF_8))
   }

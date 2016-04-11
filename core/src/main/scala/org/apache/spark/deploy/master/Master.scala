@@ -140,7 +140,7 @@ private[deploy] class Master(
 
   override def onStart(): Unit = {
     logInfo("Starting Spark master at " + masterUrl)
-    logInfo(s"Running Spark version ${org.apache.spark.SPARK_VERSION}")
+    logInfo(s"Running Spark version ${org.apache.spark.VersionInfo.getVersion}")
     webUi = new MasterWebUI(this, webUiPort)
     webUi.bind()
     masterWebUiUrl = "http://" + masterPublicAddress + ":" + webUi.boundPort

@@ -324,6 +324,22 @@
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
+      <resources>
+          <resource>
+              <directory>${basedir}/src/main/resources</directory>
+              <excludes>
+                  <exclude>spark-version-info.properties</exclude>
+              </excludes>
+              <filtering>false</filtering>
+          </resource>
+          <resource>
+              <directory>${basedir}/src/main/resources</directory>
+              <includes>
+                  <include>spark-version-info.properties</include>
+              </includes>
+              <filtering>true</filtering>
+          </resource>
+      </resources>
     <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
@@ -351,6 +367,28 @@
             </configuration>
           </execution>
         </executions>
+      </plugin>
+      <plugin>
+          <groupId>org.apache.spark</groupId>
+          <artifactId>spark-maven-plugins_${scala.binary.version}</artifactId>
+          <version>${project.version}</version>
+          <executions>
+              <execution>
+                  <id>version-info</id>
+                  <phase>generate-resources</phase>
+                  <goals>
+                      <goal>version-info</goal>
+                  </goals>
+                  <configuration>
+                      <source>
+                          <directory>${basedir}/src/</directory>
+                          <includes>
+                              <include>main/java/**/*.java</include>
+                          </includes>
+                      </source>
+                  </configuration>
+              </execution>
+          </executions>
       </plugin>
     </plugins>
   </build>
