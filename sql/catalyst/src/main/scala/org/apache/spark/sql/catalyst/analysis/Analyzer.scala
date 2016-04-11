@@ -852,8 +852,8 @@ class Analyzer(
   }
 
   /**
-   * This rule resolve subqueries inside expressions, rewrite correlated subqueries or
-   * uncorrelated list-subquery (returns multiple rows, used with EXISTS/IN) into joins.
+   * This rule resolves subqueries inside expressions, rewrites correlated subqueries or
+   * scalar subqueries.
    *
    * It works as following:
    * 1. For each logical plan, find out the subqueries from expressions, try to resolve them,
@@ -862,13 +862,8 @@ class Analyzer(
    *   will be rewritten as following:
    *   a. EXISTS/NOT EXISTS will be rewritten as semi/anti join, unresolved condition in Filter
    *     will be pulled out as join conditions.
-   *   b. IN will be rewritten as semi join, unresolved condition in Filter will be pulled out as
-   *     join conditions, value = selected column will also be used as join condition.
-   *   c. NOT IN will be rewritten as anti join, unresolved condition in Filter will be pulled out
-   *     as join conditions, value = selected column will also be used as join condition, if the
-   *     selected column is not nullable, otherwise it's not supported (raise Exception).
-   *   d. Unresolved scalar subquery will be rewritten as left outer join, the unresolved conditoin
-   *     in Filter will be pulled out as join condition.
+   *   b. IN/NOT IN will be rewritten as semi/anti join, unresolved conditions in the Filter will be
+   *     pulled out as join conditions, value = selected column will also be used as join condition.
    *
    * Note: CTE are handled in CTESubstitution.
    */
