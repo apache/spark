@@ -77,7 +77,7 @@ class FileStreamSourceTest extends StreamTest with SharedSQLContext {
       .queryExecution.analyzed
       .collect { case StreamingRelation(dataSource, _, _) =>
         // There is only one source in our tests so just set sourceId to 1
-        dataSource.createSource(Some(0), Some(checkpointLocation)).asInstanceOf[FileStreamSource]
+        dataSource.createSource(0, checkpointLocation).asInstanceOf[FileStreamSource]
       }.head
   }
 
@@ -104,9 +104,8 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext
       }
     df.queryExecution.analyzed
       .collect { case StreamingRelation(dataSource, _, _) =>
-        dataSource.createSource().asInstanceOf[FileStreamSource]
-      }.head
-      .schema
+        dataSource.sourceSchema()
+      }.head._2
   }
 
   test("FileStreamSource schema: no path") {

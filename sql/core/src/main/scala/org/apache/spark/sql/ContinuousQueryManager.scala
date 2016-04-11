@@ -182,7 +182,7 @@ class ContinuousQueryManager(sqlContext: SQLContext) {
       val logicalPlan = df.logicalPlan.transform {
         case StreamingRelation(dataSource, _, output) =>
           // Materialize source to avoid creating it in every batch
-          val source = dataSource.createSource(Some(nextSourceId), Some(checkpointLocation))
+          val source = dataSource.createSource(nextSourceId, checkpointLocation)
           nextSourceId += 1
           // We still need to use the previous `output` instead of `source.schema` as attributes in
           // "df.logicalPlan" has already used attributes of the previous `output`.

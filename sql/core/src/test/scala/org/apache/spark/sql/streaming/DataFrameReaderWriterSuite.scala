@@ -21,6 +21,7 @@ import java.util.concurrent.TimeUnit
 
 import scala.concurrent.duration._
 
+import org.mockito.Mockito._
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql._
@@ -31,22 +32,53 @@ import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 import org.apache.spark.util.Utils
 
 object LastOptions {
+
+  var mockStreamSourceProvider = mock(classOf[StreamSourceProvider])
+  var mockStreamSinkProvider = mock(classOf[StreamSinkProvider])
+  var sourceId: Long = -1
   var parameters: Map[String, String] = null
   var schema: Option[StructType] = null
   var partitionColumns: Seq[String] = Nil
+
+  def clear(): Unit = {
+    sourceId = -1
+    parameters = null
+    schema = null
+    partitionColumns = null
+    reset(mockStreamSourceProvider)
+    reset(mockStreamSinkProvider)
+  }
 }
 
 /** Dummy provider: returns no-op source/sink and records options in [[LastOptions]]. */
 class DefaultSource extends StreamSourceProvider with StreamSinkProvider {
-  override def createSource(
+
+  private val fakeSchema = StructType(StructField("a", IntegerType) :: Nil)
+
+  override def sourceSchema(
       sqlContext: SQLContext,
       schema: Option[StructType],
       providerName: String,
-      parameters: Map[String, String]): Source = {
+      parameters: Map[String, String]): (String, StructType) = {
     LastOptions.parameters = parameters
     LastOptions.schema = schema
+    LastOptions.mockStreamSourceProvider.sourceSchema(sqlContext, schema, providerName, parameters)
+    ("dummySource", fakeSchema)
+  }
+
+  override def createSource(
+      sqlContext: SQLContext,
+      sourceId: Long,
+      schema: Option[StructType],
+      providerName: String,
+      parameters: Map[String, String]): Source = {
+    LastOptions.sourceId = sourceId
+    LastOptions.parameters = parameters
+    LastOptions.schema = schema
+    LastOptions.mockStreamSourceProvider.createSource(
+      sqlContext, sourceId, schema, providerName, parameters)
     new Source {
-      override def schema: StructType = StructType(StructField("a", IntegerType) :: Nil)
+      override def schema: StructType = fakeSchema
 
       override def getOffset: Option[Offset] = Some(new LongOffset(0))
 
@@ -64,6 +96,7 @@ class DefaultSource extends StreamSourceProvider with StreamSinkProvider {
       partitionColumns: Seq[String]): Sink = {
     LastOptions.parameters = parameters
     LastOptions.partitionColumns = partitionColumns
+    LastOptions.mockStreamSinkProvider.createSink(sqlContext, parameters, partitionColumns)
     new Sink {
       override def addBatch(batchId: Long, data: DataFrame): Unit = {}
     }
@@ -117,7 +150,7 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
     assert(LastOptions.parameters("opt2") == "2")
     assert(LastOptions.parameters("opt3") == "3")
 
-    LastOptions.parameters = null
+    LastOptions.clear()
 
     df.write
       .format("org.apache.spark.sql.streaming.test")
@@ -181,7 +214,7 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
 
     assert(LastOptions.parameters("path") == "/test")
 
-    LastOptions.parameters = null
+    LastOptions.clear()
 
     df.write
       .format("org.apache.spark.sql.streaming.test")
@@ -204,7 +237,7 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
     assert(LastOptions.parameters("boolOpt") == "false")
     assert(LastOptions.parameters("doubleOpt") == "6.7")
 
-    LastOptions.parameters = null
+    LastOptions.clear()
     df.write
       .format("org.apache.spark.sql.streaming.test")
       .option("intOpt", 56)
@@ -302,5 +335,29 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
     q.stop()
 
     assert(q.asInstanceOf[StreamExecution].trigger == ProcessingTime(100000))
+  }
+
+  test("sourceId") {
+    LastOptions.clear()
+
+    val df1 = sqlContext.read
+      .format("org.apache.spark.sql.streaming.test")
+      .stream()
+
+    val df2 = sqlContext.read
+      .format("org.apache.spark.sql.streaming.test")
+      .stream()
+
+    val q = df1.union(df2).write
+      .format("org.apache.spark.sql.streaming.test")
+      .option("checkpointLocation", newMetadataDir)
+      .trigger(ProcessingTime(10.seconds))
+      .startStream()
+    q.stop()
+
+    verify(LastOptions.mockStreamSourceProvider)
+      .createSource(sqlContext, 0L, None, "org.apache.spark.sql.streaming.test", Map.empty)
+    verify(LastOptions.mockStreamSourceProvider)
+      .createSource(sqlContext, 1L, None, "org.apache.spark.sql.streaming.test", Map.empty)
   }
 }

@@ -129,8 +129,16 @@ trait SchemaRelationProvider {
  * Implemented by objects that can produce a streaming [[Source]] for a specific format or system.
  */
 trait StreamSourceProvider {
+
+  def sourceSchema(
+      sqlContext: SQLContext,
+      schema: Option[StructType],
+      providerName: String,
+      parameters: Map[String, String]): (String, StructType)
+
   def createSource(
       sqlContext: SQLContext,
+      sourceId: Long,
       schema: Option[StructType],
       providerName: String,
       parameters: Map[String, String]): Source

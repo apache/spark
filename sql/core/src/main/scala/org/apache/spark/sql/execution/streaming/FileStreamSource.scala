@@ -33,15 +33,20 @@ import org.apache.spark.util.collection.OpenHashSet
  */
 class FileStreamSource(
     sqlContext: SQLContext,
+    metadataPath: String,
     path: String,
     dataSchema: Option[StructType],
     providerName: String,
     dataFrameBuilder: Array[String] => DataFrame) extends Source with Logging {
 
   private val fs = FileSystem.get(sqlContext.sparkContext.hadoopConfiguration)
-  private var metadataLog: MetadataLog[Seq[String]] = _
-  private var maxBatchId: Long = _
+  private val metadataLog = new HDFSMetadataLog[Seq[String]](sqlContext, metadataPath)
+  private var maxBatchId = metadataLog.getLatest().map(_._1).getOrElse(-1L)
+
   private val seenFiles = new OpenHashSet[String]
+  metadataLog.get(None, Some(maxBatchId)).foreach { case (batchId, files) =>
+    files.foreach(seenFiles.add)
+  }
 
   /** Returns the schema of the data from this source */
   override lazy val schema: StructType = {
@@ -62,33 +67,12 @@ class FileStreamSource(
   }
 
   /**
-   * Set the metadata path. This method should be called before using [[FileStreamSource]].
-   */
-  def setMetadataPath(metadataPath: String): Unit = {
-    if (metadataLog != null) {
-      throw new IllegalStateException("metadataPath has already been set")
-    }
-    metadataLog = new HDFSMetadataLog[Seq[String]](sqlContext, metadataPath)
-    maxBatchId = metadataLog.getLatest().map(_._1).getOrElse(-1L)
-    metadataLog.get(None, Some(maxBatchId)).foreach { case (batchId, files) =>
-      files.foreach(seenFiles.add)
-    }
-  }
-
-  private def assertMetadataPath(): Unit = {
-    if (metadataLog == null) {
-      throw new IllegalStateException("metadataPath has not been set yet")
-    }
-  }
-
-  /**
    * Returns the maximum offset that can be retrieved from the source.
    *
    * `synchronized` on this method is for solving race conditions in tests. In the normal usage,
    * there is no race here, so the cost of `synchronized` should be rare.
    */
   private def fetchMaxOffset(): LongOffset = synchronized {
-    assertMetadataPath()
     val filesPresent = fetchAllFiles()
     val newFiles = new ArrayBuffer[String]()
     filesPresent.foreach { file =>
@@ -119,7 +103,6 @@ class FileStreamSource(
 
   /** Return the latest offset in the source */
   def currentOffset: LongOffset = synchronized {
-    assertMetadataPath()
     new LongOffset(maxBatchId)
   }
 
@@ -127,7 +110,6 @@ class FileStreamSource(
    * Returns the next batch of data that is available after `start`, if any is available.
    */
   override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
-    assertMetadataPath()
     val startId = start.map(_.asInstanceOf[LongOffset].offset).getOrElse(-1L)
     val endId = end.asInstanceOf[LongOffset].offset
 
