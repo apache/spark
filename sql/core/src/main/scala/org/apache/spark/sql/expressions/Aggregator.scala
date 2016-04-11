@@ -76,12 +76,26 @@ abstract class Aggregator[-IN, BUF, OUT] extends Serializable {
   def finish(reduction: BUF): OUT
 
   /**
-   * Returns this `Aggregator` as a [[TypedColumn]] that can be used in [[Dataset]] operations.
+   * Specifies the [[Encoder]] for the intermediate value type.
+   * @since 2.0.0
+   */
+  def bufferEncoder: Encoder[BUF]
+
+  /**
+   * Specifies the [[Encoder]] for the final ouput value type.
+   * @since 2.0.0
+   */
+  def outputEncoder: Encoder[OUT]
+
+  /**
+   * Returns this `Aggregator` as a [[TypedColumn]] that can be used in [[Dataset]].
+   * operations.
    * @since 1.6.0
    */
-  def toColumn(
-      implicit bufferEnc: Encoder[BUF],
-      outputEnc: Encoder[OUT]): TypedColumn[IN, OUT] = {
+  def toColumn: TypedColumn[IN, OUT] = {
+    implicit val bEncoder = bufferEncoder
+    implicit val cEncoder = outputEncoder
+
     val expr =
       AggregateExpression(
         TypedAggregateExpression(this),

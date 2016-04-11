@@ -56,7 +56,7 @@ import org.apache.spark.unsafe.types.UTF8String;
  *
  * ColumnVectors are intended to be reused.
  */
-public abstract class ColumnVector {
+public abstract class ColumnVector implements AutoCloseable {
   /**
    * Allocates a column to store elements of `type` on or off heap.
    * Capacity is the initial capacity of the vector and it will grow as necessary. Capacity is
@@ -913,6 +913,11 @@ public abstract class ColumnVector {
   }
 
   /**
+   * Returns true if this column has a dictionary.
+   */
+  public boolean hasDictionary() { return this.dictionary != null; }
+
+  /**
    * Reserve a integer column for ids of dictionary.
    */
   public ColumnVector reserveDictionaryIds(int capacity) {
@@ -923,6 +928,13 @@ public abstract class ColumnVector {
       dictionaryIds.reset();
       dictionaryIds.reserve(capacity);
     }
+    return dictionaryIds;
+  }
+
+  /**
+   * Returns the underlying integer column for ids of dictionary.
+   */
+  public ColumnVector getDictionaryIds() {
     return dictionaryIds;
   }
 
