@@ -48,6 +48,23 @@ class FlumeStreamSuite extends SparkFunSuite with BeforeAndAfter with Matchers w
     testFlumeStream(testCompression = true)
   }
 
+  test("flume input with maxBatchSize - SPARK-14531") {
+    val utils = new FlumeTestUtils
+    try {
+      conf.set("spark.streaming.receiver.maxRate", "500")
+      ssc = new StreamingContext(conf, Milliseconds(200))
+      val flumePollingStream1 = FlumeUtils.createPollingStream(
+        ssc, "localhost", utils.getTestPort())
+      assert(flumePollingStream1.getReceiver().asInstanceOf[FlumePollingReceiver]
+        .getMaxBatchSize == 500)
+    } finally {
+      if (ssc != null) {
+        ssc.stop()
+      }
+      utils.close()
+    }
+  }
+
   /** Run test on flume stream */
   private def testFlumeStream(testCompression: Boolean): Unit = {
     val input = (1 to 100).map { _.toString }
