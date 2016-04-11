@@ -89,7 +89,7 @@ class NonNullableBinaryComparisonSimplificationSuite extends PlanTest with Predi
 
   test("Expression Normalization") {
     val plan = nonNullableRelation.where(
-      'a * Literal(100) + Pi() === Pi() + Literal(100) * 'a ||
+      'a * Literal(100) + Pi() === Pi() + Literal(100) * 'a &&
       DateAdd(CurrentDate(), 'a + Literal(2)) <= DateAdd(CurrentDate(), Literal(2) + 'a))
       .analyze
     val actual = Optimize.execute(plan)
