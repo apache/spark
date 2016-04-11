@@ -443,6 +443,14 @@ object SQLConf {
     .stringConf
     .createOptional
 
+  val UNSUPPORTED_OPERATION_CHECK_ENABLED =
+    SQLConfigBuilder("spark.sql.streaming.unsupportedOperationCheck")
+      .internal()
+      .doc("When true, the logical plan for continuous query will be checked for unsupported" +
+        " operations.")
+      .booleanConf
+      .createWithDefault(true)
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
     val EXTERNAL_SORT = "spark.sql.planner.externalSort"

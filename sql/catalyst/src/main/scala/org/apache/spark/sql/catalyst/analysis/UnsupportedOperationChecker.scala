@@ -25,54 +25,57 @@ import org.apache.spark.sql.catalyst.plans.logical._
  * Analyzes the presence of unsupported operations in a logical plan.
  */
 object UnsupportedOperationChecker {
-  def check(logicalPlan: LogicalPlan, forIncremental: Boolean): Unit = {
-    if (forIncremental) {
-      checkForStreaming(logicalPlan)
-    } else {
-      logicalPlan.foreachUp {
-        case p if p.isStreaming =>
-          notSupported(
-            "Queries with streaming sources must be executed with write.startStream()")(p)
 
-        case _ =>
-      }
+  def checkForBatch(logicalPlan: LogicalPlan): Unit = {
+    logicalPlan.foreachUp {
+      case p if p.isStreaming =>
+        throwError(
+          "Queries with streaming sources must be executed with write.startStream()")(p)
+
+      case _ =>
     }
   }
 
-  private def checkForStreaming(logicalPlan: LogicalPlan): Unit = {
+  def checkForStreaming(logicalPlan: LogicalPlan, outputMode: OutputMode): Unit = {
     logicalPlan.foreachUp { implicit plan =>
 
       // Operations that cannot exists anywhere in a streaming plan
       plan match {
+
         case _: Command =>
-          notSupported("Commands like CreateTable*, AlterTable*, Show* are not supported with " +
+          throwError("Commands like CreateTable*, AlterTable*, Show* are not supported with " +
             "streaming DataFrames/Datasets")
 
         case _: InsertIntoTable =>
-          notSupported("InsertIntoTable is not supported with streaming DataFrames/Datasets")
+          throwError("InsertIntoTable is not supported with streaming DataFrames/Datasets")
+
+        case Aggregate(_, _, child) if child.isStreaming && outputMode == Append =>
+          throwError(
+            "Aggregations are not supported on streaming DataFrames/Datasets in " +
+              "Append output mode. Consider changing output mode to Update.")
 
         case Join(left, right, joinType, _) =>
 
           joinType match {
 
             case Inner =>
-              notSupportedIf(
+              throwErrorIf(
                 left.isStreaming && right.isStreaming,
                 "Inner join between two streaming DataFrames/Datasets is not supported")
 
             case FullOuter =>
-              notSupportedIf(
+              throwErrorIf(
                 left.isStreaming || right.isStreaming,
                 "Full outer joins with streaming DataFrames/Datasets are not supported")
 
             case LeftOuter | LeftSemi | LeftAnti =>
-              notSupportedIf(
+              throwErrorIf(
                 right.isStreaming,
                 "Left outer/semi/anti joins with a streaming DataFrame/Dataset " +
                 "on the right is not supported")
 
             case RightOuter =>
-              notSupportedIf(
+              throwErrorIf(
                 left.isStreaming,
                 "Right outer join with a streaming DataFrame/Dataset on the left is not supported")
 
@@ -80,42 +83,41 @@ object UnsupportedOperationChecker {
               // They should not appear in an analyzed plan.
 
             case _ =>
-              notSupported(s"Join type $joinType is not supported with streaming DataFrame/Dataset")
+              throwError(s"Join type $joinType is not supported with streaming DataFrame/Dataset")
           }
 
-        case CoGroup(_, _, _, _, _, _, _, _, _, left, right)
-          if left.isStreaming || right.isStreaming =>
-          notSupported("CoGrouping between two streaming DataFrames/Datasets is not supported")
+        case c: CoGroup if plan.children.exists(_.isStreaming) =>
+          throwError("CoGrouping between two streaming DataFrames/Datasets is not supported")
 
         case u: Union if u.children.count(_.isStreaming) == 1 =>
-          notSupported("Union between streaming and batch DataFrames/Datasets is not supported")
+          throwError("Union between streaming and batch DataFrames/Datasets is not supported")
 
         case Except(left, right) if right.isStreaming =>
-          notSupported("Except with a streaming DataFrame/Dataset on the right is not supported")
+          throwError("Except with a streaming DataFrame/Dataset on the right is not supported")
 
         case Intersect(left, right) if left.isStreaming && right.isStreaming =>
-          notSupported("Intersect between two streaming DataFrames/Datasets is not supported")
+          throwError("Intersect between two streaming DataFrames/Datasets is not supported")
 
         case GroupingSets(_, _, child, _) if child.isStreaming =>
-          notSupported("GroupingSets is not supported on streaming DataFrames/Datasets")
+          throwError("GroupingSets is not supported on streaming DataFrames/Datasets")
 
         case GlobalLimit(_, _) | LocalLimit(_, _) if plan.children.forall(_.isStreaming) =>
-          notSupported("Limits are not supported on streaming DataFrames/Datasets")
+          throwError("Limits are not supported on streaming DataFrames/Datasets")
 
         case Distinct(child) if child.isStreaming =>
-          notSupported("Distinct is not supported on streaming DataFrames/Datasets")
+          throwError("Distinct is not supported on streaming DataFrames/Datasets")
 
         case Sort(_, _, _) | SortPartitions(_, _) if plan.children.forall(_.isStreaming) =>
-          notSupported("Sorting is not supported on streaming DataFrames/Datasets")
+          throwError("Sorting is not supported on streaming DataFrames/Datasets")
 
         case Sample(_, _, _, _, child) if child.isStreaming =>
-          notSupported("Sampling is not supported on streaming DataFrames/Datasets")
+          throwError("Sampling is not supported on streaming DataFrames/Datasets")
 
         case Window(_, _, _, child) if child.isStreaming =>
-          notSupported("Non-time-based windows are not supported on streaming DataFrames/Datasets")
+          throwError("Non-time-based windows are not supported on streaming DataFrames/Datasets")
 
         case ReturnAnswer(child) if child.isStreaming =>
-          notSupported("Cannot return immediate result on streaming DataFrames/Dataset. Queries " +
+          throwError("Cannot return immediate result on streaming DataFrames/Dataset. Queries " +
             "with streaming DataFrames/Datasets must be executed with write.startStream().")
 
         case _ =>
@@ -123,15 +125,15 @@ object UnsupportedOperationChecker {
     }
   }
 
-  private def notSupportedIf(
+  private def throwErrorIf(
       condition: Boolean,
       msg: String)(implicit operator: LogicalPlan): Unit = {
     if (condition) {
-      notSupported(msg)
+      throwError(msg)
     }
   }
 
-  private def notSupported(msg: String)(implicit operator: LogicalPlan): Nothing = {
+  private def throwError(msg: String)(implicit operator: LogicalPlan): Nothing = {
     throw new AnalysisException(
       msg, operator.origin.line, operator.origin.startPosition, Some(operator))
   }

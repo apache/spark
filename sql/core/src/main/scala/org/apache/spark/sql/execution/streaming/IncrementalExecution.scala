@@ -18,10 +18,11 @@
 package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
+import org.apache.spark.sql.catalyst.analysis.{OutputMode, UnsupportedOperationChecker}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SparkPlanner, UnaryNode}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * A variant of [[QueryExecution]] that allows the execution of the given [[LogicalPlan]]
@@ -30,6 +31,7 @@ import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SparkPlanner, 
 class IncrementalExecution(
     ctx: SQLContext,
     logicalPlan: LogicalPlan,
+    outputMode: OutputMode,
     checkpointLocation: String,
     currentBatchId: Long) extends QueryExecution(ctx, logicalPlan) {
 
@@ -72,6 +74,8 @@ class IncrementalExecution(
   override def preparations: Seq[Rule[SparkPlan]] = state +: super.preparations
 
   override def assertSupported(): Unit = {
-    UnsupportedOperationChecker.check(analyzed, forIncremental = true)
+    if (ctx.conf.getConf(SQLConf.UNSUPPORTED_OPERATION_CHECK_ENABLED)) {
+      UnsupportedOperationChecker.checkForStreaming(analyzed, outputMode)
+    }
   }
 }
