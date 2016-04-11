@@ -46,7 +46,8 @@ setClass("KMeansModel", representation(jobj = "jobj"))
 #' @param data DataFrame for training.
 #' @param family A description of the error distribution and link function to be used in the model.
 #'               This can be a character string naming a family function, a family function or
-#'               the result of a call to a family function.
+#'               the result of a call to a family function. Refer R family at
+#'               \url{https://stat.ethz.ch/R-manual/R-devel/library/stats/html/family.html}.
 #' @param epsilon Positive convergence tolerance of iterations.
 #' @param maxit Integer giving the maximal number of IRLS iterations.
 #' @return a fitted generalized linear model
