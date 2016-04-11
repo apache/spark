@@ -686,6 +686,10 @@ object MimaExcludes {
         ProblemFilters.exclude[IncompatibleMethTypeProblem](
           "org.apache.spark.sql.DataFrameReader.this")
       ) ++ Seq(
+        // SPARK-14542 configurable buffer size for pipe RDD
+        ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.rdd.RDD.pipe"),
+        ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.api.java.JavaRDDLike.pipe")
+      ) ++ Seq(
         // [SPARK-4452][Core]Shuffle data structures can starve others on the same thread for memory
         ProblemFilters.exclude[IncompatibleTemplateDefProblem]("org.apache.spark.util.collection.Spillable")
       ) ++ Seq(
