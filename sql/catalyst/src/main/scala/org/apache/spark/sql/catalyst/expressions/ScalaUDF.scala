@@ -177,27 +177,6 @@ case class ScalaUDF(
     """
   }
 
-  lazy val inputEncoder: ExpressionEncoder[Row] = RowEncoder(inputSchema)
-  lazy val outputEncoder: ExpressionEncoder[Row] =
-      RowEncoder(StructType(StructField("_c0", dataType) :: Nil))
-
-  lazy val reflectedFunc =
-    runtimeMirror(function.getClass.getClassLoader).reflect(function)
-  lazy val applyMethods = reflectedFunc.symbol.typeSignature.member(newTermName("apply"))
-    .asTerm.alternatives
-  lazy val invokeMethod = reflectedFunc.reflectMethod(applyMethods(0).asMethod)
-
-  override def eval(input: InternalRow): Any = {
-    val projected = InternalRow.fromSeq(children.map(_.eval(input)))
-    val cRow = inputEncoder.fromRow(projected)
-
-    try {
-      val callRet = invokeMethod.apply(cRow.toSeq: _*)
-      outputEncoder.toRow(Row(callRet)).copy().asInstanceOf[InternalRow].get(0, dataType)
-    } catch {
-      // When exception is thrown in UDF, an InvocationTargetException will be thrown.
-      // We get and re-throw the cause exception.
-      case e: InvocationTargetException => throw e.getTargetException
-    }
-  }
+  override def eval(input: InternalRow): Any =
+    throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
 }

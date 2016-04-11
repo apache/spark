@@ -57,10 +57,10 @@ class DCT(override val uid: String)
 
   setDefault(inverse -> false)
 
-  override protected val createTransformFunc: (DCT, Vector) => Vector = { (dct, vec) =>
+  override protected def createTransformFunc: Vector => Vector = { vec =>
     val result = vec.toArray
     val jTransformer = new DoubleDCT_1D(result.length)
-    if (dct.$(inverse)) jTransformer.inverse(result, true) else jTransformer.forward(result, true)
+    if ($(inverse)) jTransformer.inverse(result, true) else jTransformer.forward(result, true)
     Vectors.dense(result)
   }
 

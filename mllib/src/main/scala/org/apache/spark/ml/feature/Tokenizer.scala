@@ -35,8 +35,8 @@ class Tokenizer(override val uid: String)
 
   def this() = this(Identifiable.randomUID("tok"))
 
-  override protected val createTransformFunc: (Tokenizer, String) => Seq[String] = { (_, str) =>
-    str.toLowerCase.split("\\s")
+  override protected def createTransformFunc: String => Seq[String] = {
+    _.toLowerCase.split("\\s")
   }
 
   override protected def validateInputType(inputType: DataType): Unit = {
@@ -124,13 +124,12 @@ class RegexTokenizer(override val uid: String)
 
   setDefault(minTokenLength -> 1, gaps -> true, pattern -> "\\s+", toLowercase -> true)
 
-  override protected val createTransformFunc: (RegexTokenizer, String) => Seq[String] = {
-    (tokenizer, originStr) =>
-      val re = tokenizer.$(pattern).r
-      val str = if (tokenizer.$(toLowercase)) originStr.toLowerCase() else originStr
-      val tokens = if (tokenizer.$(gaps)) re.split(str).toSeq else re.findAllIn(str).toSeq
-      val minLength = tokenizer.$(minTokenLength)
-      tokens.filter(_.length >= minLength)
+  override protected def createTransformFunc: String => Seq[String] = { originStr =>
+    val re = $(pattern).r
+    val str = if ($(toLowercase)) originStr.toLowerCase() else originStr
+    val tokens = if ($(gaps)) re.split(str).toSeq else re.findAllIn(str).toSeq
+    val minLength = $(minTokenLength)
+    tokens.filter(_.length >= minLength)
   }
 
   override protected def validateInputType(inputType: DataType): Unit = {
