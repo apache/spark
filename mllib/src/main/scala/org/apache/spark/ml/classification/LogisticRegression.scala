@@ -258,14 +258,15 @@ class LogisticRegression @Since("1.2.0") (
   }
 
   /**
-   * Whether to use sparse data structures when aggregating feature info. This is {@code false} by default. It should
-   * be set to {@code true} if the number of actual features which exist across your whole training set is much less
-   * than the size of your feature vectors.
+   * Whether to use sparse data structures when aggregating feature info. This is {@code false} by
+   * default. It should be set to {@code true} if the number of actual features which exist across
+   * your whole training set is much less than the size of your feature vectors.
    *
    * @group param
    */
   @Since("TBD")
-  final val useSparseAgg: BooleanParam = new BooleanParam(this, "useSparseAgg", "use sparse data structure when aggregating feature stats?")
+  final val useSparseAgg: BooleanParam = new BooleanParam(
+      this, "useSparseAgg", "use sparse data structure when aggregating feature stats?")
 
   /** @group getParam */
   @Since("TBD")
@@ -962,7 +963,11 @@ private class LogisticAggregator(
 
   private val dim = if (fitIntercept) coefficients.size - 1 else coefficients.size
 
-  private val gradientSums = if (useSparseAgg) new SparseVectorBuilder(coefficients.size) else new DenseVectorBuilder(coefficients.size)
+  private val gradientSums = if (useSparseAgg) {
+    new SparseVectorBuilder(coefficients.size)
+  } else {
+    new DenseVectorBuilder(coefficients.size)
+  }
 
   /**
    * Add a new training instance to this LogisticAggregator, and update the loss and gradient

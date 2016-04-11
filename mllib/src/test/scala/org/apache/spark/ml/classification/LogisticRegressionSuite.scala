@@ -944,7 +944,7 @@ class LogisticRegressionSuite
         assert(expected.coefficients.toArray === actual.coefficients.toArray)
       }
   }
-  
+
   test("sparse aggregation should not affect the outcome") {
     val aucDense = {
       val modelDense = new LogisticRegression().setMaxIter(2).setUseSparseAgg(false).fit(dataset)
@@ -956,7 +956,7 @@ class LogisticRegressionSuite
       val summarySparse = modelSparse.summary.asInstanceOf[BinaryLogisticRegressionTrainingSummary]
       summarySparse.areaUnderROC
     }
-    
+
     assert(aucDense === aucSparse)
   }
 }

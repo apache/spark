@@ -37,12 +37,13 @@ import org.apache.spark.mllib.linalg.{DenseVectorBuilder, SparseVectorBuilder, V
  * For weighted instances, the unbiased estimation of variance is defined by the reliability
  * weights: [[https://en.wikipedia.org/wiki/Weighted_arithmetic_mean#Reliability_weights]].
  *
- * @param sparse whether the features are sparse; if `true`, data structures are used which are optimized for sparse
- *               data (default `false`)
+ * @param sparse whether the features are sparse; if `true`, data structures are used which are
+ *               optimized for sparse data (default `false`)
  */
 @Since("1.1.0")
 @DeveloperApi
-class MultivariateOnlineSummarizer(sparse: Boolean = false) extends MultivariateStatisticalSummary with Serializable {
+class MultivariateOnlineSummarizer(sparse: Boolean = false) extends MultivariateStatisticalSummary
+    with Serializable {
 
   private var n = 0
   private var currMean: VectorBuilder = _
