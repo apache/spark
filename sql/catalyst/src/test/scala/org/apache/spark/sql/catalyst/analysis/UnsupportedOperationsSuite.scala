@@ -62,22 +62,22 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
 
   // Aggregates: Not supported on streams in Append mode
   testSupportedForStreaming(
-    "aggregate - stream with update output mode supported",
+    "aggregate - stream with update output mode",
     batchRelation.groupBy("a")("count(*)"),
     outputMode = Update)
 
   testSupportedForStreaming(
-    "aggregate - batch with update output mode supported",
+    "aggregate - batch with update output mode",
     streamRelation.groupBy("a")("count(*)"),
     outputMode = Update)
 
   testSupportedForStreaming(
-    "aggregate - batch with append output mode supported",
+    "aggregate - batch with append output mode",
     batchRelation.groupBy("a")("count(*)"),
     outputMode = Append)
 
   testNotSupportedForStreaming(
-    "aggregate - stream with append output mode not supported",
+    "aggregate - stream with append output mode",
     streamRelation.groupBy("a")("count(*)"),
     outputMode = Append,
     Seq("aggregation", "append output mode"))
@@ -192,13 +192,13 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     val expectedMsgs = if (expectedMsg.isEmpty) Seq(operationName) else Seq(expectedMsg)
 
     testNotSupportedForStreaming(
-      s"$operationName - stream not supported",
+      s"$operationName with stream relation",
       logicalPlanGenerator(streamRelation),
       outputMode,
       expectedMsgs)
 
     testSupportedForStreaming(
-      s"$operationName - batch supported",
+      s"$operationName with batch relation",
       logicalPlanGenerator(batchRelation),
       outputMode)
   }
@@ -217,12 +217,12 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
 
     if (streamStreamSupported) {
       testSupportedForStreaming(
-        s"$operationName - stream-stream supported",
+        s"$operationName with stream-stream relations",
         logicalPlanGenerator(streamRelation, streamRelation),
         outputMode)
     } else {
       testNotSupportedForStreaming(
-        s"$operationName - stream-stream not supported",
+        s"$operationName with stream-stream relations",
         logicalPlanGenerator(streamRelation, streamRelation),
         outputMode,
         expectedMsgs)
@@ -230,12 +230,12 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
 
     if (streamBatchSupported) {
       testSupportedForStreaming(
-        s"$operationName - stream-batch supported",
+        s"$operationName with stream-batch relations",
         logicalPlanGenerator(streamRelation, batchRelation),
         outputMode)
     } else {
       testNotSupportedForStreaming(
-        s"$operationName - stream-batch not supported",
+        s"$operationName with stream-batch relations",
         logicalPlanGenerator(streamRelation, batchRelation),
         outputMode,
         expectedMsgs)
@@ -243,21 +243,29 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
 
     if (batchStreamSupported) {
       testSupportedForStreaming(
-        s"$operationName - batch-stream supported",
+        s"$operationName with batch-stream relations",
         logicalPlanGenerator(batchRelation, streamRelation),
         outputMode)
     } else {
       testNotSupportedForStreaming(
-        s"$operationName - batch-stream not supported",
+        s"$operationName with batch-stream relations",
         logicalPlanGenerator(batchRelation, streamRelation),
         outputMode,
         expectedMsgs)
     }
 
     testSupportedForStreaming(
-      s"$operationName - batch-batch supported",
+      s"$operationName with batch-batch relations",
       logicalPlanGenerator(batchRelation, batchRelation),
       outputMode)
+  }
+
+
+
+  def testSupportedForStreaming(name: String, plan: LogicalPlan, outputMode: OutputMode): Unit = {
+    test(s"streaming plan - $name: supported", plan, shouldBeSupported = true, Nil) {
+      UnsupportedOperationChecker.checkForStreaming(plan, outputMode)
+    }
   }
 
   def testNotSupportedForStreaming(
@@ -266,7 +274,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
       outputMode: OutputMode,
       expectedMsgs: Seq[String]): Unit = {
     test(
-      s"streaming plan - $name",
+      s"streaming plan - $name: not supported",
       plan,
       shouldBeSupported = false,
       expectedMsgs :+ "streaming" :+ "DataFrame" :+ "Dataset" :+ "not supported") {
@@ -274,20 +282,14 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     }
   }
 
-  def testSupportedForStreaming(name: String, plan: LogicalPlan, outputMode: OutputMode): Unit = {
-    test(s"streaming plan - $name", plan, shouldBeSupported = true, Nil) {
-      UnsupportedOperationChecker.checkForStreaming(plan, outputMode)
-    }
-  }
-
   def testSupportedForBatch(name: String, plan: LogicalPlan): Unit = {
-    test(s"batch plan - $name", plan, shouldBeSupported = true, Nil) {
+    test(s"batch plan - $name: supported", plan, shouldBeSupported = true, Nil) {
       UnsupportedOperationChecker.checkForBatch(plan)
     }
   }
 
   def testNotSupportedForBatch(name: String, plan: LogicalPlan, expectedMsgs: Seq[String]): Unit = {
-    test(s"batch plan - $name", plan, shouldBeSupported = false, expectedMsgs) {
+    test(s"batch plan - $name: not supported", plan, shouldBeSupported = false, expectedMsgs) {
       UnsupportedOperationChecker.checkForBatch(plan)
     }
   }
