@@ -1852,4 +1852,31 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       }
     }
   }
+
+  test(
+    "SPARK-14488 \"CREATE TEMPORARY TABLE ... USING ... AS SELECT ...\" " +
+    "shouldn't create persisted table"
+  ) {
+    withTempPath { dir =>
+      withTempTable("t1", "t2") {
+        val path = dir.getCanonicalPath
+        val ds = sqlContext.range(10)
+        ds.registerTempTable("t1")
+
+        sql(
+          s"""CREATE TEMPORARY TABLE t2
+             |USING PARQUET
+             |OPTIONS (PATH '$path')
+             |AS SELECT * FROM t1
+           """.stripMargin)
+
+        checkAnswer(
+          sqlContext.tables().select('isTemporary).filter('tableName === "t2"),
+          Row(true)
+        )
+
+        checkAnswer(table("t2"), table("t1"))
+      }
+    }
+  }
 }
