@@ -92,6 +92,7 @@ defaults = {
         'sql_alchemy_pool_size': 5,
         'sql_alchemy_pool_recycle': 3600,
         'dagbag_import_timeout': 30,
+        'non_pooled_task_slot_count': 128,
     },
     'webserver': {
         'base_url': 'http://localhost:8080',
@@ -191,6 +192,10 @@ dag_concurrency = 16
 
 # Are DAGs paused by default at creation
 dags_are_paused_at_creation = True
+
+# When not using pools, tasks are run in the "default pool",
+# whose size is guided by this config element
+non_pooled_task_slot_count = 128
 
 # The maximum number of active DAG runs per DAG
 max_active_runs_per_dag = 16
@@ -366,6 +371,7 @@ donot_pickle = False
 dag_concurrency = 16
 dags_are_paused_at_creation = False
 fernet_key = {FERNET_KEY}
+non_pooled_task_slot_count = 128
 
 [webserver]
 base_url = http://localhost:8080
