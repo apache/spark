@@ -453,8 +453,8 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
       if (epoch == epochGotten) {
         cachedSerializedStatuses(shuffleId) = byteArr
       }
-      byteArr
     }
+    byteArr
   }
 
   override def stop() {
