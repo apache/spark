@@ -21,25 +21,28 @@ import java.math.BigDecimal
 import java.sql.{Connection, Date, Timestamp}
 import java.util.Properties
 
+import org.scalatest._
+
 import org.apache.spark.tags.DockerTest
 
 @DockerTest
-class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
+@Ignore // AMPLab Jenkins needs to be updated before shared memory works on docker
+class DB2IntegrationSuite extends DockerJDBCIntegrationSuite {
   override val db = new DatabaseOnDocker {
-    override val imageName = "mysql:5.7.9"
+    override val imageName = "lresende/db2express-c:10.5.0.5-3.10.0"
     override val env = Map(
-      "MYSQL_ROOT_PASSWORD" -> "rootpass"
+      "DB2INST1_PASSWORD" -> "rootpass",
+      "LICENSE" -> "accept"
     )
-    override val usesIpc = false
-    override val jdbcPort: Int = 3306
+    override val usesIpc = true
+    override val jdbcPort: Int = 50000
     override def getJdbcUrl(ip: String, port: Int): String =
-      s"jdbc:mysql://$ip:$port/mysql?user=root&password=rootpass"
-    override def getStartupProcessName: Option[String] = None
+      s"jdbc:db2://$ip:$port/foo:user=db2inst1;password=rootpass;"
+    override def getStartupProcessName: Option[String] = Some("db2start")
   }
 
   override def dataPreparation(conn: Connection): Unit = {
-    conn.prepareStatement("CREATE DATABASE foo").executeUpdate()
-    conn.prepareStatement("CREATE TABLE tbl (x INTEGER, y TEXT(8))").executeUpdate()
+    conn.prepareStatement("CREATE TABLE tbl (x INTEGER, y VARCHAR(8))").executeUpdate()
     conn.prepareStatement("INSERT INTO tbl VALUES (42,'fred')").executeUpdate()
     conn.prepareStatement("INSERT INTO tbl VALUES (17,'dave')").executeUpdate()
 
@@ -56,11 +59,10 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
       + "'1996-01-01 01:23:45', '2009-02-13 23:31:30', '2001')").executeUpdate()
 
     // TODO: Test locale conversion for strings.
-    conn.prepareStatement("CREATE TABLE strings (a CHAR(10), b VARCHAR(10), c TINYTEXT, "
-      + "d TEXT, e MEDIUMTEXT, f LONGTEXT, g BINARY(4), h VARBINARY(10), i BLOB)"
-    ).executeUpdate()
-    conn.prepareStatement("INSERT INTO strings VALUES ('the', 'quick', 'brown', 'fox', " +
-      "'jumps', 'over', 'the', 'lazy', 'dog')").executeUpdate()
+    conn.prepareStatement("CREATE TABLE strings (a CHAR(10), b VARCHAR(10), c CLOB, d BLOB, "
+      + "e CHAR FOR BIT DATA)").executeUpdate()
+    conn.prepareStatement("INSERT INTO strings VALUES ('the', 'quick', 'brown', 'fox', 'jumps'")
+      .executeUpdate()
   }
 
   test("Basic test") {

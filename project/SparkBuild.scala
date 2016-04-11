@@ -366,8 +366,10 @@ object Flume {
 object DockerIntegrationTests {
   // This serves to override the override specified in DependencyOverrides:
   lazy val settings = Seq(
-    dependencyOverrides += "com.google.guava" % "guava" % "18.0"
+    dependencyOverrides += "com.google.guava" % "guava" % "18.0",
+    resolvers ++= Seq("DB2" at "https://app.camunda.com/nexus/content/repositories/public/")
   )
+
 }
 
 /**
