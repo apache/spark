@@ -34,7 +34,7 @@ class JavaWrapper(object):
         self._java_obj = java_obj
 
     @classmethod
-    def createFromClassName(cls, java_class, *args):
+    def _create_from_java_class(cls, java_class, *args):
         """
         Construct this object from given Java classname and arguments
         """
