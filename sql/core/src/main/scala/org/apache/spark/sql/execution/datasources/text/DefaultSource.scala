@@ -88,45 +88,6 @@ class DefaultSource extends FileFormat with DataSourceRegister {
     }
   }
 
-  override def buildInternalScan(
-      sqlContext: SQLContext,
-      dataSchema: StructType,
-      requiredColumns: Array[String],
-      filters: Array[Filter],
-      bucketSet: Option[BitSet],
-      inputFiles: Seq[FileStatus],
-      broadcastedConf: Broadcast[SerializableConfiguration],
-      options: Map[String, String]): RDD[InternalRow] = {
-    verifySchema(dataSchema)
-
-    val job = Job.getInstance(sqlContext.sparkContext.hadoopConfiguration)
-    val conf = job.getConfiguration
-    val paths = inputFiles
-        .filterNot(_.getPath.getName startsWith "_")
-        .map(_.getPath)
-        .sortBy(_.toUri)
-
-    if (paths.nonEmpty) {
-      FileInputFormat.setInputPaths(job, paths: _*)
-    }
-
-    sqlContext.sparkContext.hadoopRDD(
-      conf.asInstanceOf[JobConf], classOf[TextInputFormat], classOf[LongWritable], classOf[Text])
-        .mapPartitions { iter =>
-          val unsafeRow = new UnsafeRow(1)
-          val bufferHolder = new BufferHolder(unsafeRow)
-          val unsafeRowWriter = new UnsafeRowWriter(bufferHolder, 1)
-
-          iter.map { case (_, line) =>
-            // Writes to an UnsafeRow directly
-            bufferHolder.reset()
-            unsafeRowWriter.write(0, line.getBytes, 0, line.getLength)
-            unsafeRow.setTotalSize(bufferHolder.totalSize())
-            unsafeRow
-          }
-        }
-  }
-
   override def buildReader(
       sqlContext: SQLContext,
       dataSchema: StructType,
