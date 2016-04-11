@@ -142,17 +142,22 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
   }
 
   /**
-   * Create a table. TODO: expand this comment!
+   * Create a table, returning either a [[CreateTable]] or a [[CreateTableAsSelect]].
    *
-   * For example:
+   * This is not used to create datasource tables, which is handled through
+   * "CREATE TABLE ... USING ...".
+   *
+   * Note: several features are currently not supported - temporary tables, bucketing,
+   * skewed columns and storage handlers (STORED BY).
+   *
+   * Expected format:
    * {{{
    *   CREATE [TEMPORARY] [EXTERNAL] TABLE [IF NOT EXISTS] [db_name.]table_name
    *   [(col1 data_type [COMMENT col_comment], ...)]
    *   [COMMENT table_comment]
    *   [PARTITIONED BY (col3 data_type [COMMENT col_comment], ...)]
    *   [CLUSTERED BY (col1, ...) [SORTED BY (col1 [ASC|DESC], ...)] INTO num_buckets BUCKETS]
-   *   [SKEWED BY (col1, col2, ...) ON ((col_value, col_value, ...), ...)
-   *   [STORED AS DIRECTORIES]
+   *   [SKEWED BY (col1, col2, ...) ON ((col_value, col_value, ...), ...) [STORED AS DIRECTORIES]]
    *   [ROW FORMAT row_format]
    *   [STORED AS file_format | STORED BY storage_handler_class [WITH SERDEPROPERTIES (...)]]
    *   [LOCATION path]
