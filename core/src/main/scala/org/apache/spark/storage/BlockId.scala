@@ -46,6 +46,20 @@ sealed abstract class BlockId {
     case o: BlockId => getClass == o.getClass && name.equals(o.name)
     case _ => false
   }
+
+  def getRddId: Int = {
+    asRDDId match {
+      case Some(x) => x.rddId
+      case _ => -1
+    }
+  }
+
+  def getRddSplitIndex: Int = {
+    asRDDId match {
+      case Some(x) => x.splitIndex
+      case _ => -1
+    }
+  }
 }
 
 @DeveloperApi

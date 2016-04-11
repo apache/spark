@@ -31,7 +31,7 @@ import org.apache.spark.{SparkConf, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.memory.{MemoryManager, MemoryMode}
 import org.apache.spark.serializer.{SerializationStream, SerializerManager}
-import org.apache.spark.storage.{BlockId, BlockInfoManager, StorageLevel}
+import org.apache.spark.storage.{BlockId, BlockInfoManager, BlockManager, StorageLevel}
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.{CompletionIterator, SizeEstimator, Utils}
 import org.apache.spark.util.collection.SizeTrackingVector
@@ -84,10 +84,12 @@ private[spark] class MemoryStore(
     blockEvictionHandler: BlockEvictionHandler)
   extends Logging {
 
+  val blockManager = blockEvictionHandler.asInstanceOf[BlockManager]
   // Note: all changes to memory allocations, notably putting blocks, evicting blocks, and
   // acquiring or releasing unroll memory, must be synchronized on `memoryManager`!
 
-  private val entries = new LinkedHashMap[BlockId, MemoryEntry[_]](32, 0.75f, true)
+//  private val entries = new LinkedHashMap[BlockId, MemoryEntry[_]](32, 0.75f, true)
+  private val entries = new LRUMemoryEntryManager[BlockId, MemoryEntry[_]]
 
   // A mapping from taskAttemptId to amount of memory used for unrolling a block (in bytes)
   // All accesses of this map are assumed to have manually synchronized on `memoryManager`
@@ -123,9 +125,7 @@ private[spark] class MemoryStore(
   }
 
   def getSize(blockId: BlockId): Long = {
-    entries.synchronized {
-      entries.get(blockId).size
-    }
+    entries.getEntry(blockId).size
   }
 
   /**
@@ -147,9 +147,7 @@ private[spark] class MemoryStore(
       val bytes = _bytes()
       assert(bytes.size == size)
       val entry = new SerializedMemoryEntry[T](bytes, memoryMode, implicitly[ClassTag[T]])
-      entries.synchronized {
-        entries.put(blockId, entry)
-      }
+      entries.putEntry(blockId, entry)
       logInfo("Block %s stored as bytes in memory (estimated size %s, free %s)".format(
         blockId, Utils.bytesToString(size), Utils.bytesToString(maxMemory - blocksMemoryUsed)))
       true
@@ -264,9 +262,7 @@ private[spark] class MemoryStore(
         }
       }
       if (enoughStorageMemory) {
-        entries.synchronized {
-          entries.put(blockId, entry)
-        }
+        entries.putEntry(blockId, entry)
         logInfo("Block %s stored as values in memory (estimated size %s, free %s)".format(
           blockId, Utils.bytesToString(size), Utils.bytesToString(maxMemory - blocksMemoryUsed)))
         Right(size)
@@ -373,9 +369,7 @@ private[spark] class MemoryStore(
         val success = memoryManager.acquireStorageMemory(blockId, entry.size, memoryMode)
         assert(success, "transferring unroll memory to storage memory failed")
       }
-      entries.synchronized {
-        entries.put(blockId, entry)
-      }
+      entries.putEntry(blockId, entry)
       logInfo("Block %s stored as bytes in memory (estimated size %s, free %s)".format(
         blockId, Utils.bytesToString(entry.size), Utils.bytesToString(blocksMemoryUsed)))
       Right(entry.size)
@@ -398,7 +392,7 @@ private[spark] class MemoryStore(
   }
 
   def getBytes(blockId: BlockId): Option[ChunkedByteBuffer] = {
-    val entry = entries.synchronized { entries.get(blockId) }
+    val entry = entries.getEntry(blockId)
     entry match {
       case null => None
       case e: DeserializedMemoryEntry[_] =>
@@ -408,7 +402,7 @@ private[spark] class MemoryStore(
   }
 
   def getValues(blockId: BlockId): Option[Iterator[_]] = {
-    val entry = entries.synchronized { entries.get(blockId) }
+    val entry = entries.getEntry(blockId)
     entry match {
       case null => None
       case e: SerializedMemoryEntry[_] =>
@@ -420,9 +414,7 @@ private[spark] class MemoryStore(
   }
 
   def remove(blockId: BlockId): Boolean = memoryManager.synchronized {
-    val entry = entries.synchronized {
-      entries.remove(blockId)
-    }
+    val entry = entries.removeEntry(blockId)
     if (entry != null) {
       entry match {
         case SerializedMemoryEntry(buffer, _, _) => buffer.dispose()
@@ -498,6 +490,29 @@ private[spark] class MemoryStore(
         }
       }
 
+      if (conf.get("***") == "LCS") {
+        blockManager.inMemBlockExInfo.synchronized {
+          val setIter = blockManager.inMemBlockExInfo.iterator()
+          while (freedMemory < space && setIter.hasNext) {
+            val cur = setIter.next()
+
+            blockManager.stageExInfos.get(blockManager.currentStage) match {
+              case Some(curStageExInfo) =>
+                // cur is this stage's output RDD
+                if (!curStageExInfo.curRunningRddMap.contains(cur.blockId.getRddId)) {
+                  if (blockInfoManager.lockForWriting(cur.blockId,
+                    blocking = false).isDefined) {
+                    selectedBlocks += cur.blockId
+                    freedMemory += cur.size
+                  }
+                }
+              case None =>
+                logError("ERROR HERE")
+            }
+          }
+        }
+      }
+
       def dropBlock[T](blockId: BlockId, entry: MemoryEntry[T]): Unit = {
         val data = entry match {
           case DeserializedMemoryEntry(values, _, _) => Left(values)
@@ -520,7 +535,7 @@ private[spark] class MemoryStore(
         logInfo(s"${selectedBlocks.size} blocks selected for dropping " +
           s"(${Utils.bytesToString(freedMemory)} bytes)")
         for (blockId <- selectedBlocks) {
-          val entry = entries.synchronized { entries.get(blockId) }
+          val entry = entries.getEntry(blockId)
           // This should never be null as only one task should be dropping
           // blocks and removing entries. However the check is still here for
           // future safety.
@@ -544,7 +559,7 @@ private[spark] class MemoryStore(
   }
 
   def contains(blockId: BlockId): Boolean = {
-    entries.synchronized { entries.containsKey(blockId) }
+    entries.containsEntry(blockId)
   }
 
   private def currentTaskAttemptId(): Long = {

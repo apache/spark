@@ -38,7 +38,7 @@ import org.apache.spark.partial.BoundedDouble
 import org.apache.spark.partial.CountEvaluator
 import org.apache.spark.partial.GroupedCountEvaluator
 import org.apache.spark.partial.PartialResult
-import org.apache.spark.storage.{RDDBlockId, StorageLevel}
+import org.apache.spark.storage.{BlockExInfo, RDDBlockId, StorageLevel}
 import org.apache.spark.util.{BoundedPriorityQueue, Utils}
 import org.apache.spark.util.collection.OpenHashMap
 import org.apache.spark.util.random.{BernoulliCellSampler, BernoulliSampler, PoissonSampler,
@@ -208,6 +208,7 @@ abstract class RDD[T: ClassTag](
    */
   def unpersist(blocking: Boolean = true): this.type = {
     logInfo("Removing RDD " + id + " from persistence list")
+    sc.dagScheduler.renewDepMap(id)
     sc.unpersistRDD(id, blocking)
     storageLevel = StorageLevel.NONE
     this
@@ -308,6 +309,31 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
+    * Return the ancestors
+    */
+  private[spark] def getNarrowCachedAncestors: Set[Int] = {
+    val cachedAncestors = new mutable.HashSet[Int]
+    val ancestors = new mutable.HashSet[RDD[_]]
+    def visit(rdd: RDD[_]): Unit = {
+      val narrowDependencies = rdd.dependencies.filter(_.isInstanceOf[NarrowDependency[_]])
+      val narrowParents = narrowDependencies.map(_.rdd)
+      val narrowParentsNotVisited = narrowParents.filterNot(ancestors.contains)
+      narrowParentsNotVisited.foreach { parent =>
+        ancestors.add(parent)
+        if (parent.getStorageLevel != StorageLevel.NONE) {
+          cachedAncestors.add(parent.id)
+        } else {
+          visit(parent)
+        }
+      }
+    }
+
+    visit(this)
+
+    cachedAncestors.filterNot(_ == this.id).toSet
+  }
+
+  /**
    * Compute an RDD partition or read it from a checkpoint if the RDD is checkpointing.
    */
   private[spark] def computeOrReadCheckpoint(split: Partition, context: TaskContext): Iterator[T] =
@@ -328,6 +354,39 @@ abstract class RDD[T: ClassTag](
     // This method is called on executors, so we need call SparkEnv.get instead of sc.env.
     SparkEnv.get.blockManager.getOrElseUpdate(blockId, storageLevel, elementClassTag, () => {
       readCachedBlock = false
+      val key = blockId
+      logInfo(s"Partition $key not found, computing it")
+
+      val blockManager = SparkEnv.get.blockManager
+
+      if (!blockManager.blockExInfo.containsKey(key)) {
+        blockManager.blockExInfo.put(key, new BlockExInfo(key))
+      }
+
+      blockManager.stageExInfos.get(blockManager.currentStage) match {
+        case Some(curStageExInfo) =>
+          var parExist = true
+          for (par <- curStageExInfo.depMap(id)) {
+            val parBlockId = new RDDBlockId(par, partition.index)
+            if (blockManager.blockExInfo.containsKey(parBlockId) &&
+              blockManager.blockExInfo.get(parBlockId).isExist
+                == 1) { // par is exist
+
+            } else { // par not exist now, add this key to it's par's watching set
+              parExist = false
+              if (!blockManager.blockExInfo.containsKey(parBlockId)) {
+                blockManager.blockExInfo.put(parBlockId, new BlockExInfo(parBlockId))
+              }
+              blockManager.blockExInfo.get(parBlockId).sonSet += key
+            }
+          }
+          if (parExist) { // par are all exist so we update this rdd's start time
+            logTrace("par all exist, store start time of " + key)
+            blockManager.blockExInfo.get(key).creatStartTime = System.currentTimeMillis()
+          }
+        case None =>
+          logError("Some Thing Wrong")
+      }
       computeOrReadCheckpoint(partition, context)
     }) match {
       case Left(blockResult) =>
@@ -483,8 +542,7 @@ abstract class RDD[T: ClassTag](
    *
    * @param weights weights for splits, will be normalized if they don't sum to 1
    * @param seed random seed
-   *
-   * @return split RDDs in an array
+    * @return split RDDs in an array
    */
   def randomSplit(
       weights: Array[Double],
@@ -499,7 +557,8 @@ abstract class RDD[T: ClassTag](
   /**
    * Internal method exposed for Random Splits in DataFrames. Samples an RDD given a probability
    * range.
-   * @param lb lower bound to use for the Bernoulli sampler
+    *
+    * @param lb lower bound to use for the Bernoulli sampler
    * @param ub upper bound to use for the Bernoulli sampler
    * @param seed the seed for the Random number generator
    * @return A random sub-sample of the RDD without replacement.
@@ -517,8 +576,7 @@ abstract class RDD[T: ClassTag](
    *
    * @note this method should only be used if the resulting array is expected to be small, as
    * all the data is loaded into the driver's memory.
-   *
-   * @param withReplacement whether sampling is done with replacement
+    * @param withReplacement whether sampling is done with replacement
    * @param num size of the returned sample
    * @param seed seed for the random number generator
    * @return sample of specified size in an array
@@ -1240,8 +1298,7 @@ abstract class RDD[T: ClassTag](
    *
    * @note this method should only be used if the resulting array is expected to be small, as
    * all the data is loaded into the driver's memory.
-   *
-   * @note due to complications in the internal implementation, this method will raise
+    * @note due to complications in the internal implementation, this method will raise
    * an exception if called on an RDD of `Nothing` or `Null`.
    */
   def take(num: Int): Array[T] = withScope {
@@ -1304,8 +1361,7 @@ abstract class RDD[T: ClassTag](
    *
    * @note this method should only be used if the resulting array is expected to be small, as
    * all the data is loaded into the driver's memory.
-   *
-   * @param num k, the number of top elements to return
+    * @param num k, the number of top elements to return
    * @param ord the implicit ordering for T
    * @return an array of top elements
    */
@@ -1327,8 +1383,7 @@ abstract class RDD[T: ClassTag](
    *
    * @note this method should only be used if the resulting array is expected to be small, as
    * all the data is loaded into the driver's memory.
-   *
-   * @param num k, the number of elements to return
+    * @param num k, the number of elements to return
    * @param ord the implicit ordering for T
    * @return an array of top elements
    */
@@ -1355,7 +1410,8 @@ abstract class RDD[T: ClassTag](
 
   /**
    * Returns the max of this RDD as defined by the implicit Ordering[T].
-   * @return the maximum element of the RDD
+    *
+    * @return the maximum element of the RDD
    * */
   def max()(implicit ord: Ordering[T]): T = withScope {
     this.reduce(ord.max)
@@ -1363,7 +1419,8 @@ abstract class RDD[T: ClassTag](
 
   /**
    * Returns the min of this RDD as defined by the implicit Ordering[T].
-   * @return the minimum element of the RDD
+    *
+    * @return the minimum element of the RDD
    * */
   def min()(implicit ord: Ordering[T]): T = withScope {
     this.reduce(ord.min)

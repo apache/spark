@@ -20,6 +20,8 @@ package org.apache.spark.scheduler
 import java.io._
 import java.nio.ByteBuffer
 
+import scala.collection.mutable.HashMap
+
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
@@ -49,9 +51,11 @@ private[spark] class ResultTask[T, U](
     partition: Partition,
     locs: Seq[TaskLocation],
     val outputId: Int,
-    _initialAccums: Seq[Accumulator[_]] = InternalAccumulator.createAll())
-  extends Task[U](stageId, stageAttemptId, partition.index, _initialAccums)
-  with Serializable {
+    _initialAccums: Seq[Accumulator[_]] = InternalAccumulator.createAll(),
+    depMap: HashMap[Int, Set[Int]] = null,
+    curRunningRddMap: HashMap[Int, Set[Int]] = null)
+  extends Task[U](stageId, stageAttemptId, partition.index, _initialAccums, depMap,
+    curRunningRddMap) with Serializable {
 
   @transient private[this] val preferredLocs: Seq[TaskLocation] = {
     if (locs == null) Nil else locs.toSet.toSeq

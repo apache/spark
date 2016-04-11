@@ -51,7 +51,10 @@ private[spark] abstract class Task[T](
     val stageId: Int,
     val stageAttemptId: Int,
     val partitionId: Int,
-    val initialAccumulators: Seq[Accumulator[_]]) extends Serializable {
+    val initialAccumulators: Seq[Accumulator[_]],
+    var depMap: HashMap[Int, Set[Int]] = new HashMap[Int, Set[Int]],
+    var curRunningRddMap: HashMap[Int, Set[Int]] =
+    new HashMap[Int, Set[Int]]) extends Serializable {
 
   /**
    * Called by [[org.apache.spark.executor.Executor]] to run this task.

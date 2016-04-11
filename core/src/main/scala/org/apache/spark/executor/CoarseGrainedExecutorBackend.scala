@@ -91,6 +91,12 @@ private[spark] class CoarseGrainedExecutorBackend(
       } else {
         val taskDesc = ser.deserialize[TaskDescription](data.value)
         logInfo("Got assigned task " + taskDesc.taskId)
+        val currentStageId = taskDesc.name.substring(taskDesc.name.lastIndexOf(' ') + 1,
+          taskDesc.name.lastIndexOf('.')).toInt
+        env.currentStage = currentStageId
+        env.blockManager.currentStage = currentStageId
+        //        logEarne("this Stage has ExInfo: " + env.stageExInfos(currentStageId))
+
         executor.launchTask(this, taskId = taskDesc.taskId, attemptNumber = taskDesc.attemptNumber,
           taskDesc.name, taskDesc.serializedTask)
       }

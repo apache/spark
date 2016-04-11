@@ -220,7 +220,10 @@ private[spark] class Executor(
           // for the task.
           throw new TaskKilledException
         }
-
+        if (!env.blockManager.stageExInfos.contains(task.stageId)) {
+          env.blockManager.stageExInfos.put(task.stageId,
+            new StageExInfo(task.stageId, null, null, task.depMap, task.curRunningRddMap))
+        }
         logDebug("Task " + taskId + "'s epoch is " + task.epoch)
         env.mapOutputTracker.updateEpoch(task.epoch)
 

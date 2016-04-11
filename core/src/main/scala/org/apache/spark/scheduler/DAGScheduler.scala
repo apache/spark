@@ -155,6 +155,11 @@ class DAGScheduler(
 
   private[scheduler] val activeJobs = new HashSet[ActiveJob]
 
+  private[scheduler] var preRDDs = new HashSet[RDD[_]]
+
+  private[scheduler] var depMap = new HashMap[Int, Set[Int]]
+
+  private[scheduler] var curRunningRddMap = new HashMap[Int, Set[Int]]
   /**
    * Contains the locations that each RDD's partitions are cached on.  This map's keys are RDD ids
    * and its values are arrays indexed by partition numbers. Each array value is the set of
@@ -554,11 +559,9 @@ class DAGScheduler(
    * @param callSite where in the user program this job was called
    * @param resultHandler callback to pass each result to
    * @param properties scheduler properties to attach to this job, e.g. fair scheduler pool name
-   *
-   * @return a JobWaiter object that can be used to block until the job finishes executing
+    * @return a JobWaiter object that can be used to block until the job finishes executing
    *         or can be used to cancel the job.
-   *
-   * @throws IllegalArgumentException when partitions ids are illegal
+    * @throws IllegalArgumentException when partitions ids are illegal
    */
   def submitJob[T, U](
       rdd: RDD[T],
@@ -601,8 +604,7 @@ class DAGScheduler(
    * @param callSite where in the user program this job was called
    * @param resultHandler callback to pass each result to
    * @param properties scheduler properties to attach to this job, e.g. fair scheduler pool name
-   *
-   * @throws Exception when the job fails
+    * @throws Exception when the job fails
    */
   def runJob[T, U](
       rdd: RDD[T],
@@ -928,6 +930,16 @@ class DAGScheduler(
         logDebug("missing: " + missing)
         if (missing.isEmpty) {
           logInfo("Submitting " + stage + " (" + stage.rdd + "), which has no missing parents")
+
+          val curRDDs = stage.rdd.getNarrowAncestors ++ Seq(stage.rdd)
+          val newRDDs = curRDDs.filter(!preRDDs.contains(_))
+          val newCachedRDDs = newRDDs.filter(_.getStorageLevel != StorageLevel.NONE)
+          curRunningRddMap.clear()
+          newCachedRDDs.foreach { cachedRdd =>
+            depMap.put(cachedRdd.id, cachedRdd.getNarrowCachedAncestors)
+            curRunningRddMap.put(cachedRdd.id, cachedRdd.getNarrowCachedAncestors)
+          }
+          preRDDs = preRDDs ++ curRDDs
           submitMissingTasks(stage, jobId.get)
         } else {
           for (parent <- missing) {
@@ -938,6 +950,22 @@ class DAGScheduler(
       }
     } else {
       abortStage(stage, "No active job for stage " + stage.id, None)
+    }
+  }
+
+  /** Renew depMap when unpersist RDD */
+  def renewDepMap(id: Int): Unit = {
+    if (depMap.contains(id)) {
+      logTrace("Remove RDD " + id + " from depMap")
+      val value = depMap(id)
+      depMap.foreach { rdd =>
+        if (rdd._2.contains(id)) {
+          val tmp = rdd._2 - id
+          depMap.put(rdd._1, tmp ++ value)
+        }
+      }
+      depMap.remove(id)
+      logTrace("After Removed RDD " + id + " the depMap is " + depMap)
     }
   }
 
@@ -1036,7 +1064,7 @@ class DAGScheduler(
             val locs = taskIdToLocations(id)
             val part = stage.rdd.partitions(id)
             new ShuffleMapTask(stage.id, stage.latestInfo.attemptId,
-              taskBinary, part, locs, stage.internalAccumulators)
+              taskBinary, part, locs, stage.internalAccumulators, depMap, curRunningRddMap)
           }
 
         case stage: ResultStage =>
@@ -1046,7 +1074,7 @@ class DAGScheduler(
             val part = stage.rdd.partitions(p)
             val locs = taskIdToLocations(id)
             new ResultTask(stage.id, stage.latestInfo.attemptId,
-              taskBinary, part, locs, id, stage.internalAccumulators)
+              taskBinary, part, locs, id, stage.internalAccumulators, depMap, curRunningRddMap)
           }
       }
     } catch {
