@@ -22,6 +22,11 @@
 #' @export
 setClass("PipelineModel", representation(model = "jobj"))
 
+#' @title S4 class that represents a GeneralizedLinearRegressionModel
+#' @param jobj a Java object reference to the backing Scala GeneralizedLinearRegressionWrapper
+#' @export
+setClass("GeneralizedLinearRegressionModel", representation(jobj = "jobj"))
+
 #' @title S4 class that represents a NaiveBayesModel
 #' @param jobj a Java object reference to the backing Scala NaiveBayesWrapper
 #' @export
@@ -66,54 +71,24 @@ setClass("KMeansModel", representation(jobj = "jobj"))
 #' summary(model)
 #'}
 setMethod("glm", signature(formula = "formula", family = "ANY", data = "DataFrame"),
-          function(formula, family = c("gaussian", "binomial"), data, lambda = 0, alpha = 0,
-            standardize = TRUE, solver = "auto") {
-            family <- match.arg(family)
+          function(formula, family = gaussian, data, epsilon = 1e-06, maxit = 25) {
+            if (is.character(family)) {
+              family <- get(family, mode = "function", envir = parent.frame())
+            }
+            if (is.function(family)) {
+              family <- family()
+            }
+            if (is.null(family$family)) {
+              print(family)
+              stop("'family' not recognized")
+            }
+
             formula <- paste(deparse(formula), collapse = "")
-            model <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
-                                 "fitRModelFormula", formula, data@sdf, family, lambda,
-                                 alpha, standardize, solver)
-            return(new("PipelineModel", model = model))
-          })
 
-#' Make predictions from a model
-#'
-#' Makes predictions from a model produced by glm(), similarly to R's predict().
-#'
-#' @param object A fitted MLlib model
-#' @param newData DataFrame for testing
-#' @return DataFrame containing predicted values
-#' @rdname predict
-#' @export
-#' @examples
-#' \dontrun{
-#' model <- glm(y ~ x, trainingData)
-#' predicted <- predict(model, testData)
-#' showDF(predicted)
-#'}
-setMethod("predict", signature(object = "PipelineModel"),
-          function(object, newData) {
-            return(dataFrame(callJMethod(object@model, "transform", newData@sdf)))
-          })
-
-#' Make predictions from a naive Bayes model
-#'
-#' Makes predictions from a model produced by naiveBayes(), similarly to R package e1071's predict.
-#'
-#' @param object A fitted naive Bayes model
-#' @param newData DataFrame for testing
-#' @return DataFrame containing predicted labels in a column named "prediction"
-#' @rdname predict
-#' @export
-#' @examples
-#' \dontrun{
-#' model <- naiveBayes(y ~ x, trainingData)
-#' predicted <- predict(model, testData)
-#' showDF(predicted)
-#'}
-setMethod("predict", signature(object = "NaiveBayesModel"),
-          function(object, newData) {
-            return(dataFrame(callJMethod(object@jobj, "transform", newData@sdf)))
+            jobj <- callJStatic("org.apache.spark.ml.r.GeneralizedLinearRegressionWrapper",
+                                 "fit", formula, data@sdf, family$family, family$link,
+                                 epsilon, maxit)
+            return(new("GeneralizedLinearRegressionModel", jobj = jobj))
           })
 
 #' Get the summary of a model
@@ -135,33 +110,56 @@ setMethod("predict", signature(object = "NaiveBayesModel"),
 #' \dontrun{
 #' model <- glm(y ~ x, trainingData)
 #' summary(model)
-#'}
-setMethod("summary", signature(object = "PipelineModel"),
+#' }
+setMethod("summary", signature(object = "GeneralizedLinearRegressionModel"),
           function(object, ...) {
-            modelName <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
-                                     "getModelName", object@model)
-            features <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
-                                    "getModelFeatures", object@model)
-            coefficients <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
-                                        "getModelCoefficients", object@model)
-            if (modelName == "LinearRegressionModel") {
-              devianceResiduals <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
-                                               "getModelDevianceResiduals", object@model)
-              devianceResiduals <- matrix(devianceResiduals, nrow = 1)
-              colnames(devianceResiduals) <- c("Min", "Max")
-              rownames(devianceResiduals) <- rep("", times = 1)
-              coefficients <- matrix(coefficients, ncol = 4)
-              colnames(coefficients) <- c("Estimate", "Std. Error", "t value", "Pr(>|t|)")
-              rownames(coefficients) <- unlist(features)
-              return(list(devianceResiduals = devianceResiduals, coefficients = coefficients))
-            } else if (modelName == "LogisticRegressionModel") {
-              coefficients <- as.matrix(unlist(coefficients))
-              colnames(coefficients) <- c("Estimate")
-              rownames(coefficients) <- unlist(features)
-              return(list(coefficients = coefficients))
-            } else {
-              stop(paste("Unsupported model", modelName, sep = " "))
-            }
+            jobj <- object@jobj
+            features <- callJMethod(jobj, "rFeatures")
+            coefficients <- callJMethod(jobj, "rCoefficients")
+            coefficients <- as.matrix(unlist(coefficients))
+            colnames(coefficients) <- c("Value")
+            rownames(coefficients) <- unlist(features)
+            return(list(coefficients = coefficients))
+          })
+
+#' Make predictions from a model
+#'
+#' Makes predictions from a model produced by glm(), similarly to R's predict().
+#'
+#' @param object A fitted MLlib model
+#' @param newData DataFrame for testing
+#' @return DataFrame containing predicted values
+#' @rdname predict
+#' @export
+#' @examples
+#' \dontrun{
+#' model <- glm(y ~ x, trainingData)
+#' predicted <- predict(model, testData)
+#' showDF(predicted)
+#'}
+setMethod("predict", signature(object = "GeneralizedLinearRegressionModel"),
+          function(object, newData) {
+            return(dataFrame(callJMethod(object@jobj, "transform", newData@sdf)))
+          })
+
+#' Make predictions from a naive Bayes model
+#'
+#' Makes predictions from a model produced by naiveBayes(), similarly to R package e1071's predict.
+#'
+#' @param object A fitted naive Bayes model
+#' @param newData DataFrame for testing
+#' @return DataFrame containing predicted labels in a column named "prediction"
+#' @rdname predict
+#' @export
+#' @examples
+#' \dontrun{
+#' model <- naiveBayes(y ~ x, trainingData)
+#' predicted <- predict(model, testData)
+#' showDF(predicted)
+#'}
+setMethod("predict", signature(object = "NaiveBayesModel"),
+          function(object, newData) {
+            return(dataFrame(callJMethod(object@jobj, "transform", newData@sdf)))
           })
 
 #' Get the summary of a naive Bayes model
