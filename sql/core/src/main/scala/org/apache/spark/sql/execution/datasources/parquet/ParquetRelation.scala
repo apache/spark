@@ -74,14 +74,9 @@ private[sql] class DefaultSource
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
 
-    val conf = ContextUtil.getConfiguration(job)
+    val parquetOptions = new ParquetOptions(options, sqlContext.sessionState.conf)
 
-    // SPARK-9849 DirectParquetOutputCommitter qualified name should be backward compatible
-    val committerClassName = conf.get(SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key)
-    if (committerClassName == "org.apache.spark.sql.parquet.DirectParquetOutputCommitter") {
-      conf.set(SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key,
-        classOf[DirectParquetOutputCommitter].getCanonicalName)
-    }
+    val conf = ContextUtil.getConfiguration(job)
 
     val committerClass =
       conf.getClass(
@@ -91,23 +86,10 @@ private[sql] class DefaultSource
 
     if (conf.get(SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key) == null) {
       logInfo("Using default output committer for Parquet: " +
-          classOf[ParquetOutputCommitter].getCanonicalName)
+        classOf[ParquetOutputCommitter].getCanonicalName)
     } else {
       logInfo("Using user defined output committer for Parquet: " + committerClass.getCanonicalName)
     }
-
-    val compressionCodec: Option[String] = options
-      .get("compression")
-      .map { codecName =>
-        // Validate if given compression codec is supported or not.
-        val shortParquetCompressionCodecNames = ParquetRelation.shortParquetCompressionCodecNames
-        if (!shortParquetCompressionCodecNames.contains(codecName.toLowerCase)) {
-          val availableCodecs = shortParquetCompressionCodecNames.keys.map(_.toLowerCase)
-          throw new IllegalArgumentException(s"Codec [$codecName] " +
-              s"is not available. Available codecs are ${availableCodecs.mkString(", ")}.")
-        }
-        codecName.toLowerCase
-      }
 
     conf.setClass(
       SQLConf.OUTPUT_COMMITTER_CLASS.key,
@@ -143,14 +125,7 @@ private[sql] class DefaultSource
       sqlContext.conf.writeLegacyParquetFormat.toString)
 
     // Sets compression scheme
-    conf.set(
-      ParquetOutputFormat.COMPRESSION,
-      ParquetRelation
-        .shortParquetCompressionCodecNames
-        .getOrElse(
-          compressionCodec
-            .getOrElse(sqlContext.conf.parquetCompressionCodec.toLowerCase),
-          CompressionCodecName.UNCOMPRESSED).name())
+    conf.set(ParquetOutputFormat.COMPRESSION, parquetOptions.compressionCodec)
 
     new OutputWriterFactory {
       override def newInstance(
@@ -924,12 +899,4 @@ private[sql] object ParquetRelation extends Logging {
       // should be removed after this issue is fixed.
     }
   }
-
-  // The parquet compression short names
-  val shortParquetCompressionCodecNames = Map(
-    "none" -> CompressionCodecName.UNCOMPRESSED,
-    "uncompressed" -> CompressionCodecName.UNCOMPRESSED,
-    "snappy" -> CompressionCodecName.SNAPPY,
-    "gzip" -> CompressionCodecName.GZIP,
-    "lzo" -> CompressionCodecName.LZO)
 }

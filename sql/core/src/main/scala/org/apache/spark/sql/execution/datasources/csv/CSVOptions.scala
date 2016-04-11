@@ -23,8 +23,7 @@ import java.text.SimpleDateFormat
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.datasources.{CompressionCodecs, ParseModes}
 
-private[sql] class CSVOptions(
-    @transient private val parameters: Map[String, String])
+private[sql] class CSVOptions(@transient private val parameters: Map[String, String])
   extends Logging with Serializable {
 
   private def getChar(paramName: String, default: Char): Char = {
