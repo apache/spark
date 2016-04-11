@@ -64,7 +64,7 @@ class HiveDDLSuite
     }
   }
 
-  test("drop managed tables") {
+  test("drop managed tables in default database") {
     withTempDir { tmpDir =>
       val tabName = "tab1"
       withTable(tabName) {
@@ -91,7 +91,7 @@ class HiveDDLSuite
     }
   }
 
-  test("drop external data source table") {
+  test("drop external data source table in default database") {
     withTempDir { tmpDir =>
       val tabName = "tab1"
       withTable(tabName) {

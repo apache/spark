@@ -76,7 +76,7 @@ private[sql] class HiveSessionCatalog(
 
   override def getDatabasePath(dbName: String, path: Option[String] = None): String = {
     val dbPath = path.getOrElse(context.hiveconf.getVar(HiveConf.ConfVars.METASTOREWAREHOUSE))
-    new Path(new Path(dbPath), dbName + ".db").toString
+    new Path(new Path(dbPath), dbName.toLowerCase() + ".db").toString
   }
 
   // Catalog for handling data source tables. TODO: This really doesn't belong here since it is

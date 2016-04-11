@@ -238,7 +238,9 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     assert(message.contains(s"Database '$dbName' is not empty. One or more tables exist"))
 
     dropTable(catalog, tableIdent1)
+    assert(catalog.listDatabases().contains(dbName))
     sql(s"DROP DATABASE $dbName RESTRICT")
+    assert(!catalog.listDatabases().contains(dbName))
   }
 
   test("drop non-empty database in cascade mode") {
@@ -251,8 +253,10 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     createTable(catalog, tableIdent1)
 
     // drop a non-empty database in CASCADE mode
-    dropTable(catalog, tableIdent1)
+    assert(catalog.listTables(dbName).contains(tableIdent1))
+    assert(catalog.listDatabases().contains(dbName))
     sql(s"DROP DATABASE $dbName CASCADE")
+    assert(!catalog.listDatabases().contains(dbName))
   }
 
   test("alter table: rename") {
