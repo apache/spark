@@ -69,9 +69,6 @@ private[hive] case class CurrentDatabase(ctx: HiveContext)
   override def foldable: Boolean = true
   override def nullable: Boolean = false
   override def eval(input: InternalRow): Any = {
-    // scalastyle:off println
-    println("CurrentDatabase - currentDb:" + ctx.sessionState.catalog.getCurrentDatabase)
-    // scalastyle:on println
     UTF8String.fromString(ctx.sessionState.catalog.getCurrentDatabase)
   }
 }

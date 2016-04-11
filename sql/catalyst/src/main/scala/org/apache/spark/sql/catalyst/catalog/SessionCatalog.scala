@@ -118,9 +118,6 @@ class SessionCatalog(
     if (!databaseExists(db)) {
       throw new AnalysisException(s"cannot set current database to non-existent '$db'")
     }
-    // scalastyle:off println
-    println(s"setCurrentDatabase - from '$currentDb' to '$db'")
-    // scalastyle:on println
     currentDb = db
   }
 
@@ -659,7 +656,12 @@ class SessionCatalog(
       dropDatabase(db, ignoreIfNotExists = false, cascade = true)
     }
     tempTables.clear()
-    functionRegistry.clear()
+    // Do not remove the function `current_database`, which is registered in each
+    // new session of HiveContext. Otherwise, it could load the Hive UDF function
+    // with the same function name.
+    functionRegistry.listFunction().filter(_ != "current_database").foreach { f =>
+      functionRegistry.dropFunction(f)
+    }
     // restore built-in functions
     FunctionRegistry.builtin.listFunction().foreach { f =>
       val expressionInfo = FunctionRegistry.builtin.lookupFunction(f)
