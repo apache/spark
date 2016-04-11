@@ -124,6 +124,10 @@ object DatasetBenchmark {
     override def finish(reduction: Data): Long = reduction.l
 
     override def merge(b1: Data, b2: Data): Data = Data(b1.l + b2.l, "")
+
+    override def bufferEncoder: Encoder[Data] = Encoders.product[Data]
+
+    override def outputEncoder: Encoder[Long] = Encoders.scalaLong
   }
 
   def aggregate(sqlContext: SQLContext, numRows: Long): Benchmark = {

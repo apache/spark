@@ -20,12 +20,10 @@ package org.apache.spark.sql.execution.aggregate
 import scala.language.existentials
 
 import org.apache.spark.sql.Encoder
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedDeserializer, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.DeclarativeAggregate
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.types._
 
@@ -33,28 +31,30 @@ object TypedAggregateExpression {
   def apply[BUF : Encoder, OUT : Encoder](
       aggregator: Aggregator[_, BUF, OUT]): TypedAggregateExpression = {
     val bufferEncoder = encoderFor[BUF]
-    val bufferSerializer = bufferEncoder.namedExpressions
-
-    // To avoid re-calculating the deserializer expression and function call expression while
-    // evaluating each buffer serializer expression, we serialize the buffer object to a single
-    // struct field, not multiply fields, no matter whether the encoder is flat or not. So for
-    // buffer deserializer, we should add one extra level at bottom, to use the buffer attribute of
-    // struct type as input.
+    // We will insert the deserializer and function call expression at the bottom of each serializer
+    // expression while executing `TypedAggregateExpression`, which means multiply serializer
+    // expressions will all evaluate the same sub-expression at bottom.  To avoid the re-evaluating,
+    // here we always use one single serializer expression to serialize the buffer object into a
+    // single-field row, no matter whether the encoder is flat or not.  We also need to update the
+    // deserializer to read in all fields from that single-field row.
     // TODO: remove this trick after we have  better integration of subexpression elimination and
     // whole stage codegen.
-    val bufferAttr = if (bufferEncoder.flat) {
-      AttributeReference("buffer", bufferEncoder.schema.head.dataType, nullable = false)()
+    val bufferSerializer = if (bufferEncoder.flat) {
+      bufferEncoder.namedExpressions.head
     } else {
-      AttributeReference("buffer", bufferEncoder.schema, nullable = false)()
+      Alias(CreateStruct(bufferEncoder.serializer), "buffer")()
     }
+
     val bufferDeserializer = if (bufferEncoder.flat) {
-      bufferEncoder.deserializer
+      bufferEncoder.deserializer transformUp {
+        case b: BoundReference => bufferSerializer.toAttribute
+      }
     } else {
       bufferEncoder.deserializer transformUp {
         case UnresolvedAttribute(nameParts) =>
           assert(nameParts.length == 1)
-          UnresolvedExtractValue(bufferAttr, Literal(nameParts.head))
-        case BoundReference(ordinal, dt, _) => GetStructField(bufferAttr, ordinal)
+          UnresolvedExtractValue(bufferSerializer.toAttribute, Literal(nameParts.head))
+        case BoundReference(ordinal, dt, _) => GetStructField(bufferSerializer.toAttribute, ordinal)
       }
     }
 
@@ -68,9 +68,8 @@ object TypedAggregateExpression {
     new TypedAggregateExpression(
       aggregator.asInstanceOf[Aggregator[Any, Any, Any]],
       None,
-      bufferAttr,
       bufferSerializer,
-      UnresolvedDeserializer(bufferDeserializer, bufferAttr :: Nil),
+      bufferDeserializer,
       outputEncoder.serializer,
       outputEncoder.deserializer.dataType,
       outputType)
@@ -83,8 +82,7 @@ object TypedAggregateExpression {
 case class TypedAggregateExpression(
     aggregator: Aggregator[Any, Any, Any],
     inputDeserializer: Option[Expression],
-    bufferAttr: AttributeReference,
-    bufferSerializer: Seq[NamedExpression],
+    bufferSerializer: NamedExpression,
     bufferDeserializer: Expression,
     outputSerializer: Seq[Expression],
     outputExternalType: DataType,
@@ -107,21 +105,12 @@ case class TypedAggregateExpression(
 
   private def bufferExternalType = bufferDeserializer.dataType
 
-  override lazy val aggBufferAttributes: Seq[AttributeReference] = bufferAttr :: Nil
-
-  private def generateBuffer(inputObj: Expression): Seq[Expression] = {
-    if (bufferSerializer.length > 1) {
-      EvaluateOnce(bufferSerializer, inputObj, bufferAttr.dataType) :: Nil
-    } else {
-      bufferSerializer.head.transform {
-        case b: BoundReference => inputObj
-      } :: Nil
-    }
-  }
+  override lazy val aggBufferAttributes: Seq[AttributeReference] =
+    bufferSerializer.toAttribute.asInstanceOf[AttributeReference] :: Nil
 
   override lazy val initialValues: Seq[Expression] = {
     val zero = Literal.fromObject(aggregator.zero, bufferExternalType)
-    generateBuffer(zero)
+    ReferenceToExpressions(bufferSerializer, zero :: Nil) :: Nil
   }
 
   override lazy val updateExpressions: Seq[Expression] = {
@@ -131,7 +120,7 @@ case class TypedAggregateExpression(
       bufferExternalType,
       bufferDeserializer :: inputDeserializer.get :: Nil)
 
-    generateBuffer(reduced)
+    ReferenceToExpressions(bufferSerializer, reduced :: Nil) :: Nil
   }
 
   override lazy val mergeExpressions: Seq[Expression] = {
@@ -147,7 +136,7 @@ case class TypedAggregateExpression(
       bufferExternalType,
       leftBuffer :: rightBuffer :: Nil)
 
-    generateBuffer(merged)
+    ReferenceToExpressions(bufferSerializer, merged :: Nil) :: Nil
   }
 
   override lazy val evaluateExpression: Expression = {
@@ -158,7 +147,8 @@ case class TypedAggregateExpression(
       bufferDeserializer :: Nil)
 
     dataType match {
-      case s: StructType => EvaluateOnce(outputSerializer, resultObj, s)
+      case s: StructType =>
+        ReferenceToExpressions(CreateStruct(outputSerializer), resultObj :: Nil)
       case _ =>
         assert(outputSerializer.length == 1)
         outputSerializer.head transform {
@@ -178,33 +168,4 @@ case class TypedAggregateExpression(
   }
 
   override def nodeName: String = aggregator.getClass.getSimpleName.stripSuffix("$")
-}
-
-/**
- * Combines serializer expressions into one single expression that outputs a struct, evaluate the
- * object expression only once and use the result as input for all serializer expressions.
- */
-case class EvaluateOnce(serializer: Seq[Expression], obj: Expression, dataType: DataType)
-  extends UnaryExpression with NonSQLExpression {
-
-  override def nullable: Boolean = false
-  override def child: Expression = obj
-
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
-
-  override protected def genCode(ctx: CodegenContext, ev: ExprCode): String = {
-    val evalObj = obj.gen(ctx)
-    val objRef = LambdaVariable(evalObj.value, evalObj.isNull, obj.dataType)
-
-    val result = CreateStruct(serializer.map(_ transform {
-      case b: BoundReference => objRef
-    }))
-
-    val evalResult = result.gen(ctx)
-    ev.value = evalResult.value
-    ev.isNull = evalResult.isNull
-
-    evalObj.code + "\n" + evalResult.code
-  }
 }
