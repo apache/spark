@@ -43,13 +43,21 @@ class BinaryComparisonSimplificationSuite extends PlanTest with PredicateHelper 
   val nullableRelation = LocalRelation('a.int.withNullability(true))
   val nonNullableRelation = LocalRelation('a.int.withNullability(false))
 
-  test("Preserve nullable or non-deterministic exprs in general") {
-    for (e <- Seq('a === 'a, 'a <= 'a, 'a >= 'a, 'a < 'a, 'a > 'a, Rand(0) === Rand(0))) {
+  test("Preserve nullable exprs in general") {
+    for (e <- Seq('a === 'a, 'a <= 'a, 'a >= 'a, 'a < 'a, 'a > 'a)) {
       val plan = nullableRelation.where(e).analyze
       val actual = Optimize.execute(plan)
       val correctAnswer = plan
       comparePlans(actual, correctAnswer)
     }
+  }
+
+  test("Preserve non-deterministic exprs") {
+    val plan = nonNullableRelation
+      .where(Rand(0) === Rand(0) && Rand(1) <=> Rand(1)).analyze
+    val actual = Optimize.execute(plan)
+    val correctAnswer = plan
+    comparePlans(actual, correctAnswer)
   }
 
   test("Nullable Simplification Primitive: <=>") {
@@ -72,20 +80,6 @@ class BinaryComparisonSimplificationSuite extends PlanTest with PredicateHelper 
         Alias(FalseLiteral, "(a < a)")(),
         Alias(FalseLiteral, "(a > a)")())
       .analyze
-    comparePlans(actual, correctAnswer)
-  }
-
-  test("TRUE Filter") {
-    val plan = nonNullableRelation.where('a === 'a && 'a <=> 'a && 'a <= 'a && 'a >= 'a).analyze
-    val actual = Optimize.execute(plan)
-    val correctAnswer = nonNullableRelation.analyze
-    comparePlans(actual, correctAnswer)
-  }
-
-  test("FALSE Filter") {
-    val plan = nonNullableRelation.where('a < 'a || 'a > 'a).analyze
-    val actual = Optimize.execute(plan)
-    val correctAnswer = LocalRelation(Seq('a.int.withNullability(false)), Seq.empty)
     comparePlans(actual, correctAnswer)
   }
 
