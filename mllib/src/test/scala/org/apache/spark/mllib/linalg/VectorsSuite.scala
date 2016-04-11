@@ -196,7 +196,7 @@ class VectorsSuite extends SparkFunSuite with Logging {
 
     val malformatted = Seq("1", "[1,,]", "[1,2b]", "(1,[1,2])", "([1],[2.0,1.0])")
     malformatted.foreach { s =>
-      intercept[SparkException] {
+      intercept[IllegalArgumentException] {
         Vectors.parse(s)
         logInfo(s"Didn't detect malformatted string $s.")
       }
