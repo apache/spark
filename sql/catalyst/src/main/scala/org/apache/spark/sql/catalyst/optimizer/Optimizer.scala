@@ -86,7 +86,7 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       BooleanSimplification,
       SimplifyConditionals,
       RemoveDispensableExpressions,
-      NonNullableBinaryComparisonSimplification,
+      BinaryComparisonSimplification,
       PruneFilters,
       EliminateSorts,
       SimplifyCasts,
@@ -788,16 +788,17 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
 }
 
 /**
- * Simplifies semantically-equal non-nullable expressions:
- * 1) Replace '=', '<=', and '>=' with 'true' literal
- * 2) Replace '<' and '>' with 'false' literal
+ * Simplifies binary comparisons with semantically-equal expressions:
+ * 1) Replace '<=>' with 'true' literal.
+ * 2) Replace '=', '<=', and '>=' with 'true' literal if both operands are non-nullable.
+ * 3) Replace '<' and '>' with 'false' literal if both operands are non-nullable.
  */
-object NonNullableBinaryComparisonSimplification extends Rule[LogicalPlan] with PredicateHelper {
+object BinaryComparisonSimplification extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsUp {
       // True with equality
+      case a EqualNullSafe b if a.semanticEquals(b) => TrueLiteral
       case a EqualTo b if !a.nullable && !b.nullable && a.semanticEquals(b) => TrueLiteral
-      case a EqualNullSafe b if !a.nullable && !b.nullable && a.semanticEquals(b) => TrueLiteral
       case a GreaterThanOrEqual b if !a.nullable && !b.nullable && a.semanticEquals(b) =>
         TrueLiteral
       case a LessThanOrEqual b if !a.nullable && !b.nullable && a.semanticEquals(b) => TrueLiteral

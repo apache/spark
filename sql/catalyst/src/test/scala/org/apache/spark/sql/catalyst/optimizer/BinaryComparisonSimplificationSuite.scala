@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -27,7 +26,7 @@ import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 
-class NonNullableBinaryComparisonSimplificationSuite extends PlanTest with PredicateHelper {
+class BinaryComparisonSimplificationSuite extends PlanTest with PredicateHelper {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
@@ -37,20 +36,27 @@ class NonNullableBinaryComparisonSimplificationSuite extends PlanTest with Predi
         NullPropagation,
         ConstantFolding,
         BooleanSimplification,
-        NonNullableBinaryComparisonSimplification,
+        BinaryComparisonSimplification,
         PruneFilters) :: Nil
   }
 
   val nullableRelation = LocalRelation('a.int.withNullability(true))
   val nonNullableRelation = LocalRelation('a.int.withNullability(false))
 
-  test("Preserve nullable or non-deterministic exprs") {
-    for (e <- Seq('a === 'a, Rand(0) === Rand(0))) {
-      val plan = nullableRelation.where('a === 'a).analyze
+  test("Preserve nullable or non-deterministic exprs in general") {
+    for (e <- Seq('a === 'a, 'a <= 'a, 'a >= 'a, 'a < 'a, 'a > 'a, Rand(0) === Rand(0))) {
+      val plan = nullableRelation.where(e).analyze
       val actual = Optimize.execute(plan)
       val correctAnswer = plan
       comparePlans(actual, correctAnswer)
     }
+  }
+
+  test("Nullable Simplification Primitive: <=>") {
+    val plan = nullableRelation.select('a <=> 'a).analyze
+    val actual = Optimize.execute(plan)
+    val correctAnswer = nullableRelation.select(Alias(TrueLiteral, "(a <=> a)")()).analyze
+    comparePlans(actual, correctAnswer)
   }
 
   test("Non-Nullable Simplification Primitive") {
