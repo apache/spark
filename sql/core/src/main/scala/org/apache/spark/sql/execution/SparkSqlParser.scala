@@ -143,10 +143,7 @@ class SparkSqlAstBuilder extends AstBuilder {
   override def visitExplain(ctx: ExplainContext): LogicalPlan = withOrigin(ctx) {
     val options = ctx.explainOption.asScala
     if (options.exists(_.FORMATTED != null)) {
-      logWarning("EXPLAIN FORMATTED option is ignored.")
-    }
-    if (options.exists(_.LOGICAL != null)) {
-      logWarning("EXPLAIN LOGICAL option is ignored.")
+      logWarning("Unsupported operation: EXPLAIN FORMATTED option")
     }
 
     // Create the explain comment.
@@ -206,7 +203,7 @@ class SparkSqlAstBuilder extends AstBuilder {
   override def visitCreateTableUsing(ctx: CreateTableUsingContext): LogicalPlan = withOrigin(ctx) {
     val (table, temp, ifNotExists, external) = visitCreateTableHeader(ctx.createTableHeader)
     if (external) {
-      logWarning("EXTERNAL option is not supported.")
+      throw new ParseException("Unsupported operation: EXTERNAL option", ctx)
     }
     val options = Option(ctx.tablePropertyList).map(visitTablePropertyList).getOrElse(Map.empty)
     val provider = ctx.tableProvider.qualifiedName.getText
@@ -367,6 +364,22 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   /**
+   * Create a [[DropTable]] command.
+   */
+  override def visitDropTable(ctx: DropTableContext): LogicalPlan = withOrigin(ctx) {
+    if (ctx.PURGE != null) {
+      throw new ParseException("Unsupported operation: PURGE option", ctx)
+    }
+    if (ctx.REPLICATION != null) {
+      throw new ParseException("Unsupported operation: REPLICATION clause", ctx)
+    }
+    DropTable(
+      visitTableIdentifier(ctx.tableIdentifier),
+      ctx.EXISTS != null,
+      ctx.VIEW != null)
+  }
+
+  /**
    * Create a [[AlterTableRename]] command.
    *
    * For example:
@@ -475,7 +488,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    *   ALTER VIEW view ADD [IF NOT EXISTS] PARTITION spec
    * }}}
    *
-   * ALTER VIEW ... DROP PARTITION ... is not supported because the concept of partitioning
+   * ALTER VIEW ... ADD PARTITION ... is not supported because the concept of partitioning
    * is associated with physical tables
    */
   override def visitAddTablePartition(

@@ -182,6 +182,10 @@ private[spark] class HiveExternalCatalog(client: HiveClient) extends ExternalCat
     client.getTable(db, table)
   }
 
+  override def getTableOption(db: String, table: String): Option[CatalogTable] = withClient {
+    client.getTableOption(db, table)
+  }
+
   override def tableExists(db: String, table: String): Boolean = withClient {
     client.getTableOption(db, table).isDefined
   }
@@ -290,6 +294,10 @@ private[spark] class HiveExternalCatalog(client: HiveClient) extends ExternalCat
 
   override def getFunction(db: String, funcName: String): CatalogFunction = withClient {
     client.getFunction(db, funcName)
+  }
+
+  override def functionExists(db: String, funcName: String): Boolean = withClient {
+    client.functionExists(db, funcName)
   }
 
   override def listFunctions(db: String, pattern: String): Seq[String] = withClient {

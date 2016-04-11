@@ -172,7 +172,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       "SELECT COUNT(*) FROM hive_test;"
         -> "5",
       "DROP TABLE hive_test;"
-        -> "OK"
+        -> ""
     )
   }
 
@@ -220,9 +220,9 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       "SELECT count(key) FROM t1;"
         -> "5",
       "DROP TABLE t1;"
-        -> "OK",
+        -> "",
       "DROP TABLE sourceTable;"
-        -> "OK"
+        -> ""
     )
   }
 
@@ -230,7 +230,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     runCliWithin(timeout = 2.minute,
       errorResponses = Seq("AnalysisException"))(
       "select * from nonexistent_table;"
-        -> "Error in query: Table not found: nonexistent_table;"
+        -> "Error in query: Table or View not found: nonexistent_table;"
     )
   }
 

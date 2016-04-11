@@ -33,7 +33,7 @@ import org.apache.spark.mllib.tree.loss.{AbsoluteError => OldAbsoluteError, Loss
   SquaredError => OldSquaredError}
 import org.apache.spark.mllib.tree.model.{GradientBoostedTreesModel => OldGBTModel}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 
 /**
@@ -41,6 +41,18 @@ import org.apache.spark.sql.functions._
  * [[http://en.wikipedia.org/wiki/Gradient_boosting Gradient-Boosted Trees (GBTs)]]
  * learning algorithm for regression.
  * It supports both continuous and categorical features.
+ *
+ * The implementation is based upon: J.H. Friedman. "Stochastic Gradient Boosting." 1999.
+ *
+ * Notes on Gradient Boosting vs. TreeBoost:
+ *  - This implementation is for Stochastic Gradient Boosting, not for TreeBoost.
+ *  - Both algorithms learn tree ensembles by minimizing loss functions.
+ *  - TreeBoost (Friedman, 1999) additionally modifies the outputs at tree leaf nodes
+ *    based on the loss function, whereas the original gradient boosting method does not.
+ *     - When the loss is SquaredError, these methods give the same result, but they could differ
+ *       for other loss functions.
+ *  - We expect to implement TreeBoost in the future:
+ *    [https://issues.apache.org/jira/browse/SPARK-4240]
  */
 @Since("1.4.0")
 @Experimental
@@ -135,7 +147,7 @@ final class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: Stri
     }
   }
 
-  override protected def train(dataset: DataFrame): GBTRegressionModel = {
+  override protected def train(dataset: Dataset[_]): GBTRegressionModel = {
     val categoricalFeatures: Map[Int, Int] =
       MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
@@ -197,7 +209,7 @@ final class GBTRegressionModel private[ml](
   @Since("1.4.0")
   override def treeWeights: Array[Double] = _treeWeights
 
-  override protected def transformImpl(dataset: DataFrame): DataFrame = {
+  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     val bcastModel = dataset.sqlContext.sparkContext.broadcast(this)
     val predictUDF = udf { (features: Any) =>
       bcastModel.value.predict(features.asInstanceOf[Vector])

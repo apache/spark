@@ -33,7 +33,7 @@ class NoSuchDatabaseException(db: String) extends NoSuchItemException {
 }
 
 class NoSuchTableException(db: String, table: String) extends NoSuchItemException {
-  override def getMessage: String = s"Table $table not found in database $db"
+  override def getMessage: String = s"Table or View $table not found in database $db"
 }
 
 class NoSuchPartitionException(

@@ -91,6 +91,8 @@ abstract class ExternalCatalog {
 
   def getTable(db: String, table: String): CatalogTable
 
+  def getTableOption(db: String, table: String): Option[CatalogTable]
+
   def tableExists(db: String, table: String): Boolean
 
   def listTables(db: String): Seq[String]
@@ -151,6 +153,8 @@ abstract class ExternalCatalog {
   def renameFunction(db: String, oldName: String, newName: String): Unit
 
   def getFunction(db: String, funcName: String): CatalogFunction
+
+  def functionExists(db: String, funcName: String): Boolean
 
   def listFunctions(db: String, pattern: String): Seq[String]
 

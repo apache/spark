@@ -146,7 +146,9 @@ if __name__ == "__main__":
         ("weightCol", "weight column name. If this is not set or empty, we treat " +
          "all instance weights as 1.0.", None, "TypeConverters.toString"),
         ("solver", "the solver algorithm for optimization. If this is not set or empty, " +
-         "default value is 'auto'.", "'auto'", "TypeConverters.toString")]
+         "default value is 'auto'.", "'auto'", "TypeConverters.toString"),
+        ("varianceCol", "column name for the biased sample variance of prediction.",
+         None, "TypeConverters.toString")]
 
     code = []
     for name, doc, defaultValueStr, typeConverter in shared:

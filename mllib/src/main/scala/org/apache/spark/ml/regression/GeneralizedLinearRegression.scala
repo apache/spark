@@ -31,7 +31,7 @@ import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg.{BLAS, Vector}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
 
@@ -165,7 +165,11 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
   setDefault(tol -> 1E-6)
 
   /**
-   * Sets the regularization parameter.
+   * Sets the regularization parameter for L2 regularization.
+   * The regularization term is
+   * {{{
+   *   0.5 * regParam * L2norm(coefficients)^2
+   * }}}
    * Default is 0.0.
    * @group setParam
    */
@@ -192,7 +196,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
   def setSolver(value: String): this.type = set(solver, value)
   setDefault(solver -> "irls")
 
-  override protected def train(dataset: DataFrame): GeneralizedLinearRegressionModel = {
+  override protected def train(dataset: Dataset[_]): GeneralizedLinearRegressionModel = {
     val familyObj = Family.fromName($(family))
     val linkObj = if (isDefined(link)) {
       Link.fromName($(link))
@@ -772,7 +776,7 @@ object GeneralizedLinearRegressionModel extends MLReadable[GeneralizedLinearRegr
  * :: Experimental ::
  * Summarizing Generalized Linear regression Fits.
  *
- * @param predictions predictions outputted by the model's `transform` method
+ * @param predictions predictions output by the model's `transform` method
  * @param predictionCol field in "predictions" which gives the prediction value of each instance
  * @param model the model that should be summarized
  * @param diagInvAtWA diagonal of matrix (A^T * W * A)^-1 in the last iteration
@@ -933,6 +937,9 @@ class GeneralizedLinearRegressionSummary private[regression] (
 
   /**
    * Standard error of estimated coefficients and intercept.
+   *
+   * If [[GeneralizedLinearRegression.fitIntercept]] is set to true,
+   * then the last element returned corresponds to the intercept.
    */
   @Since("2.0.0")
   lazy val coefficientStandardErrors: Array[Double] = {
@@ -941,6 +948,9 @@ class GeneralizedLinearRegressionSummary private[regression] (
 
   /**
    * T-statistic of estimated coefficients and intercept.
+   *
+   * If [[GeneralizedLinearRegression.fitIntercept]] is set to true,
+   * then the last element returned corresponds to the intercept.
    */
   @Since("2.0.0")
   lazy val tValues: Array[Double] = {
@@ -954,6 +964,9 @@ class GeneralizedLinearRegressionSummary private[regression] (
 
   /**
    * Two-sided p-value of estimated coefficients and intercept.
+   *
+   * If [[GeneralizedLinearRegression.fitIntercept]] is set to true,
+   * then the last element returned corresponds to the intercept.
    */
   @Since("2.0.0")
   lazy val pValues: Array[Double] = {
