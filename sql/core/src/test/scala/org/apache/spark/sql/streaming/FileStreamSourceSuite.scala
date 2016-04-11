@@ -73,8 +73,8 @@ class FileStreamSourceTest extends StreamTest with SharedSQLContext {
     reader.stream(path)
       .queryExecution.analyzed
       .collect { case StreamingRelation(dataSource, _, _) =>
-        // There is only one source in our tests so just set sourceId to 1
-        dataSource.createSource(0, checkpointLocation).asInstanceOf[FileStreamSource]
+        // There is only one source in our tests so just set sourceId to 0
+        dataSource.createSource(s"$checkpointLocation/sources/0").asInstanceOf[FileStreamSource]
       }.head
   }
 
@@ -340,27 +340,6 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
 
     Utils.deleteRecursively(src)
     Utils.deleteRecursively(tmp)
-  }
-
-  test("metadataPath should be in checkpointLocation") {
-    val src = Utils.createTempDir(namePrefix = "streaming.src")
-    val location = Utils.createTempDir(namePrefix = "steaming.checkpoint")
-
-    val query = sqlContext.read.format("text").stream(src.getCanonicalPath).write
-      .format("memory")
-      .queryName("memStream")
-      .option("checkpointLocation", location.getCanonicalPath)
-      .startStream()
-
-    val source = query.asInstanceOf[StreamExecution].logicalPlan.collect {
-      case StreamingExecutionRelation(source, _) => source.asInstanceOf[FileStreamSource]
-    }.head
-    val expectedPath = s"$location/sources/0"
-    assert(expectedPath === source.metadataPath)
-
-    query.stop()
-    Utils.deleteRecursively(location)
-    Utils.deleteRecursively(src)
   }
 }
 

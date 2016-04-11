@@ -33,7 +33,7 @@ import org.apache.spark.util.collection.OpenHashSet
  */
 class FileStreamSource(
     sqlContext: SQLContext,
-    private[sql] val metadataPath: String,
+    metadataPath: String,
     path: String,
     dataSchema: Option[StructType],
     providerName: String,

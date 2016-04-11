@@ -139,7 +139,7 @@ trait StreamSourceProvider {
 
   def createSource(
       sqlContext: SQLContext,
-      sourceId: Long,
+      metadataPath: String,
       schema: Option[StructType],
       providerName: String,
       parameters: Map[String, String]): Source

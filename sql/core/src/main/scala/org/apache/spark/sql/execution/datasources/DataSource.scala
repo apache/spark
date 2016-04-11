@@ -163,10 +163,10 @@ case class DataSource(
   }
 
   /** Returns a source that can be used to continually read data. */
-  def createSource(sourceId: Long, checkpointLocation: String): Source = {
+  def createSource(metadataPath: String): Source = {
     providingClass.newInstance() match {
       case s: StreamSourceProvider =>
-        s.createSource(sqlContext, sourceId, userSpecifiedSchema, className, options)
+        s.createSource(sqlContext, metadataPath, userSpecifiedSchema, className, options)
 
       case format: FileFormat =>
         val caseInsensitiveOptions = new CaseInsensitiveMap(options)
@@ -174,7 +174,6 @@ case class DataSource(
           throw new IllegalArgumentException("'path' is not specified")
         })
 
-        val metadataPath = s"$checkpointLocation/sources/$sourceId"
         val dataSchema = inferFileFormatSchema(format)
 
         def dataFrameBuilder(files: Array[String]): DataFrame = {
