@@ -964,7 +964,7 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
     >>> abs(model.transform(df).head().prediction - 1.5) < 0.001
     True
     >>> model.coefficients
-    DenseVector([1.5, -1.0])
+    DenseVector([1.5..., -1.0...])
     >>> abs(model.intercept - 1.5) < 0.001
     True
     >>> glr_path = temp_path + "/glr"
