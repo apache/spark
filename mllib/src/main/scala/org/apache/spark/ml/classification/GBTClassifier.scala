@@ -117,9 +117,11 @@ final class GBTClassifier @Since("1.4.0") (
   @Since("1.4.0")
   override def setStepSize(value: Double): this.type = super.setStepSize(value)
 
+  // Parameters from GBTClassifierParams:
+
   /** @group setParam */
   @Since("1.4.0")
-  def setLossType(value: String): this.type = set(lossType, value)
+  override def setLossType(value: String): this.type = super.setLossType(value)
 
   override protected def train(dataset: Dataset[_]): GBTClassificationModel = {
     val categoricalFeatures: Map[Int, Int] =
@@ -174,7 +176,7 @@ final class GBTClassificationModel private[ml](
     private val _treeWeights: Array[Double],
     @Since("1.6.0") override val numFeatures: Int)
   extends PredictionModel[Vector, GBTClassificationModel]
-  with GBTClassificationModelParams with TreeEnsembleModel[DecisionTreeRegressionModel]
+  with GBTClassifierParams with TreeEnsembleModel[DecisionTreeRegressionModel]
   with MLWritable with Serializable {
 
   require(_trees.nonEmpty, "GBTClassificationModel requires at least 1 tree.")

@@ -113,13 +113,11 @@ final class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: Stri
   @Since("1.4.0")
   override def setStepSize(value: Double): this.type = super.setStepSize(value)
 
-  // Parameters for GBTRegressor:
-
-
+  // Parameters from GBTRegressorParams:
 
   /** @group setParam */
   @Since("1.4.0")
-  def setLossType(value: String): this.type = set(lossType, value)
+  override def setLossType(value: String): this.type = super.setLossType(value)
 
   override protected def train(dataset: Dataset[_]): GBTRegressionModel = {
     val categoricalFeatures: Map[Int, Int] =
@@ -165,7 +163,7 @@ final class GBTRegressionModel private[ml](
     private val _treeWeights: Array[Double],
     override val numFeatures: Int)
   extends PredictionModel[Vector, GBTRegressionModel]
-  with GBTRegressionModelParams with TreeEnsembleModel[DecisionTreeRegressionModel]
+  with GBTRegressorParams with TreeEnsembleModel[DecisionTreeRegressionModel]
   with MLWritable with Serializable {
 
   require(_trees.nonEmpty, "GBTRegressionModel requires at least 1 tree.")

@@ -17,15 +17,13 @@
 
 package org.apache.spark.ml.tree
 
-import org.apache.spark.annotation.Since
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, BoostingStrategy => OldBoostingStrategy, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.impurity.{Entropy => OldEntropy, Gini => OldGini, Impurity => OldImpurity, Variance => OldVariance}
-import org.apache.spark.mllib.tree.loss.{LogLoss => OldLogLoss, Loss => OldLoss, AbsoluteError => OldAbsoluteError,
-SquaredError => OldSquaredError}
+import org.apache.spark.mllib.tree.loss.{AbsoluteError => OldAbsoluteError, LogLoss => OldLogLoss, Loss => OldLoss, SquaredError => OldSquaredError}
 import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
 
 /**
@@ -481,8 +479,10 @@ private[ml] trait GBTClassifierParams extends GBTParams with TreeClassifierParam
   setDefault(lossType -> "logistic")
 
   /** @group getParam */
-  @Since("1.4.0")
   def getLossType: String = $(lossType).toLowerCase
+
+  /** @group setParam */
+  def setLossType(value: String): this.type = set(lossType, value)
 
   /** (private[ml]) Convert new loss to old loss. */
   override private[ml] def getOldLossType: OldLoss = {
@@ -494,8 +494,6 @@ private[ml] trait GBTClassifierParams extends GBTParams with TreeClassifierParam
     }
   }
 }
-
-private[ml] trait GBTClassificationModelParams extends GBTClassifierParams
 
 private[ml] object GBTRegressorParams {
   // The losses below should be lowercase.
@@ -511,7 +509,6 @@ private[ml] trait GBTRegressorParams extends GBTParams with TreeRegressorParams 
    * (default = squared)
    * @group param
    */
-  @Since("1.4.0")
   val lossType: Param[String] = new Param[String](this, "lossType", "Loss function which GBT" +
     " tries to minimize (case-insensitive). Supported options:" +
     s" ${GBTRegressorParams.supportedLossTypes.mkString(", ")}",
@@ -520,8 +517,10 @@ private[ml] trait GBTRegressorParams extends GBTParams with TreeRegressorParams 
   setDefault(lossType -> "squared")
 
   /** @group getParam */
-  @Since("1.4.0")
   def getLossType: String = $(lossType).toLowerCase
+
+  /** @group setParam */
+  def setLossType(value: String): this.type = set(lossType, value)
 
   /** (private[ml]) Convert new loss to old loss. */
   override private[ml] def getOldLossType: OldLoss = {
@@ -534,5 +533,3 @@ private[ml] trait GBTRegressorParams extends GBTParams with TreeRegressorParams 
     }
   }
 }
-
-private[ml] trait GBTRegressionModelParams extends GBTRegressorParams
