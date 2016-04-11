@@ -1502,7 +1502,7 @@ val people = sqlContext.read.json(path)
 // The inferred schema can be visualized using the printSchema() method.
 people.printSchema()
 // root
-//  |-- age: integer (nullable = true)
+//  |-- age: long (nullable = true)
 //  |-- name: string (nullable = true)
 
 // Register this DataFrame as a table.
@@ -1540,7 +1540,7 @@ DataFrame people = sqlContext.read().json("examples/src/main/resources/people.js
 // The inferred schema can be visualized using the printSchema() method.
 people.printSchema();
 // root
-//  |-- age: integer (nullable = true)
+//  |-- age: long (nullable = true)
 //  |-- name: string (nullable = true)
 
 // Register this DataFrame as a table.
@@ -1578,7 +1578,7 @@ people = sqlContext.read.json("examples/src/main/resources/people.json")
 # The inferred schema can be visualized using the printSchema() method.
 people.printSchema()
 # root
-#  |-- age: integer (nullable = true)
+#  |-- age: long (nullable = true)
 #  |-- name: string (nullable = true)
 
 # Register this DataFrame as a table.
@@ -1617,7 +1617,7 @@ people <- jsonFile(sqlContext, path)
 # The inferred schema can be visualized using the printSchema() method.
 printSchema(people)
 # root
-#  |-- age: integer (nullable = true)
+#  |-- age: long (nullable = true)
 #  |-- name: string (nullable = true)
 
 # Register this DataFrame as a table.
