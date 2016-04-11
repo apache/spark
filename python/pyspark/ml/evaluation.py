@@ -81,7 +81,7 @@ class Evaluator(Params):
 
 
 @inherit_doc
-class JavaEvaluator(Evaluator, JavaWrapper):
+class JavaEvaluator(JavaWrapper, Evaluator):
     """
     Base class for :py:class:`Evaluator`s that wrap Java/Scala
     implementations.
