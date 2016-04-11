@@ -43,7 +43,7 @@ import org.apache.spark.storage.StorageLevel
  */
 private[regression] trait AFTSurvivalRegressionParams extends Params
   with HasFeaturesCol with HasLabelCol with HasPredictionCol with HasMaxIter
-  with HasTol with HasFitIntercept with HasStandardization with Logging {
+  with HasTol with HasFitIntercept with Logging {
 
   /**
    * Param for censor column name.
@@ -179,18 +179,6 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
   @Since("1.6.0")
   def setTol(value: Double): this.type = set(tol, value)
   setDefault(tol -> 1E-6)
-
-  /**
-   * Whether to standardize the training features before fitting the model.
-   * The coefficients of models will be always returned on the original scale,
-   * so it will be transparent for users. Note that with/without standardization,
-   * the models should be always converged to the same solution.
-   * Default is true.
-   * @group setParam
-   */
-  @Since("2.0.0")
-  def setStandardization(value: Boolean): this.type = set(standardization, value)
-  setDefault(standardization -> true)
 
   /**
    * Extract [[featuresCol]], [[labelCol]] and [[censorCol]] from input dataset,

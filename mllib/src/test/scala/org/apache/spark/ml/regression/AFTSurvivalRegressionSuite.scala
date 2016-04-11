@@ -360,6 +360,7 @@ class AFTSurvivalRegressionSuite
         assert(expected.intercept === actual.intercept)
         assert(expected.coefficients === actual.coefficients)
       }
+  }
 
   test("numerical stability of standardization") {
     val trainer = new AFTSurvivalRegression()
