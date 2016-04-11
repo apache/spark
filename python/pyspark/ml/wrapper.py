@@ -25,12 +25,12 @@ from pyspark.ml.util import _jvm
 from pyspark.mllib.common import inherit_doc, _java2py, _py2java
 
 
-class JavaCallable(object):
+class JavaWrapper(object):
     """
     Wrapper class for a Java companion object
     """
     def __init__(self, java_obj=None):
-        super(JavaCallable, self).__init__()
+        super(JavaWrapper, self).__init__()
         self._java_obj = java_obj
 
     @classmethod
@@ -38,7 +38,7 @@ class JavaCallable(object):
         """
         Construct this object from given Java classname and arguments
         """
-        java_obj = JavaCallable._new_java_obj(java_class, *args)
+        java_obj = JavaWrapper._new_java_obj(java_class, *args)
         return cls(java_obj)
 
     def _call_java(self, name, *args):
@@ -61,7 +61,7 @@ class JavaCallable(object):
 
 
 @inherit_doc
-class JavaWrapper(JavaCallable, Params):
+class JavaWrapperParams(JavaWrapper, Params):
     """
     Utility class to help create wrapper classes from Java/Scala
     implementations of pipeline components.
@@ -166,7 +166,7 @@ class JavaWrapper(JavaCallable, Params):
         stage_name = java_stage.getClass().getName().replace("org.apache.spark", "pyspark")
         # Generate a default new instance from the stage_name class.
         py_type = __get_class(stage_name)
-        if issubclass(py_type, JavaWrapper):
+        if issubclass(py_type, JavaWrapperParams):
             # Load information from java_stage to the instance.
             py_stage = py_type()
             py_stage._java_obj = java_stage
@@ -181,7 +181,7 @@ class JavaWrapper(JavaCallable, Params):
 
 
 @inherit_doc
-class JavaEstimator(JavaWrapper, Estimator):
+class JavaEstimator(JavaWrapperParams, Estimator):
     """
     Base class for :py:class:`Estimator`s that wrap Java/Scala
     implementations.
@@ -214,7 +214,7 @@ class JavaEstimator(JavaWrapper, Estimator):
 
 
 @inherit_doc
-class JavaTransformer(JavaWrapper, Transformer):
+class JavaTransformer(JavaWrapperParams, Transformer):
     """
     Base class for :py:class:`Transformer`s that wrap Java/Scala
     implementations. Subclasses should ensure they have the transformer Java object
