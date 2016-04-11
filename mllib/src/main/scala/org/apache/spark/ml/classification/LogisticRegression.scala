@@ -264,16 +264,16 @@ class LogisticRegression @Since("1.2.0") (
    *
    * @group param
    */
-  @Since("TBD")
+  @Since("2.0.0")
   final val useSparseAgg: BooleanParam = new BooleanParam(
       this, "useSparseAgg", "use sparse data structure when aggregating feature stats?")
 
   /** @group getParam */
-  @Since("TBD")
+  @Since("2.0.0")
   def getUseSparseAgg: Boolean = $(useSparseAgg)
 
   /** @group setParam */
-  @Since("TBD")
+  @Since("2.0.0")
   def setUseSparseAgg(value: Boolean): this.type = set(useSparseAgg, value)
 
   setDefault(useSparseAgg -> false)
