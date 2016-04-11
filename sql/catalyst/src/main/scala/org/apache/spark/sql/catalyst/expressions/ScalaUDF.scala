@@ -17,10 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.lang.reflect.InvocationTargetException
-
-import scala.reflect.runtime.universe._
-
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.expressions.codegen._
