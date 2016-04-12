@@ -1018,7 +1018,10 @@ private[hive] case class MetastoreRelation(
   val partitionKeys = table.partitionColumns.map(_.toAttribute)
 
   /** Non-partitionKey attributes */
-  val attributes = table.schema.map(_.toAttribute)
+  // TODO: just make this hold the schema itself, not just non-partition columns
+  val attributes = table.schema
+    .filter { c => !table.partitionColumnNames.contains(c.name) }
+    .map(_.toAttribute)
 
   val output = attributes ++ partitionKeys
 
