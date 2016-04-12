@@ -21,7 +21,6 @@ import java.net.{URI, URL}
 import javax.servlet.DispatcherType
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
-import scala.PartialFunction.condOpt
 import scala.collection.mutable.ArrayBuffer
 import scala.language.implicitConversions
 import scala.xml.Node
@@ -356,6 +355,6 @@ private[spark] case class ServerInfo(
 
   def stop(): Unit = {
     server.stop()
-    condOpt(server.getThreadPool) { case x: LifeCycle => x }.foreach(_.stop())
+    Option(server.getThreadPool).collect { case x: LifeCycle => x }.foreach(_.stop())
   }
 }

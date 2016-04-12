@@ -19,8 +19,6 @@ package org.apache.spark
 
 import java.io.File
 
-import scala.PartialFunction.condOpt
-
 import org.eclipse.jetty.security.{ConstraintMapping, ConstraintSecurityHandler, HashLoginService}
 import org.eclipse.jetty.security.authentication.DigestAuthenticator
 import org.eclipse.jetty.server.Server
@@ -158,7 +156,7 @@ private[spark] class HttpServer(
       throw new ServerStateException("Server is already stopped")
     } else {
       server.stop()
-      condOpt(server.getThreadPool) { case x: LifeCycle => x }.foreach(_.stop())
+      Option(server.getThreadPool).collect { case x: LifeCycle => x }.foreach(_.stop())
       port = -1
       server = null
     }
