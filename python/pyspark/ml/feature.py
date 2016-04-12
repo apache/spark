@@ -259,14 +259,14 @@ class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, 
     binary = Param(
         Params._dummy(), "binary", "Binary toggle to control the output vector values." +
         " If True, all nonzero counts (after minTF filter applied) are set to 1. This is useful" +
-        " for discrete probabilistic models that model binary events rather than integer counts."
+        " for discrete probabilistic models that model binary events rather than integer counts." +
         " Default False", typeConverter=TypeConverters.toBoolean)
 
     @keyword_only
     def __init__(self, minTF=1.0, minDF=1.0, vocabSize=1 << 18, binary=False, inputCol=None,
                  outputCol=None):
         """
-        __init__(self, minTF=1.0, minDF=1.0, vocabSize=1 << 18, binary=False, inputCol=None,
+        __init__(self, minTF=1.0, minDF=1.0, vocabSize=1 << 18, binary=False, inputCol=None,\
                  outputCol=None)
         """
         super(CountVectorizer, self).__init__()
@@ -281,7 +281,7 @@ class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, 
     def setParams(self, minTF=1.0, minDF=1.0, vocabSize=1 << 18, binary=False, inputCol=None,
                   outputCol=None):
         """
-        setParams(self, minTF=1.0, minDF=1.0, vocabSize=1 << 18, binary=False, inputCol=None,
+        setParams(self, minTF=1.0, minDF=1.0, vocabSize=1 << 18, binary=False, inputCol=None,\
                   outputCol=None)
         Set the params for the CountVectorizer
         """
