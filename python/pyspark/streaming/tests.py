@@ -1469,8 +1469,7 @@ class KinesisStreamTests(PySparkStreamingTestCase):
 def search_jar(dir, name_prefix):
     # We should ignore the following jars
     ignored_jar_suffixes = ("javadoc.jar", "sources.jar", "test-sources.jar", "tests.jar")
-    jars = (glob.glob(os.path.join(dir, "target/scala-*/" + name_prefix + "-*.jar")) +  # sbt build
-            glob.glob(os.path.join(dir, "target/" + name_prefix + "_*.jar")))  # maven build
+    jars = glob.glob(os.path.join(dir, "target/" + name_prefix + "_*.jar"))
     return [jar for jar in jars if not jar.endswith(ignored_jar_suffixes)]
 
 

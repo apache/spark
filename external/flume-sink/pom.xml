@@ -103,7 +103,7 @@
         <version>${avro.version}</version>
         <configuration>
           <!-- Generate the output in the same directory as the sbt-avro-plugin -->
-          <outputDirectory>${project.basedir}/target/scala-${scala.binary.version}/src_managed/main/compiled_avro</outputDirectory>
+          <outputDirectory>${project.basedir}/target/src_managed/main/compiled_avro</outputDirectory>
         </configuration>
         <executions>
           <execution>

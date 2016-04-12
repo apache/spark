@@ -165,17 +165,17 @@ echo "Spark $VERSION$GITREVSTRING built for Hadoop $SPARK_HADOOP_VERSION" > "$DI
 echo "Build flags: $@" >> "$DISTDIR/RELEASE"
 
 # Copy jars
-cp "$SPARK_HOME"/assembly/target/scala*/jars/* "$DISTDIR/jars/"
+cp "$SPARK_HOME"/assembly/target/jars/* "$DISTDIR/jars/"
 
 # Only create the yarn directory if the yarn artifacts were build.
-if [ -f "$SPARK_HOME"/common/network-yarn/target/scala*/spark-*-yarn-shuffle.jar ]; then
+if [ -f "$SPARK_HOME"/common/network-yarn/target/spark-*-yarn-shuffle.jar ]; then
   mkdir "$DISTDIR"/yarn
-  cp "$SPARK_HOME"/common/network-yarn/target/scala*/spark-*-yarn-shuffle.jar "$DISTDIR/yarn"
+  cp "$SPARK_HOME"/common/network-yarn/target/spark-*-yarn-shuffle.jar "$DISTDIR/yarn"
 fi
 
 # Copy examples and dependencies
 mkdir -p "$DISTDIR/examples/jars"
-cp "$SPARK_HOME"/examples/target/scala*/jars/* "$DISTDIR/examples/jars"
+cp "$SPARK_HOME"/examples/target/jars/* "$DISTDIR/examples/jars"
 
 # Deduplicate jars that have already been packaged as part of the main Spark dependencies.
 for f in "$DISTDIR/examples/jars/"*; do

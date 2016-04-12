@@ -59,7 +59,3 @@ export -f sed_i
 BASEDIR=$(dirname $0)/..
 find "$BASEDIR" -name 'pom.xml' -not -path '*target*' -print \
   -exec bash -c "sed_i 's/\(artifactId.*\)_'$FROM_VERSION'/\1_'$TO_VERSION'/g' {}" \;
-
-# Update source of scaladocs
-echo "$BASEDIR/docs/_plugins/copy_api_dirs.rb"
-sed_i 's/scala\-'$FROM_VERSION'/scala\-'$TO_VERSION'/' "$BASEDIR/docs/_plugins/copy_api_dirs.rb"

@@ -35,7 +35,7 @@
     <sbt.project.name>network-yarn</sbt.project.name>
     <!-- Make sure all Hadoop dependencies are provided to avoid repackaging. -->
     <hadoop.deps.scope>provided</hadoop.deps.scope>
-    <shuffle.jar>${project.build.directory}/scala-${scala.binary.version}/spark-${project.version}-yarn-shuffle.jar</shuffle.jar>
+    <shuffle.jar>${project.build.directory}/spark-${project.version}-yarn-shuffle.jar</shuffle.jar>
     <shade>org/spark_project/</shade>
   </properties>
 
