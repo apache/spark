@@ -201,10 +201,11 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
       CatalogStorageFormat(
         locationUri = None,
         inputFormat = defaultHiveSerde.flatMap(_.inputFormat)
-          .orElse(Option("org.apache.hadoop.mapred.TextInputFormat")),
+          .orElse(Some("org.apache.hadoop.mapred.TextInputFormat")),
         outputFormat = defaultHiveSerde.flatMap(_.outputFormat)
-          .orElse(Option("org.apache.hadoop.hive.ql.io.IgnoreKeyTextOutputFormat")),
-        serde = defaultHiveSerde.flatMap(_.serde),
+          .orElse(Some("org.apache.hadoop.hive.ql.io.IgnoreKeyTextOutputFormat")),
+        serde = defaultHiveSerde.flatMap(_.serde)
+          .orElse(Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")),
         serdeProperties = Map())
     }
     val fileStorage = Option(ctx.createFileFormat).map(visitCreateFileFormat)
