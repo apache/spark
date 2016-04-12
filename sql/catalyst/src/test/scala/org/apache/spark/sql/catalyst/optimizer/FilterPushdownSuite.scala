@@ -36,7 +36,7 @@ class FilterPushdownSuite extends PlanTest {
       Batch("Filter Pushdown", FixedPoint(10),
         SamplePushDown,
         CombineFilters,
-        PushPredicateThroughUnaryNode,
+        PushPredicate,
         BooleanSimplification,
         PushPredicateThroughJoin,
         CollapseProject) :: Nil
@@ -687,6 +687,39 @@ class FilterPushdownSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery.analyze)
 
     val correctAnswer = BroadcastHint(testRelation.where('a === 2L))
+      .where('b + Rand(10).as("rnd") === 3)
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("union") {
+    val testRelation2 = LocalRelation('d.int, 'e.int, 'f.int)
+
+    val originalQuery = Union(Seq(testRelation, testRelation2))
+      .where('a === 2L && 'b + Rand(10).as("rnd") === 3)
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    val correctAnswer = Union(Seq(
+      testRelation.where('a === 2L && 'b + Rand(10).as("rnd") === 3),
+      testRelation2.where('d === 2L && 'e + Rand(10).as("rnd") === 3)))
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("intersect") {
+    val testRelation2 = LocalRelation('d.int, 'e.int, 'f.int)
+
+    val originalQuery = Intersect(testRelation, testRelation2)
+      .where('a === 2L && 'b + Rand(10).as("rnd") === 3)
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    val correctAnswer = Intersect(
+      testRelation.where('a === 2L),
+      testRelation2.where('d === 2L))
       .where('b + Rand(10).as("rnd") === 3)
       .analyze
 

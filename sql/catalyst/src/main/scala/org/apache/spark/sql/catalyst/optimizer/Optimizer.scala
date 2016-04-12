@@ -66,7 +66,7 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       ReorderJoin,
       OuterJoinElimination,
       PushPredicateThroughJoin,
-      PushPredicateThroughUnaryNode,
+      PushPredicate,
       LimitPushDown,
       ColumnPruning,
       InferFiltersFromConstraints,
@@ -896,7 +896,7 @@ object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
  *
  * This heuristic is valid assuming the expression evaluation cost is minimal.
  */
-object PushPredicateThroughUnaryNode extends Rule[LogicalPlan] with PredicateHelper {
+object PushPredicate extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // SPARK-13473: We can't push the predicate down when the underlying projection output non-
     // deterministic field(s).  Non-deterministic expressions are essentially stateful. This
@@ -936,6 +936,42 @@ object PushPredicateThroughUnaryNode extends Rule[LogicalPlan] with PredicateHel
         // If there is no more filter to stay up, just eliminate the filter.
         // Otherwise, create "Filter(stayUp) <- Aggregate <- Filter(pushDownPredicate)".
         if (stayUp.isEmpty) newAggregate else Filter(stayUp.reduce(And), newAggregate)
+      } else {
+        filter
+      }
+
+    case filter @ Filter(condition, u: Union) =>
+      val output = u.output
+      val newChildren = u.children.map { child =>
+        val attrMap: Map[Expression, Expression] = output.zip(child.output).toMap
+        val newCond = condition transform {
+          case e if attrMap.contains(e) => attrMap(e)
+        }
+        Filter(newCond, child)
+      }
+      Union(newChildren)
+
+    case filter @ Filter(condition, i @ Intersect(left, right)) =>
+      // Intersect could change the rows, so non-deterministic predcate can't be pushed down
+      val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { cond =>
+        cond.deterministic
+      }
+      if (pushDown.nonEmpty) {
+        val pushDownCond = pushDown.reduceLeft(And)
+        val output = i.output
+        val newChildren = i.children.map { child =>
+          val attrMap: Map[Expression, Expression] = output.zip(child.output).toMap
+          val newCond = pushDownCond transform {
+            case e if attrMap.contains(e) => attrMap(e)
+          }
+          Filter(newCond, child)
+        }
+        val newIntersect = i.withNewChildren(newChildren)
+        if (stayUp.nonEmpty) {
+          Filter(stayUp.reduceLeft(And), newIntersect)
+        } else {
+          newIntersect
+        }
       } else {
         filter
       }
