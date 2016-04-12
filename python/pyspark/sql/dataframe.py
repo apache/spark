@@ -1199,6 +1199,9 @@ class DataFrame(object):
         if isinstance(cols, tuple):
             cols = list(cols)
         if isinstance(cols, list):
+            for c in cols:
+                if not isinstance(c, str):
+                    raise ValueError("column name should be string.")
             cols = _to_list(self._sc, cols)
 
         if not isinstance(probabilities, (list, tuple)):
