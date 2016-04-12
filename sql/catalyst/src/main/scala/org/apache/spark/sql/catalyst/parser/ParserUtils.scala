@@ -74,8 +74,7 @@ object ParserUtils {
 
   /** Get the origin (line and position) of the token. */
   def position(token: Token): Origin = {
-    val callSite = org.apache.spark.util.Utils.getCallSite().shortForm
-    Origin(Option(callSite), Option(token.getLine), Option(token.getCharPositionInLine))
+    Origin(None, Option(token.getLine), Option(token.getCharPositionInLine))
   }
 
   /** Assert if a condition holds. If it doesn't throw a parse exception. */
