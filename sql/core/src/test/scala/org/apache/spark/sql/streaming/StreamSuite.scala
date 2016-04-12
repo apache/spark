@@ -119,12 +119,12 @@ class StreamSuite extends StreamTest with SharedSQLContext {
       }
       expectedMsgs.foreach { s => assert(e.getMessage.contains(s)) }
     }
-    /*
+
     // Running streaming plan as a batch query
     assertError("startStream" :: Nil) {
       streamInput.toDS.map { i => i }.count()
     }
-    */
+
     // Running non-streaming plan with as a streaming query
     assertError("without streaming sources" :: "startStream" :: Nil) {
       val ds = batchInput.map { i => i }

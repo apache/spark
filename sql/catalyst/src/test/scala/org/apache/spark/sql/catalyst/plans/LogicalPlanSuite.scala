@@ -71,7 +71,7 @@ class LogicalPlanSuite extends SparkFunSuite {
     assert(invocationCount === 1)
   }
 
-  test("needsIncrementalExecution") {
+  test("isStreaming") {
     val relation = LocalRelation(AttributeReference("a", IntegerType, nullable = true)())
     val incrementalRelation = new LocalRelation(
       Seq(AttributeReference("a", IntegerType, nullable = true)())) {

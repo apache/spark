@@ -110,9 +110,6 @@ object UnsupportedOperationChecker {
         case GlobalLimit(_, _) | LocalLimit(_, _) if plan.children.forall(_.isStreaming) =>
           throwError("Limits are not supported on streaming DataFrames/Datasets")
 
-        case Distinct(child) if child.isStreaming =>
-          throwError("Distinct is not supported on streaming DataFrames/Datasets")
-
         case Sort(_, _, _) | SortPartitions(_, _) if plan.children.forall(_.isStreaming) =>
           throwError("Sorting is not supported on streaming DataFrames/Datasets")
 

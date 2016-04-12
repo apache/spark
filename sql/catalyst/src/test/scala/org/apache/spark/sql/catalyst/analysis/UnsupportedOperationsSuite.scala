@@ -186,7 +186,6 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
 
 
   // Unary operations
-  testUnaryOperatorForStreaming("distinct", Distinct(_))
   testUnaryOperatorForStreaming("sort", Sort(Nil, true, _))
   testUnaryOperatorForStreaming("sort partitions", SortPartitions(Nil, _), expectedMsg = "sort")
   testUnaryOperatorForStreaming("sample", Sample(0.1, 1, true, 1L, _)(), expectedMsg = "sampling")
@@ -355,13 +354,13 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     if (!expectedMsgs.map(_.toLowerCase).forall(e.getMessage.toLowerCase.contains)) {
       fail(
         s"""Exception message should contain the following substrings:
-            |
-       |  ${expectedMsgs.mkString("\n  ")}
-            |
-       |Actual exception message:
-            |
-       |  ${e.getMessage}
-     """.stripMargin)
+          |
+          |  ${expectedMsgs.mkString("\n  ")}
+          |
+          |Actual exception message:
+          |
+          |  ${e.getMessage}
+          """.stripMargin)
     }
   }
 
