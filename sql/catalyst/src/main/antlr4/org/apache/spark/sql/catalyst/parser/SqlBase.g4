@@ -104,6 +104,7 @@ statement
         REPLACE COLUMNS '(' colTypeList ')' (CASCADE | RESTRICT)?      #replaceColumns
     | DROP TABLE (IF EXISTS)? tableIdentifier PURGE?
         (FOR METADATA? REPLICATION '(' STRING ')')?                    #dropTable
+    | DROP VIEW (IF EXISTS)? tableIdentifier                           #dropTable
     | CREATE (OR REPLACE)? VIEW (IF NOT EXISTS)? tableIdentifier
         identifierCommentList? (COMMENT STRING)?
         (PARTITIONED ON identifierList)?
@@ -141,7 +142,6 @@ hiveNativeCommands
     | DELETE FROM tableIdentifier (WHERE booleanExpression)?
     | TRUNCATE TABLE tableIdentifier partitionSpec?
         (COLUMNS identifierList)?
-    | DROP VIEW (IF EXISTS)? qualifiedName
     | SHOW COLUMNS (FROM | IN) tableIdentifier ((FROM|IN) identifier)?
     | START TRANSACTION (transactionMode (',' transactionMode)*)?
     | COMMIT WORK?
@@ -380,6 +380,7 @@ joinType
     | LEFT SEMI
     | RIGHT OUTER?
     | FULL OUTER?
+    | LEFT? ANTI
     ;
 
 joinCriteria
@@ -645,7 +646,7 @@ nonReserved
     | NO | DATA
     | START | TRANSACTION | COMMIT | ROLLBACK | WORK | ISOLATION | LEVEL
     | SNAPSHOT | READ | WRITE | ONLY
-    | SORT | CLUSTER | DISTRIBUTE UNSET | TBLPROPERTIES | SKEWED | STORED | DIRECTORIES | LOCATION
+    | SORT | CLUSTER | DISTRIBUTE | UNSET | TBLPROPERTIES | SKEWED | STORED | DIRECTORIES | LOCATION
     | EXCHANGE | ARCHIVE | UNARCHIVE | FILEFORMAT | TOUCH | COMPACT | CONCATENATE | CHANGE | FIRST
     | AFTER | CASCADE | RESTRICT | BUCKETS | CLUSTERED | SORTED | PURGE | INPUTFORMAT | OUTPUTFORMAT
     | INPUTDRIVER | OUTPUTDRIVER | DBPROPERTIES | DFS | TRUNCATE | METADATA | REPLICATION | COMPUTE
@@ -878,6 +879,7 @@ INDEX: 'INDEX';
 INDEXES: 'INDEXES';
 LOCKS: 'LOCKS';
 OPTION: 'OPTION';
+ANTI: 'ANTI';
 
 STRING
     : '\'' ( ~('\''|'\\') | ('\\' .) )* '\''

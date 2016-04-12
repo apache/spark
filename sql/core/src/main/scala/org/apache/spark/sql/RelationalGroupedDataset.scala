@@ -408,7 +408,7 @@ private[sql] object RelationalGroupedDataset {
   private[sql] object RollupType extends GroupType
 
   /**
-    * To indicate it's the PIVOT
-    */
+   * To indicate it's the PIVOT
+   */
   private[sql] case class PivotType(pivotCol: Expression, values: Seq[Literal]) extends GroupType
 }

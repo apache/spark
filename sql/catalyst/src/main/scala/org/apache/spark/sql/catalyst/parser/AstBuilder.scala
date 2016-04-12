@@ -549,8 +549,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
         Explode(expressions.head)
       case "json_tuple" =>
         JsonTuple(expressions)
-      case other =>
-        withGenerator(other, expressions, ctx)
+      case name =>
+        UnresolvedGenerator(name, expressions)
     }
 
     Generate(
@@ -563,16 +563,6 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   }
 
   /**
-   * Create a [[Generator]]. Override this method in order to support custom Generators.
-   */
-  protected def withGenerator(
-      name: String,
-      expressions: Seq[Expression],
-      ctx: LateralViewContext): Generator = {
-    throw new ParseException(s"Generator function '$name' is not supported", ctx)
-  }
-
-  /**
    * Create a joins between two or more logical plans.
    */
   override def visitJoinRelation(ctx: JoinRelationContext): LogicalPlan = withOrigin(ctx) {
@@ -582,6 +572,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
         case null => Inner
         case jt if jt.FULL != null => FullOuter
         case jt if jt.SEMI != null => LeftSemi
+        case jt if jt.ANTI != null => LeftAnti
         case jt if jt.LEFT != null => LeftOuter
         case jt if jt.RIGHT != null => RightOuter
         case _ => Inner

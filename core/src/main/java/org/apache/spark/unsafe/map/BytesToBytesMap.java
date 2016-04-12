@@ -716,7 +716,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
       offset += klen;
       Platform.copyMemory(vbase, voff, base, offset, vlen);
       offset += vlen;
-      Platform.putLong(base, offset, 0);
+      // put this value at the beginning of the list
+      Platform.putLong(base, offset, isDefined ? longArray.get(pos * 2) : 0);
 
       // --- Update bookkeeping data structures ----------------------------------------------------
       offset = currentPage.getBaseOffset();
@@ -724,17 +725,12 @@ public final class BytesToBytesMap extends MemoryConsumer {
       pageCursor += recordLength;
       final long storedKeyAddress = taskMemoryManager.encodePageNumberAndOffset(
         currentPage, recordOffset);
+      longArray.set(pos * 2, storedKeyAddress);
+      updateAddressesAndSizes(storedKeyAddress);
       numValues++;
-      if (isDefined) {
-        // put this pair at the end of chain
-        while (nextValue()) { /* do nothing */ }
-        Platform.putLong(baseObject, valueOffset + valueLength, storedKeyAddress);
-        nextValue();  // point to new added value
-      } else {
+      if (!isDefined) {
         numKeys++;
-        longArray.set(pos * 2, storedKeyAddress);
         longArray.set(pos * 2 + 1, keyHashcode);
-        updateAddressesAndSizes(storedKeyAddress);
         isDefined = true;
 
         if (numKeys > growthThreshold && longArray.size() < MAX_CAPACITY) {

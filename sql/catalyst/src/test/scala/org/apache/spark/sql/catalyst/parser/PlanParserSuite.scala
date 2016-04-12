@@ -17,6 +17,7 @@
 package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -296,10 +297,18 @@ class PlanParserSuite extends PlanTest {
         .insertInto("t2"),
         from.where('s < 10).select(star()).insertInto("t3")))
 
-    // Unsupported generator.
-    intercept(
+    // Unresolved generator.
+    val expected = table("t")
+      .generate(
+        UnresolvedGenerator("posexplode", Seq('x)),
+        join = true,
+        outer = false,
+        Some("posexpl"),
+        Seq("x", "y"))
+      .select(star())
+    assertEqual(
       "select * from t lateral view posexplode(x) posexpl as x, y",
-      "Generator function 'posexplode' is not supported")
+      expected)
   }
 
   test("joins") {
@@ -325,7 +334,7 @@ class PlanParserSuite extends PlanTest {
         table("t").join(table("u"), UsingJoin(jt, Seq('a.attr, 'b.attr)), None).select(star()))
     }
     val testAll = Seq(testUnconditionalJoin, testConditionalJoin, testNaturalJoin, testUsingJoin)
-
+    val testExistence = Seq(testUnconditionalJoin, testConditionalJoin, testUsingJoin)
     def test(sql: String, jt: JoinType, tests: Seq[(String, JoinType) => Unit]): Unit = {
       tests.foreach(_(sql, jt))
     }
@@ -339,6 +348,9 @@ class PlanParserSuite extends PlanTest {
     test("right outer join", RightOuter, testAll)
     test("full join", FullOuter, testAll)
     test("full outer join", FullOuter, testAll)
+    test("left semi join", LeftSemi, testExistence)
+    test("left anti join", LeftAnti, testExistence)
+    test("anti join", LeftAnti, testExistence)
 
     // Test multiple consecutive joins
     assertEqual(

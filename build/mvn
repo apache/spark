@@ -70,9 +70,10 @@ install_app() {
 # Install maven under the build/ folder
 install_mvn() {
   local MVN_VERSION="3.3.9"
+  local APACHE_MIRROR=${APACHE_MIRROR:-'https://www.apache.org/dyn/closer.lua?action=download&filename='}
 
   install_app \
-    "http://archive.apache.org/dist/maven/maven-3/${MVN_VERSION}/binaries" \
+    "${APACHE_MIRROR}/maven/maven-3/${MVN_VERSION}/binaries" \
     "apache-maven-${MVN_VERSION}-bin.tar.gz" \
     "apache-maven-${MVN_VERSION}/bin/mvn"
 
@@ -83,8 +84,10 @@ install_mvn() {
 install_zinc() {
   local zinc_path="zinc-0.3.9/bin/zinc"
   [ ! -f "${_DIR}/${zinc_path}" ] && ZINC_INSTALL_FLAG=1
+  local TYPESAFE_MIRROR=${TYPESAFE_MIRROR:-https://downloads.typesafe.com}
+
   install_app \
-    "http://downloads.typesafe.com/zinc/0.3.9" \
+    "${TYPESAFE_MIRROR}/zinc/0.3.9" \
     "zinc-0.3.9.tgz" \
     "${zinc_path}"
   ZINC_BIN="${_DIR}/${zinc_path}"
@@ -98,9 +101,10 @@ install_scala() {
   local scala_version=`grep "scala.version" "${_DIR}/../pom.xml" | \
                        head -1 | cut -f2 -d'>' | cut -f1 -d'<'`
   local scala_bin="${_DIR}/scala-${scala_version}/bin/scala"
+  local TYPESAFE_MIRROR=${TYPESAFE_MIRROR:-https://downloads.typesafe.com}
 
   install_app \
-    "http://downloads.typesafe.com/scala/${scala_version}" \
+    "${TYPESAFE_MIRROR}/scala/${scala_version}" \
     "scala-${scala_version}.tgz" \
     "scala-${scala_version}/bin/scala"
 

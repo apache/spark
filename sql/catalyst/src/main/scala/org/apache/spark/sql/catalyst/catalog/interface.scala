@@ -91,6 +91,8 @@ abstract class ExternalCatalog {
 
   def getTable(db: String, table: String): CatalogTable
 
+  def getTableOption(db: String, table: String): Option[CatalogTable]
+
   def tableExists(db: String, table: String): Boolean
 
   def listTables(db: String): Seq[String]
@@ -150,16 +152,9 @@ abstract class ExternalCatalog {
 
   def renameFunction(db: String, oldName: String, newName: String): Unit
 
-  /**
-   * Alter a function whose name that matches the one specified in `funcDefinition`,
-   * assuming the function exists.
-   *
-   * Note: If the underlying implementation does not support altering a certain field,
-   * this becomes a no-op.
-   */
-  def alterFunction(db: String, funcDefinition: CatalogFunction): Unit
-
   def getFunction(db: String, funcName: String): CatalogFunction
+
+  def functionExists(db: String, funcName: String): Boolean
 
   def listFunctions(db: String, pattern: String): Seq[String]
 
@@ -171,8 +166,13 @@ abstract class ExternalCatalog {
  *
  * @param identifier name of the function
  * @param className fully qualified class name, e.g. "org.apache.spark.util.MyFunc"
+ * @param resources resource types and Uris used by the function
  */
-case class CatalogFunction(identifier: FunctionIdentifier, className: String)
+// TODO: Use FunctionResource instead of (String, String) as the element type of resources.
+case class CatalogFunction(
+    identifier: FunctionIdentifier,
+    className: String,
+    resources: Seq[(String, String)])
 
 
 /**

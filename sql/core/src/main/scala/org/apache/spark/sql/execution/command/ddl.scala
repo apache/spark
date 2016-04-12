@@ -18,12 +18,11 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.CatalogDatabase
+import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalog.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.execution.datasources.BucketSpec
 import org.apache.spark.sql.types._
 
 
@@ -125,7 +124,7 @@ case class AlterDatabaseProperties(
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val catalog = sqlContext.sessionState.catalog
-    val db: CatalogDatabase = catalog.getDatabase(databaseName)
+    val db: CatalogDatabase = catalog.getDatabaseMetadata(databaseName)
     catalog.alterDatabase(db.copy(properties = db.properties ++ props))
 
     Seq.empty[Row]
@@ -150,7 +149,8 @@ case class DescribeDatabase(
   extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
-    val dbMetadata: CatalogDatabase = sqlContext.sessionState.catalog.getDatabase(databaseName)
+    val dbMetadata: CatalogDatabase =
+      sqlContext.sessionState.catalog.getDatabaseMetadata(databaseName)
     val result =
       Row("Database Name", dbMetadata.name) ::
         Row("Description", dbMetadata.description) ::
@@ -175,86 +175,177 @@ case class DescribeDatabase(
   }
 }
 
-case class CreateFunction(
-    databaseName: Option[String],
-    functionName: String,
-    alias: String,
-    resources: Seq[(String, String)],
-    isTemp: Boolean)(sql: String)
-  extends NativeDDLCommand(sql) with Logging
+/**
+ * Drops a table/view from the metastore and removes it if it is cached.
+ *
+ * The syntax of this command is:
+ * {{{
+ *   DROP TABLE [IF EXISTS] table_name;
+ *   DROP VIEW [IF EXISTS] [db_name.]view_name;
+ * }}}
+ */
+case class DropTable(
+    tableName: TableIdentifier,
+    ifExists: Boolean,
+    isView: Boolean) extends RunnableCommand {
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    val catalog = sqlContext.sessionState.catalog
+    // If the command DROP VIEW is to drop a table or DROP TABLE is to drop a view
+    // issue an exception.
+    catalog.getTableMetadataOption(tableName).map(_.tableType match {
+      case CatalogTableType.VIRTUAL_VIEW if !isView =>
+        throw new AnalysisException(
+          "Cannot drop a view with DROP TABLE. Please use DROP VIEW instead")
+      case o if o != CatalogTableType.VIRTUAL_VIEW && isView =>
+        throw new AnalysisException(
+          s"Cannot drop a table with DROP VIEW. Please use DROP TABLE instead")
+      case _ =>
+    })
+
+    try {
+      sqlContext.cacheManager.tryUncacheQuery(sqlContext.table(tableName.quotedString))
+    } catch {
+      // This table's metadata is not in Hive metastore (e.g. the table does not exist).
+      case e if e.getClass.getName == "org.apache.hadoop.hive.ql.metadata.InvalidTableException" =>
+      case _: org.apache.spark.sql.catalyst.analysis.NoSuchTableException =>
+      // Other Throwables can be caused by users providing wrong parameters in OPTIONS
+      // (e.g. invalid paths). We catch it and log a warning message.
+      // Users should be able to drop such kinds of tables regardless if there is an error.
+      case e: Throwable => log.warn(s"${e.getMessage}", e)
+    }
+    catalog.invalidateTable(tableName)
+    catalog.dropTable(tableName, ifExists)
+    Seq.empty[Row]
+  }
+}
 
 /**
- * The DDL command that drops a function.
- * ifExists: returns an error if the function doesn't exist, unless this is true.
- * isTemp: indicates if it is a temporary function.
+ * A command that renames a table/view.
+ *
+ * The syntax of this command is:
+ * {{{
+ *   ALTER TABLE table1 RENAME TO table2;
+ *   ALTER VIEW view1 RENAME TO view2;
+ * }}}
  */
-case class DropFunction(
-    databaseName: Option[String],
-    functionName: String,
-    ifExists: Boolean,
-    isTemp: Boolean)(sql: String)
-  extends NativeDDLCommand(sql) with Logging
-
-/** Rename in ALTER TABLE/VIEW: change the name of a table/view to a different name. */
 case class AlterTableRename(
     oldName: TableIdentifier,
-    newName: TableIdentifier)(sql: String)
-  extends NativeDDLCommand(sql) with Logging
+    newName: TableIdentifier)
+  extends RunnableCommand {
 
-/** Set Properties in ALTER TABLE/VIEW: add metadata to a table/view. */
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    val catalog = sqlContext.sessionState.catalog
+    catalog.invalidateTable(oldName)
+    catalog.renameTable(oldName, newName)
+    Seq.empty[Row]
+  }
+
+}
+
+/**
+ * A command that sets table/view properties.
+ *
+ * The syntax of this command is:
+ * {{{
+ *   ALTER TABLE table1 SET TBLPROPERTIES ('key1' = 'val1', 'key2' = 'val2', ...);
+ *   ALTER VIEW view1 SET TBLPROPERTIES ('key1' = 'val1', 'key2' = 'val2', ...);
+ * }}}
+ */
 case class AlterTableSetProperties(
     tableName: TableIdentifier,
-    properties: Map[String, String])(sql: String)
-  extends NativeDDLCommand(sql) with Logging
+    properties: Map[String, String])
+  extends RunnableCommand {
 
-/** Unset Properties in ALTER TABLE/VIEW: remove metadata from a table/view. */
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    val catalog = sqlContext.sessionState.catalog
+    val table = catalog.getTableMetadata(tableName)
+    val newProperties = table.properties ++ properties
+    if (DDLUtils.isDatasourceTable(newProperties)) {
+      throw new AnalysisException(
+        "alter table properties is not supported for tables defined using the datasource API")
+    }
+    val newTable = table.copy(properties = newProperties)
+    catalog.alterTable(newTable)
+    Seq.empty[Row]
+  }
+
+}
+
+/**
+ * A command that unsets table/view properties.
+ *
+ * The syntax of this command is:
+ * {{{
+ *   ALTER TABLE table1 UNSET TBLPROPERTIES [IF EXISTS] ('key1', 'key2', ...);
+ *   ALTER VIEW view1 UNSET TBLPROPERTIES [IF EXISTS] ('key1', 'key2', ...);
+ * }}}
+ */
 case class AlterTableUnsetProperties(
     tableName: TableIdentifier,
-    properties: Map[String, String],
-    ifExists: Boolean)(sql: String)
-  extends NativeDDLCommand(sql) with Logging
+    propKeys: Seq[String],
+    ifExists: Boolean)
+  extends RunnableCommand {
 
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    val catalog = sqlContext.sessionState.catalog
+    val table = catalog.getTableMetadata(tableName)
+    if (DDLUtils.isDatasourceTable(table)) {
+      throw new AnalysisException(
+        "alter table properties is not supported for datasource tables")
+    }
+    if (!ifExists) {
+      propKeys.foreach { k =>
+        if (!table.properties.contains(k)) {
+          throw new AnalysisException(
+            s"attempted to unset non-existent property '$k' in table '$tableName'")
+        }
+      }
+    }
+    val newProperties = table.properties.filter { case (k, _) => !propKeys.contains(k) }
+    val newTable = table.copy(properties = newProperties)
+    catalog.alterTable(newTable)
+    Seq.empty[Row]
+  }
+
+}
+
+/**
+ * A command that sets the serde class and/or serde properties of a table/view.
+ *
+ * The syntax of this command is:
+ * {{{
+ *   ALTER TABLE table [PARTITION spec] SET SERDE serde_name [WITH SERDEPROPERTIES props];
+ *   ALTER TABLE table [PARTITION spec] SET SERDEPROPERTIES serde_properties;
+ * }}}
+ */
 case class AlterTableSerDeProperties(
     tableName: TableIdentifier,
     serdeClassName: Option[String],
     serdeProperties: Option[Map[String, String]],
-    partition: Option[Map[String, String]])(sql: String)
-  extends NativeDDLCommand(sql) with Logging
+    partition: Option[Map[String, String]])
+  extends RunnableCommand {
 
-case class AlterTableStorageProperties(
-    tableName: TableIdentifier,
-    buckets: BucketSpec)(sql: String)
-  extends NativeDDLCommand(sql) with Logging
+  // should never happen if we parsed things correctly
+  require(serdeClassName.isDefined || serdeProperties.isDefined,
+    "alter table attempted to set neither serde class name nor serde properties")
 
-case class AlterTableNotClustered(
-    tableName: TableIdentifier)(sql: String) extends NativeDDLCommand(sql) with Logging
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    val catalog = sqlContext.sessionState.catalog
+    val table = catalog.getTableMetadata(tableName)
+    // Do not support setting serde for datasource tables
+    if (serdeClassName.isDefined && DDLUtils.isDatasourceTable(table)) {
+      throw new AnalysisException(
+        "alter table serde is not supported for datasource tables")
+    }
+    val newTable = table.withNewStorage(
+      serde = serdeClassName.orElse(table.storage.serde),
+      serdeProperties = table.storage.serdeProperties ++ serdeProperties.getOrElse(Map()))
+    catalog.alterTable(newTable)
+    Seq.empty[Row]
+  }
 
-case class AlterTableNotSorted(
-    tableName: TableIdentifier)(sql: String) extends NativeDDLCommand(sql) with Logging
-
-case class AlterTableSkewed(
-    tableName: TableIdentifier,
-    // e.g. (dt, country)
-    skewedCols: Seq[String],
-    // e.g. ('2008-08-08', 'us), ('2009-09-09', 'uk')
-    skewedValues: Seq[Seq[String]],
-    storedAsDirs: Boolean)(sql: String)
-  extends NativeDDLCommand(sql) with Logging {
-
-  require(skewedValues.forall(_.size == skewedCols.size),
-    "number of columns in skewed values do not match number of skewed columns provided")
 }
-
-case class AlterTableNotSkewed(
-    tableName: TableIdentifier)(sql: String) extends NativeDDLCommand(sql) with Logging
-
-case class AlterTableNotStoredAsDirs(
-    tableName: TableIdentifier)(sql: String) extends NativeDDLCommand(sql) with Logging
-
-case class AlterTableSkewedLocation(
-    tableName: TableIdentifier,
-    skewedMap: Map[String, String])(sql: String)
-  extends NativeDDLCommand(sql) with Logging
 
 /**
  * Add Partition in ALTER TABLE/VIEW: add the table/view partitions.
@@ -312,11 +403,55 @@ case class AlterTableSetFileFormat(
     genericFormat: Option[String])(sql: String)
   extends NativeDDLCommand(sql) with Logging
 
+/**
+ * A command that sets the location of a table or a partition.
+ *
+ * For normal tables, this just sets the location URI in the table/partition's storage format.
+ * For datasource tables, this sets a "path" parameter in the table/partition's serde properties.
+ *
+ * The syntax of this command is:
+ * {{{
+ *    ALTER TABLE table_name [PARTITION partition_spec] SET LOCATION "loc";
+ * }}}
+ */
 case class AlterTableSetLocation(
     tableName: TableIdentifier,
     partitionSpec: Option[TablePartitionSpec],
-    location: String)(sql: String)
-  extends NativeDDLCommand(sql) with Logging
+    location: String)
+  extends RunnableCommand {
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    val catalog = sqlContext.sessionState.catalog
+    val table = catalog.getTableMetadata(tableName)
+    partitionSpec match {
+      case Some(spec) =>
+        // Partition spec is specified, so we set the location only for this partition
+        val part = catalog.getPartition(tableName, spec)
+        val newPart =
+          if (DDLUtils.isDatasourceTable(table)) {
+            throw new AnalysisException(
+              "alter table set location for partition is not allowed for tables defined " +
+              "using the datasource API")
+          } else {
+            part.copy(storage = part.storage.copy(locationUri = Some(location)))
+          }
+        catalog.alterPartitions(tableName, Seq(newPart))
+      case None =>
+        // No partition spec is specified, so we set the location for the table itself
+        val newTable =
+          if (DDLUtils.isDatasourceTable(table)) {
+            table.withNewStorage(
+              locationUri = Some(location),
+              serdeProperties = table.storage.serdeProperties ++ Map("path" -> location))
+          } else {
+            table.withNewStorage(locationUri = Some(location))
+          }
+        catalog.alterTable(newTable)
+    }
+    Seq.empty[Row]
+  }
+
+}
 
 case class AlterTableTouch(
     tableName: TableIdentifier,
@@ -361,3 +496,16 @@ case class AlterTableReplaceCol(
     restrict: Boolean,
     cascade: Boolean)(sql: String)
   extends NativeDDLCommand(sql) with Logging
+
+
+private object DDLUtils {
+
+  def isDatasourceTable(props: Map[String, String]): Boolean = {
+    props.contains("spark.sql.sources.provider")
+  }
+
+  def isDatasourceTable(table: CatalogTable): Boolean = {
+    isDatasourceTable(table.properties)
+  }
+}
+

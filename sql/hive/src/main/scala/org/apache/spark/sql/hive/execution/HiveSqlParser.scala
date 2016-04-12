@@ -21,13 +21,13 @@ import scala.collection.JavaConverters._
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hadoop.hive.ql.exec.FunctionRegistry
 import org.apache.hadoop.hive.ql.parse.EximUtil
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 
-import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
@@ -104,19 +104,6 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
   }
 
   /**
-   * Create a [[DropTable]] command.
-   */
-  override def visitDropTable(ctx: DropTableContext): LogicalPlan = withOrigin(ctx) {
-    if (ctx.PURGE != null) {
-      logWarning("PURGE option is ignored.")
-    }
-    if (ctx.REPLICATION != null) {
-      logWarning("REPLICATION clause is ignored.")
-    }
-    DropTable(visitTableIdentifier(ctx.tableIdentifier).toString, ctx.EXISTS != null)
-  }
-
-  /**
    * Create an [[AnalyzeTable]] command. This currently only implements the NOSCAN option (other
    * options are passed on to Hive) e.g.:
    * {{{
@@ -162,14 +149,16 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
 
       // Unsupported clauses.
       if (temp) {
-        logWarning("TEMPORARY clause is ignored.")
+        throw new ParseException(s"Unsupported operation: TEMPORARY clause.", ctx)
       }
       if (ctx.bucketSpec != null) {
         // TODO add this - we need cluster columns in the CatalogTable for this to work.
-        logWarning("CLUSTERED BY ... [ORDERED BY ...] INTO ... BUCKETS clause is ignored.")
+        throw new ParseException("Unsupported operation: " +
+          "CLUSTERED BY ... [ORDERED BY ...] INTO ... BUCKETS clause.", ctx)
       }
       if (ctx.skewSpec != null) {
-        logWarning("SKEWED BY ... ON ... [STORED AS DIRECTORIES] clause is ignored.")
+        throw new ParseException("Operation not allowed: " +
+          "SKEWED BY ... ON ... [STORED AS DIRECTORIES] clause.", ctx)
       }
 
       // Create the schema.
@@ -215,14 +204,22 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
 
   /**
    * Create or replace a view. This creates a [[CreateViewAsSelect]] command.
+   *
+   * For example:
+   * {{{
+   *   CREATE VIEW [IF NOT EXISTS] [db_name.]view_name
+   *   [(column_name [COMMENT column_comment], ...) ]
+   *   [COMMENT view_comment]
+   *   [TBLPROPERTIES (property_name = property_value, ...)]
+   *   AS SELECT ...;
+   * }}}
    */
   override def visitCreateView(ctx: CreateViewContext): LogicalPlan = withOrigin(ctx) {
-    // Pass a partitioned view on to hive.
     if (ctx.identifierList != null) {
-      HiveNativeCommand(command(ctx))
+      throw new ParseException(s"Operation not allowed: partitioned views", ctx)
     } else {
       if (ctx.STRING != null) {
-        logWarning("COMMENT clause is ignored.")
+        throw new ParseException("Unsupported operation: COMMENT clause", ctx)
       }
       val identifiers = Option(ctx.identifierCommentList).toSeq.flatMap(_.identifierComment.asScala)
       val schema = identifiers.map { ic =>
@@ -278,19 +275,6 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
   }
 
   /**
-   * Create a [[Generator]]. Override this method in order to support custom Generators.
-   */
-  override protected def withGenerator(
-      name: String,
-      expressions: Seq[Expression],
-      ctx: LateralViewContext): Generator = {
-    val info = Option(FunctionRegistry.getFunctionInfo(name.toLowerCase)).getOrElse {
-      throw new ParseException(s"Couldn't find Generator function '$name'", ctx)
-    }
-    HiveGenericUDTF(name, new HiveFunctionWrapper(info.getFunctionClass.getName), expressions)
-  }
-
-  /**
    * Create a [[HiveScriptIOSchema]].
    */
   override protected def withScriptIOSchema(
@@ -301,7 +285,8 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
       recordReader: Token,
       schemaLess: Boolean): HiveScriptIOSchema = {
     if (recordWriter != null || recordReader != null) {
-      logWarning("Used defined record reader/writer classes are currently ignored.")
+      throw new ParseException(
+        "Unsupported operation: Used defined record reader/writer classes.", ctx)
     }
 
     // Decode and input/output format.
@@ -375,7 +360,8 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
       ctx: TableFileFormatContext): CatalogStorageFormat = withOrigin(ctx) {
     import ctx._
     if (inDriver != null || outDriver != null) {
-      logWarning("INPUTDRIVER ... OUTPUTDRIVER ... clauses are ignored.")
+      throw new ParseException(
+        s"Operation not allowed: INPUTDRIVER ... OUTPUTDRIVER ... clauses", ctx)
     }
     EmptyStorageFormat.copy(
       inputFormat = Option(string(inFmt)),

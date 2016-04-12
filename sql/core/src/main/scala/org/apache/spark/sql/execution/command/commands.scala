@@ -407,7 +407,7 @@ case class ShowTablePropertiesCommand(
     if (catalog.isTemporaryTable(table)) {
       Seq.empty[Row]
     } else {
-      val catalogTable = sqlContext.sessionState.catalog.getTable(table)
+      val catalogTable = sqlContext.sessionState.catalog.getTableMetadata(table)
 
       propertyKey match {
         case Some(p) =>
@@ -426,8 +426,12 @@ case class ShowTablePropertiesCommand(
  * A command for users to list all of the registered functions.
  * The syntax of using this command in SQL is:
  * {{{
- *    SHOW FUNCTIONS
+ *    SHOW FUNCTIONS [LIKE pattern]
  * }}}
+ * For the pattern, '*' matches any sequence of characters (including no characters) and
+ * '|' is for alternation.
+ * For example, "show functions like 'yea*|windo*'" will return "window" and "year".
+ *
  * TODO currently we are simply ignore the db
  */
 case class ShowFunctions(db: Option[String], pattern: Option[String]) extends RunnableCommand {
@@ -438,18 +442,17 @@ case class ShowFunctions(db: Option[String], pattern: Option[String]) extends Ru
     schema.toAttributes
   }
 
-  override def run(sqlContext: SQLContext): Seq[Row] = pattern match {
-    case Some(p) =>
-      try {
-        val regex = java.util.regex.Pattern.compile(p)
-        sqlContext.sessionState.functionRegistry.listFunction()
-          .filter(regex.matcher(_).matches()).map(Row(_))
-      } catch {
-        // probably will failed in the regex that user provided, then returns empty row.
-        case _: Throwable => Seq.empty[Row]
-      }
-    case None =>
-      sqlContext.sessionState.functionRegistry.listFunction().map(Row(_))
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    val dbName = db.getOrElse(sqlContext.sessionState.catalog.getCurrentDatabase)
+    // If pattern is not specified, we use '*', which is used to
+    // match any sequence of characters (including no characters).
+    val functionNames =
+      sqlContext.sessionState.catalog
+        .listFunctions(dbName, pattern.getOrElse("*"))
+        .map(_.unquotedString)
+    // The session catalog caches some persistent functions in the FunctionRegistry
+    // so there can be duplicates.
+    functionNames.distinct.sorted.map(Row(_))
   }
 }
 
@@ -480,20 +483,38 @@ case class DescribeFunction(
   }
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.sessionState.functionRegistry.lookupFunction(functionName) match {
-      case Some(info) =>
-        val result =
-          Row(s"Function: ${info.getName}") ::
-          Row(s"Class: ${info.getClassName}") ::
-          Row(s"Usage: ${replaceFunctionName(info.getUsage(), info.getName)}") :: Nil
+    // Hard code "<>", "!=", "between", and "case" for now as there is no corresponding functions.
+    functionName.toLowerCase match {
+      case "<>" =>
+        Row(s"Function: $functionName") ::
+        Row(s"Usage: a <> b - Returns TRUE if a is not equal to b") :: Nil
+      case "!=" =>
+        Row(s"Function: $functionName") ::
+        Row(s"Usage: a != b - Returns TRUE if a is not equal to b") :: Nil
+      case "between" =>
+        Row(s"Function: between") ::
+        Row(s"Usage: a [NOT] BETWEEN b AND c - " +
+          s"evaluate if a is [not] in between b and c") :: Nil
+      case "case" =>
+        Row(s"Function: case") ::
+        Row(s"Usage: CASE a WHEN b THEN c [WHEN d THEN e]* [ELSE f] END - " +
+          s"When a = b, returns c; when a = d, return e; else return f") :: Nil
+      case _ => sqlContext.sessionState.functionRegistry.lookupFunction(functionName) match {
+        case Some(info) =>
+          val result =
+            Row(s"Function: ${info.getName}") ::
+            Row(s"Class: ${info.getClassName}") ::
+            Row(s"Usage: ${replaceFunctionName(info.getUsage(), info.getName)}") :: Nil
 
-        if (isExtended) {
-          result :+ Row(s"Extended Usage:\n${replaceFunctionName(info.getExtended, info.getName)}")
-        } else {
-          result
-        }
+          if (isExtended) {
+            result :+
+              Row(s"Extended Usage:\n${replaceFunctionName(info.getExtended, info.getName)}")
+          } else {
+            result
+          }
 
-      case None => Seq(Row(s"Function: $functionName not found."))
+        case None => Seq(Row(s"Function: $functionName not found."))
+      }
     }
   }
 }
