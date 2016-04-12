@@ -17,21 +17,20 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.ml.util.{DefaultReadWriteTest}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.Row
 
 class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
-  test("Imputer for Double column") {
+  test("Imputer for Double with default missing Value NaN") {
     val df = sqlContext.createDataFrame( Seq(
       (0, 1.0, 1.0, 1.0, 1.0),
       (1, 1.0, 1.0, 1.0, 1.0),
       (2, 3.0, 3.0, 3.0, 3.0),
       (3, 4.0, 4.0, 4.0, 4.0),
-      (4, Double.NaN, 2.25, 3.0, 1.0 )
+      (4, Double.NaN, 2.25, 1.0, 1.0 )
     )).toDF("id", "value", "mean", "median", "most")
     Seq("mean", "median", "most").foreach { strategy =>
       val imputer = new Imputer().setInputCol("value").setOutputCol("out").setStrategy(strategy)
@@ -49,7 +48,7 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
       (1, 1.0, 1.0, 1.0, 1.0),
       (2, 3.0, 3.0, 3.0, 3.0),
       (3, 4.0, 4.0, 4.0, 4.0),
-      (4, -1.0, 2.25, 3.0, 1.0 )
+      (4, -1.0, 2.25, 1.0, 1.0 )
     )).toDF("id", "value", "mean", "median", "most")
     Seq("mean", "median", "most").foreach { strategy =>
       val imputer = new Imputer().setInputCol("value").setOutputCol("out").setStrategy(strategy)
@@ -62,26 +61,43 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
     }
   }
 
-  test("Imputer for Vector column with NaN and null") {
+  test("Imputer for Int with missing Value -1") {
     val df = sqlContext.createDataFrame( Seq(
-      (0, Vectors.dense(1, 2), Vectors.dense(1, 2), Vectors.dense(1, 2), Vectors.dense(1, 2)),
-      (1, Vectors.dense(1, 2), Vectors.dense(1, 2), Vectors.dense(1, 2), Vectors.dense(1, 2)),
-      (2, Vectors.dense(3, 2), Vectors.dense(3, 2), Vectors.dense(3, 2), Vectors.dense(3, 2)),
-      (3, Vectors.dense(4, 2), Vectors.dense(4, 2), Vectors.dense(4, 2), Vectors.dense(4, 2)),
-      (4, Vectors.dense(Double.NaN, 2), Vectors.dense(2.25, 2), Vectors.dense(3.0, 2),
-        Vectors.dense(1.0, 2)),
-      (5, Vectors.sparse(2, Array(0, 1), Array(Double.NaN, 2.0)), Vectors.dense(2.25, 2),
-        Vectors.dense(3.0, 2), Vectors.dense(1.0, 2)),
-      (6, null.asInstanceOf[Vector], Vectors.dense(2.25, 2), Vectors.dense(3.0, 2),
-        Vectors.dense(1.0, 2))
+      (0, 1, 1, 1, 1),
+      (1, 3, 3, 3, 3),
+      (2, 10, 10, 10, 10),
+      (3, 10, 10, 10, 10),
+      (4, -1, 6, 3, 10)
     )).toDF("id", "value", "mean", "median", "most")
+
     Seq("mean", "median", "most").foreach { strategy =>
       val imputer = new Imputer().setInputCol("value").setOutputCol("out").setStrategy(strategy)
+        .setMissingValue(-1)
       val model = imputer.fit(df)
       model.transform(df).select(strategy, "out").collect()
-        .foreach { case Row(v1: Vector, v2: Vector) =>
-          assert(v1 == v2, s"$strategy Imputer ut error: $v2 should be $v1")
+        .foreach { case Row(d1: Int, d2: Int) =>
+          assert(d1 === d2, s"Imputer ut error: $d2 should be $d1")
         }
+    }
+  }
+
+  test("Imputer should impute null") {
+    val df = sqlContext.createDataFrame( Seq(
+      (0, 1, 1, 1, 1),
+      (1, 3, 3, 3, 3),
+      (2, 10, 10, 10, 10),
+      (3, 10, 10, 10, 10),
+      (4, -1, 6, 3, 10)
+    )).toDF("id", "value", "mean", "median", "most")
+    val df2 = df.selectExpr("*", "IF(value=-1, null, value) as nullable_value")
+    Seq("mean", "median", "most").foreach { strategy =>
+      val imputer = new Imputer().setInputCol("nullable_value").setOutputCol("out")
+        .setStrategy(strategy)
+      val model = imputer.fit(df2)
+      model.transform(df2).select(strategy, "out").collect()
+        .foreach { case Row(d1: Int, d2: Int) =>
+        assert(d1 == d2, s"Imputer ut error: $d2 should be $d1")
+      }
     }
   }
 
@@ -95,11 +111,11 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
 
   test("ImputerModel read/write") {
     val instance = new ImputerModel(
-      "myImputer", Vectors.dense(1.0, 10.0))
+      "myImputer", 1.234)
       .setInputCol("myInputCol")
       .setOutputCol("myOutputCol")
     val newInstance = testDefaultReadWrite(instance)
-    assert(newInstance.alternate === instance.alternate)
+    assert(newInstance.surrogate === instance.surrogate)
   }
 
 }
