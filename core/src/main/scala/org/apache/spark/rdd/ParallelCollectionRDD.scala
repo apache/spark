@@ -128,7 +128,7 @@ private object ParallelCollectionRDD {
       })
     }
     seq match {
-      case r: Range => {
+      case r: Range =>
         positions(r.length, numSlices).zipWithIndex.map({ case ((start, end), index) =>
           // If the range is inclusive, use inclusive range for the last slice
           if (r.isInclusive && index == numSlices - 1) {
@@ -138,8 +138,7 @@ private object ParallelCollectionRDD {
             new Range(r.start + start * r.step, r.start + end * r.step, r.step)
           }
         }).toSeq.asInstanceOf[Seq[Seq[T]]]
-      }
-      case nr: NumericRange[_] => {
+      case nr: NumericRange[_] =>
         // For ranges of Long, Double, BigInteger, etc
         val slices = new ArrayBuffer[Seq[T]](numSlices)
         var r = nr
@@ -149,14 +148,12 @@ private object ParallelCollectionRDD {
           r = r.drop(sliceSize)
         }
         slices
-      }
-      case _ => {
+      case _ =>
         val array = seq.toArray // To prevent O(n^2) operations for List etc
         positions(array.length, numSlices).map({
           case (start, end) =>
             array.slice(start, end).toSeq
         }).toSeq
-      }
     }
   }
 }

@@ -253,16 +253,14 @@ class KMeans private (
     }
 
     val centers = initialModel match {
-      case Some(kMeansCenters) => {
+      case Some(kMeansCenters) =>
         Array(kMeansCenters.clusterCenters.map(s => new VectorWithNorm(s)))
-      }
-      case None => {
+      case None =>
         if (initializationMode == KMeans.RANDOM) {
           initRandom(data)
         } else {
           initKMeansParallel(data)
         }
-      }
     }
     val initTimeInSeconds = (System.nanoTime() - initStartTime) / 1e9
     logInfo(s"Initialization with $initializationMode took " + "%.3f".format(initTimeInSeconds) +

@@ -97,11 +97,11 @@ class EquivalentExpressions {
   def debugString(all: Boolean = false): String = {
     val sb: mutable.StringBuilder = new StringBuilder()
     sb.append("Equivalent expressions:\n")
-    equivalenceMap.foreach { case (k, v) => {
+    equivalenceMap.foreach { case (k, v) =>
       if (all || v.length > 1) {
         sb.append("  " + v.mkString(", ")).append("\n")
       }
-    }}
+    }
     sb.toString()
   }
 }

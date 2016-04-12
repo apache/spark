@@ -228,6 +228,11 @@ This file is divided into 3 sections:
     <customMessage>Use Javadoc style indentation for multiline comments</customMessage>
   </check>
 
+  <check customId="OmitBracesInCase" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">case[^\n>]*=>\s*\{</parameter></parameters>
+    <customMessage>Omit braces in case clauses.</customMessage>
+  </check>
+
   <!-- ================================================================================ -->
   <!--       rules we'd like to enforce, but haven't cleaned up the codebase yet        -->
   <!-- ================================================================================ -->
