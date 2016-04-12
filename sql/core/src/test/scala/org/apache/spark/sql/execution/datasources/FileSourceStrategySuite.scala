@@ -365,18 +365,6 @@ class TestFileFormat extends FileFormat {
     throw new NotImplementedError("JUST FOR TESTING")
   }
 
-  override def buildInternalScan(
-      sqlContext: SQLContext,
-      dataSchema: StructType,
-      requiredColumns: Array[String],
-      filters: Array[Filter],
-      bucketSet: Option[BitSet],
-      inputFiles: Seq[FileStatus],
-      broadcastedConf: Broadcast[SerializableConfiguration],
-      options: Map[String, String]): RDD[InternalRow] = {
-    throw new NotImplementedError("JUST FOR TESTING")
-  }
-
   override def buildReader(
       sqlContext: SQLContext,
       dataSchema: StructType,

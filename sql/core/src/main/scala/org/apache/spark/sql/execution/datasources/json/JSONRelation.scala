@@ -93,35 +93,6 @@ class DefaultSource extends FileFormat with DataSourceRegister {
     }
   }
 
-  override def buildInternalScan(
-      sqlContext: SQLContext,
-      dataSchema: StructType,
-      requiredColumns: Array[String],
-      filters: Array[Filter],
-      bucketSet: Option[BitSet],
-      inputFiles: Seq[FileStatus],
-      broadcastedConf: Broadcast[SerializableConfiguration],
-      options: Map[String, String]): RDD[InternalRow] = {
-    // TODO: Filter files for all formats before calling buildInternalScan.
-    val jsonFiles = inputFiles.filterNot(_.getPath.getName startsWith "_")
-
-    val parsedOptions: JSONOptions = new JSONOptions(options)
-    val requiredDataSchema = StructType(requiredColumns.map(dataSchema(_)))
-    val columnNameOfCorruptRecord =
-      parsedOptions.columnNameOfCorruptRecord
-        .getOrElse(sqlContext.conf.columnNameOfCorruptRecord)
-    val rows = JacksonParser.parse(
-      createBaseRdd(sqlContext, jsonFiles),
-      requiredDataSchema,
-      columnNameOfCorruptRecord,
-      parsedOptions)
-
-    rows.mapPartitions { iterator =>
-      val unsafeProjection = UnsafeProjection.create(requiredDataSchema)
-      iterator.map(unsafeProjection)
-    }
-  }
-
   override def buildReader(
       sqlContext: SQLContext,
       dataSchema: StructType,

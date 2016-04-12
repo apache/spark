@@ -111,19 +111,6 @@ private[sql] class DefaultSource
     }
   }
 
-  override def buildInternalScan(
-      sqlContext: SQLContext,
-      dataSchema: StructType,
-      requiredColumns: Array[String],
-      filters: Array[Filter],
-      bucketSet: Option[BitSet],
-      inputFiles: Seq[FileStatus],
-      broadcastedConf: Broadcast[SerializableConfiguration],
-      options: Map[String, String]): RDD[InternalRow] = {
-    val output = StructType(requiredColumns.map(dataSchema(_))).toAttributes
-    OrcTableScan(sqlContext, output, filters, inputFiles).execute()
-  }
-
   override def buildReader(
       sqlContext: SQLContext,
       dataSchema: StructType,
