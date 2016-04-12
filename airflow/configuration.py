@@ -94,6 +94,9 @@ defaults = {
         'dagbag_import_timeout': 30,
         'non_pooled_task_slot_count': 128,
     },
+    'operators': {
+        'default_owner': 'airflow'
+    },
     'webserver': {
         'base_url': 'http://localhost:8080',
         'web_server_host': '0.0.0.0',
@@ -216,6 +219,13 @@ donot_pickle = False
 
 # How long before timing out a python file import while filling the DagBag
 dagbag_import_timeout = 30
+
+
+[operators]
+# The default owner assigned to each new operator, unless
+# provided explicitly or passed via `default_args`
+default_owner = Airflow
+
 
 [webserver]
 # The base url of your website as airflow cannot guess what domain or
@@ -372,6 +382,9 @@ dag_concurrency = 16
 dags_are_paused_at_creation = False
 fernet_key = {FERNET_KEY}
 non_pooled_task_slot_count = 128
+
+[operators]
+default_owner = airflow
 
 [webserver]
 base_url = http://localhost:8080

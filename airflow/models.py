@@ -65,7 +65,6 @@ from airflow.utils.state import State
 from airflow.utils.timeout import timeout
 from airflow.utils.trigger_rule import TriggerRule
 
-
 Base = declarative_base()
 ID_LEN = 250
 SQL_ALCHEMY_CONN = configuration.get('core', 'SQL_ALCHEMY_CONN')
@@ -84,6 +83,9 @@ if 'mysql' in SQL_ALCHEMY_CONN:
     LongText = LONGTEXT
 else:
     LongText = Text
+
+# used by DAG context_managers
+_CONTEXT_MANAGER_DAG = None
 
 
 def clear_task_instances(tis, session, activate_dag_runs=True):
@@ -1604,7 +1606,7 @@ class BaseOperator(object):
     def __init__(
             self,
             task_id,
-            owner,
+            owner=configuration.get('operators', 'DEFAULT_OWNER'),
             email=None,
             email_on_retry=True,
             email_on_failure=True,
@@ -1643,7 +1645,6 @@ class BaseOperator(object):
             )
 
         validate_key(task_id)
-        self.dag_id = dag.dag_id if dag else 'adhoc_' + owner
         self.task_id = task_id
         self.owner = owner
         self.email = email
@@ -1689,13 +1690,15 @@ class BaseOperator(object):
         self.params = params or {}  # Available in templates!
         self.adhoc = adhoc
         self.priority_weight = priority_weight
-        if dag:
-            dag.add_task(self)
-            self.dag = dag
 
         # Private attributes
         self._upstream_task_ids = []
         self._downstream_task_ids = []
+
+        if not dag and _CONTEXT_MANAGER_DAG:
+            dag = _CONTEXT_MANAGER_DAG
+        if dag:
+            self.dag = dag
 
         self._comps = {
             'task_id',
@@ -1740,6 +1743,96 @@ class BaseOperator(object):
                 hash_components.append(repr(val))
         return hash(tuple(hash_components))
 
+    # Composing Operators -----------------------------------------------
+
+    def __rshift__(self, other):
+        """
+        Implements Self >> Other == self.set_downstream(other)
+
+        If "Other" is a DAG, the DAG is assigned to the Operator.
+        """
+        if isinstance(other, DAG):
+            # if this dag is already assigned, do nothing
+            # otherwise, do normal dag assignment
+            if not (self.has_dag() and self.dag is other):
+                self.dag = other
+        else:
+            self.set_downstream(other)
+        return other
+
+    def __lshift__(self, other):
+        """
+        Implements Self << Other == self.set_upstream(other)
+
+        If "Other" is a DAG, the DAG is assigned to the Operator.
+        """
+        if isinstance(other, DAG):
+            # if this dag is already assigned, do nothing
+            # otherwise, do normal dag assignment
+            if not (self.has_dag() and self.dag is other):
+                self.dag = other
+        else:
+            self.set_upstream(other)
+        return other
+
+    def __rrshift__(self, other):
+        """
+        Called for [DAG] >> [Operator] because DAGs don't have
+        __rshift__ operators.
+        """
+        self.__lshift__(other)
+        return self
+
+    def __rlshift__(self, other):
+        """
+        Called for [DAG] << [Operator] because DAGs don't have
+        __lshift__ operators.
+        """
+        self.__rshift__(other)
+        return self
+
+    # /Composing Operators ---------------------------------------------
+
+    @property
+    def dag(self):
+        """
+        Returns the Operator's DAG if set, otherwise raises an error
+        """
+        if self.has_dag():
+            return self._dag
+        else:
+            raise AirflowException(
+                'Operator {} has not been assigned to a DAG yet'.format(self))
+
+    @dag.setter
+    def dag(self, dag):
+        """
+        Operators can be assigned to one DAG, one time. Repeat assignments to
+        that same DAG are ok.
+        """
+        if not isinstance(dag, DAG):
+            raise TypeError(
+                'Expected DAG; received {}'.format(dag.__class__.__name__))
+        elif self.has_dag() and self.dag is not dag:
+            raise AirflowException(
+                "The DAG assigned to {} can not be changed.".format(self))
+        elif self.task_id not in [t.task_id for t in dag.tasks]:
+            dag.add_task(self)
+            self._dag = dag
+
+    def has_dag(self):
+        """
+        Returns True if the Operator has been assigned to a DAG.
+        """
+        return getattr(self, '_dag', None) is not None
+
+    @property
+    def dag_id(self):
+        if self.has_dag():
+            return self.dag.dag_id
+        else:
+            return 'adhoc_' + self.owner
+
     @property
     def schedule_interval(self):
         """
@@ -1747,7 +1840,7 @@ class BaseOperator(object):
         that tasks within a DAG always line up. The task still needs a
         schedule_interval as it may not be attached to a DAG.
         """
-        if hasattr(self, 'dag') and self.dag:
+        if self.has_dag():
             return self.dag._schedule_interval
         else:
             return self._schedule_interval
@@ -1998,7 +2091,6 @@ class BaseOperator(object):
                 logging.info('Rendering template for {0}'.format(attr))
                 logging.info(content)
 
-
     def get_direct_relatives(self, upstream=False):
         """
         Get the direct relatives to the current task, upstream or
@@ -2010,7 +2102,8 @@ class BaseOperator(object):
             return self.downstream_list
 
     def __repr__(self):
-        return "<Task({self.__class__.__name__}): {self.task_id}>".format(self=self)
+        return "<Task({self.__class__.__name__}): {self.task_id}>".format(
+            self=self)
 
     @property
     def task_type(self):
@@ -2029,9 +2122,35 @@ class BaseOperator(object):
             task_list = list(task_or_task_list)
         except TypeError:
             task_list = [task_or_task_list]
+
+        for t in task_list:
+            if not isinstance(t, BaseOperator):
+                raise AirflowException(
+                    "Relationships can only be set between "
+                    "Operators; received {}".format(t.__class__.__name__))
+
+        # relationships can only be set if the tasks share a single DAG. Tasks
+        # without a DAG are assigned to that DAG.
+        dags = set(t.dag for t in [self] + task_list if t.has_dag())
+
+        if len(dags) > 1:
+            raise AirflowException(
+                'Tried to set relationships between tasks in '
+                'more than one DAG: {}'.format(dags))
+        elif len(dags) == 1:
+            dag = list(dags)[0]
+        else:
+            raise AirflowException(
+                "Tried to create relationships between tasks that don't have "
+                "DAGs yet. Set the DAG for at least one "
+                "task  and try again: {}".format([self] + task_list))
+
+        if dag and not self.has_dag():
+            self.dag = dag
+
         for task in task_list:
-            if not isinstance(task, BaseOperator):
-                raise AirflowException('Expecting a task')
+            if dag and not task.has_dag():
+                task.dag = dag
             if upstream:
                 task.append_only_new(task._downstream_task_ids, self.task_id)
                 self.append_only_new(self._upstream_task_ids, task.task_id)
@@ -2278,6 +2397,20 @@ class DAG(LoggingMixin):
             except TypeError:
                 hash_components.append(repr(val))
         return hash(tuple(hash_components))
+
+    # Context Manager -----------------------------------------------
+
+    def __enter__(self):
+        global _CONTEXT_MANAGER_DAG
+        self._old_context_manager_dag = _CONTEXT_MANAGER_DAG
+        _CONTEXT_MANAGER_DAG = self
+        return self
+
+    def __exit__(self, _type, _value, _tb):
+        global _CONTEXT_MANAGER_DAG
+        _CONTEXT_MANAGER_DAG = self._old_context_manager_dag
+
+    # /Context Manager ----------------------------------------------
 
     def date_range(self, start_date, num=None, end_date=datetime.now()):
         if num:
@@ -2739,8 +2872,8 @@ class DAG(LoggingMixin):
                 "to the DAG ".format(task.task_id))
         else:
             self.tasks.append(task)
-            task.dag_id = self.dag_id
             task.dag = self
+
         self.task_count = len(self.tasks)
 
     def add_tasks(self, tasks):
@@ -3057,8 +3190,8 @@ class XCom(Base):
             xcoms = [xcoms]
         for xcom in xcoms:
             if not isinstance(xcom, XCom):
-                raise TypeError(
-                    'Expected XCom; received {}'.format(type(xcom)))
+                raise TypeError('Expected XCom; received {}'.format(
+                                xcom.__class__.__name__))
             session.delete(xcom)
         session.commit()
 
