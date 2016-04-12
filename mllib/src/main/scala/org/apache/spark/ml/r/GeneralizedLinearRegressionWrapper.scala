@@ -72,7 +72,7 @@ private[r] object GeneralizedLinearRegressionWrapper {
       .setTol(epsilon)
       .setMaxIter(maxit)
     val pipeline = new Pipeline()
-      .setStages(Array(rFormula, glm))
+      .setStages(Array(rFormulaModel, glm))
       .fit(data)
     new GeneralizedLinearRegressionWrapper(pipeline, features)
   }
