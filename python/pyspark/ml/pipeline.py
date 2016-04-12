@@ -294,7 +294,7 @@ class PipelineModel(Model, MLReadable, MLWritable):
         for idx, stage in enumerate(self.stages):
             java_stages[idx] = stage._to_java()
 
-        _java_obj = \
+        _java_obj =\
             JavaParams._new_java_obj("org.apache.spark.ml.PipelineModel", self.uid, java_stages)
 
         return _java_obj
