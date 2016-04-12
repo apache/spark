@@ -95,21 +95,19 @@ private[spark] object CodeGenerationDecisionTreeModel extends Logging {
     }
     // Handle the different types of nodes
     root match {
-      case node: InternalNode => {
+      case node: InternalNode =>
         // Handle trees that get too large to fit in a single in-line java method
         depth match {
-          case 8 => {
+          case 8 =>
             val newFunctionName = freshName()
             val newFunction = nodeToFunction(root, newFunctionName)
             (s"return ${newFunctionName}(input);", newFunction)
-          }
-          case _ => {
+          case _ =>
             val nodeSplit = node.split
             val (leftSubCode, leftSubFunction) = nodeToTree(node.leftChild, depth + 1)
             val (rightSubCode, rightSubFunction) = nodeToTree(node.rightChild, depth + 1)
             val subCode = nodeSplit match {
-              case split: CategoricalSplit => {
-
+              case split: CategoricalSplit =>
                 val isLeft = split.isLeft
                 isLeft match {
                   case true => s"""
@@ -125,20 +123,16 @@ private[spark] object CodeGenerationDecisionTreeModel extends Logging {
                                  ${leftSubCode}
                                }"""
                 }
-              }
-              case split: ContinuousSplit => {
+              case split: ContinuousSplit =>
                 s"""
                if (input.apply(${split.featureIndex}) <= ${split.threshold}) {
                  ${leftSubCode}
                 } else {
                  ${rightSubCode}
                 }"""
-              }
             }
             (subCode, leftSubFunction + rightSubFunction)
-          }
         }
-      }
       case node: LeafNode => (s"return ${node.prediction};", "")
     }
   }
