@@ -186,7 +186,7 @@ private[columnar] case object RunLengthEncoding extends CompressionScheme {
       var runLocal = 0
       var valueCountLocal = 0
       columnType.dataType match {
-        case _: BooleanType => {
+        case _: BooleanType =>
           val out = ByteBuffer.allocate(capacity).order(ByteOrder.nativeOrder())
           var currentValueLocal: Boolean = false
           while (valueCountLocal < runLocal || buffer.hasRemaining) {
@@ -211,8 +211,7 @@ private[columnar] case object RunLengthEncoding extends CompressionScheme {
           out.rewind()
           nullsBuffer.rewind()
           (out, nullsBuffer)
-        }
-        case _: ByteType => {
+        case _: ByteType =>
           val out = ByteBuffer.allocate(capacity).order(ByteOrder.nativeOrder())
           var currentValueLocal: Byte = 0
           while (valueCountLocal < runLocal || buffer.hasRemaining) {
@@ -237,8 +236,7 @@ private[columnar] case object RunLengthEncoding extends CompressionScheme {
           out.rewind()
           nullsBuffer.rewind()
           (out, nullsBuffer)
-        }
-        case _: ShortType => {
+        case _: ShortType =>
           val out = ByteBuffer.allocate(capacity * 2).order(ByteOrder.nativeOrder())
           var currentValueLocal: Short = 0
           while (valueCountLocal < runLocal || buffer.hasRemaining) {
@@ -263,8 +261,7 @@ private[columnar] case object RunLengthEncoding extends CompressionScheme {
           out.rewind()
           nullsBuffer.rewind()
           (out, nullsBuffer)
-        }
-        case _: IntegerType => {
+        case _: IntegerType =>
           val out = ByteBuffer.allocate(capacity * 4).order(ByteOrder.nativeOrder())
 /*
           var currentValueLocal: Int = 0
@@ -279,7 +276,6 @@ private[columnar] case object RunLengthEncoding extends CompressionScheme {
             ByteBufferHelper.putInt(out, currentValueLocal)
           }
 */
-
           val inarray = buffer.array
           var inoffset = buffer.position
           val inlimit = buffer.limit
@@ -317,8 +313,7 @@ private[columnar] case object RunLengthEncoding extends CompressionScheme {
           out.rewind()
           nullsBuffer.rewind()
           (out, nullsBuffer)
-        }
-        case _: LongType => {
+        case _: LongType =>
           val nullsBuffer = buffer.duplicate().order(ByteOrder.nativeOrder())
           val out = ByteBuffer.allocate(capacity * 8).order(ByteOrder.nativeOrder())
           var currentValueLocal: Long = 0
@@ -344,7 +339,6 @@ private[columnar] case object RunLengthEncoding extends CompressionScheme {
           out.rewind()
           nullsBuffer.rewind()
           (out, nullsBuffer)
-        }
         case _ => throw new IllegalStateException("Not supported type in RunLengthEncoding.")
       }
     }
