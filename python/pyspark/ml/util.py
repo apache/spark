@@ -99,7 +99,7 @@ class MLWriter(object):
 @inherit_doc
 class JavaMLWriter(MLWriter):
     """
-    (Private) Specialization of :py:class:`MLWriter` for :py:class:`JavaWrapper` types
+    (Private) Specialization of :py:class:`MLWriter` for :py:class:`JavaParams` types
     """
 
     def __init__(self, instance):
@@ -178,7 +178,7 @@ class MLReader(object):
 @inherit_doc
 class JavaMLReader(MLReader):
     """
-    (Private) Specialization of :py:class:`MLReader` for :py:class:`JavaWrapper` types
+    (Private) Specialization of :py:class:`MLReader` for :py:class:`JavaParams` types
     """
 
     def __init__(self, clazz):

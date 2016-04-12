@@ -61,7 +61,7 @@ class JavaWrapper(object):
 
 
 @inherit_doc
-class JavaWrapperParams(JavaWrapper, Params):
+class JavaParams(JavaWrapper, Params):
     """
     Utility class to help create wrapper classes from Java/Scala
     implementations of pipeline components.
@@ -166,7 +166,7 @@ class JavaWrapperParams(JavaWrapper, Params):
         stage_name = java_stage.getClass().getName().replace("org.apache.spark", "pyspark")
         # Generate a default new instance from the stage_name class.
         py_type = __get_class(stage_name)
-        if issubclass(py_type, JavaWrapperParams):
+        if issubclass(py_type, JavaParams):
             # Load information from java_stage to the instance.
             py_stage = py_type()
             py_stage._java_obj = java_stage
@@ -181,7 +181,7 @@ class JavaWrapperParams(JavaWrapper, Params):
 
 
 @inherit_doc
-class JavaEstimator(JavaWrapperParams, Estimator):
+class JavaEstimator(JavaParams, Estimator):
     """
     Base class for :py:class:`Estimator`s that wrap Java/Scala
     implementations.
@@ -214,7 +214,7 @@ class JavaEstimator(JavaWrapperParams, Estimator):
 
 
 @inherit_doc
-class JavaTransformer(JavaWrapperParams, Transformer):
+class JavaTransformer(JavaParams, Transformer):
     """
     Base class for :py:class:`Transformer`s that wrap Java/Scala
     implementations. Subclasses should ensure they have the transformer Java object
