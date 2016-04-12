@@ -44,7 +44,7 @@ private[r] class AFTSurvivalRegressionWrapper private (
   }
 
   def transform(dataset: Dataset[_]): DataFrame = {
-    pipeline.transform(dataset)
+    pipeline.transform(dataset).drop(aftModel.getFeaturesCol)
   }
 }
 

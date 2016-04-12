@@ -37,7 +37,9 @@ private[r] class NaiveBayesWrapper private (
   lazy val tables: Array[Double] = naiveBayesModel.theta.toArray.map(math.exp)
 
   def transform(dataset: Dataset[_]): DataFrame = {
-    pipeline.transform(dataset).drop(PREDICTED_LABEL_INDEX_COL)
+    pipeline.transform(dataset)
+      .drop(PREDICTED_LABEL_INDEX_COL)
+      .drop(naiveBayesModel.getFeaturesCol)
   }
 }
 
