@@ -41,6 +41,13 @@ class HiveDDLCommandSuite extends PlanTest {
     }.head
   }
 
+  private def assertUnsupported(sql: String): Unit = {
+    val e = intercept[ParseException] {
+      parser.parsePlan(sql)
+    }
+    assert(e.getMessage.toLowerCase.contains("unsupported"))
+  }
+
   test("Test CTAS #1") {
     val s1 =
       """CREATE EXTERNAL TABLE IF NOT EXISTS mydb.page_view
@@ -367,4 +374,9 @@ class HiveDDLCommandSuite extends PlanTest {
       parser.parsePlan(v1).isInstanceOf[HiveNativeCommand]
     }
   }
+
+  test("MSCK repair table (not supported)") {
+    assertUnsupported("MSCK REPAIR TABLE tab1")
+  }
+
 }

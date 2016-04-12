@@ -58,6 +58,10 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     assert(e.getMessage.toLowerCase.contains("operation not allowed"))
   }
 
+  private def maybeWrapException[T](expectException: Boolean)(body: => T): Unit = {
+    if (expectException) intercept[AnalysisException] { body } else body
+  }
+
   private def createDatabase(catalog: SessionCatalog, name: String): Unit = {
     catalog.createDatabase(CatalogDatabase(name, "", "", Map()), ignoreIfExists = false)
   }
@@ -320,6 +324,62 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     assertUnsupported("ALTER TABLE dbx.tab1 NOT STORED AS DIRECTORIES")
   }
 
+  test("alter table: add partition") {
+    testAddPartitions(isDatasourceTable = false)
+  }
+
+  test("alter table: add partition (datasource table)") {
+    testAddPartitions(isDatasourceTable = true)
+  }
+
+  test("alter table: add partition is not supported for views") {
+    assertUnsupported("ALTER VIEW dbx.tab1 ADD IF NOT EXISTS PARTITION (b='2')")
+  }
+
+  test("alter table: drop partition") {
+    testDropPartitions(isDatasourceTable = false)
+  }
+
+  test("alter table: drop partition (datasource table)") {
+    testDropPartitions(isDatasourceTable = true)
+  }
+
+  test("alter table: drop partition is not supported for views") {
+    assertUnsupported("ALTER VIEW dbx.tab1 DROP IF EXISTS PARTITION (b='2')")
+  }
+
+  test("alter table: rename partition") {
+    val catalog = sqlContext.sessionState.catalog
+    val tableIdent = TableIdentifier("tab1", Some("dbx"))
+    val part1 = Map("a" -> "1")
+    val part2 = Map("b" -> "2")
+    val part3 = Map("c" -> "3")
+    createDatabase(catalog, "dbx")
+    createTable(catalog, tableIdent)
+    createTablePartition(catalog, part1, tableIdent)
+    createTablePartition(catalog, part2, tableIdent)
+    createTablePartition(catalog, part3, tableIdent)
+    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
+      Set(part1, part2, part3))
+    sql("ALTER TABLE dbx.tab1 PARTITION (a='1') RENAME TO PARTITION (a='100')")
+    sql("ALTER TABLE dbx.tab1 PARTITION (b='2') RENAME TO PARTITION (b='200')")
+    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
+      Set(Map("a" -> "100"), Map("b" -> "200"), part3))
+    // rename without explicitly specifying database
+    catalog.setCurrentDatabase("dbx")
+    sql("ALTER TABLE tab1 PARTITION (a='100') RENAME TO PARTITION (a='10')")
+    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
+      Set(Map("a" -> "10"), Map("b" -> "200"), part3))
+    // table to alter does not exist
+    intercept[AnalysisException] {
+      sql("ALTER TABLE does_not_exist PARTITION (c='3') RENAME TO PARTITION (c='333')")
+    }
+    // partition to rename does not exist
+    intercept[AnalysisException] {
+      sql("ALTER TABLE tab1 PARTITION (x='300') RENAME TO PARTITION (x='333')")
+    }
+  }
+
   // TODO: ADD a testcase for Drop Database in Restric when we can create tables in SQLContext
 
   test("show tables") {
@@ -487,10 +547,6 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         assert(storageFormat.locationUri === Some(expected))
       }
     }
-    // Optionally expect AnalysisException
-    def maybeWrapException[T](expectException: Boolean)(body: => T): Unit = {
-      if (expectException) intercept[AnalysisException] { body } else body
-    }
     // set table location
     sql("ALTER TABLE dbx.tab1 SET LOCATION '/path/to/your/lovely/heart'")
     verifyLocation("/path/to/your/lovely/heart")
@@ -561,6 +617,104 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     // table to alter does not exist
     intercept[AnalysisException] {
       sql("ALTER TABLE does_not_exist SET SERDEPROPERTIES ('x' = 'y')")
+    }
+  }
+
+  private def testAddPartitions(isDatasourceTable: Boolean): Unit = {
+    val catalog = sqlContext.sessionState.catalog
+    val tableIdent = TableIdentifier("tab1", Some("dbx"))
+    val part1 = Map("a" -> "1")
+    val part2 = Map("b" -> "2")
+    val part3 = Map("c" -> "3")
+    val part4 = Map("d" -> "4")
+    createDatabase(catalog, "dbx")
+    createTable(catalog, tableIdent)
+    createTablePartition(catalog, part1, tableIdent)
+    if (isDatasourceTable) {
+      convertToDatasourceTable(catalog, tableIdent)
+    }
+    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1))
+    maybeWrapException(isDatasourceTable) {
+      sql("ALTER TABLE dbx.tab1 ADD IF NOT EXISTS " +
+        "PARTITION (b='2') LOCATION 'paris' PARTITION (c='3')")
+    }
+    if (!isDatasourceTable) {
+      assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1, part2, part3))
+      assert(catalog.getPartition(tableIdent, part1).storage.locationUri.isEmpty)
+      assert(catalog.getPartition(tableIdent, part2).storage.locationUri == Some("paris"))
+      assert(catalog.getPartition(tableIdent, part3).storage.locationUri.isEmpty)
+    }
+    // add partitions without explicitly specifying database
+    catalog.setCurrentDatabase("dbx")
+    maybeWrapException(isDatasourceTable) {
+      sql("ALTER TABLE tab1 ADD IF NOT EXISTS PARTITION (d='4')")
+    }
+    if (!isDatasourceTable) {
+      assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
+        Set(part1, part2, part3, part4))
+    }
+    // table to alter does not exist
+    intercept[AnalysisException] {
+      sql("ALTER TABLE does_not_exist ADD IF NOT EXISTS PARTITION (d='4')")
+    }
+    // partition to add already exists
+    intercept[AnalysisException] {
+      sql("ALTER TABLE tab1 ADD PARTITION (d='4')")
+    }
+    maybeWrapException(isDatasourceTable) {
+      sql("ALTER TABLE tab1 ADD IF NOT EXISTS PARTITION (d='4')")
+    }
+    if (!isDatasourceTable) {
+      assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
+        Set(part1, part2, part3, part4))
+    }
+  }
+
+  private def testDropPartitions(isDatasourceTable: Boolean): Unit = {
+    val catalog = sqlContext.sessionState.catalog
+    val tableIdent = TableIdentifier("tab1", Some("dbx"))
+    val part1 = Map("a" -> "1")
+    val part2 = Map("b" -> "2")
+    val part3 = Map("c" -> "3")
+    val part4 = Map("d" -> "4")
+    createDatabase(catalog, "dbx")
+    createTable(catalog, tableIdent)
+    createTablePartition(catalog, part1, tableIdent)
+    createTablePartition(catalog, part2, tableIdent)
+    createTablePartition(catalog, part3, tableIdent)
+    createTablePartition(catalog, part4, tableIdent)
+    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
+      Set(part1, part2, part3, part4))
+    if (isDatasourceTable) {
+      convertToDatasourceTable(catalog, tableIdent)
+    }
+    maybeWrapException(isDatasourceTable) {
+      sql("ALTER TABLE dbx.tab1 DROP IF EXISTS PARTITION (d='4'), PARTITION (c='3')")
+    }
+    if (!isDatasourceTable) {
+      assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1, part2))
+    }
+    // drop partitions without explicitly specifying database
+    catalog.setCurrentDatabase("dbx")
+    maybeWrapException(isDatasourceTable) {
+      sql("ALTER TABLE tab1 DROP IF EXISTS PARTITION (b='2')")
+    }
+    if (!isDatasourceTable) {
+      assert(catalog.listPartitions(tableIdent).map(_.spec) == Seq(part1))
+    }
+    // table to alter does not exist
+    intercept[AnalysisException] {
+      sql("ALTER TABLE does_not_exist DROP IF EXISTS PARTITION (b='2')")
+    }
+    // partition to drop does not exist
+    intercept[AnalysisException] {
+      sql("ALTER TABLE tab1 DROP PARTITION (x='300')")
+    }
+    maybeWrapException(isDatasourceTable) {
+      sql("ALTER TABLE tab1 DROP IF EXISTS PARTITION (x='300')")
+    }
+    if (!isDatasourceTable) {
+      assert(catalog.listPartitions(tableIdent).map(_.spec) == Seq(part1))
     }
   }
 

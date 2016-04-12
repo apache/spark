@@ -376,7 +376,13 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
 
     // Create partitioned view is not supported
     "create_like_view",
-    "describe_formatted_view_partitioned"
+    "describe_formatted_view_partitioned",
+
+    // This uses CONCATENATE, which we don't support
+    "alter_merge_2",
+
+    // TOUCH is not supported
+    "touch"
   )
 
   /**
@@ -392,7 +398,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "alter2",
     "alter3",
     "alter5",
-    "alter_merge_2",
     "alter_partition_format_loc",
     "alter_partition_with_whitelist",
     "alter_rename_partition",
@@ -897,7 +902,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "timestamp_comparison",
     "timestamp_lazy",
     "timestamp_null",
-    "touch",
     "transform_ppr1",
     "transform_ppr2",
     "truncate_table",
