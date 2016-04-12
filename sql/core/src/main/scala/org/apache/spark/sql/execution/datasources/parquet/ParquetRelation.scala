@@ -251,12 +251,12 @@ private[sql] class DefaultSource
   }
 
   /**
-   * Returns whether the reader will the rows as batch or not.
+   * Returns whether the reader will return the rows as batch or not.
    */
   override def supportBatch(sqlContext: SQLContext, schema: StructType): Boolean = {
     val conf = SQLContext.getActive().get.conf
-    conf.useFileScan && conf.parquetVectorizedReaderEnabled &&
-      conf.wholeStageEnabled && schema.length <= conf.wholeStageMaxNumFields &&
+    conf.parquetVectorizedReaderEnabled && conf.wholeStageEnabled &&
+      schema.length <= conf.wholeStageMaxNumFields &&
       schema.forall(_.dataType.isInstanceOf[AtomicType])
   }
 
@@ -374,110 +374,6 @@ private[sql] class DefaultSource
             .map(d => appendPartitionColumns(joinedRow(d, file.partitionValues)))
       }
     }
-  }
-
-  override def buildInternalScan(
-      sqlContext: SQLContext,
-      dataSchema: StructType,
-      requiredColumns: Array[String],
-      filters: Array[Filter],
-      bucketSet: Option[BitSet],
-      allFiles: Seq[FileStatus],
-      broadcastedConf: Broadcast[SerializableConfiguration],
-      options: Map[String, String]): RDD[InternalRow] = {
-    val useMetadataCache = sqlContext.getConf(SQLConf.PARQUET_CACHE_METADATA)
-    val parquetFilterPushDown = sqlContext.conf.parquetFilterPushDown
-    val assumeBinaryIsString = sqlContext.conf.isParquetBinaryAsString
-    val assumeInt96IsTimestamp = sqlContext.conf.isParquetINT96AsTimestamp
-
-    // Parquet row group size. We will use this value as the value for
-    // mapreduce.input.fileinputformat.split.minsize and mapred.min.split.size if the value
-    // of these flags are smaller than the parquet row group size.
-    val parquetBlockSize = ParquetOutputFormat.getLongBlockSize(broadcastedConf.value.value)
-
-    // Create the function to set variable Parquet confs at both driver and executor side.
-    val initLocalJobFuncOpt =
-      ParquetRelation.initializeLocalJobFunc(
-        requiredColumns,
-        filters,
-        dataSchema,
-        parquetBlockSize,
-        useMetadataCache,
-        parquetFilterPushDown,
-        assumeBinaryIsString,
-        assumeInt96IsTimestamp) _
-
-    val inputFiles = splitFiles(allFiles).data.toArray
-
-    // Create the function to set input paths at the driver side.
-    val setInputPaths =
-      ParquetRelation.initializeDriverSideJobFunc(inputFiles, parquetBlockSize) _
-
-    val allPrimitiveTypes = dataSchema.forall(_.dataType.isInstanceOf[AtomicType])
-    val inputFormatCls = if (sqlContext.conf.parquetVectorizedReaderEnabled
-      && allPrimitiveTypes) {
-      classOf[VectorizedParquetInputFormat]
-    } else {
-      classOf[ParquetInputFormat[InternalRow]]
-    }
-
-    Utils.withDummyCallSite(sqlContext.sparkContext) {
-      new SqlNewHadoopRDD(
-        sqlContext = sqlContext,
-        broadcastedConf = broadcastedConf,
-        initDriverSideJobFuncOpt = Some(setInputPaths),
-        initLocalJobFuncOpt = Some(initLocalJobFuncOpt),
-        inputFormatClass = inputFormatCls,
-        valueClass = classOf[InternalRow]) {
-
-        val cacheMetadata = useMetadataCache
-
-        @transient val cachedStatuses = inputFiles.map { f =>
-          // In order to encode the authority of a Path containing special characters such as '/'
-          // (which does happen in some S3N credentials), we need to use the string returned by the
-          // URI of the path to create a new Path.
-          val pathWithEscapedAuthority = escapePathUserInfo(f.getPath)
-          new FileStatus(
-            f.getLen, f.isDirectory, f.getReplication, f.getBlockSize, f.getModificationTime,
-            f.getAccessTime, f.getPermission, f.getOwner, f.getGroup, pathWithEscapedAuthority)
-        }.toSeq
-
-        private def escapePathUserInfo(path: Path): Path = {
-          val uri = path.toUri
-          new Path(new URI(
-            uri.getScheme, uri.getRawUserInfo, uri.getHost, uri.getPort, uri.getPath,
-            uri.getQuery, uri.getFragment))
-        }
-
-        // Overridden so we can inject our own cached files statuses.
-        override def getPartitions: Array[SparkPartition] = {
-          val inputFormat = new ParquetInputFormat[InternalRow] {
-            override def listStatus(jobContext: JobContext): JList[FileStatus] = {
-              if (cacheMetadata) cachedStatuses.asJava else super.listStatus(jobContext)
-            }
-          }
-
-          val jobContext = new JobContextImpl(getConf(isDriverSide = true), jobId)
-          val rawSplits = inputFormat.getSplits(jobContext)
-
-          Array.tabulate[SparkPartition](rawSplits.size) { i =>
-            new SqlNewHadoopPartition(
-              id, i, rawSplits.get(i).asInstanceOf[InputSplit with Writable])
-          }
-        }
-      }
-    }
-  }
-}
-
-/**
- * The ParquetInputFormat that create VectorizedParquetRecordReader.
- */
-final class VectorizedParquetInputFormat extends ParquetInputFormat[InternalRow] {
-  override def createRecordReader(
-    inputSplit: InputSplit,
-    taskAttemptContext: TaskAttemptContext): RecordReader[Void, InternalRow] = {
-    new VectorizedParquetRecordReader().asInstanceOf[RecordReader[Void, InternalRow]]
   }
 }
 

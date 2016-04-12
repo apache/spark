@@ -55,15 +55,7 @@ import org.apache.spark.sql.sources._
  */
 private[sql] object FileSourceStrategy extends Strategy with Logging {
   def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-    case PhysicalOperation(projects, filters, l @ LogicalRelation(files: HadoopFsRelation, _, _))
-      if (files.fileFormat.toString == "TestFileFormat" ||
-         files.fileFormat.isInstanceOf[parquet.DefaultSource] ||
-         files.fileFormat.toString == "ORC" ||
-         files.fileFormat.toString == "LibSVM" ||
-         files.fileFormat.isInstanceOf[csv.DefaultSource] ||
-         files.fileFormat.isInstanceOf[text.DefaultSource] ||
-         files.fileFormat.isInstanceOf[json.DefaultSource]) &&
-         files.sqlContext.conf.useFileScan =>
+    case PhysicalOperation(projects, filters, l @ LogicalRelation(files: HadoopFsRelation, _, _)) =>
       // Filters on this relation fall into four categories based on where we can use them to avoid
       // reading unneeded data:
       //  - partition keys only - used to prune directories to read
