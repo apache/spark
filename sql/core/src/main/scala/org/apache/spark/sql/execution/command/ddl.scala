@@ -20,10 +20,12 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalog.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.types._
+
 
 
 // Note: The definition of these commands are based on the ones described in
@@ -208,7 +210,7 @@ case class DropTable(
     } catch {
       // This table's metadata is not in Hive metastore (e.g. the table does not exist).
       case e if e.getClass.getName == "org.apache.hadoop.hive.ql.metadata.InvalidTableException" =>
-      case _: org.apache.spark.sql.catalyst.analysis.NoSuchTableException =>
+      case _: NoSuchTableException =>
       // Other Throwables can be caused by users providing wrong parameters in OPTIONS
       // (e.g. invalid paths). We catch it and log a warning message.
       // Users should be able to drop such kinds of tables regardless if there is an error.
