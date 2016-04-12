@@ -37,7 +37,7 @@ object NaiveBayesExample {
     // Split the data into training and test sets (30% held out for testing)
     val Array(trainingData, testData) = data.randomSplit(Array(0.7, 0.3))
 
-    // Train a DecisionTree model.
+    // Train a NaiveBayes model.
     val model = new NaiveBayes()
       .fit(trainingData)
 

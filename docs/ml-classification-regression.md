@@ -306,8 +306,10 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/classification/OneVsRe
 
 [Naive Bayes](http://en.wikipedia.org/wiki/Naive_Bayes_classifier) are a family of simple 
 probabilistic classifiers based on applying Bayes' theorem with strong (naive) independence 
-assumptions between the features. More information about the spark.ml implementation can be 
-found further in the section on [Naive Bayes in MLlib](mllib-naive-bayes.html#naive-bayes-sparkmllib).
+assumptions between the features. The spark.ml implementation currently supports both [multinomial
+naive Bayes](http://nlp.stanford.edu/IR-book/html/htmledition/naive-bayes-text-classification-1.html)
+and [Bernoulli naive Bayes](http://nlp.stanford.edu/IR-book/html/htmledition/the-bernoulli-model-1.html).
+More information can be found in the section on [Naive Bayes in MLlib](mllib-naive-bayes.html#naive-bayes-sparkmllib).
 
 **Example**
 
