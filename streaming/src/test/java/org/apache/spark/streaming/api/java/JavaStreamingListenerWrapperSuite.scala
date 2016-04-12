@@ -63,7 +63,7 @@ class JavaStreamingListenerWrapperSuite extends SparkFunSuite {
     assertReceiverInfo(listener.receiverError.receiverInfo, receiverError.receiverInfo)
 
     val batchSubmitted = StreamingListenerBatchSubmitted(BatchInfo(
-      batchTime = Time(1000L),
+      batchTime = Time(1000L), None,
       streamIdToInputInfo = Map(
         0 -> StreamInputInfo(
           inputStreamId = 0,
@@ -98,7 +98,7 @@ class JavaStreamingListenerWrapperSuite extends SparkFunSuite {
     assertBatchInfo(listener.batchSubmitted.batchInfo, batchSubmitted.batchInfo)
 
     val batchStarted = StreamingListenerBatchStarted(BatchInfo(
-      batchTime = Time(1000L),
+      batchTime = Time(1000L), None,
       streamIdToInputInfo = Map(
         0 -> StreamInputInfo(
           inputStreamId = 0,
@@ -133,7 +133,7 @@ class JavaStreamingListenerWrapperSuite extends SparkFunSuite {
     assertBatchInfo(listener.batchStarted.batchInfo, batchStarted.batchInfo)
 
     val batchCompleted = StreamingListenerBatchCompleted(BatchInfo(
-      batchTime = Time(1000L),
+      batchTime = Time(1000L), None,
       streamIdToInputInfo = Map(
         0 -> StreamInputInfo(
           inputStreamId = 0,

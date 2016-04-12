@@ -17,14 +17,13 @@
 
 package org.apache.spark.streaming.scheduler
 
-import scala.util.{Failure, Success, Try}
-
-import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.streaming.{Checkpoint, CheckpointWriter, Time}
 import org.apache.spark.streaming.util.RecurringTimer
+import org.apache.spark.streaming.{Checkpoint, CheckpointWriter, Time}
 import org.apache.spark.util.{Clock, EventLoop, ManualClock, Utils}
+
+import scala.util.{Failure, Success, Try}
 
 /** Event classes for JobGenerator */
 private[scheduler] sealed trait JobGeneratorEvent
@@ -231,7 +230,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
       // added but not allocated, are dangling in the queue after recovering, we have to allocate
       // those blocks to the next batch, which is the batch they were supposed to go.
       jobScheduler.receiverTracker.allocateBlocksToBatch(time) // allocate received blocks to batch
-      jobScheduler.submitJobSet(JobSet(time, graph.generateJobs(time)))
+      jobScheduler.submitJobSet(JobSet(time, None, graph.generateJobs(time)))
     }
 
     // Restart the timer
@@ -241,6 +240,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
 
   /** Generate jobs and perform checkpoint for the given `time`.  */
   private def generateJobs(time: Time) {
+    val jobSetCreationStartTime=clock.getTimeMillis()
     // Checkpoint all RDDs marked for checkpointing to ensure their lineages are
     // truncated periodically. Otherwise, we may run into stack overflows (SPARK-6847).
     ssc.sparkContext.setLocalProperty(RDD.CHECKPOINT_ALL_MARKED_ANCESTORS, "true")
@@ -249,8 +249,9 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
       graph.generateJobs(time) // generate jobs using allocated block
     } match {
       case Success(jobs) =>
+        val jobSetCreationEndTime=clock.getTimeMillis()
         val streamIdToInputInfos = jobScheduler.inputInfoTracker.getInfo(time)
-        jobScheduler.submitJobSet(JobSet(time, jobs, streamIdToInputInfos))
+        jobScheduler.submitJobSet(JobSet(time, Option(jobSetCreationEndTime-jobSetCreationStartTime), jobs, streamIdToInputInfos))
       case Failure(e) =>
         jobScheduler.reportError("Error generating jobs for time " + time, e)
     }

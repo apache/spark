@@ -28,6 +28,7 @@ import org.apache.spark.streaming.Time
 private[streaming]
 case class JobSet(
     time: Time,
+    jobSetCreationDelay: Option[Long],
     jobs: Seq[Job],
     streamIdToInputInfo: Map[Int, StreamInputInfo] = Map.empty) {
 
@@ -63,6 +64,7 @@ case class JobSet(
   def toBatchInfo: BatchInfo = {
     BatchInfo(
       time,
+      jobSetCreationDelay,
       streamIdToInputInfo,
       submissionTime,
       if (hasStarted) Some(processingStartTime) else None,
