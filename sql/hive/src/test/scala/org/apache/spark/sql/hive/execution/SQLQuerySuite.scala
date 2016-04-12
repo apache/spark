@@ -19,12 +19,9 @@ package org.apache.spark.sql.hive.execution
 
 import java.sql.{Date, Timestamp}
 
-import scala.collection.JavaConverters._
-
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, FunctionRegistry}
-import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.{HiveContext, MetastoreRelation}
@@ -1877,6 +1874,25 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
         checkAnswer(table("t2"), table("t1"))
       }
+    }
+  }
+
+  test(
+    "SPARK-14493 \"CREATE TEMPORARY TABLE ... USING ... AS SELECT ...\" " +
+    "shouldn always be used together with PATH data source option"
+  ) {
+    withTempTable("t") {
+      sqlContext.range(10).registerTempTable("t")
+
+      val message = intercept[IllegalArgumentException] {
+        sql(
+          s"""CREATE TEMPORARY TABLE t1
+             |USING PARQUET
+             |AS SELECT * FROM t
+           """.stripMargin)
+      }.getMessage
+
+      assert(message == "'path' is not specified")
     }
   }
 }
