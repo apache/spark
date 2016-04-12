@@ -76,7 +76,7 @@ private[sql] class HiveSessionCatalog(
   // ----------------------------------------------------------------
 
   // This function is to get the path for creating a non-default database
-  override def getDatabasePath(dbName: String, path: Option[String] = None): String = {
+  override def createDatabasePath(dbName: String, path: Option[String] = None): String = {
     val dbPath = path.map(new Path(_)).getOrElse {
       val defaultPath = context.hiveconf.getVar(HiveConf.ConfVars.METASTOREWAREHOUSE)
       if (StringUtils.isBlank(defaultPath)) {
@@ -85,6 +85,10 @@ private[sql] class HiveSessionCatalog(
       }
       new Path(new Path(defaultPath), dbName.toLowerCase() + ".db")
     }
+    // When dbPath does not have scheme and authority, qualify the input path against the
+    // default file system indicated by the configuration. Otherwise, replace the scheme and
+    // authority of a path with the scheme and authority of the file system that it maps to.
+    // This is based on hive.metastore.Warehouse.getDnsPath
     val fs = dbPath.getFileSystem(context.hiveconf)
     new Path(fs.getUri.getScheme, fs.getUri.getAuthority, dbPath.toUri.getPath).toString
   }

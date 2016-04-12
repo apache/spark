@@ -123,7 +123,7 @@ class SessionCatalog(
     currentDb = db
   }
 
-  def getDatabasePath(dbName: String, path: Option[String]): String = {
+  def createDatabasePath(dbName: String, path: Option[String]): String = {
     val dbPath =
       path.map(new Path(_))
         .getOrElse(

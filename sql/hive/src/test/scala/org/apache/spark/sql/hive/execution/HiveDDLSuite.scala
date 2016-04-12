@@ -174,7 +174,7 @@ class HiveDDLSuite
     withTempDir { tmpDir =>
       val dbName = "db1"
       val tabName = "tab1"
-      val path = catalog.getDatabasePath(dbName, Option(tmpDir.toString))
+      val path = catalog.createDatabasePath(dbName, Option(tmpDir.toString))
       val fs = new Path(path).getFileSystem(hiveContext.hiveconf)
       withTable(tabName) {
         assert(tmpDir.listFiles.isEmpty)
@@ -203,7 +203,7 @@ class HiveDDLSuite
   test("create/drop database - RESTRICT") {
     val catalog = sqlContext.sessionState.catalog
     val dbName = "db1"
-    val path = catalog.getDatabasePath(dbName, None)
+    val path = catalog.createDatabasePath(dbName, None)
     val dbPath = new Path(path)
     val fs = dbPath.getFileSystem(hiveContext.hiveconf)
     // the database directory does not exist
@@ -235,7 +235,7 @@ class HiveDDLSuite
   test("create/drop database - CASCADE") {
     val catalog = sqlContext.sessionState.catalog
     val dbName = "db1"
-    val path = catalog.getDatabasePath(dbName, None)
+    val path = catalog.createDatabasePath(dbName, None)
     val dbPath = new Path(path)
     val fs = dbPath.getFileSystem(hiveContext.hiveconf)
     // the database directory does not exist
