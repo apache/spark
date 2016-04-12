@@ -165,13 +165,13 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
       sqlContext.setConf("spark.sql.codegen.wholeStage", "false")
       f()
     }
+ */
 
     benchmark.addCase(s"codegen=true hashmap=false") { iter =>
       sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
       sqlContext.setConf("spark.sql.codegen.aggregate.map.enabled", "false")
       f()
     }
-*/
 
     benchmark.addCase(s"codegen=true hashmap=true") { iter =>
       sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
