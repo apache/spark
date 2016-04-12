@@ -237,25 +237,53 @@ private[spark] object BLAS extends Serializable with Logging {
   }
 
   /**
-   * Adds alpha * x * x.t to a matrix in-place. This is the same as BLAS's ?SPR.
+   * Adds alpha * v * v.t to a matrix in-place. This is the same as BLAS's ?SPR.
    *
    * @param U the upper triangular part of the matrix in a [[DenseVector]](column major)
    */
   def spr(alpha: Double, v: Vector, U: DenseVector): Unit = {
-    spr(alpha, v, U.values)
+    spr(alpha, v, U.values, null)
   }
 
   /**
-   * Adds alpha * x * x.t to a matrix in-place. This is the same as BLAS's ?SPR.
+   * Adds alpha * v * v.t to a matrix in-place. This is the same as BLAS's ?SPR.
    *
+   * @param alpha scaling factor
+   * @param v vector argument
    * @param U the upper triangular part of the matrix packed in an array (column major)
+   * @param dv an optional vector of values to subtract from each value of v before computing
    */
-  def spr(alpha: Double, v: Vector, U: Array[Double]): Unit = {
+  def spr(alpha: Double, v: Vector, U: Array[Double], dv: Vector): Unit = {
     val n = v.size
     v match {
       case DenseVector(values) =>
-        NativeBLAS.dspr("U", n, alpha, values, 1, U)
-      case SparseVector(size, indices, values) =>
+        // If shifted, copy and shift values
+        val shiftedValues =
+          if (dv == null) {
+            values
+          } else {
+            val copy = values.clone()
+            var i = 0
+            while (i < copy.length) {
+              copy(i) -= dv(i)
+              i += 1
+            }
+            copy
+          }
+        NativeBLAS.dspr("U", n, alpha, shiftedValues, 1, U)
+
+      case sparse: SparseVector if dv != null =>
+        // Sparse case, but with shift; treat it as dense
+        val dense = sparse.toArray
+        var i = 0
+        while (i < dense.length) {
+          dense(i) -= dv(i)
+          i += 1
+        }
+        NativeBLAS.dspr("U", n, alpha, dense, 1, U)
+
+      case SparseVector(size, indices, values) if dv == null =>
+        // Optimization for sparse case with no shift
         val nnz = indices.length
         var colStartIdx = 0
         var prevCol = 0
@@ -267,7 +295,6 @@ private[spark] object BLAS extends Serializable with Logging {
           col = indices(j)
           // Skip empty columns.
           colStartIdx += (col - prevCol) * (col + prevCol + 1) / 2
-          col = indices(j)
           av = alpha * values(j)
           i = 0
           while (i <= j) {
