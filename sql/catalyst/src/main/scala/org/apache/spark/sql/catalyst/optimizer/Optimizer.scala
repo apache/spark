@@ -951,8 +951,8 @@ object PushPredicate extends Rule[LogicalPlan] with PredicateHelper {
       }
       Union(newChildren)
 
-    case filter @ Filter(condition, i @ Intersect(left, right)) =>
-      // Intersect could change the rows, so non-deterministic predcate can't be pushed down
+    case filter @ Filter(condition, i: Intersect) =>
+      // Intersect could change the rows, so non-deterministic predicate can't be pushed down
       val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { cond =>
         cond.deterministic
       }
@@ -976,22 +976,36 @@ object PushPredicate extends Rule[LogicalPlan] with PredicateHelper {
         filter
       }
 
+    case filter @ Filter(condition, e @ Except(left, _)) =>
+      pushDownPredicate(filter, e, e.left) { pushDown =>
+        e.copy(left = Filter(pushDown, left))
+      }
+
     case filter @ Filter(condition, u: UnaryNode) if u.expressions.forall(_.deterministic) =>
-      // Predicates that reference attributes produced by the unary operator cannot
-      // be pushed below it.
-      val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { cond =>
-        cond.deterministic && cond.references.subsetOf(u.child.outputSet)
+      pushDownPredicate(filter, u, u.child) { pushDown =>
+        u.withNewChildren(Seq(Filter(pushDown, u.child)))
       }
-      if (pushDown.nonEmpty) {
-        val newU = u.withNewChildren(Seq(Filter(pushDown.reduceLeft(And), u.child)))
-        if (stayUp.nonEmpty) {
-          Filter(stayUp.reduceLeft(And), newU)
-        } else {
-          newU
-        }
+  }
+
+  private def pushDownPredicate(
+      filter: Filter,
+      plan: LogicalPlan,
+      child: LogicalPlan)(insertFilter: Expression => LogicalPlan): LogicalPlan = {
+    // Predicates that reference attributes produced by the unary operator cannot
+    // be pushed below it.
+    val (pushDown, stayUp) = splitConjunctivePredicates(filter.condition).partition { cond =>
+      cond.deterministic && cond.references.subsetOf(child.outputSet)
+    }
+    if (pushDown.nonEmpty) {
+      val newU = insertFilter(pushDown.reduceLeft(And))
+      if (stayUp.nonEmpty) {
+        Filter(stayUp.reduceLeft(And), newU)
       } else {
-        filter
+        newU
       }
+    } else {
+      filter
+    }
   }
 }
 
