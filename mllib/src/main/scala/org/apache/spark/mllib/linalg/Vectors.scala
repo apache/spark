@@ -376,7 +376,7 @@ object Vectors {
       case Seq(size: Double, indices: Array[Double], values: Array[Double]) =>
         Vectors.sparse(size.toInt, indices.map(_.toInt), values)
       case other =>
-        throw new SparkException(s"Cannot parse $other.")
+        throw new IllegalArgumentException(s"Cannot parse $other.")
     }
   }
 
