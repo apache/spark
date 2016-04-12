@@ -87,7 +87,7 @@ class ContinuousQuery(object):
         self._jcq.stop()
 
 
-class Trigger:
+class Trigger(object):
     """Used to indicate how often results should be produced by a :class:`ContinuousQuery`.
 
     .. note:: Experimental
