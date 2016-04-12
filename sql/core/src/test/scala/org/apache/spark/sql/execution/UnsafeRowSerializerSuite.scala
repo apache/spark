@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, File}
+import java.util.Properties
 
 import org.apache.spark._
 import org.apache.spark.memory.TaskMemoryManager
@@ -113,7 +114,7 @@ class UnsafeRowSerializerSuite extends SparkFunSuite with LocalSparkContext {
       }
       val taskMemoryManager = new TaskMemoryManager(sc.env.memoryManager, 0)
       val taskContext = new TaskContextImpl(
-        0, 0, 0, 0, taskMemoryManager, null, InternalAccumulator.create(sc))
+        0, 0, 0, 0, taskMemoryManager, new Properties, null, InternalAccumulator.create(sc))
 
       val sorter = new ExternalSorter[Int, UnsafeRow, UnsafeRow](
         taskContext,

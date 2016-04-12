@@ -19,6 +19,7 @@ package org.apache.spark.scheduler
 
 import java.io.{DataInputStream, DataOutputStream}
 import java.nio.ByteBuffer
+import java.util.Properties
 
 import scala.collection.mutable.HashMap
 
@@ -46,12 +47,14 @@ import org.apache.spark.util.{ByteBufferInputStream, ByteBufferOutputStream, Uti
  * @param initialAccumulators initial set of accumulators to be used in this task for tracking
  *                            internal metrics. Other accumulators will be registered later when
  *                            they are deserialized on the executors.
+ * @param localProperties copy of thread-local properties set by the user on the driver side.
  */
 private[spark] abstract class Task[T](
     val stageId: Int,
     val stageAttemptId: Int,
     val partitionId: Int,
-    val initialAccumulators: Seq[Accumulator[_]]) extends Serializable {
+    val initialAccumulators: Seq[Accumulator[_]],
+    @transient var localProperties: Properties) extends Serializable {
 
   /**
    * Called by [[org.apache.spark.executor.Executor]] to run this task.
@@ -71,6 +74,7 @@ private[spark] abstract class Task[T](
       taskAttemptId,
       attemptNumber,
       taskMemoryManager,
+      localProperties,
       metricsSystem,
       initialAccumulators)
     TaskContext.setTaskContext(context)
@@ -212,6 +216,11 @@ private[spark] object Task {
       dataOut.writeLong(timestamp)
     }
 
+    // Write the task properties separately so it is available before full task deserialization.
+    val propBytes = Utils.serialize(task.localProperties)
+    dataOut.writeInt(propBytes.length)
+    dataOut.write(propBytes)
+
     // Write the task itself and finish
     dataOut.flush()
     val taskBytes = serializer.serialize(task)
@@ -227,7 +236,7 @@ private[spark] object Task {
    * @return (taskFiles, taskJars, taskBytes)
    */
   def deserializeWithDependencies(serializedTask: ByteBuffer)
-    : (HashMap[String, Long], HashMap[String, Long], ByteBuffer) = {
+    : (HashMap[String, Long], HashMap[String, Long], Properties, ByteBuffer) = {
 
     val in = new ByteBufferInputStream(serializedTask)
     val dataIn = new DataInputStream(in)
@@ -246,8 +255,13 @@ private[spark] object Task {
       taskJars(dataIn.readUTF()) = dataIn.readLong()
     }
 
+    val propLength = dataIn.readInt()
+    val propBytes = new Array[Byte](propLength)
+    dataIn.readFully(propBytes, 0, propLength)
+    val taskProps = Utils.deserialize[Properties](propBytes)
+
     // Create a sub-buffer for the rest of the data, which is the serialized Task object
     val subBuffer = serializedTask.slice()  // ByteBufferInputStream will have read just up to task
-    (taskFiles, taskJars, subBuffer)
+    (taskFiles, taskJars, taskProps, subBuffer)
   }
 }
