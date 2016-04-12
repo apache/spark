@@ -147,7 +147,7 @@ class GCSLog(object):
                     'airflow[gcp_api] is installed and the GCS connection '
                     'exists.'.format(remote_conn_id))
 
-    def read(self, remote_log_location, return_error=True):
+    def read(self, remote_log_location, return_error=False):
         """
         Returns the log found at the remote_log_location.
 
