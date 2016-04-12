@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.command
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -203,19 +205,15 @@ case class DropTable(
       case _ =>
     })
 
-    try {
-      sqlContext.cacheManager.tryUncacheQuery(sqlContext.table(tableName.quotedString))
-    } catch {
-      // This table's metadata is not in Hive metastore (e.g. the table does not exist).
-      case e if e.getClass.getName == "org.apache.hadoop.hive.ql.metadata.InvalidTableException" =>
-      case _: org.apache.spark.sql.catalyst.analysis.NoSuchTableException =>
-      // Other Throwables can be caused by users providing wrong parameters in OPTIONS
-      // (e.g. invalid paths). We catch it and log a warning message.
-      // Users should be able to drop such kinds of tables regardless if there is an error.
-      case e: Throwable => log.warn(s"${e.getMessage}", e)
+    if (catalog.tableExists(tableName)) {
+      try {
+        sqlContext.cacheManager.tryUncacheQuery(sqlContext.table(tableName.quotedString))
+      } catch {
+        case NonFatal(e) => log.warn(s"${e.getMessage}", e)
+      }
+      catalog.invalidateTable(tableName)
+      catalog.dropTable(tableName, ifExists)
     }
-    catalog.invalidateTable(tableName)
-    catalog.dropTable(tableName, ifExists)
     Seq.empty[Row]
   }
 }
