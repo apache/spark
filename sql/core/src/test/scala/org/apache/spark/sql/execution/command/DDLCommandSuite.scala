@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.command
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
@@ -24,8 +25,16 @@ import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.types._
 
+// TODO: merge this with DDLSuite (SPARK-14441)
 class DDLCommandSuite extends PlanTest {
   private val parser = SparkSqlParser
+
+  private def assertUnsupported(sql: String): Unit = {
+    val e = intercept[AnalysisException] {
+      parser.parsePlan(sql)
+    }
+    assert(e.getMessage.toLowerCase.contains("operation not allowed"))
+  }
 
   test("create database") {
     val sql =
@@ -326,11 +335,11 @@ class DDLCommandSuite extends PlanTest {
       Seq(
         (Map("dt" -> "2008-08-08", "country" -> "us"), Some("location1")),
         (Map("dt" -> "2009-09-09", "country" -> "uk"), None)),
-      ifNotExists = true)(sql1)
+      ifNotExists = true)
     val expected2 = AlterTableAddPartition(
       TableIdentifier("table_name", None),
       Seq((Map("dt" -> "2008-08-08"), Some("loc"))),
-      ifNotExists = false)(sql2)
+      ifNotExists = false)
 
     comparePlans(parsed1, expected1)
     comparePlans(parsed2, expected2)
@@ -369,22 +378,16 @@ class DDLCommandSuite extends PlanTest {
     val expected = AlterTableRenamePartition(
       TableIdentifier("table_name", None),
       Map("dt" -> "2008-08-08", "country" -> "us"),
-      Map("dt" -> "2008-09-09", "country" -> "uk"))(sql)
+      Map("dt" -> "2008-09-09", "country" -> "uk"))
     comparePlans(parsed, expected)
   }
 
-  test("alter table: exchange partition") {
-    val sql =
+  test("alter table: exchange partition (not supported)") {
+    assertUnsupported(
       """
        |ALTER TABLE table_name_1 EXCHANGE PARTITION
        |(dt='2008-08-08', country='us') WITH TABLE table_name_2
-      """.stripMargin
-    val parsed = parser.parsePlan(sql)
-    val expected = AlterTableExchangePartition(
-      TableIdentifier("table_name_1", None),
-      TableIdentifier("table_name_2", None),
-      Map("dt" -> "2008-08-08", "country" -> "us"))(sql)
-    comparePlans(parsed, expected)
+      """.stripMargin)
   }
 
   // ALTER TABLE table_name DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...] [PURGE]
@@ -405,7 +408,10 @@ class DDLCommandSuite extends PlanTest {
     val sql2_view = sql2_table.replace("TABLE", "VIEW").replace("PURGE", "")
 
     val parsed1_table = parser.parsePlan(sql1_table)
-    val parsed2_table = parser.parsePlan(sql2_table)
+    val e = intercept[ParseException] {
+      parser.parsePlan(sql2_table)
+    }
+    assert(e.getMessage.contains("Operation not allowed"))
 
     intercept[ParseException] {
       parser.parsePlan(sql1_view)
@@ -420,36 +426,17 @@ class DDLCommandSuite extends PlanTest {
       Seq(
         Map("dt" -> "2008-08-08", "country" -> "us"),
         Map("dt" -> "2009-09-09", "country" -> "uk")),
-      ifExists = true,
-      purge = false)(sql1_table)
-    val expected2_table = AlterTableDropPartition(
-      tableIdent,
-      Seq(
-        Map("dt" -> "2008-08-08", "country" -> "us"),
-        Map("dt" -> "2009-09-09", "country" -> "uk")),
-      ifExists = false,
-      purge = true)(sql2_table)
+      ifExists = true)
 
     comparePlans(parsed1_table, expected1_table)
-    comparePlans(parsed2_table, expected2_table)
   }
 
-  test("alter table: archive partition") {
-    val sql = "ALTER TABLE table_name ARCHIVE PARTITION (dt='2008-08-08', country='us')"
-    val parsed = parser.parsePlan(sql)
-    val expected = AlterTableArchivePartition(
-      TableIdentifier("table_name", None),
-      Map("dt" -> "2008-08-08", "country" -> "us"))(sql)
-    comparePlans(parsed, expected)
+  test("alter table: archive partition (not supported)") {
+    assertUnsupported("ALTER TABLE table_name ARCHIVE PARTITION (dt='2008-08-08', country='us')")
   }
 
-  test("alter table: unarchive partition") {
-    val sql = "ALTER TABLE table_name UNARCHIVE PARTITION (dt='2008-08-08', country='us')"
-    val parsed = parser.parsePlan(sql)
-    val expected = AlterTableUnarchivePartition(
-      TableIdentifier("table_name", None),
-      Map("dt" -> "2008-08-08", "country" -> "us"))(sql)
-    comparePlans(parsed, expected)
+  test("alter table: unarchive partition (not supported)") {
+    assertUnsupported("ALTER TABLE table_name UNARCHIVE PARTITION (dt='2008-08-08', country='us')")
   }
 
   test("alter table: set file format") {
@@ -505,55 +492,24 @@ class DDLCommandSuite extends PlanTest {
     comparePlans(parsed2, expected2)
   }
 
-  test("alter table: touch") {
-    val sql1 = "ALTER TABLE table_name TOUCH"
-    val sql2 = "ALTER TABLE table_name TOUCH PARTITION (dt='2008-08-08', country='us')"
-    val parsed1 = parser.parsePlan(sql1)
-    val parsed2 = parser.parsePlan(sql2)
-    val tableIdent = TableIdentifier("table_name", None)
-    val expected1 = AlterTableTouch(
-      tableIdent,
-      None)(sql1)
-    val expected2 = AlterTableTouch(
-      tableIdent,
-      Some(Map("dt" -> "2008-08-08", "country" -> "us")))(sql2)
-    comparePlans(parsed1, expected1)
-    comparePlans(parsed2, expected2)
+  test("alter table: touch (not supported)") {
+    assertUnsupported("ALTER TABLE table_name TOUCH")
+    assertUnsupported("ALTER TABLE table_name TOUCH PARTITION (dt='2008-08-08', country='us')")
   }
 
-  test("alter table: compact") {
-    val sql1 = "ALTER TABLE table_name COMPACT 'compaction_type'"
-    val sql2 =
+  test("alter table: compact (not supported)") {
+    assertUnsupported("ALTER TABLE table_name COMPACT 'compaction_type'")
+    assertUnsupported(
       """
-       |ALTER TABLE table_name PARTITION (dt='2008-08-08', country='us')
-       |COMPACT 'MAJOR'
-      """.stripMargin
-    val parsed1 = parser.parsePlan(sql1)
-    val parsed2 = parser.parsePlan(sql2)
-    val tableIdent = TableIdentifier("table_name", None)
-    val expected1 = AlterTableCompact(
-      tableIdent,
-      None,
-      "compaction_type")(sql1)
-    val expected2 = AlterTableCompact(
-      tableIdent,
-      Some(Map("dt" -> "2008-08-08", "country" -> "us")),
-      "MAJOR")(sql2)
-    comparePlans(parsed1, expected1)
-    comparePlans(parsed2, expected2)
+        |ALTER TABLE table_name PARTITION (dt='2008-08-08', country='us')
+        |COMPACT 'MAJOR'
+      """.stripMargin)
   }
 
-  test("alter table: concatenate") {
-    val sql1 = "ALTER TABLE table_name CONCATENATE"
-    val sql2 = "ALTER TABLE table_name PARTITION (dt='2008-08-08', country='us') CONCATENATE"
-    val parsed1 = parser.parsePlan(sql1)
-    val parsed2 = parser.parsePlan(sql2)
-    val tableIdent = TableIdentifier("table_name", None)
-    val expected1 = AlterTableMerge(tableIdent, None)(sql1)
-    val expected2 = AlterTableMerge(
-      tableIdent, Some(Map("dt" -> "2008-08-08", "country" -> "us")))(sql2)
-    comparePlans(parsed1, expected1)
-    comparePlans(parsed2, expected2)
+  test("alter table: concatenate (not supported)") {
+    assertUnsupported("ALTER TABLE table_name CONCATENATE")
+    assertUnsupported(
+      "ALTER TABLE table_name PARTITION (dt='2008-08-08', country='us') CONCATENATE")
   }
 
   test("alter table: change column name/type/position/comment") {
