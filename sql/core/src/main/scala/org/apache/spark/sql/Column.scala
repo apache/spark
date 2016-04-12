@@ -52,6 +52,8 @@ private[sql] object Column {
   @scala.annotation.varargs
   def updateExpressionsOrigin(cols: Column*): Unit = {
     val callSite = org.apache.spark.util.Utils.getCallSite().shortForm
+    print(s"callSite: $callSite\n")
+    Thread.dumpStack()
     cols.map(col => col.expr.foreach(e => e.origin.callSite = Some(callSite)))
   }
 }
@@ -146,16 +148,6 @@ class Column(protected[sql] val expr: Expression) extends Logging {
   }
 
   override def hashCode: Int = this.expr.hashCode()
-
-  {
-    // set current call stack to CurrentOrigin
-    val exprWithCallSite = expr.children.find(_.origin.callSite.isDefined)
-    val callSite = exprWithCallSite match {
-      case Some(expr) => expr.origin.callSite.get
-      case _ => org.apache.spark.util.Utils.getCallSite().shortForm
-    }
-    org.apache.spark.sql.catalyst.trees.CurrentOrigin.setPosition(callSite, 0, 0)
-  }
 
   /** Creates a column based on the given expression. */
   private def withExpr(newExpr: Expression): Column = new Column(newExpr)
