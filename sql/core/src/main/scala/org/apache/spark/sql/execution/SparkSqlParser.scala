@@ -699,19 +699,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       None
     }
 
-    AlterTableChangeCol(
-      visitTableIdentifier(ctx.tableIdentifier),
-      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec),
-      ctx.oldName.getText,
-      // We could also pass in a struct field - seems easier.
-      col.name,
-      col.dataType,
-      comment,
-      Option(ctx.after).map(_.getText),
-      // Note that Restrict and Cascade are mutually exclusive.
-      ctx.RESTRICT != null,
-      ctx.CASCADE != null)(
-      command(ctx))
+    throw new AnalysisException("Operation not allowed: ALTER TABLE ... CHANGE [COLUMN]")
   }
 
   /**
@@ -724,14 +712,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    * }}}
    */
   override def visitAddColumns(ctx: AddColumnsContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableAddCol(
-      visitTableIdentifier(ctx.tableIdentifier),
-      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec),
-      createStructType(ctx.colTypeList),
-      // Note that Restrict and Cascade are mutually exclusive.
-      ctx.RESTRICT != null,
-      ctx.CASCADE != null)(
-      command(ctx))
+    throw new AnalysisException("Operation not allowed: ALTER TABLE ... ADD COLUMNS")
   }
 
   /**
@@ -744,14 +725,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    * }}}
    */
   override def visitReplaceColumns(ctx: ReplaceColumnsContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableReplaceCol(
-      visitTableIdentifier(ctx.tableIdentifier),
-      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec),
-      createStructType(ctx.colTypeList),
-      // Note that Restrict and Cascade are mutually exclusive.
-      ctx.RESTRICT != null,
-      ctx.CASCADE != null)(
-      command(ctx))
+    throw new AnalysisException("Operation not allowed: ALTER TABLE ... REPLACE COLUMNS")
   }
 
   /**
