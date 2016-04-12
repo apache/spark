@@ -150,7 +150,7 @@ object CSVRelation extends Logging {
     }
   }
 
-  def parseCsvInRdd(
+  private[csv] def parseCsvInRdd(
       tokenizedRDD: RDD[Array[String]],
       schema: StructType,
       requiredColumns: Array[String],
@@ -167,7 +167,7 @@ object CSVRelation extends Logging {
     }
   }
 
-  def parseCsvInIterator(
+  private[csv] def parseCsvInIterator(
       tokenizedIterator: Iterator[Array[String]],
       schema: StructType,
       requiredColumns: Array[String],
