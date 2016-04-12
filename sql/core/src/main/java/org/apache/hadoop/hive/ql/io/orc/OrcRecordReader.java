@@ -27,6 +27,12 @@ import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import java.io.IOException;
 import java.util.List;
 
+/**
+ * This is based on
+ * {@link org.apache.hadoop.hive.ql.io.orc.OrcNewInputFormat.OrcRecordReader}.
+ * This class exposes getObjectInspector which can be used for reducing
+ * NameNode calls in OrcRelation.
+ */
 public class OrcRecordReader extends RecordReader<NullWritable, OrcStruct> {
   private final org.apache.hadoop.hive.ql.io.orc.RecordReader reader;
   private final int numColumns;
