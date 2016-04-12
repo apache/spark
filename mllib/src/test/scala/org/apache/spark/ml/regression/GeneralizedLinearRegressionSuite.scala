@@ -992,6 +992,14 @@ class GeneralizedLinearRegressionSuite
         assert(expected.coefficients === actual.coefficients)
       }
   }
+
+  test("glm accepts Dataset[LabeledPoint]") {
+    val context = sqlContext
+    import context.implicits._
+    new GeneralizedLinearRegression()
+      .setFamily("gaussian")
+      .fit(datasetGaussianIdentity.as[LabeledPoint])
+  }
 }
 
 object GeneralizedLinearRegressionSuite {

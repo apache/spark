@@ -104,6 +104,7 @@ statement
         REPLACE COLUMNS '(' colTypeList ')' (CASCADE | RESTRICT)?      #replaceColumns
     | DROP TABLE (IF EXISTS)? tableIdentifier PURGE?
         (FOR METADATA? REPLICATION '(' STRING ')')?                    #dropTable
+    | DROP VIEW (IF EXISTS)? tableIdentifier                           #dropTable
     | CREATE (OR REPLACE)? VIEW (IF NOT EXISTS)? tableIdentifier
         identifierCommentList? (COMMENT STRING)?
         (PARTITIONED ON identifierList)?
@@ -141,7 +142,6 @@ hiveNativeCommands
     | DELETE FROM tableIdentifier (WHERE booleanExpression)?
     | TRUNCATE TABLE tableIdentifier partitionSpec?
         (COLUMNS identifierList)?
-    | DROP VIEW (IF EXISTS)? qualifiedName
     | SHOW COLUMNS (FROM | IN) tableIdentifier ((FROM|IN) identifier)?
     | START TRANSACTION (transactionMode (',' transactionMode)*)?
     | COMMIT WORK?

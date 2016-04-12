@@ -79,6 +79,7 @@ class HiveDDLCommandSuite extends PlanTest {
       CatalogColumn("country", "string", comment = Some("country of origination")) :: Nil)
     // TODO will be SQLText
     assert(desc.viewText == Option("This is the staging page view table"))
+    assert(desc.viewOriginalText.isEmpty)
     assert(desc.partitionColumns ==
       CatalogColumn("dt", "string", comment = Some("date type")) ::
       CatalogColumn("hour", "string", comment = Some("hour of the day")) :: Nil)
@@ -125,6 +126,7 @@ class HiveDDLCommandSuite extends PlanTest {
       CatalogColumn("country", "string", comment = Some("country of origination")) :: Nil)
     // TODO will be SQLText
     assert(desc.viewText == Option("This is the staging page view table"))
+    assert(desc.viewOriginalText.isEmpty)
     assert(desc.partitionColumns ==
       CatalogColumn("dt", "string", comment = Some("date type")) ::
       CatalogColumn("hour", "string", comment = Some("hour of the day")) :: Nil)
@@ -145,6 +147,7 @@ class HiveDDLCommandSuite extends PlanTest {
     assert(desc.storage.locationUri == None)
     assert(desc.schema == Seq.empty[CatalogColumn])
     assert(desc.viewText == None) // TODO will be SQLText
+    assert(desc.viewOriginalText.isEmpty)
     assert(desc.storage.serdeProperties == Map())
     assert(desc.storage.inputFormat == Some("org.apache.hadoop.mapred.TextInputFormat"))
     assert(desc.storage.outputFormat ==
@@ -180,11 +183,71 @@ class HiveDDLCommandSuite extends PlanTest {
     assert(desc.storage.locationUri == None)
     assert(desc.schema == Seq.empty[CatalogColumn])
     assert(desc.viewText == None) // TODO will be SQLText
+    assert(desc.viewOriginalText.isEmpty)
     assert(desc.storage.serdeProperties == Map(("serde_p1" -> "p1"), ("serde_p2" -> "p2")))
     assert(desc.storage.inputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileInputFormat"))
     assert(desc.storage.outputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileOutputFormat"))
     assert(desc.storage.serde == Some("org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe"))
     assert(desc.properties == Map(("tbl_p1" -> "p11"), ("tbl_p2" -> "p22")))
+  }
+
+  test("unsupported operations") {
+    intercept[ParseException] {
+      parser.parsePlan(
+        """
+          |CREATE TEMPORARY TABLE ctas2
+          |ROW FORMAT SERDE "org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe"
+          |WITH SERDEPROPERTIES("serde_p1"="p1","serde_p2"="p2")
+          |STORED AS RCFile
+          |TBLPROPERTIES("tbl_p1"="p11", "tbl_p2"="p22")
+          |AS SELECT key, value FROM src ORDER BY key, value
+        """.stripMargin)
+    }
+    intercept[ParseException] {
+      parser.parsePlan(
+        """CREATE TABLE ctas2
+          |STORED AS
+          |INPUTFORMAT "org.apache.hadoop.mapred.TextInputFormat"
+          |OUTPUTFORMAT "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"
+          |INPUTDRIVER "org.apache.hadoop.hive.howl.rcfile.RCFileInputDriver"
+          |OUTPUTDRIVER "org.apache.hadoop.hive.howl.rcfile.RCFileOutputDriver"
+          |AS SELECT key, value FROM src ORDER BY key, value
+        """.stripMargin)
+    }
+    intercept[ParseException] {
+      parser.parsePlan(
+        """
+          |CREATE TABLE user_info_bucketed(user_id BIGINT, firstname STRING, lastname STRING)
+          |CLUSTERED BY(user_id) INTO 256 BUCKETS
+          |AS SELECT key, value FROM src ORDER BY key, value
+        """.stripMargin)
+    }
+    intercept[ParseException] {
+      parser.parsePlan(
+        """
+          |CREATE TABLE user_info_bucketed(user_id BIGINT, firstname STRING, lastname STRING)
+          |SKEWED BY (key) ON (1,5,6)
+          |AS SELECT key, value FROM src ORDER BY key, value
+        """.stripMargin)
+    }
+    intercept[ParseException] {
+      parser.parsePlan(
+        """
+          |SELECT TRANSFORM (key, value) USING 'cat' AS (tKey, tValue)
+          |ROW FORMAT SERDE 'org.apache.hadoop.hive.contrib.serde2.TypedBytesSerDe'
+          |RECORDREADER 'org.apache.hadoop.hive.contrib.util.typedbytes.TypedBytesRecordReader'
+          |FROM testData
+        """.stripMargin)
+    }
+    intercept[ParseException] {
+      parser.parsePlan(
+        """
+          |CREATE OR REPLACE VIEW IF NOT EXISTS view1 (col1, col3)
+          |COMMENT 'blabla'
+          |TBLPROPERTIES('prop1Key'="prop1Val")
+          |AS SELECT * FROM tab1
+        """.stripMargin)
+    }
   }
 
   test("Invalid interval term should throw AnalysisException") {
@@ -234,7 +297,7 @@ class HiveDDLCommandSuite extends PlanTest {
   }
 
   test("use backticks in output of Script Transform") {
-    val plan = parser.parsePlan(
+    parser.parsePlan(
       """SELECT `t`.`thing1`
         |FROM (SELECT TRANSFORM (`parquet_t1`.`key`, `parquet_t1`.`value`)
         |USING 'cat' AS (`thing1` int, `thing2` string) FROM `default`.`parquet_t1`) AS t
@@ -242,7 +305,7 @@ class HiveDDLCommandSuite extends PlanTest {
   }
 
   test("use backticks in output of Generator") {
-    val plan = parser.parsePlan(
+    parser.parsePlan(
       """
         |SELECT `gentab2`.`gencol2`
         |FROM `default`.`src`
@@ -252,7 +315,7 @@ class HiveDDLCommandSuite extends PlanTest {
   }
 
   test("use escaped backticks in output of Generator") {
-    val plan = parser.parsePlan(
+    parser.parsePlan(
       """
         |SELECT `gen``tab2`.`gen``col2`
         |FROM `default`.`src`
@@ -284,7 +347,6 @@ class HiveDDLCommandSuite extends PlanTest {
       """
         |CREATE OR REPLACE VIEW IF NOT EXISTS view1
         |(col1, col3)
-        |COMMENT 'I cannot spell'
         |TBLPROPERTIES('prop1Key'="prop1Val")
         |AS SELECT * FROM tab1
       """.stripMargin

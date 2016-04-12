@@ -291,7 +291,7 @@ class LogisticRegressionSummary(JavaCallable):
     @since("2.0.0")
     def probabilityCol(self):
         """
-        Field in "predictions" which gives the calibrated probability
+        Field in "predictions" which gives the probability
         of each class as a vector.
         """
         return self._call_java("probabilityCol")

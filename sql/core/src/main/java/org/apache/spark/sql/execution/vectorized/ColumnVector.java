@@ -913,6 +913,11 @@ public abstract class ColumnVector implements AutoCloseable {
   }
 
   /**
+   * Returns true if this column has a dictionary.
+   */
+  public boolean hasDictionary() { return this.dictionary != null; }
+
+  /**
    * Reserve a integer column for ids of dictionary.
    */
   public ColumnVector reserveDictionaryIds(int capacity) {
@@ -923,6 +928,13 @@ public abstract class ColumnVector implements AutoCloseable {
       dictionaryIds.reset();
       dictionaryIds.reserve(capacity);
     }
+    return dictionaryIds;
+  }
+
+  /**
+   * Returns the underlying integer column for ids of dictionary.
+   */
+  public ColumnVector getDictionaryIds() {
     return dictionaryIds;
   }
 
