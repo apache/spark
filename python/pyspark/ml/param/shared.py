@@ -559,6 +559,30 @@ class HasSolver(Params):
         return self.getOrDefault(self.solver)
 
 
+class HasVarianceCol(Params):
+    """
+    Mixin for param varianceCol: column name for the biased sample variance of prediction.
+    """
+
+    varianceCol = Param(Params._dummy(), "varianceCol", "column name for the biased sample variance of prediction.", typeConverter=TypeConverters.toString)
+
+    def __init__(self):
+        super(HasVarianceCol, self).__init__()
+
+    def setVarianceCol(self, value):
+        """
+        Sets the value of :py:attr:`varianceCol`.
+        """
+        self._set(varianceCol=value)
+        return self
+
+    def getVarianceCol(self):
+        """
+        Gets the value of varianceCol or its default value.
+        """
+        return self.getOrDefault(self.varianceCol)
+
+
 class DecisionTreeParams(Params):
     """
     Mixin for Decision Tree parameters.

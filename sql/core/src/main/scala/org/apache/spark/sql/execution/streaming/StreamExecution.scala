@@ -159,7 +159,7 @@ class StreamExecution(
       triggerExecutor.execute(() => {
         if (isActive) {
           if (dataAvailable) runBatch()
-          commitAndConstructNextBatch()
+          constructNextBatch()
           true
         } else {
           false
@@ -207,7 +207,7 @@ class StreamExecution(
       case None => // We are starting this stream for the first time.
         logInfo(s"Starting new continuous query.")
         currentBatchId = 0
-        commitAndConstructNextBatch()
+        constructNextBatch()
     }
   }
 
@@ -227,15 +227,8 @@ class StreamExecution(
   /**
    * Queries all of the sources to see if any new data is available. When there is new data the
    * batchId counter is incremented and a new log entry is written with the newest offsets.
-   *
-   * Note that committing the offsets for a new batch implicitly marks the previous batch as
-   * finished and thus this method should only be called when all currently available data
-   * has been written to the sink.
    */
-  private def commitAndConstructNextBatch(): Boolean = {
-    // Update committed offsets.
-    committedOffsets ++= availableOffsets
-
+  private def constructNextBatch(): Boolean = {
     // There is a potential dead-lock in Hadoop "Shell.runCommand" before 2.5.0 (HADOOP-10622).
     // If we interrupt some thread running Shell.runCommand, we may hit this issue.
     // As "FileStreamSource.getOffset" will create a file using HDFS API and call "Shell.runCommand"
@@ -331,6 +324,8 @@ class StreamExecution(
 
     val batchTime = (System.nanoTime() - startTime).toDouble / 1000000
     logInfo(s"Completed up to $availableOffsets in ${batchTime}ms")
+    // Update committed offsets.
+    committedOffsets ++= availableOffsets
     postEvent(new QueryProgress(this))
   }
 

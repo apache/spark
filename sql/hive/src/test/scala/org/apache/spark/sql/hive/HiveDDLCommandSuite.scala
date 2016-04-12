@@ -26,17 +26,26 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans
 import org.apache.spark.sql.catalyst.dsl.plans.DslLogicalPlan
 import org.apache.spark.sql.catalyst.expressions.JsonTuple
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, ScriptTransformation}
-import org.apache.spark.sql.hive.execution.HiveSqlParser
+import org.apache.spark.sql.hive.execution.{HiveNativeCommand, HiveSqlParser}
 
-class HiveQlSuite extends PlanTest {
+class HiveDDLCommandSuite extends PlanTest {
   val parser = HiveSqlParser
 
   private def extractTableDesc(sql: String): (CatalogTable, Boolean) = {
     parser.parsePlan(sql).collect {
-      case CreateTableAsSelect(desc, child, allowExisting) => (desc, allowExisting)
+      case CreateTableAsSelect(desc, _, allowExisting) => (desc, allowExisting)
+      case CreateViewAsSelect(desc, _, allowExisting, _, _) => (desc, allowExisting)
     }.head
+  }
+
+  private def assertUnsupported(sql: String): Unit = {
+    val e = intercept[ParseException] {
+      parser.parsePlan(sql)
+    }
+    assert(e.getMessage.toLowerCase.contains("unsupported"))
   }
 
   test("Test CTAS #1") {
@@ -70,6 +79,7 @@ class HiveQlSuite extends PlanTest {
       CatalogColumn("country", "string", comment = Some("country of origination")) :: Nil)
     // TODO will be SQLText
     assert(desc.viewText == Option("This is the staging page view table"))
+    assert(desc.viewOriginalText.isEmpty)
     assert(desc.partitionColumns ==
       CatalogColumn("dt", "string", comment = Some("date type")) ::
       CatalogColumn("hour", "string", comment = Some("hour of the day")) :: Nil)
@@ -116,6 +126,7 @@ class HiveQlSuite extends PlanTest {
       CatalogColumn("country", "string", comment = Some("country of origination")) :: Nil)
     // TODO will be SQLText
     assert(desc.viewText == Option("This is the staging page view table"))
+    assert(desc.viewOriginalText.isEmpty)
     assert(desc.partitionColumns ==
       CatalogColumn("dt", "string", comment = Some("date type")) ::
       CatalogColumn("hour", "string", comment = Some("hour of the day")) :: Nil)
@@ -136,6 +147,7 @@ class HiveQlSuite extends PlanTest {
     assert(desc.storage.locationUri == None)
     assert(desc.schema == Seq.empty[CatalogColumn])
     assert(desc.viewText == None) // TODO will be SQLText
+    assert(desc.viewOriginalText.isEmpty)
     assert(desc.storage.serdeProperties == Map())
     assert(desc.storage.inputFormat == Some("org.apache.hadoop.mapred.TextInputFormat"))
     assert(desc.storage.outputFormat ==
@@ -171,11 +183,71 @@ class HiveQlSuite extends PlanTest {
     assert(desc.storage.locationUri == None)
     assert(desc.schema == Seq.empty[CatalogColumn])
     assert(desc.viewText == None) // TODO will be SQLText
+    assert(desc.viewOriginalText.isEmpty)
     assert(desc.storage.serdeProperties == Map(("serde_p1" -> "p1"), ("serde_p2" -> "p2")))
     assert(desc.storage.inputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileInputFormat"))
     assert(desc.storage.outputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileOutputFormat"))
     assert(desc.storage.serde == Some("org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe"))
     assert(desc.properties == Map(("tbl_p1" -> "p11"), ("tbl_p2" -> "p22")))
+  }
+
+  test("unsupported operations") {
+    intercept[ParseException] {
+      parser.parsePlan(
+        """
+          |CREATE TEMPORARY TABLE ctas2
+          |ROW FORMAT SERDE "org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe"
+          |WITH SERDEPROPERTIES("serde_p1"="p1","serde_p2"="p2")
+          |STORED AS RCFile
+          |TBLPROPERTIES("tbl_p1"="p11", "tbl_p2"="p22")
+          |AS SELECT key, value FROM src ORDER BY key, value
+        """.stripMargin)
+    }
+    intercept[ParseException] {
+      parser.parsePlan(
+        """CREATE TABLE ctas2
+          |STORED AS
+          |INPUTFORMAT "org.apache.hadoop.mapred.TextInputFormat"
+          |OUTPUTFORMAT "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"
+          |INPUTDRIVER "org.apache.hadoop.hive.howl.rcfile.RCFileInputDriver"
+          |OUTPUTDRIVER "org.apache.hadoop.hive.howl.rcfile.RCFileOutputDriver"
+          |AS SELECT key, value FROM src ORDER BY key, value
+        """.stripMargin)
+    }
+    intercept[ParseException] {
+      parser.parsePlan(
+        """
+          |CREATE TABLE user_info_bucketed(user_id BIGINT, firstname STRING, lastname STRING)
+          |CLUSTERED BY(user_id) INTO 256 BUCKETS
+          |AS SELECT key, value FROM src ORDER BY key, value
+        """.stripMargin)
+    }
+    intercept[ParseException] {
+      parser.parsePlan(
+        """
+          |CREATE TABLE user_info_bucketed(user_id BIGINT, firstname STRING, lastname STRING)
+          |SKEWED BY (key) ON (1,5,6)
+          |AS SELECT key, value FROM src ORDER BY key, value
+        """.stripMargin)
+    }
+    intercept[ParseException] {
+      parser.parsePlan(
+        """
+          |SELECT TRANSFORM (key, value) USING 'cat' AS (tKey, tValue)
+          |ROW FORMAT SERDE 'org.apache.hadoop.hive.contrib.serde2.TypedBytesSerDe'
+          |RECORDREADER 'org.apache.hadoop.hive.contrib.util.typedbytes.TypedBytesRecordReader'
+          |FROM testData
+        """.stripMargin)
+    }
+    intercept[ParseException] {
+      parser.parsePlan(
+        """
+          |CREATE OR REPLACE VIEW IF NOT EXISTS view1 (col1, col3)
+          |COMMENT 'blabla'
+          |TBLPROPERTIES('prop1Key'="prop1Val")
+          |AS SELECT * FROM tab1
+        """.stripMargin)
+    }
   }
 
   test("Invalid interval term should throw AnalysisException") {
@@ -225,7 +297,7 @@ class HiveQlSuite extends PlanTest {
   }
 
   test("use backticks in output of Script Transform") {
-    val plan = parser.parsePlan(
+    parser.parsePlan(
       """SELECT `t`.`thing1`
         |FROM (SELECT TRANSFORM (`parquet_t1`.`key`, `parquet_t1`.`value`)
         |USING 'cat' AS (`thing1` int, `thing2` string) FROM `default`.`parquet_t1`) AS t
@@ -233,7 +305,7 @@ class HiveQlSuite extends PlanTest {
   }
 
   test("use backticks in output of Generator") {
-    val plan = parser.parsePlan(
+    parser.parsePlan(
       """
         |SELECT `gentab2`.`gencol2`
         |FROM `default`.`src`
@@ -243,7 +315,7 @@ class HiveQlSuite extends PlanTest {
   }
 
   test("use escaped backticks in output of Generator") {
-    val plan = parser.parsePlan(
+    parser.parsePlan(
       """
         |SELECT `gen``tab2`.`gen``col2`
         |FROM `default`.`src`
@@ -251,4 +323,60 @@ class HiveQlSuite extends PlanTest {
         |LATERAL VIEW explode(`gen``tab1`.`gen``col1`) `gen``tab2` AS `gen``col2`
       """.stripMargin)
   }
+
+  test("create view -- basic") {
+    val v1 = "CREATE VIEW view1 AS SELECT * FROM tab1"
+    val (desc, exists) = extractTableDesc(v1)
+    assert(!exists)
+    assert(desc.identifier.database.isEmpty)
+    assert(desc.identifier.table == "view1")
+    assert(desc.tableType == CatalogTableType.VIRTUAL_VIEW)
+    assert(desc.storage.locationUri.isEmpty)
+    assert(desc.schema == Seq.empty[CatalogColumn])
+    assert(desc.viewText == Option("SELECT * FROM tab1"))
+    assert(desc.viewOriginalText == Option("SELECT * FROM tab1"))
+    assert(desc.storage.serdeProperties == Map())
+    assert(desc.storage.inputFormat.isEmpty)
+    assert(desc.storage.outputFormat.isEmpty)
+    assert(desc.storage.serde.isEmpty)
+    assert(desc.properties == Map())
+  }
+
+  test("create view - full") {
+    val v1 =
+      """
+        |CREATE OR REPLACE VIEW IF NOT EXISTS view1
+        |(col1, col3)
+        |TBLPROPERTIES('prop1Key'="prop1Val")
+        |AS SELECT * FROM tab1
+      """.stripMargin
+    val (desc, exists) = extractTableDesc(v1)
+    assert(exists)
+    assert(desc.identifier.database.isEmpty)
+    assert(desc.identifier.table == "view1")
+    assert(desc.tableType == CatalogTableType.VIRTUAL_VIEW)
+    assert(desc.storage.locationUri.isEmpty)
+    assert(desc.schema ==
+      CatalogColumn("col1", null, nullable = true, None) ::
+        CatalogColumn("col3", null, nullable = true, None) :: Nil)
+    assert(desc.viewText == Option("SELECT * FROM tab1"))
+    assert(desc.viewOriginalText == Option("SELECT * FROM tab1"))
+    assert(desc.storage.serdeProperties == Map())
+    assert(desc.storage.inputFormat.isEmpty)
+    assert(desc.storage.outputFormat.isEmpty)
+    assert(desc.storage.serde.isEmpty)
+    assert(desc.properties == Map("prop1Key" -> "prop1Val"))
+  }
+
+  test("create view -- partitioned view") {
+    val v1 = "CREATE VIEW view1 partitioned on (ds, hr) as select * from srcpart"
+    intercept[ParseException] {
+      parser.parsePlan(v1).isInstanceOf[HiveNativeCommand]
+    }
+  }
+
+  test("MSCK repair table (not supported)") {
+    assertUnsupported("MSCK REPAIR TABLE tab1")
+  }
+
 }

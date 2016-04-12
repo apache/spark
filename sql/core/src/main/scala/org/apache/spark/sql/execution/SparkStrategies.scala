@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.Strategy
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
@@ -30,6 +31,7 @@ import org.apache.spark.sql.execution.command.{DescribeCommand => RunnableDescri
 import org.apache.spark.sql.execution.datasources.{DescribeCommand => LogicalDescribeCommand, _}
 import org.apache.spark.sql.execution.exchange.ShuffleExchange
 import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight}
+import org.apache.spark.sql.execution.streaming.MemoryPlan
 import org.apache.spark.sql.internal.SQLConf
 
 private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
@@ -60,16 +62,17 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 
-  object LeftSemiJoin extends Strategy with PredicateHelper {
+  object ExistenceJoin extends Strategy with PredicateHelper {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case ExtractEquiJoinKeys(
-             LeftSemi, leftKeys, rightKeys, condition, left, CanBroadcast(right)) =>
+             LeftExistence(jt), leftKeys, rightKeys, condition, left, CanBroadcast(right)) =>
         Seq(joins.BroadcastHashJoin(
-          leftKeys, rightKeys, LeftSemi, BuildRight, condition, planLater(left), planLater(right)))
+          leftKeys, rightKeys, jt, BuildRight, condition, planLater(left), planLater(right)))
       // Find left semi joins where at least some predicates can be evaluated by matching join keys
-      case ExtractEquiJoinKeys(LeftSemi, leftKeys, rightKeys, condition, left, right) =>
+      case ExtractEquiJoinKeys(
+             LeftExistence(jt), leftKeys, rightKeys, condition, left, right) =>
         Seq(joins.ShuffledHashJoin(
-          leftKeys, rightKeys, LeftSemi, BuildRight, condition, planLater(left), planLater(right)))
+          leftKeys, rightKeys, jt, BuildRight, condition, planLater(left), planLater(right)))
       case _ => Nil
     }
   }
@@ -332,6 +335,10 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case r: RunnableCommand => ExecutedCommand(r) :: Nil
 
+      case MemoryPlan(sink, output) =>
+        val encoder = RowEncoder(sink.schema)
+        LocalTableScan(output, sink.allData.map(r => encoder.toRow(r).copy())) :: Nil
+
       case logical.Distinct(child) =>
         throw new IllegalStateException(
           "logical distinct operator should have been replaced by aggregate in the optimizer")
@@ -339,8 +346,14 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         throw new IllegalStateException(
           "logical intersect operator should have been replaced by semi-join in the optimizer")
 
+      case logical.DeserializeToObject(deserializer, child) =>
+        execution.DeserializeToObject(deserializer, planLater(child)) :: Nil
+      case logical.SerializeFromObject(serializer, child) =>
+        execution.SerializeFromObject(serializer, planLater(child)) :: Nil
       case logical.MapPartitions(f, in, out, child) =>
         execution.MapPartitions(f, in, out, planLater(child)) :: Nil
+      case logical.MapElements(f, in, out, child) =>
+        execution.MapElements(f, in, out, planLater(child)) :: Nil
       case logical.AppendColumns(f, in, out, child) =>
         execution.AppendColumns(f, in, out, planLater(child)) :: Nil
       case logical.MapGroups(f, key, in, out, grouping, data, child) =>
