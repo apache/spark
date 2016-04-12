@@ -2468,4 +2468,21 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
           Row("r3c1x", "r3c2", "t1r3c3", "r3c2", "t1r3c3") :: Nil)
     }
   }
+
+  test("test !< and !> comparator") {
+    // !< is equivalent to >=
+    checkAnswer(
+      sql("select count(*) from testData where key !< 99 and key >= 99"),
+      Row(2) :: Nil)
+    checkAnswer(
+      sql("select count(*) from testData where key !< null and key >= null"),
+      Row(0) :: Nil)
+    // !> is equivalent to <=
+    checkAnswer(
+      sql("select count(*) from testData where key !> 99 and key <= 99"),
+      Row(99) :: Nil)
+    checkAnswer(
+      sql("select count(*) from testData where key !> null and key <= null"),
+      Row(0) :: Nil)
+  }
 }

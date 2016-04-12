@@ -134,7 +134,7 @@ class SqlLexical extends scala.util.parsing.combinator.lexical.StdLexical {
   def normalizeKeyword(str: String): String = str.toLowerCase
 
   delimiters += (
-    "@", "*", "+", "-", "<", "=", "<>", "!=", "<=", ">=", ">", "/", "(", ")",
+    "@", "*", "+", "-", "<", "=", "<>", "!=", "<=", "!>", ">=", "!<", ">", "/", "(", ")",
     ",", ";", "%", "{", "}", ":", "[", "]", ".", "&", "|", "^", "~", "<=>"
     )
 

@@ -1432,4 +1432,15 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       getMessage()
     assert(e1.startsWith("Path does not exist"))
   }
+
+  test("test !< and !> comparator") {
+    // !< is equivalent to >=
+    checkAnswer(
+      testData.where("key !< 99"),
+      testData.collect().filter(_.getInt(0) >= 99).toSeq)
+    // !> is equivalent to <=
+    checkAnswer(
+      testData.where("key !> 99"),
+      testData.collect().filter(_.getInt(0) <= 99).toSeq)
+  }
 }

@@ -428,4 +428,13 @@ class PlanParserSuite extends PlanTest {
       "Number of aliases must match the number of fields in an inline table.")
     intercept[ArrayIndexOutOfBoundsException](parsePlan("values (1, 'a'), (2, 'b', 5Y)"))
   }
+
+  test("simple select query with !> and !<") {
+    // !< is equivalent to >=
+    assertEqual("select a, b from db.c where x !< 1",
+      table("db", "c").where('x >= 1).select('a, 'b))
+    // !> is equivalent to <=
+    assertEqual("select a, b from db.c where x !> 1",
+      table("db", "c").where('x <= 1).select('a, 'b))
+  }
 }
