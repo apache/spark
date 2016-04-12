@@ -530,6 +530,8 @@ object LikeSimplification extends Rule[LogicalPlan] {
           StartsWith(l, Literal(pattern))
         case endsWith(pattern) =>
           EndsWith(l, Literal(pattern))
+        // 'a%a' pattern is basically same with 'a%' && '%a'.
+        // However, the additional `Length` condition is required to prevent 'a' match 'a%a'.
         case startsAndEndsWith(prefix, postfix) if !prefix.endsWith("\\") =>
           And(GreaterThanOrEqual(Length(l), Literal(prefix.size + postfix.size)),
             And(StartsWith(l, Literal(prefix)), EndsWith(l, Literal(postfix))))

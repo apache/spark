@@ -61,7 +61,7 @@ class LikeSimplificationSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("simplify Like into StartsAndEndsWith") {
+  test("simplify Like into startsWith and EndsWith") {
     val originalQuery =
       testRelation
         .where(('a like "abc\\%def") || ('a like "abc%def"))
