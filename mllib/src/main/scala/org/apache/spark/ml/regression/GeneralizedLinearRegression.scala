@@ -730,7 +730,7 @@ class GeneralizedLinearRegressionModel private[ml] (
     if ($(linkPredictionCol).nonEmpty) {
       output = output.withColumn($(linkPredictionCol), predictLinkUDF(col($(featuresCol))))
     }
-    output
+    output.toDF
   }
 
   private var trainingSummary: Option[GeneralizedLinearRegressionSummary] = None
