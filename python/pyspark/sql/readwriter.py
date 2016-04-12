@@ -156,8 +156,8 @@ class DataFrameReader(object):
         self.options(**options)
         if path is not None:
             if type(path) != str or len(path.strip()) == 0:
-                raise ValueError("If the path is provided for stream, " +\
-                    "it needs to be a non-empty string. List of paths are not supported.")
+                raise ValueError("If the path is provided for stream, it needs to be a " +
+                                 "non-empty string. List of paths are not supported.")
             return self._df(self._jreader.stream(path))
         else:
             return self._df(self._jreader.stream())

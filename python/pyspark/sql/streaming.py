@@ -80,7 +80,6 @@ class ContinuousQuery(object):
             raise ValueError("timeoutMs must be a positive integer. Got %s" % timeoutMs)
         return self._jcq.awaitTermination(timeoutMs)
 
-
     @since(2.0)
     def stop(self):
         """Stop this continuous query.
@@ -99,7 +98,10 @@ class Trigger:
     __metaclass__ = ABCMeta
 
     @abstractmethod
-    def _to_java_trigger(self, sqlContext): pass
+    def _to_java_trigger(self, sqlContext):
+        """Internal method to construct the trigger on the jvm.
+        """
+        pass
 
 
 class ProcessingTime(Trigger):
