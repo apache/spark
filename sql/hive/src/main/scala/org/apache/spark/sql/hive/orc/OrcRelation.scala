@@ -160,19 +160,22 @@ private[sql] class DefaultSource
           val job = Job.getInstance(conf)
           FileInputFormat.setInputPaths(job, file.filePath)
 
-          val inputFormat = new OrcNewInputFormat
           val fileSplit = new FileSplit(
             new Path(new URI(file.filePath)), file.start, file.length, Array.empty
           )
-
-          val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
-          val hadoopAttemptContext = new TaskAttemptContextImpl(conf, attemptId)
-          inputFormat.createRecordReader(fileSplit, hadoopAttemptContext)
+          // Create RecordReader here. This will help in getting
+          // ObjectInspector during recordReader creation itself and can
+          // avoid NN call in unwrapOrcStructs to get ObjectInspector for the
+          // file. Would be helpful for partitioned datasets.
+          new OrcRecordReader(OrcFile.createReader(new Path(new URI(file
+            .filePath)), OrcFile.readerOptions(conf)), conf, fileSplit.getStart(),
+            fileSplit.getLength())
         }
 
         // Unwraps `OrcStruct`s to `UnsafeRow`s
-        val unsafeRowIterator = OrcRelation.unwrapOrcStructs(
-          file.filePath, conf, requiredSchema, new RecordReaderIterator[OrcStruct](orcRecordReader)
+        val unsafeRowIterator = OrcRelation.unwrapOrcStructs(conf, requiredSchema,
+          Some(orcRecordReader.getObjectInspector.asInstanceOf[StructObjectInspector]),
+          new RecordReaderIterator[OrcStruct](orcRecordReader)
         )
 
         // Appends partition values
@@ -337,10 +340,12 @@ private[orc] case class OrcTableScan(
 
     rdd.mapPartitionsWithInputSplit { case (split: OrcSplit, iterator) =>
       val writableIterator = iterator.map(_._2)
+      val maybeStructOI = OrcFileOperator.getObjectInspector(
+        split.getPath.toString, Some(conf))
       OrcRelation.unwrapOrcStructs(
-        split.getPath.toString,
         wrappedConf.value,
         StructType.fromAttributes(attributes),
+        maybeStructOI,
         writableIterator
       )
     }
@@ -370,12 +375,11 @@ private[orc] object OrcRelation extends HiveInspectors {
   )
 
   def unwrapOrcStructs(
-      filePath: String,
       conf: Configuration,
       dataSchema: StructType,
+      maybeStructOI: Option[StructObjectInspector],
       iterator: Iterator[Writable]): Iterator[InternalRow] = {
     val deserializer = new OrcSerde
-    val maybeStructOI = OrcFileOperator.getObjectInspector(filePath, Some(conf))
     val mutableRow = new SpecificMutableRow(dataSchema.map(_.dataType))
     val unsafeProjection = UnsafeProjection.create(dataSchema)
 
