@@ -52,7 +52,7 @@ object MultivariateSummarizer {
         |For example, the following command runs this app on a synthetic dataset:
         |
         | bin/spark-submit --class org.apache.spark.examples.mllib.MultivariateSummarizer \
-        |  examples/target/scala-*/spark-examples-*.jar \
+        |  examples/target/spark-examples-*.jar \
         |  --input data/mllib/sample_linear_regression_data.txt
         """.stripMargin)
     }

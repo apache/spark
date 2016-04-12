@@ -76,7 +76,7 @@ object LinearRegression {
           |For example, the following command runs this app on a synthetic dataset:
           |
           | bin/spark-submit --class org.apache.spark.examples.mllib.LinearRegression \
-          |  examples/target/scala-*/spark-examples-*.jar \
+          |  examples/target/spark-examples-*.jar \
           |  data/mllib/sample_linear_regression_data.txt
         """.stripMargin)
     }
