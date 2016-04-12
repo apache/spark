@@ -210,7 +210,7 @@ class DDLCommandSuite extends PlanTest {
     val expected_view = AlterTableRename(
       TableIdentifier("table_name", None),
       TableIdentifier("new_table_name", None),
-      isView = false)
+      isView = true)
     comparePlans(parsed_table, expected_table)
     comparePlans(parsed_view, expected_view)
   }
@@ -242,9 +242,9 @@ class DDLCommandSuite extends PlanTest {
       tableIdent, Seq("comment", "test"), ifExists = false, isView = false)
     val expected3_table = AlterTableUnsetProperties(
       tableIdent, Seq("comment", "test"), ifExists = true, isView = false)
-    val expected1_view = expected1_table
-    val expected2_view = expected2_table
-    val expected3_view = expected3_table
+    val expected1_view = expected1_table.copy(isView = true)
+    val expected2_view = expected2_table.copy(isView = true)
+    val expected3_view = expected3_table.copy(isView = true)
 
     comparePlans(parsed1_table, expected1_table)
     comparePlans(parsed2_table, expected2_table)
