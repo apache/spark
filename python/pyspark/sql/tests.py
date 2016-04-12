@@ -294,6 +294,23 @@ class SQLTests(ReusedPySparkTestCase):
         res = data.select(pudf(data['number']).alias('plus_four'))
         self.assertEqual(res.agg({'plus_four': 'sum'}).collect()[0][0], 85)
 
+    def test_udf_with_non_null_result(self):
+        rdd = self.sc.parallelize([
+            Row(a=1, b=1),
+            Row(a=2, b=2),
+        ])
+        data = self.sqlCtx.createDataFrame(rdd)
+
+        udf = UserDefinedFunction(lambda x: x + 1, LongType(), False)
+
+        res = data.select("a", udf(data['b']).alias("b"))
+        self.assertEqual(res.schema.names[1], 'b')
+        self.assertFalse(res.schema.fields[1].nullable)
+        self.assertEqual(res.collect(), [
+            Row(a=1, b=2),
+            Row(a=2, b=3),
+        ])
+
     def test_udf(self):
         self.sqlCtx.registerFunction("twoArgs", lambda x, y: len(x) + y, IntegerType())
         [row] = self.sqlCtx.sql("SELECT twoArgs('test', 1)").collect()

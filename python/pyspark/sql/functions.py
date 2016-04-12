@@ -1710,9 +1710,10 @@ class UserDefinedFunction(object):
 
     .. versionadded:: 1.3
     """
-    def __init__(self, func, returnType, name=None):
+    def __init__(self, func, returnType, name=None, nullable=True):
         self.func = func
         self.returnType = returnType
+        self.nullable = nullable
         self._broadcast = None
         self._judf = self._create_judf(name)
 
@@ -1726,7 +1727,7 @@ class UserDefinedFunction(object):
             f = self.func
             name = f.__name__ if hasattr(f, '__name__') else f.__class__.__name__
         judf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonFunction(
-            name, wrapped_func, jdt)
+            name, wrapped_func, jdt, self.nullable)
         return judf
 
     def __del__(self):
@@ -1741,7 +1742,7 @@ class UserDefinedFunction(object):
 
 
 @since(1.3)
-def udf(f, returnType=StringType()):
+def udf(f, returnType=StringType(), nullable=True):
     """Creates a :class:`Column` expression representing a user defined function (UDF).
 
     >>> from pyspark.sql.types import IntegerType
@@ -1749,7 +1750,7 @@ def udf(f, returnType=StringType()):
     >>> df.select(slen(df.name).alias('slen')).collect()
     [Row(slen=5), Row(slen=3)]
     """
-    return UserDefinedFunction(f, returnType)
+    return UserDefinedFunction(f, returnType, nullable=nullable)
 
 blacklist = ['map', 'since', 'ignore_unicode_prefix']
 __all__ = [k for k, v in globals().items()
