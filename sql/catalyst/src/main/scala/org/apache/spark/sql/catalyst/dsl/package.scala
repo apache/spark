@@ -323,6 +323,8 @@ package object dsl {
 
       def union(otherPlan: LogicalPlan): LogicalPlan = Union(logicalPlan, otherPlan)
 
+      def distinct(): LogicalPlan = Distinct(logicalPlan)
+
       def generate(
         generator: Generator,
         join: Boolean = false,

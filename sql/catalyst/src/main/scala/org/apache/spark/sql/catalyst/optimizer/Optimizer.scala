@@ -91,7 +91,8 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       EliminateSorts,
       SimplifyCasts,
       SimplifyCaseConversionExpressions,
-      EliminateSerialization) ::
+      EliminateSerialization,
+      EliminateDistinct) ::
     Batch("Decimal Optimizations", FixedPoint(100),
       DecimalAggregates) ::
     Batch("Typed Filter Optimization", FixedPoint(100),
@@ -1231,6 +1232,20 @@ object RemoveDispensableExpressions extends Rule[LogicalPlan] {
 }
 
 /**
+ * Removes useless Distinct that are not necessary.
+ */
+object EliminateDistinct extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    // Eliminate the useless distinct.
+    // Distinct has been replaced by Aggregate in the rule ReplaceDistinctWithAggregate
+    case a @ Aggregate(grouping, aggs, child)
+        if child.distinctSet.nonEmpty && child.distinctSet.subsetOf(AttributeSet(aggs)) &&
+          a.isForDistinct =>
+      child
+  }
+}
+
+/**
  * Combines two adjacent [[Limit]] operators into one, merging the
  * expressions into one single expression.
  */
@@ -1328,7 +1343,7 @@ object ReplaceIntersectWithSemiJoin extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case Intersect(left, right) =>
       assert(left.output.size == right.output.size)
-      val joinCond = left.output.zip(right.output).map { case (l, r) => EqualNullSafe(l, r) }
+      val joinCond = left.output.zip(right.output).map(EqualNullSafe.tupled)
       Distinct(Join(left, right, LeftSemi, joinCond.reduceLeftOption(And)))
   }
 }

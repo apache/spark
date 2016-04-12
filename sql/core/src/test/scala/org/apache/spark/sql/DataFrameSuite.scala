@@ -429,6 +429,12 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       Row("id1", 1) ::
       Row("id", 1) ::
       Row("id1", 2) :: Nil)
+
+    checkAnswer(
+      df.distinct().intersect(df),
+      Row("id1", 1) ::
+      Row("id", 1) ::
+      Row("id1", 2) :: Nil)
   }
 
   test("intersect - nullability") {
