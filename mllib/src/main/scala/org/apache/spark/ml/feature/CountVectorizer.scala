@@ -26,7 +26,7 @@ import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg.{Vectors, VectorUDT}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OpenHashMap
@@ -147,7 +147,8 @@ class CountVectorizer(override val uid: String)
 
   setDefault(vocabSize -> (1 << 18), minDF -> 1)
 
-  override def fit(dataset: DataFrame): CountVectorizerModel = {
+  @Since("2.0.0")
+  override def fit(dataset: Dataset[_]): CountVectorizerModel = {
     transformSchema(dataset.schema, logging = true)
     val vocSize = $(vocabSize)
     val input = dataset.select($(inputCol)).rdd.map(_.getAs[Seq[String]](0))
@@ -170,16 +171,10 @@ class CountVectorizer(override val uid: String)
       (word, count)
     }.cache()
     val fullVocabSize = wordCounts.count()
-    val vocab: Array[String] = {
-      val tmpSortedWC: Array[(String, Long)] = if (fullVocabSize <= vocSize) {
-        // Use all terms
-        wordCounts.collect().sortBy(-_._2)
-      } else {
-        // Sort terms to select vocab
-        wordCounts.sortBy(_._2, ascending = false).take(vocSize)
-      }
-      tmpSortedWC.map(_._1)
-    }
+
+    val vocab = wordCounts
+      .top(math.min(fullVocabSize, vocSize).toInt)(Ordering.by(_._2))
+      .map(_._1)
 
     require(vocab.length > 0, "The vocabulary size should be > 0. Lower minDF as necessary.")
     copyValues(new CountVectorizerModel(uid, vocab).setParent(this))
@@ -230,7 +225,8 @@ class CountVectorizerModel(override val uid: String, val vocabulary: Array[Strin
   /** Dictionary created from [[vocabulary]] and its indices, broadcast once for [[transform()]] */
   private var broadcastDict: Option[Broadcast[Map[String, Int]]] = None
 
-  override def transform(dataset: DataFrame): DataFrame = {
+  @Since("2.0.0")
+  override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     if (broadcastDict.isEmpty) {
       val dict = vocabulary.zipWithIndex.toMap

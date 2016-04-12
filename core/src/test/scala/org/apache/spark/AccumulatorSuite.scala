@@ -17,6 +17,7 @@
 
 package org.apache.spark
 
+import java.util.Properties
 import java.util.concurrent.Semaphore
 import javax.annotation.concurrent.GuardedBy
 
@@ -292,7 +293,7 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
       dummyTask, mutable.HashMap(), mutable.HashMap(), serInstance)
     // Now we're on the executors.
     // Deserialize the task and assert that its accumulators are zero'ed out.
-    val (_, _, taskBytes) = Task.deserializeWithDependencies(taskSer)
+    val (_, _, _, taskBytes) = Task.deserializeWithDependencies(taskSer)
     val taskDeser = serInstance.deserialize[DummyTask](
       taskBytes, Thread.currentThread.getContextClassLoader)
     // Assert that executors see only zeros
@@ -403,6 +404,6 @@ private class SaveInfoListener extends SparkListener {
 private[spark] class DummyTask(
     val internalAccums: Seq[Accumulator[_]],
     val externalAccums: Seq[Accumulator[_]])
-  extends Task[Int](0, 0, 0, internalAccums) {
+  extends Task[Int](0, 0, 0, internalAccums, new Properties) {
   override def runTask(c: TaskContext): Int = 1
 }
