@@ -17,6 +17,10 @@
 
 package org.apache.spark
 
+import java.util.Properties
+import java.util.concurrent.Semaphore
+import javax.annotation.concurrent.GuardedBy
+
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.ref.WeakReference
@@ -162,7 +166,7 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
   test("internal accumulators in TaskContext") {
     sc = new SparkContext("local", "test")
     val accums = InternalAccumulator.create(sc)
-    val taskContext = new TaskContextImpl(0, 0, 0, 0, null, null, accums)
+    val taskContext = new TaskContextImpl(0, 0, 0, 0, null, new Properties, null, accums)
     val internalMetricsToAccums = taskContext.internalMetricsToAccumulators
     val collectedInternalAccums = taskContext.collectInternalAccumulators()
     val collectedAccums = taskContext.collectAccumulators()

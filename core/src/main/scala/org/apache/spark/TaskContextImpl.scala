@@ -17,6 +17,8 @@
 
 package org.apache.spark
 
+import java.util.Properties
+
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 
 import org.apache.spark.executor.TaskMetrics
@@ -31,6 +33,7 @@ private[spark] class TaskContextImpl(
     override val taskAttemptId: Long,
     override val attemptNumber: Int,
     override val taskMemoryManager: TaskMemoryManager,
+    localProperties: Properties,
     @transient private val metricsSystem: MetricsSystem,
     internalAccumulators: Seq[Accumulator[Long]],
     val runningLocally: Boolean = false,
@@ -123,6 +126,8 @@ private[spark] class TaskContextImpl(
   override def isRunningLocally(): Boolean = runningLocally
 
   override def isInterrupted(): Boolean = interrupted
+
+  override def getLocalProperty(key: String): String = localProperties.getProperty(key)
 
   override def getMetricsSources(sourceName: String): Seq[Source] =
     metricsSystem.getSourcesByName(sourceName)
