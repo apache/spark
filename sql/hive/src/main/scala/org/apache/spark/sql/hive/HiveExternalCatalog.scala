@@ -219,26 +219,7 @@ private[spark] class HiveExternalCatalog(client: HiveClient) extends ExternalCat
       parts: Seq[TablePartitionSpec],
       ignoreIfNotExists: Boolean): Unit = withClient {
     requireTableExists(db, table)
-    // Note: Unfortunately Hive does not currently support `ignoreIfNotExists` so we
-    // need to implement it here ourselves. This is currently somewhat expensive because
-    // we make multiple synchronous calls to Hive for each partition we want to drop.
-    val partsToDrop =
-      if (ignoreIfNotExists) {
-        parts.filter { spec =>
-          try {
-            getPartition(db, table, spec)
-            true
-          } catch {
-            // Filter out the partitions that do not actually exist
-            case _: AnalysisException => false
-          }
-        }
-      } else {
-        parts
-      }
-    if (partsToDrop.nonEmpty) {
-      client.dropPartitions(db, table, partsToDrop)
-    }
+    client.dropPartitions(db, table, parts, ignoreIfNotExists)
   }
 
   override def renamePartitions(
