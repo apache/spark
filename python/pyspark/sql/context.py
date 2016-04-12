@@ -405,6 +405,7 @@ class SQLContext(object):
         >>> sqlContext.createDataFrame(rdd, "boolean").collect() # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
             ...
+        Py4JJavaError
         """
         if isinstance(data, DataFrame):
             raise TypeError("data is already a DataFrame")
