@@ -123,36 +123,58 @@ case class DataSource(
     }
   }
 
-  /** Returns a source that can be used to continually read data. */
-  def createSource(): Source = {
+  private def inferFileFormatSchema(format: FileFormat): StructType = {
+    val caseInsensitiveOptions = new CaseInsensitiveMap(options)
+    val allPaths = caseInsensitiveOptions.get("path")
+    val globbedPaths = allPaths.toSeq.flatMap { path =>
+      val hdfsPath = new Path(path)
+      val fs = hdfsPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
+      val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+      SparkHadoopUtil.get.globPathIfNecessary(qualified)
+    }.toArray
+
+    val fileCatalog: FileCatalog = new HDFSFileCatalog(sqlContext, options, globbedPaths, None)
+    userSpecifiedSchema.orElse {
+      format.inferSchema(
+        sqlContext,
+        caseInsensitiveOptions,
+        fileCatalog.allFiles())
+    }.getOrElse {
+      throw new AnalysisException("Unable to infer schema.  It must be specified manually.")
+    }
+  }
+
+  /** Returns the name and schema of the source that can be used to continually read data. */
+  def sourceSchema(): (String, StructType) = {
     providingClass.newInstance() match {
       case s: StreamSourceProvider =>
-        s.createSource(sqlContext, userSpecifiedSchema, className, options)
+        s.sourceSchema(sqlContext, userSpecifiedSchema, className, options)
 
       case format: FileFormat =>
         val caseInsensitiveOptions = new CaseInsensitiveMap(options)
         val path = caseInsensitiveOptions.getOrElse("path", {
           throw new IllegalArgumentException("'path' is not specified")
         })
-        val metadataPath = caseInsensitiveOptions.getOrElse("metadataPath", s"$path/_metadata")
+        (s"FileSource[$path]", inferFileFormatSchema(format))
+      case _ =>
+        throw new UnsupportedOperationException(
+          s"Data source $className does not support streamed reading")
+    }
+  }
 
-        val allPaths = caseInsensitiveOptions.get("path")
-        val globbedPaths = allPaths.toSeq.flatMap { path =>
-          val hdfsPath = new Path(path)
-          val fs = hdfsPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
-          val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-          SparkHadoopUtil.get.globPathIfNecessary(qualified)
-        }.toArray
+  /** Returns a source that can be used to continually read data. */
+  def createSource(metadataPath: String): Source = {
+    providingClass.newInstance() match {
+      case s: StreamSourceProvider =>
+        s.createSource(sqlContext, metadataPath, userSpecifiedSchema, className, options)
 
-        val fileCatalog: FileCatalog = new HDFSFileCatalog(sqlContext, options, globbedPaths, None)
-        val dataSchema = userSpecifiedSchema.orElse {
-          format.inferSchema(
-            sqlContext,
-            caseInsensitiveOptions,
-            fileCatalog.allFiles())
-        }.getOrElse {
-          throw new AnalysisException("Unable to infer schema.  It must be specified manually.")
-        }
+      case format: FileFormat =>
+        val caseInsensitiveOptions = new CaseInsensitiveMap(options)
+        val path = caseInsensitiveOptions.getOrElse("path", {
+          throw new IllegalArgumentException("'path' is not specified")
+        })
+
+        val dataSchema = inferFileFormatSchema(format)
 
         def dataFrameBuilder(files: Array[String]): DataFrame = {
           Dataset.ofRows(

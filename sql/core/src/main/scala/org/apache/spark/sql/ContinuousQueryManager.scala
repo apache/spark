@@ -178,10 +178,13 @@ class ContinuousQueryManager(sqlContext: SQLContext) {
         throw new IllegalArgumentException(
           s"Cannot start query with name $name as a query with that name is already active")
       }
+      var nextSourceId = 0L
       val logicalPlan = df.logicalPlan.transform {
         case StreamingRelation(dataSource, _, output) =>
           // Materialize source to avoid creating it in every batch
-          val source = dataSource.createSource()
+          val metadataPath = s"$checkpointLocation/sources/$nextSourceId"
+          val source = dataSource.createSource(metadataPath)
+          nextSourceId += 1
           // We still need to use the previous `output` instead of `source.schema` as attributes in
           // "df.logicalPlan" has already used attributes of the previous `output`.
           StreamingExecutionRelation(source, output)

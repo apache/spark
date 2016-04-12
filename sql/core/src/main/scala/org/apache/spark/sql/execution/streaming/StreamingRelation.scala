@@ -23,8 +23,8 @@ import org.apache.spark.sql.execution.datasources.DataSource
 
 object StreamingRelation {
   def apply(dataSource: DataSource): StreamingRelation = {
-    val source = dataSource.createSource()
-    StreamingRelation(dataSource, source.toString, source.schema.toAttributes)
+    val (name, schema) = dataSource.sourceSchema()
+    StreamingRelation(dataSource, name, schema.toAttributes)
   }
 }
 

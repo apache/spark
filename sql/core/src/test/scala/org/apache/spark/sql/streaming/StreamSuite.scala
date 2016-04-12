@@ -115,8 +115,17 @@ class StreamSuite extends StreamTest with SharedSQLContext {
  */
 class FakeDefaultSource extends StreamSourceProvider {
 
+  private val fakeSchema = StructType(StructField("a", IntegerType) :: Nil)
+
+  override def sourceSchema(
+      sqlContext: SQLContext,
+      schema: Option[StructType],
+      providerName: String,
+      parameters: Map[String, String]): (String, StructType) = ("fakeSource", fakeSchema)
+
   override def createSource(
       sqlContext: SQLContext,
+      metadataPath: String,
       schema: Option[StructType],
       providerName: String,
       parameters: Map[String, String]): Source = {
