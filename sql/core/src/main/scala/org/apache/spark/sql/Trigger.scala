@@ -55,8 +55,8 @@ sealed trait Trigger {}
  * }}}
  */
 @Experimental
-case class ProcessingTime(interval: Long) extends Trigger {
-  require(interval >= 0, "the interval of trigger should not be negative")
+case class ProcessingTime(intervalMs: Long) extends Trigger {
+  require(intervalMs >= 0, "the interval of trigger should not be negative")
 }
 
 /**
