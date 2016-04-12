@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.csv
 
-import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
@@ -35,30 +34,6 @@ import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils
 import org.apache.spark.sql.execution.datasources.{OutputWriter, OutputWriterFactory, PartitionedFile}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.CompletionIterator
-
-/**
- * Stores and counts malformed lines during CSV parsing.
- */
-private[csv] class MalformedLinesInfo(maxStoreMalformed: Int) extends Serializable {
-
-  var malformedLines = new ArrayBuffer[String]
-  var malformedLineNum = 0
-
-  def add(line: String): Unit = {
-    if (malformedLines.size < maxStoreMalformed) {
-      malformedLines += line
-    }
-    malformedLineNum = malformedLineNum + 1
-  }
-
-  override def toString: String =
-    s"""
-       |# of total malformed lines: ${malformedLineNum}
-       |${malformedLines.size} malformed lines extracted and listed as follows;
-       |${malformedLines.mkString("\n")}
-     """.stripMargin.trim
-}
-
 
 object CSVRelation extends Logging {
 
