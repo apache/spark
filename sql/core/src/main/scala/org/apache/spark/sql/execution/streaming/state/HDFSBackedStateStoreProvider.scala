@@ -80,7 +80,7 @@ private[state] class HDFSBackedStateStoreProvider(
     extends StateStore {
 
     /** Trait and classes representing the internal state of the store */
-    private sealed trait STATE
+    trait STATE
     case object UPDATING extends STATE
     case object COMMITTED extends STATE
     case object ABORTED extends STATE
