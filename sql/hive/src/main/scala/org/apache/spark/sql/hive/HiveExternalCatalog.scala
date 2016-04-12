@@ -65,7 +65,6 @@ private[spark] class HiveExternalCatalog(client: HiveClient) extends ExternalCat
     try {
       body
     } catch {
-      case e: AnalysisException => throw new AnalysisException(e.getMessage)
       case NonFatal(e) if isClientException(e) =>
         throw new AnalysisException(e.getClass.getCanonicalName + ": " + e.getMessage)
     }
