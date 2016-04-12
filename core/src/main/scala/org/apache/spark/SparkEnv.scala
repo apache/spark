@@ -101,14 +101,13 @@ class SparkEnv (
       // We only need to delete the tmp dir create by driver, because sparkFilesDir is point to the
       // current working dir in executor which we do not need to delete.
       driverTmpDirToDelete match {
-        case Some(path) => {
+        case Some(path) =>
           try {
             Utils.deleteRecursively(new File(path))
           } catch {
             case e: Exception =>
               logWarning(s"Exception while deleting Spark temp dir: $path", e)
           }
-        }
         case None => // We just need to delete tmp dir created by driver, so do nothing on executor
       }
     }
