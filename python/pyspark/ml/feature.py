@@ -514,7 +514,7 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures, Java
 
     binary = Param(Params._dummy(), "binary", "If true, all non zero counts are set to 1. " +
                    "This is useful for discrete probabilistic models that model binary events " +
-                   "rather than integer counts",
+                   "rather than integer counts. (default: False)",
                    typeConverter=TypeConverters.toBoolean)
 
     @keyword_only

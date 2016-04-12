@@ -386,7 +386,7 @@ class HashingTF(object):
         """
         If true, term frequency vector will be binary such that non-zero
         term counts will be set to 1
-        (default: false)
+        (default: False)
         """
         self.binary = value
         return self
