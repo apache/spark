@@ -31,8 +31,8 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
       (2, 3.0, 3.0, 3.0, 3.0),
       (3, 4.0, 4.0, 4.0, 4.0),
       (4, Double.NaN, 2.25, 1.0, 1.0 )
-    )).toDF("id", "value", "mean", "median", "most")
-    Seq("mean", "median", "most").foreach { strategy =>
+    )).toDF("id", "value", "mean", "median", "mode")
+    Seq("mean", "median", "mode").foreach { strategy =>
       val imputer = new Imputer().setInputCol("value").setOutputCol("out").setStrategy(strategy)
       val model = imputer.fit(df)
       model.transform(df).select(strategy, "out").collect()
@@ -49,8 +49,8 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
       (2, 3.0, 3.0, 3.0, 3.0),
       (3, 4.0, 4.0, 4.0, 4.0),
       (4, -1.0, 2.25, 1.0, 1.0 )
-    )).toDF("id", "value", "mean", "median", "most")
-    Seq("mean", "median", "most").foreach { strategy =>
+    )).toDF("id", "value", "mean", "median", "mode")
+    Seq("mean", "median", "mode").foreach { strategy =>
       val imputer = new Imputer().setInputCol("value").setOutputCol("out").setStrategy(strategy)
         .setMissingValue(-1.0)
       val model = imputer.fit(df)
@@ -68,9 +68,9 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
       (2, 10, 10, 10, 10),
       (3, 10, 10, 10, 10),
       (4, -1, 6, 3, 10)
-    )).toDF("id", "value", "mean", "median", "most")
+    )).toDF("id", "value", "mean", "median", "mode")
 
-    Seq("mean", "median", "most").foreach { strategy =>
+    Seq("mean", "median", "mode").foreach { strategy =>
       val imputer = new Imputer().setInputCol("value").setOutputCol("out").setStrategy(strategy)
         .setMissingValue(-1)
       val model = imputer.fit(df)
@@ -88,9 +88,9 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
       (2, 10, 10, 10, 10),
       (3, 10, 10, 10, 10),
       (4, -1, 6, 3, 10)
-    )).toDF("id", "value", "mean", "median", "most")
+    )).toDF("id", "value", "mean", "median", "mode")
     val df2 = df.selectExpr("*", "IF(value=-1, null, value) as nullable_value")
-    Seq("mean", "median", "most").foreach { strategy =>
+    Seq("mean", "median", "mode").foreach { strategy =>
       val imputer = new Imputer().setInputCol("nullable_value").setOutputCol("out")
         .setStrategy(strategy)
       val model = imputer.fit(df2)

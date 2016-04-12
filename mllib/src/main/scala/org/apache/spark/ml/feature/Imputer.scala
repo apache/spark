@@ -39,7 +39,7 @@ private[feature] trait ImputerParams extends Params with HasInputCol with HasOut
    * The imputation strategy.
    * If "mean", then replace missing values using the mean value of the feature.
    * If "median", then replace missing values using the median value of the feature.
-   * If "most", then replace missing using the most frequent value of the feature.
+   * If "mode", then replace missing using the most frequent value of the feature.
    * Default: mean
    *
    * @group param
@@ -47,7 +47,7 @@ private[feature] trait ImputerParams extends Params with HasInputCol with HasOut
   val strategy: Param[String] = new Param(this, "strategy", "strategy for imputation. " +
     "If mean, then replace missing values using the mean value of the feature." +
     "If median, then replace missing values using the median value of the feature." +
-    "If most, then replace missing using the most frequent value of the feature.",
+    "If mode, then replace missing using the most frequent value of the feature.",
     ParamValidators.inArray[String](Imputer.supportedStrategyNames.toArray))
 
   /** @group getParam */
@@ -82,7 +82,7 @@ private[feature] trait ImputerParams extends Params with HasInputCol with HasOut
 /**
  * :: Experimental ::
  * Imputation estimator for completing missing values, either using the mean("mean"), the
- * median("median") or the most frequent value("most") of the column in which the missing
+ * median("median") or the most frequent value("mode") of the column in which the missing
  * values are located.
  */
 @Experimental
@@ -99,7 +99,7 @@ class Imputer @Since("2.0.0")(override val uid: String)
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /**
-   * Imputation strategy. Available options are ["mean", "median" and "most"].
+   * Imputation strategy. Available options are ["mean", "median" and "mode"].
    * @group setParam
    */
   def setStrategy(value: String): this.type = set(strategy, value)
@@ -116,7 +116,7 @@ class Imputer @Since("2.0.0")(override val uid: String)
     val surrogate = $(strategy) match {
       case "mean" => filtered.select(avg($(inputCol))).first().getDouble(0)
       case "median" => filtered.stat.approxQuantile($(inputCol), Array(0.5), 0.001)(0)
-      case "most" => filtered.rdd.map(r => r.getDouble(0)).map(d => (d, 1)).reduceByKey(_ + _)
+      case "mode" => filtered.rdd.map(r => r.getDouble(0)).map(d => (d, 1)).reduceByKey(_ + _)
         .sortBy(-_._2).first()._1
     }
     copyValues(new ImputerModel(uid, surrogate).setParent(this))
@@ -136,7 +136,7 @@ class Imputer @Since("2.0.0")(override val uid: String)
 object Imputer extends DefaultParamsReadable[Imputer] {
 
   /** Set of strategy names that Imputer currently supports. */
-  private[ml] val supportedStrategyNames = Set("mean", "median", "most")
+  private[ml] val supportedStrategyNames = Set("mean", "median", "mode")
 
   @Since("2.0.0")
   override def load(path: String): Imputer = super.load(path)
