@@ -21,6 +21,8 @@ import java.io.File
 
 import scala.collection.mutable
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystConf, SimpleCatalystConf}
@@ -121,8 +123,13 @@ class SessionCatalog(
     currentDb = db
   }
 
-  def getDefaultDBPath(db: String): String = {
-    System.getProperty("java.io.tmpdir") + File.separator + db + ".db"
+  def getDatabasePath(dbName: String, path: Option[String]): String = {
+    val dbPath =
+      path.map(new Path(_))
+        .getOrElse(
+          new Path(new Path(System.getProperty("java.io.tmpdir")), dbName.toLowerCase() + ".db"))
+    val dbLocation = dbPath.toString
+    if (dbLocation.endsWith(File.separator)) dbLocation.dropRight(1) else dbLocation
   }
 
   // ----------------------------------------------------------------------------
@@ -650,7 +657,12 @@ class SessionCatalog(
       dropDatabase(db, ignoreIfNotExists = false, cascade = true)
     }
     tempTables.clear()
-    functionRegistry.clear()
+    // Do not remove the function `current_database`, which is registered in each
+    // new session of HiveContext. Otherwise, it could load the Hive UDF function
+    // with the same function name.
+    functionRegistry.listFunction().filter(_ != "current_database").foreach { f =>
+      functionRegistry.dropFunction(f)
+    }
     // restore built-in functions
     FunctionRegistry.builtin.listFunction().foreach { f =>
       val expressionInfo = FunctionRegistry.builtin.lookupFunction(f)
