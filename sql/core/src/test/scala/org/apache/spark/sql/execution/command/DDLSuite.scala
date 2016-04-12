@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.command
 
+import java.io.File
+
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
@@ -110,6 +112,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   test("Create/Drop Database - location") {
     val catalog = sqlContext.sessionState.catalog
     val databaseNames = Seq("db1", "`database`")
+    val defaultPath = System.getProperty("java.io.tmpdir")
 
     databaseNames.foreach { dbName =>
       try {
@@ -119,7 +122,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         assert(db1 == CatalogDatabase(
           dbNameWithoutBackTicks,
           "",
-          org.apache.commons.lang.StringUtils.removeEnd(System.getProperty("java.io.tmpdir"), "/"),
+          if (defaultPath.endsWith(File.separator)) defaultPath.dropRight(1) else defaultPath,
           Map.empty))
         sql(s"DROP DATABASE $dbName CASCADE")
         assert(!catalog.databaseExists(dbNameWithoutBackTicks))

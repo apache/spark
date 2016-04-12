@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
+import java.io.File
+
 import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
@@ -126,8 +128,8 @@ class SessionCatalog(
       path.map(new Path(_))
         .getOrElse(
           new Path(new Path(System.getProperty("java.io.tmpdir")), dbName.toLowerCase() + ".db"))
-
-    org.apache.commons.lang.StringUtils.removeEnd(dbPath.toString, "/")
+    val dbLocation = dbPath.toString
+    if (dbLocation.endsWith(File.separator)) dbLocation.dropRight(1) else dbLocation
   }
 
   // ----------------------------------------------------------------------------
