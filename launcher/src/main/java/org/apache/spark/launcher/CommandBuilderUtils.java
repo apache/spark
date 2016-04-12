@@ -354,7 +354,7 @@ class CommandBuilderUtils {
    * Find the location of the Spark jars dir, depending on whether we're looking at a build
    * or a distribution directory.
    */
-  static String findJarsDir(String sparkHome, String scalaVersion, boolean failIfNotFound) {
+  static String findJarsDir(String sparkHome, boolean failIfNotFound) {
     // TODO: change to the correct directory once the assembly build is changed.
     File libdir;
     if (new File(sparkHome, "RELEASE").isFile()) {
@@ -363,7 +363,7 @@ class CommandBuilderUtils {
         "Library directory '%s' does not exist.",
         libdir.getAbsolutePath());
     } else {
-      libdir = new File(sparkHome, String.format("assembly/target/scala-%s/jars", scalaVersion));
+      libdir = new File(sparkHome, "assembly/target/jars");
       if (!libdir.isDirectory()) {
         checkState(!failIfNotFound,
           "Library directory '%s' does not exist; make sure Spark is built.",

@@ -19,7 +19,6 @@ package org.apache.spark.launcher
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
-import scala.util.Properties
 
 /**
  * Exposes methods from the launcher library that are used by the YARN backend.
@@ -31,11 +30,7 @@ private[spark] object YarnCommandBuilderUtils {
   }
 
   def findJarsDir(sparkHome: String): String = {
-    val scalaVer = Properties.versionNumberString
-      .split("\\.")
-      .take(2)
-      .mkString(".")
-    CommandBuilderUtils.findJarsDir(sparkHome, scalaVer, true)
+    CommandBuilderUtils.findJarsDir(sparkHome, true)
   }
 
   /**

@@ -32,7 +32,7 @@ rem Find Spark jars.
 if exist "%SPARK_HOME%\RELEASE" (
   set SPARK_JARS_DIR="%SPARK_HOME%\jars"
 ) else (
-  set SPARK_JARS_DIR="%SPARK_HOME%\assembly\target\scala-%SPARK_SCALA_VERSION%\jars"
+  set SPARK_JARS_DIR="%SPARK_HOME%\assembly\target\jars"
 )
 
 if not exist "%SPARK_JARS_DIR%"\ (
@@ -45,7 +45,7 @@ set LAUNCH_CLASSPATH=%SPARK_JARS_DIR%\*
 
 rem Add the launcher build dir to the classpath if requested.
 if not "x%SPARK_PREPEND_CLASSES%"=="x" (
-  set LAUNCH_CLASSPATH="%SPARK_HOME%\launcher\target\scala-%SPARK_SCALA_VERSION%\classes;%LAUNCH_CLASSPATH%"
+  set LAUNCH_CLASSPATH="%SPARK_HOME%\launcher\target\classes;%LAUNCH_CLASSPATH%"
 )
 
 rem Figure out where java is.
