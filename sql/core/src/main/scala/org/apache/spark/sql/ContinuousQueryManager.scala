@@ -20,9 +20,10 @@ package org.apache.spark.sql
 import scala.collection.mutable
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.catalyst.analysis.{Append, OutputMode}
+import org.apache.spark.sql.catalyst.analysis.{UnsupportedOperationChecker, Append, OutputMode}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorRef
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.util.ContinuousQueryListener
 
 /**
@@ -180,7 +181,14 @@ class ContinuousQueryManager(sqlContext: SQLContext) {
         throw new IllegalArgumentException(
           s"Cannot start query with name $name as a query with that name is already active")
       }
-      val logicalPlan = df.logicalPlan.transform {
+      val analyzedPlan = df.queryExecution.analyzed
+      df.queryExecution.assertAnalyzed()
+
+      if (sqlContext.conf.getConf(SQLConf.UNSUPPORTED_OPERATION_CHECK_ENABLED)) {
+        UnsupportedOperationChecker.checkForStreaming(analyzedPlan, outputMode)
+      }
+
+      val logicalPlan = analyzedPlan.transform {
         case StreamingRelation(dataSource, _, output) =>
           // Materialize source to avoid creating it in every batch
           val source = dataSource.createSource()

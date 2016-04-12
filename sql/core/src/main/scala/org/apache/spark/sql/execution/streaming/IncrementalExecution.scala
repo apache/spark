@@ -73,9 +73,6 @@ class IncrementalExecution(
 
   override def preparations: Seq[Rule[SparkPlan]] = state +: super.preparations
 
-  override def assertSupported(): Unit = {
-    if (ctx.conf.getConf(SQLConf.UNSUPPORTED_OPERATION_CHECK_ENABLED)) {
-      UnsupportedOperationChecker.checkForStreaming(analyzed, outputMode)
-    }
-  }
+  /** No need assert supported, as this check has already been done */
+  override def assertSupported(): Unit = { }
 }

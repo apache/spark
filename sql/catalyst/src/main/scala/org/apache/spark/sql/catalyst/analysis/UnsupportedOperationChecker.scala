@@ -26,8 +26,8 @@ import org.apache.spark.sql.catalyst.plans.logical._
  */
 object UnsupportedOperationChecker {
 
-  def checkForBatch(logicalPlan: LogicalPlan): Unit = {
-    logicalPlan.foreachUp {
+  def checkForBatch(plan: LogicalPlan): Unit = {
+    plan.foreachUp {
       case p if p.isStreaming =>
         throwError(
           "Queries with streaming sources must be executed with write.startStream()")(p)
@@ -36,8 +36,14 @@ object UnsupportedOperationChecker {
     }
   }
 
-  def checkForStreaming(logicalPlan: LogicalPlan, outputMode: OutputMode): Unit = {
-    logicalPlan.foreachUp { implicit plan =>
+  def checkForStreaming(plan: LogicalPlan, outputMode: OutputMode): Unit = {
+
+    if (!plan.isStreaming) {
+      throwError(
+        "Queries without streaming sources cannot be executed with write.startStream()")(plan)
+    }
+
+    plan.foreachUp { implicit plan =>
 
       // Operations that cannot exists anywhere in a streaming plan
       plan match {
