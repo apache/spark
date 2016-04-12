@@ -268,6 +268,7 @@ case class TungstenAggregate(
   // The name for HashMap
   private var hashMapTerm: String = _
   private var sorterTerm: String = _
+  private var abc: String = _
 
   /**
    * This is called by generated Java class, should be public.
@@ -409,10 +410,15 @@ case class TungstenAggregate(
         BindReferences.bindReference(e, inputAttrs).gen(ctx)
       }
       s"""
+       // 1
        $evaluateKeyVars
+       // 2
        $evaluateBufferVars
+       // 3
        $evaluateAggResults
+       // 4
        ${consume(ctx, resultVars)}
+       // 5
        """
 
     } else if (modes.contains(Partial) || modes.contains(PartialMerge)) {
@@ -503,17 +509,46 @@ case class TungstenAggregate(
 
      // output the result
      ${if (isAggregateHashMapEnabled) {
-         s"""while ($iterTermForGeneratedHashMap.hasNext()) {
-               $numOutput.add(1);
-               org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row row =
-                 (org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row)
-                 $iterTermForGeneratedHashMap.next();
-               append(row.copy());
+        val row = ctx.freshName("aggregateHashmapRow")
+      var schema: StructType = groupingKeySchema
+      bufferSchema.foreach(i => schema = schema.add(i))
+      val aggregateRow = ctx.freshName("aggregateRow")
+      ctx.addMutableState("UnsafeProjection", aggregateRow, "")
 
-               if (shouldStop()) return;
-             }
+      ctx.currentVars = null
+      ctx.INPUT_ROW = row
+      val code = GenerateUnsafeProjection.createCode(ctx,
+        schema.toAttributes.zipWithIndex.map { case (attr, i) =>
+        BoundReference(i, attr.dataType, attr.nullable)
+      })
 
-            $aggregateHashMapTerm.batch.close();"""} else ""}
+      UnsafeProjection.create(schema)
+      val x = ctx.freshName("x")
+        // ctx.INPUT_ROW = row
+        // ctx.currentVars = null
+/*
+      val eval = resultExpressions.map { e =>
+        BindReferences.bindReference(e, groupingAttributes).gen(ctx)
+      }
+*/
+        s"""
+           while ($iterTermForGeneratedHashMap.hasNext()) {
+             $numOutput.add(1);
+             org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row $row =
+               (org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row)
+               $iterTermForGeneratedHashMap.next();
+               ${code.code}
+             // UnsafeRow $x = aggregateRow.apply($row);
+             ${consume(ctx, Seq.empty, {code.value})}
+             // append(row.copy());
+
+             if (shouldStop()) return;
+           }
+
+           $aggregateHashMapTerm.batch.close();
+        """
+       } else ""
+     }
 
      while ($iterTerm.next()) {
        $numOutput.add(1);
@@ -561,11 +596,19 @@ case class TungstenAggregate(
     val inputAttr = aggregateBufferAttributes ++ child.output
     ctx.currentVars = new Array[ExprCode](aggregateBufferAttributes.length) ++ input
     ctx.INPUT_ROW = aggregateRow
+    var schema: StructType = groupingKeySchema
+    bufferSchema.foreach(i => schema = schema.add(i))
+    // ctx.currentVars = null
+    val code = GenerateUnsafeProjection.createCode(ctx,
+      schema.toAttributes.zipWithIndex.map { case (attr, i) =>
+        BoundReference(i, attr.dataType, attr.nullable)
+      })
+
     // TODO: support subexpression elimination
     val aggregateRowEvals = updateExpr.map(BindReferences.bindReference(_, inputAttr).gen(ctx))
     val updateAggregateRow = aggregateRowEvals.zipWithIndex.map { case (ev, i) =>
       val dt = updateExpr(i).dataType
-      ctx.updateColumn(aggregateRow, dt, groupingKeySchema.length + i, ev, updateExpr(i).nullable)
+      ctx.updateColumn(aggregateRow, dt, i, ev, updateExpr(i).nullable)
     }
     ctx.INPUT_ROW = buffer
     // TODO: support subexpression elimination
@@ -588,9 +631,6 @@ case class TungstenAggregate(
     // continue to do in-memory aggregation and spilling until all the rows had been processed.
     // Finally, sort the spilled aggregate buffers by key, and merge them together for same key.
     s"""
-     // generate grouping key
-     ${keyCode.code.trim}
-     ${hashEval.code.trim}
      UnsafeRow $buffer = null;
      org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row $aggregateRow = null;
      if ($checkFallback) {
@@ -600,6 +640,9 @@ case class TungstenAggregate(
          } else ""}
        // try to get the buffer from hash map
        if ($aggregateRow == null) {
+         // generate grouping key
+         ${keyCode.code.trim}
+         ${hashEval.code.trim}
          $buffer = $hashMapTerm.getAggregationBufferFromUnsafeRow($key, ${hashEval.value});
        }
      }

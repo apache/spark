@@ -126,6 +126,7 @@ trait CodegenSupport extends SparkPlan {
         // outputVars will be used to generate the code for UnsafeRow, so we should copy them
         outputVars.map(_.copy())
       }
+
     val rowVar = if (row != null) {
       ExprCode("", "false", row)
     } else {
@@ -338,7 +339,7 @@ case class WholeStageCodegen(child: SparkPlan) extends UnaryNode with CodegenSup
 
     // try to compile, helpful for debug
     val cleanedSource = CodeFormatter.stripExtraNewLines(source)
-    logDebug(s"\n${CodeFormatter.format(cleanedSource)}")
+    // println(s"\n${CodeFormatter.format(cleanedSource)}")
     CodeGenerator.compile(cleanedSource)
     (ctx, cleanedSource)
   }

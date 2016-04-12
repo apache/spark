@@ -151,11 +151,16 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
   }
 
   test("aggregate with keys") {
-    val N = 20 // << 20
+    val N = 20  << 20
 
     val benchmark = new Benchmark("Aggregate w keys", N)
-    def f(): Unit = sqlContext.range(N).selectExpr("(id & 3) as k").groupBy("k").sum().collect().foreach(println)
+    // def f(): Unit = sqlContext.range(N).selectExpr("id", "(id & 65535) as k1", "(id & 65535) as k2").groupBy("k1", "k2").sum("id").collect()
+       // .foreach(println)
+    def f(): Unit = sqlContext.range(N).selectExpr("id", "(id & 65535) as k1").groupBy("k1").sum("id").collect()
 
+    //def f(): Unit = sqlContext.range(N).selectExpr("id").groupBy().sum("id").collect()
+
+/*
     benchmark.addCase(s"codegen=false") { iter =>
       sqlContext.setConf("spark.sql.codegen.wholeStage", "false")
       f()
@@ -166,6 +171,7 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
       sqlContext.setConf("spark.sql.codegen.aggregate.map.enabled", "false")
       f()
     }
+*/
 
     benchmark.addCase(s"codegen=true hashmap=true") { iter =>
       sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
