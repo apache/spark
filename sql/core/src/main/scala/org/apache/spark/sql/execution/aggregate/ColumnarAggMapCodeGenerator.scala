@@ -65,23 +65,38 @@ class ColumnarAggMapCodeGenerator(
           .mkString("\n")};
       """.stripMargin
 
+    val generatedSchema2: String =
+      s"""
+         |new org.apache.spark.sql.types.StructType()
+         |${(bufferSchema).map(key =>
+        s""".add("${key.name}", org.apache.spark.sql.types.DataTypes.${key.dataType})""")
+        .mkString("\n")};
+      """.stripMargin
+
     s"""
        |  public org.apache.spark.sql.execution.vectorized.ColumnarBatch batch;
+       |  public org.apache.spark.sql.execution.vectorized.ColumnarBatch batch2;
        |  private int[] buckets;
        |  private int numBuckets;
        |  private int maxSteps;
        |  private int numRows = 0;
        |  private org.apache.spark.sql.types.StructType schema = $generatedSchema
+       |  private org.apache.spark.sql.types.StructType schema2 = $generatedSchema2
        |
        |  public $generatedClassName() {
        |    int DEFAULT_CAPACITY = 1 << 16;
        |    double DEFAULT_LOAD_FACTOR = 0.25;
-       |    int DEFAULT_MAX_STEPS = 5;
+       |    int DEFAULT_MAX_STEPS = 2;
        |    assert (DEFAULT_CAPACITY > 0 && ((DEFAULT_CAPACITY & (DEFAULT_CAPACITY - 1)) == 0));
        |    this.maxSteps = DEFAULT_MAX_STEPS;
        |    numBuckets = (int) (DEFAULT_CAPACITY / DEFAULT_LOAD_FACTOR);
        |    batch = org.apache.spark.sql.execution.vectorized.ColumnarBatch.allocate(schema,
        |      org.apache.spark.memory.MemoryMode.ON_HEAP, DEFAULT_CAPACITY);
+       |    batch2 = org.apache.spark.sql.execution.vectorized.ColumnarBatch.allocate(schema2,
+       |      org.apache.spark.memory.MemoryMode.ON_HEAP, DEFAULT_CAPACITY);
+       |    for (int i = 0 ; i < batch2.numCols(); i++) {
+       |       batch2.setColumn(i, batch.column(i+${groupingKeys.length}));
+       |    }
        |    buckets = new int[numBuckets];
        |    java.util.Arrays.fill(buckets, -1);
        |  }
@@ -102,7 +117,7 @@ class ColumnarAggMapCodeGenerator(
     s"""
        |// TODO: Improve this hash function
        |private long hash($groupingKeySignature) {
-       |  return ${groupingKeys.map(_._2).mkString(" ^ ")};
+       |  return ${groupingKeys.map(_._2).mkString(" | ")};
        |}
      """.stripMargin
   }
@@ -177,9 +192,10 @@ class ColumnarAggMapCodeGenerator(
                 s"batch.column(${groupingKeys.length + k._2}).putLong(numRows, 0);")
                 .mkString("\n")}
        |      buckets[idx] = numRows++;
-       |      return batch.getRow(buckets[idx]);
+       |      batch.setNumRows(numRows);
+       |      return batch2.getRow(buckets[idx]);
        |    } else if (equals(idx, ${groupingKeys.map(_._2).mkString(", ")})) {
-       |      return batch.getRow(buckets[idx]);
+       |      return batch2.getRow(buckets[idx]);
        |    }
        |    idx = (idx + 1) & (numBuckets - 1);
        |    step++;
