@@ -644,21 +644,21 @@ case class TungstenAggregate(
          ${keyCode.code.trim}
          ${hashEval.code.trim}
          $buffer = $hashMapTerm.getAggregationBufferFromUnsafeRow($key, ${hashEval.value});
-       }
-     }
-     if ($aggregateRow == null && $buffer == null) {
-       if ($sorterTerm == null) {
-         $sorterTerm = $hashMapTerm.destructAndCreateExternalSorter();
-       } else {
-         $sorterTerm.merge($hashMapTerm.destructAndCreateExternalSorter());
-       }
-       $resetCounter
-       // the hash map had be spilled, it should have enough memory now,
-       // try  to allocate buffer again.
-       $buffer = $hashMapTerm.getAggregationBufferFromUnsafeRow($key, ${hashEval.value});
-       if ($buffer == null) {
-         // failed to allocate the first page
-         throw new OutOfMemoryError("No enough memory for aggregation");
+         if ($buffer == null) {
+       |       if ($sorterTerm == null) {
+       |         $sorterTerm = $hashMapTerm.destructAndCreateExternalSorter();
+       |       } else {
+       |         $sorterTerm.merge($hashMapTerm.destructAndCreateExternalSorter());
+       |       }
+       |       $resetCounter
+       |       // the hash map had be spilled, it should have enough memory now,
+       |       // try  to allocate buffer again.
+       |       $buffer = $hashMapTerm.getAggregationBufferFromUnsafeRow($key, ${hashEval.value});
+       |       if ($buffer == null) {
+       |         // failed to allocate the first page
+       |         throw new OutOfMemoryError("No enough memory for aggregation");
+       |       }
+       |     }
        }
      }
      $incCounter
