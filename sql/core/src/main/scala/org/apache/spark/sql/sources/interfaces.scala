@@ -458,16 +458,6 @@ trait FileFormat {
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory
 
-  def buildInternalScan(
-      sqlContext: SQLContext,
-      dataSchema: StructType,
-      requiredColumns: Array[String],
-      filters: Array[Filter],
-      bucketSet: Option[BitSet],
-      inputFiles: Seq[FileStatus],
-      broadcastedConf: Broadcast[SerializableConfiguration],
-      options: Map[String, String]): RDD[InternalRow]
-
   /**
    * Returns whether this format support returning columnar batch or not.
    *

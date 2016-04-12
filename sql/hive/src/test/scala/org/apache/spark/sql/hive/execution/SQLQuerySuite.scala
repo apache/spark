@@ -203,8 +203,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     checkAnswer(sql("SHOW functions abc.abs"), Row("abs"))
     checkAnswer(sql("SHOW functions `abc`.`abs`"), Row("abs"))
     checkAnswer(sql("SHOW functions `abc`.`abs`"), Row("abs"))
-    // TODO: Re-enable this test after we fix SPARK-14335.
-    // checkAnswer(sql("SHOW functions `~`"), Row("~"))
+    checkAnswer(sql("SHOW functions `~`"), Row("~"))
     checkAnswer(sql("SHOW functions `a function doens't exist`"), Nil)
     checkAnswer(sql("SHOW functions `weekofyea*`"), Row("weekofyear"))
     // this probably will failed if we add more function with `sha` prefixing.
@@ -236,11 +235,28 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     checkExistence(sql("describe functioN abcadf"), true,
       "Function: abcadf not found.")
 
-    // TODO: Re-enable this test after we fix SPARK-14335.
-    // checkExistence(sql("describe functioN  `~`"), true,
-    //  "Function: ~",
-    //  "Class: org.apache.hadoop.hive.ql.udf.UDFOPBitNot",
-    //  "Usage: ~ n - Bitwise not")
+    checkExistence(sql("describe functioN  `~`"), true,
+      "Function: ~",
+      "Class: org.apache.spark.sql.catalyst.expressions.BitwiseNot",
+      "Usage: ~ b - Bitwise NOT.")
+
+    // Hard coded describe functions
+    checkExistence(sql("describe function  `<>`"), true,
+      "Function: <>",
+      "Usage: a <> b - Returns TRUE if a is not equal to b")
+
+    checkExistence(sql("describe function  `!=`"), true,
+      "Function: !=",
+      "Usage: a != b - Returns TRUE if a is not equal to b")
+
+    checkExistence(sql("describe function  `between`"), true,
+      "Function: between",
+      "Usage: a [NOT] BETWEEN b AND c - evaluate if a is [not] in between b and c")
+
+    checkExistence(sql("describe function  `case`"), true,
+      "Function: case",
+      "Usage: CASE a WHEN b THEN c [WHEN d THEN e]* [ELSE f] END - " +
+        "When a = b, returns c; when a = d, return e; else return f")
   }
 
   test("SPARK-5371: union with null and sum") {
@@ -1475,7 +1491,6 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         sql(
           """CREATE VIEW IF NOT EXISTS
             |default.testView (c1 COMMENT 'blabla', c2 COMMENT 'blabla')
-            |COMMENT 'blabla'
             |TBLPROPERTIES ('a' = 'b')
             |AS SELECT * FROM jt""".stripMargin)
         checkAnswer(sql("SELECT c1, c2 FROM testView ORDER BY c1"), (1 to 9).map(i => Row(i, i)))

@@ -27,7 +27,7 @@ import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.clustering.{KMeans => MLlibKMeans, KMeansModel => MLlibKMeansModel}
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{IntegerType, StructType}
 
@@ -105,8 +105,8 @@ class KMeansModel private[ml] (
     copyValues(copied, extra)
   }
 
-  @Since("1.5.0")
-  override def transform(dataset: DataFrame): DataFrame = {
+  @Since("2.0.0")
+  override def transform(dataset: Dataset[_]): DataFrame = {
     val predictUDF = udf((vector: Vector) => predict(vector))
     dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
   }
@@ -126,8 +126,8 @@ class KMeansModel private[ml] (
    * model on the given data.
    */
   // TODO: Replace the temp fix when we have proper evaluators defined for clustering.
-  @Since("1.6.0")
-  def computeCost(dataset: DataFrame): Double = {
+  @Since("2.0.0")
+  def computeCost(dataset: Dataset[_]): Double = {
     SchemaUtils.checkColumnType(dataset.schema, $(featuresCol), new VectorUDT)
     val data = dataset.select(col($(featuresCol))).rdd.map { case Row(point: Vector) => point }
     parentModel.computeCost(data)
@@ -254,8 +254,8 @@ class KMeans @Since("1.5.0") (
   @Since("1.5.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
-  @Since("1.5.0")
-  override def fit(dataset: DataFrame): KMeansModel = {
+  @Since("2.0.0")
+  override def fit(dataset: Dataset[_]): KMeansModel = {
     val rdd = dataset.select(col($(featuresCol))).rdd.map { case Row(point: Vector) => point }
 
     val algo = new MLlibKMeans()

@@ -171,6 +171,7 @@ object FunctionRegistry {
     expression[Rand]("rand"),
     expression[Randn]("randn"),
     expression[CreateStruct]("struct"),
+    expression[CaseWhen]("when"),
 
     // math functions
     expression[Acos]("acos"),
@@ -217,6 +218,12 @@ object FunctionRegistry {
     expression[Tan]("tan"),
     expression[Tanh]("tanh"),
 
+    expression[Add]("+"),
+    expression[Subtract]("-"),
+    expression[Multiply]("*"),
+    expression[Divide]("/"),
+    expression[Remainder]("%"),
+
     // aggregate functions
     expression[HyperLogLogPlusPlus]("approx_count_distinct"),
     expression[Average]("avg"),
@@ -257,6 +264,7 @@ object FunctionRegistry {
     expression[Lower]("lcase"),
     expression[Length]("length"),
     expression[Levenshtein]("levenshtein"),
+    expression[Like]("like"),
     expression[Lower]("lower"),
     expression[StringLocate]("locate"),
     expression[StringLPad]("lpad"),
@@ -267,6 +275,7 @@ object FunctionRegistry {
     expression[RegExpReplace]("regexp_replace"),
     expression[StringRepeat]("repeat"),
     expression[StringReverse]("reverse"),
+    expression[RLike]("rlike"),
     expression[StringRPad]("rpad"),
     expression[StringTrimRight]("rtrim"),
     expression[SoundEx]("soundex"),
@@ -343,7 +352,29 @@ object FunctionRegistry {
     expression[NTile]("ntile"),
     expression[Rank]("rank"),
     expression[DenseRank]("dense_rank"),
-    expression[PercentRank]("percent_rank")
+    expression[PercentRank]("percent_rank"),
+
+    // predicates
+    expression[And]("and"),
+    expression[In]("in"),
+    expression[Not]("not"),
+    expression[Or]("or"),
+
+    expression[EqualNullSafe]("<=>"),
+    expression[EqualTo]("="),
+    expression[EqualTo]("=="),
+    expression[GreaterThan](">"),
+    expression[GreaterThanOrEqual](">="),
+    expression[LessThan]("<"),
+    expression[LessThanOrEqual]("<="),
+    expression[Not]("!"),
+
+    // bitwise
+    expression[BitwiseAnd]("&"),
+    expression[BitwiseNot]("~"),
+    expression[BitwiseOr]("|"),
+    expression[BitwiseXor]("^")
+
   )
 
   val builtin: SimpleFunctionRegistry = {
