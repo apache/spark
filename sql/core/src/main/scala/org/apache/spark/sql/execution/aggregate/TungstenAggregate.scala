@@ -261,6 +261,8 @@ case class TungstenAggregate(
     .map(_.asInstanceOf[DeclarativeAggregate])
   private val bufferSchema = StructType.fromAttributes(aggregateBufferAttributes)
 
+  private var isAggregateHashMapEnabled: Boolean = false
+
   // The name for AggregateHashMap
   private var aggregateHashMapTerm: String = _
 
@@ -441,24 +443,21 @@ case class TungstenAggregate(
     ctx.addMutableState("boolean", initAgg, s"$initAgg = false;")
 
     // create AggregateHashMap
-    val isAggregateHashMapEnabled: Boolean = true
-    val isAggregateHashMapSupported: Boolean =
+    isAggregateHashMapEnabled = isAggregateHashMapEnabled &&
       (groupingKeySchema ++ bufferSchema).forall(_.dataType == LongType)
     aggregateHashMapTerm = ctx.freshName("aggregateHashMap")
     val aggregateHashMapClassName = ctx.freshName("GeneratedAggregateHashMap")
     val aggregateHashMapGenerator = new ColumnarAggMapCodeGenerator(ctx, aggregateHashMapClassName,
       groupingKeySchema, bufferSchema)
-    if (isAggregateHashMapEnabled && isAggregateHashMapSupported) {
+    // Create a name for iterator from AggregateHashMap
+    val iterTermForGeneratedHashMap = ctx.freshName("genMapIter")
+    if (isAggregateHashMapEnabled) {
       ctx.addMutableState(aggregateHashMapClassName, aggregateHashMapTerm,
         s"$aggregateHashMapTerm = new $aggregateHashMapClassName();")
+      ctx.addMutableState(
+        "java.util.Iterator<org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row>",
+        iterTermForGeneratedHashMap, "")
     }
-
-    // Create a name for iterator from AggregateHashMap
-    val iterTermforGeneratedHashMap = ctx.freshName("genMapIter")
-    ctx.addMutableState(
-      "java.util.Iterator<org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row>",
-      iterTermforGeneratedHashMap, "")
-
 
     // create hashMap
     val thisPlan = ctx.addReferenceObj("plan", this)
@@ -475,11 +474,17 @@ case class TungstenAggregate(
     val doAgg = ctx.freshName("doAggregateWithKeys")
     ctx.addNewFunction(doAgg,
       s"""
-        ${if (isAggregateHashMapSupported) aggregateHashMapGenerator.generate() else ""}
+        ${if (isAggregateHashMapEnabled) aggregateHashMapGenerator.generate() else ""}
         private void $doAgg() throws java.io.IOException {
           $hashMapTerm = $thisPlan.createHashMap();
           ${child.asInstanceOf[CodegenSupport].produce(ctx, this)}
-          $iterTermforGeneratedHashMap = $aggregateHashMapTerm.batch.rowIterator();
+          ${
+              if (isAggregateHashMapEnabled) {
+                s"""
+                   $iterTermForGeneratedHashMap = $aggregateHashMapTerm.batch.rowIterator();
+                 """
+              } else ""
+            }
           $iterTerm = $thisPlan.finishAggregate($hashMapTerm, $sorterTerm);
         }
        """)
@@ -487,7 +492,6 @@ case class TungstenAggregate(
     // generate code for output
     val keyTerm = ctx.freshName("aggKey")
     val bufferTerm = ctx.freshName("aggBuffer")
-    val outputCode1 = generateResultCode(ctx, keyTerm, bufferTerm, thisPlan)
     val outputCode = generateResultCode(ctx, keyTerm, bufferTerm, thisPlan)
     val numOutput = metricTerm(ctx, "numOutputRows")
 
@@ -501,18 +505,22 @@ case class TungstenAggregate(
        $doAgg();
      }
 
+     ${if (isAggregateHashMapEnabled) {
+      s"""
+        while ($iterTermForGeneratedHashMap.hasNext()) {
+          $numOutput.add(1);
+          org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row row =
+            (org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row) $iterTermForGeneratedHashMap.next();
+          append(row.copy());
+
+          if (shouldStop()) return;
+        }
+
+        $aggregateHashMapTerm.batch.close();
+      """
+    } else ""}
+
      // output the result
-     while ($iterTermforGeneratedHashMap.next()) {
-       $numOutput.add(1);
-       // UnsafeRow $keyTerm = (UnsafeRow) $iterTermforGeneratedHashMap.getKey();
-       // UnsafeRow $bufferTerm = (UnsafeRow) $iterTermforGeneratedHashMap.getValue();
-       $outputCode
-
-       if (shouldStop()) return;
-     }
-
-     $iterTermforGeneratedHashMap.close();
-
      while ($iterTerm.next()) {
        $numOutput.add(1);
        UnsafeRow $keyTerm = (UnsafeRow) $iterTerm.getKey();
@@ -556,6 +564,9 @@ case class TungstenAggregate(
 
     val inputAttr = aggregateBufferAttributes ++ child.output
     ctx.currentVars = new Array[ExprCode](aggregateBufferAttributes.length) ++ input
+    ctx.INPUT_ROW = aggregateRow
+    val evals2 = updateExpr.map(BindReferences.bindReference(_, inputAttr).gen(ctx))
+
     ctx.INPUT_ROW = buffer
     // TODO: support subexpression elimination
     val evals = updateExpr.map(BindReferences.bindReference(_, inputAttr).gen(ctx))
@@ -563,7 +574,7 @@ case class TungstenAggregate(
       val dt = updateExpr(i).dataType
       ctx.updateColumn(buffer, dt, i, ev, updateExpr(i).nullable)
     }
-    val updateAggregateRow = evals.zipWithIndex.map { case (ev, i) =>
+    val updateAggregateRow = evals2.zipWithIndex.map { case (ev, i) =>
       val dt = updateExpr(i).dataType
       ctx.updateColumn(aggregateRow, dt, groupingKeySchema.length + i, ev, updateExpr(i).nullable)
     }
@@ -584,13 +595,15 @@ case class TungstenAggregate(
      // generate grouping key
      ${keyCode.code.trim}
      ${hashEval.code.trim}
-
      UnsafeRow $buffer = null;
      org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row $aggregateRow = null;
-
      if ($checkFallback) {
-       $aggregateRow =
-         $aggregateHashMapTerm.findOrInsert(${groupByKeys2.map(_.value).mkString(", ")});
+       ${if (isAggregateHashMapEnabled) {
+        s"""
+              $aggregateRow =
+                $aggregateHashMapTerm.findOrInsert(${groupByKeys2.map(_.value).mkString(", ")});
+         """
+      } else ""}
        // try to get the buffer from hash map
        if ($aggregateRow == null) {
          $buffer = $hashMapTerm.getAggregationBufferFromUnsafeRow($key, ${hashEval.value});
@@ -613,13 +626,14 @@ case class TungstenAggregate(
      }
      $incCounter
 
-     // evaluate aggregate function
-     ${evaluateVariables(evals)}
-
      if ($aggregateRow != null) {
+       // evaluate aggregate function
+       ${evaluateVariables(evals2)}
        // update aggregate row
        ${updateAggregateRow.mkString("\n").trim}
      } else {
+       // evaluate aggregate function
+       ${evaluateVariables(evals)}
        // update aggregate buffer
        ${updateAggregateBuffer.mkString("\n").trim}
      }

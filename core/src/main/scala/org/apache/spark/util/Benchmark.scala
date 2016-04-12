@@ -38,7 +38,7 @@ import org.apache.commons.lang3.SystemUtils
 private[spark] class Benchmark(
     name: String,
     valuesPerIteration: Long,
-    iters: Int = 1,
+    iters: Int = 5,
     outputPerIteration: Boolean = false) {
   val benchmarks = mutable.ArrayBuffer.empty[Benchmark.Case]
 
