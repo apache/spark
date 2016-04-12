@@ -63,12 +63,18 @@
     <dependency>
       <groupId>com.google.protobuf</groupId>
       <artifactId>protobuf-java</artifactId>
-      <scope>2.6.1</scope>
+      <version>2.6.1</version>
     </dependency>
     <dependency>
       <groupId>com.sun.jersey</groupId>
       <artifactId>jersey-server</artifactId>
       <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.google.guava</groupId>
+      <artifactId>guava</artifactId>
+      <version>18.0</version>
+      <scope>compile</scope>
     </dependency>
     <dependency>
       <groupId>com.sun.jersey</groupId>
@@ -142,6 +148,22 @@
             <include>*:*</include>
           </includes>
         </artifactSet>
+        <relocations>
+          <relocation>
+            <pattern>com.google.protobuf</pattern>
+            <shadedPattern>kinesis.protobuf</shadedPattern>
+            <includes>
+              <include>com.google.protobuf.**</include>
+            </includes>
+          </relocation>
+          <relocation>
+            <pattern>com.google.common</pattern>
+            <shadedPattern>kinesis.guava</shadedPattern>
+            <includes>
+              <include>com.google.common.**</include>
+            </includes>
+          </relocation>
+        </relocations>
         <filters>
           <filter>
             <artifact>*:*</artifact>
