@@ -114,7 +114,7 @@ sealed trait Matrix extends Serializable {
    * backing array. For example, an operation such as addition or subtraction will only be
    * performed on the non-zero values in a `SparseMatrix`.
    */
-  private[mllib] def update(f: Double => Double): Matrix
+  private[ml] def update(f: Double => Double): Matrix
 
   /**
    * Applies a function `f` to all the active elements of dense and sparse matrix. The ordering
@@ -190,7 +190,7 @@ class DenseMatrix (
     com.google.common.base.Objects.hashCode(numRows: Integer, numCols: Integer, toArray)
   }
 
-  private[mllib] def toBreeze: BM[Double] = {
+  private[ml] def toBreeze: BM[Double] = {
     if (!isTransposed) {
       new BDM[Double](numRows, numCols, values)
     } else {
@@ -199,17 +199,17 @@ class DenseMatrix (
     }
   }
 
-  private[mllib] def apply(i: Int): Double = values(i)
+  private[ml] def apply(i: Int): Double = values(i)
 
   override def apply(i: Int, j: Int): Double = values(index(i, j))
 
-  private[mllib] def index(i: Int, j: Int): Int = {
+  private[ml] def index(i: Int, j: Int): Int = {
     require(i >= 0 && i < numRows, s"Expected 0 <= i < $numRows, got i = $i.")
     require(j >= 0 && j < numCols, s"Expected 0 <= j < $numCols, got j = $j.")
     if (!isTransposed) i + numRows * j else j + numCols * i
   }
 
-  private[mllib] def update(i: Int, j: Int, v: Double): Unit = {
+  private[ml] def update(i: Int, j: Int, v: Double): Unit = {
     values(index(i, j)) = v
   }
 
@@ -218,7 +218,7 @@ class DenseMatrix (
   private[spark] def map(f: Double => Double) = new DenseMatrix(numRows, numCols, values.map(f),
     isTransposed)
 
-  private[mllib] def update(f: Double => Double): DenseMatrix = {
+  private[ml] def update(f: Double => Double): DenseMatrix = {
     val len = values.length
     var i = 0
     while (i < len) {
@@ -477,7 +477,7 @@ class SparseMatrix (
     if (ind < 0) 0.0 else values(ind)
   }
 
-  private[mllib] def index(i: Int, j: Int): Int = {
+  private[ml] def index(i: Int, j: Int): Int = {
     require(i >= 0 && i < numRows, s"Expected 0 <= i < $numRows, got i = $i.")
     require(j >= 0 && j < numCols, s"Expected 0 <= j < $numCols, got j = $j.")
     if (!isTransposed) {
@@ -487,7 +487,7 @@ class SparseMatrix (
     }
   }
 
-  private[mllib] def update(i: Int, j: Int, v: Double): Unit = {
+  private[ml] def update(i: Int, j: Int, v: Double): Unit = {
     val ind = index(i, j)
     if (ind < 0) {
       throw new NoSuchElementException("The given row and column indices correspond to a zero " +
@@ -504,7 +504,7 @@ class SparseMatrix (
   private[spark] def map(f: Double => Double) =
     new SparseMatrix(numRows, numCols, colPtrs, rowIndices, values.map(f), isTransposed)
 
-  private[mllib] def update(f: Double => Double): SparseMatrix = {
+  private[ml] def update(f: Double => Double): SparseMatrix = {
     val len = values.length
     var i = 0
     while (i < len) {
