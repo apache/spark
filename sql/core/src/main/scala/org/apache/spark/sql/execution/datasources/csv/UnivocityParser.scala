@@ -30,77 +30,22 @@ import org.apache.spark.sql.types.{StructField, StructType}
 /**
  * Converts CSV string to a sequence of string
  */
-private[csv] object UnivocityParser extends Logging{
-  /**
-   * Convert the input RDD to a tokenized RDD by Univocity
-   */
-  def tokenize(
-      csv: RDD[String],
-      options: CSVOptions,
-      headers: Array[String] = Array.empty): RDD[Array[String]] = {
-    csv.mapPartitions { iter =>
-      tokenizeData(iter, options, headers)
-    }
-  }
-
-  private def tokenizeData(
-      csv: Iterator[String],
-      options: CSVOptions,
-      headers: Array[String] = Array.empty): Iterator[Array[String]] = {
-    val settings = getSettings(options)
-    if (headers != null) settings.setHeaders(headers: _*)
-    val parser = new CsvParser(settings)
-
-    csv.map { record =>
-      parser.parseLine(record)
-    }
-  }
-
-  /**
-   * Convert the input RDD to a RDD having [[InternalRow]]
-   */
-  def parse(
-      csv: RDD[String],
-      schema: StructType,
-      requiredSchema: StructType,
-      headers: Array[String],
-      options: CSVOptions): RDD[InternalRow] = {
-    val filteredRdd = csv.mapPartitions(CSVUtils.filterCommentAndEmpty(_, options))
-    val firstLine = filteredRdd.first()
-    // TODO: If there is data same with header, then it will be skipped too.
-    val dropHeaderRdd = if (options.headerFlag) {
-      filteredRdd.filter(_ != firstLine)
-    } else {
-      filteredRdd
-    }
-    dropHeaderRdd.mapPartitions { iter =>
-      parseCsvData(iter, schema, requiredSchema, headers, options)
-    }
-  }
-
+private[csv] object UnivocityParser extends Logging {
   /**
    * Convert the input iterator to a iterator having [[InternalRow]]
    */
   def parseCsv(
-       csv: Iterator[String],
-       schema: StructType,
-       requiredSchema: StructType,
-       headers: Array[String],
-       shouldDropHeader: Boolean,
-       options: CSVOptions): Iterator[InternalRow] = {
-    if (shouldDropHeader) {
-      CSVUtils.dropHeaderLine(csv, options)
-    }
-    val filteredLines = CSVUtils.filterCommentAndEmpty(csv, options)
-    parseCsvData(filteredLines, schema, requiredSchema, headers, options)
-  }
-
-  private def parseCsvData(
-      csv: Iterator[String],
+      iter: Iterator[String],
       schema: StructType,
       requiredSchema: StructType,
       headers: Array[String],
+      shouldDropHeader: Boolean,
       options: CSVOptions): Iterator[InternalRow] = {
+    if (shouldDropHeader) {
+      CSVUtils.dropHeaderLine(iter, options)
+    }
+    val csv = CSVUtils.filterCommentAndEmpty(iter, options)
+
     val schemaFields = schema.fields
     val requiredFields = requiredSchema.fields
     val safeRequiredFields = if (options.dropMalformed) {
@@ -180,6 +125,31 @@ private[csv] object UnivocityParser extends Logging{
       subIndex = subIndex + 1
     }
     row
+  }
+
+  /**
+   * Convert the input RDD to a tokenized RDD by Univocity
+   */
+  def tokenize(
+      csv: RDD[String],
+      options: CSVOptions,
+      headers: Array[String] = Array.empty): RDD[Array[String]] = {
+    csv.mapPartitions { iter =>
+      tokenizeData(iter, options, headers)
+    }
+  }
+
+  private def tokenizeData(
+      csv: Iterator[String],
+      options: CSVOptions,
+      headers: Array[String] = Array.empty): Iterator[Array[String]] = {
+    val settings = getSettings(options)
+    if (headers != null) settings.setHeaders(headers: _*)
+    val parser = new CsvParser(settings)
+
+    csv.map { record =>
+      parser.parseLine(record)
+    }
   }
 
   /**

@@ -137,42 +137,6 @@ class DefaultSource extends FileFormat with DataSourceRegister {
     }
   }
 
-  /**
-   * This supports to eliminate unneeded columns before producing an RDD
-   * containing all of its tuples as Row objects. This reads all the tokens of each line
-   * and then drop unneeded tokens without casting and type-checking by mapping
-   * both the indices produced by `requiredColumns` and the ones of tokens.
-   */
-  override def buildInternalScan(
-       sqlContext: SQLContext,
-       dataSchema: StructType,
-       requiredColumns: Array[String],
-       filters: Array[Filter],
-       bucketSet: Option[BitSet],
-       inputFiles: Seq[FileStatus],
-       broadcastedConf: Broadcast[SerializableConfiguration],
-       options: Map[String, String]): RDD[InternalRow] = {
-    // TODO: Filter before calling buildInternalScan.
-    val csvFiles = inputFiles.filterNot(_.getPath.getName startsWith "_")
-    val csvOptions = new CSVOptions(options)
-    val pathsString = csvFiles.map(_.getPath.toUri.toString)
-    val header = dataSchema.fields.map(_.name)
-    val rdd = createBaseRdd(sqlContext, csvOptions, pathsString)
-    val requiredDataSchema = StructType(requiredColumns.map(dataSchema(_)))
-
-    val rows = UnivocityParser.parse(
-      rdd,
-      dataSchema,
-      requiredDataSchema,
-      header,
-      csvOptions)
-
-    rows.mapPartitions { iterator =>
-      val unsafeProjection = UnsafeProjection.create(requiredDataSchema)
-      iterator.map(unsafeProjection)
-    }
-  }
-
   private def createBaseRdd(
       sqlContext: SQLContext,
       options: CSVOptions,
