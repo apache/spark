@@ -476,8 +476,8 @@ private[sql] class DefaultSource
 final class VectorizedParquetInputFormat extends ParquetInputFormat[InternalRow] {
   override def createRecordReader(
     inputSplit: InputSplit,
-    taskAttemptContext: TaskAttemptContext): ParquetRecordReader[InternalRow] = {
-    new VectorizedParquetRecordReader().asInstanceOf[ParquetRecordReader[InternalRow]]
+    taskAttemptContext: TaskAttemptContext): RecordReader[Void, InternalRow] = {
+    new VectorizedParquetRecordReader().asInstanceOf[RecordReader[Void, InternalRow]]
   }
 }
 
