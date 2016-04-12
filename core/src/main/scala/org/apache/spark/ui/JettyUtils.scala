@@ -355,6 +355,11 @@ private[spark] case class ServerInfo(
 
   def stop(): Unit = {
     server.stop()
-    Option(server.getThreadPool).collect { case x: LifeCycle => x }.foreach(_.stop())
+    // Stop the ThreadPool if it supports stop() method (through LifeCycle).
+    // It is needed because stopping the Server won't stop the ThreadPool it uses.
+    val threadPool = server.getThreadPool
+    if (threadPool != null && threadPool.isInstanceOf[LifeCycle]) {
+      threadPool.asInstanceOf[LifeCycle].stop
+    }
   }
 }
