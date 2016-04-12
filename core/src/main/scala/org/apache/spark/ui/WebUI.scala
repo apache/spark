@@ -135,16 +135,18 @@ private[spark] abstract class WebUI(
   def bind() {
     assert(!serverInfo.isDefined, "Attempted to bind %s more than once!".format(className))
     try {
-      var host = Option(conf.getenv("SPARK_LOCAL_IP")).getOrElse("0.0.0.0")
+      val host = Option(conf.getenv("SPARK_LOCAL_IP")).getOrElse("0.0.0.0")
       serverInfo = Some(startJettyServer(host, port, sslOptions, handlers, conf, name))
-      logInfo("Bound %s to %s, and started at http://%s:%d".format(className, host,
-        publicHostName, boundPort))
+      logInfo("Bound %s to %s, and started at %s".format(className, host, webUrl))
     } catch {
       case e: Exception =>
         logError("Failed to bind %s".format(className), e)
         System.exit(1)
     }
   }
+
+  /** Return the url of web interface. Only valid after bind(). */
+  def webUrl: String = "http://%s:%d".format(publicHostName, boundPort)
 
   /** Return the actual port to which this server is bound. Only valid after bind(). */
   def boundPort: Int = serverInfo.map(_.boundPort).getOrElse(-1)

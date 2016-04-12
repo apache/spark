@@ -125,6 +125,9 @@ private[repl] trait SparkILoopInit {
       command("""
         @transient val sc = {
           val _sc = org.apache.spark.repl.Main.interp.createSparkContext()
+          _sc.uiWebUrl.map { webUrl =>
+            println(s"Spark context Web UI available at ${webUrl}")
+          }
           println("Spark context available as 'sc' " +
             s"(master = ${_sc.master}, app id = ${_sc.applicationId}).")
           _sc

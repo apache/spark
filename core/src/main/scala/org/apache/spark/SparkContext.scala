@@ -280,6 +280,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   private[spark] def ui: Option[SparkUI] = _ui
 
+  def uiWebUrl: Option[String] = _ui.map(_.webUrl)
+
   /**
    * A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse.
    *
