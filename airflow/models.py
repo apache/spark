@@ -1329,7 +1329,7 @@ class TaskInstance(Base):
         for attr in task.__class__.template_fields:
             content = getattr(task, attr)
             if content:
-                rendered_content = rt(content, jinja_context)
+                rendered_content = rt(attr, content, jinja_context)
                 setattr(task, attr, rendered_content)
 
     def email_alert(self, exception, is_retry=False):
@@ -1809,7 +1809,7 @@ class BaseOperator(object):
             result.user_defined_macros = self.user_defined_macros
         return result
 
-    def render_template_from_field(self, content, context, jinja_env):
+    def render_template_from_field(self, attr, content, context, jinja_env):
         '''
         Renders a template from a field. If the field is a string, it will
         simply render the string and return the result. If it is a collection or
@@ -1820,10 +1820,10 @@ class BaseOperator(object):
         if isinstance(content, six.string_types):
             result = jinja_env.from_string(content).render(**context)
         elif isinstance(content, (list, tuple)):
-            result = [rt(e, context) for e in content]
+            result = [rt(attr, e, context) for e in content]
         elif isinstance(content, dict):
             result = {
-                k: rt(v, context)
+                k: rt("{}[{}]".format(attr, k), v, context)
                 for k, v in list(content.items())}
         else:
             param_type = type(content)
@@ -1833,7 +1833,7 @@ class BaseOperator(object):
             raise AirflowException(msg)
         return result
 
-    def render_template(self, content, context):
+    def render_template(self, attr, content, context):
         '''
         Renders a template either from a file or directly in a field, and returns
         the rendered result.
@@ -1848,7 +1848,7 @@ class BaseOperator(object):
                 any([content.endswith(ext) for ext in exts])):
             return jinja_env.get_template(content).render(**context)
         else:
-            return self.render_template_from_field(content, context, jinja_env)
+            return self.render_template_from_field(attr, content, context, jinja_env)
 
     def prepare_template(self):
         '''
