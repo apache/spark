@@ -49,4 +49,12 @@ class HivePlanTest extends QueryTest with TestHiveSingleton {
     assert(plan.collect{ case w: logical.Window => w }.size === 1,
       "Should have only 1 Window operator.")
   }
+
+  test("SPARK-14580 Hive IfCoercion should preserve predicate") {
+    val plan = sql("SELECT IF(assert_true(false), 1, 2)").queryExecution.analyzed
+    val optimized = sql("SELECT IF(assert_true(false), 1, 2)").queryExecution.optimizedPlan
+    val correctAnswer = plan
+
+    comparePlans(optimized, plan)
+  }
 }
