@@ -126,8 +126,7 @@ private[hive] trait HiveClient {
       db: String,
       table: String,
       specs: Seq[ExternalCatalog.TablePartitionSpec],
-      ignoreIfNotExists: Boolean,
-      purge: Boolean): Unit
+      ignoreIfNotExists: Boolean): Unit
 
   /**
    * Rename one or many existing table partitions, assuming they exist.

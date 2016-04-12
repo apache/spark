@@ -422,8 +422,7 @@ case class AlterTableRenamePartition(
 case class AlterTableDropPartition(
     tableName: TableIdentifier,
     specs: Seq[TablePartitionSpec],
-    ifExists: Boolean,
-    purge: Boolean)
+    ifExists: Boolean)
   extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
@@ -433,7 +432,7 @@ case class AlterTableDropPartition(
       throw new AnalysisException(
         "alter table drop partition is not allowed for tables defined using the datasource API")
     }
-    catalog.dropPartitions(tableName, specs, ignoreIfNotExists = ifExists, purge = purge)
+    catalog.dropPartitions(tableName, specs, ignoreIfNotExists = ifExists)
     Seq.empty[Row]
   }
 

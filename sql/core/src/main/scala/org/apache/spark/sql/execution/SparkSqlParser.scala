@@ -561,11 +561,13 @@ class SparkSqlAstBuilder extends AstBuilder {
     if (ctx.VIEW != null) {
       throw new AnalysisException(s"Operation not allowed: partitioned views")
     }
+    if (ctx.PURGE != null) {
+      throw new AnalysisException(s"Operation not allowed: PURGE")
+    }
     AlterTableDropPartition(
       visitTableIdentifier(ctx.tableIdentifier),
       ctx.partitionSpec.asScala.map(visitNonOptionalPartitionSpec),
-      ctx.EXISTS != null,
-      ctx.PURGE != null)
+      ctx.EXISTS != null)
   }
 
   /**

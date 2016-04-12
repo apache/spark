@@ -217,10 +217,9 @@ private[spark] class HiveExternalCatalog(client: HiveClient) extends ExternalCat
       db: String,
       table: String,
       parts: Seq[TablePartitionSpec],
-      ignoreIfNotExists: Boolean,
-      purge: Boolean): Unit = withClient {
+      ignoreIfNotExists: Boolean): Unit = withClient {
     requireTableExists(db, table)
-    client.dropPartitions(db, table, parts, ignoreIfNotExists, purge)
+    client.dropPartitions(db, table, parts, ignoreIfNotExists)
   }
 
   override def renamePartitions(

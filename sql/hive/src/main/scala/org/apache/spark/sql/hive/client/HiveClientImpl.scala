@@ -368,8 +368,7 @@ private[hive] class HiveClientImpl(
       db: String,
       table: String,
       specs: Seq[ExternalCatalog.TablePartitionSpec],
-      ignoreIfNotExists: Boolean,
-      purge: Boolean): Unit = withHiveState {
+      ignoreIfNotExists: Boolean): Unit = withHiveState {
     // TODO: figure out how to drop multiple partitions in one call
     val hiveTable = client.getTable(db, table, true /* throw exception */)
     specs.foreach { s =>
@@ -384,7 +383,6 @@ private[hive] class HiveClientImpl(
       matchingParts.foreach { hivePartition =>
         val dropOptions = new PartitionDropOptions
         dropOptions.ifExists = ignoreIfNotExists
-        dropOptions.purgeData = purge
         client.dropPartition(db, table, hivePartition.getValues, dropOptions)
       }
     }

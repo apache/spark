@@ -408,7 +408,10 @@ class DDLCommandSuite extends PlanTest {
     val sql2_view = sql2_table.replace("TABLE", "VIEW").replace("PURGE", "")
 
     val parsed1_table = parser.parsePlan(sql1_table)
-    val parsed2_table = parser.parsePlan(sql2_table)
+    val e = intercept[ParseException] {
+      parser.parsePlan(sql2_table)
+    }
+    assert(e.getMessage.contains("Operation not allowed"))
 
     intercept[ParseException] {
       parser.parsePlan(sql1_view)
@@ -423,18 +426,9 @@ class DDLCommandSuite extends PlanTest {
       Seq(
         Map("dt" -> "2008-08-08", "country" -> "us"),
         Map("dt" -> "2009-09-09", "country" -> "uk")),
-      ifExists = true,
-      purge = false)
-    val expected2_table = AlterTableDropPartition(
-      tableIdent,
-      Seq(
-        Map("dt" -> "2008-08-08", "country" -> "us"),
-        Map("dt" -> "2009-09-09", "country" -> "uk")),
-      ifExists = false,
-      purge = true)
+      ifExists = true)
 
     comparePlans(parsed1_table, expected1_table)
-    comparePlans(parsed2_table, expected2_table)
   }
 
   test("alter table: archive partition (not supported)") {

@@ -498,16 +498,14 @@ class SessionCatalogSuite extends SparkFunSuite {
     sessionCatalog.dropPartitions(
       TableIdentifier("tbl2", Some("db2")),
       Seq(part1.spec),
-      ignoreIfNotExists = false,
-      purge = true)
+      ignoreIfNotExists = false)
     assert(catalogPartitionsEqual(externalCatalog, "db2", "tbl2", Seq(part2)))
     // Drop partitions without explicitly specifying database
     sessionCatalog.setCurrentDatabase("db2")
     sessionCatalog.dropPartitions(
       TableIdentifier("tbl2"),
       Seq(part2.spec),
-      ignoreIfNotExists = false,
-      purge = true)
+      ignoreIfNotExists = false)
     assert(externalCatalog.listPartitions("db2", "tbl2").isEmpty)
     // Drop multiple partitions at once
     sessionCatalog.createPartitions(
@@ -516,8 +514,7 @@ class SessionCatalogSuite extends SparkFunSuite {
     sessionCatalog.dropPartitions(
       TableIdentifier("tbl2", Some("db2")),
       Seq(part1.spec, part2.spec),
-      ignoreIfNotExists = false,
-      purge = true)
+      ignoreIfNotExists = false)
     assert(externalCatalog.listPartitions("db2", "tbl2").isEmpty)
   }
 
@@ -527,15 +524,13 @@ class SessionCatalogSuite extends SparkFunSuite {
       catalog.dropPartitions(
         TableIdentifier("tbl1", Some("does_not_exist")),
         Seq(),
-        ignoreIfNotExists = false,
-        purge = true)
+        ignoreIfNotExists = false)
     }
     intercept[AnalysisException] {
       catalog.dropPartitions(
         TableIdentifier("does_not_exist", Some("db2")),
         Seq(),
-        ignoreIfNotExists = false,
-        purge = true)
+        ignoreIfNotExists = false)
     }
   }
 
@@ -545,14 +540,12 @@ class SessionCatalogSuite extends SparkFunSuite {
       catalog.dropPartitions(
         TableIdentifier("tbl2", Some("db2")),
         Seq(part3.spec),
-        ignoreIfNotExists = false,
-        purge = true)
+        ignoreIfNotExists = false)
     }
     catalog.dropPartitions(
       TableIdentifier("tbl2", Some("db2")),
       Seq(part3.spec),
-      ignoreIfNotExists = true,
-      purge = true)
+      ignoreIfNotExists = true)
   }
 
   test("get partition") {
