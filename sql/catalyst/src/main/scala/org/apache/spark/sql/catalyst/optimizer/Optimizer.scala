@@ -519,6 +519,7 @@ object LikeSimplification extends Rule[LogicalPlan] {
   // Cases like "something\%" are not optimized, but this does not affect correctness.
   private val startsWith = "([^_%]+)%".r
   private val endsWith = "%([^_%]+)".r
+  private val startsAndEndsWith = "([^_%]+)%([^_%]+)".r
   private val contains = "%([^_%]+)%".r
   private val equalTo = "([^_%]*)".r
 
@@ -529,6 +530,9 @@ object LikeSimplification extends Rule[LogicalPlan] {
           StartsWith(l, Literal(pattern))
         case endsWith(pattern) =>
           EndsWith(l, Literal(pattern))
+        case startsAndEndsWith(prefix, postfix) if !prefix.endsWith("\\") =>
+          And(GreaterThanOrEqual(Length(l), Literal(prefix.size + postfix.size)),
+            And(StartsWith(l, Literal(prefix)), EndsWith(l, Literal(postfix))))
         case contains(pattern) if !pattern.endsWith("\\") =>
           Contains(l, Literal(pattern))
         case equalTo(pattern) =>
