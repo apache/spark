@@ -30,7 +30,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.scheduler._
 import org.apache.spark.streaming.scheduler.rate.RateEstimator
-import org.apache.spark.streaming.{Seconds, Milliseconds, StreamingContext, Time}
+import org.apache.spark.streaming.{Milliseconds, StreamingContext, Time}
 import org.apache.spark.util.Utils
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.scalatest.concurrent.Eventually
@@ -115,8 +115,8 @@ class DirectKafkaStreamSuite
         logInfo(s"${o.topic} ${o.partition} ${o.fromOffset} ${o.untilOffset}")
       }
       val collected = rdd.mapPartitionsWithIndex { (i, iter) =>
-      // For each partition, get size of the range in the partition,
-      // and the number of items in the partition
+        // For each partition, get size of the range in the partition,
+        // and the number of items in the partition
         val off = offsetRanges(i)
         val all = iter.toSeq
         val partSize = all.size
@@ -411,7 +411,7 @@ class DirectKafkaStreamSuite
         .fold(e => Map.empty[TopicAndPartition, Long], m => m.mapValues(lo => lo.offset))
 
       new DirectKafkaInputDStream[String, String, StringDecoder, StringDecoder, (String, String)](
-          ssc, kafkaParams, m, messageHandler) {
+        ssc, kafkaParams, m, messageHandler) {
         override protected[streaming] val rateController =
           Some(new DirectKafkaRateController(id, estimator))
       }
@@ -436,8 +436,8 @@ class DirectKafkaStreamSuite
     Seq(100, 50, 20).foreach { rate =>
       collectedData.clear()       // Empty this buffer on each pass.
       estimator.updateRate(rate)  // Set a new rate.
-      // Expect blocks of data equal to "rate", scaled by the interval length in secs.
-      val expectedSize = Math.round(rate * batchIntervalMilliseconds * 0.001)
+    // Expect blocks of data equal to "rate", scaled by the interval length in secs.
+    val expectedSize = Math.round(rate * batchIntervalMilliseconds * 0.001)
       eventually(timeout(5.seconds), interval(batchIntervalMilliseconds.milliseconds)) {
         // Assert that rate estimator values are used to determine maxMessagesPerPartition.
         // Funky "-" in message makes the complete assertion message read better.
@@ -451,7 +451,7 @@ class DirectKafkaStreamSuite
 
   /** Get the generated offset ranges from the DirectKafkaStream */
   private def getOffsetRanges[K, V](
-      kafkaStream: DStream[(K, V)]): Seq[(Time, Array[OffsetRange])] = {
+                                     kafkaStream: DStream[(K, V)]): Seq[(Time, Array[OffsetRange])] = {
     kafkaStream.generatedRDDs.mapValues { rdd =>
       rdd.asInstanceOf[KafkaRDD[K, V, _, _, (K, V)]].offsetRanges
     }.toSeq.sortBy { _._1 }
@@ -477,75 +477,26 @@ class DirectKafkaStreamSuite
   }
 }
 
-object DirectKafkaWordCountLocal {
+
+object DirectKafkaWordCount {
 
   import org.apache.spark.streaming._
-
-  case class Tick(symbol: String, price: Int, ts: Long)
 
   def main(args: Array[String]) {
 
     // Create context with 2 second batch interval
     val sparkConf = new SparkConf().setMaster("local[*]").setAppName("DirectKafkaWordCount")
-    val ssc = new StreamingContext(sparkConf, Seconds(2))
-    ssc.checkpoint("/tmp/checkpoint")
+    val ssc = new StreamingContext(sparkConf, Seconds(6))
     val listener = new LatencyListener(ssc)
     ssc.addStreamingListener(listener)
-    val lines = ssc.socketTextStream("localhost", 8888)
+
+    val lines = ssc.socketTextStream("localhost", 9998)
 
     val words = lines.flatMap(_.split(" "))
 
     val pairs = words.map(word => (word, 1))
 
-    val wordCounts = pairs.reduceByKeyAndWindow(_+_, _-_, Seconds(60),Seconds(10))
-
-
-    val wordCountNew = wordCounts.filter(_._1.startsWith("sac")).reduceByKeyAndWindow(_+_, _-_, Seconds(60),Seconds(10))
-    wordCountNew.print()
-
-    ssc.start()
-    ssc.awaitTermination()
-  }
-}
-object DirectKafkaWordCountKafka {
-
-  import org.apache.spark.streaming._
-
-  def main(args: Array[String]) {
-    val sparkConf = new SparkConf().setMaster("local[*]").setAppName("DirectKafkaWordCount")
-
-    val ssc = new StreamingContext(sparkConf, Seconds(2))
-    //ssc.checkpoint(checkPointPath)
-
-    val listener = new LatencyListener(ssc)
-    ssc.addStreamingListener(listener)
-    val kafkaBrokers = "localhost"
-    val kafkaPort ="9092"
-    val topic="test"
-
-    val topicsSet = Set(topic)
-
-    val brokerListString = new StringBuilder();
-
-    brokerListString.append(kafkaBrokers).append(":").append(kafkaPort)
-
-
-    val kafkaParams = Map[String, String]("metadata.broker.list" -> brokerListString.toString())
-    System.err.println(
-      "Trying to connect to Kafka at " + brokerListString.toString())
-    val messages = KafkaUtils.createDirectStream[String, String, StringDecoder, StringDecoder](
-      ssc, kafkaParams, topicsSet)
-    ssc.checkpoint("/tmp/checkPoint/")
-    // Create context with 2 second batch interval
-
-    //val lines = ssc.socketTextStream("localhost", 9998)
-
-    val words = messages.map(x => x._2).flatMap(_.split(" "))
-
-    val pairs = words.map(word => (word, 1))
-    pairs.print()
-
-    val wordCounts = pairs.reduceByKeyAndWindow(_+_, _-_, Seconds(60),Seconds(10))
+    val wordCounts = pairs.reduceByKey(_ + _)
 
     wordCounts.print()
 
@@ -553,8 +504,8 @@ object DirectKafkaWordCountKafka {
     ssc.awaitTermination()
   }
 }
-
-
+import org.apache.spark.streaming.StreamingContext
+import org.apache.spark.streaming.scheduler._
 
 class StopContextThread(ssc: StreamingContext) extends Runnable {
   def run {
@@ -586,77 +537,58 @@ class LatencyListener(ssc: StreamingContext) extends StreamingListener {
     this.metricMap = metricMap
   }
 
-  /** Called when processing of a job of a batch has started. */
-  override def onOutputOperationStarted(outputOperationStarted: StreamingListenerOutputOperationStarted): Unit = {
-    println("job creation delay repoted in onOutputOperationStarted ==>"+outputOperationStarted.outputOperationInfo.batchTime+"==>"+outputOperationStarted.outputOperationInfo.id+"==>"+outputOperationStarted.outputOperationInfo.jobGenTime)
-  }
-
-  val batchSize =  Seconds(2).toString
-  val recordLimitPerThread = 1000
-  val loaderThreads = 10
-
-  val recordLimit = loaderThreads * recordLimitPerThread
-
   override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted): Unit = {
     val batchInfo = batchCompleted.batchInfo
+    println("job generate delay ="+batchCompleted.batchInfo.batchJobSetCreationDelay)
+
     val prevCount = totalRecords
     var recordThisBatch = batchInfo.numRecords
-
-    println("job creation delay repoted in onBatchCompleted ==>" +batchInfo.batchTime+"==>"+batchInfo.batchJobSetCreationDelay )
-
     if (!thread.isAlive) {
       totalRecords += recordThisBatch
-      //      val imap = getMap
-      //      imap(batchInfo.batchTime.toString()) = "batchTime," + batchInfo.batchTime +
-      //        ", batch Count so far," + batchCount +
-      //        ", total Records so far," + totalRecords +
-      //        ", record This Batch," + recordThisBatch +
-      //        ", submission Time," + batchInfo.submissionTime +
-      //        ", processing Start Time," + batchInfo.processingStartTime.getOrElse(0L) +
-      //        ", processing End Time," + batchInfo.processingEndTime.getOrElse(0L) +
-      //        ", scheduling Delay," + batchInfo.schedulingDelay.getOrElse(0L) +
-      //        ", processing Delay," + batchInfo.processingDelay.getOrElse(0L)
-      //
-      //      setMap(imap)
+      val imap = getMap
+      imap(batchInfo.batchTime.toString()) = "batchTime," + batchInfo.batchTime +
+        ", batch Count so far," + batchCount +
+        ", total Records so far," + totalRecords +
+        ", record This Batch," + recordThisBatch +
+        ", submission Time," + batchInfo.submissionTime +
+        ", processing Start Time," + batchInfo.processingStartTime.getOrElse(0L) +
+        ", processing End Time," + batchInfo.processingEndTime.getOrElse(0L) +
+        ", scheduling Delay," + batchInfo.schedulingDelay.getOrElse(0L) +
+        ", processing Delay," + batchInfo.processingDelay.getOrElse(0L)
+
+      setMap(imap)
     }
 
-    if (totalRecords >= recordLimit) {
+    if (totalRecords >= 100) {
       if (hasStarted && !thread.isAlive) {
         //not receiving any data more, finish
         endTime = System.currentTimeMillis()
         endTime1 = batchInfo.processingEndTime.getOrElse(0L)
-        var warning = ""
+        var warning=""
         val totalTime = (endTime - startTime).toDouble / 1000
         //This is weighted avg of every batch process time. The weight is records processed int the batch
-        val avgLatency = totalDelay.toDouble / totalRecords
-        if (avgLatency > batchSize.toDouble)
-          warning = "WARNING:SPARK CLUSTER IN UNSTABLE STATE. TRY REDUCE INPUT SPEED"
-
-        val avgLatencyAdjust = avgLatency + batchSize.toDouble
         val recordThroughput = totalRecords / totalTime
 
         val imap = getMap
 
-        imap("Final Metric") = " Total Batch count," + batchCount +
-          ", startTime based on submissionTime," + startTime +
-          ", startTime based on System," + startTime1 +
-          ", endTime based on System," + endTime +
-          ", endTime based on processingEndTime," + endTime1 +
-          ", Total Records," + totalRecords +
+        imap("Final Metric") = " Total Batch count," + batchCount+
+          ", startTime based on submissionTime,"+startTime +
+          ", startTime based on System,"+startTime1 +
+          ", endTime based on System,"+endTime +
+          ", endTime based on processingEndTime,"+endTime1 +
+          ", Total Records,"+totalRecords+
           // ", Total processing delay = " + totalDelay + " ms "+
           ", Total Consumed time in sec," + totalTime +
-          ", Avg latency/batchInterval in ms," + avgLatencyAdjust +
-          ", Avg records/sec," + recordThroughput +
-          ", WARNING," + warning
+          ", Avg records/sec," + recordThroughput
 
-        imap.foreach { case (key, value) => println(key + "-->" + value) }
+        imap.foreach {case (key, value) => println(key + "-->" + value)}
 
         thread.start
       }
     } else if (!hasStarted) {
-      if (batchInfo.numRecords > 0) {
+      if (batchInfo.numRecords>0) {
         startTime = batchCompleted.batchInfo.submissionTime
-        startTime1 = System.currentTimeMillis()
+        startTime1 =  System.currentTimeMillis()
         hasStarted = true
       }
     }
@@ -670,8 +602,8 @@ class LatencyListener(ssc: StreamingContext) extends StreamingListener {
       batchCount = batchCount + 1
     }
   }
-}
 
+}
 object DirectKafkaStreamSuite {
   val collectedData = new ConcurrentLinkedQueue[String]()
   @volatile var total = -1L
@@ -703,10 +635,10 @@ private[streaming] class ConstantEstimator(@volatile private var rate: Long)
   }
 
   def compute(
-      time: Long,
-      elements: Long,
-      processingDelay: Long,
-      schedulingDelay: Long): Option[Double] = Some(rate)
+               time: Long,
+               elements: Long,
+               processingDelay: Long,
+               schedulingDelay: Long): Option[Double] = Some(rate)
 }
 
 private[streaming] class ConstantRateController(id: Int, estimator: RateEstimator, rate: Long)
