@@ -230,10 +230,10 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
 
 
   /**
-    * Test that a binary operator correctly fails support check when it has combinations of
-    * streaming and batch child plans. There can be batch sub-plans inside a streaming plan,
-    * so it is valid for the operator to have a batch child plan.
-    */
+   * Test that a binary operator correctly fails support check when it has combinations of
+   * streaming and batch child plans. There can be batch sub-plans inside a streaming plan,
+   * so it is valid for the operator to have a batch child plan.
+   */
   def testBinaryOperationForStreaming(
       operationName: String,
       planGenerator: (LogicalPlan, LogicalPlan) => LogicalPlan,
