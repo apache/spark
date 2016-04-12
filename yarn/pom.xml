@@ -40,7 +40,7 @@
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-network-yarn_${scala.binary.version}</artifactId>
+      <artifactId>spark-network-yarn</artifactId>
       <version>${project.version}</version>
       <scope>test</scope>
     </dependency>
@@ -188,10 +188,4 @@
       <scope>test</scope>
     </dependency>
   </dependencies>
-
-  <build>
-    <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
-    <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
-  </build>
-
 </project>

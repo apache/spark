@@ -27,7 +27,7 @@
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-network-shuffle_2.11</artifactId>
+  <artifactId>spark-network-shuffle</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Shuffle Streaming Service</name>
   <url>http://spark.apache.org/</url>
@@ -39,7 +39,7 @@
     <!-- Core dependencies -->
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-network-common_${scala.binary.version}</artifactId>
+      <artifactId>spark-network-common</artifactId>
       <version>${project.version}</version>
     </dependency>
 
@@ -73,14 +73,10 @@
     <!-- Test dependencies -->
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-network-common_${scala.binary.version}</artifactId>
+      <artifactId>spark-network-common</artifactId>
       <version>${project.version}</version>
       <type>test-jar</type>
       <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.spark</groupId>
-      <artifactId>spark-test-tags_${scala.binary.version}</artifactId>
     </dependency>
     <dependency>
       <groupId>log4j</groupId>
@@ -93,9 +89,4 @@
       <scope>test</scope>
     </dependency>
   </dependencies>
-
-  <build>
-    <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
-    <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
-  </build>
 </project>

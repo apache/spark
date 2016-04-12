@@ -27,7 +27,7 @@
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-launcher_2.11</artifactId>
+  <artifactId>spark-launcher</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Launcher</name>
   <url>http://spark.apache.org/</url>
@@ -63,11 +63,6 @@
       <scope>test</scope>
     </dependency>
 
-    <dependency>
-      <groupId>org.apache.spark</groupId>
-      <artifactId>spark-test-tags_${scala.binary.version}</artifactId>
-    </dependency>
-
     <!-- Not needed by the test code, but referenced by SparkSubmit which is used by the tests. -->
     <dependency>
       <groupId>org.apache.hadoop</groupId>
@@ -75,9 +70,4 @@
       <scope>test</scope>
     </dependency>
   </dependencies>
-
-  <build>
-    <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
-    <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
-  </build>
 </project>
