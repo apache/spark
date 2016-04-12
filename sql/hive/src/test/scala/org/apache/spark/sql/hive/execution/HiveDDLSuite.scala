@@ -131,6 +131,60 @@ class HiveDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
+  test("alter views - rename") {
+    val tabName = "tab1"
+    withTable(tabName) {
+      sqlContext.range(10).write.saveAsTable(tabName)
+      val oldViewName = "view1"
+      val newViewName = "view2"
+      withView(oldViewName, newViewName) {
+        val catalog = hiveContext.sessionState.catalog
+        sql(s"CREATE VIEW $oldViewName AS SELECT * FROM $tabName")
+
+        assert(catalog.tableExists(TableIdentifier(oldViewName)))
+        assert(!catalog.tableExists(TableIdentifier(newViewName)))
+        sql(s"ALTER VIEW $oldViewName RENAME TO $newViewName")
+        assert(!catalog.tableExists(TableIdentifier(oldViewName)))
+        assert(catalog.tableExists(TableIdentifier(newViewName)))
+
+        sql(s"DROP VIEW $newViewName")
+      }
+    }
+  }
+
+  test("alter views and alter table - misuse") {
+    val tabName = "tab1"
+    withTable(tabName) {
+      sqlContext.range(10).write.saveAsTable(tabName)
+      val oldViewName = "view1"
+      val newViewName = "view2"
+      withView(oldViewName, newViewName) {
+        val catalog = hiveContext.sessionState.catalog
+        sql(s"CREATE VIEW $oldViewName AS SELECT * FROM $tabName")
+
+        assert(catalog.tableExists(TableIdentifier(tabName)))
+        assert(catalog.tableExists(TableIdentifier(oldViewName)))
+
+        var message = intercept[AnalysisException] {
+          sql(s"ALTER VIEW $tabName RENAME TO $newViewName")
+        }.getMessage
+        assert(message.contains(
+          "Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead"))
+
+        message = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $oldViewName RENAME TO $newViewName")
+        }.getMessage
+        assert(message.contains(
+          "Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead"))
+
+        assert(catalog.tableExists(TableIdentifier(tabName)))
+        assert(catalog.tableExists(TableIdentifier(oldViewName)))
+
+        sql(s"DROP VIEW $newViewName")
+      }
+    }
+  }
+
   test("drop table using drop view") {
     withTable("tab1") {
       sql("CREATE TABLE tab1(c1 int)")
