@@ -191,9 +191,6 @@ case class DropTable(
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val catalog = sqlContext.sessionState.catalog
-    if (isView && !catalog.isViewSupported) {
-      throw new AnalysisException(s"Not supported object: views")
-    }
     // If the command DROP VIEW is to drop a table or DROP TABLE is to drop a view
     // issue an exception.
     catalog.getTableMetadataOption(tableName).map(_.tableType match {

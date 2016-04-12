@@ -327,7 +327,9 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
       case n: InternalNode => n.split match {
         case s: CategoricalSplit =>
           assert(s.leftCategories === Array(1.0))
+        case _ => throw new AssertionError("model.rootNode.split was not a CategoricalSplit")
       }
+      case _ => throw new AssertionError("model.rootNode was not an InternalNode")
     }
   }
 
@@ -352,6 +354,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
         assert(n.leftChild.isInstanceOf[InternalNode])
         assert(n.rightChild.isInstanceOf[InternalNode])
         Array(n.leftChild.asInstanceOf[InternalNode], n.rightChild.asInstanceOf[InternalNode])
+      case _ => throw new AssertionError("rootNode was not an InternalNode")
     }
 
     // Single group second level tree construction.

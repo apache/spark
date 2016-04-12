@@ -31,7 +31,7 @@ import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg.{BLAS, Vector}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
 
@@ -196,7 +196,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
   def setSolver(value: String): this.type = set(solver, value)
   setDefault(solver -> "irls")
 
-  override protected def train(dataset: DataFrame): GeneralizedLinearRegressionModel = {
+  override protected def train(dataset: Dataset[_]): GeneralizedLinearRegressionModel = {
     val familyObj = Family.fromName($(family))
     val linkObj = if (isDefined(link)) {
       Link.fromName($(link))
