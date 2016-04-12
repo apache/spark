@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import scala.collection.mutable
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.catalyst.analysis.{UnsupportedOperationChecker, Append, OutputMode}
+import org.apache.spark.sql.catalyst.analysis.{Append, OutputMode, UnsupportedOperationChecker}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorRef
 import org.apache.spark.sql.internal.SQLConf
