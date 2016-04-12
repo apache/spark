@@ -51,10 +51,12 @@ private[sql] object Column {
 
   @scala.annotation.varargs
   def updateExpressionsOrigin(cols: Column*): Unit = {
+    // Update Expression.origin using the callSite of an operation
     val callSite = org.apache.spark.util.Utils.getCallSite().shortForm
-    print(s"callSite: $callSite\n")
-    Thread.dumpStack()
     cols.map(col => col.expr.foreach(e => e.origin.callSite = Some(callSite)))
+    // Update CurrentOrigin for setting origin for LogicalPlan node
+    CurrentOrigin.set(
+      Origin(Some(callSite), CurrentOrigin.get.line, CurrentOrigin.get.startPosition))
   }
 }
 
