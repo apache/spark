@@ -536,7 +536,17 @@ case class CreateExternalRow(children: Seq[Expression], schema: StructType)
           }
          """
     }
-    val childrenCode = ctx.splitExpressions(ctx.INPUT_ROW, childrenCodes)
+
+    val childrenCode = if (ctx.currentVars == null) {
+      ctx.splitExpressions(ctx.INPUT_ROW, childrenCodes)
+    } else {
+      // If ctx.currentVars != null, which means we are in whole stage codegen context and the input
+      // to children expressions maybe not the input row but some local variables, so we should not
+      // split children expressions codes here.
+      // TODO: figure out a way to integrate ctx.currentVars and ctx.splitExpressions.
+      childrenCodes.mkString("\n")
+    }
+
     val schemaField = ctx.addReferenceObj("schema", schema)
     s"""
       boolean ${ev.isNull} = false;
