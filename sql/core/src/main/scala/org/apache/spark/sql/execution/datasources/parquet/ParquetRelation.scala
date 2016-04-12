@@ -251,12 +251,12 @@ private[sql] class DefaultSource
   }
 
   /**
-   * Returns whether the reader will the rows as batch or not.
+   * Returns whether the reader will return the rows as batch or not.
    */
   override def supportBatch(sqlContext: SQLContext, schema: StructType): Boolean = {
     val conf = SQLContext.getActive().get.conf
-    conf.useFileScan && conf.parquetVectorizedReaderEnabled &&
-      conf.wholeStageEnabled && schema.length <= conf.wholeStageMaxNumFields &&
+    conf.parquetVectorizedReaderEnabled && conf.wholeStageEnabled &&
+      schema.length <= conf.wholeStageMaxNumFields &&
       schema.forall(_.dataType.isInstanceOf[AtomicType])
   }
 
