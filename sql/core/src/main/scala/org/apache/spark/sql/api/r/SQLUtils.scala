@@ -24,8 +24,8 @@ import scala.util.matching.Regex
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.api.r.SerDe
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Column, DataFrame, GroupedData, Row, SaveMode, SQLContext}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, GenericRowWithSchema, NamedExpression}
+import org.apache.spark.sql.{DataFrame, Row, SaveMode, SQLContext}
+import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.types._
 
 private[r] object SQLUtils {
@@ -94,13 +94,13 @@ private[r] object SQLUtils {
   }
 
   def createDF(rdd: RDD[Array[Byte]], schema: StructType, sqlContext: SQLContext): DataFrame = {
-    val num = schema.fields.size
+    val num = schema.fields.length
     val rowRDD = rdd.map(bytesToRow(_, schema))
     sqlContext.createDataFrame(rowRDD, schema)
   }
 
   def dfToRowRDD(df: DataFrame): JavaRDD[Array[Byte]] = {
-    df.map(r => rowToRBytes(r))
+    df.rdd.map(r => rowToRBytes(r))
   }
 
   private[this] def doConversion(data: Object, dataType: DataType): Object = {

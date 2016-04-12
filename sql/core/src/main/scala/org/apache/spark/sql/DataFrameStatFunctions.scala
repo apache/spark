@@ -37,6 +37,50 @@ import org.apache.spark.util.sketch.{BloomFilter, CountMinSketch}
 final class DataFrameStatFunctions private[sql](df: DataFrame) {
 
   /**
+   * Calculates the approximate quantiles of a numerical column of a DataFrame.
+   *
+   * The result of this algorithm has the following deterministic bound:
+   * If the DataFrame has N elements and if we request the quantile at probability `p` up to error
+   * `err`, then the algorithm will return a sample `x` from the DataFrame so that the *exact* rank
+   * of `x` is close to (p * N).
+   * More precisely,
+   *
+   *   floor((p - err) * N) <= rank(x) <= ceil((p + err) * N).
+   *
+   * This method implements a variation of the Greenwald-Khanna algorithm (with some speed
+   * optimizations).
+   * The algorithm was first present in [[http://dx.doi.org/10.1145/375663.375670 Space-efficient
+   * Online Computation of Quantile Summaries]] by Greenwald and Khanna.
+   *
+   * @param col the name of the numerical column
+   * @param probabilities a list of quantile probabilities
+   *   Each number must belong to [0, 1].
+   *   For example 0 is the minimum, 0.5 is the median, 1 is the maximum.
+   * @param relativeError The relative target precision to achieve (>= 0).
+   *   If set to zero, the exact quantiles are computed, which could be very expensive.
+   *   Note that values greater than 1 are accepted but give the same result as 1.
+   * @return the approximate quantiles at the given probabilities
+   *
+   * @since 2.0.0
+   */
+  def approxQuantile(
+      col: String,
+      probabilities: Array[Double],
+      relativeError: Double): Array[Double] = {
+    StatFunctions.multipleApproxQuantiles(df, Seq(col), probabilities, relativeError).head.toArray
+  }
+
+  /**
+   * Python-friendly version of [[approxQuantile()]]
+   */
+  private[spark] def approxQuantile(
+      col: String,
+      probabilities: List[Double],
+      relativeError: Double): java.util.List[Double] = {
+    approxQuantile(col, probabilities.toArray, relativeError).toList.asJava
+  }
+
+  /**
    * Calculate the sample covariance of two numerical columns of a DataFrame.
    * @param col1 the name of the first column
    * @param col2 the name of the second column

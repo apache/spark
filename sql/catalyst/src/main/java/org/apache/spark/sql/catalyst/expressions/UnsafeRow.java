@@ -400,7 +400,7 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
       return null;
     }
     if (precision <= Decimal.MAX_LONG_DIGITS()) {
-      return Decimal.apply(getLong(ordinal), precision, scale);
+      return Decimal.createUnsafe(getLong(ordinal), precision, scale);
     } else {
       byte[] bytes = getBinary(ordinal);
       BigInteger bigInteger = new BigInteger(bytes);

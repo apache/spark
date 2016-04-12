@@ -222,10 +222,11 @@ function renderDagVizForJob(svgContainer) {
       var attemptId = 0
       var stageLink = d3.select("#stage-" + stageId + "-" + attemptId)
         .select("a.name-link")
-        .attr("href") + "&expandDagViz=true";
+        .attr("href");
       container = svgContainer
         .append("a")
         .attr("xlink:href", stageLink)
+        .attr("onclick", "window.localStorage.setItem(expandDagVizArrowKey(false), true)")
         .append("g")
         .attr("id", containerId);
     }

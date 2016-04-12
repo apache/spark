@@ -235,6 +235,7 @@ public class ParquetAvroCompat extends org.apache.avro.specific.SpecificRecordBa
     }
 
     @Override
+    @SuppressWarnings(value="unchecked")
     public ParquetAvroCompat build() {
       try {
         ParquetAvroCompat record = new ParquetAvroCompat();

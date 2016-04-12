@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.analysis.{EliminateSubQueries, UnresolvedExtractValue}
-// For implicit conversions
+import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
@@ -32,7 +31,7 @@ class ConstantFoldingSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("AnalysisNodes", Once,
-        EliminateSubQueries) ::
+        EliminateSubqueryAliases) ::
       Batch("ConstantFolding", Once,
         OptimizeIn,
         ConstantFolding,

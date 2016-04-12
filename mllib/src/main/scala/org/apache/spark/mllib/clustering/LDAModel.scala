@@ -534,7 +534,8 @@ class DistributedLDAModel private[clustering] (
     @Since("1.5.0") override val docConcentration: Vector,
     @Since("1.5.0") override val topicConcentration: Double,
     private[spark] val iterationTimes: Array[Double],
-    override protected[clustering] val gammaShape: Double = 100)
+    override protected[clustering] val gammaShape: Double = DistributedLDAModel.defaultGammaShape,
+    private[spark] val checkpointFiles: Array[String] = Array.empty[String])
   extends LDAModel {
 
   import LDA._
@@ -806,11 +807,9 @@ class DistributedLDAModel private[clustering] (
 
   override protected def formatVersion = "1.0"
 
-  /**
-   * Java-friendly version of [[topicDistributions]]
-   */
   @Since("1.5.0")
   override def save(sc: SparkContext, path: String): Unit = {
+    // Note: This intentionally does not save checkpointFiles.
     DistributedLDAModel.SaveLoadV1_0.save(
       sc, path, graph, globalTopicTotals, k, vocabSize, docConcentration, topicConcentration,
       iterationTimes, gammaShape)
@@ -821,6 +820,12 @@ class DistributedLDAModel private[clustering] (
 @Experimental
 @Since("1.5.0")
 object DistributedLDAModel extends Loader[DistributedLDAModel] {
+
+  /**
+   * The [[DistributedLDAModel]] constructor's default arguments assume gammaShape = 100
+   * to ensure equivalence in LDAModel.toLocal conversion.
+   */
+  private[clustering] val defaultGammaShape: Double = 100
 
   private object SaveLoadV1_0 {
 
@@ -896,11 +901,11 @@ object DistributedLDAModel extends Loader[DistributedLDAModel] {
       Loader.checkSchema[EdgeData](edgeDataFrame.schema)
       val globalTopicTotals: LDA.TopicCounts =
         dataFrame.first().getAs[Vector](0).toBreeze.toDenseVector
-      val vertices: RDD[(VertexId, LDA.TopicCounts)] = vertexDataFrame.map {
+      val vertices: RDD[(VertexId, LDA.TopicCounts)] = vertexDataFrame.rdd.map {
         case Row(ind: Long, vec: Vector) => (ind, vec.toBreeze.toDenseVector)
       }
 
-      val edges: RDD[Edge[LDA.TokenCount]] = edgeDataFrame.map {
+      val edges: RDD[Edge[LDA.TokenCount]] = edgeDataFrame.rdd.map {
         case Row(srcId: Long, dstId: Long, prop: Double) => Edge(srcId, dstId, prop)
       }
       val graph: Graph[LDA.TopicCounts, LDA.TokenCount] = Graph(vertices, edges)

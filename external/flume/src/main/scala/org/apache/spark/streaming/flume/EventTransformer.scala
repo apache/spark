@@ -21,7 +21,7 @@ import java.io.{ObjectInput, ObjectOutput}
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
 /**

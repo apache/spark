@@ -36,7 +36,9 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.util.Utils
 
 /**
  * A framework for implementing tests for streaming queries and sources.
@@ -65,9 +67,9 @@ import org.apache.spark.sql.execution.streaming._
 trait StreamTest extends QueryTest with Timeouts {
 
   implicit class RichSource(s: Source) {
-    def toDF(): DataFrame = new DataFrame(sqlContext, StreamingRelation(s))
+    def toDF(): DataFrame = Dataset.ofRows(sqlContext, StreamingExecutionRelation(s))
 
-    def toDS[A: Encoder](): Dataset[A] = new Dataset(sqlContext, StreamingRelation(s))
+    def toDS[A: Encoder](): Dataset[A] = Dataset(sqlContext, StreamingExecutionRelation(s))
   }
 
   /** How long to wait for an active stream to catch up when checking a result. */
@@ -80,7 +82,7 @@ trait StreamTest extends QueryTest with Timeouts {
   trait StreamMustBeRunning
 
   /**
-   * Adds the given data to the stream.  Subsuquent check answers will block until this data has
+   * Adds the given data to the stream. Subsequent check answers will block until this data has
    * been processed.
    */
   object AddData {
@@ -109,24 +111,37 @@ trait StreamTest extends QueryTest with Timeouts {
 
   /**
    * Checks to make sure that the current data stored in the sink matches the `expectedAnswer`.
-   * This operation automatically blocks untill all added data has been processed.
+   * This operation automatically blocks until all added data has been processed.
    */
   object CheckAnswer {
     def apply[A : Encoder](data: A*): CheckAnswerRows = {
       val encoder = encoderFor[A]
       val toExternalRow = RowEncoder(encoder.schema)
-      CheckAnswerRows(data.map(d => toExternalRow.fromRow(encoder.toRow(d))))
+      CheckAnswerRows(data.map(d => toExternalRow.fromRow(encoder.toRow(d))), false)
     }
 
-    def apply(rows: Row*): CheckAnswerRows = CheckAnswerRows(rows)
+    def apply(rows: Row*): CheckAnswerRows = CheckAnswerRows(rows, false)
   }
 
-  case class CheckAnswerRows(expectedAnswer: Seq[Row])
+  /**
+   * Checks to make sure that the current data stored in the sink matches the `expectedAnswer`.
+   * This operation automatically blocks until all added data has been processed.
+   */
+  object CheckLastBatch {
+    def apply[A : Encoder](data: A*): CheckAnswerRows = {
+      val encoder = encoderFor[A]
+      val toExternalRow = RowEncoder(encoder.schema)
+      CheckAnswerRows(data.map(d => toExternalRow.fromRow(encoder.toRow(d))), true)
+    }
+
+    def apply(rows: Row*): CheckAnswerRows = CheckAnswerRows(rows, true)
+  }
+
+  case class CheckAnswerRows(expectedAnswer: Seq[Row], lastOnly: Boolean)
       extends StreamAction with StreamMustBeRunning {
-    override def toString: String = s"CheckAnswer: ${expectedAnswer.mkString(",")}"
+    override def toString: String = s"$operatorName: ${expectedAnswer.mkString(",")}"
+    private def operatorName = if (lastOnly) "CheckLastBatch" else "CheckAnswer"
   }
-
-  case class DropBatches(num: Int) extends StreamAction
 
   /** Stops the stream.  It must currently be running. */
   case object StopStream extends StreamAction with StreamMustBeRunning
@@ -168,18 +183,15 @@ trait StreamTest extends QueryTest with Timeouts {
     }
   }
 
-  /** A helper for running actions on a Streaming Dataset. See `checkAnswer(DataFrame)`. */
-  def testStream(stream: Dataset[_])(actions: StreamAction*): Unit =
-    testStream(stream.toDF())(actions: _*)
-
   /**
-   * Executes the specified actions on the the given streaming DataFrame and provides helpful
+   * Executes the specified actions on the given streaming DataFrame and provides helpful
    * error messages in the case of failures or incorrect answers.
    *
-   * Note that if the stream is not explictly started before an action that requires it to be
+   * Note that if the stream is not explicitly started before an action that requires it to be
    * running then it will be automatically started before performing any other actions.
    */
-  def testStream(stream: DataFrame)(actions: StreamAction*): Unit = {
+  def testStream(_stream: Dataset[_])(actions: StreamAction*): Unit = {
+    val stream = _stream.toDF()
     var pos = 0
     var currentPlan: LogicalPlan = stream.logicalPlan
     var currentStream: StreamExecution = null
@@ -205,7 +217,7 @@ trait StreamTest extends QueryTest with Timeouts {
     }.mkString("\n")
 
     def currentOffsets =
-      if (currentStream != null) currentStream.streamProgress.toString else "not started"
+      if (currentStream != null) currentStream.committedOffsets.toString else "not started"
 
     def threadState =
       if (currentStream != null && currentStream.microBatchThread.isAlive) "alive" else "dead"
@@ -228,11 +240,8 @@ trait StreamTest extends QueryTest with Timeouts {
          """.stripMargin
 
     def verify(condition: => Boolean, message: String): Unit = {
-      try {
-        Assertions.assert(condition)
-      } catch {
-        case NonFatal(e) =>
-          failTest(message, e)
+      if (!condition) {
+        failTest(message)
       }
     }
 
@@ -269,6 +278,7 @@ trait StreamTest extends QueryTest with Timeouts {
     }
 
     val testThread = Thread.currentThread()
+    val metadataRoot = Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
 
     try {
       startedTest.foreach { action =>
@@ -279,7 +289,11 @@ trait StreamTest extends QueryTest with Timeouts {
             currentStream =
               sqlContext
                 .streams
-                .startQuery(StreamExecution.nextName, stream, sink)
+                .startQuery(
+                  StreamExecution.nextName,
+                  metadataRoot,
+                  stream,
+                  sink)
                 .asInstanceOf[StreamExecution]
             currentStream.microBatchThread.setUncaughtExceptionHandler(
               new UncaughtExceptionHandler {
@@ -310,10 +324,6 @@ trait StreamTest extends QueryTest with Timeouts {
               lastStream = currentStream
               currentStream = null
             }
-
-          case DropBatches(num) =>
-            verify(currentStream == null, "dropping batches while running leads to corruption")
-            sink.dropBatches(num)
 
           case ef: ExpectFailure[_] =>
             verify(currentStream != null, "can not expect failure when stream is not running")
@@ -358,7 +368,7 @@ trait StreamTest extends QueryTest with Timeouts {
           case a: AddData =>
             awaiting.put(a.source, a.addData())
 
-          case CheckAnswerRows(expectedAnswer) =>
+          case CheckAnswerRows(expectedAnswer, lastOnly) =>
             verify(currentStream != null, "stream not running")
 
             // Block until all data added has been processed
@@ -368,12 +378,12 @@ trait StreamTest extends QueryTest with Timeouts {
               }
             }
 
-            val allData = try sink.allData catch {
+            val sparkAnswer = try if (lastOnly) sink.lastBatch else sink.allData catch {
               case e: Exception =>
                 failTest("Exception while getting data from sink", e)
             }
 
-            QueryTest.sameRows(expectedAnswer, allData).foreach {
+            QueryTest.sameRows(expectedAnswer, sparkAnswer).foreach {
               error => failTest(error)
             }
         }

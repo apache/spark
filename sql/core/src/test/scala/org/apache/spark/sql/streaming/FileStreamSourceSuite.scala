@@ -17,14 +17,11 @@
 
 package org.apache.spark.sql.streaming
 
-import java.io.{ByteArrayInputStream, File, FileNotFoundException, InputStream}
+import java.io.File
 
-import com.google.common.base.Charsets.UTF_8
-
-import org.apache.spark.sql.StreamTest
+import org.apache.spark.sql.{AnalysisException, StreamTest}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.FileStreamSource._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.Utils
@@ -74,8 +71,9 @@ class FileStreamSourceTest extends StreamTest with SharedSQLContext {
       }
     reader.stream(path)
       .queryExecution.analyzed
-      .collect { case StreamingRelation(s: FileStreamSource, _) => s }
-      .head
+      .collect { case StreamingRelation(dataSource, _, _) =>
+        dataSource.createSource().asInstanceOf[FileStreamSource]
+      }.head
   }
 
   val valueSchema = new StructType().add("value", StringType)
@@ -99,8 +97,9 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
         reader.stream()
       }
     df.queryExecution.analyzed
-      .collect { case StreamingRelation(s: FileStreamSource, _) => s }
-      .head
+      .collect { case StreamingRelation(dataSource, _, _) =>
+        dataSource.createSource().asInstanceOf[FileStreamSource]
+      }.head
       .schema
   }
 
@@ -112,7 +111,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
   }
 
   test("FileStreamSource schema: path doesn't exist") {
-    intercept[FileNotFoundException] {
+    intercept[AnalysisException] {
       createFileStreamSourceAndGetSchema(format = None, path = Some("/a/b/c"), schema = None)
     }
   }
@@ -146,11 +145,11 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
 
   test("FileStreamSource schema: parquet, no existing files, no schema") {
     withTempDir { src =>
-      val e = intercept[IllegalArgumentException] {
+      val e = intercept[AnalysisException] {
         createFileStreamSourceAndGetSchema(
           format = Some("parquet"), path = Some(new File(src, "1").getCanonicalPath), schema = None)
       }
-      assert("No schema specified" === e.getMessage)
+      assert("Unable to infer schema.  It must be specified manually.;" === e.getMessage)
     }
   }
 
@@ -177,11 +176,11 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
 
   test("FileStreamSource schema: json, no existing files, no schema") {
     withTempDir { src =>
-      val e = intercept[IllegalArgumentException] {
+      val e = intercept[AnalysisException] {
         createFileStreamSourceAndGetSchema(
           format = Some("json"), path = Some(src.getCanonicalPath), schema = None)
       }
-      assert("No schema specified" === e.getMessage)
+      assert("Unable to infer schema.  It must be specified manually.;" === e.getMessage)
     }
   }
 
@@ -205,8 +204,8 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
   }
 
   test("read from text files") {
-    val src = Utils.createTempDir("streaming.src")
-    val tmp = Utils.createTempDir("streaming.tmp")
+    val src = Utils.createTempDir(namePrefix = "streaming.src")
+    val tmp = Utils.createTempDir(namePrefix = "streaming.tmp")
 
     val textSource = createFileStreamSource("text", src.getCanonicalPath)
     val filtered = textSource.toDF().filter($"value" contains "keep")
@@ -227,8 +226,8 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
   }
 
   test("read from json files") {
-    val src = Utils.createTempDir("streaming.src")
-    val tmp = Utils.createTempDir("streaming.tmp")
+    val src = Utils.createTempDir(namePrefix = "streaming.src")
+    val tmp = Utils.createTempDir(namePrefix = "streaming.tmp")
 
     val textSource = createFileStreamSource("json", src.getCanonicalPath, Some(valueSchema))
     val filtered = textSource.toDF().filter($"value" contains "keep")
@@ -261,8 +260,8 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
   }
 
   test("read from json files with inferring schema") {
-    val src = Utils.createTempDir("streaming.src")
-    val tmp = Utils.createTempDir("streaming.tmp")
+    val src = Utils.createTempDir(namePrefix = "streaming.src")
+    val tmp = Utils.createTempDir(namePrefix = "streaming.tmp")
 
     // Add a file so that we can infer its schema
     stringToFile(new File(src, "existing"), "{'c': 'drop1'}\n{'c': 'keep2'}\n{'c': 'keep3'}")
@@ -282,8 +281,8 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
   }
 
   test("read from parquet files") {
-    val src = Utils.createTempDir("streaming.src")
-    val tmp = Utils.createTempDir("streaming.tmp")
+    val src = Utils.createTempDir(namePrefix = "streaming.src")
+    val tmp = Utils.createTempDir(namePrefix = "streaming.tmp")
 
     val fileSource = createFileStreamSource("parquet", src.getCanonicalPath, Some(valueSchema))
     val filtered = fileSource.toDF().filter($"value" contains "keep")
@@ -304,16 +303,16 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
   }
 
   test("file stream source without schema") {
-    val src = Utils.createTempDir("streaming.src")
+    val src = Utils.createTempDir(namePrefix = "streaming.src")
 
     // Only "text" doesn't need a schema
     createFileStreamSource("text", src.getCanonicalPath)
 
     // Both "json" and "parquet" require a schema if no existing file to infer
-    intercept[IllegalArgumentException] {
+    intercept[AnalysisException] {
       createFileStreamSource("json", src.getCanonicalPath)
     }
-    intercept[IllegalArgumentException] {
+    intercept[AnalysisException] {
       createFileStreamSource("parquet", src.getCanonicalPath)
     }
 
@@ -321,18 +320,8 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
   }
 
   test("fault tolerance") {
-    def assertBatch(batch1: Option[Batch], batch2: Option[Batch]): Unit = {
-      (batch1, batch2) match {
-        case (Some(b1), Some(b2)) =>
-          assert(b1.end === b2.end)
-          assert(b1.data.as[String].collect() === b2.data.as[String].collect())
-        case (None, None) =>
-        case _ => fail(s"batch ($batch1) is not equal to batch ($batch2)")
-      }
-    }
-
-    val src = Utils.createTempDir("streaming.src")
-    val tmp = Utils.createTempDir("streaming.tmp")
+    val src = Utils.createTempDir(namePrefix = "streaming.src")
+    val tmp = Utils.createTempDir(namePrefix = "streaming.tmp")
 
     val textSource = createFileStreamSource("text", src.getCanonicalPath)
     val filtered = textSource.toDF().filter($"value" contains "keep")
@@ -348,71 +337,10 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
       CheckAnswer("keep2", "keep3", "keep5", "keep6", "keep8", "keep9")
     )
 
-    val textSource2 = createFileStreamSource("text", src.getCanonicalPath)
-    assert(textSource2.currentOffset === textSource.currentOffset)
-    assertBatch(textSource2.getNextBatch(None), textSource.getNextBatch(None))
-    for (f <- 0L to textSource.currentOffset.offset) {
-      val offset = LongOffset(f)
-      assertBatch(textSource2.getNextBatch(Some(offset)), textSource.getNextBatch(Some(offset)))
-    }
-
     Utils.deleteRecursively(src)
     Utils.deleteRecursively(tmp)
   }
 
-  test("fault tolerance with corrupted metadata file") {
-    val src = Utils.createTempDir("streaming.src")
-    assert(new File(src, "_metadata").mkdirs())
-    stringToFile(
-      new File(src, "_metadata/0"),
-      s"${FileStreamSource.VERSION}\nSTART\n-/a/b/c\n-/e/f/g\nEND\n")
-    stringToFile(new File(src, "_metadata/1"), s"${FileStreamSource.VERSION}\nSTART\n-")
-
-    val textSource = createFileStreamSource("text", src.getCanonicalPath)
-    // the metadata file of batch is corrupted, so currentOffset should be 0
-    assert(textSource.currentOffset === LongOffset(0))
-
-    Utils.deleteRecursively(src)
-  }
-
-  test("fault tolerance with normal metadata file") {
-    val src = Utils.createTempDir("streaming.src")
-    assert(new File(src, "_metadata").mkdirs())
-    stringToFile(
-      new File(src, "_metadata/0"),
-      s"${FileStreamSource.VERSION}\nSTART\n-/a/b/c\n-/e/f/g\nEND\n")
-    stringToFile(
-      new File(src, "_metadata/1"),
-      s"${FileStreamSource.VERSION}\nSTART\n-/x/y/z\nEND\n")
-
-    val textSource = createFileStreamSource("text", src.getCanonicalPath)
-    assert(textSource.currentOffset === LongOffset(1))
-
-    Utils.deleteRecursively(src)
-  }
-
-  test("readBatch") {
-    def stringToStream(str: String): InputStream = new ByteArrayInputStream(str.getBytes(UTF_8))
-
-    // Invalid metadata
-    assert(readBatch(stringToStream("")) === Nil)
-    assert(readBatch(stringToStream(FileStreamSource.VERSION)) === Nil)
-    assert(readBatch(stringToStream(s"${FileStreamSource.VERSION}\n")) === Nil)
-    assert(readBatch(stringToStream(s"${FileStreamSource.VERSION}\nSTART")) === Nil)
-    assert(readBatch(stringToStream(s"${FileStreamSource.VERSION}\nSTART\n-")) === Nil)
-    assert(readBatch(stringToStream(s"${FileStreamSource.VERSION}\nSTART\n-/a/b/c")) === Nil)
-    assert(readBatch(stringToStream(s"${FileStreamSource.VERSION}\nSTART\n-/a/b/c\n")) === Nil)
-    assert(readBatch(stringToStream(s"${FileStreamSource.VERSION}\nSTART\n-/a/b/c\nEN")) === Nil)
-
-    // Valid metadata
-    assert(readBatch(stringToStream(
-      s"${FileStreamSource.VERSION}\nSTART\n-/a/b/c\nEND")) === Seq("/a/b/c"))
-    assert(readBatch(stringToStream(
-      s"${FileStreamSource.VERSION}\nSTART\n-/a/b/c\nEND\n")) === Seq("/a/b/c"))
-    assert(readBatch(stringToStream(
-      s"${FileStreamSource.VERSION}\nSTART\n-/a/b/c\n-/e/f/g\nEND\n"))
-      === Seq("/a/b/c", "/e/f/g"))
-  }
 }
 
 class FileStreamSourceStressTestSuite extends FileStreamSourceTest with SharedSQLContext {
@@ -420,8 +348,8 @@ class FileStreamSourceStressTestSuite extends FileStreamSourceTest with SharedSQ
   import testImplicits._
 
   test("file source stress test") {
-    val src = Utils.createTempDir("streaming.src")
-    val tmp = Utils.createTempDir("streaming.tmp")
+    val src = Utils.createTempDir(namePrefix = "streaming.src")
+    val tmp = Utils.createTempDir(namePrefix = "streaming.tmp")
 
     val textSource = createFileStreamSource("text", src.getCanonicalPath)
     val ds = textSource.toDS[String]().map(_.toInt + 1)

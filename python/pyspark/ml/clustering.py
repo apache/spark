@@ -21,10 +21,11 @@ from pyspark.ml.wrapper import JavaEstimator, JavaModel
 from pyspark.ml.param.shared import *
 from pyspark.mllib.common import inherit_doc
 
-__all__ = ['KMeans', 'KMeansModel', 'BisectingKMeans', 'BisectingKMeansModel']
+__all__ = ['BisectingKMeans', 'BisectingKMeansModel',
+           'KMeans', 'KMeansModel']
 
 
-class KMeansModel(JavaModel, MLWritable, MLReadable):
+class KMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
     Model fitted by KMeans.
 
@@ -47,7 +48,7 @@ class KMeansModel(JavaModel, MLWritable, MLReadable):
 
 @inherit_doc
 class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol, HasSeed,
-             MLWritable, MLReadable):
+             JavaMLWritable, JavaMLReadable):
     """
     K-means clustering with support for multiple parallel runs and a k-means++ like initialization
     mode (the k-means|| algorithm by Bahmani et al). When multiple concurrent runs are requested,
@@ -70,35 +71,30 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
     True
     >>> rows[2].prediction == rows[3].prediction
     True
-    >>> import os, tempfile
-    >>> path = tempfile.mkdtemp()
-    >>> kmeans_path = path + "/kmeans"
+    >>> kmeans_path = temp_path + "/kmeans"
     >>> kmeans.save(kmeans_path)
     >>> kmeans2 = KMeans.load(kmeans_path)
     >>> kmeans2.getK()
     2
-    >>> model_path = path + "/kmeans_model"
+    >>> model_path = temp_path + "/kmeans_model"
     >>> model.save(model_path)
     >>> model2 = KMeansModel.load(model_path)
     >>> model.clusterCenters()[0] == model2.clusterCenters()[0]
     array([ True,  True], dtype=bool)
     >>> model.clusterCenters()[1] == model2.clusterCenters()[1]
     array([ True,  True], dtype=bool)
-    >>> from shutil import rmtree
-    >>> try:
-    ...     rmtree(path)
-    ... except OSError:
-    ...     pass
 
     .. versionadded:: 1.5.0
     """
 
-    k = Param(Params._dummy(), "k", "number of clusters to create")
+    k = Param(Params._dummy(), "k", "number of clusters to create",
+              typeConverter=TypeConverters.toInt)
     initMode = Param(Params._dummy(), "initMode",
                      "the initialization algorithm. This can be either \"random\" to " +
                      "choose random points as initial cluster centers, or \"k-means||\" " +
-                     "to use a parallel variant of k-means++")
-    initSteps = Param(Params._dummy(), "initSteps", "steps for k-means initialization mode")
+                     "to use a parallel variant of k-means++", TypeConverters.toString)
+    initSteps = Param(Params._dummy(), "initSteps", "steps for k-means initialization mode",
+                      typeConverter=TypeConverters.toInt)
 
     @keyword_only
     def __init__(self, featuresCol="features", predictionCol="prediction", k=2,
@@ -175,7 +171,7 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
         return self.getOrDefault(self.initSteps)
 
 
-class BisectingKMeansModel(JavaModel):
+class BisectingKMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
     .. note:: Experimental
 
@@ -199,7 +195,8 @@ class BisectingKMeansModel(JavaModel):
 
 
 @inherit_doc
-class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasSeed):
+class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasSeed,
+                      JavaMLWritable, JavaMLReadable):
     """
     .. note:: Experimental
 
@@ -229,14 +226,28 @@ class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     True
     >>> rows[2].prediction == rows[3].prediction
     True
+    >>> bkm_path = temp_path + "/bkm"
+    >>> bkm.save(bkm_path)
+    >>> bkm2 = BisectingKMeans.load(bkm_path)
+    >>> bkm2.getK()
+    2
+    >>> model_path = temp_path + "/bkm_model"
+    >>> model.save(model_path)
+    >>> model2 = BisectingKMeansModel.load(model_path)
+    >>> model.clusterCenters()[0] == model2.clusterCenters()[0]
+    array([ True,  True], dtype=bool)
+    >>> model.clusterCenters()[1] == model2.clusterCenters()[1]
+    array([ True,  True], dtype=bool)
 
     .. versionadded:: 2.0.0
     """
 
-    k = Param(Params._dummy(), "k", "number of clusters to create")
+    k = Param(Params._dummy(), "k", "number of clusters to create",
+              typeConverter=TypeConverters.toInt)
     minDivisibleClusterSize = Param(Params._dummy(), "minDivisibleClusterSize",
                                     "the minimum number of points (if >= 1.0) " +
-                                    "or the minimum proportion")
+                                    "or the minimum proportion",
+                                    typeConverter=TypeConverters.toFloat)
 
     @keyword_only
     def __init__(self, featuresCol="features", predictionCol="prediction", maxIter=20,
@@ -310,7 +321,17 @@ if __name__ == "__main__":
     sqlContext = SQLContext(sc)
     globs['sc'] = sc
     globs['sqlContext'] = sqlContext
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
-    sc.stop()
+    import tempfile
+    temp_path = tempfile.mkdtemp()
+    globs['temp_path'] = temp_path
+    try:
+        (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+        sc.stop()
+    finally:
+        from shutil import rmtree
+        try:
+            rmtree(temp_path)
+        except OSError:
+            pass
     if failure_count:
         exit(-1)

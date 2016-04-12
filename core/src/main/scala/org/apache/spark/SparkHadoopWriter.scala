@@ -27,6 +27,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapred._
 import org.apache.hadoop.mapreduce.TaskType
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.rdd.HadoopRDD
 import org.apache.spark.util.SerializableJobConf

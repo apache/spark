@@ -21,11 +21,11 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions.Alias
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
-import org.apache.spark.sql.execution.RunnableCommand
-import org.apache.spark.sql.hive.{HiveContext, HiveMetastoreTypes, SQLBuilder}
-import org.apache.spark.sql.hive.client.{HiveColumn, HiveTable}
+import org.apache.spark.sql.execution.command.RunnableCommand
+import org.apache.spark.sql.hive.{ HiveContext, HiveMetastoreTypes, SQLBuilder}
 
 /**
  * Create Hive view on non-hive-compatible tables by specifying schema ourselves instead of
@@ -34,7 +34,7 @@ import org.apache.spark.sql.hive.client.{HiveColumn, HiveTable}
 // TODO: Note that this class can NOT canonicalize the view SQL string entirely, which is different
 // from Hive and may not work for some cases like create view on self join.
 private[hive] case class CreateViewAsSelect(
-    tableDesc: HiveTable,
+    tableDesc: CatalogTable,
     child: LogicalPlan,
     allowExisting: Boolean,
     orReplace: Boolean) extends RunnableCommand {
@@ -44,19 +44,19 @@ private[hive] case class CreateViewAsSelect(
   assert(tableDesc.schema == Nil || tableDesc.schema.length == childSchema.length)
   assert(tableDesc.viewText.isDefined)
 
-  val tableIdentifier = TableIdentifier(tableDesc.name, Some(tableDesc.database))
+  private val tableIdentifier = tableDesc.identifier
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
 
-    hiveContext.catalog.tableExists(tableIdentifier) match {
+    hiveContext.sessionState.catalog.tableExists(tableIdentifier) match {
       case true if allowExisting =>
         // Handles `CREATE VIEW IF NOT EXISTS v0 AS SELECT ...`. Does nothing when the target view
         // already exists.
 
       case true if orReplace =>
         // Handles `CREATE OR REPLACE VIEW v0 AS SELECT ...`
-        hiveContext.catalog.client.alertView(prepareTable(sqlContext))
+        hiveContext.metadataHive.alertView(prepareTable(sqlContext))
 
       case true =>
         // Handles `CREATE VIEW v0 AS SELECT ...`. Throws exception when the target view already
@@ -66,13 +66,13 @@ private[hive] case class CreateViewAsSelect(
           "CREATE OR REPLACE VIEW AS")
 
       case false =>
-        hiveContext.catalog.client.createView(prepareTable(sqlContext))
+        hiveContext.metadataHive.createView(prepareTable(sqlContext))
     }
 
     Seq.empty[Row]
   }
 
-  private def prepareTable(sqlContext: SQLContext): HiveTable = {
+  private def prepareTable(sqlContext: SQLContext): CatalogTable = {
     val expandedText = if (sqlContext.conf.canonicalView) {
       try rebuildViewQueryString(sqlContext) catch {
         case NonFatal(e) => wrapViewTextWithSelect
@@ -83,12 +83,16 @@ private[hive] case class CreateViewAsSelect(
 
     val viewSchema = {
       if (tableDesc.schema.isEmpty) {
-        childSchema.map { attr =>
-          HiveColumn(attr.name, HiveMetastoreTypes.toMetastoreType(attr.dataType), null)
+        childSchema.map { a =>
+          CatalogColumn(a.name, HiveMetastoreTypes.toMetastoreType(a.dataType))
         }
       } else {
-        childSchema.zip(tableDesc.schema).map { case (attr, col) =>
-          HiveColumn(col.name, HiveMetastoreTypes.toMetastoreType(attr.dataType), col.comment)
+        childSchema.zip(tableDesc.schema).map { case (a, col) =>
+          CatalogColumn(
+            col.name,
+            HiveMetastoreTypes.toMetastoreType(a.dataType),
+            nullable = true,
+            col.comment)
         }
       }
     }
@@ -112,7 +116,7 @@ private[hive] case class CreateViewAsSelect(
     }
 
     val viewText = tableDesc.viewText.get
-    val viewName = quote(tableDesc.name)
+    val viewName = quote(tableDesc.identifier.table)
     s"SELECT $viewOutput FROM ($viewText) $viewName"
   }
 

@@ -142,7 +142,7 @@ _functions_1_6 = {
 _binary_mathfunctions = {
     'atan2': 'Returns the angle theta from the conversion of rectangular coordinates (x, y) to' +
              'polar coordinates (r, theta).',
-    'hypot': 'Computes `sqrt(a^2^ + b^2^)` without intermediate overflow or underflow.',
+    'hypot': 'Computes `sqrt(a^2 + b^2)` without intermediate overflow or underflow.',
     'pow': 'Returns the value of the first argument raised to the power of the second argument.',
 }
 
@@ -223,22 +223,22 @@ def coalesce(*cols):
     +----+----+
 
     >>> cDf.select(coalesce(cDf["a"], cDf["b"])).show()
-    +-------------+
-    |coalesce(a,b)|
-    +-------------+
-    |         null|
-    |            1|
-    |            2|
-    +-------------+
+    +--------------+
+    |coalesce(a, b)|
+    +--------------+
+    |          null|
+    |             1|
+    |             2|
+    +--------------+
 
     >>> cDf.select('*', coalesce(cDf["a"], lit(0.0))).show()
-    +----+----+---------------+
-    |   a|   b|coalesce(a,0.0)|
-    +----+----+---------------+
-    |null|null|            0.0|
-    |   1|null|            1.0|
-    |null|   2|            0.0|
-    +----+----+---------------+
+    +----+----+----------------+
+    |   a|   b|coalesce(a, 0.0)|
+    +----+----+----------------+
+    |null|null|             0.0|
+    |   1|null|             1.0|
+    |null|   2|             0.0|
+    +----+----+----------------+
     """
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.coalesce(_to_seq(sc, cols, _to_java_column))
@@ -348,13 +348,13 @@ def grouping_id(*cols):
     grouping columns).
 
     >>> df.cube("name").agg(grouping_id(), sum("age")).orderBy("name").show()
-    +-----+------------+--------+
-    | name|groupingid()|sum(age)|
-    +-----+------------+--------+
-    | null|           1|       7|
-    |Alice|           0|       2|
-    |  Bob|           0|       5|
-    +-----+------------+--------+
+    +-----+-------------+--------+
+    | name|grouping_id()|sum(age)|
+    +-----+-------------+--------+
+    | null|            1|       7|
+    |Alice|            0|       2|
+    |  Bob|            0|       5|
+    +-----+-------------+--------+
     """
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.grouping_id(_to_seq(sc, cols, _to_java_column))
@@ -479,7 +479,7 @@ def round(col, scale=0):
 
 @since(1.5)
 def shiftLeft(col, numBits):
-    """Shift the the given value numBits left.
+    """Shift the given value numBits left.
 
     >>> sqlContext.createDataFrame([(21,)], ['a']).select(shiftLeft('a', 1).alias('r')).collect()
     [Row(r=42)]
@@ -490,7 +490,7 @@ def shiftLeft(col, numBits):
 
 @since(1.5)
 def shiftRight(col, numBits):
-    """Shift the the given value numBits right.
+    """Shift the given value numBits right.
 
     >>> sqlContext.createDataFrame([(42,)], ['a']).select(shiftRight('a', 1).alias('r')).collect()
     [Row(r=21)]
@@ -502,7 +502,7 @@ def shiftRight(col, numBits):
 
 @since(1.5)
 def shiftRightUnsigned(col, numBits):
-    """Unsigned shift the the given value numBits right.
+    """Unsigned shift the given value numBits right.
 
     >>> df = sqlContext.createDataFrame([(-42,)], ['a'])
     >>> df.select(shiftRightUnsigned('a', 1).alias('r')).collect()
@@ -616,10 +616,10 @@ def log(arg1, arg2=None):
 
     If there is only one argument, then this takes the natural logarithm of the argument.
 
-    >>> df.select(log(10.0, df.age).alias('ten')).map(lambda l: str(l.ten)[:7]).collect()
+    >>> df.select(log(10.0, df.age).alias('ten')).rdd.map(lambda l: str(l.ten)[:7]).collect()
     ['0.30102', '0.69897']
 
-    >>> df.select(log(df.age).alias('e')).map(lambda l: str(l.e)[:7]).collect()
+    >>> df.select(log(df.age).alias('e')).rdd.map(lambda l: str(l.e)[:7]).collect()
     ['0.69314', '1.60943']
     """
     sc = SparkContext._active_spark_context
@@ -1051,6 +1051,55 @@ def to_utc_timestamp(timestamp, tz):
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.to_utc_timestamp(_to_java_column(timestamp), tz))
+
+
+@since(2.0)
+@ignore_unicode_prefix
+def window(timeColumn, windowDuration, slideDuration=None, startTime=None):
+    """Bucketize rows into one or more time windows given a timestamp specifying column. Window
+    starts are inclusive but the window ends are exclusive, e.g. 12:05 will be in the window
+    [12:05,12:10) but not in [12:00,12:05). Windows can support microsecond precision. Windows in
+    the order of months are not supported.
+
+    The time column must be of TimestampType.
+
+    Durations are provided as strings, e.g. '1 second', '1 day 12 hours', '2 minutes'. Valid
+    interval strings are 'week', 'day', 'hour', 'minute', 'second', 'millisecond', 'microsecond'.
+    If the `slideDuration` is not provided, the windows will be tumbling windows.
+
+    The startTime is the offset with respect to 1970-01-01 00:00:00 UTC with which to start
+    window intervals. For example, in order to have hourly tumbling windows that start 15 minutes
+    past the hour, e.g. 12:15-13:15, 13:15-14:15... provide `startTime` as `15 minutes`.
+
+    The output column will be a struct called 'window' by default with the nested columns 'start'
+    and 'end', where 'start' and 'end' will be of `TimestampType`.
+
+    >>> df = sqlContext.createDataFrame([("2016-03-11 09:00:07", 1)]).toDF("date", "val")
+    >>> w = df.groupBy(window("date", "5 seconds")).agg(sum("val").alias("sum"))
+    >>> w.select(w.window.start.cast("string").alias("start"),
+    ...          w.window.end.cast("string").alias("end"), "sum").collect()
+    [Row(start=u'2016-03-11 09:00:05', end=u'2016-03-11 09:00:10', sum=1)]
+    """
+    def check_string_field(field, fieldName):
+        if not field or type(field) is not str:
+            raise TypeError("%s should be provided as a string" % fieldName)
+
+    sc = SparkContext._active_spark_context
+    time_col = _to_java_column(timeColumn)
+    check_string_field(windowDuration, "windowDuration")
+    if slideDuration and startTime:
+        check_string_field(slideDuration, "slideDuration")
+        check_string_field(startTime, "startTime")
+        res = sc._jvm.functions.window(time_col, windowDuration, slideDuration, startTime)
+    elif slideDuration:
+        check_string_field(slideDuration, "slideDuration")
+        res = sc._jvm.functions.window(time_col, windowDuration, slideDuration)
+    elif startTime:
+        check_string_field(startTime, "startTime")
+        res = sc._jvm.functions.window(time_col, windowDuration, windowDuration, startTime)
+    else:
+        res = sc._jvm.functions.window(time_col, windowDuration)
+    return Column(res)
 
 
 # ---------------------------- misc functions ----------------------------------
@@ -1498,6 +1547,26 @@ def translate(srcCol, matching, replace):
 
 # ---------------------- Collection functions ------------------------------
 
+@ignore_unicode_prefix
+@since(2.0)
+def create_map(*cols):
+    """Creates a new map column.
+
+    :param cols: list of column names (string) or list of :class:`Column` expressions that grouped
+        as key-value pairs, e.g. (key1, value1, key2, value2, ...).
+
+    >>> df.select(create_map('name', 'age').alias("map")).collect()
+    [Row(map={u'Alice': 2}), Row(map={u'Bob': 5})]
+    >>> df.select(create_map([df.name, df.age]).alias("map")).collect()
+    [Row(map={u'Alice': 2}), Row(map={u'Bob': 5})]
+    """
+    sc = SparkContext._active_spark_context
+    if len(cols) == 1 and isinstance(cols[0], (list, set)):
+        cols = cols[0]
+    jc = sc._jvm.functions.map(_to_seq(sc, cols, _to_java_column))
+    return Column(jc)
+
+
 @since(1.4)
 def array(*cols):
     """Creates a new array column.
@@ -1528,7 +1597,7 @@ def array_contains(col, value):
 
     >>> df = sqlContext.createDataFrame([(["a", "b", "c"],), ([],)], ['data'])
     >>> df.select(array_contains(df.data, "a")).collect()
-    [Row(array_contains(data,a)=True), Row(array_contains(data,a)=False)]
+    [Row(array_contains(data, a)=True), Row(array_contains(data, a)=False)]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.array_contains(_to_java_column(col), value))
@@ -1628,6 +1697,13 @@ def sort_array(col, asc=True):
 
 # ---------------------------- User Defined Function ----------------------------------
 
+def _wrap_function(sc, func, returnType):
+    command = (func, returnType)
+    pickled_command, broadcast_vars, env, includes = _prepare_for_python_RDD(sc, command)
+    return sc._jvm.PythonFunction(bytearray(pickled_command), env, includes, sc.pythonExec,
+                                  sc.pythonVer, broadcast_vars, sc._javaAccumulator)
+
+
 class UserDefinedFunction(object):
     """
     User defined function in Python
@@ -1642,19 +1718,15 @@ class UserDefinedFunction(object):
 
     def _create_judf(self, name):
         from pyspark.sql import SQLContext
-        f, returnType = self.func, self.returnType  # put them in closure `func`
-        func = lambda _, it: map(lambda x: returnType.toInternal(f(*x)), it)
-        ser = AutoBatchedSerializer(PickleSerializer())
-        command = (func, None, ser, ser)
         sc = SparkContext.getOrCreate()
-        pickled_command, broadcast_vars, env, includes = _prepare_for_python_RDD(sc, command, self)
+        wrapped_func = _wrap_function(sc, self.func, self.returnType)
         ctx = SQLContext.getOrCreate(sc)
         jdt = ctx._ssql_ctx.parseDataType(self.returnType.json())
         if name is None:
+            f = self.func
             name = f.__name__ if hasattr(f, '__name__') else f.__class__.__name__
-        judf = sc._jvm.UserDefinedPythonFunction(name, bytearray(pickled_command), env, includes,
-                                                 sc.pythonExec, sc.pythonVer, broadcast_vars,
-                                                 sc._javaAccumulator, jdt)
+        judf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonFunction(
+            name, wrapped_func, jdt)
         return judf
 
     def __del__(self):

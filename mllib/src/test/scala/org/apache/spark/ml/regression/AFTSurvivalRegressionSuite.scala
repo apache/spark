@@ -44,6 +44,19 @@ class AFTSurvivalRegressionSuite
         2, Array(0.9, -1.3), Array(0.7, 1.2), 1000, 42, 1.5, 2.5, 2.0)))
   }
 
+  /**
+   * Enable the ignored test to export the dataset into CSV format,
+   * so we can validate the training accuracy compared with R's survival package.
+   */
+  ignore("export test data into CSV format") {
+    datasetUnivariate.rdd.map { case Row(features: Vector, label: Double, censor: Double) =>
+      features.toArray.mkString(",") + "," + censor + "," + label
+    }.repartition(1).saveAsTextFile("target/tmp/AFTSurvivalRegressionSuite/datasetUnivariate")
+    datasetMultivariate.rdd.map { case Row(features: Vector, label: Double, censor: Double) =>
+      features.toArray.mkString(",") + "," + censor + "," + label
+    }.repartition(1).saveAsTextFile("target/tmp/AFTSurvivalRegressionSuite/datasetMultivariate")
+  }
+
   test("params") {
     ParamsSuite.checkParams(new AFTSurvivalRegression)
     val model = new AFTSurvivalRegressionModel("aftSurvReg", Vectors.dense(0.0), 0.0, 0.0)
@@ -332,6 +345,15 @@ class AFTSurvivalRegressionSuite
         case Row(features: Vector, prediction: Double) =>
           assert(prediction ~== model.predict(features) relTol 1E-5)
     }
+  }
+
+  test("should support all NumericType labels") {
+    val aft = new AFTSurvivalRegression().setMaxIter(1)
+    MLTestingUtils.checkNumericTypes[AFTSurvivalRegressionModel, AFTSurvivalRegression](
+      aft, isClassification = false, sqlContext) { (expected, actual) =>
+        assert(expected.intercept === actual.intercept)
+        assert(expected.coefficients === actual.coefficients)
+      }
   }
 
   test("read/write") {

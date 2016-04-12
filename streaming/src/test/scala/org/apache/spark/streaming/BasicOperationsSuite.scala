@@ -76,7 +76,7 @@ class BasicOperationsSuite extends TestSuiteBase {
     assert(numInputPartitions === 2, "Number of input partitions has been changed from 2")
     val input = Seq(1 to 4, 5 to 8, 9 to 12)
     val output = Seq(Seq(3, 7), Seq(11, 15), Seq(19, 23))
-    val operation = (r: DStream[Int]) => r.mapPartitions(x => Iterator(x.reduce(_ + _)))
+    val operation = (r: DStream[Int]) => r.mapPartitions(x => Iterator(x.sum))
     testOperation(input, operation, output, true)
   }
 

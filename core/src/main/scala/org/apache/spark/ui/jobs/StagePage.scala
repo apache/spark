@@ -107,10 +107,6 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val taskPageSize = Option(parameterTaskPageSize).map(_.toInt).getOrElse(100)
       val taskPrevPageSize = Option(parameterTaskPrevPageSize).map(_.toInt).getOrElse(taskPageSize)
 
-      // If this is set, expand the dag visualization by default
-      val expandDagVizParam = request.getParameter("expandDagViz")
-      val expandDagViz = expandDagVizParam != null && expandDagVizParam.toBoolean
-
       val stageId = parameterId.toInt
       val stageAttemptId = parameterAttempt.toInt
       val stageDataOption = progressListener.stageIdToData.get((stageId, stageAttemptId))
@@ -262,13 +258,6 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
 
       val dagViz = UIUtils.showDagVizForStage(
         stageId, operationGraphListener.getOperationGraphForStage(stageId))
-
-      val maybeExpandDagViz: Seq[Node] =
-        if (expandDagViz) {
-          UIUtils.expandDagVizOnLoad(forJob = false)
-        } else {
-          Seq.empty
-        }
 
       val accumulableHeaders: Seq[String] = Seq("Accumulable", "Value")
       def accumulableRow(acc: AccumulableInfo): Seq[Node] = {
@@ -578,7 +567,6 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val content =
         summary ++
         dagViz ++
-        maybeExpandDagViz ++
         showAdditionalMetrics ++
         makeTimeline(
           // Only show the tasks in the table

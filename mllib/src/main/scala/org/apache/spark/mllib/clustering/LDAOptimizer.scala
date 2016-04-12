@@ -25,7 +25,6 @@ import breeze.stats.distributions.{Gamma, RandBasis}
 
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.graphx._
-import org.apache.spark.graphx.impl.GraphImpl
 import org.apache.spark.mllib.impl.PeriodicGraphCheckpointer
 import org.apache.spark.mllib.linalg.{DenseVector, Matrices, SparseVector, Vector, Vectors}
 import org.apache.spark.rdd.RDD
@@ -81,9 +80,29 @@ final class EMLDAOptimizer extends LDAOptimizer {
 
   import LDA._
 
+  // Adjustable parameters
+  private var keepLastCheckpoint: Boolean = true
+
   /**
-   * The following fields will only be initialized through the initialize() method
+   * If using checkpointing, this indicates whether to keep the last checkpoint (vs clean up).
    */
+  @Since("2.0.0")
+  def getKeepLastCheckpoint: Boolean = this.keepLastCheckpoint
+
+  /**
+   * If using checkpointing, this indicates whether to keep the last checkpoint (vs clean up).
+   * Deleting the checkpoint can cause failures if a data partition is lost, so set this bit with
+   * care.  Note that checkpoints will be cleaned up via reference counting, regardless.
+   *
+   * Default: true
+   */
+  @Since("2.0.0")
+  def setKeepLastCheckpoint(keepLastCheckpoint: Boolean): this.type = {
+    this.keepLastCheckpoint = keepLastCheckpoint
+    this
+  }
+
+  // The following fields will only be initialized through the initialize() method
   private[clustering] var graph: Graph[TopicCounts, TokenCount] = null
   private[clustering] var k: Int = 0
   private[clustering] var vocabSize: Int = 0
@@ -188,7 +207,7 @@ final class EMLDAOptimizer extends LDAOptimizer {
       graph.aggregateMessages[(Boolean, TopicCounts)](sendMsg, mergeMsg)
         .mapValues(_._2)
     // Update the vertex descriptors with the new counts.
-    val newGraph = GraphImpl.fromExistingRDDs(docTopicDistributions, graph.edges)
+    val newGraph = Graph(docTopicDistributions, graph.edges)
     graph = newGraph
     graphCheckpointer.update(newGraph)
     globalTopicTotals = computeGlobalTopicTotals()
@@ -209,12 +228,18 @@ final class EMLDAOptimizer extends LDAOptimizer {
 
   override private[clustering] def getLDAModel(iterationTimes: Array[Double]): LDAModel = {
     require(graph != null, "graph is null, EMLDAOptimizer not initialized.")
-    this.graphCheckpointer.deleteAllCheckpoints()
+    val checkpointFiles: Array[String] = if (keepLastCheckpoint) {
+      this.graphCheckpointer.deleteAllCheckpointsButLast()
+      this.graphCheckpointer.getAllCheckpointFiles
+    } else {
+      this.graphCheckpointer.deleteAllCheckpoints()
+      Array.empty[String]
+    }
     // The constructor's default arguments assume gammaShape = 100 to ensure equivalence in
-    // LDAModel.toLocal conversion
+    // LDAModel.toLocal conversion.
     new DistributedLDAModel(this.graph, this.globalTopicTotals, this.k, this.vocabSize,
       Vectors.dense(Array.fill(this.k)(this.docConcentration)), this.topicConcentration,
-      iterationTimes)
+      iterationTimes, DistributedLDAModel.defaultGammaShape, checkpointFiles)
   }
 }
 
@@ -452,10 +477,11 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
       }
       Iterator((stat, gammaPart))
     }
-    val statsSum: BDM[Double] = stats.map(_._1).reduce(_ += _)
+    val statsSum: BDM[Double] = stats.map(_._1).treeAggregate(BDM.zeros[Double](k, vocabSize))(
+      _ += _, _ += _)
     expElogbetaBc.unpersist()
     val gammat: BDM[Double] = breeze.linalg.DenseMatrix.vertcat(
-      stats.map(_._2).reduce(_ ++ _).map(_.toDenseMatrix): _*)
+      stats.map(_._2).flatMap(list => list).collect().map(_.toDenseMatrix): _*)
     val batchResult = statsSum :* expElogbeta.t
 
     // Note that this is an optimization to avoid batch.count

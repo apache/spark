@@ -27,7 +27,8 @@ import scala.language.postfixOps
 import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.Eventually._
 
-import org.apache.spark.{Logging, SparkConf, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{Seconds, StreamingContext, TestOutputStream}

@@ -61,13 +61,15 @@ class Interaction @Since("1.6.0") (override val uid: String) extends Transformer
   // optimistic schema; does not contain any ML attributes
   @Since("1.6.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateParams()
+    require(get(inputCols).isDefined, "Input cols must be defined first.")
+    require(get(outputCol).isDefined, "Output col must be defined first.")
+    require($(inputCols).length > 0, "Input cols must have non-zero length.")
+    require($(inputCols).distinct.length == $(inputCols).length, "Input cols must be distinct.")
     StructType(schema.fields :+ StructField($(outputCol), new VectorUDT, false))
   }
 
   @Since("1.6.0")
   override def transform(dataset: DataFrame): DataFrame = {
-    validateParams()
     val inputFeatures = $(inputCols).map(c => dataset.schema(c))
     val featureEncoders = getFeatureEncoders(inputFeatures)
     val featureAttrs = getFeatureAttrs(inputFeatures)
@@ -217,13 +219,6 @@ class Interaction @Since("1.6.0") (override val uid: String) extends Transformer
   @Since("1.6.0")
   override def copy(extra: ParamMap): Interaction = defaultCopy(extra)
 
-  @Since("1.6.0")
-  override def validateParams(): Unit = {
-    require(get(inputCols).isDefined, "Input cols must be defined first.")
-    require(get(outputCol).isDefined, "Output col must be defined first.")
-    require($(inputCols).length > 0, "Input cols must have non-zero length.")
-    require($(inputCols).distinct.length == $(inputCols).length, "Input cols must be distinct.")
-  }
 }
 
 @Since("1.6.0")

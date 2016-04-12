@@ -22,6 +22,8 @@ import java.text.{DateFormat, SimpleDateFormat}
 import java.util.{Calendar, TimeZone}
 import javax.xml.bind.DatatypeConverter
 
+import scala.annotation.tailrec
+
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -58,6 +60,13 @@ object DateTimeUtils {
   final val TimeZoneGMT = TimeZone.getTimeZone("GMT")
 
   @transient lazy val defaultTimeZone = TimeZone.getDefault
+
+  // Reuse the Calendar object in each thread as it is expensive to create in each method call.
+  private val threadLocalGmtCalendar = new ThreadLocal[Calendar] {
+    override protected def initialValue: Calendar = {
+      Calendar.getInstance(TimeZoneGMT)
+    }
+  }
 
   // Java TimeZone has no mention of thread safety. Use thread local instance to be safe.
   private val threadLocalLocalTimeZone = new ThreadLocal[TimeZone] {
@@ -110,6 +119,7 @@ object DateTimeUtils {
     }
   }
 
+  @tailrec
   def stringToTime(s: String): java.util.Date = {
     val indexOfGMT = s.indexOf("GMT")
     if (indexOfGMT != -1) {
@@ -408,7 +418,8 @@ object DateTimeUtils {
         segments(2) < 1 || segments(2) > 31) {
       return None
     }
-    val c = Calendar.getInstance(TimeZoneGMT)
+    val c = threadLocalGmtCalendar.get()
+    c.clear()
     c.set(segments(0), segments(1) - 1, segments(2), 0, 0, 0)
     c.set(Calendar.MILLISECOND, 0)
     Some((c.getTimeInMillis / MILLIS_PER_DAY).toInt)

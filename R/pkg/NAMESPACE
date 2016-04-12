@@ -13,7 +13,11 @@ export("print.jobj")
 # MLlib integration
 exportMethods("glm",
               "predict",
-              "summary")
+              "summary",
+              "kmeans",
+              "fitted",
+              "naiveBayes",
+              "survreg")
 
 # Job group lifecycle management methods
 export("setJobGroup",
@@ -109,6 +113,7 @@ exportMethods("%in%",
               "add_months",
               "alias",
               "approxCountDistinct",
+              "approxQuantile",
               "array_contains",
               "asc",
               "ascii",
@@ -260,6 +265,7 @@ exportMethods("%in%",
               "var_samp",
               "weekofyear",
               "when",
+              "window",
               "year")
 
 exportClasses("GroupedData")

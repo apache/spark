@@ -71,6 +71,7 @@ We list major functionality from both below, with links to detailed guides.
 * [Extracting, transforming and selecting features](ml-features.html)
 * [Classification and regression](ml-classification-regression.html)
 * [Clustering](ml-clustering.html)
+* [Collaborative filtering](ml-collaborative-filtering.html)
 * [Advanced topics](ml-advanced.html)
 
 Some techniques are not available yet in spark.ml, most notably dimensionality reduction 

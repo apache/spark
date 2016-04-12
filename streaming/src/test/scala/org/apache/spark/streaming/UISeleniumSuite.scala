@@ -161,12 +161,12 @@ class UISeleniumSuite
         jobLinks.size should be (4)
 
         // Check stage progress
-        findAll(cssSelector(""".stage-progress-cell""")).map(_.text).toSeq should be
-          (List("1/1", "1/1", "1/1", "0/1 (1 failed)"))
+        findAll(cssSelector(""".stage-progress-cell""")).map(_.text).toList should be (
+          List("1/1", "1/1", "1/1", "0/1 (1 failed)"))
 
         // Check job progress
-        findAll(cssSelector(""".progress-cell""")).map(_.text).toSeq should be
-          (List("1/1", "1/1", "1/1", "0/1 (1 failed)"))
+        findAll(cssSelector(""".progress-cell""")).map(_.text).toList should be (
+          List("4/4", "4/4", "4/4", "0/4 (1 failed)"))
 
         // Check stacktrace
         val errorCells = findAll(cssSelector(""".stacktrace-details""")).map(_.text).toSeq
