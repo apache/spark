@@ -30,6 +30,7 @@ import org.eclipse.jetty.server.handler._
 import org.eclipse.jetty.server.nio.SelectChannelConnector
 import org.eclipse.jetty.server.ssl.SslSelectChannelConnector
 import org.eclipse.jetty.servlet._
+import org.eclipse.jetty.util.component.LifeCycle
 import org.eclipse.jetty.util.thread.QueuedThreadPool
 import org.json4s.JValue
 import org.json4s.jackson.JsonMethods.{pretty, render}
@@ -350,4 +351,15 @@ private[spark] object JettyUtils extends Logging {
 private[spark] case class ServerInfo(
     server: Server,
     boundPort: Int,
-    rootHandler: ContextHandlerCollection)
+    rootHandler: ContextHandlerCollection) {
+
+  def stop(): Unit = {
+    server.stop()
+    // Stop the ThreadPool if it supports stop() method (through LifeCycle).
+    // It is needed because stopping the Server won't stop the ThreadPool it uses.
+    val threadPool = server.getThreadPool
+    if (threadPool != null && threadPool.isInstanceOf[LifeCycle]) {
+      threadPool.asInstanceOf[LifeCycle].stop
+    }
+  }
+}

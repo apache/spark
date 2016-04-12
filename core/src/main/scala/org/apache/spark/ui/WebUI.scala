@@ -153,7 +153,7 @@ private[spark] abstract class WebUI(
   def stop() {
     assert(serverInfo.isDefined,
       "Attempted to stop %s before binding to a server!".format(className))
-    serverInfo.get.server.stop()
+    serverInfo.get.stop()
   }
 }
 
