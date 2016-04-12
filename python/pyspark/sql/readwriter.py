@@ -136,6 +136,32 @@ class DataFrameReader(object):
         else:
             return self._df(self._jreader.load())
 
+    @since(2.0)
+    def stream(self, path=None, format=None, schema=None, **options):
+        """Loads a data stream from a data source and returns it as a :class`DataFrame`.
+
+        :param path: optional string for file-system backed data sources.
+        :param format: optional string for format of the data source. Default to 'parquet'.
+        :param schema: optional :class:`StructType` for the input schema.
+        :param options: all other string options
+
+        >>> df = sqlContext.read.format('text').stream('python/test_support/sql/streaming')
+        >>> df.isStreaming
+        True
+        """
+        if format is not None:
+            self.format(format)
+        if schema is not None:
+            self.schema(schema)
+        self.options(**options)
+        if path is not None:
+            if type(path) != str or len(path.strip()) == 0:
+                raise ValueError("If the path is provided for stream, " +\
+                    "it needs to be a non-empty string. List of paths are not supported.")
+            return self._df(self._jreader.stream(path))
+        else:
+            return self._df(self._jreader.stream())
+
     @since(1.4)
     def json(self, path, schema=None):
         """
@@ -334,6 +360,10 @@ class DataFrameWriter(object):
         self._sqlContext = df.sql_ctx
         self._jwrite = df._jdf.write()
 
+    def _cq(self, jcq):
+        from pyspark.sql.streaming import ContinuousQuery
+        return ContinuousQuery(jcq, self._sqlContext)
+
     @since(1.4)
     def mode(self, saveMode):
         """Specifies the behavior when data or table already exists.
@@ -395,6 +425,37 @@ class DataFrameWriter(object):
         self._jwrite = self._jwrite.partitionBy(_to_seq(self._sqlContext._sc, cols))
         return self
 
+    @since(2.0)
+    def queryName(self, queryName):
+        """Specifies the name of the :class:`ContinuousQuery` that can be started with
+        :func:`startStream()`. This name must be unique among all the currently active queries
+        in the associated SQLContext.
+
+        :param queryName: unique name for the query
+
+        >>> sdf.write.queryName('streaming_query')
+        """
+        if not queryName or type(queryName) != str or len(queryName.strip()) == 0:
+            raise ValueError('The queryName must be a non-empty string. Got: %s' % queryName)
+        self._jwrite = self._jwrite.queryName(queryName)
+        return self
+
+    @since(2.0)
+    def trigger(self, trigger):
+        """Set the trigger for the stream query. The default value is `ProcessingTime(0)` and it
+        will run the query as fast as possible.
+
+        :param trigger: a :class:`Trigger`.
+        >>> from pyspark.sql.streaming import ProcessingTime
+        >>> # trigger the query for execution every 5 seconds
+        >>> sdf.trigger(ProcessingTime('5 seconds'))
+        """
+        from pyspark.sql.streaming import Trigger
+        if not trigger or issubclass(trigger, Trigger):
+            raise ValueError('The trigger must be of the Trigger class. Got: %s' % trigger)
+        self._jwrite = self._jwrite.trigger(trigger._to_java_trigger(self._sqlContext))
+        return self
+
     @since(1.4)
     def save(self, path=None, format=None, mode=None, partitionBy=None, **options):
         """Saves the contents of the :class:`DataFrame` to a data source.
@@ -425,6 +486,67 @@ class DataFrameWriter(object):
             self._jwrite.save()
         else:
             self._jwrite.save(path)
+
+    @ignore_unicode_prefix
+    @since(2.0)
+    def startStream(self, path=None, format=None, mode=None, partitionBy=None,
+                    queryName=None, checkpointLocation=None, trigger=None, **options):
+        """Saves the contents of the :class:`DataFrame` to a data source.
+
+        The data source is specified by the ``format`` and a set of ``options``.
+        If ``format`` is not specified, the default data source configured by
+        ``spark.sql.sources.default`` will be used.
+
+        :param path: the path in a Hadoop supported file system
+        :param format: the format used to save
+        :param mode: specifies the behavior of the save operation when data already exists.
+
+            * ``append``: Append contents of this :class:`DataFrame` to existing data.
+            * ``overwrite``: Overwrite existing data.
+            * ``ignore``: Silently ignore this operation if data already exists.
+            * ``error`` (default case): Throw an exception if data already exists.
+        :param partitionBy: names of partitioning columns
+        :param queryName: unique name for the query
+        :param trigger: Set the trigger for the stream query. The default value is
+           `ProcessingTime(0)` and it will run as fast as possible.
+        :param options: all other string options
+
+        >>> temp = tempfile.mkdtemp()
+        >>> cq = sdf.write.format('text').startStream(os.path.join(temp, 'out'),
+        ...     checkpointLocation=os.path.join(temp, 'chk'))
+        >>> cq.isActive
+        True
+        >>> cq.stop()
+        >>> cq.isActive
+        False
+        >>> from pyspark.sql.streaming import ProcessingTime
+        >>> cq = sdf.write.startStream(os.path.join(temp, 'out'), format='text',
+        ...     queryName='my_query', trigger=ProcessingTime('5 seconds'),
+        ...     checkpointLocation=os.path.join(temp, 'chk'))
+        >>> cq.name
+        'my_query'
+        >>> cq.isActive
+        True
+        >>> cq.stop()
+        """
+        self.mode(mode).options(**options)
+        if partitionBy is not None:
+            self.partitionBy(partitionBy)
+        if format is not None:
+            self.format(format)
+        if queryName is not None:
+            self.queryName(queryName)
+        if checkpointLocation is not None:
+            if type(checkpointLocation) != str or len(checkpointLocation.strip()) == 0:
+                raise ValueError('The checkpointLocation must be a non-empty string. Got: %s' %
+                                 checkpointLocation)
+            self.option('checkpointLocation', checkpointLocation)
+        if trigger is not None:
+            self.trigger(trigger)
+        if path is None:
+            return self._cq(self._jwrite.startStream())
+        else:
+            return self._cq(self._jwrite.startStream(path))
 
     @since(1.4)
     def insertInto(self, tableName, overwrite=False):
@@ -625,6 +747,8 @@ def _test():
     globs['sqlContext'] = SQLContext(sc)
     globs['hiveContext'] = HiveContext(sc)
     globs['df'] = globs['sqlContext'].read.parquet('python/test_support/sql/parquet_partitioned')
+    globs['sdf'] =\
+        globs['sqlContext'].read.format('text').stream('python/test_support/sql/streaming')
 
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.readwriter, globs=globs,

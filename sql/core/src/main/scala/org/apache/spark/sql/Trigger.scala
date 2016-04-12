@@ -35,28 +35,28 @@ sealed trait Trigger {}
 
 /**
  * :: Experimental ::
- * A trigger that runs a query periodically based on the processing time. If `intervalMs` is 0,
+ * A trigger that runs a query periodically based on the processing time. If `interval` is 0,
  * the query will run as fast as possible.
  *
  * Scala Example:
  * {{{
- *   def.writer.trigger(ProcessingTime("10 seconds"))
+ *   df.write.trigger(ProcessingTime("10 seconds"))
  *
  *   import scala.concurrent.duration._
- *   def.writer.trigger(ProcessingTime(10.seconds))
+ *   df.write.trigger(ProcessingTime(10.seconds))
  * }}}
  *
  * Java Example:
  * {{{
- *   def.writer.trigger(ProcessingTime.create("10 seconds"))
+ *   df.write.trigger(ProcessingTime.create("10 seconds"))
  *
  *   import java.util.concurrent.TimeUnit
- *   def.writer.trigger(ProcessingTime.create(10, TimeUnit.SECONDS))
+ *   df.write.trigger(ProcessingTime.create(10, TimeUnit.SECONDS))
  * }}}
  */
 @Experimental
-case class ProcessingTime(intervalMs: Long) extends Trigger {
-  require(intervalMs >= 0, "the interval of trigger should not be negative")
+case class ProcessingTime(interval: Long) extends Trigger {
+  require(interval >= 0, "the interval of trigger should not be negative")
 }
 
 /**
@@ -67,11 +67,11 @@ case class ProcessingTime(intervalMs: Long) extends Trigger {
 object ProcessingTime {
 
   /**
-   * Create a [[ProcessingTime]]. If `intervalMs` is 0, the query will run as fast as possible.
+   * Create a [[ProcessingTime]]. If `interval` is 0, the query will run as fast as possible.
    *
    * Example:
    * {{{
-   *   def.writer.trigger(ProcessingTime("10 seconds"))
+   *   df.write.trigger(ProcessingTime("10 seconds"))
    * }}}
    */
   def apply(interval: String): ProcessingTime = {
@@ -94,12 +94,12 @@ object ProcessingTime {
   }
 
   /**
-   * Create a [[ProcessingTime]]. If `intervalMs` is 0, the query will run as fast as possible.
+   * Create a [[ProcessingTime]]. If `interval` is 0, the query will run as fast as possible.
    *
    * Example:
    * {{{
    *   import scala.concurrent.duration._
-   *   def.writer.trigger(ProcessingTime(10.seconds))
+   *   df.write.trigger(ProcessingTime(10.seconds))
    * }}}
    */
   def apply(interval: Duration): ProcessingTime = {
@@ -107,11 +107,11 @@ object ProcessingTime {
   }
 
   /**
-   * Create a [[ProcessingTime]]. If `intervalMs` is 0, the query will run as fast as possible.
+   * Create a [[ProcessingTime]]. If `interval` is 0, the query will run as fast as possible.
    *
    * Example:
    * {{{
-   *   def.writer.trigger(ProcessingTime.create("10 seconds"))
+   *   df.write.trigger(ProcessingTime.create("10 seconds"))
    * }}}
    */
   def create(interval: String): ProcessingTime = {
@@ -119,12 +119,12 @@ object ProcessingTime {
   }
 
   /**
-   * Create a [[ProcessingTime]]. If `intervalMs` is 0, the query will run as fast as possible.
+   * Create a [[ProcessingTime]]. If `interval` is 0, the query will run as fast as possible.
    *
    * Example:
    * {{{
    *   import java.util.concurrent.TimeUnit
-   *   def.writer.trigger(ProcessingTime.create(10, TimeUnit.SECONDS))
+   *   df.write.trigger(ProcessingTime.create(10, TimeUnit.SECONDS))
    * }}}
    */
   def create(interval: Long, unit: TimeUnit): ProcessingTime = {
