@@ -22,7 +22,7 @@ import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.param.{Param, ParamMap}
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.util._
-import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+import org.apache.spark.sql.{DataFrame, Dataset, Row, SQLContext}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -63,8 +63,8 @@ class SQLTransformer @Since("1.6.0") (override val uid: String) extends Transfor
 
   private val tableIdentifier: String = "__THIS__"
 
-  @Since("1.6.0")
-  override def transform(dataset: DataFrame): DataFrame = {
+  @Since("2.0.0")
+  override def transform(dataset: Dataset[_]): DataFrame = {
     val tableName = Identifiable.randomUID(uid)
     dataset.registerTempTable(tableName)
     val realStatement = $(statement).replace(tableIdentifier, tableName)

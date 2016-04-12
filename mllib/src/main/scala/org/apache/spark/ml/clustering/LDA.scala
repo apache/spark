@@ -32,7 +32,7 @@ import org.apache.spark.mllib.clustering.{DistributedLDAModel => OldDistributedL
 import org.apache.spark.mllib.impl.PeriodicCheckpointer
 import org.apache.spark.mllib.linalg.{Matrix, Vector, Vectors, VectorUDT}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+import org.apache.spark.sql.{DataFrame, Dataset, Row, SQLContext}
 import org.apache.spark.sql.functions.{col, monotonicallyIncreasingId, udf}
 import org.apache.spark.sql.types.StructType
 
@@ -402,15 +402,15 @@ sealed abstract class LDAModel private[ml] (
    *          is set to "em"), this involves collecting a large [[topicsMatrix]] to the driver.
    *          This implementation may be changed in the future.
    */
-  @Since("1.6.0")
-  override def transform(dataset: DataFrame): DataFrame = {
+  @Since("2.0.0")
+  override def transform(dataset: Dataset[_]): DataFrame = {
     if ($(topicDistributionCol).nonEmpty) {
       val t = udf(oldLocalModel.getTopicDistributionMethod(sqlContext.sparkContext))
-      dataset.withColumn($(topicDistributionCol), t(col($(featuresCol))))
+      dataset.withColumn($(topicDistributionCol), t(col($(featuresCol)))).toDF
     } else {
       logWarning("LDAModel.transform was called without any output columns. Set an output column" +
         " such as topicDistributionCol to produce results.")
-      dataset
+      dataset.toDF
     }
   }
 
@@ -455,8 +455,8 @@ sealed abstract class LDAModel private[ml] (
    * @param dataset  test corpus to use for calculating log likelihood
    * @return variational lower bound on the log likelihood of the entire corpus
    */
-  @Since("1.6.0")
-  def logLikelihood(dataset: DataFrame): Double = {
+  @Since("2.0.0")
+  def logLikelihood(dataset: Dataset[_]): Double = {
     val oldDataset = LDA.getOldDataset(dataset, $(featuresCol))
     oldLocalModel.logLikelihood(oldDataset)
   }
@@ -472,8 +472,8 @@ sealed abstract class LDAModel private[ml] (
    * @param dataset test corpus to use for calculating perplexity
    * @return Variational upper bound on log perplexity per token.
    */
-  @Since("1.6.0")
-  def logPerplexity(dataset: DataFrame): Double = {
+  @Since("2.0.0")
+  def logPerplexity(dataset: Dataset[_]): Double = {
     val oldDataset = LDA.getOldDataset(dataset, $(featuresCol))
     oldLocalModel.logPerplexity(oldDataset)
   }
@@ -840,8 +840,8 @@ class LDA @Since("1.6.0") (
   @Since("1.6.0")
   override def copy(extra: ParamMap): LDA = defaultCopy(extra)
 
-  @Since("1.6.0")
-  override def fit(dataset: DataFrame): LDAModel = {
+  @Since("2.0.0")
+  override def fit(dataset: Dataset[_]): LDAModel = {
     transformSchema(dataset.schema, logging = true)
     val oldLDA = new OldLDA()
       .setK($(k))
@@ -873,7 +873,7 @@ class LDA @Since("1.6.0") (
 private[clustering] object LDA extends DefaultParamsReadable[LDA] {
 
   /** Get dataset for spark.mllib LDA */
-  def getOldDataset(dataset: DataFrame, featuresCol: String): RDD[(Long, Vector)] = {
+  def getOldDataset(dataset: Dataset[_], featuresCol: String): RDD[(Long, Vector)] = {
     dataset
       .withColumn("docId", monotonicallyIncreasingId())
       .select("docId", featuresCol)
