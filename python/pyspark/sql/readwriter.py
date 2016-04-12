@@ -428,7 +428,7 @@ class DataFrameWriter(object):
     @since(2.0)
     def queryName(self, queryName):
         """Specifies the name of the :class:`ContinuousQuery` that can be started with
-        :func:`startStream()`. This name must be unique among all the currently active queries
+        :func:`startStream`. This name must be unique among all the currently active queries
         in the associated SQLContext.
 
         :param queryName: unique name for the query
@@ -446,6 +446,7 @@ class DataFrameWriter(object):
         will run the query as fast as possible.
 
         :param trigger: a :class:`Trigger`.
+
         >>> from pyspark.sql.streaming import ProcessingTime
         >>> # trigger the query for execution every 5 seconds
         >>> sdf.trigger(ProcessingTime('5 seconds'))
@@ -509,6 +510,7 @@ class DataFrameWriter(object):
         :param queryName: unique name for the query
         :param trigger: Set the trigger for the stream query. The default value is
            `ProcessingTime(0)` and it will run as fast as possible.
+        :param checkpointLocation: An optional location for checkpointing state and metadata.
         :param options: all other string options
 
         >>> temp = tempfile.mkdtemp()
