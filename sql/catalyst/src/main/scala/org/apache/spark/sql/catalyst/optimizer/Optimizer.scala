@@ -66,9 +66,7 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       ReorderJoin,
       OuterJoinElimination,
       PushPredicateThroughJoin,
-      PushPredicateThroughProject,
-      PushPredicateThroughGenerate,
-      PushPredicateThroughAggregate,
+      PushPredicateThroughUnaryNode,
       LimitPushDown,
       ColumnPruning,
       InferFiltersFromConstraints,
@@ -898,7 +896,7 @@ object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
  *
  * This heuristic is valid assuming the expression evaluation cost is minimal.
  */
-object PushPredicateThroughProject extends Rule[LogicalPlan] with PredicateHelper {
+object PushPredicateThroughUnaryNode extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // SPARK-13473: We can't push the predicate down when the underlying projection output non-
     // deterministic field(s).  Non-deterministic expressions are essentially stateful. This
@@ -915,41 +913,7 @@ object PushPredicateThroughProject extends Rule[LogicalPlan] with PredicateHelpe
       })
 
       project.copy(child = Filter(replaceAlias(condition, aliasMap), grandChild))
-  }
 
-}
-
-/**
- * Push [[Filter]] operators through [[Generate]] operators. Parts of the predicate that reference
- * attributes generated in [[Generate]] will remain above, and the rest should be pushed beneath.
- */
-object PushPredicateThroughGenerate extends Rule[LogicalPlan] with PredicateHelper {
-
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case filter @ Filter(condition, g: Generate) =>
-      // Predicates that reference attributes produced by the `Generate` operator cannot
-      // be pushed below the operator.
-      val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { cond =>
-        cond.references.subsetOf(g.child.outputSet) && cond.deterministic
-      }
-      if (pushDown.nonEmpty) {
-        val pushDownPredicate = pushDown.reduce(And)
-        val newGenerate = Generate(g.generator, join = g.join, outer = g.outer,
-          g.qualifier, g.generatorOutput, Filter(pushDownPredicate, g.child))
-        if (stayUp.isEmpty) newGenerate else Filter(stayUp.reduce(And), newGenerate)
-      } else {
-        filter
-      }
-  }
-}
-
-/**
- * Push [[Filter]] operators through [[Aggregate]] operators, iff the filters reference only
- * non-aggregate attributes (typically literals or grouping expressions).
- */
-object PushPredicateThroughAggregate extends Rule[LogicalPlan] with PredicateHelper {
-
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case filter @ Filter(condition, aggregate: Aggregate) =>
       // Find all the aliased expressions in the aggregate list that don't include any actual
       // AggregateExpression, and create a map from the alias to the expression
@@ -972,6 +936,23 @@ object PushPredicateThroughAggregate extends Rule[LogicalPlan] with PredicateHel
         // If there is no more filter to stay up, just eliminate the filter.
         // Otherwise, create "Filter(stayUp) <- Aggregate <- Filter(pushDownPredicate)".
         if (stayUp.isEmpty) newAggregate else Filter(stayUp.reduce(And), newAggregate)
+      } else {
+        filter
+      }
+
+    case filter @ Filter(condition, u: UnaryNode) if u.expressions.forall(_.deterministic) =>
+      // Predicates that reference attributes produced by the unary operator cannot
+      // be pushed below it.
+      val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { cond =>
+        cond.deterministic && cond.references.subsetOf(u.child.outputSet)
+      }
+      if (pushDown.nonEmpty) {
+        val newU = u.withNewChildren(Seq(Filter(pushDown.reduceLeft(And), u.child)))
+        if (stayUp.nonEmpty) {
+          Filter(stayUp.reduceLeft(And), newU)
+        } else {
+          newU
+        }
       } else {
         filter
       }

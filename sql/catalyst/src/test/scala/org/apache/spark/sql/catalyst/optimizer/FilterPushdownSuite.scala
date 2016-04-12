@@ -33,14 +33,12 @@ class FilterPushdownSuite extends PlanTest {
     val batches =
       Batch("Subqueries", Once,
         EliminateSubqueryAliases) ::
-      Batch("Filter Pushdown", Once,
+      Batch("Filter Pushdown", FixedPoint(10),
         SamplePushDown,
         CombineFilters,
-        PushPredicateThroughProject,
+        PushPredicateThroughUnaryNode,
         BooleanSimplification,
         PushPredicateThroughJoin,
-        PushPredicateThroughGenerate,
-        PushPredicateThroughAggregate,
         CollapseProject) :: Nil
   }
 
@@ -620,8 +618,8 @@ class FilterPushdownSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery.analyze)
 
     val correctAnswer = testRelation
-                        .select('a, 'b)
                         .where('a === 3)
+                        .select('a, 'b)
                         .groupBy('a)('a, count('b) as 'c)
                         .where('c === 2L)
                         .analyze
@@ -638,8 +636,8 @@ class FilterPushdownSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery.analyze)
 
     val correctAnswer = testRelation
-      .select('a, 'b)
       .where('a + 1 < 3)
+      .select('a, 'b)
       .groupBy('a)(('a + 1) as 'aa, count('b) as 'c)
       .where('c === 2L || 'aa > 4)
       .analyze
@@ -656,8 +654,8 @@ class FilterPushdownSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery.analyze)
 
     val correctAnswer = testRelation
-      .select('a, 'b)
       .where("s" === "s")
+      .select('a, 'b)
       .groupBy('a)('a, count('b) as 'c, "s" as 'd)
       .where('c === 2L)
       .analyze
@@ -677,6 +675,19 @@ class FilterPushdownSuite extends PlanTest {
       .select('a, 'b)
       .groupBy('a)('a + Rand(10) as 'aa, count('b) as 'c, Rand(11).as("rnd"))
       .where('c === 2L && 'aa + Rand(10).as("rnd") === 3 && 'rnd === 5)
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("broadcast hint") {
+    val originalQuery = BroadcastHint(testRelation)
+      .where('a === 2L && 'b + Rand(10).as("rnd") === 3)
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    val correctAnswer = BroadcastHint(testRelation.where('a === 2L))
+      .where('b + Rand(10).as("rnd") === 3)
       .analyze
 
     comparePlans(optimized, correctAnswer)
