@@ -261,10 +261,9 @@ case class TungstenAggregate(
     .map(_.asInstanceOf[DeclarativeAggregate])
   private val bufferSchema = StructType.fromAttributes(aggregateBufferAttributes)
 
-  private var isAggregateHashMapEnabled: Boolean = false
-
   // The name for AggregateHashMap
   private var aggregateHashMapTerm: String = _
+  private var isAggregateHashMapEnabled: Boolean = true
 
   // The name for HashMap
   private var hashMapTerm: String = _
@@ -442,7 +441,7 @@ case class TungstenAggregate(
     val initAgg = ctx.freshName("initAgg")
     ctx.addMutableState("boolean", initAgg, s"$initAgg = false;")
 
-    // create AggregateHashMap
+    // We currently only enable aggregate hashmap for long key/value types
     isAggregateHashMapEnabled = isAggregateHashMapEnabled &&
       (groupingKeySchema ++ bufferSchema).forall(_.dataType == LongType)
     aggregateHashMapTerm = ctx.freshName("aggregateHashMap")
@@ -478,13 +477,10 @@ case class TungstenAggregate(
         private void $doAgg() throws java.io.IOException {
           $hashMapTerm = $thisPlan.createHashMap();
           ${child.asInstanceOf[CodegenSupport].produce(ctx, this)}
-          ${
-              if (isAggregateHashMapEnabled) {
-                s"""
-                   $iterTermForGeneratedHashMap = $aggregateHashMapTerm.batch.rowIterator();
-                 """
-              } else ""
-            }
+
+          ${if (isAggregateHashMapEnabled) {
+              s"$iterTermForGeneratedHashMap = $aggregateHashMapTerm.batch.rowIterator();"} else ""}
+
           $iterTerm = $thisPlan.finishAggregate($hashMapTerm, $sorterTerm);
         }
        """)
@@ -505,22 +501,20 @@ case class TungstenAggregate(
        $doAgg();
      }
 
-     ${if (isAggregateHashMapEnabled) {
-      s"""
-        while ($iterTermForGeneratedHashMap.hasNext()) {
-          $numOutput.add(1);
-          org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row row =
-            (org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row) $iterTermForGeneratedHashMap.next();
-          append(row.copy());
-
-          if (shouldStop()) return;
-        }
-
-        $aggregateHashMapTerm.batch.close();
-      """
-    } else ""}
-
      // output the result
+     ${if (isAggregateHashMapEnabled) {
+         s"""while ($iterTermForGeneratedHashMap.hasNext()) {
+               $numOutput.add(1);
+               org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row row =
+                 (org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row)
+                 $iterTermForGeneratedHashMap.next();
+               append(row.copy());
+
+               if (shouldStop()) return;
+             }
+
+            $aggregateHashMapTerm.batch.close();"""} else ""}
+
      while ($iterTerm.next()) {
        $numOutput.add(1);
        UnsafeRow $keyTerm = (UnsafeRow) $iterTerm.getKey();
@@ -541,8 +535,10 @@ case class TungstenAggregate(
 
     // create grouping key
     ctx.currentVars = input
-    val (groupByKeys2, keyCode) = GenerateUnsafeProjection.createCode2(
+    val keyCode = GenerateUnsafeProjection.createCode(
       ctx, groupingExpressions.map(e => BindReferences.bindReference[Expression](e, child.output)))
+    val groupByKeys = ctx.generateExpressions(
+      groupingExpressions.map(e => BindReferences.bindReference[Expression](e, child.output)))
     val key = keyCode.value
     val buffer = ctx.freshName("aggBuffer")
     val aggregateRow = ctx.freshName("aggregateRow")
@@ -565,18 +561,18 @@ case class TungstenAggregate(
     val inputAttr = aggregateBufferAttributes ++ child.output
     ctx.currentVars = new Array[ExprCode](aggregateBufferAttributes.length) ++ input
     ctx.INPUT_ROW = aggregateRow
-    val evals2 = updateExpr.map(BindReferences.bindReference(_, inputAttr).gen(ctx))
-
+    // TODO: support subexpression elimination
+    val aggregateRowEvals = updateExpr.map(BindReferences.bindReference(_, inputAttr).gen(ctx))
+    val updateAggregateRow = aggregateRowEvals.zipWithIndex.map { case (ev, i) =>
+      val dt = updateExpr(i).dataType
+      ctx.updateColumn(aggregateRow, dt, groupingKeySchema.length + i, ev, updateExpr(i).nullable)
+    }
     ctx.INPUT_ROW = buffer
     // TODO: support subexpression elimination
     val evals = updateExpr.map(BindReferences.bindReference(_, inputAttr).gen(ctx))
     val updateAggregateBuffer = evals.zipWithIndex.map { case (ev, i) =>
       val dt = updateExpr(i).dataType
       ctx.updateColumn(buffer, dt, i, ev, updateExpr(i).nullable)
-    }
-    val updateAggregateRow = evals2.zipWithIndex.map { case (ev, i) =>
-      val dt = updateExpr(i).dataType
-      ctx.updateColumn(aggregateRow, dt, groupingKeySchema.length + i, ev, updateExpr(i).nullable)
     }
 
     val (checkFallback, resetCounter, incCounter) = if (testFallbackStartsAt.isDefined) {
@@ -599,11 +595,9 @@ case class TungstenAggregate(
      org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row $aggregateRow = null;
      if ($checkFallback) {
        ${if (isAggregateHashMapEnabled) {
-        s"""
-              $aggregateRow =
-                $aggregateHashMapTerm.findOrInsert(${groupByKeys2.map(_.value).mkString(", ")});
-         """
-      } else ""}
+        s"""$aggregateRow =
+              $aggregateHashMapTerm.findOrInsert(${groupByKeys.map(_.value).mkString(", ")});"""
+         } else ""}
        // try to get the buffer from hash map
        if ($aggregateRow == null) {
          $buffer = $hashMapTerm.getAggregationBufferFromUnsafeRow($key, ${hashEval.value});
@@ -628,7 +622,7 @@ case class TungstenAggregate(
 
      if ($aggregateRow != null) {
        // evaluate aggregate function
-       ${evaluateVariables(evals2)}
+       ${evaluateVariables(aggregateRowEvals)}
        // update aggregate row
        ${updateAggregateRow.mkString("\n").trim}
      } else {
