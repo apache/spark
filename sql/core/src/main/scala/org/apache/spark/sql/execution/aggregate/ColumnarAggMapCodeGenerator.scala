@@ -177,6 +177,7 @@ class ColumnarAggMapCodeGenerator(
                 s"batch.column(${groupingKeys.length + k._2}).putLong(numRows, 0);")
                 .mkString("\n")}
        |      buckets[idx] = numRows++;
+       |      batch.setNumRows(numRows);
        |      return batch.getRow(buckets[idx]);
        |    } else if (equals(idx, ${groupingKeys.map(_._2).mkString(", ")})) {
        |      return batch.getRow(buckets[idx]);
@@ -185,6 +186,7 @@ class ColumnarAggMapCodeGenerator(
        |    step++;
        |  }
        |  // Didn't find it
+       |  System.out.println("nooooo....");
        |  return null;
        |}
      """.stripMargin

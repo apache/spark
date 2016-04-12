@@ -263,7 +263,7 @@ case class TungstenAggregate(
 
   // The name for AggregateHashMap
   private var aggregateHashMapTerm: String = _
-  private var isAggregateHashMapEnabled: Boolean = true
+  private var isAggregateHashMapEnabled: Boolean = sqlContext.conf.columnarAggregateMapEnabled
 
   // The name for HashMap
   private var hashMapTerm: String = _
@@ -596,7 +596,7 @@ case class TungstenAggregate(
      if ($checkFallback) {
        ${if (isAggregateHashMapEnabled) {
         s"""$aggregateRow =
-              $aggregateHashMapTerm.findOrInsert(${groupByKeys.map(_.value).mkString(", ")});"""
+            $aggregateHashMapTerm.findOrInsert(${groupByKeys.map(_.value).mkString(", ")});"""
          } else ""}
        // try to get the buffer from hash map
        if ($aggregateRow == null) {
