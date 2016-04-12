@@ -384,7 +384,7 @@ class HashingTF(object):
     @since("2.0.0")
     def setBinary(self, value):
         """
-        If true, term frequency vector will be binary such that non-zero
+        If True, term frequency vector will be binary such that non-zero
         term counts will be set to 1
         (default: False)
         """
