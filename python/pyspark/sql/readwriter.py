@@ -433,7 +433,7 @@ class DataFrameWriter(object):
 
         :param queryName: unique name for the query
 
-        >>> sdf.write.queryName('streaming_query')
+        >>> writer = sdf.write.queryName('streaming_query')
         """
         if not queryName or type(queryName) != str or len(queryName.strip()) == 0:
             raise ValueError('The queryName must be a non-empty string. Got: %s' % queryName)
@@ -449,7 +449,7 @@ class DataFrameWriter(object):
 
         >>> from pyspark.sql.streaming import ProcessingTime
         >>> # trigger the query for execution every 5 seconds
-        >>> sdf.trigger(ProcessingTime('5 seconds'))
+        >>> writer = sdf.write.trigger(ProcessingTime('5 seconds'))
         """
         from pyspark.sql.streaming import Trigger
         if not trigger or issubclass(trigger, Trigger):
@@ -526,7 +526,7 @@ class DataFrameWriter(object):
         ...     queryName='my_query', trigger=ProcessingTime('5 seconds'),
         ...     checkpointLocation=os.path.join(temp, 'chk'))
         >>> cq.name
-        'my_query'
+        u'my_query'
         >>> cq.isActive
         True
         >>> cq.stop()
