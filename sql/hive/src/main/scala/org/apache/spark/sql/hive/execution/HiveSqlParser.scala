@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkSqlAstBuilder
 import org.apache.spark.sql.execution.command.CreateTable
 import org.apache.spark.sql.hive.{CreateTableAsSelect => CTAS, CreateViewAsSelect => CreateView}
-import org.apache.spark.sql.hive.{HiveGenericUDTF, HiveSerDe}
+import org.apache.spark.sql.hive.{HiveGenericUDTF, HiveMetastoreTypes, HiveSerDe}
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 
 /**
@@ -185,8 +185,8 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
       CatalogTableType.MANAGED_TABLE
     }
     val comment = Option(ctx.STRING).map(string)
-    val partitionCols = Option(ctx.partitionColumns).toSeq.flatMap(visitCatalogColumns(_))
-    val cols = Option(ctx.columns).toSeq.flatMap(visitCatalogColumns(_, _.toLowerCase))
+    val partitionCols = Option(ctx.partitionColumns).toSeq.flatMap(visitCatalogColumns)
+    val cols = Option(ctx.columns).toSeq.flatMap(visitCatalogColumns)
     val properties = Option(ctx.tablePropertyList).map(visitTablePropertyList).getOrElse(Map.empty)
     val selectQuery = Option(ctx.query).map(plan)
 
@@ -479,13 +479,15 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
   /**
    * Create a sequence of [[CatalogColumn]]s from a column list
    */
-  private def visitCatalogColumns(
-      ctx: ColTypeListContext,
-      formatter: String => String = identity): Seq[CatalogColumn] = withOrigin(ctx) {
+  private def visitCatalogColumns(ctx: ColTypeListContext): Seq[CatalogColumn] = withOrigin(ctx) {
     ctx.colType.asScala.map { col =>
       CatalogColumn(
-        formatter(col.identifier.getText),
-        col.dataType.getText.toLowerCase, // TODO validate this?
+        col.identifier.getText,
+        // Note: for types like "STRUCT<myFirstName: STRING, myLastName: STRING>" we can't
+        // just convert the whole type string to lower case, otherwise the struct field names
+        // will no longer be case sensitive. Instead, we rely on our parser to get the proper
+        // case before passing it to Hive.
+        HiveMetastoreTypes.toDataType(col.dataType.getText).simpleString,
         nullable = true,
         Option(col.STRING).map(string))
     }
