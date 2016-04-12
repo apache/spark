@@ -460,7 +460,7 @@ private[columnar] case object DictionaryEncoding extends CompressionScheme {
       var pos = 0
       var seenNulls = 0
       columnType.dataType match {
-        case _: IntegerType => {
+        case _: IntegerType =>
           val out = ByteBuffer.allocate(capacity * 4).order(ByteOrder.nativeOrder())
           while (buffer.hasRemaining) {
             if (pos != nextNullIndex) {
@@ -478,8 +478,7 @@ private[columnar] case object DictionaryEncoding extends CompressionScheme {
           out.rewind()
           nullsBuffer.rewind()
           (out, nullsBuffer)
-        }
-        case _: LongType => {
+        case _: LongType =>
           val out = ByteBuffer.allocate(capacity * 8).order(ByteOrder.nativeOrder())
           while (buffer.hasRemaining) {
             if (pos != nextNullIndex) {
@@ -497,7 +496,6 @@ private[columnar] case object DictionaryEncoding extends CompressionScheme {
           out.rewind()
           nullsBuffer.rewind()
           (out, nullsBuffer)
-        }
         case _ => throw new IllegalStateException("Not supported type in DictionaryEncoding.")
       }
     }
