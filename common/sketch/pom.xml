@@ -27,20 +27,13 @@
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-sketch_2.11</artifactId>
+  <artifactId>spark-sketch</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Sketch</name>
   <url>http://spark.apache.org/</url>
   <properties>
     <sbt.project.name>sketch</sbt.project.name>
   </properties>
-
-  <dependencies>
-    <dependency>
-      <groupId>org.apache.spark</groupId>
-      <artifactId>spark-test-tags_${scala.binary.version}</artifactId>
-    </dependency>
-  </dependencies>
 
   <build>
     <pluginManagement>

@@ -44,7 +44,7 @@
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-sketch_2.11</artifactId>
+      <artifactId>spark-sketch</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
