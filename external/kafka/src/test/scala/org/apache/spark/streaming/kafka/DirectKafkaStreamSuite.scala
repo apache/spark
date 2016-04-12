@@ -539,15 +539,17 @@ class LatencyListener(ssc: StreamingContext) extends StreamingListener {
     this.metricMap = metricMap
   }
 
+  var start:Long=0L;
   /** Called when a batch generate has been started */
   override def onBatchGenerateStarted(batchGenerateStarted: StreamingListenerBatchGenerateStarted): Unit = {
-    println("started systemTime="+batchGenerateStarted.time)
+    start=batchGenerateStarted.time
   }
 
-
+  var finish =0L;
   /** Called when a batch generate has been done */
   override def onBatchGenerateCompleted(batchGenerateCompleted: StreamingListenerBatchGenerateCompleted): Unit = {
-    println("completed systemTime="+batchGenerateCompleted.time)
+    finish=batchGenerateCompleted.time
+    println("job creation delay="+(finish-start))
   }
   override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted): Unit = {
     val batchInfo = batchCompleted.batchInfo
