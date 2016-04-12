@@ -183,11 +183,16 @@ private[spark] object DecisionTreeMetadata extends Logging {
         }
       case _ => featureSubsetStrategy
     }
+
+    val isIntRegex = "^([1-9]\\d*)$".r
+    val isFractionRegex = "^(0?\\.\\d*[1-9]\\d*|1\\.0+)$".r
     val numFeaturesPerNode: Int = _featureSubsetStrategy match {
       case "all" => numFeatures
       case "sqrt" => math.sqrt(numFeatures).ceil.toInt
       case "log2" => math.max(1, (math.log(numFeatures) / math.log(2)).ceil.toInt)
       case "onethird" => (numFeatures / 3.0).ceil.toInt
+      case isIntRegex(number) => if (BigInt(number) > numFeatures) numFeatures else number.toInt
+      case isFractionRegex(fraction) => (fraction.toDouble * numFeatures).ceil.toInt
     }
 
     new DecisionTreeMetadata(numFeatures, numExamples, numClasses, numBins.max,
