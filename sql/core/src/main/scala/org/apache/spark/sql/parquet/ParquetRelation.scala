@@ -1,5 +1,5 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one or more
+ * Licensid to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
  * The ASF licenses this file to You under the Apache License, Version 2.0
@@ -184,9 +184,9 @@ private[sql] object ParquetRelation {
     val schema = StructType.fromAttributes(attributes).asNullable
     val newAttributes = schema.toAttributes
     if (sqlContext.sparkContext.hadoopConfiguration
-      .getBoolean(ParquetOutputFormat.ENABLE_JOB_SUMMARY, true)) {
+        .getBoolean(ParquetOutputFormat.ENABLE_JOB_SUMMARY, true)) {
       ParquetTypesConverter.writeMetaData(attributes, path, conf)
-      } else {
+    } else {
       // Create only the directory without the metafile
       val fs = path.getFileSystem(conf)
       if (fs == null) {
