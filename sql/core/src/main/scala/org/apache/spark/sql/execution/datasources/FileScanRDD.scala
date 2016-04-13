@@ -50,7 +50,7 @@ class FileScanRDD(
     @transient val sqlContext: SQLContext,
     readFunction: (PartitionedFile) => Iterator[InternalRow],
     @transient val filePartitions: Seq[FilePartition])
-    extends RDD[InternalRow](sqlContext.sparkContext, Nil) {
+  extends RDD[InternalRow](sqlContext.sparkContext, Nil) {
 
   override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
     val iterator = new Iterator[Object] with AutoCloseable {
