@@ -149,6 +149,15 @@ for more details on the API.
 
 {% include_example java/org/apache/spark/examples/ml/JavaCountVectorizerExample.java %}
 </div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [CountVectorizer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.CountVectorizer)
+and the [CountVectorizerModel Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.CountVectorizerModel)
+for more details on the API.
+
+{% include_example python/ml/count_vectorizer_example.py %}
+</div>
 </div>
 
 # Feature Transformers
