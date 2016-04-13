@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 
@@ -32,15 +32,18 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTable
  */
 case class CreateTableLike(
     table: CatalogTable,
+    ifNotExists: Boolean,
     sourceTable: TableIdentifier) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.sessionState.catalog.createTable(table, ifNotExists)
-
     val catalog = sqlContext.sessionState.catalog
     if (!catalog.tableExists(sourceTable)) {
       throw new AnalysisException(
         s"Cannot create table like on not existing table ${sourceTable.identifier}.")
+    }
+    if (catalog.isTemporaryTable(sourceTable)) {
+      throw new AnalysisException(
+        s"Cannot create table like on a temporary table ${sourceTable.identifier}.")
     }
 
     val sourceTableMetadata = catalog.getTableMetadata(sourceTable)
@@ -57,7 +60,7 @@ case class CreateTableLike(
       viewText = sourceTableMetadata.viewText
     )
 
-    catalog.createTable(tableToCreate, false)
+    catalog.createTable(tableToCreate, ifNotExists)
     Seq.empty[Row]
   }
 }

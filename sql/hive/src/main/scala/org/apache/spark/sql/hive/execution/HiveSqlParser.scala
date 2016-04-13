@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkSqlAstBuilder
+import org.apache.spark.sql.execution.command.CreateTableLike
 import org.apache.spark.sql.hive.{CreateTableAsSelect => CTAS, CreateViewAsSelect => CreateView}
 import org.apache.spark.sql.hive.{HiveGenericUDTF, HiveSerDe}
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
@@ -205,7 +206,7 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
   /**
    * Create a [[CreateTableLike]] command.
    */
-  override def visitCreateTableLike(ctx: CreateTableContext): LogicalPlan = {
+  override def visitCreateTableLike(ctx: CreateTableLikeContext): LogicalPlan = withOrigin(ctx) {
     // Get the table header.
     val (table, temp, ifNotExists, external) = visitCreateTableHeader(ctx.createTableHeader)
     val sourceTable = visitTableIdentifier(ctx.source)
@@ -220,15 +221,12 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
     if (temp) {
       throw new ParseException(s"Unsupported operation: TEMPORARY clause.", ctx)
     }
-    if (ifNotExists) {
-      throw new ParseException("Unsupported operation: IF NOT EXISTS clause.", ctx)
-    }
     val tableDesc = CatalogTable(
       identifier = table,
       tableType = tableType,
-      schema = Seq[CatalogColumn].empty,
+      schema = Seq.empty,
       storage = EmptyStorageFormat)
-    CreateTableLike(tableDesc, sourceTable)
+    CreateTableLike(tableDesc, ifNotExists, sourceTable)
   }
 
   /**

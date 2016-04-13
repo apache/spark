@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.JsonTuple
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, ScriptTransformation}
+import org.apache.spark.sql.execution.command.CreateTableLike
 import org.apache.spark.sql.hive.execution.{HiveNativeCommand, HiveSqlParser}
 
 class HiveDDLCommandSuite extends PlanTest {
@@ -38,6 +39,7 @@ class HiveDDLCommandSuite extends PlanTest {
     parser.parsePlan(sql).collect {
       case CreateTableAsSelect(desc, _, allowExisting) => (desc, allowExisting)
       case CreateViewAsSelect(desc, _, allowExisting, _, _) => (desc, allowExisting)
+      case CreateTableLike(desc, allowExisting, _) => (desc, allowExisting)
     }.head
   }
 
@@ -377,6 +379,46 @@ class HiveDDLCommandSuite extends PlanTest {
 
   test("MSCK repair table (not supported)") {
     assertUnsupported("MSCK REPAIR TABLE tab1")
+  }
+
+  test("create table like") {
+    val v1 = "CREATE TABLE table1 LIKE table2"
+    val (desc, exists) = extractTableDesc(v1)
+    assert(exists == false)
+    assert(desc.identifier.database.isEmpty)
+    assert(desc.identifier.table == "table1")
+    assert(desc.tableType == CatalogTableType.MANAGED_TABLE)
+    assert(desc.storage.locationUri.isEmpty)
+    assert(desc.storage.serdeProperties == Map())
+    assert(desc.storage.inputFormat.isEmpty)
+    assert(desc.storage.outputFormat.isEmpty)
+    assert(desc.storage.serde.isEmpty)
+    assert(desc.schema.isEmpty)
+    assert(desc.viewText == None)
+    assert(desc.viewOriginalText == None)
+    assert(desc.properties == Map())
+    assert(desc.partitionColumns.isEmpty)
+    assert(desc.numBuckets == 0)
+    assert(desc.sortColumns.isEmpty)
+
+    val v2 = "CREATE TABLE IF NOT EXISTS table1 LIKE table2"
+    val (desc2, exists2) = extractTableDesc(v2)
+    assert(exists2)
+    assert(desc2.identifier.database.isEmpty)
+    assert(desc2.identifier.table == "table1")
+    assert(desc2.tableType == CatalogTableType.MANAGED_TABLE)
+    assert(desc2.storage.locationUri.isEmpty)
+    assert(desc2.storage.serdeProperties == Map())
+    assert(desc2.storage.inputFormat.isEmpty)
+    assert(desc2.storage.outputFormat.isEmpty)
+    assert(desc2.storage.serde.isEmpty)
+    assert(desc2.schema.isEmpty)
+    assert(desc2.viewText == None)
+    assert(desc2.viewOriginalText == None)
+    assert(desc2.properties == Map())
+    assert(desc2.partitionColumns.isEmpty)
+    assert(desc2.numBuckets == 0)
+    assert(desc2.sortColumns.isEmpty)
   }
 
 }
