@@ -330,6 +330,14 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("nullif") {
+    val testData = sqlContext.createDataFrame(sparkContext.parallelize(
+      Row("a", "a") :: Row("a", "b") :: Nil),
+      StructType(Seq(StructField("c1", StringType), StructField("c2", StringType))))
+    testData.registerTempTable("t")
+    checkAnswer(sql("select nullif(c1, c2) from t"), Row(null) :: Row("a") :: Nil)
+  }
+
   test("===") {
     checkAnswer(
       testData2.filter($"a" === 1),

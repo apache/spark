@@ -128,6 +128,58 @@ case class IsNaN(child: Expression) extends UnaryExpression
 }
 
 /**
+ * An Expression accepts two parameters and returns null if both parameters are equal.
+ * If they are not equal, the first parameter value is returned.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(a,b) - Returns null if a equals to b, or a otherwise.")
+case class NullIf(left: Expression, right: Expression) extends BinaryExpression {
+  override def nullable: Boolean = true
+  override def dataType: DataType = left.dataType
+
+  override def eval(input: InternalRow): Any = {
+    val valueLeft = left.eval(input)
+    val valueRight = right.eval(input)
+    if (valueLeft.equals(valueRight)) {
+      null
+    } else {
+      valueLeft
+    }
+  }
+
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+    val leftGen = left.gen(ctx)
+    val rightGen = right.gen(ctx)
+    dataType match {
+      case DoubleType | FloatType | IntegerType =>
+        s"""
+          ${leftGen.code}
+          ${rightGen.code}
+          boolean ${ev.isNull} = false;
+          ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+          if (${leftGen.value} == ${rightGen.value}) {
+            ${ev.isNull} = true;
+          } else {
+            ${ev.value} = ${leftGen.value};
+          }
+        """
+      case _ =>
+        s"""
+          ${leftGen.code}
+          ${rightGen.code}
+          boolean ${ev.isNull} = false;
+          ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+          if (${leftGen.value} != null && ${leftGen.value}.equals(${rightGen.value})) {
+            ${ev.isNull} = true;
+          } else {
+            ${ev.value} = ${leftGen.value};
+          }
+        """
+    }
+  }
+}
+
+/**
  * An Expression evaluates to `left` iff it's not NaN, or evaluates to `right` otherwise.
  * This Expression is useful for mapping NaN values to null.
  */
@@ -135,6 +187,7 @@ case class IsNaN(child: Expression) extends UnaryExpression
   usage = "_FUNC_(a,b) - Returns a iff it's not NaN, or b otherwise.")
 case class NaNvl(left: Expression, right: Expression)
     extends BinaryExpression with ImplicitCastInputTypes {
+  override def nullable: Boolean = false
 
   override def dataType: DataType = left.dataType
 

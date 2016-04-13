@@ -163,6 +163,7 @@ object FunctionRegistry {
     expression[IsNaN]("isnan"),
     expression[IsNull]("isnull"),
     expression[IsNotNull]("isnotnull"),
+    expression[NullIf]("nullif"),
     expression[Least]("least"),
     expression[CreateMap]("map"),
     expression[CreateNamedStruct]("named_struct"),

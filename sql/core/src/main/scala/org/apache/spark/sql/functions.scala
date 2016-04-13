@@ -1015,6 +1015,14 @@ object functions {
   def nanvl(col1: Column, col2: Column): Column = withExpr { NaNvl(col1.expr, col2.expr) }
 
   /**
+   * Returns null if col1 equals to col2, otherwise returns col1.
+   *
+   * @group normal_funcs
+   * @since 2.0.0
+   */
+  def nullif(col1: Column, col2: Column): Column = withExpr { NullIf(col1.expr, col2.expr)}
+
+  /**
    * Unary minus, i.e. negate the expression.
    * {{{
    *   // Select the amount column and negates all values.
