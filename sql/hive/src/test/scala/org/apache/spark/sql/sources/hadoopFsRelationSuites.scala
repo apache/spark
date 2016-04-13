@@ -738,10 +738,7 @@ class LocalityTestFileSystem extends RawLocalFileSystem {
 
   override def getFileBlockLocations(
       file: FileStatus, start: Long, len: Long): Array[BlockLocation] = {
-    if (invocations.getAndAdd(1) % 2 == 0) {
-      Array(new BlockLocation(Array("host1:50010"), Array("host1"), 0, len))
-    } else {
-      Array(new BlockLocation(Array("host2:50010"), Array("host2"), 0, len))
-    }
+    val count = invocations.getAndAdd(1)
+    Array(new BlockLocation(Array(s"host$count:50010"), Array(s"host$count"), 0, len))
   }
 }
