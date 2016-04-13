@@ -497,13 +497,13 @@ private[sql] object Expand {
           // replace it with constant null
           Literal.create(null, attr.dataType)
         } else {
-          groupByAliases(groupByAttrs.indexOf(attr))
+          attr
         }
       // groupingId is the last output, here we use the bit mask as the concrete value for it.
       } :+ Literal.create(bitmask, IntegerType)
     }
     val output = child.output ++ groupByAttrs :+ gid
-    Expand(projections, output, child)
+    Expand(projections, output, Project(child.output ++ groupByAliases, child))
   }
 }
 

@@ -975,8 +975,6 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
 
     // two filters should be combine together by other rules
     case filter @ Filter(_, f: Filter) => filter
-    // should not push predicates through sample, or will generate different results.
-    case filter @ Filter(_, s: Sample) => filter
 
     case filter @ Filter(condition, u: UnaryNode) if u.expressions.forall(_.deterministic) =>
       pushDownPredicate(filter, u.child) { predicate =>
