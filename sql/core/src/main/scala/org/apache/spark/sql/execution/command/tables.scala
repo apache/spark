@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTable
  *
  * The syntax of using this command in SQL is:
  * {{{
- *   CREATE TABLE [db_name.]table_name
+ *   CREATE TABLE [IF NOT EXISTS] [db_name.]table_name
  *   LIKE [other_db_name.]existing_table_name
  * }}}
  */
