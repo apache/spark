@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.{broadcast, TaskContext}
+import org.apache.spark.broadcast
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -305,7 +307,7 @@ case class WholeStageCodegen(child: SparkPlan) extends UnaryNode with CodegenSup
    * @return the tuple of the codegen context and the actual generated source.
    */
   def doCodeGen(): (CodegenContext, String) = {
-    val ctx = new CodegenContext
+    val ctx = new CodegenContext(SQLContext.getActive().get.conf)
     val code = child.asInstanceOf[CodegenSupport].produce(ctx, this)
     val source = s"""
       public Object generate(Object[] references) {
@@ -429,7 +431,7 @@ case class CollapseCodegenStages(conf: SQLConf) extends Rule[SparkPlan] {
 
   private def supportCodegen(e: Expression): Boolean = e match {
     case e: LeafExpression => true
-    case e: CaseWhen => e.shouldCodegen
+    case e: CaseWhen => e.shouldCodegen(conf)
     // CodegenFallback requires the input to be an InternalRow
     case e: CodegenFallback => false
     case _ => true

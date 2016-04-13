@@ -142,12 +142,13 @@ case class CaseWhen(branches: Seq[(Expression, Expression)], elseValue: Option[E
     }
   }
 
-  def shouldCodegen: Boolean = {
-    branches.length < CaseWhen.MAX_NUM_CASES_FOR_CODEGEN
+  def shouldCodegen(conf: CodegenConf): Boolean = {
+    branches.length < conf.maxCaseBranches
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     if (!shouldCodegen) {
+    if (!shouldCodegen(ctx.conf)) {
       // Fallback to interpreted mode if there are too many branches, as it may reach the
       // 64K limit (limit on bytecode size for a single function).
       return super[CodegenFallback].doGenCode(ctx, ev)
@@ -218,10 +219,6 @@ case class CaseWhen(branches: Seq[(Expression, Expression)], elseValue: Option[E
 
 /** Factory methods for CaseWhen. */
 object CaseWhen {
-
-  // The maximum number of switches supported with codegen.
-  val MAX_NUM_CASES_FOR_CODEGEN = 20
-
   def apply(branches: Seq[(Expression, Expression)], elseValue: Expression): CaseWhen = {
     CaseWhen(branches, Option(elseValue))
   }

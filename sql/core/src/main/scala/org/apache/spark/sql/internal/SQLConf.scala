@@ -28,6 +28,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.catalyst.CatalystConf
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenConf
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines the configuration options for Spark SQL.
@@ -402,6 +403,12 @@ object SQLConf {
     .intConf
     .createWithDefault(200)
 
+  val MAX_CASES_BRANCHES = SQLConfigBuilder("spark.sql.codegen.maxCaseBranches")
+    .internal()
+    .doc("The maximum number of switches supported with codegen.")
+    .intConf
+    .createWithDefault(20)
+
   val FILES_MAX_PARTITION_BYTES = SQLConfigBuilder("spark.sql.files.maxPartitionBytes")
     .doc("The maximum number of bytes to pack into a single partition when reading files.")
     .longConf
@@ -478,7 +485,7 @@ object SQLConf {
  *
  * SQLConf is thread-safe (internally synchronized, so safe to be used in multiple threads).
  */
-private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
+private[sql] class SQLConf extends Serializable with CatalystConf with CodegenConf with Logging {
   import SQLConf._
 
   /** Only low degree of contention is expected for conf, thus NOT using ConcurrentHashMap. */
@@ -528,6 +535,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def wholeStageEnabled: Boolean = getConf(WHOLESTAGE_CODEGEN_ENABLED)
 
   def wholeStageMaxNumFields: Int = getConf(WHOLESTAGE_MAX_NUM_FIELDS)
+
+  def maxCaseBranches: Int = getConf(MAX_CASES_BRANCHES)
 
   def exchangeReuseEnabled: Boolean = getConf(EXCHANGE_REUSE_ENABLED)
 

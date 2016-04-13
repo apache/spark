@@ -22,6 +22,7 @@ import org.apache.spark.sql.execution.aggregate.TungstenAggregate
 import org.apache.spark.sql.execution.joins.BroadcastHashJoin
 import org.apache.spark.sql.expressions.scala.typed
 import org.apache.spark.sql.functions.{avg, broadcast, col, max}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 
@@ -112,5 +113,26 @@ class WholeStageCodegenSuite extends SparkPlanTest with SharedSQLContext {
       p.isInstanceOf[WholeStageCodegen] &&
         p.asInstanceOf[WholeStageCodegen].child.isInstanceOf[TungstenAggregate]).isDefined)
     assert(ds.collect() === Array(("a", 10.0), ("b", 3.0), ("c", 1.0)))
+  }
+
+  test("Support spark.sql.codegen.maxCaseBranches option") {
+    val query = sqlContext.sql(
+      """select case when a=a+1 then 1 when a=a+2 then 2 else 100 end
+        |from (select explode(array(1,2,3)) a) t""".stripMargin)
+
+    // SQLConf.MAX_CASES_BRANCHES.key == 20 (Default)
+    val code1 = debug.codegenString(query.queryExecution.executedPlan)
+
+    // SQLConf.MAX_CASES_BRANCHES.key == 2
+    sqlContext.setConf(SQLConf.MAX_CASES_BRANCHES.key, "2")
+    val code2 = debug.codegenString(query.queryExecution.executedPlan)
+
+    // SQLConf.MAX_CASES_BRANCHES.key == 20 (Recover)
+    sqlContext.setConf(SQLConf.MAX_CASES_BRANCHES.key, "20")
+    val code3 = debug.codegenString(query.queryExecution.executedPlan)
+
+    assert(!code1.contains("/* expression: CASE WHEN"))
+    assert(code2.contains("/* expression: CASE WHEN"))
+    assert(!code3.contains("/* expression: CASE WHEN"))
   }
 }
