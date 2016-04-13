@@ -372,7 +372,17 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "alter_index",
 
     // Macro commands are not supported
-    "macro"
+    "macro",
+
+    // Create partitioned view is not supported
+    "create_like_view",
+    "describe_formatted_view_partitioned",
+
+    // This uses CONCATENATE, which we don't support
+    "alter_merge_2",
+
+    // TOUCH is not supported
+    "touch"
   )
 
   /**
@@ -388,7 +398,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "alter2",
     "alter3",
     "alter5",
-    "alter_merge_2",
     "alter_partition_format_loc",
     "alter_partition_with_whitelist",
     "alter_rename_partition",
@@ -482,7 +491,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "cp_mj_rc",
     "create_insert_outputformat",
     "create_like_tbl_props",
-    "create_like_view",
     "create_nested_type",
     "create_skewed_table1",
     "create_struct_table",
@@ -507,7 +515,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "default_partition_name",
     "delimiter",
     "desc_non_existent_tbl",
-    "describe_formatted_view_partitioned",
     "diff_part_input_formats",
     "disable_file_format_check",
     "disallow_incompatible_type_change_off",
@@ -895,7 +902,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "timestamp_comparison",
     "timestamp_lazy",
     "timestamp_null",
-    "touch",
     "transform_ppr1",
     "transform_ppr2",
     "truncate_table",

@@ -124,11 +124,10 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
               markErr()
             }
           } catch {
-            case e: Exception => {
+            case e: Exception =>
               logError("driver.run() failed", e)
               error = Some(e)
               markErr()
-            }
           }
         }
       }.start()
@@ -184,7 +183,7 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
     var remain = amountToUse
     var requestedResources = new ArrayBuffer[Resource]
     val remainingResources = resources.asScala.map {
-      case r => {
+      case r =>
         if (remain > 0 &&
           r.getType == Value.Type.SCALAR &&
           r.getScalar.getValue > 0.0 &&
@@ -196,7 +195,6 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
         } else {
           r
         }
-      }
     }
 
     // Filter any resource that has depleted.

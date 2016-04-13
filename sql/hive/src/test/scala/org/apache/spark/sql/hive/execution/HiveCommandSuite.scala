@@ -26,7 +26,7 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     super.beforeAll()
     sql(
       """
-        |CREATE EXTERNAL TABLE parquet_tab1 (c1 INT, c2 STRING)
+        |CREATE TABLE parquet_tab1 (c1 INT, c2 STRING)
         |USING org.apache.spark.sql.parquet.DefaultSource
       """.stripMargin)
 
@@ -96,7 +96,7 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     val message1 = intercept[AnalysisException] {
       sql("SHOW TBLPROPERTIES badtable")
     }.getMessage
-    assert(message1.contains("Table badtable not found in database default"))
+    assert(message1.contains("Table or View badtable not found in database default"))
 
     // When key is not found, a row containing the error is returned.
     checkAnswer(
