@@ -571,6 +571,11 @@ private[spark] class TaskSchedulerImpl(
       return
     }
     while (!backend.isReady) {
+      // Might take a while for backend to be ready if it is waiting on resources.
+      if (sc.stopped.get) {
+        // For example: the master removes the application for some reason
+        throw new IllegalStateException("Spark context stopped while waiting for backend")
+      }
       synchronized {
         this.wait(100)
       }
