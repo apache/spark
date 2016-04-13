@@ -898,7 +898,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     val result = ctx.freshName("result")
     val tmpRow = ctx.freshName("tmpRow")
 
-    val fieldsEvalCode = fieldsCasts.zipWithIndex.map { case (cast, i) => {
+    val fieldsEvalCode = fieldsCasts.zipWithIndex.map { case (cast, i) =>
       val fromFieldPrim = ctx.freshName("ffp")
       val fromFieldNull = ctx.freshName("ffn")
       val toFieldPrim = ctx.freshName("tfp")
@@ -920,7 +920,6 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
           }
         }
        """
-      }
     }.mkString("\n")
 
     (c, evPrim, evNull) =>

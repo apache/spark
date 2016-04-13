@@ -374,7 +374,7 @@ private[spark] class ApplicationMaster(
             failureCount = 0
           } catch {
             case i: InterruptedException =>
-            case e: Throwable => {
+            case e: Throwable =>
               failureCount += 1
               // this exception was introduced in hadoop 2.4 and this code would not compile
               // with earlier versions if we refer it directly.
@@ -390,7 +390,6 @@ private[spark] class ApplicationMaster(
               } else {
                 logWarning(s"Reporter thread fails $failureCount time(s) in a row.", e)
               }
-            }
           }
           try {
             val numPendingAllocate = allocator.getPendingAllocate.size

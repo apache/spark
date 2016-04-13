@@ -493,7 +493,9 @@ class SparkSqlAstBuilder extends AstBuilder {
    */
   override def visitAddTablePartition(
       ctx: AddTablePartitionContext): LogicalPlan = withOrigin(ctx) {
-    if (ctx.VIEW != null) throw new ParseException(s"Operation not allowed: partitioned views", ctx)
+    if (ctx.VIEW != null) {
+      throw new AnalysisException(s"Operation not allowed: partitioned views")
+    }
     // Create partition spec to location mapping.
     val specsAndLocs = if (ctx.partitionSpec.isEmpty) {
       ctx.partitionSpecLocation.asScala.map {
@@ -509,8 +511,7 @@ class SparkSqlAstBuilder extends AstBuilder {
     AlterTableAddPartition(
       visitTableIdentifier(ctx.tableIdentifier),
       specsAndLocs,
-      ctx.EXISTS != null)(
-      command(ctx))
+      ctx.EXISTS != null)
   }
 
   /**
@@ -523,11 +524,8 @@ class SparkSqlAstBuilder extends AstBuilder {
    */
   override def visitExchangeTablePartition(
       ctx: ExchangeTablePartitionContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableExchangePartition(
-      visitTableIdentifier(ctx.from),
-      visitTableIdentifier(ctx.to),
-      visitNonOptionalPartitionSpec(ctx.partitionSpec))(
-      command(ctx))
+    throw new AnalysisException(
+      "Operation not allowed: ALTER TABLE ... EXCHANGE PARTITION ...")
   }
 
   /**
@@ -543,8 +541,7 @@ class SparkSqlAstBuilder extends AstBuilder {
     AlterTableRenamePartition(
       visitTableIdentifier(ctx.tableIdentifier),
       visitNonOptionalPartitionSpec(ctx.from),
-      visitNonOptionalPartitionSpec(ctx.to))(
-      command(ctx))
+      visitNonOptionalPartitionSpec(ctx.to))
   }
 
   /**
@@ -561,13 +558,16 @@ class SparkSqlAstBuilder extends AstBuilder {
    */
   override def visitDropTablePartitions(
       ctx: DropTablePartitionsContext): LogicalPlan = withOrigin(ctx) {
-    if (ctx.VIEW != null) throw new ParseException(s"Operation not allowed: partitioned views", ctx)
+    if (ctx.VIEW != null) {
+      throw new AnalysisException(s"Operation not allowed: partitioned views")
+    }
+    if (ctx.PURGE != null) {
+      throw new AnalysisException(s"Operation not allowed: PURGE")
+    }
     AlterTableDropPartition(
       visitTableIdentifier(ctx.tableIdentifier),
       ctx.partitionSpec.asScala.map(visitNonOptionalPartitionSpec),
-      ctx.EXISTS != null,
-      ctx.PURGE != null)(
-      command(ctx))
+      ctx.EXISTS != null)
   }
 
   /**
@@ -580,10 +580,8 @@ class SparkSqlAstBuilder extends AstBuilder {
    */
   override def visitArchiveTablePartition(
       ctx: ArchiveTablePartitionContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableArchivePartition(
-      visitTableIdentifier(ctx.tableIdentifier),
-      visitNonOptionalPartitionSpec(ctx.partitionSpec))(
-      command(ctx))
+    throw new AnalysisException(
+      "Operation not allowed: ALTER TABLE ... ARCHIVE PARTITION ...")
   }
 
   /**
@@ -596,10 +594,8 @@ class SparkSqlAstBuilder extends AstBuilder {
    */
   override def visitUnarchiveTablePartition(
       ctx: UnarchiveTablePartitionContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableUnarchivePartition(
-      visitTableIdentifier(ctx.tableIdentifier),
-      visitNonOptionalPartitionSpec(ctx.partitionSpec))(
-      command(ctx))
+    throw new AnalysisException(
+      "Operation not allowed: ALTER TABLE ... UNARCHIVE PARTITION ...")
   }
 
   /**
@@ -658,10 +654,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    * }}}
    */
   override def visitTouchTable(ctx: TouchTableContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableTouch(
-      visitTableIdentifier(ctx.tableIdentifier),
-      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec))(
-      command(ctx))
+    throw new AnalysisException("Operation not allowed: ALTER TABLE ... TOUCH ...")
   }
 
   /**
@@ -673,11 +666,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    * }}}
    */
   override def visitCompactTable(ctx: CompactTableContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableCompact(
-      visitTableIdentifier(ctx.tableIdentifier),
-      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec),
-      string(ctx.STRING))(
-      command(ctx))
+    throw new AnalysisException("Operation not allowed: ALTER TABLE ... COMPACT ...")
   }
 
   /**
@@ -689,10 +678,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    * }}}
    */
   override def visitConcatenateTable(ctx: ConcatenateTableContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableMerge(
-      visitTableIdentifier(ctx.tableIdentifier),
-      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec))(
-      command(ctx))
+    throw new AnalysisException("Operation not allowed: ALTER TABLE ... CONCATENATE")
   }
 
   /**
