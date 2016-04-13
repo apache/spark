@@ -52,6 +52,10 @@ class ColumnarAggMapCodeGenerator(
        |${generateEquals()}
        |
        |${generateHashFunction()}
+       |
+       |${generateRowIterator()}
+       |
+       |${generateClose()}
        |}
      """.stripMargin
   }
@@ -74,8 +78,8 @@ class ColumnarAggMapCodeGenerator(
       """.stripMargin
 
     s"""
-       |  public org.apache.spark.sql.execution.vectorized.ColumnarBatch batch;
-       |  public org.apache.spark.sql.execution.vectorized.ColumnarBatch aggregateBufferBatch;
+       |  private org.apache.spark.sql.execution.vectorized.ColumnarBatch batch;
+       |  private org.apache.spark.sql.execution.vectorized.ColumnarBatch aggregateBufferBatch;
        |  private int[] buckets;
        |  private int numBuckets;
        |  private int maxSteps;
@@ -205,6 +209,23 @@ class ColumnarAggMapCodeGenerator(
        |  }
        |  // Didn't find it
        |  return null;
+       |}
+     """.stripMargin
+  }
+
+  private def generateRowIterator(): String = {
+    s"""
+       |public java.util.Iterator<org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row>
+       |    rowIterator() {
+       |  return batch.rowIterator();
+       |}
+     """.stripMargin
+  }
+
+  private def generateClose(): String = {
+    s"""
+       |public void close() {
+       |  batch.close();
        |}
      """.stripMargin
   }

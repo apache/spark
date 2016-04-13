@@ -481,7 +481,7 @@ case class TungstenAggregate(
           ${child.asInstanceOf[CodegenSupport].produce(ctx, this)}
 
           ${if (isAggregateHashMapEnabled) {
-              s"$iterTermForGeneratedHashMap = $aggregateHashMapTerm.batch.rowIterator();"} else ""}
+              s"$iterTermForGeneratedHashMap = $aggregateHashMapTerm.rowIterator();"} else ""}
 
           $iterTerm = $thisPlan.finishAggregate($hashMapTerm, $sorterTerm);
         }
@@ -519,7 +519,7 @@ case class TungstenAggregate(
              |   if (shouldStop()) return;
              | }
              |
-             | $aggregateHashMapTerm.batch.close();
+             | $aggregateHashMapTerm.close();
            """.stripMargin)
       } else None
     }
