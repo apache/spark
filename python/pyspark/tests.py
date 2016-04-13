@@ -23,6 +23,7 @@ individual modules.
 from array import array
 from glob import glob
 import os
+import os.path
 import re
 import shutil
 import subprocess
@@ -1946,6 +1947,24 @@ class ContextTests(unittest.TestCase):
             sc.stop()
         self.assertEqual(SparkContext._active_spark_context, None)
 
+    def test_add_py_package(self):
+        name = "test_tmp"
+        try:
+            os.mkdir(name)
+            with open(os.path.join(name, "__init__.py"), 'w+') as temp:
+                temp.write("triple = lambda x: 3*x")
+            pkg = __import__(name)
+            with SparkContext() as sc:
+                #trips = sc.parallelize([0, 1, 2, 3]).map(test_tmp.triple)
+                #sc.addPyPackage(pkg)
+                trips = sc.parallelize([0, 1, 2, 3]).map(lambda x: pkg.triple(x))
+                self.assertSequenceEqual([0, 3, 6, 9], trips.collect())
+        finally:
+            shutil.rmtree(name)
+        
+
+    """
+    This needs internet access
     def test_requirements_file(self):
         import pip
         with tempfile.NamedTemporaryFile() as temp:
@@ -1956,6 +1975,7 @@ class ContextTests(unittest.TestCase):
                 qks = sc.parallelize([(0, 0), (1, 1), (2, 2)]) \
                         .map(lambda pair: quadkey.from_geo(pair, 1).key)
                 self.assertSequenceEqual(['3', '1', '1'], qks.collect())
+    """
 
     def test_progress_api(self):
         with SparkContext() as sc:
