@@ -482,8 +482,6 @@ object DirectKafkaWordCountLocal {
 
   import org.apache.spark.streaming._
 
-  case class Tick(symbol: String, price: Int, ts: Long)
-
   def main(args: Array[String]) {
 
     // Create context with 2 second batch interval
@@ -525,10 +523,7 @@ object DirectKafkaWordCountKafka {
 
     val topicsSet = Set(topic)
 
-    val brokerListString = new StringBuilder();
-
-      brokerListString.append(kafkaBrokers).append(":").append(kafkaPort)
-
+    val brokerListString = kafkaBrokers+":"+kafkaPort
 
     val kafkaParams = Map[String, String]("metadata.broker.list" -> brokerListString.toString())
     System.err.println(
@@ -536,9 +531,6 @@ object DirectKafkaWordCountKafka {
     val messages = KafkaUtils.createDirectStream[String, String, StringDecoder, StringDecoder](
       ssc, kafkaParams, topicsSet)
     ssc.checkpoint("/tmp/checkPoint/")
-    // Create context with 2 second batch interval
-
-    //val lines = ssc.socketTextStream("localhost", 9998)
 
     val words = messages.map(x => x._2).flatMap(_.split(" "))
 
