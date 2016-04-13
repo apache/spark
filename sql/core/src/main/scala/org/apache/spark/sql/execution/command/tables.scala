@@ -58,7 +58,7 @@ case class CreateTableLike(
       properties = sourceTableMetadata.properties,
       viewOriginalText = sourceTableMetadata.viewOriginalText,
       viewText = sourceTableMetadata.viewText
-    )
+    ).withNewStorage(locationUri = None)
 
     catalog.createTable(tableToCreate, ifNotExists)
     Seq.empty[Row]
