@@ -1154,14 +1154,12 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   private def verifyNonExchangingAgg(df: DataFrame) = {
     var atFirstAgg: Boolean = false
     df.queryExecution.executedPlan.foreach {
-      case agg: TungstenAggregate => {
+      case agg: TungstenAggregate =>
         atFirstAgg = !atFirstAgg
-      }
-      case _ => {
+      case _ =>
         if (atFirstAgg) {
           fail("Should not have operators between the two aggregations")
         }
-      }
     }
   }
 
@@ -1171,12 +1169,11 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   private def verifyExchangingAgg(df: DataFrame) = {
     var atFirstAgg: Boolean = false
     df.queryExecution.executedPlan.foreach {
-      case agg: TungstenAggregate => {
+      case agg: TungstenAggregate =>
         if (atFirstAgg) {
           fail("Should not have back to back Aggregates")
         }
         atFirstAgg = true
-      }
       case e: ShuffleExchange => atFirstAgg = false
       case _ =>
     }

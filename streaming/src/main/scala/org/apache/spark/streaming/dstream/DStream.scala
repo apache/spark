@@ -429,13 +429,12 @@ abstract class DStream[T: ClassTag] (
    */
   private[streaming] def generateJob(time: Time): Option[Job] = {
     getOrCompute(time) match {
-      case Some(rdd) => {
+      case Some(rdd) =>
         val jobFunc = () => {
           val emptyFunc = { (iterator: Iterator[T]) => {} }
           context.sparkContext.runJob(rdd, emptyFunc)
         }
         Some(new Job(time, jobFunc))
-      }
       case None => None
     }
   }

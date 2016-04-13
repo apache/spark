@@ -180,7 +180,7 @@ object DecisionTreeRunner {
     }
     // For classification, re-index classes if needed.
     val (examples, classIndexMap, numClasses) = algo match {
-      case Classification => {
+      case Classification =>
         // classCounts: class --> # examples in class
         val classCounts = origExamples.map(_.label).countByValue()
         val sortedClasses = classCounts.keys.toList.sorted
@@ -209,7 +209,6 @@ object DecisionTreeRunner {
           println(s"$c\t$frac\t${classCounts(c)}")
         }
         (examples, classIndexMap, numClasses)
-      }
       case Regression =>
         (origExamples, null, 0)
       case _ =>
@@ -225,7 +224,7 @@ object DecisionTreeRunner {
         case "libsvm" => MLUtils.loadLibSVMFile(sc, testInput, numFeatures)
       }
       algo match {
-        case Classification => {
+        case Classification =>
           // classCounts: class --> # examples in class
           val testExamples = {
             if (classIndexMap.isEmpty) {
@@ -235,7 +234,6 @@ object DecisionTreeRunner {
             }
           }
           Array(examples, testExamples)
-        }
         case Regression =>
           Array(examples, origTestExamples)
       }

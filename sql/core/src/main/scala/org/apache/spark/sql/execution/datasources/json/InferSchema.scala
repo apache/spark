@@ -256,6 +256,14 @@ private[sql] object InferSchema {
         case (ArrayType(elementType1, containsNull1), ArrayType(elementType2, containsNull2)) =>
           ArrayType(compatibleType(elementType1, elementType2), containsNull1 || containsNull2)
 
+        // The case that given `DecimalType` is capable of given `IntegralType` is handled in
+        // `findTightestCommonTypeOfTwo`. Both cases below will be executed only when
+        // the given `DecimalType` is not capable of the given `IntegralType`.
+        case (t1: IntegralType, t2: DecimalType) =>
+          compatibleType(DecimalType.forType(t1), t2)
+        case (t1: DecimalType, t2: IntegralType) =>
+          compatibleType(t1, DecimalType.forType(t2))
+
         // strings and every string is a Json object.
         case (_, _) => StringType
       }

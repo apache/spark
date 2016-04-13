@@ -453,6 +453,10 @@ private[spark] object PythonRDD extends Logging {
     serveIterator(rdd.collect().iterator, s"serve RDD ${rdd.id}")
   }
 
+  def toLocalIteratorAndServe[T](rdd: RDD[T]): Int = {
+    serveIterator(rdd.toLocalIterator, s"serve toLocalIterator")
+  }
+
   def readRDDFromFile(sc: JavaSparkContext, filename: String, parallelism: Int):
   JavaRDD[Array[Byte]] = {
     val file = new DataInputStream(new FileInputStream(filename))
@@ -466,7 +470,7 @@ private[spark] object PythonRDD extends Logging {
           objs.append(obj)
         }
       } catch {
-        case eof: EOFException => {}
+        case eof: EOFException => // No-op
       }
       JavaRDD.fromRDD(sc.sc.parallelize(objs, parallelism))
     } finally {

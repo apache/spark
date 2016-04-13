@@ -182,7 +182,7 @@ private[spark] class RRunner[U](
           }
           stream.flush()
         } catch {
-          // TODO: We should propogate this error to the task thread
+          // TODO: We should propagate this error to the task thread
           case e: Exception =>
             logError("R Writer thread got an exception", e)
         } finally {
