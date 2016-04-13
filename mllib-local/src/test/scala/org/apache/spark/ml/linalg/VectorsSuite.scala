@@ -197,8 +197,6 @@ class VectorsSuite extends SparkMLFunSuite {
     malformatted.foreach { s =>
       intercept[IllegalArgumentException] {
         Vectors.parse(s)
-        // logInfo(s"Didn't detect malformatted string $s.")
-        // TODO: replace this.
       }
     }
   }
