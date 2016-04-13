@@ -17,8 +17,8 @@
 
 package org.apache.spark.network.protocol;
 
+import java.nio.charset.StandardCharsets;
 
-import com.google.common.base.Charsets;
 import io.netty.buffer.ByteBuf;
 
 /** Provides a canonical set of Encoders for simple types. */
@@ -27,11 +27,11 @@ public class Encoders {
   /** Strings are encoded with their length followed by UTF-8 bytes. */
   public static class Strings {
     public static int encodedLength(String s) {
-      return 4 + s.getBytes(Charsets.UTF_8).length;
+      return 4 + s.getBytes(StandardCharsets.UTF_8).length;
     }
 
     public static void encode(ByteBuf buf, String s) {
-      byte[] bytes = s.getBytes(Charsets.UTF_8);
+      byte[] bytes = s.getBytes(StandardCharsets.UTF_8);
       buf.writeInt(bytes.length);
       buf.writeBytes(bytes);
     }
@@ -40,7 +40,7 @@ public class Encoders {
       int length = buf.readInt();
       byte[] bytes = new byte[length];
       buf.readBytes(bytes);
-      return new String(bytes, Charsets.UTF_8);
+      return new String(bytes, StandardCharsets.UTF_8);
     }
   }
 

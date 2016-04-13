@@ -18,9 +18,45 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.Encoder
+import org.apache.spark.sql.catalyst.analysis.UnresolvedDeserializer
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.types.{ObjectType, StructType}
+import org.apache.spark.sql.types.{DataType, ObjectType, StructType}
+
+object CatalystSerde {
+  def deserialize[T : Encoder](child: LogicalPlan): DeserializeToObject = {
+    val deserializer = UnresolvedDeserializer(encoderFor[T].deserializer)
+    DeserializeToObject(Alias(deserializer, "obj")(), child)
+  }
+
+  def serialize[T : Encoder](child: LogicalPlan): SerializeFromObject = {
+    SerializeFromObject(encoderFor[T].namedExpressions, child)
+  }
+}
+
+/**
+ * Takes the input row from child and turns it into object using the given deserializer expression.
+ * The output of this operator is a single-field safe row containing the deserialized object.
+ */
+case class DeserializeToObject(
+    deserializer: Alias,
+    child: LogicalPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = deserializer.toAttribute :: Nil
+
+  def outputObjectType: DataType = deserializer.dataType
+}
+
+/**
+ * Takes the input object from child and turns in into unsafe row using the given serializer
+ * expression.  The output of its child must be a single-field row containing the input object.
+ */
+case class SerializeFromObject(
+    serializer: Seq[NamedExpression],
+    child: LogicalPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = serializer.map(_.toAttribute)
+
+  def inputObjectType: DataType = child.output.head.dataType
+}
 
 /**
  * A trait for logical operators that apply user defined functions to domain objects.
@@ -31,13 +67,6 @@ trait ObjectOperator extends LogicalPlan {
   def serializer: Seq[NamedExpression]
 
   override def output: Seq[Attribute] = serializer.map(_.toAttribute)
-
-  /**
-   * An [[ObjectOperator]] may have one or more deserializers to convert internal rows to objects.
-   * It must also provide the attributes that are available during the resolution of each
-   * deserializer.
-   */
-  def deserializers: Seq[(Expression, Seq[Attribute])]
 
   /**
    * The object type that is produced by the user defined function. Note that the return type here
@@ -71,7 +100,7 @@ object MapPartitions {
       child: LogicalPlan): MapPartitions = {
     MapPartitions(
       func.asInstanceOf[Iterator[Any] => Iterator[Any]],
-      encoderFor[T].fromRowExpression,
+      UnresolvedDeserializer(encoderFor[T].deserializer),
       encoderFor[U].namedExpressions,
       child)
   }
@@ -87,9 +116,31 @@ case class MapPartitions(
     func: Iterator[Any] => Iterator[Any],
     deserializer: Expression,
     serializer: Seq[NamedExpression],
-    child: LogicalPlan) extends UnaryNode with ObjectOperator {
-  override def deserializers: Seq[(Expression, Seq[Attribute])] = Seq(deserializer -> child.output)
+    child: LogicalPlan) extends UnaryNode with ObjectOperator
+
+object MapElements {
+  def apply[T : Encoder, U : Encoder](
+      func: AnyRef,
+      child: LogicalPlan): MapElements = {
+    MapElements(
+      func,
+      UnresolvedDeserializer(encoderFor[T].deserializer),
+      encoderFor[U].namedExpressions,
+      child)
+  }
 }
+
+/**
+ * A relation produced by applying `func` to each element of the `child`.
+ *
+ * @param deserializer used to extract the input to `func` from an input row.
+ * @param serializer use to serialize the output of `func`.
+ */
+case class MapElements(
+    func: AnyRef,
+    deserializer: Expression,
+    serializer: Seq[NamedExpression],
+    child: LogicalPlan) extends UnaryNode with ObjectOperator
 
 /** Factory for constructing new `AppendColumn` nodes. */
 object AppendColumns {
@@ -98,7 +149,7 @@ object AppendColumns {
       child: LogicalPlan): AppendColumns = {
     new AppendColumns(
       func.asInstanceOf[Any => Any],
-      encoderFor[T].fromRowExpression,
+      UnresolvedDeserializer(encoderFor[T].deserializer),
       encoderFor[U].namedExpressions,
       child)
   }
@@ -120,8 +171,6 @@ case class AppendColumns(
   override def output: Seq[Attribute] = child.output ++ newColumns
 
   def newColumns: Seq[Attribute] = serializer.map(_.toAttribute)
-
-  override def deserializers: Seq[(Expression, Seq[Attribute])] = Seq(deserializer -> child.output)
 }
 
 /** Factory for constructing new `MapGroups` nodes. */
@@ -133,8 +182,8 @@ object MapGroups {
       child: LogicalPlan): MapGroups = {
     new MapGroups(
       func.asInstanceOf[(Any, Iterator[Any]) => TraversableOnce[Any]],
-      encoderFor[K].fromRowExpression,
-      encoderFor[T].fromRowExpression,
+      UnresolvedDeserializer(encoderFor[K].deserializer, groupingAttributes),
+      UnresolvedDeserializer(encoderFor[T].deserializer, dataAttributes),
       encoderFor[U].namedExpressions,
       groupingAttributes,
       dataAttributes,
@@ -158,11 +207,7 @@ case class MapGroups(
     serializer: Seq[NamedExpression],
     groupingAttributes: Seq[Attribute],
     dataAttributes: Seq[Attribute],
-    child: LogicalPlan) extends UnaryNode with ObjectOperator {
-
-  override def deserializers: Seq[(Expression, Seq[Attribute])] =
-    Seq(keyDeserializer -> groupingAttributes, valueDeserializer -> dataAttributes)
-}
+    child: LogicalPlan) extends UnaryNode with ObjectOperator
 
 /** Factory for constructing new `CoGroup` nodes. */
 object CoGroup {
@@ -170,22 +215,24 @@ object CoGroup {
       func: (Key, Iterator[Left], Iterator[Right]) => TraversableOnce[Result],
       leftGroup: Seq[Attribute],
       rightGroup: Seq[Attribute],
-      leftData: Seq[Attribute],
-      rightData: Seq[Attribute],
+      leftAttr: Seq[Attribute],
+      rightAttr: Seq[Attribute],
       left: LogicalPlan,
       right: LogicalPlan): CoGroup = {
     require(StructType.fromAttributes(leftGroup) == StructType.fromAttributes(rightGroup))
 
     CoGroup(
       func.asInstanceOf[(Any, Iterator[Any], Iterator[Any]) => TraversableOnce[Any]],
-      encoderFor[Key].fromRowExpression,
-      encoderFor[Left].fromRowExpression,
-      encoderFor[Right].fromRowExpression,
+      // The `leftGroup` and `rightGroup` are guaranteed te be of same schema, so it's safe to
+      // resolve the `keyDeserializer` based on either of them, here we pick the left one.
+      UnresolvedDeserializer(encoderFor[Key].deserializer, leftGroup),
+      UnresolvedDeserializer(encoderFor[Left].deserializer, leftAttr),
+      UnresolvedDeserializer(encoderFor[Right].deserializer, rightAttr),
       encoderFor[Result].namedExpressions,
       leftGroup,
       rightGroup,
-      leftData,
-      rightData,
+      leftAttr,
+      rightAttr,
       left,
       right)
   }
@@ -206,10 +253,4 @@ case class CoGroup(
     leftAttr: Seq[Attribute],
     rightAttr: Seq[Attribute],
     left: LogicalPlan,
-    right: LogicalPlan) extends BinaryNode with ObjectOperator {
-
-  override def deserializers: Seq[(Expression, Seq[Attribute])] =
-    // The `leftGroup` and `rightGroup` are guaranteed te be of same schema, so it's safe to resolve
-    // the `keyDeserializer` based on either of them, here we pick the left one.
-    Seq(keyDeserializer -> leftGroup, leftDeserializer -> leftAttr, rightDeserializer -> rightAttr)
-}
+    right: LogicalPlan) extends BinaryNode with ObjectOperator

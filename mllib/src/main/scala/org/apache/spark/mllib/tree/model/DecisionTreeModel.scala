@@ -23,9 +23,10 @@ import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.{Logging, SparkContext}
+import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.tree.configuration.{Algo, FeatureType}
 import org.apache.spark.mllib.tree.configuration.Algo._
@@ -155,7 +156,7 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
         feature: Int,
         threshold: Double,
         featureType: Int,
-        categories: Seq[Double]) { // TODO: Change to List once SPARK-3365 is fixed
+        categories: Seq[Double]) {
       def toSplit: Split = {
         new Split(feature, threshold, FeatureType(featureType), categories.toList)
       }

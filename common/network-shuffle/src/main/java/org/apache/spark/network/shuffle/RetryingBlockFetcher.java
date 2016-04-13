@@ -46,7 +46,7 @@ public class RetryingBlockFetcher {
    * Used to initiate the first fetch for all blocks, and subsequently for retrying the fetch on any
    * remaining blocks.
    */
-  public static interface BlockFetchStarter {
+  public interface BlockFetchStarter {
     /**
      * Creates a new BlockFetcher to fetch the given block ids which may do some synchronous
      * bootstrapping followed by fully asynchronous block fetching.

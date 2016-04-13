@@ -136,7 +136,7 @@ class IsotonicRegressionModel @Since("1.3.0") (
     // higher than all values, in between two values or exact match.
     if (insertIndex == 0) {
       predictions.head
-    } else if (insertIndex == boundaries.length){
+    } else if (insertIndex == boundaries.length) {
       predictions.last
     } else if (foundIndex < 0) {
       linearInterpolation(

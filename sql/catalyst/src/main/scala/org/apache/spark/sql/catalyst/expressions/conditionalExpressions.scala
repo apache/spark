@@ -23,7 +23,10 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
-
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(expr1,expr2,expr3) - If expr1 is TRUE then IF() returns expr2; otherwise it returns expr3.")
+// scalastyle:on line.size.limit
 case class If(predicate: Expression, trueValue: Expression, falseValue: Expression)
   extends Expression {
 
@@ -85,8 +88,12 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
  * @param branches seq of (branch condition, branch value)
  * @param elseValue optional value for the else branch
  */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "CASE WHEN a THEN b [WHEN c THEN d]* [ELSE e] END - When a = true, returns b; when c = true, return d; else return e.")
+// scalastyle:on line.size.limit
 case class CaseWhen(branches: Seq[(Expression, Expression)], elseValue: Option[Expression] = None)
-  extends Expression {
+  extends Expression with CodegenFallback {
 
   override def children: Seq[Expression] = branches.flatMap(b => b._1 :: b._2 :: Nil) ++ elseValue
 
@@ -136,7 +143,16 @@ case class CaseWhen(branches: Seq[(Expression, Expression)], elseValue: Option[E
     }
   }
 
+  def shouldCodegen: Boolean = {
+    branches.length < CaseWhen.MAX_NUM_CASES_FOR_CODEGEN
+  }
+
   override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+    if (!shouldCodegen) {
+      // Fallback to interpreted mode if there are too many branches, as it may reach the
+      // 64K limit (limit on bytecode size for a single function).
+      return super[CodegenFallback].genCode(ctx, ev)
+    }
     // Generate code that looks like:
     //
     // condA = ...
@@ -205,12 +221,15 @@ case class CaseWhen(branches: Seq[(Expression, Expression)], elseValue: Option[E
 /** Factory methods for CaseWhen. */
 object CaseWhen {
 
+  // The maximum number of switches supported with codegen.
+  val MAX_NUM_CASES_FOR_CODEGEN = 20
+
   def apply(branches: Seq[(Expression, Expression)], elseValue: Expression): CaseWhen = {
     CaseWhen(branches, Option(elseValue))
   }
 
   /**
-   * A factory method to faciliate the creation of this expression when used in parsers.
+   * A factory method to facilitate the creation of this expression when used in parsers.
    * @param branches Expressions at even position are the branch conditions, and expressions at odd
    *                 position are branch values.
    */
@@ -244,6 +263,8 @@ object CaseKeyWhen {
  * A function that returns the least value of all parameters, skipping null values.
  * It takes at least 2 parameters, and returns null iff all parameters are null.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(n1, ...) - Returns the least value of all parameters, skipping null values.")
 case class Least(children: Seq[Expression]) extends Expression {
 
   override def nullable: Boolean = children.forall(_.nullable)
@@ -303,6 +324,8 @@ case class Least(children: Seq[Expression]) extends Expression {
  * A function that returns the greatest value of all parameters, skipping null values.
  * It takes at least 2 parameters, and returns null iff all parameters are null.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(n1, ...) - Returns the greatest value of all parameters, skipping null values.")
 case class Greatest(children: Seq[Expression]) extends Expression {
 
   override def nullable: Boolean = children.forall(_.nullable)

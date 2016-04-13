@@ -24,6 +24,7 @@ import org.apache.spark._
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.PartitionStrategy._
 import org.apache.spark.graphx.lib._
+import org.apache.spark.internal.Logging
 import org.apache.spark.storage.StorageLevel
 
 /**

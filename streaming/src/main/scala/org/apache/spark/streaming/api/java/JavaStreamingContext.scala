@@ -517,9 +517,10 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
     ssc.remember(duration)
   }
 
-  /** Add a [[org.apache.spark.streaming.scheduler.StreamingListener]] object for
-    * receiving system events related to streaming.
-    */
+  /**
+   * Add a [[org.apache.spark.streaming.scheduler.StreamingListener]] object for
+   * receiving system events related to streaming.
+   */
   def addStreamingListener(streamingListener: StreamingListener) {
     ssc.addStreamingListener(streamingListener)
   }
@@ -530,7 +531,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    * Return the current state of the context. The context can be in three possible states -
    * <ul>
    *   <li>
-   *   StreamingContextState.INTIALIZED - The context has been created, but not been started yet.
+   *   StreamingContextState.INITIALIZED - The context has been created, but not been started yet.
    *   Input DStreams, transformations and output operations can be created on the context.
    *   </li>
    *   <li>

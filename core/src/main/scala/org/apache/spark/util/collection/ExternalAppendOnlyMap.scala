@@ -26,11 +26,12 @@ import scala.collection.mutable.ArrayBuffer
 
 import com.google.common.io.ByteStreams
 
-import org.apache.spark.{Logging, SparkEnv, TaskContext}
+import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.ShuffleWriteMetrics
+import org.apache.spark.internal.Logging
 import org.apache.spark.memory.TaskMemoryManager
-import org.apache.spark.serializer.{DeserializationStream, Serializer}
+import org.apache.spark.serializer.{DeserializationStream, Serializer, SerializerManager}
 import org.apache.spark.storage.{BlockId, BlockManager}
 import org.apache.spark.util.CompletionIterator
 import org.apache.spark.util.collection.ExternalAppendOnlyMap.HashComparator
@@ -58,7 +59,8 @@ class ExternalAppendOnlyMap[K, V, C](
     mergeCombiners: (C, C) => C,
     serializer: Serializer = SparkEnv.get.serializer,
     blockManager: BlockManager = SparkEnv.get.blockManager,
-    context: TaskContext = TaskContext.get())
+    context: TaskContext = TaskContext.get(),
+    serializerManager: SerializerManager = SparkEnv.get.serializerManager)
   extends Iterable[(K, C)]
   with Serializable
   with Logging
@@ -457,7 +459,7 @@ class ExternalAppendOnlyMap[K, V, C](
           ", batchOffsets = " + batchOffsets.mkString("[", ", ", "]"))
 
         val bufferedStream = new BufferedInputStream(ByteStreams.limit(fileStream, end - start))
-        val compressedStream = blockManager.wrapForCompression(blockId, bufferedStream)
+        val compressedStream = serializerManager.wrapForCompression(blockId, bufferedStream)
         ser.deserializeStream(compressedStream)
       } else {
         // No more batches left
