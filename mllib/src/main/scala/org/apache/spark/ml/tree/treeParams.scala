@@ -481,9 +481,6 @@ private[ml] trait GBTClassifierParams extends GBTParams with TreeClassifierParam
   /** @group getParam */
   def getLossType: String = $(lossType).toLowerCase
 
-  /** @group setParam */
-  def setLossType(value: String): this.type = set(lossType, value)
-
   /** (private[ml]) Convert new loss to old loss. */
   override private[ml] def getOldLossType: OldLoss = {
     getLossType match {
@@ -518,9 +515,6 @@ private[ml] trait GBTRegressorParams extends GBTParams with TreeRegressorParams 
 
   /** @group getParam */
   def getLossType: String = $(lossType).toLowerCase
-
-  /** @group setParam */
-  def setLossType(value: String): this.type = set(lossType, value)
 
   /** (private[ml]) Convert new loss to old loss. */
   override private[ml] def getOldLossType: OldLoss = {
