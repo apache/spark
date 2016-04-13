@@ -60,7 +60,7 @@ import org.apache.spark.util.Utils
  *                     reevaluation. Partial evaluation of a partition will not increment a data
  *                     property [[Accumulable]]. Data property [[Accumulable]]s are currently
  *                     experimental and the behaviour may change in future versions.
- * @tparam R the full accumulated data
+ * @tparam R the full accumulated data (result type)
  * @tparam T partial data that can be added in
  */
 class Accumulable[R, T] private[spark] (

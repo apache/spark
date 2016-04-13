@@ -24,7 +24,6 @@ import java.util.Properties
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
-import org.apache.spark.storage.StorageLevel
 
 /**
  * A task that sends back the output to the driver application.
@@ -70,9 +69,7 @@ private[spark] class ResultTask[T, U](
     _executorDeserializeTime = System.currentTimeMillis() - deserializeStartTime
 
     metrics = Some(context.taskMetrics)
-    val itr = rdd.iterator(partition, context)
-    val result = func(context, itr)
-    result
+    func(context, rdd.iterator(partition, context))
   }
 
   // This is only callable on the driver side.
