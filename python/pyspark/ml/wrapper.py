@@ -16,6 +16,9 @@
 #
 
 from abc import ABCMeta, abstractmethod
+import sys
+if sys.version > '3':
+    unicode = str
 
 from pyspark import SparkContext
 from pyspark.sql import DataFrame
@@ -254,7 +257,8 @@ class JavaModel(JavaTransformer, Model):
         """
         super(JavaModel, self).__init__(java_model)
         if java_model is not None:
-            self.uid = java_model.uid()
+            self._java_obj = java_model
+            self._resetUid(java_model.uid())
 
     def copy(self, extra=None):
         """

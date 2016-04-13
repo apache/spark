@@ -19,6 +19,7 @@ import sys
 
 if sys.version > '3':
     basestring = str
+    unicode = str
 
 from pyspark import SparkContext
 from pyspark import since
