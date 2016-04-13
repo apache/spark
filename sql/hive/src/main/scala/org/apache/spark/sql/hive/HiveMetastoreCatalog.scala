@@ -91,7 +91,7 @@ private[hive] object HiveSerDe {
       "textfile" ->
         HiveSerDe(
           inputFormat = Option("org.apache.hadoop.mapred.TextInputFormat"),
-          outputFormat = Option("org.apache.hadoop.hive.ql.io.IgnoreKeyTextOutputFormat")),
+          outputFormat = Option("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat")),
 
       "avro" ->
         HiveSerDe(

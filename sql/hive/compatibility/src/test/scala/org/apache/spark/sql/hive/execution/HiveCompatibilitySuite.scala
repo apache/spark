@@ -416,7 +416,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "skewjoinopt18",
     "skewjoinopt9",
 
-    // IWASHERE
     // Index commands are not supported
     "drop_index",
     "drop_index_removes_partition_dirs",
@@ -538,7 +537,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "count",
     "cp_mj_rc",
     "create_insert_outputformat",
-    //"create_like_tbl_props", // TODO: results don't match
+    "create_like_tbl_props",
     "create_nested_type",
     "create_struct_table",
     "create_view_translate",
@@ -827,7 +826,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "parallel",
     "parenthesis_star_by",
     "part_inherit_tbl_props",
-    //"part_inherit_tbl_props_empty", // TODO: results don't match
+    "part_inherit_tbl_props_empty",
     "part_inherit_tbl_props_with_star",
     "partcols1",
     "partition_date",
@@ -899,7 +898,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "sort",
     "stats0",
     "stats_aggregator_error_1",
-    //"stats_empty_partition", // TODO: results don't match
+    "stats_empty_partition",
     "stats_publisher_error_1",
     "subq2",
     "tablename_with_select",
@@ -1056,7 +1055,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_xpath_long",
     "udf_xpath_short",
     "udf_xpath_string",
-    //"unicode_notation", // TODO: results don't match
+    "unicode_notation",
     "union10",
     "union11",
     "union13",
@@ -1090,8 +1089,8 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "union_date",
     "union_lateralview",
     "union_ppr",
-    //"union_remove_11", // TODO: results don't match
-    //"union_remove_3", // TODO: results don't match
+    "union_remove_11",
+    "union_remove_3",
     "union_remove_6",
     "union_script",
     "varchar_2",

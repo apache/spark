@@ -203,7 +203,7 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
         inputFormat = defaultHiveSerde.flatMap(_.inputFormat)
           .orElse(Some("org.apache.hadoop.mapred.TextInputFormat")),
         outputFormat = defaultHiveSerde.flatMap(_.outputFormat)
-          .orElse(Some("org.apache.hadoop.hive.ql.io.IgnoreKeyTextOutputFormat")),
+          .orElse(Some("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat")),
         // Note: Keep this unspecified because we use the presence of the serde to decide
         // whether to convert a table created by CTAS to a datasource table.
         serde = None,

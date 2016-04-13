@@ -159,7 +159,7 @@ class HiveDDLCommandSuite extends PlanTest {
     assert(desc.storage.serdeProperties == Map())
     assert(desc.storage.inputFormat == Some("org.apache.hadoop.mapred.TextInputFormat"))
     assert(desc.storage.outputFormat ==
-      Some("org.apache.hadoop.hive.ql.io.IgnoreKeyTextOutputFormat"))
+      Some("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"))
     assert(desc.storage.serde.isEmpty)
     assert(desc.properties == Map())
   }
@@ -332,14 +332,14 @@ class HiveDDLCommandSuite extends PlanTest {
     assert(desc.partitionColumnNames.isEmpty)
     assert(desc.sortColumnNames.isEmpty)
     assert(desc.bucketColumnNames.isEmpty)
-    assert(desc.numBuckets == 0)
+    assert(desc.numBuckets == -1)
     assert(desc.viewText.isEmpty)
     assert(desc.viewOriginalText.isEmpty)
     assert(desc.storage.locationUri.isEmpty)
     assert(desc.storage.inputFormat ==
       Some("org.apache.hadoop.mapred.TextInputFormat"))
     assert(desc.storage.outputFormat ==
-      Some("org.apache.hadoop.hive.ql.io.IgnoreKeyTextOutputFormat"))
+      Some("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"))
     assert(desc.storage.serde.isEmpty)
     assert(desc.storage.serdeProperties.isEmpty)
     assert(desc.properties.isEmpty)
@@ -497,7 +497,7 @@ class HiveDDLCommandSuite extends PlanTest {
     assert(desc.partitionColumnNames == Seq("month"))
     assert(desc.sortColumnNames.isEmpty)
     assert(desc.bucketColumnNames.isEmpty)
-    assert(desc.numBuckets == 0)
+    assert(desc.numBuckets == -1)
     assert(desc.viewText.isEmpty)
     assert(desc.viewOriginalText.isEmpty)
     assert(desc.storage.locationUri == Some("/path/to/mercury"))
