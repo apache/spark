@@ -69,6 +69,10 @@ private[streaming] class StreamingListenerBus(sparkListenerBus: LiveListenerBus)
         listener.onOutputOperationStarted(outputOperationStarted)
       case outputOperationCompleted: StreamingListenerOutputOperationCompleted =>
         listener.onOutputOperationCompleted(outputOperationCompleted)
+      case checkpointingStarted:StreamingListenerCheckPointingStarted =>
+        listener.onCheckPointingStarted(checkpointingStarted)
+      case checkPointingCompleted: StreamingListenerCheckPointingCompleted =>
+        listener.onCheckPointingCompleted(checkPointingCompleted)
       case _ =>
     }
   }

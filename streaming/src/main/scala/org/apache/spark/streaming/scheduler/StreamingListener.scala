@@ -53,6 +53,12 @@ case class StreamingListenerOutputOperationCompleted(outputOperationInfo: Output
   extends StreamingListenerEvent
 
 @DeveloperApi
+case class StreamingListenerCheckPointingStarted(time: Long) extends StreamingListenerEvent
+
+@DeveloperApi
+case class StreamingListenerCheckPointingCompleted(time: Long) extends StreamingListenerEvent
+
+@DeveloperApi
 case class StreamingListenerReceiverStarted(receiverInfo: ReceiverInfo)
   extends StreamingListenerEvent
 
@@ -72,14 +78,20 @@ case class StreamingListenerReceiverStopped(receiverInfo: ReceiverInfo)
 @DeveloperApi
 trait StreamingListener {
 
-  /** Called when a receiver has been started */
-  def onReceiverStarted(receiverStarted: StreamingListenerReceiverStarted) { }
-
   /** Called when a batch generate has been started */
   def onBatchGenerateStarted(batchGenerateStarted: StreamingListenerBatchGenerateStarted) { }
 
   /** Called when a batch generate has been completed */
   def onBatchGenerateCompleted(batchGenerateCompleted: StreamingListenerBatchGenerateCompleted) { }
+
+  /** Called when a checkpointing operation been started */
+  def onCheckPointingStarted(checkpointingStarted: StreamingListenerCheckPointingStarted) { }
+
+  /** Called when a checkpointing operation has been completed */
+  def onCheckPointingCompleted(checkPointingCompleted: StreamingListenerCheckPointingCompleted) { }
+
+  /** Called when a receiver has been started */
+  def onReceiverStarted(receiverStarted: StreamingListenerReceiverStarted) { }
 
   /** Called when a receiver has reported an error */
   def onReceiverError(receiverError: StreamingListenerReceiverError) { }

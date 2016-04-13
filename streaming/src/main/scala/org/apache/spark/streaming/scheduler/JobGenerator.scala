@@ -299,9 +299,11 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   /** Perform checkpoint for the give `time`. */
   private def doCheckpoint(time: Time, clearCheckpointDataLater: Boolean) {
     if (shouldCheckpoint && (time - graph.zeroTime).isMultipleOf(ssc.checkpointDuration)) {
+      listenerBus.post(StreamingListenerCheckPointingStarted(clock.getTimeMillis()))
       logInfo("Checkpointing graph for time " + time)
       ssc.graph.updateCheckpointData(time)
       checkpointWriter.write(new Checkpoint(ssc, time), clearCheckpointDataLater)
+      listenerBus.post(StreamingListenerCheckPointingCompleted(clock.getTimeMillis()))
     }
   }
 
