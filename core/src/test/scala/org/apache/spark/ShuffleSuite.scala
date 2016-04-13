@@ -373,7 +373,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     }
 
     val reader = manager.getReader[Int, Int](shuffleHandle, 0, 1,
-      new TaskContextImpl(1, 0, 2L, 0, taskMemoryManager, new Properties, metricsSystem, false,
+      new TaskContextImpl(1, 0, 2L, 0, taskMemoryManager, new Properties, metricsSystem,
         InternalAccumulator.create(sc)))
     val readData = reader.read().toIndexedSeq
     assert(readData === data1.toIndexedSeq || readData === data2.toIndexedSeq)
@@ -389,6 +389,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
       .set("spark.shuffle.sort.bypassMergeThreshold", "0")
       // for relocation, so we can use ShuffleExternalSorter
       .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+      .set("spark.shuffle.spillAfterRead", "true")
     sc = new SparkContext("local", "test", myConf)
     val N = 2e6.toInt
     val p = new org.apache.spark.HashPartitioner(10)
@@ -413,6 +414,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
       // pretty small, but otherwise its too easy for the structures to claim they are using 0
       // memory in these small tests
       .set("spark.shuffle.spill.initialMemoryThreshold", "5000")
+      .set("spark.shuffle.spillAfterRead", "true")
     sc = new SparkContext("local", "test", myConf)
     val N = 2e6.toInt
     val p = new org.apache.spark.HashPartitioner(10)

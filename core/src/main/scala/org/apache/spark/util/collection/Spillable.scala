@@ -28,10 +28,49 @@ import org.apache.spark.memory.{MemoryConsumer, MemoryMode, TaskMemoryManager}
 private[spark] trait Spillable[C] extends Logging {
   /**
    * Spills the current in-memory collection to disk, and releases the memory.
-   *
-   * @param collection collection to spill to disk
    */
-  protected def spill(collection: C): Unit
+  protected def spillCollection(): Unit
+
+  /**
+   * After a spill, reset any internal data structures so they are ready to accept more input data
+   */
+  protected def resetAfterSpill(): Unit
+
+  /**
+    * return an estimate of the current memory used by the collection.
+    *
+    * Note this is *not* the same as the memory requested from the memory manager, for two reasons:
+    * (1) If we allow the collection to use some initial amount of memory that is untracked, that
+    * should still be reported here. (which would lead to this amount being larger than what is
+    * tracked by the memory manager.)
+    * (2) If we've just requested a large increase in memory from the memory manager, but aren't
+    * actually *using* that memory yet, we will not report it here (which would lead to this amount
+    * being smaller than what is tracked by the memory manager.)
+    */
+  def estimateUsedMemory(): Long
+
+  /**
+   * Spills the in-memory collection, releases memory, and updates metrics.  This can be
+   * used to force a spill, even if this collection beleives it still has extra memory, to
+   * free up memory for other operators.  For example, during a stage which does a shuffle-read
+   * and a shuffle-write, after the shuffle-read is finished, we can spill to free up memory
+   * for the shuffle-write.
+   * [[maybeSpill]] can be used when the collection
+   * should only spill if it doesn't have enough memory
+   */
+  final def spill(): Unit = {
+    spill(estimateUsedMemory())
+  }
+
+  final def spill(currentMemory: Long): Unit = {
+    _spillCount += 1
+    logSpillage(currentMemory)
+    spillCollection()
+    _elementsRead = 0
+    _memoryBytesSpilled += currentMemory
+    releaseMemory()
+    resetAfterSpill()
+  }
 
   // Number of elements read from input since last spill
   protected def elementsRead: Long = _elementsRead
@@ -81,13 +120,13 @@ private[spark] trait Spillable[C] extends Logging {
 
   /**
    * Spills the current in-memory collection to disk if needed. Attempts to acquire more
-   * memory before spilling.
+   * memory before spilling.  If this does spill, it will call [[resetAfterSpill()]] to
+   * prepare the in-memory data structures to accept more data
    *
-   * @param collection collection to spill to disk
    * @param currentMemory estimated size of the collection in bytes
    * @return true if `collection` was spilled to disk; false otherwise
    */
-  protected def maybeSpill(collection: C, currentMemory: Long): Boolean = {
+  protected def maybeSpill(currentMemory: Long): Boolean = {
     var shouldSpill = false
     if (elementsRead % 32 == 0 && currentMemory >= myMemoryThreshold) {
       // Claim up to double our current memory from the shuffle memory pool
@@ -103,12 +142,7 @@ private[spark] trait Spillable[C] extends Logging {
     shouldSpill = shouldSpill || _elementsRead > numElementsForceSpillThreshold
     // Actually spill
     if (shouldSpill) {
-      _spillCount += 1
-      logSpillage(currentMemory)
-      spill(collection)
-      _elementsRead = 0
-      _memoryBytesSpilled += currentMemory
-      releaseMemory()
+      spill(currentMemory)
     }
     shouldSpill
   }

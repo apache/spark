@@ -129,6 +129,8 @@ private[spark] class ExternalSorter[K, V, C](
   private var map = new PartitionedAppendOnlyMap[K, C]
   private var buffer = new PartitionedPairBuffer[K, C]
 
+  private[this] val usingMap = aggregator.isDefined
+
   // Total spilling statistics
   private var _diskBytesSpilled = 0L
   def diskBytesSpilled: Long = _diskBytesSpilled
@@ -177,9 +179,8 @@ private[spark] class ExternalSorter[K, V, C](
 
   def insertAll(records: Iterator[Product2[K, V]]): Unit = {
     // TODO: stop combining if we find that the reduction factor isn't high
-    val shouldCombine = aggregator.isDefined
 
-    if (shouldCombine) {
+    if (usingMap) {
       // Combine values in-memory first using our AppendOnlyMap
       val mergeValue = aggregator.get.mergeValue
       val createCombiner = aggregator.get.createCombiner
@@ -191,7 +192,7 @@ private[spark] class ExternalSorter[K, V, C](
         addElementsRead()
         kv = records.next()
         map.changeValue((getPartition(kv._1), kv._1), update)
-        maybeSpillCollection(usingMap = true)
+        maybeSpillCollection()
       }
     } else {
       // Stick values into our buffer
@@ -199,29 +200,36 @@ private[spark] class ExternalSorter[K, V, C](
         addElementsRead()
         val kv = records.next()
         buffer.insert(getPartition(kv._1), kv._1, kv._2.asInstanceOf[C])
-        maybeSpillCollection(usingMap = false)
+        maybeSpillCollection()
       }
     }
   }
+
+  override protected[this] def resetAfterSpill(): Unit = {
+    if (usingMap) {
+      map = new PartitionedAppendOnlyMap[K, C]
+    } else {
+      buffer = new PartitionedPairBuffer[K, C]
+    }
+  }
+
+  override def estimateUsedMemory: Long = {
+    if (usingMap) {
+      map.estimateSize()
+    } else {
+      buffer.estimateSize()
+    }
+  }
+
 
   /**
    * Spill the current in-memory collection to disk if needed.
    *
    * @param usingMap whether we're using a map or buffer as our current in-memory collection
    */
-  private def maybeSpillCollection(usingMap: Boolean): Unit = {
-    var estimatedSize = 0L
-    if (usingMap) {
-      estimatedSize = map.estimateSize()
-      if (maybeSpill(map, estimatedSize)) {
-        map = new PartitionedAppendOnlyMap[K, C]
-      }
-    } else {
-      estimatedSize = buffer.estimateSize()
-      if (maybeSpill(buffer, estimatedSize)) {
-        buffer = new PartitionedPairBuffer[K, C]
-      }
-    }
+  private def maybeSpillCollection(): Unit = {
+    val estimatedSize = estimateUsedMemory
+    maybeSpill(estimatedSize)
 
     if (estimatedSize > _peakMemoryUsedBytes) {
       _peakMemoryUsedBytes = estimatedSize
@@ -234,7 +242,15 @@ private[spark] class ExternalSorter[K, V, C](
    *
    * @param collection whichever collection we're using (map or buffer)
    */
-  override protected[this] def spill(collection: WritablePartitionedPairCollection[K, C]): Unit = {
+  override protected[this] def spillCollection(): Unit = {
+    if(usingMap) {
+      spillCollection(map)
+    } else {
+      spillCollection(buffer)
+    }
+  }
+
+  protected[this] def spillCollection(collection: WritablePartitionedPairCollection[K, C]): Unit = {
     // Because these files may be read during shuffle, their compression must be controlled by
     // spark.shuffle.compress instead of spark.shuffle.spill.compress, so we need to use
     // createTempShuffleBlock here; see SPARK-3426 for more context.
