@@ -203,6 +203,35 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
   }
 
   /**
+   * Create a [[CreateTableLike]] command.
+   */
+  override def visitCreateTableLike(ctx: CreateTableContext): LogicalPlan = {
+    // Get the table header.
+    val (table, temp, ifNotExists, external) = visitCreateTableHeader(ctx.createTableHeader)
+    val sourceTable = visitTableIdentifier(ctx.source)
+
+    val tableType = if (external) {
+      throw new ParseException("Unsupported operation: EXTERNAL clause.", ctx)
+    } else {
+      CatalogTableType.MANAGED_TABLE
+    }
+
+    // Unsupported clauses.
+    if (temp) {
+      throw new ParseException(s"Unsupported operation: TEMPORARY clause.", ctx)
+    }
+    if (ifNotExists) {
+      throw new ParseException("Unsupported operation: IF NOT EXISTS clause.", ctx)
+    }
+    val tableDesc = CatalogTable(
+      identifier = table,
+      tableType = tableType,
+      schema = Seq[CatalogColumn].empty,
+      storage = EmptyStorageFormat)
+    CreateTableLike(tableDesc, sourceTable)
+  }
+
+  /**
    * Create or replace a view. This creates a [[CreateViewAsSelect]] command.
    *
    * For example:

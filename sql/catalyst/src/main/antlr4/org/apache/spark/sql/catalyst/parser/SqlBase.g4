@@ -55,6 +55,7 @@ statement
         rowFormat?  createFileFormat? locationSpec?
         (TBLPROPERTIES tablePropertyList)?
         (AS? query)?                                                   #createTable
+    | createTableHeader LIKE source=tableIdentifier                    #createTableLike
     | ANALYZE TABLE tableIdentifier partitionSpec? COMPUTE STATISTICS
         (identifier | FOR COLUMNS identifierSeq?)?                     #analyze
     | ALTER (TABLE | VIEW) from=tableIdentifier
@@ -136,10 +137,7 @@ statement
     ;
 
 hiveNativeCommands
-    : createTableHeader LIKE tableIdentifier
-        rowFormat?  createFileFormat? locationSpec?
-        (TBLPROPERTIES tablePropertyList)?
-    | DELETE FROM tableIdentifier (WHERE booleanExpression)?
+    : DELETE FROM tableIdentifier (WHERE booleanExpression)?
     | TRUNCATE TABLE tableIdentifier partitionSpec?
         (COLUMNS identifierList)?
     | SHOW COLUMNS (FROM | IN) tableIdentifier ((FROM|IN) identifier)?
