@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.hive
 
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.serde.serdeConstants
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, QueryTest, SaveMode}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -27,12 +29,141 @@ import org.apache.spark.sql.catalyst.dsl.plans
 import org.apache.spark.sql.catalyst.dsl.plans.DslLogicalPlan
 import org.apache.spark.sql.catalyst.expressions.JsonTuple
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, ScriptTransformation}
 import org.apache.spark.sql.hive.execution.{HiveNativeCommand, HiveSqlParser}
+import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SQLTestUtils
 
-class HiveDDLCommandSuite extends PlanTest {
-  val parser = HiveSqlParser
+class HiveDDLCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
+  private val parser = HiveSqlParser
+
+  // check if the directory for recording the data of the table exists.
+  private def tableDirectoryExists(tableIdentifier: TableIdentifier): Boolean = {
+    val expectedTablePath =
+      hiveContext.sessionState.catalog.hiveDefaultTableFilePath(tableIdentifier)
+    val filesystemPath = new Path(expectedTablePath)
+    val fs = filesystemPath.getFileSystem(sparkContext.hadoopConfiguration)
+    fs.exists(filesystemPath)
+  }
+
+  test("drop tables") {
+    withTable("tab1") {
+      val tabName = "tab1"
+
+      assert(!tableDirectoryExists(TableIdentifier(tabName)))
+      sql(s"CREATE TABLE $tabName(c1 int)")
+
+      assert(tableDirectoryExists(TableIdentifier(tabName)))
+      sql(s"DROP TABLE $tabName")
+
+      assert(!tableDirectoryExists(TableIdentifier(tabName)))
+      sql(s"DROP TABLE IF EXISTS $tabName")
+      sql(s"DROP VIEW IF EXISTS $tabName")
+    }
+  }
+
+  test("drop managed tables") {
+    withTempDir { tmpDir =>
+      val tabName = "tab1"
+      withTable(tabName) {
+        assert(tmpDir.listFiles.isEmpty)
+        sql(
+          s"""
+             |create table $tabName
+             |stored as parquet
+             |location '$tmpDir'
+             |as select 1, '3'
+          """.stripMargin)
+
+        val hiveTable =
+          hiveContext.sessionState.catalog
+            .getTableMetadata(TableIdentifier(tabName, Some("default")))
+        // It is a managed table, although it uses external in SQL
+        assert(hiveTable.tableType == CatalogTableType.MANAGED_TABLE)
+
+        assert(tmpDir.listFiles.nonEmpty)
+        sql(s"DROP TABLE $tabName")
+        // The data are deleted since the table type is not EXTERNAL
+        assert(tmpDir.listFiles == null)
+      }
+    }
+  }
+
+  test("drop external data source table") {
+    import hiveContext.implicits._
+
+    withTempDir { tmpDir =>
+      val tabName = "tab1"
+      withTable(tabName) {
+        assert(tmpDir.listFiles.isEmpty)
+
+        withSQLConf(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key -> "true") {
+          Seq(1 -> "a").toDF("i", "j")
+            .write
+            .mode(SaveMode.Overwrite)
+            .format("parquet")
+            .option("path", tmpDir.toString)
+            .saveAsTable(tabName)
+        }
+
+        val hiveTable =
+          hiveContext.sessionState.catalog
+            .getTableMetadata(TableIdentifier(tabName, Some("default")))
+        // This data source table is external table
+        assert(hiveTable.tableType == CatalogTableType.EXTERNAL_TABLE)
+
+        assert(tmpDir.listFiles.nonEmpty)
+        sql(s"DROP TABLE $tabName")
+        // The data are not deleted since the table type is EXTERNAL
+        assert(tmpDir.listFiles.nonEmpty)
+      }
+    }
+  }
+
+  test("drop views") {
+    withTable("tab1") {
+      val tabName = "tab1"
+      sqlContext.range(10).write.saveAsTable("tab1")
+      withView("view1") {
+        val viewName = "view1"
+
+        assert(tableDirectoryExists(TableIdentifier(tabName)))
+        assert(!tableDirectoryExists(TableIdentifier(viewName)))
+        sql(s"CREATE VIEW $viewName AS SELECT * FROM tab1")
+
+        assert(tableDirectoryExists(TableIdentifier(tabName)))
+        assert(!tableDirectoryExists(TableIdentifier(viewName)))
+        sql(s"DROP VIEW $viewName")
+
+        assert(tableDirectoryExists(TableIdentifier(tabName)))
+        sql(s"DROP VIEW IF EXISTS $viewName")
+      }
+    }
+  }
+
+  test("drop table using drop view") {
+    withTable("tab1") {
+      sql("CREATE TABLE tab1(c1 int)")
+      val message = intercept[AnalysisException] {
+        sql("DROP VIEW tab1")
+      }.getMessage
+      assert(message.contains("Cannot drop a table with DROP VIEW. Please use DROP TABLE instead"))
+    }
+  }
+
+  test("drop view using drop table") {
+    withTable("tab1") {
+      sqlContext.range(10).write.saveAsTable("tab1")
+      withView("view1") {
+        sql("CREATE VIEW view1 AS SELECT * FROM tab1")
+        val message = intercept[AnalysisException] {
+          sql("DROP TABLE view1")
+        }.getMessage
+        assert(message.contains("Cannot drop a view with DROP TABLE. Please use DROP VIEW instead"))
+      }
+    }
+  }
 
   private def extractTableDesc(sql: String): (CatalogTable, Boolean) = {
     parser.parsePlan(sql).collect {
@@ -66,10 +197,10 @@ class HiveDDLCommandSuite extends PlanTest {
 
     val (desc, exists) = extractTableDesc(s1)
     assert(exists)
-    assert(desc.identifier.database == Some("mydb"))
+    assert(desc.identifier.database.contains("mydb"))
     assert(desc.identifier.table == "page_view")
     assert(desc.tableType == CatalogTableType.EXTERNAL_TABLE)
-    assert(desc.storage.locationUri == Some("/user/external/page_view"))
+    assert(desc.storage.locationUri.contains("/user/external/page_view"))
     assert(desc.schema ==
       CatalogColumn("viewtime", "int") ::
       CatalogColumn("userid", "bigint") ::
@@ -84,12 +215,12 @@ class HiveDDLCommandSuite extends PlanTest {
       CatalogColumn("dt", "string", comment = Some("date type")) ::
       CatalogColumn("hour", "string", comment = Some("hour of the day")) :: Nil)
     assert(desc.storage.serdeProperties ==
-      Map((serdeConstants.SERIALIZATION_FORMAT, "\u002C"), (serdeConstants.FIELD_DELIM, "\u002C")))
-    assert(desc.storage.inputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileInputFormat"))
-    assert(desc.storage.outputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileOutputFormat"))
-    assert(desc.storage.serde ==
-      Some("org.apache.hadoop.hive.serde2.columnar.LazyBinaryColumnarSerDe"))
-    assert(desc.properties == Map(("p1", "v1"), ("p2", "v2")))
+      Map(serdeConstants.SERIALIZATION_FORMAT -> "\u002C", serdeConstants.FIELD_DELIM -> "\u002C"))
+    assert(desc.storage.inputFormat.contains("org.apache.hadoop.hive.ql.io.RCFileInputFormat"))
+    assert(desc.storage.outputFormat.contains("org.apache.hadoop.hive.ql.io.RCFileOutputFormat"))
+    assert(desc.storage.serde
+      .contains("org.apache.hadoop.hive.serde2.columnar.LazyBinaryColumnarSerDe"))
+    assert(desc.properties == Map("p1" -> "v1", "p2" -> "v2"))
   }
 
   test("Test CTAS #2") {
@@ -113,10 +244,10 @@ class HiveDDLCommandSuite extends PlanTest {
 
     val (desc, exists) = extractTableDesc(s2)
     assert(exists)
-    assert(desc.identifier.database == Some("mydb"))
+    assert(desc.identifier.database.contains("mydb"))
     assert(desc.identifier.table == "page_view")
     assert(desc.tableType == CatalogTableType.EXTERNAL_TABLE)
-    assert(desc.storage.locationUri == Some("/user/external/page_view"))
+    assert(desc.storage.locationUri.contains("/user/external/page_view"))
     assert(desc.schema ==
       CatalogColumn("viewtime", "int") ::
       CatalogColumn("userid", "bigint") ::
@@ -131,27 +262,27 @@ class HiveDDLCommandSuite extends PlanTest {
       CatalogColumn("dt", "string", comment = Some("date type")) ::
       CatalogColumn("hour", "string", comment = Some("hour of the day")) :: Nil)
     assert(desc.storage.serdeProperties == Map())
-    assert(desc.storage.inputFormat == Some("parquet.hive.DeprecatedParquetInputFormat"))
-    assert(desc.storage.outputFormat == Some("parquet.hive.DeprecatedParquetOutputFormat"))
-    assert(desc.storage.serde == Some("parquet.hive.serde.ParquetHiveSerDe"))
-    assert(desc.properties == Map(("p1", "v1"), ("p2", "v2")))
+    assert(desc.storage.inputFormat.contains("parquet.hive.DeprecatedParquetInputFormat"))
+    assert(desc.storage.outputFormat.contains("parquet.hive.DeprecatedParquetOutputFormat"))
+    assert(desc.storage.serde.contains("parquet.hive.serde.ParquetHiveSerDe"))
+    assert(desc.properties == Map("p1" -> "v1", "p2" -> "v2"))
   }
 
   test("Test CTAS #3") {
     val s3 = """CREATE TABLE page_view AS SELECT * FROM src"""
     val (desc, exists) = extractTableDesc(s3)
-    assert(exists == false)
-    assert(desc.identifier.database == None)
+    assert(!exists)
+    assert(desc.identifier.database.isEmpty)
     assert(desc.identifier.table == "page_view")
     assert(desc.tableType == CatalogTableType.MANAGED_TABLE)
-    assert(desc.storage.locationUri == None)
+    assert(desc.storage.locationUri.isEmpty)
     assert(desc.schema == Seq.empty[CatalogColumn])
-    assert(desc.viewText == None) // TODO will be SQLText
+    assert(desc.viewText.isEmpty) // TODO will be SQLText
     assert(desc.viewOriginalText.isEmpty)
     assert(desc.storage.serdeProperties == Map())
-    assert(desc.storage.inputFormat == Some("org.apache.hadoop.mapred.TextInputFormat"))
-    assert(desc.storage.outputFormat ==
-      Some("org.apache.hadoop.hive.ql.io.IgnoreKeyTextOutputFormat"))
+    assert(desc.storage.inputFormat.contains("org.apache.hadoop.mapred.TextInputFormat"))
+    assert(desc.storage.outputFormat
+      .contains("org.apache.hadoop.hive.ql.io.IgnoreKeyTextOutputFormat"))
     assert(desc.storage.serde.isEmpty)
     assert(desc.properties == Map())
   }
@@ -176,19 +307,19 @@ class HiveDDLCommandSuite extends PlanTest {
                |   FROM src
                |   ORDER BY key, value""".stripMargin
     val (desc, exists) = extractTableDesc(s5)
-    assert(exists == false)
-    assert(desc.identifier.database == None)
+    assert(!exists)
+    assert(desc.identifier.database.isEmpty)
     assert(desc.identifier.table == "ctas2")
     assert(desc.tableType == CatalogTableType.MANAGED_TABLE)
-    assert(desc.storage.locationUri == None)
+    assert(desc.storage.locationUri.isEmpty)
     assert(desc.schema == Seq.empty[CatalogColumn])
-    assert(desc.viewText == None) // TODO will be SQLText
+    assert(desc.viewText.isEmpty) // TODO will be SQLText
     assert(desc.viewOriginalText.isEmpty)
-    assert(desc.storage.serdeProperties == Map(("serde_p1" -> "p1"), ("serde_p2" -> "p2")))
-    assert(desc.storage.inputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileInputFormat"))
-    assert(desc.storage.outputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileOutputFormat"))
-    assert(desc.storage.serde == Some("org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe"))
-    assert(desc.properties == Map(("tbl_p1" -> "p11"), ("tbl_p2" -> "p22")))
+    assert(desc.storage.serdeProperties == Map("serde_p1" -> "p1", "serde_p2" -> "p2"))
+    assert(desc.storage.inputFormat.contains("org.apache.hadoop.hive.ql.io.RCFileInputFormat"))
+    assert(desc.storage.outputFormat.contains("org.apache.hadoop.hive.ql.io.RCFileOutputFormat"))
+    assert(desc.storage.serde.contains("org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe"))
+    assert(desc.properties == Map("tbl_p1" -> "p11", "tbl_p2" -> "p22"))
   }
 
   test("unsupported operations") {
