@@ -70,12 +70,14 @@ case class TungstenAggregate(
     }
   }
 
-  // This is for testing. We force TungstenAggregationIterator to fall back to sort-based
-  // aggregation once it has processed a given number of input rows.
-  private val testFallbackStartsAt: Option[Int] = {
+  // This is for testing. We force TungstenAggregationIterator to fall back to the bytes to bytes
+  // map and the sort-based aggregation once it has processed a given number of input rows.
+  private val testFallbackStartsAt: Option[(Int, Int)] = {
     sqlContext.getConf("spark.sql.TungstenAggregate.testFallbackStartsAt", null) match {
       case null | "" => None
-      case fallbackStartsAt => Some(fallbackStartsAt.toInt)
+      case fallbackStartsAt =>
+        val splits = fallbackStartsAt.split(",").map(_.trim)
+        Some((splits.head.toInt, splits.last.toInt))
     }
   }
 
@@ -593,20 +595,27 @@ case class TungstenAggregate(
       ctx.updateColumn(buffer, dt, i, ev, updateExpr(i).nullable)
     }
 
-    val (checkFallback, resetCounter, incCounter) = if (testFallbackStartsAt.isDefined) {
+    val (checkFallbackForGeneratedHashMap, checkFallbackForBytesToBytesMap, resetCounter,
+    incCounter) = if (testFallbackStartsAt.isDefined) {
       val countTerm = ctx.freshName("fallbackCounter")
       ctx.addMutableState("int", countTerm, s"$countTerm = 0;")
-      (s"$countTerm < ${testFallbackStartsAt.get}", s"$countTerm = 0;", s"$countTerm += 1;")
+      (s"$countTerm < ${testFallbackStartsAt.get._1}",
+        s"$countTerm < ${testFallbackStartsAt.get._2}", s"$countTerm = 0;", s"$countTerm += 1;")
     } else {
-      ("true", "", "")
+      ("true", "true", "", "")
     }
 
     val findOrInsertInGeneratedHashMap: Option[String] = {
       if (isAggregateHashMapEnabled) {
         Option(
           s"""
-             | $aggregateRow =
-             |   $aggregateHashMapTerm.findOrInsert(${groupByKeys.map(_.value).mkString(", ")});
+             |if ($checkFallbackForGeneratedHashMap) {
+             |  ${groupByKeys.map(_.code).mkString("\n")}
+             |  if (${groupByKeys.map("!" + _.isNull).mkString(" && ")}) {
+             |    $aggregateRow =
+             |      $aggregateHashMapTerm.findOrInsert(${groupByKeys.map(_.value).mkString(", ")});
+             |  }
+             |}
          """.stripMargin)
       } else {
         None
@@ -619,7 +628,7 @@ case class TungstenAggregate(
          |   // generate grouping key
          |   ${keyCode.code.trim}
          |   ${hashEval.code.trim}
-         |   if ($checkFallback) {
+         |   if ($checkFallbackForBytesToBytesMap) {
          |     // try to get the buffer from hash map
          |     $buffer = $hashMapTerm.getAggregationBufferFromUnsafeRow($key, ${hashEval.value});
          |   }

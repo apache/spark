@@ -191,10 +191,11 @@ class ColumnarAggMapCodeGenerator(
        |      ${groupingKeys.zipWithIndex.map(k =>
                 s"batch.column(${k._2}).putLong(numRows, ${k._1._2});").mkString("\n")}
        |      ${bufferValues.zipWithIndex.map(k =>
-                s"batch.column(${groupingKeys.length + k._2}).putLong(numRows, 0);")
+                s"batch.column(${groupingKeys.length + k._2}).putNull(numRows);")
                 .mkString("\n")}
        |      buckets[idx] = numRows++;
        |      batch.setNumRows(numRows);
+       |      aggregateBufferBatch.setNumRows(numRows);
        |      return aggregateBufferBatch.getRow(buckets[idx]);
        |    } else if (equals(idx, ${groupingKeys.map(_._2).mkString(", ")})) {
        |      return aggregateBufferBatch.getRow(buckets[idx]);
