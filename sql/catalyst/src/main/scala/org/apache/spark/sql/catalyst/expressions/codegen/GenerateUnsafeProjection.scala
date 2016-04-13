@@ -164,7 +164,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
     s"""
       $resetWriter
-      ${ctx.splitExpressions(row, writeFields)}
+      ${ctx.splitExpressions(row, writeFields, inputTypes)}
     """.trim
   }
 
