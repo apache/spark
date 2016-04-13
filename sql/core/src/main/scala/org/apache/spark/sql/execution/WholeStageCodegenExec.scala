@@ -118,7 +118,6 @@ trait CodegenSupport extends SparkPlan {
   final def consume(ctx: CodegenContext, outputVars: Seq[ExprCode], row: String = null): String = {
     val inputVars =
       if (row != null) {
-        assert(ctx.isRow)
         ctx.currentVars = null
         ctx.INPUT_ROW = row
         output.zipWithIndex.map { case (attr, i) =>
