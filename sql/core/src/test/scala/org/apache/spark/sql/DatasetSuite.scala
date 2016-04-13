@@ -624,7 +624,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("SPARK-14554: Dataset.map may generate wrong java code for wide table") {
     val wideDF = sqlContext.range(10).select(Seq.tabulate(1000) {i => ('id + i).as(s"c$i")} : _*)
     // Make sure the generated code for this plan can compile and execute.
-    wideDF.map(_.getLong(0)).collect()
+    checkDataset(wideDF.map(_.getLong(0)), 0L until 10 : _*)
   }
 }
 
