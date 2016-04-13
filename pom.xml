@@ -94,6 +94,7 @@
     <module>core</module>
     <module>graphx</module>
     <module>mllib</module>
+    <module>mllib-local</module>
     <module>tools</module>
     <module>streaming</module>
     <module>sql/catalyst</module>
@@ -665,7 +666,7 @@
         <groupId>com.spotify</groupId>
         <artifactId>docker-client</artifactId>
         <classifier>shaded</classifier>
-        <version>3.4.0</version>
+        <version>3.6.6</version>
         <scope>test</scope>
         <exclusions>
           <exclusion>
@@ -2253,7 +2254,7 @@
           <failOnViolation>false</failOnViolation>
           <includeTestSourceDirectory>true</includeTestSourceDirectory>
           <failOnWarning>false</failOnWarning>
-          <sourceDirectory>${basedir}/src/main/java</sourceDirectory>
+          <sourceDirectories>${basedir}/src/main/java,${basedir}/src/main/scala</sourceDirectories>
           <testSourceDirectory>${basedir}/src/test/java</testSourceDirectory>
           <configLocation>dev/checkstyle.xml</configLocation>
           <outputFile>${basedir}/target/checkstyle-output.xml</outputFile>

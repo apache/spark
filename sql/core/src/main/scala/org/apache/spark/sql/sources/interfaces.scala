@@ -129,8 +129,17 @@ trait SchemaRelationProvider {
  * Implemented by objects that can produce a streaming [[Source]] for a specific format or system.
  */
 trait StreamSourceProvider {
+
+  /** Returns the name and schema of the source that can be used to continually read data. */
+  def sourceSchema(
+      sqlContext: SQLContext,
+      schema: Option[StructType],
+      providerName: String,
+      parameters: Map[String, String]): (String, StructType)
+
   def createSource(
       sqlContext: SQLContext,
+      metadataPath: String,
       schema: Option[StructType],
       providerName: String,
       parameters: Map[String, String]): Source
@@ -457,16 +466,6 @@ trait FileFormat {
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory
-
-  def buildInternalScan(
-      sqlContext: SQLContext,
-      dataSchema: StructType,
-      requiredColumns: Array[String],
-      filters: Array[Filter],
-      bucketSet: Option[BitSet],
-      inputFiles: Seq[FileStatus],
-      broadcastedConf: Broadcast[SerializableConfiguration],
-      options: Map[String, String]): RDD[InternalRow]
 
   /**
    * Returns whether this format support returning columnar batch or not.

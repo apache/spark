@@ -145,12 +145,6 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
-  val USE_FILE_SCAN = SQLConfigBuilder("spark.sql.sources.fileScan")
-    .internal()
-    .doc("Use the new FileScanRDD path for reading HDSF based data sources.")
-    .booleanConf
-    .createWithDefault(true)
-
   val PARQUET_SCHEMA_MERGING_ENABLED = SQLConfigBuilder("spark.sql.parquet.mergeSchema")
     .doc("When true, the Parquet data source merges schemas collected from all data files, " +
          "otherwise the schema is picked from the summary file or a random data file " +
@@ -193,7 +187,7 @@ object SQLConf {
     .stringConf
     .transform(_.toLowerCase())
     .checkValues(Set("uncompressed", "snappy", "gzip", "lzo"))
-    .createWithDefault("gzip")
+    .createWithDefault("snappy")
 
   val PARQUET_FILTER_PUSHDOWN_ENABLED = SQLConfigBuilder("spark.sql.parquet.filterPushdown")
     .doc("Enables Parquet filter push-down optimization when set to true.")
@@ -480,8 +474,6 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def filesOpenCostInBytes: Long = getConf(FILES_OPEN_COST_IN_BYTES)
 
   def useCompression: Boolean = getConf(COMPRESS_CACHED)
-
-  def useFileScan: Boolean = getConf(USE_FILE_SCAN)
 
   def parquetCompressionCodec: String = getConf(PARQUET_COMPRESSION)
 

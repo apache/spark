@@ -31,7 +31,7 @@ import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg.{BLAS, Vector}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
 
@@ -196,7 +196,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
   def setSolver(value: String): this.type = set(solver, value)
   setDefault(solver -> "irls")
 
-  override protected def train(dataset: DataFrame): GeneralizedLinearRegressionModel = {
+  override protected def train(dataset: Dataset[_]): GeneralizedLinearRegressionModel = {
     val familyObj = Family.fromName($(family))
     val linkObj = if (isDefined(link)) {
       Link.fromName($(link))
@@ -237,7 +237,8 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
         predictionColName,
         model,
         wlsModel.diagInvAtWA.toArray,
-        1)
+        1,
+        getSolver)
       return model.setSummary(trainingSummary)
     }
 
@@ -257,7 +258,8 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
       predictionColName,
       model,
       irlsModel.diagInvAtWA.toArray,
-      irlsModel.numIterations)
+      irlsModel.numIterations,
+      getSolver)
 
     model.setSummary(trainingSummary)
   }
@@ -781,6 +783,7 @@ object GeneralizedLinearRegressionModel extends MLReadable[GeneralizedLinearRegr
  * @param model the model that should be summarized
  * @param diagInvAtWA diagonal of matrix (A^T * W * A)^-1 in the last iteration
  * @param numIterations number of iterations
+ * @param solver the solver algorithm used for model training
  */
 @Since("2.0.0")
 @Experimental
@@ -789,7 +792,8 @@ class GeneralizedLinearRegressionSummary private[regression] (
     @Since("2.0.0") val predictionCol: String,
     @Since("2.0.0") val model: GeneralizedLinearRegressionModel,
     private val diagInvAtWA: Array[Double],
-    @Since("2.0.0") val numIterations: Int) extends Serializable {
+    @Since("2.0.0") val numIterations: Int,
+    @Since("2.0.0") val solver: String) extends Serializable {
 
   import GeneralizedLinearRegression._
 

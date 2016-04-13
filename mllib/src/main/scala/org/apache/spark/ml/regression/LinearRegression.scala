@@ -38,7 +38,7 @@ import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS._
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.DoubleType
 import org.apache.spark.storage.StorageLevel
@@ -158,7 +158,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
   def setSolver(value: String): this.type = set(solver, value)
   setDefault(solver -> "auto")
 
-  override protected def train(dataset: DataFrame): LinearRegressionModel = {
+  override protected def train(dataset: Dataset[_]): LinearRegressionModel = {
     // Extract the number of features before deciding optimization solver.
     val numFeatures = dataset.select(col($(featuresCol))).limit(1).rdd.map {
       case Row(features: Vector) => features.size
@@ -417,7 +417,7 @@ class LinearRegressionModel private[ml] (
    * @param dataset Test dataset to evaluate model on.
    */
   @Since("2.0.0")
-  def evaluate(dataset: DataFrame): LinearRegressionSummary = {
+  def evaluate(dataset: Dataset[_]): LinearRegressionSummary = {
     // Handle possible missing or invalid prediction columns
     val (summaryModel, predictionColName) = findSummaryModelAndPredictionCol()
     new LinearRegressionSummary(summaryModel.transform(dataset), predictionColName,

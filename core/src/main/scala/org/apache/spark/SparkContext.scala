@@ -602,8 +602,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /**
-   * Set a local property that affects jobs submitted from this thread, such as the
-   * Spark fair scheduler pool.
+   * Set a local property that affects jobs submitted from this thread, such as the Spark fair
+   * scheduler pool. User-defined properties may also be set here. These properties are propagated
+   * through to worker tasks and can be accessed there via
+   * [[org.apache.spark.TaskContext#getLocalProperty]].
    */
   def setLocalProperty(key: String, value: String) {
     if (value == null) {
@@ -2425,9 +2427,8 @@ object SparkContext extends Logging {
         } catch {
           // TODO: Enumerate the exact reasons why it can fail
           // But irrespective of it, it means we cannot proceed !
-          case e: Exception => {
+          case e: Exception =>
             throw new SparkException("YARN mode not available ?", e)
-          }
         }
         val backend = try {
           val clazz =
@@ -2435,9 +2436,8 @@ object SparkContext extends Logging {
           val cons = clazz.getConstructor(classOf[TaskSchedulerImpl], classOf[SparkContext])
           cons.newInstance(scheduler, sc).asInstanceOf[CoarseGrainedSchedulerBackend]
         } catch {
-          case e: Exception => {
+          case e: Exception =>
             throw new SparkException("YARN mode not available ?", e)
-          }
         }
         scheduler.initialize(backend)
         (backend, scheduler)
@@ -2449,9 +2449,8 @@ object SparkContext extends Logging {
           cons.newInstance(sc).asInstanceOf[TaskSchedulerImpl]
 
         } catch {
-          case e: Exception => {
+          case e: Exception =>
             throw new SparkException("YARN mode not available ?", e)
-          }
         }
 
         val backend = try {
@@ -2460,9 +2459,8 @@ object SparkContext extends Logging {
           val cons = clazz.getConstructor(classOf[TaskSchedulerImpl], classOf[SparkContext])
           cons.newInstance(scheduler, sc).asInstanceOf[CoarseGrainedSchedulerBackend]
         } catch {
-          case e: Exception => {
+          case e: Exception =>
             throw new SparkException("YARN mode not available ?", e)
-          }
         }
 
         scheduler.initialize(backend)

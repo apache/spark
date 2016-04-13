@@ -36,7 +36,7 @@ import org.apache.spark.mllib.linalg.BLAS._
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions.{col, lit}
 import org.apache.spark.sql.types.DoubleType
 import org.apache.spark.storage.StorageLevel
@@ -257,12 +257,12 @@ class LogisticRegression @Since("1.2.0") (
     this
   }
 
-  override protected[spark] def train(dataset: DataFrame): LogisticRegressionModel = {
+  override protected[spark] def train(dataset: Dataset[_]): LogisticRegressionModel = {
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
     train(dataset, handlePersistence)
   }
 
-  protected[spark] def train(dataset: DataFrame, handlePersistence: Boolean):
+  protected[spark] def train(dataset: Dataset[_], handlePersistence: Boolean):
       LogisticRegressionModel = {
     val w = if ($(weightCol).isEmpty) lit(1.0) else col($(weightCol))
     val instances: RDD[Instance] =
@@ -272,6 +272,10 @@ class LogisticRegression @Since("1.2.0") (
       }
 
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
+
+    val instr = Instrumentation.create(this, instances)
+    instr.logParams(regParam, elasticNetParam, standardization, threshold,
+      maxIter, tol, fitIntercept)
 
     val (summarizer, labelSummarizer) = {
       val seqOp = (c: (MultivariateOnlineSummarizer, MultiClassSummarizer),
@@ -290,6 +294,9 @@ class LogisticRegression @Since("1.2.0") (
     val numInvalid = labelSummarizer.countInvalid
     val numClasses = histogram.length
     val numFeatures = summarizer.mean.size
+
+    instr.logNumClasses(numClasses)
+    instr.logNumFeatures(numFeatures)
 
     val (coefficients, intercept, objectiveHistory) = {
       if (numInvalid != 0) {
@@ -444,7 +451,9 @@ class LogisticRegression @Since("1.2.0") (
       $(labelCol),
       $(featuresCol),
       objectiveHistory)
-    model.setSummary(logRegSummary)
+    val m = model.setSummary(logRegSummary)
+    instr.logSuccess(m)
+    m
   }
 
   @Since("1.4.0")
@@ -544,7 +553,7 @@ class LogisticRegressionModel private[spark] (
    * @param dataset Test dataset to evaluate model on.
    */
   @Since("2.0.0")
-  def evaluate(dataset: DataFrame): LogisticRegressionSummary = {
+  def evaluate(dataset: Dataset[_]): LogisticRegressionSummary = {
     // Handle possible missing or invalid prediction columns
     val (summaryModel, probabilityColName) = findSummaryModelAndProbabilityCol()
     new BinaryLogisticRegressionSummary(summaryModel.transform(dataset),

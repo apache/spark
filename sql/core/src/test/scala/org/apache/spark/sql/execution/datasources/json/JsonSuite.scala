@@ -1664,4 +1664,19 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       )
     }
   }
+
+  test("wide nested json table") {
+    val nested = (1 to 100).map { i =>
+      s"""
+         |"c$i": $i
+       """.stripMargin
+    }.mkString(", ")
+    val json = s"""
+       |{"a": [{$nested}], "b": [{$nested}]}
+     """.stripMargin
+    val rdd = sqlContext.sparkContext.makeRDD(Seq(json))
+    val df = sqlContext.read.json(rdd)
+    assert(df.schema.size === 2)
+    df.collect()
+  }
 }
