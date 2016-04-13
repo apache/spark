@@ -129,8 +129,17 @@ trait SchemaRelationProvider {
  * Implemented by objects that can produce a streaming [[Source]] for a specific format or system.
  */
 trait StreamSourceProvider {
+
+  /** Returns the name and schema of the source that can be used to continually read data. */
+  def sourceSchema(
+      sqlContext: SQLContext,
+      schema: Option[StructType],
+      providerName: String,
+      parameters: Map[String, String]): (String, StructType)
+
   def createSource(
       sqlContext: SQLContext,
+      metadataPath: String,
       schema: Option[StructType],
       providerName: String,
       parameters: Map[String, String]): Source
@@ -152,19 +161,19 @@ trait StreamSinkProvider {
 @DeveloperApi
 trait CreatableRelationProvider {
   /**
-    * Creates a relation with the given parameters based on the contents of the given
-    * DataFrame. The mode specifies the expected behavior of createRelation when
-    * data already exists.
-    * Right now, there are three modes, Append, Overwrite, and ErrorIfExists.
-    * Append mode means that when saving a DataFrame to a data source, if data already exists,
-    * contents of the DataFrame are expected to be appended to existing data.
-    * Overwrite mode means that when saving a DataFrame to a data source, if data already exists,
-    * existing data is expected to be overwritten by the contents of the DataFrame.
-    * ErrorIfExists mode means that when saving a DataFrame to a data source,
-    * if data already exists, an exception is expected to be thrown.
-     *
-     * @since 1.3.0
-    */
+   * Creates a relation with the given parameters based on the contents of the given
+   * DataFrame. The mode specifies the expected behavior of createRelation when
+   * data already exists.
+   * Right now, there are three modes, Append, Overwrite, and ErrorIfExists.
+   * Append mode means that when saving a DataFrame to a data source, if data already exists,
+   * contents of the DataFrame are expected to be appended to existing data.
+   * Overwrite mode means that when saving a DataFrame to a data source, if data already exists,
+   * existing data is expected to be overwritten by the contents of the DataFrame.
+   * ErrorIfExists mode means that when saving a DataFrame to a data source,
+   * if data already exists, an exception is expected to be thrown.
+   *
+   * @since 1.3.0
+   */
   def createRelation(
       sqlContext: SQLContext,
       mode: SaveMode,
@@ -439,6 +448,15 @@ trait FileFormat {
       files: Seq[FileStatus]): Option[StructType]
 
   /**
+   * Prepares a read job and returns a potentially updated data source option [[Map]]. This method
+   * can be useful for collecting necessary global information for scanning input data.
+   */
+  def prepareRead(
+      sqlContext: SQLContext,
+      options: Map[String, String],
+      files: Seq[FileStatus]): Map[String, String] = options
+
+  /**
    * Prepares a write job and returns an [[OutputWriterFactory]].  Client side job preparation can
    * be put here.  For example, user defined output committer can be configured here
    * by setting the output committer class in the conf of spark.sql.sources.outputCommitterClass.
@@ -449,15 +467,14 @@ trait FileFormat {
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory
 
-  def buildInternalScan(
-      sqlContext: SQLContext,
-      dataSchema: StructType,
-      requiredColumns: Array[String],
-      filters: Array[Filter],
-      bucketSet: Option[BitSet],
-      inputFiles: Seq[FileStatus],
-      broadcastedConf: Broadcast[SerializableConfiguration],
-      options: Map[String, String]): RDD[InternalRow]
+  /**
+   * Returns whether this format support returning columnar batch or not.
+   *
+   * TODO: we should just have different traits for the different formats.
+   */
+  def supportBatch(sqlContext: SQLContext, dataSchema: StructType): Boolean = {
+    false
+  }
 
   /**
    * Returns a function that can be used to read a single file in as an Iterator of InternalRow.

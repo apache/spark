@@ -22,7 +22,7 @@ import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
 import org.apache.spark.ml.tree.LeafNode
 import org.apache.spark.ml.tree.impl.TreeTests
-import org.apache.spark.ml.util.MLTestingUtils
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{EnsembleTestHelper, GradientBoostedTrees => OldGBT}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
@@ -31,11 +31,11 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.util.Utils
 
-
 /**
  * Test suite for [[GBTClassifier]].
  */
-class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
+class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
+  with DefaultReadWriteTest {
 
   import GBTClassifierSuite.compareAPIs
 
@@ -102,6 +102,14 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
     Utils.deleteRecursively(tempDir)
   }
 
+  test("should support all NumericType labels and not support other types") {
+    val gbt = new GBTClassifier().setMaxDepth(1)
+    MLTestingUtils.checkNumericTypes[GBTClassificationModel, GBTClassifier](
+      gbt, isClassification = true, sqlContext) { (expected, actual) =>
+        TreeTests.checkEqual(expected, actual)
+      }
+  }
+
   // TODO: Reinstate test once runWithValidation is implemented   SPARK-7132
   /*
   test("runWithValidation stops early and performs better on a validation dataset") {
@@ -149,27 +157,23 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
   // Tests of model save/load
   /////////////////////////////////////////////////////////////////////////////
 
-  // TODO: Reinstate test once save/load are implemented  SPARK-6725
-  /*
   test("model save/load") {
-    val tempDir = Utils.createTempDir()
-    val path = tempDir.toURI.toString
-
-    val trees = Range(0, 3).map(_ => OldDecisionTreeSuite.createModel(OldAlgo.Regression)).toArray
-    val treeWeights = Array(0.1, 0.3, 1.1)
-    val oldModel = new OldGBTModel(OldAlgo.Classification, trees, treeWeights)
-    val newModel = GBTClassificationModel.fromOld(oldModel)
-
-    // Save model, load it back, and compare.
-    try {
-      newModel.save(sc, path)
-      val sameNewModel = GBTClassificationModel.load(sc, path)
-      TreeTests.checkEqual(newModel, sameNewModel)
-    } finally {
-      Utils.deleteRecursively(tempDir)
+    def checkModelData(
+        model: GBTClassificationModel,
+        model2: GBTClassificationModel): Unit = {
+      TreeTests.checkEqual(model, model2)
+      assert(model.numFeatures === model2.numFeatures)
     }
+
+    val gbt = new GBTClassifier()
+    val rdd = TreeTests.getTreeReadWriteData(sc)
+
+    val allParamSettings = TreeTests.allParamSettings ++ Map("lossType" -> "logistic")
+
+    val continuousData: DataFrame =
+      TreeTests.setMetadata(rdd, Map.empty[Int, Int], numClasses = 2)
+    testEstimatorAndModelReadWrite(gbt, continuousData, allParamSettings, checkModelData)
   }
-  */
 }
 
 private object GBTClassifierSuite extends SparkFunSuite {

@@ -36,8 +36,9 @@ import org.apache.spark.mllib.linalg.BLAS._
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions.{col, lit}
+import org.apache.spark.sql.types.DoubleType
 import org.apache.spark.storage.StorageLevel
 
 /**
@@ -256,21 +257,25 @@ class LogisticRegression @Since("1.2.0") (
     this
   }
 
-  override protected[spark] def train(dataset: DataFrame): LogisticRegressionModel = {
+  override protected[spark] def train(dataset: Dataset[_]): LogisticRegressionModel = {
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
     train(dataset, handlePersistence)
   }
 
-  protected[spark] def train(dataset: DataFrame, handlePersistence: Boolean):
+  protected[spark] def train(dataset: Dataset[_], handlePersistence: Boolean):
       LogisticRegressionModel = {
     val w = if ($(weightCol).isEmpty) lit(1.0) else col($(weightCol))
     val instances: RDD[Instance] =
-      dataset.select(col($(labelCol)), w, col($(featuresCol))).rdd.map {
+      dataset.select(col($(labelCol)).cast(DoubleType), w, col($(featuresCol))).rdd.map {
         case Row(label: Double, weight: Double, features: Vector) =>
           Instance(label, weight, features)
       }
 
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
+
+    val instr = Instrumentation.create(this, instances)
+    instr.logParams(regParam, elasticNetParam, standardization, threshold,
+      maxIter, tol, fitIntercept)
 
     val (summarizer, labelSummarizer) = {
       val seqOp = (c: (MultivariateOnlineSummarizer, MultiClassSummarizer),
@@ -289,6 +294,9 @@ class LogisticRegression @Since("1.2.0") (
     val numInvalid = labelSummarizer.countInvalid
     val numClasses = histogram.length
     val numFeatures = summarizer.mean.size
+
+    instr.logNumClasses(numClasses)
+    instr.logNumFeatures(numFeatures)
 
     val (coefficients, intercept, objectiveHistory) = {
       if (numInvalid != 0) {
@@ -361,7 +369,7 @@ class LogisticRegression @Since("1.2.0") (
         if (optInitialModel.isDefined && optInitialModel.get.coefficients.size != numFeatures) {
           val vec = optInitialModel.get.coefficients
           logWarning(
-            s"Initial coefficients provided ${vec} did not match the expected size ${numFeatures}")
+            s"Initial coefficients provided $vec did not match the expected size $numFeatures")
         }
 
         if (optInitialModel.isDefined && optInitialModel.get.coefficients.size == numFeatures) {
@@ -443,7 +451,9 @@ class LogisticRegression @Since("1.2.0") (
       $(labelCol),
       $(featuresCol),
       objectiveHistory)
-    model.setSummary(logRegSummary)
+    val m = model.setSummary(logRegSummary)
+    instr.logSuccess(m)
+    m
   }
 
   @Since("1.4.0")
@@ -522,7 +532,7 @@ class LogisticRegressionModel private[spark] (
       (LogisticRegressionModel, String) = {
     $(probabilityCol) match {
       case "" =>
-        val probabilityColName = "probability_" + java.util.UUID.randomUUID.toString()
+        val probabilityColName = "probability_" + java.util.UUID.randomUUID.toString
         (copy(ParamMap.empty).setProbabilityCol(probabilityColName), probabilityColName)
       case p => (this, p)
     }
@@ -543,7 +553,7 @@ class LogisticRegressionModel private[spark] (
    * @param dataset Test dataset to evaluate model on.
    */
   @Since("2.0.0")
-  def evaluate(dataset: DataFrame): LogisticRegressionSummary = {
+  def evaluate(dataset: Dataset[_]): LogisticRegressionSummary = {
     // Handle possible missing or invalid prediction columns
     val (summaryModel, probabilityColName) = findSummaryModelAndProbabilityCol()
     new BinaryLogisticRegressionSummary(summaryModel.transform(dataset),
@@ -773,13 +783,13 @@ sealed trait LogisticRegressionTrainingSummary extends LogisticRegressionSummary
  */
 sealed trait LogisticRegressionSummary extends Serializable {
 
-  /** Dataframe outputted by the model's `transform` method. */
+  /** Dataframe output by the model's `transform` method. */
   def predictions: DataFrame
 
-  /** Field in "predictions" which gives the calibrated probability of each instance as a vector. */
+  /** Field in "predictions" which gives the probability of each class as a vector. */
   def probabilityCol: String
 
-  /** Field in "predictions" which gives the true label of each instance. */
+  /** Field in "predictions" which gives the true label of each instance (if available). */
   def labelCol: String
 
   /** Field in "predictions" which gives the features of each instance as a vector. */
@@ -791,9 +801,9 @@ sealed trait LogisticRegressionSummary extends Serializable {
  * :: Experimental ::
  * Logistic regression training results.
  *
- * @param predictions dataframe outputted by the model's `transform` method.
- * @param probabilityCol field in "predictions" which gives the calibrated probability of
- *                       each instance as a vector.
+ * @param predictions dataframe output by the model's `transform` method.
+ * @param probabilityCol field in "predictions" which gives the probability of
+ *                       each class as a vector.
  * @param labelCol field in "predictions" which gives the true label of each instance.
  * @param featuresCol field in "predictions" which gives the features of each instance as a vector.
  * @param objectiveHistory objective function (scaled loss + regularization) at each iteration.
@@ -815,9 +825,9 @@ class BinaryLogisticRegressionTrainingSummary private[classification] (
  * :: Experimental ::
  * Binary Logistic regression results for a given model.
  *
- * @param predictions dataframe outputted by the model's `transform` method.
- * @param probabilityCol field in "predictions" which gives the calibrated probability of
- *                       each instance.
+ * @param predictions dataframe output by the model's `transform` method.
+ * @param probabilityCol field in "predictions" which gives the probability of
+ *                       each class as a vector.
  * @param labelCol field in "predictions" which gives the true label of each instance.
  * @param featuresCol field in "predictions" which gives the features of each instance as a vector.
  */

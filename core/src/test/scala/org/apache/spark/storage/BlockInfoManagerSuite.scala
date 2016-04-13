@@ -17,6 +17,8 @@
 
 package org.apache.spark.storage
 
+import java.util.Properties
+
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
@@ -58,7 +60,8 @@ class BlockInfoManagerSuite extends SparkFunSuite with BeforeAndAfterEach {
 
   private def withTaskId[T](taskAttemptId: Long)(block: => T): T = {
     try {
-      TaskContext.setTaskContext(new TaskContextImpl(0, 0, taskAttemptId, 0, null, null))
+      TaskContext.setTaskContext(
+        new TaskContextImpl(0, 0, taskAttemptId, 0, null, new Properties, null))
       block
     } finally {
       TaskContext.unset()

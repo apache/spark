@@ -445,55 +445,6 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
     }
   }
 
-  testQuietly("SPARK-6352 DirectParquetOutputCommitter") {
-    val clonedConf = new Configuration(hadoopConfiguration)
-
-    // Write to a parquet file and let it fail.
-    // _temporary should be missing if direct output committer works.
-    try {
-      hadoopConfiguration.set("spark.sql.parquet.output.committer.class",
-        classOf[DirectParquetOutputCommitter].getCanonicalName)
-      sqlContext.udf.register("div0", (x: Int) => x / 0)
-      withTempPath { dir =>
-        intercept[org.apache.spark.SparkException] {
-          sqlContext.sql("select div0(1) as div0").write.parquet(dir.getCanonicalPath)
-        }
-        val path = new Path(dir.getCanonicalPath, "_temporary")
-        val fs = path.getFileSystem(hadoopConfiguration)
-        assert(!fs.exists(path))
-      }
-    } finally {
-      // Hadoop 1 doesn't have `Configuration.unset`
-      hadoopConfiguration.clear()
-      clonedConf.asScala.foreach(entry => hadoopConfiguration.set(entry.getKey, entry.getValue))
-    }
-  }
-
-  testQuietly("SPARK-9849 DirectParquetOutputCommitter qualified name backwards compatiblity") {
-    val clonedConf = new Configuration(hadoopConfiguration)
-
-    // Write to a parquet file and let it fail.
-    // _temporary should be missing if direct output committer works.
-    try {
-      hadoopConfiguration.set("spark.sql.parquet.output.committer.class",
-        "org.apache.spark.sql.parquet.DirectParquetOutputCommitter")
-      sqlContext.udf.register("div0", (x: Int) => x / 0)
-      withTempPath { dir =>
-        intercept[org.apache.spark.SparkException] {
-          sqlContext.sql("select div0(1) as div0").write.parquet(dir.getCanonicalPath)
-        }
-        val path = new Path(dir.getCanonicalPath, "_temporary")
-        val fs = path.getFileSystem(hadoopConfiguration)
-        assert(!fs.exists(path))
-      }
-    } finally {
-      // Hadoop 1 doesn't have `Configuration.unset`
-      hadoopConfiguration.clear()
-      clonedConf.asScala.foreach(entry => hadoopConfiguration.set(entry.getKey, entry.getValue))
-    }
-  }
-
-
   test("SPARK-8121: spark.sql.parquet.output.committer.class shouldn't be overridden") {
     withTempPath { dir =>
       val clonedConf = new Configuration(hadoopConfiguration)

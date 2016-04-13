@@ -88,9 +88,10 @@ trait PredicateHelper {
     expr.references.subsetOf(plan.outputSet)
 }
 
-
+@ExpressionDescription(
+  usage = "_FUNC_ a - Logical not")
 case class Not(child: Expression)
-  extends UnaryExpression with Predicate with ImplicitCastInputTypes {
+  extends UnaryExpression with Predicate with ImplicitCastInputTypes with NullIntolerant {
 
   override def toString: String = s"NOT $child"
 
@@ -109,6 +110,8 @@ case class Not(child: Expression)
 /**
  * Evaluates to `true` if `list` contains `value`.
  */
+@ExpressionDescription(
+  usage = "expr _FUNC_(val1, val2, ...) - Returns true if expr equals to any valN.")
 case class In(value: Expression, list: Seq[Expression]) extends Predicate
     with ImplicitCastInputTypes {
 
@@ -243,6 +246,8 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
   }
 }
 
+@ExpressionDescription(
+  usage = "a _FUNC_ b - Logical AND.")
 case class And(left: Expression, right: Expression) extends BinaryOperator with Predicate {
 
   override def inputType: AbstractDataType = BooleanType
@@ -306,7 +311,8 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
   }
 }
 
-
+@ExpressionDescription(
+  usage = "a _FUNC_ b - Logical OR.")
 case class Or(left: Expression, right: Expression) extends BinaryOperator with Predicate {
 
   override def inputType: AbstractDataType = BooleanType
@@ -401,8 +407,10 @@ private[sql] object Equality {
   }
 }
 
-
-case class EqualTo(left: Expression, right: Expression) extends BinaryComparison {
+@ExpressionDescription(
+  usage = "a _FUNC_ b - Returns TRUE if a equals b and false otherwise.")
+case class EqualTo(left: Expression, right: Expression)
+    extends BinaryComparison with NullIntolerant {
 
   override def inputType: AbstractDataType = AnyDataType
 
@@ -425,7 +433,9 @@ case class EqualTo(left: Expression, right: Expression) extends BinaryComparison
   }
 }
 
-
+@ExpressionDescription(
+  usage = """a _FUNC_ b - Returns same result with EQUAL(=) operator for non-null operands,
+    but returns TRUE if both are NULL, FALSE if one of the them is NULL.""")
 case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComparison {
 
   override def inputType: AbstractDataType = AnyDataType
@@ -466,8 +476,10 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
   }
 }
 
-
-case class LessThan(left: Expression, right: Expression) extends BinaryComparison {
+@ExpressionDescription(
+  usage = "a _FUNC_ b - Returns TRUE if a is less than b.")
+case class LessThan(left: Expression, right: Expression)
+    extends BinaryComparison with NullIntolerant {
 
   override def inputType: AbstractDataType = TypeCollection.Ordered
 
@@ -478,8 +490,10 @@ case class LessThan(left: Expression, right: Expression) extends BinaryCompariso
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.lt(input1, input2)
 }
 
-
-case class LessThanOrEqual(left: Expression, right: Expression) extends BinaryComparison {
+@ExpressionDescription(
+  usage = "a _FUNC_ b - Returns TRUE if a is not greater than b.")
+case class LessThanOrEqual(left: Expression, right: Expression)
+    extends BinaryComparison with NullIntolerant {
 
   override def inputType: AbstractDataType = TypeCollection.Ordered
 
@@ -490,8 +504,10 @@ case class LessThanOrEqual(left: Expression, right: Expression) extends BinaryCo
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.lteq(input1, input2)
 }
 
-
-case class GreaterThan(left: Expression, right: Expression) extends BinaryComparison {
+@ExpressionDescription(
+  usage = "a _FUNC_ b - Returns TRUE if a is greater than b.")
+case class GreaterThan(left: Expression, right: Expression)
+    extends BinaryComparison with NullIntolerant {
 
   override def inputType: AbstractDataType = TypeCollection.Ordered
 
@@ -502,8 +518,10 @@ case class GreaterThan(left: Expression, right: Expression) extends BinaryCompar
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.gt(input1, input2)
 }
 
-
-case class GreaterThanOrEqual(left: Expression, right: Expression) extends BinaryComparison {
+@ExpressionDescription(
+  usage = "a _FUNC_ b - Returns TRUE if a is not smaller than b.")
+case class GreaterThanOrEqual(left: Expression, right: Expression)
+    extends BinaryComparison with NullIntolerant {
 
   override def inputType: AbstractDataType = TypeCollection.Ordered
 

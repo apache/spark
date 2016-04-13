@@ -438,6 +438,8 @@ abstract class InterpretedHashFunction {
  * We should use this hash function for both shuffle and bucket, so that we can guarantee shuffle
  * and bucketing have same data distribution.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(a1, a2, ...) - Returns a hash value of the arguments.")
 case class Murmur3Hash(children: Seq[Expression], seed: Int) extends HashExpression[Int] {
   def this(arguments: Seq[Expression]) = this(arguments, 42)
 
@@ -467,8 +469,8 @@ object Murmur3HashFunction extends InterpretedHashFunction {
 }
 
 /**
-  * Print the result of an expression to stderr (used for debugging codegen).
-  */
+ * Print the result of an expression to stderr (used for debugging codegen).
+ */
 case class PrintToStderr(child: Expression) extends UnaryExpression {
 
   override def dataType: DataType = child.dataType

@@ -58,6 +58,13 @@ public class JavaKMeansExample {
     int numIterations = 20;
     KMeansModel clusters = KMeans.train(parsedData.rdd(), numClusters, numIterations);
 
+    System.out.println("Cluster centers:");
+    for (Vector center: clusters.clusterCenters()) {
+      System.out.println(" " + center);
+    }
+    double cost = clusters.computeCost(parsedData.rdd());
+    System.out.println("Cost: " + cost);
+
     // Evaluate clustering by computing Within Set Sum of Squared Errors
     double WSSSE = clusters.computeCost(parsedData.rdd());
     System.out.println("Within Set Sum of Squared Errors = " + WSSSE);

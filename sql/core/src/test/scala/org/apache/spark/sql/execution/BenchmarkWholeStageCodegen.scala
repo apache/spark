@@ -21,20 +21,22 @@ import java.util.HashMap
 
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.memory.{StaticMemoryManager, TaskMemoryManager}
+import org.apache.spark.sql.execution.joins.LongToUnsafeRowMap
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.execution.vectorized.AggregateHashMap
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{IntegerType, LongType, StructType}
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.hash.Murmur3_x86_32
 import org.apache.spark.unsafe.map.BytesToBytesMap
 import org.apache.spark.util.Benchmark
 
 /**
-  * Benchmark to measure whole stage codegen performance.
-  * To run this:
-  *  build/sbt "sql/test-only *BenchmarkWholeStageCodegen"
-  */
+ * Benchmark to measure whole stage codegen performance.
+ * To run this:
+ *  build/sbt "sql/test-only *BenchmarkWholeStageCodegen"
+ */
 class BenchmarkWholeStageCodegen extends SparkFunSuite {
   lazy val conf = new SparkConf().setMaster("local[1]").setAppName("benchmark")
     .set("spark.sql.shuffle.partitions", "1")
@@ -81,6 +83,31 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     -------------------------------------------------------------------------------------------
     range/limit/sum codegen=false             609 /  672        861.6           1.2       1.0X
     range/limit/sum codegen=true              561 /  621        935.3           1.1       1.1X
+    */
+  }
+
+  ignore("range/sample/sum") {
+    val N = 500 << 20
+    runBenchmark("range/sample/sum", N) {
+      sqlContext.range(N).sample(true, 0.01).groupBy().sum().collect()
+    }
+    /*
+    Westmere E56xx/L56xx/X56xx (Nehalem-C)
+    range/sample/sum:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    -------------------------------------------------------------------------------------------
+    range/sample/sum codegen=false         53888 / 56592          9.7         102.8       1.0X
+    range/sample/sum codegen=true          41614 / 42607         12.6          79.4       1.3X
+    */
+
+    runBenchmark("range/sample/sum", N) {
+      sqlContext.range(N).sample(false, 0.01).groupBy().sum().collect()
+    }
+    /*
+    Westmere E56xx/L56xx/X56xx (Nehalem-C)
+    range/sample/sum:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    -------------------------------------------------------------------------------------------
+    range/sample/sum codegen=false         12982 / 13384         40.4          24.8       1.0X
+    range/sample/sum codegen=true            7074 / 7383         74.1          13.5       1.8X
     */
   }
 
@@ -140,20 +167,35 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
   }
 
   ignore("broadcast hash join") {
-    val N = 100 << 20
+    val N = 20 << 20
     val M = 1 << 16
     val dim = broadcast(sqlContext.range(M).selectExpr("id as k", "cast(id as string) as v"))
 
     runBenchmark("Join w long", N) {
-      sqlContext.range(N).join(dim, (col("id") bitwiseAND M) === col("k")).count()
+      sqlContext.range(N).join(dim, (col("id") % M) === col("k")).count()
     }
 
     /*
+    Java HotSpot(TM) 64-Bit Server VM 1.7.0_60-b19 on Mac OS X 10.9.5
     Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
     Join w long:                        Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -------------------------------------------------------------------------------------------
-    Join w long codegen=false                5744 / 5814         18.3          54.8       1.0X
-    Join w long codegen=true                  735 /  853        142.7           7.0       7.8X
+    Join w long codegen=false                3002 / 3262          7.0         143.2       1.0X
+    Join w long codegen=true                  321 /  371         65.3          15.3       9.3X
+    */
+
+    runBenchmark("Join w long duplicated", N) {
+      val dim = broadcast(sqlContext.range(M).selectExpr("cast(id/10 as long) as k"))
+      sqlContext.range(N).join(dim, (col("id") % M) === col("k")).count()
+    }
+
+    /**
+    Java HotSpot(TM) 64-Bit Server VM 1.7.0_60-b19 on Mac OS X 10.9.5
+    Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+    Join w long duplicated:             Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    -------------------------------------------------------------------------------------------
+    Join w long duplicated codegen=false      3446 / 3478          6.1         164.3       1.0X
+    Join w long duplicated codegen=true       322 /  351         65.2          15.3      10.7X
     */
 
     val dim2 = broadcast(sqlContext.range(M)
@@ -161,16 +203,17 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
 
     runBenchmark("Join w 2 ints", N) {
       sqlContext.range(N).join(dim2,
-        (col("id") bitwiseAND M).cast(IntegerType) === col("k1")
-          && (col("id") bitwiseAND M).cast(IntegerType) === col("k2")).count()
+        (col("id") % M).cast(IntegerType) === col("k1")
+          && (col("id") % M).cast(IntegerType) === col("k2")).count()
     }
 
     /**
+    Java HotSpot(TM) 64-Bit Server VM 1.7.0_60-b19 on Mac OS X 10.9.5
     Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
     Join w 2 ints:                      Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -------------------------------------------------------------------------------------------
-    Join w 2 ints codegen=false              7159 / 7224         14.6          68.3       1.0X
-    Join w 2 ints codegen=true               1135 / 1197         92.4          10.8       6.3X
+    Join w 2 ints codegen=false              4426 / 4501          4.7         211.1       1.0X
+    Join w 2 ints codegen=true                791 /  818         26.5          37.7       5.6X
     */
 
     val dim3 = broadcast(sqlContext.range(M)
@@ -178,16 +221,17 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
 
     runBenchmark("Join w 2 longs", N) {
       sqlContext.range(N).join(dim3,
-        (col("id") bitwiseAND M) === col("k1") && (col("id") bitwiseAND M) === col("k2"))
+        (col("id") % M) === col("k1") && (col("id") % M) === col("k2"))
         .count()
     }
 
     /**
+    Java HotSpot(TM) 64-Bit Server VM 1.7.0_60-b19 on Mac OS X 10.9.5
     Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
     Join w 2 longs:                     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -------------------------------------------------------------------------------------------
-    Join w 2 longs codegen=false           12725 / 13158          8.2         121.4       1.0X
-    Join w 2 longs codegen=true              6044 / 6771         17.3          57.6       2.1X
+    Join w 2 longs codegen=false             5905 / 6123          3.6         281.6       1.0X
+    Join w 2 longs codegen=true              2230 / 2529          9.4         106.3       2.6X
       */
 
     val dim4 = broadcast(sqlContext.range(M)
@@ -201,34 +245,36 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
 
     /**
     Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
-    Join w 2 longs:                     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    Join w 2 longs duplicated:          Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -------------------------------------------------------------------------------------------
-    Join w 2 longs duplicated codegen=false 13066 / 13710          8.0         124.6       1.0X
-    Join w 2 longs duplicated codegen=true    7122 / 7277         14.7          67.9       1.8X
+    Join w 2 longs duplicated codegen=false      6420 / 6587          3.3         306.1       1.0X
+    Join w 2 longs duplicated codegen=true      2080 / 2139         10.1          99.2       3.1X
      */
 
     runBenchmark("outer join w long", N) {
-      sqlContext.range(N).join(dim, (col("id") bitwiseAND M) === col("k"), "left").count()
+      sqlContext.range(N).join(dim, (col("id") % M) === col("k"), "left").count()
     }
 
     /**
+    Java HotSpot(TM) 64-Bit Server VM 1.7.0_60-b19 on Mac OS X 10.9.5
     Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
     outer join w long:                  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -------------------------------------------------------------------------------------------
-    outer join w long codegen=false        15280 / 16497          6.9         145.7       1.0X
-    outer join w long codegen=true            769 /  796        136.3           7.3      19.9X
+    outer join w long codegen=false          3055 / 3189          6.9         145.7       1.0X
+    outer join w long codegen=true            261 /  276         80.5          12.4      11.7X
       */
 
     runBenchmark("semi join w long", N) {
-      sqlContext.range(N).join(dim, (col("id") bitwiseAND M) === col("k"), "leftsemi").count()
+      sqlContext.range(N).join(dim, (col("id") % M) === col("k"), "leftsemi").count()
     }
 
     /**
+    Java HotSpot(TM) 64-Bit Server VM 1.7.0_60-b19 on Mac OS X 10.9.5
     Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
     semi join w long:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -------------------------------------------------------------------------------------------
-    semi join w long codegen=false           5804 / 5969         18.1          55.3       1.0X
-    semi join w long codegen=true             814 /  934        128.8           7.8       7.1X
+    semi join w long codegen=false           1912 / 1990         11.0          91.2       1.0X
+    semi join w long codegen=true             237 /  244         88.3          11.3       8.1X
      */
   }
 
@@ -277,11 +323,12 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     }
 
     /**
+    Java HotSpot(TM) 64-Bit Server VM 1.7.0_60-b19 on Mac OS X 10.9.5
     Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
     shuffle hash join:                  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -------------------------------------------------------------------------------------------
-    shuffle hash join codegen=false          1168 / 1902          3.6         278.6       1.0X
-    shuffle hash join codegen=true            850 / 1196          4.9         202.8       1.4X
+    shuffle hash join codegen=false          1101 / 1391          3.8         262.6       1.0X
+    shuffle hash join codegen=true            528 /  578          7.9         125.8       2.1X
      */
   }
 
@@ -303,11 +350,11 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
   }
 
   ignore("hash and BytesToBytesMap") {
-    val N = 10 << 20
+    val N = 20 << 20
 
     val benchmark = new Benchmark("BytesToBytesMap", N)
 
-    benchmark.addCase("hash") { iter =>
+    benchmark.addCase("UnsafeRowhash") { iter =>
       var i = 0
       val keyBytes = new Array[Byte](16)
       val key = new UnsafeRow(1)
@@ -322,15 +369,34 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
       }
     }
 
+    benchmark.addCase("murmur3 hash") { iter =>
+      var i = 0
+      val keyBytes = new Array[Byte](16)
+      val key = new UnsafeRow(1)
+      key.pointTo(keyBytes, Platform.BYTE_ARRAY_OFFSET, 16)
+      var p = 524283
+      var s = 0
+      while (i < N) {
+        var h = Murmur3_x86_32.hashLong(i, 42)
+        key.setInt(0, h)
+        s += h
+        i += 1
+      }
+    }
+
     benchmark.addCase("fast hash") { iter =>
       var i = 0
       val keyBytes = new Array[Byte](16)
       val key = new UnsafeRow(1)
       key.pointTo(keyBytes, Platform.BYTE_ARRAY_OFFSET, 16)
+      var p = 524283
       var s = 0
       while (i < N) {
-        key.setInt(0, i % 1000)
-        val h = Murmur3_x86_32.hashLong(i % 1000, 42)
+        var h = i % p
+        if (h < 0) {
+          h += p
+        }
+        key.setInt(0, h)
         s += h
         i += 1
       }
@@ -429,6 +495,42 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
       }
     }
 
+    Seq(false, true).foreach { optimized =>
+      benchmark.addCase(s"LongToUnsafeRowMap (opt=$optimized)") { iter =>
+        var i = 0
+        val valueBytes = new Array[Byte](16)
+        val value = new UnsafeRow(1)
+        value.pointTo(valueBytes, Platform.BYTE_ARRAY_OFFSET, 16)
+        value.setInt(0, 555)
+        val taskMemoryManager = new TaskMemoryManager(
+          new StaticMemoryManager(
+            new SparkConf().set("spark.memory.offHeap.enabled", "false"),
+            Long.MaxValue,
+            Long.MaxValue,
+            1),
+          0)
+        val map = new LongToUnsafeRowMap(taskMemoryManager, 64)
+        while (i < 65536) {
+          value.setInt(0, i)
+          val key = i % 100000
+          map.append(key, value)
+          i += 1
+        }
+        if (optimized) {
+          map.optimize()
+        }
+        var s = 0
+        i = 0
+        while (i < N) {
+          val key = i % 100000
+          if (map.getValue(key, value) != null) {
+            s += 1
+          }
+          i += 1
+        }
+      }
+    }
+
     Seq("off", "on").foreach { heap =>
       benchmark.addCase(s"BytesToBytesMap ($heap Heap)") { iter =>
         val taskMemoryManager = new TaskMemoryManager(
@@ -447,35 +549,70 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
         val value = new UnsafeRow(1)
         value.pointTo(valueBytes, Platform.BYTE_ARRAY_OFFSET, 16)
         var i = 0
-        while (i < N) {
+        val numKeys = 65536
+        while (i < numKeys) {
           key.setInt(0, i % 65536)
           val loc = map.lookup(key.getBaseObject, key.getBaseOffset, key.getSizeInBytes,
             Murmur3_x86_32.hashLong(i % 65536, 42))
-          if (loc.isDefined) {
-            value.pointTo(loc.getValueBase, loc.getValueOffset, loc.getValueLength)
-            value.setInt(0, value.getInt(0) + 1)
-            i += 1
-          } else {
+          if (!loc.isDefined) {
             loc.append(key.getBaseObject, key.getBaseOffset, key.getSizeInBytes,
               value.getBaseObject, value.getBaseOffset, value.getSizeInBytes)
           }
+          i += 1
+        }
+        i = 0
+        var s = 0
+        while (i < N) {
+          key.setInt(0, i % 100000)
+          val loc = map.lookup(key.getBaseObject, key.getBaseOffset, key.getSizeInBytes,
+            Murmur3_x86_32.hashLong(i % 100000, 42))
+          if (loc.isDefined) {
+            s += 1
+          }
+          i += 1
         }
       }
     }
 
+    benchmark.addCase("Aggregate HashMap") { iter =>
+      var i = 0
+      val numKeys = 65536
+      val schema = new StructType()
+        .add("key", LongType)
+        .add("value", LongType)
+      val map = new AggregateHashMap(schema)
+      while (i < numKeys) {
+        val row = map.findOrInsert(i.toLong)
+        row.setLong(1, row.getLong(1) +  1)
+        i += 1
+      }
+      var s = 0
+      i = 0
+      while (i < N) {
+        if (map.find(i % 100000) != -1) {
+          s += 1
+        }
+        i += 1
+      }
+    }
+
     /**
-    Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+    Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
     BytesToBytesMap:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -------------------------------------------------------------------------------------------
-    hash                                      651 /  678         80.0          12.5       1.0X
-    fast hash                                 336 /  343        155.9           6.4       1.9X
-    arrayEqual                                417 /  428        125.0           8.0       1.6X
-    Java HashMap (Long)                       145 /  168         72.2          13.8       0.8X
-    Java HashMap (two ints)                   157 /  164         66.8          15.0       0.8X
-    Java HashMap (UnsafeRow)                  538 /  573         19.5          51.3       0.2X
-    BytesToBytesMap (off Heap)               2594 / 2664         20.2          49.5       0.2X
-    BytesToBytesMap (on Heap)                2693 / 2989         19.5          51.4       0.2X
-      */
+    UnsafeRow hash                            267 /  284         78.4          12.8       1.0X
+    murmur3 hash                              102 /  129        205.5           4.9       2.6X
+    fast hash                                  79 /   96        263.8           3.8       3.4X
+    arrayEqual                                164 /  172        128.2           7.8       1.6X
+    Java HashMap (Long)                       321 /  399         65.4          15.3       0.8X
+    Java HashMap (two ints)                   328 /  363         63.9          15.7       0.8X
+    Java HashMap (UnsafeRow)                 1140 / 1200         18.4          54.3       0.2X
+    LongToUnsafeRowMap (opt=false)            378 /  400         55.5          18.0       0.7X
+    LongToUnsafeRowMap (opt=true)             144 /  152        145.2           6.9       1.9X
+    BytesToBytesMap (off Heap)               1300 / 1616         16.1          62.0       0.2X
+    BytesToBytesMap (on Heap)                1165 / 1202         18.0          55.5       0.2X
+    Aggregate HashMap                         121 /  131        173.3           5.8       2.2X
+    */
     benchmark.run()
   }
 

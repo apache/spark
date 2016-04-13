@@ -106,21 +106,22 @@ pre {
   line-height: 18px;
   padding: 6px;
   margin: 0;
+  word-break: break-word;
   border-radius: 3px;
 }
 
 .stage-details {
-  max-height: 100px;
   overflow-y: auto;
   margin: 0;
+  display: block;
   transition: max-height 0.25s ease-out, padding 0.25s ease-out;
 }
 
 .stage-details.collapsed {
-  max-height: 0;
   padding-top: 0;
   padding-bottom: 0;
   border: none;
+  display: none;
 }
 
 .description-input {
@@ -143,14 +144,15 @@ pre {
   max-height: 300px;
   overflow-y: auto;
   margin: 0;
+  display: block;
   transition: max-height 0.25s ease-out, padding 0.25s ease-out;
 }
 
 .stacktrace-details.collapsed {
-  max-height: 0;
   padding-top: 0;
   padding-bottom: 0;
   border: none;
+  display: none;
 }
 
 span.expand-additional-metrics, span.expand-dag-viz {

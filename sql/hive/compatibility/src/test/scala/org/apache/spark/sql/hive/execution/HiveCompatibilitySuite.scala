@@ -20,9 +20,10 @@ package org.apache.spark.sql.hive.execution
 import java.io.File
 import java.util.{Locale, TimeZone}
 
-import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.internal.SQLConf
 
@@ -38,6 +39,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
   private val originalLocale = Locale.getDefault
   private val originalColumnBatchSize = TestHive.conf.columnBatchSize
   private val originalInMemoryPartitionPruning = TestHive.conf.inMemoryPartitionPruning
+  private val originalConvertMetastoreOrc = TestHive.convertMetastoreOrc
 
   def testCases: Seq[(String, File)] = {
     hiveQueryDir.listFiles.map(f => f.getName.stripSuffix(".q") -> f)
@@ -56,6 +58,9 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     TestHive.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, true)
     // Use Hive hash expression instead of the native one
     TestHive.sessionState.functionRegistry.unregisterFunction("hash")
+    // Ensures that the plans generation use metastore relation and not OrcRelation
+    // Was done because SqlBuilder does not work with plans having logical relation
+    TestHive.setConf(HiveContext.CONVERT_METASTORE_ORC, false)
     RuleExecutor.resetTime()
   }
 
@@ -66,6 +71,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
       Locale.setDefault(originalLocale)
       TestHive.setConf(SQLConf.COLUMN_BATCH_SIZE, originalColumnBatchSize)
       TestHive.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, originalInMemoryPartitionPruning)
+      TestHive.setConf(HiveContext.CONVERT_METASTORE_ORC, originalConvertMetastoreOrc)
       TestHive.sessionState.functionRegistry.restore()
 
       // For debugging dump some statistics about how much time was spent in various optimizer rules.
@@ -352,7 +358,97 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "show_create_table_index",
     "show_create_table_partitioned",
     "show_create_table_serde",
-    "show_create_table_view"
+    "show_create_table_view",
+
+    // These tests try to change how a table is bucketed, which we don't support
+    "alter4",
+    "sort_merge_join_desc_5",
+    "sort_merge_join_desc_6",
+    "sort_merge_join_desc_7",
+
+    // These tests try to create a table with bucketed columns, which we don't support
+    "auto_join32",
+    "auto_join_filters",
+    "auto_smb_mapjoin_14",
+    "ct_case_insensitive",
+    "explain_rearrange",
+    "groupby_sort_10",
+    "groupby_sort_2",
+    "groupby_sort_3",
+    "groupby_sort_4",
+    "groupby_sort_5",
+    "groupby_sort_7",
+    "groupby_sort_8",
+    "groupby_sort_9",
+    "groupby_sort_test_1",
+    "inputddl4",
+    "join_filters",
+    "join_nulls",
+    "join_nullsafe",
+    "load_dyn_part2",
+    "orc_empty_files",
+    "reduce_deduplicate",
+    "smb_mapjoin9",
+    "smb_mapjoin_1",
+    "smb_mapjoin_10",
+    "smb_mapjoin_13",
+    "smb_mapjoin_14",
+    "smb_mapjoin_15",
+    "smb_mapjoin_16",
+    "smb_mapjoin_17",
+    "smb_mapjoin_2",
+    "smb_mapjoin_21",
+    "smb_mapjoin_25",
+    "smb_mapjoin_3",
+    "smb_mapjoin_4",
+    "smb_mapjoin_5",
+    "smb_mapjoin_6",
+    "smb_mapjoin_7",
+    "smb_mapjoin_8",
+    "sort_merge_join_desc_1",
+    "sort_merge_join_desc_2",
+    "sort_merge_join_desc_3",
+    "sort_merge_join_desc_4",
+
+    // These tests try to create a table with skewed columns, which we don't support
+    "create_skewed_table1",
+    "skewjoinopt13",
+    "skewjoinopt18",
+    "skewjoinopt9",
+
+    // Index commands are not supported
+    "drop_index",
+    "drop_index_removes_partition_dirs",
+    "alter_index",
+    "auto_sortmerge_join_1",
+    "auto_sortmerge_join_10",
+    "auto_sortmerge_join_11",
+    "auto_sortmerge_join_12",
+    "auto_sortmerge_join_13",
+    "auto_sortmerge_join_14",
+    "auto_sortmerge_join_15",
+    "auto_sortmerge_join_16",
+    "auto_sortmerge_join_2",
+    "auto_sortmerge_join_3",
+    "auto_sortmerge_join_4",
+    "auto_sortmerge_join_5",
+    "auto_sortmerge_join_6",
+    "auto_sortmerge_join_7",
+    "auto_sortmerge_join_8",
+    "auto_sortmerge_join_9",
+
+    // Macro commands are not supported
+    "macro",
+
+    // Create partitioned view is not supported
+    "create_like_view",
+    "describe_formatted_view_partitioned",
+
+    // This uses CONCATENATE, which we don't support
+    "alter_merge_2",
+
+    // TOUCH is not supported
+    "touch"
   )
 
   /**
@@ -367,10 +463,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "alias_casted_column",
     "alter2",
     "alter3",
-    "alter4",
     "alter5",
-    "alter_index",
-    "alter_merge_2",
     "alter_partition_format_loc",
     "alter_partition_with_whitelist",
     "alter_rename_partition",
@@ -408,33 +501,14 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "auto_join3",
     "auto_join30",
     "auto_join31",
-    "auto_join32",
     "auto_join4",
     "auto_join5",
     "auto_join6",
     "auto_join7",
     "auto_join8",
     "auto_join9",
-    "auto_join_filters",
     "auto_join_nulls",
     "auto_join_reordering_values",
-    "auto_smb_mapjoin_14",
-    "auto_sortmerge_join_1",
-    "auto_sortmerge_join_10",
-    "auto_sortmerge_join_11",
-    "auto_sortmerge_join_12",
-    "auto_sortmerge_join_13",
-    "auto_sortmerge_join_14",
-    "auto_sortmerge_join_15",
-    "auto_sortmerge_join_16",
-    "auto_sortmerge_join_2",
-    "auto_sortmerge_join_3",
-    "auto_sortmerge_join_4",
-    "auto_sortmerge_join_5",
-    "auto_sortmerge_join_6",
-    "auto_sortmerge_join_7",
-    "auto_sortmerge_join_8",
-    "auto_sortmerge_join_9",
     "binary_constant",
     "binarysortable_1",
     "cast1",
@@ -464,15 +538,12 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "cp_mj_rc",
     "create_insert_outputformat",
     "create_like_tbl_props",
-    "create_like_view",
     "create_nested_type",
-    "create_skewed_table1",
     "create_struct_table",
     "create_view_translate",
     "cross_join",
     "cross_product_check_1",
     "cross_product_check_2",
-    "ct_case_insensitive",
     "database_drop",
     "database_location",
     "database_properties",
@@ -489,15 +560,12 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "default_partition_name",
     "delimiter",
     "desc_non_existent_tbl",
-    "describe_formatted_view_partitioned",
     "diff_part_input_formats",
     "disable_file_format_check",
     "disallow_incompatible_type_change_off",
     "distinct_stats",
     "drop_database_removes_partition_dirs",
     "drop_function",
-    "drop_index",
-    "drop_index_removes_partition_dirs",
     "drop_multi_partitions",
     "drop_partitions_filter",
     "drop_partitions_filter2",
@@ -511,7 +579,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "escape_distributeby1",
     "escape_orderby1",
     "escape_sortby1",
-    "explain_rearrange",
     "fileformat_mix",
     "fileformat_sequencefile",
     "fileformat_text",
@@ -566,16 +633,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "groupby_neg_float",
     "groupby_ppd",
     "groupby_ppr",
-    "groupby_sort_10",
-    "groupby_sort_2",
-    "groupby_sort_3",
-    "groupby_sort_4",
-    "groupby_sort_5",
     "groupby_sort_6",
-    "groupby_sort_7",
-    "groupby_sort_8",
-    "groupby_sort_9",
-    "groupby_sort_test_1",
     "having",
     "implicit_cast1",
     "index_serde",
@@ -630,7 +688,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "inputddl1",
     "inputddl2",
     "inputddl3",
-    "inputddl4",
     "inputddl6",
     "inputddl7",
     "inputddl8",
@@ -686,11 +743,8 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "join_array",
     "join_casesensitive",
     "join_empty",
-    "join_filters",
     "join_hive_626",
     "join_map_ppr",
-    "join_nulls",
-    "join_nullsafe",
     "join_rc",
     "join_reorder2",
     "join_reorder3",
@@ -714,7 +768,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "load_dyn_part13",
     "load_dyn_part14",
     "load_dyn_part14_win",
-    "load_dyn_part2",
     "load_dyn_part3",
     "load_dyn_part4",
     "load_dyn_part5",
@@ -725,7 +778,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "load_file_with_space_in_the_name",
     "loadpart1",
     "louter_join_ppr",
-    "macro",
     "mapjoin_distinct",
     "mapjoin_filter_on_outerjoin",
     "mapjoin_mapjoin",
@@ -768,7 +820,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "nullscript",
     "optional_outer",
     "orc_dictionary_threshold",
-    "orc_empty_files",
     "order",
     "order2",
     "outer_join_ppr",
@@ -824,7 +875,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "rcfile_null_value",
     "rcfile_toleratecorruptions",
     "rcfile_union",
-    "reduce_deduplicate",
     "reduce_deduplicate_exclude_gby",
     "reduce_deduplicate_exclude_join",
     "reduce_deduplicate_extended",
@@ -845,34 +895,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "show_functions",
     "show_partitions",
     "show_tblproperties",
-    "skewjoinopt13",
-    "skewjoinopt18",
-    "skewjoinopt9",
-    "smb_mapjoin9",
-    "smb_mapjoin_1",
-    "smb_mapjoin_10",
-    "smb_mapjoin_13",
-    "smb_mapjoin_14",
-    "smb_mapjoin_15",
-    "smb_mapjoin_16",
-    "smb_mapjoin_17",
-    "smb_mapjoin_2",
-    "smb_mapjoin_21",
-    "smb_mapjoin_25",
-    "smb_mapjoin_3",
-    "smb_mapjoin_4",
-    "smb_mapjoin_5",
-    "smb_mapjoin_6",
-    "smb_mapjoin_7",
-    "smb_mapjoin_8",
     "sort",
-    "sort_merge_join_desc_1",
-    "sort_merge_join_desc_2",
-    "sort_merge_join_desc_3",
-    "sort_merge_join_desc_4",
-    "sort_merge_join_desc_5",
-    "sort_merge_join_desc_6",
-    "sort_merge_join_desc_7",
     "stats0",
     "stats_aggregator_error_1",
     "stats_empty_partition",
@@ -883,7 +906,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "timestamp_comparison",
     "timestamp_lazy",
     "timestamp_null",
-    "touch",
     "transform_ppr1",
     "transform_ppr2",
     "truncate_table",

@@ -297,6 +297,10 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
         <div>
           <ul class="unstyled">
             <li>
+              <strong>User:</strong>
+              {parent.getSparkUser}
+            </li>
+            <li>
               <strong>Total Uptime:</strong>
               {
                 if (endTime < 0 && parent.sc.isDefined) {
