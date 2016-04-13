@@ -65,26 +65,42 @@ class ColumnarAggMapCodeGenerator(
           .mkString("\n")};
       """.stripMargin
 
+    val generatedAggBufferSchema: String =
+      s"""
+         |new org.apache.spark.sql.types.StructType()
+         |${bufferSchema.map(key =>
+        s""".add("${key.name}", org.apache.spark.sql.types.DataTypes.${key.dataType})""")
+        .mkString("\n")};
+      """.stripMargin
+
     s"""
-       |  private org.apache.spark.sql.execution.vectorized.ColumnarBatch batch;
+       |  public org.apache.spark.sql.execution.vectorized.ColumnarBatch batch;
+       |  public org.apache.spark.sql.execution.vectorized.ColumnarBatch aggregateBufferBatch;
        |  private int[] buckets;
        |  private int numBuckets;
        |  private int maxSteps;
        |  private int numRows = 0;
        |  private org.apache.spark.sql.types.StructType schema = $generatedSchema
-       |
-       |  public $generatedClassName(int capacity, double loadFactor, int maxSteps) {
-       |    assert (capacity > 0 && ((capacity & (capacity - 1)) == 0));
-       |    this.maxSteps = maxSteps;
-       |    numBuckets = (int) (capacity / loadFactor);
-       |    batch = org.apache.spark.sql.execution.vectorized.ColumnarBatch.allocate(schema,
-       |      org.apache.spark.memory.MemoryMode.ON_HEAP, capacity);
-       |    buckets = new int[numBuckets];
-       |    java.util.Arrays.fill(buckets, -1);
-       |  }
+       |  private org.apache.spark.sql.types.StructType aggregateBufferSchema =
+       |    $generatedAggBufferSchema
        |
        |  public $generatedClassName() {
-       |    new $generatedClassName(1 << 16, 0.25, 5);
+       |    // TODO: These should be generated based on the schema
+       |    int DEFAULT_CAPACITY = 1 << 16;
+       |    double DEFAULT_LOAD_FACTOR = 0.25;
+       |    int DEFAULT_MAX_STEPS = 2;
+       |    assert (DEFAULT_CAPACITY > 0 && ((DEFAULT_CAPACITY & (DEFAULT_CAPACITY - 1)) == 0));
+       |    this.maxSteps = DEFAULT_MAX_STEPS;
+       |    numBuckets = (int) (DEFAULT_CAPACITY / DEFAULT_LOAD_FACTOR);
+       |    batch = org.apache.spark.sql.execution.vectorized.ColumnarBatch.allocate(schema,
+       |      org.apache.spark.memory.MemoryMode.ON_HEAP, DEFAULT_CAPACITY);
+       |    aggregateBufferBatch = org.apache.spark.sql.execution.vectorized.ColumnarBatch.allocate(
+       |      aggregateBufferSchema, org.apache.spark.memory.MemoryMode.ON_HEAP, DEFAULT_CAPACITY);
+       |    for (int i = 0 ; i < aggregateBufferBatch.numCols(); i++) {
+       |       aggregateBufferBatch.setColumn(i, batch.column(i+${groupingKeys.length}));
+       |    }
+       |    buckets = new int[numBuckets];
+       |    java.util.Arrays.fill(buckets, -1);
        |  }
      """.stripMargin
   }
@@ -103,7 +119,7 @@ class ColumnarAggMapCodeGenerator(
     s"""
        |// TODO: Improve this hash function
        |private long hash($groupingKeySignature) {
-       |  return ${groupingKeys.map(_._2).mkString(" ^ ")};
+       |  return ${groupingKeys.map(_._2).mkString(" | ")};
        |}
      """.stripMargin
   }
@@ -178,9 +194,10 @@ class ColumnarAggMapCodeGenerator(
                 s"batch.column(${groupingKeys.length + k._2}).putLong(numRows, 0);")
                 .mkString("\n")}
        |      buckets[idx] = numRows++;
-       |      return batch.getRow(buckets[idx]);
+       |      batch.setNumRows(numRows);
+       |      return aggregateBufferBatch.getRow(buckets[idx]);
        |    } else if (equals(idx, ${groupingKeys.map(_._2).mkString(", ")})) {
-       |      return batch.getRow(buckets[idx]);
+       |      return aggregateBufferBatch.getRow(buckets[idx]);
        |    }
        |    idx = (idx + 1) & (numBuckets - 1);
        |    step++;

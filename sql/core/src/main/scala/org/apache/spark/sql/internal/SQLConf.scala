@@ -437,6 +437,12 @@ object SQLConf {
     .stringConf
     .createOptional
 
+  val COLUMNAR_AGGREGATE_MAP_ENABLED = SQLConfigBuilder("spark.sql.codegen.aggregate.map.enabled")
+    .internal()
+    .doc("When true, aggregate with keys use an in-memory columnar map to speed up execution.")
+    .booleanConf
+    .createWithDefault(false)
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
     val EXTERNAL_SORT = "spark.sql.planner.externalSort"
@@ -560,6 +566,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def dataFrameRetainGroupColumns: Boolean = getConf(DATAFRAME_RETAIN_GROUP_COLUMNS)
 
   def runSQLOnFile: Boolean = getConf(RUN_SQL_ON_FILES)
+
+  def columnarAggregateMapEnabled: Boolean = getConf(COLUMNAR_AGGREGATE_MAP_ENABLED)
 
   override def orderByOrdinal: Boolean = getConf(ORDER_BY_ORDINAL)
 
