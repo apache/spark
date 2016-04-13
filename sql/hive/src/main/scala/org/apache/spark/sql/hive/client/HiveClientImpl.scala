@@ -696,7 +696,18 @@ private[hive] class HiveClientImpl(
     val (partCols, schema) = table.schema.map(toHiveColumn).partition { c =>
       table.partitionColumnNames.contains(c.getName)
     }
-    hiveTable.setFields(schema.asJava)
+    if (table.schema.isEmpty) {
+      // This is a hack to preserve an existing behavior. For data source table,
+      // we allow users to not provide a schema. Before Spark 2.0,
+      // there is one field called "col" got automatically populated.
+      // At here, we add this col to here explicitly when no schema is defined
+      // because we always set the LazySimpleSerde as the default SerDe and
+      // Hive stops to automatically populate this field.
+      hiveTable.setFields(
+        Seq(new FieldSchema("col", "array<string>", "from deserializer")).asJava)
+    } else {
+      hiveTable.setFields(schema.asJava)
+    }
     hiveTable.setPartCols(partCols.asJava)
     // TODO: set sort columns here too
     hiveTable.setBucketCols(table.bucketColumnNames.asJava)
