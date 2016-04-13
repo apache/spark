@@ -160,7 +160,7 @@ class HiveDDLCommandSuite extends PlanTest {
     assert(desc.storage.inputFormat == Some("org.apache.hadoop.mapred.TextInputFormat"))
     assert(desc.storage.outputFormat ==
       Some("org.apache.hadoop.hive.ql.io.IgnoreKeyTextOutputFormat"))
-    assert(desc.storage.serde.isEmpty)
+    assert(desc.storage.serde == Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
     assert(desc.properties == Map())
   }
 
@@ -340,7 +340,7 @@ class HiveDDLCommandSuite extends PlanTest {
       Some("org.apache.hadoop.mapred.TextInputFormat"))
     assert(desc.storage.outputFormat ==
       Some("org.apache.hadoop.hive.ql.io.IgnoreKeyTextOutputFormat"))
-    assert(desc.storage.serde.isEmpty)
+    assert(desc.storage.serde == Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
     assert(desc.storage.serdeProperties.isEmpty)
     assert(desc.properties.isEmpty)
     assert(desc.comment.isEmpty)
@@ -446,7 +446,7 @@ class HiveDDLCommandSuite extends PlanTest {
     val (desc2, _) = extractTableDesc(query2)
     assert(desc1.storage.inputFormat == Some("winput"))
     assert(desc1.storage.outputFormat == Some("wowput"))
-    assert(desc1.storage.serde.isEmpty)
+    assert(desc1.storage.serde == Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
     assert(desc2.storage.inputFormat == Some("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat"))
     assert(desc2.storage.outputFormat == Some("org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat"))
     assert(desc2.storage.serde == Some("org.apache.hadoop.hive.ql.io.orc.OrcSerde"))

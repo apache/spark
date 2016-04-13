@@ -482,7 +482,7 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
   private def visitCatalogColumns(ctx: ColTypeListContext): Seq[CatalogColumn] = withOrigin(ctx) {
     ctx.colType.asScala.map { col =>
       CatalogColumn(
-        col.identifier.getText,
+        col.identifier.getText.toLowerCase,
         // Note: for types like "STRUCT<myFirstName: STRING, myLastName: STRING>" we can't
         // just convert the whole type string to lower case, otherwise the struct field names
         // will no longer be case sensitive. Instead, we rely on our parser to get the proper
