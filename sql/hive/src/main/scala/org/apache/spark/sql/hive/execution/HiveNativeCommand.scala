@@ -29,6 +29,8 @@ case class HiveNativeCommand(sql: String) extends RunnableCommand {
   override def output: Seq[AttributeReference] =
     Seq(AttributeReference("result", StringType, nullable = false)())
 
-  override def run(sqlContext: SQLContext): Seq[Row] =
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    logWarning("HiveNativeCommand is not allowed " + sql.trim)
     sqlContext.asInstanceOf[HiveContext].runSqlHive(sql).map(Row(_))
+  }
 }
