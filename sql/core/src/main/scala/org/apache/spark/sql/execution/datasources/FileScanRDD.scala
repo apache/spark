@@ -89,17 +89,6 @@ class FileScanRDD(
 
   override protected def getPreferredLocations(split: Partition): Seq[String] = {
     val files = split.asInstanceOf[FilePartition].files
-    val partitionSize = files.map(_.length).sum
-
-    // Here we only collect locations of file blocks whose size exceeds a predefined fraction
-    // of the whole partition size.
-    files
-      .filter(_.length.toDouble / partitionSize >= FileScanRDD.FILE_PARTITION_PREF_LOCS_FRAC)
-      .flatMap(_.locations)
-      .distinct
+    if (files.isEmpty) Seq.empty else files.maxBy(_.length).locations
   }
-}
-
-object FileScanRDD {
-  private val FILE_PARTITION_PREF_LOCS_FRAC = 0.1D
 }
