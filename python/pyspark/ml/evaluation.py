@@ -18,7 +18,7 @@
 from abc import abstractmethod, ABCMeta
 
 from pyspark import since
-from pyspark.ml.wrapper import JavaWrapper
+from pyspark.ml.wrapper import JavaParams
 from pyspark.ml.param import Param, Params
 from pyspark.ml.param.shared import HasLabelCol, HasPredictionCol, HasRawPredictionCol
 from pyspark.ml.util import keyword_only
@@ -81,7 +81,7 @@ class Evaluator(Params):
 
 
 @inherit_doc
-class JavaEvaluator(Evaluator, JavaWrapper):
+class JavaEvaluator(JavaParams, Evaluator):
     """
     Base class for :py:class:`Evaluator`s that wrap Java/Scala
     implementations.

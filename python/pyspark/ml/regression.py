@@ -20,7 +20,7 @@ import warnings
 from pyspark import since
 from pyspark.ml.param.shared import *
 from pyspark.ml.util import *
-from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaCallable
+from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaWrapper
 from pyspark.mllib.common import inherit_doc
 from pyspark.sql import DataFrame
 
@@ -188,7 +188,7 @@ class LinearRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
         return LinearRegressionSummary(java_lr_summary)
 
 
-class LinearRegressionSummary(JavaCallable):
+class LinearRegressionSummary(JavaWrapper):
     """
     .. note:: Experimental
 

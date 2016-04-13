@@ -52,7 +52,7 @@ from pyspark.ml.regression import LinearRegression, DecisionTreeRegressor
 from pyspark.ml.tuning import *
 from pyspark.ml.util import keyword_only
 from pyspark.ml.util import MLWritable, MLWriter
-from pyspark.ml.wrapper import JavaWrapper
+from pyspark.ml.wrapper import JavaParams
 from pyspark.mllib.linalg import Vectors, DenseVector, SparseVector
 from pyspark.sql import DataFrame, SQLContext, Row
 from pyspark.sql.functions import rand
@@ -644,7 +644,7 @@ class PersistenceTest(PySparkTestCase):
         """
         self.assertEqual(m1.uid, m2.uid)
         self.assertEqual(type(m1), type(m2))
-        if isinstance(m1, JavaWrapper):
+        if isinstance(m1, JavaParams):
             self.assertEqual(len(m1.params), len(m2.params))
             for p in m1.params:
                 self.assertEqual(m1.getOrDefault(p), m2.getOrDefault(p))

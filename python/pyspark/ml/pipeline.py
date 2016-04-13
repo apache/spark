@@ -25,7 +25,7 @@ from pyspark import since
 from pyspark.ml import Estimator, Model, Transformer
 from pyspark.ml.param import Param, Params
 from pyspark.ml.util import keyword_only, JavaMLWriter, JavaMLReader, MLReadable, MLWritable
-from pyspark.ml.wrapper import JavaWrapper
+from pyspark.ml.wrapper import JavaParams
 from pyspark.mllib.common import inherit_doc
 
 
@@ -177,7 +177,7 @@ class Pipeline(Estimator, MLReadable, MLWritable):
         # Create a new instance of this stage.
         py_stage = cls()
         # Load information from java_stage to the instance.
-        py_stages = [JavaWrapper._from_java(s) for s in java_stage.getStages()]
+        py_stages = [JavaParams._from_java(s) for s in java_stage.getStages()]
         py_stage.setStages(py_stages)
         py_stage._resetUid(java_stage.uid())
         return py_stage
@@ -195,7 +195,7 @@ class Pipeline(Estimator, MLReadable, MLWritable):
         for idx, stage in enumerate(self.getStages()):
             java_stages[idx] = stage._to_java()
 
-        _java_obj = JavaWrapper._new_java_obj("org.apache.spark.ml.Pipeline", self.uid)
+        _java_obj = JavaParams._new_java_obj("org.apache.spark.ml.Pipeline", self.uid)
         _java_obj.setStages(java_stages)
 
         return _java_obj
@@ -275,7 +275,7 @@ class PipelineModel(Model, MLReadable, MLWritable):
         Used for ML persistence.
         """
         # Load information from java_stage to the instance.
-        py_stages = [JavaWrapper._from_java(s) for s in java_stage.stages()]
+        py_stages = [JavaParams._from_java(s) for s in java_stage.stages()]
         # Create a new instance of this stage.
         py_stage = cls(py_stages)
         py_stage._resetUid(java_stage.uid())
@@ -295,6 +295,6 @@ class PipelineModel(Model, MLReadable, MLWritable):
             java_stages[idx] = stage._to_java()
 
         _java_obj =\
-            JavaWrapper._new_java_obj("org.apache.spark.ml.PipelineModel", self.uid, java_stages)
+            JavaParams._new_java_obj("org.apache.spark.ml.PipelineModel", self.uid, java_stages)
 
         return _java_obj
