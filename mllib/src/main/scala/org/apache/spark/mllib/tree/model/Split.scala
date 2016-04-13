@@ -18,7 +18,6 @@
 package org.apache.spark.mllib.tree.model
 
 import org.apache.spark.annotation.{DeveloperApi, Since}
-import org.apache.spark.mllib.tree.configuration.FeatureType
 import org.apache.spark.mllib.tree.configuration.FeatureType.FeatureType
 
 /**

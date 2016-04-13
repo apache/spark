@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive.orc
 
+import java.nio.charset.StandardCharsets
+
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.hive.ql.io.sarg.{PredicateLeaf, SearchArgument}
@@ -26,6 +28,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, LogicalRelation}
+import org.apache.spark.sql.sources.HadoopFsRelation
 
 /**
  * A test suite that tests ORC filter API based filter pushdown optimization.
@@ -40,9 +43,9 @@ class OrcFilterSuite extends QueryTest with OrcTest {
       .select(output.map(e => Column(e)): _*)
       .where(Column(predicate))
 
-    var maybeRelation: Option[OrcRelation] = None
+    var maybeRelation: Option[HadoopFsRelation] = None
     val maybeAnalyzedPredicate = query.queryExecution.optimizedPlan.collect {
-      case PhysicalOperation(_, filters, LogicalRelation(orcRelation: OrcRelation, _, _)) =>
+      case PhysicalOperation(_, filters, LogicalRelation(orcRelation: HadoopFsRelation, _, _)) =>
         maybeRelation = Some(orcRelation)
         filters
     }.flatten.reduceLeftOption(_ && _)
@@ -61,8 +64,8 @@ class OrcFilterSuite extends QueryTest with OrcTest {
       (predicate: Predicate, filterOperator: PredicateLeaf.Operator)
       (implicit df: DataFrame): Unit = {
     def checkComparisonOperator(filter: SearchArgument) = {
-      val operator = filter.getLeaves.asScala.head.getOperator
-      assert(operator === filterOperator)
+      val operator = filter.getLeaves.asScala
+      assert(operator.map(_.getOperator).contains(filterOperator))
     }
     checkFilterPredicate(df, predicate, checkComparisonOperator)
   }
@@ -189,7 +192,7 @@ class OrcFilterSuite extends QueryTest with OrcTest {
 
   test("filter pushdown - binary") {
     implicit class IntToBinary(int: Int) {
-      def b: Array[Byte] = int.toString.getBytes("UTF-8")
+      def b: Array[Byte] = int.toString.getBytes(StandardCharsets.UTF_8)
     }
 
     withOrcDataFrame((1 to 4).map(i => Tuple1(i.b))) { implicit df =>
@@ -210,14 +213,16 @@ class OrcFilterSuite extends QueryTest with OrcTest {
           |expr = (not leaf-0)""".stripMargin.trim
       )
       checkFilterPredicate(
-        '_1 !== 1,
-        """leaf-0 = (EQUALS _1 1)
-          |expr = (not leaf-0)""".stripMargin.trim
+        '_1 =!= 1,
+        """leaf-0 = (IS_NULL _1)
+          |leaf-1 = (EQUALS _1 1)
+          |expr = (and (not leaf-0) (not leaf-1))""".stripMargin.trim
       )
       checkFilterPredicate(
         !('_1 < 4),
-        """leaf-0 = (LESS_THAN _1 4)
-          |expr = (not leaf-0)""".stripMargin.trim
+        """leaf-0 = (IS_NULL _1)
+          |leaf-1 = (LESS_THAN _1 4)
+          |expr = (and (not leaf-0) (not leaf-1))""".stripMargin.trim
       )
       checkFilterPredicate(
         '_1 < 2 || '_1 > 3,
@@ -227,9 +232,10 @@ class OrcFilterSuite extends QueryTest with OrcTest {
       )
       checkFilterPredicate(
         '_1 < 2 && '_1 > 3,
-        """leaf-0 = (LESS_THAN _1 2)
-          |leaf-1 = (LESS_THAN_EQUALS _1 3)
-          |expr = (and leaf-0 (not leaf-1))""".stripMargin.trim
+        """leaf-0 = (IS_NULL _1)
+          |leaf-1 = (LESS_THAN _1 2)
+          |leaf-2 = (LESS_THAN_EQUALS _1 3)
+          |expr = (and (not leaf-0) leaf-1 (not leaf-2))""".stripMargin.trim
       )
     }
   }

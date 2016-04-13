@@ -20,9 +20,9 @@ package org.apache.spark.ml.evaluation
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.param.{Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasLabelCol, HasPredictionCol}
-import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable, SchemaUtils}
+import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable}
 import org.apache.spark.mllib.evaluation.RegressionMetrics
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DoubleType, FloatType}
 
@@ -70,8 +70,8 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
 
   setDefault(metricName -> "rmse")
 
-  @Since("1.4.0")
-  override def evaluate(dataset: DataFrame): Double = {
+  @Since("2.0.0")
+  override def evaluate(dataset: Dataset[_]): Double = {
     val schema = dataset.schema
     val predictionColName = $(predictionCol)
     val predictionType = schema($(predictionCol)).dataType
@@ -85,7 +85,8 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
 
     val predictionAndLabels = dataset
       .select(col($(predictionCol)).cast(DoubleType), col($(labelCol)).cast(DoubleType))
-      .map { case Row(prediction: Double, label: Double) =>
+      .rdd.
+      map { case Row(prediction: Double, label: Double) =>
         (prediction, label)
       }
     val metrics = new RegressionMetrics(predictionAndLabels)

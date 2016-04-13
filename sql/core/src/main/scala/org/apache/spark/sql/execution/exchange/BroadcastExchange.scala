@@ -23,9 +23,8 @@ import scala.concurrent.duration._
 import org.apache.spark.broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.physical.{BroadcastMode, BroadcastPartitioning, Partitioning}
-import org.apache.spark.sql.execution.{SparkPlan, SQLExecution, UnaryNode}
+import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -34,11 +33,15 @@ import org.apache.spark.util.ThreadUtils
  */
 case class BroadcastExchange(
     mode: BroadcastMode,
-    child: SparkPlan) extends UnaryNode {
-
-  override def output: Seq[Attribute] = child.output
+    child: SparkPlan) extends Exchange {
 
   override def outputPartitioning: Partitioning = BroadcastPartitioning(mode)
+
+  override def sameResult(plan: SparkPlan): Boolean = plan match {
+    case p: BroadcastExchange =>
+      mode.compatibleWith(p.mode) && child.sameResult(p.child)
+    case _ => false
+  }
 
   @transient
   private val timeout: Duration = {

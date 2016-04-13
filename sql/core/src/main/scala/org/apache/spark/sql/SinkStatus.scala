@@ -31,4 +31,4 @@ import org.apache.spark.sql.execution.streaming.{Offset, Sink}
 @Experimental
 class SinkStatus private[sql](
     val description: String,
-    val offset: Option[Offset])
+    val offset: Offset)

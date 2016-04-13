@@ -28,6 +28,7 @@ import com.google.common.collect.MapMaker
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.python.PythonWorkerFactory
 import org.apache.spark.broadcast.BroadcastManager
+import org.apache.spark.internal.Logging
 import org.apache.spark.memory.{MemoryManager, StaticMemoryManager, UnifiedMemoryManager}
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.network.BlockTransferService
@@ -35,7 +36,7 @@ import org.apache.spark.network.netty.NettyBlockTransferService
 import org.apache.spark.rpc.{RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.{LiveListenerBus, OutputCommitCoordinator}
 import org.apache.spark.scheduler.OutputCommitCoordinator.OutputCommitCoordinatorEndpoint
-import org.apache.spark.serializer.{JavaSerializer, Serializer}
+import org.apache.spark.serializer.{JavaSerializer, Serializer, SerializerManager}
 import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.storage._
 import org.apache.spark.util.{RpcUtils, Utils}
@@ -56,7 +57,7 @@ class SparkEnv (
     private[spark] val rpcEnv: RpcEnv,
     val serializer: Serializer,
     val closureSerializer: Serializer,
-    val cacheManager: CacheManager,
+    val serializerManager: SerializerManager,
     val mapOutputTracker: MapOutputTracker,
     val shuffleManager: ShuffleManager,
     val broadcastManager: BroadcastManager,
@@ -100,14 +101,13 @@ class SparkEnv (
       // We only need to delete the tmp dir create by driver, because sparkFilesDir is point to the
       // current working dir in executor which we do not need to delete.
       driverTmpDirToDelete match {
-        case Some(path) => {
+        case Some(path) =>
           try {
             Utils.deleteRecursively(new File(path))
           } catch {
             case e: Exception =>
               logWarning(s"Exception while deleting Spark temp dir: $path", e)
           }
-        }
         case None => // We just need to delete tmp dir created by driver, so do nothing on executor
       }
     }
@@ -152,14 +152,6 @@ object SparkEnv extends Logging {
    * Returns the SparkEnv.
    */
   def get: SparkEnv = {
-    env
-  }
-
-  /**
-   * Returns the ThreadLocal SparkEnv.
-   */
-  @deprecated("Use SparkEnv.get instead", "1.2.0")
-  def getThreadLocal: SparkEnv = {
     env
   }
 
@@ -277,6 +269,8 @@ object SparkEnv extends Logging {
       "spark.serializer", "org.apache.spark.serializer.JavaSerializer")
     logDebug(s"Using serializer: ${serializer.getClass}")
 
+    val serializerManager = new SerializerManager(serializer, conf)
+
     val closureSerializer = new JavaSerializer(conf)
 
     def registerOrLookupEndpoint(
@@ -319,7 +313,8 @@ object SparkEnv extends Logging {
         UnifiedMemoryManager(conf, numUsableCores)
       }
 
-    val blockTransferService = new NettyBlockTransferService(conf, securityManager, numUsableCores)
+    val blockTransferService =
+      new NettyBlockTransferService(conf, securityManager, hostname, numUsableCores)
 
     val blockManagerMaster = new BlockManagerMaster(registerOrLookupEndpoint(
       BlockManagerMaster.DRIVER_ENDPOINT_NAME,
@@ -328,12 +323,10 @@ object SparkEnv extends Logging {
 
     // NB: blockManager is not valid until initialize() is called later.
     val blockManager = new BlockManager(executorId, rpcEnv, blockManagerMaster,
-      serializer, conf, memoryManager, mapOutputTracker, shuffleManager,
+      serializerManager, conf, memoryManager, mapOutputTracker, shuffleManager,
       blockTransferService, securityManager, numUsableCores)
 
     val broadcastManager = new BroadcastManager(isDriver, conf, securityManager)
-
-    val cacheManager = new CacheManager(blockManager)
 
     val metricsSystem = if (isDriver) {
       // Don't start metrics system right now for Driver.
@@ -371,7 +364,7 @@ object SparkEnv extends Logging {
       rpcEnv,
       serializer,
       closureSerializer,
-      cacheManager,
+      serializerManager,
       mapOutputTracker,
       shuffleManager,
       broadcastManager,

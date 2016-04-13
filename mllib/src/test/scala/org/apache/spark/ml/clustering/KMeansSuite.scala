@@ -22,14 +22,14 @@ import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.clustering.{KMeans => MLlibKMeans}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.{DataFrame, Dataset, SQLContext}
 
 private[clustering] case class TestRow(features: Vector)
 
 class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   final val k = 5
-  @transient var dataset: DataFrame = _
+  @transient var dataset: Dataset[_] = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -93,7 +93,8 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     expectedColumns.foreach { column =>
       assert(transformed.columns.contains(column))
     }
-    val clusters = transformed.select(predictionColName).map(_.getInt(0)).distinct().collect().toSet
+    val clusters =
+      transformed.select(predictionColName).rdd.map(_.getInt(0)).distinct().collect().toSet
     assert(clusters.size === k)
     assert(clusters === Set(0, 1, 2, 3, 4))
     assert(model.computeCost(dataset) < 0.1)

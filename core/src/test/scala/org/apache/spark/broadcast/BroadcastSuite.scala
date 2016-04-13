@@ -37,7 +37,7 @@ class DummyBroadcastClass(rdd: RDD[Int]) extends Serializable {
     rdd.map { x =>
       val bm = SparkEnv.get.blockManager
       // Check if broadcast block was fetched
-      val isFound = bm.getLocal(BroadcastBlockId(bid)).isDefined
+      val isFound = bm.getLocalValues(BroadcastBlockId(bid)).isDefined
       (x, isFound)
     }.collect().toSet
   }
@@ -128,6 +128,13 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext {
       sc.broadcast(Seq(1, 2, 3))
     }
     assert(thrown.getMessage.toLowerCase.contains("stopped"))
+  }
+
+  test("Forbid broadcasting RDD directly") {
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+    val rdd = sc.parallelize(1 to 4)
+    intercept[IllegalArgumentException] { sc.broadcast(rdd) }
+    sc.stop()
   }
 
   /**

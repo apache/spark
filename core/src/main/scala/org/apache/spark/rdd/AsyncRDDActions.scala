@@ -23,7 +23,8 @@ import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{ExecutionContext, Future}
 import scala.reflect.ClassTag
 
-import org.apache.spark.{ComplexFutureAction, FutureAction, JobSubmitter, Logging}
+import org.apache.spark.{ComplexFutureAction, FutureAction, JobSubmitter}
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.ThreadUtils
 
 /**

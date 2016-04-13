@@ -28,7 +28,7 @@ import org.apache.avro.ipc.NettyTransceiver
 import org.apache.avro.ipc.specific.SpecificRequestor
 import org.jboss.netty.channel.socket.nio.NioClientSocketChannelFactory
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.dstream.ReceiverInputDStream

@@ -32,8 +32,8 @@ import org.apache.spark.{Partition => SparkPartition, _}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.DataReadMethod
-import org.apache.spark.sql.{SQLConf, SQLContext}
-import org.apache.spark.sql.execution.datasources.parquet.UnsafeRowParquetRecordReader
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.{SerializableConfiguration, ShutdownHookManager}
 
@@ -94,13 +94,6 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
   }
 
   @transient protected val jobId = new JobID(jobTrackerId, id)
-
-  // If true, enable using the custom RecordReader for parquet. This only works for
-  // a subset of the types (no complex types).
-  protected val enableUnsafeRowParquetReader: Boolean =
-    sqlContext.getConf(SQLConf.PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED.key).toBoolean
-  protected val enableVectorizedParquetReader: Boolean =
-    sqlContext.getConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key).toBoolean
 
   override def getPartitions: Array[SparkPartition] = {
     val conf = getConf(isDriverSide = true)
@@ -163,30 +156,9 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
       }
       val attemptId = new TaskAttemptID(jobTrackerId, id, TaskType.MAP, split.index, 0)
       val hadoopAttemptContext = new TaskAttemptContextImpl(conf, attemptId)
-      private[this] var reader: RecordReader[Void, V] = null
-
-      /**
-        * If the format is ParquetInputFormat, try to create the optimized RecordReader. If this
-        * fails (for example, unsupported schema), try with the normal reader.
-        * TODO: plumb this through a different way?
-        */
-      if (enableUnsafeRowParquetReader &&
-        format.getClass.getName == "org.apache.parquet.hadoop.ParquetInputFormat") {
-        val parquetReader: UnsafeRowParquetRecordReader = new UnsafeRowParquetRecordReader()
-        if (!parquetReader.tryInitialize(
-            split.serializableHadoopSplit.value, hadoopAttemptContext)) {
-          parquetReader.close()
-        } else {
-          reader = parquetReader.asInstanceOf[RecordReader[Void, V]]
-          if (enableVectorizedParquetReader) parquetReader.resultBatch()
-        }
-      }
-
-      if (reader == null) {
-        reader = format.createRecordReader(
+      private[this] var reader: RecordReader[Void, V] = format.createRecordReader(
           split.serializableHadoopSplit.value, hadoopAttemptContext)
-        reader.initialize(split.serializableHadoopSplit.value, hadoopAttemptContext)
-      }
+      reader.initialize(split.serializableHadoopSplit.value, hadoopAttemptContext)
 
       // Register an on-task-completion callback to close the input stream.
       context.addTaskCompletionListener(context => close())
@@ -195,7 +167,7 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
       private[this] var finished = false
 
       override def hasNext: Boolean = {
-        if (context.isInterrupted) {
+        if (context.isInterrupted()) {
           throw new TaskKilledException
         }
         if (!finished && !havePair) {

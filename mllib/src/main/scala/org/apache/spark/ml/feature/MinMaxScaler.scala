@@ -59,7 +59,7 @@ private[feature] trait MinMaxScalerParams extends Params with HasInputCol with H
 
   /** Validates and transforms the input schema. */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
-    validateParams()
+    require($(min) < $(max), s"The specified min(${$(min)}) is larger or equal to max(${$(max)})")
     val inputType = schema($(inputCol)).dataType
     require(inputType.isInstanceOf[VectorUDT],
       s"Input column ${$(inputCol)} must be a vector column")
@@ -69,9 +69,6 @@ private[feature] trait MinMaxScalerParams extends Params with HasInputCol with H
     StructType(outputFields)
   }
 
-  override def validateParams(): Unit = {
-    require($(min) < $(max), s"The specified min(${$(min)}) is larger or equal to max(${$(max)})")
-  }
 }
 
 /**
@@ -106,9 +103,10 @@ class MinMaxScaler(override val uid: String)
   /** @group setParam */
   def setMax(value: Double): this.type = set(max, value)
 
-  override def fit(dataset: DataFrame): MinMaxScalerModel = {
+  @Since("2.0.0")
+  override def fit(dataset: Dataset[_]): MinMaxScalerModel = {
     transformSchema(dataset.schema, logging = true)
-    val input = dataset.select($(inputCol)).map { case Row(v: Vector) => v }
+    val input = dataset.select($(inputCol)).rdd.map { case Row(v: Vector) => v }
     val summary = Statistics.colStats(input)
     copyValues(new MinMaxScalerModel(uid, summary.min, summary.max).setParent(this))
   }
@@ -157,7 +155,8 @@ class MinMaxScalerModel private[ml] (
   /** @group setParam */
   def setMax(value: Double): this.type = set(max, value)
 
-  override def transform(dataset: DataFrame): DataFrame = {
+  @Since("2.0.0")
+  override def transform(dataset: Dataset[_]): DataFrame = {
     val originalRange = (originalMax.toBreeze - originalMin.toBreeze).toArray
     val minArray = originalMin.toArray
 
@@ -166,7 +165,7 @@ class MinMaxScalerModel private[ml] (
 
       // 0 in sparse vector will probably be rescaled to non-zero
       val values = vector.toArray
-      val size = values.size
+      val size = values.length
       var i = 0
       while (i < size) {
         val raw = if (originalRange(i) != 0) (values(i) - minArray(i)) / originalRange(i) else 0.5

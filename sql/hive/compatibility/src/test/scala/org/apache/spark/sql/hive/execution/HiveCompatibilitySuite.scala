@@ -20,11 +20,12 @@ package org.apache.spark.sql.hive.execution
 import java.io.File
 import java.util.{Locale, TimeZone}
 
-import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.SQLConf
+import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Runs the test cases that are included in the hive distribution.
@@ -38,6 +39,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
   private val originalLocale = Locale.getDefault
   private val originalColumnBatchSize = TestHive.conf.columnBatchSize
   private val originalInMemoryPartitionPruning = TestHive.conf.inMemoryPartitionPruning
+  private val originalConvertMetastoreOrc = TestHive.convertMetastoreOrc
 
   def testCases: Seq[(String, File)] = {
     hiveQueryDir.listFiles.map(f => f.getName.stripSuffix(".q") -> f)
@@ -55,21 +57,28 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     // Enable in-memory partition pruning for testing purposes
     TestHive.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, true)
     // Use Hive hash expression instead of the native one
-    TestHive.functionRegistry.unregisterFunction("hash")
+    TestHive.sessionState.functionRegistry.unregisterFunction("hash")
+    // Ensures that the plans generation use metastore relation and not OrcRelation
+    // Was done because SqlBuilder does not work with plans having logical relation
+    TestHive.setConf(HiveContext.CONVERT_METASTORE_ORC, false)
     RuleExecutor.resetTime()
   }
 
   override def afterAll() {
-    TestHive.cacheTables = false
-    TimeZone.setDefault(originalTimeZone)
-    Locale.setDefault(originalLocale)
-    TestHive.setConf(SQLConf.COLUMN_BATCH_SIZE, originalColumnBatchSize)
-    TestHive.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, originalInMemoryPartitionPruning)
-    TestHive.functionRegistry.restore()
+    try {
+      TestHive.cacheTables = false
+      TimeZone.setDefault(originalTimeZone)
+      Locale.setDefault(originalLocale)
+      TestHive.setConf(SQLConf.COLUMN_BATCH_SIZE, originalColumnBatchSize)
+      TestHive.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, originalInMemoryPartitionPruning)
+      TestHive.setConf(HiveContext.CONVERT_METASTORE_ORC, originalConvertMetastoreOrc)
+      TestHive.sessionState.functionRegistry.restore()
 
-    // For debugging dump some statistics about how much time was spent in various optimizer rules.
-    logWarning(RuleExecutor.dumpTimeSpent())
-    super.afterAll()
+      // For debugging dump some statistics about how much time was spent in various optimizer rules.
+      logWarning(RuleExecutor.dumpTimeSpent())
+    } finally {
+      super.afterAll()
+    }
   }
 
   /** A list of tests deemed out of scope currently and thus completely disregarded. */
@@ -288,7 +297,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "compute_stats_empty_table",
     "compute_stats_long",
     "create_view_translate",
-    "show_create_table_serde",
     "show_tblproperties",
 
     // Odd changes to output
@@ -336,7 +344,45 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_format_number",
     "udf_round",
     "udf_round_3",
-    "view_cast"
+    "view_cast",
+
+    // These tests check the VIEW table definition, but Spark handles CREATE VIEW itself and
+    // generates different View Expanded Text.
+    "alter_view_as_select",
+
+    // We don't support show create table commands in general
+    "show_create_table_alter",
+    "show_create_table_db_table",
+    "show_create_table_delimited",
+    "show_create_table_does_not_exist",
+    "show_create_table_index",
+    "show_create_table_partitioned",
+    "show_create_table_serde",
+    "show_create_table_view",
+
+    // These tests try to change how a table is bucketed, which we don't support
+    "alter4",
+    "sort_merge_join_desc_5",
+    "sort_merge_join_desc_6",
+    "sort_merge_join_desc_7",
+
+    // Index commands are not supported
+    "drop_index",
+    "drop_index_removes_partition_dirs",
+    "alter_index",
+
+    // Macro commands are not supported
+    "macro",
+
+    // Create partitioned view is not supported
+    "create_like_view",
+    "describe_formatted_view_partitioned",
+
+    // This uses CONCATENATE, which we don't support
+    "alter_merge_2",
+
+    // TOUCH is not supported
+    "touch"
   )
 
   /**
@@ -351,17 +397,13 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "alias_casted_column",
     "alter2",
     "alter3",
-    "alter4",
     "alter5",
-    "alter_index",
-    "alter_merge_2",
     "alter_partition_format_loc",
     "alter_partition_with_whitelist",
     "alter_rename_partition",
     "alter_table_serde",
     "alter_varchar1",
     "alter_varchar2",
-    "alter_view_as_select",
     "ambiguous_col",
     "annotate_stats_join",
     "annotate_stats_limit",
@@ -449,7 +491,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "cp_mj_rc",
     "create_insert_outputformat",
     "create_like_tbl_props",
-    "create_like_view",
     "create_nested_type",
     "create_skewed_table1",
     "create_struct_table",
@@ -474,15 +515,12 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "default_partition_name",
     "delimiter",
     "desc_non_existent_tbl",
-    "describe_formatted_view_partitioned",
     "diff_part_input_formats",
     "disable_file_format_check",
     "disallow_incompatible_type_change_off",
     "distinct_stats",
     "drop_database_removes_partition_dirs",
     "drop_function",
-    "drop_index",
-    "drop_index_removes_partition_dirs",
     "drop_multi_partitions",
     "drop_partitions_filter",
     "drop_partitions_filter2",
@@ -710,7 +748,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "load_file_with_space_in_the_name",
     "loadpart1",
     "louter_join_ppr",
-    "macro",
     "mapjoin_distinct",
     "mapjoin_filter_on_outerjoin",
     "mapjoin_mapjoin",
@@ -826,14 +863,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "serde_reported_schema",
     "set_variable_sub",
     "show_columns",
-    "show_create_table_alter",
-    "show_create_table_db_table",
-    "show_create_table_delimited",
-    "show_create_table_does_not_exist",
-    "show_create_table_index",
-    "show_create_table_partitioned",
-    "show_create_table_serde",
-    "show_create_table_view",
     "show_describe_func_quotes",
     "show_functions",
     "show_partitions",
@@ -863,9 +892,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "sort_merge_join_desc_2",
     "sort_merge_join_desc_3",
     "sort_merge_join_desc_4",
-    "sort_merge_join_desc_5",
-    "sort_merge_join_desc_6",
-    "sort_merge_join_desc_7",
     "stats0",
     "stats_aggregator_error_1",
     "stats_empty_partition",
@@ -876,7 +902,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "timestamp_comparison",
     "timestamp_lazy",
     "timestamp_null",
-    "touch",
     "transform_ppr1",
     "transform_ppr2",
     "truncate_table",

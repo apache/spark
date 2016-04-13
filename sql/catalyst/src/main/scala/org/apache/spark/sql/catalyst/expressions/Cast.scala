@@ -112,7 +112,7 @@ object Cast {
 }
 
 /** Cast the child expression to the target data type. */
-case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
+case class Cast(child: Expression, dataType: DataType) extends UnaryExpression with NullIntolerant {
 
   override def toString: String = s"cast($child as ${dataType.simpleString})"
 
@@ -898,7 +898,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
     val result = ctx.freshName("result")
     val tmpRow = ctx.freshName("tmpRow")
 
-    val fieldsEvalCode = fieldsCasts.zipWithIndex.map { case (cast, i) => {
+    val fieldsEvalCode = fieldsCasts.zipWithIndex.map { case (cast, i) =>
       val fromFieldPrim = ctx.freshName("ffp")
       val fromFieldNull = ctx.freshName("ffn")
       val toFieldPrim = ctx.freshName("tfp")
@@ -920,12 +920,11 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
           }
         }
        """
-      }
     }.mkString("\n")
 
     (c, evPrim, evNull) =>
       s"""
-        final $rowClass $result = new $rowClass(${fieldsCasts.size});
+        final $rowClass $result = new $rowClass(${fieldsCasts.length});
         final InternalRow $tmpRow = $c;
         $fieldsEvalCode
         $evPrim = $result.copy();

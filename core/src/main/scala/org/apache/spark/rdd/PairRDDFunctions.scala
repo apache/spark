@@ -41,6 +41,7 @@ import org.apache.spark.Partitioner.defaultPartitioner
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.{DataWriteMethod, OutputMetrics}
+import org.apache.spark.internal.Logging
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.util.{SerializableConfiguration, Utils}
@@ -1101,7 +1102,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       val writer = format.getRecordWriter(hadoopContext).asInstanceOf[NewRecordWriter[K, V]]
       require(writer != null, "Unable to obtain RecordWriter")
       var recordsWritten = 0L
-      Utils.tryWithSafeFinally {
+      Utils.tryWithSafeFinallyAndFailureCallbacks {
         while (iter.hasNext) {
           val pair = iter.next()
           writer.write(pair._1, pair._2)
@@ -1110,9 +1111,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
           maybeUpdateOutputMetrics(outputMetricsAndBytesWrittenCallback, recordsWritten)
           recordsWritten += 1
         }
-      } {
-        writer.close(hadoopContext)
-      }
+      }(finallyBlock = writer.close(hadoopContext))
       committer.commitTask(hadoopContext)
       outputMetricsAndBytesWrittenCallback.foreach { case (om, callback) =>
         om.setBytesWritten(callback())
@@ -1190,7 +1189,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       writer.open()
       var recordsWritten = 0L
 
-      Utils.tryWithSafeFinally {
+      Utils.tryWithSafeFinallyAndFailureCallbacks {
         while (iter.hasNext) {
           val record = iter.next()
           writer.write(record._1.asInstanceOf[AnyRef], record._2.asInstanceOf[AnyRef])
@@ -1199,9 +1198,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
           maybeUpdateOutputMetrics(outputMetricsAndBytesWrittenCallback, recordsWritten)
           recordsWritten += 1
         }
-      } {
-        writer.close()
-      }
+      }(finallyBlock = writer.close())
       writer.commit()
       outputMetricsAndBytesWrittenCallback.foreach { case (om, callback) =>
         om.setBytesWritten(callback())

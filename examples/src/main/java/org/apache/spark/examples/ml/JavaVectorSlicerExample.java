@@ -30,7 +30,7 @@ import org.apache.spark.ml.attribute.AttributeGroup;
 import org.apache.spark.ml.attribute.NumericAttribute;
 import org.apache.spark.ml.feature.VectorSlicer;
 import org.apache.spark.mllib.linalg.Vectors;
-import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.types.*;
@@ -55,7 +55,8 @@ public class JavaVectorSlicerExample {
       RowFactory.create(Vectors.dense(-2.0, 2.3, 0.0))
     ));
 
-    DataFrame dataset = jsql.createDataFrame(jrdd, (new StructType()).add(group.toStructField()));
+    Dataset<Row> dataset =
+        jsql.createDataFrame(jrdd, (new StructType()).add(group.toStructField()));
 
     VectorSlicer vectorSlicer = new VectorSlicer()
       .setInputCol("userFeatures").setOutputCol("features");
@@ -63,7 +64,7 @@ public class JavaVectorSlicerExample {
     vectorSlicer.setIndices(new int[]{1}).setNames(new String[]{"f3"});
     // or slicer.setIndices(new int[]{1, 2}), or slicer.setNames(new String[]{"f2", "f3"})
 
-    DataFrame output = vectorSlicer.transform(dataset);
+    Dataset<Row> output = vectorSlicer.transform(dataset);
 
     System.out.println(output.select("userFeatures", "features").first());
     // $example off$
