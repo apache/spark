@@ -18,6 +18,8 @@
 package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.{Partition, TaskContext}
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.rdd.{RDD, SqlNewHadoopRDDState}
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.InternalRow
@@ -25,7 +27,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 /**
  * A single file that should be read, along with partition column values that
  * need to be prepended to each row.  The reading should start at the first
- * valid record found after `offset`.
+ * valid record found after `start`.
  */
 case class PartitionedFile(
     partitionValues: InternalRow,
@@ -54,33 +56,70 @@ class FileScanRDD(
 
   override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
     val iterator = new Iterator[Object] with AutoCloseable {
+      private val inputMetrics = context.taskMetrics().registerInputMetrics(DataReadMethod.Hadoop)
+      private val existingBytesRead = inputMetrics.bytesRead
+
+      // Find a function that will return the FileSystem bytes read by this thread. Do this before
+      // apply readFunction, because it might read some bytes.
+      private val getBytesReadCallback: Option[() => Long] =
+        SparkHadoopUtil.get.getFSBytesReadOnThreadCallback()
+
+      // For Hadoop 2.5+, we get our input bytes from thread-local Hadoop FileSystem statistics.
+      // If we do a coalesce, however, we are likely to compute multiple partitions in the same
+      // task and in the same thread, in which case we need to avoid override values written by
+      // previous partitions (SPARK-13071).
+      private def updateBytesRead(): Unit = {
+        getBytesReadCallback.foreach { getBytesRead =>
+          inputMetrics.setBytesRead(existingBytesRead + getBytesRead())
+        }
+      }
+
+      // If we can't get the bytes read from the FS stats, fall back to the file size,
+      // which may be inaccurate.
+      private def updateBytesReadWithFileSize(): Unit = {
+        if (getBytesReadCallback.isEmpty && currentFile != null) {
+          inputMetrics.incBytesReadInternal(currentFile.length)
+        }
+      }
+
       private[this] val files = split.asInstanceOf[FilePartition].files.toIterator
+      private[this] var currentFile: PartitionedFile = null
       private[this] var currentIterator: Iterator[Object] = null
 
       def hasNext = (currentIterator != null && currentIterator.hasNext) || nextIterator()
-      def next() = currentIterator.next()
+      def next() = {
+        inputMetrics.incRecordsReadInternal(1)
+        if (inputMetrics.recordsRead % SparkHadoopUtil.UPDATE_INPUT_METRICS_INTERVAL_RECORDS == 0) {
+          updateBytesRead()
+        }
+        currentIterator.next()
+      }
 
       /** Advances to the next file. Returns true if a new non-empty iterator is available. */
       private def nextIterator(): Boolean = {
         if (files.hasNext) {
-          val nextFile = files.next()
-          logInfo(s"Reading File $nextFile")
-          SqlNewHadoopRDDState.setInputFileName(nextFile.filePath)
-          currentIterator = readFunction(nextFile)
+          updateBytesReadWithFileSize()
+          currentFile = files.next()
+          logInfo(s"Reading File $currentFile")
+          SqlNewHadoopRDDState.setInputFileName(currentFile.filePath)
+          currentIterator = readFunction(currentFile)
           hasNext
         } else {
+          currentFile = null
           SqlNewHadoopRDDState.unsetInputFileName()
           false
         }
       }
 
       override def close() = {
+        updateBytesRead()
+        updateBytesReadWithFileSize()
         SqlNewHadoopRDDState.unsetInputFileName()
       }
     }
 
     // Register an on-task-completion callback to close the input stream.
-    context.addTaskCompletionListener(context => iterator.close())
+    context.addTaskCompletionListener(_ => iterator.close())
 
     iterator.asInstanceOf[Iterator[InternalRow]] // This is an erasure hack.
   }
