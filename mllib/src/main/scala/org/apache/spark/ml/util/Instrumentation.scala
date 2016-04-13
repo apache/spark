@@ -19,6 +19,12 @@ package org.apache.spark.ml.util
 
 import java.util.concurrent.atomic.AtomicLong
 
+import org.json4s._
+import org.json4s.{DefaultFormats, JObject}
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods._
+
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param.Param
@@ -29,7 +35,7 @@ import org.apache.spark.sql.Dataset
  * A small wrapper that defines a training session for an estimator, and some methods to log
  * useful information during this session.
  *
- * A new class is expected to be created within fit().
+ * A new instance is expected to be created within fit().
  *
  * @param estimator the estimator that is being fit
  * @param dataset the training dataset
@@ -37,7 +43,13 @@ import org.apache.spark.sql.Dataset
  */
 private[ml] class Instrumentation[E <: Estimator[_]] private (
     estimator: E, dataset: RDD[_]) extends Logging {
+
   private val id = Instrumentation.counter.incrementAndGet()
+  private val prefix = {
+    val className = estimator.getClass.getSimpleName
+    s"$className-${estimator.uid}-${dataset.hashCode()}-$id: "
+  }
+
   init()
 
   private def init(): Unit = {
@@ -46,26 +58,24 @@ private[ml] class Instrumentation[E <: Estimator[_]] private (
   }
 
   /**
-   * Logs a message with a prefix that uniquely identifies the prefix session.
+   * Logs a message with a prefix that uniquely identifies the training session.
    */
   def log(msg: String): Unit = {
-    val className = estimator.getClass.getSimpleName
-    logInfo(s"Instrumentation($className-${estimator.uid}-${dataset.hashCode()}-$id): $msg")
+    logInfo(prefix + msg)
   }
 
   /**
    * Logs the value of the given parameters for the estimator being used in this session.
- *
-   * @param params
    */
   def logParams(params: Param[_]*): Unit = {
-    val pairs = for {
+    val pairs: Seq[(String, JValue)] = for {
       p <- params
       value <- estimator.get(p)
     } yield {
-      s"${p.name}=$value"
+      val cast = p.asInstanceOf[Param[Any]]
+      p.name -> parse(cast.jsonEncode(value))
     }
-    log(s"${pairs.mkString(" ")}")
+    log(compact(render(map2jvalue(pairs.toMap))))
   }
 
   def logNumFeatures(num: Long): Unit = {
