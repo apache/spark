@@ -373,12 +373,54 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     }
 
     val reader = manager.getReader[Int, Int](shuffleHandle, 0, 1,
-      new TaskContextImpl(1, 0, 2L, 0, taskMemoryManager, new Properties, metricsSystem,
+      new TaskContextImpl(1, 0, 2L, 0, taskMemoryManager, new Properties, metricsSystem, false,
         InternalAccumulator.create(sc)))
     val readData = reader.read().toIndexedSeq
     assert(readData === data1.toIndexedSeq || readData === data2.toIndexedSeq)
 
     manager.unregisterShuffle(0)
+  }
+
+  test("SPARK-14560 -- UnsafeShuffleWriter") {
+    val myConf = conf.clone()
+      .set("spark.shuffle.memoryFraction", "0.01")
+      .set("spark.memory.useLegacyMode", "true")
+      .set("spark.testing.memory", "500000000") //~500MB
+      .set("spark.shuffle.sort.bypassMergeThreshold", "0")
+      // for relocation, so we can use ShuffleExternalSorter
+      .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+    sc = new SparkContext("local", "test", myConf)
+    val N = 2e6.toInt
+    val p = new org.apache.spark.HashPartitioner(10)
+    val d = sc.parallelize(1 to N, 10).map { x => (x % 10000) -> x.toLong }
+    // now we use an aggregator, but that still produces enough data that we need to spill on the read-side
+    // (this one is ridiculous, we shouldn't aggregate at all, but its just an easy
+    // way to trigger lots of memory use on the shuffle-read side)
+   val d2: RDD[(Int, Seq[Long])] = d.aggregateByKey(Seq[Long](), 5) (
+      { case (list, next) => list :+ next },
+      { case (listA, listB) => listA ++ listB }
+    )
+    val d3 = d2.repartitionAndSortWithinPartitions(p)
+    d3.count()
+  }
+
+  test("SPARK-14560 -- SortShuffleWriters") {
+    val myConf = conf.clone()
+      .set("spark.shuffle.memoryFraction", "0.01")
+      .set("spark.memory.useLegacyMode", "true")
+      .set("spark.testing.memory", "500000000") //~500MB
+      .set("spark.shuffle.sort.bypassMergeThreshold", "0")
+      // pretty small, but otherwise its too easy for the structures to claim they are using 0
+      // memory in these small tests
+      .set("spark.shuffle.spill.initialMemoryThreshold", "5000")
+    sc = new SparkContext("local", "test", myConf)
+    val N = 2e6.toInt
+    val p = new org.apache.spark.HashPartitioner(10)
+    val d = sc.parallelize(1 to N, 10).map { x => (x % 10000) -> x.toLong }
+    val p2 = new org.apache.spark.HashPartitioner(5)
+    val d2 = d.repartitionAndSortWithinPartitions(p2)
+    val d3 = d2.repartitionAndSortWithinPartitions(p)
+    d3.count()
   }
 }
 
