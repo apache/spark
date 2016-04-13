@@ -10,3 +10,6 @@
 
 (If this patch involves UI changes, please attach a screenshot; otherwise, remove this)
 
+## What is the Jira issue?
+
+[SPARK-XXXX](https://issues.apache.org/jira/browse/SPARK-XXXX)
