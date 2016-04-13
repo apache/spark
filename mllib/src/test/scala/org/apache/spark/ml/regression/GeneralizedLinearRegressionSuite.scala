@@ -626,6 +626,7 @@ class GeneralizedLinearRegressionSuite
     assert(summary.residualDegreeOfFreedom === residualDegreeOfFreedomR)
     assert(summary.residualDegreeOfFreedomNull === residualDegreeOfFreedomNullR)
     assert(summary.aic ~== aicR absTol 1E-3)
+    assert(summary.solver === "irls")
   }
 
   test("glm summary: binomial family with weight") {
@@ -739,6 +740,7 @@ class GeneralizedLinearRegressionSuite
     assert(summary.residualDegreeOfFreedom === residualDegreeOfFreedomR)
     assert(summary.residualDegreeOfFreedomNull === residualDegreeOfFreedomNullR)
     assert(summary.aic ~== aicR absTol 1E-3)
+    assert(summary.solver === "irls")
   }
 
   test("glm summary: poisson family with weight") {
@@ -855,6 +857,7 @@ class GeneralizedLinearRegressionSuite
     assert(summary.residualDegreeOfFreedom === residualDegreeOfFreedomR)
     assert(summary.residualDegreeOfFreedomNull === residualDegreeOfFreedomNullR)
     assert(summary.aic ~== aicR absTol 1E-3)
+    assert(summary.solver === "irls")
   }
 
   test("glm summary: gamma family with weight") {
@@ -968,6 +971,7 @@ class GeneralizedLinearRegressionSuite
     assert(summary.residualDegreeOfFreedom === residualDegreeOfFreedomR)
     assert(summary.residualDegreeOfFreedomNull === residualDegreeOfFreedomNullR)
     assert(summary.aic ~== aicR absTol 1E-3)
+    assert(summary.solver === "irls")
   }
 
   test("read/write") {
@@ -991,6 +995,14 @@ class GeneralizedLinearRegressionSuite
         assert(expected.intercept === actual.intercept)
         assert(expected.coefficients === actual.coefficients)
       }
+  }
+
+  test("glm accepts Dataset[LabeledPoint]") {
+    val context = sqlContext
+    import context.implicits._
+    new GeneralizedLinearRegression()
+      .setFamily("gaussian")
+      .fit(datasetGaussianIdentity.as[LabeledPoint])
   }
 }
 

@@ -602,8 +602,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /**
-   * Set a local property that affects jobs submitted from this thread, such as the
-   * Spark fair scheduler pool.
+   * Set a local property that affects jobs submitted from this thread, such as the Spark fair
+   * scheduler pool. User-defined properties may also be set here. These properties are propagated
+   * through to worker tasks and can be accessed there via
+   * [[org.apache.spark.TaskContext#getLocalProperty]].
    */
   def setLocalProperty(key: String, value: String) {
     if (value == null) {
@@ -1356,8 +1358,18 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Register a listener to receive up-calls from events that happen during execution.
    */
   @DeveloperApi
-  def addSparkListener(listener: SparkListener) {
+  def addSparkListener(listener: SparkListenerInterface) {
     listenerBus.addListener(listener)
+  }
+
+  private[spark] override def getExecutorIds(): Seq[String] = {
+    schedulerBackend match {
+      case b: CoarseGrainedSchedulerBackend =>
+        b.getExecutorIds()
+      case _ =>
+        logWarning("Requesting executors is only supported in coarse-grained mode")
+        Nil
+    }
   }
 
   /**
@@ -1997,7 +2009,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
         // Use reflection to find the right constructor
         val constructors = {
           val listenerClass = Utils.classForName(className)
-          listenerClass.getConstructors.asInstanceOf[Array[Constructor[_ <: SparkListener]]]
+          listenerClass
+              .getConstructors
+              .asInstanceOf[Array[Constructor[_ <: SparkListenerInterface]]]
         }
         val constructorTakingSparkConf = constructors.find { c =>
           c.getParameterTypes.sameElements(Array(classOf[SparkConf]))
@@ -2005,7 +2019,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
         lazy val zeroArgumentConstructor = constructors.find { c =>
           c.getParameterTypes.isEmpty
         }
-        val listener: SparkListener = {
+        val listener: SparkListenerInterface = {
           if (constructorTakingSparkConf.isDefined) {
             constructorTakingSparkConf.get.newInstance(conf)
           } else if (zeroArgumentConstructor.isDefined) {
@@ -2383,9 +2397,8 @@ object SparkContext extends Logging {
         } catch {
           // TODO: Enumerate the exact reasons why it can fail
           // But irrespective of it, it means we cannot proceed !
-          case e: Exception => {
+          case e: Exception =>
             throw new SparkException("YARN mode not available ?", e)
-          }
         }
         val backend = try {
           val clazz =
@@ -2393,9 +2406,8 @@ object SparkContext extends Logging {
           val cons = clazz.getConstructor(classOf[TaskSchedulerImpl], classOf[SparkContext])
           cons.newInstance(scheduler, sc).asInstanceOf[CoarseGrainedSchedulerBackend]
         } catch {
-          case e: Exception => {
+          case e: Exception =>
             throw new SparkException("YARN mode not available ?", e)
-          }
         }
         scheduler.initialize(backend)
         (backend, scheduler)
@@ -2407,9 +2419,8 @@ object SparkContext extends Logging {
           cons.newInstance(sc).asInstanceOf[TaskSchedulerImpl]
 
         } catch {
-          case e: Exception => {
+          case e: Exception =>
             throw new SparkException("YARN mode not available ?", e)
-          }
         }
 
         val backend = try {
@@ -2418,9 +2429,8 @@ object SparkContext extends Logging {
           val cons = clazz.getConstructor(classOf[TaskSchedulerImpl], classOf[SparkContext])
           cons.newInstance(scheduler, sc).asInstanceOf[CoarseGrainedSchedulerBackend]
         } catch {
-          case e: Exception => {
+          case e: Exception =>
             throw new SparkException("YARN mode not available ?", e)
-          }
         }
 
         scheduler.initialize(backend)

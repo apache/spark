@@ -454,6 +454,16 @@ public class JavaDatasetSuite implements Serializable {
     Assert.assertEquals(data, ds.collectAsList());
   }
 
+  @Test
+  public void testRandomSplit() {
+    List<String> data = Arrays.asList("hello", "world", "from", "spark");
+    Dataset<String> ds = context.createDataset(data, Encoders.STRING());
+    double[] arraySplit = {1, 2, 3};
+
+    List<Dataset<String>> randomSplit =  ds.randomSplitAsList(arraySplit, 1);
+    Assert.assertEquals("wrong number of splits", randomSplit.size(), 3);
+  }
+
   /**
    * For testing error messages when creating an encoder on a private class. This is done
    * here since we cannot create truly private classes in Scala.

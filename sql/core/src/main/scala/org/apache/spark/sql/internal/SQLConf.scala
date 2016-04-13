@@ -145,12 +145,6 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
-  val USE_FILE_SCAN = SQLConfigBuilder("spark.sql.sources.fileScan")
-    .internal()
-    .doc("Use the new FileScanRDD path for reading HDSF based data sources.")
-    .booleanConf
-    .createWithDefault(true)
-
   val PARQUET_SCHEMA_MERGING_ENABLED = SQLConfigBuilder("spark.sql.parquet.mergeSchema")
     .doc("When true, the Parquet data source merges schemas collected from all data files, " +
          "otherwise the schema is picked from the summary file or a random data file " +
@@ -193,7 +187,7 @@ object SQLConf {
     .stringConf
     .transform(_.toLowerCase())
     .checkValues(Set("uncompressed", "snappy", "gzip", "lzo"))
-    .createWithDefault("gzip")
+    .createWithDefault("snappy")
 
   val PARQUET_FILTER_PUSHDOWN_ENABLED = SQLConfigBuilder("spark.sql.parquet.filterPushdown")
     .doc("Enables Parquet filter push-down optimization when set to true.")
@@ -396,6 +390,13 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val WHOLESTAGE_MAX_NUM_FIELDS = SQLConfigBuilder("spark.sql.codegen.maxFields")
+    .internal()
+    .doc("The maximum number of fields (including nested fields) that will be supported before" +
+      " deactivating whole-stage codegen.")
+    .intConf
+    .createWithDefault(200)
+
   val FILES_MAX_PARTITION_BYTES = SQLConfigBuilder("spark.sql.files.maxPartitionBytes")
     .doc("The maximum number of bytes to pack into a single partition when reading files.")
     .longConf
@@ -474,11 +475,11 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def useCompression: Boolean = getConf(COMPRESS_CACHED)
 
-  def useFileScan: Boolean = getConf(USE_FILE_SCAN)
-
   def parquetCompressionCodec: String = getConf(PARQUET_COMPRESSION)
 
   def parquetCacheMetadata: Boolean = getConf(PARQUET_CACHE_METADATA)
+
+  def parquetVectorizedReaderEnabled: Boolean = getConf(PARQUET_VECTORIZED_READER_ENABLED)
 
   def columnBatchSize: Int = getConf(COLUMN_BATCH_SIZE)
 
@@ -503,6 +504,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def nativeView: Boolean = getConf(NATIVE_VIEW)
 
   def wholeStageEnabled: Boolean = getConf(WHOLESTAGE_CODEGEN_ENABLED)
+
+  def wholeStageMaxNumFields: Int = getConf(WHOLESTAGE_MAX_NUM_FIELDS)
 
   def exchangeReuseEnabled: Boolean = getConf(EXCHANGE_REUSE_ENABLED)
 
