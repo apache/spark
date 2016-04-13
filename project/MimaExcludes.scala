@@ -628,7 +628,10 @@ object MimaExcludes {
       ) ++ Seq(
         // [SPARK-14475] Propagate user-defined context from driver to executors
         ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.getLocalProperty")
-      )
+      ) ++ Seq(
+        // [SPARK-11171] [SPARK-11237] Add PMML export for ML
+        ProblemFilters.exclude[UpdateForwarderBodyProblem]("org.apache.spark.mllib.pmml.PMMLExportable.toPMML"),
+        ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.mllib.pmml.PMMLExportable.toPMML"))
     case v if v.startsWith("1.6") =>
       Seq(
         MimaBuild.excludeSparkPackage("deploy"),
