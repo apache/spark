@@ -225,29 +225,6 @@ case class DropTable(
 }
 
 /**
- * A command that renames a table/view.
- *
- * The syntax of this command is:
- * {{{
- *   ALTER TABLE table1 RENAME TO table2;
- *   ALTER VIEW view1 RENAME TO view2;
- * }}}
- */
-case class AlterTableRename(
-    oldName: TableIdentifier,
-    newName: TableIdentifier)
-  extends RunnableCommand {
-
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    val catalog = sqlContext.sessionState.catalog
-    catalog.invalidateTable(oldName)
-    catalog.renameTable(oldName, newName)
-    Seq.empty[Row]
-  }
-
-}
-
-/**
  * A command that sets table/view properties.
  *
  * The syntax of this command is:

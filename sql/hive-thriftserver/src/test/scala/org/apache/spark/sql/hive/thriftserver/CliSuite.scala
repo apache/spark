@@ -162,7 +162,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
 
     runCliWithin(3.minute)(
       "CREATE TABLE hive_test(key INT, val STRING);"
-        -> "OK",
+        -> "",
       "SHOW TABLES;"
         -> "hive_test",
       s"LOAD DATA LOCAL INPATH '$dataFilePath' OVERWRITE INTO TABLE hive_test;"
@@ -187,7 +187,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       "USE hive_test_db;"
         -> "",
       "CREATE TABLE hive_test(key INT, val STRING);"
-        -> "OK",
+        -> "",
       "SHOW TABLES;"
         -> "hive_test"
     )
@@ -210,9 +210,9 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       """CREATE TABLE t1(key string, val string)
         |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe';
       """.stripMargin
-        -> "OK",
+        -> "",
       "CREATE TABLE sourceTable (key INT, val STRING);"
-        -> "OK",
+        -> "",
       s"LOAD DATA LOCAL INPATH '$dataFilePath' OVERWRITE INTO TABLE sourceTable;"
         -> "OK",
       "INSERT INTO TABLE t1 SELECT key, val FROM sourceTable;"

@@ -360,7 +360,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       var message = intercept[AnalysisException] {
         sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
       }.getMessage
-      assert(message.contains("ctas1 already exists"))
+      assert(message.contains("already exists"))
       checkRelation("ctas1", true)
       sql("DROP TABLE ctas1")
 

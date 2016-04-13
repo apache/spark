@@ -179,7 +179,9 @@ class SparkSqlAstBuilder extends AstBuilder {
     }
   }
 
-  /** Type to keep track of a table header. */
+  /**
+   * Type to keep track of a table header: (identifier, isTemporary, ifNotExists, isExternal).
+   */
   type TableHeader = (TableIdentifier, Boolean, Boolean, Boolean)
 
   /**
@@ -616,10 +618,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       case s: GenericFileFormatContext =>
         (Seq.empty[String], Option(s.identifier.getText))
       case s: TableFileFormatContext =>
-        val elements = Seq(s.inFmt, s.outFmt) ++
-          Option(s.serdeCls).toSeq ++
-          Option(s.inDriver).toSeq ++
-          Option(s.outDriver).toSeq
+        val elements = Seq(s.inFmt, s.outFmt) ++ Option(s.serdeCls).toSeq
         (elements.map(string), None)
     }
     AlterTableSetFileFormat(
@@ -771,22 +770,6 @@ class SparkSqlAstBuilder extends AstBuilder {
       Option(ctx.orderedIdentifierList).toSeq
         .flatMap(_.orderedIdentifier.asScala)
         .map(_.identifier.getText))
-  }
-
-  /**
-   * Create a skew specification. This contains three components:
-   * - The Skewed Columns
-   * - Values for which are skewed. The size of each entry must match the number of skewed columns.
-   * - A store in directory flag.
-   */
-  override def visitSkewSpec(
-      ctx: SkewSpecContext): (Seq[String], Seq[Seq[String]], Boolean) = withOrigin(ctx) {
-    val skewedValues = if (ctx.constantList != null) {
-      Seq(visitConstantList(ctx.constantList))
-    } else {
-      visitNestedConstantList(ctx.nestedConstantList)
-    }
-    (visitIdentifierList(ctx.identifierList), skewedValues, ctx.DIRECTORIES != null)
   }
 
   /**
