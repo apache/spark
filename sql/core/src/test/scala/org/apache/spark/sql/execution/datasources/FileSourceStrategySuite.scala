@@ -22,8 +22,6 @@ import java.io.File
 import org.apache.hadoop.fs.FileStatus
 import org.apache.hadoop.mapreduce.Job
 
-import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionSet, PredicateHelper}
@@ -34,8 +32,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StructType}
-import org.apache.spark.util.{SerializableConfiguration, Utils}
-import org.apache.spark.util.collection.BitSet
+import org.apache.spark.util.Utils
 
 class FileSourceStrategySuite extends QueryTest with SharedSQLContext with PredicateHelper {
   import testImplicits._
