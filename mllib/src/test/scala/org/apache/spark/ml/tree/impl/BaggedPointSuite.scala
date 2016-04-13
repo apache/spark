@@ -18,6 +18,7 @@
 package org.apache.spark.ml.tree.impl
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.EnsembleTestHelper
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
@@ -94,10 +95,31 @@ class BaggedPointSuite extends SparkFunSuite with MLlibTestSparkContext  {
     val arr = EnsembleTestHelper.generateOrderedLabeledPoints(1, 1000)
     val rdd = sc.parallelize(arr)
     seeds.foreach { seed =>
-      val baggedRDD =
-        BaggedPoint.convertToBaggedRDD(rdd, subsample, numSubsamples, false, seed = seed)
+      val baggedRDD = BaggedPoint.convertToBaggedRDD(rdd, subsample, numSubsamples, false,
+        seed = seed)
       val subsampleCounts: Array[Array[Double]] =
         baggedRDD.map(_.subsampleCounts.map(_.toDouble)).collect()
+      EnsembleTestHelper.testRandomArrays(subsampleCounts, numSubsamples, expectedMean,
+        expectedStddev, epsilon = 0.01)
+    }
+  }
+
+  test("BaggedPoint RDD: with subsampling without replacement (fraction = 0.5) with weights") {
+    val numSubsamples = 100
+    val subsample = 0.5
+    val constantWeight = 0.1
+    val expectedMean = subsample * constantWeight
+    val expectedStddev = math.sqrt(subsample * (1 - subsample)) * constantWeight
+    val seeds = Array(123, 5354, 230, 349867, 23987)
+    val numSamples = 1000
+    val arr = EnsembleTestHelper.generateOrderedLabeledPoints(1, numSamples)
+    val rdd = sc.parallelize(arr)
+    seeds.foreach { seed =>
+      val baggedRDD =
+        BaggedPoint.convertToBaggedRDD(rdd, subsample, numSubsamples, false,
+          (lp: LabeledPoint) => constantWeight, seed = seed)
+      val subsampleCounts: Array[Array[Double]] =
+        baggedRDD.map(point => point.weightedCounts).collect()
       EnsembleTestHelper.testRandomArrays(subsampleCounts, numSubsamples, expectedMean,
         expectedStddev, epsilon = 0.01)
     }

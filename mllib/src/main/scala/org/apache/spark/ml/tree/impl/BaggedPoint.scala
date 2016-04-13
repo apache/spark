@@ -39,7 +39,14 @@ import org.apache.spark.util.random.XORShiftRandom
 private[spark] class BaggedPoint[Datum](
     val datum: Datum,
     val subsampleCounts: Array[Int],
-    val sampleWeight: Double) extends Serializable
+    val sampleWeight: Double) extends Serializable {
+
+  /**
+   * Subsample counts weighted by the sample weight.
+   */
+  def weightedCounts: Array[Double] = subsampleCounts.map(_ * sampleWeight)
+
+}
 
 private[spark] object BaggedPoint {
 
