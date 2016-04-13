@@ -160,6 +160,14 @@ class RowEncoderSuite extends SparkFunSuite {
       .compareTo(convertedBack.getDecimal(3)) == 0)
   }
 
+  test("RowEncoder should preserve schema nullability") {
+    val schema = new StructType().add("int", IntegerType, nullable = false)
+    val encoder = RowEncoder(schema)
+    assert(encoder.serializer.length == 1)
+    assert(encoder.serializer.head.dataType == IntegerType)
+    assert(encoder.serializer.head.nullable == false)
+  }
+
   private def encodeDecodeTest(schema: StructType): Unit = {
     test(s"encode/decode: ${schema.simpleString}") {
       val encoder = RowEncoder(schema)
