@@ -183,7 +183,21 @@ private[sql] object ParquetRelation {
     // for the schema of a parquet data.
     val schema = StructType.fromAttributes(attributes).asNullable
     val newAttributes = schema.toAttributes
-    ParquetTypesConverter.writeMetaData(newAttributes, path, conf)
+    if (sqlContext.sparkContext.hadoopConfiguration
+      .getBoolean(ParquetOutputFormat.ENABLE_JOB_SUMMARY, true)) {
+      ParquetTypesConverter.writeMetaData(attributes, path, conf)
+      } else {
+      // Create only the directory without the metafile
+      val fs = path.getFileSystem(conf)
+      if (fs == null) {
+        throw new IllegalArgumentException(
+          s"ParquetRelation: Path $path is incorrectly formatted")
+      }
+      if (!fs.exists(path) || !fs.getFileStatus(path).isDir) {
+        fs.mkdirs(path)
+      }
+    }
+
     new ParquetRelation(path.toString, Some(conf), sqlContext) {
       override val output = newAttributes
     }
