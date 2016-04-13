@@ -702,8 +702,9 @@ class FilterPushdownSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery.analyze)
 
     val correctAnswer = Union(Seq(
-      testRelation.where('a === 2L && 'b + Rand(10).as("rnd") === 3),
-      testRelation2.where('d === 2L && 'e + Rand(10).as("rnd") === 3)))
+      testRelation.where('a === 2L),
+      testRelation2.where('d === 2L)))
+      .where('b + Rand(10).as("rnd") === 3)
       .analyze
 
     comparePlans(optimized, correctAnswer)
