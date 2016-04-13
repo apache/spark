@@ -554,7 +554,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "date_comparison",
     "date_join1",
     "date_serde",
-    //"decimal_1", // TODO: cannot parse column decimal(5)
+    "decimal_1",
     "decimal_4",
     "decimal_join",
     "default_partition_name",

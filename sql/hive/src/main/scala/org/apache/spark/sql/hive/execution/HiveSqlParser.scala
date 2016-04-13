@@ -488,7 +488,7 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
         // just convert the whole type string to lower case, otherwise the struct field names
         // will no longer be case sensitive. Instead, we rely on our parser to get the proper
         // case before passing it to Hive.
-        HiveMetastoreTypes.toDataType(col.dataType.getText).simpleString,
+        CatalystSqlParser.parseDataType(col.dataType.getText).simpleString,
         nullable = true,
         Option(col.STRING).map(string))
     }
