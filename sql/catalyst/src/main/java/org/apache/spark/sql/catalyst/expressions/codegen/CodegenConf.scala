@@ -17,9 +17,19 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
+/**
+ * A trait that enables to access Code-Gen related configuration in SQLContext.
+ */
 private[spark] trait CodegenConf {
   def maxCaseBranches: Int
 }
 
-case class SimpleCodegenConf(maxCaseBranches: Int = 20) extends CodegenConf {
+/**
+ * A empty conf that is used in CodeGenerator.newCodeGenContext that stores expressions
+ * don't support codegen.
+ */
+object EmptyCodegenConf extends CodegenConf {
+  override def maxCaseBranches: Int = {
+    return 0 // Prevent codegen.
+  }
 }

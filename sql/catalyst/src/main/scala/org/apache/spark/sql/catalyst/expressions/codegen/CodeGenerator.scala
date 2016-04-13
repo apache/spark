@@ -52,6 +52,9 @@ case class ExprCode(var code: String, var isNull: String, var value: String)
  */
 class CodegenContext(codegenConf: CodegenConf) {
 
+  /**
+   * Code-generation related configuration (e.g. the maximum number of switches supported)
+   */
   val conf: CodegenConf = codegenConf
 
   /**
@@ -622,7 +625,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
    * expressions that don't support codegen
    */
   def newCodeGenContext(): CodegenContext = {
-    new CodegenContext(new SimpleCodegenConf)
+    new CodegenContext(EmptyCodegenConf)
   }
 }
 
