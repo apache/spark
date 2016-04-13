@@ -117,7 +117,7 @@ final class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: Stri
 
   /** @group setParam */
   @Since("1.4.0")
-  override def setLossType(value: String): this.type = set(lossType, value)
+  def setLossType(value: String): this.type = set(lossType, value)
 
   override protected def train(dataset: Dataset[_]): GBTRegressionModel = {
     val categoricalFeatures: Map[Int, Int] =
