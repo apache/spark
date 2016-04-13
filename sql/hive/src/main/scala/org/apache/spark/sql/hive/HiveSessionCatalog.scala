@@ -26,21 +26,21 @@ import org.apache.hadoop.hive.ql.exec.{UDAF, UDF}
 import org.apache.hadoop.hive.ql.exec.{FunctionRegistry => HiveFunctionRegistry}
 import org.apache.hadoop.hive.ql.udf.generic.{AbstractGenericUDAFResolver, GenericUDF, GenericUDTF}
 
-import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
-import org.apache.spark.sql.catalyst.catalog.{FunctionResourceLoader, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType, FunctionResourceLoader, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.datasources.BucketSpec
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.Utils
-
 
 private[sql] class HiveSessionCatalog(
     externalCatalog: HiveExternalCatalog,
@@ -240,6 +240,182 @@ private[sql] class HiveSessionCatalog(
       val builder = makeFunctionBuilder(functionName, clazz)
       val info = new ExpressionInfo(clazz.getCanonicalName, functionName)
       createTempFunction(functionName, info, builder, ignoreIfExists = false)
+  }
+
+  private def generateCreateTableHeader(
+              ct: CatalogTable,
+              processedProps: scala.collection.mutable.ArrayBuffer[String]): String = {
+    if (ct.tableType == CatalogTableType.EXTERNAL_TABLE) {
+      processedProps += "EXTERNAL"
+      "CREATE EXTERNAL TABLE " + ct.qualifiedName
+    } else {
+      "CREATE TABLE " + ct.qualifiedName
+    }
+  }
+
+  private def generateCols(ct: CatalogTable): String = {
+    val cols = ct.schema map { col =>
+      "`" + col.name + "` " + col.dataType + (col.comment.getOrElse("") match {
+        case cmt: String if cmt.length > 0 => " COMMENT '" + escapeHiveCommand(cmt) + "'"
+        case _ => ""
+      })
+    }
+    cols.mkString("(", ", ", ")")
+  }
+
+  private def generateHiveDDL(ct: CatalogTable): String = {
+    val sb = new StringBuilder("")
+    val processedProperties = scala.collection.mutable.ArrayBuffer.empty[String]
+
+    if (ct.tableType == CatalogTableType.VIRTUAL_VIEW) {
+      sb.append("CREATE VIEW " + ct.qualifiedName + " AS " + ct.viewOriginalText.getOrElse(""))
+    } else {
+      sb.append(generateCreateTableHeader(ct, processedProperties) + "\n")
+      sb.append(generateCols(ct) + "\n")
+
+      // table comment
+      sb.append(" " +
+        ct.properties.getOrElse("comment", new String) match {
+        case tcmt: String if tcmt.trim.length > 0 =>
+          processedProperties += "comment"
+          " COMMENT '" + escapeHiveCommand(tcmt.trim) + "'\n"
+        case _ => ""
+      })
+
+      // partitions
+      val partCols = ct.partitionColumns map { col =>
+        col.name + " " + col.dataType + (col.comment.getOrElse("") match {
+          case cmt: String if cmt.length > 0 => " COMMENT '" + escapeHiveCommand(cmt) + "'"
+          case _ => ""
+        })
+      }
+      if (partCols != null && partCols.size > 0) {
+        sb.append(" PARTITIONED BY ")
+        sb.append(partCols.mkString("( ", ", ", " )") + "\n")
+      }
+
+      // sort bucket
+      // TODO bucketing and sorting columns are not supported yet natively
+      // TODO CatalogTable does not implement skew spec yet
+      // skew spec
+      // TODO StorageHandler case is not handled yet, since CatalogTable does not have it yet
+      // row format
+      sb.append(" ROW FORMAT ")
+
+      val serdeProps = ct.storage.serdeProperties
+      // potentially for serde properties that should be ignored
+      val processedSerdeProps = Seq()
+
+      sb.append("SERDE '")
+      sb.append(escapeHiveCommand(ct.storage.serde.getOrElse("")) + "' \n")
+
+      val leftOverSerdeProps = serdeProps.filter(e => !processedSerdeProps.contains(e._1))
+      if (leftOverSerdeProps.size > 0) {
+        sb.append("WITH SERDEPROPERTIES \n")
+        sb.append(
+          leftOverSerdeProps.map { e =>
+            "'" + escapeHiveCommand(e._1) + "'='" + escapeHiveCommand(e._2) + "'"
+          }.mkString("( ", ", ", " )\n"))
+      }
+
+      sb.append("STORED AS INPUTFORMAT '" +
+        escapeHiveCommand(ct.storage.inputFormat.getOrElse("")) + "' \n")
+      sb.append("OUTPUTFORMAT  '" +
+        escapeHiveCommand(ct.storage.outputFormat.getOrElse("")) + "' \n")
+
+      // table location
+      sb.append("LOCATION '" +
+        escapeHiveCommand(ct.storage.locationUri.getOrElse("")) + "' \n")
+
+      // table properties
+      val propertPairs = ct.properties collect {
+        case (k, v) if !processedProperties.contains(k) =>
+          "'" + escapeHiveCommand(k) + "'='" + escapeHiveCommand(v) + "'"
+      }
+      if (propertPairs.size>0) {
+        sb.append("TBLPROPERTIES " + propertPairs.mkString("( ", ", \n", " )") + "\n")
+      }
+    }
+    sb.toString()
+  }
+
+  /**
+   * Generate DDL for datasource tables that are created by following ways:
+   * 1. CREATE [TEMPORARY] TABLE .... USING .... OPTIONS(.....)
+   * 2. DF.write.format("parquet").saveAsTable("t1")
+   * @param ct spark sql version of table metadator loaded
+   * @return DDL string
+   */
+  private def generateDataSourceDDL(ct: CatalogTable): String = {
+    val processedProperties = scala.collection.mutable.ArrayBuffer.empty[String]
+    val sb = new StringBuilder(generateCreateTableHeader(ct, processedProperties))
+    // It is possible that the column list returned from hive metastore is just a dummy
+    // one, such as "col array<String>", because the metastore was created as spark sql
+    // specific metastore (refer to HiveMetaStoreCatalog.createDataSourceTable.
+    // newSparkSQLSpecificMetastoreTable). In such case, the column schema information
+    // is located in tblproperties in json format.
+    sb.append(generateColsDataSource(ct, processedProperties) + "\n")
+    sb.append("USING " + ct.properties.get("spark.sql.sources.provider").get + "\n")
+    sb.append("OPTIONS ")
+    val options = scala.collection.mutable.ArrayBuffer.empty[String]
+    ct.storage.serdeProperties.foreach { e =>
+      options += "" + escapeHiveCommand(e._1) + " '" + escapeHiveCommand(e._2) + "'"
+    }
+    if (options.size > 0) sb.append(options.mkString("( ", ", \n", " )"))
+    sb.toString
+  }
+
+  private def generateColsDataSource(
+              ct: CatalogTable,
+              processedProps: scala.collection.mutable.ArrayBuffer[String]): String = {
+    val schemaStringFromParts: Option[String] = {
+      ct.properties.get("spark.sql.sources.schema.numParts").map { numParts =>
+        val parts = (0 until numParts.toInt).map { index =>
+          val part = ct.properties.get(s"spark.sql.sources.schema.part.$index").orNull
+          if (part == null) {
+            throw new AnalysisException(
+              "Could not read schema from the metastore because it is corrupted " +
+                s"(missing part $index of the schema, $numParts parts are expected).")
+          }
+          part
+        }
+        // Stick all parts back to a single schema string.
+        parts.mkString
+      }
+    }
+
+    if (schemaStringFromParts.isDefined) {
+      (schemaStringFromParts.map(s => DataType.fromJson(s).asInstanceOf[StructType]).
+        get map { f => s"${quoteIdentifier(f.name)} ${f.dataType.sql}" })
+        .mkString("( ", ", ", " )")
+    } else {
+      ""
+    }
+  }
+
+  /**
+   * Generate Create table DDL string for the specified tableIdentifier
+   * that is from Hive metastore
+   */
+  override def generateTableDDL(name: TableIdentifier): String = {
+    val ct = this.getTableMetadata(name)
+    if(ct.properties.get("spark.sql.sources.provider").isDefined) {
+      // CREATE [TEMPORARY] TABLE <tablename> .... USING .... OPTIONS (...)
+      generateDataSourceDDL(ct)
+    } else {
+      // CREATE [TEMPORARY] TABLE <tablename> ... ROW FORMAT.. TBLPROPERTIES (...)
+      generateHiveDDL(ct)
+    }
+  }
+
+  private def escapeHiveCommand(str: String): String = {
+    str.map{c =>
+      if (c == '\'' || c == ';') {
+        '\\'
+      } else {
+        c
+      }
+    }
   }
 }
 

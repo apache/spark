@@ -187,6 +187,14 @@ class SessionCatalog(
     externalCatalog.getTableOption(db, table)
   }
 
+  /**
+   * Generate Create table DDL string for the specified tableIdentifier
+   */
+  def generateTableDDL(name: TableIdentifier): String = {
+    throw new AnalysisException(
+      "SHOW CREATE TABLE command is not supported for temporary tables created in SQLContext.")
+  }
+
   // -------------------------------------------------------------
   // | Methods that interact with temporary and metastore tables |
   // -------------------------------------------------------------
