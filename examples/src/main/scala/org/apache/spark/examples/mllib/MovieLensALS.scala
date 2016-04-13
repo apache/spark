@@ -83,7 +83,7 @@ object MovieLensALS {
           |For example, the following command runs this app on a synthetic dataset:
           |
           | bin/spark-submit --class org.apache.spark.examples.mllib.MovieLensALS \
-          |  examples/target/scala-*/spark-examples-*.jar \
+          |  examples/target/spark-examples-*.jar \
           |  --rank 5 --numIterations 20 --lambda 1.0 --kryo \
           |  data/mllib/sample_movielens_data.txt
         """.stripMargin)

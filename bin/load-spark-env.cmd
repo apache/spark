@@ -33,24 +33,6 @@ if [%SPARK_ENV_LOADED%] == [] (
   call :LoadSparkEnv
 )
 
-rem Setting SPARK_SCALA_VERSION if not already set.
-
-set ASSEMBLY_DIR2="%SPARK_HOME%\assembly\target\scala-2.11"
-set ASSEMBLY_DIR1="%SPARK_HOME%\assembly\target\scala-2.10"
-
-if [%SPARK_SCALA_VERSION%] == [] (
-
-  if exist %ASSEMBLY_DIR2% if exist %ASSEMBLY_DIR1% (
-    echo "Presence of build for both scala versions(SCALA 2.10 and SCALA 2.11) detected."
-    echo "Either clean one of them or, set SPARK_SCALA_VERSION=2.11 in spark-env.cmd."
-    exit 1
-  )
-  if exist %ASSEMBLY_DIR2% (
-    set SPARK_SCALA_VERSION=2.11
-  ) else (
-    set SPARK_SCALA_VERSION=2.10
-  )
-)
 exit /b 0
 
 :LoadSparkEnv

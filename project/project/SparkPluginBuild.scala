@@ -24,5 +24,9 @@ import sbt.Keys._
  */
 object SparkPluginDef extends Build {
   lazy val root = Project("plugins", file(".")) dependsOn(sbtPomReader)
-  lazy val sbtPomReader = uri("https://github.com/ScrapCodes/sbt-pom-reader.git#ignore_artifact_id")
+  // This corresponds to https://github.com/ScrapCodes/sbt-pom-reader/commits/test-scoped-depstest-scoped-deps")
+  // This branch contains https://github.com/sbt/sbt-pom-reader/pull/14, a patch to fix test-jar dependencies
+  // which has not yet been merged upstream. Once that's merged, we should remove our custom fork and use
+  // the official sbt-pom-reader release instead; see SPARK-14401
+  lazy val sbtPomReader = uri("https://github.com/ScrapCodes/sbt-pom-reader.git#dee910271ccde761837c19ad1d7d450b1dc63a6d")
 }

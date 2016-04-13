@@ -355,8 +355,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     if (new File(sparkHome, "RELEASE").isFile()) {
       jarsDir = new File(sparkHome, "examples/jars");
     } else {
-      jarsDir = new File(sparkHome,
-        String.format("examples/target/scala-%s/jars", getScalaVersion()));
+      jarsDir = new File(sparkHome,"examples/target/jars");
     }
 
     boolean foundDir = jarsDir.isDirectory();

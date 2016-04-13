@@ -144,7 +144,6 @@ abstract class AbstractCommandBuilder {
     boolean prependClasses = !isEmpty(getenv("SPARK_PREPEND_CLASSES"));
     boolean isTesting = "1".equals(getenv("SPARK_TESTING"));
     if (prependClasses || isTesting) {
-      String scala = getScalaVersion();
       List<String> projects = Arrays.asList(
         "common/network-common",
         "common/network-shuffle",
@@ -172,14 +171,12 @@ abstract class AbstractCommandBuilder {
             "assembly.");
         }
         for (String project : projects) {
-          addToClassPath(cp, String.format("%s/%s/target/scala-%s/classes", sparkHome, project,
-            scala));
+          addToClassPath(cp, String.format("%s/%s/target/classes", sparkHome, project));
         }
       }
       if (isTesting) {
         for (String project : projects) {
-          addToClassPath(cp, String.format("%s/%s/target/scala-%s/test-classes", sparkHome,
-            project, scala));
+          addToClassPath(cp, String.format("%s/%s/target/test-classes", sparkHome, project));
         }
       }
 
@@ -192,7 +189,7 @@ abstract class AbstractCommandBuilder {
     // propagate the test classpath appropriately. For normal invocation, look for the jars
     // directory under SPARK_HOME.
     boolean isTestingSql = "1".equals(getenv("SPARK_SQL_TESTING"));
-    String jarsDir = findJarsDir(getSparkHome(), getScalaVersion(), !isTesting && !isTestingSql);
+    String jarsDir = findJarsDir(getSparkHome(), !isTesting && !isTestingSql);
     if (jarsDir != null) {
       addToClassPath(cp, join(File.separator, jarsDir, "*"));
     }
@@ -221,25 +218,6 @@ abstract class AbstractCommandBuilder {
         }
         cp.add(entry);
       }
-    }
-  }
-
-  String getScalaVersion() {
-    String scala = getenv("SPARK_SCALA_VERSION");
-    if (scala != null) {
-      return scala;
-    }
-    String sparkHome = getSparkHome();
-    File scala210 = new File(sparkHome, "launcher/target/scala-2.10");
-    File scala211 = new File(sparkHome, "launcher/target/scala-2.11");
-    checkState(!scala210.isDirectory() || !scala211.isDirectory(),
-      "Presence of build for both scala versions (2.10 and 2.11) detected.\n" +
-      "Either clean one of them or set SPARK_SCALA_VERSION in your environment.");
-    if (scala210.isDirectory()) {
-      return "2.10";
-    } else {
-      checkState(scala211.isDirectory(), "Cannot find any build directories.");
-      return "2.11";
     }
   }
 

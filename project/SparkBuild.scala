@@ -172,6 +172,15 @@ object SparkBuild extends PomBuild {
     publishLocal in MavenCompile <<= publishTask(publishLocalConfiguration in MavenCompile, deliverLocal),
     publishLocalBoth <<= Seq(publishLocal in MavenCompile, publishLocal).dependOn,
 
+    // Don't append Scala versions to the generated artifacts. We handle this ourselves by doing
+    // this in the POM. In order for our POM names to work properly, we need to disable SBT's
+    // normalization so that spark-foo_2.xx isn't escaped to spark-foo_2-xx.
+    crossPaths := false,
+    normalizedName := name.value,
+    // Don't automatically include Scala library dependency. We manage our dependencies via Maven
+    // POMs and thus do not want SBT to implicitly add additional dependencies.
+    autoScalaLibrary := false,
+
     javacOptions in (Compile, doc) ++= {
       val versionParts = System.getProperty("java.version").split("[+.\\-]+", 3)
       var major = versionParts(0).toInt
@@ -708,7 +717,6 @@ object TestSettings {
       "SPARK_DIST_CLASSPATH" ->
         (fullClasspath in Test).value.files.map(_.getAbsolutePath).mkString(":").stripSuffix(":"),
       "SPARK_PREPEND_CLASSES" -> "1",
-      "SPARK_SCALA_VERSION" -> scalaBinaryVersion,
       "SPARK_TESTING" -> "1",
       "JAVA_HOME" -> sys.env.get("JAVA_HOME").getOrElse(sys.props("java.home"))),
     javaOptions in Test += s"-Djava.io.tmpdir=$testTempDir",

@@ -48,7 +48,7 @@ object SampledRDDs {
         |For example, the following command runs this app:
         |
         | bin/spark-submit --class org.apache.spark.examples.mllib.SampledRDDs \
-        |  examples/target/scala-*/spark-examples-*.jar
+        |  examples/target/spark-examples-*.jar
         """.stripMargin)
     }
 

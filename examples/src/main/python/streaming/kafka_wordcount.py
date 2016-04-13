@@ -24,7 +24,7 @@
 
  and then run the example
     `$ bin/spark-submit --jars \
-      external/kafka-assembly/target/scala-*/spark-streaming-kafka-assembly-*.jar \
+      external/kafka-assembly/target/spark-streaming-kafka-assembly-*.jar \
       examples/src/main/python/streaming/kafka_wordcount.py \
       localhost:2181 test`
 """
