@@ -179,6 +179,7 @@ object FunctionRegistry {
     expression[Atan]("atan"),
     expression[Atan2]("atan2"),
     expression[Bin]("bin"),
+    expression[BRound]("bround"),
     expression[Cbrt]("cbrt"),
     expression[Ceil]("ceil"),
     expression[Ceil]("ceiling"),
