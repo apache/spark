@@ -327,6 +327,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     // Evaluate all the subexpression.
     val evalSubexpr = ctx.subexprFunctions.mkString("\n")
 
+    ctx.currentVars = null
     val writeExpressions =
       writeExpressionsToBuffer(ctx, ctx.INPUT_ROW, exprEvals, exprTypes, holder, isTopLevel = true)
 
