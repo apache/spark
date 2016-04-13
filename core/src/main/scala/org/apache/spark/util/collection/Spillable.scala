@@ -37,16 +37,16 @@ private[spark] trait Spillable[C] extends Logging {
   protected def resetAfterSpill(): Unit
 
   /**
-    * return an estimate of the current memory used by the collection.
-    *
-    * Note this is *not* the same as the memory requested from the memory manager, for two reasons:
-    * (1) If we allow the collection to use some initial amount of memory that is untracked, that
-    * should still be reported here. (which would lead to this amount being larger than what is
-    * tracked by the memory manager.)
-    * (2) If we've just requested a large increase in memory from the memory manager, but aren't
-    * actually *using* that memory yet, we will not report it here (which would lead to this amount
-    * being smaller than what is tracked by the memory manager.)
-    */
+   * Return an estimate of the current memory used by the collection.
+   *
+   * Note this is *not* the same as the memory requested from the memory manager, for two reasons:
+   * (1) If we allow the collection to use some initial amount of memory that is untracked, that
+   * should still be reported here. (which would lead to this amount being larger than what is
+   * tracked by the memory manager.)
+   * (2) If we've just requested a large increase in memory from the memory manager, but aren't
+   * actually *using* that memory yet, we will not report it here (which would lead to this amount
+   * being smaller than what is tracked by the memory manager.)
+   */
   def estimateUsedMemory(): Long
 
   /**
@@ -176,12 +176,12 @@ private[spark] trait Spillable[C] extends Logging {
 }
 
 /**
-  * A light-wrapper around Spillables to implement MemoryConsumer, just so that
-  * they can be tracked and logged in TaskMemoryManager.
-  *
-  * Note that this does *not* give cooperative memory management for Spillables, its just to
-  * make debug logs clearly on memory usage.
-  */
+ * A light-wrapper around Spillables to implement MemoryConsumer, just so that
+ * they can be tracked and logged in TaskMemoryManager.
+ *
+ * Note that this does *not* give cooperative memory management for Spillables, its just to
+ * make debug logs clearly on memory usage.
+ */
 class SpillableMemoryConsumer(val sp: Spillable[_], val taskMM: TaskMemoryManager)
     extends MemoryConsumer(taskMM) with Logging {
   def spill(size: Long, trigger: MemoryConsumer): Long = {

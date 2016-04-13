@@ -385,7 +385,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     val myConf = conf.clone()
       .set("spark.shuffle.memoryFraction", "0.01")
       .set("spark.memory.useLegacyMode", "true")
-      .set("spark.testing.memory", "500000000") //~500MB
+      .set("spark.testing.memory", "500000000") // ~500MB
       .set("spark.shuffle.sort.bypassMergeThreshold", "0")
       // for relocation, so we can use ShuffleExternalSorter
       .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
@@ -394,8 +394,8 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     val N = 2e6.toInt
     val p = new org.apache.spark.HashPartitioner(10)
     val d = sc.parallelize(1 to N, 10).map { x => (x % 10000) -> x.toLong }
-    // now we use an aggregator, but that still produces enough data that we need to spill on the read-side
-    // (this one is ridiculous, we shouldn't aggregate at all, but its just an easy
+    // now we use an aggregator, but that still produces enough data that we need to spill on the
+    // read-side (this one is ridiculous, we shouldn't aggregate at all, but its just an easy
     // way to trigger lots of memory use on the shuffle-read side)
    val d2: RDD[(Int, Seq[Long])] = d.aggregateByKey(Seq[Long](), 5) (
       { case (list, next) => list :+ next },
@@ -409,7 +409,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     val myConf = conf.clone()
       .set("spark.shuffle.memoryFraction", "0.01")
       .set("spark.memory.useLegacyMode", "true")
-      .set("spark.testing.memory", "500000000") //~500MB
+      .set("spark.testing.memory", "500000000") // ~500MB
       .set("spark.shuffle.sort.bypassMergeThreshold", "0")
       // pretty small, but otherwise its too easy for the structures to claim they are using 0
       // memory in these small tests

@@ -243,7 +243,7 @@ private[spark] class ExternalSorter[K, V, C](
    * @param collection whichever collection we're using (map or buffer)
    */
   override protected[this] def spillCollection(): Unit = {
-    if(usingMap) {
+    if (usingMap) {
       spillCollection(map)
     } else {
       spillCollection(buffer)
