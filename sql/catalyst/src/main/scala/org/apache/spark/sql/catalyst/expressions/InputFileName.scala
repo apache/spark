@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.rdd.SqlNewHadoopRDDState
+import org.apache.spark.rdd.FileScanRDDState
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.types.{DataType, StringType}
@@ -40,7 +40,7 @@ case class InputFileName() extends LeafExpression with Nondeterministic {
   override protected def initInternal(): Unit = {}
 
   override protected def evalInternal(input: InternalRow): UTF8String = {
-    SqlNewHadoopRDDState.getInputFileName()
+    FileScanRDDState.getInputFileName()
   }
 
   override def genCode(ctx: CodegenContext, ev: ExprCode): String = {

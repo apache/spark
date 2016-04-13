@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.{Partition, TaskContext}
-import org.apache.spark.rdd.{RDD, SqlNewHadoopRDDState}
+import org.apache.spark.rdd.{FileScanRDDState, RDD}
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.InternalRow
 
@@ -65,17 +65,17 @@ class FileScanRDD(
         if (files.hasNext) {
           val nextFile = files.next()
           logInfo(s"Reading File $nextFile")
-          SqlNewHadoopRDDState.setInputFileName(nextFile.filePath)
+          FileScanRDDState.setInputFileName(nextFile.filePath)
           currentIterator = readFunction(nextFile)
           hasNext
         } else {
-          SqlNewHadoopRDDState.unsetInputFileName()
+          FileScanRDDState.unsetInputFileName()
           false
         }
       }
 
       override def close() = {
-        SqlNewHadoopRDDState.unsetInputFileName()
+        FileScanRDDState.unsetInputFileName()
       }
     }
 
