@@ -527,7 +527,7 @@ class CodegenContext {
       callArgs.append(varsBuilder.map(_._2).mkString(", "))
     }
 
-    if (false && blocks.length == 1) {
+    if (blocks.length == 1) {
       // inline execution if only one block
       blocks.head
     } else {
