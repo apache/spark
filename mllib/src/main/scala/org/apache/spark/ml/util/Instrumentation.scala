@@ -79,11 +79,11 @@ private[ml] class Instrumentation[E <: Estimator[_]] private (
   }
 
   def logNumFeatures(num: Long): Unit = {
-    log(s"numFeatures=$num")
+    log(compact(render("numFeatures" -> num)))
   }
 
   def logNumClasses(num: Long): Unit = {
-    log(s"numClasses=$num")
+    log(compact(render("numClasses" -> num)))
   }
 
   /**
