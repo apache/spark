@@ -36,7 +36,7 @@ class JoinOptimizationSuite extends PlanTest {
         EliminateSubqueryAliases) ::
       Batch("Filter Pushdown", FixedPoint(100),
         CombineFilters,
-        PushPredicate,
+        PushDownPredicate,
         BooleanSimplification,
         ReorderJoin,
         PushPredicateThroughJoin,

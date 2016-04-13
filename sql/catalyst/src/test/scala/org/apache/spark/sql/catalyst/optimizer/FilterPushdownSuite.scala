@@ -36,7 +36,7 @@ class FilterPushdownSuite extends PlanTest {
       Batch("Filter Pushdown", FixedPoint(10),
         SamplePushDown,
         CombineFilters,
-        PushPredicate,
+        PushDownPredicate,
         BooleanSimplification,
         PushPredicateThroughJoin,
         CollapseProject) :: Nil

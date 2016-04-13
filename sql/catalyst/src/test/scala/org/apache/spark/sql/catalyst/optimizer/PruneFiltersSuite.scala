@@ -34,7 +34,7 @@ class PruneFiltersSuite extends PlanTest {
       Batch("Filter Pushdown and Pruning", Once,
         CombineFilters,
         PruneFilters,
-        PushPredicate,
+        PushDownPredicate,
         PushPredicateThroughJoin) :: Nil
   }
 

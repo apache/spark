@@ -66,7 +66,7 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       ReorderJoin,
       OuterJoinElimination,
       PushPredicateThroughJoin,
-      PushPredicate,
+      PushDownPredicate,
       LimitPushDown,
       ColumnPruning,
       InferFiltersFromConstraints,
@@ -891,12 +891,13 @@ object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
 }
 
 /**
- * Pushes [[Filter]] operators through [[Project]] operators, in-lining any [[Alias Aliases]]
- * that were defined in the projection.
+ * Pushes [[Filter]] operators through many operators iff:
+ * 1) the operator is deterministic
+ * 2) the predicate is deterministic and the operator will not change any of rows.
  *
  * This heuristic is valid assuming the expression evaluation cost is minimal.
  */
-object PushPredicate extends Rule[LogicalPlan] with PredicateHelper {
+object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // SPARK-13473: We can't push the predicate down when the underlying projection output non-
     // deterministic field(s).  Non-deterministic expressions are essentially stateful. This
@@ -943,10 +944,12 @@ object PushPredicate extends Rule[LogicalPlan] with PredicateHelper {
     case filter @ Filter(condition, u: Union) =>
       val output = u.output
       val newChildren = u.children.map { child =>
-        val attrMap: Map[Expression, Expression] = output.zip(child.output).toMap
+        // Union will not change the rows, so all the predicates could be pushed down.
         val newCond = condition transform {
-          case e if attrMap.contains(e) => attrMap(e)
+          case e if output.exists(_.semanticEquals(e)) =>
+            child.output(output.indexWhere(_.semanticEquals(e)))
         }
+        assert(newCond.references.subsetOf(child.outputSet))
         Filter(newCond, child)
       }
       Union(newChildren)
@@ -960,10 +963,11 @@ object PushPredicate extends Rule[LogicalPlan] with PredicateHelper {
         val pushDownCond = pushDown.reduceLeft(And)
         val output = i.output
         val newChildren = i.children.map { child =>
-          val attrMap: Map[Expression, Expression] = output.zip(child.output).toMap
           val newCond = pushDownCond transform {
-            case e if attrMap.contains(e) => attrMap(e)
+            case e if output.exists(_.semanticEquals(e)) =>
+              child.output(output.indexWhere(_.semanticEquals(e)))
           }
+          assert(newCond.references.subsetOf(child.outputSet))
           Filter(newCond, child)
         }
         val newIntersect = i.withNewChildren(newChildren)
@@ -977,31 +981,35 @@ object PushPredicate extends Rule[LogicalPlan] with PredicateHelper {
       }
 
     case filter @ Filter(condition, e @ Except(left, _)) =>
-      pushDownPredicate(filter, e, e.left) { pushDown =>
-        e.copy(left = Filter(pushDown, left))
+      pushDownPredicate(filter, e.left) { predicate =>
+        e.copy(left = Filter(predicate, left))
       }
 
+    // two filters should be combine together by other rules
+    case filter @ Filter(_, f: Filter) => filter
+
     case filter @ Filter(condition, u: UnaryNode) if u.expressions.forall(_.deterministic) =>
-      pushDownPredicate(filter, u, u.child) { pushDown =>
-        u.withNewChildren(Seq(Filter(pushDown, u.child)))
+      pushDownPredicate(filter, u.child) { predicate =>
+        u.withNewChildren(Seq(Filter(predicate, u.child)))
       }
   }
 
   private def pushDownPredicate(
       filter: Filter,
-      plan: LogicalPlan,
-      child: LogicalPlan)(insertFilter: Expression => LogicalPlan): LogicalPlan = {
-    // Predicates that reference attributes produced by the unary operator cannot
-    // be pushed below it.
+      grandchild: LogicalPlan)(insertFilter: Expression => LogicalPlan): LogicalPlan = {
+    // Only push down the predicates that is deterministic and all the referenced attributes
+    // come from grandchild.
+    // TODO: non-deterministic predicates could be pushed through some operators that do not change
+    // the rows.
     val (pushDown, stayUp) = splitConjunctivePredicates(filter.condition).partition { cond =>
-      cond.deterministic && cond.references.subsetOf(child.outputSet)
+      cond.deterministic && cond.references.subsetOf(grandchild.outputSet)
     }
     if (pushDown.nonEmpty) {
-      val newU = insertFilter(pushDown.reduceLeft(And))
+      val newChild = insertFilter(pushDown.reduceLeft(And))
       if (stayUp.nonEmpty) {
-        Filter(stayUp.reduceLeft(And), newU)
+        Filter(stayUp.reduceLeft(And), newChild)
       } else {
-        newU
+        newChild
       }
     } else {
       filter
