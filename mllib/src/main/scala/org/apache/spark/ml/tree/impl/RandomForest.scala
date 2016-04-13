@@ -1016,12 +1016,6 @@ private[spark] object RandomForest extends Logging {
         splitsBuilder.result()
       }
     }
-
-//    // TODO: Do not fail; just ignore the useless feature.
-//    assert(splits.length > 0,
-//      s"DecisionTree could not handle feature $featureIndex since it had only 1 unique value." +
-//        "  Please remove this feature and then try again.")
-
     splits
   }
 
