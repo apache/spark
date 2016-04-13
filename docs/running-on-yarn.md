@@ -343,8 +343,8 @@ If you need a reference to the proper location to put log files in the YARN so t
   <td>
   A string of extra JVM options to pass to the YARN Application Master in client mode.
   In cluster mode, use <code>spark.driver.extraJavaOptions</code> instead. Note that it is illegal
-  to set maximum heap size (-Xmx) settings with this option. However, specifying an initial heap
-  size (-Xms) is allowed. Maximum heap size settings can be set with <code>spark.yarn.am.memory</code>
+  to set maximum heap size (-Xmx) settings with this option. Maximum heap size settings can be set
+  with <code>spark.yarn.am.memory</code>
   </td>
 </tr>
 <tr>
