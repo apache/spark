@@ -584,6 +584,8 @@ object HiveTypeCoercion {
           val newRight = if (right.dataType == widestType) right else Cast(right, widestType)
           If(pred, newLeft, newRight)
         }.getOrElse(i)  // If there is no applicable conversion, leave expression unchanged.
+      case If(Literal(null, NullType), left, right) =>
+        If(Literal.create(null, BooleanType), left, right)
       case If(pred, left, right) if pred.dataType == NullType =>
         If(Cast(pred, BooleanType), left, right)
     }
