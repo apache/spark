@@ -488,17 +488,17 @@ object DirectKafkaWordCount {
 
     // Create context with 2 second batch interval
     val sparkConf = new SparkConf().setMaster("local[*]").setAppName("DirectKafkaWordCount")
-    val ssc = new StreamingContext(sparkConf, Seconds(6))
+    val ssc = new StreamingContext(sparkConf, Seconds(2))
+    ssc.checkpoint("/tmp/checkpoint")
     val listener = new LatencyListener(ssc)
     ssc.addStreamingListener(listener)
-
     val lines = ssc.socketTextStream("localhost", 9998)
 
     val words = lines.flatMap(_.split(" "))
 
     val pairs = words.map(word => (word, 1))
 
-    val wordCounts = pairs.reduceByKey(_ + _)
+    val wordCounts = pairs.reduceByKeyAndWindow(_+_, _-_, Seconds(60),Seconds(10))
 
     wordCounts.print()
 
