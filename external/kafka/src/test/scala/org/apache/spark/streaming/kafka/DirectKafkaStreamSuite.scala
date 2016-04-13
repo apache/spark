@@ -483,20 +483,39 @@ object DirectKafkaWordCount {
   import org.apache.spark.streaming._
 
   def main(args: Array[String]) {
-
-    // Create context with 2 second batch interval
     val sparkConf = new SparkConf().setMaster("local[*]").setAppName("DirectKafkaWordCount")
-    val ssc = new StreamingContext(sparkConf, Seconds(6))
+
+    val ssc = new StreamingContext(sparkConf, Seconds(2))
+    //ssc.checkpoint(checkPointPath)
+
     val listener = new LatencyListener(ssc)
     ssc.addStreamingListener(listener)
+    val kafkaBrokers = "localhost"
+    val kafkaPort ="9092"
+    val topic="test"
 
-    val lines = ssc.socketTextStream("localhost", 9998)
+    val topicsSet = Set(topic)
 
-    val words = lines.flatMap(_.split(" "))
+    val brokerListString = new StringBuilder();
+
+      brokerListString.append(kafkaBrokers).append(":").append(kafkaPort)
+
+
+    val kafkaParams = Map[String, String]("metadata.broker.list" -> brokerListString.toString())
+    System.err.println(
+      "Trying to connect to Kafka at " + brokerListString.toString())
+    val messages = KafkaUtils.createDirectStream[String, String, StringDecoder, StringDecoder](
+      ssc, kafkaParams, topicsSet)
+    ssc.checkpoint("/tmp/checkPoint/")
+    // Create context with 2 second batch interval
+
+    //val lines = ssc.socketTextStream("localhost", 9998)
+
+    val words = messages.map(x => x._2).flatMap(_.split(" "))
 
     val pairs = words.map(word => (word, 1))
 
-    val wordCounts = pairs.reduceByKey(_ + _)
+    val wordCounts = pairs.reduceByKeyAndWindow(_+_, _-_, Seconds(60),Seconds(10))
 
     wordCounts.print()
 
@@ -559,7 +578,7 @@ class LatencyListener(ssc: StreamingContext) extends StreamingListener {
       setMap(imap)
     }
 
-    if (totalRecords >= 100) {
+    if (totalRecords >= 10000) {
       if (hasStarted && !thread.isAlive) {
         //not receiving any data more, finish
         endTime = System.currentTimeMillis()
