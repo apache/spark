@@ -144,6 +144,12 @@ class KMeansModel private[ml] (
   }
 
   /**
+   * Return true if there exists summary of model.
+   */
+  @Since("2.0.0")
+  def hasSummary: Boolean = trainingSummary.nonEmpty
+
+  /**
    * Gets summary of model on training set. An exception is
    * thrown if `trainingSummary == None`.
    */
@@ -267,7 +273,8 @@ class KMeans @Since("1.5.0") (
       .setEpsilon($(tol))
     val parentModel = algo.run(rdd)
     val model = copyValues(new KMeansModel(uid, parentModel).setParent(this))
-    val summary = new KMeansSummary(model.transform(dataset), $(predictionCol), $(featuresCol))
+    val summary = new KMeansSummary(
+      model.transform(dataset), $(predictionCol), $(featuresCol), $(k))
     model.setSummary(summary)
   }
 
@@ -284,10 +291,22 @@ object KMeans extends DefaultParamsReadable[KMeans] {
   override def load(path: String): KMeans = super.load(path)
 }
 
+/**
+ * :: Experimental ::
+ * Summary of KMeans.
+ *
+ * @param predictions  [[DataFrame]] produced by [[KMeansModel.transform()]]
+ * @param predictionCol  Name for column of predicted clusters in `predictions`
+ * @param featuresCol  Name for column of features in `predictions`
+ * @param k  Number of clusters
+ */
+@Since("2.0.0")
+@Experimental
 class KMeansSummary private[clustering] (
     @Since("2.0.0") @transient val predictions: DataFrame,
     @Since("2.0.0") val predictionCol: String,
-    @Since("2.0.0") val featuresCol: String) extends Serializable {
+    @Since("2.0.0") val featuresCol: String,
+    @Since("2.0.0") val k: Int) extends Serializable {
 
   /**
    * Cluster centers of the transformed data.
@@ -296,11 +315,15 @@ class KMeansSummary private[clustering] (
   @transient lazy val cluster: DataFrame = predictions.select(predictionCol)
 
   /**
-   * Size of each cluster.
+   * Size of (number of data points in) each cluster.
    */
   @Since("2.0.0")
-  lazy val clusterSizes: Array[Int] = cluster.rdd.map {
-    case Row(clusterIdx: Int) => (clusterIdx, 1)
-  }.reduceByKey(_ + _).collect().sortBy(_._1).map(_._2)
+  lazy val clusterSizes: Array[Long] = {
+    val sizes = Array.fill[Long](k)(0)
+    cluster.groupBy(predictionCol).count().select(predictionCol, "count").collect().foreach {
+      case Row(cluster: Int, count: Long) => sizes(cluster) = count
+    }
+    sizes
+  }
 
 }
