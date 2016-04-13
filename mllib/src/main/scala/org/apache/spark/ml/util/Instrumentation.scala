@@ -20,10 +20,8 @@ package org.apache.spark.ml.util
 import java.util.concurrent.atomic.AtomicLong
 
 import org.json4s._
-import org.json4s.{DefaultFormats, JObject}
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
-
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
