@@ -125,8 +125,8 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
           val defaultMaxSplitBytes = files.sqlContext.conf.filesMaxPartitionBytes
           val openCostInBytes = files.sqlContext.conf.filesOpenCostInBytes
           val defaultParallelism = files.sqlContext.sparkContext.defaultParallelism
-          val totalBytes = selectedPartitions.flatMap(_.files.map(_.getLen)).sum
-          val maxSplitBytes = Math.max(openCostInBytes,
+          val totalBytes = selectedPartitions.flatMap(_.files.map(_.getLen + openCostInBytes)).sum
+          val maxSplitBytes = Math.max(openCostInBytes * 2,
             // reduce the size of each split to increase parallelism
             Math.min(totalBytes / defaultParallelism, defaultMaxSplitBytes))
           logInfo(s"Planning scan with bin packing, max size: $maxSplitBytes bytes, " +
