@@ -38,7 +38,7 @@ import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS._
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.DoubleType
 import org.apache.spark.storage.StorageLevel
@@ -158,7 +158,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
   def setSolver(value: String): this.type = set(solver, value)
   setDefault(solver -> "auto")
 
-  override protected def train(dataset: DataFrame): LinearRegressionModel = {
+  override protected def train(dataset: Dataset[_]): LinearRegressionModel = {
     // Extract the number of features before deciding optimization solver.
     val numFeatures = dataset.select(col($(featuresCol))).limit(1).rdd.map {
       case Row(features: Vector) => features.size
@@ -190,9 +190,9 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
         summaryModel.transform(dataset),
         predictionColName,
         $(labelCol),
+        $(featuresCol),
         summaryModel,
         model.diagInvAtWA.toArray,
-        $(featuresCol),
         Array(0D))
 
       return lrModel.setSummary(trainingSummary)
@@ -249,9 +249,9 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
           summaryModel.transform(dataset),
           predictionColName,
           $(labelCol),
+          $(featuresCol),
           model,
           Array(0D),
-          $(featuresCol),
           Array(0D))
         return copyValues(model.setSummary(trainingSummary))
       } else {
@@ -356,9 +356,9 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
       summaryModel.transform(dataset),
       predictionColName,
       $(labelCol),
+      $(featuresCol),
       model,
       Array(0D),
-      $(featuresCol),
       objectiveHistory)
     model.setSummary(trainingSummary)
   }
@@ -417,11 +417,11 @@ class LinearRegressionModel private[ml] (
    * @param dataset Test dataset to evaluate model on.
    */
   @Since("2.0.0")
-  def evaluate(dataset: DataFrame): LinearRegressionSummary = {
+  def evaluate(dataset: Dataset[_]): LinearRegressionSummary = {
     // Handle possible missing or invalid prediction columns
     val (summaryModel, predictionColName) = findSummaryModelAndPredictionCol()
     new LinearRegressionSummary(summaryModel.transform(dataset), predictionColName,
-      $(labelCol), summaryModel, Array(0D))
+      $(labelCol), $(featuresCol), summaryModel, Array(0D))
   }
 
   /**
@@ -511,9 +511,9 @@ object LinearRegressionModel extends MLReadable[LinearRegressionModel] {
 /**
  * :: Experimental ::
  * Linear regression training results. Currently, the training summary ignores the
- * training coefficients except for the objective trace.
+ * training weights except for the objective trace.
  *
- * @param predictions predictions outputted by the model's `transform` method.
+ * @param predictions predictions output by the model's `transform` method.
  * @param objectiveHistory objective function (scaled loss + regularization) at each iteration.
  */
 @Since("1.5.0")
@@ -522,13 +522,24 @@ class LinearRegressionTrainingSummary private[regression] (
     predictions: DataFrame,
     predictionCol: String,
     labelCol: String,
+    featuresCol: String,
     model: LinearRegressionModel,
     diagInvAtWA: Array[Double],
-    val featuresCol: String,
     val objectiveHistory: Array[Double])
-  extends LinearRegressionSummary(predictions, predictionCol, labelCol, model, diagInvAtWA) {
+  extends LinearRegressionSummary(
+    predictions,
+    predictionCol,
+    labelCol,
+    featuresCol,
+    model,
+    diagInvAtWA) {
 
-  /** Number of training iterations until termination */
+  /**
+   * Number of training iterations until termination
+   *
+   * This value is only available when using the "l-bfgs" solver.
+   * @see [[LinearRegression.solver]]
+   */
   @Since("1.5.0")
   val totalIterations = objectiveHistory.length
 
@@ -538,7 +549,11 @@ class LinearRegressionTrainingSummary private[regression] (
  * :: Experimental ::
  * Linear regression results evaluated on a dataset.
  *
- * @param predictions predictions outputted by the model's `transform` method.
+ * @param predictions predictions output by the model's `transform` method.
+ * @param predictionCol Field in "predictions" which gives the predicted value of the label at
+ *                      each instance.
+ * @param labelCol Field in "predictions" which gives the true label of each instance.
+ * @param featuresCol Field in "predictions" which gives the features of each instance as a vector.
  */
 @Since("1.5.0")
 @Experimental
@@ -546,6 +561,7 @@ class LinearRegressionSummary private[regression] (
     @transient val predictions: DataFrame,
     val predictionCol: String,
     val labelCol: String,
+    val featuresCol: String,
     val model: LinearRegressionModel,
     private val diagInvAtWA: Array[Double]) extends Serializable {
 
@@ -639,6 +655,12 @@ class LinearRegressionSummary private[regression] (
 
   /**
    * Standard error of estimated coefficients and intercept.
+   * This value is only available when using the "normal" solver.
+   *
+   * If [[LinearRegression.fitIntercept]] is set to true,
+   * then the last element returned corresponds to the intercept.
+   *
+   * @see [[LinearRegression.solver]]
    */
   lazy val coefficientStandardErrors: Array[Double] = {
     if (diagInvAtWA.length == 1 && diagInvAtWA(0) == 0) {
@@ -660,6 +682,12 @@ class LinearRegressionSummary private[regression] (
 
   /**
    * T-statistic of estimated coefficients and intercept.
+   * This value is only available when using the "normal" solver.
+   *
+   * If [[LinearRegression.fitIntercept]] is set to true,
+   * then the last element returned corresponds to the intercept.
+   *
+   * @see [[LinearRegression.solver]]
    */
   lazy val tValues: Array[Double] = {
     if (diagInvAtWA.length == 1 && diagInvAtWA(0) == 0) {
@@ -677,6 +705,12 @@ class LinearRegressionSummary private[regression] (
 
   /**
    * Two-sided p-value of estimated coefficients and intercept.
+   * This value is only available when using the "normal" solver.
+   *
+   * If [[LinearRegression.fitIntercept]] is set to true,
+   * then the last element returned corresponds to the intercept.
+   *
+   * @see [[LinearRegression.solver]]
    */
   lazy val pValues: Array[Double] = {
     if (diagInvAtWA.length == 1 && diagInvAtWA(0) == 0) {

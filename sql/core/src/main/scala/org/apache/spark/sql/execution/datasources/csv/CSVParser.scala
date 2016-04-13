@@ -47,6 +47,7 @@ private[sql] abstract class CsvReader(params: CSVOptions, headers: Seq[String]) 
     settings.setMaxColumns(params.maxColumns)
     settings.setNullValue(params.nullValue)
     settings.setMaxCharsPerColumn(params.maxCharsPerColumn)
+    settings.setParseUnescapedQuotesUntilDelimiter(true)
     if (headers != null) settings.setHeaders(headers: _*)
 
     new CsvParser(settings)

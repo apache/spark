@@ -279,7 +279,8 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
   /** Plans the query and calls the provided validation function with the planned partitioning. */
   def checkScan(df: DataFrame)(func: Seq[FilePartition] => Unit): Unit = {
     val fileScan = df.queryExecution.executedPlan.collect {
-      case DataSourceScan(_, scan: FileScanRDD, _, _) => scan
+      case scan: DataSourceScan if scan.rdd.isInstanceOf[FileScanRDD] =>
+        scan.rdd.asInstanceOf[FileScanRDD]
     }.headOption.getOrElse {
       fail(s"No FileScan in query\n${df.queryExecution}")
     }
@@ -361,18 +362,6 @@ class TestFileFormat extends FileFormat {
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
-    throw new NotImplementedError("JUST FOR TESTING")
-  }
-
-  override def buildInternalScan(
-      sqlContext: SQLContext,
-      dataSchema: StructType,
-      requiredColumns: Array[String],
-      filters: Array[Filter],
-      bucketSet: Option[BitSet],
-      inputFiles: Seq[FileStatus],
-      broadcastedConf: Broadcast[SerializableConfiguration],
-      options: Map[String, String]): RDD[InternalRow] = {
     throw new NotImplementedError("JUST FOR TESTING")
   }
 

@@ -116,7 +116,7 @@ This file is divided into 3 sections:
 
   <check level="error" class="org.scalastyle.file.NewLineAtEofChecker" enabled="true"></check>
 
-  <check level="error" class="org.scalastyle.scalariform.NonASCIICharacterChecker" enabled="true"></check>
+  <check customId="nonascii" level="error" class="org.scalastyle.scalariform.NonASCIICharacterChecker" enabled="true"></check>
 
   <check level="error" class="org.scalastyle.scalariform.SpaceAfterCommentStartChecker" enabled="true"></check>
 
@@ -221,6 +221,16 @@ This file is divided into 3 sections:
     <customMessage><![CDATA[
       Single Space between ')' and `{`.
     ]]></customMessage>
+  </check>
+
+  <check customId="NoScalaDoc" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">(?m)^(\s*)/[*][*].*$(\r|)\n^\1  [*]</parameter></parameters>
+    <customMessage>Use Javadoc style indentation for multiline comments</customMessage>
+  </check>
+
+  <check customId="OmitBracesInCase" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">case[^\n>]*=>\s*\{</parameter></parameters>
+    <customMessage>Omit braces in case clauses.</customMessage>
   </check>
 
   <!-- ================================================================================ -->

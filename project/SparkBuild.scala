@@ -20,6 +20,7 @@ import java.nio.file.Files
 
 import scala.util.Properties
 import scala.collection.JavaConverters._
+import scala.collection.mutable.Stack
 
 import sbt._
 import sbt.Classpaths.publishTask
@@ -46,9 +47,9 @@ object BuildCommons {
   ).map(ProjectRef(buildLocation, _))
 
   val allProjects@Seq(
-    core, graphx, mllib, repl, networkCommon, networkShuffle, launcher, unsafe, testTags, sketch, _*
+    core, graphx, mllib, mllibLocal, repl, networkCommon, networkShuffle, launcher, unsafe, testTags, sketch, _*
   ) = Seq(
-    "core", "graphx", "mllib", "repl", "network-common", "network-shuffle", "launcher", "unsafe",
+    "core", "graphx", "mllib", "mllib-local", "repl", "network-common", "network-shuffle", "launcher", "unsafe",
     "test-tags", "sketch"
   ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects
 
@@ -253,7 +254,7 @@ object SparkBuild extends PomBuild {
   val mimaProjects = allProjects.filterNot { x =>
     Seq(
       spark, hive, hiveThriftServer, catalyst, repl, networkCommon, networkShuffle, networkYarn,
-      unsafe, testTags, sketch
+      unsafe, testTags, sketch, mllibLocal
     ).contains(x)
   }
 
@@ -365,8 +366,10 @@ object Flume {
 object DockerIntegrationTests {
   // This serves to override the override specified in DependencyOverrides:
   lazy val settings = Seq(
-    dependencyOverrides += "com.google.guava" % "guava" % "18.0"
+    dependencyOverrides += "com.google.guava" % "guava" % "18.0",
+    resolvers ++= Seq("DB2" at "https://app.camunda.com/nexus/content/repositories/public/")
   )
+
 }
 
 /**
@@ -742,8 +745,21 @@ object TestSettings {
     parallelExecution in Test := false,
     // Make sure the test temp directory exists.
     resourceGenerators in Test <+= resourceManaged in Test map { outDir: File =>
-      if (!new File(testTempDir).isDirectory()) {
-        require(new File(testTempDir).mkdirs(), s"Error creating temp directory $testTempDir.")
+      var dir = new File(testTempDir)
+      if (!dir.isDirectory()) {
+        // Because File.mkdirs() can fail if multiple callers are trying to create the same
+        // parent directory, this code tries to create parents one at a time, and avoids
+        // failures when the directories have been created by somebody else.
+        val stack = new Stack[File]()
+        while (!dir.isDirectory()) {
+          stack.push(dir)
+          dir = dir.getParentFile()
+        }
+
+        while (stack.nonEmpty) {
+          val d = stack.pop()
+          require(d.mkdir() || d.isDirectory(), s"Failed to create directory $d")
+        }
       }
       Seq[File]()
     },
