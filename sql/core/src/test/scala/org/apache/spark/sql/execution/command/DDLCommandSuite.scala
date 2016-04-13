@@ -31,7 +31,6 @@ import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
-
 class DDLCommandSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   private val parser = SparkSqlParser
 
