@@ -50,7 +50,9 @@ case class Sort(
 
   override private[sql] lazy val metrics = Map(
     "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
-    "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"))
+    "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"),
+    "blockPhaseFinishTime" -> SQLMetrics.createTimingMetric(
+      sparkContext, "blocking phase finish time", startTimeMs))
 
   def createSorter(): UnsafeExternalRowSorter = {
     val ordering = newOrdering(sortOrder, output)
@@ -90,6 +92,7 @@ case class Sort(
 
       val sortedIterator = sorter.sort(iter.asInstanceOf[Iterator[UnsafeRow]])
 
+      longMetric("blockPhaseFinishTime") += System.currentTimeMillis()
       dataSize += sorter.getPeakMemoryUsage
       spillSize += metrics.memoryBytesSpilled - spillSizeBefore
       metrics.incPeakExecutionMemory(sorter.getPeakMemoryUsage)
