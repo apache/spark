@@ -346,10 +346,12 @@ private[ml] trait HasFeatureSubsetStrategy extends Params {
    */
   final val featureSubsetStrategy: Param[String] = new Param[String](this, "featureSubsetStrategy",
     "The number of features to consider for splits at each tree node." +
-      s" Supported options: ${RandomForestParams.supportedFeatureSubsetStrategies.mkString(", ")}",
+      s" Supported options: ${RandomForestParams.supportedFeatureSubsetStrategies.mkString(", ")}" +
+      s", (0.0-1.0], [1-n].",
     (value: String) =>
       RandomForestParams.supportedFeatureSubsetStrategies.contains(value.toLowerCase)
-      || value.matches(RandomForestParams.supportedFeatureSubsetStrategiesRegex))
+      || RandomForestParams.integerFeatureSubsetStrategy.unapply(value).isDefined
+      || RandomForestParams.doubleFeatureSubsetStrategy.unapply(value).isDefined)
 
   setDefault(featureSubsetStrategy -> "auto")
 
@@ -397,8 +399,31 @@ private[spark] object RandomForestParams {
   final val supportedFeatureSubsetStrategies: Array[String] =
     Array("auto", "all", "onethird", "sqrt", "log2").map(_.toLowerCase)
 
-  // The regex to capture "(0.0-1.0]", and "n" for integer 0 < n <= (number of features)
-  final val supportedFeatureSubsetStrategiesRegex = "^(?:[1-9]\\d*|0?\\.\\d*[1-9]\\d*|1\\.0+)$"
+  object integerFeatureSubsetStrategy {
+    def unapply(strategy: String): Option[Int] = try {
+      val number = strategy.toInt
+      if (0 < number) {
+        Some(number)
+      } else {
+        None
+      }
+    } catch {
+      case _ : java.lang.NumberFormatException => None
+    }
+  }
+
+  object doubleFeatureSubsetStrategy {
+    def unapply(strategy: String): Option[Double] = try {
+      val fraction = strategy.toDouble
+      if (0.0 < fraction && fraction <= 1.0) {
+        Some(fraction)
+      } else {
+        None
+      }
+    } catch {
+      case _ : java.lang.NumberFormatException => None
+    }
+  }
 }
 
 private[ml] trait RandomForestClassifierParams

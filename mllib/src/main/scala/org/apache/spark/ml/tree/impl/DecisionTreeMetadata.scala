@@ -20,6 +20,7 @@ package org.apache.spark.ml.tree.impl
 import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.ml.tree.RandomForestParams
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
@@ -184,15 +185,15 @@ private[spark] object DecisionTreeMetadata extends Logging {
       case _ => featureSubsetStrategy
     }
 
-    val isIntRegex = "^([1-9]\\d*)$".r
-    val isFractionRegex = "^(0?\\.\\d*[1-9]\\d*|1\\.0+)$".r
     val numFeaturesPerNode: Int = _featureSubsetStrategy match {
       case "all" => numFeatures
       case "sqrt" => math.sqrt(numFeatures).ceil.toInt
       case "log2" => math.max(1, (math.log(numFeatures) / math.log(2)).ceil.toInt)
       case "onethird" => (numFeatures / 3.0).ceil.toInt
-      case isIntRegex(number) => if (BigInt(number) > numFeatures) numFeatures else number.toInt
-      case isFractionRegex(fraction) => (fraction.toDouble * numFeatures).ceil.toInt
+      case RandomForestParams.integerFeatureSubsetStrategy(number) =>
+        if (number > numFeatures) numFeatures else number
+      case RandomForestParams.doubleFeatureSubsetStrategy(fraction) =>
+        (fraction * numFeatures).ceil.toInt
     }
 
     new DecisionTreeMetadata(numFeatures, numExamples, numClasses, numBins.max,

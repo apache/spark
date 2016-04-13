@@ -76,7 +76,8 @@ private class RandomForest (
   strategy.assertValid()
   require(numTrees > 0, s"RandomForest requires numTrees > 0, but was given numTrees = $numTrees.")
   require(RandomForest.supportedFeatureSubsetStrategies.contains(featureSubsetStrategy)
-    || featureSubsetStrategy.matches(NewRFParams.supportedFeatureSubsetStrategiesRegex),
+    || NewRFParams.integerFeatureSubsetStrategy.unapply(featureSubsetStrategy).isDefined
+    || NewRFParams.doubleFeatureSubsetStrategy.unapply(featureSubsetStrategy).isDefined,
     s"RandomForest given invalid featureSubsetStrategy: $featureSubsetStrategy." +
     s" Supported values: ${RandomForest.supportedFeatureSubsetStrategies.mkString(", ")}," +
     s" (0.0-1.0], [1-n].")
