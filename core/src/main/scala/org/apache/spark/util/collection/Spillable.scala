@@ -19,7 +19,7 @@ package org.apache.spark.util.collection
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
-import org.apache.spark.memory.{MemoryMode, TaskMemoryManager}
+import org.apache.spark.memory.{MemoryConsumer, MemoryMode, TaskMemoryManager}
 
 /**
  * Spills contents of an in-memory collection to disk when the memory threshold
@@ -57,6 +57,17 @@ private[spark] trait Spillable[C] extends Logging {
   // To avoid a large number of small spills, initialize this to a value orders of magnitude > 0
   private[this] var myMemoryThreshold = initialMemoryThreshold
 
+  /**
+   * The amount of memory that has been allocated to this Spillable by the memory manager.
+   *
+   * Note that this is *not* the same as [[estimateUsedMemory]] -- see the doc on that method
+   * for why these differ
+   */
+  def allocatedMemory: Long = {
+    // we don't ever request initialMemoryThreshold from the memory manager
+    myMemoryThreshold - initialMemoryThreshold
+  }
+
   // Number of elements read from input since last spill
   private[this] var _elementsRead = 0L
 
@@ -65,6 +76,8 @@ private[spark] trait Spillable[C] extends Logging {
 
   // Number of spills
   private[this] var _spillCount = 0
+
+  private[this] val memoryConsumer = new SpillableMemoryConsumer(this, taskMemoryManager)
 
   /**
    * Spills the current in-memory collection to disk if needed. Attempts to acquire more
@@ -80,7 +93,8 @@ private[spark] trait Spillable[C] extends Logging {
       // Claim up to double our current memory from the shuffle memory pool
       val amountToRequest = 2 * currentMemory - myMemoryThreshold
       val granted =
-        taskMemoryManager.acquireExecutionMemory(amountToRequest, MemoryMode.ON_HEAP, null)
+        taskMemoryManager.acquireExecutionMemory(amountToRequest, MemoryMode.ON_HEAP,
+          memoryConsumer)
       myMemoryThreshold += granted
       // If we were granted too little memory to grow further (either tryToAcquire returned 0,
       // or we already had more memory than myMemoryThreshold), spill the current collection
@@ -110,7 +124,7 @@ private[spark] trait Spillable[C] extends Logging {
   def releaseMemory(): Unit = {
     // The amount we requested does not include the initial memory tracking threshold
     taskMemoryManager.releaseExecutionMemory(
-      myMemoryThreshold - initialMemoryThreshold, MemoryMode.ON_HEAP, null)
+      myMemoryThreshold - initialMemoryThreshold, MemoryMode.ON_HEAP, memoryConsumer)
     myMemoryThreshold = initialMemoryThreshold
   }
 
@@ -125,4 +139,34 @@ private[spark] trait Spillable[C] extends Logging {
       .format(threadId, org.apache.spark.util.Utils.bytesToString(size),
         _spillCount, if (_spillCount > 1) "s" else ""))
   }
+}
+
+/**
+  * A light-wrapper around Spillables to implement MemoryConsumer, just so that
+  * they can be tracked and logged in TaskMemoryManager.
+  *
+  * Note that this does *not* give cooperative memory management for Spillables, its just to
+  * make debug logs clearly on memory usage.
+  */
+class SpillableMemoryConsumer(val sp: Spillable[_], val taskMM: TaskMemoryManager)
+    extends MemoryConsumer(taskMM) with Logging {
+  def spill(size: Long, trigger: MemoryConsumer): Long = {
+    // If another memory consumer requests more memory, we can't easily spill here.  The
+    // problem is that even if we do spill, there may be an iterator that is already
+    // reading from the in-memory data structures, which would hold a reference to that
+    // object even if we spilled.  So even if we spilled, we aren't *actually* freeing memory
+    // unless we update any in-flight iterators to switch to the spilled data
+    logDebug(s"Spill requested for ${sp} (TID ${taskMemoryManager.getTaskAttemptId}) by " +
+      s"${trigger}, but ${this} can't spill")
+    0L
+  }
+
+  override def toString(): String = {
+    s"SpillableConsumer($sp)"
+  }
+
+  override def getUsed(): Long = {
+    sp.allocatedMemory
+  }
+
 }

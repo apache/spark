@@ -98,6 +98,10 @@ public class TaskMemoryManager {
 
   private final long taskAttemptId;
 
+  public long getTaskAttemptId() {
+    return taskAttemptId;
+  }
+
   /**
    * Tracks whether we're in-heap or off-heap. For off-heap, we short-circuit most of these methods
    * without doing any masking or lookups. Since this branching should be well-predicted by the JIT,

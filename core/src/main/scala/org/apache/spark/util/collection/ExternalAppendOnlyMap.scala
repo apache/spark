@@ -534,6 +534,13 @@ class ExternalAppendOnlyMap[K, V, C](
 
   /** Convenience function to hash the given (K, C) pair by the key. */
   private def hashKey(kc: (K, C)): Int = ExternalAppendOnlyMap.hash(kc._1)
+
+  /**
+   * To prevent debug code from printing out the contents of the iterator, and destroying the data
+   */
+  override def toString(): String = {
+    getClass().getSimpleName + "@" + System.identityHashCode(this)
+  }
 }
 
 private[spark] object ExternalAppendOnlyMap {
