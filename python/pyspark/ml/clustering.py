@@ -20,9 +20,91 @@ from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel
 from pyspark.ml.param.shared import *
 from pyspark.mllib.common import inherit_doc
+from pyspark.mllib.stat.distribution import MultivariateGaussian
 
 __all__ = ['BisectingKMeans', 'BisectingKMeansModel',
-           'KMeans', 'KMeansModel']
+           'KMeans', 'KMeansModel', 'GaussianMixture', 'GaussianMixtureModel']
+
+
+class GaussianMixtureModel(JavaModel, JavaMLWritable, JavaMLReadable):
+    """
+    Model fitted by GaussianMixtureModel.
+
+    .. versionadded:: 2.0.0
+    """
+
+    @property
+    @since("2.0.0")
+    def weights(self):
+        """
+        Weights for each Gaussian distribution in the mixture, where weights[i] is
+        the weight for Gaussian i, and weights.sum == 1.
+        """
+        return [c.toArray() for c in self._call_java("weights")]
+
+    @property
+    @since("2.0.0")
+    def gaussians(self):
+        """
+        Array of MultivariateGaussian where gaussians[i] represents
+        the Multivariate Gaussian (Normal) Distribution for Gaussian i.
+        """
+        return [
+            MultivariateGaussian(gaussian[0], gaussian[1])
+            for gaussian in self._call_java("gaussians")]
+
+
+@inherit_doc
+class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol, HasSeed,
+                      HasProbabilityCol, JavaMLWritable, JavaMLReadable):
+
+    k = Param(Params._dummy(), "k", "number of clusters to create",
+              typeConverter=TypeConverters.toInt)
+
+    @keyword_only
+    def __init__(self, featuresCol="features", predictionCol="prediction", k=2,
+                 probabilityCol="probability", tol=0.01, maxIter=100, seed=None):
+        """
+        __init__(self, featuresCol="features", predictionCol="prediction", k=2, \
+                 probabilityCol="probability", tol=0.01, maxIter=100, seed=None)
+        """
+        super(GaussianMixture, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.clustering.GaussianMixture",
+                                            self.uid)
+        self._setDefault(k=2, tol=0.01, maxIter=100)
+        kwargs = self.__init__._input_kwargs
+        self.setParams(**kwargs)
+
+    def _create_model(self, java_model):
+        return GaussianMixtureModel(java_model)
+
+    @keyword_only
+    @since("2.0.0")
+    def setParams(self, featuresCol="features", predictionCol="prediction", k=2,
+                  probabilityCol="probability", tol=0.01, maxIter=100, seed=None):
+        """
+        setParams(self, featuresCol="features", predictionCol="prediction", k=2, \
+                  probabilityCol="probability", tol=0.01, maxIter=100, seed=None)
+
+        Sets params for GaussianMixture.
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
+
+    @since("2.0.0")
+    def setK(self, value):
+        """
+        Sets the value of :py:attr:`k`.
+        """
+        self._paramMap[self.k] = value
+        return self
+
+    @since("2.0.0")
+    def getK(self):
+        """
+        Gets the value of `k`
+        """
+        return self.getOrDefault(self.k)
 
 
 class KMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
