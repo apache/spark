@@ -19,20 +19,19 @@ package org.apache.spark.sql.sources
 
 import java.text.NumberFormat
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.io.{NullWritable, Text}
 import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat, TextOutputFormat}
 
-import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{sources, Row, SQLContext}
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, GenericInternalRow, InterpretedPredicate, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, GenericInternalRow, InterpretedPredicate, InterpretedProjection, JoinedRow, Literal}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.execution.datasources.{HadoopFileLinesReader, PartitionedFile}
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.SerializableConfiguration
-import org.apache.spark.util.collection.BitSet
 
 class SimpleTextSource extends FileFormat with DataSourceRegister {
   override def shortName(): String = "test"
@@ -58,23 +57,25 @@ class SimpleTextSource extends FileFormat with DataSourceRegister {
     }
   }
 
-  override def buildInternalScan(
+  override def buildReader(
       sqlContext: SQLContext,
       dataSchema: StructType,
-      requiredColumns: Array[String],
-      filters: Array[Filter],
-      bucketSet: Option[BitSet],
-      inputFiles: Seq[FileStatus],
-      broadcastedConf: Broadcast[SerializableConfiguration],
-      options: Map[String, String]): RDD[InternalRow] = {
+      partitionSchema: StructType,
+      requiredSchema: StructType,
+      filters: Seq[Filter],
+      options: Map[String, String]): (PartitionedFile) => Iterator[InternalRow] = {
 
-    val fields = dataSchema.map(_.dataType)
+    val fieldTypes = dataSchema.map(_.dataType)
     val inputAttributes = dataSchema.toAttributes
-    val outputAttributes = requiredColumns.flatMap(name => inputAttributes.find(_.name == name))
+    val outputAttributes = requiredSchema.flatMap { field =>
+      inputAttributes.find(_.name == field.name)
+    }
 
-    val inputPaths = inputFiles.map(_.getPath).mkString(",")
-    sqlContext.sparkContext.textFile(inputPaths).mapPartitions { iterator =>
-      // Constructs a filter predicate to simulate filter push-down
+    val conf = new Configuration(sqlContext.sparkContext.hadoopConfiguration)
+    val broadcastedConf =
+      sqlContext.sparkContext.broadcast(new SerializableConfiguration(conf))
+
+    (file: PartitionedFile) => {
       val predicate = {
         val filterCondition: Expression = filters.collect {
           // According to `unhandledFilters`, `SimpleTextRelation` only handles `GreaterThan` filter
@@ -88,20 +89,26 @@ class SimpleTextSource extends FileFormat with DataSourceRegister {
       }
 
       // Uses a simple projection to simulate column pruning
-      val projection = GenerateUnsafeProjection.generate(outputAttributes, inputAttributes)
+      val projection = new InterpretedProjection(outputAttributes, inputAttributes)
 
-      iterator.map { record =>
-        val row = new GenericInternalRow(record.split(",", -1).zip(fields).map {
-          case (v, dataType) =>
-            val value = if (v == "") null else v
-            // `Cast`ed values are always of internal types (e.g. UTF8String instead of String)
-            Cast(Literal(value), dataType).eval()
-        })
-        row
-      }.filter { row =>
-        predicate(row)
-      }.map { row =>
-        projection(row)
+      val unsafeRowIterator =
+        new HadoopFileLinesReader(file, broadcastedConf.value.value).map { line =>
+          val record = line.toString
+          new GenericInternalRow(record.split(",", -1).zip(fieldTypes).map {
+            case (v, dataType) =>
+              val value = if (v == "") null else v
+              // `Cast`ed values are always of internal types (e.g. UTF8String instead of String)
+              Cast(Literal(value), dataType).eval()
+          })
+        }.filter(predicate).map(projection)
+
+      // Appends partition values
+      val fullOutput = requiredSchema.toAttributes ++ partitionSchema.toAttributes
+      val joinedRow = new JoinedRow()
+      val appendPartitionColumns = GenerateUnsafeProjection.generate(fullOutput, fullOutput)
+
+      unsafeRowIterator.map { dataRow =>
+        appendPartitionColumns(joinedRow(dataRow, file.partitionValues))
       }
     }
   }
