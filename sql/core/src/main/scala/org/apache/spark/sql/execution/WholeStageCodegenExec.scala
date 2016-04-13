@@ -276,8 +276,7 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupp
       val columns = (output zip colVars).map { case (attr, colVar) =>
         new ColumnVectorReference(colVar, rowidx, attr.dataType, attr.nullable).gen(ctx) }
     s"""
-       | org.apache.spark.sql.execution.columnar.CachedBatch batch =
-       |   (org.apache.spark.sql.execution.columnar.CachedBatch) $batch;
+       | $columnarBatchClz batch = ($columnarBatchClz) $batch;
        |
        | if ($idx == 0) {
        |   ${columnAssigns.mkString("", "\n", "")}
