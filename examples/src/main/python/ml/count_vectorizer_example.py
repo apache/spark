@@ -35,11 +35,10 @@ if __name__ == "__main__":
     ], ["id", "words"])
 
     # fit a CountVectorizerModel from the corpus.
-    cv = CountVectorizer(inputCol="words", outputCol="features")
+    cv = CountVectorizer(inputCol="words", outputCol="features", vocabSize=3, minDF=2.0)
     model = cv.fit(df)
     result = model.transform(df)
-    for feature in result.select("id", "features").take(2):
-        print(feature)
+    result.show()
     # $example off$
 
     sc.stop()
