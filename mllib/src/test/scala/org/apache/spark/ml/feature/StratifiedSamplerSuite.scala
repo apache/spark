@@ -31,24 +31,28 @@ class StratifiedSamplerSuite
     ParamsSuite.checkParams(new Binarizer)
   }
 
-  test("StratifiedSampling on String label") {
+  test("StratifiedSampling on String, Int and Boolean label") {
     Logger.getRootLogger.setLevel(Level.WARN)
     val df = sqlContext.createDataFrame(Seq(
-      (0, "0"),
-      (0, "0"),
-      (1, "1"),
-      (1, "1")
-    )).toDF("label", "str")
-    val map = Map("1" -> 0.5, "2" -> 0.1)
-    val trans = new StratifiedSampler(false, map).setLabel("str")
-    trans.transform(df).schema == df.schema
+      (0, "0", false),
+      (0, "0", false),
+      (1, "1", true),
+      (1, "1", true)
+    )).toDF("int", "str", "bool")
+    val strMap = Map("1" -> 0.5, "0" -> 0.1)
+    assert(new StratifiedSampler(strMap).setLabel("str").transform(df).schema == df.schema)
+
+    val intMap = Map(1 -> 0.5, 0 -> 0.1)
+    assert(new StratifiedSampler(intMap).setLabel("str").transform(df).schema == df.schema)
+
+    val boolMap = Map(true -> 0.5, false -> 0.1)
+    assert(new StratifiedSampler(boolMap).setLabel("str").transform(df).schema == df.schema)
   }
 
   test("StratifiedSampling read/write") {
-    val t = new StratifiedSampler(false, Map("1" -> 0.5, "2" -> 0.1))
+    val t = new StratifiedSampler(Map("1" -> 0.5, "2" -> 0.1))
       .setLabel("myLabel")
     val newInstance = testDefaultReadWrite(t)
-    assert(t.withReplacement == newInstance.withReplacement &&
-      t.fraction == newInstance.fraction)
+    assert(t.fractions == newInstance.fractions)
   }
 }
