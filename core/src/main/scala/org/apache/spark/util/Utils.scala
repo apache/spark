@@ -1307,7 +1307,7 @@ private[spark] object Utils extends Logging {
   }
 
   /** Default filtering function for finding call sites using `getCallSite`. */
-  private def sparkInternalExclusionFunction(className: String, testClassName: String):
+  private def sparkInternalExclusionFunction(className: String):
     Boolean = {
     // A regular expression to match classes of the internal Spark API's
     // that we want to skip when finding the call site of a method.
@@ -1318,6 +1318,7 @@ private[spark] object Utils extends Logging {
     val isSparkClass = SPARK_CORE_CLASS_REGEX.findFirstIn(className).isDefined ||
       SPARK_SQL_CLASS_REGEX.findFirstIn(className).isDefined
     val isScalaClass = className.startsWith(SCALA_CORE_CLASS_PREFIX)
+    val testClassName = System.getProperty("spark.callstack.testClass")
     val isSparkTestSuiteClass = (testClassName != null) && className.startsWith(testClassName)
     // If the class is a Spark internal class or a Scala class, then exclude.
     (isSparkClass || isScalaClass) && !isSparkTestSuiteClass
@@ -1330,7 +1331,7 @@ private[spark] object Utils extends Logging {
    *
    * @param skipClass Function that is used to exclude non-user-code classes.
    */
-  def getCallSite(skipClass: (String, String) => Boolean = sparkInternalExclusionFunction):
+  def getCallSite(skipClass: String => Boolean = sparkInternalExclusionFunction):
     CallSite = {
     // Keep crawling up the stack trace until we find the first function not inside of the spark
     // package. We track the last (shallowest) contiguous Spark method. This might be an RDD
@@ -1346,11 +1347,10 @@ private[spark] object Utils extends Logging {
       // When running under some profilers, the current stack trace might contain some bogus
       // frames. This is intended to ensure that we don't crash in these situations by
       // ignoring any frames that we can't examine.
-      val testClassName = System.getProperty("spark.callstack.testClass")
       if (ste != null && ste.getMethodName != null
         && !ste.getMethodName.contains("getStackTrace")) {
         if (insideSpark) {
-          if (skipClass(ste.getClassName, testClassName)) {
+          if (skipClass(ste.getClassName)) {
             lastSparkMethod = if (ste.getMethodName == "<init>") {
               // Spark method is a constructor; get its class name
               ste.getClassName.substring(ste.getClassName.lastIndexOf('.') + 1)
