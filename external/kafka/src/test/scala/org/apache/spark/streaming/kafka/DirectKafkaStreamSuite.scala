@@ -595,7 +595,6 @@ class LatencyListener(ssc: StreamingContext) extends StreamingListener {
         ", processing End Time," + batchInfo.processingEndTime.getOrElse(0L) +
         ", scheduling Delay," + batchInfo.schedulingDelay.getOrElse(0L) +
         ", processing Delay," + batchInfo.processingDelay.getOrElse(0L)
-
       setMap(imap)
     }
 
