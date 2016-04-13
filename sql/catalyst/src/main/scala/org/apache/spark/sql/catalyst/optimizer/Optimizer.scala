@@ -941,40 +941,28 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
         filter
       }
 
-    case filter @ Filter(condition, u: Union) =>
-      val output = u.output
-      val newChildren = u.children.map { child =>
-        // Union will not change the rows, so all the predicates could be pushed down.
-        val newCond = condition transform {
-          case e if output.exists(_.semanticEquals(e)) =>
-            child.output(output.indexWhere(_.semanticEquals(e)))
-        }
-        assert(newCond.references.subsetOf(child.outputSet))
-        Filter(newCond, child)
-      }
-      Union(newChildren)
-
-    case filter @ Filter(condition, i: Intersect) =>
-      // Intersect could change the rows, so non-deterministic predicate can't be pushed down
+    case filter @ Filter(condition, child)
+      if child.isInstanceOf[Union] || child.isInstanceOf[Intersect] =>
+      // Union/Intersect could change the rows, so non-deterministic predicate can't be pushed down
       val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { cond =>
         cond.deterministic
       }
       if (pushDown.nonEmpty) {
         val pushDownCond = pushDown.reduceLeft(And)
-        val output = i.output
-        val newChildren = i.children.map { child =>
+        val output = child.output
+        val newGrandChildren = child.children.map { grandchild =>
           val newCond = pushDownCond transform {
             case e if output.exists(_.semanticEquals(e)) =>
-              child.output(output.indexWhere(_.semanticEquals(e)))
+              grandchild.output(output.indexWhere(_.semanticEquals(e)))
           }
-          assert(newCond.references.subsetOf(child.outputSet))
-          Filter(newCond, child)
+          assert(newCond.references.subsetOf(grandchild.outputSet))
+          Filter(newCond, grandchild)
         }
-        val newIntersect = i.withNewChildren(newChildren)
+        val newChild = child.withNewChildren(newGrandChildren)
         if (stayUp.nonEmpty) {
-          Filter(stayUp.reduceLeft(And), newIntersect)
+          Filter(stayUp.reduceLeft(And), newChild)
         } else {
-          newIntersect
+          newChild
         }
       } else {
         filter
