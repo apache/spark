@@ -478,11 +478,9 @@ class DirectKafkaStreamSuite
 }
 
 
-object DirectKafkaWordCount {
+object DirectKafkaWordCountLocal {
 
   import org.apache.spark.streaming._
-
-  case class Tick(symbol: String, price: Int, ts: Long)
 
   def main(args: Array[String]) {
 
@@ -495,6 +493,46 @@ object DirectKafkaWordCount {
     val lines = ssc.socketTextStream("localhost", 9998)
 
     val words = lines.flatMap(_.split(" "))
+
+    val pairs = words.map(word => (word, 1))
+
+    val wordCounts = pairs.reduceByKeyAndWindow(_+_, _-_, Seconds(60),Seconds(10))
+
+    wordCounts.print()
+
+    ssc.start()
+    ssc.awaitTermination()
+  }
+}
+
+object DirectKafkaWordCountKafka {
+
+  import org.apache.spark.streaming._
+
+  def main(args: Array[String]) {
+    val sparkConf = new SparkConf().setMaster("local[*]").setAppName("DirectKafkaWordCount")
+
+    val ssc = new StreamingContext(sparkConf, Seconds(2))
+    //ssc.checkpoint(checkPointPath)
+
+    val listener = new LatencyListener(ssc)
+    ssc.addStreamingListener(listener)
+    val kafkaBrokers = "localhost"
+    val kafkaPort ="9092"
+    val topic="test"
+
+    val topicsSet = Set(topic)
+
+    val brokerListString = kafkaBrokers+":"+kafkaPort
+
+    val kafkaParams = Map[String, String]("metadata.broker.list" -> brokerListString.toString())
+    System.err.println(
+      "Trying to connect to Kafka at " + brokerListString.toString())
+    val messages = KafkaUtils.createDirectStream[String, String, StringDecoder, StringDecoder](
+      ssc, kafkaParams, topicsSet)
+    ssc.checkpoint("/tmp/checkPoint/")
+
+    val words = messages.map(x => x._2).flatMap(_.split(" "))
 
     val pairs = words.map(word => (word, 1))
 
