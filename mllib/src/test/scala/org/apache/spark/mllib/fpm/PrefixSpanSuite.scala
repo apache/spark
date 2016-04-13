@@ -364,13 +364,6 @@ class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
       Array(Array(1), Array(3, 2), Array(1, 2)),
       Array(Array(1, 2), Array(5)),
       Array(Array(6)))
-    val expected = Array(
-      (Array(Array(1)), 3L),
-      (Array(Array(2)), 3L),
-      (Array(Array(3)), 2L),
-      (Array(Array(1), Array(3)), 2L),
-      (Array(Array(1, 2)), 3L)
-    )
     val rdd = sc.parallelize(sequences, 2).cache()
 
     val prefixSpan = new PrefixSpan()
@@ -383,9 +376,13 @@ class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
     try {
       model.save(sc, path)
       val newModel = PrefixSpanModel.load(sc, path)
-      val actual = newModel.freqSequences.collect()
-        .map(_.asInstanceOf[PrefixSpan.FreqSequence[Int]])
-      compareResults(expected, actual)
+      val originalSet = model.freqSequences.collect().map { x =>
+        (x.sequence.map(_.toSet).toSeq, x.freq)
+      }.toSet
+      val newSet = newModel.freqSequences.collect().map { x =>
+        (x.sequence.map(_.toSet).toSeq, x.freq)
+      }.toSet
+      assert(originalSet === newSet)
     } finally {
       Utils.deleteRecursively(tempDir)
     }
