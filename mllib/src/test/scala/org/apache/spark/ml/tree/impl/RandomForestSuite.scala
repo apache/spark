@@ -114,7 +114,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
       )
       val featureSamples = Array(1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 3).map(_.toDouble)
       val splits = RandomForest.findSplitsForContinuousFeature(featureSamples, fakeMetadata, 0)
-      assert(splits.length === 3)
+      assert(splits.length === 2)
       // check returned splits are distinct
       assert(splits.distinct.length === splits.length)
     }
@@ -137,7 +137,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     {
       val fakeMetadata = new DecisionTreeMetadata(1, 0, 0, 0,
         Map(), Set(),
-        Array(3), Gini, QuantileStrategy.Sort,
+        Array(2), Gini, QuantileStrategy.Sort,
         0, 0, 0.0, 0, 0
       )
       val featureSamples = Array(0, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2).map(_.toDouble)
@@ -145,6 +145,35 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
       assert(splits.length === 1)
       assert(splits(0) === 1.0)
     }
+
+    // find splits for constant feature
+    {
+      val fakeMetadata = new DecisionTreeMetadata(1, 0, 0, 0,
+        Map(), Set(),
+        Array(3), Gini, QuantileStrategy.Sort,
+        0, 0, 0.0, 0, 0
+      )
+      val featureSamples = Array(0, 0, 0).map(_.toDouble)
+      val splits = RandomForest.findSplitsForContinuousFeature(featureSamples, fakeMetadata, 0)
+      assert(splits === Array[Double]())
+    }
+  }
+
+  test("train with constant features") {
+    val lp = LabeledPoint(1.0, Vectors.dense(0.0, 0.0, 0.0))
+    val data = Array.fill(5)(lp)
+    val rdd = sc.parallelize(data)
+    val strategy = new OldStrategy(
+          OldAlgo.Classification,
+          Gini,
+          maxDepth = 2,
+          numClasses = 100,
+          maxBins = 100,
+          categoricalFeaturesInfo = Map(0 -> 2, 1 -> 5))
+    val Array(tree) = RandomForest.run(rdd, strategy, 1, "all", 42L)
+    assert(tree.rootNode.impurity === -1.0)
+    assert(tree.depth === 0)
+    assert(tree.rootNode.prediction === lp.label)
   }
 
   test("Multiclass classification with unordered categorical features: split calculations") {

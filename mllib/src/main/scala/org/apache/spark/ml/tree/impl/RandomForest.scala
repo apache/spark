@@ -712,17 +712,23 @@ private[spark] object RandomForest extends Logging {
             splitIndex += 1
           }
           // Find best split.
-          val (bestFeatureSplitIndex, bestFeatureGainStats) =
-            Range(0, numSplits).map { case splitIdx =>
-              val leftChildStats = binAggregates.getImpurityCalculator(nodeFeatureOffset, splitIdx)
-              val rightChildStats =
-                binAggregates.getImpurityCalculator(nodeFeatureOffset, numSplits)
-              rightChildStats.subtract(leftChildStats)
-              gainAndImpurityStats = calculateImpurityStats(gainAndImpurityStats,
-                leftChildStats, rightChildStats, binAggregates.metadata)
-              (splitIdx, gainAndImpurityStats)
-            }.maxBy(_._2.gain)
-          (splits(featureIndex)(bestFeatureSplitIndex), bestFeatureGainStats)
+          if (numSplits == 0) {
+            (new ContinuousSplit(featureIndex, Double.MinValue),
+              ImpurityStats.getInvalidImpurityStats(gainAndImpurityStats.impurityCalculator))
+          } else {
+            val (bestFeatureSplitIndex, bestFeatureGainStats) =
+              Range(0, numSplits).map { case splitIdx =>
+                val leftChildStats =
+                  binAggregates.getImpurityCalculator(nodeFeatureOffset, splitIdx)
+                val rightChildStats =
+                  binAggregates.getImpurityCalculator(nodeFeatureOffset, numSplits)
+                rightChildStats.subtract(leftChildStats)
+                gainAndImpurityStats = calculateImpurityStats(gainAndImpurityStats,
+                  leftChildStats, rightChildStats, binAggregates.metadata)
+                (splitIdx, gainAndImpurityStats)
+              }.maxBy(_._2.gain)
+            (splits(featureIndex)(bestFeatureSplitIndex), bestFeatureGainStats)
+          }
         } else if (binAggregates.metadata.isUnordered(featureIndex)) {
           // Unordered categorical feature
           val leftChildOffset = binAggregates.getFeatureOffset(featureIndexIdx)
@@ -974,9 +980,9 @@ private[spark] object RandomForest extends Logging {
       val valueCounts = valueCountMap.toSeq.sortBy(_._1).toArray
 
       // if possible splits is not enough or just enough, just return all possible splits
-      val possibleSplits = valueCounts.length
+      val possibleSplits = valueCounts.length - 1
       if (possibleSplits <= numSplits) {
-        valueCounts.map(_._1)
+        valueCounts.map(_._1).init
       } else {
         // stride between splits
         val stride: Double = numSamples.toDouble / (numSplits + 1)
@@ -1011,10 +1017,10 @@ private[spark] object RandomForest extends Logging {
       }
     }
 
-    // TODO: Do not fail; just ignore the useless feature.
-    assert(splits.length > 0,
-      s"DecisionTree could not handle feature $featureIndex since it had only 1 unique value." +
-        "  Please remove this feature and then try again.")
+//    // TODO: Do not fail; just ignore the useless feature.
+//    assert(splits.length > 0,
+//      s"DecisionTree could not handle feature $featureIndex since it had only 1 unique value." +
+//        "  Please remove this feature and then try again.")
 
     splits
   }
