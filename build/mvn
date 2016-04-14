@@ -69,7 +69,6 @@ install_app() {
 
 # Install maven under the build/ folder
 install_mvn() {
-  local MVN_VERSION="3.3.9"
   local APACHE_MIRROR=${APACHE_MIRROR:-'https://www.apache.org/dyn/closer.lua?action=download&filename='}
 
   install_app \
@@ -124,10 +123,13 @@ if [ "$1" == "--force" ]; then
 fi
 
 # Install Maven if necessary
+MVN_VERSION="3.3.9"
 MVN_BIN="$(command -v mvn)"
 
 if [ ! "$MVN_BIN" -o -n "$FORCE_MVN" ]; then
   install_mvn
+elif [ -f "${_DIR}/apache-maven-${MVN_VERSION}/bin/mvn" ]; then # Try to use downloaded mvn first.
+  MVN_BIN="${_DIR}/apache-maven-${MVN_VERSION}/bin/mvn"
 fi
 
 # Install the proper version of Scala and Zinc for the build
