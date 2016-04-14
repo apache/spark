@@ -245,7 +245,7 @@ class LogisticRegression @Since("1.2.0") (
 
   @Since("1.5.0")
   override def setThresholds(value: Array[Double]): this.type = {
-    logWarning("Ignoring setThresholds, use setThreshold() for binary Logistic Regression.")
+    logWarning("Ignoring setThresholds(), use setThreshold() for binary Logistic Regression.")
     this
   }
 
