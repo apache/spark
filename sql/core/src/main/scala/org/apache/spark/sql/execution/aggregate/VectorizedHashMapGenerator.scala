@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.types.StructType
 
 /**
- * This is a helper class to generate an append-only aggregate hash map that can act as a 'cache'
+ * This is a helper class to generate an append-only vectorized hash map that can act as a 'cache'
  * for extremely fast key-value lookups while evaluating aggregates (and fall back to the
  * `BytesToBytesMap` if a given key isn't found). This is 'codegened' in TungstenAggregate to speed
  * up aggregates w/ key.
@@ -31,9 +31,14 @@ import org.apache.spark.sql.types.StructType
  * maximum tries) and use an inexpensive hash function which makes it really efficient for a
  * majority of lookups. However, using linear probing and an inexpensive hash function also makes it
  * less robust as compared to the `BytesToBytesMap` (especially for a large number of keys or even
- * for certain distribution of keys) and requires us to fall back on the latter for correctness.
+ * for certain distribution of keys) and requires us to fall back on the latter for correctness. We
+ * also use a secondary columnar batch that logically projects over the original columnar batch and
+ * is equivalent to the `BytesToBytesMap` aggregate buffer.
+ *
+ * NOTE: This vectorized hash map currently doesn't support nullable keys and falls back to the
+ * `BytesToBytesMap` to store them.
  */
-class ColumnarAggMapCodeGenerator(
+class VectorizedHashMapGenerator(
     ctx: CodegenContext,
     generatedClassName: String,
     groupingKeySchema: StructType,
@@ -96,13 +101,17 @@ class ColumnarAggMapCodeGenerator(
        |    assert (DEFAULT_CAPACITY > 0 && ((DEFAULT_CAPACITY & (DEFAULT_CAPACITY - 1)) == 0));
        |    this.maxSteps = DEFAULT_MAX_STEPS;
        |    numBuckets = (int) (DEFAULT_CAPACITY / DEFAULT_LOAD_FACTOR);
+       |
        |    batch = org.apache.spark.sql.execution.vectorized.ColumnarBatch.allocate(schema,
        |      org.apache.spark.memory.MemoryMode.ON_HEAP, DEFAULT_CAPACITY);
+       |
+       |    // TODO: Possibly generate this projection in TungstenAggregate directly
        |    aggregateBufferBatch = org.apache.spark.sql.execution.vectorized.ColumnarBatch.allocate(
        |      aggregateBufferSchema, org.apache.spark.memory.MemoryMode.ON_HEAP, DEFAULT_CAPACITY);
        |    for (int i = 0 ; i < aggregateBufferBatch.numCols(); i++) {
        |       aggregateBufferBatch.setColumn(i, batch.column(i+${groupingKeys.length}));
        |    }
+       |
        |    buckets = new int[numBuckets];
        |    java.util.Arrays.fill(buckets, -1);
        |  }
