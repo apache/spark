@@ -55,14 +55,7 @@ import org.apache.spark.sql.sources._
  */
 private[sql] object FileSourceStrategy extends Strategy with Logging {
   def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-    case PhysicalOperation(projects, filters, l @ LogicalRelation(files: HadoopFsRelation, _, _))
-      if (files.fileFormat.toString == "TestFileFormat" ||
-         files.fileFormat.isInstanceOf[parquet.DefaultSource] ||
-         files.fileFormat.toString == "ORC" ||
-         files.fileFormat.isInstanceOf[csv.DefaultSource] ||
-         files.fileFormat.isInstanceOf[text.DefaultSource] ||
-         files.fileFormat.isInstanceOf[json.DefaultSource]) &&
-         files.sqlContext.conf.useFileScan =>
+    case PhysicalOperation(projects, filters, l @ LogicalRelation(files: HadoopFsRelation, _, _)) =>
       // Filters on this relation fall into four categories based on where we can use them to avoid
       // reading unneeded data:
       //  - partition keys only - used to prune directories to read
@@ -71,18 +64,28 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
       //  - filters that need to be evaluated again after the scan
       val filterSet = ExpressionSet(filters)
 
+      // The attribute name of predicate could be different than the one in schema in case of
+      // case insensitive, we should change them to match the one in schema, so we donot need to
+      // worry about case sensitivity anymore.
+      val normalizedFilters = filters.map { e =>
+        e transform {
+          case a: AttributeReference =>
+            a.withName(l.output.find(_.semanticEquals(a)).get.name)
+        }
+      }
+
       val partitionColumns =
         l.resolve(files.partitionSchema, files.sqlContext.sessionState.analyzer.resolver)
       val partitionSet = AttributeSet(partitionColumns)
       val partitionKeyFilters =
-        ExpressionSet(filters.filter(_.references.subsetOf(partitionSet)))
+        ExpressionSet(normalizedFilters.filter(_.references.subsetOf(partitionSet)))
       logInfo(s"Pruning directories with: ${partitionKeyFilters.mkString(",")}")
 
       val dataColumns =
         l.resolve(files.dataSchema, files.sqlContext.sessionState.analyzer.resolver)
 
       // Partition keys are not available in the statistics of the files.
-      val dataFilters = filters.filter(_.references.intersect(partitionSet).isEmpty)
+      val dataFilters = normalizedFilters.filter(_.references.intersect(partitionSet).isEmpty)
 
       // Predicates with both partition keys and attributes need to be evaluated after the scan.
       val afterScanFilters = filterSet -- partitionKeyFilters
@@ -130,9 +133,9 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
 
         case _ =>
           val maxSplitBytes = files.sqlContext.conf.filesMaxPartitionBytes
-          val maxFileNumInPartition = files.sqlContext.conf.filesMaxNumInPartition
+          val openCostInBytes = files.sqlContext.conf.filesOpenCostInBytes
           logInfo(s"Planning scan with bin packing, max size: $maxSplitBytes bytes, " +
-            s"max #files: $maxFileNumInPartition")
+            s"open cost is considered as scanning $openCostInBytes bytes.")
 
           val splitFiles = selectedPartitions.flatMap { partition =>
             partition.files.flatMap { file =>
@@ -150,7 +153,7 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
 
           /** Add the given file to the current partition. */
           def addFile(file: PartitionedFile): Unit = {
-            currentSize += file.length
+            currentSize += file.length + openCostInBytes
             currentFiles.append(file)
           }
 
@@ -170,20 +173,17 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
           // Assign files to partitions using "First Fit Decreasing" (FFD)
           // TODO: consider adding a slop factor here?
           splitFiles.foreach { file =>
-            if (currentSize + file.length > maxSplitBytes ||
-                currentFiles.length >= maxFileNumInPartition) {
+            if (currentSize + file.length > maxSplitBytes) {
               closePartition()
-              addFile(file)
-            } else {
-              addFile(file)
             }
+            addFile(file)
           }
           closePartition()
           partitions
       }
 
       val scan =
-        DataSourceScan(
+        DataSourceScan.create(
           readDataColumns ++ partitionColumns,
           new FileScanRDD(
             files.sqlContext,

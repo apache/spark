@@ -30,12 +30,12 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types.Metadata
 
 class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
-  @transient var dataset: DataFrame = _
+  @transient var dataset: Dataset[_] = _
   @transient var rdd: RDD[LabeledPoint] = _
 
   override def beforeAll(): Unit = {
@@ -74,7 +74,7 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     // copied model must have the same parent.
     MLTestingUtils.checkCopy(ovaModel)
 
-    assert(ovaModel.models.size === numClasses)
+    assert(ovaModel.models.length === numClasses)
     val transformedDataset = ovaModel.transform(dataset)
 
     // check for label metadata in prediction col
@@ -224,6 +224,20 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     val newOvaModel = testDefaultReadWrite(ovaModel, testParams = false)
     checkModelData(ovaModel, newOvaModel)
   }
+
+  test("should support all NumericType labels and not support other types") {
+    val ovr = new OneVsRest().setClassifier(new LogisticRegression().setMaxIter(1))
+    MLTestingUtils.checkNumericTypes[OneVsRestModel, OneVsRest](
+      ovr, isClassification = true, sqlContext) { (expected, actual) =>
+        val expectedModels = expected.models.map(m => m.asInstanceOf[LogisticRegressionModel])
+        val actualModels = actual.models.map(m => m.asInstanceOf[LogisticRegressionModel])
+        assert(expectedModels.length === actualModels.length)
+        expectedModels.zip(actualModels).foreach { case (e, a) =>
+          assert(e.intercept === a.intercept)
+          assert(e.coefficients.toArray === a.coefficients.toArray)
+        }
+      }
+  }
 }
 
 private class MockLogisticRegression(uid: String) extends LogisticRegression(uid) {
@@ -232,7 +246,7 @@ private class MockLogisticRegression(uid: String) extends LogisticRegression(uid
 
   setMaxIter(1)
 
-  override protected[spark] def train(dataset: DataFrame): LogisticRegressionModel = {
+  override protected[spark] def train(dataset: Dataset[_]): LogisticRegressionModel = {
     val labelSchema = dataset.schema($(labelCol))
     // check for label attribute propagation.
     assert(MetadataUtils.getNumClasses(labelSchema).forall(_ == 2))

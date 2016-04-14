@@ -745,8 +745,8 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     )
   }
 
-  test("Loading a JSON dataset floatAsBigDecimal returns schema with float types as BigDecimal") {
-    val jsonDF = sqlContext.read.option("floatAsBigDecimal", "true").json(primitiveFieldAndType)
+  test("Loading a JSON dataset prefersDecimal returns schema with float types as BigDecimal") {
+    val jsonDF = sqlContext.read.option("prefersDecimal", "true").json(primitiveFieldAndType)
 
     val expectedSchema = StructType(
       StructField("bigInteger", DecimalType(20, 0), true) ::
@@ -770,6 +770,72 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         21474836470L,
         null,
         "this is a simple string.")
+    )
+  }
+
+  test("Find compatible types even if inferred DecimalType is not capable of other IntegralType") {
+    val mixedIntegerAndDoubleRecords = sparkContext.parallelize(
+      """{"a": 3, "b": 1.1}""" ::
+      s"""{"a": 3.1, "b": 0.${"0" * 38}1}""" :: Nil)
+    val jsonDF = sqlContext.read
+      .option("prefersDecimal", "true")
+      .json(mixedIntegerAndDoubleRecords)
+
+    // The values in `a` field will be decimals as they fit in decimal. For `b` field,
+    // they will be doubles as `1.0E-39D` does not fit.
+    val expectedSchema = StructType(
+      StructField("a", DecimalType(21, 1), true) ::
+      StructField("b", DoubleType, true) :: Nil)
+
+    assert(expectedSchema === jsonDF.schema)
+    checkAnswer(
+      jsonDF,
+      Row(BigDecimal("3"), 1.1D) ::
+      Row(BigDecimal("3.1"), 1.0E-39D) :: Nil
+    )
+  }
+
+  test("Infer big integers correctly even when it does not fit in decimal") {
+    val jsonDF = sqlContext.read
+      .json(bigIntegerRecords)
+
+    // The value in `a` field will be a double as it does not fit in decimal. For `b` field,
+    // it will be a decimal as `92233720368547758070`.
+    val expectedSchema = StructType(
+      StructField("a", DoubleType, true) ::
+      StructField("b", DecimalType(20, 0), true) :: Nil)
+
+    assert(expectedSchema === jsonDF.schema)
+    checkAnswer(jsonDF, Row(1.0E38D, BigDecimal("92233720368547758070")))
+  }
+
+  test("Infer floating-point values correctly even when it does not fit in decimal") {
+    val jsonDF = sqlContext.read
+      .option("prefersDecimal", "true")
+      .json(floatingValueRecords)
+
+    // The value in `a` field will be a double as it does not fit in decimal. For `b` field,
+    // it will be a decimal as `0.01` by having a precision equal to the scale.
+    val expectedSchema = StructType(
+      StructField("a", DoubleType, true) ::
+      StructField("b", DecimalType(2, 2), true):: Nil)
+
+    assert(expectedSchema === jsonDF.schema)
+    checkAnswer(jsonDF, Row(1.0E-39D, BigDecimal(0.01)))
+
+    val mergedJsonDF = sqlContext.read
+      .option("prefersDecimal", "true")
+      .json(floatingValueRecords ++ bigIntegerRecords)
+
+    val expectedMergedSchema = StructType(
+      StructField("a", DoubleType, true) ::
+      StructField("b", DecimalType(22, 2), true):: Nil)
+
+    assert(expectedMergedSchema === mergedJsonDF.schema)
+    checkAnswer(
+      mergedJsonDF,
+      Row(1.0E-39D, BigDecimal(0.01)) ::
+      Row(1.0E38D, BigDecimal("92233720368547758070")) :: Nil
     )
   }
 
@@ -1597,5 +1663,20 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         Row(java.sql.Timestamp.valueOf("2016-01-02 03:04:05"))
       )
     }
+  }
+
+  test("wide nested json table") {
+    val nested = (1 to 100).map { i =>
+      s"""
+         |"c$i": $i
+       """.stripMargin
+    }.mkString(", ")
+    val json = s"""
+       |{"a": [{$nested}], "b": [{$nested}]}
+     """.stripMargin
+    val rdd = sqlContext.sparkContext.makeRDD(Seq(json))
+    val df = sqlContext.read.json(rdd)
+    assert(df.schema.size === 2)
+    df.collect()
   }
 }

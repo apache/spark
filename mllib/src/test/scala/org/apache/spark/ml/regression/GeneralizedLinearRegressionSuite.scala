@@ -626,6 +626,7 @@ class GeneralizedLinearRegressionSuite
     assert(summary.residualDegreeOfFreedom === residualDegreeOfFreedomR)
     assert(summary.residualDegreeOfFreedomNull === residualDegreeOfFreedomNullR)
     assert(summary.aic ~== aicR absTol 1E-3)
+    assert(summary.solver === "irls")
   }
 
   test("glm summary: binomial family with weight") {
@@ -739,6 +740,7 @@ class GeneralizedLinearRegressionSuite
     assert(summary.residualDegreeOfFreedom === residualDegreeOfFreedomR)
     assert(summary.residualDegreeOfFreedomNull === residualDegreeOfFreedomNullR)
     assert(summary.aic ~== aicR absTol 1E-3)
+    assert(summary.solver === "irls")
   }
 
   test("glm summary: poisson family with weight") {
@@ -855,6 +857,7 @@ class GeneralizedLinearRegressionSuite
     assert(summary.residualDegreeOfFreedom === residualDegreeOfFreedomR)
     assert(summary.residualDegreeOfFreedomNull === residualDegreeOfFreedomNullR)
     assert(summary.aic ~== aicR absTol 1E-3)
+    assert(summary.solver === "irls")
   }
 
   test("glm summary: gamma family with weight") {
@@ -968,6 +971,7 @@ class GeneralizedLinearRegressionSuite
     assert(summary.residualDegreeOfFreedom === residualDegreeOfFreedomR)
     assert(summary.residualDegreeOfFreedomNull === residualDegreeOfFreedomNullR)
     assert(summary.aic ~== aicR absTol 1E-3)
+    assert(summary.solver === "irls")
   }
 
   test("read/write") {
@@ -981,6 +985,24 @@ class GeneralizedLinearRegressionSuite
     val glr = new GeneralizedLinearRegression()
     testEstimatorAndModelReadWrite(glr, datasetPoissonLog,
       GeneralizedLinearRegressionSuite.allParamSettings, checkModelData)
+  }
+
+  test("should support all NumericType labels and not support other types") {
+    val glr = new GeneralizedLinearRegression().setMaxIter(1)
+    MLTestingUtils.checkNumericTypes[
+        GeneralizedLinearRegressionModel, GeneralizedLinearRegression](
+      glr, isClassification = false, sqlContext) { (expected, actual) =>
+        assert(expected.intercept === actual.intercept)
+        assert(expected.coefficients === actual.coefficients)
+      }
+  }
+
+  test("glm accepts Dataset[LabeledPoint]") {
+    val context = sqlContext
+    import context.implicits._
+    new GeneralizedLinearRegression()
+      .setFamily("gaussian")
+      .fit(datasetGaussianIdentity.as[LabeledPoint])
   }
 }
 
@@ -1023,7 +1045,7 @@ object GeneralizedLinearRegressionSuite {
     generator.setSeed(seed)
 
     (0 until nPoints).map { _ =>
-      val features = Vectors.dense(coefficients.indices.map { rndElement(_) }.toArray)
+      val features = Vectors.dense(coefficients.indices.map(rndElement).toArray)
       val eta = BLAS.dot(Vectors.dense(coefficients), features) + intercept
       val mu = link match {
         case "identity" => eta

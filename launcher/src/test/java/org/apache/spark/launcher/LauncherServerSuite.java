@@ -83,13 +83,13 @@ public class LauncherServerSuite extends BaseSuite {
 
       client = new TestClient(s);
       client.send(new Hello(handle.getSecret(), "1.4.0"));
-      assertTrue(semaphore.tryAcquire(1, TimeUnit.SECONDS));
+      assertTrue(semaphore.tryAcquire(30, TimeUnit.SECONDS));
 
       // Make sure the server matched the client to the handle.
       assertNotNull(handle.getConnection());
 
       client.send(new SetAppId("app-id"));
-      assertTrue(semaphore.tryAcquire(1, TimeUnit.SECONDS));
+      assertTrue(semaphore.tryAcquire(30, TimeUnit.SECONDS));
       assertEquals("app-id", handle.getAppId());
 
       client.send(new SetState(SparkAppHandle.State.RUNNING));
@@ -97,7 +97,7 @@ public class LauncherServerSuite extends BaseSuite {
       assertEquals(SparkAppHandle.State.RUNNING, handle.getState());
 
       handle.stop();
-      Message stopMsg = client.inbound.poll(10, TimeUnit.SECONDS);
+      Message stopMsg = client.inbound.poll(30, TimeUnit.SECONDS);
       assertTrue(stopMsg instanceof Stop);
     } finally {
       kill(handle);
@@ -175,7 +175,7 @@ public class LauncherServerSuite extends BaseSuite {
 
     TestClient(Socket s) throws IOException {
       super(s);
-      this.inbound = new LinkedBlockingQueue<Message>();
+      this.inbound = new LinkedBlockingQueue<>();
       this.clientThread = new Thread(this);
       clientThread.setName("TestClient");
       clientThread.setDaemon(true);

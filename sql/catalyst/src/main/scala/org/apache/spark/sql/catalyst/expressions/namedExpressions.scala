@@ -97,7 +97,7 @@ trait NamedExpression extends Expression {
     }
 }
 
-abstract class Attribute extends LeafExpression with NamedExpression {
+abstract class Attribute extends LeafExpression with NamedExpression with NullIntolerant {
 
   override def references: AttributeSet = AttributeSet(this)
 
@@ -329,10 +329,12 @@ case class PrettyAttribute(
   override def withName(newName: String): Attribute = throw new UnsupportedOperationException
   override def qualifier: Option[String] = throw new UnsupportedOperationException
   override def exprId: ExprId = throw new UnsupportedOperationException
-  override def nullable: Boolean = throw new UnsupportedOperationException
+  override def nullable: Boolean = true
 }
 
 object VirtualColumn {
-  val groupingIdName: String = "grouping__id"
+  // The attribute name used by Hive, which has different result than Spark, deprecated.
+  val hiveGroupingIdName: String = "grouping__id"
+  val groupingIdName: String = "spark_grouping_id"
   val groupingIdAttribute: UnresolvedAttribute = UnresolvedAttribute(groupingIdName)
 }
