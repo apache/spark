@@ -250,13 +250,13 @@ public final class UnsafeInMemorySorter {
    */
   public SortedIterator getSortedIterator() {
     int offset = 0;
-    if (useRadix) {
-      offset = RadixSort.sortKeyPrefixArray(array, pos / 2, 0, pos, 0, 7);
-    } else if (sorter != null) {
-      sorter.sort(array, 0, pos / 2, sortComparator);
+    if (sorter != null) {
+      if (useRadix) {
+        offset = RadixSort.sortKeyPrefixArray(array, pos / 2, 0, pos, 0, 7);
+      } else {
+        sorter.sort(array, 0, pos / 2, sortComparator);
+      }
     }
-    System.out.println("tmpOffset: " + pos);
-    System.out.println("offset: " + offset);
     return new SortedIterator(pos / 2, offset);
   }
 }
