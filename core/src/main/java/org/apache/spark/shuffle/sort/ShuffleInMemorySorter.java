@@ -22,6 +22,7 @@ import java.util.Comparator;
 import org.apache.spark.memory.MemoryConsumer;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.LongArray;
+import org.apache.spark.util.collection.RadixSort;
 import org.apache.spark.util.collection.Sorter;
 
 final class ShuffleInMemorySorter {
@@ -57,7 +58,7 @@ final class ShuffleInMemorySorter {
     this.consumer = consumer;
     assert (initialSize > 0);
     this.initialSize = initialSize;
-    this.array = consumer.allocateArray(initialSize);
+    this.array = consumer.allocateArray(initialSize * 2);
     this.sorter = new Sorter<>(ShuffleSortDataFormat.INSTANCE);
   }
 
@@ -87,14 +88,14 @@ final class ShuffleInMemorySorter {
       array.getBaseOffset(),
       newArray.getBaseObject(),
       newArray.getBaseOffset(),
-      array.size() * 8L
+      array.size() * 4L  // Skip copying the half we hold in reserve.
     );
     consumer.freeArray(array);
     array = newArray;
   }
 
   public boolean hasSpaceForAnotherRecord() {
-    return pos < array.size();
+    return pos < array.size() / 2;
   }
 
   public long getMemoryUsage() {
@@ -125,17 +126,18 @@ final class ShuffleInMemorySorter {
   public static final class ShuffleSorterIterator {
 
     private final LongArray pointerArray;
-    private final int numRecords;
+    private final int limit;
     final PackedRecordPointer packedRecordPointer = new PackedRecordPointer();
     private int position = 0;
 
-    ShuffleSorterIterator(int numRecords, LongArray pointerArray) {
-      this.numRecords = numRecords;
+    ShuffleSorterIterator(int numRecords, LongArray pointerArray, int startingPosition) {
+      this.limit = numRecords + startingPosition;
       this.pointerArray = pointerArray;
+      this.position = startingPosition;
     }
 
     public boolean hasNext() {
-      return position < numRecords;
+      return position < limit;
     }
 
     public void loadNext() {
@@ -148,7 +150,12 @@ final class ShuffleInMemorySorter {
    * Return an iterator over record pointers in sorted order.
    */
   public ShuffleSorterIterator getSortedIterator() {
-    sorter.sort(array, 0, pos, SORT_COMPARATOR);
-    return new ShuffleSorterIterator(pos, array);
+    assert(pos * 2 <= array.size());
+//    if (true == true) {
+//      throw new RuntimeException();
+//    }
+//    sorter.sort(array, 0, pos, SORT_COMPARATOR);
+    int offset = RadixSort.sort(array, pos, consumer, 5, 7);
+    return new ShuffleSorterIterator(pos, array, offset);
   }
 }

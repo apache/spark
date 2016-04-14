@@ -77,7 +77,7 @@ public class ShuffleInMemorySorterSuite {
     long position = dataPage.getBaseOffset();
     for (String str : dataToSort) {
       if (!sorter.hasSpaceForAnotherRecord()) {
-        sorter.expandPointerArray(consumer.allocateArray(sorter.numRecords() * 2));
+        sorter.expandPointerArray(consumer.allocateArray(sorter.numRecords() * 4));
       }
       final long recordAddress = memoryManager.encodePageNumberAndOffset(dataPage, position);
       final byte[] strBytes = str.getBytes(StandardCharsets.UTF_8);
@@ -115,18 +115,27 @@ public class ShuffleInMemorySorterSuite {
   @Test
   public void testSortingManyNumbers() throws Exception {
     ShuffleInMemorySorter sorter = new ShuffleInMemorySorter(consumer, 4);
-    int[] numbersToSort = new int[128000];
+    int[] numbersToSort = new int[10000000];
     Random random = new Random(16);
+    System.out.println("populating sort");
     for (int i = 0; i < numbersToSort.length; i++) {
       if (!sorter.hasSpaceForAnotherRecord()) {
-        sorter.expandPointerArray(consumer.allocateArray(sorter.numRecords() * 2));
+        System.out.println("allocate: " + sorter.numRecords());
+        sorter.expandPointerArray(consumer.allocateArray(sorter.numRecords() * 4));
+        System.out.println("done");
       }
       numbersToSort[i] = random.nextInt(PackedRecordPointer.MAXIMUM_PARTITION_ID + 1);
       sorter.insertRecord(0, numbersToSort[i]);
     }
+    long start = System.nanoTime();
+    System.out.println("system sort");
     Arrays.sort(numbersToSort);
+    System.out.println("end sort: " + (System.nanoTime() - start) / 1e9);
+    System.out.println("radix sort");
+    start = System.nanoTime();
     int[] sorterResult = new int[numbersToSort.length];
     ShuffleInMemorySorter.ShuffleSorterIterator iter = sorter.getSortedIterator();
+    System.out.println("end sort: " + (System.nanoTime() - start) / 1e9);
     int j = 0;
     while (iter.hasNext()) {
       iter.loadNext();

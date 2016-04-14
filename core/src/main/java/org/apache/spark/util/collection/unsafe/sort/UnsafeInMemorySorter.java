@@ -97,7 +97,7 @@ public final class UnsafeInMemorySorter {
   }
 
   public UnsafeInMemorySorter(
-    final MemoryConsumer consumer,
+      final MemoryConsumer consumer,
       final TaskMemoryManager memoryManager,
       final RecordComparator recordComparator,
       final PrefixComparator prefixComparator,
