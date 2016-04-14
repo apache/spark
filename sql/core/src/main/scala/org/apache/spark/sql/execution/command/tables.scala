@@ -67,11 +67,13 @@ case class CreateTable(table: CatalogTable, ifNotExists: Boolean) extends Runnab
  */
 case class AlterTableRename(
     oldName: TableIdentifier,
-    newName: TableIdentifier)
+    newName: TableIdentifier,
+    isView: Boolean)
   extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val catalog = sqlContext.sessionState.catalog
+    DDLUtils.verifyAlterTableType(catalog, oldName, isView)
     catalog.invalidateTable(oldName)
     catalog.renameTable(oldName, newName)
     Seq.empty[Row]

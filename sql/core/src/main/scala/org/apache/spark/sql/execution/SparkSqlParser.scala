@@ -393,7 +393,8 @@ class SparkSqlAstBuilder extends AstBuilder {
   override def visitRenameTable(ctx: RenameTableContext): LogicalPlan = withOrigin(ctx) {
     AlterTableRename(
       visitTableIdentifier(ctx.from),
-      visitTableIdentifier(ctx.to))
+      visitTableIdentifier(ctx.to),
+      ctx.VIEW != null)
   }
 
   /**
@@ -409,7 +410,8 @@ class SparkSqlAstBuilder extends AstBuilder {
       ctx: SetTablePropertiesContext): LogicalPlan = withOrigin(ctx) {
     AlterTableSetProperties(
       visitTableIdentifier(ctx.tableIdentifier),
-      visitTablePropertyList(ctx.tablePropertyList))
+      visitTablePropertyList(ctx.tablePropertyList),
+      ctx.VIEW != null)
   }
 
   /**
@@ -426,7 +428,8 @@ class SparkSqlAstBuilder extends AstBuilder {
     AlterTableUnsetProperties(
       visitTableIdentifier(ctx.tableIdentifier),
       visitTablePropertyList(ctx.tablePropertyList).keys.toSeq,
-      ctx.EXISTS != null)
+      ctx.EXISTS != null,
+      ctx.VIEW != null)
   }
 
   /**
