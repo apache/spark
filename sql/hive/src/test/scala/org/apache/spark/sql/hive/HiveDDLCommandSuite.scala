@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.JsonTuple
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, ScriptTransformation}
+import org.apache.spark.sql.execution.command.CreateTable
 import org.apache.spark.sql.hive.execution.{HiveNativeCommand, HiveSqlParser}
 
 class HiveDDLCommandSuite extends PlanTest {
@@ -36,6 +37,7 @@ class HiveDDLCommandSuite extends PlanTest {
 
   private def extractTableDesc(sql: String): (CatalogTable, Boolean) = {
     parser.parsePlan(sql).collect {
+      case CreateTable(desc, allowExisting) => (desc, allowExisting)
       case CreateTableAsSelect(desc, _, allowExisting) => (desc, allowExisting)
       case CreateViewAsSelect(desc, _, allowExisting, _, _) => (desc, allowExisting)
     }.head
@@ -76,9 +78,12 @@ class HiveDDLCommandSuite extends PlanTest {
       CatalogColumn("page_url", "string") ::
       CatalogColumn("referrer_url", "string") ::
       CatalogColumn("ip", "string", comment = Some("IP Address of the User")) ::
-      CatalogColumn("country", "string", comment = Some("country of origination")) :: Nil)
+      CatalogColumn("country", "string", comment = Some("country of origination")) ::
+      CatalogColumn("dt", "string", comment = Some("date type")) ::
+      CatalogColumn("hour", "string", comment = Some("hour of the day")) :: Nil)
+    assert(desc.comment == Some("This is the staging page view table"))
     // TODO will be SQLText
-    assert(desc.viewText == Option("This is the staging page view table"))
+    assert(desc.viewText.isEmpty)
     assert(desc.viewOriginalText.isEmpty)
     assert(desc.partitionColumns ==
       CatalogColumn("dt", "string", comment = Some("date type")) ::
@@ -123,9 +128,12 @@ class HiveDDLCommandSuite extends PlanTest {
       CatalogColumn("page_url", "string") ::
       CatalogColumn("referrer_url", "string") ::
       CatalogColumn("ip", "string", comment = Some("IP Address of the User")) ::
-      CatalogColumn("country", "string", comment = Some("country of origination")) :: Nil)
+      CatalogColumn("country", "string", comment = Some("country of origination")) ::
+      CatalogColumn("dt", "string", comment = Some("date type")) ::
+      CatalogColumn("hour", "string", comment = Some("hour of the day")) :: Nil)
     // TODO will be SQLText
-    assert(desc.viewText == Option("This is the staging page view table"))
+    assert(desc.comment == Some("This is the staging page view table"))
+    assert(desc.viewText.isEmpty)
     assert(desc.viewOriginalText.isEmpty)
     assert(desc.partitionColumns ==
       CatalogColumn("dt", "string", comment = Some("date type")) ::
@@ -151,7 +159,7 @@ class HiveDDLCommandSuite extends PlanTest {
     assert(desc.storage.serdeProperties == Map())
     assert(desc.storage.inputFormat == Some("org.apache.hadoop.mapred.TextInputFormat"))
     assert(desc.storage.outputFormat ==
-      Some("org.apache.hadoop.hive.ql.io.IgnoreKeyTextOutputFormat"))
+      Some("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"))
     assert(desc.storage.serde.isEmpty)
     assert(desc.properties == Map())
   }
@@ -200,17 +208,6 @@ class HiveDDLCommandSuite extends PlanTest {
           |WITH SERDEPROPERTIES("serde_p1"="p1","serde_p2"="p2")
           |STORED AS RCFile
           |TBLPROPERTIES("tbl_p1"="p11", "tbl_p2"="p22")
-          |AS SELECT key, value FROM src ORDER BY key, value
-        """.stripMargin)
-    }
-    intercept[ParseException] {
-      parser.parsePlan(
-        """CREATE TABLE ctas2
-          |STORED AS
-          |INPUTFORMAT "org.apache.hadoop.mapred.TextInputFormat"
-          |OUTPUTFORMAT "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"
-          |INPUTDRIVER "org.apache.hadoop.hive.howl.rcfile.RCFileInputDriver"
-          |OUTPUTDRIVER "org.apache.hadoop.hive.howl.rcfile.RCFileOutputDriver"
           |AS SELECT key, value FROM src ORDER BY key, value
         """.stripMargin)
     }
@@ -322,6 +319,194 @@ class HiveDDLCommandSuite extends PlanTest {
         |LATERAL VIEW explode(array(array(1, 2,  3))) `gen``tab1` AS `gen``col1`
         |LATERAL VIEW explode(`gen``tab1`.`gen``col1`) `gen``tab2` AS `gen``col2`
       """.stripMargin)
+  }
+
+  test("create table - basic") {
+    val query = "CREATE TABLE my_table (id int, name string)"
+    val (desc, allowExisting) = extractTableDesc(query)
+    assert(!allowExisting)
+    assert(desc.identifier.database.isEmpty)
+    assert(desc.identifier.table == "my_table")
+    assert(desc.tableType == CatalogTableType.MANAGED_TABLE)
+    assert(desc.schema == Seq(CatalogColumn("id", "int"), CatalogColumn("name", "string")))
+    assert(desc.partitionColumnNames.isEmpty)
+    assert(desc.sortColumnNames.isEmpty)
+    assert(desc.bucketColumnNames.isEmpty)
+    assert(desc.numBuckets == -1)
+    assert(desc.viewText.isEmpty)
+    assert(desc.viewOriginalText.isEmpty)
+    assert(desc.storage.locationUri.isEmpty)
+    assert(desc.storage.inputFormat ==
+      Some("org.apache.hadoop.mapred.TextInputFormat"))
+    assert(desc.storage.outputFormat ==
+      Some("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"))
+    assert(desc.storage.serde.isEmpty)
+    assert(desc.storage.serdeProperties.isEmpty)
+    assert(desc.properties.isEmpty)
+    assert(desc.comment.isEmpty)
+  }
+
+  test("create table - with database name") {
+    val query = "CREATE TABLE dbx.my_table (id int, name string)"
+    val (desc, _) = extractTableDesc(query)
+    assert(desc.identifier.database == Some("dbx"))
+    assert(desc.identifier.table == "my_table")
+  }
+
+  test("create table - temporary") {
+    val query = "CREATE TEMPORARY TABLE tab1 (id int, name string)"
+    val e = intercept[ParseException] { parser.parsePlan(query) }
+    assert(e.message.contains("registerTempTable"))
+  }
+
+  test("create table - external") {
+    val query = "CREATE EXTERNAL TABLE tab1 (id int, name string)"
+    val (desc, _) = extractTableDesc(query)
+    assert(desc.tableType == CatalogTableType.EXTERNAL_TABLE)
+  }
+
+  test("create table - if not exists") {
+    val query = "CREATE TABLE IF NOT EXISTS tab1 (id int, name string)"
+    val (_, allowExisting) = extractTableDesc(query)
+    assert(allowExisting)
+  }
+
+  test("create table - comment") {
+    val query = "CREATE TABLE my_table (id int, name string) COMMENT 'its hot as hell below'"
+    val (desc, _) = extractTableDesc(query)
+    assert(desc.comment == Some("its hot as hell below"))
+  }
+
+  test("create table - partitioned columns") {
+    val query = "CREATE TABLE my_table (id int, name string) PARTITIONED BY (month int)"
+    val (desc, _) = extractTableDesc(query)
+    assert(desc.schema == Seq(
+      CatalogColumn("id", "int"),
+      CatalogColumn("name", "string"),
+      CatalogColumn("month", "int")))
+    assert(desc.partitionColumnNames == Seq("month"))
+  }
+
+  test("create table - clustered by") {
+    val baseQuery = "CREATE TABLE my_table (id int, name string) CLUSTERED BY(id)"
+    val query1 = s"$baseQuery INTO 10 BUCKETS"
+    val query2 = s"$baseQuery SORTED BY(id) INTO 10 BUCKETS"
+    val e1 = intercept[ParseException] { parser.parsePlan(query1) }
+    val e2 = intercept[ParseException] { parser.parsePlan(query2) }
+    assert(e1.getMessage.contains("Operation not allowed"))
+    assert(e2.getMessage.contains("Operation not allowed"))
+  }
+
+  test("create table - skewed by") {
+    val baseQuery = "CREATE TABLE my_table (id int, name string) SKEWED BY"
+    val query1 = s"$baseQuery(id) ON (1, 10, 100)"
+    val query2 = s"$baseQuery(id, name) ON ((1, 'x'), (2, 'y'), (3, 'z'))"
+    val query3 = s"$baseQuery(id, name) ON ((1, 'x'), (2, 'y'), (3, 'z')) STORED AS DIRECTORIES"
+    val e1 = intercept[ParseException] { parser.parsePlan(query1) }
+    val e2 = intercept[ParseException] { parser.parsePlan(query2) }
+    val e3 = intercept[ParseException] { parser.parsePlan(query3) }
+    assert(e1.getMessage.contains("Operation not allowed"))
+    assert(e2.getMessage.contains("Operation not allowed"))
+    assert(e3.getMessage.contains("Operation not allowed"))
+  }
+
+  test("create table - row format") {
+    val baseQuery = "CREATE TABLE my_table (id int, name string) ROW FORMAT"
+    val query1 = s"$baseQuery SERDE 'org.apache.poof.serde.Baff'"
+    val query2 = s"$baseQuery SERDE 'org.apache.poof.serde.Baff' WITH SERDEPROPERTIES ('k1'='v1')"
+    val query3 =
+      s"""
+        |$baseQuery DELIMITED FIELDS TERMINATED BY 'x' ESCAPED BY 'y'
+        |COLLECTION ITEMS TERMINATED BY 'a'
+        |MAP KEYS TERMINATED BY 'b'
+        |LINES TERMINATED BY '\n'
+        |NULL DEFINED AS 'c'
+      """.stripMargin
+    val (desc1, _) = extractTableDesc(query1)
+    val (desc2, _) = extractTableDesc(query2)
+    val (desc3, _) = extractTableDesc(query3)
+    assert(desc1.storage.serde == Some("org.apache.poof.serde.Baff"))
+    assert(desc1.storage.serdeProperties.isEmpty)
+    assert(desc2.storage.serde == Some("org.apache.poof.serde.Baff"))
+    assert(desc2.storage.serdeProperties == Map("k1" -> "v1"))
+    assert(desc3.storage.serdeProperties == Map(
+      "field.delim" -> "x",
+      "escape.delim" -> "y",
+      "serialization.format" -> "x",
+      "line.delim" -> "\n",
+      "colelction.delim" -> "a", // yes, it's a typo from Hive :)
+      "mapkey.delim" -> "b"))
+  }
+
+  test("create table - file format") {
+    val baseQuery = "CREATE TABLE my_table (id int, name string) STORED AS"
+    val query1 = s"$baseQuery INPUTFORMAT 'winput' OUTPUTFORMAT 'wowput'"
+    val query2 = s"$baseQuery ORC"
+    val (desc1, _) = extractTableDesc(query1)
+    val (desc2, _) = extractTableDesc(query2)
+    assert(desc1.storage.inputFormat == Some("winput"))
+    assert(desc1.storage.outputFormat == Some("wowput"))
+    assert(desc1.storage.serde.isEmpty)
+    assert(desc2.storage.inputFormat == Some("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat"))
+    assert(desc2.storage.outputFormat == Some("org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat"))
+    assert(desc2.storage.serde == Some("org.apache.hadoop.hive.ql.io.orc.OrcSerde"))
+  }
+
+  test("create table - storage handler") {
+    val baseQuery = "CREATE TABLE my_table (id int, name string) STORED BY"
+    val query1 = s"$baseQuery 'org.papachi.StorageHandler'"
+    val query2 = s"$baseQuery 'org.mamachi.StorageHandler' WITH SERDEPROPERTIES ('k1'='v1')"
+    val e1 = intercept[ParseException] { parser.parsePlan(query1) }
+    val e2 = intercept[ParseException] { parser.parsePlan(query2) }
+    assert(e1.getMessage.contains("Operation not allowed"))
+    assert(e2.getMessage.contains("Operation not allowed"))
+  }
+
+  test("create table - location") {
+    val query = "CREATE TABLE my_table (id int, name string) LOCATION '/path/to/mars'"
+    val (desc, _) = extractTableDesc(query)
+    assert(desc.storage.locationUri == Some("/path/to/mars"))
+  }
+
+  test("create table - properties") {
+    val query = "CREATE TABLE my_table (id int, name string) TBLPROPERTIES ('k1'='v1', 'k2'='v2')"
+    val (desc, _) = extractTableDesc(query)
+    assert(desc.properties == Map("k1" -> "v1", "k2" -> "v2"))
+  }
+
+  test("create table - everything!") {
+    val query =
+      """
+        |CREATE EXTERNAL TABLE IF NOT EXISTS dbx.my_table (id int, name string)
+        |COMMENT 'no comment'
+        |PARTITIONED BY (month int)
+        |ROW FORMAT SERDE 'org.apache.poof.serde.Baff' WITH SERDEPROPERTIES ('k1'='v1')
+        |STORED AS INPUTFORMAT 'winput' OUTPUTFORMAT 'wowput'
+        |LOCATION '/path/to/mercury'
+        |TBLPROPERTIES ('k1'='v1', 'k2'='v2')
+      """.stripMargin
+    val (desc, allowExisting) = extractTableDesc(query)
+    assert(allowExisting)
+    assert(desc.identifier.database == Some("dbx"))
+    assert(desc.identifier.table == "my_table")
+    assert(desc.tableType == CatalogTableType.EXTERNAL_TABLE)
+    assert(desc.schema == Seq(
+      CatalogColumn("id", "int"),
+      CatalogColumn("name", "string"),
+      CatalogColumn("month", "int")))
+    assert(desc.partitionColumnNames == Seq("month"))
+    assert(desc.sortColumnNames.isEmpty)
+    assert(desc.bucketColumnNames.isEmpty)
+    assert(desc.numBuckets == -1)
+    assert(desc.viewText.isEmpty)
+    assert(desc.viewOriginalText.isEmpty)
+    assert(desc.storage.locationUri == Some("/path/to/mercury"))
+    assert(desc.storage.inputFormat == Some("winput"))
+    assert(desc.storage.outputFormat == Some("wowput"))
+    assert(desc.storage.serde == Some("org.apache.poof.serde.Baff"))
+    assert(desc.storage.serdeProperties == Map("k1" -> "v1"))
+    assert(desc.properties == Map("k1" -> "v1", "k2" -> "v2"))
+    assert(desc.comment == Some("no comment"))
   }
 
   test("create view -- basic") {

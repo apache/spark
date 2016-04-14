@@ -54,9 +54,9 @@ object JacksonParser extends Logging {
    * with an array.
    */
   def convertRootField(
-        factory: JsonFactory,
-        parser: JsonParser,
-        schema: DataType): Any = {
+      factory: JsonFactory,
+      parser: JsonParser,
+      schema: DataType): Any = {
     import com.fasterxml.jackson.core.JsonToken._
     (parser.getCurrentToken, schema) match {
       case (START_ARRAY, st: StructType) =>

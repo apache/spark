@@ -612,23 +612,20 @@ class ColumnarBatchSuite extends SparkFunSuite {
             val a2 = r2.getList(v._2).toArray
             assert(a1.length == a2.length, "Seed = " + seed)
             childType match {
-              case DoubleType => {
+              case DoubleType =>
                 var i = 0
                 while (i < a1.length) {
                   assert(doubleEquals(a1(i).asInstanceOf[Double], a2(i).asInstanceOf[Double]),
                     "Seed = " + seed)
                   i += 1
                 }
-              }
-              case FloatType => {
+              case FloatType =>
                 var i = 0
                 while (i < a1.length) {
                   assert(doubleEquals(a1(i).asInstanceOf[Float], a2(i).asInstanceOf[Float]),
                     "Seed = " + seed)
                   i += 1
                 }
-              }
-
               case t: DecimalType =>
                 var i = 0
                 while (i < a1.length) {
@@ -640,7 +637,6 @@ class ColumnarBatchSuite extends SparkFunSuite {
                   }
                   i += 1
                 }
-
               case _ => assert(a1 === a2, "Seed = " + seed)
             }
           case StructType(childFields) =>

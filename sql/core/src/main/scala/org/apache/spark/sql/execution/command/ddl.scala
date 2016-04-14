@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.command
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -25,6 +27,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogTablePartition, CatalogTabl
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalog.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.types._
+
 
 
 // Note: The definition of these commands are based on the ones described in
@@ -195,56 +198,33 @@ case class DropTable(
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val catalog = sqlContext.sessionState.catalog
-    // If the command DROP VIEW is to drop a table or DROP TABLE is to drop a view
-    // issue an exception.
-    catalog.getTableMetadataOption(tableName).map(_.tableType match {
-      case CatalogTableType.VIRTUAL_VIEW if !isView =>
-        throw new AnalysisException(
-          "Cannot drop a view with DROP TABLE. Please use DROP VIEW instead")
-      case o if o != CatalogTableType.VIRTUAL_VIEW && isView =>
-        throw new AnalysisException(
-          s"Cannot drop a table with DROP VIEW. Please use DROP TABLE instead")
-      case _ =>
-    })
-
-    try {
-      sqlContext.cacheManager.tryUncacheQuery(sqlContext.table(tableName.quotedString))
-    } catch {
-      // This table's metadata is not in Hive metastore (e.g. the table does not exist).
-      case e if e.getClass.getName == "org.apache.hadoop.hive.ql.metadata.InvalidTableException" =>
-      case _: org.apache.spark.sql.catalyst.analysis.NoSuchTableException =>
-      // Other Throwables can be caused by users providing wrong parameters in OPTIONS
-      // (e.g. invalid paths). We catch it and log a warning message.
-      // Users should be able to drop such kinds of tables regardless if there is an error.
-      case e: Throwable => log.warn(s"${e.getMessage}", e)
+    if (!catalog.tableExists(tableName)) {
+      if (!ifExists) {
+        val objectName = if (isView) "View" else "Table"
+        logError(s"$objectName '${tableName.quotedString}' does not exist")
+      }
+    } else {
+      // If the command DROP VIEW is to drop a table or DROP TABLE is to drop a view
+      // issue an exception.
+      catalog.getTableMetadataOption(tableName).map(_.tableType match {
+        case CatalogTableType.VIRTUAL_VIEW if !isView =>
+          throw new AnalysisException(
+            "Cannot drop a view with DROP TABLE. Please use DROP VIEW instead")
+        case o if o != CatalogTableType.VIRTUAL_VIEW && isView =>
+          throw new AnalysisException(
+            s"Cannot drop a table with DROP VIEW. Please use DROP TABLE instead")
+        case _ =>
+      })
+      try {
+        sqlContext.cacheManager.tryUncacheQuery(sqlContext.table(tableName.quotedString))
+      } catch {
+        case NonFatal(e) => log.warn(s"${e.getMessage}", e)
+      }
+      catalog.invalidateTable(tableName)
+      catalog.dropTable(tableName, ifExists)
     }
-    catalog.invalidateTable(tableName)
-    catalog.dropTable(tableName, ifExists)
     Seq.empty[Row]
   }
-}
-
-/**
- * A command that renames a table/view.
- *
- * The syntax of this command is:
- * {{{
- *   ALTER TABLE table1 RENAME TO table2;
- *   ALTER VIEW view1 RENAME TO view2;
- * }}}
- */
-case class AlterTableRename(
-    oldName: TableIdentifier,
-    newName: TableIdentifier)
-  extends RunnableCommand {
-
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    val catalog = sqlContext.sessionState.catalog
-    catalog.invalidateTable(oldName)
-    catalog.renameTable(oldName, newName)
-    Seq.empty[Row]
-  }
-
 }
 
 /**
