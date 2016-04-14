@@ -165,6 +165,54 @@ case class NullIf(left: Expression, right: Expression) extends BinaryExpression 
 }
 
 /**
+ * An Expression accepts two parameters and returns the second parameter if the value
+ * in the first parameter is null; if the first parameter is any value other than null,
+ * it is returned unchanged.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(a,b) - Returns b if a is null, or a otherwise.")
+case class Nvl(left: Expression, right: Expression) extends BinaryExpression {
+  override def nullable: Boolean = false
+  override def dataType: DataType = left.dataType
+
+  override def eval(input: InternalRow): Any = {
+    val valueLeft = left.eval(input)
+    val valueRight = right.eval(input)
+    if (valueLeft == null) {
+      valueRight
+    } else {
+      valueLeft
+    }
+  }
+
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+    val leftGen = left.gen(ctx)
+    val rightGen = right.gen(ctx)
+    s"""
+       ${leftGen.code}
+       ${rightGen.code}
+       boolean ${ev.isNull} = false;
+       ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+     """ +
+    {
+      if (ctx.isPrimitiveType(dataType)) {
+        s"""
+          ${ev.value} = ${leftGen.value};
+        """
+      } else {
+        s"""
+          if (${leftGen.value} == null) {
+            ${ev.value} = ${rightGen.value};
+          } else {
+            ${ev.value} = ${leftGen.value};
+          }
+        """
+      }
+    }
+  }
+}
+
+/**
  * An Expression evaluates to `left` iff it's not NaN, or evaluates to `right` otherwise.
  * This Expression is useful for mapping NaN values to null.
  */

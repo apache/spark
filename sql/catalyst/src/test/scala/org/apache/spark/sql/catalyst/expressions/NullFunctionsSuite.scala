@@ -63,6 +63,13 @@ class NullFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(NullIf(Literal(1.0), Literal(1.0, DoubleType)), null)
   }
 
+  test("Nvl") {
+    checkEvaluation(Nvl(Literal("a"), Literal("b")), "a")
+    checkEvaluation(Nvl(Literal(null), Literal("a")), "a")
+    checkEvaluation(Nvl(Literal(1), Literal(2)), 1)
+    checkEvaluation(Nvl(Literal(null), Literal(2)), 2)
+  }
+
   test("nanvl") {
     checkEvaluation(NaNvl(Literal(5.0), Literal.create(null, DoubleType)), 5.0)
     checkEvaluation(NaNvl(Literal.create(null, DoubleType), Literal(5.0)), null)
