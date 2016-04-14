@@ -78,10 +78,14 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
   }
 
   test("basic data types (without binary)") {
-    val data = (1 to 4).map { i =>
-      (i % 2 == 0, i, i.toLong, i.toFloat, i.toDouble)
+    (true :: false :: Nil).foreach { v =>
+      withSQLConf(SQLConf.FILES_ASYNC_IO.key -> v.toString) {
+        val data = (1 to 4).map { i =>
+          (i % 2 == 0, i, i.toLong, i.toFloat, i.toDouble)
+        }
+        checkParquetFile(data)
+      }
     }
-    checkParquetFile(data)
   }
 
   test("raw binary") {
