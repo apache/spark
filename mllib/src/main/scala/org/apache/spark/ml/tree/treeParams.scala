@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.tree
 
+import scala.util.Try
+
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -350,8 +352,8 @@ private[ml] trait HasFeatureSubsetStrategy extends Params {
       s", (0.0-1.0], [1-n].",
     (value: String) =>
       RandomForestParams.supportedFeatureSubsetStrategies.contains(value.toLowerCase)
-      || RandomForestParams.integerFeatureSubsetStrategy.unapply(value).isDefined
-      || RandomForestParams.doubleFeatureSubsetStrategy.unapply(value).isDefined)
+      || Try(value.toInt).filter(_ > 0).isSuccess
+      || Try(value.toDouble).filter(_ > 0).filter(_ <= 1.0).isSuccess)
 
   setDefault(featureSubsetStrategy -> "auto")
 
@@ -398,32 +400,6 @@ private[spark] object RandomForestParams {
   // These options should be lowercase.
   final val supportedFeatureSubsetStrategies: Array[String] =
     Array("auto", "all", "onethird", "sqrt", "log2").map(_.toLowerCase)
-
-  object integerFeatureSubsetStrategy {
-    def unapply(strategy: String): Option[Int] = try {
-      val number = strategy.toInt
-      if (0 < number) {
-        Some(number)
-      } else {
-        None
-      }
-    } catch {
-      case _ : java.lang.NumberFormatException => None
-    }
-  }
-
-  object doubleFeatureSubsetStrategy {
-    def unapply(strategy: String): Option[Double] = try {
-      val fraction = strategy.toDouble
-      if (0.0 < fraction && fraction <= 1.0) {
-        Some(fraction)
-      } else {
-        None
-      }
-    } catch {
-      case _ : java.lang.NumberFormatException => None
-    }
-  }
 }
 
 private[ml] trait RandomForestClassifierParams

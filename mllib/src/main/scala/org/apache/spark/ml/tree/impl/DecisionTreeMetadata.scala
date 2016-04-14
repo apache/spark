@@ -18,6 +18,7 @@
 package org.apache.spark.ml.tree.impl
 
 import scala.collection.mutable
+import scala.util.Try
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.tree.RandomForestParams
@@ -190,10 +191,17 @@ private[spark] object DecisionTreeMetadata extends Logging {
       case "sqrt" => math.sqrt(numFeatures).ceil.toInt
       case "log2" => math.max(1, (math.log(numFeatures) / math.log(2)).ceil.toInt)
       case "onethird" => (numFeatures / 3.0).ceil.toInt
-      case RandomForestParams.integerFeatureSubsetStrategy(number) =>
-        if (number > numFeatures) numFeatures else number
-      case RandomForestParams.doubleFeatureSubsetStrategy(fraction) =>
-        (fraction * numFeatures).ceil.toInt
+      case _ =>
+        Try(_featureSubsetStrategy.toInt).filter(_ > 0).toOption match {
+          case Some(value) => math.min(value, numFeatures)
+          case None =>
+            Try(_featureSubsetStrategy.toDouble).filter(_ > 0).filter(_ <= 1.0).toOption match {
+              case Some(value) => math.ceil(value * numFeatures).toInt
+              case _ => throw new IllegalArgumentException(s"Supported values:" +
+                s" ${RandomForestParams.supportedFeatureSubsetStrategies.mkString(", ")}," +
+                s" (0.0-1.0], [1-n].")
+            }
+        }
     }
 
     new DecisionTreeMetadata(numFeatures, numExamples, numClasses, numBins.max,
