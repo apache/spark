@@ -253,20 +253,6 @@ class HadoopTableReader(
   }
 
   /**
-   * If `filterOpt` is defined, then it will be used to filter files from `path`. These files are
-   * returned in a single, comma-separated string.
-   */
-  private def applyFilterIfNeeded(path: Path, filterOpt: Option[PathFilter]): String = {
-    filterOpt match {
-      case Some(filter) =>
-        val fs = path.getFileSystem(sc.hiveconf)
-        val filteredFiles = fs.listStatus(path, filter).map(_.getPath.toString)
-        filteredFiles.mkString(",")
-      case None => path.toString
-    }
-  }
-
-  /**
    * Creates a HadoopRDD based on the broadcasted HiveConf and other job properties that will be
    * applied locally on each slave.
    */
