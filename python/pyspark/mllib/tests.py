@@ -1034,6 +1034,7 @@ class Word2VecTests(MLlibTestCase):
         self.assertEqual(model.numIterations, 10)
         self.assertEqual(model.seed, 1024)
         self.assertEqual(model.minCount, 3)
+        self.assertEqual(model.windowSize, 6)
 
     def test_word2vec_get_vectors(self):
         data = [
