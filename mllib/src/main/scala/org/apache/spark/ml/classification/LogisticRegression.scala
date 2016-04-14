@@ -92,6 +92,9 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
   }
 
   /**
+   * This functionality is currently disabled. It will be re-enabled once multi-class logistic
+   * regression is included in ML.
+   *
    * Set thresholds in multiclass (or binary) classification to adjust the probability of
    * predicting each class. Array must have length equal to the number of classes, with values >= 0.
    * The class with largest value p/t is predicted, where p is the original probability of that
@@ -104,14 +107,14 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
    * @group setParam
    */
   def setThresholds(value: Array[Double]): this.type = {
-    if (isSet(threshold)) clear(threshold)
-    set(thresholds, value)
+    logWarning("Ignoring setThresholds(), use setThreshold() for binary Logistic Regression.")
+    this
   }
 
   /**
    * Get thresholds for binary or multiclass classification.
    *
-   * If [[thresholds]] is set, return its value.
+   * If [[thresholds]] is x, return its value.
    * Otherwise, if [[threshold]] is set, return the equivalent thresholds for binary
    * classification: (1-threshold, threshold).
    * If neither are set, throw an exception.
