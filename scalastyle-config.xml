@@ -114,6 +114,8 @@ This file is divided into 3 sections:
 
   <check level="error" class="org.scalastyle.scalariform.PublicMethodsHaveTypeChecker" enabled="true"></check>
 
+  <check level="error" class="org.apache.spark.scala_style.PublicAbstractMethodsHaveTypeChecker" enabled="true"></check>
+
   <check level="error" class="org.scalastyle.file.NewLineAtEofChecker" enabled="true"></check>
 
   <check customId="nonascii" level="error" class="org.scalastyle.scalariform.NonASCIICharacterChecker" enabled="true"></check>
