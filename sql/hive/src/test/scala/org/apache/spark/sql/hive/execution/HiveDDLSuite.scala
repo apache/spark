@@ -146,8 +146,6 @@ class HiveDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         sql(s"ALTER VIEW $oldViewName RENAME TO $newViewName")
         assert(!catalog.tableExists(TableIdentifier(oldViewName)))
         assert(catalog.tableExists(TableIdentifier(newViewName)))
-
-        sql(s"DROP VIEW $newViewName")
       }
     }
   }
@@ -186,8 +184,6 @@ class HiveDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         }.getMessage
         assert(message.contains(
           "attempted to unset non-existent property 'p' in table '`view1`'"))
-
-        sql(s"DROP VIEW $viewName")
       }
     }
   }
@@ -243,8 +239,6 @@ class HiveDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
         assert(catalog.tableExists(TableIdentifier(tabName)))
         assert(catalog.tableExists(TableIdentifier(oldViewName)))
-
-        sql(s"DROP VIEW $newViewName")
       }
     }
   }
