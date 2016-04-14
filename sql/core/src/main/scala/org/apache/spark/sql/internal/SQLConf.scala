@@ -437,11 +437,12 @@ object SQLConf {
     .stringConf
     .createOptional
 
+  // TODO: This is still WIP and shouldn't be turned on without extensive test coverage
   val COLUMNAR_AGGREGATE_MAP_ENABLED = SQLConfigBuilder("spark.sql.codegen.aggregate.map.enabled")
     .internal()
     .doc("When true, aggregate with keys use an in-memory columnar map to speed up execution.")
     .booleanConf
-    .createWithDefault(true)
+    .createWithDefault(false)
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"

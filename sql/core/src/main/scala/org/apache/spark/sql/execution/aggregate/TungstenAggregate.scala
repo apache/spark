@@ -265,7 +265,8 @@ case class TungstenAggregate(
 
   // The name for Vectorized HashMap
   private var vectorizedHashMapTerm: String = _
-  private var isVectorizedHashMapEnabled: Boolean = sqlContext.conf.columnarAggregateMapEnabled
+  private var isVectorizedHashMapEnabled: Boolean = sqlContext.conf.columnarAggregateMapEnabled &&
+    (modes.contains(Partial) || modes.contains(PartialMerge))
 
   // The name for UnsafeRow HashMap
   private var hashMapTerm: String = _
