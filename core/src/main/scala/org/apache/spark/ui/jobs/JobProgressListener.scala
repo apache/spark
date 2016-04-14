@@ -396,13 +396,13 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
           None
         }
       taskMetrics.foreach { m =>
-        val oldMetrics = stageData.taskData.get(info.taskId).flatMap(_.taskMetrics)
+        val oldMetrics = stageData.taskData.get(info.taskId).flatMap(_.metrics)
         updateAggregateMetrics(stageData, info.executorId, m, oldMetrics)
       }
 
       val taskData = stageData.taskData.getOrElseUpdate(info.taskId, new TaskUIData(info))
       taskData.taskInfo = info
-      taskData.taskMetrics = taskMetrics
+      taskData.metrics = taskMetrics
       taskData.errorMessage = errorMessage
 
       for (
@@ -506,9 +506,9 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
       val metrics = TaskMetrics.fromAccumulatorUpdates(accumUpdates)
       taskData.foreach { t =>
         if (!t.taskInfo.finished) {
-          updateAggregateMetrics(stageData, executorMetricsUpdate.execId, metrics, t.taskMetrics)
+          updateAggregateMetrics(stageData, executorMetricsUpdate.execId, metrics, t.metrics)
           // Overwrite task metrics
-          t.taskMetrics = Some(metrics)
+          t.metrics = Some(metrics)
         }
       }
     }
