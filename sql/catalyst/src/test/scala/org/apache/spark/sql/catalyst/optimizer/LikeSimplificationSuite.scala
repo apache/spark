@@ -61,6 +61,20 @@ class LikeSimplificationSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("simplify Like into startsWith and EndsWith") {
+    val originalQuery =
+      testRelation
+        .where(('a like "abc\\%def") || ('a like "abc%def"))
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer = testRelation
+      .where(('a like "abc\\%def") ||
+        (Length('a) >= 6 && (StartsWith('a, "abc") && EndsWith('a, "def"))))
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
   test("simplify Like into Contains") {
     val originalQuery =
       testRelation
