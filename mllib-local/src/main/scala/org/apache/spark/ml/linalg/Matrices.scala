@@ -187,7 +187,7 @@ class DenseMatrix (
   }
 
   override def hashCode: Int = {
-    com.google.common.base.Objects.hashCode(numRows: Integer, numCols: Integer, toArray)
+    Seq(numRows, numCols, toArray).##
   }
 
   private[ml] def toBreeze: BM[Double] = {
