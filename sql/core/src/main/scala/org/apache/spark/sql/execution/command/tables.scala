@@ -17,9 +17,45 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.CatalogTable
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
+
+/**
+ * A command to create a table with the same definition of the given existing table.
+ *
+ * The syntax of using this command in SQL is:
+ * {{{
+ *   CREATE TABLE [IF NOT EXISTS] [db_name.]table_name
+ *   LIKE [other_db_name.]existing_table_name
+ * }}}
+ */
+case class CreateTableLike(
+    targetTable: TableIdentifier,
+    sourceTable: TableIdentifier,
+    ifNotExists: Boolean) extends RunnableCommand {
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    val catalog = sqlContext.sessionState.catalog
+    if (!catalog.tableExists(sourceTable)) {
+      throw new AnalysisException(
+        s"Source table in CREATE TABLE LIKE does not exist: '$sourceTable'")
+    }
+    if (catalog.isTemporaryTable(sourceTable)) {
+      throw new AnalysisException(
+        s"Source table in CREATE TABLE LIKE cannot be temporary: '$sourceTable'")
+    }
+
+    val tableToCreate = catalog.getTableMetadata(sourceTable).copy(
+      identifier = targetTable,
+      tableType = CatalogTableType.MANAGED_TABLE,
+      createTime = System.currentTimeMillis,
+      lastAccessTime = -1).withNewStorage(locationUri = None)
+
+    catalog.createTable(tableToCreate, ifNotExists)
+    Seq.empty[Row]
+  }
+}
 
 
 // TODO: move the rest of the table commands from ddl.scala to this file
