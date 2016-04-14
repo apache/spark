@@ -665,7 +665,7 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case p if !p.childrenResolved => p
       // Replace the index with the related attribute for ORDER BY,
-      // cwhich is a 1-base position of the projection list.
+      // which is a 1-base position of the projection list.
       case s @ Sort(orders, global, child)
           if conf.orderByOrdinal && orders.exists(o => IntegerIndex.unapply(o.child).nonEmpty) =>
         val newOrders = orders map {
@@ -852,20 +852,21 @@ class Analyzer(
   }
 
   /**
-   * This rule resolves subqueries inside expressions, rewrites correlated subqueries or
-   * scalar subqueries.
+   * This rule resolves subqueries inside expressions and it rewrites correlated & scalar
+   * subqueries.
    *
-   * It works as following:
-   * 1. For each logical plan, find out the subqueries from expressions, try to resolve them,
-   *   update the SubQueryExpression with resolved logical plan.
-   * 2. For Filter, the condition will be splitted by AND, each sub-condition that has subqueries
-   *   will be rewritten as following:
-   *   a. EXISTS/NOT EXISTS will be rewritten as semi/anti join, unresolved condition in Filter
-   *     will be pulled out as join conditions.
-   *   b. IN/NOT IN will be rewritten as semi/anti join, unresolved conditions in the Filter will be
-   *     pulled out as join conditions, value = selected column will also be used as join condition.
+   * It works as follows:
+   * 1. Find all subquery expressions in a logical plan. Try to resolve them and update the
+   *    SubQueryExpression with the resolved logical plan.
+   * 2. For Filter (i.e. WHERE/HAVING clauses) the condition will be split by AND. Each part of the
+   *    condition that contains a [[CorrelatedSubqueryExpression]] will be rewritten:
+   *    a. EXISTS/NOT EXISTS will be rewritten as semi/anti join, unresolved conditions in Filter
+   *       will be pulled out as the join conditions.
+   *    b. IN/NOT IN will be rewritten as semi/anti join, unresolved conditions in the Filter will
+   *       be pulled out as join conditions, value = selected column will also be used as join
+   *       condition.
    *
-   * Note: CTE are handled in CTESubstitution.
+   * Note: CTEs are handled in CTESubstitution.
    */
   object ResolveSubquery extends Rule[LogicalPlan] with PredicateHelper {
 
@@ -923,38 +924,29 @@ class Analyzer(
         value: Expression,
         subquery: LogicalPlan): (LogicalPlan, Expression) = {
       val (resolved, joinCondition) = removeUnresolvedPredicates(execute(subquery))
-      // check the dataType of value and subquery
-      val equalCond = value match {
-        case CreateStruct(columns) =>
-          if (columns.length != resolved.output.length) {
-            throw new AnalysisException(s"the number of fields in value (${columns.length}) does" +
-              s" not match with the number of columns in subquery (${resolved.output.length})")
-          }
-          columns.zip(resolved.output).map {
-            case (e, attr) =>
-              if (e.dataType != attr.dataType) {
-                throw new AnalysisException(s"data type of value (${e.dataType}) does not match" +
-                  s" with subquery (${attr.dataType})")
-              }
-              EqualTo(e, attr)
-          }.reduceLeft(And)
-        case e =>
-          if (resolved.output.length != 1) {
-            throw new AnalysisException(s"the number of columns in value (1) does" +
-              s" not match with the number of columns in subquery (${resolved.output.length})")
-          }
-          if (e.dataType != resolved.output.head.dataType) {
-            throw new AnalysisException(s"data type of value (${e.dataType}) does not match" +
-              s" with subquery (${resolved.output.head.dataType})")
-          }
-          EqualTo(value, resolved.output.head)
+
+      // Extract the columns on the expression side.
+      val columns = value match {
+        case CreateStruct(cs) => cs
+        case c => Seq(c)
       }
-      val cond = if (joinCondition.isDefined) {
-        And(joinCondition.get, equalCond)
-      } else {
-        equalCond
+
+      // The number of left and right expressions must be equal.
+      if (columns.length != resolved.output.length) {
+        throw new AnalysisException(s"the number of fields in value (${columns.length}) does" +
+          s" not match with the number of columns in subquery (${resolved.output.length})")
       }
-      (resolved, cond)
+      val conditions = joinCondition.toSeq ++ columns.zip(resolved.output).map {
+        case (e, a) =>
+          // Check the left and right dataTypes.
+          if (e.dataType != a.dataType) {
+            throw new AnalysisException(
+              s"data type of value (${e.dataType}) does not match with subquery (${a.dataType})")
+          }
+          EqualTo(e, a)
+      }
+
+      (resolved, conditions.reduceLeft(And))
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {

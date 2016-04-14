@@ -79,21 +79,48 @@ case class ScalarSubquery(
 }
 
 /**
- * Base interface for correlated subquery expressions.
+ * Base interface for (potentially) correlated subquery expressions.
  */
-abstract class CorrelatedSubqueryExpression extends SubqueryExpression{
+abstract class CorrelatedSubqueryExpression extends SubqueryExpression {
   override lazy val resolved: Boolean = false  // can't be resolved
   override def plan: LogicalPlan = SubqueryAlias(toString, query)
 }
 
+/**
+ * The [[InSubQuery]] allows us to use a subquery as the (single) argument in an [[In]] predicate.
+ * Such predicates are typically used to filter query results. For example (SQL):
+ * {{{
+ *   SELECT  *
+ *   FROM    a
+ *   WHERE   a.id IN (SELECT  id
+ *                    FROM    b)
+ * }}}
+ *
+ * Currently we only allow [[InSubQuery]] expressions within a Filter plan (i.e. WHERE or a HAVING
+ * clause). This will be rewritten into a left semi/anti join during analysis.
+ */
 case class InSubQuery(query: LogicalPlan) extends CorrelatedSubqueryExpression with Unevaluable  {
   override def dataType: DataType = ArrayType(NullType)
   override def nullable: Boolean = true
   override def withNewPlan(plan: LogicalPlan): InSubQuery = InSubQuery(plan)
 }
 
-case class Exists(
-    query: LogicalPlan) extends CorrelatedSubqueryExpression with Unevaluable with Predicate {
+/**
+ * The [[Exists]] expression checks if a row exists in a subquery given some correlated condition.
+ * This is typically used to filter query results. For example (SQL):
+ * {{{5
+ *   SELECT  *
+ *   FROM    a
+ *   WHERE   EXISTS (SELECT  *
+ *                   FROM    b
+ *                   WHERE   b.id = a.id)
+ * }}}
+ *
+ * Currently we only allow [[Exists]] expressions within a Filter plan (i.e. WHERE or a HAVING
+ * clause). This will be rewritten into a left semi/anti join during analysis.
+ */
+case class Exists(query: LogicalPlan)
+  extends CorrelatedSubqueryExpression with Unevaluable with Predicate {
   override def dataType: DataType = BooleanType
   override def nullable: Boolean = false
   override def withNewPlan(plan: LogicalPlan): Exists = Exists(plan)
