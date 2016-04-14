@@ -169,9 +169,7 @@ private[v1] object AllStagesResource {
 
     val inputMetrics: Option[InputMetricDistributions] =
       new MetricHelper[InternalInputMetrics, InputMetricDistributions](rawMetrics, quantiles) {
-        def getSubmetrics(raw: InternalTaskMetrics): Option[InternalInputMetrics] = {
-          Some(raw.inputMetrics)
-        }
+        def getSubmetrics(raw: InternalTaskMetrics): InternalInputMetrics = raw.inputMetrics
 
         def build: InputMetricDistributions = new InputMetricDistributions(
           bytesRead = submetricQuantiles(_.bytesRead),
@@ -181,9 +179,7 @@ private[v1] object AllStagesResource {
 
     val outputMetrics: Option[OutputMetricDistributions] =
       new MetricHelper[InternalOutputMetrics, OutputMetricDistributions](rawMetrics, quantiles) {
-        def getSubmetrics(raw: InternalTaskMetrics): Option[InternalOutputMetrics] = {
-          Some(raw.outputMetrics)
-        }
+        def getSubmetrics(raw: InternalTaskMetrics): InternalOutputMetrics = raw.outputMetrics
         def build: OutputMetricDistributions = new OutputMetricDistributions(
           bytesWritten = submetricQuantiles(_.bytesWritten),
           recordsWritten = submetricQuantiles(_.recordsWritten)
@@ -193,8 +189,8 @@ private[v1] object AllStagesResource {
     val shuffleReadMetrics: Option[ShuffleReadMetricDistributions] =
       new MetricHelper[InternalShuffleReadMetrics, ShuffleReadMetricDistributions](rawMetrics,
         quantiles) {
-        def getSubmetrics(raw: InternalTaskMetrics): Option[InternalShuffleReadMetrics] = {
-          Some(raw.shuffleReadMetrics)
+        def getSubmetrics(raw: InternalTaskMetrics): InternalShuffleReadMetrics = {
+          raw.shuffleReadMetrics
         }
         def build: ShuffleReadMetricDistributions = new ShuffleReadMetricDistributions(
           readBytes = submetricQuantiles(_.totalBytesRead),
@@ -210,8 +206,8 @@ private[v1] object AllStagesResource {
     val shuffleWriteMetrics: Option[ShuffleWriteMetricDistributions] =
       new MetricHelper[InternalShuffleWriteMetrics, ShuffleWriteMetricDistributions](rawMetrics,
         quantiles) {
-        def getSubmetrics(raw: InternalTaskMetrics): Option[InternalShuffleWriteMetrics] = {
-          Some(raw.shuffleWriteMetrics)
+        def getSubmetrics(raw: InternalTaskMetrics): InternalShuffleWriteMetrics = {
+          raw.shuffleWriteMetrics
         }
         def build: ShuffleWriteMetricDistributions = new ShuffleWriteMetricDistributions(
           writeBytes = submetricQuantiles(_.bytesWritten),
@@ -301,11 +297,11 @@ private[v1] abstract class MetricHelper[I, O](
     rawMetrics: Seq[InternalTaskMetrics],
     quantiles: Array[Double]) {
 
-  def getSubmetrics(raw: InternalTaskMetrics): Option[I]
+  def getSubmetrics(raw: InternalTaskMetrics): I
 
   def build: O
 
-  val data: Seq[I] = rawMetrics.flatMap(getSubmetrics)
+  val data: Seq[I] = rawMetrics.map(getSubmetrics)
 
   /** applies the given function to all input metrics, and returns the quantiles */
   def submetricQuantiles(f: I => Double): IndexedSeq[Double] = {
