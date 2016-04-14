@@ -627,7 +627,10 @@ object MimaExcludes {
         ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.clustering.DistributedLDAModel.this")
       ) ++ Seq(
         // [SPARK-14475] Propagate user-defined context from driver to executors
-        ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.getLocalProperty")
+        ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.getLocalProperty"),
+        // [SPARK-14617] Remove deprecated APIs in TaskMetrics
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.executor.InputMetrics$"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.executor.OutputMetrics$")
       )
     case v if v.startsWith("1.6") =>
       Seq(
