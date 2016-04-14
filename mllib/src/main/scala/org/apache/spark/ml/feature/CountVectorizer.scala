@@ -22,7 +22,7 @@ import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
+import org.apache.spark.ml.param.shared.{HasBinary, HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg.{Vectors, VectorUDT}
 import org.apache.spark.rdd.RDD
@@ -34,7 +34,8 @@ import org.apache.spark.util.collection.OpenHashMap
 /**
  * Params for [[CountVectorizer]] and [[CountVectorizerModel]].
  */
-private[feature] trait CountVectorizerParams extends Params with HasInputCol with HasOutputCol {
+private[feature] trait CountVectorizerParams extends Params with HasBinary with HasInputCol
+    with HasOutputCol {
 
   /**
    * Max size of the vocabulary.
@@ -100,19 +101,6 @@ private[feature] trait CountVectorizerParams extends Params with HasInputCol wit
 
   /** @group getParam */
   def getMinTF: Double = $(minTF)
-
-  /**
-   * Binary toggle to control the output vector values.
-   * If True, all nonzero counts (after minTF filter applied) are set to 1. This is useful for
-   * discrete probabilistic models that model binary events rather than integer counts.
-   * Default: false
-   * @group param
-   */
-  val binary: BooleanParam =
-    new BooleanParam(this, "binary", "If True, all non zero counts are set to 1.")
-
-  /** @group getParam */
-  def getBinary: Boolean = $(binary)
 
   setDefault(binary -> false)
 }
