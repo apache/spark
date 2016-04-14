@@ -2245,7 +2245,7 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
         """
         return self.getOrDefault(self.minCount)
 
-    @since("1.4.0")
+    @since("2.0.0")
     def setWindowSize(self, value):
         """
         Sets the value of :py:attr:`windowSize`.
@@ -2253,7 +2253,7 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
         self._paramMap[self.windowSize] = value
         return self
 
-    @since("1.4.0")
+    @since("2.0.0")
     def getWindowSize(self):
         """
         Gets the value of windowSize or its default value.
