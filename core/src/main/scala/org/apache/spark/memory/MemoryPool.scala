@@ -111,13 +111,11 @@ private[memory] class MemoryPool(
     var success: Boolean = false
     try {
       val extraMemoryNeeded = numBytes - freeMemoryAcquired
-      // TODO: Once we support off-heap caching, this will need to change:
-      if (extraMemoryNeeded > 0
-          && maxBytesToAttemptToFreeViaEviction > 0
-          && memoryMode == MemoryMode.ON_HEAP) {
+      if (extraMemoryNeeded > 0 && maxBytesToAttemptToFreeViaEviction > 0) {
         memoryStore.evictBlocksToFreeSpace(
           Some(blockId),
-          math.min(extraMemoryNeeded, maxBytesToAttemptToFreeViaEviction))
+          math.min(extraMemoryNeeded, maxBytesToAttemptToFreeViaEviction),
+          memoryMode)
       }
       // NOTE: If the memory store evicts blocks, then those evictions will synchronously call
       // back into this StorageMemoryPool in order to free memory, so the free memory counters
@@ -181,14 +179,8 @@ private[memory] class MemoryPool(
       val evictableStorageMemory = math.max(0, _storageMemoryUsed - unevictableStorageMemory)
       if (numBytes > freeExecutionMem && numBytes - freeExecutionMem <= evictableStorageMemory) {
         val extraMemoryNeeded = numBytes - freeExecutionMem
-        val spaceFreedByEviction = {
-          // Once we support off-heap caching, this will need to change:
-          if (memoryMode == MemoryMode.ON_HEAP) {
-            memoryStore.evictBlocksToFreeSpace(None, extraMemoryNeeded)
-          } else {
-            0
-          }
-        }
+        val spaceFreedByEviction =
+          memoryStore.evictBlocksToFreeSpace(None, extraMemoryNeeded, memoryMode)
         // When a block is released, BlockManager.dropFromMemory() calls releaseMemory()
         // so we do not need to update the memory bookkeeping structures here.
         if (spaceFreedByEviction >= extraMemoryNeeded) {
