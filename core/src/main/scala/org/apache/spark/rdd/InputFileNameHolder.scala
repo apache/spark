@@ -20,9 +20,10 @@ package org.apache.spark.rdd
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
- * State for FileScanRDD objects. This is split this way because of the package splits.
+ * This holds file names of the current Spark task. This is used in HadoopRDD,
+ * FileScanRDD and InputFileName function in Spark SQL.
  */
-private[spark] object SqlNewHadoopRDDState {
+private[spark] object InputFileNameHolder {
   /**
    * The thread variable for the name of the current file being read. This is used by
    * the InputFileName function in Spark SQL.
