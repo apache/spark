@@ -325,7 +325,7 @@ final class ShuffleExternalSorter extends MemoryConsumer {
       LongArray array;
       try {
         // could trigger spilling
-        array = allocateArray(used / 8 * 4);
+        array = allocateArray(used / 8 * 2);
       } catch (OutOfMemoryError e) {
         // should have trigger spilling
         if (!inMemSorter.hasSpaceForAnotherRecord()) {

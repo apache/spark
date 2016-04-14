@@ -178,7 +178,8 @@ public class UnsafeExternalSorterSuite {
       recordComparator,
       prefixComparator,
       /* initialSize */ 1024,
-      pageSizeBytes);
+      pageSizeBytes,
+      false);
   }
 
   @Test
@@ -381,7 +382,8 @@ public class UnsafeExternalSorterSuite {
       null,
       null,
       /* initialSize */ 1024,
-      pageSizeBytes);
+      pageSizeBytes,
+      false);
     long[] record = new long[100];
     int recordSize = record.length * 8;
     int n = (int) pageSizeBytes / recordSize * 3;
@@ -416,7 +418,8 @@ public class UnsafeExternalSorterSuite {
       recordComparator,
       prefixComparator,
       1024,
-      pageSizeBytes);
+      pageSizeBytes,
+      false);
 
     // Peak memory should be monotonically increasing. More specifically, every time
     // we allocate a new page it should increase by exactly the size of the page.

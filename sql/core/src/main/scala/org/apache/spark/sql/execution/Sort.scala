@@ -21,6 +21,7 @@ import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.types._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, GenerateUnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.physical.{Distribution, OrderedDistribution, UnspecifiedDistribution}
@@ -53,6 +54,7 @@ case class Sort(
     "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"))
 
   def createSorter(): UnsafeExternalRowSorter = {
+    System.out.println("createSorter: " + sortOrder)
     val ordering = newOrdering(sortOrder, output)
 
     // The comparator for comparing prefix
@@ -69,7 +71,13 @@ case class Sort(
 
     val pageSize = SparkEnv.get.memoryManager.pageSizeBytes
     val sorter = new UnsafeExternalRowSorter(
-      schema, ordering, prefixComparator, prefixComputer, pageSize)
+      schema, ordering, prefixComparator, prefixComputer, pageSize,
+      sortOrder.length == 1 && (sortOrder.head.dataType match {
+        case BooleanType | ByteType | ShortType | IntegerType | LongType | DateType | TimestampType =>
+          true
+        case _ =>
+          false
+      }))
     if (testSpillFrequency > 0) {
       sorter.setTestSpillFrequency(testSpillFrequency)
     }

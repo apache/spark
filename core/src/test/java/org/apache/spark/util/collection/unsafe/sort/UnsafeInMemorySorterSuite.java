@@ -54,7 +54,8 @@ public class UnsafeInMemorySorterSuite {
       memoryManager,
       mock(RecordComparator.class),
       mock(PrefixComparator.class),
-      100);
+      100,
+      false);
     final UnsafeSorterIterator iter = sorter.getSortedIterator();
     Assert.assertFalse(iter.hasNext());
   }
@@ -109,7 +110,7 @@ public class UnsafeInMemorySorterSuite {
       }
     };
     UnsafeInMemorySorter sorter = new UnsafeInMemorySorter(consumer, memoryManager,
-      recordComparator, prefixComparator, dataToSort.length);
+      recordComparator, prefixComparator, dataToSort.length, true);
     // Given a page of records, insert those records into the sorter one-by-one:
     position = dataPage.getBaseOffset();
     for (int i = 0; i < dataToSort.length; i++) {

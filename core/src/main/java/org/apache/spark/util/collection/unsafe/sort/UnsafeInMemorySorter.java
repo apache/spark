@@ -25,6 +25,7 @@ import org.apache.spark.memory.MemoryConsumer;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.LongArray;
+import org.apache.spark.util.collection.RadixSort;
 import org.apache.spark.util.collection.Sorter;
 
 /**
@@ -72,6 +73,7 @@ public final class UnsafeInMemorySorter {
   private final Sorter<RecordPointerAndKeyPrefix, LongArray> sorter;
   @Nullable
   private final Comparator<RecordPointerAndKeyPrefix> sortComparator;
+  private boolean useRadix;
 
   /**
    * Within this buffer, position {@code 2 * i} holds a pointer pointer to the record at
@@ -91,9 +93,10 @@ public final class UnsafeInMemorySorter {
     final TaskMemoryManager memoryManager,
     final RecordComparator recordComparator,
     final PrefixComparator prefixComparator,
-    int initialSize) {
+    int initialSize,
+    boolean useRadix) {
     this(consumer, memoryManager, recordComparator, prefixComparator,
-      consumer.allocateArray(initialSize * 2));
+      consumer.allocateArray(initialSize * (useRadix ? 4 : 2)), useRadix);
   }
 
   public UnsafeInMemorySorter(
@@ -101,10 +104,12 @@ public final class UnsafeInMemorySorter {
       final TaskMemoryManager memoryManager,
       final RecordComparator recordComparator,
       final PrefixComparator prefixComparator,
-      LongArray array) {
+      LongArray array,
+      boolean useRadix) {
     this.consumer = consumer;
     this.memoryManager = memoryManager;
     this.initialSize = array.size();
+    this.useRadix = useRadix;
     if (recordComparator != null) {
       this.sorter = new Sorter<>(UnsafeSortDataFormat.INSTANCE);
       this.sortComparator = new SortComparator(recordComparator, prefixComparator, memoryManager);
@@ -145,7 +150,7 @@ public final class UnsafeInMemorySorter {
   }
 
   public boolean hasSpaceForAnotherRecord() {
-    return pos + 2 <= array.size();
+    return pos + 2 <= (array.size() / (useRadix ? 2 : 1));
   }
 
   public void expandPointerArray(LongArray newArray) {
@@ -157,7 +162,7 @@ public final class UnsafeInMemorySorter {
       array.getBaseOffset(),
       newArray.getBaseObject(),
       newArray.getBaseOffset(),
-      array.size() * 8L);
+      array.size() * 4L);
     consumer.freeArray(array);
     array = newArray;
   }
@@ -183,18 +188,20 @@ public final class UnsafeInMemorySorter {
 
     private final int numRecords;
     private int position;
+    private int offset;
     private Object baseObject;
     private long baseOffset;
     private long keyPrefix;
     private int recordLength;
 
-    private SortedIterator(int numRecords) {
+    private SortedIterator(int numRecords, int offset) {
       this.numRecords = numRecords;
       this.position = 0;
+      this.offset = offset;
     }
 
     public SortedIterator clone() {
-      SortedIterator iter = new SortedIterator(numRecords);
+      SortedIterator iter = new SortedIterator(numRecords, offset);
       iter.position = position;
       iter.baseObject = baseObject;
       iter.baseOffset = baseOffset;
@@ -216,11 +223,11 @@ public final class UnsafeInMemorySorter {
     @Override
     public void loadNext() {
       // This pointer points to a 4-byte record length, followed by the record's bytes
-      final long recordPointer = array.get(position);
+      final long recordPointer = array.get(offset + position);
       baseObject = memoryManager.getPage(recordPointer);
       baseOffset = memoryManager.getOffsetInPage(recordPointer) + 4;  // Skip over record length
       recordLength = Platform.getInt(baseObject, baseOffset - 4);
-      keyPrefix = array.get(position + 1);
+      keyPrefix = array.get(offset + position + 1);
       position += 2;
     }
 
@@ -242,9 +249,14 @@ public final class UnsafeInMemorySorter {
    * {@code next()} will return the same mutable object.
    */
   public SortedIterator getSortedIterator() {
-    if (sorter != null) {
+    int offset = 0;
+    if (useRadix) {
+      offset = RadixSort.sortKeyPrefixArray(array, pos / 2, 0, pos, 0, 7);
+    } else if (sorter != null) {
       sorter.sort(array, 0, pos / 2, sortComparator);
     }
-    return new SortedIterator(pos / 2);
+    System.out.println("tmpOffset: " + pos);
+    System.out.println("offset: " + offset);
+    return new SortedIterator(pos / 2, offset);
   }
 }

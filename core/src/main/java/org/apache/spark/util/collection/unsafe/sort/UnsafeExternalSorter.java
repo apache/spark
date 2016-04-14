@@ -76,6 +76,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
   private long pageCursor = -1;
   private long peakMemoryUsedBytes = 0;
   private volatile SpillableIterator readingIterator = null;
+  private boolean useRadix;
 
   public static UnsafeExternalSorter createWithExistingInMemorySorter(
       TaskMemoryManager taskMemoryManager,
@@ -89,7 +90,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       UnsafeInMemorySorter inMemorySorter) throws IOException {
     UnsafeExternalSorter sorter = new UnsafeExternalSorter(taskMemoryManager, blockManager,
       serializerManager, taskContext, recordComparator, prefixComparator, initialSize,
-        pageSizeBytes, inMemorySorter);
+        pageSizeBytes, inMemorySorter, false);
     sorter.spill(Long.MAX_VALUE, sorter);
     // The external sorter will be used to insert records, in-memory sorter is not needed.
     sorter.inMemSorter = null;
@@ -104,9 +105,10 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       RecordComparator recordComparator,
       PrefixComparator prefixComparator,
       int initialSize,
-      long pageSizeBytes) {
+      long pageSizeBytes,
+      boolean useRadix) {
     return new UnsafeExternalSorter(taskMemoryManager, blockManager, serializerManager,
-      taskContext, recordComparator, prefixComparator, initialSize, pageSizeBytes, null);
+      taskContext, recordComparator, prefixComparator, initialSize, pageSizeBytes, null, useRadix);
   }
 
   private UnsafeExternalSorter(
@@ -118,8 +120,10 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       PrefixComparator prefixComparator,
       int initialSize,
       long pageSizeBytes,
-      @Nullable UnsafeInMemorySorter existingInMemorySorter) {
+      @Nullable UnsafeInMemorySorter existingInMemorySorter,
+      boolean useRadix) {
     super(taskMemoryManager, pageSizeBytes);
+    this.useRadix = useRadix;
     this.taskMemoryManager = taskMemoryManager;
     this.blockManager = blockManager;
     this.serializerManager = serializerManager;
@@ -133,7 +137,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
 
     if (existingInMemorySorter == null) {
       this.inMemSorter = new UnsafeInMemorySorter(
-        this, taskMemoryManager, recordComparator, prefixComparator, initialSize);
+        this, taskMemoryManager, recordComparator, prefixComparator, initialSize, useRadix);
     } else {
       this.inMemSorter = existingInMemorySorter;
     }

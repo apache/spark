@@ -28,16 +28,17 @@ public class RadixSort {
       int tmpOffset,
       int startByteIdx,
       int endByteIdx) {
-    System.out.println("radixSort: " + dataLen);
     assert startByteIdx >= 0 : "startByteIdx (" + startByteIdx + ") should >= 0";
     assert endByteIdx <= 7 : "endByteIdx (" + endByteIdx + ") should <= 7";
     assert startByteIdx <= endByteIdx;
+    assert dataOffset + dataLen <= array.size();
+    assert tmpOffset + dataLen <= array.size();
     if (dataLen > 0) {
       // Optimization: make a pre-pass to determine which byte indices we can skip for sorting.
       // If all the byte values at a particular index are the same we don't need to sort it.
       long orMask = 0;
       long andMask = ~0L;
-      for (int i = 0; i < dataLen; i++) {
+      for (int i = dataOffset; i < dataOffset + dataLen; i++) {
         long value = array.get(i);
         orMask |= value;
         andMask &= value;
@@ -46,13 +47,10 @@ public class RadixSort {
         long bitMin = ((orMask >>> (i * 8)) & 0xff);
         long bitMax = ((andMask >>> (i * 8)) & 0xff);
         if (bitMin != bitMax) {
-          System.out.println("sort " + i);
           sortAtByte(array, i, dataLen, dataOffset, tmpOffset);
           int tmp = dataOffset;
           dataOffset = tmpOffset;
           tmpOffset = tmp;
-        } else {
-          System.out.println("skip " + i);
         }
       }
     }
@@ -75,6 +73,73 @@ public class RadixSort {
     int[] tmpOffsets = new int[256];
     for (int i = 0; i < dataLen; i++) {
       tmpOffsets[(int)((array.get(dataOffset + i) >>> (byteIdx * 8)) & 0xff)]++;
+    }
+    int accum = 0;
+    for (int i = 0; i < 256; i++) {
+      int tmp = tmpOffsets[i];
+      tmpOffsets[i] = tmpOffset + accum;
+      accum += tmp;
+    }
+    return tmpOffsets;
+  }
+
+  public static int sortKeyPrefixArray(
+      LongArray array,
+      int dataLen,
+      int dataOffset,
+      int tmpOffset,
+      int startByteIdx,
+      int endByteIdx) {
+    System.out.println("radixSort");
+    assert startByteIdx >= 0 : "startByteIdx (" + startByteIdx + ") should >= 0";
+    assert endByteIdx <= 7 : "endByteIdx (" + endByteIdx + ") should <= 7";
+    assert startByteIdx <= endByteIdx;
+    assert dataOffset + dataLen * 2 <= array.size();
+    assert tmpOffset + dataLen * 2 <= array.size();
+    if (dataLen > 0) {
+      // Optimization: make a pre-pass to determine which byte indices we can skip for sorting.
+      // If all the byte values at a particular index are the same we don't need to sort it.
+      long orMask = 0;
+      long andMask = ~0L;
+      for (int i = dataOffset; i < dataOffset + dataLen * 2; i += 2) {
+        long value = array.get(i + 1);
+        orMask |= value;
+        andMask &= value;
+      }
+      for (int i = startByteIdx; i <= endByteIdx; i++) {
+        long bitMin = ((orMask >>> (i * 8)) & 0xff);
+        long bitMax = ((andMask >>> (i * 8)) & 0xff);
+        if (bitMin != bitMax) {
+          sortKeyPrefixArrayAtByte(array, i, dataLen, dataOffset, tmpOffset);
+          int tmp = dataOffset;
+          dataOffset = tmpOffset;
+          tmpOffset = tmp;
+        }
+      }
+    }
+    return dataOffset;
+  }
+
+  private static void sortKeyPrefixArrayAtByte(
+      LongArray array, int byteIdx, int dataLen, int dataOffset, int tmpOffset) {
+    int[] tmpOffsets = getKeyPrefixArrayOffsets(array, byteIdx, dataLen, dataOffset, tmpOffset);
+    for (int i = dataOffset; i < dataOffset + dataLen * 2; i += 2) {
+      long key = array.get(i);
+      long prefix = array.get(i + 1);
+      int bucket = (int)((prefix >>> (byteIdx * 8)) & 0xff);
+      int offset = tmpOffsets[bucket];
+      tmpOffsets[bucket] += 2;
+      array.set(offset, key);
+      array.set(offset + 1, prefix);
+    }
+  }
+
+  // TODO(ekl) it might be worth pre-computing these up-front for all bytes
+  private static int[] getKeyPrefixArrayOffsets(
+      LongArray array, int byteIdx, int dataLen, int dataOffset, int tmpOffset) {
+    int[] tmpOffsets = new int[256];
+    for (int i = 0; i < dataLen * 2; i += 2) {
+      tmpOffsets[(int)((array.get(dataOffset + i + 1) >>> (byteIdx * 8)) & 0xff)] += 2;
     }
     int accum = 0;
     for (int i = 0; i < 256; i++) {
