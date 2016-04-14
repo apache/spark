@@ -344,6 +344,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
       StructType(Seq(StructField("c1", StringType), StructField("c2", StringType))))
     testData.registerTempTable("t")
     checkAnswer(sql("select nvl(c1, c2) from t"), Row("b") :: Row("a") :: Nil)
+    checkAnswer(sql("select ifnull(c1, c2) from t"), Row("b") :: Row("a") :: Nil)
   }
 
   test("===") {

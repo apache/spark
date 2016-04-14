@@ -1029,6 +1029,7 @@ object functions {
    * @since 2.0.0
    */
   def nvl(col1: Column, col2: Column): Column = withExpr { Nvl(col1.expr, col2.expr)}
+  def ifnull(col1: Column, col2: Column): Column = withExpr { Nvl(col1.expr, col2.expr)}
 
   /**
    * Unary minus, i.e. negate the expression.

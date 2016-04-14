@@ -165,6 +165,7 @@ object FunctionRegistry {
     expression[IsNotNull]("isnotnull"),
     expression[NullIf]("nullif"),
     expression[Nvl]("nvl"),
+    expression[Nvl]("ifnull"),
     expression[Least]("least"),
     expression[CreateMap]("map"),
     expression[CreateNamedStruct]("named_struct"),
