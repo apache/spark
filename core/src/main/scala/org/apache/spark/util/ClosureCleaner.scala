@@ -20,6 +20,7 @@ package org.apache.spark.util
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 
 import scala.collection.mutable.{Map, Set, Stack}
+import scala.language.existentials
 
 import org.apache.xbean.asm5.{ClassReader, ClassVisitor, MethodVisitor, Type}
 import org.apache.xbean.asm5.Opcodes._
