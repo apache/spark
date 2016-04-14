@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkSqlAstBuilder
-import org.apache.spark.sql.execution.command.CreateTable
+import org.apache.spark.sql.execution.command.{CreateTable, CreateTableLike}
 import org.apache.spark.sql.hive.{CreateTableAsSelect => CTAS, CreateViewAsSelect => CreateView}
 import org.apache.spark.sql.hive.{HiveGenericUDTF, HiveMetastoreTypes, HiveSerDe}
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
@@ -234,6 +234,15 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
       case Some(q) => CTAS(tableDesc, q, ifNotExists)
       case None => CreateTable(tableDesc, ifNotExists)
     }
+  }
+
+  /**
+   * Create a [[CreateTableLike]] command.
+   */
+  override def visitCreateTableLike(ctx: CreateTableLikeContext): LogicalPlan = withOrigin(ctx) {
+    val targetTable = visitTableIdentifier(ctx.target)
+    val sourceTable = visitTableIdentifier(ctx.source)
+    CreateTableLike(targetTable, sourceTable, ctx.EXISTS != null)
   }
 
   /**
