@@ -36,7 +36,7 @@
     <!-- Make sure all Hadoop dependencies are provided to avoid repackaging. -->
     <hadoop.deps.scope>provided</hadoop.deps.scope>
     <shuffle.jar>${project.build.directory}/scala-${scala.binary.version}/spark-${project.version}-yarn-shuffle.jar</shuffle.jar>
-    <shade>org/spark-project/</shade>
+    <shade>org/spark_project/</shade>
   </properties>
 
   <dependencies>
@@ -91,7 +91,7 @@
           <relocations>
             <relocation>
               <pattern>com.fasterxml.jackson</pattern>
-              <shadedPattern>org.spark-project.com.fasterxml.jackson</shadedPattern>
+              <shadedPattern>${spark.shade.packageName}.com.fasterxml.jackson</shadedPattern>
               <includes>
                 <include>com.fasterxml.jackson.**</include>
               </includes>

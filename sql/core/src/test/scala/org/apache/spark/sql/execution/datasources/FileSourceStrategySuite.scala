@@ -196,6 +196,34 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
     checkDataFilters(Set(IsNotNull("c1"), EqualTo("c1", 1)))
   }
 
+  test("partitioned table - case insensitive") {
+    withSQLConf("spark.sql.caseSensitive" -> "false") {
+      val table =
+        createTable(
+          files = Seq(
+            "p1=1/file1" -> 10,
+            "p1=2/file2" -> 10))
+
+      // Only one file should be read.
+      checkScan(table.where("P1 = 1")) { partitions =>
+        assert(partitions.size == 1, "when checking partitions")
+        assert(partitions.head.files.size == 1, "when files in partition 1")
+      }
+      // We don't need to reevaluate filters that are only on partitions.
+      checkDataFilters(Set.empty)
+
+      // Only one file should be read.
+      checkScan(table.where("P1 = 1 AND C1 = 1 AND (P1 + C1) = 1")) { partitions =>
+        assert(partitions.size == 1, "when checking partitions")
+        assert(partitions.head.files.size == 1, "when checking files in partition 1")
+        assert(partitions.head.files.head.partitionValues.getInt(0) == 1,
+          "when checking partition values")
+      }
+      // Only the filters that do not contain the partition column should be pushed down
+      checkDataFilters(Set(IsNotNull("c1"), EqualTo("c1", 1)))
+    }
+  }
+
   test("partitioned table - after scan filters") {
     val table =
       createTable(
@@ -279,7 +307,8 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
   /** Plans the query and calls the provided validation function with the planned partitioning. */
   def checkScan(df: DataFrame)(func: Seq[FilePartition] => Unit): Unit = {
     val fileScan = df.queryExecution.executedPlan.collect {
-      case DataSourceScan(_, scan: FileScanRDD, _, _) => scan
+      case scan: DataSourceScan if scan.rdd.isInstanceOf[FileScanRDD] =>
+        scan.rdd.asInstanceOf[FileScanRDD]
     }.headOption.getOrElse {
       fail(s"No FileScan in query\n${df.queryExecution}")
     }
@@ -361,18 +390,6 @@ class TestFileFormat extends FileFormat {
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
-    throw new NotImplementedError("JUST FOR TESTING")
-  }
-
-  override def buildInternalScan(
-      sqlContext: SQLContext,
-      dataSchema: StructType,
-      requiredColumns: Array[String],
-      filters: Array[Filter],
-      bucketSet: Option[BitSet],
-      inputFiles: Seq[FileStatus],
-      broadcastedConf: Broadcast[SerializableConfiguration],
-      options: Map[String, String]): RDD[InternalRow] = {
     throw new NotImplementedError("JUST FOR TESTING")
   }
 
