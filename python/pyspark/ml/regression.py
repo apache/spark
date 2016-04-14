@@ -1292,7 +1292,7 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
         """
         Sets the value of :py:attr:`family`.
         """
-        self._paramMap[self.family] = value
+        self._set(family=value)
         return self
 
     @since("2.0.0")
@@ -1307,7 +1307,7 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
         """
         Sets the value of :py:attr:`link`.
         """
-        self._paramMap[self.link] = value
+        self._set(link=value)
         return self
 
     @since("2.0.0")

@@ -441,6 +441,13 @@ class Params(Identifiable):
             self._paramMap[p] = value
         return self
 
+    def _clearParam(self, param):
+        """
+        Clears a param from the param map if it has been explicitly set.
+        """
+        if self.isSet(param):
+            del self._paramMap[param]
+
     def _setDefault(self, **kwargs):
         """
         Sets default params.
