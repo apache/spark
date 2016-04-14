@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.{CatalystConf, SimpleCatalystConf}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchFunctionException, SimpleFunctionRegistry}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
-import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, ExpressionInfo}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.catalyst.util.StringUtils
 
@@ -318,6 +318,23 @@ class SessionCatalog(
     // If an alias was specified by the lookup, wrap the plan in a subquery so that
     // attributes are properly qualified with this alias.
     alias.map(a => SubqueryAlias(a, qualifiedTable)).getOrElse(qualifiedTable)
+  }
+
+  /**
+   * Describes a table by returning various metadata pertaining to table/partitions/columns.
+   */
+  def describeTable(
+      table: TableIdentifier,
+      partSpec: Option[TablePartitionSpec],
+      colPath: Option[String],
+      isExtended: Boolean,
+      output: Seq[Attribute]): Seq[(String, String, String)] = {
+    val relation = lookupRelation(table)
+    relation.schema.fields.map { field =>
+      val cmtKey = "comment"
+      val comment = if (field.metadata.contains(cmtKey)) field.metadata.getString(cmtKey) else ""
+      (field.name, field.dataType.simpleString, comment)
+    }
   }
 
   /**

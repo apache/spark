@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.command.RunnableCommand
 import org.apache.spark.sql.types._
 
-
 /**
  * Used to represent the operation of create table using a data source.
  *

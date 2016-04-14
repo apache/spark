@@ -819,6 +819,35 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
         .collect()
     }
 
+    // Describe a column is a native command
+    assertResult(Array(Row("value", "string", "from deserializer"))) {
+      sql("DESCRIBE test_describe_commands1 value")
+        .select('col_name, 'data_type, 'comment)
+        .collect()
+    }
+
+    // Describe a column is a native command
+    assertResult(Array(Row("value", "string", "from deserializer"))) {
+      sql("DESCRIBE default.test_describe_commands1 value")
+        .select('col_name, 'data_type, 'comment)
+        .collect()
+    }
+
+    // Describe a partition is a native command
+    assertResult(
+      Array(
+        Row("key", "int"),
+        Row("value", "string"),
+        Row("dt", "string"),
+        Row("# Partition Information", ""),
+        Row("# col_name", "data_type"),
+        Row("dt", "string"))
+    ) {
+      sql("DESCRIBE test_describe_commands1 PARTITION (dt='2008-06-08')")
+        .select('col_name, 'data_type)
+        .collect()
+    }
+
     // Describe a registered temporary table.
     val testData =
       TestHive.sparkContext.parallelize(

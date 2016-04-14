@@ -29,7 +29,6 @@ import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation, ScriptInputOutputSchema}
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf, VariableSubstitution}
 
 
@@ -218,32 +217,31 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
 
     // Create the explain comment.
     val statement = plan(ctx.statement)
-    if (isExplainableStatement(statement)) {
-      ExplainCommand(statement, extended = options.exists(_.EXTENDED != null),
-        codegen = options.exists(_.CODEGEN != null))
-    } else {
-      ExplainCommand(OneRowRelation)
-    }
+    ExplainCommand(statement, extended = options.exists(_.EXTENDED != null),
+      codegen = options.exists(_.CODEGEN != null))
   }
 
   /**
-   * Determine if a plan should be explained at all.
-   */
-  protected def isExplainableStatement(plan: LogicalPlan): Boolean = plan match {
-    case _: DescribeTableCommand => false
-    case _ => true
-  }
-
-  /**
-   * Create a [[DescribeTableCommand]] logical plan.
+   * A command for users to describe a table in the given database. If a databaseName is not given,
+   * the current database will be used.
+   * The syntax of using this command in SQL is:
+   * {{{
+   *   DESCRIBE [EXTENDED|FORMATTED] [db_name.]table_name [column_name] [PARTITION partition_spec]
+   * }}}
    */
   override def visitDescribeTable(ctx: DescribeTableContext): LogicalPlan = withOrigin(ctx) {
     // FORMATTED and columns are not supported. Return null and let the parser decide what to do
     // with this (create an exception or pass it on to a different system).
-    if (ctx.describeColName != null || ctx.FORMATTED != null || ctx.partitionSpec != null) {
+    if (ctx.FORMATTED != null) {
       null
     } else {
-      DescribeTableCommand(visitTableIdentifier(ctx.tableIdentifier), ctx.EXTENDED != null)
+      val partitionKeys = Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec)
+      val columnPath = Option(ctx.describeColName).map(visitDescribeColName)
+      DescribeCommand(
+        visitTableIdentifier(ctx.tableIdentifier),
+        partitionKeys,
+        columnPath,
+        ctx.EXTENDED != null)
     }
   }
 
@@ -348,6 +346,21 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       key.getText
     }
   }
+
+   /**
+    * A column path can be specified as an parameter to describe command. It is a dot separated
+    * elements where the last element can be a String.
+    * TODO - check with Herman
+    */
+   override def visitDescribeColName(ctx: DescribeColNameContext): String = {
+     var result = ctx.identifier.asScala.map ( _.getText).mkString(".")
+     val elementStr = ctx.STRING().asScala.map(c => string(c)).mkString(".")
+     if (elementStr.nonEmpty) {
+       result ++ "." + elementStr
+     } else {
+       result
+     }
+   }
 
   /**
    * Create a [[CreateDatabase]] command.

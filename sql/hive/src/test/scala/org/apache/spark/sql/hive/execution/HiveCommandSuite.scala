@@ -152,6 +152,26 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     }
   }
 
+  test("describe table - negative tests") {
+    val message1 = intercept[AnalysisException] {
+      sql("DESCRIBE badtable")
+    }.getMessage
+    assert(message1.contains("Table or View badtable not found"))
+    val message2 = intercept[AnalysisException] {
+      sql("DESCRIBE parquet_tab2 PARTITION (day=31)")
+    }.getMessage
+    assert(message2.contains("Non-partitioned column(s) [day] are specified"))
+    val message3 = intercept[AnalysisException] {
+      sql("DESCRIBE parquet_tab4 PARTITION (Year=2000, month='10')")
+    }.getMessage
+    assert(message3.contains("partition to describe 'Map(year -> 2000, month -> 10)'" +
+      " does not exist in table"))
+    val message4 = intercept[AnalysisException] {
+      sql("DESCRIBE parquet_tab2 invalidCol")
+    }.getMessage
+    assert(message4.contains("Error in getting fields from serde.Invalid Field invalidCol"))
+  }
+
   test("LOAD DATA") {
     withTable("non_part_table", "part_table") {
       sql(

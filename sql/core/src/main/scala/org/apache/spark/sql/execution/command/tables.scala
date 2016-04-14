@@ -20,6 +20,8 @@ package org.apache.spark.sql.execution.command
 import java.io.File
 import java.net.URI
 
+import org.apache.spark.sql.catalyst.catalog.ExternalCatalog.TablePartitionSpec
+
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
@@ -268,15 +270,28 @@ case class LoadData(
 }
 
 /**
- * Command that looks like
+ * A command for users to describe a table in the given database. If a databaseName is not given,
+ * the current database will be used.
+ * The syntax of using this command in SQL is:
  * {{{
- *   DESCRIBE (EXTENDED) table_name;
+ *   DESCRIBE [EXTENDED|FORMATTED] [db_name.]table_name [column_name] [PARTITION partition_spec]
  * }}}
+ * @param table table to be described.
+ * @param partSpec spec If specified, the specified partition is described. It is effective only
+ *                 when the table is a Hive table
+ * @param  colPath If specified, only the specified column is described. It is effective only
+ *                 when the table is a Hive table
+ * @param isExtended True if "DESCRIBE EXTENDED" is used. Otherwise, false. It is effective only
+ *                   when the table is a Hive table
  */
-case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean)
+case class DescribeTableCommand(
+    table: TableIdentifier,
+    partSpec: Option[TablePartitionSpec],
+    colPath: Option[String],
+    isExtended: Boolean)
   extends RunnableCommand {
 
-  override val output: Seq[Attribute] = Seq(
+   override val output: Seq[Attribute] = Seq(
     // Column names are based on Hive.
     AttributeReference("col_name", StringType, nullable = false,
       new MetadataBuilder().putString("comment", "name of the column").build())(),
@@ -287,31 +302,23 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean)
   )
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val result = new ArrayBuffer[Row]
-    sparkSession.sessionState.catalog.lookupRelation(table) match {
-      case catalogRelation: CatalogRelation =>
-        catalogRelation.catalogTable.schema.foreach { column =>
-          result += Row(column.name, column.dataType, column.comment.orNull)
-        }
-
-        if (catalogRelation.catalogTable.partitionColumns.nonEmpty) {
-          result += Row("# Partition Information", "", "")
-          result += Row(s"# ${output(0).name}", output(1).name, output(2).name)
-
-          catalogRelation.catalogTable.partitionColumns.foreach { col =>
-            result += Row(col.name, col.dataType, col.comment.orNull)
-          }
-        }
-
-      case relation =>
-        relation.schema.fields.foreach { field =>
-          val comment =
-            if (field.metadata.contains("comment")) field.metadata.getString("comment") else ""
-          result += Row(field.name, field.dataType.simpleString, comment)
-        }
+    val catalog = sparkSession.sessionState.catalog
+    // Check to make sure supplied partition are valid partition columns. .
+    if (partSpec.isDefined && !catalog.isTemporaryTable(table)) {
+      val tab = catalog.getTableMetadata(table)
+      val badColumns = partSpec.get.keySet.filterNot(tab.partitionColumns.map(_.name).contains)
+      if (badColumns.nonEmpty) {
+        throw new AnalysisException(
+          s"Non-partitioned column(s) [${badColumns.mkString(", ")}] are " +
+            s"specified for DESCRIBE command")
+      }
     }
-
-    result
+    val results =
+      sparkSession.sessionState.catalog.describeTable(table, partSpec, colPath, isExtended, output)
+    val rows = results.map { case (name, dataType, comment) =>
+      Row(name, dataType, comment)
+    }
+    rows
   }
 }
 
