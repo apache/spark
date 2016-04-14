@@ -121,11 +121,11 @@ private object ParallelCollectionRDD {
     // Sequences need to be sliced at the same set of index positions for operations
     // like RDD.zip() to behave as expected
     def positions(length: Long, numSlices: Int): Iterator[(Int, Int)] = {
-      (0 until numSlices).iterator.map(i => {
+      (0 until numSlices).iterator.map { i =>
         val start = ((i * length) / numSlices).toInt
         val end = (((i + 1) * length) / numSlices).toInt
         (start, end)
-      })
+      }
     }
     seq match {
       case r: Range =>

@@ -422,7 +422,7 @@ private[spark] object HadoopRDD extends Logging {
 
   private[spark] def convertSplitLocationInfo(infos: Array[AnyRef]): Seq[String] = {
     val out = ListBuffer[String]()
-    infos.foreach { loc => {
+    infos.foreach { loc =>
       val locationStr = HadoopRDD.SPLIT_INFO_REFLECTIONS.get.
         getLocation.invoke(loc).asInstanceOf[String]
       if (locationStr != "localhost") {
@@ -434,7 +434,7 @@ private[spark] object HadoopRDD extends Logging {
           out += new HostTaskLocation(locationStr).toString
         }
       }
-    }}
+    }
     out.seq
   }
 }

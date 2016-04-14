@@ -286,10 +286,10 @@ object SetOperationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       assert(children.nonEmpty)
       if (projectList.forall(_.deterministic)) {
         val newFirstChild = Project(projectList, children.head)
-        val newOtherChildren = children.tail.map ( child => {
+        val newOtherChildren = children.tail.map { child =>
           val rewrites = buildRewrites(children.head, child)
           Project(projectList.map(pushToRight(_, rewrites)), child)
-        } )
+        }
         Union(newFirstChild +: newOtherChildren)
       } else {
         p

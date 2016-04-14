@@ -226,7 +226,7 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
    * @return
    */
   protected def toAttributeMap(offerAttributes: JList[Attribute]): Map[String, GeneratedMessage] = {
-    offerAttributes.asScala.map(attr => {
+    offerAttributes.asScala.map { attr =>
       val attrValue = attr.getType match {
         case Value.Type.SCALAR => attr.getScalar
         case Value.Type.RANGES => attr.getRanges
@@ -234,7 +234,7 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
         case Value.Type.TEXT => attr.getText
       }
       (attr.getName, attrValue)
-    }).toMap
+    }.toMap
   }
 
 

@@ -723,7 +723,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
         (safeEnd - safeStart) / step + 1
       }
     }
-    parallelize(0 until numSlices, numSlices).mapPartitionsWithIndex((i, _) => {
+    parallelize(0 until numSlices, numSlices).mapPartitionsWithIndex { (i, _) =>
       val partitionStart = (i * numElements) / numSlices * step + start
       val partitionEnd = (((i + 1) * numElements) / numSlices) * step + start
       def getSafeMargin(bi: BigInt): Long =
@@ -762,7 +762,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
           ret
         }
       }
-    })
+    }
   }
 
   /** Distribute a local Scala collection to form an RDD.
