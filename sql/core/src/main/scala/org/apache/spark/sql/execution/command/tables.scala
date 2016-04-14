@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.CatalogTable
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
 
 /**
  * A command to create a table with the same definition of the given existing table.
@@ -46,12 +46,9 @@ case class CreateTableLike(
         s"Source table in CREATE TABLE LIKE cannot be temporary: '$sourceTable'")
     }
 
-    if (catalog.tableExists(targetTable)) {
-      throw new AnalysisException(
-        s"Target table in CREATE TABLE LIKE already exists: '$targetTable'")
-    }
-
-    val tableToCreate = catalog.getTableMetadata(sourceTable).copy(
+    val tableToCreate = catalog.getTableMetadata(sourceTable).copy( 
+      identifier = targetTable,
+      tableType = CatalogTableType.MANAGED_TABLE,
       createTime = System.currentTimeMillis,
       lastAccessTime = -1).withNewStorage(locationUri = None)
 
