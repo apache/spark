@@ -1165,26 +1165,25 @@ class OneVsRest(Estimator, HasFeaturesCol, HasLabelCol, HasPredictionCol):
     ...     Row(label=1.0, features=Vectors.sparse(2, [], [])),
     ...     Row(label=2.0, features=Vectors.dense(0.5, 0.5))]).toDF()
     >>> lr = LogisticRegression(maxIter=5, regParam=0.01)
-    >>> ovr = OneVsRest(classifier=lr).setPredictionCol("indexed")
+    >>> ovr = OneVsRest(classifier=lr)
     >>> model = ovr.fit(df)
     >>> [x.coefficients for x in model.models]
     [DenseVector([3.3925, 1.8785]), DenseVector([-4.3016, -6.3163]), DenseVector([-4.5855, 6.1785])]
     >>> [x.intercept for x in model.models]
     [-3.6474708290602034, 2.5507881951814495, -1.1016513228162115]
     >>> test0 = sc.parallelize([Row(features=Vectors.dense(-1.0, 0.0))]).toDF()
-    >>> model.transform(test0).head().indexed
+    >>> model.transform(test0).head().prediction
     1.0
     >>> test1 = sc.parallelize([Row(features=Vectors.sparse(2, [0], [1.0]))]).toDF()
-    >>> model.transform(test1).head().indexed
+    >>> model.transform(test1).head().prediction
     0.0
     >>> test2 = sc.parallelize([Row(features=Vectors.dense(0.5, 0.4))]).toDF()
-    >>> model.transform(test2).head().indexed
+    >>> model.transform(test2).head().prediction
     2.0
 
     .. versionadded:: 2.0.0
     """
 
-    # a placeholder to make it appear in the generated doc
     classifier = Param(Params._dummy(), "classifier", "base binary classifier")
 
     @keyword_only
@@ -1213,10 +1212,9 @@ class OneVsRest(Estimator, HasFeaturesCol, HasLabelCol, HasPredictionCol):
         """
         Sets the value of :py:attr:`classifier`.
 
-        .. note:: Only LogisticRegression, NaiveBayes and MultilayerPerceptronClassifier are
-                  supported now.
+        .. note:: Only LogisticRegression and NaiveBayes are supported now.
         """
-        self._paramMap[self.classifier] = value
+        self._set(classifier=value)
         return self
 
     @since("2.0.0")
@@ -1231,6 +1229,8 @@ class OneVsRest(Estimator, HasFeaturesCol, HasLabelCol, HasPredictionCol):
         featuresCol = self.getFeaturesCol()
         predictionCol = self.getPredictionCol()
         classifier = self.getClassifier()
+        assert isinstance(classifier, HasRawPredictionCol),\
+            "Classifier %s doesn't extend from HasRawPredictionCol." % type(classifier)
 
         numClasses = int(dataset.agg({labelCol: "max"}).head()["max("+labelCol+")"]) + 1
 
@@ -1264,8 +1264,8 @@ class OneVsRest(Estimator, HasFeaturesCol, HasLabelCol, HasPredictionCol):
     def copy(self, extra=None):
         """
         Creates a copy of this instance with a randomly generated uid
-        and some extra params. This copies creates a deep copy of
-        the embedded paramMap, and copies the embedded and extra parameters over.
+        and some extra params. This creates a deep copy of the embedded paramMap,
+        and copies the embedded and extra parameters over.
 
         :param extra: Extra parameters to copy to the new instance
         :return: Copy of this instance
@@ -1290,7 +1290,6 @@ class OneVsRestModel(Model, HasFeaturesCol, HasLabelCol, HasPredictionCol):
 
     def __init__(self, models):
         super(OneVsRestModel, self).__init__()
-        #: best model from cross validation
         self.models = models
 
     def _transform(self, dataset):
