@@ -278,9 +278,9 @@ private object ContextCleaner {
  * Listener class used for testing when any item has been cleaned by the Cleaner class.
  */
 private[spark] trait CleanerListener {
-  def rddCleaned(rddId: Int)
-  def shuffleCleaned(shuffleId: Int)
-  def broadcastCleaned(broadcastId: Long)
-  def accumCleaned(accId: Long)
-  def checkpointCleaned(rddId: Long)
+  def rddCleaned(rddId: Int): Unit
+  def shuffleCleaned(shuffleId: Int): Unit
+  def broadcastCleaned(broadcastId: Long): Unit
+  def accumCleaned(accId: Long): Unit
+  def checkpointCleaned(rddId: Long): Unit
 }

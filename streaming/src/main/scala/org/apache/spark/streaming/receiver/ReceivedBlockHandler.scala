@@ -48,7 +48,7 @@ private[streaming] trait ReceivedBlockHandler {
   def storeBlock(blockId: StreamBlockId, receivedBlock: ReceivedBlock): ReceivedBlockStoreResult
 
   /** Cleanup old blocks older than the given threshold time */
-  def cleanupOldBlocks(threshTime: Long)
+  def cleanupOldBlocks(threshTime: Long): Unit
 }
 
 

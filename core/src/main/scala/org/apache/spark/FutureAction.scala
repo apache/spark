@@ -41,7 +41,7 @@ trait FutureAction[T] extends Future[T] {
   /**
    * Cancels the execution of this action.
    */
-  def cancel()
+  def cancel(): Unit
 
   /**
    * Blocks until this action completes.
@@ -65,7 +65,7 @@ trait FutureAction[T] extends Future[T] {
    * When this action is completed, either through an exception, or a value, applies the provided
    * function.
    */
-  def onComplete[U](func: (Try[T]) => U)(implicit executor: ExecutionContext)
+  def onComplete[U](func: (Try[T]) => U)(implicit executor: ExecutionContext): Unit
 
   /**
    * Returns whether the action has already been completed with a value or an exception.

@@ -36,7 +36,7 @@ abstract class BlockTransferService extends ShuffleClient with Closeable with Lo
    * Initialize the transfer service by giving it the BlockDataManager that can be used to fetch
    * local blocks or put local blocks.
    */
-  def init(blockDataManager: BlockDataManager)
+  def init(blockDataManager: BlockDataManager): Unit
 
   /**
    * Tear down the transfer service.
