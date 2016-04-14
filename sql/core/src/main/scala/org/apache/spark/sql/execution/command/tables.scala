@@ -46,7 +46,7 @@ case class CreateTableLike(
         s"Source table in CREATE TABLE LIKE cannot be temporary: '$sourceTable'")
     }
 
-    val tableToCreate = catalog.getTableMetadata(sourceTable).copy( 
+    val tableToCreate = catalog.getTableMetadata(sourceTable).copy(
       identifier = targetTable,
       tableType = CatalogTableType.MANAGED_TABLE,
       createTime = System.currentTimeMillis,
