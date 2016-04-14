@@ -187,7 +187,7 @@ private[spark] object InternalAccumulator {
    * add to the same set of accumulators. We do this to report the distribution of accumulator
    * values across all tasks within each stage.
    */
-  def create(sc: SparkContext): Seq[Accumulator[_]] = {
+  def createAll(sc: SparkContext): Seq[Accumulator[_]] = {
     val accums = createAll()
     accums.foreach { accum =>
       Accumulators.register(accum)

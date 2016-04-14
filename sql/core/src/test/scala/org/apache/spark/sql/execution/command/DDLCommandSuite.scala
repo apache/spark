@@ -214,10 +214,12 @@ class DDLCommandSuite extends PlanTest {
     val parsed_view = parser.parsePlan(sql_view)
     val expected_table = AlterTableRename(
       TableIdentifier("table_name", None),
-      TableIdentifier("new_table_name", None))
+      TableIdentifier("new_table_name", None),
+      isView = false)
     val expected_view = AlterTableRename(
       TableIdentifier("table_name", None),
-      TableIdentifier("new_table_name", None))
+      TableIdentifier("new_table_name", None),
+      isView = true)
     comparePlans(parsed_table, expected_table)
     comparePlans(parsed_view, expected_view)
   }
@@ -244,14 +246,14 @@ class DDLCommandSuite extends PlanTest {
 
     val tableIdent = TableIdentifier("table_name", None)
     val expected1_table = AlterTableSetProperties(
-      tableIdent, Map("test" -> "test", "comment" -> "new_comment"))
+      tableIdent, Map("test" -> "test", "comment" -> "new_comment"), isView = false)
     val expected2_table = AlterTableUnsetProperties(
-      tableIdent, Seq("comment", "test"), ifExists = false)
+      tableIdent, Seq("comment", "test"), ifExists = false, isView = false)
     val expected3_table = AlterTableUnsetProperties(
-      tableIdent, Seq("comment", "test"), ifExists = true)
-    val expected1_view = expected1_table
-    val expected2_view = expected2_table
-    val expected3_view = expected3_table
+      tableIdent, Seq("comment", "test"), ifExists = true, isView = false)
+    val expected1_view = expected1_table.copy(isView = true)
+    val expected2_view = expected2_table.copy(isView = true)
+    val expected3_view = expected3_table.copy(isView = true)
 
     comparePlans(parsed1_table, expected1_table)
     comparePlans(parsed2_table, expected2_table)

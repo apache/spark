@@ -416,6 +416,9 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "skewjoinopt18",
     "skewjoinopt9",
 
+    // This test tries to create a table like with TBLPROPERTIES clause, which we don't support.
+    "create_like_tbl_props",
+
     // Index commands are not supported
     "drop_index",
     "drop_index_removes_partition_dirs",
@@ -537,7 +540,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "count",
     "cp_mj_rc",
     "create_insert_outputformat",
-    "create_like_tbl_props",
     "create_nested_type",
     "create_struct_table",
     "create_view_translate",
