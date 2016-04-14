@@ -55,7 +55,8 @@ statement
         rowFormat?  createFileFormat? locationSpec?
         (TBLPROPERTIES tablePropertyList)?
         (AS? query)?                                                   #createTable
-    | createTableHeader LIKE source=tableIdentifier                    #createTableLike
+    | CREATE TABLE (IF NOT EXISTS)? target=tableIdentifier
+        LIKE source=tableIdentifier                                    #createTableLike
     | ANALYZE TABLE tableIdentifier partitionSpec? COMPUTE STATISTICS
         (identifier | FOR COLUMNS identifierSeq?)?                     #analyze
     | ALTER (TABLE | VIEW) from=tableIdentifier
@@ -270,8 +271,7 @@ createFileFormat
     ;
 
 fileFormat
-    : INPUTFORMAT inFmt=STRING OUTPUTFORMAT outFmt=STRING (SERDE serdeCls=STRING)?
-      (INPUTDRIVER inDriver=STRING OUTPUTDRIVER outDriver=STRING)?                         #tableFileFormat
+    : INPUTFORMAT inFmt=STRING OUTPUTFORMAT outFmt=STRING (SERDE serdeCls=STRING)?         #tableFileFormat
     | identifier                                                                           #genericFileFormat
     ;
 

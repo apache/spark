@@ -553,8 +553,12 @@ abstract class CatalogTestUtils {
       identifier = TableIdentifier(name, database),
       tableType = CatalogTableType.EXTERNAL_TABLE,
       storage = storageFormat,
-      schema = Seq(CatalogColumn("col1", "int"), CatalogColumn("col2", "string")),
-      partitionColumns = Seq(CatalogColumn("a", "int"), CatalogColumn("b", "string")))
+      schema = Seq(
+        CatalogColumn("col1", "int"),
+        CatalogColumn("col2", "string"),
+        CatalogColumn("a", "int"),
+        CatalogColumn("b", "string")),
+      partitionColumnNames = Seq("a", "b"))
   }
 
   def newFunc(name: String, database: Option[String] = None): CatalogFunction = {

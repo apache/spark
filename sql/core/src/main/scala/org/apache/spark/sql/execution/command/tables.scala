@@ -31,36 +31,89 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTable
  * }}}
  */
 case class CreateTableLike(
-    table: CatalogTable,
-    ifNotExists: Boolean,
-    sourceTable: TableIdentifier) extends RunnableCommand {
+    targetTable: TableIdentifier,
+    sourceTable: TableIdentifier,
+    ifNotExists: Boolean) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val catalog = sqlContext.sessionState.catalog
     if (!catalog.tableExists(sourceTable)) {
       throw new AnalysisException(
-        s"Cannot create table like on not existing table ${sourceTable.identifier}.")
+        s"Source table in CREATE TABLE LIKE does not exist: '$sourceTable'")
     }
     if (catalog.isTemporaryTable(sourceTable)) {
       throw new AnalysisException(
-        s"Cannot create table like on a temporary table ${sourceTable.identifier}.")
+        s"Source table in CREATE TABLE LIKE cannot be temporary: '$sourceTable'")
     }
 
-    val sourceTableMetadata = catalog.getTableMetadata(sourceTable)
-    val tableToCreate = CatalogTable(
-      identifier = table.identifier,
-      tableType = table.tableType,
-      storage = sourceTableMetadata.storage,
-      schema = sourceTableMetadata.schema,
-      partitionColumns = sourceTableMetadata.partitionColumns,
-      sortColumns = sourceTableMetadata.sortColumns,
-      numBuckets = sourceTableMetadata.numBuckets,
-      properties = sourceTableMetadata.properties,
-      viewOriginalText = sourceTableMetadata.viewOriginalText,
-      viewText = sourceTableMetadata.viewText
-    ).withNewStorage(locationUri = None)
+    if (catalog.tableExists(targetTable)) {
+      throw new AnalysisException(
+        s"Target table in CREATE TABLE LIKE already exists: '$targetTable'")
+    }
+
+    val tableToCreate = catalog.getTableMetadata(sourceTable).copy(
+      createTime = System.currentTimeMillis,
+      lastAccessTime = -1).withNewStorage(locationUri = None)
 
     catalog.createTable(tableToCreate, ifNotExists)
     Seq.empty[Row]
   }
+}
+
+
+// TODO: move the rest of the table commands from ddl.scala to this file
+
+/**
+ * A command to create a table.
+ *
+ * Note: This is currently used only for creating Hive tables.
+ * This is not intended for temporary tables.
+ *
+ * The syntax of using this command in SQL is:
+ * {{{
+ *   CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [db_name.]table_name
+ *   [(col1 data_type [COMMENT col_comment], ...)]
+ *   [COMMENT table_comment]
+ *   [PARTITIONED BY (col3 data_type [COMMENT col_comment], ...)]
+ *   [CLUSTERED BY (col1, ...) [SORTED BY (col1 [ASC|DESC], ...)] INTO num_buckets BUCKETS]
+ *   [SKEWED BY (col1, col2, ...) ON ((col_value, col_value, ...), ...)
+ *   [STORED AS DIRECTORIES]
+ *   [ROW FORMAT row_format]
+ *   [STORED AS file_format | STORED BY storage_handler_class [WITH SERDEPROPERTIES (...)]]
+ *   [LOCATION path]
+ *   [TBLPROPERTIES (property_name=property_value, ...)]
+ *   [AS select_statement];
+ * }}}
+ */
+case class CreateTable(table: CatalogTable, ifNotExists: Boolean) extends RunnableCommand {
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    sqlContext.sessionState.catalog.createTable(table, ifNotExists)
+    Seq.empty[Row]
+  }
+
+}
+
+
+/**
+ * A command that renames a table/view.
+ *
+ * The syntax of this command is:
+ * {{{
+ *    ALTER TABLE table1 RENAME TO table2;
+ *    ALTER VIEW view1 RENAME TO view2;
+ * }}}
+ */
+case class AlterTableRename(
+    oldName: TableIdentifier,
+    newName: TableIdentifier)
+  extends RunnableCommand {
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    val catalog = sqlContext.sessionState.catalog
+    catalog.invalidateTable(oldName)
+    catalog.renameTable(oldName, newName)
+    Seq.empty[Row]
+  }
+
 }
