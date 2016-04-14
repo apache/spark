@@ -64,18 +64,28 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
       //  - filters that need to be evaluated again after the scan
       val filterSet = ExpressionSet(filters)
 
+      // The attribute name of predicate could be different than the one in schema in case of
+      // case insensitive, we should change them to match the one in schema, so we donot need to
+      // worry about case sensitivity anymore.
+      val normalizedFilters = filters.map { e =>
+        e transform {
+          case a: AttributeReference =>
+            a.withName(l.output.find(_.semanticEquals(a)).get.name)
+        }
+      }
+
       val partitionColumns =
         l.resolve(files.partitionSchema, files.sqlContext.sessionState.analyzer.resolver)
       val partitionSet = AttributeSet(partitionColumns)
       val partitionKeyFilters =
-        ExpressionSet(filters.filter(_.references.subsetOf(partitionSet)))
+        ExpressionSet(normalizedFilters.filter(_.references.subsetOf(partitionSet)))
       logInfo(s"Pruning directories with: ${partitionKeyFilters.mkString(",")}")
 
       val dataColumns =
         l.resolve(files.dataSchema, files.sqlContext.sessionState.analyzer.resolver)
 
       // Partition keys are not available in the statistics of the files.
-      val dataFilters = filters.filter(_.references.intersect(partitionSet).isEmpty)
+      val dataFilters = normalizedFilters.filter(_.references.intersect(partitionSet).isEmpty)
 
       // Predicates with both partition keys and attributes need to be evaluated after the scan.
       val afterScanFilters = filterSet -- partitionKeyFilters

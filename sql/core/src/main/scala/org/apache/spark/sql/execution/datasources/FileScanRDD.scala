@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources
 import org.apache.spark.{Partition, TaskContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.DataReadMethod
-import org.apache.spark.rdd.{RDD, SqlNewHadoopRDDState}
+import org.apache.spark.rdd.{InputFileNameHolder, RDD}
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.InternalRow
 
@@ -39,7 +39,6 @@ case class PartitionedFile(
   }
 }
 
-
 /**
  * A collection of files that should be read as a single task possibly from multiple partitioned
  * directories.
@@ -52,7 +51,7 @@ class FileScanRDD(
     @transient val sqlContext: SQLContext,
     readFunction: (PartitionedFile) => Iterator[InternalRow],
     @transient val filePartitions: Seq[FilePartition])
-    extends RDD[InternalRow](sqlContext.sparkContext, Nil) {
+  extends RDD[InternalRow](sqlContext.sparkContext, Nil) {
 
   override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
     val iterator = new Iterator[Object] with AutoCloseable {
@@ -78,7 +77,7 @@ class FileScanRDD(
       // which may be inaccurate.
       private def updateBytesReadWithFileSize(): Unit = {
         if (getBytesReadCallback.isEmpty && currentFile != null) {
-          inputMetrics.incBytesReadInternal(currentFile.length)
+          inputMetrics.incBytesRead(currentFile.length)
         }
       }
 
@@ -88,7 +87,7 @@ class FileScanRDD(
 
       def hasNext = (currentIterator != null && currentIterator.hasNext) || nextIterator()
       def next() = {
-        inputMetrics.incRecordsReadInternal(1)
+        inputMetrics.incRecordsRead(1)
         if (inputMetrics.recordsRead % SparkHadoopUtil.UPDATE_INPUT_METRICS_INTERVAL_RECORDS == 0) {
           updateBytesRead()
         }
@@ -101,12 +100,12 @@ class FileScanRDD(
           updateBytesReadWithFileSize()
           currentFile = files.next()
           logInfo(s"Reading File $currentFile")
-          SqlNewHadoopRDDState.setInputFileName(currentFile.filePath)
+          InputFileNameHolder.setInputFileName(currentFile.filePath)
           currentIterator = readFunction(currentFile)
           hasNext
         } else {
           currentFile = null
-          SqlNewHadoopRDDState.unsetInputFileName()
+          InputFileNameHolder.unsetInputFileName()
           false
         }
       }
@@ -114,7 +113,7 @@ class FileScanRDD(
       override def close() = {
         updateBytesRead()
         updateBytesReadWithFileSize()
-        SqlNewHadoopRDDState.unsetInputFileName()
+        InputFileNameHolder.unsetInputFileName()
       }
     }
 

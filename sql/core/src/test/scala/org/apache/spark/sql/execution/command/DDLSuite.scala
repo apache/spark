@@ -380,8 +380,6 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
-  // TODO: ADD a testcase for Drop Database in Restric when we can create tables in SQLContext
-
   test("show tables") {
     withTempTable("show1a", "show2b") {
       sql(
