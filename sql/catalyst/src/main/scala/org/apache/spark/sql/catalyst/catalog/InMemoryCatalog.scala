@@ -299,29 +299,17 @@ class InMemoryCatalog extends ExternalCatalog {
   }
 
   /**
-   * Returns the partition names from catalog for a given table in a database.
-   * Currently returns empty sequence for [[InMemoryCatalog]].
+   * List the metadata of all partitions that belong to the specified table, assuming it exists.
+   *
+   * A partial partition spec may optionally be provided to filter the partitions returned.
+   * For instance, if there exist partitions (a='1', b='2'), (a='1', b='3') and (a='2', b='4'),
+   * then a partial spec of (a='1') will return the first two only.
+   * TODO: Currently partialSpec is not used for memory catalog and it returns all the partitions.
    */
-  def getPartitionNames(db: String, table: String, range: Short): Seq[String] = {
-    Seq.empty[String]
-  }
-
-  /**
-   * Returns the partition names that matche the partition spec for a given table in a database.
-   * When no match is found, an empty Sequence is returned.
-   * Currently returns empty sequence for [[InMemoryCatalog]]
-   */
-  def getPartitionNames(
-      db: String,
-      table: String,
-      spec: TablePartitionSpec,
-      range: Short): Seq[String] = {
-    Seq.empty[String]
-  }
-
   override def listPartitions(
       db: String,
-      table: String): Seq[CatalogTablePartition] = synchronized {
+      table: String,
+      partialSpec: Option[TablePartitionSpec] = None): Seq[CatalogTablePartition] = synchronized {
     requireTableExists(db, table)
     catalog(db).tables(table).partitions.values.toSeq
   }
