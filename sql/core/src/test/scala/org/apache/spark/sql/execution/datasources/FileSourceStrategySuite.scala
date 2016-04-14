@@ -21,6 +21,7 @@ import java.io.File
 
 import org.apache.hadoop.fs.FileStatus
 import org.apache.hadoop.mapreduce.Job
+
 import org.apache.spark.SparkConf
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{InternalRow, util}
