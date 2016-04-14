@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.JsonTuple
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, ScriptTransformation}
-import org.apache.spark.sql.execution.command.CreateTable
+import org.apache.spark.sql.execution.command.{CreateTable, CreateTableLike}
 import org.apache.spark.sql.hive.execution.{HiveNativeCommand, HiveSqlParser}
 
 class HiveDDLCommandSuite extends PlanTest {
@@ -234,15 +234,6 @@ class HiveDDLCommandSuite extends PlanTest {
           |ROW FORMAT SERDE 'org.apache.hadoop.hive.contrib.serde2.TypedBytesSerDe'
           |RECORDREADER 'org.apache.hadoop.hive.contrib.util.typedbytes.TypedBytesRecordReader'
           |FROM testData
-        """.stripMargin)
-    }
-    intercept[ParseException] {
-      parser.parsePlan(
-        """
-          |CREATE OR REPLACE VIEW IF NOT EXISTS view1 (col1, col3)
-          |COMMENT 'blabla'
-          |TBLPROPERTIES('prop1Key'="prop1Val")
-          |AS SELECT * FROM tab1
         """.stripMargin)
     }
   }
@@ -532,6 +523,7 @@ class HiveDDLCommandSuite extends PlanTest {
       """
         |CREATE OR REPLACE VIEW IF NOT EXISTS view1
         |(col1, col3)
+        |COMMENT 'BLABLA'
         |TBLPROPERTIES('prop1Key'="prop1Val")
         |AS SELECT * FROM tab1
       """.stripMargin
@@ -551,6 +543,7 @@ class HiveDDLCommandSuite extends PlanTest {
     assert(desc.storage.outputFormat.isEmpty)
     assert(desc.storage.serde.isEmpty)
     assert(desc.properties == Map("prop1Key" -> "prop1Val"))
+    assert(desc.comment == Option("BLABLA"))
   }
 
   test("create view -- partitioned view") {
@@ -562,6 +555,28 @@ class HiveDDLCommandSuite extends PlanTest {
 
   test("MSCK repair table (not supported)") {
     assertUnsupported("MSCK REPAIR TABLE tab1")
+  }
+
+  test("create table like") {
+    val v1 = "CREATE TABLE table1 LIKE table2"
+    val (target, source, exists) = parser.parsePlan(v1).collect {
+      case CreateTableLike(t, s, allowExisting) => (t, s, allowExisting)
+    }.head
+    assert(exists == false)
+    assert(target.database.isEmpty)
+    assert(target.table == "table1")
+    assert(source.database.isEmpty)
+    assert(source.table == "table2")
+
+    val v2 = "CREATE TABLE IF NOT EXISTS table1 LIKE table2"
+    val (target2, source2, exists2) = parser.parsePlan(v2).collect {
+      case CreateTableLike(t, s, allowExisting) => (t, s, allowExisting)
+    }.head
+    assert(exists2)
+    assert(target2.database.isEmpty)
+    assert(target2.table == "table1")
+    assert(source2.database.isEmpty)
+    assert(source2.table == "table2")
   }
 
 }
