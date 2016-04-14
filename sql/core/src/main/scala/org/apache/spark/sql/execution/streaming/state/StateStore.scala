@@ -50,7 +50,7 @@ trait StateStore {
   def get(key: UnsafeRow): Option[UnsafeRow]
 
   /** Put a new value for a key. */
-  def put(key: UnsafeRow, value: UnsafeRow)
+  def put(key: UnsafeRow, value: UnsafeRow): Unit
 
   /**
    * Remove keys that match the following condition.
