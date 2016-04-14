@@ -190,9 +190,10 @@ class SessionCatalog(
   /**
    * Generate Create table DDL string for the specified tableIdentifier
    */
-  def generateTableDDL(name: TableIdentifier): String = {
-    throw new AnalysisException(
-      "SHOW CREATE TABLE command is not supported for temporary tables created in SQLContext.")
+  def showCreateTable(name: TableIdentifier): String = {
+    val db = name.database.getOrElse(currentDb)
+    val table = formatTableName(name.table)
+    externalCatalog.showCreateTable(db, table)
   }
 
   // -------------------------------------------------------------

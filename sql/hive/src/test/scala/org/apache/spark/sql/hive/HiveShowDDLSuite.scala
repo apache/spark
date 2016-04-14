@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
+import org.apache.spark.sql.hive.execution.HiveNativeCommand
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
@@ -57,16 +58,20 @@ class HiveShowDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     }
   }
 
-  test("Hive syntax DDL - external table with column and table comments") {
+  test("Hive syntax DDL - partitioned table with column and table comments") {
     withTempDir { tmpDir =>
       withTable("t1") {
         sql(
           s"""
-            |create external table t1(c1 int COMMENT 'abc', c2 string) COMMENT 'my table'
-            |row format delimited fields terminated by ','
-            |stored as parquet
-            |location '${tmpDir}'
+             |create table t1(c1 bigint, c2 string)
+             |PARTITIONED BY (c3 int COMMENT 'partition column', c4 string)
+             |row format delimited fields terminated by ','
+             |stored as parquet
+             |location '${tmpDir}'
+             |TBLPROPERTIES ('my.property.one'='true', 'my.property.two'='1',
+             |'my.property.three'='2', 'my.property.four'='false')
           """.stripMargin)
+
         assert(compareCatalog(
           TableIdentifier("t1"),
           sql("show create table t1").collect()(0).toSeq(0).toString))
@@ -74,19 +79,19 @@ class HiveShowDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     }
   }
 
-  test("Hive syntax DDL - partitioned, row format and tblproperties") {
+  test("Hive syntax DDL - external, row format and tblproperties") {
     withTempDir { tmpDir =>
       withTable("t1") {
         sql(
           s"""
             |create external table t1(c1 bigint, c2 string)
-            |PARTITIONED BY (c3 int COMMENT 'partition column', c4 string)
             |row format delimited fields terminated by ','
             |stored as parquet
             |location '${tmpDir}'
             |TBLPROPERTIES ('my.property.one'='true', 'my.property.two'='1',
             |'my.property.three'='2', 'my.property.four'='false')
           """.stripMargin)
+
         assert(compareCatalog(
           TableIdentifier("t1"),
           sql("show create table t1").collect()(0).toSeq(0).toString))
@@ -111,40 +116,7 @@ class HiveShowDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
             |TBLPROPERTIES ('my.property.one'='true', 'my.property.two'='1',
             |'my.property.three'='2', 'my.property.four'='false')
           """.stripMargin)
-        assert(compareCatalog(
-          TableIdentifier("t1"),
-          sql("show create table t1").collect()(0).toSeq(0).toString))
-      }
-    }
-  }
 
-  test("Hive syntax DDL - temp table") {
-    withTempDir { tmpDir =>
-      withTable("t1") {
-        sql(
-          s"""
-            |create TEMPORARY table t1(c1 int, c2 string)
-            |row format delimited fields terminated by ','
-            |stored as parquet
-            |location '${tmpDir}'
-          """.stripMargin)
-        assert(compareCatalog(
-          TableIdentifier("t1"),
-          sql("show create table t1").collect()(0).toSeq(0).toString))
-      }
-    }
-  }
-
-  test("Hive syntax DDL - TEMPORARY external table") {
-    withTempDir { tmpDir =>
-      withTable("t1") {
-        sql(
-          s"""
-            |create TEMPORARY external table t1(c1 int, c2 string)
-            |row format delimited fields terminated by ','
-            |stored as parquet
-            |location '${tmpDir}'
-          """.stripMargin)
         assert(compareCatalog(
           TableIdentifier("t1"),
           sql("show create table t1").collect()(0).toSeq(0).toString))
@@ -175,7 +147,7 @@ class HiveShowDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     }
   }
 
-  test("Hive syntax DDL - SERDE ") {
+  test("Hive syntax DDL - SERDE") {
     withTempDir { tmpDir =>
       withTable("t1") {
         sql(
@@ -188,10 +160,56 @@ class HiveShowDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
              |OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
              |location '${tmpDir}'
            """.stripMargin)
+
         assert(compareCatalog(
           TableIdentifier("t1"),
           sql("show create table t1").collect()(0).toSeq(0).toString))
       }
+    }
+  }
+
+  // hive native DDL that is not supported by Spark SQL DDL
+  test("Hive syntax DDL -- CLUSTERED") {
+    withTable("t1") {
+      HiveNativeCommand(
+        s"""
+          |create table t1 (c1 int, c2 string)
+          |clustered by (c1) sorted by (c2 desc) into 5 buckets
+        """.stripMargin).run(sqlContext)
+      val ddl = sql("show create table t1").collect()
+      assert(ddl(0).toSeq(0).toString.contains("WARN"))
+      assert(ddl(1).toSeq(0).toString
+        .contains("CLUSTERED BY ( `c1` ) \nSORTED BY ( `c2` DESC ) \nINTO 5 BUCKETS"))
+    }
+  }
+
+  test("Hive syntax DDL -- STORED BY") {
+    withTable("tmp_showcrt1") {
+      HiveNativeCommand(
+        s"""
+           |CREATE EXTERNAL TABLE tmp_showcrt1 (key string, value boolean)
+           |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe'
+           |STORED BY 'org.apache.hadoop.hive.ql.metadata.DefaultStorageHandler'
+           |WITH SERDEPROPERTIES ('field.delim'=',', 'serialization.format'=',')
+        """.stripMargin).run(sqlContext)
+      val ddl = sql("show create table tmp_showcrt1").collect()
+      assert(ddl(0).toSeq(0).toString.contains("WARN"))
+      assert(ddl(1).toSeq(0).toString
+        .contains("STORED BY 'org.apache.hadoop.hive.ql.metadata.DefaultStorageHandler'"))
+    }
+  }
+
+  test("Hive syntax DDL -- SKEWED BY") {
+    withTable("stored_as_dirs_multiple") {
+      HiveNativeCommand(
+      s"""
+         |CREATE TABLE  stored_as_dirs_multiple (col1 STRING, col2 int, col3 STRING)
+         |SKEWED BY (col1, col2) ON (('s1',1), ('s3',3), ('s13',13), ('s78',78))
+         |stored as DIRECTORIES
+       """.stripMargin).run(sqlContext)
+      val ddl = sql("show create table stored_as_dirs_multiple").collect()
+      assert(ddl(0).toSeq(0).toString.contains("WARN"))
+      assert(ddl(1).toSeq(0).toString.contains("SKEWED BY ( `col1`, `col2` )"))
     }
   }
 
@@ -222,7 +240,8 @@ class HiveShowDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       // This works because JSON objects are self-describing and JSONRelation can get needed
       // field values based on field names.
       sql(
-        s"""CREATE TABLE jsonTable (`<d>` Struct<`=`:array<struct<Dd2: boolean>>>, b String)
+        s"""
+           |CREATE TABLE jsonTable (`<d>` Struct<`=`:array<struct<Dd2: boolean>>>, b String)
            |USING org.apache.spark.sql.json.DefaultSource
            |OPTIONS (path '$jsonFilePath')
          """.stripMargin)
@@ -317,17 +336,24 @@ class HiveShowDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     val expected: CatalogTable =
       sqlContext.sessionState.catalog.getTableMetadata(expectedTable)
     withTempDir { tmpDir =>
-      withTable(actualTable) {
-        var revisedActualDDL: String = null
-        if (expected.tableType == CatalogTableType.EXTERNAL_TABLE) {
-          revisedActualDDL = actualDDL.replace(expectedTable.table.toLowerCase(), actualTable)
-        } else {
-          revisedActualDDL = actualDDL
-            .replace(expectedTable.table.toLowerCase(), actualTable)
-            .replaceAll("path.*,", s"path '${tmpDir}',")
+      if (actualDDL.contains("CREATE VIEW")) {
+        withView(actualTable) {
+          sql(actualDDL.replace(expectedTable.table.toLowerCase(), actualTable))
+          actual = sqlContext.sessionState.catalog.getTableMetadata(TableIdentifier(actualTable))
         }
-        sql(revisedActualDDL)
-        actual = sqlContext.sessionState.catalog.getTableMetadata(TableIdentifier(actualTable))
+      } else {
+        withTable(actualTable) {
+          var revisedActualDDL: String = null
+          if (expected.tableType == CatalogTableType.EXTERNAL_TABLE) {
+            revisedActualDDL = actualDDL.replace(expectedTable.table.toLowerCase(), actualTable)
+          } else {
+            revisedActualDDL = actualDDL
+              .replace(expectedTable.table.toLowerCase(), actualTable)
+              .replaceAll("path.*,", s"path '${tmpDir}',")
+          }
+          sql(revisedActualDDL)
+          actual = sqlContext.sessionState.catalog.getTableMetadata(TableIdentifier(actualTable))
+        }
       }
     }
 
@@ -377,8 +403,8 @@ class HiveShowDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
               p._1.comment == p._2.comment
           }
         }
-      val sameBuckets = expected.numBuckets == actual.numBuckets &&
-          expected.bucketColumns.zip(actual.bucketColumns).forall(p => p._1 == p._2)
+
+      // TODO current SparkSQl does not support bucketing yet
       // TODO current CatalogTable does not populate sortcolumns yet
 
       val sameStorageFormat = expected.storage.inputFormat == actual.storage.inputFormat &&
@@ -403,7 +429,7 @@ class HiveShowDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         }
       }
       sameTableType && sameTableName && sameColmnSchema &&
-        samePartitionBy && sameBuckets && sameStorageFormat && sameTblProperties
+        samePartitionBy && sameStorageFormat && sameTblProperties
     }
   }
 
