@@ -714,7 +714,7 @@ private[spark] object RandomForest extends Logging {
           // Find best split.
           if (numSplits == 0) {
             (new ContinuousSplit(featureIndex, Double.MinValue),
-              ImpurityStats.getInvalidImpurityStats(gainAndImpurityStats.impurityCalculator))
+              ImpurityStats.getInvalidImpurityStats(binAggregates.getParentImpurityCalculator()))
           } else {
             val (bestFeatureSplitIndex, bestFeatureGainStats) =
               Range(0, numSplits).map { case splitIdx =>
