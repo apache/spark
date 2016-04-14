@@ -1032,6 +1032,16 @@ object functions {
   def ifnull(col1: Column, col2: Column): Column = withExpr { Nvl(col1.expr, col2.expr)}
 
   /**
+   * Returns col3 if col1 equals is null, otherwise returns col2.
+   *
+   * @group normal_funcs
+   * @since 2.0.0
+   */
+  def nvl2(col1: Column, col2: Column, col3: Column): Column = withExpr {
+    Nvl2(col1.expr, col2.expr, col3.expr)
+  }
+
+  /**
    * Unary minus, i.e. negate the expression.
    * {{{
    *   // Select the amount column and negates all values.
