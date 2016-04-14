@@ -1352,7 +1352,9 @@ class OneVsRestModel(Model, HasFeaturesCol, HasLabelCol, HasPredictionCol):
         """
         if extra is None:
             extra = dict()
-        return self._copyValues(OneVsRestModel([model.copy(extra) for model in self.models]))
+        newModel = Params.copy(self, extra)
+        newModel.models = [model.copy(extra) for model in self.models]
+        return newModel
 
 
 if __name__ == "__main__":
