@@ -379,6 +379,17 @@ class HashingTF(object):
     """
     def __init__(self, numFeatures=1 << 20):
         self.numFeatures = numFeatures
+        self.binary = False
+
+    @since("2.0.0")
+    def setBinary(self, value):
+        """
+        If True, term frequency vector will be binary such that non-zero
+        term counts will be set to 1
+        (default: False)
+        """
+        self.binary = value
+        return self
 
     @since('1.2.0')
     def indexOf(self, term):
@@ -398,7 +409,7 @@ class HashingTF(object):
         freq = {}
         for term in document:
             i = self.indexOf(term)
-            freq[i] = freq.get(i, 0) + 1.0
+            freq[i] = 1.0 if self.binary else freq.get(i, 0) + 1.0
         return Vectors.sparse(self.numFeatures, freq.items())
 
 
