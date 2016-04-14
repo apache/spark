@@ -400,7 +400,7 @@ case class Range(
     sqlContext
       .sparkContext
       .parallelize(0 until numSlices, numSlices)
-      .mapPartitionsWithIndex((i, _) => {
+      .mapPartitionsWithIndex { (i, _) =>
         val partitionStart = (i * numElements) / numSlices * step + start
         val partitionEnd = (((i + 1) * numElements) / numSlices) * step + start
         def getSafeMargin(bi: BigInt): Long =
@@ -444,7 +444,7 @@ case class Range(
             unsafeRow
           }
         }
-      })
+      }
   }
 }
 

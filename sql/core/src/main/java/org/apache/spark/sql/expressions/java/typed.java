@@ -19,7 +19,6 @@ package org.apache.spark.sql.expressions.java;
 
 import org.apache.spark.annotation.Experimental;
 import org.apache.spark.api.java.function.MapFunction;
-import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.TypedColumn;
 import org.apache.spark.sql.execution.aggregate.TypedAverage;
 import org.apache.spark.sql.execution.aggregate.TypedCount;
@@ -28,7 +27,7 @@ import org.apache.spark.sql.execution.aggregate.TypedSumLong;
 
 /**
  * :: Experimental ::
- * Type-safe functions available for {@link Dataset} operations in Java.
+ * Type-safe functions available for {@link org.apache.spark.sql.Dataset} operations in Java.
  *
  * Scala users should use {@link org.apache.spark.sql.expressions.scala.typed}.
  *
@@ -43,7 +42,7 @@ public class typed {
    *
    * @since 2.0.0
    */
-  public static<T> TypedColumn<T, Double> avg(MapFunction<T, Double> f) {
+  public static <T> TypedColumn<T, Double> avg(MapFunction<T, Double> f) {
     return new TypedAverage<T>(f).toColumnJava();
   }
 
@@ -52,7 +51,7 @@ public class typed {
    *
    * @since 2.0.0
    */
-  public static<T> TypedColumn<T, Long> count(MapFunction<T, Object> f) {
+  public static <T> TypedColumn<T, Long> count(MapFunction<T, Object> f) {
     return new TypedCount<T>(f).toColumnJava();
   }
 
@@ -61,7 +60,7 @@ public class typed {
    *
    * @since 2.0.0
    */
-  public static<T> TypedColumn<T, Double> sum(MapFunction<T, Double> f) {
+  public static <T> TypedColumn<T, Double> sum(MapFunction<T, Double> f) {
     return new TypedSumDouble<T>(f).toColumnJava();
   }
 
@@ -70,7 +69,7 @@ public class typed {
    *
    * @since 2.0.0
    */
-  public static<T> TypedColumn<T, Long> sumLong(MapFunction<T, Long> f) {
+  public static <T> TypedColumn<T, Long> sumLong(MapFunction<T, Long> f) {
     return new TypedSumLong<T>(f).toColumnJava();
   }
 }

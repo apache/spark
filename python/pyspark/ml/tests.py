@@ -52,7 +52,7 @@ from pyspark.ml.regression import LinearRegression, DecisionTreeRegressor
 from pyspark.ml.tuning import *
 from pyspark.ml.util import keyword_only
 from pyspark.ml.util import MLWritable, MLWriter
-from pyspark.ml.wrapper import JavaWrapper
+from pyspark.ml.wrapper import JavaParams
 from pyspark.mllib.linalg import Vectors, DenseVector, SparseVector
 from pyspark.sql import DataFrame, SQLContext, Row
 from pyspark.sql.functions import rand
@@ -406,6 +406,22 @@ class FeatureTests(PySparkTestCase):
         transformedDF = stopWordRemover.transform(dataset)
         self.assertEqual(transformedDF.head().output, ["a"])
 
+    def test_count_vectorizer_with_binary(self):
+        sqlContext = SQLContext(self.sc)
+        dataset = sqlContext.createDataFrame([
+            (0, "a a a b b c".split(' '), SparseVector(3, {0: 1.0, 1: 1.0, 2: 1.0}),),
+            (1, "a a".split(' '), SparseVector(3, {0: 1.0}),),
+            (2, "a b".split(' '), SparseVector(3, {0: 1.0, 1: 1.0}),),
+            (3, "c".split(' '), SparseVector(3, {2: 1.0}),)], ["id", "words", "expected"])
+        cv = CountVectorizer(binary=True, inputCol="words", outputCol="features")
+        model = cv.fit(dataset)
+
+        transformedList = model.transform(dataset).select("features", "expected").collect()
+
+        for r in transformedList:
+            feature, expected = r
+            self.assertEqual(feature, expected)
+
 
 class HasInducedError(Params):
 
@@ -644,7 +660,7 @@ class PersistenceTest(PySparkTestCase):
         """
         self.assertEqual(m1.uid, m2.uid)
         self.assertEqual(type(m1), type(m2))
-        if isinstance(m1, JavaWrapper):
+        if isinstance(m1, JavaParams):
             self.assertEqual(len(m1.params), len(m2.params))
             for p in m1.params:
                 self.assertEqual(m1.getOrDefault(p), m2.getOrDefault(p))
@@ -829,6 +845,25 @@ class TrainingSummaryTest(PySparkTestCase):
         # one check is enough to verify a summary is returned, Scala version runs full test
         sameSummary = model.evaluate(df)
         self.assertAlmostEqual(sameSummary.areaUnderROC, s.areaUnderROC)
+
+
+class HashingTFTest(PySparkTestCase):
+
+    def test_apply_binary_term_freqs(self):
+        sqlContext = SQLContext(self.sc)
+
+        df = sqlContext.createDataFrame([(0, ["a", "a", "b", "c", "c", "c"])], ["id", "words"])
+        n = 100
+        hashingTF = HashingTF()
+        hashingTF.setInputCol("words").setOutputCol("features").setNumFeatures(n).setBinary(True)
+        output = hashingTF.transform(df)
+        features = output.select("features").first().features.toArray()
+        expected = Vectors.sparse(n, {(ord("a") % n): 1.0,
+                                      (ord("b") % n): 1.0,
+                                      (ord("c") % n): 1.0}).toArray()
+        for i in range(0, n):
+            self.assertAlmostEqual(features[i], expected[i], 14, "Error at " + str(i) +
+                                   ": expected " + str(expected[i]) + ", got " + str(features[i]))
 
 
 if __name__ == "__main__":

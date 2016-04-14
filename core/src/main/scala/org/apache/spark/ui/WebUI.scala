@@ -129,7 +129,7 @@ private[spark] abstract class WebUI(
   }
 
   /** Initialize all components of the server. */
-  def initialize()
+  def initialize(): Unit
 
   /** Bind to the HTTP server behind this web interface. */
   def bind() {
@@ -153,7 +153,7 @@ private[spark] abstract class WebUI(
   def stop() {
     assert(serverInfo.isDefined,
       "Attempted to stop %s before binding to a server!".format(className))
-    serverInfo.get.server.stop()
+    serverInfo.get.stop()
   }
 }
 
