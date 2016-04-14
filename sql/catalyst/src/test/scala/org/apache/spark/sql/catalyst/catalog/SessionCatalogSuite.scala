@@ -491,6 +491,22 @@ class SessionCatalogSuite extends SparkFunSuite {
       TableIdentifier("tbl2", Some("db2")), Seq(part1), ignoreIfExists = true)
   }
 
+  test("create partitions that have unknown columns") {
+    val catalog = new SessionCatalog(newBasicCatalog())
+    val expectedErrorMsg =
+      "Columns (a, c) must be a subset of schema (col1, col2, a, b) in table '`db2`.`tbl2`"
+    var e = intercept[AnalysisException] {
+      catalog.createPartitions(
+        TableIdentifier("tbl2", Some("db2")), Seq(part1, unknownPart1), ignoreIfExists = false)
+    }
+    assert(e.getMessage.contains(expectedErrorMsg))
+    e = intercept[AnalysisException] {
+      catalog.createPartitions(
+        TableIdentifier("tbl2", Some("db2")), Seq(part1, unknownPart1), ignoreIfExists = true)
+    }
+    assert(e.getMessage.contains(expectedErrorMsg))
+  }
+
   test("drop partitions") {
     val externalCatalog = newBasicCatalog()
     val sessionCatalog = new SessionCatalog(externalCatalog)
@@ -542,6 +558,22 @@ class SessionCatalogSuite extends SparkFunSuite {
         Seq(part3.spec),
         ignoreIfNotExists = false)
     }
+    catalog.dropPartitions(
+      TableIdentifier("tbl2", Some("db2")),
+      Seq(part3.spec),
+      ignoreIfNotExists = true)
+  }
+
+  test("drop partitions with not-found partitioning columns") {
+    val catalog = new SessionCatalog(newBasicCatalog())
+    val e = intercept[AnalysisException] {
+      catalog.dropPartitions(
+        TableIdentifier("tbl2", Some("db2")),
+        Seq(unknownPart1.spec),
+        ignoreIfNotExists = false)
+    }
+    assert(e.getMessage.contains(
+      "Columns (a, c) must be a subset of partitioning columns (a, b) in table '`db2`.`tbl2`"))
     catalog.dropPartitions(
       TableIdentifier("tbl2", Some("db2")),
       Seq(part3.spec),

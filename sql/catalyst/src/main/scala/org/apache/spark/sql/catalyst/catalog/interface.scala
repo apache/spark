@@ -251,6 +251,28 @@ case class CatalogTable(
     throw new AnalysisException(s"table $identifier did not specify database")
   }
 
+  /**
+   * Verify if the provided columns are part of the schema.
+   * If not, throw an [[AnalysisException]] exception.
+   */
+  def requireSubsetOfSchema(cols: Set[String]): Unit = {
+    if (!cols.subsetOf(colNames)) {
+      throw new AnalysisException(s"Columns (${cols.mkString(", ")}) must be a subset of " +
+        s"schema (${colNames.mkString(", ")}) in table '$identifier")
+    }
+  }
+
+  /**
+   * Verify if the provided columns are part of the partitioning columns.
+   * If not, throw an [[AnalysisException]] exception.
+   */
+  def requireSubsetOfPartColumns(cols: Set[String]): Unit = {
+    if (!cols.subsetOf(partitionColumnNames.toSet)) {
+      throw new AnalysisException(s"Columns (${cols.mkString(", ")}) must be a subset of " +
+        s"partitioning columns (${partitionColumnNames.mkString(", ")}) in table '$identifier")
+    }
+  }
+
   /** Return the fully qualified name of this table, assuming the database was specified. */
   def qualifiedName: String = identifier.unquotedString
 

@@ -367,11 +367,14 @@ class SessionCatalog(
    * Create partitions in an existing table, assuming it exists.
    * If no database is specified, assume the table is in the current database.
    */
-  // todo: check eligibility of partitions.
   def createPartitions(
       tableName: TableIdentifier,
       parts: Seq[CatalogTablePartition],
       ignoreIfExists: Boolean): Unit = {
+    val tableMetadata = getTableMetadata(tableName)
+    // verify if the parts are part of the schema of the table
+    parts.foreach { p => tableMetadata.requireSubsetOfSchema(p.spec.keySet) }
+
     val db = tableName.database.getOrElse(currentDb)
     val table = formatTableName(tableName.table)
     externalCatalog.createPartitions(db, table, parts, ignoreIfExists)
@@ -381,11 +384,14 @@ class SessionCatalog(
    * Drop partitions from a table, assuming they exist.
    * If no database is specified, assume the table is in the current database.
    */
-  // todo: check eligibility of partitions.
   def dropPartitions(
       tableName: TableIdentifier,
       parts: Seq[TablePartitionSpec],
       ignoreIfNotExists: Boolean): Unit = {
+    val tableMetadata = getTableMetadata(tableName)
+    // verify if the parts are part of the partitioning columns of the table
+    parts.foreach { p => tableMetadata.requireSubsetOfPartColumns(p.keySet) }
+
     val db = tableName.database.getOrElse(currentDb)
     val table = formatTableName(tableName.table)
     externalCatalog.dropPartitions(db, table, parts, ignoreIfNotExists)
@@ -397,11 +403,16 @@ class SessionCatalog(
    * This assumes index i of `specs` corresponds to index i of `newSpecs`.
    * If no database is specified, assume the table is in the current database.
    */
-  // todo: check eligibility of partitions.
   def renamePartitions(
       tableName: TableIdentifier,
       specs: Seq[TablePartitionSpec],
       newSpecs: Seq[TablePartitionSpec]): Unit = {
+    val tableMetadata = getTableMetadata(tableName)
+    // verify if old specs are part of the partitioning columns of the table
+    specs.foreach { p => tableMetadata.requireSubsetOfPartColumns(p.keySet) }
+    // verify if newSpecs are part of the schema of the table
+    newSpecs.foreach { p => tableMetadata.requireSubsetOfSchema(p.keySet) }
+
     val db = tableName.database.getOrElse(currentDb)
     val table = formatTableName(tableName.table)
     externalCatalog.renamePartitions(db, table, specs, newSpecs)
@@ -416,8 +427,11 @@ class SessionCatalog(
    * Note: If the underlying implementation does not support altering a certain field,
    * this becomes a no-op.
    */
-  // todo: check eligibility of partitions.
   def alterPartitions(tableName: TableIdentifier, parts: Seq[CatalogTablePartition]): Unit = {
+    val tableMetadata = getTableMetadata(tableName)
+    // verify if the parts are part of the schema of the table
+    parts.foreach { p => tableMetadata.requireSubsetOfSchema(p.spec.keySet) }
+
     val db = tableName.database.getOrElse(currentDb)
     val table = formatTableName(tableName.table)
     externalCatalog.alterPartitions(db, table, parts)
@@ -428,6 +442,10 @@ class SessionCatalog(
    * If no database is specified, assume the table is in the current database.
    */
   def getPartition(tableName: TableIdentifier, spec: TablePartitionSpec): CatalogTablePartition = {
+    val tableMetadata = getTableMetadata(tableName)
+    // verify if the spec is part of the partitioning columns of the table
+    tableMetadata.requireSubsetOfPartColumns(spec.keySet)
+
     val db = tableName.database.getOrElse(currentDb)
     val table = formatTableName(tableName.table)
     externalCatalog.getPartition(db, table, spec)
