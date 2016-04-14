@@ -524,23 +524,23 @@ object LikeSimplification extends Rule[LogicalPlan] {
   private val equalTo = "([^_%]*)".r
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-    case Like(l, Literal(pattern, StringType)) =>
+    case Like(input, Literal(pattern, StringType)) =>
       pattern.toString match {
         case startsWith(prefix) if !prefix.endsWith("\\") =>
-          StartsWith(l, Literal(prefix))
+          StartsWith(input, Literal(prefix))
         case endsWith(postfix) =>
-          EndsWith(l, Literal(postfix))
+          EndsWith(input, Literal(postfix))
         // 'a%a' pattern is basically same with 'a%' && '%a'.
         // However, the additional `Length` condition is required to prevent 'a' match 'a%a'.
         case startsAndEndsWith(prefix, postfix) if !prefix.endsWith("\\") =>
-          And(GreaterThanOrEqual(Length(l), Literal(prefix.size + postfix.size)),
-            And(StartsWith(l, Literal(prefix)), EndsWith(l, Literal(postfix))))
+          And(GreaterThanOrEqual(Length(input), Literal(prefix.size + postfix.size)),
+            And(StartsWith(input, Literal(prefix)), EndsWith(input, Literal(postfix))))
         case contains(infix) if !infix.endsWith("\\") =>
-          Contains(l, Literal(infix))
+          Contains(input, Literal(infix))
         case equalTo(str) =>
-          EqualTo(l, Literal(str))
+          EqualTo(input, Literal(str))
         case _ =>
-          Like(l, Literal.create(pattern, StringType))
+          Like(input, Literal.create(pattern, StringType))
       }
   }
 }
