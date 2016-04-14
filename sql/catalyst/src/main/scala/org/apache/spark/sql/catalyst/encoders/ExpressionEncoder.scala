@@ -339,9 +339,13 @@ case class ExpressionEncoder[T](
    * Returns a new encoder with input columns shifted by `delta` ordinals
    */
   def shift(delta: Int): ExpressionEncoder[T] = {
-    copy(deserializer = deserializer transform {
-      case r: BoundReference => r.copy(ordinal = r.ordinal + delta)
-    })
+    if (delta == 0) {
+      this
+    } else {
+      copy(deserializer = deserializer transform {
+        case r: BoundReference => r.copy(ordinal = r.ordinal + delta)
+      })
+    }
   }
 
   protected val attrs = serializer.flatMap(_.collect {

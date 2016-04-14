@@ -85,6 +85,9 @@ case class TypedAggregateExpression(
     .resolve(aggBufferAttributes, OuterScopes.outerScopes)
     .bind(aggBufferAttributes)
 
+  val bEncoderForMutableAggBuffer = bEncoder.shift(mutableAggBufferOffset)
+  val bEncoderForInputAggBuffer = bEncoder.shift(inputAggBufferOffset)
+
   // Note: although this simply copies aggBufferAttributes, this common code can not be placed
   // in the superclass because that will lead to initialization ordering issues.
   override val inputAggBufferAttributes: Seq[AttributeReference] =
@@ -118,7 +121,7 @@ case class TypedAggregateExpression(
 
   override def update(buffer: MutableRow, input: InternalRow): Unit = {
     val inputA = boundA.fromRow(input)
-    val currentB = bEncoder.shift(mutableAggBufferOffset).fromRow(buffer)
+    val currentB = bEncoderForMutableAggBuffer.fromRow(buffer)
     val merged = aggregator.reduce(currentB, inputA)
     val returned = bEncoder.toRow(merged)
 
@@ -126,8 +129,8 @@ case class TypedAggregateExpression(
   }
 
   override def merge(buffer1: MutableRow, buffer2: InternalRow): Unit = {
-    val b1 = bEncoder.shift(mutableAggBufferOffset).fromRow(buffer1)
-    val b2 = bEncoder.shift(inputAggBufferOffset).fromRow(buffer2)
+    val b1 = bEncoderForMutableAggBuffer.fromRow(buffer1)
+    val b2 = bEncoderForInputAggBuffer.fromRow(buffer2)
     val merged = aggregator.merge(b1, b2)
     val returned = bEncoder.toRow(merged)
 
@@ -135,7 +138,7 @@ case class TypedAggregateExpression(
   }
 
   override def eval(buffer: InternalRow): Any = {
-    val b = bEncoder.shift(mutableAggBufferOffset).fromRow(buffer)
+    val b = bEncoderForMutableAggBuffer.fromRow(buffer)
     val result = cEncoder.toRow(aggregator.finish(b))
     dataType match {
       case _: StructType => result
