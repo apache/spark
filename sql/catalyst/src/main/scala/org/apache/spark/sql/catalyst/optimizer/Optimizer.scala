@@ -517,22 +517,28 @@ object LikeSimplification extends Rule[LogicalPlan] {
   // Cases like "something\%" are not optimized, but this does not affect correctness.
   private val startsWith = "([^_%]+)%".r
   private val endsWith = "%([^_%]+)".r
+  private val startsAndEndsWith = "([^_%]+)%([^_%]+)".r
   private val contains = "%([^_%]+)%".r
   private val equalTo = "([^_%]*)".r
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-    case Like(l, Literal(utf, StringType)) =>
-      utf.toString match {
-        case startsWith(pattern) if !pattern.endsWith("\\") =>
-          StartsWith(l, Literal(pattern))
-        case endsWith(pattern) =>
-          EndsWith(l, Literal(pattern))
-        case contains(pattern) if !pattern.endsWith("\\") =>
-          Contains(l, Literal(pattern))
-        case equalTo(pattern) =>
-          EqualTo(l, Literal(pattern))
+    case Like(input, Literal(pattern, StringType)) =>
+      pattern.toString match {
+        case startsWith(prefix) if !prefix.endsWith("\\") =>
+          StartsWith(input, Literal(prefix))
+        case endsWith(postfix) =>
+          EndsWith(input, Literal(postfix))
+        // 'a%a' pattern is basically same with 'a%' && '%a'.
+        // However, the additional `Length` condition is required to prevent 'a' match 'a%a'.
+        case startsAndEndsWith(prefix, postfix) if !prefix.endsWith("\\") =>
+          And(GreaterThanOrEqual(Length(input), Literal(prefix.size + postfix.size)),
+            And(StartsWith(input, Literal(prefix)), EndsWith(input, Literal(postfix))))
+        case contains(infix) if !infix.endsWith("\\") =>
+          Contains(input, Literal(infix))
+        case equalTo(str) =>
+          EqualTo(input, Literal(str))
         case _ =>
-          Like(l, Literal.create(utf, StringType))
+          Like(input, Literal.create(pattern, StringType))
       }
   }
 }
