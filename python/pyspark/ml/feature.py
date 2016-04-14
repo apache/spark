@@ -2173,13 +2173,16 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
     minCount = Param(Params._dummy(), "minCount",
                      "the minimum number of times a token must appear to be included in the " +
                      "word2vec model's vocabulary", typeConverter=TypeConverters.toInt)
+    windowSize = Param(Params._dummy(), "windowSize",
+                       "the window size of words",
+                       typeConverter=TypeConverters.toInt)
 
     @keyword_only
     def __init__(self, vectorSize=100, minCount=5, numPartitions=1, stepSize=0.025, maxIter=1,
                  seed=None, inputCol=None, outputCol=None, windowSize=5):
         """
         __init__(self, vectorSize=100, minCount=5, numPartitions=1, stepSize=0.025, maxIter=1, \
-                 seed=None, inputCol=None, outputCol=None)
+                 seed=None, inputCol=None, outputCol=None, windowSize=5)
         """
         super(Word2Vec, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Word2Vec", self.uid)
@@ -2194,7 +2197,7 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
                   seed=None, inputCol=None, outputCol=None, windowSize=5):
         """
         setParams(self, minCount=5, numPartitions=1, stepSize=0.025, maxIter=1, seed=None, \
-                 inputCol=None, outputCol=None)
+                 inputCol=None, outputCol=None, windowSize=5)
         Sets params for this Word2Vec.
         """
         kwargs = self.setParams._input_kwargs

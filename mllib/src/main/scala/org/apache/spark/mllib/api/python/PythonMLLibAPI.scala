@@ -671,6 +671,7 @@ private[python] class PythonMLLibAPI extends Serializable {
    * @param numPartitions number of partitions
    * @param numIterations number of iterations
    * @param seed initial seed for random generator
+   * @param windowSize size of window
    * @return A handle to java Word2VecModelWrapper instance at python side
    */
   def trainWord2VecModel(
