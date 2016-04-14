@@ -147,6 +147,118 @@ class HiveDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
+  test("alter views - rename") {
+    val tabName = "tab1"
+    withTable(tabName) {
+      sqlContext.range(10).write.saveAsTable(tabName)
+      val oldViewName = "view1"
+      val newViewName = "view2"
+      withView(oldViewName, newViewName) {
+        val catalog = hiveContext.sessionState.catalog
+        sql(s"CREATE VIEW $oldViewName AS SELECT * FROM $tabName")
+
+        assert(catalog.tableExists(TableIdentifier(oldViewName)))
+        assert(!catalog.tableExists(TableIdentifier(newViewName)))
+        sql(s"ALTER VIEW $oldViewName RENAME TO $newViewName")
+        assert(!catalog.tableExists(TableIdentifier(oldViewName)))
+        assert(catalog.tableExists(TableIdentifier(newViewName)))
+      }
+    }
+  }
+
+  test("alter views - set/unset tblproperties") {
+    val tabName = "tab1"
+    withTable(tabName) {
+      sqlContext.range(10).write.saveAsTable(tabName)
+      val viewName = "view1"
+      withView(viewName) {
+        val catalog = hiveContext.sessionState.catalog
+        sql(s"CREATE VIEW $viewName AS SELECT * FROM $tabName")
+
+        assert(catalog.getTableMetadata(TableIdentifier(viewName))
+          .properties.filter(_._1 != "transient_lastDdlTime") == Map())
+        sql(s"ALTER VIEW $viewName SET TBLPROPERTIES ('p' = 'an')")
+        assert(catalog.getTableMetadata(TableIdentifier(viewName))
+          .properties.filter(_._1 != "transient_lastDdlTime") == Map("p" -> "an"))
+
+        // no exception or message will be issued if we set it again
+        sql(s"ALTER VIEW $viewName SET TBLPROPERTIES ('p' = 'an')")
+        assert(catalog.getTableMetadata(TableIdentifier(viewName))
+          .properties.filter(_._1 != "transient_lastDdlTime") == Map("p" -> "an"))
+
+        // the value will be updated if we set the same key to a different value
+        sql(s"ALTER VIEW $viewName SET TBLPROPERTIES ('p' = 'b')")
+        assert(catalog.getTableMetadata(TableIdentifier(viewName))
+          .properties.filter(_._1 != "transient_lastDdlTime") == Map("p" -> "b"))
+
+        sql(s"ALTER VIEW $viewName UNSET TBLPROPERTIES ('p')")
+        assert(catalog.getTableMetadata(TableIdentifier(viewName))
+          .properties.filter(_._1 != "transient_lastDdlTime") == Map())
+
+        val message = intercept[AnalysisException] {
+          sql(s"ALTER VIEW $viewName UNSET TBLPROPERTIES ('p')")
+        }.getMessage
+        assert(message.contains(
+          "attempted to unset non-existent property 'p' in table '`view1`'"))
+      }
+    }
+  }
+
+  test("alter views and alter table - misuse") {
+    val tabName = "tab1"
+    withTable(tabName) {
+      sqlContext.range(10).write.saveAsTable(tabName)
+      val oldViewName = "view1"
+      val newViewName = "view2"
+      withView(oldViewName, newViewName) {
+        val catalog = hiveContext.sessionState.catalog
+        sql(s"CREATE VIEW $oldViewName AS SELECT * FROM $tabName")
+
+        assert(catalog.tableExists(TableIdentifier(tabName)))
+        assert(catalog.tableExists(TableIdentifier(oldViewName)))
+
+        var message = intercept[AnalysisException] {
+          sql(s"ALTER VIEW $tabName RENAME TO $newViewName")
+        }.getMessage
+        assert(message.contains(
+          "Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead"))
+
+        message = intercept[AnalysisException] {
+          sql(s"ALTER VIEW $tabName SET TBLPROPERTIES ('p' = 'an')")
+        }.getMessage
+        assert(message.contains(
+          "Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead"))
+
+        message = intercept[AnalysisException] {
+          sql(s"ALTER VIEW $tabName UNSET TBLPROPERTIES ('p')")
+        }.getMessage
+        assert(message.contains(
+          "Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead"))
+
+        message = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $oldViewName RENAME TO $newViewName")
+        }.getMessage
+        assert(message.contains(
+          "Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead"))
+
+        message = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $oldViewName SET TBLPROPERTIES ('p' = 'an')")
+        }.getMessage
+        assert(message.contains(
+          "Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead"))
+
+        message = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $oldViewName UNSET TBLPROPERTIES ('p')")
+        }.getMessage
+        assert(message.contains(
+          "Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead"))
+
+        assert(catalog.tableExists(TableIdentifier(tabName)))
+        assert(catalog.tableExists(TableIdentifier(oldViewName)))
+      }
+    }
+  }
+
   test("drop table using drop view") {
     withTable("tab1") {
       sql("CREATE TABLE tab1(c1 int)")
