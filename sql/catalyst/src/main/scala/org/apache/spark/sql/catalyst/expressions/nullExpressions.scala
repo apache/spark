@@ -150,32 +150,17 @@ case class NullIf(left: Expression, right: Expression) extends BinaryExpression 
   override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     val leftGen = left.gen(ctx)
     val rightGen = right.gen(ctx)
-    dataType match {
-      case DoubleType | FloatType | IntegerType =>
-        s"""
-          ${leftGen.code}
-          ${rightGen.code}
-          boolean ${ev.isNull} = false;
-          ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-          if (${leftGen.value} == ${rightGen.value}) {
-            ${ev.isNull} = true;
-          } else {
-            ${ev.value} = ${leftGen.value};
-          }
-        """
-      case _ =>
-        s"""
-          ${leftGen.code}
-          ${rightGen.code}
-          boolean ${ev.isNull} = false;
-          ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-          if (${leftGen.value} != null && ${leftGen.value}.equals(${rightGen.value})) {
-            ${ev.isNull} = true;
-          } else {
-            ${ev.value} = ${leftGen.value};
-          }
-        """
-    }
+    s"""
+      ${leftGen.code}
+      ${rightGen.code}
+      boolean ${ev.isNull} = false;
+      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+      if (${ctx.genEqual(dataType, leftGen.value, rightGen.value)}) {
+        ${ev.isNull} = true;
+      } else {
+        ${ev.value} = ${leftGen.value};
+      }
+    """
   }
 }
 
