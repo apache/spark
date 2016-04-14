@@ -322,12 +322,13 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
     assert(stage1Data.inputBytes == 207)
     assert(stage0Data.outputBytes == 116)
     assert(stage1Data.outputBytes == 208)
-    assert(stage0Data.taskData.get(1234L).get.metrics.get.shuffleReadMetrics.get
-      .totalBlocksFetched == 2)
-    assert(stage0Data.taskData.get(1235L).get.metrics.get.shuffleReadMetrics.get
-      .totalBlocksFetched == 102)
-    assert(stage1Data.taskData.get(1236L).get.metrics.get.shuffleReadMetrics.get
-      .totalBlocksFetched == 202)
+
+    assert(
+      stage0Data.taskData.get(1234L).get.metrics.get.shuffleReadMetrics.totalBlocksFetched == 2)
+    assert(
+      stage0Data.taskData.get(1235L).get.metrics.get.shuffleReadMetrics.totalBlocksFetched == 102)
+    assert(
+      stage1Data.taskData.get(1236L).get.metrics.get.shuffleReadMetrics.totalBlocksFetched == 202)
 
     // task that was included in a heartbeat
     listener.onTaskEnd(SparkListenerTaskEnd(0, 0, taskType, Success, makeTaskInfo(1234L, 1),
@@ -355,9 +356,9 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
     assert(stage1Data.inputBytes == 614)
     assert(stage0Data.outputBytes == 416)
     assert(stage1Data.outputBytes == 616)
-    assert(stage0Data.taskData.get(1234L).get.metrics.get.shuffleReadMetrics.get
-      .totalBlocksFetched == 302)
-    assert(stage1Data.taskData.get(1237L).get.metrics.get.shuffleReadMetrics.get
-      .totalBlocksFetched == 402)
+    assert(
+      stage0Data.taskData.get(1234L).get.metrics.get.shuffleReadMetrics.totalBlocksFetched == 302)
+    assert(
+      stage1Data.taskData.get(1237L).get.metrics.get.shuffleReadMetrics.totalBlocksFetched == 402)
   }
 }

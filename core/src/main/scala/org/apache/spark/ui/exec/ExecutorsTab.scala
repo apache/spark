@@ -131,10 +131,8 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener, conf: Spar
           executorToOutputRecords(eid) =
             executorToOutputRecords.getOrElse(eid, 0L) + outputMetrics.recordsWritten
         }
-        metrics.shuffleReadMetrics.foreach { shuffleRead =>
-          executorToShuffleRead(eid) =
-            executorToShuffleRead.getOrElse(eid, 0L) + shuffleRead.remoteBytesRead
-        }
+        executorToShuffleRead(eid) =
+          executorToShuffleRead.getOrElse(eid, 0L) + metrics.shuffleReadMetrics.remoteBytesRead
         metrics.shuffleWriteMetrics.foreach { shuffleWrite =>
           executorToShuffleWrite(eid) =
             executorToShuffleWrite.getOrElse(eid, 0L) + shuffleWrite.bytesWritten

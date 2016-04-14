@@ -55,9 +55,9 @@ class StatsReportListener extends SparkListener with Logging {
 
     // Fetch & I/O
     showMillisDistribution("fetch wait time:",
-      (_, metric) => metric.shuffleReadMetrics.map(_.fetchWaitTime), taskInfoMetrics)
+      (_, metric) => Some(metric.shuffleReadMetrics.fetchWaitTime), taskInfoMetrics)
     showBytesDistribution("remote bytes read:",
-      (_, metric) => metric.shuffleReadMetrics.map(_.remoteBytesRead), taskInfoMetrics)
+      (_, metric) => Some(metric.shuffleReadMetrics.remoteBytesRead), taskInfoMetrics)
     showBytesDistribution("task result size:",
       (_, metric) => Some(metric.resultSize), taskInfoMetrics)
 
@@ -190,7 +190,7 @@ private case class RuntimePercentage(executorPct: Double, fetchPct: Option[Doubl
 private object RuntimePercentage {
   def apply(totalTime: Long, metrics: TaskMetrics): RuntimePercentage = {
     val denom = totalTime.toDouble
-    val fetchTime = metrics.shuffleReadMetrics.map(_.fetchWaitTime)
+    val fetchTime = Some(metrics.shuffleReadMetrics.fetchWaitTime)
     val fetch = fetchTime.map(_ / denom)
     val exec = (metrics.executorRunTime - fetchTime.getOrElse(0L)) / denom
     val other = 1.0 - (exec + fetch.getOrElse(0d))
