@@ -92,9 +92,9 @@ private[execution] object HashedRelation {
       new TaskMemoryManager(
         new StaticMemoryManager(
           new SparkConf().set("spark.memory.offHeap.enabled", "false"),
-          Long.MaxValue,
-          Long.MaxValue,
-          1),
+          numCores = 1,
+          totalHeapMemory = Long.MaxValue,
+          totalOffHeapMemory = 0L),
         0)
     }
 
@@ -362,9 +362,9 @@ private[execution] final class LongToUnsafeRowMap(var mm: TaskMemoryManager, cap
       new TaskMemoryManager(
         new StaticMemoryManager(
           new SparkConf().set("spark.memory.offHeap.enabled", "false"),
-          Long.MaxValue,
-          Long.MaxValue,
-          1),
+          numCores = 1,
+          totalHeapMemory = Long.MaxValue,
+          totalOffHeapMemory = 0),
         0),
       0)
   }
