@@ -31,6 +31,7 @@ import org.apache.parquet.hadoop.ParquetOutputCommitter
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
+import org.apache.spark.sql.execution.DataSourceScan
 import org.apache.spark.sql.execution.datasources.{FileScanRDD, LogicalRelation}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
@@ -688,16 +689,9 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
           .option("dataSchema", df1.schema.json)
           .load(path)
 
-        val Some(fileScanRDD) = {
-          def allRDDsInDAG(rdd: RDD[_]): Seq[RDD[_]] = {
-            rdd +: rdd.dependencies.map(_.rdd).flatMap(allRDDsInDAG)
-          }
-
-          // We have to search for the `FileScanRDD` along the RDD DAG since
-          // RDD.preferredLocations doesn't propagate along the DAG to the root RDD.
-          allRDDsInDAG(df2.rdd).collectFirst {
-            case f: FileScanRDD => f
-          }
+        val Some(fileScanRDD) = df2.queryExecution.executedPlan.collectFirst {
+          case scan: DataSourceScan if scan.rdd.isInstanceOf[FileScanRDD] =>
+            scan.rdd.asInstanceOf[FileScanRDD]
         }
 
         val partitions = fileScanRDD.partitions

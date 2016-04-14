@@ -121,7 +121,7 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
           val bucketed =
             selectedPartitions.flatMap { p =>
               p.files.map { f =>
-                val hosts = getBlockHosts(getBlockLocations(f), 0)
+                val hosts = getBlockHosts(getBlockLocations(f), 0, f.getLen)
                 PartitionedFile(p.values, f.getPath.toUri.toString, 0, f.getLen, hosts)
               }
             }.groupBy { f =>
@@ -146,9 +146,7 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
               (0L to file.getLen by maxSplitBytes).map { offset =>
                 val remaining = file.getLen - offset
                 val size = if (remaining > maxSplitBytes) maxSplitBytes else remaining
-                // Finds out a list of location hosts where lives the first block that contains the
-                // starting point the file block starts at `offset` with length `size`.
-                val hosts = getBlockHosts(blockLocations, offset)
+                val hosts = getBlockHosts(blockLocations, offset, size)
                 PartitionedFile(partition.values, file.getPath.toUri.toString, offset, size, hosts)
               }
             }
@@ -220,20 +218,37 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
     case f => Array.empty[BlockLocation]
   }
 
-  // Given locations of all blocks of a single file, `blockLocations`, and an `offset` position of
-  // the same file, find out the index of the block that contains this `offset`. If no such block
-  // can be found, returns -1.
-  private def getBlockIndex(blockLocations: Array[BlockLocation], offset: Long): Int = {
-    blockLocations.indexWhere { b =>
-      b.getOffset <= offset && offset < b.getOffset + b.getLength
-    }
-  }
+  // Given locations of all blocks of a single file, `blockLocations`, and an `(offset, length)`
+  // pair that represents a segment of the same file, find out the block that contains the largest
+  // fraction the segment, and returns location hosts of that block. If no such block can be found,
+  // returns an empty array.
+  private def getBlockHosts(
+      blockLocations: Array[BlockLocation], offset: Long, length: Long): Array[String] = {
+    val candidates = blockLocations.map {
+      // The fragment starts from a position within this block
+      case b if b.getOffset <= offset && offset < b.getOffset + b.getLength =>
+        b.getHosts -> (b.getOffset + b.getLength - offset).min(length)
 
-  // Given locations of all blocks of a single file, `blockLocations`, and an `offset` position of
-  // the same file, find out the block that contains this `offset`, and returns location hosts of
-  // that block. If no such block can be found, returns an empty array.
-  private def getBlockHosts(blockLocations: Array[BlockLocation], offset: Long): Array[String] = {
-    val index = getBlockIndex(blockLocations, offset)
-    if (index < 0) Array.empty[String] else blockLocations(index).getHosts
+      // The fragment ends at a position within this block
+      case b if offset <= b.getOffset && offset + length < b.getLength =>
+        b.getHosts -> (offset + length - b.getOffset).min(length)
+
+      // The fragment fully contains this block
+      case b if offset <= b.getOffset && b.getOffset + b.getLength <= offset + length =>
+        b.getHosts -> b.getLength
+
+      // The fragment doesn't intersect with this block
+      case b =>
+        b.getHosts -> 0L
+    }.filter { case (hosts, size) =>
+      size > 0L
+    }
+
+    if (candidates.isEmpty) {
+      Array.empty[String]
+    } else {
+      val (hosts, _) = candidates.maxBy { case (_, size) => size }
+      hosts
+    }
   }
 }

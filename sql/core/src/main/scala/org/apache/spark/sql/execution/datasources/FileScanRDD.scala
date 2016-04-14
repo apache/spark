@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import scala.collection.mutable
+
 import org.apache.spark.{Partition, TaskContext}
 import org.apache.spark.rdd.{InputFileNameHolder, RDD}
 import org.apache.spark.sql.SQLContext
@@ -89,6 +91,20 @@ class FileScanRDD(
 
   override protected def getPreferredLocations(split: Partition): Seq[String] = {
     val files = split.asInstanceOf[FilePartition].files
-    if (files.isEmpty) Seq.empty else files.maxBy(_.length).locations
+
+    // Computes total number of bytes can be retrieved from each host.
+    val hostToNumBytes = mutable.HashMap.empty[String, Long]
+    files.foreach { file =>
+      file.locations foreach { host =>
+        hostToNumBytes(host) = hostToNumBytes.getOrElse(host, 0L) + file.length
+      }
+    }
+
+    // Takes the first 3 hosts with the most data to be retrieved
+    hostToNumBytes.toSeq.sortBy {
+      case (host, numBytes) => numBytes
+    }.take(3).map {
+      case (host, numBytes) => host
+    }
   }
 }
