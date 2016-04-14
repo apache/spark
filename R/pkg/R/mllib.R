@@ -101,11 +101,52 @@ setMethod("summary", signature(object = "GeneralizedLinearRegressionModel"),
             jobj <- object@jobj
             features <- callJMethod(jobj, "rFeatures")
             coefficients <- callJMethod(jobj, "rCoefficients")
-            coefficients <- as.matrix(unlist(coefficients))
-            colnames(coefficients) <- c("Estimate")
+            deviance.resid <- callJMethod(jobj, "rDevianceResiduals")
+            dispersion <- callJMethod(jobj, "rDispersion")
+            null.deviance <- callJMethod(jobj, "rNullDeviance")
+            deviance <- callJMethod(jobj, "rDeviance")
+            df.null <- callJMethod(jobj, "rResidualDegreeOfFreedomNull")
+            df.residual <- callJMethod(jobj, "rResidualDegreeOfFreedom")
+            aic <- callJMethod(jobj, "rAic")
+            iter <- callJMethod(jobj, "rNumIterations")
+            family <- callJMethod(jobj, "rFamily")
+
+            deviance.resid <- dataFrame(deviance.resid)
+            coefficients <- matrix(coefficients, ncol = 4)
+            colnames(coefficients) <- c("Estimate", "Std. Error", "t value", "Pr(>|t|)")
             rownames(coefficients) <- unlist(features)
-            return(list(coefficients = coefficients))
+            ans <- list(deviance.resid = deviance.resid, coefficients = coefficients,
+                        dispersion = dispersion, null.deviance = null.deviance,
+                        deviance = deviance, df.null = df.null, df.residual = df.residual,
+                        aic = aic, iter = iter, family = family)
+            class(ans) <- "summary.GeneralizedLinearRegressionModel"
+            return(ans)
           })
+
+#' @rdname print
+#' @name print.summary.GeneralizedLinearRegressionModel
+#' @export
+print.summary.GeneralizedLinearRegressionModel <- function(x, digits = max(3L, getOption("digits") - 3L), ...) {
+    x$deviance.resid <- setNames(unlist(approxQuantile(x$deviance.resid, "devianceResiduals",
+                                 c(0.0, 0.25, 0.5, 0.75, 1.0), 0.0)),
+                                 c("Min", "1Q", "Median", "3Q", "Max"))
+    xx <- zapsmall(x$deviance.resid, digits + 1L)
+    cat("\nDeviance Residuals: \n")
+    print.default(xx, digits = digits, na.print = "", print.gap = 2L)
+
+    cat("\nCoefficients:\n")
+    print.default(x$coefficients, digits = digits + 1L, na.print = "", print.gap = 2L)
+
+    cat("\n(Dispersion parameter for ", x$family, " family taken to be ", format(x$dispersion),
+        ")\n\n", apply(cbind(paste(format(c("Null","Residual"), justify="right"), "deviance:"),
+        format(unlist(x[c("null.deviance","deviance")]), digits = max(5L, digits + 1L)),
+        " on", format(unlist(x[c("df.null","df.residual")])), " degrees of freedom\n"),
+        1L, paste, collapse = " "), sep = "")
+    cat("AIC: ", format(x$aic, digits = max(4L, digits + 1L)),"\n\n",
+        "Number of Fisher Scoring iterations: ", x$iter, "\n", sep = "")
+    cat("\n")
+    invisible(x)
+  }
 
 #' Make predictions from a generalized linear model
 #'
