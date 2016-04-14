@@ -27,7 +27,7 @@ import org.scalatest.mock.MockitoSugar.mock
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.Pipeline.SharedReadWrite
 import org.apache.spark.ml.feature.{HashingTF, MinMaxScaler}
-import org.apache.spark.ml.param.{IntParam, ParamMap}
+import org.apache.spark.ml.param.{IntParam, ParamMap, ParamPair}
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
@@ -51,11 +51,11 @@ class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     val dataset3 = mock[DataFrame]
     val dataset4 = mock[DataFrame]
 
-    when(dataset0.toDF).thenReturn(dataset0)
-    when(dataset1.toDF).thenReturn(dataset1)
-    when(dataset2.toDF).thenReturn(dataset2)
-    when(dataset3.toDF).thenReturn(dataset3)
-    when(dataset4.toDF).thenReturn(dataset4)
+    when(dataset0.toDF()).thenReturn(dataset0)
+    when(dataset1.toDF()).thenReturn(dataset1)
+    when(dataset2.toDF()).thenReturn(dataset2)
+    when(dataset3.toDF()).thenReturn(dataset3)
+    when(dataset4.toDF()).thenReturn(dataset4)
 
     when(estimator0.copy(any[ParamMap])).thenReturn(estimator0)
     when(model0.copy(any[ParamMap])).thenReturn(model0)
@@ -192,14 +192,27 @@ class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     ).toDF("id", "features", "label")
 
     intercept[IllegalArgumentException] {
-       val scaler = new MinMaxScaler()
-         .setInputCol("features")
-         .setOutputCol("features_scaled")
-         .setMin(10)
-         .setMax(0)
-       val pipeline = new Pipeline().setStages(Array(scaler))
-       pipeline.fit(df)
+      val scaler = new MinMaxScaler()
+        .setInputCol("features")
+        .setOutputCol("features_scaled")
+        .setMin(10)
+        .setMax(0)
+      val pipeline = new Pipeline().setStages(Array(scaler))
+      pipeline.fit(df)
     }
+  }
+
+  test("Pipeline.setStages should handle Java Arrays being non-covariant") {
+    val stages0 = Array(new UnWritableStage("b"))
+    val stages1 = Array(new WritableStage("a"))
+    val steps = stages0 ++ stages1
+    val p = new Pipeline().setStages(steps)
+
+    p.stages.w(steps)
+    new ParamPair(p.stages, steps)
+    // These
+    //val pp: ParamPair[Array[PipelineStage]] = p.stages -> steps
+    //p.set(p.stages -> steps)
   }
 }
 
@@ -219,7 +232,7 @@ class WritableStage(override val uid: String) extends Transformer with MLWritabl
 
   override def write: MLWriter = new DefaultParamsWriter(this)
 
-  override def transform(dataset: Dataset[_]): DataFrame = dataset.toDF
+  override def transform(dataset: Dataset[_]): DataFrame = dataset.toDF()
 
   override def transformSchema(schema: StructType): StructType = schema
 }
@@ -240,7 +253,7 @@ class UnWritableStage(override val uid: String) extends Transformer {
 
   override def copy(extra: ParamMap): UnWritableStage = defaultCopy(extra)
 
-  override def transform(dataset: Dataset[_]): DataFrame = dataset.toDF
+  override def transform(dataset: Dataset[_]): DataFrame = dataset.toDF()
 
   override def transformSchema(schema: StructType): StructType = schema
 }

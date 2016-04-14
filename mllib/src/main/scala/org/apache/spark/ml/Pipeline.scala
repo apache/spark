@@ -103,7 +103,10 @@ class Pipeline @Since("1.4.0") (
 
   /** @group setParam */
   @Since("1.2.0")
-  def setStages(value: Array[PipelineStage]): this.type = { set(stages, value); this }
+  def setStages(value: Array[_ <: PipelineStage]): this.type = {
+    set(stages, value.asInstanceOf[Array[PipelineStage]])
+    this
+  }
 
   // Below, we clone stages so that modifications to the list of stages will not change
   // the Param value in the Pipeline.
@@ -294,7 +297,7 @@ class PipelineModel private[ml] (
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    stages.foldLeft(dataset.toDF)((cur, transformer) => transformer.transform(cur))
+    stages.foldLeft(dataset.toDF())((cur, transformer) => transformer.transform(cur))
   }
 
   @Since("1.2.0")
