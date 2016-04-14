@@ -2237,6 +2237,13 @@
           <inputEncoding>${project.build.sourceEncoding}</inputEncoding>
           <outputEncoding>${project.reporting.outputEncoding}</outputEncoding>
         </configuration>
+        <dependencies>
+          <dependency>
+            <groupId>org.apache.spark</groupId>
+            <artifactId>scala_style_checker</artifactId>
+            <version>${project.version}</version>
+          </dependency>
+        </dependencies>
         <executions>
           <execution>
             <goals>
