@@ -19,12 +19,9 @@ package org.apache.spark.sql.hive.execution
 
 import java.sql.{Date, Timestamp}
 
-import scala.collection.JavaConverters._
-
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, FunctionRegistry}
-import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.{HiveContext, MetastoreRelation}
@@ -203,8 +200,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     checkAnswer(sql("SHOW functions abc.abs"), Row("abs"))
     checkAnswer(sql("SHOW functions `abc`.`abs`"), Row("abs"))
     checkAnswer(sql("SHOW functions `abc`.`abs`"), Row("abs"))
-    // TODO: Re-enable this test after we fix SPARK-14335.
-    // checkAnswer(sql("SHOW functions `~`"), Row("~"))
+    checkAnswer(sql("SHOW functions `~`"), Row("~"))
     checkAnswer(sql("SHOW functions `a function doens't exist`"), Nil)
     checkAnswer(sql("SHOW functions `weekofyea*`"), Row("weekofyear"))
     // this probably will failed if we add more function with `sha` prefixing.
@@ -236,11 +232,28 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     checkExistence(sql("describe functioN abcadf"), true,
       "Function: abcadf not found.")
 
-    // TODO: Re-enable this test after we fix SPARK-14335.
-    // checkExistence(sql("describe functioN  `~`"), true,
-    //  "Function: ~",
-    //  "Class: org.apache.hadoop.hive.ql.udf.UDFOPBitNot",
-    //  "Usage: ~ n - Bitwise not")
+    checkExistence(sql("describe functioN  `~`"), true,
+      "Function: ~",
+      "Class: org.apache.spark.sql.catalyst.expressions.BitwiseNot",
+      "Usage: ~ b - Bitwise NOT.")
+
+    // Hard coded describe functions
+    checkExistence(sql("describe function  `<>`"), true,
+      "Function: <>",
+      "Usage: a <> b - Returns TRUE if a is not equal to b")
+
+    checkExistence(sql("describe function  `!=`"), true,
+      "Function: !=",
+      "Usage: a != b - Returns TRUE if a is not equal to b")
+
+    checkExistence(sql("describe function  `between`"), true,
+      "Function: between",
+      "Usage: a [NOT] BETWEEN b AND c - evaluate if a is [not] in between b and c")
+
+    checkExistence(sql("describe function  `case`"), true,
+      "Function: case",
+      "Usage: CASE a WHEN b THEN c [WHEN d THEN e]* [ELSE f] END - " +
+        "When a = b, returns c; when a = d, return e; else return f")
   }
 
   test("SPARK-5371: union with null and sum") {
@@ -347,7 +360,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       var message = intercept[AnalysisException] {
         sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
       }.getMessage
-      assert(message.contains("ctas1 already exists"))
+      assert(message.contains("already exists"))
       checkRelation("ctas1", true)
       sql("DROP TABLE ctas1")
 
@@ -1475,7 +1488,6 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         sql(
           """CREATE VIEW IF NOT EXISTS
             |default.testView (c1 COMMENT 'blabla', c2 COMMENT 'blabla')
-            |COMMENT 'blabla'
             |TBLPROPERTIES ('a' = 'b')
             |AS SELECT * FROM jt""".stripMargin)
         checkAnswer(sql("SELECT c1, c2 FROM testView ORDER BY c1"), (1 to 9).map(i => Row(i, i)))
@@ -1835,6 +1847,52 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           sqlContext.table("dest2"),
           sql("SELECT col FROM source LATERAL VIEW EXPLODE(arr) exp AS col WHERE col > 3"))
       }
+    }
+  }
+
+  test(
+    "SPARK-14488 \"CREATE TEMPORARY TABLE ... USING ... AS SELECT ...\" " +
+    "shouldn't create persisted table"
+  ) {
+    withTempPath { dir =>
+      withTempTable("t1", "t2") {
+        val path = dir.getCanonicalPath
+        val ds = sqlContext.range(10)
+        ds.registerTempTable("t1")
+
+        sql(
+          s"""CREATE TEMPORARY TABLE t2
+             |USING PARQUET
+             |OPTIONS (PATH '$path')
+             |AS SELECT * FROM t1
+           """.stripMargin)
+
+        checkAnswer(
+          sqlContext.tables().select('isTemporary).filter('tableName === "t2"),
+          Row(true)
+        )
+
+        checkAnswer(table("t2"), table("t1"))
+      }
+    }
+  }
+
+  test(
+    "SPARK-14493 \"CREATE TEMPORARY TABLE ... USING ... AS SELECT ...\" " +
+    "shouldn always be used together with PATH data source option"
+  ) {
+    withTempTable("t") {
+      sqlContext.range(10).registerTempTable("t")
+
+      val message = intercept[IllegalArgumentException] {
+        sql(
+          s"""CREATE TEMPORARY TABLE t1
+             |USING PARQUET
+             |AS SELECT * FROM t
+           """.stripMargin)
+      }.getMessage
+
+      assert(message == "'path' is not specified")
     }
   }
 }

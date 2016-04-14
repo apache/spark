@@ -26,6 +26,7 @@ import org.junit.Test;
 
 import org.apache.spark.api.java.function.MapFunction;
 import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Encoder;
 import org.apache.spark.sql.Encoders;
 import org.apache.spark.sql.KeyValueGroupedDataset;
 import org.apache.spark.sql.expressions.Aggregator;
@@ -39,12 +40,10 @@ public class JavaDatasetAggregatorSuite extends JavaDatasetAggregatorSuiteBase {
   public void testTypedAggregationAnonClass() {
     KeyValueGroupedDataset<String, Tuple2<String, Integer>> grouped = generateGroupedDataset();
 
-    Dataset<Tuple2<String, Integer>> agged =
-      grouped.agg(new IntSumOf().toColumn(Encoders.INT(), Encoders.INT()));
+    Dataset<Tuple2<String, Integer>> agged = grouped.agg(new IntSumOf().toColumn());
     Assert.assertEquals(Arrays.asList(tuple2("a", 3), tuple2("b", 3)), agged.collectAsList());
 
-    Dataset<Tuple2<String, Integer>> agged2 = grouped.agg(
-      new IntSumOf().toColumn(Encoders.INT(), Encoders.INT()))
+    Dataset<Tuple2<String, Integer>> agged2 = grouped.agg(new IntSumOf().toColumn())
       .as(Encoders.tuple(Encoders.STRING(), Encoders.INT()));
     Assert.assertEquals(
       Arrays.asList(
@@ -72,6 +71,16 @@ public class JavaDatasetAggregatorSuite extends JavaDatasetAggregatorSuiteBase {
     @Override
     public Integer finish(Integer reduction) {
       return reduction;
+    }
+
+    @Override
+    public Encoder<Integer> bufferEncoder() {
+      return Encoders.INT();
+    }
+
+    @Override
+    public Encoder<Integer> outputEncoder() {
+      return Encoders.INT();
     }
   }
 

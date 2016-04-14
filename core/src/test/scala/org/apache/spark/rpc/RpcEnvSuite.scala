@@ -127,9 +127,8 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
       override val rpcEnv = env
 
       override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
-        case msg: String => {
+        case msg: String =>
           context.reply(msg)
-        }
       }
     })
     val reply = rpcEndpointRef.askWithRetry[String]("hello")
@@ -141,9 +140,8 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
       override val rpcEnv = env
 
       override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
-        case msg: String => {
+        case msg: String =>
           context.reply(msg)
-        }
       }
     })
 
@@ -164,10 +162,9 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
       override val rpcEnv = env
 
       override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
-        case msg: String => {
+        case msg: String =>
           Thread.sleep(100)
           context.reply(msg)
-        }
       }
     })
 
@@ -317,10 +314,9 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
       override val rpcEnv = env
 
       override def receive: PartialFunction[Any, Unit] = {
-        case m => {
+        case m =>
           self
           callSelfSuccessfully = true
-        }
       }
     })
 
@@ -682,9 +678,8 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
         override val rpcEnv = localEnv
 
         override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
-          case msg: String => {
+          case msg: String =>
             context.reply(msg)
-          }
         }
       })
       val rpcEndpointRef = remoteEnv.setupEndpointRef(localEnv.address, "ask-authentication")

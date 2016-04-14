@@ -91,6 +91,8 @@ abstract class ExternalCatalog {
 
   def getTable(db: String, table: String): CatalogTable
 
+  def getTableOption(db: String, table: String): Option[CatalogTable]
+
   def tableExists(db: String, table: String): Boolean
 
   def listTables(db: String): Seq[String]
@@ -218,14 +220,30 @@ case class CatalogTable(
     tableType: CatalogTableType,
     storage: CatalogStorageFormat,
     schema: Seq[CatalogColumn],
-    partitionColumns: Seq[CatalogColumn] = Seq.empty,
-    sortColumns: Seq[CatalogColumn] = Seq.empty,
-    numBuckets: Int = 0,
+    partitionColumnNames: Seq[String] = Seq.empty,
+    sortColumnNames: Seq[String] = Seq.empty,
+    bucketColumnNames: Seq[String] = Seq.empty,
+    numBuckets: Int = -1,
     createTime: Long = System.currentTimeMillis,
-    lastAccessTime: Long = System.currentTimeMillis,
+    lastAccessTime: Long = -1,
     properties: Map[String, String] = Map.empty,
     viewOriginalText: Option[String] = None,
-    viewText: Option[String] = None) {
+    viewText: Option[String] = None,
+    comment: Option[String] = None) {
+
+  // Verify that the provided columns are part of the schema
+  private val colNames = schema.map(_.name).toSet
+  private def requireSubsetOfSchema(cols: Seq[String], colType: String): Unit = {
+    require(cols.toSet.subsetOf(colNames), s"$colType columns (${cols.mkString(", ")}) " +
+      s"must be a subset of schema (${colNames.mkString(", ")}) in table '$identifier'")
+  }
+  requireSubsetOfSchema(partitionColumnNames, "partition")
+  requireSubsetOfSchema(sortColumnNames, "sort")
+  requireSubsetOfSchema(bucketColumnNames, "bucket")
+
+  /** Columns this table is partitioned by. */
+  def partitionColumns: Seq[CatalogColumn] =
+    schema.filter { c => partitionColumnNames.contains(c.name) }
 
   /** Return the database this table was specified to belong to, assuming it exists. */
   def database: String = identifier.database.getOrElse {

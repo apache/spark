@@ -18,6 +18,7 @@
 package org.apache.spark.scheduler
 
 import java.nio.ByteBuffer
+import java.util.Properties
 
 import scala.language.existentials
 
@@ -42,6 +43,7 @@ import org.apache.spark.shuffle.ShuffleWriter
  * @param _initialAccums initial set of accumulators to be used in this task for tracking
  *                       internal metrics. Other accumulators will be registered later when
  *                       they are deserialized on the executors.
+ * @param localProperties copy of thread-local properties set by the user on the driver side.
  */
 private[spark] class ShuffleMapTask(
     stageId: Int,
@@ -49,13 +51,14 @@ private[spark] class ShuffleMapTask(
     taskBinary: Broadcast[Array[Byte]],
     partition: Partition,
     @transient private var locs: Seq[TaskLocation],
-    _initialAccums: Seq[Accumulator[_]])
-  extends Task[MapStatus](stageId, stageAttemptId, partition.index, _initialAccums)
+    _initialAccums: Seq[Accumulator[_]],
+    localProperties: Properties)
+  extends Task[MapStatus](stageId, stageAttemptId, partition.index, _initialAccums, localProperties)
   with Logging {
 
   /** A constructor used only in test suites. This does not require passing in an RDD. */
   def this(partitionId: Int) {
-    this(0, 0, null, new Partition { override def index: Int = 0 }, null, null)
+    this(0, 0, null, new Partition { override def index: Int = 0 }, null, null, new Properties)
   }
 
   @transient private val preferredLocs: Seq[TaskLocation] = {
