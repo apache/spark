@@ -593,10 +593,7 @@ class HDFSFileCatalog(
     }
 
     if (partitionPruningPredicates.nonEmpty) {
-      val predicate =
-        partitionPruningPredicates
-            .reduceOption(expressions.And)
-            .getOrElse(Literal(true))
+      val predicate = partitionPruningPredicates.reduce(expressions.And)
 
       val boundPredicate = InterpretedPredicate.create(predicate.transform {
         case a: AttributeReference =>
