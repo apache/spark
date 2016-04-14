@@ -236,15 +236,6 @@ class HiveDDLCommandSuite extends PlanTest {
           |FROM testData
         """.stripMargin)
     }
-    intercept[ParseException] {
-      parser.parsePlan(
-        """
-          |CREATE OR REPLACE VIEW IF NOT EXISTS view1 (col1, col3)
-          |COMMENT 'blabla'
-          |TBLPROPERTIES('prop1Key'="prop1Val")
-          |AS SELECT * FROM tab1
-        """.stripMargin)
-    }
   }
 
   test("Invalid interval term should throw AnalysisException") {
@@ -532,6 +523,7 @@ class HiveDDLCommandSuite extends PlanTest {
       """
         |CREATE OR REPLACE VIEW IF NOT EXISTS view1
         |(col1, col3)
+        |COMMENT 'BLABLA'
         |TBLPROPERTIES('prop1Key'="prop1Val")
         |AS SELECT * FROM tab1
       """.stripMargin
@@ -551,6 +543,7 @@ class HiveDDLCommandSuite extends PlanTest {
     assert(desc.storage.outputFormat.isEmpty)
     assert(desc.storage.serde.isEmpty)
     assert(desc.properties == Map("prop1Key" -> "prop1Val"))
+    assert(desc.comment == Option("BLABLA"))
   }
 
   test("create view -- partitioned view") {
