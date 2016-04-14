@@ -218,11 +218,13 @@ private[spark] object ClosureCleaner extends Logging {
     var outerPairs: List[(Class[_], AnyRef)] = (outerClasses zip outerObjects).reverse
     var parent: AnyRef = null
     if (outerPairs.size > 0) {
-      if (isClosure(outerPairs.head._1)) {
-        logDebug(s" + outermost object is a closure, so we just keep it: ${outerPairs.head}")
-      } else if (outerPairs.head._1.getName.startsWith("$line")) {
-        logDebug(" + outermost object is a REPL line object, so we just keep it: " +
-          outerPairs.head)
+      val (outermostClass, outermostObject) = outerPairs.head
+      if (isClosure(outermostClass)) {
+        logDebug(s" + outermost object is a closure, so we clone it: ${outerPairs.head}")
+      } else if (outermostClass.getName.startsWith("$line")) {
+        // SPARK-14558: if the outermost object is a REPL line object, we should clone and clean it
+        // as it may carray a lot of unnecessary information, e.g. hadoop conf, spark conf, etc.
+        logDebug(s" + outermost object is a REPL line object, so we clone it: ${outerPairs.head}")
       } else {
         // The closure is ultimately nested inside a class; keep the object of that
         // class without cloning it since we don't want to clone the user's objects.
@@ -230,7 +232,7 @@ private[spark] object ClosureCleaner extends Logging {
         // we need it to clone its child closure later (see below).
         logDebug(" + outermost object is not a closure or REPL line object, so do not clone it: " +
           outerPairs.head)
-        parent = outerPairs.head._2 // e.g. SparkContext
+        parent = outermostObject // e.g. SparkContext
         outerPairs = outerPairs.tail
       }
     } else {
