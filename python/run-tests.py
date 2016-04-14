@@ -167,8 +167,6 @@ def main():
             print("Error: unrecognized module '%s'. Supported modules: %s" %
                   (module_name, ", ".join(python_modules)))
             sys.exit(-1)
-    #TODO REMOVE
-    modules_to_test = [modules_to_test[0]]
     LOGGER.info("Will test against the following Python executables: %s", python_execs)
     LOGGER.info("Will test the following Python modules: %s", [x.name for x in modules_to_test])
 
