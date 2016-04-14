@@ -110,6 +110,24 @@ class HiveDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
+  test("create table and view with comment") {
+    val catalog = hiveContext.sessionState.catalog
+    val tabName = "tab1"
+    withTable(tabName) {
+      sql(s"CREATE TABLE $tabName(c1 int) COMMENT 'BLABLA'")
+      val viewName = "view1"
+      withView(viewName) {
+        sql(s"CREATE VIEW $viewName COMMENT 'no comment' AS SELECT * FROM $tabName")
+        val tableMetadata = catalog.getTableMetadata(TableIdentifier(tabName, Some("default")))
+        val viewMetadata = catalog.getTableMetadata(TableIdentifier(viewName, Some("default")))
+        assert(tableMetadata.properties.filter(_._1 != "transient_lastDdlTime")
+          == Map("comment" -> "BLABLA"))
+        assert(viewMetadata.properties.filter(_._1 != "transient_lastDdlTime")
+          == Map("comment" -> "no comment"))
+      }
+    }
+  }
+
   test("drop views") {
     withTable("tab1") {
       val tabName = "tab1"

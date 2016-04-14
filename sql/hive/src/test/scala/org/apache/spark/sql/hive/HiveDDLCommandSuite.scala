@@ -542,7 +542,8 @@ class HiveDDLCommandSuite extends PlanTest {
     assert(desc.storage.inputFormat.isEmpty)
     assert(desc.storage.outputFormat.isEmpty)
     assert(desc.storage.serde.isEmpty)
-    assert(desc.properties == Map("prop1Key" -> "prop1Val", "comment" -> "BLABLA"))
+    assert(desc.properties == Map("prop1Key" -> "prop1Val"))
+    assert(desc.comment == Option("BLABLA"))
   }
 
   test("create view -- partitioned view") {
