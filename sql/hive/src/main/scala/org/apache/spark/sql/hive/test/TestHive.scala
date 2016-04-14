@@ -41,7 +41,7 @@ import org.apache.spark.sql.execution.CacheManager
 import org.apache.spark.sql.execution.command.CacheTableCommand
 import org.apache.spark.sql.execution.ui.SQLListener
 import org.apache.spark.sql.hive._
-import org.apache.spark.sql.hive.client.{HiveClient, HiveClientImpl}
+import org.apache.spark.sql.hive.client.{HiveClient, HiveClientImpl, NonClosableMutableURLClassLoader}
 import org.apache.spark.sql.hive.execution.HiveNativeCommand
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.{ShutdownHookManager, Utils}
@@ -77,6 +77,7 @@ class TestHiveContext private[hive](
     listener: SQLListener,
     executionHive: HiveClientImpl,
     metadataHive: HiveClient,
+    jarClassLoader: NonClosableMutableURLClassLoader,
     isRootContext: Boolean,
     hiveCatalog: HiveExternalCatalog,
     val warehousePath: File,
@@ -89,7 +90,8 @@ class TestHiveContext private[hive](
     executionHive,
     metadataHive,
     isRootContext,
-    hiveCatalog) { self =>
+    hiveCatalog,
+    jarClassLoader) { self =>
 
   // Unfortunately, due to the complex interactions between the construction parameters
   // and the limitations in scala constructors, we need many of these constructors to
@@ -100,6 +102,7 @@ class TestHiveContext private[hive](
       sc: SparkContext,
       executionHive: HiveClientImpl,
       metadataHive: HiveClient,
+      jarClassLoader: NonClosableMutableURLClassLoader,
       warehousePath: File,
       scratchDirPath: File,
       metastoreTemporaryConf: Map[String, String]) {
@@ -109,6 +112,7 @@ class TestHiveContext private[hive](
       SQLContext.createListenerAndUI(sc),
       executionHive,
       metadataHive,
+      jarClassLoader,
       true,
       new HiveExternalCatalog(metadataHive),
       warehousePath,
@@ -126,6 +130,7 @@ class TestHiveContext private[hive](
       HiveContext.newClientForExecution(sc.conf, sc.hadoopConfiguration),
       TestHiveContext.newClientForMetadata(
         sc.conf, sc.hadoopConfiguration, warehousePath, scratchDirPath, metastoreTemporaryConf),
+      new NonClosableMutableURLClassLoader(Utils.getContextOrSparkClassLoader),
       warehousePath,
       scratchDirPath,
       metastoreTemporaryConf)
@@ -146,6 +151,7 @@ class TestHiveContext private[hive](
       listener = listener,
       executionHive = executionHive.newSession(),
       metadataHive = metadataHive.newSession(),
+      jarClassLoader = jarClassLoader,
       isRootContext = false,
       hiveCatalog = hiveCatalog,
       warehousePath = warehousePath,
@@ -508,7 +514,6 @@ class TestHiveContext private[hive](
       hiveconf.set("fs.default.name", new File(".").toURI.toString)
       // It is important that we RESET first as broken hooks that might have been set could break
       // other sql exec here.
-      executionHive.runSqlHive("RESET")
       metadataHive.runSqlHive("RESET")
       // For some reason, RESET does not reset the following variables...
       // https://issues.apache.org/jira/browse/HIVE-9004
