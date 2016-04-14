@@ -170,7 +170,7 @@ private[v1] object AllStagesResource {
     val inputMetrics: Option[InputMetricDistributions] =
       new MetricHelper[InternalInputMetrics, InputMetricDistributions](rawMetrics, quantiles) {
         def getSubmetrics(raw: InternalTaskMetrics): Option[InternalInputMetrics] = {
-          raw.inputMetrics
+          Some(raw.inputMetrics)
         }
 
         def build: InputMetricDistributions = new InputMetricDistributions(
@@ -182,7 +182,7 @@ private[v1] object AllStagesResource {
     val outputMetrics: Option[OutputMetricDistributions] =
       new MetricHelper[InternalOutputMetrics, OutputMetricDistributions](rawMetrics, quantiles) {
         def getSubmetrics(raw: InternalTaskMetrics): Option[InternalOutputMetrics] = {
-          raw.outputMetrics
+          Some(raw.outputMetrics)
         }
         def build: OutputMetricDistributions = new OutputMetricDistributions(
           bytesWritten = submetricQuantiles(_.bytesWritten),
@@ -211,7 +211,7 @@ private[v1] object AllStagesResource {
       new MetricHelper[InternalShuffleWriteMetrics, ShuffleWriteMetricDistributions](rawMetrics,
         quantiles) {
         def getSubmetrics(raw: InternalTaskMetrics): Option[InternalShuffleWriteMetrics] = {
-          raw.shuffleWriteMetrics
+          Some(raw.shuffleWriteMetrics)
         }
         def build: ShuffleWriteMetricDistributions = new ShuffleWriteMetricDistributions(
           writeBytes = submetricQuantiles(_.bytesWritten),
@@ -250,10 +250,10 @@ private[v1] object AllStagesResource {
       resultSerializationTime = internal.resultSerializationTime,
       memoryBytesSpilled = internal.memoryBytesSpilled,
       diskBytesSpilled = internal.diskBytesSpilled,
-      inputMetrics = internal.inputMetrics.map { convertInputMetrics },
-      outputMetrics = Option(internal.outputMetrics).flatten.map { convertOutputMetrics },
+      inputMetrics = Option(convertInputMetrics(internal.inputMetrics)),
+      outputMetrics = Option(convertOutputMetrics(internal.outputMetrics)),
       shuffleReadMetrics = Option(convertShuffleReadMetrics(internal.shuffleReadMetrics)),
-      shuffleWriteMetrics = internal.shuffleWriteMetrics.map { convertShuffleWriteMetrics }
+      shuffleWriteMetrics = Option(convertShuffleWriteMetrics(internal.shuffleWriteMetrics))
     )
   }
 

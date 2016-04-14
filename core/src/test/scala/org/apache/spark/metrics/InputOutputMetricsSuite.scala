@@ -209,10 +209,10 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
     sc.addSparkListener(new SparkListener() {
       override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
         val metrics = taskEnd.taskMetrics
-        metrics.inputMetrics.foreach(inputRead += _.recordsRead)
-        metrics.outputMetrics.foreach(outputWritten += _.recordsWritten)
+        inputRead += metrics.inputMetrics.recordsRead
+        outputWritten += metrics.outputMetrics.recordsWritten
         shuffleRead += metrics.shuffleReadMetrics.recordsRead
-        metrics.shuffleWriteMetrics.foreach(shuffleWritten += _.recordsWritten)
+        shuffleWritten += metrics.shuffleWriteMetrics.recordsWritten
       }
     })
 
@@ -272,19 +272,18 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
   }
 
   private def runAndReturnBytesRead(job: => Unit): Long = {
-    runAndReturnMetrics(job, _.taskMetrics.inputMetrics.map(_.bytesRead))
+    runAndReturnMetrics(job, _.taskMetrics.inputMetrics.bytesRead)
   }
 
   private def runAndReturnRecordsRead(job: => Unit): Long = {
-    runAndReturnMetrics(job, _.taskMetrics.inputMetrics.map(_.recordsRead))
+    runAndReturnMetrics(job, _.taskMetrics.inputMetrics.recordsRead)
   }
 
   private def runAndReturnRecordsWritten(job: => Unit): Long = {
-    runAndReturnMetrics(job, _.taskMetrics.outputMetrics.map(_.recordsWritten))
+    runAndReturnMetrics(job, _.taskMetrics.outputMetrics.recordsWritten)
   }
 
-  private def runAndReturnMetrics(job: => Unit,
-      collector: (SparkListenerTaskEnd) => Option[Long]): Long = {
+  private def runAndReturnMetrics(job: => Unit, collector: (SparkListenerTaskEnd) => Long): Long = {
     val taskMetrics = new ArrayBuffer[Long]()
 
     // Avoid receiving earlier taskEnd events
@@ -292,7 +291,7 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
 
     sc.addSparkListener(new SparkListener() {
       override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
-        collector(taskEnd).foreach(taskMetrics += _)
+        taskMetrics += collector(taskEnd)
       }
     })
 
@@ -337,7 +336,7 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
       val taskBytesWritten = new ArrayBuffer[Long]()
       sc.addSparkListener(new SparkListener() {
         override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
-          taskBytesWritten += taskEnd.taskMetrics.outputMetrics.get.bytesWritten
+          taskBytesWritten += taskEnd.taskMetrics.outputMetrics.bytesWritten
         }
       })
 
