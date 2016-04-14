@@ -117,6 +117,7 @@ class TimSort<K, Buffer> {
    * @author Josh Bloch
    */
   public void sort(Buffer a, int lo, int hi, Comparator<? super K> c) {
+    System.out.println("timSort: " + (hi - lo));
     assert c != null;
 
     int nRemaining  = hi - lo;

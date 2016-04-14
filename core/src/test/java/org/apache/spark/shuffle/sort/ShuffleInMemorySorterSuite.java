@@ -115,14 +115,11 @@ public class ShuffleInMemorySorterSuite {
   @Test
   public void testSortingManyNumbers() throws Exception {
     ShuffleInMemorySorter sorter = new ShuffleInMemorySorter(consumer, 4);
-    int[] numbersToSort = new int[10000000];
+    int[] numbersToSort = new int[50000000];
     Random random = new Random(16);
-    System.out.println("populating sort");
     for (int i = 0; i < numbersToSort.length; i++) {
       if (!sorter.hasSpaceForAnotherRecord()) {
-        System.out.println("allocate: " + sorter.numRecords());
         sorter.expandPointerArray(consumer.allocateArray(sorter.numRecords() * 4));
-        System.out.println("done");
       }
       numbersToSort[i] = random.nextInt(PackedRecordPointer.MAXIMUM_PARTITION_ID + 1);
       sorter.insertRecord(0, numbersToSort[i]);

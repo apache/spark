@@ -24,6 +24,10 @@ public class RadixSort {
 
   public static int sort(
       LongArray data, int length, MemoryConsumer consumer, int startByteIndex, int endByteIndex) {
+    System.out.println("radixSort: " + length);
+    assert startByteIndex >= 0 : "startByteIndex (" + startByteIndex + ") should >= 0";
+    assert endByteIndex <= 7 : "endByteIndex (" + endByteIndex + ") should <= 7";
+    assert startByteIndex <= endByteIndex;
     int inOffset = 0;
     int outOffset = length;
     if (length > 0) {
@@ -38,10 +42,13 @@ public class RadixSort {
         long bitMin = ((orMask >>> (i * 8)) & 0xff);
         long bitMax = ((andMask >>> (i * 8)) & 0xff);
         if (bitMin != bitMax) {
+          System.out.println("sort " + i);
           sortAtByte(data, i, length, inOffset, outOffset);
           int tmp = inOffset;
           inOffset = outOffset;
           outOffset = tmp;
+        } else {
+          System.out.println("skip " + i);
         }
       }
     }
@@ -50,8 +57,6 @@ public class RadixSort {
 
   private static void sortAtByte(
       LongArray in, int byteIndex, int length, int inOffset, int outOffset) {
-    assert byteIndex >= 0 : "byteIndex (" + byteIndex + ") should >= 0";
-    assert byteIndex <= 7 : "byteIndex (" + byteIndex + ") should <= 7";
     int[] outOffsets = getOffsets(in, byteIndex, length, inOffset, outOffset);
     for (int i=inOffset; i < inOffset + length; i++) {
       long value = in.get(i);
@@ -60,7 +65,7 @@ public class RadixSort {
     }
   }
 
-  // TODO(ekl) we should just pre-compute these up-front
+  // TODO(ekl) we should probably pre-compute these up-front
   private static int[] getOffsets(
       LongArray data, int byteIndex, int length, int inOffset, int outOffset) {
     int[] counts = new int[256];

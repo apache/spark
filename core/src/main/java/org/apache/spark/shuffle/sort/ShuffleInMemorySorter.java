@@ -150,12 +150,12 @@ final class ShuffleInMemorySorter {
    * Return an iterator over record pointers in sorted order.
    */
   public ShuffleSorterIterator getSortedIterator() {
+    long start = System.nanoTime();
     assert(pos * 2 <= array.size());
-//    if (true == true) {
-//      throw new RuntimeException();
-//    }
 //    sorter.sort(array, 0, pos, SORT_COMPARATOR);
+//    int offset = 0;
     int offset = RadixSort.sort(array, pos, consumer, 5, 7);
+    System.out.println((System.nanoTime() - start) / 1e9);
     return new ShuffleSorterIterator(pos, array, offset);
   }
 }
