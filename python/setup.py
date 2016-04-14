@@ -11,12 +11,12 @@ setup(
     author_email='dev@spark.apache.org',
     url='https://github.com/apache/spark/tree/master/python',
     packages=['pyspark', 'pyspark.mllib', 'pyspark.ml', 'pyspark.sql', 'pyspark.streaming'],
-    include_package_data = True,
+    include_package_data=True,
     package_data={
         'spark.jar': [JAR_PATH]},
     license='http://www.apache.org/licenses/LICENSE-2.0',
     install_requires=['py4j==0.9'],
-    extras_require = {
+    extras_require={
         'ml': ['numpy>=1.7'],
         'sql': ['pandas']
     }
