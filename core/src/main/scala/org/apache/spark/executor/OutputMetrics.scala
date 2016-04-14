@@ -52,18 +52,6 @@ class OutputMetrics private (
   }
 
   /**
-   * Create a new [[OutputMetrics]] that is not associated with any particular task.
-   *
-   * This is only used for preserving matching behavior on [[OutputMetrics]], which used to be
-   * a case class before Spark 2.0. Once we remove support for matching on [[OutputMetrics]]
-   * we can remove this constructor as well.
-   */
-  private[executor] def this() {
-    this(InternalAccumulator.createOutputAccums()
-      .map { a => (a.name.get, a) }.toMap[String, Accumulator[_]])
-  }
-
-  /**
    * Total number of bytes written.
    */
   def bytesWritten: Long = _bytesWritten.localValue
@@ -83,22 +71,4 @@ class OutputMetrics private (
   private[spark] def setWriteMethod(v: DataWriteMethod.Value): Unit =
     _writeMethod.setValue(v.toString)
 
-}
-
-/**
- * Deprecated methods to preserve case class matching behavior before Spark 2.0.
- */
-object OutputMetrics {
-
-  @deprecated("matching on OutputMetrics will not be supported in the future", "2.0.0")
-  def apply(writeMethod: DataWriteMethod.Value): OutputMetrics = {
-    val om = new OutputMetrics
-    om.setWriteMethod(writeMethod)
-    om
-  }
-
-  @deprecated("matching on OutputMetrics will not be supported in the future", "2.0.0")
-  def unapply(output: OutputMetrics): Option[DataWriteMethod.Value] = {
-    Some(output.writeMethod)
-  }
 }
