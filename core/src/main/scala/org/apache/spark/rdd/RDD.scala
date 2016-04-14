@@ -333,10 +333,10 @@ abstract class RDD[T: ClassTag](
       case Left(blockResult) =>
         if (readCachedBlock) {
           val existingMetrics = context.taskMetrics().registerInputMetrics(blockResult.readMethod)
-          existingMetrics.incBytesReadInternal(blockResult.bytes)
+          existingMetrics.incBytesRead(blockResult.bytes)
           new InterruptibleIterator[T](context, blockResult.data.asInstanceOf[Iterator[T]]) {
             override def next(): T = {
-              existingMetrics.incRecordsReadInternal(1)
+              existingMetrics.incRecordsRead(1)
               delegate.next()
             }
           }

@@ -35,7 +35,7 @@ private[spark] trait ShuffleWriterGroup {
   val writers: Array[DiskBlockObjectWriter]
 
   /** @param success Indicates all writes were successful. If false, no blocks will be recorded. */
-  def releaseWriters(success: Boolean)
+  def releaseWriters(success: Boolean): Unit
 }
 
 /**

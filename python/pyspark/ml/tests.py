@@ -406,6 +406,22 @@ class FeatureTests(PySparkTestCase):
         transformedDF = stopWordRemover.transform(dataset)
         self.assertEqual(transformedDF.head().output, ["a"])
 
+    def test_count_vectorizer_with_binary(self):
+        sqlContext = SQLContext(self.sc)
+        dataset = sqlContext.createDataFrame([
+            (0, "a a a b b c".split(' '), SparseVector(3, {0: 1.0, 1: 1.0, 2: 1.0}),),
+            (1, "a a".split(' '), SparseVector(3, {0: 1.0}),),
+            (2, "a b".split(' '), SparseVector(3, {0: 1.0, 1: 1.0}),),
+            (3, "c".split(' '), SparseVector(3, {2: 1.0}),)], ["id", "words", "expected"])
+        cv = CountVectorizer(binary=True, inputCol="words", outputCol="features")
+        model = cv.fit(dataset)
+
+        transformedList = model.transform(dataset).select("features", "expected").collect()
+
+        for r in transformedList:
+            feature, expected = r
+            self.assertEqual(feature, expected)
+
 
 class HasInducedError(Params):
 
@@ -859,6 +875,25 @@ class OneVsRestTests(PySparkTestCase):
         model = ovr.fit(df)
         output = model.transform(df)
         self.assertEqual(output.columns, ["label", "features", "prediction"])
+
+
+class HashingTFTest(PySparkTestCase):
+
+    def test_apply_binary_term_freqs(self):
+        sqlContext = SQLContext(self.sc)
+
+        df = sqlContext.createDataFrame([(0, ["a", "a", "b", "c", "c", "c"])], ["id", "words"])
+        n = 100
+        hashingTF = HashingTF()
+        hashingTF.setInputCol("words").setOutputCol("features").setNumFeatures(n).setBinary(True)
+        output = hashingTF.transform(df)
+        features = output.select("features").first().features.toArray()
+        expected = Vectors.sparse(n, {(ord("a") % n): 1.0,
+                                      (ord("b") % n): 1.0,
+                                      (ord("c") % n): 1.0}).toArray()
+        for i in range(0, n):
+            self.assertAlmostEqual(features[i], expected[i], 14, "Error at " + str(i) +
+                                   ": expected " + str(expected[i]) + ", got " + str(features[i]))
 
 
 if __name__ == "__main__":
