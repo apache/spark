@@ -154,7 +154,7 @@ final class ShuffleInMemorySorter {
     assert(pos * 2 <= array.size());
 //    sorter.sort(array, 0, pos, SORT_COMPARATOR);
 //    int offset = 0;
-    int offset = RadixSort.sort(array, pos, consumer, 5, 7);
+    int offset = RadixSort.sort(array, pos, 0, pos, 5, 7);
     System.out.println((System.nanoTime() - start) / 1e9);
     return new ShuffleSorterIterator(pos, array, offset);
   }

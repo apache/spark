@@ -17,67 +17,71 @@
 
 package org.apache.spark.util.collection;
 
-import org.apache.spark.memory.MemoryConsumer;
 import org.apache.spark.unsafe.array.LongArray;
 
 public class RadixSort {
 
   public static int sort(
-      LongArray data, int length, MemoryConsumer consumer, int startByteIndex, int endByteIndex) {
-    System.out.println("radixSort: " + length);
-    assert startByteIndex >= 0 : "startByteIndex (" + startByteIndex + ") should >= 0";
-    assert endByteIndex <= 7 : "endByteIndex (" + endByteIndex + ") should <= 7";
-    assert startByteIndex <= endByteIndex;
-    int inOffset = 0;
-    int outOffset = length;
-    if (length > 0) {
+      LongArray array,
+      int dataLen,
+      int dataOffset,
+      int tmpOffset,
+      int startByteIdx,
+      int endByteIdx) {
+    System.out.println("radixSort: " + dataLen);
+    assert startByteIdx >= 0 : "startByteIdx (" + startByteIdx + ") should >= 0";
+    assert endByteIdx <= 7 : "endByteIdx (" + endByteIdx + ") should <= 7";
+    assert startByteIdx <= endByteIdx;
+    if (dataLen > 0) {
+      // Optimization: make a pre-pass to determine which byte indices we can skip for sorting.
+      // If all the byte values at a particular index are the same we don't need to sort it.
       long orMask = 0;
       long andMask = ~0L;
-      for (int i = 0; i < length; i++) {
-        long value = data.get(i);
+      for (int i = 0; i < dataLen; i++) {
+        long value = array.get(i);
         orMask |= value;
         andMask &= value;
       }
-      for (int i = startByteIndex; i <= endByteIndex; i++) {
+      for (int i = startByteIdx; i <= endByteIdx; i++) {
         long bitMin = ((orMask >>> (i * 8)) & 0xff);
         long bitMax = ((andMask >>> (i * 8)) & 0xff);
         if (bitMin != bitMax) {
           System.out.println("sort " + i);
-          sortAtByte(data, i, length, inOffset, outOffset);
-          int tmp = inOffset;
-          inOffset = outOffset;
-          outOffset = tmp;
+          sortAtByte(array, i, dataLen, dataOffset, tmpOffset);
+          int tmp = dataOffset;
+          dataOffset = tmpOffset;
+          tmpOffset = tmp;
         } else {
           System.out.println("skip " + i);
         }
       }
     }
-    return inOffset;
+    return dataOffset;
   }
 
   private static void sortAtByte(
-      LongArray in, int byteIndex, int length, int inOffset, int outOffset) {
-    int[] outOffsets = getOffsets(in, byteIndex, length, inOffset, outOffset);
-    for (int i=inOffset; i < inOffset + length; i++) {
-      long value = in.get(i);
-      int bucket = (int)((value >>> (byteIndex * 8)) & 0xff);
-      in.set(outOffsets[bucket]++, value);
+      LongArray array, int byteIdx, int dataLen, int dataOffset, int tmpOffset) {
+    int[] tmpOffsets = getOffsets(array, byteIdx, dataLen, dataOffset, tmpOffset);
+    for (int i = dataOffset; i < dataOffset + dataLen; i++) {
+      long value = array.get(i);
+      int bucket = (int)((value >>> (byteIdx * 8)) & 0xff);
+      array.set(tmpOffsets[bucket]++, value);
     }
   }
 
-  // TODO(ekl) we should probably pre-compute these up-front
+  // TODO(ekl) it might be worth pre-computing these up-front for all bytes
   private static int[] getOffsets(
-      LongArray data, int byteIndex, int length, int inOffset, int outOffset) {
-    int[] counts = new int[256];
-    for (int i=0; i < length; i++) {
-      counts[(int)((data.get(inOffset + i) >>> (byteIndex * 8)) & 0xff)]++;
+      LongArray array, int byteIdx, int dataLen, int dataOffset, int tmpOffset) {
+    int[] tmpOffsets = new int[256];
+    for (int i = 0; i < dataLen; i++) {
+      tmpOffsets[(int)((array.get(dataOffset + i) >>> (byteIdx * 8)) & 0xff)]++;
     }
     int accum = 0;
-    for (int i=0; i < 256; i++) {
-      int tmp = counts[i];
-      counts[i] = outOffset + accum;
+    for (int i = 0; i < 256; i++) {
+      int tmp = tmpOffsets[i];
+      tmpOffsets[i] = tmpOffset + accum;
       accum += tmp;
     }
-    return counts;
+    return tmpOffsets;
   }
 }
