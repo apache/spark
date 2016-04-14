@@ -452,7 +452,7 @@ class DataFrameWriter(object):
         >>> writer = sdf.write.trigger(ProcessingTime('5 seconds'))
         """
         from pyspark.sql.streaming import Trigger
-        if not trigger or issubclass(trigger, Trigger):
+        if not trigger or issubclass(type(trigger), Trigger):
             raise ValueError('The trigger must be of the Trigger class. Got: %s' % trigger)
         self._jwrite = self._jwrite.trigger(trigger._to_java_trigger(self._sqlContext))
         return self

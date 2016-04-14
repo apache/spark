@@ -51,9 +51,11 @@ class ContinuousQuery(object):
         return self._jcq.isActive()
 
     @since(2.0)
-    def awaitTermination(self):
+    def awaitTermination(self, timeoutMs=None):
         """Waits for the termination of `this` query, either by :func:`query.stop()` or by an
         exception. If the query has terminated with an exception, then the exception will be thrown.
+        If `timeoutMs` is set, it returns whether the query has terminated or not within the
+        `timeoutMs` milliseconds.
 
         If the query has terminated, then all subsequent calls to this method will either return
         immediately (if the query was terminated by :func:`stop()`), or throw the exception
@@ -61,24 +63,12 @@ class ContinuousQuery(object):
 
         throws ContinuousQueryException, if `this` query has terminated with an exception
         """
-        self._jcq.awaitTermination()
-
-    @since(2.0)
-    def awaitTermination(self, timeoutMs):
-        """Waits for the termination of `this` query, either by :func:`query.stop()` or by an
-        exception. If the query has terminated with an exception, then the exception will be thrown.
-        Otherwise, it returns whether the query has terminated or not within the `timeoutMs`
-        milliseconds.
-
-        If the query has terminated, then all subsequent calls to this method will either return
-        `true` immediately (if the query was terminated by :func:`stop()`), or throw the exception
-        immediately (if the query has terminated with exception).
-
-        throws ContinuousQueryException, if `this` query has terminated with an exception
-        """
-        if type(timeoutMs) != int or timeoutMs < 0:
-            raise ValueError("timeoutMs must be a positive integer. Got %s" % timeoutMs)
-        return self._jcq.awaitTermination(timeoutMs)
+        if timeoutMs is not None:
+            if type(timeoutMs) != int or timeoutMs < 0:
+                raise ValueError("timeoutMs must be a positive integer. Got %s" % timeoutMs)
+            return self._jcq.awaitTermination(timeoutMs)
+        else:
+            return self._jcq.awaitTermination()
 
     @since(2.0)
     def stop(self):
