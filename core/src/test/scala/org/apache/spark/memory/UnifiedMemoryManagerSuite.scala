@@ -231,7 +231,7 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
       .set("spark.testing.reservedMemory", reservedMemory.toString)
     val mm = UnifiedMemoryManager(conf, numCores = 1)
     val expectedMaxMemory = ((systemMemory - reservedMemory) * memoryFraction).toLong
-    assert(mm.totalHeapMemory === expectedMaxMemory)
+    assert(mm.heapMemoryPool.totalMemory === expectedMaxMemory)
 
     // Try using a system memory that's too small
     val conf2 = conf.clone().set("spark.testing.memory", (reservedMemory / 2).toString)
@@ -267,7 +267,7 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     val mm = UnifiedMemoryManager(conf, numCores = 2)
     val ms = makeMemoryStore(mm)
     val memoryMode = MemoryMode.ON_HEAP
-    assert(mm.totalHeapMemory === 1000)
+    assert(mm.heapMemoryPool.totalMemory === 1000)
     // Have two tasks each acquire some execution memory so that the memory pool registers that
     // there are two active tasks:
     assert(mm.acquireExecutionMemory(100L, 0, memoryMode) === 100L)

@@ -32,11 +32,7 @@ private[spark] class StaticMemoryManager(
     numCores: Int,
     totalHeapMemory: Long,
     totalOffHeapMemory: Long)
-  extends MemoryManager(
-    conf,
-    numCores,
-    totalHeapMemory,
-    totalOffHeapMemory) {
+  extends MemoryManager(conf, numCores) {
 
   def this(conf: SparkConf, numCores: Int) {
     this(
@@ -46,25 +42,42 @@ private[spark] class StaticMemoryManager(
       totalOffHeapMemory = conf.getSizeAsBytes("spark.memory.offHeap.size", 0))
   }
 
-  override protected val maxHeapExecutionMemory: Long = {
-    val memoryFraction = conf.getDouble("spark.shuffle.memoryFraction", 0.2)
-    val safetyFraction = conf.getDouble("spark.shuffle.safetyFraction", 0.8)
-    (totalHeapMemory * memoryFraction * safetyFraction).toLong
+  override val heapMemoryPool: MemoryPool = {
+    val maxHeapExecutionMemory: Long = {
+      val memoryFraction = conf.getDouble("spark.shuffle.memoryFraction", 0.2)
+      val safetyFraction = conf.getDouble("spark.shuffle.safetyFraction", 0.8)
+      (totalHeapMemory * memoryFraction * safetyFraction).toLong
+    }
+    val maxHeapStorageMemory: Long = {
+      val memoryFraction = conf.getDouble("spark.storage.memoryFraction", 0.6)
+      val safetyFraction = conf.getDouble("spark.storage.safetyFraction", 0.9)
+      (totalHeapMemory * memoryFraction * safetyFraction).toLong
+    }
+    new MemoryPool(
+      conf,
+      numCores = numCores,
+      memoryMode = MemoryMode.ON_HEAP,
+      totalMemory = totalHeapMemory,
+      maxExecutionMemory = maxHeapExecutionMemory,
+      maxStorageMemory = maxHeapStorageMemory,
+      unevictableStorageMemory = maxHeapStorageMemory)
   }
-  override val maxHeapStorageMemory: Long = {
-    val memoryFraction = conf.getDouble("spark.storage.memoryFraction", 0.6)
-    val safetyFraction = conf.getDouble("spark.storage.safetyFraction", 0.9)
-    (totalHeapMemory * memoryFraction * safetyFraction).toLong
+
+  override val offHeapMemoryPool: MemoryPool = {
+    new MemoryPool(
+      conf,
+      numCores = numCores,
+      memoryMode = MemoryMode.OFF_HEAP,
+      totalMemory = totalOffHeapMemory,
+      maxExecutionMemory = totalOffHeapMemory,
+      maxStorageMemory = 0L, // StaticMemoryManager does not support off-heap storage memory
+      unevictableStorageMemory = 0L)
   }
-  override protected val unevictableHeapStorageMemory: Long = maxHeapStorageMemory
-  override protected val maxOffHeapExecutionMemory: Long = totalOffHeapMemory
+
   // Max number of bytes worth of blocks to evict when unrolling
   private val maxUnrollMemory: Long = {
-    (maxHeapStorageMemory * conf.getDouble("spark.storage.unrollFraction", 0.2)).toLong
+    (heapMemoryPool.maxStorageMemory * conf.getDouble("spark.storage.unrollFraction", 0.2)).toLong
   }
-  // StaticMemoryManager does not support off-heap storage memory:
-  override protected val maxOffHeapStorageMemory: Long = 0L
-  override protected val unevictableOffHeapStorageMemory: Long = 0L
 
   override def acquireUnrollMemory(
       blockId: BlockId,
@@ -73,8 +86,9 @@ private[spark] class StaticMemoryManager(
     // TODO(josh): update after off-heap caching patch is merged.
     require(memoryMode != MemoryMode.OFF_HEAP,
       "StaticMemoryManager does not support off-heap unroll memory")
-    val currentUnrollMemory = memoryStore.currentUnrollMemory
-    val freeMemory = math.min(freeHeapMemory, maxHeapStorageMemory - heapStorageMemoryUsed)
+    val currentUnrollMemory = heapMemoryPool.memoryStore.currentUnrollMemory
+    val freeMemory = math.min(
+      heapMemoryPool.freeMemory, heapMemoryPool.maxStorageMemory - heapMemoryPool.storageMemoryUsed)
     // When unrolling, we will use all of the existing free memory, and, if necessary,
     // some extra space freed from evicting cached blocks. We must place a cap on the
     // amount of memory to be evicted by unrolling, however, otherwise unrolling one
@@ -83,5 +97,4 @@ private[spark] class StaticMemoryManager(
       math.max(0, maxUnrollMemory - currentUnrollMemory - freeMemory)
     acquireStorageMemory(blockId, numBytes, memoryMode, maxBytesToAttemptToFreeViaEviction)
   }
-
 }

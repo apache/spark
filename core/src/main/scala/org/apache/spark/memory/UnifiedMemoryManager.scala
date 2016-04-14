@@ -44,22 +44,31 @@ private[spark] class UnifiedMemoryManager private[memory] (
     numCores: Int,
     totalHeapMemory: Long,
     totalOffHeapMemory: Long)
-  extends MemoryManager(
-    conf,
-    numCores,
-    totalHeapMemory,
-    totalOffHeapMemory) {
-
-  override protected val maxHeapExecutionMemory: Long = totalHeapMemory
-  override val maxHeapStorageMemory: Long = totalHeapMemory
-  override protected val maxOffHeapExecutionMemory: Long = totalOffHeapMemory
-  override protected val maxOffHeapStorageMemory: Long = totalOffHeapMemory
+  extends MemoryManager(conf, numCores) {
 
   private[this] val storageFraction = conf.getDouble("spark.memory.storageFraction", 0.5)
-  override protected val unevictableHeapStorageMemory: Long =
-    (totalHeapMemory * storageFraction).toLong
-  override protected val unevictableOffHeapStorageMemory: Long =
-    (totalOffHeapMemory * storageFraction).toLong
+
+  override val heapMemoryPool: MemoryPool = {
+    new MemoryPool(
+      conf,
+      numCores = numCores,
+      memoryMode = MemoryMode.ON_HEAP,
+      totalMemory = totalHeapMemory,
+      maxExecutionMemory = totalHeapMemory,
+      maxStorageMemory = totalHeapMemory,
+      unevictableStorageMemory = (totalHeapMemory * storageFraction).toLong)
+  }
+
+  override val offHeapMemoryPool: MemoryPool = {
+    new MemoryPool(
+      conf,
+      numCores = numCores,
+      memoryMode = MemoryMode.OFF_HEAP,
+      totalMemory = totalOffHeapMemory,
+      maxExecutionMemory = totalOffHeapMemory,
+      maxStorageMemory = totalOffHeapMemory,
+      unevictableStorageMemory = (totalOffHeapMemory * storageFraction).toLong)
+  }
 
   override def acquireUnrollMemory(
       blockId: BlockId,

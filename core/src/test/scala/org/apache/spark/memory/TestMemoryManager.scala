@@ -20,8 +20,12 @@ package org.apache.spark.memory
 import org.apache.spark.SparkConf
 import org.apache.spark.storage.BlockId
 
-class TestMemoryManager(conf: SparkConf)
-  extends MemoryManager(conf, numCores = 1, Long.MaxValue, Long.MaxValue) {
+class TestMemoryManager(conf: SparkConf) extends MemoryManager(conf, numCores = 1) {
+
+  override val heapMemoryPool: MemoryPool =
+    new MemoryPool(conf, 1, MemoryMode.ON_HEAP, Long.MaxValue, Long.MaxValue, Long.MaxValue, 0)
+  override val offHeapMemoryPool: MemoryPool =
+    new MemoryPool(conf, 1, MemoryMode.OFF_HEAP, Long.MaxValue, Long.MaxValue, Long.MaxValue, 0)
 
   override private[memory] def acquireExecutionMemory(
       numBytes: Long,
@@ -39,13 +43,6 @@ class TestMemoryManager(conf: SparkConf)
       grant
     }
   }
-
-  override protected val maxHeapExecutionMemory: Long = Long.MaxValue
-  override protected val maxOffHeapExecutionMemory: Long = Long.MaxValue
-  override protected val unevictableOffHeapStorageMemory: Long = Long.MaxValue
-  override val maxHeapStorageMemory: Long = Long.MaxValue
-  override protected val unevictableHeapStorageMemory: Long = Long.MaxValue
-  override protected val maxOffHeapStorageMemory: Long = Long.MaxValue
 
   override def acquireStorageMemory(
       blockId: BlockId,
