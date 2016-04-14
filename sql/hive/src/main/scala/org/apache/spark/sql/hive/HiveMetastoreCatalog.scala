@@ -91,7 +91,7 @@ private[hive] object HiveSerDe {
       "textfile" ->
         HiveSerDe(
           inputFormat = Option("org.apache.hadoop.mapred.TextInputFormat"),
-          outputFormat = Option("org.apache.hadoop.hive.ql.io.IgnoreKeyTextOutputFormat")),
+          outputFormat = Option("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat")),
 
       "avro" ->
         HiveSerDe(
@@ -905,8 +905,13 @@ private[hive] case class MetastoreRelation(
 
     val sd = new org.apache.hadoop.hive.metastore.api.StorageDescriptor()
     tTable.setSd(sd)
-    sd.setCols(table.schema.map(toHiveColumn).asJava)
-    tTable.setPartitionKeys(table.partitionColumns.map(toHiveColumn).asJava)
+
+    // Note: In Hive the schema and partition columns must be disjoint sets
+    val (partCols, schema) = table.schema.map(toHiveColumn).partition { c =>
+      table.partitionColumnNames.contains(c.getName)
+    }
+    sd.setCols(schema.asJava)
+    tTable.setPartitionKeys(partCols.asJava)
 
     table.storage.locationUri.foreach(sd.setLocation)
     table.storage.inputFormat.foreach(sd.setInputFormat)
@@ -1013,7 +1018,10 @@ private[hive] case class MetastoreRelation(
   val partitionKeys = table.partitionColumns.map(_.toAttribute)
 
   /** Non-partitionKey attributes */
-  val attributes = table.schema.map(_.toAttribute)
+  // TODO: just make this hold the schema itself, not just non-partition columns
+  val attributes = table.schema
+    .filter { c => !table.partitionColumnNames.contains(c.name) }
+    .map(_.toAttribute)
 
   val output = attributes ++ partitionKeys
 

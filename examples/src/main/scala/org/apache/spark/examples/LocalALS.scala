@@ -104,16 +104,14 @@ object LocalALS {
   def main(args: Array[String]) {
 
     args match {
-      case Array(m, u, f, iters) => {
+      case Array(m, u, f, iters) =>
         M = m.toInt
         U = u.toInt
         F = f.toInt
         ITERATIONS = iters.toInt
-      }
-      case _ => {
+      case _ =>
         System.err.println("Usage: LocalALS <M> <U> <F> <iters>")
         System.exit(1)
-      }
     }
 
     showWarning()
