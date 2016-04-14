@@ -23,7 +23,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable}
-import org.apache.spark.sql.catalyst.catalog.{CatalogTablePartition, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog.{CatalogTablePartition, CatalogTableType, SessionCatalog}
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalog.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.types._
@@ -225,6 +225,30 @@ case class DropTable(
 }
 
 /**
+ * A command that renames a table/view.
+ *
+ * The syntax of this command is:
+ * {{{
+ *   ALTER TABLE table1 RENAME TO table2;
+ *   ALTER VIEW view1 RENAME TO view2;
+ * }}}
+ */
+case class AlterTableRename(
+    oldName: TableIdentifier,
+    newName: TableIdentifier,
+    isView: Boolean)
+  extends RunnableCommand {
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    val catalog = sqlContext.sessionState.catalog
+    DDLUtils.verifyAlterTableOrAlterView(catalog, oldName, isView)
+    catalog.invalidateTable(oldName)
+    catalog.renameTable(oldName, newName)
+    Seq.empty[Row]
+  }
+}
+
+/**
  * A command that sets table/view properties.
  *
  * The syntax of this command is:
@@ -235,11 +259,13 @@ case class DropTable(
  */
 case class AlterTableSetProperties(
     tableName: TableIdentifier,
-    properties: Map[String, String])
+    properties: Map[String, String],
+    isView: Boolean)
   extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val catalog = sqlContext.sessionState.catalog
+    DDLUtils.verifyAlterTableOrAlterView(catalog, tableName, isView)
     val table = catalog.getTableMetadata(tableName)
     val newProperties = table.properties ++ properties
     if (DDLUtils.isDatasourceTable(newProperties)) {
@@ -265,11 +291,13 @@ case class AlterTableSetProperties(
 case class AlterTableUnsetProperties(
     tableName: TableIdentifier,
     propKeys: Seq[String],
-    ifExists: Boolean)
+    ifExists: Boolean,
+    isView: Boolean)
   extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val catalog = sqlContext.sessionState.catalog
+    DDLUtils.verifyAlterTableOrAlterView(catalog, tableName, isView)
     val table = catalog.getTableMetadata(tableName)
     if (DDLUtils.isDatasourceTable(table)) {
       throw new AnalysisException(
@@ -512,6 +540,24 @@ private object DDLUtils {
 
   def isDatasourceTable(table: CatalogTable): Boolean = {
     isDatasourceTable(table.properties)
+  }
+
+  // If the command ALTER VIEW is to alter a table or ALTER TABLE is to alter a view,
+  // issue an exception.
+  @throws[AnalysisException]
+  def verifyAlterTableOrAlterView(
+      catalog: SessionCatalog,
+      tableIdentifier: TableIdentifier,
+      isView: Boolean): Unit = {
+    catalog.getTableMetadataOption(tableIdentifier).map(_.tableType match {
+      case CatalogTableType.VIRTUAL_VIEW if !isView =>
+        throw new AnalysisException(
+          "Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead")
+      case o if o != CatalogTableType.VIRTUAL_VIEW && isView =>
+        throw new AnalysisException(
+          s"Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead")
+      case _ =>
+    })
   }
 }
 
