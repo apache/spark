@@ -187,7 +187,6 @@ case class NullIf(left: Expression, right: Expression) extends BinaryExpression 
   usage = "_FUNC_(a,b) - Returns a iff it's not NaN, or b otherwise.")
 case class NaNvl(left: Expression, right: Expression)
     extends BinaryExpression with ImplicitCastInputTypes {
-  override def nullable: Boolean = false
 
   override def dataType: DataType = left.dataType
 
