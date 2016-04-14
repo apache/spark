@@ -131,9 +131,11 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
 
   @Override
   public final float readFloat() {
-    float v = Platform.getFloat(buffer, offset);
-    if (bigEndianPlatform) {
-      v = ByteBuffer.allocate(4).putFloat(v).order(ByteOrder.LITTLE_ENDIAN).getFloat(0);
+    float v;
+    if (!bigEndianPlatform) {
+      v = Platform.getFloat(buffer, offset);
+    } else {
+      v = ByteBuffer.wrap(buffer).order(ByteOrder.LITTLE_ENDIAN).getFloat(offset);
     }
     offset += 4;
     return v;
@@ -141,9 +143,11 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
 
   @Override
   public final double readDouble() {
-    double v = Platform.getDouble(buffer, offset);
-    if (bigEndianPlatform) {
-      v = ByteBuffer.allocate(8).putDouble(v).order(ByteOrder.LITTLE_ENDIAN).getDouble(0);
+    double v;
+    if (!bigEndianPlatform) {
+      v = Platform.getDouble(buffer, offset);      
+    } else {
+      v = ByteBuffer.wrap(buffer).order(ByteOrder.LITTLE_ENDIAN).getDouble(offset);
     }
     offset += 8;
     return v;

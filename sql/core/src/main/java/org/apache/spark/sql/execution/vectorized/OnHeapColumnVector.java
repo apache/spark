@@ -297,10 +297,10 @@ public final class OnHeapColumnVector extends ColumnVector {
       Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex, floatData,
           Platform.DOUBLE_ARRAY_OFFSET + rowId * 4, count * 4);
     } else {
+      ByteBuffer bb = ByteBuffer.wrap(src).order(ByteOrder.LITTLE_ENDIAN);
       int srcOffset = srcIndex + Platform.BYTE_ARRAY_OFFSET;
       for (int i = 0; i < count; ++i, srcOffset += 4) {
-        floatData[i + rowId] = ByteBuffer.allocate(4).putFloat(Platform.getFloat(src, srcOffset))
-            .order(ByteOrder.LITTLE_ENDIAN).getFloat(0);
+        floatData[i + rowId] = bb.getFloat(srcOffset);
       }
     }
   }
@@ -339,10 +339,10 @@ public final class OnHeapColumnVector extends ColumnVector {
       Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex, doubleData,
           Platform.DOUBLE_ARRAY_OFFSET + rowId * 8, count * 8);
     } else {
+      ByteBuffer bb = ByteBuffer.wrap(src).order(ByteOrder.LITTLE_ENDIAN);
       int srcOffset = srcIndex + Platform.BYTE_ARRAY_OFFSET;
       for (int i = 0; i < count; ++i, srcOffset += 8) {
-        doubleData[i + rowId] = ByteBuffer.allocate(8).putDouble(Platform.getDouble(src, srcOffset))
-            .order(ByteOrder.LITTLE_ENDIAN).getDouble(0);
+        doubleData[i + rowId] = bb.getDouble(srcOffset);
       }
     }
   }
