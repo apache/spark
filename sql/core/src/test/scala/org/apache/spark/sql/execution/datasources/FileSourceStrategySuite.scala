@@ -21,22 +21,17 @@ import java.io.File
 
 import org.apache.hadoop.fs.FileStatus
 import org.apache.hadoop.mapreduce.Job
-
 import org.apache.spark.SparkConf
-import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{InternalRow, util}
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionSet, PredicateHelper}
-import org.apache.spark.sql.catalyst.util
 import org.apache.spark.sql.execution.DataSourceScan
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StructType}
-import org.apache.spark.util.{SerializableConfiguration, Utils}
-import org.apache.spark.util.collection.BitSet
+import org.apache.spark.util.Utils
 
 class FileSourceStrategySuite extends QueryTest with SharedSQLContext with PredicateHelper {
   import testImplicits._
@@ -197,6 +192,34 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
     }
     // Only the filters that do not contain the partition column should be pushed down
     checkDataFilters(Set(IsNotNull("c1"), EqualTo("c1", 1)))
+  }
+
+  test("partitioned table - case insensitive") {
+    withSQLConf("spark.sql.caseSensitive" -> "false") {
+      val table =
+        createTable(
+          files = Seq(
+            "p1=1/file1" -> 10,
+            "p1=2/file2" -> 10))
+
+      // Only one file should be read.
+      checkScan(table.where("P1 = 1")) { partitions =>
+        assert(partitions.size == 1, "when checking partitions")
+        assert(partitions.head.files.size == 1, "when files in partition 1")
+      }
+      // We don't need to reevaluate filters that are only on partitions.
+      checkDataFilters(Set.empty)
+
+      // Only one file should be read.
+      checkScan(table.where("P1 = 1 AND C1 = 1 AND (P1 + C1) = 1")) { partitions =>
+        assert(partitions.size == 1, "when checking partitions")
+        assert(partitions.head.files.size == 1, "when checking files in partition 1")
+        assert(partitions.head.files.head.partitionValues.getInt(0) == 1,
+          "when checking partition values")
+      }
+      // Only the filters that do not contain the partition column should be pushed down
+      checkDataFilters(Set(IsNotNull("c1"), EqualTo("c1", 1)))
+    }
   }
 
   test("partitioned table - after scan filters") {
