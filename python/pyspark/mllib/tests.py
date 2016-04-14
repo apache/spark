@@ -21,6 +21,7 @@ Fuller unit tests for Python MLlib.
 
 import os
 import sys
+sys.path = sys.path[1:]
 import tempfile
 import array as pyarray
 from time import time, sleep
@@ -1026,7 +1027,8 @@ class Word2VecTests(MLlibTestCase):
             .setNumPartitions(2) \
             .setNumIterations(10) \
             .setSeed(1024) \
-            .setMinCount(3)
+            .setMinCount(3) \
+            .setWindowSize(6)
         self.assertEqual(model.vectorSize, 2)
         self.assertTrue(model.learningRate < 0.02)
         self.assertEqual(model.numPartitions, 2)
