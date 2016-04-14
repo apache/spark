@@ -19,10 +19,11 @@ package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
-import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.hive.test.{TestHive, TestHiveSingleton}
 import org.apache.spark.sql.test.SQLTestUtils
 
 class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
+  import testImplicits._
    protected override def beforeAll(): Unit = {
     super.beforeAll()
     sql(
@@ -279,7 +280,7 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     val message = intercept[NoSuchTableException] {
       sql("SHOW COLUMNS IN badtable FROM default")
     }.getMessage
-    assert(message.contains("Table badtable not found in database"))
+    assert(message.contains("badtable not found in database"))
   }
 
   test("show partitions - show everything") {
@@ -322,27 +323,29 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
           |USING org.apache.spark.sql.parquet.DefaultSource
         """.stripMargin)
       // An empty sequence of row is returned for session temporary table.
-      checkAnswer(sql("SHOW PARTITIONS parquet_temp"), Nil)
       val message1 = intercept[AnalysisException] {
-        sql("SHOW PARTITIONS parquet_tab3")
+        sql("SHOW PARTITIONS parquet_temp")
       }.getMessage
-      assert(message1.contains("is not a partitioned table"))
+      assert(message1.contains("is not allowed on a temporary table"))
 
       val message2 = intercept[AnalysisException] {
-        sql("SHOW PARTITIONS parquet_tab4 PARTITION(abcd=2015, xyz=1)")
+        sql("SHOW PARTITIONS parquet_tab3")
       }.getMessage
-      assert(message2.contains("Partition spec (abcd -> 2015, xyz -> 1) contains " +
-        "non-partition columns"))
+      assert(message2.contains("not allowed on a table that is not partitioned"))
 
       val message3 = intercept[AnalysisException] {
+        sql("SHOW PARTITIONS parquet_tab4 PARTITION(abcd=2015, xyz=1)")
+      }.getMessage
+      assert(message3.contains("Non-partitioned column(s) [abcd, xyz] are specified"))
+
+      val message4 = intercept[AnalysisException] {
         sql("SHOW PARTITIONS parquet_view1")
       }.getMessage
-      assert(message3.contains("Operation not allowed: view or index table"))
+      assert(message4.contains("is not allowed on a view or index table"))
     }
   }
 
   test("show partitions - datasource") {
-    import sqlContext.implicits._
     withTable("part_datasrc") {
       val df = (1 to 3).map(i => (i, s"val_$i", i * 2)).toDF("a", "b", "c")
       df.write
@@ -354,7 +357,7 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       val message1 = intercept[AnalysisException] {
         sql("SHOW PARTITIONS part_datasrc")
       }.getMessage
-      assert(message1.contains("Operation not allowed: datasource table"))
+      assert(message1.contains("is not allowed on a datasource table"))
     }
   }
 }

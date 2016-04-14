@@ -158,33 +158,19 @@ abstract class ExternalCatalog {
   def getPartition(db: String, table: String, spec: TablePartitionSpec): CatalogTablePartition
 
   /**
-   * Returns the partition names from catalog for a given table in a database.
+   * List the metadata of all partitions that belong to the specified table, assuming it exists.
    *
+   * A partial partition spec may optionally be provided to filter the partitions returned.
+   * For instance, if there exist partitions (a='1', b='2'), (a='1', b='3') and (a='2', b='4'),
+   * then a partial spec of (a='1') will return the first two only.
    * @param db database name
    * @param table table name
-   * @param range maximum number of partition names to return. When value of -1 is specified, all
-   *              the partitions are returned.
+   * @param partialSpec  partition spec
    */
-  def getPartitionNames(db: String, table: String, range: Short): Seq[String]
-
-  /**
-   * Returns the partition names that matches the partition spec for a given table in a database.
-   * When no match is found, an empty Sequence is returned.
-   *
-   * @param db database name
-   * @param table table name
-   * @param spec  partition spec
-   * @param range maximum number of partition names to return. When value of -1 is specified, all
-   *              the partitions that match the spec are returned.
-   */
-  def getPartitionNames(
+  def listPartitions(
       db: String,
       table: String,
-      spec: TablePartitionSpec,
-      range: Short): Seq[String]
-
-  // TODO: support listing by pattern
-  def listPartitions(db: String, table: String): Seq[CatalogTablePartition]
+      partialSpec: Option[TablePartitionSpec] = None): Seq[CatalogTablePartition]
 
   // --------------------------------------------------------------------------
   // Functions

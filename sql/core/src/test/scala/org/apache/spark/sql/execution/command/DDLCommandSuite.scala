@@ -678,7 +678,7 @@ class DDLCommandSuite extends PlanTest {
     comparePlans(parsed3, expected3)
     comparePlans(parsed4, expected4)
   }
-  
+
   test("show columns") {
     val sql1 = "SHOW COLUMNS FROM t1"
     val sql2 = "SHOW COLUMNS IN db1.t1"
