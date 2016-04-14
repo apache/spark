@@ -69,10 +69,10 @@ private[spark] class BlockStoreShuffleReader[K, C](
     // Update the context task metrics for each record read.
     val readMetrics = context.taskMetrics.registerTempShuffleReadMetrics()
     val metricIter = CompletionIterator[(Any, Any), Iterator[(Any, Any)]](
-      recordIter.map(record => {
+      recordIter.map { record =>
         readMetrics.incRecordsRead(1)
         record
-      }),
+      },
       context.taskMetrics().mergeShuffleReadMetrics())
 
     // An interruptible iterator must be used here in order to support task cancellation
