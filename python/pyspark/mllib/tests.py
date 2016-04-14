@@ -21,7 +21,6 @@ Fuller unit tests for Python MLlib.
 
 import os
 import sys
-sys.path = sys.path[1:]
 import tempfile
 import array as pyarray
 from time import time, sleep
