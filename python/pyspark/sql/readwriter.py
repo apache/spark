@@ -443,7 +443,7 @@ class DataFrameWriter(object):
     @since(2.0)
     def trigger(self, trigger):
         """Set the trigger for the stream query. If this is not set it will run the query as fast
-        as possible.
+        as possible, which is equivalent to setting the trigger to ``ProcessingTime('0 seconds')``.
 
         :param trigger: a :class:`Trigger`.
 
