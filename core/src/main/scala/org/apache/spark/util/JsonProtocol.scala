@@ -327,14 +327,12 @@ private[spark] object JsonProtocol {
 
   def taskMetricsToJson(taskMetrics: TaskMetrics): JValue = {
     val shuffleReadMetrics: JValue =
-      taskMetrics.shuffleReadMetrics.map { rm =>
-        ("Remote Blocks Fetched" -> rm.remoteBlocksFetched) ~
-        ("Local Blocks Fetched" -> rm.localBlocksFetched) ~
-        ("Fetch Wait Time" -> rm.fetchWaitTime) ~
-        ("Remote Bytes Read" -> rm.remoteBytesRead) ~
-        ("Local Bytes Read" -> rm.localBytesRead) ~
-        ("Total Records Read" -> rm.recordsRead)
-      }.getOrElse(JNothing)
+      ("Remote Blocks Fetched" -> taskMetrics.shuffleReadMetrics.remoteBlocksFetched) ~
+      ("Local Blocks Fetched" -> taskMetrics.shuffleReadMetrics.localBlocksFetched) ~
+      ("Fetch Wait Time" -> taskMetrics.shuffleReadMetrics.fetchWaitTime) ~
+      ("Remote Bytes Read" -> taskMetrics.shuffleReadMetrics.remoteBytesRead) ~
+      ("Local Bytes Read" -> taskMetrics.shuffleReadMetrics.localBytesRead) ~
+      ("Total Records Read" -> taskMetrics.shuffleReadMetrics.recordsRead)
     val shuffleWriteMetrics: JValue =
       taskMetrics.shuffleWriteMetrics.map { wm =>
         ("Shuffle Bytes Written" -> wm.bytesWritten) ~

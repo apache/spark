@@ -211,7 +211,7 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
         val metrics = taskEnd.taskMetrics
         metrics.inputMetrics.foreach(inputRead += _.recordsRead)
         metrics.outputMetrics.foreach(outputWritten += _.recordsWritten)
-        metrics.shuffleReadMetrics.foreach(shuffleRead += _.recordsRead)
+        shuffleRead += metrics.shuffleReadMetrics.recordsRead
         metrics.shuffleWriteMetrics.foreach(shuffleWritten += _.recordsWritten)
       }
     })

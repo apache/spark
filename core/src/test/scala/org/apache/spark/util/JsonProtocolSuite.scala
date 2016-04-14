@@ -222,13 +222,12 @@ class JsonProtocolSuite extends SparkFunSuite {
     // records read were added after 1.2
     val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6,
       hasHadoopInput = false, hasOutput = false, hasRecords = false)
-    assert(metrics.shuffleReadMetrics.nonEmpty)
     assert(metrics.shuffleWriteMetrics.nonEmpty)
     val newJson = JsonProtocol.taskMetricsToJson(metrics)
     val oldJson = newJson.removeField { case (field, _) => field == "Total Records Read" }
                          .removeField { case (field, _) => field == "Shuffle Records Written" }
     val newMetrics = JsonProtocol.taskMetricsFromJson(oldJson)
-    assert(newMetrics.shuffleReadMetrics.get.recordsRead == 0)
+    assert(newMetrics.shuffleReadMetrics.recordsRead == 0)
     assert(newMetrics.shuffleWriteMetrics.get.recordsWritten == 0)
   }
 
@@ -279,11 +278,10 @@ class JsonProtocolSuite extends SparkFunSuite {
     // Metrics about local shuffle bytes read were added in 1.3.1.
     val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6,
       hasHadoopInput = false, hasOutput = false, hasRecords = false)
-    assert(metrics.shuffleReadMetrics.nonEmpty)
     val newJson = JsonProtocol.taskMetricsToJson(metrics)
     val oldJson = newJson.removeField { case (field, _) => field == "Local Bytes Read" }
     val newMetrics = JsonProtocol.taskMetricsFromJson(oldJson)
-    assert(newMetrics.shuffleReadMetrics.get.localBytesRead == 0)
+    assert(newMetrics.shuffleReadMetrics.localBytesRead == 0)
   }
 
   test("SparkListenerApplicationStart backwards compatibility") {
@@ -619,8 +617,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
     assert(metrics1.resultSerializationTime === metrics2.resultSerializationTime)
     assert(metrics1.memoryBytesSpilled === metrics2.memoryBytesSpilled)
     assert(metrics1.diskBytesSpilled === metrics2.diskBytesSpilled)
-    assertOptionEquals(
-      metrics1.shuffleReadMetrics, metrics2.shuffleReadMetrics, assertShuffleReadEquals)
+    assertEquals(metrics1.shuffleReadMetrics, metrics2.shuffleReadMetrics)
     assertOptionEquals(
       metrics1.shuffleWriteMetrics, metrics2.shuffleWriteMetrics, assertShuffleWriteEquals)
     assertOptionEquals(
@@ -740,20 +737,12 @@ private[spark] object JsonProtocolSuite extends Assertions {
    * Use different names for methods we pass in to assertSeqEquals or assertOptionEquals
    */
 
-  private def assertShuffleReadEquals(r1: ShuffleReadMetrics, r2: ShuffleReadMetrics) {
-    assertEquals(r1, r2)
-  }
-
   private def assertShuffleWriteEquals(w1: ShuffleWriteMetrics, w2: ShuffleWriteMetrics) {
     assertEquals(w1, w2)
   }
 
   private def assertInputMetricsEquals(i1: InputMetrics, i2: InputMetrics) {
     assertEquals(i1, i2)
-  }
-
-  private def assertTaskMetricsEquals(t1: TaskMetrics, t2: TaskMetrics) {
-    assertEquals(t1, t2)
   }
 
   private def assertBlocksEquals(

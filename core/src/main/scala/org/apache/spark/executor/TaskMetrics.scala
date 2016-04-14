@@ -233,13 +233,13 @@ class TaskMetrics private[spark] (initialAccums: Seq[Accumulator[_]]) extends Se
    |        SHUFFLE READ METRICS        |
    * ================================== */
 
-  private var _shuffleReadMetrics: Option[ShuffleReadMetrics] = None
+  private val _shuffleReadMetrics = new ShuffleReadMetrics(initialAccumsMap)
 
   /**
    * Metrics related to shuffle read aggregated across all shuffle dependencies.
    * This is defined only if there are shuffle dependencies in this task.
    */
-  def shuffleReadMetrics: Option[ShuffleReadMetrics] = _shuffleReadMetrics
+  def shuffleReadMetrics: ShuffleReadMetrics = _shuffleReadMetrics
 
   /**
    * Temporary list of [[ShuffleReadMetrics]], one per shuffle dependency.
@@ -269,9 +269,7 @@ class TaskMetrics private[spark] (initialAccums: Seq[Accumulator[_]]) extends Se
    */
   private[spark] def mergeShuffleReadMetrics(): Unit = synchronized {
     if (tempShuffleReadMetrics.nonEmpty) {
-      val metrics = new ShuffleReadMetrics(initialAccumsMap)
-      metrics.setMergeValues(tempShuffleReadMetrics)
-      _shuffleReadMetrics = Some(metrics)
+      _shuffleReadMetrics.setMergeValues(tempShuffleReadMetrics)
     }
   }
 
@@ -320,19 +318,17 @@ class TaskMetrics private[spark] (initialAccums: Seq[Accumulator[_]]) extends Se
   // If we are reconstructing this TaskMetrics on the driver, some metrics may already be set.
   // If so, initialize all relevant metrics classes so listeners can access them downstream.
   {
-    var (hasShuffleRead, hasShuffleWrite, hasInput, hasOutput) = (false, false, false, false)
+    var (hasShuffleWrite, hasInput, hasOutput) = (false, false, false)
     initialAccums
       .filter { a => a.localValue != a.zero }
       .foreach { a =>
         a.name.get match {
-          case sr if sr.startsWith(SHUFFLE_READ_METRICS_PREFIX) => hasShuffleRead = true
           case sw if sw.startsWith(SHUFFLE_WRITE_METRICS_PREFIX) => hasShuffleWrite = true
           case in if in.startsWith(INPUT_METRICS_PREFIX) => hasInput = true
           case out if out.startsWith(OUTPUT_METRICS_PREFIX) => hasOutput = true
           case _ =>
         }
       }
-    if (hasShuffleRead) { _shuffleReadMetrics = Some(new ShuffleReadMetrics(initialAccumsMap)) }
     if (hasShuffleWrite) { _shuffleWriteMetrics = Some(new ShuffleWriteMetrics(initialAccumsMap)) }
     if (hasInput) { _inputMetrics = Some(new InputMetrics(initialAccumsMap)) }
     if (hasOutput) { _outputMetrics = Some(new OutputMetrics(initialAccumsMap)) }

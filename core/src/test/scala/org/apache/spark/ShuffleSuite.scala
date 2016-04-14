@@ -454,10 +454,9 @@ object ShuffleSuite {
           recordsWritten += m.recordsWritten
           bytesWritten += m.bytesWritten
         }
-        taskEnd.taskMetrics.shuffleReadMetrics.foreach { m =>
-          recordsRead += m.recordsRead
-          bytesRead += m.totalBytesRead
-        }
+
+        recordsRead += taskEnd.taskMetrics.shuffleReadMetrics.recordsRead
+        bytesRead += taskEnd.taskMetrics.shuffleReadMetrics.totalBytesRead
       }
     }
     sc.addSparkListener(listener)

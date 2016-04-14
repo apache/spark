@@ -35,12 +35,10 @@ class TaskMetricsSuite extends SparkFunSuite {
     val tm1 = new TaskMetrics
     val tm2 = new TaskMetrics(internalAccums)
     assert(tm1.accumulatorUpdates().size === internalAccums.size)
-    assert(tm1.shuffleReadMetrics.isEmpty)
     assert(tm1.shuffleWriteMetrics.isEmpty)
     assert(tm1.inputMetrics.isEmpty)
     assert(tm1.outputMetrics.isEmpty)
     assert(tm2.accumulatorUpdates().size === internalAccums.size)
-    assert(tm2.shuffleReadMetrics.isEmpty)
     assert(tm2.shuffleWriteMetrics.isEmpty)
     assert(tm2.inputMetrics.isEmpty)
     assert(tm2.outputMetrics.isEmpty)
@@ -183,14 +181,12 @@ class TaskMetricsSuite extends SparkFunSuite {
     val accums = InternalAccumulator.createAll()
     val tm = new TaskMetrics(accums)
     def assertValEquals[T](tmValue: ShuffleReadMetrics => T, name: String, value: T): Unit = {
-      assertValueEquals(tm, tm => tmValue(tm.shuffleReadMetrics.get), accums, name, value)
+      assertValueEquals(tm, tm => tmValue(tm.shuffleReadMetrics), accums, name, value)
     }
     // create shuffle read metrics
-    assert(tm.shuffleReadMetrics.isEmpty)
     tm.registerTempShuffleReadMetrics()
     tm.mergeShuffleReadMetrics()
-    assert(tm.shuffleReadMetrics.isDefined)
-    val sr = tm.shuffleReadMetrics.get
+    val sr = tm.shuffleReadMetrics
     // initial values
     assertValEquals(_.remoteBlocksFetched, REMOTE_BLOCKS_FETCHED, 0)
     assertValEquals(_.localBlocksFetched, LOCAL_BLOCKS_FETCHED, 0)
@@ -327,27 +323,22 @@ class TaskMetricsSuite extends SparkFunSuite {
 
   test("merging multiple shuffle read metrics") {
     val tm = new TaskMetrics
-    assert(tm.shuffleReadMetrics.isEmpty)
     val sr1 = tm.registerTempShuffleReadMetrics()
     val sr2 = tm.registerTempShuffleReadMetrics()
     val sr3 = tm.registerTempShuffleReadMetrics()
-    assert(tm.shuffleReadMetrics.isEmpty)
     sr1.setRecordsRead(10L)
     sr2.setRecordsRead(10L)
     sr1.setFetchWaitTime(1L)
     sr2.setFetchWaitTime(2L)
     sr3.setFetchWaitTime(3L)
     tm.mergeShuffleReadMetrics()
-    assert(tm.shuffleReadMetrics.isDefined)
-    val sr = tm.shuffleReadMetrics.get
-    assert(sr.remoteBlocksFetched === 0L)
-    assert(sr.recordsRead === 20L)
-    assert(sr.fetchWaitTime === 6L)
+    assert(tm.shuffleReadMetrics.remoteBlocksFetched === 0L)
+    assert(tm.shuffleReadMetrics.recordsRead === 20L)
+    assert(tm.shuffleReadMetrics.fetchWaitTime === 6L)
 
     // SPARK-5701: calling merge without any shuffle deps does nothing
     val tm2 = new TaskMetrics
     tm2.mergeShuffleReadMetrics()
-    assert(tm2.shuffleReadMetrics.isEmpty)
   }
 
   test("register multiple shuffle write metrics") {
@@ -424,7 +415,6 @@ class TaskMetricsSuite extends SparkFunSuite {
     assert(srAccum.isDefined)
     srAccum.get.asInstanceOf[Accumulator[Long]] += 10L
     val tm = new TaskMetrics(accums)
-    assert(tm.shuffleReadMetrics.isDefined)
     assert(tm.shuffleWriteMetrics.isEmpty)
     assert(tm.inputMetrics.isEmpty)
     assert(tm.outputMetrics.isEmpty)
@@ -437,7 +427,6 @@ class TaskMetricsSuite extends SparkFunSuite {
     assert(swAccum.isDefined)
     swAccum.get.asInstanceOf[Accumulator[Long]] += 10L
     val tm = new TaskMetrics(accums)
-    assert(tm.shuffleReadMetrics.isEmpty)
     assert(tm.shuffleWriteMetrics.isDefined)
     assert(tm.inputMetrics.isEmpty)
     assert(tm.outputMetrics.isEmpty)
@@ -450,7 +439,6 @@ class TaskMetricsSuite extends SparkFunSuite {
     assert(inAccum.isDefined)
     inAccum.get.asInstanceOf[Accumulator[Long]] += 10L
     val tm = new TaskMetrics(accums)
-    assert(tm.shuffleReadMetrics.isEmpty)
     assert(tm.shuffleWriteMetrics.isEmpty)
     assert(tm.inputMetrics.isDefined)
     assert(tm.outputMetrics.isEmpty)
@@ -463,7 +451,6 @@ class TaskMetricsSuite extends SparkFunSuite {
     assert(outAccum.isDefined)
     outAccum.get.asInstanceOf[Accumulator[Long]] += 10L
     val tm4 = new TaskMetrics(accums)
-    assert(tm4.shuffleReadMetrics.isEmpty)
     assert(tm4.shuffleWriteMetrics.isEmpty)
     assert(tm4.inputMetrics.isEmpty)
     assert(tm4.outputMetrics.isDefined)

@@ -194,7 +194,7 @@ private[v1] object AllStagesResource {
       new MetricHelper[InternalShuffleReadMetrics, ShuffleReadMetricDistributions](rawMetrics,
         quantiles) {
         def getSubmetrics(raw: InternalTaskMetrics): Option[InternalShuffleReadMetrics] = {
-          raw.shuffleReadMetrics
+          Some(raw.shuffleReadMetrics)
         }
         def build: ShuffleReadMetricDistributions = new ShuffleReadMetricDistributions(
           readBytes = submetricQuantiles(_.totalBytesRead),
@@ -252,7 +252,7 @@ private[v1] object AllStagesResource {
       diskBytesSpilled = internal.diskBytesSpilled,
       inputMetrics = internal.inputMetrics.map { convertInputMetrics },
       outputMetrics = Option(internal.outputMetrics).flatten.map { convertOutputMetrics },
-      shuffleReadMetrics = internal.shuffleReadMetrics.map { convertShuffleReadMetrics },
+      shuffleReadMetrics = Option(convertShuffleReadMetrics(internal.shuffleReadMetrics)),
       shuffleWriteMetrics = internal.shuffleWriteMetrics.map { convertShuffleWriteMetrics }
     )
   }

@@ -450,7 +450,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
             getFormattedSizeQuantilesWithRecords(outputSizes, outputRecords)
 
           val shuffleReadBlockedTimes = validTasks.map { taskUIData: TaskUIData =>
-            taskUIData.metrics.get.shuffleReadMetrics.map(_.fetchWaitTime).getOrElse(0L).toDouble
+            taskUIData.metrics.get.shuffleReadMetrics.fetchWaitTime.toDouble
           }
           val shuffleReadBlockedQuantiles =
             <td>
@@ -462,10 +462,10 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
             getFormattedTimeQuantiles(shuffleReadBlockedTimes)
 
           val shuffleReadTotalSizes = validTasks.map { taskUIData: TaskUIData =>
-            taskUIData.metrics.get.shuffleReadMetrics.map(_.totalBytesRead).getOrElse(0L).toDouble
+            taskUIData.metrics.get.shuffleReadMetrics.totalBytesRead.toDouble
           }
           val shuffleReadTotalRecords = validTasks.map { taskUIData: TaskUIData =>
-            taskUIData.metrics.get.shuffleReadMetrics.map(_.recordsRead).getOrElse(0L).toDouble
+            taskUIData.metrics.get.shuffleReadMetrics.recordsRead.toDouble
           }
           val shuffleReadTotalQuantiles =
             <td>
@@ -477,7 +477,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
             getFormattedSizeQuantilesWithRecords(shuffleReadTotalSizes, shuffleReadTotalRecords)
 
           val shuffleReadRemoteSizes = validTasks.map { taskUIData: TaskUIData =>
-            taskUIData.metrics.get.shuffleReadMetrics.map(_.remoteBytesRead).getOrElse(0L).toDouble
+            taskUIData.metrics.get.shuffleReadMetrics.remoteBytesRead.toDouble
           }
           val shuffleReadRemoteQuantiles =
             <td>
@@ -603,7 +603,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
 
         val metricsOpt = taskUIData.metrics
         val shuffleReadTime =
-          metricsOpt.flatMap(_.shuffleReadMetrics.map(_.fetchWaitTime)).getOrElse(0L)
+          metricsOpt.map(_.shuffleReadMetrics.fetchWaitTime).getOrElse(0L)
         val shuffleReadTimeProportion = toProportion(shuffleReadTime)
         val shuffleWriteTime =
           (metricsOpt.flatMap(_.shuffleWriteMetrics
@@ -904,7 +904,7 @@ private[ui] class TaskDataSource(
       .getOrElse("")
     val outputRecords = maybeOutput.map(_.recordsWritten.toString).getOrElse("")
 
-    val maybeShuffleRead = metrics.flatMap(_.shuffleReadMetrics)
+    val maybeShuffleRead = metrics.map(_.shuffleReadMetrics)
     val shuffleReadBlockedTimeSortable = maybeShuffleRead.map(_.fetchWaitTime).getOrElse(0L)
     val shuffleReadBlockedTimeReadable =
       maybeShuffleRead.map(ms => UIUtils.formatDuration(ms.fetchWaitTime)).getOrElse("")
