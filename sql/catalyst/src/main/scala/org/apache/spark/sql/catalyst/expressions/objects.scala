@@ -711,36 +711,36 @@ case class AssertNotNull(child: Expression, walkedTypePath: Seq[String])
 
 /**
  * Returns the value of field at index `index` from the external row `child`.
+ *
+ * Note that the input row and the field we try to get are both guaranteed to be not null, if they
+ * are null, a runtime exception will be thrown.
  */
 case class GetExternalRowField(
     child: Expression,
     index: Int,
-    dataType: DataType,
-    override val nullable: Boolean) extends UnaryExpression with NonSQLExpression {
+    dataType: DataType) extends UnaryExpression with NonSQLExpression {
+
+  override def nullable: Boolean = false
 
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported")
 
   override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
-    nullSafeCodeGen(ctx, ev, eval => {
-      val getField = dataType match {
-        case ObjectType(x) if x == classOf[Row] => s"""$eval.getStruct($index)"""
-        case _ => s"""((${ctx.boxedType(dataType)}) $eval.get($index))"""
-      }
+    val row = child.gen(ctx)
 
-      if (nullable) {
-        s"""
-          if ($eval.isNullAt($index)) {
-            ${ev.isNull} = true;
-          } else {
-            ${ev.value} = $getField;
-          }
-        """
-      } else {
-        s"""
-          ${ev.value} = $getField;
-        """
+    val getField = dataType match {
+      case ObjectType(x) if x == classOf[Row] => s"""$row.getStruct($index)"""
+      case _ => s"""(${ctx.boxedType(dataType)}) $row.get($index)"""
+    }
+
+    ev.isNull = "false"
+
+    s"""
+      ${row.code}
+      if (${row.isNull} || ${row.value}.isNullAt($index)) {
+        throw new RuntimeException("Runtime null check failed.");
       }
-    })
+      final ${ctx.javaType(dataType)} ${ev.value} = $getField;
+     """
   }
 }

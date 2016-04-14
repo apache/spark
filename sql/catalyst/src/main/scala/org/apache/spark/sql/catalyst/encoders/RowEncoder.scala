@@ -34,9 +34,8 @@ import org.apache.spark.unsafe.types.UTF8String
 object RowEncoder {
   def apply(schema: StructType): ExpressionEncoder[Row] = {
     val cls = classOf[Row]
-    val inputObject = BoundReference(0, ObjectType(cls), nullable = true)
-    // We use an If expression to wrap extractorsFor result of StructType
-    val serializer = serializerFor(inputObject, schema).asInstanceOf[If].falseValue
+    val inputObject = BoundReference(0, ObjectType(cls), nullable = false)
+    val serializer = serializerFor(inputObject, schema)
     val deserializer = deserializerFor(schema)
     new ExpressionEncoder[Row](
       schema,
@@ -121,7 +120,7 @@ object RowEncoder {
     case StructType(fields) =>
       val convertedFields = fields.zipWithIndex.map { case (f, i) =>
         val fieldValue = serializerFor(
-          GetExternalRowField(inputObject, i, externalDataTypeForInput(f.dataType), f.nullable),
+          GetExternalRowField(inputObject, i, externalDataTypeForInput(f.dataType)),
           f.dataType
         )
         if (f.nullable) {
@@ -134,9 +133,14 @@ object RowEncoder {
           fieldValue
         }
       }
-      If(IsNull(inputObject),
-        Literal.create(null, inputType),
-        CreateStruct(convertedFields))
+
+      if (inputObject.nullable) {
+        If(IsNull(inputObject),
+          Literal.create(null, inputType),
+          CreateStruct(convertedFields))
+      } else {
+        CreateStruct(convertedFields)
+      }
   }
 
   /**
