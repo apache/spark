@@ -21,9 +21,8 @@ import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * State for FileScanRDD objects. This is split this way because of the package splits.
- * TODO: Move/Combine this with org.apache.spark.sql.datasources.FileScanRDD
  */
-private[spark] object FileScanRDDState {
+private[spark] object SqlNewHadoopRDDState {
   /**
    * The thread variable for the name of the current file being read. This is used by
    * the InputFileName function in Spark SQL.
