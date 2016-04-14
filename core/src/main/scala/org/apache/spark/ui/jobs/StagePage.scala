@@ -428,22 +428,22 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
           }
 
           val inputSizes = validTasks.map { taskUIData: TaskUIData =>
-            taskUIData.metrics.get.inputMetrics.map(_.bytesRead).getOrElse(0L).toDouble
+            taskUIData.metrics.get.inputMetrics.bytesRead.toDouble
           }
 
           val inputRecords = validTasks.map { taskUIData: TaskUIData =>
-            taskUIData.metrics.get.inputMetrics.map(_.recordsRead).getOrElse(0L).toDouble
+            taskUIData.metrics.get.inputMetrics.recordsRead.toDouble
           }
 
           val inputQuantiles = <td>Input Size / Records</td> +:
             getFormattedSizeQuantilesWithRecords(inputSizes, inputRecords)
 
           val outputSizes = validTasks.map { taskUIData: TaskUIData =>
-            taskUIData.metrics.get.outputMetrics.map(_.bytesWritten).getOrElse(0L).toDouble
+            taskUIData.metrics.get.outputMetrics.bytesWritten.toDouble
           }
 
           val outputRecords = validTasks.map { taskUIData: TaskUIData =>
-            taskUIData.metrics.get.outputMetrics.map(_.recordsWritten).getOrElse(0L).toDouble
+            taskUIData.metrics.get.outputMetrics.recordsWritten.toDouble
           }
 
           val outputQuantiles = <td>Output Size / Records</td> +:
@@ -489,11 +489,11 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
             getFormattedSizeQuantiles(shuffleReadRemoteSizes)
 
           val shuffleWriteSizes = validTasks.map { taskUIData: TaskUIData =>
-            taskUIData.metrics.get.shuffleWriteMetrics.map(_.bytesWritten).getOrElse(0L).toDouble
+            taskUIData.metrics.get.shuffleWriteMetrics.bytesWritten.toDouble
           }
 
           val shuffleWriteRecords = validTasks.map { taskUIData: TaskUIData =>
-            taskUIData.metrics.get.shuffleWriteMetrics.map(_.recordsWritten).getOrElse(0L).toDouble
+            taskUIData.metrics.get.shuffleWriteMetrics.recordsWritten.toDouble
           }
 
           val shuffleWriteQuantiles = <td>Shuffle Write Size / Records</td> +:
@@ -606,8 +606,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
           metricsOpt.map(_.shuffleReadMetrics.fetchWaitTime).getOrElse(0L)
         val shuffleReadTimeProportion = toProportion(shuffleReadTime)
         val shuffleWriteTime =
-          (metricsOpt.flatMap(_.shuffleWriteMetrics
-            .map(_.writeTime)).getOrElse(0L) / 1e6).toLong
+          (metricsOpt.map(_.shuffleWriteMetrics.writeTime).getOrElse(0L) / 1e6).toLong
         val shuffleWriteTimeProportion = toProportion(shuffleWriteTime)
 
         val serializationTime = metricsOpt.map(_.resultSerializationTime).getOrElse(0L)
@@ -890,14 +889,14 @@ private[ui] class TaskDataSource(
       }
     val peakExecutionMemoryUsed = metrics.map(_.peakExecutionMemory).getOrElse(0L)
 
-    val maybeInput = metrics.flatMap(_.inputMetrics)
+    val maybeInput = metrics.map(_.inputMetrics)
     val inputSortable = maybeInput.map(_.bytesRead).getOrElse(0L)
     val inputReadable = maybeInput
-      .map(m => s"${Utils.bytesToString(m.bytesRead)} (${m.readMethod.toString.toLowerCase()})")
+      .map(m => s"${Utils.bytesToString(m.bytesRead)}")
       .getOrElse("")
     val inputRecords = maybeInput.map(_.recordsRead.toString).getOrElse("")
 
-    val maybeOutput = metrics.flatMap(_.outputMetrics)
+    val maybeOutput = metrics.map(_.outputMetrics)
     val outputSortable = maybeOutput.map(_.bytesWritten).getOrElse(0L)
     val outputReadable = maybeOutput
       .map(m => s"${Utils.bytesToString(m.bytesWritten)}")
@@ -918,14 +917,14 @@ private[ui] class TaskDataSource(
     val shuffleReadRemoteSortable = remoteShuffleBytes.getOrElse(0L)
     val shuffleReadRemoteReadable = remoteShuffleBytes.map(Utils.bytesToString).getOrElse("")
 
-    val maybeShuffleWrite = metrics.flatMap(_.shuffleWriteMetrics)
+    val maybeShuffleWrite = metrics.map(_.shuffleWriteMetrics)
     val shuffleWriteSortable = maybeShuffleWrite.map(_.bytesWritten).getOrElse(0L)
     val shuffleWriteReadable = maybeShuffleWrite
       .map(m => s"${Utils.bytesToString(m.bytesWritten)}").getOrElse("")
     val shuffleWriteRecords = maybeShuffleWrite
       .map(_.recordsWritten.toString).getOrElse("")
 
-    val maybeWriteTime = metrics.flatMap(_.shuffleWriteMetrics).map(_.writeTime)
+    val maybeWriteTime = metrics.map(_.shuffleWriteMetrics.writeTime)
     val writeTimeSortable = maybeWriteTime.getOrElse(0L)
     val writeTimeReadable = maybeWriteTime.map(t => t / (1000 * 1000)).map { ms =>
       if (ms == 0) "" else UIUtils.formatDuration(ms)

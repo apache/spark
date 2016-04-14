@@ -184,7 +184,7 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
     val conf = new SparkConf()
     val listener = new JobProgressListener(conf)
     val taskMetrics = new TaskMetrics()
-    val shuffleReadMetrics = taskMetrics.registerTempShuffleReadMetrics()
+    val shuffleReadMetrics = taskMetrics.createTempShuffleReadMetrics()
     assert(listener.stageIdToData.size === 0)
 
     // finish this task, should get updated shuffleRead
@@ -272,10 +272,10 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
       val accums = InternalAccumulator.createAll()
       accums.foreach(Accumulators.register)
       val taskMetrics = new TaskMetrics(accums)
-      val shuffleReadMetrics = taskMetrics.registerTempShuffleReadMetrics()
-      val shuffleWriteMetrics = taskMetrics.registerShuffleWriteMetrics()
-      val inputMetrics = taskMetrics.registerInputMetrics(DataReadMethod.Hadoop)
-      val outputMetrics = taskMetrics.registerOutputMetrics(DataWriteMethod.Hadoop)
+      val shuffleReadMetrics = taskMetrics.createTempShuffleReadMetrics()
+      val shuffleWriteMetrics = taskMetrics.shuffleWriteMetrics
+      val inputMetrics = taskMetrics.inputMetrics
+      val outputMetrics = taskMetrics.outputMetrics
       shuffleReadMetrics.incRemoteBytesRead(base + 1)
       shuffleReadMetrics.incLocalBytesRead(base + 9)
       shuffleReadMetrics.incRemoteBlocksFetched(base + 2)

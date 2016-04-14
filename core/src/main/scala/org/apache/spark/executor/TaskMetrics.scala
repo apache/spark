@@ -91,6 +91,14 @@ class TaskMetrics private[spark] (initialAccums: Seq[Accumulator[_]]) extends Se
   private val _updatedBlockStatuses =
     TaskMetrics.getAccum[Seq[(BlockId, BlockStatus)]](initialAccumsMap, UPDATED_BLOCK_STATUSES)
 
+  private val _inputMetrics = new InputMetrics(initialAccumsMap)
+
+  private val _outputMetrics = new OutputMetrics(initialAccumsMap)
+
+  private val _shuffleReadMetrics = new ShuffleReadMetrics(initialAccumsMap)
+
+  private val _shuffleWriteMetrics = new ShuffleWriteMetrics(initialAccumsMap)
+
   /**
    * Time taken on the executor to deserialize this task.
    */
@@ -163,77 +171,17 @@ class TaskMetrics private[spark] (initialAccums: Seq[Accumulator[_]]) extends Se
     TaskMetrics.getAccum[Long](initialAccumsMap, name)
   }
 
-
-  /* ========================== *
-   |        INPUT METRICS       |
-   * ========================== */
-
-  private var _inputMetrics: Option[InputMetrics] = None
-
   /**
    * Metrics related to reading data from a [[org.apache.spark.rdd.HadoopRDD]] or from persisted
    * data, defined only in tasks with input.
    */
-  def inputMetrics: Option[InputMetrics] = _inputMetrics
-
-  /**
-   * Get or create a new [[InputMetrics]] associated with this task.
-   */
-  private[spark] def registerInputMetrics(readMethod: DataReadMethod.Value): InputMetrics = {
-    synchronized {
-      val metrics = _inputMetrics.getOrElse {
-        val metrics = new InputMetrics(initialAccumsMap)
-        metrics.setReadMethod(readMethod)
-        _inputMetrics = Some(metrics)
-        metrics
-      }
-      // If there already exists an InputMetric with the same read method, we can just return
-      // that one. Otherwise, if the read method is different from the one previously seen by
-      // this task, we return a new dummy one to avoid clobbering the values of the old metrics.
-      // In the future we should try to store input metrics from all different read methods at
-      // the same time (SPARK-5225).
-      if (metrics.readMethod == readMethod) {
-        metrics
-      } else {
-        val m = new InputMetrics
-        m.setReadMethod(readMethod)
-        m
-      }
-    }
-  }
-
-
-  /* ============================ *
-   |        OUTPUT METRICS        |
-   * ============================ */
-
-  private var _outputMetrics: Option[OutputMetrics] = None
+  def inputMetrics: InputMetrics = _inputMetrics
 
   /**
    * Metrics related to writing data externally (e.g. to a distributed filesystem),
    * defined only in tasks with output.
    */
-  def outputMetrics: Option[OutputMetrics] = _outputMetrics
-
-  /**
-   * Get or create a new [[OutputMetrics]] associated with this task.
-   */
-  private[spark] def registerOutputMetrics(
-      writeMethod: DataWriteMethod.Value): OutputMetrics = synchronized {
-    _outputMetrics.getOrElse {
-      val metrics = new OutputMetrics(initialAccumsMap)
-      metrics.setWriteMethod(writeMethod)
-      _outputMetrics = Some(metrics)
-      metrics
-    }
-  }
-
-
-  /* ================================== *
-   |        SHUFFLE READ METRICS        |
-   * ================================== */
-
-  private val _shuffleReadMetrics = new ShuffleReadMetrics(initialAccumsMap)
+  def outputMetrics: OutputMetrics = _outputMetrics
 
   /**
    * Metrics related to shuffle read aggregated across all shuffle dependencies.
@@ -257,7 +205,7 @@ class TaskMetrics private[spark] (initialAccums: Seq[Accumulator[_]]) extends Se
    * merges the temporary values synchronously. Otherwise, all temporary data collected will
    * be lost.
    */
-  private[spark] def registerTempShuffleReadMetrics(): ShuffleReadMetrics = synchronized {
+  private[spark] def createTempShuffleReadMetrics(): ShuffleReadMetrics = synchronized {
     val readMetrics = new ShuffleReadMetrics
     tempShuffleReadMetrics += readMetrics
     readMetrics
@@ -273,28 +221,10 @@ class TaskMetrics private[spark] (initialAccums: Seq[Accumulator[_]]) extends Se
     }
   }
 
-  /* =================================== *
-   |        SHUFFLE WRITE METRICS        |
-   * =================================== */
-
-  private var _shuffleWriteMetrics: Option[ShuffleWriteMetrics] = None
-
   /**
    * Metrics related to shuffle write, defined only in shuffle map stages.
    */
-  def shuffleWriteMetrics: Option[ShuffleWriteMetrics] = _shuffleWriteMetrics
-
-  /**
-   * Get or create a new [[ShuffleWriteMetrics]] associated with this task.
-   */
-  private[spark] def registerShuffleWriteMetrics(): ShuffleWriteMetrics = synchronized {
-    _shuffleWriteMetrics.getOrElse {
-      val metrics = new ShuffleWriteMetrics(initialAccumsMap)
-      _shuffleWriteMetrics = Some(metrics)
-      metrics
-    }
-  }
-
+  def shuffleWriteMetrics: ShuffleWriteMetrics = _shuffleWriteMetrics
 
   /* ========================== *
    |        OTHER THINGS        |
@@ -314,26 +244,6 @@ class TaskMetrics private[spark] (initialAccums: Seq[Accumulator[_]]) extends Se
   def accumulatorUpdates(): Seq[AccumulableInfo] = {
     accums.map { a => a.toInfo(Some(a.localValue), None) }
   }
-
-  // If we are reconstructing this TaskMetrics on the driver, some metrics may already be set.
-  // If so, initialize all relevant metrics classes so listeners can access them downstream.
-  {
-    var (hasShuffleWrite, hasInput, hasOutput) = (false, false, false)
-    initialAccums
-      .filter { a => a.localValue != a.zero }
-      .foreach { a =>
-        a.name.get match {
-          case sw if sw.startsWith(SHUFFLE_WRITE_METRICS_PREFIX) => hasShuffleWrite = true
-          case in if in.startsWith(INPUT_METRICS_PREFIX) => hasInput = true
-          case out if out.startsWith(OUTPUT_METRICS_PREFIX) => hasOutput = true
-          case _ =>
-        }
-      }
-    if (hasShuffleWrite) { _shuffleWriteMetrics = Some(new ShuffleWriteMetrics(initialAccumsMap)) }
-    if (hasInput) { _inputMetrics = Some(new InputMetrics(initialAccumsMap)) }
-    if (hasOutput) { _outputMetrics = Some(new OutputMetrics(initialAccumsMap)) }
-  }
-
 }
 
 /**

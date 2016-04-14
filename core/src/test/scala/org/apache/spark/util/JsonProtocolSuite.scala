@@ -197,48 +197,41 @@ class JsonProtocolSuite extends SparkFunSuite {
   test("InputMetrics backward compatibility") {
     // InputMetrics were added after 1.0.1.
     val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, hasHadoopInput = true, hasOutput = false)
-    assert(metrics.inputMetrics.nonEmpty)
     val newJson = JsonProtocol.taskMetricsToJson(metrics)
     val oldJson = newJson.removeField { case (field, _) => field == "Input Metrics" }
     val newMetrics = JsonProtocol.taskMetricsFromJson(oldJson)
-    assert(newMetrics.inputMetrics.isEmpty)
   }
 
   test("Input/Output records backwards compatibility") {
     // records read were added after 1.2
     val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6,
       hasHadoopInput = true, hasOutput = true, hasRecords = false)
-    assert(metrics.inputMetrics.nonEmpty)
-    assert(metrics.outputMetrics.nonEmpty)
     val newJson = JsonProtocol.taskMetricsToJson(metrics)
     val oldJson = newJson.removeField { case (field, _) => field == "Records Read" }
                          .removeField { case (field, _) => field == "Records Written" }
     val newMetrics = JsonProtocol.taskMetricsFromJson(oldJson)
-    assert(newMetrics.inputMetrics.get.recordsRead == 0)
-    assert(newMetrics.outputMetrics.get.recordsWritten == 0)
+    assert(newMetrics.inputMetrics.recordsRead == 0)
+    assert(newMetrics.outputMetrics.recordsWritten == 0)
   }
 
   test("Shuffle Read/Write records backwards compatibility") {
     // records read were added after 1.2
     val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6,
       hasHadoopInput = false, hasOutput = false, hasRecords = false)
-    assert(metrics.shuffleWriteMetrics.nonEmpty)
     val newJson = JsonProtocol.taskMetricsToJson(metrics)
     val oldJson = newJson.removeField { case (field, _) => field == "Total Records Read" }
                          .removeField { case (field, _) => field == "Shuffle Records Written" }
     val newMetrics = JsonProtocol.taskMetricsFromJson(oldJson)
     assert(newMetrics.shuffleReadMetrics.recordsRead == 0)
-    assert(newMetrics.shuffleWriteMetrics.get.recordsWritten == 0)
+    assert(newMetrics.shuffleWriteMetrics.recordsWritten == 0)
   }
 
   test("OutputMetrics backward compatibility") {
     // OutputMetrics were added after 1.1
     val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, hasHadoopInput = false, hasOutput = true)
-    assert(metrics.outputMetrics.nonEmpty)
     val newJson = JsonProtocol.taskMetricsToJson(metrics)
     val oldJson = newJson.removeField { case (field, _) => field == "Output Metrics" }
     val newMetrics = JsonProtocol.taskMetricsFromJson(oldJson)
-    assert(newMetrics.outputMetrics.isEmpty)
   }
 
   test("BlockManager events backward compatibility") {
@@ -421,7 +414,6 @@ class JsonProtocolSuite extends SparkFunSuite {
     })
     testAccumValue(Some(RESULT_SIZE), 3L, JInt(3))
     testAccumValue(Some(shuffleRead.REMOTE_BLOCKS_FETCHED), 2, JInt(2))
-    testAccumValue(Some(input.READ_METHOD), "aka", JString("aka"))
     testAccumValue(Some(UPDATED_BLOCK_STATUSES), blocks, blocksJson)
     // For anything else, we just cast the value to a string
     testAccumValue(Some("anything"), blocks, JString(blocks.toString))
@@ -618,10 +610,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
     assert(metrics1.memoryBytesSpilled === metrics2.memoryBytesSpilled)
     assert(metrics1.diskBytesSpilled === metrics2.diskBytesSpilled)
     assertEquals(metrics1.shuffleReadMetrics, metrics2.shuffleReadMetrics)
-    assertOptionEquals(
-      metrics1.shuffleWriteMetrics, metrics2.shuffleWriteMetrics, assertShuffleWriteEquals)
-    assertOptionEquals(
-      metrics1.inputMetrics, metrics2.inputMetrics, assertInputMetricsEquals)
+    assertEquals(metrics1.shuffleWriteMetrics, metrics2.shuffleWriteMetrics)
+    assertEquals(metrics1.inputMetrics, metrics2.inputMetrics)
     assertBlocksEquals(metrics1.updatedBlockStatuses, metrics2.updatedBlockStatuses)
   }
 
@@ -638,7 +628,6 @@ private[spark] object JsonProtocolSuite extends Assertions {
   }
 
   private def assertEquals(metrics1: InputMetrics, metrics2: InputMetrics) {
-    assert(metrics1.readMethod === metrics2.readMethod)
     assert(metrics1.bytesRead === metrics2.bytesRead)
   }
 
@@ -737,14 +726,6 @@ private[spark] object JsonProtocolSuite extends Assertions {
    * Use different names for methods we pass in to assertSeqEquals or assertOptionEquals
    */
 
-  private def assertShuffleWriteEquals(w1: ShuffleWriteMetrics, w2: ShuffleWriteMetrics) {
-    assertEquals(w1, w2)
-  }
-
-  private def assertInputMetricsEquals(i1: InputMetrics, i2: InputMetrics) {
-    assertEquals(i1, i2)
-  }
-
   private def assertBlocksEquals(
       blocks1: Seq[(BlockId, BlockStatus)],
       blocks2: Seq[(BlockId, BlockStatus)]) = {
@@ -840,11 +821,11 @@ private[spark] object JsonProtocolSuite extends Assertions {
     t.incMemoryBytesSpilled(a + c)
 
     if (hasHadoopInput) {
-      val inputMetrics = t.registerInputMetrics(DataReadMethod.Hadoop)
+      val inputMetrics = t.inputMetrics
       inputMetrics.setBytesRead(d + e + f)
       inputMetrics.incRecordsRead(if (hasRecords) (d + e + f) / 100 else -1)
     } else {
-      val sr = t.registerTempShuffleReadMetrics()
+      val sr = t.createTempShuffleReadMetrics()
       sr.incRemoteBytesRead(b + d)
       sr.incLocalBlocksFetched(e)
       sr.incFetchWaitTime(a + d)
@@ -854,11 +835,10 @@ private[spark] object JsonProtocolSuite extends Assertions {
       t.mergeShuffleReadMetrics()
     }
     if (hasOutput) {
-      val outputMetrics = t.registerOutputMetrics(DataWriteMethod.Hadoop)
-      outputMetrics.setBytesWritten(a + b + c)
-      outputMetrics.setRecordsWritten(if (hasRecords) (a + b + c)/100 else -1)
+      t.outputMetrics.setBytesWritten(a + b + c)
+      t.outputMetrics.setRecordsWritten(if (hasRecords) (a + b + c) / 100 else -1)
     } else {
-      val sw = t.registerShuffleWriteMetrics()
+      val sw = t.shuffleWriteMetrics
       sw.incBytesWritten(a + b + c)
       sw.incWriteTime(b + c + d)
       sw.incRecordsWritten(if (hasRecords) (a + b + c) / 100 else -1)
@@ -1899,13 +1879,6 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 18,
-      |          "Name": "${input.READ_METHOD}",
-      |          "Update": "Hadoop",
-      |          "Internal": true,
-      |          "Count Failed Values": true
-      |        },
-      |        {
       |          "ID": 19,
       |          "Name": "${input.BYTES_READ}",
       |          "Update": 2100,
@@ -1916,13 +1889,6 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "ID": 20,
       |          "Name": "${input.RECORDS_READ}",
       |          "Update": 21,
-      |          "Internal": true,
-      |          "Count Failed Values": true
-      |        },
-      |        {
-      |          "ID": 21,
-      |          "Name": "${output.WRITE_METHOD}",
-      |          "Update": "Hadoop",
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
