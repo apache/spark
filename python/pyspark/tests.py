@@ -1963,8 +1963,6 @@ class ContextTests(unittest.TestCase):
             shutil.rmtree(name)
         
 
-    """
-    This needs internet access
     def test_requirements_file(self):
         import pip
         with tempfile.NamedTemporaryFile() as temp:
@@ -1975,7 +1973,6 @@ class ContextTests(unittest.TestCase):
                 qks = sc.parallelize([(0, 0), (1, 1), (2, 2)]) \
                         .map(lambda pair: quadkey.from_geo(pair, 1).key)
                 self.assertSequenceEqual(['3', '1', '1'], qks.collect())
-    """
 
     def test_progress_api(self):
         with SparkContext() as sc:
