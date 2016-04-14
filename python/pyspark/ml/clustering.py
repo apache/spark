@@ -60,10 +60,7 @@ class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
 
     Learning algorithm for Gaussian Mixtures using the expectation-maximization algorithm.
 
-    >>> from pyspark.mllib.linalg import Vectors, DenseMatrix
-    >>> from numpy.testing import assert_equal
-    >>> from shutil import rmtree
-    >>> import os, tempfile
+    >>> from pyspark.mllib.linalg import Vectors
 
     >>> data1 = [(Vectors.dense([-0.1, -0.05 ]),),
     ...         (Vectors.dense([-0.01, -0.1]),),
@@ -83,8 +80,6 @@ class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     3
     >>> transformed = model.transform(df1).select("features", "prediction")
     >>> rows = transformed.collect()
-    >>> len(rows)
-    6
     >>> rows[0].prediction == rows[2].prediction
     False
     >>> rows[4].prediction == rows[5].prediction
@@ -104,6 +99,21 @@ class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     >>> model2.weights == model.weights
     True
     >>> model2.gaussians == model.gaussians
+    True
+    >>> data2 = [(Vectors.dense([-5.1971, -2.5359, -3.8220]),),
+    ...          (Vectors.dense([-5.2211, -5.0602,  4.7118]),),
+    ...          (Vectors.dense([6.8989, 3.4592,  4.6322]),),
+    ...          (Vectors.dense([5.7048,  4.6567, 5.5026]),),
+    ...          (Vectors.dense([4.5605,  5.2043,  6.2734]),)]
+    >>> df2 = sqlContext.createDataFrame(data2, ["features"])
+    >>> gaussianmixture3 = GaussianMixture(k=2, tol=0.0001,
+    ...                                     maxIter=150, seed=10)
+    >>> model3 = gaussianmixture3.fit(df2)
+    >>> transformed2 = model3.transform(df2).select("features", "prediction")
+    >>> rows2 = transformed2.collect()
+    >>> rows2[0].prediction == rows2[1].prediction
+    True
+    >>> rows2[2].prediction == rows2[3].prediction == rows2[4].prediction
     True
 
     .. versionadded:: 2.0.0
