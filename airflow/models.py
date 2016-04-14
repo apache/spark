@@ -183,11 +183,12 @@ class DagBag(LoggingMixin):
         # If the root_dag_id is absent or expired
         orm_dag = DagModel.get_current(root_dag_id)
         if orm_dag and (
-                root_dag_id not in self.dags or (
-                    dag.last_loaded < (
-                    orm_dag.last_expired or datetime(2100, 1, 1)
+                root_dag_id not in self.dags or
+                (
+                    orm_dag.last_expired and
+                    dag.last_loaded < orm_dag.last_expired
                 )
-        )):
+        ):
             # Reprocessing source file
             found_dags = self.process_file(
                 filepath=orm_dag.fileloc, only_if_updated=False)
