@@ -263,53 +263,25 @@ private[columnar] case object RunLengthEncoding extends CompressionScheme {
           (out, nullsBuffer)
         case _: IntegerType =>
           val out = ByteBuffer.allocate(capacity * 4).order(ByteOrder.nativeOrder())
-/*
           var currentValueLocal: Int = 0
           while (valueCountLocal < runLocal || buffer.hasRemaining) {
-            if (valueCountLocal == runLocal) {
-              currentValueLocal = buffer.getInt()
-              runLocal = ByteBufferHelper.getInt(buffer)
-              valueCountLocal = 1
-            } else {
-              valueCountLocal += 1
-            }
-            ByteBufferHelper.putInt(out, currentValueLocal)
-          }
-*/
-          val inarray = buffer.array
-          var inoffset = buffer.position
-          val inlimit = buffer.limit
-          val outarray = out.array
-          var outoffset = 0
-          while (inoffset < inlimit) {
-            val currentValueLocal =
-              org.apache.spark.unsafe.Platform.getInt(inarray,
-                org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET +
-                  inoffset)
-            val runLocal0 =
-              org.apache.spark.unsafe.Platform.getInt(inarray,
-                org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET +
-                  inoffset + 4)
-            inoffset += 8
-            var i = 0
-            while (i < runLocal0) {
-              if (pos != nextNullIndex) {
-                org.apache.spark.unsafe.Platform.putInt(outarray,
-                  org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET +
-                    outoffset, currentValueLocal)
-                i += 1
+            if (pos != nextNullIndex) {
+              if (valueCountLocal == runLocal) {
+                currentValueLocal = buffer.getInt()
+                runLocal = ByteBufferHelper.getInt(buffer)
+                valueCountLocal = 1
               } else {
-                seenNulls += 1
-                if (seenNulls < nullCount) {
-                  nextNullIndex = ByteBufferHelper.getInt(nullsBuffer)
-                }
+                valueCountLocal += 1
               }
-              pos += 1
-              outoffset += 4
+              ByteBufferHelper.putInt(out, currentValueLocal)
+            } else {
+              seenNulls += 1
+              if (seenNulls < nullCount) {
+                nextNullIndex = ByteBufferHelper.getInt(nullsBuffer)
+              }
+              out.position(out.position + 4)
             }
           }
-          buffer.position(inoffset)
-
           out.rewind()
           nullsBuffer.rewind()
           (out, nullsBuffer)
