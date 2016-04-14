@@ -244,7 +244,10 @@ class LogisticRegression @Since("1.2.0") (
   setDefault(weightCol -> "")
 
   @Since("1.5.0")
-  override def setThresholds(value: Array[Double]): this.type = super.setThresholds(value)
+  override def setThresholds(value: Array[Double]): this.type = {
+    logWarning("Ignoring setThresholds, use setThreshold() for binary Logistic Regression.")
+    this
+  }
 
   @Since("1.5.0")
   override def getThresholds: Array[Double] = super.getThresholds
@@ -481,7 +484,10 @@ class LogisticRegressionModel private[spark] (
   override def getThreshold: Double = super.getThreshold
 
   @Since("1.5.0")
-  override def setThresholds(value: Array[Double]): this.type = super.setThresholds(value)
+  override def setThresholds(value: Array[Double]): this.type = {
+    logWarning("Ignoring setThresholds(), use setThreshold() for binary Logistic Regression.")
+    this
+  }
 
   @Since("1.5.0")
   override def getThresholds: Array[Double] = super.getThresholds
