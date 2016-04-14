@@ -157,6 +157,7 @@ private[spark] class HiveExternalCatalog(client: HiveClient) extends ExternalCat
   }
 
   override def renameTable(db: String, oldName: String, newName: String): Unit = withClient {
+    requireDbExists(db)
     val newTable = client.getTable(db, oldName)
       .copy(identifier = TableIdentifier(newName, Some(db)))
     client.alterTable(oldName, newTable)

@@ -21,6 +21,7 @@ import javax.annotation.Nullable
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
 
@@ -39,7 +40,7 @@ abstract class ExternalCatalog {
 
   protected def requireDbExists(db: String): Unit = {
     if (!databaseExists(db)) {
-      throw new AnalysisException(s"Database '$db' does not exist")
+      throw new NoSuchDatabaseException(db)
     }
   }
 

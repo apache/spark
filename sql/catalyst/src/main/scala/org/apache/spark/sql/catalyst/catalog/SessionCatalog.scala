@@ -25,7 +25,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystConf, SimpleCatalystConf}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchFunctionException, SimpleFunctionRegistry}
+import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
@@ -116,7 +116,7 @@ class SessionCatalog(
 
   def setCurrentDatabase(db: String): Unit = {
     if (!databaseExists(db)) {
-      throw new AnalysisException(s"cannot set current database to non-existent '$db'")
+      throw new NoSuchDatabaseException(db)
     }
     currentDb = db
   }
@@ -200,7 +200,7 @@ class SessionCatalog(
       overrideIfExists: Boolean): Unit = {
     val table = formatTableName(name)
     if (tempTables.contains(table) && !overrideIfExists) {
-      throw new AnalysisException(s"Temporary table '$name' already exists.")
+      throw new AlreadyExistTempFunctionException(name)
     }
     tempTables.put(table, tableDefinition)
   }
@@ -222,6 +222,9 @@ class SessionCatalog(
     val oldTableName = formatTableName(oldName.table)
     val newTableName = formatTableName(newName.table)
     if (oldName.database.isDefined || !tempTables.contains(oldTableName)) {
+      if (tableExists(newName)) {
+        throw new AlreadyExistTableException(db = db, table = newTableName)
+      }
       externalCatalog.renameTable(db, oldTableName, newTableName)
     } else {
       val table = tempTables(oldTableName)
@@ -246,7 +249,7 @@ class SessionCatalog(
       if (externalCatalog.tableExists(db, table)) {
         externalCatalog.dropTable(db, table, ignoreIfNotExists = true)
       } else if (!ignoreIfNotExists) {
-        logError(s"Table or View '${name.quotedString}' does not exist")
+        logError(new NoSuchTableException(db = db, table = table).getMessage)
       }
     } else {
       tempTables.remove(table)
@@ -364,6 +367,7 @@ class SessionCatalog(
    * Create partitions in an existing table, assuming it exists.
    * If no database is specified, assume the table is in the current database.
    */
+  // todo: check eligibility of partitions.
   def createPartitions(
       tableName: TableIdentifier,
       parts: Seq[CatalogTablePartition],
@@ -377,6 +381,7 @@ class SessionCatalog(
    * Drop partitions from a table, assuming they exist.
    * If no database is specified, assume the table is in the current database.
    */
+  // todo: check eligibility of partitions.
   def dropPartitions(
       tableName: TableIdentifier,
       parts: Seq[TablePartitionSpec],
@@ -392,6 +397,7 @@ class SessionCatalog(
    * This assumes index i of `specs` corresponds to index i of `newSpecs`.
    * If no database is specified, assume the table is in the current database.
    */
+  // todo: check eligibility of partitions.
   def renamePartitions(
       tableName: TableIdentifier,
       specs: Seq[TablePartitionSpec],
@@ -410,6 +416,7 @@ class SessionCatalog(
    * Note: If the underlying implementation does not support altering a certain field,
    * this becomes a no-op.
    */
+  // todo: check eligibility of partitions.
   def alterPartitions(tableName: TableIdentifier, parts: Seq[CatalogTablePartition]): Unit = {
     val db = tableName.database.getOrElse(currentDb)
     val table = formatTableName(tableName.table)
@@ -460,7 +467,7 @@ class SessionCatalog(
     if (!functionExists(identifier)) {
       externalCatalog.createFunction(db, newFuncDefinition)
     } else if (!ignoreIfExists) {
-      throw new AnalysisException(s"function '$identifier' already exists in database '$db'")
+      throw new AlreadyExistFunctionException(db = db, func = identifier.toString)
     }
   }
 
@@ -482,7 +489,7 @@ class SessionCatalog(
       }
       externalCatalog.dropFunction(db, name.funcName)
     } else if (!ignoreIfNotExists) {
-      throw new AnalysisException(s"function '$identifier' does not exist in database '$db'")
+      throw new NoSuchFunctionException(db = db, func = identifier.toString)
     }
   }
 
@@ -542,7 +549,7 @@ class SessionCatalog(
       funcDefinition: FunctionBuilder,
       ignoreIfExists: Boolean): Unit = {
     if (functionRegistry.lookupFunctionBuilder(name).isDefined && !ignoreIfExists) {
-      throw new AnalysisException(s"Temporary function '$name' already exists.")
+      throw new AlreadyExistTempFunctionException(name)
     }
     functionRegistry.registerFunction(name, info, funcDefinition)
   }
@@ -555,8 +562,7 @@ class SessionCatalog(
   // dropFunction and dropTempFunction.
   def dropTempFunction(name: String, ignoreIfNotExists: Boolean): Unit = {
     if (!functionRegistry.dropFunction(name) && !ignoreIfNotExists) {
-      throw new AnalysisException(
-        s"Temporary function '$name' cannot be dropped because it does not exist!")
+      throw new NoSuchTempFunctionException(name)
     }
   }
 

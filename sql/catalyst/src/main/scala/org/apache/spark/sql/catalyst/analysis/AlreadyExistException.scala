@@ -20,27 +20,27 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalog.TablePartitionSpec
 
-
 /**
- * Thrown by a catalog when an item cannot be found. The analyzer will rethrow the exception
+ * Thrown by a catalog when an item already exists. The analyzer will rethrow the exception
  * as an [[org.apache.spark.sql.AnalysisException]] with the correct position information.
  */
-class NoSuchDatabaseException(db: String) extends AnalysisException(s"Database '$db' not found")
+class AlreadyExistDatabaseException(db: String)
+  extends AnalysisException(s"Database '$db' already exists")
 
-class NoSuchTableException(db: String, table: String)
-  extends AnalysisException(s"Table or View '$table' not found in database '$db'")
+class AlreadyExistTableException(db: String, table: String)
+  extends AnalysisException(s"Table or View '$table' already exists in database '$db'")
 
-class NoSuchPartitionException(db: String, table: String, spec: TablePartitionSpec)
+class AlreadyExistPartitionException(db: String, table: String, spec: TablePartitionSpec)
   extends AnalysisException(
-    s"Partition not found in table '$table' database '$db':\n" + spec.mkString("\n"))
+    s"Partition already exists in table '$table' database '$db':\n" + spec.mkString("\n"))
 
-class NoSuchPartitionsException(db: String, table: String, specs: Seq[TablePartitionSpec])
+class AlreadyExistPartitionsException(db: String, table: String, specs: Seq[TablePartitionSpec])
   extends AnalysisException(
-    s"The following partitions not found in table '$table' database '$db':\n"
+    s"The following partitions already exists in table '$table' database '$db':\n"
       + specs.mkString("\n===\n"))
 
-class NoSuchFunctionException(db: String, func: String)
-  extends AnalysisException(s"Function '$func' not found in database '$db'")
+class AlreadyExistFunctionException(db: String, func: String)
+  extends AnalysisException(s"Function '$func' already exists in database '$db'")
 
-class NoSuchTempFunctionException(func: String)
-  extends AnalysisException(s"Temporary function '$func' not found")
+class AlreadyExistTempFunctionException(func: String)
+  extends AnalysisException(s"Temporary function '$func' already exists")

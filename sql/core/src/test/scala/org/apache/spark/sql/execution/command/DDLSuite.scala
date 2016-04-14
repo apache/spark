@@ -124,7 +124,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         val message = intercept[AnalysisException] {
           sql(s"CREATE DATABASE $dbName")
         }.getMessage
-        assert(message.contains(s"Database '$dbNameWithoutBackTicks' already exists."))
+        assert(message.contains(s"Database '$dbNameWithoutBackTicks' already exists"))
       } finally {
         catalog.reset()
       }
@@ -182,17 +182,17 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       var message = intercept[AnalysisException] {
         sql(s"DROP DATABASE $dbName")
       }.getMessage
-      assert(message.contains(s"Database '$dbNameWithoutBackTicks' does not exist"))
+      assert(message.contains(s"Database '$dbNameWithoutBackTicks' not found"))
 
       message = intercept[AnalysisException] {
         sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('d'='d')")
       }.getMessage
-      assert(message.contains(s"Database '$dbNameWithoutBackTicks' does not exist"))
+      assert(message.contains(s"Database '$dbNameWithoutBackTicks' not found"))
 
       message = intercept[AnalysisException] {
         sql(s"DESCRIBE DATABASE EXTENDED $dbName")
       }.getMessage
-      assert(message.contains(s"Database '$dbNameWithoutBackTicks' does not exist"))
+      assert(message.contains(s"Database '$dbNameWithoutBackTicks' not found"))
 
       sql(s"DROP DATABASE IF EXISTS $dbName")
     }
