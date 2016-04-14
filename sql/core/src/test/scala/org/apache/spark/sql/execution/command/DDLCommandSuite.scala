@@ -440,37 +440,25 @@ class DDLCommandSuite extends PlanTest {
   }
 
   test("alter table: set file format") {
-    val sql1 =
-      """
-       |ALTER TABLE table_name SET FILEFORMAT INPUTFORMAT 'test'
-       |OUTPUTFORMAT 'test' SERDE 'test' INPUTDRIVER 'test' OUTPUTDRIVER 'test'
-      """.stripMargin
-    val sql2 = "ALTER TABLE table_name SET FILEFORMAT INPUTFORMAT 'test' " +
+    val sql1 = "ALTER TABLE table_name SET FILEFORMAT INPUTFORMAT 'test' " +
       "OUTPUTFORMAT 'test' SERDE 'test'"
-    val sql3 = "ALTER TABLE table_name PARTITION (dt='2008-08-08', country='us') " +
+    val sql2 = "ALTER TABLE table_name PARTITION (dt='2008-08-08', country='us') " +
       "SET FILEFORMAT PARQUET"
     val parsed1 = parser.parsePlan(sql1)
     val parsed2 = parser.parsePlan(sql2)
-    val parsed3 = parser.parsePlan(sql3)
     val tableIdent = TableIdentifier("table_name", None)
     val expected1 = AlterTableSetFileFormat(
       tableIdent,
       None,
-      List("test", "test", "test", "test", "test"),
+      List("test", "test", "test"),
       None)(sql1)
     val expected2 = AlterTableSetFileFormat(
       tableIdent,
-      None,
-      List("test", "test", "test"),
-      None)(sql2)
-    val expected3 = AlterTableSetFileFormat(
-      tableIdent,
       Some(Map("dt" -> "2008-08-08", "country" -> "us")),
       Seq(),
-      Some("PARQUET"))(sql3)
+      Some("PARQUET"))(sql2)
     comparePlans(parsed1, expected1)
     comparePlans(parsed2, expected2)
-    comparePlans(parsed3, expected3)
   }
 
   test("alter table: set location") {

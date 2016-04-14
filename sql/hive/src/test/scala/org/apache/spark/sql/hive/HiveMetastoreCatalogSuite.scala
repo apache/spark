@@ -88,7 +88,7 @@ class DataSourceWithHiveMetastoreCatalogSuite
         assert(hiveTable.storage.outputFormat === Some(outputFormat))
         assert(hiveTable.storage.serde === Some(serde))
 
-        assert(hiveTable.partitionColumns.isEmpty)
+        assert(hiveTable.partitionColumnNames.isEmpty)
         assert(hiveTable.tableType === CatalogTableType.MANAGED_TABLE)
 
         val columns = hiveTable.schema
@@ -151,7 +151,7 @@ class DataSourceWithHiveMetastoreCatalogSuite
           assert(hiveTable.storage.outputFormat === Some(outputFormat))
           assert(hiveTable.storage.serde === Some(serde))
 
-          assert(hiveTable.partitionColumns.isEmpty)
+          assert(hiveTable.partitionColumnNames.isEmpty)
           assert(hiveTable.tableType === CatalogTableType.EXTERNAL_TABLE)
 
           val columns = hiveTable.schema
