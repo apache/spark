@@ -123,29 +123,30 @@ setMethod("summary", signature(object = "GeneralizedLinearRegressionModel"),
             return(ans)
           })
 
+#' Print the summary of GeneralizedLinearRegressionModel
+#'
 #' @rdname print
 #' @name print.summary.GeneralizedLinearRegressionModel
 #' @export
-print.summary.GeneralizedLinearRegressionModel <- function(x, digits = max(3L, getOption("digits") - 3L), ...) {
-    x$deviance.resid <- setNames(unlist(approxQuantile(x$deviance.resid, "devianceResiduals",
-                                 c(0.0, 0.25, 0.5, 0.75, 1.0), 0.0)),
-                                 c("Min", "1Q", "Median", "3Q", "Max"))
-    xx <- zapsmall(x$deviance.resid, digits + 1L)
-    cat("\nDeviance Residuals: \n")
-    print.default(xx, digits = digits, na.print = "", print.gap = 2L)
+print.summary.GeneralizedLinearRegressionModel <- function(x, ...) {
+  x$deviance.resid <- setNames(unlist(approxQuantile(x$deviance.resid, "devianceResiduals",
+    c(0.0, 0.25, 0.5, 0.75, 1.0), 0.0)), c("Min", "1Q", "Median", "3Q", "Max"))
+  x$deviance.resid <- zapsmall(x$deviance.resid, 5L)
+  cat("\nDeviance Residuals: \n")
+  print.default(x$deviance.resid, digits = 5L, na.print = "", print.gap = 2L)
 
-    cat("\nCoefficients:\n")
-    print.default(x$coefficients, digits = digits + 1L, na.print = "", print.gap = 2L)
+  cat("\nCoefficients:\n")
+  print.default(x$coefficients, digits = 5L, na.print = "", print.gap = 2L)
 
-    cat("\n(Dispersion parameter for ", x$family, " family taken to be ", format(x$dispersion),
-        ")\n\n", apply(cbind(paste(format(c("Null","Residual"), justify="right"), "deviance:"),
-        format(unlist(x[c("null.deviance","deviance")]), digits = max(5L, digits + 1L)),
-        " on", format(unlist(x[c("df.null","df.residual")])), " degrees of freedom\n"),
-        1L, paste, collapse = " "), sep = "")
-    cat("AIC: ", format(x$aic, digits = max(4L, digits + 1L)),"\n\n",
-        "Number of Fisher Scoring iterations: ", x$iter, "\n", sep = "")
-    cat("\n")
-    invisible(x)
+  cat("\n(Dispersion parameter for ", x$family, " family taken to be ", format(x$dispersion),
+    ")\n\n", apply(cbind(paste(format(c("Null", "Residual"), justify = "right"), "deviance:"),
+    format(unlist(x[c("null.deviance", "deviance")]), digits = 5L),
+    " on", format(unlist(x[c("df.null", "df.residual")])), " degrees of freedom\n"),
+    1L, paste, collapse = " "), sep = "")
+  cat("AIC: ", format(x$aic, digits = 4L), "\n\n",
+    "Number of Fisher Scoring iterations: ", x$iter, "\n", sep = "")
+  cat("\n")
+  invisible(x)
   }
 
 #' Make predictions from a generalized linear model
