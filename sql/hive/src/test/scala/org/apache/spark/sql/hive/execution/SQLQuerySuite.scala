@@ -19,12 +19,9 @@ package org.apache.spark.sql.hive.execution
 
 import java.sql.{Date, Timestamp}
 
-import scala.collection.JavaConverters._
-
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, FunctionRegistry}
-import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.{HiveContext, MetastoreRelation}
@@ -1850,6 +1847,52 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           sqlContext.table("dest2"),
           sql("SELECT col FROM source LATERAL VIEW EXPLODE(arr) exp AS col WHERE col > 3"))
       }
+    }
+  }
+
+  test(
+    "SPARK-14488 \"CREATE TEMPORARY TABLE ... USING ... AS SELECT ...\" " +
+    "shouldn't create persisted table"
+  ) {
+    withTempPath { dir =>
+      withTempTable("t1", "t2") {
+        val path = dir.getCanonicalPath
+        val ds = sqlContext.range(10)
+        ds.registerTempTable("t1")
+
+        sql(
+          s"""CREATE TEMPORARY TABLE t2
+             |USING PARQUET
+             |OPTIONS (PATH '$path')
+             |AS SELECT * FROM t1
+           """.stripMargin)
+
+        checkAnswer(
+          sqlContext.tables().select('isTemporary).filter('tableName === "t2"),
+          Row(true)
+        )
+
+        checkAnswer(table("t2"), table("t1"))
+      }
+    }
+  }
+
+  test(
+    "SPARK-14493 \"CREATE TEMPORARY TABLE ... USING ... AS SELECT ...\" " +
+    "shouldn always be used together with PATH data source option"
+  ) {
+    withTempTable("t") {
+      sqlContext.range(10).registerTempTable("t")
+
+      val message = intercept[IllegalArgumentException] {
+        sql(
+          s"""CREATE TEMPORARY TABLE t1
+             |USING PARQUET
+             |AS SELECT * FROM t
+           """.stripMargin)
+      }.getMessage
+
+      assert(message == "'path' is not specified")
     }
   }
 }
