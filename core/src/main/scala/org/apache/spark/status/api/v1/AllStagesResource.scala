@@ -147,7 +147,7 @@ private[v1] object AllStagesResource {
       speculative = uiData.taskInfo.speculative,
       accumulatorUpdates = uiData.taskInfo.accumulables.map { convertAccumulableInfo },
       errorMessage = uiData.errorMessage,
-      taskMetrics = uiData.taskMetrics.map { convertUiTaskMetrics }
+      taskMetrics = uiData.metrics.map { convertUiTaskMetrics }
     )
   }
 
@@ -155,7 +155,7 @@ private[v1] object AllStagesResource {
       allTaskData: Iterable[TaskUIData],
       quantiles: Array[Double]): TaskMetricDistributions = {
 
-    val rawMetrics = allTaskData.flatMap{_.taskMetrics}.toSeq
+    val rawMetrics = allTaskData.flatMap{_.metrics}.toSeq
 
     def metricQuantiles(f: InternalTaskMetrics => Double): IndexedSeq[Double] =
       Distribution(rawMetrics.map { d => f(d) }).get.getQuantiles(quantiles)

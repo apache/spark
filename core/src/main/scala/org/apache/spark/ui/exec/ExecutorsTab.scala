@@ -70,7 +70,7 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener, conf: Spar
     executorToLogUrls(eid) = executorAdded.executorInfo.logUrlMap
     executorToTotalCores(eid) = executorAdded.executorInfo.totalCores
     executorToTasksMax(eid) = executorToTotalCores(eid) / conf.getInt("spark.task.cpus", 1)
-    executorIdToData(eid) = ExecutorUIData(executorAdded.time)
+    executorIdToData(eid) = new ExecutorUIData(executorAdded.time)
   }
 
   override def onExecutorRemoved(
