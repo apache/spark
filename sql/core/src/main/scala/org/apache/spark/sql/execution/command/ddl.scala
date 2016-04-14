@@ -225,30 +225,6 @@ case class DropTable(
 }
 
 /**
- * A command that renames a table/view.
- *
- * The syntax of this command is:
- * {{{
- *   ALTER TABLE table1 RENAME TO table2;
- *   ALTER VIEW view1 RENAME TO view2;
- * }}}
- */
-case class AlterTableRename(
-    oldName: TableIdentifier,
-    newName: TableIdentifier,
-    isView: Boolean)
-  extends RunnableCommand {
-
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    val catalog = sqlContext.sessionState.catalog
-    DDLUtils.verifyAlterTableOrAlterView(catalog, oldName, isView)
-    catalog.invalidateTable(oldName)
-    catalog.renameTable(oldName, newName)
-    Seq.empty[Row]
-  }
-}
-
-/**
  * A command that sets table/view properties.
  *
  * The syntax of this command is:
@@ -265,7 +241,7 @@ case class AlterTableSetProperties(
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val catalog = sqlContext.sessionState.catalog
-    DDLUtils.verifyAlterTableOrAlterView(catalog, tableName, isView)
+    DDLUtils.verifyAlterTableType(catalog, tableName, isView)
     val table = catalog.getTableMetadata(tableName)
     val newProperties = table.properties ++ properties
     if (DDLUtils.isDatasourceTable(newProperties)) {
@@ -297,7 +273,7 @@ case class AlterTableUnsetProperties(
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val catalog = sqlContext.sessionState.catalog
-    DDLUtils.verifyAlterTableOrAlterView(catalog, tableName, isView)
+    DDLUtils.verifyAlterTableType(catalog, tableName, isView)
     val table = catalog.getTableMetadata(tableName)
     if (DDLUtils.isDatasourceTable(table)) {
       throw new AnalysisException(
@@ -542,10 +518,11 @@ private object DDLUtils {
     isDatasourceTable(table.properties)
   }
 
-  // If the command ALTER VIEW is to alter a table or ALTER TABLE is to alter a view,
-  // issue an exception.
-  @throws[AnalysisException]
-  def verifyAlterTableOrAlterView(
+  /**
+   * If the command ALTER VIEW is to alter a table or ALTER TABLE is to alter a view,
+   * issue an exception [[AnalysisException]].
+   */
+  def verifyAlterTableType(
       catalog: SessionCatalog,
       tableIdentifier: TableIdentifier,
       isView: Boolean): Unit = {
