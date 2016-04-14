@@ -124,12 +124,10 @@ class SessionCatalog(
   }
 
   def createDatabasePath(dbName: String, path: Option[String]): String = {
-    val dbPath =
-      path.map(new Path(_))
-        .getOrElse(
-          new Path(new Path(System.getProperty("java.io.tmpdir")), dbName.toLowerCase() + ".db"))
-    val dbLocation = dbPath.toString
-    if (dbLocation.endsWith(File.separator)) dbLocation.dropRight(1) else dbLocation
+    val dbPath = path.map(new Path(_)).getOrElse {
+      new Path(new Path(System.getProperty("java.io.tmpdir")), dbName.toLowerCase() + ".db")
+    }
+    dbPath.toString.stripSuffix(File.separator)
   }
 
   // ----------------------------------------------------------------------------
