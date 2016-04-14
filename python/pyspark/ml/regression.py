@@ -28,7 +28,7 @@ from pyspark.sql import DataFrame
 __all__ = ['AFTSurvivalRegression', 'AFTSurvivalRegressionModel',
            'DecisionTreeRegressor', 'DecisionTreeRegressionModel',
            'GBTRegressor', 'GBTRegressionModel',
-           'GeneralizedLinearRegression', 'GeneralizedLinearRegressionModel'
+           'GeneralizedLinearRegression', 'GeneralizedLinearRegressionModel',
            'IsotonicRegression', 'IsotonicRegressionModel',
            'LinearRegression', 'LinearRegressionModel',
            'LinearRegressionSummary', 'LinearRegressionTrainingSummary',
