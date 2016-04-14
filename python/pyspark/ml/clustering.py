@@ -28,6 +28,7 @@ __all__ = ['BisectingKMeans', 'BisectingKMeansModel',
 class GaussianMixtureModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
     .. note:: Experimental
+
     Model fitted by GaussianMixtureModel.
 
     .. versionadded:: 2.0.0
