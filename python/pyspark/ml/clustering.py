@@ -20,7 +20,6 @@ from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel
 from pyspark.ml.param.shared import *
 from pyspark.mllib.common import inherit_doc
-from pyspark.mllib.stat.distribution import MultivariateGaussian
 
 __all__ = ['BisectingKMeans', 'BisectingKMeansModel',
            'KMeans', 'KMeansModel', 'GaussianMixture', 'GaussianMixtureModel']
@@ -28,6 +27,7 @@ __all__ = ['BisectingKMeans', 'BisectingKMeansModel',
 
 class GaussianMixtureModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
+    .. note:: Experimental
     Model fitted by GaussianMixtureModel.
 
     .. versionadded:: 2.0.0
@@ -40,7 +40,7 @@ class GaussianMixtureModel(JavaModel, JavaMLWritable, JavaMLReadable):
         Weights for each Gaussian distribution in the mixture, where weights[i] is
         the weight for Gaussian i, and weights.sum == 1.
         """
-        return [c.toArray() for c in self._call_java("weights")]
+        return self._call_java("weights")
 
     @property
     @since("2.0.0")
@@ -49,14 +49,65 @@ class GaussianMixtureModel(JavaModel, JavaMLWritable, JavaMLReadable):
         Array of MultivariateGaussian where gaussians[i] represents
         the Multivariate Gaussian (Normal) Distribution for Gaussian i.
         """
-        return [
-            MultivariateGaussian(gaussian[0], gaussian[1])
-            for gaussian in self._call_java("gaussians")]
+        return self._call_java("gaussians")
 
 
 @inherit_doc
 class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol, HasSeed,
                       HasProbabilityCol, JavaMLWritable, JavaMLReadable):
+    """
+    .. note:: Experimental
+
+    Learning algorithm for Gaussian Mixtures using the expectation-maximization algorithm.
+
+    >>> from pyspark.mllib.linalg import Vectors, DenseMatrix
+    >>> from numpy.testing import assert_equal
+    >>> from shutil import rmtree
+    >>> import os, tempfile
+
+    >>> data1 = [(Vectors.dense([-0.1, -0.05 ]),),
+    ...         (Vectors.dense([-0.01, -0.1]),),
+    ...         (Vectors.dense([0.9, 0.8]),),
+    ...         (Vectors.dense([0.75, 0.935]),),
+    ...         (Vectors.dense([-0.83, -0.68]),),
+    ...         (Vectors.dense([-0.91, -0.76]),)]
+    >>> df1 = sqlContext.createDataFrame(data1, ["features"])
+    >>> gaussianmixture = GaussianMixture(k=3, tol=0.0001,
+    ...                                    maxIter=50, seed=10)
+    >>> model = gaussianmixture.fit(df1)
+    >>> weights = model.weights
+    >>> len(weights)
+    3
+    >>> gaussians = model.gaussians
+    >>> len(gaussians)
+    3
+    >>> transformed = model.transform(df1).select("features", "prediction")
+    >>> rows = transformed.collect()
+    >>> len(rows)
+    6
+    >>> rows[0].prediction == rows[2].prediction
+    False
+    >>> rows[4].prediction == rows[5].prediction
+    True
+    >>> rows[1].prediction == rows[5].prediction
+    False
+    >>> rows[2].prediction == rows[3].prediction
+    True
+    >>> gmm_path = temp_path + "/gmm"
+    >>> gaussianmixture.save(gmm_path)
+    >>> gaussianmixture2 = GaussianMixture.load(gmm_path)
+    >>> gaussianmixture2.getK()
+    3
+    >>> model_path = temp_path + "/gmm_model"
+    >>> model.save(model_path)
+    >>> model2 = GaussianMixtureModel.load(model_path)
+    >>> model2.weights == model.weights
+    True
+    >>> model2.gaussians == model.gaussians
+    True
+
+    .. versionadded:: 2.0.0
+    """
 
     k = Param(Params._dummy(), "k", "number of clusters to create",
               typeConverter=TypeConverters.toInt)
