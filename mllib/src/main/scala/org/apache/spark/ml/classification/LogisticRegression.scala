@@ -114,7 +114,7 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
   /**
    * Get thresholds for binary or multiclass classification.
    *
-   * If [[thresholds]] is x, return its value.
+   * If [[thresholds]] is set, return its value.
    * Otherwise, if [[threshold]] is set, return the equivalent thresholds for binary
    * classification: (1-threshold, threshold).
    * If neither are set, throw an exception.
