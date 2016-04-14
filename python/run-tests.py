@@ -41,6 +41,7 @@ from sparktestsupport import SPARK_HOME  # noqa (suppress pep8 warnings)
 from sparktestsupport.shellutils import which, subprocess_check_output  # noqa
 from sparktestsupport.modules import all_modules  # noqa
 
+
 python_modules = dict((m.name, m) for m in all_modules if m.python_test_goals if m.name != 'root')
 
 
