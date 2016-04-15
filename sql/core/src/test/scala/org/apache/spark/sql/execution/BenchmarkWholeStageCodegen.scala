@@ -153,16 +153,36 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
   ignore("aggregate with keys") {
     val N = 20 << 20
 
-    runBenchmark("Aggregate w keys", N) {
-      sqlContext.range(N).selectExpr("(id & 65535) as k").groupBy("k").sum().collect()
+    val benchmark = new Benchmark("Aggregate w keys", N)
+    def f(): Unit = sqlContext.range(N).selectExpr("(id & 65535) as k").groupBy("k").sum().collect()
+
+    benchmark.addCase(s"codegen = F") { iter =>
+      sqlContext.setConf("spark.sql.codegen.wholeStage", "false")
+      f()
     }
 
+    benchmark.addCase(s"codegen = T hashmap = F") { iter =>
+      sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
+      sqlContext.setConf("spark.sql.codegen.aggregate.map.enabled", "false")
+      f()
+    }
+
+    benchmark.addCase(s"codegen = T hashmap = T") { iter =>
+      sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
+      sqlContext.setConf("spark.sql.codegen.aggregate.map.enabled", "true")
+      f()
+    }
+
+    benchmark.run()
+
     /*
-      Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
-      Aggregate w keys:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-      -------------------------------------------------------------------------------------------
-      Aggregate w keys codegen=false           2429 / 2644          8.6         115.8       1.0X
-      Aggregate w keys codegen=true            1535 / 1571         13.7          73.2       1.6X
+    Java HotSpot(TM) 64-Bit Server VM 1.8.0_73-b02 on Mac OS X 10.11.4
+    Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
+    Aggregate w keys:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    -------------------------------------------------------------------------------------------
+    codegen = F                              2219 / 2392          9.4         105.8       1.0X
+    codegen = T hashmap = F                  1330 / 1466         15.8          63.4       1.7X
+    codegen = T hashmap = T                   384 /  518         54.7          18.3       5.8X
     */
   }
 

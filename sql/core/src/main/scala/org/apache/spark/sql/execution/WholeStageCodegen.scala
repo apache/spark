@@ -126,6 +126,7 @@ trait CodegenSupport extends SparkPlan {
         // outputVars will be used to generate the code for UnsafeRow, so we should copy them
         outputVars.map(_.copy())
       }
+
     val rowVar = if (row != null) {
       ExprCode("", "false", row)
     } else {
