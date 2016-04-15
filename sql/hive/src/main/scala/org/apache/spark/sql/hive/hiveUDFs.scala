@@ -82,7 +82,7 @@ private[hive] case class HiveSimpleUDF(
 
   // TODO: Finish input output types.
   override def eval(input: InternalRow): Any = {
-    val inputs = wrap(children.map(c => c.eval(input)), arguments, cached, inputDataTypes)
+    val inputs = wrap(children.map(_.eval(input)), arguments, cached, inputDataTypes)
     val ret = FunctionRegistry.invoke(
       method,
       function,

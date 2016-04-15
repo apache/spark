@@ -175,7 +175,7 @@ private class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanceSlack:
 
   // gets the *current* preferred locations from the DAGScheduler (as opposed to the static ones)
   def currPrefLocs(part: Partition): Seq[String] = {
-    prev.context.getPreferredLocs(prev, part.index).map(tl => tl.host)
+    prev.context.getPreferredLocs(prev, part.index).map(_.host)
   }
 
   // this class just keeps iterating and rotating infinitely over the partitions of the RDD
@@ -190,12 +190,12 @@ private class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanceSlack:
 
     // initializes/resets to start iterating from the beginning
     def resetIterator(): Iterator[(String, Partition)] = {
-      val iterators = (0 to 2).map( x =>
+      val iterators = (0 to 2).map { x =>
         prev.partitions.iterator.flatMap { p =>
           if (currPrefLocs(p).size > x) Some((currPrefLocs(p)(x), p)) else None
         }
-      )
-      iterators.reduceLeft((x, y) => x ++ y)
+      }
+      iterators.reduceLeft(_ ++ _)
     }
 
     // hasNext() is false iff there are no preferredLocations for any of the partitions of the RDD
@@ -241,7 +241,7 @@ private class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanceSlack:
 
     // deal with empty case, just create targetLen partition groups with no preferred location
     if (!rotIt.hasNext) {
-      (1 to targetLen).foreach(x => groupArr += PartitionGroup())
+      (1 to targetLen).foreach(groupArr += PartitionGroup())
       return
     }
 
@@ -330,7 +330,7 @@ private class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanceSlack:
     }
   }
 
-  def getPartitions: Array[PartitionGroup] = groupArr.filter( pg => pg.size > 0).toArray
+  def getPartitions: Array[PartitionGroup] = groupArr.filter(_.size > 0).toArray
 
   /**
    * Runs the packing algorithm and returns an array of PartitionGroups that if possible are

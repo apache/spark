@@ -169,8 +169,8 @@ class Analyzer(
     private def assignAliases(exprs: Seq[NamedExpression]) = {
       exprs.zipWithIndex.map {
         case (expr, i) =>
-          expr transformUp {
-            case u @ UnresolvedAlias(child, optionalAliasName) => child match {
+          expr.transformUp { case u @ UnresolvedAlias(child, optionalAliasName) =>
+            child match {
               case ne: NamedExpression => ne
               case e if !e.resolved => u
               case g: Generator => MultiAlias(g, Nil)
@@ -225,7 +225,7 @@ class Analyzer(
      *  represented as the bit masks.
      */
     def bitmasks(c: Cube): Seq[Int] = {
-      Seq.tabulate(1 << c.groupByExprs.length)(i => i)
+      Seq.tabulate(1 << c.groupByExprs.length)(_)
     }
 
     private def hasGroupingAttribute(expr: Expression): Boolean = {

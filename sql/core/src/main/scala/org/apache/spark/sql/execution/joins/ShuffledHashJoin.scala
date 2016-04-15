@@ -60,9 +60,7 @@ case class ShuffledHashJoin(
     val context = TaskContext.get()
     val relation = HashedRelation(iter, buildKeys, taskMemoryManager = context.taskMemoryManager())
     // This relation is usually used until the end of task.
-    context.addTaskCompletionListener { _ =>
-      relation.close()
-    }
+    context.addTaskCompletionListener(_ => relation.close())
     relation
   }
 

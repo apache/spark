@@ -119,7 +119,7 @@ private[deploy] class DriverRunner(
   /** Terminate this driver (or prevent it from ever starting if not yet started) */
   private[worker] def kill() {
     synchronized {
-      process.foreach(p => p.destroy())
+      process.foreach(_.destroy())
       killed = true
     }
   }
