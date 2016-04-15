@@ -66,6 +66,8 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
 
       val partitionColumns =
         l.resolve(files.partitionSchema, files.sqlContext.sessionState.analyzer.resolver)
+      logInfo(s"Partition columns: $partitionColumns")
+
       val partitionSet = AttributeSet(partitionColumns)
       val partitionKeyFilters =
         ExpressionSet(filters.filter(_.references.subsetOf(partitionSet)))

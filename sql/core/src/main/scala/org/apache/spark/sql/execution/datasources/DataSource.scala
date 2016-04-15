@@ -207,7 +207,7 @@ case class DataSource(
           throw new IllegalArgumentException("'path' is not specified")
         })
 
-        new FileStreamSink(sqlContext, path, format)
+        new FileStreamSink(sqlContext, path, format, partitionColumns, options)
       case _ =>
         throw new UnsupportedOperationException(
           s"Data source $className does not support streamed writing")

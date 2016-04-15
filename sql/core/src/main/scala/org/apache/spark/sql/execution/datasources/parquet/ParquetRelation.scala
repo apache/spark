@@ -31,6 +31,7 @@ import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat, FileSplit}
 import org.apache.hadoop.mapreduce.task.{JobContextImpl, TaskAttemptContextImpl}
+import org.apache.parquet.hadoop.codec.CodecConfig
 import org.apache.parquet.{Log => ApacheParquetLog}
 import org.apache.parquet.filter2.compat.FilterCompat
 import org.apache.parquet.filter2.predicate.FilterApi
@@ -46,13 +47,13 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{RDD, SqlNewHadoopPartition, SqlNewHadoopRDD}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.JoinedRow
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.parser.LegacyTypeStringParser
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.types.{AtomicType, DataType, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 import org.apache.spark.util.collection.BitSet
 
@@ -260,6 +261,17 @@ private[sql] class DefaultSource
       schema.forall(_.dataType.isInstanceOf[AtomicType])
   }
 
+  override def buildWriter(
+      sqlContext: SQLContext,
+      dataSchema: StructType,
+      options: Map[String, String]): OutputWriterFactory = {
+    new ParquetOutputWriterFactory(
+      sqlContext.conf,
+      dataSchema,
+      sqlContext.sparkContext.hadoopConfiguration,
+      options)
+  }
+
   override def buildReader(
       sqlContext: SQLContext,
       dataSchema: StructType,
@@ -376,6 +388,116 @@ private[sql] class DefaultSource
     }
   }
 }
+
+private[sql] class ParquetOutputWriterFactory(
+    sqlConf: SQLConf,
+    dataSchema: StructType,
+    hadoopConf: Configuration,
+    options: Map[String, String])
+  extends OutputWriterFactory {
+
+  @transient private val preparedHadoopConf = {
+
+    val job = Job.getInstance(hadoopConf)
+    val conf = ContextUtil.getConfiguration(job)
+
+    val compressionCodec: Option[String] = options
+      .get("compression")
+      .map { codecName =>
+        // Validate if given compression codec is supported or not.
+        val shortParquetCompressionCodecNames = ParquetRelation.shortParquetCompressionCodecNames
+        if (!shortParquetCompressionCodecNames.contains(codecName.toLowerCase)) {
+          val availableCodecs = shortParquetCompressionCodecNames.keys.map(_.toLowerCase)
+          throw new IllegalArgumentException(
+            s"Codec [$codecName] " +
+              s"is not available. Available codecs are ${availableCodecs.mkString(", ")}.")
+        }
+        codecName.toLowerCase
+      }
+
+    // We're not really using `ParquetOutputFormat[Row]` for writing data here, because we override
+    // it in `ParquetOutputWriter` to support appending and dynamic partitioning.  The reason why
+    // we set it here is to setup the output committer class to `ParquetOutputCommitter`, which is
+    // bundled with `ParquetOutputFormat[Row]`.
+    job.setOutputFormatClass(classOf[ParquetOutputFormat[Row]])
+
+    ParquetOutputFormat.setWriteSupportClass(job, classOf[CatalystWriteSupport])
+
+    // We want to clear this temporary metadata from saving into Parquet file.
+    // This metadata is only useful for detecting optional columns when pushdowning filters.
+    val dataSchemaToWrite = StructType.removeMetadata(
+      StructType.metadataKeyForOptionalField,
+      dataSchema).asInstanceOf[StructType]
+    CatalystWriteSupport.setSchema(dataSchemaToWrite, conf)
+
+    // Sets flags for `CatalystSchemaConverter` (which converts Catalyst schema to Parquet schema)
+    // and `CatalystWriteSupport` (writing actual rows to Parquet files).
+    conf.set(
+      SQLConf.PARQUET_BINARY_AS_STRING.key,
+      sqlConf.isParquetBinaryAsString.toString)
+
+    conf.set(
+      SQLConf.PARQUET_INT96_AS_TIMESTAMP.key,
+      sqlConf.isParquetINT96AsTimestamp.toString)
+
+    conf.set(
+      SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key,
+      sqlConf.writeLegacyParquetFormat.toString)
+
+    // Sets compression scheme
+    conf.set(
+      ParquetOutputFormat.COMPRESSION,
+      ParquetRelation
+        .shortParquetCompressionCodecNames
+        .getOrElse(
+          compressionCodec
+            .getOrElse(sqlConf.parquetCompressionCodec.toLowerCase),
+          CompressionCodecName.UNCOMPRESSED).name())
+    conf
+  }
+
+  private val serializableConf = new SerializableConfiguration(preparedHadoopConf)
+
+  override private[sql] def newInstance(path: String): OutputWriter = {
+    new OutputWriter {
+      private val hadoopAttemptContext = new TaskAttemptContextImpl(
+        serializableConf.value,
+        new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0))
+
+      private val recordWriter: RecordWriter[Void, InternalRow] = {
+        new ParquetOutputFormat[InternalRow]() {
+          override def getOutputCommitter(context: TaskAttemptContext): OutputCommitter = {
+            null
+          }
+
+          override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
+            new Path(path)
+          }
+        }.getRecordWriter(hadoopAttemptContext)
+      }
+
+      override def write(row: Row): Unit = {
+        throw new UnsupportedOperationException("call writeInternal")
+      }
+
+      override protected[sql] def writeInternal(row: InternalRow): Unit = {
+        recordWriter.write(null, row)
+      }
+
+      override def close(): Unit = recordWriter.close(hadoopAttemptContext)
+    }
+  }
+
+  private[sql] def newInstance(
+    path: String,
+    bucketId: Option[Int],
+    dataSchema: StructType,
+    context: TaskAttemptContext): OutputWriter = {
+    throw new UnsupportedOperationException("this verison of newInstance not supported for " +
+      "ParquetOutputWriterFactory")
+  }
+}
+
 
 // NOTE: This class is instantiated and used on executor side only, no need to be serializable.
 private[sql] class ParquetOutputWriter(
