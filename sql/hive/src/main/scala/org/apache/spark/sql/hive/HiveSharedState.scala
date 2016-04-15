@@ -40,7 +40,7 @@ private[hive] class HiveSharedState(override val sparkContext: SparkContext)
   /**
    * A Hive client used to interact with the metastore.
    */
-  val metadataHive: HiveClient = {
+  lazy val metadataHive: HiveClient = {
     HiveContext.newClientForMetadata(sparkContext.conf, sparkContext.hadoopConfiguration)
   }
 

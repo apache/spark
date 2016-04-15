@@ -513,7 +513,7 @@ private[hive] class TestHiveSharedState(
     metastoreTemporaryConf: Map[String, String])
   extends HiveSharedState(sc) {
 
-  override val metadataHive: HiveClient = {
+  override lazy val metadataHive: HiveClient = {
     TestHiveContext.newClientForMetadata(
       sc.conf, sc.hadoopConfiguration, warehousePath, scratchDirPath, metastoreTemporaryConf)
   }
