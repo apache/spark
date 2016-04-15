@@ -26,11 +26,9 @@ import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.mllib.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, DataFrameReader, Row, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
@@ -40,7 +38,6 @@ import org.apache.spark.sql.execution.datasources.{CaseInsensitiveMap, HadoopFil
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
-import org.apache.spark.util.collection.BitSet
 
 private[libsvm] class LibSVMOutputWriter(
     path: String,

@@ -578,7 +578,9 @@ private[spark] object JsonProtocol {
     // The "Stage Infos" field was added in Spark 1.2.0
     val stageInfos = Utils.jsonOption(json \ "Stage Infos")
       .map(_.extract[Seq[JValue]].map(stageInfoFromJson)).getOrElse {
-        stageIds.map(id => new StageInfo(id, 0, "unknown", 0, Seq.empty, Seq.empty, "unknown"))
+        stageIds.map { id =>
+          new StageInfo(id, 0, "unknown", 0, Seq.empty, Seq.empty, "unknown", Seq.empty)
+        }
       }
     SparkListenerJobStart(jobId, submissionTime, stageInfos, properties)
   }
@@ -686,7 +688,7 @@ private[spark] object JsonProtocol {
     }
 
     val stageInfo = new StageInfo(
-      stageId, attemptId, stageName, numTasks, rddInfos, parentIds, details)
+      stageId, attemptId, stageName, numTasks, rddInfos, parentIds, details, Seq.empty)
     stageInfo.submissionTime = submissionTime
     stageInfo.completionTime = completionTime
     stageInfo.failureReason = failureReason
@@ -811,8 +813,8 @@ private[spark] object JsonProtocol {
     Utils.jsonOption(json \ "Input Metrics").foreach { inJson =>
       val readMethod = DataReadMethod.withName((inJson \ "Data Read Method").extract[String])
       val inputMetrics = metrics.registerInputMetrics(readMethod)
-      inputMetrics.incBytesReadInternal((inJson \ "Bytes Read").extract[Long])
-      inputMetrics.incRecordsReadInternal((inJson \ "Records Read").extractOpt[Long].getOrElse(0L))
+      inputMetrics.incBytesRead((inJson \ "Bytes Read").extract[Long])
+      inputMetrics.incRecordsRead((inJson \ "Records Read").extractOpt[Long].getOrElse(0L))
     }
 
     // Updated blocks

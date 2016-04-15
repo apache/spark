@@ -992,7 +992,7 @@ class Dataset[T] private[sql](
       sqlContext,
       Project(
         c1.withInputType(
-          boundTEncoder,
+          unresolvedTEncoder.deserializer,
           logicalPlan.output).named :: Nil,
         logicalPlan),
       implicitly[Encoder[U1]])
@@ -1006,7 +1006,7 @@ class Dataset[T] private[sql](
   protected def selectUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
     val encoders = columns.map(_.encoder)
     val namedColumns =
-      columns.map(_.withInputType(resolvedTEncoder, logicalPlan.output).named)
+      columns.map(_.withInputType(unresolvedTEncoder.deserializer, logicalPlan.output).named)
     val execution = new QueryExecution(sqlContext, Project(namedColumns, logicalPlan))
 
     new Dataset(sqlContext, execution, ExpressionEncoder.tuple(encoders))
