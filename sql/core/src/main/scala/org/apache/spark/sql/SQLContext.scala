@@ -41,7 +41,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.ShowTablesCommand
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.ui.{SQLListener, SQLTab}
-import org.apache.spark.sql.internal.{PersistentState, SessionState, SQLConf}
+import org.apache.spark.sql.internal.{SharedState, SessionState, SQLConf}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ExecutionListenerManager
@@ -63,14 +63,14 @@ import org.apache.spark.util.Utils
  * @since 1.0.0
  */
 class SQLContext private[sql](
-    @transient protected[sql] val persistentState: PersistentState,
+    @transient protected[sql] val sharedState: SharedState,
     val isRootContext: Boolean)
   extends Logging with Serializable {
 
   self =>
 
   def this(sc: SparkContext) = {
-    this(new PersistentState(sc), true)
+    this(new SharedState(sc), true)
   }
 
   def this(sparkContext: JavaSparkContext) = this(sparkContext.sc)
@@ -97,11 +97,11 @@ class SQLContext private[sql](
     }
   }
 
-  def sparkContext: SparkContext = persistentState.sparkContext
+  def sparkContext: SparkContext = sharedState.sparkContext
 
-  protected[sql] def cacheManager: CacheManager = persistentState.cacheManager
-  protected[sql] def listener: SQLListener = persistentState.listener
-  protected[sql] def externalCatalog: ExternalCatalog = persistentState.externalCatalog
+  protected[sql] def cacheManager: CacheManager = sharedState.cacheManager
+  protected[sql] def listener: SQLListener = sharedState.listener
+  protected[sql] def externalCatalog: ExternalCatalog = sharedState.externalCatalog
 
   /**
    * Returns a [[SQLContext]] as new session, with separated SQL configurations, temporary
@@ -110,7 +110,7 @@ class SQLContext private[sql](
    *
    * @since 1.6.0
    */
-  def newSession(): SQLContext = new SQLContext(persistentState, isRootContext = false)
+  def newSession(): SQLContext = new SQLContext(sharedState, isRootContext = false)
 
   /**
    * Per-session state, e.g. configuration, functions, temporary tables etc.

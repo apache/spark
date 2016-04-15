@@ -52,7 +52,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.command.{ExecutedCommand, SetCommand}
 import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.hive.execution.{DescribeHiveTableCommand, HiveNativeCommand}
-import org.apache.spark.sql.internal.{PersistentState, SQLConf}
+import org.apache.spark.sql.internal.{SharedState, SQLConf}
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -78,14 +78,14 @@ private[hive] case class CurrentDatabase(ctx: HiveContext)
  * @since 1.0.0
  */
 class HiveContext private[hive](
-    @transient protected[hive] val hivePersistentState: HivePersistentState,
+    @transient protected[hive] val hiveSharedState: HiveSharedState,
     override val isRootContext: Boolean)
-  extends SQLContext(hivePersistentState, isRootContext) with Logging {
+  extends SQLContext(hiveSharedState, isRootContext) with Logging {
 
   self =>
 
   def this(sc: SparkContext) = {
-    this(new HivePersistentState(sc), true)
+    this(new HiveSharedState(sc), true)
   }
 
   def this(sc: JavaSparkContext) = this(sc.sc)
@@ -100,13 +100,13 @@ class HiveContext private[hive](
    * and Hive client (both of execution and metadata) with existing HiveContext.
    */
   override def newSession(): HiveContext = {
-    new HiveContext(hivePersistentState, isRootContext = false)
+    new HiveContext(hiveSharedState, isRootContext = false)
   }
 
   @transient
   protected[sql] override lazy val sessionState = new HiveSessionState(self)
 
-  protected[hive] def hiveCatalog: HiveExternalCatalog = hivePersistentState.externalCatalog
+  protected[hive] def hiveCatalog: HiveExternalCatalog = hiveSharedState.externalCatalog
   protected[hive] def executionHive: HiveClient = sessionState.executionHive
   protected[hive] def metadataHive: HiveClient = sessionState.metadataHive
 

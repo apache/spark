@@ -35,12 +35,12 @@ private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx)
   /**
    * A Hive client used for execution.
    */
-  val executionHive: HiveClient = ctx.hivePersistentState.executionHive.newSession()
+  val executionHive: HiveClient = ctx.hiveSharedState.executionHive.newSession()
 
   /**
    * A Hive client used for interacting with the metastore.
    */
-  val metadataHive: HiveClient = ctx.hivePersistentState.metadataHive.newSession()
+  val metadataHive: HiveClient = ctx.hiveSharedState.metadataHive.newSession()
 
   override lazy val conf: SQLConf = new SQLConf {
     override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
