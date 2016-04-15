@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import scala.beans.{BeanInfo, BeanProperty}
 
+import org.apache.spark.ml.linalg._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.InternalRow
@@ -28,10 +29,11 @@ import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.udt.VectorUDT
 
-private[sql] trait DenseVector extends Serializable
+private[sql] trait DVector extends Serializable
 
-private[sql] class MyDVector(val data: Array[Double]) extends DenseVector with Serializable {
+private[sql] class MyDVector(val data: Array[Double]) extends DVector with Serializable {
   override def equals(other: Any): Boolean = other match {
     case v: MyDVector =>
       java.util.Arrays.equals(this.data, v.data)
@@ -39,7 +41,7 @@ private[sql] class MyDVector(val data: Array[Double]) extends DenseVector with S
   }
 }
 
-private[sql] class MyDVector2(val data: Array[Double]) extends DenseVector with Serializable {
+private[sql] class MyDVector2(val data: Array[Double]) extends DVector with Serializable {
   override def equals(other: Any): Boolean = other match {
     case v: MyDVector2 =>
       java.util.Arrays.equals(this.data, v.data)
@@ -58,9 +60,14 @@ object MyDVector2 {
 @BeanInfo
 private[sql] case class MyPoint(
     @BeanProperty label: Double,
-    @BeanProperty features: DenseVector)
+    @BeanProperty features: DVector)
 
-private[sql] class MyDVectorUDT extends UserDefinedType[DenseVector] {
+@BeanInfo
+private[sql] case class MyVectorPoint(
+    @BeanProperty label: Double,
+    @BeanProperty vector: Vector)
+
+private[sql] class MyDVectorUDT extends UserDefinedType[DVector] {
 
   override def sqlType: DataType = {
     // type: 0 = MyDVector, 1 = MyDVector2
@@ -69,7 +76,7 @@ private[sql] class MyDVectorUDT extends UserDefinedType[DenseVector] {
       StructField("values", ArrayType(DoubleType, containsNull = false), nullable = false)))
   }
 
-  override def serialize(features: DenseVector): InternalRow = {
+  override def serialize(features: DVector): InternalRow = {
     val row = new GenericMutableRow(2)
     features match {
       case MyDVector(data) =>
@@ -82,7 +89,7 @@ private[sql] class MyDVectorUDT extends UserDefinedType[DenseVector] {
     row
   }
 
-  override def deserialize(datum: Any): DenseVector = {
+  override def deserialize(datum: Any): DVector = {
     datum match {
       case row: InternalRow =>
         require(row.numFields == 2, "MyDVectorUDT.deserialize given row with length " +
@@ -99,7 +106,7 @@ private[sql] class MyDVectorUDT extends UserDefinedType[DenseVector] {
     }
   }
 
-  override def userClass: Class[DenseVector] = classOf[DenseVector]
+  override def userClass: Class[DVector] = classOf[DVector]
 
   private[spark] override def asNullable: MyDVectorUDT = this
 
@@ -112,7 +119,7 @@ private[sql] class MyDVectorUDT extends UserDefinedType[DenseVector] {
 class UDTRegistrationSuite extends QueryTest with SharedSQLContext with ParquetTest {
   import testImplicits._
 
-  UDTRegistration.register(classOf[DenseVector], classOf[MyDVectorUDT])
+  UDTRegistration.register(classOf[DVector], classOf[MyDVectorUDT])
   UDTRegistration.register(classOf[MyDVector], classOf[MyDVectorUDT])
   UDTRegistration.register(classOf[MyDVector2], classOf[MyDVectorUDT])
 
@@ -123,6 +130,32 @@ class UDTRegistrationSuite extends QueryTest with SharedSQLContext with ParquetT
   private lazy val pointsRDD2 = Seq(
     MyPoint(1.0, new MyDVector2(Array(0.1, 1.0))),
     MyPoint(0.0, new MyDVector2(Array(0.2, 2.0)))).toDF()
+
+  test("preloaded VectorUDT") {
+    val dv0 = Vectors.dense(Array.empty[Double])
+    val dv1 = Vectors.dense(1.0, 2.0)
+    val sv0 = Vectors.sparse(2, Array.empty, Array.empty)
+    val sv1 = Vectors.sparse(2, Array(1), Array(2.0))
+
+    val vectorRDD = Seq(
+      MyVectorPoint(1.0, dv0),
+      MyVectorPoint(2.0, dv1),
+      MyVectorPoint(3.0, sv0),
+      MyVectorPoint(4.0, sv1)).toDF()
+
+    val labels: RDD[Double] = vectorRDD.select('label).rdd.map { case Row(v: Double) => v }
+    val labelsArrays: Array[Double] = labels.collect()
+    assert(labelsArrays.size === 4)
+    assert(labelsArrays.sorted === Array(1.0, 2.0, 3.0, 4.0))
+
+    val vectors: RDD[Vector] =
+      vectorRDD.select('vector).rdd.map { case Row(v: Vector) => v }
+    val vectorsArrays: Array[Vector] = vectors.collect()
+    assert(vectorsArrays.contains(dv0))
+    assert(vectorsArrays.contains(dv1))
+    assert(vectorsArrays.contains(sv0))
+    assert(vectorsArrays.contains(sv1))
+  }
 
   test("register user type: MyDVector for MyPoint") {
     val labels: RDD[Double] = pointsRDD.select('label).rdd.map { case Row(v: Double) => v }
