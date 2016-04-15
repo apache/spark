@@ -618,7 +618,7 @@ class HiveContext private[hive](
           command.executeCollect().map(_.getString(0))
         }
 
-      case other => 
+      case other =>
         SQLExecution.withNewExecutionId(self, this) {
           val result: Seq[Seq[Any]] = other.executeCollectPublic().map(_.toSeq).toSeq
           // We need the types so we can output struct field names
