@@ -113,9 +113,12 @@ class DriverRunnerTest extends SparkFunSuite {
   }
 
   test("Process doesn't restart if killed") {
-    val (processBuilder, process) = createProcessBuilderAndProcess()
-    val runner = createTestableDriverRunner(processBuilder, superviseRetry = true)
+    val runner = createDriverRunner()
 
+    val sleeper = mock(classOf[Sleeper])
+    runner.setSleeper(sleeper)
+
+    val (processBuilder, process) = createProcessBuilderAndProcess()
     when(process.waitFor()).thenAnswer(new Answer[Int] {
       def answer(invocation: InvocationOnMock): Int = {
         runner.kill()
@@ -123,12 +126,10 @@ class DriverRunnerTest extends SparkFunSuite {
       }
     })
 
-    runner.start()
+    runner.runCommandWithRetry(processBuilder, p => (), supervise = true)
 
-    eventually(timeout(10.seconds), interval(100.millis)) {
-      assert(runner.finalState.get === DriverState.KILLED)
-    }
-    verify(process, atMost(1)).waitFor()  // Might not get to waitFor after thread interrupted
+    verify(process, times(1)).waitFor()
+    verify(sleeper, times(0)).sleep(anyInt())
   }
 
   test("Reset of backoff counter") {
@@ -163,6 +164,25 @@ class DriverRunnerTest extends SparkFunSuite {
     verify(sleeper, times(2)).sleep(2)
   }
 
+  test("Kill process finalized with state KILLED") {
+    val (processBuilder, process) = createProcessBuilderAndProcess()
+    val runner = createTestableDriverRunner(processBuilder, superviseRetry = true)
+
+    when(process.waitFor()).thenAnswer(new Answer[Int] {
+      def answer(invocation: InvocationOnMock): Int = {
+        runner.kill()
+        -1
+      }
+    })
+
+    runner.start()
+
+    eventually(timeout(10.seconds), interval(100.millis)) {
+      assert(runner.finalState.get === DriverState.KILLED)
+    }
+    verify(process, times(1)).waitFor()
+  }
+
   test("Finalized with state FINISHED") {
     val (processBuilder, process) = createProcessBuilderAndProcess()
     val runner = createTestableDriverRunner(processBuilder, superviseRetry = true)
@@ -193,5 +213,4 @@ class DriverRunnerTest extends SparkFunSuite {
       assert(runner.finalException.get.isInstanceOf[RuntimeException])
     }
   }
-
 }

@@ -49,15 +49,15 @@ private[deploy] class DriverRunner(
     val securityManager: SecurityManager)
   extends Logging {
 
-  private var workerThread: Thread = null
-  private var process: Process = null
-
-  // Timeout to wait for when trying to terminate a driver.
-  private val DRIVER_TERMINATE_TIMEOUT_MS = 10 * 1000
+  @volatile private var process: Option[Process] = None
+  @volatile private var killed = false
 
   // Populated once finished
   @volatile private[worker] var finalState: Option[DriverState] = None
   @volatile private[worker] var finalException: Option[Exception] = None
+
+  // Timeout to wait for when trying to terminate a driver.
+  private val DRIVER_TERMINATE_TIMEOUT_MS = 10 * 1000
 
   // Decoupled for testing
   def setClock(_clock: Clock): Unit = {
@@ -70,12 +70,12 @@ private[deploy] class DriverRunner(
 
   private var clock: Clock = new SystemClock()
   private var sleeper = new Sleeper {
-    def sleep(seconds: Int): Unit = Thread.sleep(seconds * 1000)
+    def sleep(seconds: Int): Unit = (0 until seconds).takeWhile(f => {Thread.sleep(1000); !killed})
   }
 
   /** Starts a thread to run and manage the driver. */
   private[worker] def start() = {
-    workerThread = new Thread("DriverRunner for " + driverId) {
+    new Thread("DriverRunner for " + driverId) {
       override def run() {
         var shutdownHook: AnyRef = null
         try {
@@ -84,16 +84,23 @@ private[deploy] class DriverRunner(
             kill()
           }
 
-          // prepare driver jars, launch driver and set final state from process exit code
+          // prepare driver jars and launch driver
           val exitCode = prepareAndLaunchDriver()
-          finalState = if (exitCode == 0) Some(DriverState.FINISHED) else Some(DriverState.FAILED)
+
+          // set final state depending on if forcibly killed and process exit code
+          finalState = if (exitCode == 0) {
+            Some(DriverState.FINISHED)
+          } else if (killed) {
+            Some(DriverState.KILLED)
+          } else {
+            Some(DriverState.FAILED)
+          }
         }
         catch {
-          case interrupted: InterruptedException =>
-            logInfo("Runner thread for driver " + driverId + " interrupted")
-            killProcessAndFinalize(DriverState.KILLED, interrupted)
           case e: Exception =>
-            killProcessAndFinalize(DriverState.ERROR, e)
+            kill()
+            finalState = Some(DriverState.ERROR)
+            finalException = Some(e)
         }
         finally {
           if (shutdownHook != null) ShutdownHookManager.removeShutdownHook(shutdownHook)
@@ -102,40 +109,20 @@ private[deploy] class DriverRunner(
         // notify worker of final driver state, possible exception
         worker.send(DriverStateChanged(driverId, finalState.get, finalException))
       }
-
-      // kill the process if started, set shared finalizing variables
-      def killProcessAndFinalize(state: DriverState.DriverState, e: Exception): Unit = {
-        killProcess()
-        finalState = Some(state)
-        finalException = Some(e)
-      }
-    }
-
-    workerThread.start()
+    }.start()
   }
 
-  /** Kill driver process and wait for it to exit. */
-  private def killProcess(): Unit = {
-    if (process != null) {
-      logInfo("Killing driver process!")
-      val exitCode = Utils.terminateProcess(process, DRIVER_TERMINATE_TIMEOUT_MS)
-      if (exitCode.isEmpty) {
-        logWarning("Failed to terminate driver process: " + process +
-            ". This process will likely be orphaned.")
-      }
-    }
-  }
-
-  /** Stop this driver, including the process it launched */
+  /** Terminate this driver (or prevent it from ever starting if not yet started) */
   private[worker] def kill(): Unit = {
-    if (workerThread != null) {
-      // make sure process does not start if being interrupted
-      this.synchronized {
-        // the workerThread will kill the child process when interrupted
-        workerThread.interrupt()
-        workerThread.join()
-      }
-      workerThread = null
+    synchronized {
+      process.foreach(p => {
+        val exitCode = Utils.terminateProcess(p, DRIVER_TERMINATE_TIMEOUT_MS)
+        if (exitCode.isEmpty) {
+          logWarning("Failed to terminate driver process: " + p +
+              ". This process will likely be orphaned.")
+        }
+      })
+      killed = true
     }
   }
 
@@ -217,30 +204,28 @@ private[deploy] class DriverRunner(
 
   private[worker] def runCommandWithRetry(
       command: ProcessBuilderLike, initialize: Process => Unit, supervise: Boolean): Int = {
+    var exitCode = -1
     // Time to wait between submission retries.
     var waitSeconds = 1
     // A run of this many seconds resets the exponential back-off.
     val successfulRunDuration = 5
-    var attemptRun = true
-    var exitCode = -1
+    var keepTrying = !killed
 
-    while (attemptRun) {
+    while (keepTrying) {
       logInfo("Launch Command: " + command.command.mkString("\"", "\" \"", "\""))
 
-      // make sure process is assigned once start is attempted
-      this.synchronized {
-        process = command.start()
+      synchronized {
+        if (killed) { return exitCode }
+        process = Some(command.start())
+        initialize(process.get)
       }
-      initialize(process)
 
       val processStart = clock.getTimeMillis()
-
-      exitCode = process.waitFor()
-      process = null
+      exitCode = process.get.waitFor()
 
       // check if attempting another run
-      attemptRun = supervise && exitCode != 0
-      if (attemptRun) {
+      keepTrying = supervise && exitCode != 0 && !killed
+      if (keepTrying) {
         if (clock.getTimeMillis() - processStart > successfulRunDuration * 1000) {
           waitSeconds = 1
         }
