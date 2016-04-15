@@ -180,9 +180,9 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
     Aggregate w keys:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -------------------------------------------------------------------------------------------
-    codegen = F                              2323 / 2567          9.0         110.8       1.0X
-    codegen = T hashmap = F                  1182 / 1246         17.7          56.4       2.0X
-    codegen = T hashmap = T                   381 /  489         55.0          18.2       6.1X
+    codegen = F                              2067 / 2166         10.1          98.6       1.0X
+    codegen = T hashmap = F                  1149 / 1321         18.3          54.8       1.8X
+    codegen = T hashmap = T                   388 /  475         54.0          18.5       5.3X
     */
   }
 
@@ -218,9 +218,9 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
     Aggregate w keys:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -------------------------------------------------------------------------------------------
-    codegen = F                              2417 / 2457          8.7         115.2       1.0X
-    codegen = T hashmap = F                  1554 / 1581         13.5          74.1       1.6X
-    codegen = T hashmap = T                   877 /  929         23.9          41.8       2.8X
+    codegen = F                              2517 / 2608          8.3         120.0       1.0X
+    codegen = T hashmap = F                  1484 / 1560         14.1          70.8       1.7X
+    codegen = T hashmap = T                   794 /  908         26.4          37.9       3.2X
     */
   }
 
