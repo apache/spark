@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, GenerateUnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.physical.{Distribution, OrderedDistribution, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.util.collection.RadixSort;
 
 /**
  * Performs (external) sorting.
@@ -49,12 +50,22 @@ case class Sort(
   override def requiredChildDistribution: Seq[Distribution] =
     if (global) OrderedDistribution(sortOrder) :: Nil else UnspecifiedDistribution :: Nil
 
+  private val useRadixSort = RadixSort.enabled && sortOrder.length == 1 &&
+    (sortOrder.head.dataType match {
+    case BooleanType | ByteType | ShortType | IntegerType | LongType | DateType | TimestampType =>
+      true
+    case _ =>
+      false
+  })
+
+  private val labels = if (useRadixSort) " (radix)" else " (tim)"
+
   override private[sql] lazy val metrics = Map(
-    "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
-    "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"))
+    "sortTime" -> SQLMetrics.createLongMetric(sparkContext, "sort time" + labels),
+    "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size" + labels),
+    "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size" + labels))
 
   def createSorter(): UnsafeExternalRowSorter = {
-//    System.out.println("createSorter: " + sortOrder)
     val ordering = newOrdering(sortOrder, output)
 
     // The comparator for comparing prefix
@@ -71,13 +82,8 @@ case class Sort(
 
     val pageSize = SparkEnv.get.memoryManager.pageSizeBytes
     val sorter = new UnsafeExternalRowSorter(
-      schema, ordering, prefixComparator, prefixComputer, pageSize,
-      sortOrder.length == 1 && (sortOrder.head.dataType match {
-        case BooleanType | ByteType | ShortType | IntegerType | LongType | DateType | TimestampType =>
-          true
-        case _ =>
-          false
-      }))
+      schema, ordering, prefixComparator, prefixComputer, pageSize, useRadixSort)
+
     if (testSpillFrequency > 0) {
       sorter.setTestSpillFrequency(testSpillFrequency)
     }
@@ -147,11 +153,15 @@ case class Sort(
     val dataSize = metricTerm(ctx, "dataSize")
     val spillSize = metricTerm(ctx, "spillSize")
     val spillSizeBefore = ctx.freshName("spillSizeBefore")
+    val startTime = ctx.freshName("startTime")
+    val sortTime = metricTerm(ctx, "sortTime")
     s"""
        | if ($needToSort) {
        |   $addToSorter();
        |   Long $spillSizeBefore = $metrics.memoryBytesSpilled();
+       |   Long $startTime = System.nanoTime();
        |   $sortedIterator = $sorterVariable.sort();
+       |   $sortTime.add(System.nanoTime() - $startTime);
        |   $dataSize.add($sorterVariable.getPeakMemoryUsage());
        |   $spillSize.add($metrics.memoryBytesSpilled() - $spillSizeBefore);
        |   $metrics.incPeakExecutionMemory($sorterVariable.getPeakMemoryUsage());

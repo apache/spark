@@ -20,6 +20,7 @@ package org.apache.spark.util.collection;
 import org.apache.spark.unsafe.array.LongArray;
 
 public class RadixSort {
+  public static boolean enabled = false;
 
   public static int sort(
       LongArray array,
@@ -28,6 +29,7 @@ public class RadixSort {
       int tmpOffset,
       int startByteIdx,
       int endByteIdx) {
+    assert enabled, "Radix sort is disabled.";
     assert startByteIdx >= 0 : "startByteIdx (" + startByteIdx + ") should >= 0";
     assert endByteIdx <= 7 : "endByteIdx (" + endByteIdx + ") should <= 7";
     assert startByteIdx <= endByteIdx;

@@ -53,7 +53,7 @@ final class ShuffleInMemorySorter {
   private int pos = 0;
 
   private int initialSize;
-  private final boolean useRadix = true;
+  private final boolean useRadix = RadixSort.enabled;
 
   ShuffleInMemorySorter(MemoryConsumer consumer, int initialSize) {
     this.consumer = consumer;
