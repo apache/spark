@@ -233,9 +233,9 @@ This file is divided into 3 sections:
     <customMessage>Omit braces in case clauses.</customMessage>
   </check>
 
-  <check customId="ExtraClosureInTransformation" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
-    <parameters><parameter name="regex">(?m)\.[a-zA-Z_][a-zA-Z0-9]*+\s*[\(|\{]\s*[a-zA-Z_][a-zA-Z0-9]*+\s*\=>\s*\{\s*.+\s*\}\s*[\(|\}]</parameter></parameters>
-    <customMessage>Extra closure in transformation functions.</customMessage>
+  <check customId="NoExtraClosure" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">(?m)\.[a-zA-Z_][a-zA-Z0-9]*\(\s*[^,]+s*=>\s*\{[^\}]+\}\s*\)</parameter></parameters>
+    <customMessage>Remove an anonymous extra closure.</customMessage>
   </check>
 
   <!-- ================================================================================ -->

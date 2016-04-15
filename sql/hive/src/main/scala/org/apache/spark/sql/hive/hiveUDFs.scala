@@ -152,10 +152,8 @@ private[hive] case class HiveGenericUDF(
     var i = 0
     while (i < children.length) {
       val idx = i
-      deferredObjects(i).asInstanceOf[DeferredObjectAdapter].set(
-        () => {
-          children(idx).eval(input)
-        })
+      deferredObjects(i).asInstanceOf[DeferredObjectAdapter]
+        .set(() => children(idx).eval(input))
       i += 1
     }
     unwrap(function.evaluate(deferredObjects), returnInspector)

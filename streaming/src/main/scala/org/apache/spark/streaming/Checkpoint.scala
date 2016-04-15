@@ -247,10 +247,10 @@ class CheckpointWriter(
           // Delete old checkpoint files
           val allCheckpointFiles = Checkpoint.getCheckpointFiles(checkpointDir, Some(fs))
           if (allCheckpointFiles.size > 10) {
-            allCheckpointFiles.take(allCheckpointFiles.size - 10).foreach(file => {
+            allCheckpointFiles.take(allCheckpointFiles.size - 10).foreach { file =>
               logInfo("Deleting " + file)
               fs.delete(file, true)
-            })
+            }
           }
 
           // All done, print success

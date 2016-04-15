@@ -212,7 +212,7 @@ class Analyzer(
      *  represented as the bit masks.
      */
     def bitmasks(r: Rollup): Seq[Int] = {
-      Seq.tabulate(r.groupByExprs.length + 1)(idx => {(1 << idx) - 1})
+      Seq.tabulate(r.groupByExprs.length + 1)(idx => (1 << idx) - 1)
     }
 
     /*
