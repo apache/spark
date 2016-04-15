@@ -833,6 +833,219 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     assert(results === Map(0 -> 42))
   }
 
+  test("Test no duplicate shuffle map tasks running on fetch failure (SPARK-14649)") {
+    val firstRDD = new MyRDD(sc, 2, Nil)
+    val firstShuffleDep = new ShuffleDependency(firstRDD, new HashPartitioner(2))
+    val firstShuffleId = firstShuffleDep.shuffleId
+    val shuffleMapRdd = new MyRDD(sc, 3, List(firstShuffleDep))
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
+    val reduceRdd = new MyRDD(sc, 1, List(shuffleDep))
+    submit(reduceRdd, Array(0))
+
+    // things start out smoothly, stage 0 completes with no issues
+    complete(taskSets(0), Seq(
+      (Success, makeMapStatus("hostB", shuffleMapRdd.partitions.length)),
+      (Success, makeMapStatus("hostA", shuffleMapRdd.partitions.length))
+    ))
+
+    // Begin event for the reduce tasks.
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+
+    // fail taks 0 in stage 1 due to fetch failure
+    val failedTask1 = taskSets(1).tasks(0)
+    runEvent(makeCompletionEvent(
+      failedTask1,
+      FetchFailed(makeBlockManagerId("hostA"), firstShuffleId, 0, 0, "ignored"),
+      42, Seq.empty, createFakeTaskInfo()))
+
+    // abort task 1 in stage 1 due to fetch failure, task 2 still running
+    val abortedTask1 = taskSets(1).tasks(1)
+    runEvent(new TasksAborted(1, List(abortedTask1)))
+
+    // Make sure that we still have 2 running tasks for the first attempt
+    assert(sparkListener.failedStages.contains(1))
+
+    // Wait for resubmission of the map stage
+    Thread.sleep(1000)
+
+    // so we resubmit stage 0, which completes happily
+    val stage0Resubmit1 = taskSets(2)
+    assert(stage0Resubmit1.stageId == 0)
+    assert(stage0Resubmit1.stageAttemptId === 1)
+    val task1 = stage0Resubmit1.tasks(0)
+    runEvent(makeCompletionEvent(
+      task1,
+      Success,
+      makeMapStatus("hostC", shuffleMapRdd.partitions.length),
+      Seq.empty, createFakeTaskInfo()))
+
+    // we will now have a task set representing
+    // the second attempt for stage 1, but we *also* have 1 task for the first attempt for
+    // stage 1 still going, so we make sure that we don't resubmit the already running tasks.
+    val stage1Resubmit1 = taskSets(3)
+    assert(stage1Resubmit1.stageId == 1)
+    assert(stage1Resubmit1.stageAttemptId === 1)
+    assert(stage1Resubmit1.tasks.length === 2)
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+
+    // Now fail the running task from the first attempt and
+    // succeed all others
+    val succeededTask1 = taskSets(3).tasks(0)
+    runEvent(makeCompletionEvent(
+      succeededTask1,
+      Success,
+      makeMapStatus("hostC", reduceRdd.partitions.length),
+      Seq.empty, createFakeTaskInfo()))
+
+    val failedTask2 = taskSets(1).tasks(2)
+    runEvent(makeCompletionEvent(
+      failedTask2,
+      FetchFailed(makeBlockManagerId("hostB"), firstShuffleId, 0, 0, "ignored"),
+      42, Seq.empty, createFakeTaskInfo()))
+
+    val succeededTask2 = taskSets(3).tasks(1)
+    runEvent(makeCompletionEvent(
+      succeededTask2,
+      Success,
+      makeMapStatus("hostC", reduceRdd.partitions.length),
+      Seq.empty, createFakeTaskInfo()))
+
+    // Sleep for some time for the completion event to be processed by the DagScheduler
+    // and make sure that stage 0 is resumbitted.
+    Thread.sleep(1000)
+    val stage0Resubmit2 = taskSets(4)
+    assert(stage0Resubmit2.stageId == 0)
+    assert(stage0Resubmit2.stageAttemptId === 2)
+    assert(stage0Resubmit2.tasks.length === 1)
+    val task2 = stage0Resubmit2.tasks(0)
+    runEvent(makeCompletionEvent(
+      task2,
+      Success,
+      makeMapStatus("hostC", shuffleMapRdd.partitions.length)))
+
+    Thread.sleep(1000)
+    // Make sure we resubmit the only failed tasks in stage 1.
+    val stage1Resubmit2 = taskSets(5)
+    assert(stage1Resubmit2.stageId == 1)
+    assert(stage1Resubmit2.stageAttemptId === 2)
+    assert(stage1Resubmit2.tasks.length === 1)
+  }
+
+  test("Test no duplicate result tasks running on fetch failure (SPARK-14649)") {
+    val shuffleMapRdd = new MyRDD(sc, 2, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
+    val shuffleId = shuffleDep.shuffleId
+    val reduceRdd = new MyRDD(sc, 3, List(shuffleDep), tracker = mapOutputTracker)
+    submit(reduceRdd, Array(0, 1, 2))
+    complete(taskSets(0), Seq(
+      (Success, makeMapStatus("hostA", reduceRdd.partitions.length)),
+      (Success, makeMapStatus("hostB", reduceRdd.partitions.length))))
+    // Begin event for the reduce tasks.
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+    // Fail one  and abort one of the reduce tasks due to fetch failure.
+    assert(taskSets(1).tasks.size === 3)
+    val failedTask = taskSets(1).tasks(0)
+    runEvent(makeCompletionEvent(
+      failedTask,
+      FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0, 0, "ignored"),
+      42, Seq.empty, createFakeTaskInfo()))
+    val abortedTask = taskSets(1).tasks(1)
+    runEvent(new TasksAborted(1, List(abortedTask)))
+    // note that taskSet(1).tasks(2) will be still running state so
+    // it should not be resumbitted in the next retry
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+    assert(sparkListener.failedStages.contains(1))
+
+    // Wait for resubmission of the map stage
+    Thread.sleep(1000)
+    // Retry of the map stage finishes happily
+    assert(taskSets(2).tasks.size === 1)
+    complete(taskSets(2), Seq(
+      (Success, makeMapStatus("hostC", reduceRdd.partitions.length))))
+
+    // Newly submitted taskSet for the reduce phase should not contain the
+    // running task.
+    assert(taskSets(3).tasks.size == 2)
+
+    // Finish the taskSet(3) successfully
+    runEvent(makeCompletionEvent(
+      taskSets(3).tasks(0), Success, 42,
+      Seq.empty, createFakeTaskInfo()))
+
+    runEvent(makeCompletionEvent(
+      taskSets(3).tasks(1), Success, 42,
+      Seq.empty, createFakeTaskInfo()))
+
+    // Fail the running tasks in taskSets(1) and make sure its resubmitted
+    runEvent(makeCompletionEvent(
+      taskSets(1).tasks(2),
+      FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0, 0, "ignored"),
+      42, Seq.empty, createFakeTaskInfo()))
+
+    // Make sure that we resubmit the failed reduce task
+    Thread.sleep(1000)
+    assert(taskSets(4).tasks.size == 1)
+  }
+
+  test("Test task rerun in case of failure in zombie taskSet (SPARK-14649)") {
+    val shuffleMapRdd = new MyRDD(sc, 2, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
+    val shuffleId = shuffleDep.shuffleId
+    val reduceRdd = new MyRDD(sc, 3, List(shuffleDep), tracker = mapOutputTracker)
+    submit(reduceRdd, Array(0, 1, 2))
+    complete(taskSets(0), Seq(
+      (Success, makeMapStatus("hostA", reduceRdd.partitions.length)),
+      (Success, makeMapStatus("hostB", reduceRdd.partitions.length))))
+    // Begin event for the reduce tasks.
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+    // Fail one  and abort one of the reduce tasks due to fetch failure.
+    assert(taskSets(1).tasks.size === 3)
+    val failedTask = taskSets(1).tasks(0)
+    runEvent(makeCompletionEvent(
+      failedTask,
+      FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0, 0, "ignored"),
+      42, Seq.empty, createFakeTaskInfo()))
+    val abortedTask = taskSets(1).tasks(1)
+    runEvent(new TasksAborted(1, List(abortedTask)))
+    // note that taskSet(1).tasks(2) will be still running state so
+    // it should not be resumbitted in the next retry
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+    assert(sparkListener.failedStages.contains(1))
+
+    // Wait for resubmission of the map stage
+    Thread.sleep(1000)
+    // Retry of the map stage finishes happily
+    assert(taskSets(2).tasks.size === 1)
+    complete(taskSets(2), Seq(
+      (Success, makeMapStatus("hostC", reduceRdd.partitions.length))))
+
+    // Newly submitted taskSet for the reduce phase should not contain the
+    // running task.
+    assert(taskSets(3).tasks.size == 2)
+
+    // Fail the running tasks in taskSets(1) with ExceptionFailure. Since the
+    // taskSet(1) is in zombie state now, the DagScheduler should rerun the
+    // failed task.
+
+    val exceptionFailure = new ExceptionFailure(
+      new SparkException("fondue?"), Seq.empty)
+
+    runEvent(makeCompletionEvent(taskSets(1).tasks(2), exceptionFailure, "result"))
+
+    // Finish the taskSet(3) successfully
+    runEvent(makeCompletionEvent(
+      taskSets(3).tasks(0), Success, 42,
+      Seq.empty, createFakeTaskInfo()))
+
+    runEvent(makeCompletionEvent(
+      taskSets(3).tasks(1), Success, 42,
+      Seq.empty, createFakeTaskInfo()))
+
+    // Make sure that we resubmit the failed reduce task
+    Thread.sleep(1000)
+    assert(taskSets(4).tasks.size == 1)
+  }
+
   test("trivial shuffle with multiple fetch failures") {
     val shuffleMapRdd = new MyRDD(sc, 2, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
@@ -927,10 +1140,10 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
 
   /**
    * This tests the case where a late FetchFailed comes in after the map stage has finished getting
-   * retried and a new reduce stage starts running.
+   * retried and a new reduce stage starts running. We make sure that the late FetchFailure is not
+   * ignored and map stage is resubmitted.
    */
-  test("extremely late fetch failures don't cause multiple concurrent attempts for " +
-    "the same stage") {
+  test("extremely late fetch failures should cause rerun of the map stage") {
     val shuffleMapRdd = new MyRDD(sc, 2, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
     val shuffleId = shuffleDep.shuffleId
@@ -983,8 +1196,8 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     // the FetchFailed should have been ignored
     runEvent(ResubmitFailedStages)
 
-    // The FetchFailed from the original reduce stage should be ignored.
-    assert(countSubmittedMapStageAttempts() === 2)
+    // The FetchFailed from the original reduce stage should not be ignored.
+    assert(countSubmittedMapStageAttempts() === 3)
   }
 
   test("task events always posted in speculation / when stage is killed") {
@@ -1193,11 +1406,11 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
 
     // now here is where things get tricky : we will now have a task set representing
     // the second attempt for stage 1, but we *also* have some tasks for the first attempt for
-    // stage 1 still going
+    // stage 1 still going, so we make sure that we don't resubmit the already running tasks.
     val stage1Resubmit = taskSets(3)
     assert(stage1Resubmit.stageId == 1)
     assert(stage1Resubmit.stageAttemptId === 1)
-    assert(stage1Resubmit.tasks.length === 3)
+    assert(stage1Resubmit.tasks.length === 1)
 
     // we'll have some tasks finish from the first attempt, and some finish from the second attempt,
     // so that we actually have all stage outputs, though no attempt has completed all its
@@ -1207,7 +1420,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
       Success,
       makeMapStatus("hostC", reduceRdd.partitions.length)))
     runEvent(makeCompletionEvent(
-      taskSets(3).tasks(1),
+      taskSets(1).tasks(1),
       Success,
       makeMapStatus("hostC", reduceRdd.partitions.length)))
     // late task finish from the first attempt
@@ -2019,6 +2232,12 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
       case _ => Seq.empty
     }
     CompletionEvent(task, reason, result, accumUpdates ++ extraAccumUpdates, taskInfo)
+  }
+
+  private def makeBeginEvent(
+       task: Task[_],
+       taskInfo: TaskInfo): BeginEvent = {
+    BeginEvent(task, taskInfo)
   }
 
 }
