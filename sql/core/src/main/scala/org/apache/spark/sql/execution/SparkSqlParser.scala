@@ -112,9 +112,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    * Create a [[ShowCreateTableCommand]] logical plan
    */
   override def visitShowCreateTable(ctx: ShowCreateTableContext): LogicalPlan = withOrigin(ctx) {
-    ShowCreateTableCommand(
-      ctx.tableIdentifier.table.getText,
-      Option(ctx.tableIdentifier.db).map(_.getText))
+    ShowCreateTableCommand(visitTableIdentifier(ctx.tableIdentifier))
   }
 
   /**

@@ -429,9 +429,7 @@ case class ShowTablePropertiesCommand(
  *   SHOW CREATE TABLE tableIdentifier
  * }}}
  */
-case class ShowCreateTableCommand(
-    tableName: String,
-    databaseName: Option[String])
+case class ShowCreateTableCommand(tableIdentifier: TableIdentifier)
   extends RunnableCommand{
 
   // The result of SHOW CREATE TABLE is the whole string of DDL command
@@ -443,7 +441,7 @@ case class ShowCreateTableCommand(
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val catalog = sqlContext.sessionState.catalog
-    val ddl = catalog.showCreateTable(TableIdentifier(tableName, databaseName))
+    val ddl = catalog.showCreateTable(tableIdentifier)
     if (ddl.contains("CLUSTERED BY") || ddl.contains("SKEWED BY") || ddl.contains("STORED BY")) {
       Seq(Row("WARN: This DDL is not supported by Spark SQL natively, " +
           "because it contains 'CLUSTERED BY', 'SKEWED BY' or 'STORED BY' clause."),
