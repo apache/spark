@@ -490,7 +490,7 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
  * A function throws an exception if 'condition' is not true.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(condition) - Throw an exception if 'condition' is not true.")
+  usage = "_FUNC_(condition) - Throw an exception if 'condition' is not true (false, 0, null, '').")
 case class AssertTrue(child: Expression) extends UnaryExpression {
 
   override def nullable: Boolean = true
@@ -499,21 +499,13 @@ case class AssertTrue(child: Expression) extends UnaryExpression {
 
   override def prettyName: String = "assert_true"
 
-  override def checkInputDataTypes(): TypeCheckResult = {
-    if (child.dataType != BooleanType) {
-      TypeCheckResult.TypeCheckFailure(
-        s"type of condition expression in assert_true should be boolean, not ${child.dataType}")
-    } else {
-      TypeCheckResult.TypeCheckSuccess
-    }
-  }
-
   override def eval(input: InternalRow) : Any = {
     val v = child.eval(input)
-    if (java.lang.Boolean.TRUE.equals(v)) {
-      null
-    } else {
+    if (v == null || v == 0 || UTF8String.fromString("").equals(v) ||
+        java.lang.Boolean.FALSE.equals(v)) {
       throw new RuntimeException(s"'${child.simpleString}' is not true!")
+    } else {
+      null
     }
   }
 
@@ -521,7 +513,8 @@ case class AssertTrue(child: Expression) extends UnaryExpression {
     val eval = child.gen(ctx)
     ev.isNull = "true"
     ev.value = "null"
-    s"""if (${eval.isNull} || !java.lang.Boolean.TRUE.equals(${eval.value})) {
+    s"""if (${eval.isNull} || "0".equals("${eval.value}") || "".equals("${eval.value}") ||
+       |    java.lang.Boolean.FALSE.equals("${eval.value}")) {
        |  throw new RuntimeException("'${child.simpleString}' is not true.");
        |}
      """.stripMargin

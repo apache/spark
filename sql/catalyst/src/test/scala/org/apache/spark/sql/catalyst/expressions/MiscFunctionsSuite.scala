@@ -70,13 +70,25 @@ class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("assert_true") {
-    checkEvaluation(AssertTrue(Literal(true, BooleanType)), null)
+    // False values of assert_true: false, 0, null, ""
     intercept[RuntimeException] {
       checkEvaluation(AssertTrue(Literal(false, BooleanType)), null)
     }
     intercept[RuntimeException] {
-      checkEvaluation(AssertTrue(Literal.create(null, BinaryType)), null)
+      checkEvaluation(AssertTrue(Literal(0)), null)
     }
+    intercept[RuntimeException] {
+      checkEvaluation(AssertTrue(Literal.create(null, NullType)), null)
+    }
+    intercept[RuntimeException] {
+      checkEvaluation(AssertTrue(Literal.create(null, BooleanType)), null)
+    }
+    intercept[RuntimeException] {
+      checkEvaluation(AssertTrue(Literal("")), null)
+    }
+    checkEvaluation(AssertTrue(Literal(true, BooleanType)), null)
+    checkEvaluation(AssertTrue(Literal(1)), null)
+    checkEvaluation(AssertTrue(Literal("abc", BooleanType)), null)
   }
 
   private val structOfString = new StructType().add("str", StringType)
