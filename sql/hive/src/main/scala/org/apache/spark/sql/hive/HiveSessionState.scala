@@ -17,6 +17,11 @@
 
 package org.apache.spark.sql.hive
 
+import java.util.regex.Pattern
+
+import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hadoop.hive.conf.HiveConf.ConfVars
+import org.apache.hadoop.hive.ql.parse.VariableSubstitution
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.Analyzer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
@@ -25,6 +30,7 @@ import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.client.{HiveClient, HiveClientImpl}
 import org.apache.spark.sql.hive.execution.HiveSqlParser
 import org.apache.spark.sql.internal.{SessionState, SQLConf}
+import org.apache.spark.sql.types.DataType
 
 
 /**
@@ -51,8 +57,8 @@ private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx)
    */
   override lazy val catalog = {
     new HiveSessionCatalog(
-      ctx.hiveCatalog,
-      ctx.metadataHive,
+      ctx.externalCatalog,
+      metadataHive,
       ctx,
       ctx.functionResourceLoader,
       functionRegistry,
@@ -114,4 +120,61 @@ private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx)
     }
   }
 
+  // All of stuff moved from HiveContext
+
+  lazy val hiveconf: HiveConf = {
+    val c = executionHive.conf
+    ctx.setConf(c.getAllProperties)
+    c
+  }
+
+  @transient
+  protected[sql] lazy val substitutor = new VariableSubstitution()
+
+  override def withSubstitution(sql: String): String = {
+    substitutor.substitute(hiveconf, sql)
+  }
+
+  override def defaultOverrides(): Unit = {
+    ctx.setConf(ConfVars.HIVE_SUPPORT_SQL11_RESERVED_KEYWORDS.varname, "false")
+  }
+
+  private def functionOrMacroDDLPattern(command: String) = Pattern.compile(
+    ".*(create|drop)\\s+(temporary\\s+)?(function|macro).+", Pattern.DOTALL).matcher(command)
+
+  override def runSqlHive(sql: String): Seq[String] = {
+    val command = sql.trim.toLowerCase
+    if (functionOrMacroDDLPattern(command).matches()) {
+      executionHive.runSqlHive(sql)
+    } else if (command.startsWith("set")) {
+      metadataHive.runSqlHive(sql)
+      executionHive.runSqlHive(sql)
+    } else {
+      metadataHive.runSqlHive(sql)
+    }
+  }
+
+  override def setConfHook(key: String, value: String): Unit = {
+    super.setConfHook(key, value)
+    executionHive.runSqlHive(s"SET $key=$value")
+    metadataHive.runSqlHive(s"SET $key=$value")
+    // If users put any Spark SQL setting in the spark conf (e.g. spark-defaults.conf),
+    // this setConf will be called in the constructor of the SQLContext.
+    // Also, calling hiveconf will create a default session containing a HiveConf, which
+    // will interfer with the creation of executionHive (which is a lazy val). So,
+    // we put hiveconf.set at the end of this method.
+    hiveconf.set(key, value)
+  }
+
+  override def addJarHook(path: String): Unit = {
+    // Add jar to Hive and classloader
+    executionHive.addJar(path)
+    metadataHive.addJar(path)
+    Thread.currentThread().setContextClassLoader(executionHive.clientLoader.classLoader)
+    super.addJarHook(path)
+  }
+
+  override def formatStringResult(a: (Any, DataType)): String = {
+    HiveContext.toHiveString(a)
+  }
 }

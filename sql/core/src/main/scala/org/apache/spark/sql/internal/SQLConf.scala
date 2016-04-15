@@ -436,6 +436,38 @@ object SQLConf {
     .stringConf
     .createOptional
 
+
+  val CONVERT_METASTORE_PARQUET = SQLConfigBuilder("spark.sql.hive.convertMetastoreParquet")
+    .doc("When set to false, Spark SQL will use the Hive SerDe for parquet tables instead of " +
+      "the built in support.")
+    .booleanConf
+    .createWithDefault(true)
+
+  val CONVERT_METASTORE_PARQUET_WITH_SCHEMA_MERGING =
+    SQLConfigBuilder("spark.sql.hive.convertMetastoreParquet.mergeSchema")
+      .doc("When true, also tries to merge possibly different but compatible Parquet schemas in " +
+        "different Parquet data files. This configuration is only effective " +
+        "when \"spark.sql.hive.convertMetastoreParquet\" is true.")
+      .booleanConf
+      .createWithDefault(false)
+
+  val CONVERT_CTAS = SQLConfigBuilder("spark.sql.hive.convertCTAS")
+    .doc("When true, a table created by a Hive CTAS statement (no USING clause) will be " +
+      "converted to a data source table, using the data source set by spark.sql.sources.default.")
+    .booleanConf
+    .createWithDefault(false)
+
+  val CONVERT_METASTORE_ORC = SQLConfigBuilder("spark.sql.hive.convertMetastoreOrc")
+    .doc("When set to false, Spark SQL will use the Hive SerDe for ORC tables instead of " +
+      "the built in support.")
+    .booleanConf
+    .createWithDefault(true)
+
+  val HIVE_THRIFT_SERVER_ASYNC = SQLConfigBuilder("spark.sql.hive.thriftServer.async")
+    .doc("When set to true, Hive Thrift server executes SQL queries in an asynchronous way.")
+    .booleanConf
+    .createWithDefault(true)
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
     val EXTERNAL_SORT = "spark.sql.planner.externalSort"

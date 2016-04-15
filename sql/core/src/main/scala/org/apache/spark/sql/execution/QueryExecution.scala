@@ -18,7 +18,8 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{AnalysisException, SQLContext}
+import org.apache.spark.sql.execution.command.ExecutedCommand
+import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -119,5 +120,34 @@ class QueryExecution(val sqlContext: SQLContext, val logical: LogicalPlan) {
       println(org.apache.spark.sql.execution.debug.codegenString(executedPlan))
       // scalastyle:on println
     }
+  }
+
+  /**
+   * Returns the result as a hive compatible sequence of strings.  For native commands, the
+   * execution is simply passed back to Hive.
+   */
+  def stringResult(): Seq[String] = executedPlan match {
+    case ExecutedCommand(describeHiveTableCommand)
+      if describeHiveTableCommand.getClass.getCanonicalName.contains("DescribeHiveTableCommand") =>
+      // If it is a describe command for a Hive table, we want to have the output format
+      // be similar with Hive.
+      describeHiveTableCommand.run(sqlContext).map {
+        case Row(name: String, dataType: String, comment) =>
+          Seq(name, dataType,
+            Option(comment.asInstanceOf[String]).getOrElse(""))
+            .map(s => String.format(s"%-20s", s))
+            .mkString("\t")
+      }
+    case command: ExecutedCommand =>
+      command.executeCollect().map(_.getString(0))
+
+    case other =>
+      val result: Seq[Seq[Any]] = other.executeCollectPublic().map(_.toSeq).toSeq
+      // We need the types so we can output struct field names
+      val types = analyzed.output.map(_.dataType)
+      // Reformat to match hive tab delimited output.
+      result
+        .map(_.zip(types).map(sqlContext.sessionState.formatStringResult))
+        .map(_.mkString("\t"))
   }
 }
