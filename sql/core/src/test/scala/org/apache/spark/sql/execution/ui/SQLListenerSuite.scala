@@ -23,11 +23,15 @@ import org.mockito.Mockito.{mock, when}
 
 import org.apache.spark.{SparkConf, SparkContext, SparkException, SparkFunSuite}
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler._
 import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericInternalRow}
 import org.apache.spark.sql.catalyst.util.quietly
-import org.apache.spark.sql.execution.{SparkPlanInfo, SQLExecution}
-import org.apache.spark.sql.execution.metric.{LongSQLMetricValue, SQLMetrics}
+import org.apache.spark.sql.execution.{LeafNode, QueryExecution, SparkPlanInfo, SQLExecution}
+import org.apache.spark.sql.execution.command.DescribeDatabase
+import org.apache.spark.sql.execution.metric.{LongSQLMetricValue, SQLMetric, SQLMetrics}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.ui.SparkUI
 
@@ -378,6 +382,69 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
     // Listener tracks only SQL metrics, not other accumulators
     assert(trackedAccums.size === 1)
     assert(trackedAccums.head === sqlMetricInfo)
+  }
+
+  test("SQL metrics can be set on driver") {
+    val listener = new TestSQLListener(new SparkConf)
+    val expectedAccumValue = 12345
+    val dummyLogicalPlan = DescribeDatabase("x", extended = true) // not actually used
+    val physicalPlan = MyPlan(sqlContext.sparkContext, expectedAccumValue)
+    sqlContext.sparkContext.addSparkListener(listener)
+    val dummyQueryExecution = new QueryExecution(sqlContext, dummyLogicalPlan) {
+      override lazy val sparkPlan = physicalPlan
+      override lazy val executedPlan = physicalPlan
+    }
+    SQLExecution.withNewExecutionId(sqlContext, dummyQueryExecution) {
+      physicalPlan.execute().collect()
+    }
+    listener.waitTillExecutionFinished()
+    assert(listener.getCompletedExecutions.size === 1)
+    val execution = listener.getCompletedExecutions.head
+    assert(execution.driverAccumUpdates.size === 1)
+    assert(execution.driverAccumUpdates.head.name === Some("dummy"))
+    assert(execution.driverAccumUpdates.head.update ===
+      Some(new LongSQLMetricValue(expectedAccumValue)))
+    val expectedAccumId = execution.driverAccumUpdates.head.id
+    assert(listener.getExecutionMetrics(execution.executionId) ===
+      Map(expectedAccumId -> expectedAccumValue.toString))
+  }
+
+}
+
+
+/**
+ * A dummy [[org.apache.spark.sql.execution.SparkPlan]] that updates a [[SQLMetric]]
+ * on the driver.
+ */
+private case class MyPlan(sc: SparkContext, expectedValue: Long) extends LeafNode {
+  override def sparkContext: SparkContext = sc
+  override def output: Seq[Attribute] = Seq()
+  override val metrics: Map[String, SQLMetric[_, _]] = Map(
+    "dummy" -> SQLMetrics.createLongMetric(sc, "dummy"))
+  override def doExecute(): RDD[InternalRow] = {
+    longMetric("dummy") += expectedValue
+    sc.parallelize(1 to 10).map { i => new GenericInternalRow(Array[Any](i)) }
+  }
+}
+
+
+/**
+ * A [[SQLListener]] that allows you to wait for an execution to finish!
+ */
+private class TestSQLListener(conf: SparkConf) extends SQLListener(conf) {
+
+  def waitTillExecutionFinished(): Unit = synchronized {
+    while (getCompletedExecutions.isEmpty) {
+      wait()
+    }
+  }
+
+  override def onOtherEvent(event: SparkListenerEvent): Unit = synchronized {
+    super.onOtherEvent(event)
+    event match {
+      case SparkListenerSQLExecutionEnd(_, _, _) => notify()
+      case _ =>
+    }
   }
 
 }
