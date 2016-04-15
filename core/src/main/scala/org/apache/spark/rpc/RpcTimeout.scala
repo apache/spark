@@ -21,6 +21,7 @@ import java.util.concurrent.TimeoutException
 
 import scala.concurrent.{Await, Awaitable}
 import scala.concurrent.duration._
+import scala.util.control.NonFatal
 
 import org.apache.spark.SparkConf
 import org.apache.spark.util.Utils
@@ -71,8 +72,13 @@ private[spark] class RpcTimeout(val duration: FiniteDuration, val timeoutProp: S
    */
   def awaitResult[T](awaitable: Awaitable[T]): T = {
     try {
-      Await.result(awaitable, duration)
-    } catch addMessageIfTimeout
+      try {
+        Await.result(awaitable, duration)
+      } catch addMessageIfTimeout
+    } catch {
+      case NonFatal(t) =>
+        throw new Exception("Exception occurred while waiting on future", t)
+    }
   }
 }
 

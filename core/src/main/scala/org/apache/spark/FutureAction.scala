@@ -23,6 +23,7 @@ import java.util.concurrent.TimeUnit
 import scala.concurrent._
 import scala.concurrent.duration.Duration
 import scala.util.Try
+import scala.util.control.NonFatal
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.java.JavaFutureAction
@@ -90,7 +91,12 @@ trait FutureAction[T] extends Future[T] {
    * Blocks and returns the result of this job.
    */
   @throws(classOf[Exception])
-  def get(): T = Await.result(this, Duration.Inf)
+  def get(): T = try {
+    Await.result(this, Duration.Inf)
+  } catch {
+    case NonFatal(t) =>
+      throw new Exception("Exception occurred while waiting on job", t)
+  }
 
   /**
    * Returns the job IDs run by the underlying async operation.

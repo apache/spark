@@ -80,7 +80,12 @@ private[util] class BatchedWriteAheadLog(val wrappedLog: WriteAheadLog, conf: Sp
       }
     }
     if (putSuccessfully) {
-      Await.result(promise.future, WriteAheadLogUtils.getBatchingTimeout(conf).milliseconds)
+      try {
+        Await.result(promise.future, WriteAheadLogUtils.getBatchingTimeout(conf).milliseconds)
+      } catch {
+        case NonFatal(t) =>
+          throw new Exception("Exception occurred while waiting for write to finish", t)
+      }
     } else {
       throw new IllegalStateException("close() was called on BatchedWriteAheadLog before " +
         s"write request with time $time could be fulfilled.")
