@@ -107,7 +107,7 @@ class HiveContext private[hive](
   protected[sql] override lazy val sessionState = new HiveSessionState(self)
 
   protected[hive] def hiveCatalog: HiveExternalCatalog = hiveSharedState.externalCatalog
-  protected[hive] def executionHive: HiveClient = sessionState.executionHive
+  protected[hive] def executionHive: HiveClientImpl = sessionState.executionHive
   protected[hive] def metadataHive: HiveClient = sessionState.metadataHive
 
   // The Hive UDF current_database() is foldable, will be evaluated by optimizer,
@@ -577,7 +577,7 @@ private[hive] object HiveContext extends Logging {
    */
   protected[hive] def newClientForExecution(
       conf: SparkConf,
-      hadoopConf: Configuration): HiveClient = {
+      hadoopConf: Configuration): HiveClientImpl = {
     logInfo(s"Initializing execution hive, version $hiveExecutionVersion")
     val loader = new IsolatedClientLoader(
       version = IsolatedClientLoader.hiveVersion(hiveExecutionVersion),
@@ -587,7 +587,7 @@ private[hive] object HiveContext extends Logging {
       config = newTemporaryConfiguration(useInMemoryDerby = true),
       isolationOn = false,
       baseClassLoader = Utils.getContextOrSparkClassLoader)
-    loader.createClient()
+    loader.createClient().asInstanceOf[HiveClientImpl]
   }
 
   /**

@@ -19,9 +19,6 @@ package org.apache.spark.sql.hive.client
 
 import java.io.PrintStream
 
-import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.ql.session.SessionState
-
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Expression
@@ -33,15 +30,6 @@ import org.apache.spark.sql.catalyst.expressions.Expression
  * shared classes.
  */
 private[hive] trait HiveClient {
-
-  /** Hive session state. */
-  val state: SessionState
-
-  /** The loader that loaded this client. */
-  val clientLoader: IsolatedClientLoader
-
-  /** Underlying conf used in Hive. */
-  def conf: HiveConf
 
   /** Returns the Hive Version of this client. */
   def version: HiveVersion

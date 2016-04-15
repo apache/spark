@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive
 
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.hive.client.HiveClient
+import org.apache.spark.sql.hive.client.{HiveClient, HiveClientImpl}
 import org.apache.spark.sql.internal.SharedState
 
 
@@ -33,7 +33,7 @@ private[hive] class HiveSharedState(override val sparkContext: SparkContext)
   /**
    * A Hive client used for execution.
    */
-  val executionHive: HiveClient = {
+  val executionHive: HiveClientImpl = {
     HiveContext.newClientForExecution(sparkContext.conf, sparkContext.hadoopConfiguration)
   }
 
