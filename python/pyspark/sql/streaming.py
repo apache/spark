@@ -93,6 +93,10 @@ class Trigger(object):
         """
         pass
 
+    @staticmethod
+    def _is_subclass(instance):
+        return isinstance(instance, ProcessingTime)
+
 
 class ProcessingTime(Trigger):
     """A trigger that runs a query periodically based on the processing time. If `interval` is 0,
@@ -112,6 +116,3 @@ class ProcessingTime(Trigger):
 
     def _to_java_trigger(self, sqlContext):
         return sqlContext._sc._jvm.org.apache.spark.sql.ProcessingTime.create(self.interval)
-
-
-Trigger.register(ProcessingTime)
