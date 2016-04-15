@@ -793,7 +793,6 @@ private[spark] object JsonProtocol {
 
     // Output metrics
     Utils.jsonOption(json \ "Output Metrics").foreach { outJson =>
-      val writeMethod = DataWriteMethod.withName((outJson \ "Data Write Method").extract[String])
       val outputMetrics = metrics.outputMetrics
       outputMetrics.setBytesWritten((outJson \ "Bytes Written").extract[Long])
       outputMetrics.setRecordsWritten((outJson \ "Records Written").extractOpt[Long].getOrElse(0L))
@@ -801,7 +800,6 @@ private[spark] object JsonProtocol {
 
     // Input metrics
     Utils.jsonOption(json \ "Input Metrics").foreach { inJson =>
-      val readMethod = DataReadMethod.withName((inJson \ "Data Read Method").extract[String])
       val inputMetrics = metrics.inputMetrics
       inputMetrics.incBytesRead((inJson \ "Bytes Read").extract[Long])
       inputMetrics.incRecordsRead((inJson \ "Records Read").extractOpt[Long].getOrElse(0L))
