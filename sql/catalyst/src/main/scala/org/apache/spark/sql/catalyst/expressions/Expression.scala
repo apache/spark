@@ -185,7 +185,7 @@ abstract class Expression extends TreeNode[Expression] {
    * Returns a user-facing string representation of this expression's name.
    * This should usually match the name of the function in SQL.
    */
-  def prettyName: String = getClass.getSimpleName.toLowerCase
+  def prettyName: String = nodeName.toLowerCase
 
   private def flatArguments = productIterator.flatMap {
     case t: Traversable[_] => t
