@@ -109,7 +109,6 @@ class StreamSuite extends StreamTest with SharedSQLContext {
   }
 
   test("unsupported queries") {
-    val c = sqlContext
     val streamInput = MemoryStream[Int]
     val batchInput = Seq(1, 2, 3).toDS()
 

@@ -94,10 +94,10 @@ object UnsupportedOperationChecker {
               throwError(s"Join type $joinType is not supported with streaming DataFrame/Dataset")
           }
 
-        case c: CoGroup if plan.children.exists(_.isStreaming) =>
-          throwError("CoGrouping between two streaming DataFrames/Datasets is not supported")
+        case c: CoGroup if c.children.exists(_.isStreaming) =>
+          throwError("CoGrouping with a streaming DataFrame/Dataset is not supported")
 
-        case u: Union if u.children.count(_.isStreaming) == 1 =>
+        case u: Union if u.children.map(_.isStreaming).distinct.size == 2 =>
           throwError("Union between streaming and batch DataFrames/Datasets is not supported")
 
         case Except(left, right) if right.isStreaming =>
