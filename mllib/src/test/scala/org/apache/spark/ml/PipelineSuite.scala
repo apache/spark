@@ -192,13 +192,13 @@ class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     ).toDF("id", "features", "label")
 
     intercept[IllegalArgumentException] {
-      val scaler = new MinMaxScaler()
-        .setInputCol("features")
-        .setOutputCol("features_scaled")
-        .setMin(10)
-        .setMax(0)
-      val pipeline = new Pipeline().setStages(Array(scaler))
-      pipeline.fit(df)
+       val scaler = new MinMaxScaler()
+         .setInputCol("features")
+         .setOutputCol("features_scaled")
+         .setMin(10)
+         .setMax(0)
+       val pipeline = new Pipeline().setStages(Array(scaler))
+       pipeline.fit(df)
     }
   }
 
