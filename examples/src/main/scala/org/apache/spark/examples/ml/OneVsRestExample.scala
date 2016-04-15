@@ -118,17 +118,15 @@ object OneVsRestExample {
     val inputData = sqlContext.read.format("libsvm").load(params.input)
     // compute the train/test split: if testInput is not provided use part of input.
     val data = params.testInput match {
-      case Some(t) => {
+      case Some(t) =>
         // compute the number of features in the training set.
         val numFeatures = inputData.first().getAs[Vector](1).size
         val testData = sqlContext.read.option("numFeatures", numFeatures.toString)
           .format("libsvm").load(t)
         Array[DataFrame](inputData, testData)
-      }
-      case None => {
+      case None =>
         val f = params.fracTest
         inputData.randomSplit(Array(1 - f, f), seed = 12345)
-      }
     }
     val Array(train, test) = data.map(_.cache())
 
