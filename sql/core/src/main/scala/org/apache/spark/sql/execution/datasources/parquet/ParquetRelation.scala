@@ -784,7 +784,7 @@ private[sql] object ParquetRelation extends Logging {
       // scalastyle:on classforname
       redirect(JLogger.getLogger("parquet"))
     } catch { case _: Throwable =>
-      // SPARK-9974: com.twitter:parquet-hadoop-bundle:1.6.0 is not packaged into the assembly jar
+      // SPARK-9974: com.twitter:parquet-hadoop-bundle:1.6.0 is not packaged into the assembly
       // when Spark is built with SBT. So `parquet.Log` may not be found.  This try/catch block
       // should be removed after this issue is fixed.
     }
