@@ -75,6 +75,11 @@ class FileStreamSink(
   override def toString: String = s"FileSink[$path]"
 }
 
+/**
+ * Writes data given to a [[FileStreamSink]] to the given `basePath` in the given `fileFormat`,
+ * partitioned by the given `partitionColumnNames`. This writer always appends data to the
+ * directory if it already has data.
+ */
 class FileStreamSinkWriter(
     data: DataFrame,
     fileFormat: FileFormat,
@@ -88,6 +93,8 @@ class FileStreamSinkWriter(
   private val dataSchema = data.schema
   private val dataColumns = data.logicalPlan.output
 
+  // Get the actual partition columns as attributes after matching them by name with
+  // the given columns names.
   private val partitionColumns = partitionColumnNames.map { col =>
     val nameEquality = if (data.sqlContext.conf.caseSensitiveAnalysis) {
       org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
@@ -99,15 +106,18 @@ class FileStreamSinkWriter(
     }
   }
 
+  // Columns that are to be written to the files. If there are partitioning columns, then
+  // those will not be written to the files.
   private val writeColumns = {
     val partitionSet = AttributeSet(partitionColumns)
     dataColumns.filterNot(partitionSet.contains)
   }
 
+  // An OutputWriterFactory for generating writers in the executors for writing the files.
   private val outputWriterFactory =
     fileFormat.buildWriter(data.sqlContext, writeColumns.toStructType, options)
 
-  // Expressions that given a partition key build a string like: col1=val/col2=val/...
+  /** Expressions that given a partition key build a string like: col1=val/col2=val/... */
   private def partitionStringExpression: Seq[Expression] = {
     partitionColumns.zipWithIndex.flatMap { case (c, i) =>
       val escaped =
@@ -129,7 +139,7 @@ class FileStreamSinkWriter(
     newWriter
   }
 
-  /** Write the dataframe to a files */
+  /** Write the dataframe to files. This gets called in the driver by the [[FileStreamSink]]. */
   def write(): Array[String] = {
     data.sqlContext.sparkContext.runJob(
       data.queryExecution.toRdd,
@@ -142,7 +152,10 @@ class FileStreamSinkWriter(
       }).flatten
   }
 
-  /** Writes a RDD partition to a single file without dynamic partitioning. */
+  /**
+   * Writes a RDD partition to a single file without dynamic partitioning.
+   * This gets called in the executor, and it uses a [[OutputWriter]] to write the data.
+   */
   def writePartitionToSingleFile(iterator: Iterator[InternalRow]): String = {
     var writer: OutputWriter = null
     try {
@@ -167,7 +180,11 @@ class FileStreamSinkWriter(
     }
   }
 
-  /** Writes a RDD partition to multiple dynamically partitioned files. */
+  /**
+   * Writes a RDD partition to multiple dynamically partitioned files.
+   * This gets called in the executor. It first sorts the data based on the partitioning columns
+   * and then writes the data of each key to separate files using [[OutputWriter]]s.
+   */
   def writePartitionToPartitionedFiles(iterator: Iterator[InternalRow]): Seq[String] = {
 
     // Returns the partitioning columns for sorting
@@ -197,7 +214,7 @@ class FileStreamSinkWriter(
     val sortedIterator = sorter.sortedIterator()
     val paths = new ArrayBuffer[String]
 
-    // Writes the sorted data to partitioned files, one for each unique key
+    // Write the sorted data to partitioned files, one for each unique key
     var currentWriter: OutputWriter = null
     try {
       var currentKey: UnsafeRow = null

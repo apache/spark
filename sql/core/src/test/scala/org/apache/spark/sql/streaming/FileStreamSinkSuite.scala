@@ -17,9 +17,15 @@
 
 package org.apache.spark.sql.streaming
 
+import java.io.File
+
+import org.apache.commons.io.FileUtils
+import org.apache.commons.io.filefilter.{DirectoryFileFilter, RegexFileFilter}
+
 import org.apache.spark.sql.{Row, StreamTest}
-import org.apache.spark.sql.execution.streaming.{FileStreamSinkWriter, MemoryStream}
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.datasources.parquet
+import org.apache.spark.sql.execution.streaming.{FileStreamSinkWriter, MemoryStream}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
@@ -27,42 +33,86 @@ import org.apache.spark.util.Utils
 class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
   import testImplicits._
 
-  test("FileStreamSinkWriter") {
+  test("FileStreamSinkWriter - writing and appending unpartitioned data") {
     val path = Utils.createTempDir()
     path.delete()
 
     val fileFormat = new parquet.DefaultSource()
 
-    def writeRange(start: Int, end: Int): Unit = {
-      val df = sqlContext.range(start, end, 1, 1)
-        .select($"id", lit(100).as("data"), lit(1000).as("dummy"))
-
-      val attributes = df.logicalPlan.output
-
+    def writeRange(start: Int, end: Int, numPartitions: Int): Seq[String] = {
+      val df = sqlContext
+        .range(start, end, 1, numPartitions)
+        .select($"id", lit(100).as("data"))
       val writer = new FileStreamSinkWriter(
-        df,
-        fileFormat,
-        path.toString,
-        partitionColumnNames = Seq("id"),
-        Map.empty)
-
-      val writtenFiles = writer.write()
+        df, fileFormat, path.toString, partitionColumnNames = Nil, options = Map.empty)
+      writer.write()
     }
 
-    // Write and check
-    writeRange(0, 10)
-    checkAnswer(
-      sqlContext.read.load(path.getCanonicalPath),
-      (0 until 10).map(Row(100, 1000, _)).toSeq)
+    // Write and check whether new files are written correctly
+    val files1 = writeRange(0, 10, 2)
+    assert(files1.size === 2, s"unexpected number of files: $files1")
+    checkFilesExist(path, files1, "file not written")
+    checkAnswer(sqlContext.read.load(path.getCanonicalPath), (0 until 10).map(Row(_, 100)))
 
-    // Append and check
-    writeRange(10, 20)
-    checkAnswer(
-      sqlContext.read.load(path.getCanonicalPath),
-      (0 until 20).map(Row(100, 1000, _)).toSeq)
+    // Append and check whether new files are written correctly and old files still exist
+    val files2 = writeRange(10, 20, 3)
+    assert(files2.size === 3, s"unexpected number of files: $files2")
+    assert(files2.intersect(files1).isEmpty, "old files returned")
+    checkFilesExist(path, files2, s"New file not written")
+    checkFilesExist(path, files1, s"Old file not found")
+    checkAnswer(sqlContext.read.load(path.getCanonicalPath), (0 until 20).map(Row(_, 100)))
   }
 
-  test("unpartitioned writing") {
+  test("FileStreamSinkWriter - writing and appending partitioned data") {
+    implicit val e = ExpressionEncoder[java.lang.Long]
+    val path = Utils.createTempDir()
+    path.delete()
+
+    val fileFormat = new parquet.DefaultSource()
+
+    def writeRange(start: Int, end: Int, numPartitions: Int): Seq[String] = {
+      val df = sqlContext
+        .range(start, end, 1, numPartitions)
+        .flatMap(x => Iterator(x, x, x)).toDF("id")
+        .select($"id", lit(100).as("data1"), lit(1000).as("data2"))
+
+      require(df.rdd.partitions.size === numPartitions)
+      val writer = new FileStreamSinkWriter(
+        df, fileFormat, path.toString, partitionColumnNames = Seq("id"), options = Map.empty)
+      writer.write()
+    }
+
+    def checkOneFileWrittenPerKey(keys: Seq[Int], filesWritten: Seq[String]): Unit = {
+      keys.foreach { id =>
+        assert(
+          filesWritten.count(_.contains(s"/id=$id/")) == 1,
+          s"no file for id=$id. all files: \n\t${filesWritten.mkString("\n\t")}"
+        )
+      }
+    }
+
+    // Write and check whether new files are written correctly
+    val files1 = writeRange(0, 10, 2)
+    assert(files1.size === 10, s"unexpected number of files:\n${files1.mkString("\n")}")
+    checkFilesExist(path, files1, "file not written")
+    checkOneFileWrittenPerKey(0 until 10, files1)
+
+    val answer1 = (0 until 10).flatMap(x => Iterator(x, x, x)).map(Row(100, 1000, _))
+    checkAnswer(sqlContext.read.load(path.getCanonicalPath), answer1)
+
+    // Append and check whether new files are written correctly and old files still exist
+    val files2 = writeRange(0, 20, 3)
+    assert(files2.size === 20, s"unexpected number of files:\n${files2.mkString("\n")}")
+    assert(files2.intersect(files1).isEmpty, "old files returned")
+    checkFilesExist(path, files2, s"New file not written")
+    checkFilesExist(path, files1, s"Old file not found")
+    checkOneFileWrittenPerKey(0 until 20, files2)
+
+    val answer2 = (0 until 20).flatMap(x => Iterator(x, x, x)).map(Row(100, 1000, _))
+    checkAnswer(sqlContext.read.load(path.getCanonicalPath), answer1 ++ answer2)
+  }
+
+  test("FileStreamSink - unpartitioned writing and batch reading") {
     val inputData = MemoryStream[Int]
     val df = inputData.toDF()
 
@@ -79,12 +129,10 @@ class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
     failAfter(streamingTimeout) { query.processAllAvailable() }
 
     val outputDf = sqlContext.read.parquet(outputDir).as[Int]
-    checkDataset(
-      outputDf,
-      1, 2, 3)
+    checkDataset(outputDf, 1, 2, 3)
   }
 
-  ignore("partitioned writing") {
+  test("FileStreamSink - partitioned writing and batch reading [IGNORES PARTITION COLUMN]") {
     val inputData = MemoryStream[Int]
     val ds = inputData.toDS()
 
@@ -92,7 +140,7 @@ class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
     val checkpointDir = Utils.createTempDir(namePrefix = "stream.checkpoint").getCanonicalPath
 
     val query =
-      ds.map(i => (i, 1000))
+      ds.map(i => (i, i * 1000))
         .toDF("id", "value")
         .write
         .format("parquet")
@@ -106,9 +154,23 @@ class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
     }
 
     val outputDf = sqlContext.read.parquet(outputDir)
-    outputDf.show()
     checkDataset(
-      outputDf.as[(Int, Int)],
-      (1000, 1), (1000, 2), (1000, 3))
+      outputDf.as[Int],
+      1000, 2000, 3000)
   }
+
+  private def checkFilesExist(dir: File, expectedFiles: Seq[String], msg: String): Unit = {
+    import scala.collection.JavaConverters._
+    val files =
+      FileUtils.listFiles(dir, new RegexFileFilter("[^.]+"), DirectoryFileFilter.DIRECTORY)
+        .asScala
+        .map(_.getCanonicalPath)
+        .toSet
+
+    expectedFiles.foreach { f =>
+      assert(files.contains(f),
+        s"\n$msg\nexpected file:\n\t$f\nfound files:\n${files.mkString("\n\t")}")
+    }
+  }
+
 }
