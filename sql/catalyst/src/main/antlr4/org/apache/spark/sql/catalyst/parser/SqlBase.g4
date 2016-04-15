@@ -149,7 +149,7 @@ hiveNativeCommands
     | ROLLBACK WORK?
     | SHOW PARTITIONS tableIdentifier partitionSpec?
     | DFS .*?
-    | (CREATE | ALTER | DROP | SHOW | DESC | DESCRIBE | LOAD) .*?
+    | (CREATE | ALTER | DROP | SHOW | DESC | DESCRIBE) .*?
     ;
 
 unsupportedHiveNativeCommands

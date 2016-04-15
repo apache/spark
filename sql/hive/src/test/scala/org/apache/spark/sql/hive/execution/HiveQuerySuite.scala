@@ -935,6 +935,58 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     sql("DROP TABLE t1")
   }
 
+  test("LOAD DATA") {
+    sql(
+      """
+        |CREATE EXTERNAL TABLE non_part_table (time TIMESTAMP, id INT)
+        |ROW FORMAT DELIMITED
+        |FIELDS TERMINATED BY ','
+        |LINES TERMINATED BY '\n'
+      """.stripMargin)
+
+    val testData = TestHive.getHiveFile("data/files/issue-4077-data.txt").getCanonicalPath
+
+    // LOAD DATA INTO non-partitioned table can't specify partition
+    intercept[AnalysisException] {
+      sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE non_part_table PARTITION(ds="1")""")
+    }
+
+    sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE non_part_table""")
+    assert(sql("SELECT time FROM non_part_table LIMIT 2").collect()
+      === Array(Row(java.sql.Timestamp.valueOf("2014-12-11 00:00:00")), Row(null)))
+
+    sql(
+      """
+        |CREATE EXTERNAL TABLE part_table (time TIMESTAMP, id INT)
+        |PARTITIONED BY (c STRING, d STRING)
+        |ROW FORMAT DELIMITED
+        |FIELDS TERMINATED BY ','
+        |LINES TERMINATED BY '\n'
+      """.stripMargin)
+
+    // LOAD DATA INTO partitioned table must specify partition
+    intercept[AnalysisException] {
+      sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE part_table""")
+    }
+
+    intercept[AnalysisException] {
+      sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE part_table PARTITION(c="1")""")
+    }
+    intercept[AnalysisException] {
+      sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE part_table PARTITION(d="1")""")
+    }
+    intercept[AnalysisException] {
+      sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE part_table PARTITION(c="1", k="2")""")
+    }
+
+    sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE part_table PARTITION(c="1", d="2")""")
+    assert(sql("SELECT time, id FROM part_table WHERE c = '1' AND d = '2'").collect()
+      === sql("SELECT * FROM non_part_table").collect())
+
+    sql("DROP TABLE non_part_table")
+    sql("DROP TABLE part_table")
+  }
+
   test("CREATE TEMPORARY FUNCTION") {
     val funcJar = TestHive.getHiveFile("TestUDTF.jar").getCanonicalPath
     val jarURL = s"file://$funcJar"
