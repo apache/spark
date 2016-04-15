@@ -142,9 +142,8 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         Sets the value of :py:attr:`threshold`.
         Clears value of :py:attr:`thresholds` if it has been set.
         """
-        self._paramMap[self.threshold] = value
-        if self.isSet(self.thresholds):
-            del self._paramMap[self.thresholds]
+        self._set(threshold=value)
+        self._clear(self.thresholds)
         return self
 
     @since("1.4.0")
@@ -169,9 +168,8 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         Sets the value of :py:attr:`thresholds`.
         Clears value of :py:attr:`threshold` if it has been set.
         """
-        self._paramMap[self.thresholds] = value
-        if self.isSet(self.threshold):
-            del self._paramMap[self.threshold]
+        self._set(thresholds=value)
+        self._clear(self.threshold)
         return self
 
     @since("1.5.0")
@@ -471,7 +469,7 @@ class TreeClassifierParams(object):
         """
         Sets the value of :py:attr:`impurity`.
         """
-        self._paramMap[self.impurity] = value
+        self._set(impurity=value)
         return self
 
     @since("1.6.0")
@@ -833,7 +831,7 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
         """
         Sets the value of :py:attr:`lossType`.
         """
-        self._paramMap[self.lossType] = value
+        self._set(lossType=value)
         return self
 
     @since("1.4.0")
@@ -963,7 +961,7 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, H
         """
         Sets the value of :py:attr:`smoothing`.
         """
-        self._paramMap[self.smoothing] = value
+        self._set(smoothing=value)
         return self
 
     @since("1.5.0")
@@ -978,7 +976,7 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, H
         """
         Sets the value of :py:attr:`modelType`.
         """
-        self._paramMap[self.modelType] = value
+        self._set(modelType=value)
         return self
 
     @since("1.5.0")
@@ -1108,7 +1106,7 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
         """
         Sets the value of :py:attr:`layers`.
         """
-        self._paramMap[self.layers] = value
+        self._set(layers=value)
         return self
 
     @since("1.6.0")
@@ -1123,7 +1121,7 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
         """
         Sets the value of :py:attr:`blockSize`.
         """
-        self._paramMap[self.blockSize] = value
+        self._set(blockSize=value)
         return self
 
     @since("1.6.0")
