@@ -54,7 +54,7 @@ case class Sort(
     "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"))
 
   def createSorter(): UnsafeExternalRowSorter = {
-    System.out.println("createSorter: " + sortOrder)
+//    System.out.println("createSorter: " + sortOrder)
     val ordering = newOrdering(sortOrder, output)
 
     // The comparator for comparing prefix

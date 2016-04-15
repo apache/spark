@@ -62,7 +62,7 @@ public final class UnsafeExternalRowSorter {
       PrefixComputer prefixComputer,
       long pageSizeBytes,
       boolean canUseRadixSort) throws IOException {
-    System.out.println("UnsafeExternalRowSorter(radixSort=" + canUseRadixSort + ")");
+//    System.out.println("UnsafeExternalRowSorter(radixSort=" + canUseRadixSort + ")");
     this.useRadix = canUseRadixSort;
     this.schema = schema;
     this.prefixComputer = prefixComputer;

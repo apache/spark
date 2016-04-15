@@ -162,7 +162,7 @@ public final class UnsafeInMemorySorter {
       array.getBaseOffset(),
       newArray.getBaseObject(),
       newArray.getBaseOffset(),
-      array.size() * 4L);
+      array.size() * (useRadix ? 4L : 8L));
     consumer.freeArray(array);
     array = newArray;
   }
