@@ -632,8 +632,6 @@ private[hive] class HiveClientImpl(
   override def showCreateTable(db: String, tableName: String): String = withHiveState {
     Option(client.getTable(db, tableName, false)).map { hiveTable =>
       val tblProperties = hiveTable.getParameters.asScala.toMap
-      val duplicateProps = scala.collection.mutable.ArrayBuffer.empty[String]
-
       if (tblProperties.get("spark.sql.sources.provider").isDefined) {
         generateDataSourceDDL(hiveTable)
       } else {

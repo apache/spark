@@ -103,13 +103,13 @@ private[sql] class HiveSessionCatalog(
   }
 
   def createDataSourceTable(
-                             name: TableIdentifier,
-                             userSpecifiedSchema: Option[StructType],
-                             partitionColumns: Array[String],
-                             bucketSpec: Option[BucketSpec],
-                             provider: String,
-                             options: Map[String, String],
-                             isExternal: Boolean): Unit = {
+      name: TableIdentifier,
+      userSpecifiedSchema: Option[StructType],
+      partitionColumns: Array[String],
+      bucketSpec: Option[BucketSpec],
+      provider: String,
+      options: Map[String, String],
+      isExternal: Boolean): Unit = {
     metastoreCatalog.createDataSourceTable(
       name, userSpecifiedSchema, partitionColumns, bucketSpec, provider, options, isExternal)
   }
@@ -155,7 +155,7 @@ private[sql] class HiveSessionCatalog(
             new HiveFunctionWrapper(clazz.getName),
             children,
             isUDAFBridgeRequired = true)
-          udaf.dataType // Force it to check input data types.
+          udaf.dataType  // Force it to check input data types.
           udaf
         } else if (classOf[GenericUDTF].isAssignableFrom(clazz)) {
           val udtf = HiveGenericUDTF(name, new HiveFunctionWrapper(clazz.getName), children)
