@@ -40,16 +40,16 @@ class NullFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   def testAllTypes2Values(testFunc: (Any, Any, DataType) => Unit): Unit = {
     testFunc(false, true, BooleanType)
-//    testFunc(1.toByte, 2.toByte, ByteType)
-//    testFunc(1.toShort, 2.toShort, ShortType)
-//    testFunc(1, 2, IntegerType)
-//    testFunc(1L, 2L, LongType)
-//    testFunc(1.0F, 2.0F, FloatType)
-//    testFunc(1.0, 2.0, DoubleType)
-//    testFunc(Decimal(1.5), Decimal(2.5), DecimalType(2, 1))
-//    testFunc(new Date(1460745262177L), new Date(1260745262177L), DateType)
-//    testFunc(new Timestamp(10), new Timestamp(20), TimestampType)
-//    testFunc("abcd", "xyz", StringType)
+    testFunc(1.toByte, 2.toByte, ByteType)
+    testFunc(1.toShort, 2.toShort, ShortType)
+    testFunc(1, 2, IntegerType)
+    testFunc(1L, 2L, LongType)
+    testFunc(1.0F, 2.0F, FloatType)
+    testFunc(1.0, 2.0, DoubleType)
+    testFunc(Decimal(1.5), Decimal(2.5), DecimalType(2, 1))
+    testFunc(new Date(1460745262177L), new Date(1260745262177L), DateType)
+    testFunc(new Timestamp(10), new Timestamp(20), TimestampType)
+    testFunc("abcd", "xyz", StringType)
   }
 
   test("isnull and isnotnull") {
