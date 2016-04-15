@@ -314,31 +314,26 @@ case class LoadData(
 
     val hiveClient = sqlContext.asInstanceOf[HiveContext].metadataHive
 
-    val holdDDLTime = false
-
     if (partition.nonEmpty) {
       val orderedPartitionSpec = new util.LinkedHashMap[String, String]()
       targetTable.partitionColumnNames.foreach { colName =>
         orderedPartitionSpec.put(colName, partition.get(colName))
       }
 
-      val inheritTableSpecs = true
-      val isSkewedStoreAsSubdir = false
-
       hiveClient.loadPartition(
         path,
         table.unquotedString,
         orderedPartitionSpec,
         isOverwrite,
-        holdDDLTime,
-        inheritTableSpecs,
-        isSkewedStoreAsSubdir)
+        holdDDLTime = false,
+        inheritTableSpecs = true,
+        isSkewedStoreAsSubdir = false)
     } else {
       hiveClient.loadTable(
         path,
         table.unquotedString,
         isOverwrite,
-        holdDDLTime)
+        holdDDLTime = false)
     }
     Seq.empty[Row]
   }
