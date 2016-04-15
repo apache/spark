@@ -225,3 +225,26 @@ broadcast <- function(sc, object) {
 setCheckpointDir <- function(sc, dirName) {
   invisible(callJMethod(sc, "setCheckpointDir", suppressWarnings(normalizePath(dirName))))
 }
+
+#' @title Run a function over a list of elements, distributing the computations with Spark.
+#'
+#' @description
+#' Applies a function in a manner that is similar to doParallel or lapply to elements of a list.
+#' The computations are distributed using Spark. It is conceptually the same as the following code:
+#'   unlist(lapply(list, func))
+#'
+#' @param list the list of elements
+#' @param func a function that takes one argument.
+#' @noRd
+#' @examples
+#' Here is a trivial example that double the values in a list
+#'\dontrun{
+#' doubled <- sparkLapply(1:10, function(x){2 * x})
+#'}
+sparkLapply <- function(list, func) {
+  sc <- get(".sparkRjsc", envir = .sparkREnv)
+  rdd <- parallelize(sc, list, length(list))
+  results <- map(rdd, func)
+  local <- collect(results)
+  unlist(local)
+}
