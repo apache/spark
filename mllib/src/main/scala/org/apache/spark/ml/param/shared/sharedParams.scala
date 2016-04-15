@@ -396,10 +396,10 @@ private[ml] trait HasSolver extends Params {
 private[ml] trait HasBinary extends Params {
 
   /**
-   * Param for If true, all non zero results are set to 1. This is useful for discrete probabilistic models that model binary events rather than integer counts. Default False..
+   * Param for If true, all non-zero counts (after any filters are applied) are set to 1. This is useful for discrete probabilistic models that model binary events rather than integer counts. Default False..
    * @group param
    */
-  final val binary: BooleanParam = new BooleanParam(this, "binary", "If true, all non zero results are set to 1. This is useful for discrete probabilistic models that model binary events rather than integer counts. Default False.")
+  final val binary: BooleanParam = new BooleanParam(this, "binary", "If true, all non-zero counts (after any filters are applied) are set to 1. This is useful for discrete probabilistic models that model binary events rather than integer counts. Default False.")
 
   setDefault(binary, false)
 

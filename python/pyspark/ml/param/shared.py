@@ -585,10 +585,10 @@ class HasVarianceCol(Params):
 
 class HasBinary(Params):
     """
-    Mixin for param binary: If True, all non zero results are set to 1. This is useful for discrete probabilistic models that model binary events rather than integer counts. Default False.
+    Mixin for param binary: If True, all non-zero counts (after any filters are applied) are set to 1. This is useful for discrete probabilistic models that model binary events rather than integer counts. Default False.
     """
 
-    binary = Param(Params._dummy(), "binary", "If True, all non zero results are set to 1. This is useful for discrete probabilistic models that model binary events rather than integer counts. Default False.", typeConverter=TypeConverters.toBoolean)
+    binary = Param(Params._dummy(), "binary", "If True, all non-zero counts (after any filters are applied) are set to 1. This is useful for discrete probabilistic models that model binary events rather than integer counts. Default False.", typeConverter=TypeConverters.toBoolean)
 
     def __init__(self):
         super(HasBinary, self).__init__()
