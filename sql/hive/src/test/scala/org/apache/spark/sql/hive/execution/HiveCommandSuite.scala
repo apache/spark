@@ -52,8 +52,8 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       sql("DROP TABLE IF EXISTS parquet_tab1")
       sql("DROP TABLE IF EXISTS parquet_tab2")
       sql("DROP TABLE IF EXISTS parquet_tab3")
-      sql("DROP TABLE IF EXISTS parquet_tab4")
       sql("DROP VIEW IF EXISTS parquet_view1")
+      sql("DROP TABLE IF EXISTS parquet_tab4")
     } finally {
       super.afterAll()
     }
