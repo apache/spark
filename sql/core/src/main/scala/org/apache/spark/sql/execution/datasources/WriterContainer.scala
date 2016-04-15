@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.UnsafeKVExternalSorter
 import org.apache.spark.sql.sources.{HadoopFsRelation, OutputWriter, OutputWriterFactory}
 import org.apache.spark.sql.types.{StructType, StringType}
-import org.apache.spark.util.SerializableConfiguration
+import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 
 private[sql] abstract class BaseWriterContainer(
@@ -257,19 +257,16 @@ private[sql] class DefaultWriterContainer(
 
     // If anything below fails, we should abort the task.
     try {
-      while (iterator.hasNext) {
-        val internalRow = iterator.next()
-        writer.writeInternal(internalRow)
-      }
-
-      commitTask()
+      Utils.tryWithSafeFinallyAndFailureCallbacks {
+        while (iterator.hasNext) {
+          val internalRow = iterator.next()
+          writer.writeInternal(internalRow)
+        }
+        commitTask()
+      }(catchBlock = abortTask())
     } catch {
-      case cause: Throwable =>
-        logError("Aborting task.", cause)
-        // call failure callbacks first, so we could have a chance to cleanup the writer.
-        TaskContext.get().asInstanceOf[TaskContextImpl].markTaskFailed(cause)
-        abortTask()
-        throw new SparkException("Task failed while writing rows.", cause)
+      case t: Throwable =>
+        throw new SparkException("Task failed while writing rows", t)
     }
 
     def commitTask(): Unit = {
@@ -343,81 +340,81 @@ private[sql] class DynamicPartitionWriterContainer(
     // If anything below fails, we should abort the task.
     var currentWriter: OutputWriter = null
     try {
-      // This will be filled in if we have to fall back on sorting.
-      var sorter: UnsafeKVExternalSorter = null
-      while (iterator.hasNext && sorter == null) {
-        val inputRow = iterator.next()
-        val currentKey = getPartitionKey(inputRow)
-        currentWriter = outputWriters.get(currentKey)
+      Utils.tryWithSafeFinallyAndFailureCallbacks {
+        // This will be filled in if we have to fall back on sorting.
+        var sorter: UnsafeKVExternalSorter = null
+        while (iterator.hasNext && sorter == null) {
+          val inputRow = iterator.next()
+          val currentKey = getPartitionKey(inputRow)
+          currentWriter = outputWriters.get(currentKey)
 
-        if (currentWriter == null) {
-          if (outputWriters.size < maxOpenFiles) {
-            currentWriter = newOutputWriter(currentKey)
-            outputWriters.put(currentKey.copy(), currentWriter)
-            currentWriter.writeInternal(getOutputRow(inputRow))
-          } else {
-            logInfo(s"Maximum partitions reached, falling back on sorting.")
-            sorter = new UnsafeKVExternalSorter(
-              StructType.fromAttributes(partitionColumns),
-              StructType.fromAttributes(dataColumns),
-              SparkEnv.get.blockManager,
-              TaskContext.get().taskMemoryManager().pageSizeBytes)
-            sorter.insertKV(currentKey, getOutputRow(inputRow))
-          }
-        } else {
-          currentWriter.writeInternal(getOutputRow(inputRow))
-        }
-      }
-      // current writer is included in outputWriters
-      currentWriter = null
-
-      // If the sorter is not null that means that we reached the maxFiles above and need to finish
-      // using external sort.
-      if (sorter != null) {
-        while (iterator.hasNext) {
-          val currentRow = iterator.next()
-          sorter.insertKV(getPartitionKey(currentRow), getOutputRow(currentRow))
-        }
-
-        logInfo(s"Sorting complete. Writing out partition files one at a time.")
-
-        val sortedIterator = sorter.sortedIterator()
-        var currentKey: InternalRow = null
-        while (sortedIterator.next()) {
-          if (currentKey != sortedIterator.getKey) {
-            if (currentWriter != null) {
-              currentWriter.close()
-              currentWriter = null
-            }
-            currentKey = sortedIterator.getKey.copy()
-            logDebug(s"Writing partition: $currentKey")
-
-            // Either use an existing file from before, or open a new one.
-            currentWriter = outputWriters.remove(currentKey)
-            if (currentWriter == null) {
+          if (currentWriter == null) {
+            if (outputWriters.size < maxOpenFiles) {
               currentWriter = newOutputWriter(currentKey)
+              outputWriters.put(currentKey.copy(), currentWriter)
+              currentWriter.writeInternal(getOutputRow(inputRow))
+            } else {
+              logInfo(s"Maximum partitions reached, falling back on sorting.")
+              sorter = new UnsafeKVExternalSorter(
+                StructType.fromAttributes(partitionColumns),
+                StructType.fromAttributes(dataColumns),
+                SparkEnv.get.blockManager,
+                TaskContext.get().taskMemoryManager().pageSizeBytes)
+              sorter.insertKV(currentKey, getOutputRow(inputRow))
             }
+          } else {
+            currentWriter.writeInternal(getOutputRow(inputRow))
+          }
+        }
+        // current writer is included in outputWriters
+        currentWriter = null
+
+        // If the sorter is not null that means that we reached the maxFiles above and need to
+        // finish using external sort.
+        if (sorter != null) {
+          while (iterator.hasNext) {
+            val currentRow = iterator.next()
+            sorter.insertKV(getPartitionKey(currentRow), getOutputRow(currentRow))
           }
 
-          currentWriter.writeInternal(sortedIterator.getValue)
-        }
-        if (currentWriter != null) {
-          currentWriter.close()
-          currentWriter = null
-        }
-      }
+          logInfo(s"Sorting complete. Writing out partition files one at a time.")
 
-      commitTask()
-    } catch {
-      case cause: Throwable =>
-        logError("Aborting task.", cause)
-        // call failure callbacks first, so we could have a chance to cleanup the writer.
-        TaskContext.get().asInstanceOf[TaskContextImpl].markTaskFailed(cause)
+          val sortedIterator = sorter.sortedIterator()
+          var currentKey: InternalRow = null
+          while (sortedIterator.next()) {
+            if (currentKey != sortedIterator.getKey) {
+              if (currentWriter != null) {
+                currentWriter.close()
+                currentWriter = null
+              }
+              currentKey = sortedIterator.getKey.copy()
+              logDebug(s"Writing partition: $currentKey")
+
+              // Either use an existing file from before, or open a new one.
+              currentWriter = outputWriters.remove(currentKey)
+              if (currentWriter == null) {
+                currentWriter = newOutputWriter(currentKey)
+              }
+            }
+
+            currentWriter.writeInternal(sortedIterator.getValue)
+          }
+          if (currentWriter != null) {
+            currentWriter.close()
+            currentWriter = null
+          }
+        }
+
+        commitTask()
+      }(catchBlock = {
         if (currentWriter != null) {
           currentWriter.close()
         }
         abortTask()
-        throw new SparkException("Task failed while writing rows.", cause)
+      })
+    } catch {
+      case t: Throwable =>
+        throw new SparkException("Task failed while writing rows", t)
     }
 
     /** Open and returns a new OutputWriter given a partition key. */
