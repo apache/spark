@@ -78,7 +78,7 @@ private[hive] case class CurrentDatabase(ctx: HiveContext)
  * @since 1.0.0
  */
 class HiveContext private[hive](
-    @transient private val hivePersistentState: HivePersistentState,
+    @transient protected[hive] val hivePersistentState: HivePersistentState,
     override val isRootContext: Boolean)
   extends SQLContext(hivePersistentState, isRootContext) with Logging {
 
@@ -97,20 +97,6 @@ class HiveContext private[hive](
   @transient
   protected[sql] override val persistentState: PersistentState = hivePersistentState
 
-  // TODO: move these Hive clients into session state
-
-  @transient
-  protected[hive] lazy val metadataHive: HiveClient = {
-    hivePersistentState.metadataHive.newSession()
-  }
-
-  @transient
-  protected[hive] lazy val executionHive: HiveClientImpl = {
-    hivePersistentState.executionHive.newSession()
-  }
-
-  protected[sql] def hiveCatalog: HiveExternalCatalog = hivePersistentState.externalCatalog
-
   /**
    * Returns a new HiveContext as new session, which will have separated SQLConf, UDF/UDAF,
    * temporary tables and SessionState, but sharing the same CacheManager, IsolatedClientLoader
@@ -122,6 +108,10 @@ class HiveContext private[hive](
 
   @transient
   protected[sql] override lazy val sessionState = new HiveSessionState(self)
+
+  protected[hive] def hiveCatalog: HiveExternalCatalog = hivePersistentState.externalCatalog
+  protected[hive] def executionHive: HiveClientImpl = sessionState.executionHive
+  protected[hive] def metadataHive: HiveClient = sessionState.metadataHive
 
   // The Hive UDF current_database() is foldable, will be evaluated by optimizer,
   // but the optimizer can't access the SessionState of metadataHive.

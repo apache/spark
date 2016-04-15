@@ -28,6 +28,8 @@ import org.apache.spark.sql.hive.client.{HiveClient, HiveClientImpl}
 private[hive] class HivePersistentState(override val sparkContext: SparkContext)
   extends PersistentState(sparkContext) {
 
+  // TODO: just share the IsolatedClientLoader instead of the client instances themselves
+
   /**
    * A Hive client used for execution.
    */
