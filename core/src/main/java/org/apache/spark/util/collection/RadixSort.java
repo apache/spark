@@ -45,10 +45,9 @@ public class RadixSort {
         orMask |= value;
         andMask &= value;
       }
+      long bitsChanged = andMask ^ orMask;
       for (int i = startByteIdx; i <= endByteIdx; i++) {
-        long bitMin = ((orMask >>> (i * 8)) & 0xff);
-        long bitMax = ((andMask >>> (i * 8)) & 0xff);
-        if (bitMin != bitMax) {
+        if (((bitsChanged >>> (i * 8)) & 0xff) != 0) {
           sortAtByte(array, i, dataLen, dataOffset, tmpOffset);
           int tmp = dataOffset;
           dataOffset = tmpOffset;
@@ -107,10 +106,9 @@ public class RadixSort {
         orMask |= value;
         andMask &= value;
       }
+      long bitsChanged = andMask ^ orMask;
       for (int i = startByteIdx; i <= endByteIdx; i++) {
-        long bitMin = ((orMask >>> (i * 8)) & 0xff);
-        long bitMax = ((andMask >>> (i * 8)) & 0xff);
-        if (bitMin != bitMax) {
+        if (((bitsChanged >>> (i * 8)) & 0xff) != 0) {
           sortKeyPrefixArrayAtByte(array, i, dataLen, dataOffset, tmpOffset);
           int tmp = dataOffset;
           dataOffset = tmpOffset;
