@@ -18,13 +18,13 @@
 package org.apache.spark.sql.udt
 
 import org.apache.spark.ml.linalg.{DenseMatrix, DenseVector, Matrix, SparseMatrix, SparseVector, Vector}
+import org.apache.spark.sql.types.UDTRegistration
 
 /**
  * This object holds the built-in User Defined Types (UDTs) which we want to pre-load
  * into UDTRegistration.
  */
-private[spark]
-object BuiltInUDT {
+private[sql] object BuiltInUDT {
   val preloadedUDT =
     (classOf[Vector], classOf[VectorUDT]) ::
     (classOf[DenseVector], classOf[VectorUDT]) ::
@@ -32,5 +32,11 @@ object BuiltInUDT {
     (classOf[Matrix], classOf[MatrixUDT]) ::
     (classOf[DenseMatrix], classOf[MatrixUDT]) ::
     (classOf[SparseMatrix], classOf[MatrixUDT]) :: Nil
+
+  def preloadBuiltInUDT: Unit =  {
+    preloadedUDT.foreach { case (userClass, udtClass) =>
+      UDTRegistration.register(userClass, udtClass)
+    }
+  }
 }
 

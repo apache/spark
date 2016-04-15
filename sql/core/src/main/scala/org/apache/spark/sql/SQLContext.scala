@@ -44,6 +44,7 @@ import org.apache.spark.sql.execution.ui.{SQLListener, SQLTab}
 import org.apache.spark.sql.internal.{SessionState, SQLConf}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.udt.BuiltInUDT
 import org.apache.spark.sql.util.ExecutionListenerManager
 import org.apache.spark.util.Utils
 
@@ -113,6 +114,11 @@ class SQLContext private[sql](
       listener = listener,
       isRootContext = false,
       externalCatalog = externalCatalog)
+  }
+
+  /** Pre-Load built-in User Defined Types */
+  if (isRootContext) {
+    BuiltInUDT.preloadBuiltInUDT
   }
 
   /**
