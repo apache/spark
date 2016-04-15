@@ -33,14 +33,12 @@ class FilterPushdownSuite extends PlanTest {
     val batches =
       Batch("Subqueries", Once,
         EliminateSubqueryAliases) ::
-      Batch("Filter Pushdown", Once,
+      Batch("Filter Pushdown", FixedPoint(10),
         SamplePushDown,
         CombineFilters,
-        PushPredicateThroughProject,
+        PushDownPredicate,
         BooleanSimplification,
         PushPredicateThroughJoin,
-        PushPredicateThroughGenerate,
-        PushPredicateThroughAggregate,
         CollapseProject) :: Nil
   }
 
@@ -76,6 +74,21 @@ class FilterPushdownSuite extends PlanTest {
       testRelation
         .where('a === 1)
         .select('a)
+        .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("combine redundant filters") {
+    val originalQuery =
+      testRelation
+        .where('a === 1 && 'b === 1)
+        .where('a === 1 && 'c === 1)
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer =
+      testRelation
+        .where('a === 1 && 'b === 1 && 'c === 1)
         .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -496,6 +509,24 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("generate: non-deterministic predicate referenced no generated column") {
+    val originalQuery = {
+      testRelationWithArrayType
+        .generate(Explode('c_arr), true, false, Some("arr"))
+        .where(('b >= 5) && ('a + Rand(10).as("rnd") > 6))
+    }
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer = {
+      testRelationWithArrayType
+        .where('b >= 5)
+        .generate(Explode('c_arr), true, false, Some("arr"))
+        .where('a + Rand(10).as("rnd") > 6)
+        .analyze
+    }
+
+    comparePlans(optimized, correctAnswer)
+  }
+
   test("generate: part of conjuncts referenced generated column") {
     val generator = Explode('c_arr)
     val originalQuery = {
@@ -517,7 +548,7 @@ class FilterPushdownSuite extends PlanTest {
     // Filter("c" > 6)
     assertResult(classOf[Filter])(optimized.getClass)
     assertResult(1)(optimized.asInstanceOf[Filter].condition.references.size)
-    assertResult("c"){
+    assertResult("c") {
       optimized.asInstanceOf[Filter].condition.references.toSeq(0).name
     }
 
@@ -587,8 +618,8 @@ class FilterPushdownSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery.analyze)
 
     val correctAnswer = testRelation
-                        .select('a, 'b)
                         .where('a === 3)
+                        .select('a, 'b)
                         .groupBy('a)('a, count('b) as 'c)
                         .where('c === 2L)
                         .analyze
@@ -605,8 +636,8 @@ class FilterPushdownSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery.analyze)
 
     val correctAnswer = testRelation
-      .select('a, 'b)
       .where('a + 1 < 3)
+      .select('a, 'b)
       .groupBy('a)(('a + 1) as 'aa, count('b) as 'c)
       .where('c === 2L || 'aa > 4)
       .analyze
@@ -623,8 +654,8 @@ class FilterPushdownSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery.analyze)
 
     val correctAnswer = testRelation
-      .select('a, 'b)
       .where("s" === "s")
+      .select('a, 'b)
       .groupBy('a)('a, count('b) as 'c, "s" as 'd)
       .where('c === 2L)
       .analyze
@@ -644,6 +675,70 @@ class FilterPushdownSuite extends PlanTest {
       .select('a, 'b)
       .groupBy('a)('a + Rand(10) as 'aa, count('b) as 'c, Rand(11).as("rnd"))
       .where('c === 2L && 'aa + Rand(10).as("rnd") === 3 && 'rnd === 5)
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("broadcast hint") {
+    val originalQuery = BroadcastHint(testRelation)
+      .where('a === 2L && 'b + Rand(10).as("rnd") === 3)
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    val correctAnswer = BroadcastHint(testRelation.where('a === 2L))
+      .where('b + Rand(10).as("rnd") === 3)
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("union") {
+    val testRelation2 = LocalRelation('d.int, 'e.int, 'f.int)
+
+    val originalQuery = Union(Seq(testRelation, testRelation2))
+      .where('a === 2L && 'b + Rand(10).as("rnd") === 3)
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    val correctAnswer = Union(Seq(
+      testRelation.where('a === 2L),
+      testRelation2.where('d === 2L)))
+      .where('b + Rand(10).as("rnd") === 3)
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("intersect") {
+    val testRelation2 = LocalRelation('d.int, 'e.int, 'f.int)
+
+    val originalQuery = Intersect(testRelation, testRelation2)
+      .where('a === 2L && 'b + Rand(10).as("rnd") === 3)
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    val correctAnswer = Intersect(
+      testRelation.where('a === 2L),
+      testRelation2.where('d === 2L))
+      .where('b + Rand(10).as("rnd") === 3)
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("except") {
+    val testRelation2 = LocalRelation('d.int, 'e.int, 'f.int)
+
+    val originalQuery = Except(testRelation, testRelation2)
+      .where('a === 2L && 'b + Rand(10).as("rnd") === 3)
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    val correctAnswer = Except(
+      testRelation.where('a === 2L),
+      testRelation2)
+      .where('b + Rand(10).as("rnd") === 3)
       .analyze
 
     comparePlans(optimized, correctAnswer)

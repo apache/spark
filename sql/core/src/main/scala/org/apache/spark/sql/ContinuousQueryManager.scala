@@ -20,7 +20,8 @@ package org.apache.spark.sql
 import scala.collection.mutable
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.execution.streaming.{ContinuousQueryListenerBus, Sink, StreamExecution}
+import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorRef
 import org.apache.spark.sql.util.ContinuousQueryListener
 
 /**
@@ -33,6 +34,8 @@ import org.apache.spark.sql.util.ContinuousQueryListener
 @Experimental
 class ContinuousQueryManager(sqlContext: SQLContext) {
 
+  private[sql] val stateStoreCoordinator =
+    StateStoreCoordinatorRef.forDriver(sqlContext.sparkContext.env)
   private val listenerBus = new ContinuousQueryListenerBus(sqlContext.sparkContext.listenerBus)
   private val activeQueries = new mutable.HashMap[String, ContinuousQuery]
   private val activeQueriesLock = new Object
@@ -164,13 +167,35 @@ class ContinuousQueryManager(sqlContext: SQLContext) {
   }
 
   /** Start a query */
-  private[sql] def startQuery(name: String, df: DataFrame, sink: Sink): ContinuousQuery = {
+  private[sql] def startQuery(
+      name: String,
+      checkpointLocation: String,
+      df: DataFrame,
+      sink: Sink,
+      trigger: Trigger = ProcessingTime(0)): ContinuousQuery = {
     activeQueriesLock.synchronized {
       if (activeQueries.contains(name)) {
         throw new IllegalArgumentException(
           s"Cannot start query with name $name as a query with that name is already active")
       }
-      val query = new StreamExecution(sqlContext, name, df.logicalPlan, sink)
+      var nextSourceId = 0L
+      val logicalPlan = df.logicalPlan.transform {
+        case StreamingRelation(dataSource, _, output) =>
+          // Materialize source to avoid creating it in every batch
+          val metadataPath = s"$checkpointLocation/sources/$nextSourceId"
+          val source = dataSource.createSource(metadataPath)
+          nextSourceId += 1
+          // We still need to use the previous `output` instead of `source.schema` as attributes in
+          // "df.logicalPlan" has already used attributes of the previous `output`.
+          StreamingExecutionRelation(source, output)
+      }
+      val query = new StreamExecution(
+        sqlContext,
+        name,
+        checkpointLocation,
+        logicalPlan,
+        sink,
+        trigger)
       query.start()
       activeQueries.put(name, query)
       query

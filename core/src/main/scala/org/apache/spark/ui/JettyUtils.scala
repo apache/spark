@@ -30,11 +30,13 @@ import org.eclipse.jetty.server.handler._
 import org.eclipse.jetty.server.nio.SelectChannelConnector
 import org.eclipse.jetty.server.ssl.SslSelectChannelConnector
 import org.eclipse.jetty.servlet._
+import org.eclipse.jetty.util.component.LifeCycle
 import org.eclipse.jetty.util.thread.QueuedThreadPool
 import org.json4s.JValue
 import org.json4s.jackson.JsonMethods.{pretty, render}
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf, SSLOptions}
+import org.apache.spark.{SecurityManager, SparkConf, SSLOptions}
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
 /**
@@ -270,9 +272,24 @@ private[spark] object JettyUtils extends Logging {
 
       gzipHandlers.foreach(collection.addHandler)
       connectors.foreach(_.setHost(hostName))
+      // As each acceptor and each selector will use one thread, the number of threads should at
+      // least be the number of acceptors and selectors plus 1. (See SPARK-13776)
+      var minThreads = 1
+      connectors.foreach { c =>
+        // Currently we only use "SelectChannelConnector"
+        val connector = c.asInstanceOf[SelectChannelConnector]
+        // Limit the max acceptor number to 8 so that we don't waste a lot of threads
+        connector.setAcceptors(math.min(connector.getAcceptors, 8))
+        // The number of selectors always equals to the number of acceptors
+        minThreads += connector.getAcceptors * 2
+      }
       server.setConnectors(connectors.toArray)
 
       val pool = new QueuedThreadPool
+      if (serverName.nonEmpty) {
+        pool.setName(serverName)
+      }
+      pool.setMaxThreads(math.max(pool.getMaxThreads, minThreads))
       pool.setDaemon(true)
       server.setThreadPool(pool)
       val errorHandler = new ErrorHandler()
@@ -334,4 +351,15 @@ private[spark] object JettyUtils extends Logging {
 private[spark] case class ServerInfo(
     server: Server,
     boundPort: Int,
-    rootHandler: ContextHandlerCollection)
+    rootHandler: ContextHandlerCollection) {
+
+  def stop(): Unit = {
+    server.stop()
+    // Stop the ThreadPool if it supports stop() method (through LifeCycle).
+    // It is needed because stopping the Server won't stop the ThreadPool it uses.
+    val threadPool = server.getThreadPool
+    if (threadPool != null && threadPool.isInstanceOf[LifeCycle]) {
+      threadPool.asInstanceOf[LifeCycle].stop
+    }
+  }
+}

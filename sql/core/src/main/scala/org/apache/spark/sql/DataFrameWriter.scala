@@ -21,14 +21,18 @@ import java.util.Properties
 
 import scala.collection.JavaConverters._
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, Project}
-import org.apache.spark.sql.execution.datasources.{BucketSpec, CreateTableUsingAsSelect, ResolvedDataSource}
+import org.apache.spark.sql.execution.datasources.{BucketSpec, CreateTableUsingAsSelect, DataSource}
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
-import org.apache.spark.sql.execution.streaming.StreamExecution
+import org.apache.spark.sql.execution.streaming.{MemoryPlan, MemorySink, StreamExecution}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.HadoopFsRelation
+import org.apache.spark.util.Utils
 
 /**
  * :: Experimental ::
@@ -72,6 +76,35 @@ final class DataFrameWriter private[sql](df: DataFrame) {
       case _ => throw new IllegalArgumentException(s"Unknown save mode: $saveMode. " +
         "Accepted modes are 'overwrite', 'append', 'ignore', 'error'.")
     }
+    this
+  }
+
+  /**
+   * :: Experimental ::
+   * Set the trigger for the stream query. The default value is `ProcessingTime(0)` and it will run
+   * the query as fast as possible.
+   *
+   * Scala Example:
+   * {{{
+   *   def.writer.trigger(ProcessingTime("10 seconds"))
+   *
+   *   import scala.concurrent.duration._
+   *   def.writer.trigger(ProcessingTime(10.seconds))
+   * }}}
+   *
+   * Java Example:
+   * {{{
+   *   def.writer.trigger(ProcessingTime.create("10 seconds"))
+   *
+   *   import java.util.concurrent.TimeUnit
+   *   def.writer.trigger(ProcessingTime.create(10, TimeUnit.SECONDS))
+   * }}}
+   *
+   * @since 2.0.0
+   */
+  @Experimental
+  def trigger(trigger: Trigger): DataFrameWriter = {
+    this.trigger = trigger
     this
   }
 
@@ -138,7 +171,16 @@ final class DataFrameWriter private[sql](df: DataFrame) {
 
   /**
    * Partitions the output by the given columns on the file system. If specified, the output is
-   * laid out on the file system similar to Hive's partitioning scheme.
+   * laid out on the file system similar to Hive's partitioning scheme. As an example, when we
+   * partition a dataset by year and then month, the directory layout would look like:
+   *
+   *   - year=2016/month=01/
+   *   - year=2016/month=02/
+   *
+   * Partitioning is one of the most widely used techniques to optimize physical data layout.
+   * It provides a coarse-grained index for skipping unnecessary data reads when queries have
+   * predicates on the partitioned columns. In order for partitioning to work well, the number
+   * of distinct values in each column should typically be less than tens of thousands.
    *
    * This was initially applicable for Parquet but in 1.5+ covers JSON, text, ORC and avro as well.
    *
@@ -195,18 +237,18 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    */
   def save(): Unit = {
     assertNotBucketed()
-    ResolvedDataSource(
+    val dataSource = DataSource(
       df.sqlContext,
-      source,
-      partitioningColumns.map(_.toArray).getOrElse(Array.empty[String]),
-      getBucketSpec,
-      mode,
-      extraOptions.toMap,
-      df)
+      className = source,
+      partitionColumns = partitioningColumns.getOrElse(Nil),
+      bucketSpec = getBucketSpec,
+      options = extraOptions.toMap)
+
+    dataSource.write(mode, df)
   }
 
   /**
-   * Specifies the name of the [[ContinuousQuery]] that can be started with `stream()`.
+   * Specifies the name of the [[ContinuousQuery]] that can be started with `startStream()`.
    * This name must be unique among all the currently active queries in the associated SQLContext.
    *
    * @since 2.0.0
@@ -223,8 +265,8 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    *
    * @since 2.0.0
    */
-  def stream(path: String): ContinuousQuery = {
-    option("path", path).stream()
+  def startStream(path: String): ContinuousQuery = {
+    option("path", path).startStream()
   }
 
   /**
@@ -234,15 +276,65 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    *
    * @since 2.0.0
    */
-  def stream(): ContinuousQuery = {
-    val sink = ResolvedDataSource.createSink(
-      df.sqlContext,
-      source,
-      extraOptions.toMap,
-      normalizedParCols.getOrElse(Nil))
+  def startStream(): ContinuousQuery = {
+    if (source == "memory") {
+      val queryName =
+        extraOptions.getOrElse(
+          "queryName", throw new AnalysisException("queryName must be specified for memory sink"))
+      val checkpointLocation = extraOptions.get("checkpointLocation").map { userSpecified =>
+        new Path(userSpecified).toUri.toString
+      }.orElse {
+        val checkpointConfig: Option[String] =
+          df.sqlContext.conf.getConf(
+            SQLConf.CHECKPOINT_LOCATION,
+            None)
 
-    df.sqlContext.continuousQueryManager.startQuery(
-      extraOptions.getOrElse("queryName", StreamExecution.nextName), df, sink)
+        checkpointConfig.map { location =>
+          new Path(location, queryName).toUri.toString
+        }
+      }.getOrElse {
+        Utils.createTempDir(namePrefix = "memory.stream").getCanonicalPath
+      }
+
+      // If offsets have already been created, we trying to resume a query.
+      val checkpointPath = new Path(checkpointLocation, "offsets")
+      val fs = checkpointPath.getFileSystem(df.sqlContext.sparkContext.hadoopConfiguration)
+      if (fs.exists(checkpointPath)) {
+        throw new AnalysisException(
+          s"Unable to resume query written to memory sink. Delete $checkpointPath to start over.")
+      } else {
+        checkpointPath.toUri.toString
+      }
+
+      val sink = new MemorySink(df.schema)
+      val resultDf = Dataset.ofRows(df.sqlContext, new MemoryPlan(sink))
+      resultDf.registerTempTable(queryName)
+      val continuousQuery = df.sqlContext.sessionState.continuousQueryManager.startQuery(
+        queryName,
+        checkpointLocation,
+        df,
+        sink,
+        trigger)
+      continuousQuery
+    } else {
+      val dataSource =
+        DataSource(
+          df.sqlContext,
+          className = source,
+          options = extraOptions.toMap,
+          partitionColumns = normalizedParCols.getOrElse(Nil))
+
+      val queryName = extraOptions.getOrElse("queryName", StreamExecution.nextName)
+      val checkpointLocation = extraOptions.getOrElse("checkpointLocation", {
+        new Path(df.sqlContext.conf.checkpointLocation, queryName).toUri.toString
+      })
+      df.sqlContext.sessionState.continuousQueryManager.startQuery(
+        queryName,
+        checkpointLocation,
+        df,
+        dataSource.createSink(),
+        trigger)
+    }
   }
 
   /**
@@ -254,7 +346,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 1.4.0
    */
   def insertInto(tableName: String): Unit = {
-    insertInto(df.sqlContext.sqlParser.parseTableIdentifier(tableName))
+    insertInto(df.sqlContext.sessionState.sqlParser.parseTableIdentifier(tableName))
   }
 
   private def insertInto(tableIdent: TableIdentifier): Unit = {
@@ -322,7 +414,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    */
   private def normalize(columnName: String, columnType: String): String = {
     val validColumnNames = df.logicalPlan.output.map(_.name)
-    validColumnNames.find(df.sqlContext.analyzer.resolver(_, columnName))
+    validColumnNames.find(df.sqlContext.sessionState.analyzer.resolver(_, columnName))
       .getOrElse(throw new AnalysisException(s"$columnType column $columnName not found in " +
         s"existing columns (${validColumnNames.mkString(", ")})"))
   }
@@ -353,11 +445,11 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 1.4.0
    */
   def saveAsTable(tableName: String): Unit = {
-    saveAsTable(df.sqlContext.sqlParser.parseTableIdentifier(tableName))
+    saveAsTable(df.sqlContext.sessionState.sqlParser.parseTableIdentifier(tableName))
   }
 
   private def saveAsTable(tableIdent: TableIdentifier): Unit = {
-    val tableExists = df.sqlContext.catalog.tableExists(tableIdent)
+    val tableExists = df.sqlContext.sessionState.catalog.tableExists(tableIdent)
 
     (tableExists, mode) match {
       case (true, SaveMode.Ignore) =>
@@ -365,13 +457,6 @@ final class DataFrameWriter private[sql](df: DataFrame) {
 
       case (true, SaveMode.ErrorIfExists) =>
         throw new AnalysisException(s"Table $tableIdent already exists.")
-
-      case (true, SaveMode.Append) =>
-        // If it is Append, we just ask insertInto to handle it. We will not use insertInto
-        // to handle saveAsTable with Overwrite because saveAsTable can change the schema of
-        // the table. But, insertInto with Overwrite requires the schema of data be the same
-        // the schema of the table.
-        insertInto(tableIdent)
 
       case _ =>
         val cmd =
@@ -539,6 +624,8 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   private var source: String = df.sqlContext.conf.defaultDataSourceName
 
   private var mode: SaveMode = SaveMode.ErrorIfExists
+
+  private var trigger: Trigger = ProcessingTime(0L)
 
   private var extraOptions = new scala.collection.mutable.HashMap[String, String]
 

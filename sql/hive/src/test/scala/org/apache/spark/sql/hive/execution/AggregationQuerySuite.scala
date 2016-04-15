@@ -128,6 +128,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
   import testImplicits._
 
   override def beforeAll(): Unit = {
+    super.beforeAll()
     val data1 = Seq[(Integer, Integer)](
       (1, 10),
       (null, -60),
@@ -188,10 +189,14 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
   }
 
   override def afterAll(): Unit = {
-    sqlContext.sql("DROP TABLE IF EXISTS agg1")
-    sqlContext.sql("DROP TABLE IF EXISTS agg2")
-    sqlContext.sql("DROP TABLE IF EXISTS agg3")
-    sqlContext.dropTempTable("emptyTable")
+    try {
+      sqlContext.sql("DROP TABLE IF EXISTS agg1")
+      sqlContext.sql("DROP TABLE IF EXISTS agg2")
+      sqlContext.sql("DROP TABLE IF EXISTS agg3")
+      sqlContext.dropTempTable("emptyTable")
+    } finally {
+      super.afterAll()
+    }
   }
 
   test("group by function") {
@@ -962,27 +967,32 @@ class TungstenAggregationQuerySuite extends AggregationQuerySuite
 class TungstenAggregationQueryWithControlledFallbackSuite extends AggregationQuerySuite {
 
   override protected def checkAnswer(actual: => DataFrame, expectedAnswer: Seq[Row]): Unit = {
-    (0 to 2).foreach { fallbackStartsAt =>
-      withSQLConf("spark.sql.TungstenAggregate.testFallbackStartsAt" -> fallbackStartsAt.toString) {
-        // Create a new df to make sure its physical operator picks up
-        // spark.sql.TungstenAggregate.testFallbackStartsAt.
-        // todo: remove it?
-        val newActual = DataFrame(sqlContext, actual.logicalPlan)
+    Seq(false, true).foreach { enableColumnarHashMap =>
+      withSQLConf("spark.sql.codegen.aggregate.map.enabled" -> enableColumnarHashMap.toString) {
+        (1 to 3).foreach { fallbackStartsAt =>
+          withSQLConf("spark.sql.TungstenAggregate.testFallbackStartsAt" ->
+            s"${(fallbackStartsAt - 1).toString}, ${fallbackStartsAt.toString}") {
+            // Create a new df to make sure its physical operator picks up
+            // spark.sql.TungstenAggregate.testFallbackStartsAt.
+            // todo: remove it?
+            val newActual = Dataset.ofRows(sqlContext, actual.logicalPlan)
 
-        QueryTest.checkAnswer(newActual, expectedAnswer) match {
-          case Some(errorMessage) =>
-            val newErrorMessage =
-              s"""
-                |The following aggregation query failed when using TungstenAggregate with
-                |controlled fallback (it falls back to sort-based aggregation once it has processed
-                |$fallbackStartsAt input rows). The query is
-                |${actual.queryExecution}
-                |
-                |$errorMessage
-              """.stripMargin
+            QueryTest.checkAnswer(newActual, expectedAnswer) match {
+              case Some(errorMessage) =>
+                val newErrorMessage =
+                  s"""
+                    |The following aggregation query failed when using TungstenAggregate with
+                    |controlled fallback (it falls back to bytes to bytes map once it has processed
+                    |${fallbackStartsAt -1} input rows and to sort-based aggregation once it has
+                    |processed $fallbackStartsAt input rows). The query is ${actual.queryExecution}
+                    |
+                    |$errorMessage
+                  """.stripMargin
 
-            fail(newErrorMessage)
-          case None =>
+                fail(newErrorMessage)
+              case None => // Success
+            }
+          }
         }
       }
     }

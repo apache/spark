@@ -37,7 +37,7 @@ class TextSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SQLContext.read.text() API") {
-    verifyFrame(sqlContext.read.text(testFile))
+    verifyFrame(sqlContext.read.text(testFile).toDF())
   }
 
   test("SPARK-12562 verify write.text() can handle column name beyond `value`") {
@@ -46,7 +46,7 @@ class TextSuite extends QueryTest with SharedSQLContext {
     val tempFile = Utils.createTempDir()
     tempFile.delete()
     df.write.text(tempFile.getCanonicalPath)
-    verifyFrame(sqlContext.read.text(tempFile.getCanonicalPath))
+    verifyFrame(sqlContext.read.text(tempFile.getCanonicalPath).toDF())
 
     Utils.deleteRecursively(tempFile)
   }
@@ -74,8 +74,8 @@ class TextSuite extends QueryTest with SharedSQLContext {
         val tempDirPath = tempDir.getAbsolutePath
         testDf.write.option("compression", codecName).mode(SaveMode.Overwrite).text(tempDirPath)
         val compressedFiles = new File(tempDirPath).listFiles()
-        assert(compressedFiles.exists(_.getName.endsWith(extension)))
-        verifyFrame(sqlContext.read.text(tempDirPath))
+        assert(compressedFiles.exists(_.getName.endsWith(s".txt$extension")))
+        verifyFrame(sqlContext.read.text(tempDirPath).toDF())
     }
 
     val errMsg = intercept[IllegalArgumentException] {
@@ -102,8 +102,8 @@ class TextSuite extends QueryTest with SharedSQLContext {
         val tempDirPath = tempDir.getAbsolutePath
         testDf.write.option("compression", "none").mode(SaveMode.Overwrite).text(tempDirPath)
         val compressedFiles = new File(tempDirPath).listFiles()
-        assert(compressedFiles.exists(!_.getName.endsWith(".gz")))
-        verifyFrame(sqlContext.read.text(tempDirPath))
+        assert(compressedFiles.exists(!_.getName.endsWith(".txt.gz")))
+        verifyFrame(sqlContext.read.text(tempDirPath).toDF())
       } finally {
         // Hadoop 1 doesn't have `Configuration.unset`
         hadoopConfiguration.clear()

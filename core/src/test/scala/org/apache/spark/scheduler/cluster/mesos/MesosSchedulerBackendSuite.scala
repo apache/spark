@@ -26,9 +26,9 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.mesos.{Protos, Scheduler, SchedulerDriver}
 import org.apache.mesos.Protos._
 import org.apache.mesos.Protos.Value.Scalar
-import org.apache.mesos.SchedulerDriver
 import org.mockito.{ArgumentCaptor, Matchers}
 import org.mockito.Matchers._
 import org.mockito.Mockito._
@@ -41,6 +41,41 @@ import org.apache.spark.scheduler.{LiveListenerBus, SparkListenerExecutorAdded,
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 
 class MesosSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext with MockitoSugar {
+
+  test("weburi is set in created scheduler driver") {
+    val conf = new SparkConf
+    conf.set("spark.mesos.driver.webui.url", "http://webui")
+    conf.set("spark.app.name", "name1")
+
+    val sc = mock[SparkContext]
+    when(sc.conf).thenReturn(conf)
+    when(sc.sparkUser).thenReturn("sparkUser1")
+    when(sc.appName).thenReturn("appName1")
+
+    val taskScheduler = mock[TaskSchedulerImpl]
+    val driver = mock[SchedulerDriver]
+    when(driver.start()).thenReturn(Protos.Status.DRIVER_RUNNING)
+
+    val backend = new MesosSchedulerBackend(taskScheduler, sc, "master") {
+      override protected def createSchedulerDriver(
+        masterUrl: String,
+        scheduler: Scheduler,
+        sparkUser: String,
+        appName: String,
+        conf: SparkConf,
+        webuiUrl: Option[String] = None,
+        checkpoint: Option[Boolean] = None,
+        failoverTimeout: Option[Double] = None,
+        frameworkId: Option[String] = None): SchedulerDriver = {
+        markRegistered()
+        assert(webuiUrl.isDefined)
+        assert(webuiUrl.get.equals("http://webui"))
+        driver
+      }
+    }
+
+    backend.start()
+  }
 
   test("Use configured mesosExecutor.cores for ExecutorInfo") {
     val mesosExecutorCores = 3

@@ -18,6 +18,7 @@ package org.apache.spark.sql.execution.vectorized;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
 import java.sql.Date;
 import java.util.Iterator;
 import java.util.List;
@@ -104,7 +105,7 @@ public class ColumnVectorUtils {
       int[] result = new int[array.length];
       ColumnVector data = array.data;
       for (int i = 0; i < result.length; i++) {
-        if (data.getIsNull(array.offset + i)) {
+        if (data.isNullAt(array.offset + i)) {
           throw new RuntimeException("Cannot handle NULL values.");
         }
         result[i] = data.getInt(array.offset + i);
@@ -138,7 +139,7 @@ public class ColumnVectorUtils {
       } else if (t == DataTypes.DoubleType) {
         dst.appendDouble(((Double)o).doubleValue());
       } else if (t == DataTypes.StringType) {
-        byte[] b =((String)o).getBytes();
+        byte[] b =((String)o).getBytes(StandardCharsets.UTF_8);
         dst.appendByteArray(b, 0, b.length);
       } else if (t instanceof DecimalType) {
         DecimalType dt = (DecimalType)t;

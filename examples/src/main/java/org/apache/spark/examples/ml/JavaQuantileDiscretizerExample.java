@@ -25,7 +25,7 @@ import java.util.Arrays;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.feature.QuantileDiscretizer;
-import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.types.DataTypes;
@@ -56,14 +56,14 @@ public class JavaQuantileDiscretizerExample {
       new StructField("hour", DataTypes.DoubleType, false, Metadata.empty())
     });
 
-    DataFrame df = sqlContext.createDataFrame(jrdd, schema);
+    Dataset<Row> df = sqlContext.createDataFrame(jrdd, schema);
 
     QuantileDiscretizer discretizer = new QuantileDiscretizer()
       .setInputCol("hour")
       .setOutputCol("result")
       .setNumBuckets(3);
 
-    DataFrame result = discretizer.fit(df).transform(df);
+    Dataset<Row> result = discretizer.fit(df).transform(df);
     result.show();
     // $example off$
     jsc.stop();

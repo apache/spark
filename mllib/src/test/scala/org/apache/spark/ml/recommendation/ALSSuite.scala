@@ -25,7 +25,8 @@ import scala.language.existentials
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
-import org.apache.spark.{Logging, SparkException, SparkFunSuite}
+import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.internal.Logging
 import org.apache.spark.ml.recommendation.ALS._
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.linalg.Vectors
@@ -33,7 +34,6 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.util.Utils
 
 class ALSSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest with Logging {

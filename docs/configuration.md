@@ -225,11 +225,14 @@ Apart from these, the following properties are also available, and may be useful
   <td>(none)</td>
   <td>
     A string of extra JVM options to pass to the driver. For instance, GC settings or other logging.
+    Note that it is illegal to set maximum heap size (-Xmx) settings with this option. Maximum heap
+    size settings can be set with <code>spark.driver.memory</code> in the cluster mode and through
+    the <code>--driver-memory</code> command line option in the client mode.
 
     <br /><em>Note:</em> In client mode, this config must not be set through the <code>SparkConf</code>
     directly in your application, because the driver JVM has already started at that point.
     Instead, please set this through the <code>--driver-java-options</code> command line option or in
-    your default properties file.</td>
+    your default properties file.
   </td>
 </tr>
 <tr>
@@ -269,9 +272,9 @@ Apart from these, the following properties are also available, and may be useful
   <td>(none)</td>
   <td>
     A string of extra JVM options to pass to executors. For instance, GC settings or other logging.
-    Note that it is illegal to set Spark properties or heap size settings with this option. Spark
-    properties should be set using a SparkConf object or the spark-defaults.conf file used with the
-    spark-submit script. Heap size settings can be set with spark.executor.memory.
+    Note that it is illegal to set Spark properties or maximum heap size (-Xmx) settings with this
+    option. Spark properties should be set using a SparkConf object or the spark-defaults.conf file
+    used with the spark-submit script. Maximum heap size settings can be set with spark.executor.memory.
   </td>
 </tr>
 <tr>
@@ -769,7 +772,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.memory.offHeap.size</code></td>
   <td>0</td>
   <td>
-    The absolute amount of memory which can be used for off-heap allocation.
+    The absolute amount of memory in bytes which can be used for off-heap allocation.
     This setting has no impact on heap memory usage, so if your executors' total memory consumption must fit within some hard limit then be sure to shrink your JVM heap size accordingly.
     This must be set to a positive value when <code>spark.memory.offHeap.enabled=true</code>.
   </td>

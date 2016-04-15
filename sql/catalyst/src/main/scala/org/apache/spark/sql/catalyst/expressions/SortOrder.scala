@@ -57,7 +57,8 @@ case class SortOrder(child: Expression, direction: SortDirection)
   override def dataType: DataType = child.dataType
   override def nullable: Boolean = child.nullable
 
-  override def toString: String = s"$child ${if (direction == Ascending) "ASC" else "DESC"}"
+  override def toString: String = s"$child ${direction.sql}"
+  override def sql: String = child.sql + " " + direction.sql
 
   def isAscending: Boolean = direction == Ascending
 }

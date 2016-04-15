@@ -98,7 +98,7 @@
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-compiler-plugin</artifactId>
           <configuration>
-            <compilerArgs>
+            <compilerArgs combine.children="append">
               <!-- This option is needed to suppress warnings from sun.misc.Unsafe usage -->
               <arg>-XDignore.symbol.file</arg>
             </compilerArgs>

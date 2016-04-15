@@ -31,7 +31,7 @@ import scala.util.Random
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
+import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.{ApplicationDescription, DriverDescription,
   ExecutorState, SparkHadoopUtil}
 import org.apache.spark.deploy.DeployMessages._
@@ -40,6 +40,7 @@ import org.apache.spark.deploy.master.DriverState.DriverState
 import org.apache.spark.deploy.master.MasterMessages._
 import org.apache.spark.deploy.master.ui.MasterWebUI
 import org.apache.spark.deploy.rest.StandaloneRestServer
+import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler.{EventLoggingListener, ReplayListenerBus}
@@ -216,7 +217,7 @@ private[deploy] class Master(
   }
 
   override def receive: PartialFunction[Any, Unit] = {
-    case ElectedLeader => {
+    case ElectedLeader =>
       val (storedApps, storedDrivers, storedWorkers) = persistenceEngine.readPersistedData(rpcEnv)
       state = if (storedApps.isEmpty && storedDrivers.isEmpty && storedWorkers.isEmpty) {
         RecoveryState.ALIVE
@@ -232,16 +233,14 @@ private[deploy] class Master(
           }
         }, WORKER_TIMEOUT_MS, TimeUnit.MILLISECONDS)
       }
-    }
 
     case CompleteRecovery => completeRecovery()
 
-    case RevokedLeadership => {
+    case RevokedLeadership =>
       logError("Leadership has been revoked -- master shutting down.")
       System.exit(0)
-    }
 
-    case RegisterApplication(description, driver) => {
+    case RegisterApplication(description, driver) =>
       // TODO Prevent repeated registrations from some driver
       if (state == RecoveryState.STANDBY) {
         // ignore, don't send response
@@ -254,12 +253,11 @@ private[deploy] class Master(
         driver.send(RegisteredApplication(app.id, self))
         schedule()
       }
-    }
 
-    case ExecutorStateChanged(appId, execId, state, message, exitStatus) => {
+    case ExecutorStateChanged(appId, execId, state, message, exitStatus) =>
       val execOption = idToApp.get(appId).flatMap(app => app.executors.get(execId))
       execOption match {
-        case Some(exec) => {
+        case Some(exec) =>
           val appInfo = idToApp(appId)
           val oldState = exec.state
           exec.state = state
@@ -297,22 +295,19 @@ private[deploy] class Master(
               }
             }
           }
-        }
         case None =>
           logWarning(s"Got status update for unknown executor $appId/$execId")
       }
-    }
 
-    case DriverStateChanged(driverId, state, exception) => {
+    case DriverStateChanged(driverId, state, exception) =>
       state match {
         case DriverState.ERROR | DriverState.FINISHED | DriverState.KILLED | DriverState.FAILED =>
           removeDriver(driverId, state, exception)
         case _ =>
           throw new Exception(s"Received unexpected state update for driver $driverId: $state")
       }
-    }
 
-    case Heartbeat(workerId, worker) => {
+    case Heartbeat(workerId, worker) =>
       idToWorker.get(workerId) match {
         case Some(workerInfo) =>
           workerInfo.lastHeartbeat = System.currentTimeMillis()
@@ -326,9 +321,8 @@ private[deploy] class Master(
               " This worker was never registered, so ignoring the heartbeat.")
           }
       }
-    }
 
-    case MasterChangeAcknowledged(appId) => {
+    case MasterChangeAcknowledged(appId) =>
       idToApp.get(appId) match {
         case Some(app) =>
           logInfo("Application has been re-registered: " + appId)
@@ -338,9 +332,8 @@ private[deploy] class Master(
       }
 
       if (canCompleteRecovery) { completeRecovery() }
-    }
 
-    case WorkerSchedulerStateResponse(workerId, executors, driverIds) => {
+    case WorkerSchedulerStateResponse(workerId, executors, driverIds) =>
       idToWorker.get(workerId) match {
         case Some(worker) =>
           logInfo("Worker has been re-registered: " + workerId)
@@ -366,15 +359,37 @@ private[deploy] class Master(
       }
 
       if (canCompleteRecovery) { completeRecovery() }
-    }
+
+    case WorkerLatestState(workerId, executors, driverIds) =>
+      idToWorker.get(workerId) match {
+        case Some(worker) =>
+          for (exec <- executors) {
+            val executorMatches = worker.executors.exists {
+              case (_, e) => e.application.id == exec.appId && e.id == exec.execId
+            }
+            if (!executorMatches) {
+              // master doesn't recognize this executor. So just tell worker to kill it.
+              worker.endpoint.send(KillExecutor(masterUrl, exec.appId, exec.execId))
+            }
+          }
+
+          for (driverId <- driverIds) {
+            val driverMatches = worker.drivers.exists { case (id, _) => id == driverId }
+            if (!driverMatches) {
+              // master doesn't recognize this driver. So just tell worker to kill it.
+              worker.endpoint.send(KillDriver(driverId))
+            }
+          }
+        case None =>
+          logWarning("Worker state from unknown worker: " + workerId)
+      }
 
     case UnregisterApplication(applicationId) =>
       logInfo(s"Received unregister request from application $applicationId")
       idToApp.get(applicationId).foreach(finishApplication)
 
-    case CheckForWorkerTimeOut => {
+    case CheckForWorkerTimeOut =>
       timeOutDeadWorkers()
-    }
 
     case AttachCompletedRebuildUI(appId) =>
       // An asyncRebuildSparkUI has completed, so need to attach to master webUi
@@ -383,7 +398,7 @@ private[deploy] class Master(
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case RegisterWorker(
-        id, workerHost, workerPort, workerRef, cores, memory, workerWebUiUrl) => {
+        id, workerHost, workerPort, workerRef, cores, memory, workerWebUiUrl) =>
       logInfo("Registering worker %s:%d with %d cores, %s RAM".format(
         workerHost, workerPort, cores, Utils.megabytesToString(memory)))
       if (state == RecoveryState.STANDBY) {
@@ -405,9 +420,8 @@ private[deploy] class Master(
             + workerAddress))
         }
       }
-    }
 
-    case RequestSubmitDriver(description) => {
+    case RequestSubmitDriver(description) =>
       if (state != RecoveryState.ALIVE) {
         val msg = s"${Utils.BACKUP_STANDALONE_MASTER_PREFIX}: $state. " +
           "Can only accept driver submissions in ALIVE state."
@@ -426,9 +440,8 @@ private[deploy] class Master(
         context.reply(SubmitDriverResponse(self, true, Some(driver.id),
           s"Driver successfully submitted as ${driver.id}"))
       }
-    }
 
-    case RequestKillDriver(driverId) => {
+    case RequestKillDriver(driverId) =>
       if (state != RecoveryState.ALIVE) {
         val msg = s"${Utils.BACKUP_STANDALONE_MASTER_PREFIX}: $state. " +
           s"Can only kill drivers in ALIVE state."
@@ -459,9 +472,8 @@ private[deploy] class Master(
             context.reply(KillDriverResponse(self, driverId, success = false, msg))
         }
       }
-    }
 
-    case RequestDriverStatus(driverId) => {
+    case RequestDriverStatus(driverId) =>
       if (state != RecoveryState.ALIVE) {
         val msg = s"${Utils.BACKUP_STANDALONE_MASTER_PREFIX}: $state. " +
           "Can only request driver status in ALIVE state."
@@ -476,18 +488,15 @@ private[deploy] class Master(
             context.reply(DriverStatusResponse(found = false, None, None, None, None))
         }
       }
-    }
 
-    case RequestMasterState => {
+    case RequestMasterState =>
       context.reply(MasterStateResponse(
         address.host, address.port, restServerBoundPort,
         workers.toArray, apps.toArray, completedApps.toArray,
         drivers.toArray, completedDrivers.toArray, state))
-    }
 
-    case BoundPortsRequest => {
+    case BoundPortsRequest =>
       context.reply(BoundPortsResponse(address.port, webUi.boundPort, restServerBoundPort))
-    }
 
     case RequestExecutors(appId, requestedTotal) =>
       context.reply(handleRequestExecutors(appId, requestedTotal))
@@ -703,15 +712,28 @@ private[deploy] class Master(
    * every time a new app joins or resource availability changes.
    */
   private def schedule(): Unit = {
-    if (state != RecoveryState.ALIVE) { return }
+    if (state != RecoveryState.ALIVE) {
+      return
+    }
     // Drivers take strict precedence over executors
-    val shuffledWorkers = Random.shuffle(workers) // Randomization helps balance drivers
-    for (worker <- shuffledWorkers if worker.state == WorkerState.ALIVE) {
-      for (driver <- waitingDrivers) {
+    val shuffledAliveWorkers = Random.shuffle(workers.toSeq.filter(_.state == WorkerState.ALIVE))
+    val numWorkersAlive = shuffledAliveWorkers.size
+    var curPos = 0
+    for (driver <- waitingDrivers.toList) { // iterate over a copy of waitingDrivers
+      // We assign workers to each waiting driver in a round-robin fashion. For each driver, we
+      // start from the last worker that was assigned a driver, and continue onwards until we have
+      // explored all alive workers.
+      var launched = false
+      var numWorkersVisited = 0
+      while (numWorkersVisited < numWorkersAlive && !launched) {
+        val worker = shuffledAliveWorkers(curPos)
+        numWorkersVisited += 1
         if (worker.memoryFree >= driver.desc.mem && worker.coresFree >= driver.desc.cores) {
           launchDriver(worker, driver)
           waitingDrivers -= driver
+          launched = true
         }
+        curPos = (curPos + 1) % numWorkersAlive
       }
     }
     startExecutorsOnWorkers()
@@ -763,6 +785,7 @@ private[deploy] class Master(
       logInfo("Telling app of lost executor: " + exec.id)
       exec.application.driver.send(ExecutorUpdated(
         exec.id, ExecutorState.LOST, Some("worker lost"), None))
+      exec.state = ExecutorState.LOST
       exec.application.removeExecutor(exec)
     }
     for (driver <- worker.drivers.values) {
@@ -820,10 +843,10 @@ private[deploy] class Master(
       addressToApp -= app.driver.address
       if (completedApps.size >= RETAINED_APPLICATIONS) {
         val toRemove = math.max(RETAINED_APPLICATIONS / 10, 1)
-        completedApps.take(toRemove).foreach( a => {
+        completedApps.take(toRemove).foreach { a =>
           Option(appIdToUI.remove(a.id)).foreach { ui => webUi.detachSparkUI(ui) }
           applicationMetricsSystem.removeSource(a.appSource)
-        })
+        }
         completedApps.trimStart(toRemove)
       }
       completedApps += app // Remember it in our history
