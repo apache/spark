@@ -114,6 +114,8 @@ private[deploy] class DriverRunner(
 
   /** Terminate this driver (or prevent it from ever starting if not yet started) */
   private[worker] def kill(): Unit = {
+    logInfo("Killing driver process!")
+    killed = true
     synchronized {
       process.foreach(p => {
         val exitCode = Utils.terminateProcess(p, DRIVER_TERMINATE_TIMEOUT_MS)
@@ -122,7 +124,6 @@ private[deploy] class DriverRunner(
               ". This process will likely be orphaned.")
         }
       })
-      killed = true
     }
   }
 
