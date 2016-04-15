@@ -30,7 +30,8 @@ import org.apache.spark.util.Utils
 private[sql] abstract class SQLMetric[R <: SQLMetricValue[T], T](
     name: String,
     val param: SQLMetricParam[R, T])
-  extends Accumulable[R, T](param.zero, param, Some(name), internal = true) {
+  extends Accumulable[R, T](param.zero, param, Some(name), internal = true,
+    countFailedValues = false) {
 
   // Provide special identifier as metadata so we can tell that this is a `SQLMetric` later
   override def toInfo(update: Option[Any], value: Option[Any]): AccumulableInfo = {
