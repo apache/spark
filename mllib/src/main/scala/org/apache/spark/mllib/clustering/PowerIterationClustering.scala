@@ -234,6 +234,7 @@ class PowerIterationClustering private[clustering] (
         Assignment(id, cluster)
       }
     }, preservesPartitioning = true)
+
     new PowerIterationClusteringModel(k, assignments)
   }
 }

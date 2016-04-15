@@ -150,10 +150,10 @@ private object ParallelCollectionRDD {
         slices
       case _ =>
         val array = seq.toArray // To prevent O(n^2) operations for List etc
-        positions(array.length, numSlices).map({
+        positions(array.length, numSlices).map {
           case (start, end) =>
             array.slice(start, end).toSeq
-        }).toSeq
+        }.toSeq
     }
   }
 }
