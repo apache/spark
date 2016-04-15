@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.Analyzer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.execution.SparkPlanner
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.hive.client.{HiveClient, HiveClientImpl}
+import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.hive.execution.HiveSqlParser
 import org.apache.spark.sql.internal.{SessionState, SQLConf}
 
@@ -35,7 +35,7 @@ private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx)
   /**
    * A Hive client used for execution.
    */
-  val executionHive: HiveClientImpl = ctx.hivePersistentState.executionHive.newSession()
+  val executionHive: HiveClient = ctx.hivePersistentState.executionHive.newSession()
 
   /**
    * A Hive client used for interacting with the metastore.

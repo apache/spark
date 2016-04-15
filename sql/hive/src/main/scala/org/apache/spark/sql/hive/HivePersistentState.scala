@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive
 
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.hive.client.{HiveClient, HiveClientImpl}
+import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.PersistentState
 
 
@@ -33,7 +33,7 @@ private[hive] class HivePersistentState(override val sparkContext: SparkContext)
   /**
    * A Hive client used for execution.
    */
-  val executionHive: HiveClientImpl = {
+  val executionHive: HiveClient = {
     HiveContext.newClientForExecution(sparkContext.conf, sparkContext.hadoopConfiguration)
   }
 

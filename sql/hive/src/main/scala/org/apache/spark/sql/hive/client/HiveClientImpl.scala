@@ -69,7 +69,7 @@ private[hive] class HiveClientImpl(
     hadoopConf: Configuration,
     config: Map[String, String],
     initClassLoader: ClassLoader,
-    val clientLoader: IsolatedClientLoader)
+    override val clientLoader: IsolatedClientLoader)
   extends HiveClient
   with Logging {
 
@@ -85,8 +85,8 @@ private[hive] class HiveClientImpl(
     case hive.v1_2 => new Shim_v1_2()
   }
 
-  // Create an internal session state for this HiveClientImpl.
-  val state = {
+  // Create an internal session state for this HiveClient.
+  override val state: SessionState = {
     val original = Thread.currentThread().getContextClassLoader
     // Switch to the initClassLoader.
     Thread.currentThread().setContextClassLoader(initClassLoader)
@@ -151,7 +151,7 @@ private[hive] class HiveClientImpl(
   }
 
   /** Returns the configuration for the current session. */
-  def conf: HiveConf = SessionState.get().getConf
+  override def conf: HiveConf = SessionState.get().getConf
 
   override def getConf(key: String, defaultValue: String): String = {
     conf.get(key, defaultValue)
