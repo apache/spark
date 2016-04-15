@@ -33,7 +33,7 @@ import org.json4s.jackson.JsonMethods.{compact, parse => parseJson, render}
  *
  * Note: Users should not implement this interface.
  *
- * @since 2.0
+ * @since 2.0.0
  */
 sealed trait Vector extends Serializable {
 
@@ -167,7 +167,7 @@ sealed trait Vector extends Serializable {
  * We don't use the name `Vector` because Scala imports
  * [[scala.collection.immutable.Vector]] by default.
  *
- * @since 2.0
+ * @since 2.0.0
  */
 object Vectors {
 
@@ -453,7 +453,7 @@ object Vectors {
 /**
  * A dense vector represented by a value array.
  *
- * @since 2.0
+ * @since 2.0.0
  */
 class DenseVector (val values: Array[Double]) extends Vector {
 
@@ -555,7 +555,7 @@ class DenseVector (val values: Array[Double]) extends Vector {
 }
 
 /**
- * @since 2.0
+ * @since 2.0.0
  */
 object DenseVector {
 
@@ -570,7 +570,7 @@ object DenseVector {
  * @param indices index array, assume to be strictly increasing.
  * @param values value array, must have the same length as the index array.
  *
- * @since 2.0
+ * @since 2.0.0
  */
 class SparseVector (
     override val size: Int,
@@ -746,7 +746,7 @@ class SparseVector (
 }
 
 /**
- * @since 2.0
+ * @since 2.0.0
  */
 object SparseVector {
   def unapply(sv: SparseVector): Option[(Int, Array[Int], Array[Double])] =

@@ -27,7 +27,7 @@ import com.github.fommil.netlib.BLAS.{getInstance => blas}
 /**
  * Trait for a local matrix.
  *
- * @since 2.0
+ * @since 2.0.0
  */
 sealed trait Matrix extends Serializable {
 
@@ -156,7 +156,7 @@ sealed trait Matrix extends Serializable {
  * @param isTransposed whether the matrix is transposed. If true, `values` stores the matrix in
  *                     row major.
  *
- * @since 2.0
+ * @since 2.0.0
  */
 class DenseMatrix (
     val numRows: Int,
@@ -311,7 +311,7 @@ class DenseMatrix (
 /**
  * Factory methods for [[org.apache.spark.ml.linalg.DenseMatrix]].
  *
- * @since 2.0
+ * @since 2.0.0
  */
 object DenseMatrix {
 
@@ -421,7 +421,7 @@ object DenseMatrix {
  *                     Compressed Sparse Row (CSR) format, where `colPtrs` behaves as rowPtrs,
  *                     and `rowIndices` behave as colIndices, and `values` are stored in row major.
  *
- * @since 2.0
+ * @since 2.0.0
  */
 class SparseMatrix (
     val numRows: Int,
@@ -602,7 +602,7 @@ class SparseMatrix (
 /**
  * Factory methods for [[org.apache.spark.ml.linalg.SparseMatrix]].
  *
- * @since 2.0
+ * @since 2.0.0
  */
 object SparseMatrix {
 
@@ -772,7 +772,7 @@ object SparseMatrix {
 /**
  * Factory methods for [[org.apache.spark.ml.linalg.Matrix]].
  *
- * @since 2.0
+ * @since 2.0.0
  */
 object Matrices {
 
