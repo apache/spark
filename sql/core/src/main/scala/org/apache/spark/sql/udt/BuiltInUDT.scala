@@ -33,7 +33,7 @@ private[sql] object BuiltInUDT {
     (classOf[DenseMatrix], classOf[MatrixUDT]) ::
     (classOf[SparseMatrix], classOf[MatrixUDT]) :: Nil
 
-  def preloadBuiltInUDT: Unit =  {
+  def preloadBuiltInUDT: Unit = {
     preloadedUDT.foreach { case (userClass, udtClass) =>
       UDTRegistration.register(userClass, udtClass)
     }
