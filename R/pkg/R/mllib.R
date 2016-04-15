@@ -130,9 +130,10 @@ setMethod("summary", signature(object = "GeneralizedLinearRegressionModel"),
 #' @export
 print.summary.GeneralizedLinearRegressionModel <- function(x, ...) {
   x$deviance.resid <- setNames(unlist(approxQuantile(x$deviance.resid, "devianceResiduals",
-    c(0.0, 0.25, 0.5, 0.75, 1.0), 0.0)), c("Min", "1Q", "Median", "3Q", "Max"))
+    c(0.0, 0.25, 0.5, 0.75, 1.0), 0.01)), c("Min", "1Q", "Median", "3Q", "Max"))
   x$deviance.resid <- zapsmall(x$deviance.resid, 5L)
   cat("\nDeviance Residuals: \n")
+  cat("(Note: These are approximate quantiles with relative error <= 0.01)\n")
   print.default(x$deviance.resid, digits = 5L, na.print = "", print.gap = 2L)
 
   cat("\nCoefficients:\n")
