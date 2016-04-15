@@ -49,12 +49,10 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.{Expression, LeafExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.{ExecutedCommand, SetCommand}
-import org.apache.spark.sql.execution.ui.SQLListener
 import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.hive.execution.{DescribeHiveTableCommand, HiveNativeCommand}
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{PersistentState, SQLConf}
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -80,32 +78,14 @@ private[hive] case class CurrentDatabase(ctx: HiveContext)
  * @since 1.0.0
  */
 class HiveContext private[hive](
-    sc: SparkContext,
-    cacheManager: CacheManager,
-    listener: SQLListener,
-    @transient private[hive] val executionHive: HiveClientImpl,
-    @transient private[hive] val metadataHive: HiveClient,
-    isRootContext: Boolean,
-    @transient private[sql] val hiveCatalog: HiveExternalCatalog)
-  extends SQLContext(sc, cacheManager, listener, isRootContext, hiveCatalog) with Logging {
+    @transient private val hivePersistentState: HivePersistentState,
+    override val isRootContext: Boolean)
+  extends SQLContext(hivePersistentState, isRootContext) with Logging {
+
   self =>
 
-  private def this(sc: SparkContext, execHive: HiveClientImpl, metaHive: HiveClient) {
-    this(
-      sc,
-      new CacheManager,
-      SQLContext.createListenerAndUI(sc),
-      execHive,
-      metaHive,
-      true,
-      new HiveExternalCatalog(metaHive))
-  }
-
   def this(sc: SparkContext) = {
-    this(
-      sc,
-      HiveContext.newClientForExecution(sc.conf, sc.hadoopConfiguration),
-      HiveContext.newClientForMetadata(sc.conf, sc.hadoopConfiguration))
+    this(new HivePersistentState(sc), true)
   }
 
   def this(sc: JavaSparkContext) = this(sc.sc)
@@ -114,20 +94,30 @@ class HiveContext private[hive](
 
   logDebug("create HiveContext")
 
+  @transient
+  protected[sql] override val persistentState: PersistentState = hivePersistentState
+
+  // TODO: move these Hive clients into session state
+
+  @transient
+  protected[hive] lazy val metadataHive: HiveClient = {
+    hivePersistentState.metadataHive.newSession()
+  }
+
+  @transient
+  protected[hive] lazy val executionHive: HiveClientImpl = {
+    hivePersistentState.executionHive.newSession()
+  }
+
+  protected[sql] def hiveCatalog: HiveExternalCatalog = hivePersistentState.externalCatalog
+
   /**
    * Returns a new HiveContext as new session, which will have separated SQLConf, UDF/UDAF,
    * temporary tables and SessionState, but sharing the same CacheManager, IsolatedClientLoader
    * and Hive client (both of execution and metadata) with existing HiveContext.
    */
   override def newSession(): HiveContext = {
-    new HiveContext(
-      sc = sc,
-      cacheManager = cacheManager,
-      listener = listener,
-      executionHive = executionHive.newSession(),
-      metadataHive = metadataHive.newSession(),
-      isRootContext = false,
-      hiveCatalog = hiveCatalog)
+    new HiveContext(hivePersistentState, isRootContext = false)
   }
 
   @transient
@@ -181,7 +171,7 @@ class HiveContext private[hive](
   protected[hive] def hiveThriftServerAsync: Boolean = getConf(HIVE_THRIFT_SERVER_ASYNC)
 
   protected[hive] def hiveThriftServerSingleSession: Boolean =
-    sc.conf.get("spark.sql.hive.thriftServer.singleSession", "false").toBoolean
+    sparkContext.conf.getBoolean("spark.sql.hive.thriftServer.singleSession", defaultValue = false)
 
   @transient
   protected[sql] lazy val substitutor = new VariableSubstitution()
@@ -619,7 +609,7 @@ private[hive] object HiveContext extends Logging {
    * The version of the Hive client that is used here must match the metastore that is configured
    * in the hive-site.xml file.
    */
-  private def newClientForMetadata(conf: SparkConf, hadoopConf: Configuration): HiveClient = {
+  protected[hive] def newClientForMetadata(conf: SparkConf, hadoopConf: Configuration): HiveClient = {
     val hiveConf = new HiveConf(hadoopConf, classOf[HiveConf])
     val configurations = hiveClientConfigurations(hiveConf)
     newClientForMetadata(conf, hiveConf, hadoopConf, configurations)
