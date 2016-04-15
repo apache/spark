@@ -29,7 +29,7 @@ public class RadixSort {
       int tmpOffset,
       int startByteIdx,
       int endByteIdx) {
-    assert enabled, "Radix sort is disabled.";
+    assert enabled : "Radix sort is disabled.";
     assert startByteIdx >= 0 : "startByteIdx (" + startByteIdx + ") should >= 0";
     assert endByteIdx <= 7 : "endByteIdx (" + endByteIdx + ") should <= 7";
     assert startByteIdx <= endByteIdx;
