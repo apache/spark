@@ -246,5 +246,5 @@ sparkLapply <- function(list, func) {
   rdd <- parallelize(sc, list, length(list))
   results <- map(rdd, func)
   local <- collect(results)
-  unlist(local)
+  local
 }
