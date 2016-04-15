@@ -345,7 +345,7 @@ object CheckpointReader extends Logging {
     // Try to read the checkpoint files in the order
     logInfo("Checkpoint files found: " + checkpointFiles.mkString(","))
     var readError: Exception = null
-    checkpointFiles.foreach(file => {
+    checkpointFiles.foreach { file =>
       logInfo("Attempting to load checkpoint from file " + file)
       try {
         val fis = fs.open(file)
@@ -358,7 +358,7 @@ object CheckpointReader extends Logging {
           readError = e
           logWarning("Error reading checkpoint from file " + file, e)
       }
-    })
+    }
 
     // If none of checkpoint files could be read, then throw exception
     if (!ignoreReadError) {

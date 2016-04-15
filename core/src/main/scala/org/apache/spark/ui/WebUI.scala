@@ -129,7 +129,7 @@ private[spark] abstract class WebUI(
   }
 
   /** Initialize all components of the server. */
-  def initialize()
+  def initialize(): Unit
 
   /** Bind to the HTTP server behind this web interface. */
   def bind() {
