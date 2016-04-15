@@ -149,7 +149,7 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
   public final double readDouble() {
     double v;
     if (!bigEndianPlatform) {
-      v = Platform.getDouble(buffer, offset);      
+      v = Platform.getDouble(buffer, offset);
     } else {
       v = byteBuffer.getDouble(offset - Platform.BYTE_ARRAY_OFFSET);
     }
