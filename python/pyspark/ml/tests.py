@@ -20,6 +20,9 @@ Unit tests for Spark ML Python APIs.
 """
 
 import sys
+if sys.version > '3':
+    basestring = str
+
 try:
     import xmlrunner
 except ImportError:
@@ -283,6 +286,8 @@ class FeatureTests(PySparkTestCase):
         self.assertEqual(stopWordRemover.getInputCol(), "input")
         transformedDF = stopWordRemover.transform(dataset)
         self.assertEqual(transformedDF.head().output, ["panda"])
+        self.assertEqual(type(stopWordRemover.getStopWords()), list)
+        self.assertTrue(isinstance(stopWordRemover.getStopWords()[0], basestring))
         # Custom
         stopwords = ["panda"]
         stopWordRemover.setStopWords(stopwords)
