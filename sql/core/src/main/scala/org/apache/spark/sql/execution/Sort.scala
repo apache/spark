@@ -89,11 +89,11 @@ case class Sort(
       // Remember spill data size of this task before execute this operator so that we can
       // figure out how many bytes we spilled for this operator.
       val spillSizeBefore = metrics.memoryBytesSpilled
-      val beforeSort = System.currentTimeMillis()
+      val beforeSort = System.nanoTime()
 
       val sortedIterator = sorter.sort(iter.asInstanceOf[Iterator[UnsafeRow]])
 
-      sortingTime += System.currentTimeMillis() - beforeSort
+      sortingTime += (System.nanoTime() - beforeSort) >> 20
       peakMemory += sorter.getPeakMemoryUsage
       spillSize += metrics.memoryBytesSpilled - spillSizeBefore
       metrics.incPeakExecutionMemory(sorter.getPeakMemoryUsage)
@@ -147,13 +147,13 @@ case class Sort(
     val beforeSortMs = ctx.freshName("beforeSortMs")
     s"""
        | if ($needToSort) {
-       |   long $beforeSortMs = System.currentTimeMillis();
+       |   long $beforeSortMs = System.nanoTime();
        |   long $spillSizeBefore = $metrics.memoryBytesSpilled();
        |
        |   $addToSorter();
        |   $sortedIterator = $sorterVariable.sort();
        |
-       |   $sortingTime.add(System.currentTimeMillis() - $beforeSortMs);
+       |   $sortingTime.add((System.nanoTime() - $beforeSortMs) >> 20);
        |   $peakMemory.add($sorterVariable.getPeakMemoryUsage());
        |   $spillSize.add($metrics.memoryBytesSpilled() - $spillSizeBefore);
        |   $metrics.incPeakExecutionMemory($sorterVariable.getPeakMemoryUsage());

@@ -218,9 +218,9 @@ case class TungstenAggregate(
     s"""
        | while (!$initAgg) {
        |   $initAgg = true;
-       |   long $beforeAgg = System.currentTimeMillis();
+       |   long $beforeAgg = System.nanoTime();
        |   $doAgg();
-       |   $aggTime.add(System.currentTimeMillis() - $beforeAgg);
+       |   $aggTime.add((System.nanoTime() - $beforeAgg) >> 20);
        |
        |   // output the result
        |   ${genResult.trim}
@@ -544,9 +544,9 @@ case class TungstenAggregate(
     s"""
      if (!$initAgg) {
        $initAgg = true;
-       long $beforeAgg = System.currentTimeMillis();
+       long $beforeAgg = System.nanoTime();
        $doAgg();
-       $aggTime.add(System.currentTimeMillis() - $beforeAgg);
+       $aggTime.add((System.nanoTime() - $beforeAgg) >> 20);
      }
 
      // output the result

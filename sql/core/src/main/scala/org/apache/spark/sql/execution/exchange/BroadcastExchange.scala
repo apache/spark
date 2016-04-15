@@ -69,20 +69,20 @@ case class BroadcastExchange(
       // This will run in another thread. Set the execution id so that we can connect these jobs
       // with the correct execution.
       SQLExecution.withExecutionId(sparkContext, executionId) {
-        val beforeCollect = System.currentTimeMillis()
+        val beforeCollect = System.nanoTime()
         // Note that we use .executeCollect() because we don't want to convert data to Scala types
         val input: Array[InternalRow] = child.executeCollect()
-        val beforeBuild = System.currentTimeMillis()
-        longMetric("collectTime") += beforeBuild - beforeCollect
+        val beforeBuild = System.nanoTime()
+        longMetric("collectTime") += (beforeBuild - beforeCollect) >> 20
         longMetric("dataSize") += input.map(_.asInstanceOf[UnsafeRow].getSizeInBytes.toLong).sum
 
         // Construct and broadcast the relation.
         val relation = mode.transform(input)
-        val beforeBroadcast = System.currentTimeMillis()
-        longMetric("buildTime") += beforeBroadcast - beforeBuild
+        val beforeBroadcast = System.nanoTime()
+        longMetric("buildTime") += (beforeBroadcast - beforeBuild) >> 20
 
         val broadcasted = sparkContext.broadcast(relation)
-        longMetric("broadcastTime") += System.currentTimeMillis() - beforeBroadcast
+        longMetric("broadcastTime") += (System.nanoTime() - beforeBroadcast) >> 20
         broadcasted
       }
     }(BroadcastExchange.executionContext)
