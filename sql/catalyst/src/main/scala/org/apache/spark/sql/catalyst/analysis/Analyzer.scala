@@ -225,7 +225,7 @@ class Analyzer(
      *  represented as the bit masks.
      */
     def bitmasks(c: Cube): Seq[Int] = {
-      Seq.tabulate(1 << c.groupByExprs.length)(_)
+      Seq.tabulate(1 << c.groupByExprs.length)(i => i)
     }
 
     private def hasGroupingAttribute(expr: Expression): Boolean = {
