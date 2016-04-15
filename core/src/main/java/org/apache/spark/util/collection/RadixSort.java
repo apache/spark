@@ -45,56 +45,14 @@ public class RadixSort {
         orMask |= value;
         andMask &= value;
       }
-      // We only need to make passes if some of the bits change at that byte index.
-      long bitsChanged = orMask ^ andMask;
-      int numPasses = 0;
       for (int i = startByteIdx; i <= endByteIdx; i++) {
-        if (((bitsChanged >>> (i * 8)) & 0xff) != 0) {
-          numPasses += 1;
-        }
-      }
-      // Precompute the bucket offsets for each pass.
-      int[] offsets = new int[numPasses * 256];
-      int ix = 0;
-      for (ix = 0; ix < dataLen - 200000; ix += 200000) {
-        int offsetsBase = 0;
-        for (int j = startByteIdx; j <= endByteIdx; j++) {
-          if (((bitsChanged >>> (j * 8)) & 0xff) != 0) {
-            for (int k = ix; k < ix + 200000; k++) {
-              long value = array.get(dataOffset + k);
-              offsets[offsetsBase + (int)((value >>> (j * 8)) & 0xff)]++;
-            }
-            offsetsBase += 256;
-          }
-        }
-      }
-      for (int i = ix; i < dataLen; i++) {
-        long value = array.get(dataOffset + i);
-        int offsetsBase = 0;
-        for (int j = startByteIdx; j <= endByteIdx; j++) {
-          if (((bitsChanged >>> (j * 8)) & 0xff) != 0) {
-            offsets[offsetsBase + (int)((value >>> (j * 8)) & 0xff)]++;
-            offsetsBase += 256;
-          }
-        }
-      }
-      for (int i=0; i < numPasses; i++) {
-        int accum = 0;
-        for (int j = i * 256; j < (i + 1) * 256; j++) {
-          int tmp = offsets[j];
-          offsets[j] = accum;
-          accum += tmp;
-        }
-      }
-      // Execute each pass.
-      int offsetsBase = 0;
-      for (int i = startByteIdx; i <= endByteIdx; i++) {
-        if (((bitsChanged >>> (i * 8)) & 0xff) != 0) {
-          sortAtByte(array, i, dataLen, dataOffset, tmpOffset, offsets, offsetsBase);
+        long bitMin = ((orMask >>> (i * 8)) & 0xff);
+        long bitMax = ((andMask >>> (i * 8)) & 0xff);
+        if (bitMin != bitMax) {
+          sortAtByte(array, i, dataLen, dataOffset, tmpOffset);
           int tmp = dataOffset;
           dataOffset = tmpOffset;
           tmpOffset = tmp;
-          offsetsBase += 256;
         }
       }
     }
@@ -102,13 +60,12 @@ public class RadixSort {
   }
 
   private static void sortAtByte(
-      LongArray array, int byteIdx, int dataLen, int dataOffset, int tmpOffset,
-      int[] offsets, int offsetsBase) {
-    System.out.println("sortAtByte: " + byteIdx + " " + dataLen + " " + dataOffset + " " + tmpOffset + " " + offsetsBase);
+      LongArray array, int byteIdx, int dataLen, int dataOffset, int tmpOffset) {
+    int[] tmpOffsets = getOffsets(array, byteIdx, dataLen, dataOffset, tmpOffset);
     for (int i = dataOffset; i < dataOffset + dataLen; i++) {
       long value = array.get(i);
       int bucket = (int)((value >>> (byteIdx * 8)) & 0xff);
-      array.set(tmpOffset + offsets[offsetsBase + bucket]++, value);
+      array.set(tmpOffsets[bucket]++, value);
     }
   }
 
@@ -150,9 +107,10 @@ public class RadixSort {
         orMask |= value;
         andMask &= value;
       }
-      long bitsChanged = orMask ^= andMask;
       for (int i = startByteIdx; i <= endByteIdx; i++) {
-        if (((bitsChanged >>> (i * 8)) & 0xff) != 0) {
+        long bitMin = ((orMask >>> (i * 8)) & 0xff);
+        long bitMax = ((andMask >>> (i * 8)) & 0xff);
+        if (bitMin != bitMax) {
           sortKeyPrefixArrayAtByte(array, i, dataLen, dataOffset, tmpOffset);
           int tmp = dataOffset;
           dataOffset = tmpOffset;
