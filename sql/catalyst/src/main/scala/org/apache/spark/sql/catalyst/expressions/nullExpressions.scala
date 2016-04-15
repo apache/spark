@@ -171,6 +171,9 @@ case class NullIf(left: Expression, right: Expression) extends BinaryExpression 
  * An Expression accepts two parameters and returns the second parameter if the value
  * in the first parameter is null; if the first parameter is any value other than null,
  * it is returned unchanged.
+ *
+ * Compare to Coalesce(), the difference is NVL will evaluate both parameters while Coalesce
+ * may not.
  */
 @ExpressionDescription(
   usage = "_FUNC_(a,b) - Returns b if a is null, or a otherwise.")
@@ -194,14 +197,12 @@ case class Nvl(left: Expression, right: Expression) extends BinaryExpression {
 
     s"""
       ${leftGen.code}
+      ${rightGen.code}
       boolean ${ev.isNull} = ${leftGen.isNull};
       ${ctx.javaType(dataType)} ${ev.value} = ${leftGen.value};
-      if (${ev.isNull}) {
-        ${rightGen.code}
-        if (!${rightGen.isNull}) {
-          ${ev.isNull} = false;
-          ${ev.value} = ${rightGen.value};
-        }
+      if (${ev.isNull} && !${rightGen.isNull}) {
+        ${ev.isNull} = false;
+        ${ev.value} = ${rightGen.value};
       }
     """
   }
