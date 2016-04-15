@@ -53,12 +53,13 @@ final class ShuffleInMemorySorter {
   private int pos = 0;
 
   private int initialSize;
+  private final boolean useRadix = true;
 
   ShuffleInMemorySorter(MemoryConsumer consumer, int initialSize) {
     this.consumer = consumer;
     assert (initialSize > 0);
     this.initialSize = initialSize;
-    this.array = consumer.allocateArray(initialSize * 2);
+    this.array = consumer.allocateArray(initialSize * (useRadix ? 2 : 1));
     this.sorter = new Sorter<>(ShuffleSortDataFormat.INSTANCE);
   }
 
@@ -88,14 +89,14 @@ final class ShuffleInMemorySorter {
       array.getBaseOffset(),
       newArray.getBaseObject(),
       newArray.getBaseOffset(),
-      array.size() * 4L  // Skip copying the half we hold in reserve.
+      array.size() * (useRadix ? 4L : 8L)
     );
     consumer.freeArray(array);
     array = newArray;
   }
 
   public boolean hasSpaceForAnotherRecord() {
-    return pos < array.size() / 2;
+    return pos < array.size() / (useRadix ? 2 : 1);
   }
 
   public long getMemoryUsage() {
@@ -152,9 +153,12 @@ final class ShuffleInMemorySorter {
   public ShuffleSorterIterator getSortedIterator() {
     int offset = 0;
     long start = System.nanoTime();
-    assert(pos * 2 <= array.size());
-//    sorter.sort(array, 0, pos, SORT_COMPARATOR);
-    offset = RadixSort.sort(array, pos, 0, pos, 5, 7);
+    if (useRadix) {
+      assert(pos * 2 <= array.size());
+      offset = RadixSort.sort(array, pos, 0, pos, 5, 7);
+    } else {
+      sorter.sort(array, 0, pos, SORT_COMPARATOR);
+    }
     System.out.println((System.nanoTime() - start) / 1e9);
     return new ShuffleSorterIterator(pos, array, offset);
   }
