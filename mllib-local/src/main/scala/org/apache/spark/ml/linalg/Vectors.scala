@@ -32,6 +32,8 @@ import org.json4s.jackson.JsonMethods.{compact, parse => parseJson, render}
  * Represents a numeric vector, whose index type is Int and value type is Double.
  *
  * Note: Users should not implement this interface.
+ *
+ * @since 2.0
  */
 sealed trait Vector extends Serializable {
 
@@ -164,6 +166,8 @@ sealed trait Vector extends Serializable {
  * Factory methods for [[org.apache.spark.ml.linalg.Vector]].
  * We don't use the name `Vector` because Scala imports
  * [[scala.collection.immutable.Vector]] by default.
+ *
+ * @since 2.0
  */
 object Vectors {
 
@@ -448,6 +452,8 @@ object Vectors {
 
 /**
  * A dense vector represented by a value array.
+ *
+ * @since 2.0
  */
 class DenseVector (val values: Array[Double]) extends Vector {
 
@@ -548,6 +554,9 @@ class DenseVector (val values: Array[Double]) extends Vector {
   }
 }
 
+/**
+ * @since 2.0
+ */
 object DenseVector {
 
   /** Extracts the value array from a dense vector. */
@@ -560,6 +569,8 @@ object DenseVector {
  * @param size size of the vector.
  * @param indices index array, assume to be strictly increasing.
  * @param values value array, must have the same length as the index array.
+ *
+ * @since 2.0
  */
 class SparseVector (
     override val size: Int,
@@ -734,6 +745,9 @@ class SparseVector (
   }
 }
 
+/**
+ * @since 2.0
+ */
 object SparseVector {
   def unapply(sv: SparseVector): Option[(Int, Array[Int], Array[Double])] =
     Some((sv.size, sv.indices, sv.values))
