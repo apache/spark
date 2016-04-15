@@ -281,12 +281,12 @@ case class LoadData(
       throw new AnalysisException(
         s"Table in LOAD DATA does not exist: '$table'")
     }
-    if (catalog.isTemporaryTable(table)) {
+
+    val targetTable = catalog.getTableMetadataOption(table).getOrElse {
       throw new AnalysisException(
         s"Table in LOAD DATA cannot be temporary: '$table'")
     }
 
-    val targetTable = catalog.getTableMetadata(table)
     if (DDLUtils.isDatasourceTable(targetTable)) {
       throw new AnalysisException(
         "LOAD DATA is not supported for datasource tables")
