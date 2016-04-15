@@ -449,9 +449,7 @@ case class CollapseCodegenStages(conf: SQLConf) extends Rule[SparkPlan] {
       // the generated code will be huge if there are too many columns
       val hasTooManyOutputFields =
         numOfNestedFields(plan.schema) > conf.wholeStageMaxNumFields
-      val hasTooManyInputFields =
-        plan.children.map(p => numOfNestedFields(p.schema)).exists(_ > conf.wholeStageMaxNumFields)
-      !willFallback && !hasTooManyOutputFields && !hasTooManyInputFields
+      !willFallback && !hasTooManyOutputFields
     case _ => false
   }
 

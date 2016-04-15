@@ -538,7 +538,7 @@ case class CreateExternalRow(children: Seq[Expression], schema: StructType)
           }
          """
     }
-    val childrenCode = ctx.splitExpressions(ctx.INPUT_ROW, childrenCodes)
+    val childrenCode = ctx.splitExpressions(ctx.INPUT_ROW, childrenCodes, children.map(_.dataType))
     val schemaField = ctx.addReferenceObj("schema", schema)
     s"""
       boolean ${ev.isNull} = false;
