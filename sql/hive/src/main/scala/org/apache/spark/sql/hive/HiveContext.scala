@@ -429,7 +429,7 @@ private[hive] object HiveContext extends Logging {
       | Location of the jars that should be used to instantiate the HiveMetastoreClient.
       | This property can be one of three options: "
       | 1. "builtin"
-      |   Use Hive ${hiveExecutionVersion}, which is bundled with the Spark assembly jar when
+      |   Use Hive ${hiveExecutionVersion}, which is bundled with the Spark assembly when
       |   <code>-Phive</code> is enabled. When this option is chosen,
       |   <code>spark.sql.hive.metastore.version</code> must be either
       |   <code>${hiveExecutionVersion}</code> or not defined.
