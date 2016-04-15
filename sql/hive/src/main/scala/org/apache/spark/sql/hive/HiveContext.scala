@@ -86,11 +86,16 @@ class HiveContext private[hive](
     @transient private[hive] val executionHive: HiveClientImpl,
     @transient private[hive] val metadataHive: HiveClient,
     isRootContext: Boolean,
-    @transient private[sql] val hiveCatalog: HiveExternalCatalog)
+    @transient private[sql] val hiveCatalog: HiveExternalCatalog,
+    @transient private[sql] val jarClassLoader: NonClosableMutableURLClassLoader)
   extends SQLContext(sc, cacheManager, listener, isRootContext, hiveCatalog) with Logging {
   self =>
 
-  private def this(sc: SparkContext, execHive: HiveClientImpl, metaHive: HiveClient) {
+  private def this(
+      sc: SparkContext,
+      execHive: HiveClientImpl,
+      metaHive: HiveClient,
+      jarClassLoader: NonClosableMutableURLClassLoader) {
     this(
       sc,
       new CacheManager,
@@ -98,14 +103,16 @@ class HiveContext private[hive](
       execHive,
       metaHive,
       true,
-      new HiveExternalCatalog(metaHive))
+      new HiveExternalCatalog(metaHive),
+      jarClassLoader)
   }
 
   def this(sc: SparkContext) = {
     this(
       sc,
       HiveContext.newClientForExecution(sc.conf, sc.hadoopConfiguration),
-      HiveContext.newClientForMetadata(sc.conf, sc.hadoopConfiguration))
+      HiveContext.newClientForMetadata(sc.conf, sc.hadoopConfiguration),
+      new NonClosableMutableURLClassLoader(Utils.getContextOrSparkClassLoader))
   }
 
   def this(sc: JavaSparkContext) = this(sc.sc)
@@ -127,7 +134,8 @@ class HiveContext private[hive](
       executionHive = executionHive.newSession(),
       metadataHive = metadataHive.newSession(),
       isRootContext = false,
-      hiveCatalog = hiveCatalog)
+      hiveCatalog = hiveCatalog,
+      jarClassLoader = jarClassLoader)
   }
 
   @transient
@@ -197,9 +205,7 @@ class HiveContext private[hive](
   defaultOverrides()
 
   protected[sql] override def parseSql(sql: String): LogicalPlan = {
-    executionHive.withHiveState {
-      super.parseSql(substitutor.substitute(hiveconf, sql))
-    }
+    super.parseSql(substitutor.substitute(hiveconf, sql))
   }
 
   override protected[sql] def executePlan(plan: LogicalPlan): this.QueryExecution =
@@ -308,7 +314,6 @@ class HiveContext private[hive](
 
   override def setConf(key: String, value: String): Unit = {
     super.setConf(key, value)
-    executionHive.runSqlHive(s"SET $key=$value")
     metadataHive.runSqlHive(s"SET $key=$value")
     // If users put any Spark SQL setting in the spark conf (e.g. spark-defaults.conf),
     // this setConf will be called in the constructor of the SQLContext.
@@ -343,10 +348,9 @@ class HiveContext private[hive](
   protected[hive] def runSqlHive(sql: String): Seq[String] = {
     val command = sql.trim.toLowerCase
     if (functionOrMacroDDLPattern(command).matches()) {
-      executionHive.runSqlHive(sql)
+      throw new Exception("Will functionOrMacroDDLPattern(command).matches() be true? " + sql)
     } else if (command.startsWith("set")) {
       metadataHive.runSqlHive(sql)
-      executionHive.runSqlHive(sql)
     } else {
       metadataHive.runSqlHive(sql)
     }
@@ -401,9 +405,17 @@ class HiveContext private[hive](
 
   protected[sql] override def addJar(path: String): Unit = {
     // Add jar to Hive and classloader
-    executionHive.addJar(path)
+    val uri = new Path(path).toUri
+    val jarURL = if (uri.getScheme == null) {
+      // `path` is a local file path without a URL scheme
+      new File(path).toURI.toURL
+    } else {
+      // `path` is a URL with a scheme
+      uri.toURL
+    }
+    jarClassLoader.addURL(jarURL)
     metadataHive.addJar(path)
-    Thread.currentThread().setContextClassLoader(executionHive.clientLoader.classLoader)
+    Thread.currentThread().setContextClassLoader(jarClassLoader)
     super.addJar(path)
   }
 }
