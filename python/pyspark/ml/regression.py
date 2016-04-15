@@ -902,7 +902,8 @@ class RandomForestRegressionModel(TreeEnsembleModels, JavaMLWritable, JavaMLRead
 
 @inherit_doc
 class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
-                   GBTParams, HasCheckpointInterval, HasStepSize, HasSeed):
+                   GBTParams, HasCheckpointInterval, HasStepSize, HasSeed, JavaMLWritable,
+                   JavaMLReadable):
     """
     `http://en.wikipedia.org/wiki/Gradient_boosting Gradient-Boosted Trees (GBTs)`
     learning algorithm for regression.
@@ -925,6 +926,18 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
     >>> test1 = sqlContext.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
     >>> model.transform(test1).head().prediction
     1.0
+    >>> gbtr_path = temp_path + "gbtr"
+    >>> gbt.save(gbtr_path)
+    >>> gbt2 = GBTRegressor.load(gbtr_path)
+    >>> gbt2.getMaxDepth()
+    2
+    >>> model_path = temp_path + "gbtr_model"
+    >>> model.save(model_path)
+    >>> model2 = GBTRegressionModel.load(model_path)
+    >>> model.featureImportances == model2.featureImportances
+    True
+    >>> model.treeWeights == model2.treeWeights
+    True
 
     .. versionadded:: 1.4.0
     """
@@ -989,7 +1002,7 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
         return self.getOrDefault(self.lossType)
 
 
-class GBTRegressionModel(TreeEnsembleModels):
+class GBTRegressionModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable):
     """
     Model fitted by GBTRegressor.
 

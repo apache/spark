@@ -739,7 +739,8 @@ class RandomForestClassificationModel(TreeEnsembleModels, JavaMLWritable, JavaML
 
 @inherit_doc
 class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
-                    GBTParams, HasCheckpointInterval, HasStepSize, HasSeed):
+                    GBTParams, HasCheckpointInterval, HasStepSize, HasSeed, JavaMLWritable,
+                    JavaMLReadable):
     """
     `http://en.wikipedia.org/wiki/Gradient_boosting Gradient-Boosted Trees (GBTs)`
     learning algorithm for classification.
@@ -767,6 +768,18 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
     >>> test1 = sqlContext.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
     >>> model.transform(test1).head().prediction
     1.0
+    >>> gbtc_path = temp_path + "gbtc"
+    >>> gbt.save(gbtc_path)
+    >>> gbt2 = GBTClassifier.load(gbtc_path)
+    >>> gbt2.getMaxDepth()
+    2
+    >>> model_path = temp_path + "gbtc_model"
+    >>> model.save(model_path)
+    >>> model2 = GBTClassificationModel.load(model_path)
+    >>> model.featureImportances == model2.featureImportances
+    True
+    >>> model.treeWeights == model2.treeWeights
+    True
 
     .. versionadded:: 1.4.0
     """
@@ -831,7 +844,7 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
         return self.getOrDefault(self.lossType)
 
 
-class GBTClassificationModel(TreeEnsembleModels):
+class GBTClassificationModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable):
     """
     Model fitted by GBTClassifier.
 
