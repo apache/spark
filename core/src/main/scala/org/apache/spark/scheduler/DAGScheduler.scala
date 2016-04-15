@@ -265,6 +265,13 @@ class DAGScheduler(
     eventProcessLoop.post(TaskSetFailed(taskSet, reason, exception))
   }
 
+  /**
+   * Called by the TaskSetManager when a set of tasks are aborted due to fetch failure.
+   */
+  def tasksAborted(stageId: Int, tasks: Seq[Task[_]]): Unit = {
+    eventProcessLoop.post(TasksAborted(stageId, tasks))
+  }
+
   private[scheduler]
   def getCacheLocs(rdd: RDD[_]): IndexedSeq[Seq[TaskLocation]] = cacheLocs.synchronized {
     // Note: this doesn't use `getOrElse()` because this method is called O(num tasks) times
@@ -819,6 +826,16 @@ class DAGScheduler(
     stageIdToStage.get(taskSet.stageId).foreach { abortStage(_, reason, exception) }
   }
 
+  private[scheduler] def handleTasksAborted(
+      stageId: Int,
+      tasks: Seq[Task[_]]): Unit = {
+    for (stage <- stageIdToStage.get(stageId)) {
+      for (task <- tasks) {
+        stage.pendingPartitions -= task.partitionId
+      }
+    }
+  }
+
   private[scheduler] def cleanUpAfterSchedulerStop() {
     for (job <- activeJobs) {
       val error =
@@ -945,12 +962,22 @@ class DAGScheduler(
     }
   }
 
-  /** Called when stage's parents are available and we can now do its task. */
+  /**
+   * Called when stage's parents are available and we can now run its task.
+   * This only submits the partitions which are missing and have not been
+   * submitted to the lower-level scheduler for execution.
+   */
   private def submitMissingTasks(stage: Stage, jobId: Int) {
     logDebug("submitMissingTasks(" + stage + ")")
 
-    // First figure out the indexes of partition ids to compute.
-    val partitionsToCompute: Seq[Int] = stage.findMissingPartitions()
+    val missingPartitions = stage.findMissingPartitions()
+    val partitionsToCompute =
+      missingPartitions.filter(id => !stage.pendingPartitions.contains(id))
+    stage.pendingPartitions ++= partitionsToCompute
+
+    if (partitionsToCompute.isEmpty) {
+      return
+    }
 
     // Use the scheduling pool, job group, description, etc. from an ActiveJob associated
     // with this Stage
@@ -1027,11 +1054,9 @@ class DAGScheduler(
       val serializedTaskMetrics = closureSerializer.serialize(stage.latestInfo.taskMetrics).array()
       stage match {
         case stage: ShuffleMapStage =>
-          stage.pendingPartitions.clear()
           partitionsToCompute.map { id =>
             val locs = taskIdToLocations(id)
             val part = stage.rdd.partitions(id)
-            stage.pendingPartitions += id
             new ShuffleMapTask(stage.id, stage.latestInfo.attemptId,
               taskBinary, part, locs, properties, serializedTaskMetrics, Option(jobId),
               Option(sc.applicationId), sc.applicationAttemptId)
@@ -1057,6 +1082,7 @@ class DAGScheduler(
     if (tasks.size > 0) {
       logInfo(s"Submitting ${tasks.size} missing tasks from $stage (${stage.rdd}) (first 15 " +
         s"tasks are for partitions ${tasks.take(15).map(_.partitionId)})")
+      logDebug("New pending partitions: " + stage.pendingPartitions)
       taskScheduler.submitTasks(new TaskSet(
         tasks.toArray, stage.id, stage.latestInfo.attemptId, jobId, properties))
       stage.latestInfo.submissionTime = Some(clock.getTimeMillis())
@@ -1160,6 +1186,7 @@ class DAGScheduler(
     }
 
     val stage = stageIdToStage(task.stageId)
+    stage.pendingPartitions -= task.partitionId
     event.reason match {
       case Success =>
         task match {
@@ -1179,6 +1206,12 @@ class DAGScheduler(
                     cleanupStateForJobAndIndependentStages(job)
                     listenerBus.post(
                       SparkListenerJobEnd(job.jobId, clock.getTimeMillis(), JobSucceeded))
+                  } else if (resultStage.pendingPartitions.isEmpty) {
+                    logInfo("Resubmitting " + resultStage + " (" + resultStage.name +
+                      ") because some of its tasks had failed: " +
+                      resultStage.findMissingPartitions().mkString(", "))
+                    markStageAsFinished(resultStage)
+                    submitStage(resultStage)
                   }
 
                   // taskSucceeded runs some user code that might throw an exception. Make sure
@@ -1201,30 +1234,12 @@ class DAGScheduler(
             val status = event.result.asInstanceOf[MapStatus]
             val execId = status.location.executorId
             logDebug("ShuffleMapTask finished on " + execId)
-            if (stageIdToStage(task.stageId).latestInfo.attemptId == task.stageAttemptId) {
-              // This task was for the currently running attempt of the stage. Since the task
-              // completed successfully from the perspective of the TaskSetManager, mark it as
-              // no longer pending (the TaskSetManager may consider the task complete even
-              // when the output needs to be ignored because the task's epoch is too small below.
-              // In this case, when pending partitions is empty, there will still be missing
-              // output locations, which will cause the DAGScheduler to resubmit the stage below.)
-              shuffleStage.pendingPartitions -= task.partitionId
-            }
-            if (failedEpoch.contains(execId) && smt.epoch <= failedEpoch(execId)) {
-              logInfo(s"Ignoring possibly bogus $smt completion from executor $execId")
-            } else {
-              // The epoch of the task is acceptable (i.e., the task was launched after the most
-              // recent failure we're aware of for the executor), so mark the task's output as
-              // available.
-              shuffleStage.addOutputLoc(smt.partitionId, status)
-              // Remove the task's partition from pending partitions. This may have already been
-              // done above, but will not have been done yet in cases where the task attempt was
-              // from an earlier attempt of the stage (i.e., not the attempt that's currently
-              // running).  This allows the DAGScheduler to mark the stage as complete when one
-              // copy of each task has finished successfully, even if the currently active stage
-              // still has tasks running.
-              shuffleStage.pendingPartitions -= task.partitionId
-            }
+            shuffleStage.addOutputLoc(smt.partitionId, status)
+
+            mapOutputTracker.registerMapOutput(
+              shuffleStage.shuffleDep.shuffleId,
+              smt.partitionId,
+              status)
 
             if (runningStages.contains(shuffleStage) && shuffleStage.pendingPartitions.isEmpty) {
               markStageAsFinished(shuffleStage)
@@ -1281,65 +1296,11 @@ class DAGScheduler(
         val failedStage = stageIdToStage(task.stageId)
         val mapStage = shuffleIdToMapStage(shuffleId)
 
-        if (failedStage.latestInfo.attemptId != task.stageAttemptId) {
-          logInfo(s"Ignoring fetch failure from $task as it's from $failedStage attempt" +
-            s" ${task.stageAttemptId} and there is a more recent attempt for that stage " +
-            s"(attempt ID ${failedStage.latestInfo.attemptId}) running")
-        } else {
-          // It is likely that we receive multiple FetchFailed for a single stage (because we have
-          // multiple tasks running concurrently on different executors). In that case, it is
-          // possible the fetch failure has already been handled by the scheduler.
-          if (runningStages.contains(failedStage)) {
-            logInfo(s"Marking $failedStage (${failedStage.name}) as failed " +
-              s"due to a fetch failure from $mapStage (${mapStage.name})")
-            markStageAsFinished(failedStage, Some(failureMessage))
-          } else {
-            logDebug(s"Received fetch failure from $task, but its from $failedStage which is no " +
-              s"longer running")
-          }
-
-          failedStage.fetchFailedAttemptIds.add(task.stageAttemptId)
-          val shouldAbortStage =
-            failedStage.fetchFailedAttemptIds.size >= maxConsecutiveStageAttempts ||
-            disallowStageRetryForTest
-
-          if (shouldAbortStage) {
-            val abortMessage = if (disallowStageRetryForTest) {
-              "Fetch failure will not retry stage due to testing config"
-            } else {
-              s"""$failedStage (${failedStage.name})
-                 |has failed the maximum allowable number of
-                 |times: $maxConsecutiveStageAttempts.
-                 |Most recent failure reason: $failureMessage""".stripMargin.replaceAll("\n", " ")
-            }
-            abortStage(failedStage, abortMessage, None)
-          } else { // update failedStages and make sure a ResubmitFailedStages event is enqueued
-            // TODO: Cancel running tasks in the failed stage -- cf. SPARK-17064
-            val noResubmitEnqueued = !failedStages.contains(failedStage)
-            failedStages += failedStage
-            failedStages += mapStage
-            if (noResubmitEnqueued) {
-              // We expect one executor failure to trigger many FetchFailures in rapid succession,
-              // but all of those task failures can typically be handled by a single resubmission of
-              // the failed stage.  We avoid flooding the scheduler's event queue with resubmit
-              // messages by checking whether a resubmit is already in the event queue for the
-              // failed stage.  If there is already a resubmit enqueued for a different failed
-              // stage, that event would also be sufficient to handle the current failed stage, but
-              // producing a resubmit for each failed stage makes debugging and logging a little
-              // simpler while not producing an overwhelming number of scheduler events.
-              logInfo(
-                s"Resubmitting $mapStage (${mapStage.name}) and " +
-                s"$failedStage (${failedStage.name}) due to fetch failure"
-              )
-              messageScheduler.schedule(
-                new Runnable {
-                  override def run(): Unit = eventProcessLoop.post(ResubmitFailedStages)
-                },
-                DAGScheduler.RESUBMIT_TIMEOUT,
-                TimeUnit.MILLISECONDS
-              )
-            }
-          }
+        val epochForMapOutput = mapOutputTracker.getEpochForMapOutput(shuffleId, mapId)
+        // It is possible that the map output was regenerated by rerun of the stage and the
+        // fetch failure is being reported for stale map output. In that case, we should just
+        // ignore the fetch failure and relaunch the task with latest map output info.
+        if (epochForMapOutput.nonEmpty && epochForMapOutput.get <= task.epoch) {
           // Mark the map whose fetch failed as broken in the map stage
           if (mapId != -1) {
             mapStage.removeOutputLoc(mapId, bmAddress)
@@ -1349,6 +1310,61 @@ class DAGScheduler(
           // TODO: mark the executor as failed only if there were lots of fetch failures on it
           if (bmAddress != null) {
             handleExecutorLost(bmAddress.executorId, filesLost = true, Some(task.epoch))
+          }
+        }
+
+        // It is likely that we receive multiple FetchFailed for a single stage (because we have
+        // multiple tasks running concurrently on different executors). In that case, it is
+        // possible the fetch failure has already been handled by the scheduler.
+        if (runningStages.contains(failedStage)) {
+          logInfo(s"Marking $failedStage (${failedStage.name}) as failed " +
+            s"due to a fetch failure from $mapStage (${mapStage.name})")
+          markStageAsFinished(failedStage, Some(failureMessage))
+        } else {
+          logDebug(s"Received fetch failure from $task, but its from $failedStage which is no " +
+            s"longer running")
+        }
+
+        failedStage.fetchFailedAttemptIds.add(task.stageAttemptId)
+        val shouldAbortStage =
+          failedStage.fetchFailedAttemptIds.size >= maxConsecutiveStageAttempts ||
+          disallowStageRetryForTest
+
+        if (shouldAbortStage) {
+          val abortMessage = if (disallowStageRetryForTest) {
+            "Fetch failure will not retry stage due to testing config"
+          } else {
+            s"""$failedStage (${failedStage.name})
+               |has failed the maximum allowable number of
+               |times: $maxConsecutiveStageAttempts.
+               |Most recent failure reason: $failureMessage""".stripMargin.replaceAll("\n", " ")
+          }
+          abortStage(failedStage, abortMessage, None)
+        } else {
+          // update failedStages and make sure a ResubmitFailedStages event is enqueued
+          val noResubmitEnqueued = !failedStages.contains(failedStage)
+          failedStages += failedStage
+          failedStages += mapStage
+          if (noResubmitEnqueued) {
+            // We expect one executor failure to trigger many FetchFailures in rapid succession,
+            // but all of those task failures can typically be handled by a single resubmission of
+            // the failed stage.  We avoid flooding the scheduler's event queue with resubmit
+            // messages by checking whether a resubmit is already in the event queue for the
+            // failed stage.  If there is already a resubmit enqueued for a different failed
+            // stage, that event would also be sufficient to handle the current failed stage, but
+            // producing a resubmit for each failed stage makes debugging and logging a little
+            // simpler while not producing an overwhelming number of scheduler events.
+            logInfo(
+              s"Resubmitting $mapStage (${mapStage.name}) and " +
+              s"$failedStage (${failedStage.name}) due to fetch failure"
+            )
+            messageScheduler.schedule(
+              new Runnable {
+                override def run(): Unit = eventProcessLoop.post(ResubmitFailedStages)
+              },
+              DAGScheduler.RESUBMIT_TIMEOUT,
+              TimeUnit.MILLISECONDS
+            )
           }
         }
 
@@ -1717,6 +1733,9 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
 
     case TaskSetFailed(taskSet, reason, exception) =>
       dagScheduler.handleTaskSetFailed(taskSet, reason, exception)
+
+    case TasksAborted(stageId, tasks) =>
+      dagScheduler.handleTasksAborted(stageId, tasks)
 
     case ResubmitFailedStages =>
       dagScheduler.resubmitFailedStages()

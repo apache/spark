@@ -292,6 +292,9 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf,
   protected val mapStatuses = new ConcurrentHashMap[Int, Array[MapStatus]]().asScala
   private val cachedSerializedStatuses = new ConcurrentHashMap[Int, Array[Byte]]().asScala
 
+  // HashMap for storing the epoch for the mapStatuses on the driver. This will be used to
+  // detect and ignore any bogus fetch failures
+  private val epochForMapStatus = new ConcurrentHashMap[Int, Array[Long]]().asScala
   private val maxRpcMessageSize = RpcUtils.maxMessageSizeBytes(conf)
 
   // Kept in sync with cachedSerializedStatuses explicitly
@@ -370,6 +373,7 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf,
     if (mapStatuses.put(shuffleId, new Array[MapStatus](numMaps)).isDefined) {
       throw new IllegalArgumentException("Shuffle ID " + shuffleId + " registered twice")
     }
+    epochForMapStatus.put(shuffleId, new Array[Long](numMaps))
     // add in advance
     shuffleIdLocks.putIfAbsent(shuffleId, new Object())
   }
@@ -378,15 +382,17 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf,
     val array = mapStatuses(shuffleId)
     array.synchronized {
       array(mapId) = status
+      val epochs = epochForMapStatus.get(shuffleId).get
+      epochs(mapId) = epoch
     }
   }
 
   /** Register multiple map output information for the given shuffle */
   def registerMapOutputs(shuffleId: Int, statuses: Array[MapStatus], changeEpoch: Boolean = false) {
-    mapStatuses.put(shuffleId, statuses.clone())
     if (changeEpoch) {
       incrementEpoch()
     }
+    mapStatuses.put(shuffleId, statuses.clone())
   }
 
   /** Unregister map output information of the given shuffle, mapper and block manager */
@@ -416,6 +422,15 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf,
   /** Check if the given shuffle is being tracked */
   def containsShuffle(shuffleId: Int): Boolean = {
     cachedSerializedStatuses.contains(shuffleId) || mapStatuses.contains(shuffleId)
+  }
+
+  /** Get the epoch for map output for a shuffle, if it is available */
+  def getEpochForMapOutput(shuffleId: Int, mapId: Int): Option[Long] = {
+    val arrayOpt = mapStatuses.get(shuffleId)
+    if (arrayOpt.isDefined && arrayOpt.get != null && arrayOpt.get(mapId) != null) {
+       return Some(epochForMapStatus.get(shuffleId).get(mapId))
+    }
+    None
   }
 
   /**

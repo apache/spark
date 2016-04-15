@@ -17,6 +17,7 @@
 
 package org.apache.spark.scheduler
 
+import scala.collection.mutable
 import scala.collection.mutable.HashSet
 
 import org.apache.spark.executor.TaskMetrics
@@ -66,6 +67,12 @@ private[scheduler] abstract class Stage(
 
   /** Set of jobs that this stage belongs to. */
   val jobIds = new HashSet[Int]
+
+  /**
+   * Set of partitions which have been submitted to the lower-level scheduler and
+   * they should not be resubmitted when rerun of the stage.
+   */
+  val pendingPartitions = new HashSet[Int]
 
   /** The ID to use for the next new attempt for this stage. */
   private var nextAttemptId: Int = 0
