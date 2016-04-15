@@ -149,9 +149,9 @@ if __name__ == "__main__":
          "default value is 'auto'.", "'auto'", "TypeConverters.toString"),
         ("varianceCol", "column name for the biased sample variance of prediction.",
          None, "TypeConverters.toString"),
-        ("binary", "If True, all non zero results are set to 1. This is useful for discrete " +
-         "probabilistic models that model binary events rather than integer counts. Default False.",
-         "False", "TypeConverters.toBoolean")
+        ("binary", "If True, all non-zero counts (after any filters are applied) are set to 1. " +
+         "This is useful for discrete probabilistic models that model binary events rather than " +
+         "integer counts. Default False.", "False", "TypeConverters.toBoolean")
     ]
 
     code = []
