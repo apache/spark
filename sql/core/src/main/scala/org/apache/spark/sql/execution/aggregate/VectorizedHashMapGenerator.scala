@@ -43,9 +43,10 @@ class VectorizedHashMapGenerator(
     generatedClassName: String,
     groupingKeySchema: StructType,
     bufferSchema: StructType) {
-  val groupingKeys = groupingKeySchema.map(k => (k.dataType.typeName, ctx.freshName("key")))
+  val groupingKeys = groupingKeySchema.map(k => (k.dataType, ctx.freshName("key")))
   val bufferValues = bufferSchema.map(k => (k.dataType.typeName, ctx.freshName("value")))
-  val groupingKeySignature = groupingKeys.map(_.productIterator.toList.mkString(" ")).mkString(", ")
+  val groupingKeySignature = groupingKeys.map(k => (k._1.typeName, k._2))
+    .map(_.productIterator.toList.mkString(" ")).mkString(", ")
 
   def generate(): String = {
     s"""
@@ -198,7 +199,7 @@ class VectorizedHashMapGenerator(
        |    if (buckets[idx] == -1) {
        |      if (numRows < capacity) {
        |        ${groupingKeys.zipWithIndex.map(k =>
-                  s"batch.column(${k._2}).putLong(numRows, ${k._1._2});").mkString("\n")}
+                  ctx.setColumnarBatch("batch", "numRows", k._1._1, k._2, k._1._2)).mkString("\n")}
        |        ${bufferValues.zipWithIndex.map(k =>
                   s"batch.column(${groupingKeys.length + k._2}).putNull(numRows);")
                   .mkString("\n")}

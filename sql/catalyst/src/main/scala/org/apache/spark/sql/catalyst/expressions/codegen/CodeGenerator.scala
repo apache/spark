@@ -271,6 +271,21 @@ class CodegenContext {
   }
 
   /**
+   * Returns the code to set a given value in a column vector for a given DataType.
+   */
+  def setColumnarBatch(batch: String, row: String, dataType: DataType, ordinal: Int,
+      value: String): String = {
+    val jt = javaType(dataType)
+    dataType match {
+      case _ if isPrimitiveType(jt) =>
+        s"$batch.column($ordinal).put${primitiveTypeName(jt)}($row, $value);"
+      case t: DecimalType => s"$batch.column($ordinal).putDecimal($row, $value, ${t.precision});"
+      case udt: UserDefinedType[_] => setColumnarBatch(batch, row, udt.sqlType, ordinal, value)
+      case _ => throw new IllegalArgumentException("cannot generate code for unsupported type")
+    }
+  }
+
+  /**
    * Returns the name used in accessor and setter for a Java primitive type.
    */
   def primitiveTypeName(jt: String): String = jt match {
