@@ -1765,7 +1765,7 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadabl
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.StopWordsRemover",
                                             self.uid)
         stopWordsObj = _jvm().org.apache.spark.ml.feature.StopWords
-        defaultStopWords = stopWordsObj.English()
+        defaultStopWords = list(stopWordsObj.English())
         self._setDefault(stopWords=defaultStopWords, caseSensitive=False)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
