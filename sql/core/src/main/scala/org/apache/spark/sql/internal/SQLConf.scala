@@ -461,7 +461,7 @@ object SQLConf {
     .internal()
     .doc("When true, aggregate with keys use an in-memory columnar map to speed up execution.")
     .booleanConf
-    .createWithDefault(false)
+    .createWithDefault(true)
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
