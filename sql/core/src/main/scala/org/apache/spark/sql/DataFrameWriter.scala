@@ -497,7 +497,6 @@ final class DataFrameWriter private[sql](df: DataFrame) {
     // connectionProperties should override settings in extraOptions
     props.putAll(connectionProperties)
     val conn = JdbcUtils.createConnectionFactory(url, props)()
-    val dialect = JdbcDialects.get(url)
     try {
       var tableExists = JdbcUtils.tableExists(conn, url, table)
 
@@ -516,7 +515,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
 
       // Create the table if the table didn't exist.
       if (!tableExists) {
-        val schema = JdbcUtils.schemaString(dialect, df, url)
+        val schema = JdbcUtils.schemaString(df, url)
         val sql = s"CREATE TABLE $table ($schema)"
         val statement = conn.createStatement
         try {
