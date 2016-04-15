@@ -443,6 +443,24 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val FILE_STREAM_SINK_LOG_DELETE = SQLConfigBuilder("spark.sql.sink.file.log.delete")
+    .internal()
+    .doc("Whether deleting the expired log files for FileStreamSink.")
+    .booleanConf
+    .createWithDefault(true)
+
+  val FILE_STREAM_SINK_LOG_COMPACT_LEN = SQLConfigBuilder("spark.sql.sink.file.log.compactLen")
+    .internal()
+    .doc("The frequency to compact the file sink logs.")
+    .intConf
+    .createWithDefault(10)
+
+  val FILE_STREAM_SINK_LOG_EXPIRED_TIME = SQLConfigBuilder("spark.sql.sink.file.log.expired")
+    .internal()
+    .doc("How long in milliseconds a file is guaranteed to be visible for all readers.")
+    .longConf
+    .createWithDefault(3600 * 1000L) // 1 hour
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
     val EXTERNAL_SORT = "spark.sql.planner.externalSort"
