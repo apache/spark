@@ -1029,6 +1029,13 @@ object functions {
    * @since 2.0.0
    */
   def nvl(col1: Column, col2: Column): Column = withExpr { Nvl(col1.expr, col2.expr)}
+
+  /**
+   * Returns col2 if col1 equals is null, otherwise returns col1. Same as NVL().
+   *
+   * @group normal_funcs
+   * @since 2.0.0
+   */
   def ifnull(col1: Column, col2: Column): Column = withExpr { Nvl(col1.expr, col2.expr)}
 
   /**

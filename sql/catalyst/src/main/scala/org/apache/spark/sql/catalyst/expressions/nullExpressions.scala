@@ -140,7 +140,8 @@ case class NullIf(left: Expression, right: Expression) extends BinaryExpression 
   override def eval(input: InternalRow): Any = {
     val valueLeft = left.eval(input)
     val valueRight = right.eval(input)
-    if (valueLeft.equals(valueRight)) {
+    if (valueLeft != null && valueRight != null && valueLeft.equals(valueRight) ||
+      valueLeft == null && valueRight == null) {
       null
     } else {
       valueLeft
@@ -155,7 +156,9 @@ case class NullIf(left: Expression, right: Expression) extends BinaryExpression 
       ${rightGen.code}
       boolean ${ev.isNull} = false;
       ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-      if (${ctx.genEqual(dataType, leftGen.value, rightGen.value)}) {
+      if (!${leftGen.isNull} && !${rightGen.isNull} &&
+        (${ctx.genEqual(dataType, leftGen.value, rightGen.value)}) ||
+        ${leftGen.isNull}) {
         ${ev.isNull} = true;
       } else {
         ${ev.value} = ${leftGen.value};
@@ -172,7 +175,7 @@ case class NullIf(left: Expression, right: Expression) extends BinaryExpression 
 @ExpressionDescription(
   usage = "_FUNC_(a,b) - Returns b if a is null, or a otherwise.")
 case class Nvl(left: Expression, right: Expression) extends BinaryExpression {
-  override def nullable: Boolean = false
+  override def nullable: Boolean = true
   override def dataType: DataType = left.dataType
 
   override def eval(input: InternalRow): Any = {
@@ -188,27 +191,19 @@ case class Nvl(left: Expression, right: Expression) extends BinaryExpression {
   override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     val leftGen = left.gen(ctx)
     val rightGen = right.gen(ctx)
+
     s"""
-       ${leftGen.code}
-       ${rightGen.code}
-       boolean ${ev.isNull} = false;
-       ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-     """ +
-    {
-      if (ctx.isPrimitiveType(dataType)) {
-        s"""
-          ${ev.value} = ${leftGen.value};
-        """
-      } else {
-        s"""
-          if (${leftGen.value} == null) {
-            ${ev.value} = ${rightGen.value};
-          } else {
-            ${ev.value} = ${leftGen.value};
-          }
-        """
+      ${leftGen.code}
+      boolean ${ev.isNull} = ${leftGen.isNull};
+      ${ctx.javaType(dataType)} ${ev.value} = ${leftGen.value};
+      if (${ev.isNull}) {
+        ${rightGen.code}
+        if (!${rightGen.isNull}) {
+          ${ev.isNull} = false;
+          ${ev.value} = ${rightGen.value};
+        }
       }
-    }
+    """
   }
 }
 
@@ -217,10 +212,10 @@ case class Nvl(left: Expression, right: Expression) extends BinaryExpression {
  * value is not null; if the first parameter is null, it returns the third parameter.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(a,b) - Returns b if a is null, or a otherwise.")
+  usage = "_FUNC_(a,b,c) - Returns b if a is not null, or c otherwise.")
 case class Nvl2(first: Expression, second: Expression, third: Expression)
   extends TernaryExpression {
-  override def nullable: Boolean = false
+  override def nullable: Boolean = true
   override def dataType: DataType = first.dataType
   override def children: Seq[Expression] = first :: second :: third :: Nil
 
@@ -240,27 +235,19 @@ case class Nvl2(first: Expression, second: Expression, third: Expression)
     val secondGen = second.gen(ctx)
     val thirdGen = third.gen(ctx)
     s"""
-       ${firstGen.code}
-       ${secondGen.code}
-       ${thirdGen.code}
-       boolean ${ev.isNull} = false;
-       ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-     """ +
-      {
-        if (ctx.isPrimitiveType(dataType)) {
-          s"""
-          ${ev.value} = ${secondGen.value};
-        """
-        } else {
-          s"""
-          if (${firstGen.value} == null) {
-            ${ev.value} = ${thirdGen.value};
-          } else {
-            ${ev.value} = ${secondGen.value};
-          }
-        """
-        }
+      ${firstGen.code}
+      ${secondGen.code}
+      ${thirdGen.code}
+      boolean ${ev.isNull} = true;
+      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+      if (!${firstGen.isNull} && !${secondGen.isNull}) {
+        ${ev.isNull} = false;
+        ${ev.value} = ${secondGen.value};
+      } else if (${firstGen.isNull} && !${thirdGen.isNull}) {
+        ${ev.isNull} = false;
+        ${ev.value} = ${thirdGen.value};
       }
+    """
   }
 }
 
