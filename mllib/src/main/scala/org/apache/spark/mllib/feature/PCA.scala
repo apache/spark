@@ -17,6 +17,8 @@
 
 package org.apache.spark.mllib.feature
 
+import java.util.Arrays
+
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg._
@@ -108,5 +110,22 @@ class PCAModel private[spark] (
         throw new IllegalArgumentException("Unsupported vector format. Expected " +
           s"SparseVector or DenseVector. Instead got: ${vector.getClass}")
     }
+  }
+
+  def minimalByVarianceExplained(requiredVarianceRetained: Double): PCAModel = {
+    val minFeaturesNum = explainedVariance
+      .values.zipWithIndex
+      .foldLeft((0.0, 0)) { case ((varianceSum, bestIndex), (variance, index)) =>
+        if (varianceSum >= requiredVarianceRetained) {
+          (varianceSum, bestIndex)
+        } else {
+          (varianceSum + variance, index)
+        }
+      }._2 + 1
+    val trimmedPc = Arrays.copyOfRange(pc.values, 0, pc.numRows * minFeaturesNum)
+    val trimmedExplainedVariance = Arrays.copyOfRange(explainedVariance.values, 0, minFeaturesNum)
+    new PCAModel(minFeaturesNum,
+      Matrices.dense(pc.numRows, minFeaturesNum, trimmedPc).asInstanceOf[DenseMatrix],
+      Vectors.dense(trimmedExplainedVariance).asInstanceOf[DenseVector])
   }
 }
