@@ -28,6 +28,7 @@ import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods.{compact, parse => parseJson, render}
 
+import org.apache.spark.SparkException
 import org.apache.spark.annotation.{AlphaComponent, Since}
 import org.apache.spark.mllib.util.NumericParser
 import org.apache.spark.sql.catalyst.InternalRow
@@ -375,7 +376,7 @@ object Vectors {
       case Seq(size: Double, indices: Array[Double], values: Array[Double]) =>
         Vectors.sparse(size.toInt, indices.map(_.toInt), values)
       case other =>
-        throw new IllegalArgumentException(s"Cannot parse $other.")
+        throw new SparkException(s"Cannot parse $other.")
     }
   }
 

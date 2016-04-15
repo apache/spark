@@ -21,6 +21,8 @@ import java.util.StringTokenizer
 
 import scala.collection.mutable.{ArrayBuilder, ListBuffer}
 
+import org.apache.spark.SparkException
+
 /**
  * Simple parser for a numeric structure consisting of three types:
  *
@@ -28,7 +30,7 @@ import scala.collection.mutable.{ArrayBuilder, ListBuffer}
  *  - array: an array of numbers stored as `[v0,v1,...,vn]`
  *  - tuple: a list of numbers, arrays, or tuples stored as `(...)`
  */
-private[spark] object NumericParser {
+private[mllib] object NumericParser {
 
   /** Parses a string into a Double, an Array[Double], or a Seq[Any]. */
   def parse(s: String): Any = {
@@ -44,7 +46,7 @@ private[spark] object NumericParser {
         parseDouble(token)
       }
     } else {
-      throw new IllegalArgumentException(s"Cannot find any token from the input string.")
+      throw new SparkException(s"Cannot find any token from the input string.")
     }
   }
 
@@ -61,7 +63,7 @@ private[spark] object NumericParser {
         if (allowComma) {
           allowComma = false
         } else {
-          throw new IllegalArgumentException("Found a ',' at a wrong position.")
+          throw new SparkException("Found a ',' at a wrong position.")
         }
       } else {
         // expecting a number
@@ -70,7 +72,7 @@ private[spark] object NumericParser {
       }
     }
     if (parsing) {
-      throw new IllegalArgumentException(s"An array must end with ']'.")
+      throw new SparkException(s"An array must end with ']'.")
     }
     values.result()
   }
@@ -92,7 +94,7 @@ private[spark] object NumericParser {
         if (allowComma) {
           allowComma = false
         } else {
-          throw new IllegalArgumentException("Found a ',' at a wrong position.")
+          throw new SparkException("Found a ',' at a wrong position.")
         }
       } else if (token == ")") {
         parsing = false
@@ -105,7 +107,7 @@ private[spark] object NumericParser {
       }
     }
     if (parsing) {
-      throw new IllegalArgumentException(s"A tuple must end with ')'.")
+      throw new SparkException(s"A tuple must end with ')'.")
     }
     items
   }
@@ -115,7 +117,7 @@ private[spark] object NumericParser {
       java.lang.Double.parseDouble(s)
     } catch {
       case e: NumberFormatException =>
-        throw new IllegalArgumentException(s"Cannot parse a double from: $s", e)
+        throw new SparkException(s"Cannot parse a double from: $s", e)
     }
   }
 }

@@ -28,8 +28,6 @@ import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods.{compact, parse => parseJson, render}
 
-import org.apache.spark.mllib.util.NumericParser
-
 /**
  * Represents a numeric vector, whose index type is Int and value type is Double.
  *
@@ -236,13 +234,6 @@ object Vectors {
   }
 
   /**
-   * Parses a string resulted from [[Vector.toString]] into a [[Vector]].
-   */
-  def parse(s: String): Vector = {
-    parseNumeric(NumericParser.parse(s))
-  }
-
-  /**
    * Parses the JSON representation of a vector into a [[Vector]].
    */
   def fromJson(json: String): Vector = {
@@ -259,17 +250,6 @@ object Vectors {
         dense(values)
       case _ =>
         throw new IllegalArgumentException(s"Cannot parse $json into a vector.")
-    }
-  }
-
-  private[ml] def parseNumeric(any: Any): Vector = {
-    any match {
-      case values: Array[Double] =>
-        Vectors.dense(values)
-      case Seq(size: Double, indices: Array[Double], values: Array[Double]) =>
-        Vectors.sparse(size.toInt, indices.map(_.toInt), values)
-      case other =>
-        throw new IllegalArgumentException(s"Cannot parse $other.")
     }
   }
 
