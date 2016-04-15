@@ -396,20 +396,7 @@ private[sql] class ParquetOutputWriterFactory(
 
     val job = Job.getInstance(hadoopConf)
     val conf = ContextUtil.getConfiguration(job)
-
-    val compressionCodec: Option[String] = options
-      .get("compression")
-      .map { codecName =>
-        // Validate if given compression codec is supported or not.
-        val shortParquetCompressionCodecNames = ParquetRelation.shortParquetCompressionCodecNames
-        if (!shortParquetCompressionCodecNames.contains(codecName.toLowerCase)) {
-          val availableCodecs = shortParquetCompressionCodecNames.keys.map(_.toLowerCase)
-          throw new IllegalArgumentException(
-            s"Codec [$codecName] " +
-              s"is not available. Available codecs are ${availableCodecs.mkString(", ")}.")
-        }
-        codecName.toLowerCase
-      }
+    val parquetOptions = new ParquetOptions(options, sqlConf)
 
     // We're not really using `ParquetOutputFormat[Row]` for writing data here, because we override
     // it in `ParquetOutputWriter` to support appending and dynamic partitioning.  The reason why
@@ -441,14 +428,8 @@ private[sql] class ParquetOutputWriterFactory(
       sqlConf.writeLegacyParquetFormat.toString)
 
     // Sets compression scheme
-    conf.set(
-      ParquetOutputFormat.COMPRESSION,
-      ParquetRelation
-        .shortParquetCompressionCodecNames
-        .getOrElse(
-          compressionCodec
-            .getOrElse(sqlConf.parquetCompressionCodec.toLowerCase),
-          CompressionCodecName.UNCOMPRESSED).name())
+    conf.set(ParquetOutputFormat.COMPRESSION, parquetOptions.compressionCodec)
+
     conf
   }
 
