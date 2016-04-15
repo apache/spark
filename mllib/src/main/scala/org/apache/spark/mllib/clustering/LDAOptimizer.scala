@@ -533,8 +533,8 @@ private[clustering] object OnlineLDAOptimizer {
    * avoids explicit computation of variational parameter `phi`.
    * @see [[http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.31.7566]]
    *
-   * @return A tuple of topic distribution `gammad`, `sstatsd` and `ids`. Latter two are the
-   *         statistics required by the [[OnlineLDAOptimizer.submitMiniBatch()]] method.
+   * @return Returns a tuple of `gammad` - estimate of gamma, the topic distribution, `sstatsd` -
+   *         statistics for updating lambda and `ids` - list of termCounts vector indices.
    */
   private[clustering] def variationalTopicInference(
       termCounts: Vector,
