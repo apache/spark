@@ -53,7 +53,7 @@ class ShuffleReadMetrics private (
    * many places only to merge their values together later. In the future, we should revisit
    * whether this is needed.
    *
-   * A better alternative is [[TaskMetrics.registerTempShuffleReadMetrics]] followed by
+   * A better alternative is [[TaskMetrics.createTempShuffleReadMetrics]] followed by
    * [[TaskMetrics.mergeShuffleReadMetrics]].
    */
   private[spark] def this() {
@@ -101,6 +101,11 @@ class ShuffleReadMetrics private (
    * Number of blocks fetched in this shuffle by this task (remote or local).
    */
   def totalBlocksFetched: Int = remoteBlocksFetched + localBlocksFetched
+
+  /**
+   * Returns true if this metrics has been updated before.
+   */
+  def isUpdated: Boolean = (totalBytesRead | totalBlocksFetched | recordsRead | fetchWaitTime) != 0
 
   private[spark] def incRemoteBlocksFetched(v: Int): Unit = _remoteBlocksFetched.add(v)
   private[spark] def incLocalBlocksFetched(v: Int): Unit = _localBlocksFetched.add(v)

@@ -170,7 +170,11 @@ private[v1] object AllStagesResource {
     val inputMetrics: Option[InputMetricDistributions] =
       new MetricHelper[InternalInputMetrics, InputMetricDistributions](rawMetrics, quantiles) {
         def getSubmetrics(raw: InternalTaskMetrics): Option[InternalInputMetrics] = {
-          raw.inputMetrics
+          if (raw.inputMetrics.isUpdated) {
+            Some(raw.inputMetrics)
+          } else {
+            None
+          }
         }
 
         def build: InputMetricDistributions = new InputMetricDistributions(
@@ -182,7 +186,11 @@ private[v1] object AllStagesResource {
     val outputMetrics: Option[OutputMetricDistributions] =
       new MetricHelper[InternalOutputMetrics, OutputMetricDistributions](rawMetrics, quantiles) {
         def getSubmetrics(raw: InternalTaskMetrics): Option[InternalOutputMetrics] = {
-          raw.outputMetrics
+          if (raw.outputMetrics.isUpdated) {
+            Some(raw.outputMetrics)
+          } else {
+            None
+          }
         }
         def build: OutputMetricDistributions = new OutputMetricDistributions(
           bytesWritten = submetricQuantiles(_.bytesWritten),
@@ -194,7 +202,11 @@ private[v1] object AllStagesResource {
       new MetricHelper[InternalShuffleReadMetrics, ShuffleReadMetricDistributions](rawMetrics,
         quantiles) {
         def getSubmetrics(raw: InternalTaskMetrics): Option[InternalShuffleReadMetrics] = {
-          raw.shuffleReadMetrics
+          if (raw.shuffleReadMetrics.isUpdated) {
+            Some(raw.shuffleReadMetrics)
+          } else {
+            None
+          }
         }
         def build: ShuffleReadMetricDistributions = new ShuffleReadMetricDistributions(
           readBytes = submetricQuantiles(_.totalBytesRead),
@@ -211,7 +223,11 @@ private[v1] object AllStagesResource {
       new MetricHelper[InternalShuffleWriteMetrics, ShuffleWriteMetricDistributions](rawMetrics,
         quantiles) {
         def getSubmetrics(raw: InternalTaskMetrics): Option[InternalShuffleWriteMetrics] = {
-          raw.shuffleWriteMetrics
+          if (raw.shuffleWriteMetrics.isUpdated) {
+            Some(raw.shuffleWriteMetrics)
+          } else {
+            None
+          }
         }
         def build: ShuffleWriteMetricDistributions = new ShuffleWriteMetricDistributions(
           writeBytes = submetricQuantiles(_.bytesWritten),
@@ -250,44 +266,62 @@ private[v1] object AllStagesResource {
       resultSerializationTime = internal.resultSerializationTime,
       memoryBytesSpilled = internal.memoryBytesSpilled,
       diskBytesSpilled = internal.diskBytesSpilled,
-      inputMetrics = internal.inputMetrics.map { convertInputMetrics },
-      outputMetrics = Option(internal.outputMetrics).flatten.map { convertOutputMetrics },
-      shuffleReadMetrics = internal.shuffleReadMetrics.map { convertShuffleReadMetrics },
-      shuffleWriteMetrics = internal.shuffleWriteMetrics.map { convertShuffleWriteMetrics }
+      inputMetrics = convertInputMetrics(internal.inputMetrics),
+      outputMetrics = convertOutputMetrics(internal.outputMetrics),
+      shuffleReadMetrics = convertShuffleReadMetrics(internal.shuffleReadMetrics),
+      shuffleWriteMetrics = convertShuffleWriteMetrics(internal.shuffleWriteMetrics)
     )
   }
 
-  def convertInputMetrics(internal: InternalInputMetrics): InputMetrics = {
-    new InputMetrics(
-      bytesRead = internal.bytesRead,
-      recordsRead = internal.recordsRead
-    )
+  def convertInputMetrics(internal: InternalInputMetrics): Option[InputMetrics] = {
+    if (internal.isUpdated) {
+      Some(new InputMetrics(
+        bytesRead = internal.bytesRead,
+        recordsRead = internal.recordsRead
+      ))
+    } else {
+      None
+    }
   }
 
-  def convertOutputMetrics(internal: InternalOutputMetrics): OutputMetrics = {
-    new OutputMetrics(
-      bytesWritten = internal.bytesWritten,
-      recordsWritten = internal.recordsWritten
-    )
+  def convertOutputMetrics(internal: InternalOutputMetrics): Option[OutputMetrics] = {
+    if (internal.isUpdated) {
+      Some(new OutputMetrics(
+        bytesWritten = internal.bytesWritten,
+        recordsWritten = internal.recordsWritten
+      ))
+    } else {
+      None
+    }
   }
 
-  def convertShuffleReadMetrics(internal: InternalShuffleReadMetrics): ShuffleReadMetrics = {
-    new ShuffleReadMetrics(
-      remoteBlocksFetched = internal.remoteBlocksFetched,
-      localBlocksFetched = internal.localBlocksFetched,
-      fetchWaitTime = internal.fetchWaitTime,
-      remoteBytesRead = internal.remoteBytesRead,
-      totalBlocksFetched = internal.totalBlocksFetched,
-      recordsRead = internal.recordsRead
-    )
+  def convertShuffleReadMetrics(
+      internal: InternalShuffleReadMetrics): Option[ShuffleReadMetrics] = {
+    if (internal.isUpdated) {
+      Some(new ShuffleReadMetrics(
+        remoteBlocksFetched = internal.remoteBlocksFetched,
+        localBlocksFetched = internal.localBlocksFetched,
+        fetchWaitTime = internal.fetchWaitTime,
+        remoteBytesRead = internal.remoteBytesRead,
+        totalBlocksFetched = internal.totalBlocksFetched,
+        recordsRead = internal.recordsRead
+      ))
+    } else {
+      None
+    }
   }
 
-  def convertShuffleWriteMetrics(internal: InternalShuffleWriteMetrics): ShuffleWriteMetrics = {
-    new ShuffleWriteMetrics(
-      bytesWritten = internal.bytesWritten,
-      writeTime = internal.writeTime,
-      recordsWritten = internal.recordsWritten
-    )
+  def convertShuffleWriteMetrics(
+      internal: InternalShuffleWriteMetrics): Option[ShuffleWriteMetrics] = {
+    if ((internal.bytesWritten | internal.writeTime | internal.recordsWritten) == 0) {
+      None
+    } else {
+      Some(new ShuffleWriteMetrics(
+        bytesWritten = internal.bytesWritten,
+        writeTime = internal.writeTime,
+        recordsWritten = internal.recordsWritten
+      ))
+    }
   }
 }
 

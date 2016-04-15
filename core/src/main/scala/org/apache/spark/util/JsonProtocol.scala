@@ -326,33 +326,35 @@ private[spark] object JsonProtocol {
   }
 
   def taskMetricsToJson(taskMetrics: TaskMetrics): JValue = {
-    val shuffleReadMetrics: JValue =
-      taskMetrics.shuffleReadMetrics.map { rm =>
-        ("Remote Blocks Fetched" -> rm.remoteBlocksFetched) ~
-        ("Local Blocks Fetched" -> rm.localBlocksFetched) ~
-        ("Fetch Wait Time" -> rm.fetchWaitTime) ~
-        ("Remote Bytes Read" -> rm.remoteBytesRead) ~
-        ("Local Bytes Read" -> rm.localBytesRead) ~
-        ("Total Records Read" -> rm.recordsRead)
-      }.getOrElse(JNothing)
-    val shuffleWriteMetrics: JValue =
-      taskMetrics.shuffleWriteMetrics.map { wm =>
-        ("Shuffle Bytes Written" -> wm.bytesWritten) ~
-        ("Shuffle Write Time" -> wm.writeTime) ~
-        ("Shuffle Records Written" -> wm.recordsWritten)
-      }.getOrElse(JNothing)
-    val inputMetrics: JValue =
-      taskMetrics.inputMetrics.map { im =>
-        ("Data Read Method" -> im.readMethod.toString) ~
-        ("Bytes Read" -> im.bytesRead) ~
-        ("Records Read" -> im.recordsRead)
-      }.getOrElse(JNothing)
-    val outputMetrics: JValue =
-      taskMetrics.outputMetrics.map { om =>
-        ("Data Write Method" -> om.writeMethod.toString) ~
-        ("Bytes Written" -> om.bytesWritten) ~
-        ("Records Written" -> om.recordsWritten)
-      }.getOrElse(JNothing)
+    val shuffleReadMetrics: JValue = if (taskMetrics.shuffleReadMetrics.isUpdated) {
+      ("Remote Blocks Fetched" -> taskMetrics.shuffleReadMetrics.remoteBlocksFetched) ~
+        ("Local Blocks Fetched" -> taskMetrics.shuffleReadMetrics.localBlocksFetched) ~
+        ("Fetch Wait Time" -> taskMetrics.shuffleReadMetrics.fetchWaitTime) ~
+        ("Remote Bytes Read" -> taskMetrics.shuffleReadMetrics.remoteBytesRead) ~
+        ("Local Bytes Read" -> taskMetrics.shuffleReadMetrics.localBytesRead) ~
+        ("Total Records Read" -> taskMetrics.shuffleReadMetrics.recordsRead)
+    } else {
+      JNothing
+    }
+    val shuffleWriteMetrics: JValue = if (taskMetrics.shuffleWriteMetrics.isUpdated) {
+      ("Shuffle Bytes Written" -> taskMetrics.shuffleWriteMetrics.bytesWritten) ~
+        ("Shuffle Write Time" -> taskMetrics.shuffleWriteMetrics.writeTime) ~
+        ("Shuffle Records Written" -> taskMetrics.shuffleWriteMetrics.recordsWritten)
+    } else {
+      JNothing
+    }
+    val inputMetrics: JValue = if (taskMetrics.inputMetrics.isUpdated) {
+      ("Bytes Read" -> taskMetrics.inputMetrics.bytesRead) ~
+        ("Records Read" -> taskMetrics.inputMetrics.recordsRead)
+    } else {
+      JNothing
+    }
+    val outputMetrics: JValue = if (taskMetrics.outputMetrics.isUpdated) {
+      ("Bytes Written" -> taskMetrics.outputMetrics.bytesWritten) ~
+        ("Records Written" -> taskMetrics.outputMetrics.recordsWritten)
+    } else {
+      JNothing
+    }
     val updatedBlocks =
       JArray(taskMetrics.updatedBlockStatuses.toList.map { case (id, status) =>
         ("Block ID" -> id.toString) ~
@@ -781,7 +783,7 @@ private[spark] object JsonProtocol {
 
     // Shuffle read metrics
     Utils.jsonOption(json \ "Shuffle Read Metrics").foreach { readJson =>
-      val readMetrics = metrics.registerTempShuffleReadMetrics()
+      val readMetrics = metrics.createTempShuffleReadMetrics()
       readMetrics.incRemoteBlocksFetched((readJson \ "Remote Blocks Fetched").extract[Int])
       readMetrics.incLocalBlocksFetched((readJson \ "Local Blocks Fetched").extract[Int])
       readMetrics.incRemoteBytesRead((readJson \ "Remote Bytes Read").extract[Long])
@@ -794,7 +796,7 @@ private[spark] object JsonProtocol {
     // Shuffle write metrics
     // TODO: Drop the redundant "Shuffle" since it's inconsistent with related classes.
     Utils.jsonOption(json \ "Shuffle Write Metrics").foreach { writeJson =>
-      val writeMetrics = metrics.registerShuffleWriteMetrics()
+      val writeMetrics = metrics.shuffleWriteMetrics
       writeMetrics.incBytesWritten((writeJson \ "Shuffle Bytes Written").extract[Long])
       writeMetrics.incRecordsWritten((writeJson \ "Shuffle Records Written")
         .extractOpt[Long].getOrElse(0L))
@@ -803,16 +805,14 @@ private[spark] object JsonProtocol {
 
     // Output metrics
     Utils.jsonOption(json \ "Output Metrics").foreach { outJson =>
-      val writeMethod = DataWriteMethod.withName((outJson \ "Data Write Method").extract[String])
-      val outputMetrics = metrics.registerOutputMetrics(writeMethod)
+      val outputMetrics = metrics.outputMetrics
       outputMetrics.setBytesWritten((outJson \ "Bytes Written").extract[Long])
       outputMetrics.setRecordsWritten((outJson \ "Records Written").extractOpt[Long].getOrElse(0L))
     }
 
     // Input metrics
     Utils.jsonOption(json \ "Input Metrics").foreach { inJson =>
-      val readMethod = DataReadMethod.withName((inJson \ "Data Read Method").extract[String])
-      val inputMetrics = metrics.registerInputMetrics(readMethod)
+      val inputMetrics = metrics.inputMetrics
       inputMetrics.incBytesRead((inJson \ "Bytes Read").extract[Long])
       inputMetrics.incRecordsRead((inJson \ "Records Read").extractOpt[Long].getOrElse(0L))
     }

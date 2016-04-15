@@ -47,7 +47,7 @@ class ShuffleWriteMetrics private (
    * many places only to merge their values together later. In the future, we should revisit
    * whether this is needed.
    *
-   * A better alternative is [[TaskMetrics.registerShuffleWriteMetrics]].
+   * A better alternative is [[TaskMetrics.shuffleWriteMetrics]].
    */
   private[spark] def this() {
     this(InternalAccumulator.createShuffleWriteAccums().map { a => (a.name.get, a) }.toMap)
@@ -67,6 +67,11 @@ class ShuffleWriteMetrics private (
    * Time the task spent blocking on writes to disk or buffer cache, in nanoseconds.
    */
   def writeTime: Long = _writeTime.localValue
+
+  /**
+   * Returns true if this metrics has been updated before.
+   */
+  def isUpdated: Boolean = (writeTime | recordsWritten | bytesWritten) != 0
 
   private[spark] def incBytesWritten(v: Long): Unit = _bytesWritten.add(v)
   private[spark] def incRecordsWritten(v: Long): Unit = _recordsWritten.add(v)
