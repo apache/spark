@@ -22,7 +22,7 @@ import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable}
-import org.apache.spark.mllib.linalg.{Vectors, VectorUDT}
+import org.apache.spark.mllib.linalg.{Matrices, MatrixUDT}
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{StructField, StructType}
@@ -65,7 +65,7 @@ final class LabelBinarizer @Since("2.0.0")(override val uid: String)
         i = 0
         j += len
       }
-      Vectors.dense(vec)
+      Matrices.dense(len, clsLen, vec)
     }
     dataset.withColumn($(outputCol), iter(col($(inputCol))))
   }
@@ -81,7 +81,7 @@ final class LabelBinarizer @Since("2.0.0")(override val uid: String)
     if (schema.fieldNames.contains(outputColName)) {
       throw new IllegalArgumentException(s"Output column $outputColName already exists.")
     }
-    val outputFields = schema.fields :+ StructField($(outputCol), new VectorUDT, false)
+    val outputFields = schema.fields :+ StructField($(outputCol), new MatrixUDT, false)
     StructType(outputFields)
   }
 
