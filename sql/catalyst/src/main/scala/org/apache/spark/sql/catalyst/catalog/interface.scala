@@ -99,6 +99,8 @@ abstract class ExternalCatalog {
 
   def listTables(db: String, pattern: String): Seq[String]
 
+  def showCreateTable(db: String, table: String): String
+
   // --------------------------------------------------------------------------
   // Partitions
   // --------------------------------------------------------------------------

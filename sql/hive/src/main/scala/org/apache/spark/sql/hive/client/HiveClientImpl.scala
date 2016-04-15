@@ -28,9 +28,11 @@ import org.apache.hadoop.hive.cli.CliSessionState
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.{PartitionDropOptions, TableType => HiveTableType}
 import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, FieldSchema, Function => HiveFunction, FunctionType, PrincipalType, ResourceType, ResourceUri}
+import org.apache.hadoop.hive.metastore.api.hive_metastoreConstants
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition, Table => HiveTable}
 import org.apache.hadoop.hive.ql.metadata.{Hive, HiveException}
+import org.apache.hadoop.hive.ql.parse.BaseSemanticAnalyzer
 import org.apache.hadoop.hive.ql.plan.AddPartitionDesc
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
@@ -43,7 +45,9 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchPartitionException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.QueryExecutionException
+import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.{CircularBuffer, Utils}
 
 /**
@@ -625,10 +629,216 @@ private[hive] class HiveClientImpl(
       }
   }
 
+  override def showCreateTable(db: String, tableName: String): String = withHiveState {
+    Option(client.getTable(db, tableName, false)).map { hiveTable =>
+      val tblProperties = hiveTable.getParameters.asScala.toMap
+      val duplicateProps = scala.collection.mutable.ArrayBuffer.empty[String]
+
+      if (tblProperties.get("spark.sql.sources.provider").isDefined) {
+        generateDataSourceDDL(hiveTable)
+      } else {
+        generateHiveDDL(hiveTable)
+      }
+    }.get
+  }
+
 
   /* -------------------------------------------------------- *
    |  Helper methods for converting to and from Hive classes  |
    * -------------------------------------------------------- */
+
+  private def generateCreateTableHeader(
+              hiveTable: HiveTable,
+              processedProps: scala.collection.mutable.ArrayBuffer[String]): String = {
+    val sb = new StringBuilder("CREATE ")
+    if(hiveTable.isTemporary) {
+      sb.append("TEMPORARY ")
+    }
+    if (hiveTable.getTableType == HiveTableType.EXTERNAL_TABLE) {
+      processedProps += "EXTERNAL"
+      sb.append("EXTERNAL TABLE " +
+        quoteIdentifier(hiveTable.getDbName) + "." + quoteIdentifier(hiveTable.getTableName))
+    } else {
+      sb.append("TABLE " +
+        quoteIdentifier(hiveTable.getDbName) + "." + quoteIdentifier(hiveTable.getTableName))
+    }
+    sb.toString()
+  }
+
+  private def generateColsDataSource(
+              hiveTable: HiveTable,
+              processedProps: scala.collection.mutable.ArrayBuffer[String]): String = {
+    val schemaStringFromParts: Option[String] = {
+      val props = hiveTable.getParameters.asScala
+      props.get("spark.sql.sources.schema.numParts").map { numParts =>
+        val parts = (0 until numParts.toInt).map { index =>
+          val part = props.get(s"spark.sql.sources.schema.part.$index").orNull
+          if (part == null) {
+            throw new AnalysisException(
+              "Could not read schema from the metastore because it is corrupted " +
+                s"(missing part $index of the schema, $numParts parts are expected).")
+          }
+          part
+        }
+        // Stick all parts back to a single schema string.
+        parts.mkString
+      }
+    }
+
+    if (schemaStringFromParts.isDefined) {
+      (schemaStringFromParts.map(s => DataType.fromJson(s).asInstanceOf[StructType]).
+        get map { f => s"${quoteIdentifier(f.name)} ${f.dataType.sql}" })
+        .mkString("( ", ", ", " )")
+    } else {
+      ""
+    }
+  }
+
+  private def generateDataSourceDDL(hiveTable: HiveTable): String = {
+    val processedProperties = scala.collection.mutable.ArrayBuffer.empty[String]
+    val sb = new StringBuilder(generateCreateTableHeader(hiveTable, processedProperties))
+    // It is possible that the column list returned from hive metastore is just a dummy
+    // one, such as "col array<String>", because the metastore was created as spark sql
+    // specific metastore (refer to HiveMetaStoreCatalog.createDataSourceTable.
+    // newSparkSQLSpecificMetastoreTable). In such case, the column schema information
+    // is located in tblproperties in json format.
+    sb.append(generateColsDataSource(hiveTable, processedProperties) + "\n")
+    sb.append("USING " + hiveTable.getProperty("spark.sql.sources.provider") + "\n")
+    val options = scala.collection.mutable.ArrayBuffer.empty[String]
+    hiveTable.getSd.getSerdeInfo.getParameters.asScala.foreach { e =>
+      options += "" + escapeHiveCommand(e._1) + " '" + escapeHiveCommand(e._2) + "'"
+    }
+    if (options.size > 0) {
+      sb.append("OPTIONS " + options.mkString("( ", ", \n", " )"))
+    }
+    // create table using syntax does not support EXTERNAL keyword
+    sb.toString.replace("EXTERNAL TABLE", "TABLE")
+  }
+
+  private def generateHiveDDL(hiveTable: HiveTable): String = {
+    val sb = new StringBuilder
+    val tblProperties = hiveTable.getParameters.asScala.toMap
+    val duplicateProps = scala.collection.mutable.ArrayBuffer.empty[String]
+
+    if (hiveTable.getTableType == HiveTableType.VIRTUAL_VIEW) {
+      sb.append("CREATE VIEW " + quoteIdentifier(hiveTable.getDbName) + "." +
+        quoteIdentifier(hiveTable.getTableName) + " AS " + hiveTable.getViewOriginalText)
+    } else {
+      // create table header
+      sb.append(generateCreateTableHeader(hiveTable, duplicateProps))
+
+      // column list
+      sb.append(
+        hiveTable.getCols.asScala.map(fromHiveColumn).map { col =>
+          quoteIdentifier(col.name) + " " + col.dataType + ( col.comment.getOrElse("") match {
+            case cmt: String if cmt.length > 0 =>
+              " COMMENT '" + escapeHiveCommand(cmt) + "'"
+            case _ => ""
+          })
+        }.mkString("( ", ", ", " ) \n"))
+
+      // partition
+      val partCols = hiveTable.getPartitionKeys
+      if (partCols != null && partCols.size() > 0) {
+        sb.append("PARTITIONED BY ")
+        sb.append(
+          partCols.asScala.map(fromHiveColumn).map { col =>
+            quoteIdentifier(col.name) + " " + col.dataType + (col.comment.getOrElse("") match {
+              case cmt: String if cmt.length > 0 =>
+                " COMMENT '" + escapeHiveCommand(cmt) + "'"
+              case _ => ""
+            })
+          }.mkString("( ", ", ", " )\n"))
+      }
+
+      // sort bucket
+      val bucketCols = hiveTable.getBucketCols
+      if (bucketCols != null && bucketCols.size() > 0) {
+        sb.append("CLUSTERED BY ")
+        sb.append(bucketCols.asScala.map(quoteIdentifier(_)).mkString("( ", ", ", " ) \n"))
+        // SORTing columns
+        val sortCols = hiveTable.getSortCols
+        if (sortCols != null && sortCols.size() > 0) {
+          sb.append("SORTED BY ")
+          sb.append(
+            sortCols.asScala.map { col =>
+              quoteIdentifier(col.getCol) + " " + (col.getOrder match {
+                case o if o == BaseSemanticAnalyzer.HIVE_COLUMN_ORDER_DESC => "DESC"
+                case _ => "ASC"
+              })
+            }.mkString("( ", ", ", " ) \n"))
+        }
+        if (hiveTable.getNumBuckets > 0) {
+          sb.append("INTO " + hiveTable.getNumBuckets + " BUCKETS \n")
+        }
+      }
+
+      // skew spec
+      val skewCols = hiveTable.getSkewedColNames
+      if (skewCols != null && skewCols.size() > 0) {
+        sb.append("SKEWED BY ")
+        sb.append(skewCols.asScala.map(quoteIdentifier(_)).mkString("( ", ", ", " ) \n"))
+        val skewColValues = hiveTable.getSkewedColValues
+        sb.append("ON ")
+        sb.append(skewColValues.asScala.map { values =>
+          values.asScala.map("" + _).mkString("(", ", ", ")")
+        }.mkString("(", ", ", ")\n"))
+        if (hiveTable.isStoredAsSubDirectories) {
+          sb.append("STORED AS DIRECTORIES\n")
+        }
+      }
+
+      // ROW FORMAT
+      val storageHandler = hiveTable.getStorageHandler
+      val serdeProps = hiveTable.getSd.getSerdeInfo.getParameters.asScala
+      sb.append("ROW FORMAT SERDE '" + escapeHiveCommand(hiveTable.getSerializationLib) + "'\n")
+      if (storageHandler == null) {
+        sb.append("WITH SERDEPROPERTIES ")
+        sb.append(serdeProps.map { serdeProp =>
+          "'" + escapeHiveCommand(serdeProp._1) + "'='" + escapeHiveCommand(serdeProp._2) + "'"
+        }.mkString("( ", ", ", " )\n"))
+
+        sb.append("STORED AS INPUTFORMAT '" +
+          escapeHiveCommand(hiveTable.getInputFormatClass.getName) + "' \n")
+
+        sb.append("OUTPUTFORMAT  '" +
+          escapeHiveCommand(hiveTable.getOutputFormatClass.getName) + "' \n")
+      } else {
+        // storage handler case
+        duplicateProps += hive_metastoreConstants.META_TABLE_STORAGE
+        sb.append("STORED BY '" + escapeHiveCommand(
+          tblProperties.getOrElse(hive_metastoreConstants.META_TABLE_STORAGE, "")) + "'\n")
+        sb.append("WITH SERDEPROPERTIES ")
+        sb.append(serdeProps.map { serdeProp =>
+          "'" + escapeHiveCommand(serdeProp._1) + "'='" + escapeHiveCommand(serdeProp._2) + "'"
+        }.mkString("( ", ", ", " )\n"))
+      }
+
+      // table location
+      sb.append("LOCATION '" +
+        escapeHiveCommand(shim.getDataLocation(hiveTable).get) + "' \n")
+
+      // table properties
+      val propertPairs = hiveTable.getParameters.asScala.collect {
+        case (k, v) if !duplicateProps.contains(k) =>
+          "'" + escapeHiveCommand(k) + "'='" + escapeHiveCommand(v) + "'"
+      }
+      if (propertPairs.size>0) {
+        sb.append("TBLPROPERTIES " + propertPairs.mkString("( ", ", \n", " )") + "\n")
+      }
+    }
+    sb.toString()
+  }
+
+  private def escapeHiveCommand(str: String): String = {
+    str.map{c =>
+      if (c == '\'' || c == ';') {
+        '\\'
+      } else {
+        c
+      }
+    }
+  }
 
   private def toInputFormat(name: String) =
     Utils.classForName(name).asInstanceOf[Class[_ <: org.apache.hadoop.mapred.InputFormat[_, _]]]
@@ -753,5 +963,4 @@ private[hive] class HiveClientImpl(
         serde = Option(apiPartition.getSd.getSerdeInfo.getSerializationLib),
         serdeProperties = apiPartition.getSd.getSerdeInfo.getParameters.asScala.toMap))
   }
-
 }
