@@ -51,7 +51,7 @@ class PCASuite extends SparkFunSuite with MLlibTestSparkContext {
     val pca = new PCA(4).fit(dataRDD)
 
     // when
-    val trimmed = pca.minimalByVarianceExplained(0.90)
+    val trimmed = pca.trimByVarianceRetained(0.90)
 
     // then
     val pcaWithExpectedK = new PCA(2).fit(dataRDD)

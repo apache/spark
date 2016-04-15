@@ -112,20 +112,27 @@ class PCAModel private[spark] (
     }
   }
 
-  def minimalByVarianceExplained(requiredVarianceRetained: Double): PCAModel = {
-    val minFeaturesNum = explainedVariance
-      .values.zipWithIndex
-      .foldLeft((0.0, 0)) { case ((varianceSum, bestIndex), (variance, index)) =>
-        if (varianceSum >= requiredVarianceRetained) {
-          (varianceSum, bestIndex)
-        } else {
-          (varianceSum + variance, index)
-        }
-      }._2 + 1
-    val trimmedPc = Arrays.copyOfRange(pc.values, 0, pc.numRows * minFeaturesNum)
-    val trimmedExplainedVariance = Arrays.copyOfRange(explainedVariance.values, 0, minFeaturesNum)
-    new PCAModel(minFeaturesNum,
-      Matrices.dense(pc.numRows, minFeaturesNum, trimmedPc).asInstanceOf[DenseMatrix],
-      Vectors.dense(trimmedExplainedVariance).asInstanceOf[DenseVector])
+  def trimByVarianceRetained(requiredVariance: Double): PCAModel = {
+    PCAModel.trimByVarianceRetained(requiredVariance, pc, explainedVariance)
+      .getOrElse(this)
+  }
+}
+
+object PCAModel {
+  def trimByVarianceRetained(requiredVariance: Double,
+                             pc: DenseMatrix,
+                             explainedVariance: DenseVector): Option[PCAModel] = {
+    require(requiredVariance > 0.0 && requiredVariance <= 1.0,
+      s"Requested variance must be between 0 and 1 but was $requiredVariance.")
+    val minFeaturesNum = explainedVariance.values
+      .scanLeft(0.0)(_ + _)
+      .indexWhere(_ >= requiredVariance)
+    if(minFeaturesNum == 0) None else {
+      val trimmedPc = Arrays.copyOfRange(pc.values, 0, pc.numRows * minFeaturesNum)
+      val trimmedExplainedVariance = Arrays.copyOfRange(explainedVariance.values, 0, minFeaturesNum)
+      Some(new PCAModel(minFeaturesNum,
+        Matrices.dense(pc.numRows, minFeaturesNum, trimmedPc).asInstanceOf[DenseMatrix],
+        Vectors.dense(trimmedExplainedVariance).asInstanceOf[DenseVector]))
+    }
   }
 }

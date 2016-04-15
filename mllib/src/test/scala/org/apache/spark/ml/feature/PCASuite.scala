@@ -28,6 +28,13 @@ import org.apache.spark.sql.Row
 
 class PCASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
+  val data = Array(
+    Vectors.sparse(5, Seq((1, 1.0), (3, 7.0))),
+    Vectors.dense(2.0, 0.0, 3.0, 4.0, 5.0),
+    Vectors.dense(4.0, 0.0, 0.0, 6.0, 7.0)
+  )
+  lazy val dataRDD = sc.parallelize(data, 2)
+
   test("params") {
     ParamsSuite.checkParams(new PCA)
     val mat = Matrices.dense(2, 2, Array(0.0, 1.0, 2.0, 3.0)).asInstanceOf[DenseMatrix]
@@ -37,14 +44,6 @@ class PCASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
   }
 
   test("pca") {
-    val data = Array(
-      Vectors.sparse(5, Seq((1, 1.0), (3, 7.0))),
-      Vectors.dense(2.0, 0.0, 3.0, 4.0, 5.0),
-      Vectors.dense(4.0, 0.0, 0.0, 6.0, 7.0)
-    )
-
-    val dataRDD = sc.parallelize(data, 2)
-
     val mat = new RowMatrix(dataRDD)
     val pc = mat.computePrincipalComponents(3)
     val expected = mat.multiply(pc).rows
@@ -80,5 +79,28 @@ class PCASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
       Vectors.dense(0.5, 0.5).asInstanceOf[DenseVector])
     val newInstance = testDefaultReadWrite(instance)
     assert(newInstance.pc === instance.pc)
+  }
+
+  test("should return model with minimal number of features that retain given level of variance") {
+    // given
+    val df = sqlContext.createDataFrame(dataRDD.zipWithIndex()).toDF("features", "index")
+
+    val pca = new PCA()
+      .setInputCol("features")
+      .setOutputCol("pca_features")
+      .setK(4)
+      .fit(df)
+
+    // when
+    val trimmed = pca.trimByVarianceRetained(0.90)
+
+    // then
+    val pcaWithExpectedK = new PCA()
+      .setInputCol("features")
+      .setOutputCol("pca_features")
+      .setK(2)
+      .fit(df)
+    assert(trimmed.explainedVariance === pcaWithExpectedK.explainedVariance)
+    assert(trimmed.pc === pcaWithExpectedK.pc)
   }
 }

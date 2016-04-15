@@ -37,6 +37,7 @@ private[feature] trait PCAParams extends Params with HasInputCol with HasOutputC
 
   /**
    * The number of principal components.
+   *
    * @group param
    */
   final val k: IntParam = new IntParam(this, "k", "the number of principal components")
@@ -150,6 +151,12 @@ class PCAModel private[ml] (
 
   @Since("1.6.0")
   override def write: MLWriter = new PCAModelWriter(this)
+
+  def trimByVarianceRetained(requiredVariance: Double): PCAModel = {
+    feature.PCAModel.trimByVarianceRetained(requiredVariance, pc, explainedVariance)
+      .map(model => new PCAModel(uid, model.pc, model.explainedVariance))
+      .getOrElse(this)
+  }
 }
 
 @Since("1.6.0")
