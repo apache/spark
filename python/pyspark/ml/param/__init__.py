@@ -441,7 +441,7 @@ class Params(Identifiable):
             self._paramMap[p] = value
         return self
 
-    def _clearParam(self, param):
+    def _clear(self, param):
         """
         Clears a param from the param map if it has been explicitly set.
         """

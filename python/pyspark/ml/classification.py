@@ -143,7 +143,7 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         Clears value of :py:attr:`thresholds` if it has been set.
         """
         self._set(threshold=value)
-        self._clearParam(self.thresholds)
+        self._clear(self.thresholds)
         return self
 
     @since("1.4.0")
@@ -169,7 +169,7 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         Clears value of :py:attr:`threshold` if it has been set.
         """
         self._set(thresholds=value)
-        self._clearParam(self.threshold)
+        self._clear(self.threshold)
         return self
 
     @since("1.5.0")

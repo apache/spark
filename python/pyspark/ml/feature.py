@@ -1753,10 +1753,7 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadabl
         """
         Get the stopwords.
         """
-        stopwords = self.getOrDefault(self.stopWords)
-        if isinstance(stopwords, JavaArray):
-            stopwords = list(stopwords)
-        return stopwords
+        return self.getOrDefault(self.stopWords)
 
     @since("1.6.0")
     def setCaseSensitive(self, value):
