@@ -487,6 +487,50 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
 }
 
 /**
+ * A function throws an exception if 'condition' is not true.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(condition) - Throw an exception if 'condition' is not true.")
+case class AssertTrue(child: Expression) extends UnaryExpression {
+
+  override def nullable: Boolean = true
+
+  def dataType: DataType = NullType
+
+  override def prettyName: String = "assert_true"
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (child.dataType != BooleanType) {
+      TypeCheckResult.TypeCheckFailure(
+        s"type of condition expression in assert_true should be boolean, not ${child.dataType}")
+    } else {
+      TypeCheckResult.TypeCheckSuccess
+    }
+  }
+
+  override def eval(input: InternalRow) : Any = {
+    val v = child.eval(input)
+    if (java.lang.Boolean.TRUE.equals(v)) {
+      null
+    } else {
+      throw new RuntimeException(s"'${child.simpleString}' is not true!")
+    }
+  }
+
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+    val eval = child.gen(ctx)
+    ev.isNull = "true"
+    ev.value = "null"
+    s"""if (${eval.isNull} || !java.lang.Boolean.TRUE.equals(${eval.value})) {
+       |  throw new RuntimeException("'${child.simpleString}' is not true.");
+       |}
+     """.stripMargin
+  }
+
+  override def sql: String = s"assert_true(${child.sql})"
+}
+
+/**
  * A xxHash64 64-bit hash expression.
  */
 case class XxHash64(children: Seq[Expression], seed: Long) extends HashExpression[Long] {

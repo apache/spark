@@ -19,9 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.sql.Timestamp
 
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -351,36 +349,21 @@ class HiveTypeCoercionSuite extends PlanTest {
   test("type coercion for If") {
     val rule = HiveTypeCoercion.IfCoercion
 
-    // SPARK-14580 Hive IfCoercion should preserve predicate
-    case class AssertTrue(condition: Boolean) extends LeafExpression {
-      def nullable: Boolean = true
-      def dataType: DataType = NullType
-      def eval(input: InternalRow = null) : Any = {
-        if (!condition) throw new Exception("SPARK-14580 TEST")
-        Literal.create(null, NullType)
-      }
-      override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
-        s"""if (!$condition) throw new Exception("SPARK-14580 TEST");"""
-      }
-    }
-
     ruleTest(rule,
       If(Literal(true), Literal(1), Literal(1L)),
-      If(Literal(true), Cast(Literal(1), LongType), Literal(1L))
-    )
+      If(Literal(true), Cast(Literal(1), LongType), Literal(1L)))
 
     ruleTest(rule,
       If(Literal.create(null, NullType), Literal(1), Literal(1)),
-      If(Literal.create(null, BooleanType), Literal(1), Literal(1))
-    )
+      If(Literal.create(null, BooleanType), Literal(1), Literal(1)))
 
     ruleTest(rule,
-      If(AssertTrue(true), Literal(1), Literal(2)),
-      If(Cast(AssertTrue(true), BooleanType), Literal(1), Literal(2)))
+      If(AssertTrue(Literal.create(true, BooleanType)), Literal(1), Literal(2)),
+      If(Cast(AssertTrue(Literal.create(true, BooleanType)), BooleanType), Literal(1), Literal(2)))
 
     ruleTest(rule,
-      If(AssertTrue(false), Literal(1), Literal(2)),
-      If(Cast(AssertTrue(false), BooleanType), Literal(1), Literal(2)))
+      If(AssertTrue(Literal.create(false, BooleanType)), Literal(1), Literal(2)),
+      If(Cast(AssertTrue(Literal.create(false, BooleanType)), BooleanType), Literal(1), Literal(2)))
   }
 
   test("type coercion for CaseKeyWhen") {
