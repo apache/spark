@@ -265,8 +265,11 @@ case class TungstenAggregate(
 
   // The name for Vectorized HashMap
   private var vectorizedHashMapTerm: String = _
-  private var isVectorizedHashMapEnabled: Boolean = sqlContext.conf.columnarAggregateMapEnabled &&
-    (modes.contains(Partial) || modes.contains(PartialMerge))
+
+  // We currently only enable vectorized hashmap for long key/value types and partial aggregates
+  private val isVectorizedHashMapEnabled: Boolean = sqlContext.conf.columnarAggregateMapEnabled &&
+    (groupingKeySchema ++ bufferSchema).forall(_.dataType == LongType) &&
+    modes.forall(mode => mode == Partial || mode == PartialMerge)
 
   // The name for UnsafeRow HashMap
   private var hashMapTerm: String = _
@@ -444,9 +447,6 @@ case class TungstenAggregate(
     val initAgg = ctx.freshName("initAgg")
     ctx.addMutableState("boolean", initAgg, s"$initAgg = false;")
 
-    // We currently only enable vectorized hashmap for long key/value types
-    isVectorizedHashMapEnabled = isVectorizedHashMapEnabled &&
-      (groupingKeySchema ++ bufferSchema).forall(_.dataType == LongType)
     vectorizedHashMapTerm = ctx.freshName("vectorizedHashMap")
     val vectorizedHashMapClassName = ctx.freshName("VectorizedHashMap")
     val vectorizedHashMapGenerator = new VectorizedHashMapGenerator(ctx, vectorizedHashMapClassName,
