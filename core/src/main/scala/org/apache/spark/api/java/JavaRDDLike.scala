@@ -131,7 +131,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    */
   def flatMapToDouble(f: DoubleFlatMapFunction[T]): JavaDoubleRDD = {
     def fn: (T) => Iterator[jl.Double] = (x: T) => f.call(x).asScala
-    new JavaDoubleRDD(rdd.flatMap(fn).map((x: jl.Double) => x.doubleValue()))
+    new JavaDoubleRDD(rdd.flatMap(fn).map(x => x.doubleValue()))
   }
 
   /**
@@ -173,7 +173,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
     def fn: (Iterator[T]) => Iterator[jl.Double] = {
       (x: Iterator[T]) => f.call(x.asJava).asScala
     }
-    new JavaDoubleRDD(rdd.mapPartitions(fn).map((x: jl.Double) => x.doubleValue()))
+    new JavaDoubleRDD(rdd.mapPartitions(fn).map(x => x.doubleValue()))
   }
 
   /**
