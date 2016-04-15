@@ -304,14 +304,6 @@ class TaskMetricsSuite extends SparkFunSuite {
     tm2.mergeShuffleReadMetrics()
   }
 
-  test("register multiple shuffle write metrics") {
-    val tm = new TaskMetrics
-    val sw1 = tm.shuffleWriteMetrics
-    val sw2 = tm.shuffleWriteMetrics
-    assert(sw1 === sw2)
-    assert(tm.shuffleWriteMetrics === Some(sw1))
-  }
-
   test("additional accumulables") {
     val internalAccums = InternalAccumulator.createAll()
     val tm = new TaskMetrics(internalAccums)
