@@ -423,11 +423,9 @@ abstract class UnixTime extends BinaryExpression with ExpectsInputTypes {
         }
       case StringType =>
         val sdf = classOf[SimpleDateFormat].getName
-        val formatter = ctx.freshName("sdf")
-        ctx.addMutableState(sdf, formatter, s"""$formatter = null;""")
         nullSafeCodeGen(ctx, ev, (string, format) => {
           s"""
-	    try {
+            try {
               ${ev.value} =
                 (new $sdf($format.toString())).parse($string.toString()).getTime() / 1000L;
             } catch (java.lang.Throwable e) {
@@ -546,11 +544,9 @@ case class FromUnixTime(sec: Expression, format: Expression)
         """
       }
     } else {
-      val sdfTerm = ctx.freshName("sdf")
-      ctx.addMutableState(sdf, sdfTerm, s"""$sdfTerm = null;""")
       nullSafeCodeGen(ctx, ev, (seconds, f) => {
         s"""
-	try {
+        try {
           ${ev.value} = UTF8String.fromString((new $sdf($f.toString())).format(
             new java.util.Date($seconds * 1000L)));
         } catch (java.lang.Throwable e) {
