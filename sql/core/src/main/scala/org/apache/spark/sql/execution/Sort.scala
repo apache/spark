@@ -49,8 +49,9 @@ case class Sort(
     if (global) OrderedDistribution(sortOrder) :: Nil else UnspecifiedDistribution :: Nil
 
   override private[sql] lazy val metrics = Map(
-    "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
-    "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"))
+    "peakMemory" -> SQLMetrics.createSizeMetric(sparkContext, "peak memory"),
+    "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"),
+    "sortingTime" -> SQLMetrics.createTimingMetric(sparkContext, "sorting time"))
 
   def createSorter(): UnsafeExternalRowSorter = {
     val ordering = newOrdering(sortOrder, output)
@@ -77,8 +78,9 @@ case class Sort(
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    val dataSize = longMetric("dataSize")
+    val peakMemory = longMetric("peakMemory")
     val spillSize = longMetric("spillSize")
+    val sortingTime = longMetric("sortingTime")
 
     child.execute().mapPartitionsInternal { iter =>
       val sorter = createSorter()
@@ -87,10 +89,12 @@ case class Sort(
       // Remember spill data size of this task before execute this operator so that we can
       // figure out how many bytes we spilled for this operator.
       val spillSizeBefore = metrics.memoryBytesSpilled
+      val beforeSort = System.currentTimeMillis()
 
       val sortedIterator = sorter.sort(iter.asInstanceOf[Iterator[UnsafeRow]])
 
-      dataSize += sorter.getPeakMemoryUsage
+      sortingTime += System.currentTimeMillis() - beforeSort
+      peakMemory += sorter.getPeakMemoryUsage
       spillSize += metrics.memoryBytesSpilled - spillSizeBefore
       metrics.incPeakExecutionMemory(sorter.getPeakMemoryUsage)
 
@@ -136,15 +140,21 @@ case class Sort(
     ctx.copyResult = false
 
     val outputRow = ctx.freshName("outputRow")
-    val dataSize = metricTerm(ctx, "dataSize")
+    val peakMemory = metricTerm(ctx, "peakMemory")
     val spillSize = metricTerm(ctx, "spillSize")
+    val sortingTime = metricTerm(ctx, "sortingTime")
     val spillSizeBefore = ctx.freshName("spillSizeBefore")
+    val beforeSortMs = ctx.freshName("beforeSortMs")
     s"""
        | if ($needToSort) {
+       |   long $beforeSortMs = System.currentTimeMillis();
+       |   long $spillSizeBefore = $metrics.memoryBytesSpilled();
+       |
        |   $addToSorter();
-       |   Long $spillSizeBefore = $metrics.memoryBytesSpilled();
        |   $sortedIterator = $sorterVariable.sort();
-       |   $dataSize.add($sorterVariable.getPeakMemoryUsage());
+       |
+       |   $sortingTime.add(System.currentTimeMillis() - $beforeSortMs);
+       |   $peakMemory.add($sorterVariable.getPeakMemoryUsage());
        |   $spillSize.add($metrics.memoryBytesSpilled() - $spillSizeBefore);
        |   $metrics.incPeakExecutionMemory($sorterVariable.getPeakMemoryUsage());
        |   $needToSort = false;

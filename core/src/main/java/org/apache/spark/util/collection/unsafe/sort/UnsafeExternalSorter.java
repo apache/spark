@@ -75,6 +75,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
   private MemoryBlock currentPage = null;
   private long pageCursor = -1;
   private long peakMemoryUsedBytes = 0;
+  private long totalSpillBytes = 0L;
   private volatile SpillableIterator readingIterator = null;
 
   public static UnsafeExternalSorter createWithExistingInMemorySorter(
@@ -212,7 +213,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     // we might not be able to get memory for the pointer array.
 
     taskContext.taskMetrics().incMemoryBytesSpilled(spillSize);
-
+    totalSpillBytes += spillSize;
     return spillSize;
   }
 
@@ -241,6 +242,13 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
   public long getPeakMemoryUsedBytes() {
     updatePeakMemoryUsed();
     return peakMemoryUsedBytes;
+  }
+
+  /**
+   * Return the total number of bytes that has been spilled into disk so far.
+   */
+  public long getSpillSize() {
+    return totalSpillBytes;
   }
 
   @VisibleForTesting
@@ -496,6 +504,8 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
         released += inMemSorter.getMemoryUsage();
         inMemSorter.free();
         inMemSorter = null;
+        taskContext.taskMetrics().incMemoryBytesSpilled(released);
+        totalSpillBytes += released;
         return released;
       }
     }

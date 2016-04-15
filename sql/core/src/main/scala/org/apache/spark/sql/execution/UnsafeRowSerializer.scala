@@ -26,6 +26,7 @@ import com.google.common.io.ByteStreams
 
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, Serializer, SerializerInstance}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.execution.metric.LongSQLMetric
 import org.apache.spark.unsafe.Platform
 
 /**

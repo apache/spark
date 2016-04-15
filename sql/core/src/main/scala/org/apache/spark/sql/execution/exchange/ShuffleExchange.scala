@@ -26,10 +26,11 @@ import org.apache.spark.shuffle.hash.HashShuffleManager
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
-import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.{UnsafeRow, Attribute, UnsafeProjection}
 import org.apache.spark.sql.catalyst.expressions.codegen.LazilyGeneratedOrdering
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.util.MutablePair
 
 /**
@@ -39,6 +40,9 @@ case class ShuffleExchange(
     var newPartitioning: Partitioning,
     child: SparkPlan,
     @transient coordinator: Option[ExchangeCoordinator]) extends Exchange {
+
+  override private[sql] lazy val metrics = Map(
+    "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"))
 
   override def nodeName: String = {
     val extraInfo = coordinator match {
@@ -78,6 +82,14 @@ case class ShuffleExchange(
    * the returned ShuffleDependency will be the input of shuffle.
    */
   private[sql] def prepareShuffleDependency(): ShuffleDependency[Int, InternalRow, InternalRow] = {
+    val dataSize = longMetric("dataSize")
+    val rdd = child.execute().mapPartitionsInternal { iter =>
+      val localDataSize = dataSize.localValue
+      iter.map { row =>
+        localDataSize.add(row.asInstanceOf[UnsafeRow].getSizeInBytes)
+        row
+      }
+    }
     ShuffleExchange.prepareShuffleDependency(
       child.execute(), child.output, newPartitioning, serializer)
   }
