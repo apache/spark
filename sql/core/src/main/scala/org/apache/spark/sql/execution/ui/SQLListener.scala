@@ -38,7 +38,13 @@ case class SparkListenerSQLExecutionStart(
   extends SparkListenerEvent
 
 @DeveloperApi
-case class SparkListenerSQLExecutionEnd(executionId: Long, time: Long)
+case class SparkListenerSQLExecutionEnd(
+    executionId: Long,
+    time: Long,
+    // This allows the driver to update an accumulator's value and have it reported
+    // on the SQL UI. The accumulator needs to be part of SparkPlan.metrics and updated
+    // in doExecute or doConsume, depending on whether whole stage codegen is enabled.
+    driverAccumUpdates: Seq[AccumulableInfo] = Seq.empty[AccumulableInfo])
   extends SparkListenerEvent
 
 private[sql] class SQLHistoryListenerFactory extends SparkHistoryListenerFactory {
@@ -234,8 +240,9 @@ private[sql] class SQLListener(conf: SparkConf) extends SparkListener with Loggi
         activeExecutions(executionId) = executionUIData
         _executionIdToData(executionId) = executionUIData
       }
-    case SparkListenerSQLExecutionEnd(executionId, time) => synchronized {
+    case SparkListenerSQLExecutionEnd(executionId, time, driverAccumUpdates) => synchronized {
       _executionIdToData.get(executionId).foreach { executionUIData =>
+        executionUIData.driverAccumUpdates ++= driverAccumUpdates
         executionUIData.completionTime = Some(time)
         if (!executionUIData.hasRunningJobs) {
           // onExecutionEnd happens after all "onJobEnd"s
@@ -285,16 +292,21 @@ private[sql] class SQLListener(conf: SparkConf) extends SparkListener with Loggi
   def getExecutionMetrics(executionId: Long): Map[Long, String] = synchronized {
     _executionIdToData.get(executionId) match {
       case Some(executionUIData) =>
-        val accumulatorUpdates = {
-          for (stageId <- executionUIData.stages;
-               stageMetrics <- _stageIdToStageMetrics.get(stageId).toIterable;
-               taskMetrics <- stageMetrics.taskIdToMetricUpdates.values;
-               accumulatorUpdate <- taskMetrics.accumulatorUpdates) yield {
-            assert(accumulatorUpdate.update.isDefined, s"accumulator update from " +
-              s"task did not have a partial value: ${accumulatorUpdate.name}")
-            (accumulatorUpdate.id, accumulatorUpdate.update.get)
+        val accumulatorUpdates =
+          {
+            executionUIData.driverAccumUpdates ++ {
+              for (stageId <- executionUIData.stages;
+                   stageMetrics <- _stageIdToStageMetrics.get(stageId).toIterable;
+                   taskMetrics <- stageMetrics.taskIdToMetricUpdates.values;
+                   accumulatorUpdate <- taskMetrics.accumulatorUpdates) yield {
+                assert(accumulatorUpdate.update.isDefined, s"accumulator update from " +
+                  s"task did not have a partial value: ${accumulatorUpdate.name}")
+                accumulatorUpdate
+              }
+            }
           }
-        }.filter { case (id, _) => executionUIData.accumulatorMetrics.contains(id) }
+          .filter { a => executionUIData.accumulatorMetrics.contains(a.id) }
+          .map { a => (a.id, a.update.get) }
         mergeAccumulatorUpdates(accumulatorUpdates, accumulatorId =>
           executionUIData.accumulatorMetrics(accumulatorId).metricParam)
       case None =>
@@ -370,7 +382,8 @@ private[ui] class SQLExecutionUIData(
     val submissionTime: Long,
     var completionTime: Option[Long] = None,
     val jobs: mutable.HashMap[Long, JobExecutionStatus] = mutable.HashMap.empty,
-    val stages: mutable.ArrayBuffer[Int] = mutable.ArrayBuffer()) {
+    val stages: mutable.ArrayBuffer[Int] = mutable.ArrayBuffer(),
+    val driverAccumUpdates: mutable.ArrayBuffer[AccumulableInfo] = mutable.ArrayBuffer()) {
 
   /**
    * Return whether there are running jobs in this execution.
