@@ -68,6 +68,11 @@ class ShuffleWriteMetrics private (
    */
   def writeTime: Long = _writeTime.localValue
 
+  /**
+   * Returns true if this metrics has been updated before.
+   */
+  def isUpdated: Boolean = (writeTime | recordsWritten | bytesWritten) != 0
+
   private[spark] def incBytesWritten(v: Long): Unit = _bytesWritten.add(v)
   private[spark] def incRecordsWritten(v: Long): Unit = _recordsWritten.add(v)
   private[spark] def incWriteTime(v: Long): Unit = _writeTime.add(v)

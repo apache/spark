@@ -692,12 +692,13 @@ private[spark] object JsonProtocolSuite extends Assertions {
   }
 
   private def assertJsonStringEquals(expected: String, actual: String, metadata: String) {
-    val formatJsonString = (json: String) => json.replaceAll("[\\s|]", "")
-    if (formatJsonString(expected) != formatJsonString(actual)) {
+    val expectedJson = pretty(parse(expected))
+    val actualJson = pretty(parse(actual))
+    if (expectedJson != actualJson) {
       // scalastyle:off
       // This prints something useful if the JSON strings don't match
-      println("=== EXPECTED ===\n" + pretty(parse(expected)) + "\n")
-      println("=== ACTUAL ===\n" + pretty(parse(actual)) + "\n")
+      println("=== EXPECTED ===\n" + expectedJson + "\n")
+      println("=== ACTUAL ===\n" + actualJson + "\n")
       // scalastyle:on
       throw new TestFailedException(s"$metadata JSON did not equal", 1)
     }
@@ -865,7 +866,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "Stage Name": "greetings",
       |    "Number of Tasks": 200,
       |    "RDD Info": [],
-      |    "ParentIDs" : [100, 200, 300],
+      |    "Parent IDs" : [100, 200, 300],
       |    "Details": "details",
       |    "Accumulables": [
       |      {
@@ -893,7 +894,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "Ukraine": "Kiev"
       |  }
       |}
-    """
+    """.stripMargin
 
   private val stageCompletedJsonString =
     """
@@ -922,7 +923,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Disk Size": 501
       |      }
       |    ],
-      |    "ParentIDs" : [100, 200, 300],
+      |    "Parent IDs" : [100, 200, 300],
       |    "Details": "details",
       |    "Accumulables": [
       |      {
@@ -944,7 +945,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    ]
       |  }
       |}
-    """
+    """.stripMargin
 
   private val taskStartJsonString =
     """
@@ -1192,7 +1193,6 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      "Shuffle Records Written": 12
       |    },
       |    "Input Metrics": {
-      |      "Data Read Method": "Hadoop",
       |      "Bytes Read": 2100,
       |      "Records Read": 21
       |    },
@@ -1213,7 +1213,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    ]
       |  }
       |}
-    """
+    """.stripMargin
 
   private val taskEndWithOutputJsonString =
     """
@@ -1273,12 +1273,10 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "Memory Bytes Spilled": 800,
       |    "Disk Bytes Spilled": 0,
       |    "Input Metrics": {
-      |      "Data Read Method": "Hadoop",
       |      "Bytes Read": 2100,
       |      "Records Read": 21
       |    },
       |    "Output Metrics": {
-      |      "Data Write Method": "Hadoop",
       |      "Bytes Written": 1200,
       |      "Records Written": 12
       |    },
@@ -1299,7 +1297,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    ]
       |  }
       |}
-    """
+    """.stripMargin
 
   private val jobStartJsonString =
     """
@@ -1391,7 +1389,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Disk Size": 1001
       |        }
       |      ],
-      |      "ParentIDs" : [100, 200, 300],
+      |      "Parent IDs" : [100, 200, 300],
       |      "Details": "details",
       |      "Accumulables": [
       |        {
@@ -1467,7 +1465,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Disk Size": 1502
       |        }
       |      ],
-      |      "ParentIDs" : [100, 200, 300],
+      |      "Parent IDs" : [100, 200, 300],
       |      "Details": "details",
       |      "Accumulables": [
       |        {
@@ -1559,7 +1557,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Disk Size": 2003
       |        }
       |      ],
-      |      "ParentIDs" : [100, 200, 300],
+      |      "Parent IDs" : [100, 200, 300],
       |      "Details": "details",
       |      "Accumulables": [
       |        {
@@ -1594,7 +1592,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "Ukraine": "Kiev"
       |  }
       |}
-    """
+    """.stripMargin
 
   private val jobEndJsonString =
     """
@@ -1606,7 +1604,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "Result": "JobSucceeded"
       |  }
       |}
-    """
+    """.stripMargin
 
   private val environmentUpdateJsonString =
     """
@@ -1627,7 +1625,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "Super library": "/tmp/super_library"
       |  }
       |}
-    """
+    """.stripMargin
 
   private val blockManagerAddedJsonString =
     """
@@ -1641,7 +1639,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |  "Maximum Memory": 500,
       |  "Timestamp": 1
       |}
-    """
+    """.stripMargin
 
   private val blockManagerRemovedJsonString =
     """
@@ -1654,7 +1652,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |  },
       |  "Timestamp": 2
       |}
-    """
+    """.stripMargin
 
   private val unpersistRDDJsonString =
     """
@@ -1662,7 +1660,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |  "Event": "SparkListenerUnpersistRDD",
       |  "RDD ID": 12345
       |}
-    """
+    """.stripMargin
 
   private val applicationStartJsonString =
     """
@@ -1674,7 +1672,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |  "User": "Garfield",
       |  "App Attempt ID": "appAttempt"
       |}
-    """
+    """.stripMargin
 
   private val applicationStartJsonWithLogUrlsString =
     """
@@ -1690,7 +1688,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      "stdout" : "mystdout"
       |  }
       |}
-    """
+    """.stripMargin
 
   private val applicationEndJsonString =
     """
@@ -1698,7 +1696,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |  "Event": "SparkListenerApplicationEnd",
       |  "Timestamp": 42
       |}
-    """
+    """.stripMargin
 
   private val executorAddedJsonString =
     s"""
@@ -1715,7 +1713,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    }
       |  }
       |}
-    """
+    """.stripMargin
 
   private val executorRemovedJsonString =
     s"""
@@ -1725,7 +1723,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |  "Executor ID": "exec2",
       |  "Removed Reason": "test reason"
       |}
-    """
+    """.stripMargin
 
   private val executorMetricsUpdateJsonString =
     s"""
@@ -1799,16 +1797,16 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Name": "$UPDATED_BLOCK_STATUSES",
       |          "Update": [
       |            {
-      |              "BlockID": "rdd_0_0",
+      |              "Block ID": "rdd_0_0",
       |              "Status": {
-      |                "StorageLevel": {
-      |                  "UseDisk": true,
-      |                  "UseMemory": true,
+      |                "Storage Level": {
+      |                  "Use Disk": true,
+      |                  "Use Memory": true,
       |                  "Deserialized": false,
       |                  "Replication": 2
       |                },
-      |                "MemorySize": 0,
-      |                "DiskSize": 0
+      |                "Memory Size": 0,
+      |                "Disk Size": 0
       |              }
       |            }
       |          ],
@@ -1879,35 +1877,35 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 19,
+      |          "ID": 18,
       |          "Name": "${input.BYTES_READ}",
       |          "Update": 2100,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 20,
+      |          "ID": 19,
       |          "Name": "${input.RECORDS_READ}",
       |          "Update": 21,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 22,
+      |          "ID": 20,
       |          "Name": "${output.BYTES_WRITTEN}",
       |          "Update": 1200,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 23,
+      |          "ID": 21,
       |          "Name": "${output.RECORDS_WRITTEN}",
       |          "Update": 12,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 24,
+      |          "ID": 22,
       |          "Name": "$TEST_ACCUM",
       |          "Update": 0,
       |          "Internal": true,

@@ -326,23 +326,35 @@ private[spark] object JsonProtocol {
   }
 
   def taskMetricsToJson(taskMetrics: TaskMetrics): JValue = {
-    val shuffleReadMetrics: JValue =
+    val shuffleReadMetrics: JValue = if (taskMetrics.shuffleReadMetrics.isUpdated) {
       ("Remote Blocks Fetched" -> taskMetrics.shuffleReadMetrics.remoteBlocksFetched) ~
         ("Local Blocks Fetched" -> taskMetrics.shuffleReadMetrics.localBlocksFetched) ~
         ("Fetch Wait Time" -> taskMetrics.shuffleReadMetrics.fetchWaitTime) ~
         ("Remote Bytes Read" -> taskMetrics.shuffleReadMetrics.remoteBytesRead) ~
         ("Local Bytes Read" -> taskMetrics.shuffleReadMetrics.localBytesRead) ~
         ("Total Records Read" -> taskMetrics.shuffleReadMetrics.recordsRead)
-    val shuffleWriteMetrics: JValue =
+    } else {
+      JNothing
+    }
+    val shuffleWriteMetrics: JValue = if (taskMetrics.shuffleWriteMetrics.isUpdated) {
       ("Shuffle Bytes Written" -> taskMetrics.shuffleWriteMetrics.bytesWritten) ~
         ("Shuffle Write Time" -> taskMetrics.shuffleWriteMetrics.writeTime) ~
         ("Shuffle Records Written" -> taskMetrics.shuffleWriteMetrics.recordsWritten)
-    val inputMetrics: JValue =
+    } else {
+      JNothing
+    }
+    val inputMetrics: JValue = if (taskMetrics.inputMetrics.isUpdated) {
       ("Bytes Read" -> taskMetrics.inputMetrics.bytesRead) ~
         ("Records Read" -> taskMetrics.inputMetrics.recordsRead)
-    val outputMetrics: JValue =
+    } else {
+      JNothing
+    }
+    val outputMetrics: JValue = if (taskMetrics.outputMetrics.isUpdated) {
       ("Bytes Written" -> taskMetrics.outputMetrics.bytesWritten) ~
         ("Records Written" -> taskMetrics.outputMetrics.recordsWritten)
+    } else {
+      JNothing
+    }
     val updatedBlocks =
       JArray(taskMetrics.updatedBlockStatuses.toList.map { case (id, status) =>
         ("Block ID" -> id.toString) ~
