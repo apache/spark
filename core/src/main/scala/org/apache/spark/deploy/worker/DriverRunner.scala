@@ -218,7 +218,7 @@ private[deploy] class DriverRunner(
 }
 
 private[deploy] trait Sleeper {
-  def sleep(seconds: Int)
+  def sleep(seconds: Int): Unit
 }
 
 // Needed because ProcessBuilder is a final class and cannot be mocked

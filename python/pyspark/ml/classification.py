@@ -19,7 +19,7 @@ import warnings
 
 from pyspark import since
 from pyspark.ml.util import *
-from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaCallable
+from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaWrapper
 from pyspark.ml.param import TypeConverters
 from pyspark.ml.param.shared import *
 from pyspark.ml.regression import (
@@ -272,7 +272,7 @@ class LogisticRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
         return BinaryLogisticRegressionSummary(java_blr_summary)
 
 
-class LogisticRegressionSummary(JavaCallable):
+class LogisticRegressionSummary(JavaWrapper):
     """
     Abstraction for Logistic Regression Results for a given model.
 
@@ -291,7 +291,7 @@ class LogisticRegressionSummary(JavaCallable):
     @since("2.0.0")
     def probabilityCol(self):
         """
-        Field in "predictions" which gives the calibrated probability
+        Field in "predictions" which gives the probability
         of each class as a vector.
         """
         return self._call_java("probabilityCol")
@@ -621,7 +621,8 @@ class DecisionTreeClassificationModel(DecisionTreeModel, JavaMLWritable, JavaMLR
 @inherit_doc
 class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasSeed,
                              HasRawPredictionCol, HasProbabilityCol,
-                             RandomForestParams, TreeClassifierParams, HasCheckpointInterval):
+                             RandomForestParams, TreeClassifierParams, HasCheckpointInterval,
+                             JavaMLWritable, JavaMLReadable):
     """
     `http://en.wikipedia.org/wiki/Random_forest  Random Forest`
     learning algorithm for classification.
@@ -655,6 +656,16 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     >>> test1 = sqlContext.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
     >>> model.transform(test1).head().prediction
     1.0
+    >>> rfc_path = temp_path + "/rfc"
+    >>> rf.save(rfc_path)
+    >>> rf2 = RandomForestClassifier.load(rfc_path)
+    >>> rf2.getNumTrees()
+    3
+    >>> model_path = temp_path + "/rfc_model"
+    >>> model.save(model_path)
+    >>> model2 = RandomForestClassificationModel.load(model_path)
+    >>> model.featureImportances == model2.featureImportances
+    True
 
     .. versionadded:: 1.4.0
     """
@@ -703,7 +714,7 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
         return RandomForestClassificationModel(java_model)
 
 
-class RandomForestClassificationModel(TreeEnsembleModels):
+class RandomForestClassificationModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable):
     """
     Model fitted by RandomForestClassifier.
 
@@ -728,7 +739,8 @@ class RandomForestClassificationModel(TreeEnsembleModels):
 
 @inherit_doc
 class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
-                    GBTParams, HasCheckpointInterval, HasStepSize, HasSeed):
+                    GBTParams, HasCheckpointInterval, HasStepSize, HasSeed, JavaMLWritable,
+                    JavaMLReadable):
     """
     `http://en.wikipedia.org/wiki/Gradient_boosting Gradient-Boosted Trees (GBTs)`
     learning algorithm for classification.
@@ -756,6 +768,18 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
     >>> test1 = sqlContext.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
     >>> model.transform(test1).head().prediction
     1.0
+    >>> gbtc_path = temp_path + "gbtc"
+    >>> gbt.save(gbtc_path)
+    >>> gbt2 = GBTClassifier.load(gbtc_path)
+    >>> gbt2.getMaxDepth()
+    2
+    >>> model_path = temp_path + "gbtc_model"
+    >>> model.save(model_path)
+    >>> model2 = GBTClassificationModel.load(model_path)
+    >>> model.featureImportances == model2.featureImportances
+    True
+    >>> model.treeWeights == model2.treeWeights
+    True
 
     .. versionadded:: 1.4.0
     """
@@ -820,7 +844,7 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
         return self.getOrDefault(self.lossType)
 
 
-class GBTClassificationModel(TreeEnsembleModels):
+class GBTClassificationModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable):
     """
     Model fitted by GBTClassifier.
 

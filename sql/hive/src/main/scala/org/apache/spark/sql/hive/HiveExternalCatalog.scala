@@ -25,7 +25,6 @@ import org.apache.thrift.TException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.NoSuchItemException
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.hive.client.HiveClient
 
@@ -66,8 +65,6 @@ private[spark] class HiveExternalCatalog(client: HiveClient) extends ExternalCat
     try {
       body
     } catch {
-      case e: NoSuchItemException =>
-        throw new AnalysisException(e.getMessage)
       case NonFatal(e) if isClientException(e) =>
         throw new AnalysisException(e.getClass.getCanonicalName + ": " + e.getMessage)
     }
@@ -182,6 +179,10 @@ private[spark] class HiveExternalCatalog(client: HiveClient) extends ExternalCat
     client.getTable(db, table)
   }
 
+  override def getTableOption(db: String, table: String): Option[CatalogTable] = withClient {
+    client.getTableOption(db, table)
+  }
+
   override def tableExists(db: String, table: String): Boolean = withClient {
     client.getTableOption(db, table).isDefined
   }
@@ -215,26 +216,7 @@ private[spark] class HiveExternalCatalog(client: HiveClient) extends ExternalCat
       parts: Seq[TablePartitionSpec],
       ignoreIfNotExists: Boolean): Unit = withClient {
     requireTableExists(db, table)
-    // Note: Unfortunately Hive does not currently support `ignoreIfNotExists` so we
-    // need to implement it here ourselves. This is currently somewhat expensive because
-    // we make multiple synchronous calls to Hive for each partition we want to drop.
-    val partsToDrop =
-      if (ignoreIfNotExists) {
-        parts.filter { spec =>
-          try {
-            getPartition(db, table, spec)
-            true
-          } catch {
-            // Filter out the partitions that do not actually exist
-            case _: AnalysisException => false
-          }
-        }
-      } else {
-        parts
-      }
-    if (partsToDrop.nonEmpty) {
-      client.dropPartitions(db, table, partsToDrop)
-    }
+    client.dropPartitions(db, table, parts, ignoreIfNotExists)
   }
 
   override def renamePartitions(

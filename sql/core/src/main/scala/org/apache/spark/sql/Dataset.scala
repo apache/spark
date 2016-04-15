@@ -20,7 +20,6 @@ package org.apache.spark.sql
 import java.io.CharArrayWriter
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.ArrayBuffer
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
@@ -993,7 +992,7 @@ class Dataset[T] private[sql](
       sqlContext,
       Project(
         c1.withInputType(
-          boundTEncoder,
+          unresolvedTEncoder.deserializer,
           logicalPlan.output).named :: Nil,
         logicalPlan),
       implicitly[Encoder[U1]])
@@ -1007,7 +1006,7 @@ class Dataset[T] private[sql](
   protected def selectUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
     val encoders = columns.map(_.encoder)
     val namedColumns =
-      columns.map(_.withInputType(resolvedTEncoder, logicalPlan.output).named)
+      columns.map(_.withInputType(unresolvedTEncoder.deserializer, logicalPlan.output).named)
     val execution = new QueryExecution(sqlContext, Project(namedColumns, logicalPlan))
 
     new Dataset(sqlContext, execution, ExpressionEncoder.tuple(encoders))
@@ -1493,6 +1492,8 @@ class Dataset[T] private[sql](
    * @param weights weights for splits, will be normalized if they don't sum to 1.
    * @param seed Seed for sampling.
    *
+   * For Java API, use [[randomSplitAsList]].
+   *
    * @group typedrel
    * @since 2.0.0
    */
@@ -1508,6 +1509,20 @@ class Dataset[T] private[sql](
       new Dataset[T](
         sqlContext, Sample(x(0), x(1), withReplacement = false, seed, sorted)(), encoder)
     }.toArray
+  }
+
+  /**
+   * Returns a Java list that contains randomly split [[Dataset]] with the provided weights.
+   *
+   * @param weights weights for splits, will be normalized if they don't sum to 1.
+   * @param seed Seed for sampling.
+   *
+   * @group typedrel
+   * @since 2.0.0
+   */
+  def randomSplitAsList(weights: Array[Double], seed: Long): java.util.List[Dataset[T]] = {
+    val values = randomSplit(weights, seed)
+    java.util.Arrays.asList(values : _*)
   }
 
   /**

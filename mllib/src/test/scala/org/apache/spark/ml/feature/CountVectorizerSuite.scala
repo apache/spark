@@ -59,14 +59,15 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext
       (0, split("a b c d e"),
         Vectors.sparse(5, Seq((0, 1.0), (1, 1.0), (2, 1.0), (3, 1.0), (4, 1.0)))),
       (1, split("a a a a a a"), Vectors.sparse(5, Seq((0, 6.0)))),
-      (2, split("c"), Vectors.sparse(5, Seq((2, 1.0)))),
-      (3, split("b b b b b"), Vectors.sparse(5, Seq((1, 5.0)))))
+      (2, split("c c"), Vectors.sparse(5, Seq((2, 2.0)))),
+      (3, split("d"), Vectors.sparse(5, Seq((3, 1.0)))),
+      (4, split("b b b b b"), Vectors.sparse(5, Seq((1, 5.0)))))
     ).toDF("id", "words", "expected")
     val cv = new CountVectorizer()
       .setInputCol("words")
       .setOutputCol("features")
       .fit(df)
-    assert(cv.vocabulary === Array("a", "b", "c", "d", "e"))
+    assert(cv.vocabulary.toSet === Set("a", "b", "c", "d", "e"))
 
     cv.transform(df).select("features", "expected").collect().foreach {
       case Row(features: Vector, expected: Vector) =>
@@ -168,18 +169,31 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext
     }
   }
 
-  test("CountVectorizerModel with binary") {
+  test("CountVectorizerModel and CountVectorizer with binary") {
     val df = sqlContext.createDataFrame(Seq(
-      (0, split("a a a b b c"), Vectors.sparse(4, Seq((0, 1.0), (1, 1.0), (2, 1.0)))),
+      (0, split("a a a a b b b b c d"),
+      Vectors.sparse(4, Seq((0, 1.0), (1, 1.0), (2, 1.0), (3, 1.0)))),
       (1, split("c c c"), Vectors.sparse(4, Seq((2, 1.0)))),
       (2, split("a"), Vectors.sparse(4, Seq((0, 1.0))))
     )).toDF("id", "words", "expected")
 
-    val cv = new CountVectorizerModel(Array("a", "b", "c", "d"))
+    // CountVectorizer test
+    val cv = new CountVectorizer()
       .setInputCol("words")
       .setOutputCol("features")
       .setBinary(true)
+      .fit(df)
     cv.transform(df).select("features", "expected").collect().foreach {
+      case Row(features: Vector, expected: Vector) =>
+        assert(features ~== expected absTol 1e-14)
+    }
+
+    // CountVectorizerModel test
+    val cv2 = new CountVectorizerModel(cv.vocabulary)
+      .setInputCol("words")
+      .setOutputCol("features")
+      .setBinary(true)
+    cv2.transform(df).select("features", "expected").collect().foreach {
       case Row(features: Vector, expected: Vector) =>
         assert(features ~== expected absTol 1e-14)
     }
