@@ -628,9 +628,11 @@ object MimaExcludes {
       ) ++ Seq(
         // [SPARK-14475] Propagate user-defined context from driver to executors
         ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.getLocalProperty"),
+      ) ++ Seq(
         // [SPARK-14617] Remove deprecated APIs in TaskMetrics
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.executor.InputMetrics$"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.executor.OutputMetrics$")
+        ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.getLocalProperty")
       ) ++ Seq(
         // [SPARK-14483][WEBUI] Display user name foreach job and query
         ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.SparkListenerJobStart.copy"),
