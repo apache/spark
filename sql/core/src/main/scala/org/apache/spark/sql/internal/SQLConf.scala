@@ -28,7 +28,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.catalyst.CatalystConf
-import org.apache.spark.util.Utils
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines the configuration options for Spark SQL.
@@ -145,12 +144,6 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
-  val USE_FILE_SCAN = SQLConfigBuilder("spark.sql.sources.fileScan")
-    .internal()
-    .doc("Use the new FileScanRDD path for reading HDSF based data sources.")
-    .booleanConf
-    .createWithDefault(true)
-
   val PARQUET_SCHEMA_MERGING_ENABLED = SQLConfigBuilder("spark.sql.parquet.mergeSchema")
     .doc("When true, the Parquet data source merges schemas collected from all data files, " +
          "otherwise the schema is picked from the summary file or a random data file " +
@@ -193,7 +186,7 @@ object SQLConf {
     .stringConf
     .transform(_.toLowerCase())
     .checkValues(Set("uncompressed", "snappy", "gzip", "lzo"))
-    .createWithDefault("gzip")
+    .createWithDefault("snappy")
 
   val PARQUET_FILTER_PUSHDOWN_ENABLED = SQLConfigBuilder("spark.sql.parquet.filterPushdown")
     .doc("Enables Parquet filter push-down optimization when set to true.")
@@ -443,6 +436,13 @@ object SQLConf {
     .stringConf
     .createOptional
 
+  // TODO: This is still WIP and shouldn't be turned on without extensive test coverage
+  val COLUMNAR_AGGREGATE_MAP_ENABLED = SQLConfigBuilder("spark.sql.codegen.aggregate.map.enabled")
+    .internal()
+    .doc("When true, aggregate with keys use an in-memory columnar map to speed up execution.")
+    .booleanConf
+    .createWithDefault(false)
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
     val EXTERNAL_SORT = "spark.sql.planner.externalSort"
@@ -480,8 +480,6 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def filesOpenCostInBytes: Long = getConf(FILES_OPEN_COST_IN_BYTES)
 
   def useCompression: Boolean = getConf(COMPRESS_CACHED)
-
-  def useFileScan: Boolean = getConf(USE_FILE_SCAN)
 
   def parquetCompressionCodec: String = getConf(PARQUET_COMPRESSION)
 
@@ -568,6 +566,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def dataFrameRetainGroupColumns: Boolean = getConf(DATAFRAME_RETAIN_GROUP_COLUMNS)
 
   def runSQLOnFile: Boolean = getConf(RUN_SQL_ON_FILES)
+
+  def columnarAggregateMapEnabled: Boolean = getConf(COLUMNAR_AGGREGATE_MAP_ENABLED)
 
   override def orderByOrdinal: Boolean = getConf(ORDER_BY_ORDINAL)
 

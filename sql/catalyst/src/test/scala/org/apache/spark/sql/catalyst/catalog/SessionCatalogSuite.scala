@@ -233,10 +233,9 @@ class SessionCatalogSuite extends SparkFunSuite {
     intercept[AnalysisException] {
       catalog.dropTable(TableIdentifier("tbl1", Some("unknown_db")), ignoreIfNotExists = true)
     }
-    // Table does not exist
-    intercept[AnalysisException] {
-      catalog.dropTable(TableIdentifier("unknown_table", Some("db2")), ignoreIfNotExists = false)
-    }
+    // If the table does not exist, we do not issue an exception. Instead, we output an error log
+    // message to console when ignoreIfNotExists is set to false.
+    catalog.dropTable(TableIdentifier("unknown_table", Some("db2")), ignoreIfNotExists = false)
     catalog.dropTable(TableIdentifier("unknown_table", Some("db2")), ignoreIfNotExists = true)
   }
 
@@ -497,19 +496,25 @@ class SessionCatalogSuite extends SparkFunSuite {
     val sessionCatalog = new SessionCatalog(externalCatalog)
     assert(catalogPartitionsEqual(externalCatalog, "db2", "tbl2", Seq(part1, part2)))
     sessionCatalog.dropPartitions(
-      TableIdentifier("tbl2", Some("db2")), Seq(part1.spec), ignoreIfNotExists = false)
+      TableIdentifier("tbl2", Some("db2")),
+      Seq(part1.spec),
+      ignoreIfNotExists = false)
     assert(catalogPartitionsEqual(externalCatalog, "db2", "tbl2", Seq(part2)))
     // Drop partitions without explicitly specifying database
     sessionCatalog.setCurrentDatabase("db2")
     sessionCatalog.dropPartitions(
-      TableIdentifier("tbl2"), Seq(part2.spec), ignoreIfNotExists = false)
+      TableIdentifier("tbl2"),
+      Seq(part2.spec),
+      ignoreIfNotExists = false)
     assert(externalCatalog.listPartitions("db2", "tbl2").isEmpty)
     // Drop multiple partitions at once
     sessionCatalog.createPartitions(
       TableIdentifier("tbl2", Some("db2")), Seq(part1, part2), ignoreIfExists = false)
     assert(catalogPartitionsEqual(externalCatalog, "db2", "tbl2", Seq(part1, part2)))
     sessionCatalog.dropPartitions(
-      TableIdentifier("tbl2", Some("db2")), Seq(part1.spec, part2.spec), ignoreIfNotExists = false)
+      TableIdentifier("tbl2", Some("db2")),
+      Seq(part1.spec, part2.spec),
+      ignoreIfNotExists = false)
     assert(externalCatalog.listPartitions("db2", "tbl2").isEmpty)
   }
 
@@ -517,11 +522,15 @@ class SessionCatalogSuite extends SparkFunSuite {
     val catalog = new SessionCatalog(newBasicCatalog())
     intercept[AnalysisException] {
       catalog.dropPartitions(
-        TableIdentifier("tbl1", Some("does_not_exist")), Seq(), ignoreIfNotExists = false)
+        TableIdentifier("tbl1", Some("does_not_exist")),
+        Seq(),
+        ignoreIfNotExists = false)
     }
     intercept[AnalysisException] {
       catalog.dropPartitions(
-        TableIdentifier("does_not_exist", Some("db2")), Seq(), ignoreIfNotExists = false)
+        TableIdentifier("does_not_exist", Some("db2")),
+        Seq(),
+        ignoreIfNotExists = false)
     }
   }
 
@@ -529,10 +538,14 @@ class SessionCatalogSuite extends SparkFunSuite {
     val catalog = new SessionCatalog(newBasicCatalog())
     intercept[AnalysisException] {
       catalog.dropPartitions(
-        TableIdentifier("tbl2", Some("db2")), Seq(part3.spec), ignoreIfNotExists = false)
+        TableIdentifier("tbl2", Some("db2")),
+        Seq(part3.spec),
+        ignoreIfNotExists = false)
     }
     catalog.dropPartitions(
-      TableIdentifier("tbl2", Some("db2")), Seq(part3.spec), ignoreIfNotExists = true)
+      TableIdentifier("tbl2", Some("db2")),
+      Seq(part3.spec),
+      ignoreIfNotExists = true)
   }
 
   test("get partition") {

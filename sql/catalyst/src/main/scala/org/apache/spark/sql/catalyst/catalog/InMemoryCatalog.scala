@@ -62,7 +62,7 @@ class InMemoryCatalog extends ExternalCatalog {
   private def requireTableExists(db: String, table: String): Unit = {
     if (!tableExists(db, table)) {
       throw new AnalysisException(
-        s"Table not found: '$table' does not exist in database '$db'")
+        s"Table or View not found: '$table' does not exist in database '$db'")
     }
   }
 
@@ -164,7 +164,7 @@ class InMemoryCatalog extends ExternalCatalog {
       catalog(db).tables.remove(table)
     } else {
       if (!ignoreIfNotExists) {
-        throw new AnalysisException(s"Table '$table' does not exist in database '$db'")
+        throw new AnalysisException(s"Table or View '$table' does not exist in database '$db'")
       }
     }
   }
@@ -185,6 +185,10 @@ class InMemoryCatalog extends ExternalCatalog {
   override def getTable(db: String, table: String): CatalogTable = synchronized {
     requireTableExists(db, table)
     catalog(db).tables(table).table
+  }
+
+  override def getTableOption(db: String, table: String): Option[CatalogTable] = synchronized {
+    if (!tableExists(db, table)) None else Option(catalog(db).tables(table).table)
   }
 
   override def tableExists(db: String, table: String): Boolean = synchronized {

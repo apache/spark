@@ -149,6 +149,15 @@ for more details on the API.
 
 {% include_example java/org/apache/spark/examples/ml/JavaCountVectorizerExample.java %}
 </div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [CountVectorizer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.CountVectorizer)
+and the [CountVectorizerModel Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.CountVectorizerModel)
+for more details on the API.
+
+{% include_example python/ml/count_vectorizer_example.py %}
+</div>
 </div>
 
 # Feature Transformers
@@ -412,6 +421,14 @@ Refer to the [DCT Java docs](api/java/org/apache/spark/ml/feature/DCT.html)
 for more details on the API.
 
 {% include_example java/org/apache/spark/examples/ml/JavaDCTExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [DCT Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.DCT)
+for more details on the API.
+
+{% include_example python/ml/dct_example.py %}
 </div>
 </div>
 
@@ -771,6 +788,14 @@ for more details on the API.
 
 {% include_example java/org/apache/spark/examples/ml/JavaMinMaxScalerExample.java %}
 </div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [MinMaxScaler Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.MinMaxScaler)
+for more details on the API.
+
+{% include_example python/ml/min_max_scaler_example.py %}
+</div>
 </div>
 
 
@@ -802,6 +827,14 @@ and the [MaxAbsScalerModel Java docs](api/java/org/apache/spark/ml/feature/MaxAb
 for more details on the API.
 
 {% include_example java/org/apache/spark/examples/ml/JavaMaxAbsScalerExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [MaxAbsScaler Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.MaxAbsScaler)
+for more details on the API.
+
+{% include_example python/ml/max_abs_scaler_example.py %}
 </div>
 </div>
 

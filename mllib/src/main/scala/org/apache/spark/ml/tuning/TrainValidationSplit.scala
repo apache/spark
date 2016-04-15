@@ -20,6 +20,7 @@ package org.apache.spark.ml.tuning
 import java.util.{List => JList}
 
 import scala.collection.JavaConverters._
+import scala.language.existentials
 
 import org.apache.hadoop.fs.Path
 import org.json4s.DefaultFormats
@@ -31,7 +32,7 @@ import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.param.{DoubleParam, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.HasSeed
 import org.apache.spark.ml.util._
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -89,8 +90,8 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
   @Since("2.0.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
-  @Since("1.5.0")
-  override def fit(dataset: DataFrame): TrainValidationSplitModel = {
+  @Since("2.0.0")
+  override def fit(dataset: Dataset[_]): TrainValidationSplitModel = {
     val schema = dataset.schema
     transformSchema(schema, logging = true)
     val sqlCtx = dataset.sqlContext
@@ -207,8 +208,8 @@ class TrainValidationSplitModel private[ml] (
     this(uid, bestModel, validationMetrics.asScala.toArray)
   }
 
-  @Since("1.5.0")
-  override def transform(dataset: DataFrame): DataFrame = {
+  @Since("2.0.0")
+  override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     bestModel.transform(dataset)
   }

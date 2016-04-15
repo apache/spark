@@ -94,6 +94,7 @@
     <module>core</module>
     <module>graphx</module>
     <module>mllib</module>
+    <module>mllib-local</module>
     <module>tools</module>
     <module>streaming</module>
     <module>sql/catalyst</module>
@@ -131,7 +132,7 @@
     <curator.version>2.4.0</curator.version>
     <hive.group>org.spark-project.hive</hive.group>
     <!-- Version used in Maven Hive dependency -->
-    <hive.version>1.2.1.spark</hive.version>
+    <hive.version>1.2.1.spark2</hive.version>
     <!-- Version used for internal directory structure -->
     <hive.version.short>1.2.1</hive.version.short>
     <derby.version>10.10.1.1</derby.version>
@@ -139,7 +140,7 @@
     <hive.parquet.version>1.6.0</hive.parquet.version>
     <jetty.version>8.1.14.v20131031</jetty.version>
     <orbit.version>3.0.0.v201112011016</orbit.version>
-    <chill.version>0.7.4</chill.version>
+    <chill.version>0.8.0</chill.version>
     <ivy.version>2.4.0</ivy.version>
     <oro.version>2.0.8</oro.version>
     <codahale.metrics.version>3.1.2</codahale.metrics.version>
@@ -151,6 +152,7 @@
     <aws.kinesis.producer.version>0.10.2</aws.kinesis.producer.version>
     <!--  org.apache.httpcomponents/httpclient-->
     <commons.httpclient.version>4.3.2</commons.httpclient.version>
+    <commons.httpcore.version>4.3.2</commons.httpcore.version>
     <!--  commons-httpclient/commons-httpclient-->
     <httpclient.classic.version>3.1</httpclient.classic.version>
     <commons.math3.version>3.4.1</commons.math3.version>
@@ -276,31 +278,11 @@
         <groupId>com.twitter</groupId>
         <artifactId>chill_${scala.binary.version}</artifactId>
         <version>${chill.version}</version>
-        <exclusions>
-          <exclusion>
-            <groupId>org.ow2.asm</groupId>
-            <artifactId>asm</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.ow2.asm</groupId>
-            <artifactId>asm-commons</artifactId>
-          </exclusion>
-        </exclusions>
       </dependency>
       <dependency>
         <groupId>com.twitter</groupId>
         <artifactId>chill-java</artifactId>
         <version>${chill.version}</version>
-        <exclusions>
-          <exclusion>
-            <groupId>org.ow2.asm</groupId>
-            <artifactId>asm</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.ow2.asm</groupId>
-            <artifactId>asm-commons</artifactId>
-          </exclusion>
-        </exclusions>
       </dependency>
       <!-- This artifact is a shaded version of ASM 5.0.4. The POM that was used to produce this
            is at https://github.com/apache/geronimo-xbean/tree/xbean-4.4/xbean-asm5-shaded
@@ -412,7 +394,7 @@
       <dependency>
         <groupId>org.apache.httpcomponents</groupId>
         <artifactId>httpcore</artifactId>
-        <version>${commons.httpclient.version}</version>
+        <version>${commons.httpcore.version}</version>
       </dependency>
       <dependency>
         <groupId>org.seleniumhq.selenium</groupId>
@@ -603,6 +585,28 @@
         <scope>${hadoop.deps.scope}</scope>
       </dependency>
       <dependency>
+        <groupId>org.scalanlp</groupId>
+        <artifactId>breeze_${scala.binary.version}</artifactId>
+        <version>0.11.2</version>
+        <exclusions>
+          <!-- This is included as a compile-scoped dependency by jtransforms, which is
+               a dependency of breeze. -->
+          <exclusion>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-math3</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.json4s</groupId>
+        <artifactId>json4s-jackson_${scala.binary.version}</artifactId>
+        <version>3.2.10</version>
+      </dependency>
+      <dependency>
         <groupId>com.sun.jersey</groupId>
         <artifactId>jersey-json</artifactId>
         <version>${jersey.version}</version>
@@ -684,7 +688,7 @@
         <groupId>com.spotify</groupId>
         <artifactId>docker-client</artifactId>
         <classifier>shaded</classifier>
-        <version>3.4.0</version>
+        <version>3.6.6</version>
         <scope>test</scope>
         <exclusions>
           <exclusion>
@@ -2272,7 +2276,7 @@
           <failOnViolation>false</failOnViolation>
           <includeTestSourceDirectory>true</includeTestSourceDirectory>
           <failOnWarning>false</failOnWarning>
-          <sourceDirectory>${basedir}/src/main/java</sourceDirectory>
+          <sourceDirectories>${basedir}/src/main/java,${basedir}/src/main/scala</sourceDirectories>
           <testSourceDirectory>${basedir}/src/test/java</testSourceDirectory>
           <configLocation>dev/checkstyle.xml</configLocation>
           <outputFile>${basedir}/target/checkstyle-output.xml</outputFile>

@@ -148,11 +148,10 @@ private[yarn] class YarnAllocator(
         classOf[Array[String]], classOf[Array[String]], classOf[Priority], classOf[Boolean],
         classOf[String]))
     } catch {
-      case e: NoSuchMethodException => {
+      case e: NoSuchMethodException =>
         logWarning(s"Node label expression $expr will be ignored because YARN version on" +
           " classpath does not support it.")
         None
-      }
     }
   }
 
