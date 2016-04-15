@@ -240,7 +240,7 @@ class TestHiveContext private[hive](
       logical match {
         case _: HiveNativeCommand => "<Native command: executed by Hive>"
         case _: SetCommand => "<SET command: executed by Hive, and noted by SQLContext>"
-        case _ => this.simpleString
+        case _ => super.simpleString
       }
 
 

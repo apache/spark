@@ -29,6 +29,8 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.ui.SparkUICssErrorHandler
 
+// TODO: Re-enable it
+@org.scalatest.Ignore
 class UISeleniumSuite
   extends HiveThriftJdbcTest
   with WebBrowser with Matchers with BeforeAndAfterAll {

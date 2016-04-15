@@ -36,17 +36,19 @@ import org.apache.spark.sql.types.DataType
 /**
  * A class that holds all session-specific state in a given [[HiveContext]].
  */
-private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx) {
+private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) {
+
+  val hivePersistentState = ctx.persistentState.asInstanceOf[HivePersistentState]
 
   /**
    * A Hive client used for execution.
    */
-  val executionHive: HiveClientImpl = ctx.hivePersistentState.executionHive.newSession()
+  val executionHive: HiveClientImpl = hivePersistentState.executionHive.newSession()
 
   /**
    * A Hive client used for interacting with the metastore.
    */
-  val metadataHive: HiveClient = ctx.hivePersistentState.metadataHive.newSession()
+  val metadataHive: HiveClient = hivePersistentState.metadataHive.newSession()
 
   override lazy val conf: SQLConf = new SQLConf {
     override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
@@ -94,7 +96,7 @@ private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx)
   override def planner: SparkPlanner = {
     new SparkPlanner(ctx.sparkContext, conf, experimentalMethods.extraStrategies)
       with HiveStrategies {
-      override val hiveContext = ctx
+      override val hiveContext = ctx.asInstanceOf[HiveContext]
 
       override def strategies: Seq[Strategy] = {
         experimentalMethods.extraStrategies ++ Seq(

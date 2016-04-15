@@ -65,29 +65,19 @@ import org.apache.spark.util.Utils
  * @since 1.0.0
  */
 class HiveContext private[hive](
-    @transient protected[hive] val hivePersistentState: HivePersistentState,
-    override val isRootContext: Boolean)
-  extends SQLContext(hivePersistentState, isRootContext) with Logging {
+    persistentState: PersistentState,
+    isRootContext: Boolean)
+  extends SQLContext(persistentState, isRootContext, true) with Logging {
 
   self =>
 
-  def this(sc: SparkContext) = {
-    this(new HivePersistentState(sc), true)
-  }
+  def this(sc: SparkContext) = this(SQLContext.createSharedState(sc, true), true)
 
   def this(sc: JavaSparkContext) = this(sc.sc)
 
   logDebug("create HiveContext")
 
-  /**
-   * Returns a new HiveContext as new session, which will have separated SQLConf, UDF/UDAF,
-   * temporary tables and SessionState, but sharing the same CacheManager, IsolatedClientLoader
-   * and Hive client (both of execution and metadata) with existing HiveContext.
-   */
-  override def newSession(): HiveContext = {
-    new HiveContext(hivePersistentState, isRootContext = false)
-  }
-
+  // TODO: Move the implementation of analyze to its command.
   /*
   /**
    * Analyzes the given table in the current database to generate statistics, which will be

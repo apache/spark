@@ -64,13 +64,18 @@ import org.apache.spark.util.Utils
  */
 class SQLContext private[sql](
     @transient protected[sql] val persistentState: PersistentState,
-    val isRootContext: Boolean)
+    val isRootContext: Boolean,
+    useHiveMetastore: Boolean)
   extends Logging with Serializable {
 
   self =>
 
+  def this(sc: SparkContext, useHiveMetastore: Boolean) = {
+    this(SQLContext.createSharedState(sc, useHiveMetastore), true, useHiveMetastore)
+  }
+
   def this(sc: SparkContext) = {
-    this(new PersistentState(sc), true)
+    this(sc, false)
   }
 
   def this(sparkContext: JavaSparkContext) = this(sparkContext.sc)
@@ -110,13 +115,22 @@ class SQLContext private[sql](
    *
    * @since 1.6.0
    */
-  def newSession(): SQLContext = new SQLContext(persistentState, isRootContext = false)
+  def newSession(): SQLContext =
+    new SQLContext(persistentState, isRootContext = false, useHiveMetastore = useHiveMetastore)
 
   /**
    * Per-session state, e.g. configuration, functions, temporary tables etc.
    */
   @transient
-  protected[sql] lazy val sessionState: SessionState = new SessionState(self)
+  protected[sql] lazy val sessionState: SessionState = {
+    if (useHiveMetastore) {
+      val clazz = Utils.classForName("org.apache.spark.sql.hive.HiveSessionState")
+      val ctor = clazz.getConstructor(classOf[SQLContext])
+      ctor.newInstance(self).asInstanceOf[SessionState]
+    } else {
+      new SessionState(self)
+    }
+  }
   protected[spark] def conf: SQLConf = sessionState.conf
 
   /**
@@ -1120,4 +1134,17 @@ object SQLContext {
     properties
   }
 
+  ////////////////////////////////////////////////////////////////////////////
+  // Added for HiveContext
+  ////////////////////////////////////////////////////////////////////////////
+
+  def createSharedState(sc: SparkContext, useHiveMetastore: Boolean): PersistentState = {
+    if (useHiveMetastore) {
+      val clazz = Utils.classForName("org.apache.spark.sql.hive.HivePersistentState")
+      val ctor = clazz.getConstructor(classOf[SparkContext])
+      ctor.newInstance(sc).asInstanceOf[PersistentState]
+    } else {
+      new PersistentState(sc)
+    }
+  }
 }

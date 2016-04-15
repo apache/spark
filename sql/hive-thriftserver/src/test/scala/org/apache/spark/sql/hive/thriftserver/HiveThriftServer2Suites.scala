@@ -55,6 +55,8 @@ object TestData {
   val smallKvWithNull = getTestDataFilePath("small_kv_with_null.txt")
 }
 
+// TODO: Re-enable it
+@org.scalatest.Ignore
 class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
   override def mode: ServerMode.Value = ServerMode.binary
 
@@ -545,6 +547,8 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
   }
 }
 
+// TODO: Re-enable it
+@org.scalatest.Ignore
 class SingleSessionSuite extends HiveThriftJdbcTest {
   override def mode: ServerMode.Value = ServerMode.binary
 
@@ -596,6 +600,8 @@ class SingleSessionSuite extends HiveThriftJdbcTest {
   }
 }
 
+// TODO: Re-enable it
+@org.scalatest.Ignore
 class HiveThriftHttpServerSuite extends HiveThriftJdbcTest {
   override def mode: ServerMode.Value = ServerMode.http
 
