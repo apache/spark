@@ -20,12 +20,12 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
-import org.apache.spark.sql.types.{ArrayType, BooleanType, DataType, NullType}
+import org.apache.spark.sql.types._
 
 /**
  * An interface for subquery that is used in expressions.
  */
-abstract class SubqueryExpression extends LeafExpression {
+abstract class SubqueryExpression extends Expression {
 
   /**
    * The logical plan of the query.
@@ -61,6 +61,8 @@ case class ScalarSubquery(
 
   override def dataType: DataType = query.schema.fields.head.dataType
 
+  override def children: Seq[Expression] = Nil
+
   override def checkInputDataTypes(): TypeCheckResult = {
     if (query.schema.length != 1) {
       TypeCheckResult.TypeCheckFailure("Scalar subquery must return only one column, but got " +
@@ -82,7 +84,6 @@ case class ScalarSubquery(
  * Base interface for (potentially) correlated subquery expressions.
  */
 abstract class CorrelatedSubqueryExpression extends SubqueryExpression {
-  override lazy val resolved: Boolean = false  // can't be resolved
   override def plan: LogicalPlan = SubqueryAlias(toString, query)
 }
 
@@ -99,10 +100,12 @@ abstract class CorrelatedSubqueryExpression extends SubqueryExpression {
  * Currently we only allow [[InSubQuery]] expressions within a Filter plan (i.e. WHERE or a HAVING
  * clause). This will be rewritten into a left semi/anti join during analysis.
  */
-case class InSubQuery(query: LogicalPlan) extends CorrelatedSubqueryExpression with Unevaluable  {
-  override def dataType: DataType = ArrayType(NullType)
+case class InSubQuery(value: Expression, query: LogicalPlan)
+  extends CorrelatedSubqueryExpression with Unevaluable  {
+  override def dataType: DataType = BooleanType
+  override def children: Seq[Expression] = value :: Nil
   override def nullable: Boolean = true
-  override def withNewPlan(plan: LogicalPlan): InSubQuery = InSubQuery(plan)
+  override def withNewPlan(plan: LogicalPlan): InSubQuery = InSubQuery(value, plan)
 }
 
 /**
@@ -122,6 +125,7 @@ case class InSubQuery(query: LogicalPlan) extends CorrelatedSubqueryExpression w
 case class Exists(query: LogicalPlan)
   extends CorrelatedSubqueryExpression with Unevaluable with Predicate {
   override def dataType: DataType = BooleanType
+  override def children: Seq[Expression] = Nil
   override def nullable: Boolean = false
   override def withNewPlan(plan: LogicalPlan): Exists = Exists(plan)
 }
