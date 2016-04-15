@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.encoders.OuterScopes
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
-import org.apache.spark.sql.catalyst.planning.IntegerIndex
+import org.apache.spark.sql.catalyst.planning.{ExtractJoinOutputAttributes, IntegerIndex}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, _}
 import org.apache.spark.sql.catalyst.rules._
@@ -1462,25 +1462,27 @@ class Analyzer(
   }
 
   /**
-   * Replaces attribute references in a filter if it has a join as a child and it references some
-   * columns on the base relations of the join. This is because outer joins change nullability on
-   * columns and this could cause wrong NULL propagation in Optimizer.
-   * See SPARK-13484 for the concrete query of this case.
+   * Corrects attribute references in an expression tree of some operators (e.g., filters and
+   * projects) if these operators have a join as a child and the references point to columns on the
+   * input relation of the join. This is because some joins change the nullability of input columns
+   * and this could cause illegal optimization (e.g., NULL propagation) and wrong answers.
+   * See SPARK-13484 and SPARK-13801 for the concrete queries of this case.
    */
   object SolveIllegalReferences extends Rule[LogicalPlan] {
+
+    private def replaceReferences(e: Expression, attrMap: AttributeMap[Attribute]) = e.transform {
+      case a: AttributeReference => attrMap.get(a).getOrElse(a)
+    }
+
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-       case q: LogicalPlan =>
+      case q: LogicalPlan =>
         q.transform {
-          case f @ Filter(filterCondition, j @ Join(_, _, _, _)) =>
-            val joinOutput = new ArrayBuffer[(Attribute, Attribute)]
-            j.output.foreach {
-              case a: AttributeReference => joinOutput += ((a, a))
-            }
-            val joinOutputMap = AttributeMap(joinOutput)
-            val newFilterCond = filterCondition.transform {
-              case a: AttributeReference => joinOutputMap.get(a).getOrElse(a)
-            }
-            Filter(newFilterCond, j)
+          case f @ Filter(filterCondition, ExtractJoinOutputAttributes(join, joinOutputMap)) =>
+            f.copy(condition = replaceReferences(filterCondition, joinOutputMap))
+          case p @ Project(projectList, ExtractJoinOutputAttributes(join, joinOutputMap)) =>
+            p.copy(projectList = projectList.map { e =>
+              replaceReferences(e, joinOutputMap).asInstanceOf[NamedExpression]
+            })
         }
     }
   }
@@ -2165,4 +2167,3 @@ object TimeWindowing extends Rule[LogicalPlan] {
       }
   }
 }
-

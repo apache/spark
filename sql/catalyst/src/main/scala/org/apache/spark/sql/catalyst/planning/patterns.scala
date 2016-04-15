@@ -181,6 +181,23 @@ object ExtractFiltersAndInnerJoins extends PredicateHelper {
   }
 }
 
+/**
+ * An extractor for join output attributes directly under a given operator.
+ */
+object ExtractJoinOutputAttributes {
+
+  def unapply(plan: LogicalPlan): Option[(Join, AttributeMap[Attribute])] = {
+    plan.collectFirst {
+      case j: Join => j
+    }.map { join =>
+      val joinOutput = new mutable.ArrayBuffer[(Attribute, Attribute)]
+      join.output.foreach {
+        case a: AttributeReference => joinOutput += ((a, a))
+      }
+      (join, AttributeMap(joinOutput))
+    }
+  }
+}
 
 /**
  * A pattern that collects all adjacent unions and returns their children as a Seq.
