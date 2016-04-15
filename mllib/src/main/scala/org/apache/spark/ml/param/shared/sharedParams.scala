@@ -389,4 +389,21 @@ private[ml] trait HasSolver extends Params {
   /** @group getParam */
   final def getSolver: String = $(solver)
 }
+
+/**
+ * Trait for shared param binary (default: false).
+ */
+private[ml] trait HasBinary extends Params {
+
+  /**
+   * Param for If true, all non-zero counts (after any filters are applied) are set to 1. This is useful for discrete probabilistic models that model binary events rather than integer counts. Default False..
+   * @group param
+   */
+  final val binary: BooleanParam = new BooleanParam(this, "binary", "If true, all non-zero counts (after any filters are applied) are set to 1. This is useful for discrete probabilistic models that model binary events rather than integer counts. Default False.")
+
+  setDefault(binary, false)
+
+  /** @group getParam */
+  final def getBinary: Boolean = $(binary)
+}
 // scalastyle:on

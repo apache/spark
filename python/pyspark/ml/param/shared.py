@@ -583,6 +583,31 @@ class HasVarianceCol(Params):
         return self.getOrDefault(self.varianceCol)
 
 
+class HasBinary(Params):
+    """
+    Mixin for param binary: If True, all non-zero counts (after any filters are applied) are set to 1. This is useful for discrete probabilistic models that model binary events rather than integer counts. Default False.
+    """
+
+    binary = Param(Params._dummy(), "binary", "If True, all non-zero counts (after any filters are applied) are set to 1. This is useful for discrete probabilistic models that model binary events rather than integer counts. Default False.", typeConverter=TypeConverters.toBoolean)
+
+    def __init__(self):
+        super(HasBinary, self).__init__()
+        self._setDefault(binary=False)
+
+    def setBinary(self, value):
+        """
+        Sets the value of :py:attr:`binary`.
+        """
+        self._set(binary=value)
+        return self
+
+    def getBinary(self):
+        """
+        Gets the value of binary or its default value.
+        """
+        return self.getOrDefault(self.binary)
+
+
 class DecisionTreeParams(Params):
     """
     Mixin for Decision Tree parameters.

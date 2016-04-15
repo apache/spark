@@ -76,7 +76,10 @@ private[shared] object SharedParamsCodeGen {
       ParamDesc[String]("weightCol", "weight column name. If this is not set or empty, we treat " +
         "all instance weights as 1.0"),
       ParamDesc[String]("solver", "the solver algorithm for optimization. If this is not set or " +
-        "empty, default value is 'auto'", Some("\"auto\"")))
+        "empty, default value is 'auto'", Some("\"auto\"")),
+      ParamDesc[Boolean]("binary", "If true, all non-zero counts (after any filters are applied) " +
+        "are set to 1. This is useful for discrete probabilistic models that model binary events " +
+        "rather than integer counts. Default False.", Some("false")))
 
     val code = genSharedParams(params)
     val file = "src/main/scala/org/apache/spark/ml/param/shared/sharedParams.scala"

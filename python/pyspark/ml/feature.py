@@ -202,7 +202,8 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Jav
 
 
 @inherit_doc
-class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
+class CountVectorizer(JavaEstimator, HasBinary, HasInputCol, HasOutputCol, JavaMLReadable,
+                      JavaMLWritable):
     """
     .. note:: Experimental
 
@@ -258,11 +259,6 @@ class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, 
     vocabSize = Param(
         Params._dummy(), "vocabSize", "max size of the vocabulary. Default 1 << 18.",
         typeConverter=TypeConverters.toInt)
-    binary = Param(
-        Params._dummy(), "binary", "Binary toggle to control the output vector values." +
-        " If True, all nonzero counts (after minTF filter applied) are set to 1. This is useful" +
-        " for discrete probabilistic models that model binary events rather than integer counts." +
-        " Default False", typeConverter=TypeConverters.toBoolean)
 
     @keyword_only
     def __init__(self, minTF=1.0, minDF=1.0, vocabSize=1 << 18, binary=False, inputCol=None,
@@ -512,8 +508,8 @@ class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReada
 
 
 @inherit_doc
-class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures, JavaMLReadable,
-                JavaMLWritable):
+class HashingTF(JavaTransformer, HasBinary, HasInputCol, HasOutputCol, HasNumFeatures,
+                JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
@@ -537,11 +533,6 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures, Java
 
     .. versionadded:: 1.3.0
     """
-
-    binary = Param(Params._dummy(), "binary", "If True, all non zero counts are set to 1. " +
-                   "This is useful for discrete probabilistic models that model binary events " +
-                   "rather than integer counts. Default False.",
-                   typeConverter=TypeConverters.toBoolean)
 
     @keyword_only
     def __init__(self, numFeatures=1 << 18, binary=False, inputCol=None, outputCol=None):
