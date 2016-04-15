@@ -100,7 +100,7 @@ class ResolveNaturalJoinSuite extends AnalysisTest {
     val naturalPlan = r3.join(r4, NaturalJoin(FullOuter), None)
     val usingPlan = r3.join(r4, UsingJoin(FullOuter, Seq(UnresolvedAttribute("b"))), None)
     val expected = r3.join(r4, FullOuter, Some(EqualTo(bNotNull, bNotNull))).select(
-      Alias(Coalesce(Seq(bNotNull, bNotNull)), "b")(), a, c)
+      Alias(Coalesce(Seq(b, b)), "b")(), a, c)
     checkAnalysis(naturalPlan, expected)
     checkAnalysis(usingPlan, expected)
   }
