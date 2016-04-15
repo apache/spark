@@ -175,7 +175,7 @@ private class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanceSlack:
 
   // gets the *current* preferred locations from the DAGScheduler (as opposed to the static ones)
   def currPrefLocs(part: Partition): Seq[String] = {
-    prev.context.getPreferredLocs(prev, part.index).map(_.host)
+    prev.context.getPreferredLocs(prev, part.index).map(tl => tl.host)
   }
 
   // this class just keeps iterating and rotating infinitely over the partitions of the RDD
@@ -195,7 +195,7 @@ private class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanceSlack:
           if (currPrefLocs(p).size > x) Some((currPrefLocs(p)(x), p)) else None
         }
       }
-      iterators.reduceLeft(_ ++ _)
+      iterators.reduceLeft((x, y) => x ++ y)
     }
 
     // hasNext() is false iff there are no preferredLocations for any of the partitions of the RDD
@@ -241,7 +241,7 @@ private class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanceSlack:
 
     // deal with empty case, just create targetLen partition groups with no preferred location
     if (!rotIt.hasNext) {
-      (1 to targetLen).foreach(groupArr += PartitionGroup())
+      (1 to targetLen).foreach(x => groupArr += PartitionGroup())
       return
     }
 
@@ -330,7 +330,7 @@ private class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanceSlack:
     }
   }
 
-  def getPartitions: Array[PartitionGroup] = groupArr.filter(_.size > 0).toArray
+  def getPartitions: Array[PartitionGroup] = groupArr.filter( pg => pg.size > 0).toArray
 
   /**
    * Runs the packing algorithm and returns an array of PartitionGroups that if possible are
