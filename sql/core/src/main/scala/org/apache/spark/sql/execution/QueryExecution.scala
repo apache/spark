@@ -18,12 +18,13 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.execution.command.ExecutedCommand
 import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.execution.command.ExecutedCommand
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReuseExchange}
+
 
 /**
  * The primary workflow for executing relational queries using Spark.  Designed to allow easy

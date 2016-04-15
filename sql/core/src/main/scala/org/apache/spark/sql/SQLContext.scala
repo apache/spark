@@ -41,7 +41,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.{CurrentDatabase, ShowTablesCommand}
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.ui.{SQLListener, SQLTab}
-import org.apache.spark.sql.internal.{SharedState, SessionState, SQLConf}
+import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ExecutionListenerManager

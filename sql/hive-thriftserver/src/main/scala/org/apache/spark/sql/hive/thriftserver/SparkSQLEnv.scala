@@ -24,7 +24,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.StatsReportListener
-import org.apache.spark.sql.hive.{HiveSessionState, HiveContext}
+import org.apache.spark.sql.hive.{HiveContext, HiveSessionState}
 import org.apache.spark.util.Utils
 
 /** A singleton object for the master program. The slaves should not access this. */

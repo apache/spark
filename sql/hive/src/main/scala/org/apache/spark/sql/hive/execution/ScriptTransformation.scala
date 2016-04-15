@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.ScriptInputOutputSchema
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.hive.{HiveSessionState, HiveContext, HiveInspectors}
+import org.apache.spark.sql.hive.{HiveContext, HiveInspectors, HiveSessionState}
 import org.apache.spark.sql.hive.HiveShim._
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.{CircularBuffer, RedirectThread, SerializableConfiguration, Utils}

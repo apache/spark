@@ -19,8 +19,6 @@ package org.apache.spark.sql.hive.thriftserver
 
 import java.util.{ArrayList => JArrayList, Arrays, List => JList}
 
-import org.apache.spark.sql.execution.QueryExecution
-
 import scala.collection.JavaConverters._
 
 import org.apache.commons.lang3.exception.ExceptionUtils
@@ -30,6 +28,7 @@ import org.apache.hadoop.hive.ql.processors.CommandProcessorResponse
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.hive.{HiveContext, HiveMetastoreTypes}
 
 private[hive] class SparkSQLDriver(
