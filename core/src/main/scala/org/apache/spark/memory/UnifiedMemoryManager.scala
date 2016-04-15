@@ -206,7 +206,7 @@ object UnifiedMemoryManager {
     val systemMemory = conf.getLong("spark.testing.memory", Runtime.getRuntime.maxMemory)
     val reservedMemory = conf.getLong("spark.testing.reservedMemory",
       if (conf.contains("spark.testing")) 0 else RESERVED_SYSTEM_MEMORY_BYTES)
-    val minSystemMemory = reservedMemory * 1.5
+    val minSystemMemory = (reservedMemory * 1.5).ceil.toLong
     if (systemMemory < minSystemMemory) {
       throw new IllegalArgumentException(s"System memory $systemMemory must " +
         s"be at least $minSystemMemory. Please increase heap size using the --driver-memory " +
