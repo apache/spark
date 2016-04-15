@@ -17,14 +17,17 @@
 
 package org.apache.spark.sql.hive.execution
 
+import java.util
+
 import org.apache.hadoop.hive.metastore.MetaStoreUtils
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
+import org.apache.spark.sql.catalyst.catalog.ExternalCatalog
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.command.RunnableCommand
+import org.apache.spark.sql.execution.command.{DDLUtils, RunnableCommand}
 import org.apache.spark.sql.execution.datasources.{BucketSpec, DataSource, LogicalRelation}
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.sources._
@@ -252,6 +255,91 @@ case class CreateMetastoreDataSourceAsSelect(
 
     // Refresh the cache of the table in the catalog.
     hiveContext.sessionState.catalog.refreshTable(tableIdent)
+    Seq.empty[Row]
+  }
+}
+
+/**
+ * A command that loads data into a Hive table.
+ *
+ * The syntax of this command is:
+ * {{{
+ *  LOAD DATA [LOCAL] INPATH 'filepath' [OVERWRITE] INTO TABLE tablename
+ *  [PARTITION (partcol1=val1, partcol2=val2 ...)]
+ * }}}
+ */
+case class LoadData(
+    table: TableIdentifier,
+    path: String,
+    isLocal: Boolean,
+    isOverwrite: Boolean,
+    partition: Option[ExternalCatalog.TablePartitionSpec]) extends RunnableCommand {
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    val catalog = sqlContext.sessionState.catalog
+    if (!catalog.tableExists(table)) {
+      throw new AnalysisException(
+        s"Table in LOAD DATA does not exist: '$table'")
+    }
+    if (catalog.isTemporaryTable(table)) {
+      throw new AnalysisException(
+        s"Table in LOAD DATA cannot be temporary: '$table'")
+    }
+
+    val targetTable = catalog.getTableMetadata(table)
+    if (DDLUtils.isDatasourceTable(targetTable)) {
+      throw new AnalysisException(
+        "LOAD DATA is not supported for datasource tables")
+    }
+
+    if (targetTable.partitionColumnNames.nonEmpty) {
+      if (partition.isEmpty || targetTable.partitionColumnNames.size != partition.get.size) {
+        throw new AnalysisException(
+          "LOAD DATA to partitioned table must specify a specific partition of " +
+          "the table by specifying values for all of the partitioning columns.")
+      }
+
+      partition.get.keys.foreach { colName =>
+        if (!targetTable.partitionColumnNames.contains(colName)) {
+          throw new AnalysisException(
+            s"LOAD DATA to partitioned table specifies a non-existing partition column: '$colName'")
+        }
+      }
+    } else {
+      if (partition.nonEmpty) {
+        throw new AnalysisException(
+          "LOAD DATA to non-partitioned table cannot specify partition.")
+      }
+    }
+
+    val hiveClient = sqlContext.asInstanceOf[HiveContext].metadataHive
+
+    val holdDDLTime = false
+
+    if (partition.nonEmpty) {
+      val orderedPartitionSpec = new util.LinkedHashMap[String, String]()
+      targetTable.partitionColumnNames.foreach { colName =>
+        orderedPartitionSpec.put(colName, partition.get(colName))
+      }
+
+      val inheritTableSpecs = true
+      val isSkewedStoreAsSubdir = false
+
+      hiveClient.loadPartition(
+        path,
+        table.unquotedString,
+        orderedPartitionSpec,
+        isOverwrite,
+        holdDDLTime,
+        inheritTableSpecs,
+        isSkewedStoreAsSubdir)
+    } else {
+      hiveClient.loadTable(
+        path,
+        table.unquotedString,
+        isOverwrite,
+        holdDDLTime)
+    }
     Seq.empty[Row]
   }
 }

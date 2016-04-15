@@ -130,6 +130,8 @@ statement
     | CACHE LAZY? TABLE identifier (AS? query)?                        #cacheTable
     | UNCACHE TABLE identifier                                         #uncacheTable
     | CLEAR CACHE                                                      #clearCache
+    | LOAD DATA LOCAL? INPATH path=STRING OVERWRITE? INTO TABLE
+      tableIdentifier partitionSpec?                                   #loadData
     | ADD identifier .*?                                               #addResource
     | SET ROLE .*?                                                     #failNativeCommand
     | SET .*?                                                          #setConfiguration
@@ -880,6 +882,8 @@ INDEXES: 'INDEXES';
 LOCKS: 'LOCKS';
 OPTION: 'OPTION';
 ANTI: 'ANTI';
+LOCAL: 'LOCAL';
+INPATH: 'INPATH';
 
 STRING
     : '\'' ( ~('\''|'\\') | ('\\' .) )* '\''
