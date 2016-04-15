@@ -22,19 +22,16 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types.IntegerType
 
 class UnsupportedOperationsSuite extends SparkFunSuite {
 
-  val batchRelation = LocalRelation(AttributeReference("a", IntegerType, nullable = true)())
-
-  val streamRelation = new LocalRelation(
-    Seq(AttributeReference("a", IntegerType, nullable = true)())) {
-    override def isStreaming: Boolean = true
-  }
+  val attribute = AttributeReference("a", IntegerType, nullable = true)()
+  val batchRelation = LocalRelation(attribute)
+  val streamRelation = new TestStreamingRelation(attribute)
 
   /*
     =======================================================================================
@@ -153,15 +150,14 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
       Iterator.empty
     }
     implicit val intEncoder = ExpressionEncoder[Int]
-    CoGroup[Int, Int, Int, Int](
+
+    left.cogroup[Int, Int, Int, Int](
+      right,
       func,
       AppendColumns[Int, Int]((x: Int) => x, left).newColumns,
       AppendColumns[Int, Int]((x: Int) => x, right).newColumns,
       left.output,
-      right.output,
-      left,
-      right
-    )
+      right.output)
   }
 
   // Union: Mixing between stream and batch not supported
@@ -347,20 +343,22 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
    */
   def testError(testName: String, expectedMsgs: Seq[String])(testBody: => Unit): Unit = {
 
-    val e = intercept[AnalysisException] {
-      testBody
-    }
+    test(testName) {
+      val e = intercept[AnalysisException] {
+        testBody
+      }
 
-    if (!expectedMsgs.map(_.toLowerCase).forall(e.getMessage.toLowerCase.contains)) {
-      fail(
-        s"""Exception message should contain the following substrings:
-          |
+      if (!expectedMsgs.map(_.toLowerCase).forall(e.getMessage.toLowerCase.contains)) {
+        fail(
+          s"""Exception message should contain the following substrings:
+              |
           |  ${expectedMsgs.mkString("\n  ")}
-          |
+              |
           |Actual exception message:
-          |
+              |
           |  ${e.getMessage}
           """.stripMargin)
+      }
     }
   }
 
@@ -368,12 +366,13 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     new StreamingPlanWrapper(plan)
   }
 
-  class StreamingPlanWrapper(plan: LogicalPlan) extends MapPartitions(
-    x => x,
-    UnresolvedDeserializer(ExpressionEncoder[Int].deserializer),
-    ExpressionEncoder[Int].namedExpressions,
-    plan) {
+  case class StreamingPlanWrapper(child: LogicalPlan) extends UnaryNode {
+    override def output: Seq[Attribute] = child.output
+    override def isStreaming: Boolean = true
+  }
 
+  case class TestStreamingRelation(output: Seq[Attribute]) extends LeafNode {
+    def this(attribute: Attribute) = this(Seq(attribute))
     override def isStreaming: Boolean = true
   }
 }

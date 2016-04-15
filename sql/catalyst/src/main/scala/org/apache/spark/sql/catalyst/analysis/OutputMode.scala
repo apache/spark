@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-trait OutputMode
+sealed trait OutputMode
 
 case object Append extends OutputMode
 case object Update extends OutputMode

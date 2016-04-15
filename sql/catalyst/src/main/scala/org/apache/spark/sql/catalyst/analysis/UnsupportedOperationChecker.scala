@@ -65,25 +65,27 @@ object UnsupportedOperationChecker {
           joinType match {
 
             case Inner =>
-              throwErrorIf(
-                left.isStreaming && right.isStreaming,
-                "Inner join between two streaming DataFrames/Datasets is not supported")
+              if (left.isStreaming && right.isStreaming) {
+                throwError("Inner join between two streaming DataFrames/Datasets is not supported")
+              }
 
             case FullOuter =>
-              throwErrorIf(
-                left.isStreaming || right.isStreaming,
-                "Full outer joins with streaming DataFrames/Datasets are not supported")
+              if (left.isStreaming || right.isStreaming) {
+                throwError("Full outer joins with streaming DataFrames/Datasets are not supported")
+              }
+
 
             case LeftOuter | LeftSemi | LeftAnti =>
-              throwErrorIf(
-                right.isStreaming,
-                "Left outer/semi/anti joins with a streaming DataFrame/Dataset " +
-                "on the right is not supported")
+              if (right.isStreaming) {
+                throwError("Left outer/semi/anti joins with a streaming DataFrame/Dataset " +
+                    "on the right is not supported")
+              }
 
             case RightOuter =>
-              throwErrorIf(
-                left.isStreaming,
-                "Right outer join with a streaming DataFrame/Dataset on the left is not supported")
+              if (left.isStreaming) {
+                throwError("Right outer join with a streaming DataFrame/Dataset on the left is " +
+                    "not supported")
+              }
 
             case NaturalJoin(_) | UsingJoin(_, _) =>
               // They should not appear in an analyzed plan.
