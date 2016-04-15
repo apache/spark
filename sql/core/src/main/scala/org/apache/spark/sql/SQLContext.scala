@@ -38,10 +38,10 @@ import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Range}
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.command.ShowTablesCommand
+import org.apache.spark.sql.execution.command.{CurrentDatabase, ShowTablesCommand}
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.ui.{SQLListener, SQLTab}
-import org.apache.spark.sql.internal.{SessionState, SQLConf}
+import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ExecutionListenerManager
@@ -63,17 +63,19 @@ import org.apache.spark.util.Utils
  * @since 1.0.0
  */
 class SQLContext private[sql](
-    @transient val sparkContext: SparkContext,
-    @transient protected[sql] val cacheManager: CacheManager,
-    @transient private[sql] val listener: SQLListener,
+    @transient protected[sql] val sharedState: SharedState,
     val isRootContext: Boolean,
-    @transient private[sql] val externalCatalog: ExternalCatalog)
+    useHiveMetastore: Boolean)
   extends Logging with Serializable {
 
   self =>
 
+  def this(sc: SparkContext, useHiveMetastore: Boolean) = {
+    this(SQLContext.createSharedState(sc, useHiveMetastore), true, useHiveMetastore)
+  }
+
   def this(sc: SparkContext) = {
-    this(sc, new CacheManager, SQLContext.createListenerAndUI(sc), true, new InMemoryCatalog)
+    this(sc, false)
   }
 
   def this(sparkContext: JavaSparkContext) = this(sparkContext.sc)
@@ -100,26 +102,35 @@ class SQLContext private[sql](
     }
   }
 
+  def sparkContext: SparkContext = sharedState.sparkContext
+
+  protected[sql] def cacheManager: CacheManager = sharedState.cacheManager
+  protected[sql] def listener: SQLListener = sharedState.listener
+  protected[sql] def externalCatalog: ExternalCatalog = sharedState.externalCatalog
+
   /**
-   * Returns a SQLContext as new session, with separated SQL configurations, temporary tables,
-   * registered functions, but sharing the same SparkContext, CacheManager, SQLListener and SQLTab.
+   * Returns a [[SQLContext]] as new session, with separated SQL configurations, temporary
+   * tables, registered functions, but sharing the same [[SparkContext]], cached data and
+   * other things.
    *
    * @since 1.6.0
    */
-  def newSession(): SQLContext = {
-    new SQLContext(
-      sparkContext = sparkContext,
-      cacheManager = cacheManager,
-      listener = listener,
-      isRootContext = false,
-      externalCatalog = externalCatalog)
-  }
+  def newSession(): SQLContext =
+    new SQLContext(sharedState, isRootContext = false, useHiveMetastore = useHiveMetastore)
 
   /**
    * Per-session state, e.g. configuration, functions, temporary tables etc.
    */
   @transient
-  protected[sql] lazy val sessionState: SessionState = new SessionState(self)
+  protected[sql] lazy val sessionState: SessionState = {
+    if (useHiveMetastore) {
+      val clazz = Utils.classForName("org.apache.spark.sql.hive.HiveSessionState")
+      val ctor = clazz.getConstructor(classOf[SQLContext])
+      ctor.newInstance(self).asInstanceOf[SessionState]
+    } else {
+      new SessionState(self)
+    }
+  }
   protected[spark] def conf: SQLConf = sessionState.conf
 
   /**
@@ -138,7 +149,9 @@ class SQLContext private[sql](
   def setConf(props: Properties): Unit = conf.setConf(props)
 
   /** Set the given Spark SQL configuration property. */
-  private[sql] def setConf[T](entry: ConfigEntry[T], value: T): Unit = conf.setConf(entry, value)
+  private[sql] def setConf[T](entry: ConfigEntry[T], value: T): Unit = {
+    setConf(entry.key, entry.stringConverter(value))
+  }
 
   /**
    * Set the given Spark SQL configuration property.
@@ -146,7 +159,10 @@ class SQLContext private[sql](
    * @group config
    * @since 1.0.0
    */
-  def setConf(key: String, value: String): Unit = conf.setConfString(key, value)
+  def setConf(key: String, value: String): Unit = {
+    conf.setConfString(key, value)
+    sessionState.setConfHook(key, value)
+  }
 
   /**
    * Return the value of Spark SQL configuration property for the given key.
@@ -195,7 +211,9 @@ class SQLContext private[sql](
     setConf(k, v)
   }
 
-  protected[sql] def parseSql(sql: String): LogicalPlan = sessionState.sqlParser.parsePlan(sql)
+  protected[sql] def parseSql(sql: String): LogicalPlan = {
+    sessionState.sqlParser.parsePlan(sessionState.withSubstitution(sql))
+  }
 
   protected[sql] def executeSql(sql: String): QueryExecution = executePlan(parseSql(sql))
 
@@ -205,6 +223,7 @@ class SQLContext private[sql](
    * Add a jar to SQLContext
    */
   protected[sql] def addJar(path: String): Unit = {
+    sessionState.addJarHook(path)
     sparkContext.addJar(path)
   }
 
@@ -766,15 +785,6 @@ class SQLContext private[sql](
   }
 
   /**
-   * Executes a SQL query without parsing it, but instead passing it directly to an underlying
-   * system to process. This is currently only used for Hive DDLs and will be removed as soon
-   * as Spark can parse all supported Hive DDLs itself.
-   */
-  private[sql] def runNativeSql(sqlText: String): Seq[Row] = {
-    throw new UnsupportedOperationException
-  }
-
-  /**
    * Returns the specified table as a [[DataFrame]].
    *
    * @group ddl_ops
@@ -894,6 +904,92 @@ class SQLContext private[sql](
   })
 
   SQLContext.setInstantiatedContext(self)
+
+  ////////////////////////////////////////////////////////////////////////////
+  // Added for HiveContext
+  ////////////////////////////////////////////////////////////////////////////
+
+  sessionState.defaultOverrides()
+
+  // The Hive UDF current_database() is foldable, will be evaluated by optimizer,
+  // but the optimizer can't access the SessionState of metadataHive.
+  sessionState.functionRegistry.registerFunction(
+    "current_database", (e: Seq[Expression]) => new CurrentDatabase(self))
+
+  /**
+   * Invalidate and refresh all the cached the metadata of the given table. For performance reasons,
+   * Spark SQL or the external data source library it uses might cache certain metadata about a
+   * table, such as the location of blocks. When those change outside of Spark SQL, users should
+   * call this function to invalidate the cache.
+   *
+   * @since 1.3.0
+   */
+  def refreshTable(tableName: String): Unit = {
+    val tableIdent = sessionState.sqlParser.parseTableIdentifier(tableName)
+    sessionState.catalog.refreshTable(tableIdent)
+  }
+
+  protected[sql] def invalidateTable(tableName: String): Unit = {
+    val tableIdent = sessionState.sqlParser.parseTableIdentifier(tableName)
+    sessionState.catalog.invalidateTable(tableIdent)
+  }
+
+  /**
+   * Executes a SQL query without parsing it, but instead passing it directly to an underlying
+   * system to process. This is currently only used for Hive DDLs and will be removed as soon
+   * as Spark can parse all supported Hive DDLs itself.
+   */
+  private[sql] def runNativeSql(sqlText: String): Seq[Row] =
+    sessionState.runSqlHive(sqlText).map { s => Row(s) }
+
+  def runSqlHive(sql: String): Seq[String] = {
+    sessionState.runSqlHive(sql)
+  }
+
+  /**
+   * When true, enables an experimental feature where metastore tables that use the parquet SerDe
+   * are automatically converted to use the Spark SQL parquet table scan, instead of the Hive
+   * SerDe.
+   */
+  protected[sql] def convertMetastoreParquet: Boolean = getConf(SQLConf.CONVERT_METASTORE_PARQUET)
+
+  /**
+   * When true, also tries to merge possibly different but compatible Parquet schemas in different
+   * Parquet data files.
+   *
+   * This configuration is only effective when "spark.sql.hive.convertMetastoreParquet" is true.
+   */
+  protected[sql] def convertMetastoreParquetWithSchemaMerging: Boolean =
+    getConf(SQLConf.CONVERT_METASTORE_PARQUET_WITH_SCHEMA_MERGING)
+
+  /**
+   * When true, enables an experimental feature where metastore tables that use the Orc SerDe
+   * are automatically converted to use the Spark SQL ORC table scan, instead of the Hive
+   * SerDe.
+   */
+  protected[sql] def convertMetastoreOrc: Boolean = getConf(SQLConf.CONVERT_METASTORE_ORC)
+
+  /**
+   * When true, a table created by a Hive CTAS statement (no USING clause) will be
+   * converted to a data source table, using the data source set by spark.sql.sources.default.
+   * The table in CTAS statement will be converted when it meets any of the following conditions:
+   *   - The CTAS does not specify any of a SerDe (ROW FORMAT SERDE), a File Format (STORED AS), or
+   *     a Storage Hanlder (STORED BY), and the value of hive.default.fileformat in hive-site.xml
+   *     is either TextFile or SequenceFile.
+   *   - The CTAS statement specifies TextFile (STORED AS TEXTFILE) as the file format and no SerDe
+   *     is specified (no ROW FORMAT SERDE clause).
+   *   - The CTAS statement specifies SequenceFile (STORED AS SEQUENCEFILE) as the file format
+   *     and no SerDe is specified (no ROW FORMAT SERDE clause).
+   */
+  protected[sql] def convertCTAS: Boolean = getConf(SQLConf.CONVERT_CTAS)
+
+  /*
+   * hive thrift server use background spark sql thread pool to execute sql queries
+   */
+  protected[sql] def hiveThriftServerAsync: Boolean = getConf(SQLConf.HIVE_THRIFT_SERVER_ASYNC)
+
+  protected[sql] def hiveThriftServerSingleSession: Boolean =
+    sparkContext.conf.getBoolean("spark.sql.hive.thriftServer.singleSession", defaultValue = false)
 }
 
 /**
@@ -1038,4 +1134,17 @@ object SQLContext {
     properties
   }
 
+  ////////////////////////////////////////////////////////////////////////////
+  // Added for HiveContext
+  ////////////////////////////////////////////////////////////////////////////
+
+  def createSharedState(sc: SparkContext, useHiveMetastore: Boolean): SharedState = {
+    if (useHiveMetastore) {
+      val clazz = Utils.classForName("org.apache.spark.sql.hive.HiveSharedState")
+      val ctor = clazz.getConstructor(classOf[SparkContext])
+      ctor.newInstance(sc).asInstanceOf[SharedState]
+    } else {
+      new SharedState(sc)
+    }
+  }
 }

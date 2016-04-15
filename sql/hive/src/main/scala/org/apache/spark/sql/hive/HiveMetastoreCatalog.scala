@@ -299,7 +299,8 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
       CatalogTableType.MANAGED_TABLE
     }
 
-    val maybeSerDe = HiveSerDe.sourceToSerDe(provider, hive.hiveconf)
+    val hiveconf = hive.sessionState.asInstanceOf[HiveSessionState].hiveconf
+    val maybeSerDe = HiveSerDe.sourceToSerDe(provider, hiveconf)
     val dataSource =
       DataSource(
         hive,

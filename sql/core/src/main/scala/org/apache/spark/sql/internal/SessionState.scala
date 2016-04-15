@@ -17,15 +17,14 @@
 
 package org.apache.spark.sql.internal
 
-import org.apache.spark.sql.{ContinuousQueryManager, ExperimentalMethods, SQLContext, UDFRegistration}
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
-import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources.{DataSourceAnalysis, PreInsertCastAndRename, ResolveDataSource}
-import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReuseExchange}
+import org.apache.spark.sql.types.DataType
 import org.apache.spark.sql.util.ExecutionListenerManager
 
 /**
@@ -103,5 +102,30 @@ private[sql] class SessionState(ctx: SQLContext) {
    * Interface to start and stop [[org.apache.spark.sql.ContinuousQuery]]s.
    */
   lazy val continuousQueryManager: ContinuousQueryManager = new ContinuousQueryManager(ctx)
+
+
+  ////////////////////////////////////////////////////////////////////////////
+  // Added for HiveSessionState
+  ////////////////////////////////////////////////////////////////////////////
+
+  def withSubstitution(sql: String): String = sql
+
+  def defaultOverrides(): Unit = { }
+
+  def runSqlHive(sql: String): Seq[String] = {
+    throw new UnsupportedOperationException
+  }
+
+  def setConfHook(key: String, value: String): Unit = {
+
+  }
+
+  def addJarHook(path: String): Unit = {
+
+  }
+
+  def formatStringResult(a: (Any, DataType)): String = {
+    throw new UnsupportedOperationException
+  }
 }
 

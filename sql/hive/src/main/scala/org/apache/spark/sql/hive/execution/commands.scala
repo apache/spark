@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.command.RunnableCommand
 import org.apache.spark.sql.execution.datasources.{BucketSpec, DataSource, LogicalRelation}
-import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.sql.hive.{HiveContext, HiveSessionCatalog}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 
@@ -41,8 +41,9 @@ private[hive]
 case class AnalyzeTable(tableName: String) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.asInstanceOf[HiveContext].analyze(tableName)
-    Seq.empty[Row]
+    // sqlContext.asInstanceOf[HiveContext].analyze(tableName)
+    // Seq.empty[Row]
+    throw new UnsupportedOperationException
   }
 }
 
@@ -99,8 +100,9 @@ case class CreateMetastoreDataSource(
 
     val tableName = tableIdent.unquotedString
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
+    val hiveSessionCatalog = hiveContext.sessionState.catalog.asInstanceOf[HiveSessionCatalog]
 
-    if (hiveContext.sessionState.catalog.tableExists(tableIdent)) {
+    if (hiveSessionCatalog.tableExists(tableIdent)) {
       if (allowExisting) {
         return Seq.empty[Row]
       } else {
@@ -113,7 +115,7 @@ case class CreateMetastoreDataSource(
       if (!options.contains("path") && managedIfNoPath) {
         isExternal = false
         options + ("path" ->
-          hiveContext.sessionState.catalog.hiveDefaultTableFilePath(tableIdent))
+          hiveSessionCatalog.hiveDefaultTableFilePath(tableIdent))
       } else {
         options
       }
@@ -126,7 +128,7 @@ case class CreateMetastoreDataSource(
       bucketSpec = None,
       options = optionsWithPath).resolveRelation()
 
-    hiveContext.sessionState.catalog.createDataSourceTable(
+    hiveSessionCatalog.createDataSourceTable(
       tableIdent,
       userSpecifiedSchema,
       Array.empty[String],
@@ -166,13 +168,14 @@ case class CreateMetastoreDataSourceAsSelect(
 
     val tableName = tableIdent.unquotedString
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
+    val hiveSessionCatalog = hiveContext.sessionState.catalog.asInstanceOf[HiveSessionCatalog]
     var createMetastoreTable = false
     var isExternal = true
     val optionsWithPath =
       if (!options.contains("path")) {
         isExternal = false
         options + ("path" ->
-          hiveContext.sessionState.catalog.hiveDefaultTableFilePath(tableIdent))
+          hiveSessionCatalog.hiveDefaultTableFilePath(tableIdent))
       } else {
         options
       }
@@ -240,7 +243,7 @@ case class CreateMetastoreDataSourceAsSelect(
       // We will use the schema of resolved.relation as the schema of the table (instead of
       // the schema of df). It is important since the nullability may be changed by the relation
       // provider (for example, see org.apache.spark.sql.parquet.DefaultSource).
-      hiveContext.sessionState.catalog.createDataSourceTable(
+      hiveSessionCatalog.createDataSourceTable(
         tableIdent,
         Some(result.schema),
         partitionColumns,
@@ -251,7 +254,7 @@ case class CreateMetastoreDataSourceAsSelect(
     }
 
     // Refresh the cache of the table in the catalog.
-    hiveContext.sessionState.catalog.refreshTable(tableIdent)
+    hiveSessionCatalog.refreshTable(tableIdent)
     Seq.empty[Row]
   }
 }

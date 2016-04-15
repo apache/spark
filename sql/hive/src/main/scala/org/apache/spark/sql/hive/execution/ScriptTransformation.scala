@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.ScriptInputOutputSchema
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.hive.{HiveContext, HiveInspectors}
+import org.apache.spark.sql.hive.{HiveContext, HiveInspectors, HiveSessionState}
 import org.apache.spark.sql.hive.HiveShim._
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.{CircularBuffer, RedirectThread, SerializableConfiguration, Utils}
@@ -64,7 +64,8 @@ case class ScriptTransformation(
 
   override def producedAttributes: AttributeSet = outputSet -- inputSet
 
-  private val serializedHiveConf = new SerializableConfiguration(sc.hiveconf)
+  private val serializedHiveConf =
+    new SerializableConfiguration(sc.sessionState.asInstanceOf[HiveSessionState].hiveconf)
 
   protected override def doExecute(): RDD[InternalRow] = {
     def processIterator(inputIterator: Iterator[InternalRow]): Iterator[InternalRow] = {

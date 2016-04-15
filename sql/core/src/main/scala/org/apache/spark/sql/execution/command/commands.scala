@@ -24,13 +24,15 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, Dataset, Row, SQLContext}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, ExpressionDescription, LeafExpression}
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.debug._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * A logical command that is executed for its side-effects.  `RunnableCommand`s are
@@ -527,4 +529,21 @@ case class SetDatabaseCommand(databaseName: String) extends RunnableCommand {
   }
 
   override val output: Seq[Attribute] = Seq.empty
+}
+
+
+/**
+ * Returns the current database of metadataHive.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_() - Returns the current database.",
+  extended = "> SELECT _FUNC_()")
+case class CurrentDatabase(ctx: SQLContext)
+  extends LeafExpression with CodegenFallback {
+  override def dataType: DataType = StringType
+  override def foldable: Boolean = true
+  override def nullable: Boolean = false
+  override def eval(input: InternalRow): Any = {
+    UTF8String.fromString(ctx.sessionState.catalog.getCurrentDatabase)
+  }
 }

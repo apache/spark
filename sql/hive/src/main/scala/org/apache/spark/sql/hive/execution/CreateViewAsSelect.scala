@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions.Alias
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.execution.command.RunnableCommand
-import org.apache.spark.sql.hive.{ HiveContext, HiveMetastoreTypes, SQLBuilder}
+import org.apache.spark.sql.hive.{HiveMetastoreTypes, HiveSharedState, SQLBuilder}
 
 /**
  * Create Hive view on non-hive-compatible tables by specifying schema ourselves instead of
@@ -47,16 +47,16 @@ private[hive] case class CreateViewAsSelect(
   private val tableIdentifier = tableDesc.identifier
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
-    val hiveContext = sqlContext.asInstanceOf[HiveContext]
+    val hivePersistentState = sqlContext.sharedState.asInstanceOf[HiveSharedState]
 
-    hiveContext.sessionState.catalog.tableExists(tableIdentifier) match {
+    sqlContext.sessionState.catalog.tableExists(tableIdentifier) match {
       case true if allowExisting =>
         // Handles `CREATE VIEW IF NOT EXISTS v0 AS SELECT ...`. Does nothing when the target view
         // already exists.
 
       case true if orReplace =>
         // Handles `CREATE OR REPLACE VIEW v0 AS SELECT ...`
-        hiveContext.metadataHive.alertView(prepareTable(sqlContext))
+        hivePersistentState.metadataHive.alertView(prepareTable(sqlContext))
 
       case true =>
         // Handles `CREATE VIEW v0 AS SELECT ...`. Throws exception when the target view already
@@ -66,7 +66,7 @@ private[hive] case class CreateViewAsSelect(
           "CREATE OR REPLACE VIEW AS")
 
       case false =>
-        hiveContext.metadataHive.createView(prepareTable(sqlContext))
+        hivePersistentState.metadataHive.createView(prepareTable(sqlContext))
     }
 
     Seq.empty[Row]

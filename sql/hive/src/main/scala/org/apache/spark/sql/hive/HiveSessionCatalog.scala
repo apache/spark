@@ -26,14 +26,14 @@ import org.apache.hadoop.hive.ql.exec.{UDAF, UDF}
 import org.apache.hadoop.hive.ql.exec.{FunctionRegistry => HiveFunctionRegistry}
 import org.apache.hadoop.hive.ql.udf.generic.{AbstractGenericUDAFResolver, GenericUDF, GenericUDTF}
 
+import org.apache.spark.sql.{AnalysisException, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
-import org.apache.spark.sql.catalyst.catalog.{FunctionResourceLoader, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog.{ExternalCatalog, FunctionResourceLoader, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.datasources.BucketSpec
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 import org.apache.spark.sql.hive.client.HiveClient
@@ -43,9 +43,9 @@ import org.apache.spark.util.Utils
 
 
 private[sql] class HiveSessionCatalog(
-    externalCatalog: HiveExternalCatalog,
+    externalCatalog: ExternalCatalog,
     client: HiveClient,
-    context: HiveContext,
+    context: SQLContext,
     functionResourceLoader: FunctionResourceLoader,
     functionRegistry: FunctionRegistry,
     conf: SQLConf)
@@ -75,7 +75,9 @@ private[sql] class HiveSessionCatalog(
   // ----------------------------------------------------------------
 
   override def getDefaultDBPath(db: String): String = {
-    val defaultPath = context.hiveconf.getVar(HiveConf.ConfVars.METASTOREWAREHOUSE)
+    val defaultPath =
+      context.sessionState.asInstanceOf[HiveSessionState].hiveconf.getVar(
+        HiveConf.ConfVars.METASTOREWAREHOUSE)
     new Path(new Path(defaultPath), db + ".db").toString
   }
 
@@ -83,7 +85,8 @@ private[sql] class HiveSessionCatalog(
   // essentially a cache for metastore tables. However, it relies on a lot of session-specific
   // things so it would be a lot of work to split its functionality between HiveSessionCatalog
   // and HiveCatalog. We should still do it at some point...
-  private val metastoreCatalog = new HiveMetastoreCatalog(client, context)
+  private val metastoreCatalog =
+    new HiveMetastoreCatalog(client, context.asInstanceOf[HiveContext])
 
   val ParquetConversions: Rule[LogicalPlan] = metastoreCatalog.ParquetConversions
   val OrcConversions: Rule[LogicalPlan] = metastoreCatalog.OrcConversions

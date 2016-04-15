@@ -103,7 +103,7 @@ private[hive] trait HiveStrategies {
     }
   }
 
-  case class HiveCommandStrategy(context: HiveContext) extends Strategy {
+  case class HiveCommandStrategy(context: SQLContext) extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case describe: DescribeCommand =>
         ExecutedCommand(

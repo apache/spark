@@ -74,7 +74,7 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, hiveContext:
     val ctx = if (hiveContext.hiveThriftServerSingleSession) {
       hiveContext
     } else {
-      hiveContext.newSession()
+      hiveContext.newSession().asInstanceOf[HiveContext]
     }
     ctx.setConf("spark.sql.hive.version", HiveContext.hiveExecutionVersion)
     sparkSqlOperationManager.sessionToContexts += sessionHandle -> ctx
