@@ -94,9 +94,6 @@ class HiveContext private[hive](
 
   logDebug("create HiveContext")
 
-  @transient
-  protected[sql] override val persistentState: PersistentState = hivePersistentState
-
   /**
    * Returns a new HiveContext as new session, which will have separated SQLConf, UDF/UDAF,
    * temporary tables and SessionState, but sharing the same CacheManager, IsolatedClientLoader
