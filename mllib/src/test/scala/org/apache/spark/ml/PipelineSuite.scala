@@ -210,9 +210,6 @@ class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
 
     p.stages.w(steps)
     new ParamPair(p.stages, steps)
-    // These
-    //val pp: ParamPair[Array[PipelineStage]] = p.stages -> steps
-    //p.set(p.stages -> steps)
   }
 }
 
