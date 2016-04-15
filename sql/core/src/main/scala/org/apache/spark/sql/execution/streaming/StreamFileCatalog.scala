@@ -24,7 +24,7 @@ import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.execution.datasources.PartitionSpec
-import org.apache.spark.sql.sources.{HDFSFileCatalog, FileCatalog, Partition}
+import org.apache.spark.sql.sources.{FileCatalog, Partition}
 import org.apache.spark.sql.types.StructType
 
 class StreamFileCatalog(sqlContext: SQLContext, path: Path) extends FileCatalog with Logging {
