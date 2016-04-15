@@ -18,8 +18,8 @@
 package org.apache.spark.sql.hive
 
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.internal.PersistentState
 import org.apache.spark.sql.hive.client.{HiveClient, HiveClientImpl}
+import org.apache.spark.sql.internal.PersistentState
 
 
 /**

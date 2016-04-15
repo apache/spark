@@ -19,9 +19,9 @@ package org.apache.spark.sql.internal
 
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.catalyst.catalog.{ExternalCatalog, InMemoryCatalog}
 import org.apache.spark.sql.execution.CacheManager
 import org.apache.spark.sql.execution.ui.SQLListener
-import org.apache.spark.sql.catalyst.catalog.{ExternalCatalog, InMemoryCatalog}
 
 
 /**

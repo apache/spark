@@ -599,7 +599,9 @@ private[hive] object HiveContext extends Logging {
    * The version of the Hive client that is used here must match the metastore that is configured
    * in the hive-site.xml file.
    */
-  protected[hive] def newClientForMetadata(conf: SparkConf, hadoopConf: Configuration): HiveClient = {
+  protected[hive] def newClientForMetadata(
+      conf: SparkConf,
+      hadoopConf: Configuration): HiveClient = {
     val hiveConf = new HiveConf(hadoopConf, classOf[HiveConf])
     val configurations = hiveClientConfigurations(hiveConf)
     newClientForMetadata(conf, hiveConf, hadoopConf, configurations)
