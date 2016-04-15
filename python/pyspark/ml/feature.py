@@ -2174,7 +2174,7 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
                      "the minimum number of times a token must appear to be included in the " +
                      "word2vec model's vocabulary", typeConverter=TypeConverters.toInt)
     windowSize = Param(Params._dummy(), "windowSize",
-                       "the window size of words",
+                       "the window size (context words from [-window, window])",
                        typeConverter=TypeConverters.toInt)
 
     @keyword_only
