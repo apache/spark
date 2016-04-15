@@ -895,9 +895,9 @@ abstract class DStream[T: ClassTag] (
     logInfo(s"Slicing from $fromTime to $toTime" +
       s" (aligned to $alignedFromTime and $alignedToTime)")
 
-    alignedFromTime.to(alignedToTime, slideDuration).flatMap(time => {
+    alignedFromTime.to(alignedToTime, slideDuration).flatMap { time =>
       if (time >= zeroTime) getOrCompute(time) else None
-    })
+    }
   }
 
   /**

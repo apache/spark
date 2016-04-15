@@ -168,9 +168,9 @@ object FromUnsafeProjection {
    * Returns an UnsafeProjection for given Array of DataTypes.
    */
   def apply(fields: Seq[DataType]): Projection = {
-    create(fields.zipWithIndex.map(x => {
+    create(fields.zipWithIndex.map { x =>
       new BoundReference(x._2, x._1, true)
-    }))
+    })
   }
 
   /**
