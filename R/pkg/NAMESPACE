@@ -292,7 +292,8 @@ export("as.DataFrame",
        "tableToDF",
        "tableNames",
        "tables",
-       "uncacheTable")
+       "uncacheTable",
+       "print.summary.GeneralizedLinearRegressionModel")
 
 export("structField",
        "structField.jobj",
