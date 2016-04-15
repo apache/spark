@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql.execution.command
 
+import java.io.File
+import java.util.NoSuchElementException
+
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Dataset, Row, SQLContext}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, TableIdentifier}
@@ -164,7 +168,7 @@ case class ShowPartitionsCommand(
   def getPartName(spec: TablePartitionSpec): String = {
     spec.map {s =>
       PartitioningUtils.escapePathName(s._1) + "=" + PartitioningUtils.escapePathName(s._2)
-    }.mkString("/")
+    }.mkString(File.separator)
   }
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val catalog = sqlContext.sessionState.catalog
