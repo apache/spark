@@ -74,6 +74,24 @@ private[ml] object TreeTests extends SparkFunSuite {
   }
 
   /**
+   * Set label metadata (particularly the number of classes) on a DataFrame.
+   * @param data  Dataset.  Categorical features and labels must already have 0-based indices.
+   *              This must be non-empty.
+   * @param numClasses  Number of classes label can take. If 0, mark as continuous.
+   * @param labelColName  Name of the label column on which to set the metadata.
+   * @return DataFrame with metadata
+   */
+  def setMetadata(data: DataFrame, numClasses: Int, labelColName: String): DataFrame = {
+    val labelAttribute = if (numClasses == 0) {
+      NumericAttribute.defaultAttr.withName(labelColName)
+    } else {
+      NominalAttribute.defaultAttr.withName(labelColName).withNumValues(numClasses)
+    }
+    val labelMetadata = labelAttribute.toMetadata()
+    data.select(data("features"), data(labelColName).as(labelColName, labelMetadata))
+  }
+
+  /**
    * Check if the two trees are exactly the same.
    * Note: I hesitate to override Node.equals since it could cause problems if users
    *       make mistakes such as creating loops of Nodes.
@@ -113,7 +131,7 @@ private[ml] object TreeTests extends SparkFunSuite {
    * Check if the two models are exactly the same.
    * If the models are not equal, this throws an exception.
    */
-  def checkEqual(a: TreeEnsembleModel, b: TreeEnsembleModel): Unit = {
+  def checkEqual[M <: DecisionTreeModel](a: TreeEnsembleModel[M], b: TreeEnsembleModel[M]): Unit = {
     try {
       a.trees.zip(b.trees).foreach { case (treeA, treeB) =>
         TreeTests.checkEqual(treeA, treeB)

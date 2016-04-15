@@ -58,10 +58,10 @@ class CodegenContext {
   val references: mutable.ArrayBuffer[Any] = new mutable.ArrayBuffer[Any]()
 
   /**
-    * Add an object to `references`, create a class member to access it.
-    *
-    * Returns the name of class member.
-    */
+   * Add an object to `references`, create a class member to access it.
+   *
+   * Returns the name of class member.
+   */
   def addReferenceObj(name: String, obj: Any, className: String = null): String = {
     val term = freshName(name)
     val idx = references.length
@@ -72,9 +72,9 @@ class CodegenContext {
   }
 
   /**
-    * Holding a list of generated columns as input of current operator, will be used by
-    * BoundReference to generate code.
-    */
+   * Holding a list of generated columns as input of current operator, will be used by
+   * BoundReference to generate code.
+   */
   var currentVars: Seq[ExprCode] = null
 
   /**
@@ -169,14 +169,14 @@ class CodegenContext {
   final var INPUT_ROW = "i"
 
   /**
-    * The map from a variable name to it's next ID.
-    */
+   * The map from a variable name to it's next ID.
+   */
   private val freshNameIds = new mutable.HashMap[String, Int]
   freshNameIds += INPUT_ROW -> 1
 
   /**
-    * A prefix used to generate fresh name.
-    */
+   * A prefix used to generate fresh name.
+   */
   var freshNamePrefix = ""
 
   /**
@@ -234,8 +234,8 @@ class CodegenContext {
   }
 
   /**
-    * Update a column in MutableRow from ExprCode.
-    */
+   * Update a column in MutableRow from ExprCode.
+   */
   def updateColumn(
       row: String,
       dataType: DataType,
@@ -509,7 +509,7 @@ class CodegenContext {
 
   /**
    * Checks and sets up the state and codegen for subexpression elimination. This finds the
-   * common subexpresses, generates the functions that evaluate those expressions and populates
+   * common subexpressions, generates the functions that evaluate those expressions and populates
    * the mapping of common subexpressions to the generated functions.
    */
   private def subexpressionElimination(expressions: Seq[Expression]) = {
@@ -519,7 +519,7 @@ class CodegenContext {
     // Get all the expressions that appear at least twice and set up the state for subexpression
     // elimination.
     val commonExprs = equivalentExpressions.getAllEquivalentExprs.filter(_.size > 1)
-    commonExprs.foreach(e => {
+    commonExprs.foreach { e =>
       val expr = e.head
       val fnName = freshName("evalExpr")
       val isNull = s"${fnName}IsNull"
@@ -561,7 +561,7 @@ class CodegenContext {
       subexprFunctions += s"$fnName($INPUT_ROW);"
       val state = SubExprEliminationState(isNull, value)
       e.foreach(subExprEliminationExprs.put(_, state))
-    })
+    }
   }
 
   /**
@@ -626,15 +626,15 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
 
 object CodeGenerator extends Logging {
   /**
-    * Compile the Java source code into a Java class, using Janino.
-    */
+   * Compile the Java source code into a Java class, using Janino.
+   */
   def compile(code: String): GeneratedClass = {
     cache.get(code)
   }
 
   /**
-    * Compile the Java source code into a Java class, using Janino.
-    */
+   * Compile the Java source code into a Java class, using Janino.
+   */
   private[this] def doCompile(code: String): GeneratedClass = {
     val evaluator = new ClassBodyEvaluator()
     evaluator.setParentClassLoader(Utils.getContextOrSparkClassLoader)
@@ -661,7 +661,7 @@ object CodeGenerator extends Logging {
     logDebug({
       // Only add extra debugging info to byte code when we are going to print the source code.
       evaluator.setDebuggingInformation(true, true, false)
-      formatted
+      s"\n$formatted"
     })
 
     try {

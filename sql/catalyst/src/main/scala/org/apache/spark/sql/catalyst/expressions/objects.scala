@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.lang.reflect.Modifier
+
 import scala.annotation.tailrec
 import scala.language.existentials
 import scala.reflect.ClassTag
@@ -112,23 +114,23 @@ case class Invoke(
     arguments: Seq[Expression] = Nil) extends Expression with NonSQLExpression {
 
   override def nullable: Boolean = true
-  override def children: Seq[Expression] = arguments.+:(targetObject)
+  override def children: Seq[Expression] = targetObject +: arguments
 
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
 
-  lazy val method = targetObject.dataType match {
+  @transient lazy val method = targetObject.dataType match {
     case ObjectType(cls) =>
-      cls
-        .getMethods
-        .find(_.getName == functionName)
-        .getOrElse(sys.error(s"Couldn't find $functionName on $cls"))
-        .getReturnType
-        .getName
-    case _ => ""
+      val m = cls.getMethods.find(_.getName == functionName)
+      if (m.isEmpty) {
+        sys.error(s"Couldn't find $functionName on $cls")
+      } else {
+        m
+      }
+    case _ => None
   }
 
-  lazy val unboxer = (dataType, method) match {
+  lazy val unboxer = (dataType, method.map(_.getReturnType.getName).getOrElse("")) match {
     case (IntegerType, "java.lang.Object") => (s: String) =>
       s"((java.lang.Integer)$s).intValue()"
     case (LongType, "java.lang.Object") => (s: String) =>
@@ -155,21 +157,31 @@ case class Invoke(
     // If the function can return null, we do an extra check to make sure our null bit is still set
     // correctly.
     val objNullCheck = if (ctx.defaultValue(dataType) == "null") {
-      s"${ev.isNull} = ${ev.value} == null;"
+      s"boolean ${ev.isNull} = ${ev.value} == null;"
     } else {
+      ev.isNull = obj.isNull
       ""
     }
 
     val value = unboxer(s"${obj.value}.$functionName($argString)")
 
+    val evaluate = if (method.forall(_.getExceptionTypes.isEmpty)) {
+      s"$javaType ${ev.value} = ${obj.isNull} ? ${ctx.defaultValue(dataType)} : ($javaType) $value;"
+    } else {
+      s"""
+        $javaType ${ev.value} = ${ctx.defaultValue(javaType)};
+        try {
+          ${ev.value} = ${obj.isNull} ? ${ctx.defaultValue(javaType)} : ($javaType) $value;
+        } catch (Exception e) {
+          org.apache.spark.unsafe.Platform.throwException(e);
+        }
+      """
+    }
+
     s"""
       ${obj.code}
       ${argGen.map(_.code).mkString("\n")}
-
-      boolean ${ev.isNull} = ${obj.isNull};
-      $javaType ${ev.value} =
-        ${ev.isNull} ?
-        ${ctx.defaultValue(dataType)} : ($javaType) $value;
+      $evaluate
       $objNullCheck
     """
   }
@@ -197,20 +209,32 @@ object NewInstance {
  * @param dataType The type of object being constructed, as a Spark SQL datatype.  This allows you
  *                 to manually specify the type when the object in question is a valid internal
  *                 representation (i.e. ArrayData) instead of an object.
- * @param outerPointer If the object being constructed is an inner class the outerPointer must
- *                     for the containing class must be specified.
+ * @param outerPointer If the object being constructed is an inner class, the outerPointer for the
+ *                     containing class must be specified. This parameter is defined as an optional
+ *                     function, which allows us to get the outer pointer lazily,and it's useful if
+ *                     the inner class is defined in REPL.
  */
 case class NewInstance(
     cls: Class[_],
     arguments: Seq[Expression],
     propagateNull: Boolean,
     dataType: DataType,
-    outerPointer: Option[Literal]) extends Expression with NonSQLExpression {
+    outerPointer: Option[() => AnyRef]) extends Expression with NonSQLExpression {
   private val className = cls.getName
 
   override def nullable: Boolean = propagateNull
 
   override def children: Seq[Expression] = arguments
+
+  override lazy val resolved: Boolean = {
+    // If the class to construct is an inner class, we need to get its outer pointer, or this
+    // expression should be regarded as unresolved.
+    // Note that static inner classes (e.g., inner classes within Scala objects) don't need
+    // outer pointer registration.
+    val needOuterPointer =
+      outerPointer.isEmpty && cls.isMemberClass && !Modifier.isStatic(cls.getModifiers)
+    childrenResolved && !needOuterPointer
+  }
 
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
@@ -220,12 +244,12 @@ case class NewInstance(
     val argGen = arguments.map(_.gen(ctx))
     val argString = argGen.map(_.value).mkString(", ")
 
-    val outer = outerPointer.map(_.gen(ctx))
+    val outer = outerPointer.map(func => Literal.fromObject(func()).gen(ctx))
 
     val setup =
       s"""
          ${argGen.map(_.code).mkString("\n")}
-         ${outer.map(_.code.mkString("")).getOrElse("")}
+         ${outer.map(_.code).getOrElse("")}
        """.stripMargin
 
     val constructorCall = outer.map { gen =>
@@ -422,6 +446,8 @@ case class MapObjects private(
   override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     val javaType = ctx.javaType(dataType)
     val elementJavaType = ctx.javaType(loopVar.dataType)
+    ctx.addMutableState("boolean", loopVar.isNull, "")
+    ctx.addMutableState(elementJavaType, loopVar.value, "")
     val genInputData = inputData.gen(ctx)
     val genFunction = lambdaFunction.gen(ctx)
     val dataLength = ctx.freshName("dataLength")
@@ -442,9 +468,9 @@ case class MapObjects private(
     }
 
     val loopNullCheck = if (primitiveElement) {
-      s"boolean ${loopVar.isNull} = ${genInputData.value}.isNullAt($loopIndex);"
+      s"${loopVar.isNull} = ${genInputData.value}.isNullAt($loopIndex);"
     } else {
-      s"boolean ${loopVar.isNull} = ${genInputData.isNull} || ${loopVar.value} == null;"
+      s"${loopVar.isNull} = ${genInputData.isNull} || ${loopVar.value} == null;"
     }
 
     s"""
@@ -460,7 +486,7 @@ case class MapObjects private(
 
         int $loopIndex = 0;
         while ($loopIndex < $dataLength) {
-          $elementJavaType ${loopVar.value} =
+          ${loopVar.value} =
             ($elementJavaType)${genInputData.value}${itemAccessor(loopIndex)};
           $loopNullCheck
 
@@ -500,22 +526,26 @@ case class CreateExternalRow(children: Seq[Expression], schema: StructType)
   override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     val rowClass = classOf[GenericRowWithSchema].getName
     val values = ctx.freshName("values")
-    val schemaField = ctx.addReferenceObj("schema", schema)
-    s"""
-      boolean ${ev.isNull} = false;
-      final Object[] $values = new Object[${children.size}];
-    """ +
-      children.zipWithIndex.map { case (e, i) =>
-        val eval = e.gen(ctx)
-        eval.code + s"""
+    ctx.addMutableState("Object[]", values, "")
+
+    val childrenCodes = children.zipWithIndex.map { case (e, i) =>
+      val eval = e.gen(ctx)
+      eval.code + s"""
           if (${eval.isNull}) {
             $values[$i] = null;
           } else {
             $values[$i] = ${eval.value};
           }
          """
-      }.mkString("\n") +
-      s"final ${classOf[Row].getName} ${ev.value} = new $rowClass($values, this.$schemaField);"
+    }
+    val childrenCode = ctx.splitExpressions(ctx.INPUT_ROW, childrenCodes)
+    val schemaField = ctx.addReferenceObj("schema", schema)
+    s"""
+      boolean ${ev.isNull} = false;
+      $values = new Object[${children.size}];
+      $childrenCode
+      final ${classOf[Row].getName} ${ev.value} = new $rowClass($values, this.$schemaField);
+      """
   }
 }
 

@@ -21,6 +21,10 @@ import java.math.MathContext
 import java.sql.Timestamp
 
 import org.apache.spark.AccumulatorSuite
+import org.apache.spark.sql.catalyst.analysis.UnresolvedException
+import org.apache.spark.sql.catalyst.expressions.SortOrder
+import org.apache.spark.sql.catalyst.plans.logical.Aggregate
+import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, CartesianProduct, SortMergeJoin}
 import org.apache.spark.sql.functions._
@@ -53,12 +57,13 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("show functions") {
     def getFunctions(pattern: String): Seq[Row] = {
-      val regex = java.util.regex.Pattern.compile(pattern)
-      sqlContext.sessionState.functionRegistry.listFunction()
-        .filter(regex.matcher(_).matches()).map(Row(_))
+      StringUtils.filterPattern(sqlContext.sessionState.functionRegistry.listFunction(), pattern)
+        .map(Row(_))
     }
-    checkAnswer(sql("SHOW functions"), getFunctions(".*"))
-    Seq("^c.*", ".*e$", "log.*", ".*date.*").foreach { pattern =>
+    checkAnswer(sql("SHOW functions"), getFunctions("*"))
+    Seq("^c*", "*e$", "log*", "*date*").foreach { pattern =>
+      // For the pattern part, only '*' and '|' are allowed as wildcards.
+      // For '*', we need to replace it to '.*'.
       checkAnswer(sql(s"SHOW FUNCTIONS '$pattern'"), getFunctions(pattern))
     }
   }
@@ -82,6 +87,14 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
     checkExistence(sql("describe functioN abcadf"), true,
       "Function: abcadf not found.")
+  }
+
+  test("SPARK-14415: All functions should have own descriptions") {
+    for (f <- sqlContext.sessionState.functionRegistry.listFunction()) {
+      if (!Seq("cube", "grouping", "grouping_id", "rollup", "window").contains(f)) {
+        checkExistence(sql(s"describe function `$f`"), false, "To be added.")
+      }
+    }
   }
 
   test("SPARK-6743: no columns from cache") {
@@ -248,8 +261,8 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   test("aggregation with codegen") {
     // Prepare a table that we can group some rows.
     sqlContext.table("testData")
-      .unionAll(sqlContext.table("testData"))
-      .unionAll(sqlContext.table("testData"))
+      .union(sqlContext.table("testData"))
+      .union(sqlContext.table("testData"))
       .registerTempTable("testData3x")
 
     try {
@@ -457,23 +470,101 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       Seq(Row(1, 3), Row(2, 3), Row(3, 3)))
   }
 
-  test("literal in agg grouping expressions") {
+  test("Group By Ordinal - basic") {
     checkAnswer(
-      sql("SELECT a, count(1) FROM testData2 GROUP BY a, 1"),
-      Seq(Row(1, 2), Row(2, 2), Row(3, 2)))
-    checkAnswer(
-      sql("SELECT a, count(2) FROM testData2 GROUP BY a, 2"),
-      Seq(Row(1, 2), Row(2, 2), Row(3, 2)))
+      sql("SELECT a, sum(b) FROM testData2 GROUP BY 1"),
+      sql("SELECT a, sum(b) FROM testData2 GROUP BY a"))
 
+    // duplicate group-by columns
     checkAnswer(
       sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a, 1"),
       sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a"))
+
+    checkAnswer(
+      sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY 1, 2"),
+      sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a"))
+  }
+
+  test("Group By Ordinal - non aggregate expressions") {
+    checkAnswer(
+      sql("SELECT a, b + 2, count(2) FROM testData2 GROUP BY a, 2"),
+      sql("SELECT a, b + 2, count(2) FROM testData2 GROUP BY a, b + 2"))
+
+    checkAnswer(
+      sql("SELECT a, b + 2 as c, count(2) FROM testData2 GROUP BY a, 2"),
+      sql("SELECT a, b + 2, count(2) FROM testData2 GROUP BY a, b + 2"))
+  }
+
+  test("Group By Ordinal - non-foldable constant expression") {
+    checkAnswer(
+      sql("SELECT a, b, sum(b) FROM testData2 GROUP BY a, b, 1 + 0"),
+      sql("SELECT a, b, sum(b) FROM testData2 GROUP BY a, b"))
+
     checkAnswer(
       sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a, 1 + 2"),
       sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a"))
+  }
+
+  test("Group By Ordinal - alias") {
+    checkAnswer(
+      sql("SELECT a, (b + 2) as c, count(2) FROM testData2 GROUP BY a, 2"),
+      sql("SELECT a, b + 2, count(2) FROM testData2 GROUP BY a, b + 2"))
+
+    checkAnswer(
+      sql("SELECT a as b, b as a, sum(b) FROM testData2 GROUP BY 1, 2"),
+      sql("SELECT a, b, sum(b) FROM testData2 GROUP BY a, b"))
+  }
+
+  test("Group By Ordinal - constants") {
     checkAnswer(
       sql("SELECT 1, 2, sum(b) FROM testData2 GROUP BY 1, 2"),
       sql("SELECT 1, 2, sum(b) FROM testData2"))
+  }
+
+  test("Group By Ordinal - negative cases") {
+    intercept[UnresolvedException[Aggregate]] {
+      sql("SELECT a, b FROM testData2 GROUP BY -1")
+    }
+
+    intercept[UnresolvedException[Aggregate]] {
+      sql("SELECT a, b FROM testData2 GROUP BY 3")
+    }
+
+    var e = intercept[UnresolvedException[Aggregate]](
+      sql("SELECT SUM(a) FROM testData2 GROUP BY 1"))
+    assert(e.getMessage contains
+      "Invalid call to Group by position: the '1'th column in the select contains " +
+        "an aggregate function")
+
+    e = intercept[UnresolvedException[Aggregate]](
+      sql("SELECT SUM(a) + 1 FROM testData2 GROUP BY 1"))
+    assert(e.getMessage contains
+      "Invalid call to Group by position: the '1'th column in the select contains " +
+        "an aggregate function")
+
+    var ae = intercept[AnalysisException](
+      sql("SELECT a, rand(0), sum(b) FROM testData2 GROUP BY a, 2"))
+    assert(ae.getMessage contains
+      "nondeterministic expression rand(0) should not appear in grouping expression")
+
+    ae = intercept[AnalysisException](
+      sql("SELECT * FROM testData2 GROUP BY a, b, 1"))
+    assert(ae.getMessage contains
+      "Group by position: star is not allowed to use in the select list " +
+        "when using ordinals in group by")
+  }
+
+  test("Group By Ordinal: spark.sql.groupByOrdinal=false") {
+    withSQLConf(SQLConf.GROUP_BY_ORDINAL.key -> "false") {
+      // If spark.sql.groupByOrdinal=false, ignore the position number.
+      intercept[AnalysisException] {
+        sql("SELECT a, sum(b) FROM testData2 GROUP BY 1")
+      }
+      // '*' is not allowed to use in the select list when users specify ordinals in group by
+      checkAnswer(
+        sql("SELECT * FROM testData2 GROUP BY a, b, 1"),
+        sql("SELECT * FROM testData2 GROUP BY a, b"))
+    }
   }
 
   test("aggregates with nulls") {
@@ -1395,12 +1486,16 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-4699 case sensitivity SQL query") {
-    sqlContext.setConf(SQLConf.CASE_SENSITIVE, false)
-    val data = TestData(1, "val_1") :: TestData(2, "val_2") :: Nil
-    val rdd = sparkContext.parallelize((0 to 1).map(i => data(i)))
-    rdd.toDF().registerTempTable("testTable1")
-    checkAnswer(sql("SELECT VALUE FROM TESTTABLE1 where KEY = 1"), Row("val_1"))
-    sqlContext.setConf(SQLConf.CASE_SENSITIVE, true)
+    val orig = sqlContext.getConf(SQLConf.CASE_SENSITIVE)
+    try {
+      sqlContext.setConf(SQLConf.CASE_SENSITIVE, false)
+      val data = TestData(1, "val_1") :: TestData(2, "val_2") :: Nil
+      val rdd = sparkContext.parallelize((0 to 1).map(i => data(i)))
+      rdd.toDF().registerTempTable("testTable1")
+      checkAnswer(sql("SELECT VALUE FROM TESTTABLE1 where KEY = 1"), Row("val_1"))
+    } finally {
+      sqlContext.setConf(SQLConf.CASE_SENSITIVE, orig)
+    }
   }
 
   test("SPARK-6145: ORDER BY test for nested fields") {
@@ -1571,7 +1666,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     val e2 = intercept[AnalysisException] {
       sql("select interval 23 nanosecond")
     }
-    assert(e2.message.contains("cannot recognize input near"))
+    assert(e2.message.contains("No interval can be constructed"))
   }
 
   test("SPARK-8945: add and subtract expressions for interval type") {
@@ -1619,15 +1714,15 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-10215 Div of Decimal returns null") {
-    val d = Decimal(1.12321)
+    val d = Decimal(1.12321).toBigDecimal
     val df = Seq((d, 1)).toDF("a", "b")
 
     checkAnswer(
       df.selectExpr("b * a / b"),
-      Seq(Row(d.toBigDecimal)))
+      Seq(Row(d)))
     checkAnswer(
       df.selectExpr("b * a / b / b"),
-      Seq(Row(d.toBigDecimal)))
+      Seq(Row(d)))
     checkAnswer(
       df.selectExpr("b * a + b"),
       Seq(Row(BigDecimal(2.12321))))
@@ -1636,7 +1731,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       Seq(Row(BigDecimal(0.12321))))
     checkAnswer(
       df.selectExpr("b * a * b"),
-      Seq(Row(d.toBigDecimal)))
+      Seq(Row(d)))
   }
 
   test("precision smaller than scale") {
@@ -1674,7 +1769,8 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         .format("parquet")
         .save(path)
 
-      val message = intercept[AnalysisException] {
+      // We don't support creating a temporary table while specifying a database
+      intercept[AnalysisException] {
         sqlContext.sql(
           s"""
           |CREATE TEMPORARY TABLE db.t
@@ -1684,9 +1780,8 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
           |)
         """.stripMargin)
       }.getMessage
-      assert(message.contains("Specifying database name or other qualifiers are not allowed"))
 
-      // If you use backticks to quote the name of a temporary table having dot in it.
+      // If you use backticks to quote the name then it's OK.
       sqlContext.sql(
         s"""
           |CREATE TEMPORARY TABLE `db.t`
@@ -1732,17 +1827,17 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     val e1 = intercept[AnalysisException] {
       sql("select * from in_valid_table")
     }
-    assert(e1.message.contains("Table not found"))
+    assert(e1.message.contains("Table or View not found"))
 
     val e2 = intercept[AnalysisException] {
       sql("select * from no_db.no_table").show()
     }
-    assert(e2.message.contains("Table not found"))
+    assert(e2.message.contains("Table or View not found"))
 
     val e3 = intercept[AnalysisException] {
       sql("select * from json.invalid_file")
     }
-    assert(e3.message.contains("Unable to infer schema"))
+    assert(e3.message.contains("Path does not exist"))
   }
 
   test("SortMergeJoin returns wrong results when using UnsafeRows") {
@@ -1932,6 +2027,14 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       // Qualify the struct type with the table name.
       checkAnswer(sql("SELECT nameConflict.nameConflict.* FROM nameConflict"),
         Row(1, 1) :: Row(1, 2) :: Row(2, 1) :: Row(2, 2) :: Row(3, 1) :: Row(3, 2) :: Nil)
+    }
+  }
+
+  test("Star Expansion - group by") {
+    withSQLConf("spark.sql.retainGroupColumns" -> "false") {
+      checkAnswer(
+        testData2.groupBy($"a", $"b").agg($"*"),
+        sql("SELECT * FROM testData2 group by a, b"))
     }
   }
 
@@ -2135,6 +2238,88 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     assert(error.getMessage contains "grouping__id is deprecated; use grouping_id() instead")
   }
 
+  test("grouping and grouping_id in having") {
+    checkAnswer(
+      sql("select course, year from courseSales group by cube(course, year)" +
+        " having grouping(year) = 1 and grouping_id(course, year) > 0"),
+        Row("Java", null) ::
+        Row("dotNET", null) ::
+        Row(null, null) :: Nil
+    )
+
+    var error = intercept[AnalysisException] {
+      sql("select course, year from courseSales group by course, year" +
+        " having grouping(course) > 0")
+    }
+    assert(error.getMessage contains
+      "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
+    error = intercept[AnalysisException] {
+      sql("select course, year from courseSales group by course, year" +
+        " having grouping_id(course, year) > 0")
+    }
+    assert(error.getMessage contains
+      "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
+    error = intercept[AnalysisException] {
+      sql("select course, year from courseSales group by cube(course, year)" +
+        " having grouping__id > 0")
+    }
+    assert(error.getMessage contains "grouping__id is deprecated; use grouping_id() instead")
+  }
+
+  test("grouping and grouping_id in sort") {
+    checkAnswer(
+      sql("select course, year, grouping(course), grouping(year) from courseSales" +
+        " group by cube(course, year) order by grouping_id(course, year), course, year"),
+      Row("Java", 2012, 0, 0) ::
+        Row("Java", 2013, 0, 0) ::
+        Row("dotNET", 2012, 0, 0) ::
+        Row("dotNET", 2013, 0, 0) ::
+        Row("Java", null, 0, 1) ::
+        Row("dotNET", null, 0, 1) ::
+        Row(null, 2012, 1, 0) ::
+        Row(null, 2013, 1, 0) ::
+        Row(null, null, 1, 1) :: Nil
+    )
+
+    checkAnswer(
+      sql("select course, year, grouping_id(course, year) from courseSales" +
+        " group by cube(course, year) order by grouping(course), grouping(year), course, year"),
+      Row("Java", 2012, 0) ::
+        Row("Java", 2013, 0) ::
+        Row("dotNET", 2012, 0) ::
+        Row("dotNET", 2013, 0) ::
+        Row("Java", null, 1) ::
+        Row("dotNET", null, 1) ::
+        Row(null, 2012, 2) ::
+        Row(null, 2013, 2) ::
+        Row(null, null, 3) :: Nil
+    )
+
+    var error = intercept[AnalysisException] {
+      sql("select course, year from courseSales group by course, year" +
+        " order by grouping(course)")
+    }
+    assert(error.getMessage contains
+      "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
+    error = intercept[AnalysisException] {
+      sql("select course, year from courseSales group by course, year" +
+        " order by grouping_id(course, year)")
+    }
+    assert(error.getMessage contains
+      "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
+    error = intercept[AnalysisException] {
+      sql("select course, year from courseSales group by cube(course, year)" +
+        " order by grouping__id")
+    }
+    assert(error.getMessage contains "grouping__id is deprecated; use grouping_id() instead")
+  }
+
+  test("filter on a grouping column that is not presented in SELECT") {
+    checkAnswer(
+      sql("select count(1) from (select 1 as a) t group by a having a > 0"),
+      Row(1) :: Nil)
+  }
+
   test("SPARK-13056: Null in map value causes NPE") {
     val df = Seq(1 -> Map("abc" -> "somestring", "cba" -> null)).toDF("key", "value")
     withTempTable("maptest") {
@@ -2153,6 +2338,46 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         df.select(hash($"i", $"j")),
         sql("SELECT hash(i, j) from tbl")
       )
+    }
+  }
+
+  test("order by ordinal number") {
+    checkAnswer(
+      sql("SELECT * FROM testData2 ORDER BY 1 DESC"),
+      sql("SELECT * FROM testData2 ORDER BY a DESC"))
+    // If the position is not an integer, ignore it.
+    checkAnswer(
+      sql("SELECT * FROM testData2 ORDER BY 1 + 0 DESC, b ASC"),
+      sql("SELECT * FROM testData2 ORDER BY b ASC"))
+    checkAnswer(
+      sql("SELECT * FROM testData2 ORDER BY 1 DESC, b ASC"),
+      sql("SELECT * FROM testData2 ORDER BY a DESC, b ASC"))
+    checkAnswer(
+      sql("SELECT * FROM testData2 SORT BY 1 DESC, 2"),
+      sql("SELECT * FROM testData2 SORT BY a DESC, b ASC"))
+    checkAnswer(
+      sql("SELECT * FROM testData2 ORDER BY 1 ASC, b ASC"),
+      Seq(Row(1, 1), Row(1, 2), Row(2, 1), Row(2, 2), Row(3, 1), Row(3, 2)))
+  }
+
+  test("order by ordinal number - negative cases") {
+    intercept[UnresolvedException[SortOrder]] {
+      sql("SELECT * FROM testData2 ORDER BY 0")
+    }
+    intercept[UnresolvedException[SortOrder]] {
+      sql("SELECT * FROM testData2 ORDER BY -1 DESC, b ASC")
+    }
+    intercept[UnresolvedException[SortOrder]] {
+      sql("SELECT * FROM testData2 ORDER BY 3 DESC, b ASC")
+    }
+  }
+
+  test("order by ordinal number with conf spark.sql.orderByOrdinal=false") {
+    withSQLConf(SQLConf.ORDER_BY_ORDINAL.key -> "false") {
+      // If spark.sql.orderByOrdinal=false, ignore the position number.
+      checkAnswer(
+        sql("SELECT * FROM testData2 ORDER BY 1 DESC, b ASC"),
+        sql("SELECT * FROM testData2 ORDER BY b ASC"))
     }
   }
 

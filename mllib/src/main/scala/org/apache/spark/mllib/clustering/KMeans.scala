@@ -65,6 +65,8 @@ class KMeans private (
    */
   @Since("0.8.0")
   def setK(k: Int): this.type = {
+    require(k > 0,
+      s"Number of clusters must be positive but got ${k}")
     this.k = k
     this
   }
@@ -80,6 +82,8 @@ class KMeans private (
    */
   @Since("0.8.0")
   def setMaxIterations(maxIterations: Int): this.type = {
+    require(maxIterations >= 0,
+      s"Maximum of iterations must be nonnegative but got ${maxIterations}")
     this.maxIterations = maxIterations
     this
   }
@@ -147,9 +151,8 @@ class KMeans private (
    */
   @Since("0.8.0")
   def setInitializationSteps(initializationSteps: Int): this.type = {
-    if (initializationSteps <= 0) {
-      throw new IllegalArgumentException("Number of initialization steps must be positive")
-    }
+    require(initializationSteps > 0,
+      s"Number of initialization steps must be positive but got ${initializationSteps}")
     this.initializationSteps = initializationSteps
     this
   }
@@ -166,6 +169,8 @@ class KMeans private (
    */
   @Since("0.8.0")
   def setEpsilon(epsilon: Double): this.type = {
+    require(epsilon >= 0,
+      s"Distance threshold must be nonnegative but got ${epsilon}")
     this.epsilon = epsilon
     this
   }
@@ -248,16 +253,14 @@ class KMeans private (
     }
 
     val centers = initialModel match {
-      case Some(kMeansCenters) => {
+      case Some(kMeansCenters) =>
         Array(kMeansCenters.clusterCenters.map(s => new VectorWithNorm(s)))
-      }
-      case None => {
+      case None =>
         if (initializationMode == KMeans.RANDOM) {
           initRandom(data)
         } else {
           initKMeansParallel(data)
         }
-      }
     }
     val initTimeInSeconds = (System.nanoTime() - initStartTime) / 1e9
     logInfo(s"Initialization with $initializationMode took " + "%.3f".format(initTimeInSeconds) +
@@ -385,6 +388,8 @@ class KMeans private (
     // Initialize each run's first center to a random point.
     val seed = new XORShiftRandom(this.seed).nextInt()
     val sample = data.takeSample(true, runs, seed).toSeq
+    // Could be empty if data is empty; fail with a better message early:
+    require(sample.size >= runs, s"Required $runs samples but got ${sample.size} from $data")
     val newCenters = Array.tabulate(runs)(r => ArrayBuffer(sample(r).toDense))
 
     /** Merges new centers to centers. */

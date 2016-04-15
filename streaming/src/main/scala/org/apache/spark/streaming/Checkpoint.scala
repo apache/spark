@@ -247,10 +247,10 @@ class CheckpointWriter(
           // Delete old checkpoint files
           val allCheckpointFiles = Checkpoint.getCheckpointFiles(checkpointDir, Some(fs))
           if (allCheckpointFiles.size > 10) {
-            allCheckpointFiles.take(allCheckpointFiles.size - 10).foreach(file => {
+            allCheckpointFiles.take(allCheckpointFiles.size - 10).foreach { file =>
               logInfo("Deleting " + file)
               fs.delete(file, true)
-            })
+            }
           }
 
           // All done, print success
@@ -334,8 +334,7 @@ object CheckpointReader extends Logging {
       ignoreReadError: Boolean = false): Option[Checkpoint] = {
     val checkpointPath = new Path(checkpointDir)
 
-    // TODO(rxin): Why is this a def?!
-    def fs: FileSystem = checkpointPath.getFileSystem(hadoopConf)
+    val fs = checkpointPath.getFileSystem(hadoopConf)
 
     // Try to find the checkpoint files
     val checkpointFiles = Checkpoint.getCheckpointFiles(checkpointDir, Some(fs)).reverse
@@ -346,7 +345,7 @@ object CheckpointReader extends Logging {
     // Try to read the checkpoint files in the order
     logInfo("Checkpoint files found: " + checkpointFiles.mkString(","))
     var readError: Exception = null
-    checkpointFiles.foreach(file => {
+    checkpointFiles.foreach { file =>
       logInfo("Attempting to load checkpoint from file " + file)
       try {
         val fis = fs.open(file)
@@ -359,7 +358,7 @@ object CheckpointReader extends Logging {
           readError = e
           logWarning("Error reading checkpoint from file " + file, e)
       }
-    })
+    }
 
     // If none of checkpoint files could be read, then throw exception
     if (!ignoreReadError) {

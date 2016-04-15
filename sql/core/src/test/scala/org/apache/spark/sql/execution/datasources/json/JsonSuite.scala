@@ -29,6 +29,7 @@ import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
 
+import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -744,8 +745,8 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     )
   }
 
-  test("Loading a JSON dataset floatAsBigDecimal returns schema with float types as BigDecimal") {
-    val jsonDF = sqlContext.read.option("floatAsBigDecimal", "true").json(primitiveFieldAndType)
+  test("Loading a JSON dataset prefersDecimal returns schema with float types as BigDecimal") {
+    val jsonDF = sqlContext.read.option("prefersDecimal", "true").json(primitiveFieldAndType)
 
     val expectedSchema = StructType(
       StructField("bigInteger", DecimalType(20, 0), true) ::
@@ -769,6 +770,72 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         21474836470L,
         null,
         "this is a simple string.")
+    )
+  }
+
+  test("Find compatible types even if inferred DecimalType is not capable of other IntegralType") {
+    val mixedIntegerAndDoubleRecords = sparkContext.parallelize(
+      """{"a": 3, "b": 1.1}""" ::
+      s"""{"a": 3.1, "b": 0.${"0" * 38}1}""" :: Nil)
+    val jsonDF = sqlContext.read
+      .option("prefersDecimal", "true")
+      .json(mixedIntegerAndDoubleRecords)
+
+    // The values in `a` field will be decimals as they fit in decimal. For `b` field,
+    // they will be doubles as `1.0E-39D` does not fit.
+    val expectedSchema = StructType(
+      StructField("a", DecimalType(21, 1), true) ::
+      StructField("b", DoubleType, true) :: Nil)
+
+    assert(expectedSchema === jsonDF.schema)
+    checkAnswer(
+      jsonDF,
+      Row(BigDecimal("3"), 1.1D) ::
+      Row(BigDecimal("3.1"), 1.0E-39D) :: Nil
+    )
+  }
+
+  test("Infer big integers correctly even when it does not fit in decimal") {
+    val jsonDF = sqlContext.read
+      .json(bigIntegerRecords)
+
+    // The value in `a` field will be a double as it does not fit in decimal. For `b` field,
+    // it will be a decimal as `92233720368547758070`.
+    val expectedSchema = StructType(
+      StructField("a", DoubleType, true) ::
+      StructField("b", DecimalType(20, 0), true) :: Nil)
+
+    assert(expectedSchema === jsonDF.schema)
+    checkAnswer(jsonDF, Row(1.0E38D, BigDecimal("92233720368547758070")))
+  }
+
+  test("Infer floating-point values correctly even when it does not fit in decimal") {
+    val jsonDF = sqlContext.read
+      .option("prefersDecimal", "true")
+      .json(floatingValueRecords)
+
+    // The value in `a` field will be a double as it does not fit in decimal. For `b` field,
+    // it will be a decimal as `0.01` by having a precision equal to the scale.
+    val expectedSchema = StructType(
+      StructField("a", DoubleType, true) ::
+      StructField("b", DecimalType(2, 2), true):: Nil)
+
+    assert(expectedSchema === jsonDF.schema)
+    checkAnswer(jsonDF, Row(1.0E-39D, BigDecimal(0.01)))
+
+    val mergedJsonDF = sqlContext.read
+      .option("prefersDecimal", "true")
+      .json(floatingValueRecords ++ bigIntegerRecords)
+
+    val expectedMergedSchema = StructType(
+      StructField("a", DoubleType, true) ::
+      StructField("b", DecimalType(22, 2), true):: Nil)
+
+    assert(expectedMergedSchema === mergedJsonDF.schema)
+    checkAnswer(
+      mergedJsonDF,
+      Row(1.0E-39D, BigDecimal(0.01)) ::
+      Row(1.0E38D, BigDecimal("92233720368547758070")) :: Nil
     )
   }
 
@@ -963,7 +1030,56 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     )
   }
 
-  test("Corrupt records") {
+  test("Corrupt records: FAILFAST mode") {
+    val schema = StructType(
+        StructField("a", StringType, true) :: Nil)
+    // `FAILFAST` mode should throw an exception for corrupt records.
+    val exceptionOne = intercept[SparkException] {
+      sqlContext.read
+        .option("mode", "FAILFAST")
+        .json(corruptRecords)
+        .collect()
+    }
+    assert(exceptionOne.getMessage.contains("Malformed line in FAILFAST mode: {"))
+
+    val exceptionTwo = intercept[SparkException] {
+      sqlContext.read
+        .option("mode", "FAILFAST")
+        .schema(schema)
+        .json(corruptRecords)
+        .collect()
+    }
+    assert(exceptionTwo.getMessage.contains("Malformed line in FAILFAST mode: {"))
+  }
+
+  test("Corrupt records: DROPMALFORMED mode") {
+    val schemaOne = StructType(
+      StructField("a", StringType, true) ::
+        StructField("b", StringType, true) ::
+        StructField("c", StringType, true) :: Nil)
+    val schemaTwo = StructType(
+      StructField("a", StringType, true) :: Nil)
+    // `DROPMALFORMED` mode should skip corrupt records
+    val jsonDFOne = sqlContext.read
+      .option("mode", "DROPMALFORMED")
+      .json(corruptRecords)
+    checkAnswer(
+      jsonDFOne,
+      Row("str_a_4", "str_b_4", "str_c_4") :: Nil
+    )
+    assert(jsonDFOne.schema === schemaOne)
+
+    val jsonDFTwo = sqlContext.read
+      .option("mode", "DROPMALFORMED")
+      .schema(schemaTwo)
+      .json(corruptRecords)
+    checkAnswer(
+      jsonDFTwo,
+      Row("str_a_4") :: Nil)
+    assert(jsonDFTwo.schema === schemaTwo)
+  }
+
+  test("Corrupt records: PERMISSIVE mode") {
     // Test if we can query corrupt records.
     withSQLConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD.key -> "_unparsed") {
       withTempTable("jsonTable") {
@@ -1015,6 +1131,27 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         )
       }
     }
+  }
+
+  test("SPARK-13953 Rename the corrupt record field via option") {
+    val jsonDF = sqlContext.read
+      .option("columnNameOfCorruptRecord", "_malformed")
+      .json(corruptRecords)
+    val schema = StructType(
+      StructField("_malformed", StringType, true) ::
+        StructField("a", StringType, true) ::
+        StructField("b", StringType, true) ::
+        StructField("c", StringType, true) :: Nil)
+
+    assert(schema === jsonDF.schema)
+    checkAnswer(
+      jsonDF.selectExpr("a", "b", "c", "_malformed"),
+      Row(null, null, null, "{") ::
+        Row(null, null, null, """{"a":1, b:2}""") ::
+        Row(null, null, null, """{"a":{, b:3}""") ::
+        Row("str_a_4", "str_b_4", "str_c_4", null) ::
+        Row(null, null, null, "]") :: Nil
+    )
   }
 
   test("SPARK-4068: nulls in arrays") {
@@ -1526,5 +1663,20 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         Row(java.sql.Timestamp.valueOf("2016-01-02 03:04:05"))
       )
     }
+  }
+
+  test("wide nested json table") {
+    val nested = (1 to 100).map { i =>
+      s"""
+         |"c$i": $i
+       """.stripMargin
+    }.mkString(", ")
+    val json = s"""
+       |{"a": [{$nested}], "b": [{$nested}]}
+     """.stripMargin
+    val rdd = sqlContext.sparkContext.makeRDD(Seq(json))
+    val df = sqlContext.read.json(rdd)
+    assert(df.schema.size === 2)
+    df.collect()
   }
 }

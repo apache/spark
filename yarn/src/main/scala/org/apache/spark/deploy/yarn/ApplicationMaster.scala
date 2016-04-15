@@ -137,12 +137,9 @@ private[spark] class ApplicationMaster(
         System.setProperty("spark.master", "yarn")
         System.setProperty("spark.submit.deployMode", "cluster")
 
-        // Propagate the application ID so that YarnClusterSchedulerBackend can pick it up.
+        // Set this internal configuration if it is running on cluster mode, this
+        // configuration will be checked in SparkContext to avoid misuse of yarn cluster mode.
         System.setProperty("spark.yarn.app.id", appAttemptId.getApplicationId().toString())
-
-        // Propagate the attempt if, so that in case of event logging,
-        // different attempt's logs gets created in different directory
-        System.setProperty("spark.yarn.app.attemptId", appAttemptId.getAttemptId().toString())
       }
 
       logInfo("ApplicationAttemptId: " + appAttemptId)
@@ -377,7 +374,7 @@ private[spark] class ApplicationMaster(
             failureCount = 0
           } catch {
             case i: InterruptedException =>
-            case e: Throwable => {
+            case e: Throwable =>
               failureCount += 1
               // this exception was introduced in hadoop 2.4 and this code would not compile
               // with earlier versions if we refer it directly.
@@ -393,7 +390,6 @@ private[spark] class ApplicationMaster(
               } else {
                 logWarning(s"Reporter thread fails $failureCount time(s) in a row.", e)
               }
-            }
           }
           try {
             val numPendingAllocate = allocator.getPendingAllocate.size
@@ -665,7 +661,7 @@ object ApplicationMaster extends Logging {
     SignalLogger.register(log)
     val amArgs = new ApplicationMasterArguments(args)
     SparkHadoopUtil.get.runAsSparkUser { () =>
-      master = new ApplicationMaster(amArgs, new YarnRMClient(amArgs))
+      master = new ApplicationMaster(amArgs, new YarnRMClient)
       System.exit(master.run())
     }
   }

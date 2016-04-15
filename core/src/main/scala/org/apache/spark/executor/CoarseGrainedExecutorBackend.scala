@@ -57,16 +57,14 @@ private[spark] class CoarseGrainedExecutorBackend(
     rpcEnv.asyncSetupEndpointRefByURI(driverUrl).flatMap { ref =>
       // This is a very fast action so we can use "ThreadUtils.sameThread"
       driver = Some(ref)
-      ref.ask[RegisterExecutorResponse](RegisterExecutor(executorId, self, cores, extractLogUrls))
+      ref.ask[Boolean](RegisterExecutor(executorId, self, cores, extractLogUrls))
     }(ThreadUtils.sameThread).onComplete {
       // This is a very fast action so we can use "ThreadUtils.sameThread"
-      case Success(msg) => Utils.tryLogNonFatalError {
-        Option(self).foreach(_.send(msg)) // msg must be RegisterExecutorResponse
-      }
-      case Failure(e) => {
+      case Success(msg) =>
+        // Always receive `true`. Just ignore it
+      case Failure(e) =>
         logError(s"Cannot register with driver: $driverUrl", e)
         System.exit(1)
-      }
     }(ThreadUtils.sameThread)
   }
 
@@ -113,9 +111,15 @@ private[spark] class CoarseGrainedExecutorBackend(
 
     case Shutdown =>
       stopping.set(true)
-      executor.stop()
-      stop()
-      rpcEnv.shutdown()
+      new Thread("CoarseGrainedExecutorBackend-stop-executor") {
+        override def run(): Unit = {
+          // executor.stop() will call `SparkEnv.stop()` which waits until RpcEnv stops totally.
+          // However, if `executor.stop()` runs in some thread of RpcEnv, RpcEnv won't be able to
+          // stop until `executor.stop()` returns, which becomes a dead-lock (See SPARK-14180).
+          // Therefore, we put this line in a new thread.
+          executor.stop()
+        }
+      }.start()
   }
 
   override def onDisconnected(remoteAddress: RpcAddress): Unit = {

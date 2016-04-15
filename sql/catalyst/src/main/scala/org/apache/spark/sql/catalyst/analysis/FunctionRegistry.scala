@@ -45,6 +45,19 @@ trait FunctionRegistry {
 
   /* Get the class of the registered function by specified name. */
   def lookupFunction(name: String): Option[ExpressionInfo]
+
+  /* Get the builder of the registered function by specified name. */
+  def lookupFunctionBuilder(name: String): Option[FunctionBuilder]
+
+  /** Drop a function and return whether the function existed. */
+  def dropFunction(name: String): Boolean
+
+  /** Checks if a function with a given name exists. */
+  def functionExists(name: String): Boolean = lookupFunction(name).isDefined
+
+  /** Clear all registered functions. */
+  def clear(): Unit
+
 }
 
 class SimpleFunctionRegistry extends FunctionRegistry {
@@ -74,6 +87,18 @@ class SimpleFunctionRegistry extends FunctionRegistry {
 
   override def lookupFunction(name: String): Option[ExpressionInfo] = synchronized {
     functionBuilders.get(name).map(_._1)
+  }
+
+  override def lookupFunctionBuilder(name: String): Option[FunctionBuilder] = synchronized {
+    functionBuilders.get(name).map(_._2)
+  }
+
+  override def dropFunction(name: String): Boolean = synchronized {
+    functionBuilders.remove(name).isDefined
+  }
+
+  override def clear(): Unit = {
+    functionBuilders.clear()
   }
 
   def copy(): SimpleFunctionRegistry = synchronized {
@@ -106,6 +131,19 @@ object EmptyFunctionRegistry extends FunctionRegistry {
   override def lookupFunction(name: String): Option[ExpressionInfo] = {
     throw new UnsupportedOperationException
   }
+
+  override def lookupFunctionBuilder(name: String): Option[FunctionBuilder] = {
+    throw new UnsupportedOperationException
+  }
+
+  override def dropFunction(name: String): Boolean = {
+    throw new UnsupportedOperationException
+  }
+
+  override def clear(): Unit = {
+    throw new UnsupportedOperationException
+  }
+
 }
 
 
@@ -126,12 +164,14 @@ object FunctionRegistry {
     expression[IsNull]("isnull"),
     expression[IsNotNull]("isnotnull"),
     expression[Least]("least"),
+    expression[CreateMap]("map"),
     expression[CreateNamedStruct]("named_struct"),
     expression[NaNvl]("nanvl"),
     expression[Coalesce]("nvl"),
     expression[Rand]("rand"),
     expression[Randn]("randn"),
     expression[CreateStruct]("struct"),
+    expression[CaseWhen]("when"),
 
     // math functions
     expression[Acos]("acos"),
@@ -178,6 +218,12 @@ object FunctionRegistry {
     expression[Tan]("tan"),
     expression[Tanh]("tanh"),
 
+    expression[Add]("+"),
+    expression[Subtract]("-"),
+    expression[Multiply]("*"),
+    expression[Divide]("/"),
+    expression[Remainder]("%"),
+
     // aggregate functions
     expression[HyperLogLogPlusPlus]("approx_count_distinct"),
     expression[Average]("avg"),
@@ -218,6 +264,7 @@ object FunctionRegistry {
     expression[Lower]("lcase"),
     expression[Length]("length"),
     expression[Levenshtein]("levenshtein"),
+    expression[Like]("like"),
     expression[Lower]("lower"),
     expression[StringLocate]("locate"),
     expression[StringLPad]("lpad"),
@@ -228,6 +275,7 @@ object FunctionRegistry {
     expression[RegExpReplace]("regexp_replace"),
     expression[StringRepeat]("repeat"),
     expression[StringReverse]("reverse"),
+    expression[RLike]("rlike"),
     expression[StringRPad]("rpad"),
     expression[StringTrimRight]("rtrim"),
     expression[SoundEx]("soundex"),
@@ -272,6 +320,7 @@ object FunctionRegistry {
     expression[UnixTimestamp]("unix_timestamp"),
     expression[WeekOfYear]("weekofyear"),
     expression[Year]("year"),
+    expression[TimeWindow]("window"),
 
     // collection functions
     expression[ArrayContains]("array_contains"),
@@ -303,7 +352,29 @@ object FunctionRegistry {
     expression[NTile]("ntile"),
     expression[Rank]("rank"),
     expression[DenseRank]("dense_rank"),
-    expression[PercentRank]("percent_rank")
+    expression[PercentRank]("percent_rank"),
+
+    // predicates
+    expression[And]("and"),
+    expression[In]("in"),
+    expression[Not]("not"),
+    expression[Or]("or"),
+
+    expression[EqualNullSafe]("<=>"),
+    expression[EqualTo]("="),
+    expression[EqualTo]("=="),
+    expression[GreaterThan](">"),
+    expression[GreaterThanOrEqual](">="),
+    expression[LessThan]("<"),
+    expression[LessThanOrEqual]("<="),
+    expression[Not]("!"),
+
+    // bitwise
+    expression[BitwiseAnd]("&"),
+    expression[BitwiseNot]("~"),
+    expression[BitwiseOr]("|"),
+    expression[BitwiseXor]("^")
+
   )
 
   val builtin: SimpleFunctionRegistry = {
@@ -336,7 +407,10 @@ object FunctionRegistry {
         }
         Try(f.newInstance(expressions : _*).asInstanceOf[Expression]) match {
           case Success(e) => e
-          case Failure(e) => throw new AnalysisException(e.getMessage)
+          case Failure(e) =>
+            // the exception is an invocation exception. To get a meaningful message, we need the
+            // cause.
+            throw new AnalysisException(e.getCause.getMessage)
         }
       }
     }

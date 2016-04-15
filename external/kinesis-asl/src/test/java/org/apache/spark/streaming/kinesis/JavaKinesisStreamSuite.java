@@ -17,6 +17,7 @@
 
 package org.apache.spark.streaming.kinesis;
 
+import com.amazonaws.regions.RegionUtils;
 import com.amazonaws.services.kinesis.model.Record;
 import org.junit.Test;
 
@@ -34,11 +35,13 @@ import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionIn
 public class JavaKinesisStreamSuite extends LocalJavaStreamingContext {
   @Test
   public void testKinesisStream() {
-    // Tests the API, does not actually test data receiving
-    JavaDStream<byte[]> kinesisStream = KinesisUtils.createStream(ssc, "mySparkStream",
-        "https://kinesis.us-west-2.amazonaws.com", new Duration(2000),
-        InitialPositionInStream.LATEST, StorageLevel.MEMORY_AND_DISK_2());
+    String dummyEndpointUrl = KinesisTestUtils.defaultEndpointUrl();
+    String dummyRegionName = RegionUtils.getRegionByEndpoint(dummyEndpointUrl).getName();
 
+    // Tests the API, does not actually test data receiving
+    JavaDStream<byte[]> kinesisStream = KinesisUtils.createStream(ssc, "myAppName", "mySparkStream",
+        dummyEndpointUrl, dummyRegionName, InitialPositionInStream.LATEST, new Duration(2000),
+        StorageLevel.MEMORY_AND_DISK_2());
     ssc.stop();
   }
 

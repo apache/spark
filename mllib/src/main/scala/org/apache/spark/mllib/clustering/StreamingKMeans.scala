@@ -178,6 +178,8 @@ class StreamingKMeans @Since("1.2.0") (
    */
   @Since("1.2.0")
   def setK(k: Int): this.type = {
+    require(k > 0,
+      s"Number of clusters must be positive but got ${k}")
     this.k = k
     this
   }
@@ -187,6 +189,8 @@ class StreamingKMeans @Since("1.2.0") (
    */
   @Since("1.2.0")
   def setDecayFactor(a: Double): this.type = {
+    require(a >= 0,
+      s"Decay factor must be nonnegative but got ${a}")
     this.decayFactor = a
     this
   }
@@ -198,6 +202,8 @@ class StreamingKMeans @Since("1.2.0") (
    */
   @Since("1.2.0")
   def setHalfLife(halfLife: Double, timeUnit: String): this.type = {
+    require(halfLife > 0,
+      s"Half life must be positive but got ${halfLife}")
     if (timeUnit != StreamingKMeans.BATCHES && timeUnit != StreamingKMeans.POINTS) {
       throw new IllegalArgumentException("Invalid time unit for decay: " + timeUnit)
     }
@@ -212,6 +218,12 @@ class StreamingKMeans @Since("1.2.0") (
    */
   @Since("1.2.0")
   def setInitialCenters(centers: Array[Vector], weights: Array[Double]): this.type = {
+    require(centers.size == weights.size,
+      "Number of initial centers must be equal to number of weights")
+    require(centers.size == k,
+      s"Number of initial centers must be ${k} but got ${centers.size}")
+    require(weights.forall(_ >= 0),
+      s"Weight for each inital center must be nonnegative but got [${weights.mkString(" ")}]")
     model = new StreamingKMeansModel(centers, weights)
     this
   }
@@ -225,6 +237,10 @@ class StreamingKMeans @Since("1.2.0") (
    */
   @Since("1.2.0")
   def setRandomCenters(dim: Int, weight: Double, seed: Long = Utils.random.nextLong): this.type = {
+    require(dim > 0,
+      s"Number of dimensions must be positive but got ${dim}")
+    require(weight >= 0,
+      s"Weight for each center must be nonnegative but got ${weight}")
     val random = new XORShiftRandom(seed)
     val centers = Array.fill(k)(Vectors.dense(Array.fill(dim)(random.nextGaussian())))
     val weights = Array.fill(k)(weight)

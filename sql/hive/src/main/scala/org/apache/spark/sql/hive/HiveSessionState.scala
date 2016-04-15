@@ -18,10 +18,11 @@
 package org.apache.spark.sql.hive
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry, OverrideCatalog}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.execution.{python, SparkPlanner}
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.hive.execution.HiveSqlParser
 import org.apache.spark.sql.internal.{SessionState, SQLConf}
 
 
@@ -35,46 +36,47 @@ private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx)
   }
 
   /**
-   * A metadata catalog that points to the Hive metastore.
+   * Internal catalog for managing table and database states.
    */
-  override lazy val catalog = new HiveMetastoreCatalog(ctx.metadataHive, ctx) with OverrideCatalog
-
-  /**
-   * Internal catalog for managing functions registered by the user.
-   * Note that HiveUDFs will be overridden by functions registered in this context.
-   */
-  override lazy val functionRegistry: FunctionRegistry = {
-    new HiveFunctionRegistry(FunctionRegistry.builtin.copy(), ctx.executionHive)
+  override lazy val catalog = {
+    new HiveSessionCatalog(
+      ctx.hiveCatalog,
+      ctx.metadataHive,
+      ctx,
+      ctx.functionResourceLoader,
+      functionRegistry,
+      conf)
   }
 
   /**
    * An analyzer that uses the Hive metastore.
    */
   override lazy val analyzer: Analyzer = {
-    new Analyzer(catalog, functionRegistry, conf) {
+    new Analyzer(catalog, conf) {
       override val extendedResolutionRules =
         catalog.ParquetConversions ::
+        catalog.OrcConversions ::
         catalog.CreateTables ::
         catalog.PreInsertionCasts ::
-        python.ExtractPythonUDFs ::
         PreInsertCastAndRename ::
         DataSourceAnalysis ::
         (if (conf.runSQLOnFile) new ResolveDataSource(ctx) :: Nil else Nil)
 
-      override val extendedCheckRules = Seq(PreWriteCheck(catalog))
+      override val extendedCheckRules = Seq(PreWriteCheck(conf, catalog))
     }
   }
 
   /**
    * Parser for HiveQl query texts.
    */
-  override lazy val sqlParser: ParserInterface = new HiveQl(conf)
+  override lazy val sqlParser: ParserInterface = HiveSqlParser
 
   /**
    * Planner that takes into account Hive-specific strategies.
    */
-  override lazy val planner: SparkPlanner = {
-    new SparkPlanner(ctx.sparkContext, conf, experimentalMethods) with HiveStrategies {
+  override def planner: SparkPlanner = {
+    new SparkPlanner(ctx.sparkContext, conf, experimentalMethods.extraStrategies)
+      with HiveStrategies {
       override val hiveContext = ctx
 
       override def strategies: Seq[Strategy] = {
@@ -90,7 +92,7 @@ private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx)
           DataSinks,
           Scripts,
           Aggregation,
-          LeftSemiJoin,
+          ExistenceJoin,
           EquiJoinSelection,
           BasicOperators,
           BroadcastNestedLoop,

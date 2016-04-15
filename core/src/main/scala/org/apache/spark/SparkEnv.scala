@@ -101,14 +101,13 @@ class SparkEnv (
       // We only need to delete the tmp dir create by driver, because sparkFilesDir is point to the
       // current working dir in executor which we do not need to delete.
       driverTmpDirToDelete match {
-        case Some(path) => {
+        case Some(path) =>
           try {
             Utils.deleteRecursively(new File(path))
           } catch {
             case e: Exception =>
               logWarning(s"Exception while deleting Spark temp dir: $path", e)
           }
-        }
         case None => // We just need to delete tmp dir created by driver, so do nothing on executor
       }
     }
@@ -153,14 +152,6 @@ object SparkEnv extends Logging {
    * Returns the SparkEnv.
    */
   def get: SparkEnv = {
-    env
-  }
-
-  /**
-   * Returns the ThreadLocal SparkEnv.
-   */
-  @deprecated("Use SparkEnv.get instead", "1.2.0")
-  def getThreadLocal: SparkEnv = {
     env
   }
 
@@ -322,7 +313,8 @@ object SparkEnv extends Logging {
         UnifiedMemoryManager(conf, numUsableCores)
       }
 
-    val blockTransferService = new NettyBlockTransferService(conf, securityManager, numUsableCores)
+    val blockTransferService =
+      new NettyBlockTransferService(conf, securityManager, hostname, numUsableCores)
 
     val blockManagerMaster = new BlockManagerMaster(registerOrLookupEndpoint(
       BlockManagerMaster.DRIVER_ENDPOINT_NAME,
@@ -331,7 +323,7 @@ object SparkEnv extends Logging {
 
     // NB: blockManager is not valid until initialize() is called later.
     val blockManager = new BlockManager(executorId, rpcEnv, blockManagerMaster,
-      serializer, conf, memoryManager, mapOutputTracker, shuffleManager,
+      serializerManager, conf, memoryManager, mapOutputTracker, shuffleManager,
       blockTransferService, securityManager, numUsableCores)
 
     val broadcastManager = new BroadcastManager(isDriver, conf, securityManager)

@@ -83,7 +83,7 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
                 return
               }
               val deserializedResult = serializer.get().deserialize[DirectTaskResult[_]](
-                serializedTaskResult.get)
+                serializedTaskResult.get.toByteBuffer)
               sparkEnv.blockManager.master.removeBlock(blockId)
               (deserializedResult, size)
           }
@@ -133,7 +133,7 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
               // if we can't deserialize the reason.
               logError(
                 "Could not deserialize TaskEndReason: ClassNotFound with classloader " + loader)
-            case ex: Exception => {}
+            case ex: Exception => // No-op
           }
           scheduler.handleFailedTask(taskSetManager, tid, taskState, reason)
         }

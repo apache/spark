@@ -20,11 +20,13 @@ import java.nio.file.Files
 
 import scala.util.Properties
 import scala.collection.JavaConverters._
+import scala.collection.mutable.Stack
 
 import sbt._
 import sbt.Classpaths.publishTask
 import sbt.Keys._
 import sbtunidoc.Plugin.UnidocKeys.unidocGenjavadocVersion
+import com.simplytyped.Antlr4Plugin._
 import com.typesafe.sbt.pom.{PomBuild, SbtPomKeys}
 import com.typesafe.tools.mima.plugin.MimaKeys
 
@@ -39,15 +41,15 @@ object BuildCommons {
   ).map(ProjectRef(buildLocation, _))
 
   val streamingProjects@Seq(
-    streaming, streamingKafka
+    streaming, streamingFlumeSink, streamingFlume, streamingKafka
   ) = Seq(
-    "streaming", "streaming-kafka"
+    "streaming", "streaming-flume-sink", "streaming-flume", "streaming-kafka"
   ).map(ProjectRef(buildLocation, _))
 
   val allProjects@Seq(
-    core, graphx, mllib, repl, networkCommon, networkShuffle, launcher, unsafe, testTags, sketch, _*
+    core, graphx, mllib, mllibLocal, repl, networkCommon, networkShuffle, launcher, unsafe, testTags, sketch, _*
   ) = Seq(
-    "core", "graphx", "mllib", "repl", "network-common", "network-shuffle", "launcher", "unsafe",
+    "core", "graphx", "mllib", "mllib-local", "repl", "network-common", "network-shuffle", "launcher", "unsafe",
     "test-tags", "sketch"
   ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects
 
@@ -56,11 +58,12 @@ object BuildCommons {
     Seq("yarn", "java8-tests", "ganglia-lgpl", "streaming-kinesis-asl",
       "docker-integration-tests").map(ProjectRef(buildLocation, _))
 
-  val assemblyProjects@Seq(assembly, networkYarn, streamingKafkaAssembly, streamingKinesisAslAssembly) =
-    Seq("assembly", "network-yarn", "streaming-kafka-assembly", "streaming-kinesis-asl-assembly")
+  val assemblyProjects@Seq(networkYarn, streamingFlumeAssembly, streamingKafkaAssembly, streamingKinesisAslAssembly) =
+    Seq("network-yarn", "streaming-flume-assembly", "streaming-kafka-assembly", "streaming-kinesis-asl-assembly")
       .map(ProjectRef(buildLocation, _))
 
-  val copyJarsProjects@Seq(examples) = Seq("examples").map(ProjectRef(buildLocation, _))
+  val copyJarsProjects@Seq(assembly, examples) = Seq("assembly", "examples")
+    .map(ProjectRef(buildLocation, _))
 
   val tools = ProjectRef(buildLocation, "tools")
   // Root project.
@@ -251,7 +254,7 @@ object SparkBuild extends PomBuild {
   val mimaProjects = allProjects.filterNot { x =>
     Seq(
       spark, hive, hiveThriftServer, catalyst, repl, networkCommon, networkShuffle, networkYarn,
-      unsafe, testTags, sketch
+      unsafe, testTags, sketch, mllibLocal
     ).contains(x)
   }
 
@@ -262,8 +265,14 @@ object SparkBuild extends PomBuild {
   /* Unsafe settings */
   enable(Unsafe.settings)(unsafe)
 
-  /* Set up tasks to copy dependencies during packaging. */
-  copyJarsProjects.foreach(enable(CopyDependencies.settings))
+  /*
+   * Set up tasks to copy dependencies during packaging. This step can be disabled in the command
+   * line, so that dev/mima can run without trying to copy these files again and potentially
+   * causing issues.
+   */
+  if (!"false".equals(System.getProperty("copyDependencies"))) {
+    copyJarsProjects.foreach(enable(CopyDependencies.settings))
+  }
 
   /* Enable Assembly for all assembly projects */
   assemblyProjects.foreach(enable(Assembly.settings))
@@ -282,6 +291,8 @@ object SparkBuild extends PomBuild {
 
   /* Hive console settings */
   enable(Hive.settings)(hive)
+
+  enable(Flume.settings)(streamingFlumeSink)
 
   enable(Java8TestSettings.settings)(java8Tests)
 
@@ -348,11 +359,17 @@ object Unsafe {
   )
 }
 
+object Flume {
+  lazy val settings = sbtavro.SbtAvro.avroSettings
+}
+
 object DockerIntegrationTests {
   // This serves to override the override specified in DependencyOverrides:
   lazy val settings = Seq(
-    dependencyOverrides += "com.google.guava" % "guava" % "18.0"
+    dependencyOverrides += "com.google.guava" % "guava" % "18.0",
+    resolvers ++= Seq("DB2" at "https://app.camunda.com/nexus/content/repositories/public/")
   )
+
 }
 
 /**
@@ -395,57 +412,10 @@ object OldDeps {
 }
 
 object Catalyst {
-  lazy val settings = Seq(
-    // ANTLR code-generation step.
-    //
-    // This has been heavily inspired by com.github.stefri.sbt-antlr (0.5.3). It fixes a number of
-    // build errors in the current plugin.
-    // Create Parser from ANTLR grammar files.
-    sourceGenerators in Compile += Def.task {
-      val log = streams.value.log
-
-      val grammarFileNames = Seq(
-        "SparkSqlLexer.g",
-        "SparkSqlParser.g")
-      val sourceDir = (sourceDirectory in Compile).value / "antlr3"
-      val targetDir = (sourceManaged in Compile).value
-
-      // Create default ANTLR Tool.
-      val antlr = new org.antlr.Tool
-
-      // Setup input and output directories.
-      antlr.setInputDirectory(sourceDir.getPath)
-      antlr.setOutputDirectory(targetDir.getPath)
-      antlr.setForceRelativeOutput(true)
-      antlr.setMake(true)
-
-      // Add grammar files.
-      grammarFileNames.flatMap(gFileName => (sourceDir ** gFileName).get).foreach { gFilePath =>
-        val relGFilePath = (gFilePath relativeTo sourceDir).get.getPath
-        log.info("ANTLR: Grammar file '%s' detected.".format(relGFilePath))
-        antlr.addGrammarFile(relGFilePath)
-        // We will set library directory multiple times here. However, only the
-        // last one has effect. Because the grammar files are located under the same directory,
-        // We assume there is only one library directory.
-        antlr.setLibDirectory(gFilePath.getParent)
-      }
-
-      // Generate the parser.
-      antlr.process()
-      val errorState = org.antlr.tool.ErrorManager.getErrorState
-      if (errorState.errors > 0) {
-        sys.error("ANTLR: Caught %d build errors.".format(errorState.errors))
-      } else if (errorState.warnings > 0) {
-        sys.error("ANTLR: Caught %d build warnings.".format(errorState.warnings))
-      }
-
-      // Return all generated java files.
-      (targetDir ** "*.java").get.toSeq
-    }.taskValue,
-    // Include ANTLR tokens files.
-    resourceGenerators in Compile += Def.task {
-      ((sourceManaged in Compile).value ** "*.tokens").get.toSeq
-    }.taskValue
+  lazy val settings = antlr4Settings ++ Seq(
+    antlr4PackageName in Antlr4 := Some("org.apache.spark.sql.catalyst.parser"),
+    antlr4GenListener in Antlr4 := true,
+    antlr4GenVisitor in Antlr4 := true
   )
 }
 
@@ -517,8 +487,6 @@ object Assembly {
 
   val hadoopVersion = taskKey[String]("The version of hadoop that spark is compiled against.")
 
-  val deployDatanucleusJars = taskKey[Unit]("Deploy datanucleus jars to the spark/lib_managed/jars directory")
-
   lazy val settings = assemblySettings ++ Seq(
     test in assembly := {},
     hadoopVersion := {
@@ -526,7 +494,7 @@ object Assembly {
         .getOrElse(SbtPomKeys.effectivePom.value.getProperties.get("hadoop.version").asInstanceOf[String])
     },
     jarName in assembly <<= (version, moduleName, hadoopVersion) map { (v, mName, hv) =>
-      if (mName.contains("streaming-kafka-assembly") || mName.contains("streaming-kinesis-asl-assembly")) {
+      if (mName.contains("streaming-flume-assembly") || mName.contains("streaming-kafka-assembly") || mName.contains("streaming-kinesis-asl-assembly")) {
         // This must match the same name used in maven (see external/kafka-assembly/pom.xml)
         s"${mName}-${v}.jar"
       } else {
@@ -537,27 +505,13 @@ object Assembly {
       s"${mName}-test-${v}.jar"
     },
     mergeStrategy in assembly := {
-      case PathList("org", "datanucleus", xs @ _*)             => MergeStrategy.discard
       case m if m.toLowerCase.endsWith("manifest.mf")          => MergeStrategy.discard
       case m if m.toLowerCase.matches("meta-inf.*\\.sf$")      => MergeStrategy.discard
       case "log4j.properties"                                  => MergeStrategy.discard
       case m if m.toLowerCase.startsWith("meta-inf/services/") => MergeStrategy.filterDistinctLines
       case "reference.conf"                                    => MergeStrategy.concat
       case _                                                   => MergeStrategy.first
-    },
-    deployDatanucleusJars := {
-      val jars: Seq[File] = (fullClasspath in assembly).value.map(_.data)
-        .filter(_.getPath.contains("org.datanucleus"))
-      var libManagedJars = new File(BuildCommons.sparkHome, "lib_managed/jars")
-      libManagedJars.mkdirs()
-      jars.foreach { jar =>
-        val dest = new File(libManagedJars, jar.getName)
-        if (!dest.exists()) {
-          Files.copy(jar.toPath, dest.toPath)
-        }
-      }
-    },
-    assembly <<= assembly.dependsOn(deployDatanucleusJars)
+    }
   )
 }
 
@@ -644,9 +598,9 @@ object Unidoc {
     publish := {},
 
     unidocProjectFilter in(ScalaUnidoc, unidoc) :=
-      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, yarn, testTags),
+      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, streamingFlumeSink, yarn, testTags),
     unidocProjectFilter in(JavaUnidoc, unidoc) :=
-      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, yarn, testTags),
+      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, streamingFlumeSink, yarn, testTags),
 
     // Skip actual catalyst, but include the subproject.
     // Catalyst is not public API and contains quasiquotes which break scaladoc.
@@ -665,7 +619,7 @@ object Unidoc {
       "-public",
       "-group", "Core Java API", packageList("api.java", "api.java.function"),
       "-group", "Spark Streaming", packageList(
-        "streaming.api.java", "streaming.kafka", "streaming.kinesis"
+        "streaming.api.java", "streaming.flume", "streaming.kafka", "streaming.kinesis"
       ),
       "-group", "MLlib", packageList(
         "mllib.classification", "mllib.clustering", "mllib.evaluation.binary", "mllib.linalg",
@@ -738,6 +692,13 @@ object Java8TestSettings {
 object TestSettings {
   import BuildCommons._
 
+  private val scalaBinaryVersion =
+    if (System.getProperty("scala-2.10") == "true") {
+      "2.10"
+    } else {
+      "2.11"
+    }
+
   lazy val settings = Seq (
     // Fork new JVMs for tests and set Java options for those
     fork := true,
@@ -747,6 +708,7 @@ object TestSettings {
       "SPARK_DIST_CLASSPATH" ->
         (fullClasspath in Test).value.files.map(_.getAbsolutePath).mkString(":").stripSuffix(":"),
       "SPARK_PREPEND_CLASSES" -> "1",
+      "SPARK_SCALA_VERSION" -> scalaBinaryVersion,
       "SPARK_TESTING" -> "1",
       "JAVA_HOME" -> sys.env.get("JAVA_HOME").getOrElse(sys.props("java.home"))),
     javaOptions in Test += s"-Djava.io.tmpdir=$testTempDir",
@@ -783,8 +745,21 @@ object TestSettings {
     parallelExecution in Test := false,
     // Make sure the test temp directory exists.
     resourceGenerators in Test <+= resourceManaged in Test map { outDir: File =>
-      if (!new File(testTempDir).isDirectory()) {
-        require(new File(testTempDir).mkdirs())
+      var dir = new File(testTempDir)
+      if (!dir.isDirectory()) {
+        // Because File.mkdirs() can fail if multiple callers are trying to create the same
+        // parent directory, this code tries to create parents one at a time, and avoids
+        // failures when the directories have been created by somebody else.
+        val stack = new Stack[File]()
+        while (!dir.isDirectory()) {
+          stack.push(dir)
+          dir = dir.getParentFile()
+        }
+
+        while (stack.nonEmpty) {
+          val d = stack.pop()
+          require(d.mkdir() || d.isDirectory(), s"Failed to create directory $d")
+        }
       }
       Seq[File]()
     },

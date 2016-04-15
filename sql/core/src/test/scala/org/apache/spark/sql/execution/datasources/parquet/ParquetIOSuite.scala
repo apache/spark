@@ -445,55 +445,6 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
     }
   }
 
-  test("SPARK-6352 DirectParquetOutputCommitter") {
-    val clonedConf = new Configuration(hadoopConfiguration)
-
-    // Write to a parquet file and let it fail.
-    // _temporary should be missing if direct output committer works.
-    try {
-      hadoopConfiguration.set("spark.sql.parquet.output.committer.class",
-        classOf[DirectParquetOutputCommitter].getCanonicalName)
-      sqlContext.udf.register("div0", (x: Int) => x / 0)
-      withTempPath { dir =>
-        intercept[org.apache.spark.SparkException] {
-          sqlContext.sql("select div0(1) as div0").write.parquet(dir.getCanonicalPath)
-        }
-        val path = new Path(dir.getCanonicalPath, "_temporary")
-        val fs = path.getFileSystem(hadoopConfiguration)
-        assert(!fs.exists(path))
-      }
-    } finally {
-      // Hadoop 1 doesn't have `Configuration.unset`
-      hadoopConfiguration.clear()
-      clonedConf.asScala.foreach(entry => hadoopConfiguration.set(entry.getKey, entry.getValue))
-    }
-  }
-
-  test("SPARK-9849 DirectParquetOutputCommitter qualified name should be backward compatible") {
-    val clonedConf = new Configuration(hadoopConfiguration)
-
-    // Write to a parquet file and let it fail.
-    // _temporary should be missing if direct output committer works.
-    try {
-      hadoopConfiguration.set("spark.sql.parquet.output.committer.class",
-        "org.apache.spark.sql.parquet.DirectParquetOutputCommitter")
-      sqlContext.udf.register("div0", (x: Int) => x / 0)
-      withTempPath { dir =>
-        intercept[org.apache.spark.SparkException] {
-          sqlContext.sql("select div0(1) as div0").write.parquet(dir.getCanonicalPath)
-        }
-        val path = new Path(dir.getCanonicalPath, "_temporary")
-        val fs = path.getFileSystem(hadoopConfiguration)
-        assert(!fs.exists(path))
-      }
-    } finally {
-      // Hadoop 1 doesn't have `Configuration.unset`
-      hadoopConfiguration.clear()
-      clonedConf.asScala.foreach(entry => hadoopConfiguration.set(entry.getKey, entry.getValue))
-    }
-  }
-
-
   test("SPARK-8121: spark.sql.parquet.output.committer.class shouldn't be overridden") {
     withTempPath { dir =>
       val clonedConf = new Configuration(hadoopConfiguration)
@@ -656,7 +607,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       var hash1: Int = 0
       var hash2: Int = 0
       (false :: true :: Nil).foreach { v =>
-        withSQLConf(SQLConf.PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED.key -> v.toString) {
+        withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> v.toString) {
           val df = sqlContext.read.parquet(dir.getCanonicalPath)
           val rows = df.queryExecution.toRdd.map(_.copy()).collect()
           val unsafeRows = rows.map(_.asInstanceOf[UnsafeRow])
@@ -672,13 +623,13 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
     }
   }
 
-  test("UnsafeRowParquetRecordReader - direct path read") {
-    val data = (0 to 10).map(i => (i, ((i + 'a').toChar.toString)))
+  test("VectorizedParquetRecordReader - direct path read") {
+    val data = (0 to 10).map(i => (i, (i + 'a').toChar.toString))
     withTempPath { dir =>
       sqlContext.createDataFrame(data).repartition(1).write.parquet(dir.getCanonicalPath)
       val file = SpecificParquetRecordReaderBase.listDirectory(dir).get(0);
       {
-        val reader = new UnsafeRowParquetRecordReader
+        val reader = new VectorizedParquetRecordReader
         try {
           reader.initialize(file, null)
           val result = mutable.ArrayBuffer.empty[(Int, String)]
@@ -695,7 +646,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
 
       // Project just one column
       {
-        val reader = new UnsafeRowParquetRecordReader
+        val reader = new VectorizedParquetRecordReader
         try {
           reader.initialize(file, ("_2" :: Nil).asJava)
           val result = mutable.ArrayBuffer.empty[(String)]
@@ -711,7 +662,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
 
       // Project columns in opposite order
       {
-        val reader = new UnsafeRowParquetRecordReader
+        val reader = new VectorizedParquetRecordReader
         try {
           reader.initialize(file, ("_2" :: "_1" :: Nil).asJava)
           val result = mutable.ArrayBuffer.empty[(String, Int)]
@@ -728,7 +679,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
 
       // Empty projection
       {
-        val reader = new UnsafeRowParquetRecordReader
+        val reader = new VectorizedParquetRecordReader
         try {
           reader.initialize(file, List[String]().asJava)
           var result = 0

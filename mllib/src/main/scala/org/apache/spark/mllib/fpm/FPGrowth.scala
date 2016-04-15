@@ -180,6 +180,8 @@ class FPGrowth private (
    */
   @Since("1.3.0")
   def setMinSupport(minSupport: Double): this.type = {
+    require(minSupport >= 0.0 && minSupport <= 1.0,
+      s"Minimal support level must be in range [0, 1] but got ${minSupport}")
     this.minSupport = minSupport
     this
   }
@@ -190,6 +192,8 @@ class FPGrowth private (
    */
   @Since("1.3.0")
   def setNumPartitions(numPartitions: Int): this.type = {
+    require(numPartitions > 0,
+      s"Number of partitions must be positive but got ${numPartitions}")
     this.numPartitions = numPartitions
     this
   }

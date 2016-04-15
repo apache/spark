@@ -143,7 +143,7 @@ class PlannerSuite extends SharedSQLContext {
         val sortMergeJoins = planned.collect { case join: SortMergeJoin => join }
 
         assert(broadcastHashJoins.size === 1, "Should use broadcast hash join")
-        assert(sortMergeJoins.isEmpty, "Should not use sort merge join")
+        assert(sortMergeJoins.isEmpty, "Should not use shuffled hash join")
 
         sqlContext.clearCache()
       }

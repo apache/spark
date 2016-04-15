@@ -41,7 +41,7 @@ trait FutureAction[T] extends Future[T] {
   /**
    * Cancels the execution of this action.
    */
-  def cancel()
+  def cancel(): Unit
 
   /**
    * Blocks until this action completes.
@@ -65,7 +65,7 @@ trait FutureAction[T] extends Future[T] {
    * When this action is completed, either through an exception, or a value, applies the provided
    * function.
    */
-  def onComplete[U](func: (Try[T]) => U)(implicit executor: ExecutionContext)
+  def onComplete[U](func: (Try[T]) => U)(implicit executor: ExecutionContext): Unit
 
   /**
    * Returns whether the action has already been completed with a value or an exception.
@@ -146,16 +146,16 @@ class SimpleFutureAction[T] private[spark](jobWaiter: JobWaiter[_], resultFunc: 
 
 
 /**
-  * Handle via which a "run" function passed to a [[ComplexFutureAction]]
-  * can submit jobs for execution.
-  */
+ * Handle via which a "run" function passed to a [[ComplexFutureAction]]
+ * can submit jobs for execution.
+ */
 @DeveloperApi
 trait JobSubmitter {
   /**
-    * Submit a job for execution and return a FutureAction holding the result.
-    * This is a wrapper around the same functionality provided by SparkContext
-    * to enable cancellation.
-    */
+   * Submit a job for execution and return a FutureAction holding the result.
+   * This is a wrapper around the same functionality provided by SparkContext
+   * to enable cancellation.
+   */
   def submitJob[T, U, R](
     rdd: RDD[T],
     processPartition: Iterator[T] => U,

@@ -98,8 +98,11 @@ mvn -Pyarn -Phadoop-2.3 -Dhadoop.version=2.3.0 -DskipTests clean package
 # Apache Hadoop 2.4.X or 2.5.X
 mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=VERSION -DskipTests clean package
 
-Versions of Hadoop after 2.5.X may or may not work with the -Phadoop-2.4 profile (they were
-released after this version of Spark).
+# Apache Hadoop 2.6.X
+mvn -Pyarn -Phadoop-2.6 -Dhadoop.version=2.6.0 -DskipTests clean package
+
+# Apache Hadoop 2.7.X and later
+mvn -Pyarn -Phadoop-2.7 -Dhadoop.version=VERSION -DskipTests clean package
 
 # Different versions of HDFS and YARN.
 mvn -Pyarn -Phadoop-2.3 -Dhadoop.version=2.3.0 -Dyarn.version=2.2.0 -DskipTests clean package
@@ -140,10 +143,10 @@ It's possible to build Spark sub-modules using the `mvn -pl` option.
 For instance, you can build the Spark Streaming module using:
 
 {% highlight bash %}
-mvn -pl :spark-streaming_2.10 clean install
+mvn -pl :spark-streaming_2.11 clean install
 {% endhighlight %}
 
-where `spark-streaming_2.10` is the `artifactId` as defined in `streaming/pom.xml` file.
+where `spark-streaming_2.11` is the `artifactId` as defined in `streaming/pom.xml` file.
 
 # Continuous Compilation
 
@@ -177,22 +180,15 @@ For help in setting up IntelliJ IDEA or Eclipse for Spark development, and troub
 
 Running only Java 8 tests and nothing else.
 
-    mvn install -DskipTests -Pjava8-tests
+    mvn install -DskipTests
+    mvn -pl :java8-tests_2.11 test
 
 or
 
-    sbt -Pjava8-tests java8-tests/test
+    sbt java8-tests/test
 
-Java 8 tests are run when `-Pjava8-tests` profile is enabled, they will run in spite of `-DskipTests`.
-For these tests to run your system must have a JDK 8 installation.
+Java 8 tests are automatically enabled when a Java 8 JDK is detected.
 If you have JDK 8 installed but it is not the system default, you can set JAVA_HOME to point to JDK 8 before running the tests.
-
-# Building for PySpark on YARN
-
-PySpark on YARN is only supported if the jar is built with Maven. Further, there is a known problem
-with building this assembly jar on Red Hat based operating systems (see [SPARK-1753](https://issues.apache.org/jira/browse/SPARK-1753)). If you wish to
-run PySpark on a YARN cluster with Red Hat installed, we recommend that you build the jar elsewhere,
-then ship it over to the cluster. We are investigating the exact cause for this.
 
 # Packaging without Hadoop Dependencies for YARN
 
@@ -207,7 +203,7 @@ compilation. More advanced developers may wish to use SBT.
 The SBT build is derived from the Maven POM files, and so the same Maven profiles and variables
 can be set to control the SBT build. For example:
 
-    build/sbt -Pyarn -Phadoop-2.3 assembly
+    build/sbt -Pyarn -Phadoop-2.3 package
 
 To avoid the overhead of launching sbt each time you need to re-compile, you can launch sbt
 in interactive mode by running `build/sbt`, and then run all build commands at the command
@@ -216,9 +212,9 @@ prompt. For more recommendations on reducing build time, refer to the
 
 # Testing with SBT
 
-Some of the tests require Spark to be packaged first, so always run `build/sbt assembly` the first time.  The following is an example of a correct (build, test) sequence:
+Some of the tests require Spark to be packaged first, so always run `build/sbt package` the first time.  The following is an example of a correct (build, test) sequence:
 
-    build/sbt -Pyarn -Phadoop-2.3 -Phive -Phive-thriftserver assembly
+    build/sbt -Pyarn -Phadoop-2.3 -Phive -Phive-thriftserver package
     build/sbt -Pyarn -Phadoop-2.3 -Phive -Phive-thriftserver test
 
 To run only a specific test suite as follows:

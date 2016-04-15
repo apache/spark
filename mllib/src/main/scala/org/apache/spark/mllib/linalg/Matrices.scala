@@ -123,14 +123,18 @@ sealed trait Matrix extends Serializable {
   @Since("1.4.0")
   def toString(maxLines: Int, maxLineWidth: Int): String = toBreeze.toString(maxLines, maxLineWidth)
 
-  /** Map the values of this matrix using a function. Generates a new matrix. Performs the
-    * function on only the backing array. For example, an operation such as addition or
-    * subtraction will only be performed on the non-zero values in a `SparseMatrix`. */
+  /**
+   * Map the values of this matrix using a function. Generates a new matrix. Performs the
+   * function on only the backing array. For example, an operation such as addition or
+   * subtraction will only be performed on the non-zero values in a `SparseMatrix`.
+   */
   private[spark] def map(f: Double => Double): Matrix
 
-  /** Update all the values of this matrix using the function f. Performed in-place on the
-    * backing array. For example, an operation such as addition or subtraction will only be
-    * performed on the non-zero values in a `SparseMatrix`. */
+  /**
+   * Update all the values of this matrix using the function f. Performed in-place on the
+   * backing array. For example, an operation such as addition or subtraction will only be
+   * performed on the non-zero values in a `SparseMatrix`.
+   */
   private[mllib] def update(f: Double => Double): Matrix
 
   /**
@@ -156,7 +160,6 @@ sealed trait Matrix extends Serializable {
   def numActives: Int
 }
 
-@DeveloperApi
 private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
 
   override def sqlType: StructType = {
@@ -614,7 +617,7 @@ class SparseMatrix @Since("1.3.0") (
 
   private[mllib] def update(i: Int, j: Int, v: Double): Unit = {
     val ind = index(i, j)
-    if (ind == -1) {
+    if (ind < 0) {
       throw new NoSuchElementException("The given row and column indices correspond to a zero " +
         "value. Only non-zero elements in Sparse Matrices can be updated.")
     } else {
@@ -941,8 +944,16 @@ object Matrices {
       case dm: BDM[Double] =>
         new DenseMatrix(dm.rows, dm.cols, dm.data, dm.isTranspose)
       case sm: BSM[Double] =>
+        // Spark-11507. work around breeze issue 479.
+        val mat = if (sm.colPtrs.last != sm.data.length) {
+          val matCopy = sm.copy
+          matCopy.compact()
+          matCopy
+        } else {
+          sm
+        }
         // There is no isTranspose flag for sparse matrices in Breeze
-        new SparseMatrix(sm.rows, sm.cols, sm.colPtrs, sm.rowIndices, sm.data)
+        new SparseMatrix(mat.rows, mat.cols, mat.colPtrs, mat.rowIndices, mat.data)
       case _ =>
         throw new UnsupportedOperationException(
           s"Do not support conversion from type ${breeze.getClass.getName}.")
