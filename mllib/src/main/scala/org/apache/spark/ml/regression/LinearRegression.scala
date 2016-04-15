@@ -241,7 +241,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
         val coefficients = Vectors.sparse(numFeatures, Seq())
         val intercept = yMean
 
-        val model = new LinearRegressionModel(uid, coefficients, intercept)
+        val model = copyValues(new LinearRegressionModel(uid, coefficients, intercept))
         // Handle possible missing or invalid prediction columns
         val (summaryModel, predictionColName) = model.findSummaryModelAndPredictionCol()
 
@@ -253,7 +253,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
           model,
           Array(0D),
           Array(0D))
-        return copyValues(model.setSummary(trainingSummary))
+        return model.setSummary(trainingSummary)
       } else {
         require($(regParam) == 0.0, "The standard deviation of the label is zero. " +
           "Model cannot be regularized.")
