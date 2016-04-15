@@ -20,26 +20,19 @@ package org.apache.spark.metrics
 import java.io.{File, FileWriter, PrintWriter}
 
 import scala.collection.mutable.ArrayBuffer
-
 import org.apache.commons.lang3.RandomUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.io.{LongWritable, Text}
-import org.apache.hadoop.mapred.{FileSplit => OldFileSplit, InputSplit => OldInputSplit,
-  JobConf, LineRecordReader => OldLineRecordReader, RecordReader => OldRecordReader,
-  Reporter, TextInputFormat => OldTextInputFormat}
-import org.apache.hadoop.mapred.lib.{CombineFileInputFormat => OldCombineFileInputFormat,
-  CombineFileRecordReader => OldCombineFileRecordReader, CombineFileSplit => OldCombineFileSplit}
-import org.apache.hadoop.mapreduce.{InputSplit => NewInputSplit, RecordReader => NewRecordReader,
-  TaskAttemptContext}
-import org.apache.hadoop.mapreduce.lib.input.{CombineFileInputFormat => NewCombineFileInputFormat,
-  CombineFileRecordReader => NewCombineFileRecordReader, CombineFileSplit => NewCombineFileSplit,
-  FileSplit => NewFileSplit, TextInputFormat => NewTextInputFormat}
+import org.apache.hadoop.mapred.{JobConf, Reporter, FileSplit => OldFileSplit, InputSplit => OldInputSplit, LineRecordReader => OldLineRecordReader, RecordReader => OldRecordReader, TextInputFormat => OldTextInputFormat}
+import org.apache.hadoop.mapred.lib.{CombineFileInputFormat => OldCombineFileInputFormat, CombineFileRecordReader => OldCombineFileRecordReader, CombineFileSplit => OldCombineFileSplit}
+import org.apache.hadoop.mapreduce.{TaskAttemptContext, InputSplit => NewInputSplit, RecordReader => NewRecordReader}
+import org.apache.hadoop.mapreduce.lib.input.{CombineFileInputFormat => NewCombineFileInputFormat, CombineFileRecordReader => NewCombineFileRecordReader, CombineFileSplit => NewCombineFileSplit, FileSplit => NewFileSplit, TextInputFormat => NewTextInputFormat}
 import org.apache.hadoop.mapreduce.lib.output.{TextOutputFormat => NewTextOutputFormat}
 import org.scalatest.BeforeAndAfter
-
 import org.apache.spark.{SharedSparkContext, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.rdd.PartitionPruningRDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.util.Utils
 
@@ -101,40 +94,6 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
     // for count and coalesce, the same bytes should be read.
     assert(bytesRead != 0)
     assert(bytesRead2 == bytesRead)
-  }
-
-  /**
-   * This checks the situation where we have interleaved reads from
-   * different sources. Currently, we only accumulate from the first
-   * read method we find in the task. This test uses cartesian to create
-   * the interleaved reads.
-   *
-   * Once https://issues.apache.org/jira/browse/SPARK-5225 is fixed
-   * this test should break.
-   */
-  test("input metrics with mixed read method") {
-    // prime the cache manager
-    val numPartitions = 2
-    val rdd = sc.parallelize(1 to 100, numPartitions).cache()
-    rdd.collect()
-
-    val rdd2 = sc.textFile(tmpFilePath, numPartitions)
-
-    val bytesRead = runAndReturnBytesRead {
-      rdd.count()
-    }
-    val bytesRead2 = runAndReturnBytesRead {
-      rdd2.count()
-    }
-
-    val cartRead = runAndReturnBytesRead {
-      rdd.cartesian(rdd2).count()
-    }
-
-    assert(cartRead != 0)
-    assert(bytesRead != 0)
-    // We read from the first rdd of the cartesian once per partition.
-    assert(cartRead == bytesRead * numPartitions)
   }
 
   test("input metrics for new Hadoop API with coalesce") {
