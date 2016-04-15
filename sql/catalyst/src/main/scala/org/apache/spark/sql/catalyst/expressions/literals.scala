@@ -60,7 +60,8 @@ object Literal {
    * Constructs a [[Literal]] of [[ObjectType]], for example when you need to pass an object
    * into code generation.
    */
-  def fromObject(obj: AnyRef): Literal = new Literal(obj, ObjectType(obj.getClass))
+  def fromObject(obj: Any, objType: DataType): Literal = new Literal(obj, objType)
+  def fromObject(obj: Any): Literal = new Literal(obj, ObjectType(obj.getClass))
 
   def fromJSON(json: JValue): Literal = {
     val dataType = DataType.parseDataType(json \ "dataType")

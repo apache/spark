@@ -19,133 +19,153 @@ package org.apache.spark.sql.execution.aggregate
 
 import scala.language.existentials
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoder
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder, OuterScopes}
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedDeserializer, UnresolvedExtractValue}
+import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.ImperativeAggregate
+import org.apache.spark.sql.catalyst.expressions.aggregate.DeclarativeAggregate
 import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.types._
 
 object TypedAggregateExpression {
-  def apply[A, B : Encoder, C : Encoder](
-      aggregator: Aggregator[A, B, C]): TypedAggregateExpression = {
+  def apply[BUF : Encoder, OUT : Encoder](
+      aggregator: Aggregator[_, BUF, OUT]): TypedAggregateExpression = {
+    val bufferEncoder = encoderFor[BUF]
+    // We will insert the deserializer and function call expression at the bottom of each serializer
+    // expression while executing `TypedAggregateExpression`, which means multiply serializer
+    // expressions will all evaluate the same sub-expression at bottom.  To avoid the re-evaluating,
+    // here we always use one single serializer expression to serialize the buffer object into a
+    // single-field row, no matter whether the encoder is flat or not.  We also need to update the
+    // deserializer to read in all fields from that single-field row.
+    // TODO: remove this trick after we have  better integration of subexpression elimination and
+    // whole stage codegen.
+    val bufferSerializer = if (bufferEncoder.flat) {
+      bufferEncoder.namedExpressions.head
+    } else {
+      Alias(CreateStruct(bufferEncoder.serializer), "buffer")()
+    }
+
+    val bufferDeserializer = if (bufferEncoder.flat) {
+      bufferEncoder.deserializer transformUp {
+        case b: BoundReference => bufferSerializer.toAttribute
+      }
+    } else {
+      bufferEncoder.deserializer transformUp {
+        case UnresolvedAttribute(nameParts) =>
+          assert(nameParts.length == 1)
+          UnresolvedExtractValue(bufferSerializer.toAttribute, Literal(nameParts.head))
+        case BoundReference(ordinal, dt, _) => GetStructField(bufferSerializer.toAttribute, ordinal)
+      }
+    }
+
+    val outputEncoder = encoderFor[OUT]
+    val outputType = if (outputEncoder.flat) {
+      outputEncoder.schema.head.dataType
+    } else {
+      outputEncoder.schema
+    }
+
     new TypedAggregateExpression(
       aggregator.asInstanceOf[Aggregator[Any, Any, Any]],
       None,
-      encoderFor[B].asInstanceOf[ExpressionEncoder[Any]],
-      encoderFor[C].asInstanceOf[ExpressionEncoder[Any]],
-      Nil,
-      0,
-      0)
+      bufferSerializer,
+      bufferDeserializer,
+      outputEncoder.serializer,
+      outputEncoder.deserializer.dataType,
+      outputType)
   }
 }
 
 /**
- * This class is a rough sketch of how to hook `Aggregator` into the Aggregation system.  It has
- * the following limitations:
- *  - It assumes the aggregator has a zero, `0`.
+ * A helper class to hook [[Aggregator]] into the aggregation system.
  */
 case class TypedAggregateExpression(
     aggregator: Aggregator[Any, Any, Any],
-    aEncoder: Option[ExpressionEncoder[Any]], // Should be bound.
-    unresolvedBEncoder: ExpressionEncoder[Any],
-    cEncoder: ExpressionEncoder[Any],
-    children: Seq[Attribute],
-    mutableAggBufferOffset: Int,
-    inputAggBufferOffset: Int)
-  extends ImperativeAggregate with Logging {
-
-  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
-    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
-
-  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
-    copy(inputAggBufferOffset = newInputAggBufferOffset)
+    inputDeserializer: Option[Expression],
+    bufferSerializer: NamedExpression,
+    bufferDeserializer: Expression,
+    outputSerializer: Seq[Expression],
+    outputExternalType: DataType,
+    dataType: DataType) extends DeclarativeAggregate with NonSQLExpression {
 
   override def nullable: Boolean = true
 
-  override def dataType: DataType = if (cEncoder.flat) {
-    cEncoder.schema.head.dataType
-  } else {
-    cEncoder.schema
-  }
-
   override def deterministic: Boolean = true
 
-  override lazy val resolved: Boolean = aEncoder.isDefined
+  override def children: Seq[Expression] = inputDeserializer.toSeq :+ bufferDeserializer
 
-  override lazy val inputTypes: Seq[DataType] = Nil
+  override lazy val resolved: Boolean = inputDeserializer.isDefined && childrenResolved
 
-  override val aggBufferSchema: StructType = unresolvedBEncoder.schema
+  override def references: AttributeSet = AttributeSet(inputDeserializer.toSeq)
 
-  override val aggBufferAttributes: Seq[AttributeReference] = aggBufferSchema.toAttributes
+  override def inputTypes: Seq[AbstractDataType] = Nil
 
-  val bEncoder = unresolvedBEncoder
-    .resolve(aggBufferAttributes, OuterScopes.outerScopes)
-    .bind(aggBufferAttributes)
+  private def aggregatorLiteral =
+    Literal.create(aggregator, ObjectType(classOf[Aggregator[Any, Any, Any]]))
 
-  // Note: although this simply copies aggBufferAttributes, this common code can not be placed
-  // in the superclass because that will lead to initialization ordering issues.
-  override val inputAggBufferAttributes: Seq[AttributeReference] =
-    aggBufferAttributes.map(_.newInstance())
+  private def bufferExternalType = bufferDeserializer.dataType
 
-  // We let the dataset do the binding for us.
-  lazy val boundA = aEncoder.get
+  override lazy val aggBufferAttributes: Seq[AttributeReference] =
+    bufferSerializer.toAttribute.asInstanceOf[AttributeReference] :: Nil
 
-  private def updateBuffer(buffer: MutableRow, value: InternalRow): Unit = {
-    var i = 0
-    while (i < aggBufferAttributes.length) {
-      val offset = mutableAggBufferOffset + i
-      aggBufferSchema(i).dataType match {
-        case BooleanType => buffer.setBoolean(offset, value.getBoolean(i))
-        case ByteType => buffer.setByte(offset, value.getByte(i))
-        case ShortType => buffer.setShort(offset, value.getShort(i))
-        case IntegerType => buffer.setInt(offset, value.getInt(i))
-        case LongType => buffer.setLong(offset, value.getLong(i))
-        case FloatType => buffer.setFloat(offset, value.getFloat(i))
-        case DoubleType => buffer.setDouble(offset, value.getDouble(i))
-        case other => buffer.update(offset, value.get(i, other))
-      }
-      i += 1
+  override lazy val initialValues: Seq[Expression] = {
+    val zero = Literal.fromObject(aggregator.zero, bufferExternalType)
+    ReferenceToExpressions(bufferSerializer, zero :: Nil) :: Nil
+  }
+
+  override lazy val updateExpressions: Seq[Expression] = {
+    val reduced = Invoke(
+      aggregatorLiteral,
+      "reduce",
+      bufferExternalType,
+      bufferDeserializer :: inputDeserializer.get :: Nil)
+
+    ReferenceToExpressions(bufferSerializer, reduced :: Nil) :: Nil
+  }
+
+  override lazy val mergeExpressions: Seq[Expression] = {
+    val leftBuffer = bufferDeserializer transform {
+      case a: AttributeReference => a.left
     }
+    val rightBuffer = bufferDeserializer transform {
+      case a: AttributeReference => a.right
+    }
+    val merged = Invoke(
+      aggregatorLiteral,
+      "merge",
+      bufferExternalType,
+      leftBuffer :: rightBuffer :: Nil)
+
+    ReferenceToExpressions(bufferSerializer, merged :: Nil) :: Nil
   }
 
-  override def initialize(buffer: MutableRow): Unit = {
-    val zero = bEncoder.toRow(aggregator.zero)
-    updateBuffer(buffer, zero)
-  }
+  override lazy val evaluateExpression: Expression = {
+    val resultObj = Invoke(
+      aggregatorLiteral,
+      "finish",
+      outputExternalType,
+      bufferDeserializer :: Nil)
 
-  override def update(buffer: MutableRow, input: InternalRow): Unit = {
-    val inputA = boundA.fromRow(input)
-    val currentB = bEncoder.shift(mutableAggBufferOffset).fromRow(buffer)
-    val merged = aggregator.reduce(currentB, inputA)
-    val returned = bEncoder.toRow(merged)
-
-    updateBuffer(buffer, returned)
-  }
-
-  override def merge(buffer1: MutableRow, buffer2: InternalRow): Unit = {
-    val b1 = bEncoder.shift(mutableAggBufferOffset).fromRow(buffer1)
-    val b2 = bEncoder.shift(inputAggBufferOffset).fromRow(buffer2)
-    val merged = aggregator.merge(b1, b2)
-    val returned = bEncoder.toRow(merged)
-
-    updateBuffer(buffer1, returned)
-  }
-
-  override def eval(buffer: InternalRow): Any = {
-    val b = bEncoder.shift(mutableAggBufferOffset).fromRow(buffer)
-    val result = cEncoder.toRow(aggregator.finish(b))
     dataType match {
-      case _: StructType => result
-      case _ => result.get(0, dataType)
+      case s: StructType =>
+        ReferenceToExpressions(CreateStruct(outputSerializer), resultObj :: Nil)
+      case _ =>
+        assert(outputSerializer.length == 1)
+        outputSerializer.head transform {
+          case b: BoundReference => resultObj
+        }
     }
   }
 
   override def toString: String = {
-    s"""${aggregator.getClass.getSimpleName}(${children.mkString(",")})"""
+    val input = inputDeserializer match {
+      case Some(UnresolvedDeserializer(deserializer, _)) => deserializer.dataType.simpleString
+      case Some(deserializer) => deserializer.dataType.simpleString
+      case _ => "unknown"
+    }
+
+    s"$nodeName($input)"
   }
 
-  override def nodeName: String = aggregator.getClass.getSimpleName
+  override def nodeName: String = aggregator.getClass.getSimpleName.stripSuffix("$")
 }

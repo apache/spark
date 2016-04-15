@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.LogicalRDD
+import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.streaming.MemoryPlan
@@ -205,6 +206,7 @@ abstract class QueryTest extends PlanTest {
       case _: MemoryPlan => return
     }.transformAllExpressions {
       case a: ImperativeAggregate => return
+      case _: TypedAggregateExpression => return
       case Literal(_, _: ObjectType) => return
     }
 
