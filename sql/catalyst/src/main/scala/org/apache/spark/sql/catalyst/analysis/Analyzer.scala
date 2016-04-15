@@ -622,7 +622,7 @@ class Analyzer(
 
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString}")
-        val resolvedPlan = q transformExpressionsUp  {
+        q transformExpressionsUp  {
           case u @ UnresolvedAttribute(nameParts) =>
             // Leave unchanged if resolution fails.  Hopefully will be resolved next round.
             val result =
@@ -631,23 +631,6 @@ class Analyzer(
             result
           case UnresolvedExtractValue(child, fieldExpr) if child.resolved =>
             ExtractValue(child, fieldExpr, resolver)
-        }
-
-        // Replaces attribute references in a filter if it has a join as a child and it references
-        // some columns on the base relations of the join. This is because outer joins change
-        // nullability on columns and this could cause wrong NULL propagation in Optimizer.
-        // See SPARK-13484 for the concrete query of this case.
-        resolvedPlan.transform {
-          case f @ Filter(filterCondition, j @ Join(_, _, _, _)) =>
-            val joinOutput = new ArrayBuffer[(Attribute, Attribute)]
-            j.output.map {
-              case a: AttributeReference => joinOutput += ((a, a))
-            }
-            val joinOutputMap = AttributeMap(joinOutput)
-            val newFilterCond = filterCondition.transform {
-              case a: AttributeReference => joinOutputMap.get(a).getOrElse(a)
-            }
-            Filter(newFilterCond, j)
         }
     }
 
