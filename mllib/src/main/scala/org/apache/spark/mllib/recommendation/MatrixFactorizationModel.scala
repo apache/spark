@@ -21,6 +21,8 @@ import java.io.IOException
 import java.lang.{Integer => JavaInteger}
 
 import scala.collection.mutable
+import scala.math.Numeric.DoubleIsFractional
+import scala.reflect.ClassTag
 
 import com.clearspring.analytics.stream.cardinality.HyperLogLogPlus
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
@@ -33,7 +35,6 @@ import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.{JavaPairRDD, JavaRDD}
 import org.apache.spark.internal.Logging
-import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.rdd.MLPairRDDFunctions._
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
@@ -244,7 +245,6 @@ class MatrixFactorizationModel @Since("0.8.0") (
 
 @Since("1.3.0")
 object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
-
   import org.apache.spark.mllib.util.Loader._
 
   /**
@@ -261,50 +261,85 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
   }
 
   /**
-   * Makes recommendations for all users (or products).
-   * @param rank rank
-   * @param srcFeatures src features to receive recommendations
-   * @param dstFeatures dst features used to make recommendations
-   * @param num number of recommendations for each record
-   * @return an RDD of (srcId: Int, recommendations), where recommendations are stored as an array
-   *         of (dstId, rating) pairs.
+   * Makes recommendations for all users (or items).
+   *
+   * @param rank rank the dimension of the factor vectors
+   * @param srcFactors src factor to receive recommendations
+   * @param dstFactors dst factor used to make recommendations
+   * @param num number of recommendations for each user (or item)
+   * @return an RDD of (srcId, recommendations) pairs, where recommendations are stored as an array
+   *         of (dstId, score) pairs.
    */
-  private def recommendForAll(
+  private[spark] def recommendForAll[T: ClassTag : Fractional](
       rank: Int,
-      srcFeatures: RDD[(Int, Array[Double])],
-      dstFeatures: RDD[(Int, Array[Double])],
-      num: Int): RDD[(Int, Array[(Int, Double)])] = {
-    val srcBlocks = blockify(rank, srcFeatures)
-    val dstBlocks = blockify(rank, dstFeatures)
+      srcFactors: RDD[(Int, Array[T])],
+      dstFactors: RDD[(Int, Array[T])],
+      num: Int): RDD[(Int, Array[(Int, T)])] = {
+    val srcBlocks = blockify(rank, srcFactors)
+    val dstBlocks = blockify(rank, dstFactors)
+    val tag = implicitly[ClassTag[T]].runtimeClass
     val ratings = srcBlocks.cartesian(dstBlocks).flatMap {
       case ((srcIds, srcFactors), (dstIds, dstFactors)) =>
         val m = srcIds.length
         val n = dstIds.length
-        val ratings = srcFactors.transpose.multiply(dstFactors)
-        val output = new Array[(Int, (Int, Double))](m * n)
-        var k = 0
-        ratings.foreachActive { (i, j, r) =>
-          output(k) = (srcIds(i), (dstIds(j), r))
-          k += 1
+        val targetMatrix = new Array[T](m * n)
+        tag match {
+          case java.lang.Float.TYPE =>
+            val A = srcFactors.asInstanceOf[Array[Float]]
+            val B = dstFactors.asInstanceOf[Array[Float]]
+            val C = targetMatrix.asInstanceOf[Array[Float]]
+            blas.sgemm("T", "N", m, n, rank, 1f, A, rank, B, rank, 0f, C, m)
+          case java.lang.Double.TYPE =>
+            val A = srcFactors.asInstanceOf[Array[Double]]
+            val B = dstFactors.asInstanceOf[Array[Double]]
+            val C = targetMatrix.asInstanceOf[Array[Double]]
+            blas.dgemm("T", "N", m, n, rank, 1f, A, rank, B, rank, 0f, C, m)
         }
-        output.toSeq
+        fillPredictions(srcIds, dstIds, targetMatrix, m, n).toSeq
     }
     ratings.topByKey(num)(Ordering.by(_._2))
   }
 
   /**
+   * Fills array of (srcId, Array[(targetId, score)] from the result of multiplying the
+   * user and item factor matrices.
+   */
+  private def fillPredictions[T : ClassTag](
+      srcIds: Array[Int],
+      dstIds: Array[Int],
+      predictions: Array[T],
+      m: Int,
+      n: Int): Array[(Int, (Int, T))] = {
+    val output = new Array[(Int, (Int, T))](m * n)
+    // outer loop over columns
+    var k = 0
+    var j = 0
+    while (j < n) {
+      var i = 0
+      val indStart = j * m
+      while (i < m) {
+        output(k) = (srcIds(i), (dstIds(j), predictions(indStart + i)))
+        i += 1
+        k += 1
+      }
+      j += 1
+    }
+    output
+  }
+
+  /**
    * Blockifies features to use Level-3 BLAS.
    */
-  private def blockify(
+  private def blockify[T: ClassTag](
       rank: Int,
-      features: RDD[(Int, Array[Double])]): RDD[(Array[Int], DenseMatrix)] = {
-    val blockSize = 4096 // TODO: tune the block size
+      features: RDD[(Int, Array[T])],
+      blockSize: Int = 4096): RDD[(Array[Int], Array[T])] = {
     val blockStorage = rank * blockSize
     features.mapPartitions { iter =>
       iter.grouped(blockSize).map { grouped =>
         val ids = mutable.ArrayBuilder.make[Int]
         ids.sizeHint(blockSize)
-        val factors = mutable.ArrayBuilder.make[Double]
+        val factors = mutable.ArrayBuilder.make[T]
         factors.sizeHint(blockStorage)
         var i = 0
         grouped.foreach { case (id, factor) =>
@@ -312,7 +347,7 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
           factors ++= factor
           i += 1
         }
-        (ids.result(), new DenseMatrix(rank, i, factors.result()))
+        (ids.result(), factors.result())
       }
     }
   }

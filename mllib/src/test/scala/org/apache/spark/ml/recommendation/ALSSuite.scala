@@ -539,6 +539,55 @@ class ALSSuite
       }.getMessage.contains("was out of Integer range"))
     }
   }
+
+  /**
+   * Validate expected vs actual predictions.
+   * @param data
+   */
+  private def validateRecommendations(data: Seq[(Seq[(Int, Float)], Seq[(Int, Float)])]) = {
+    data.foreach { case (expected, actual) =>
+      expected.zip(actual).foreach { case ((id1, score1), (id2, score2)) =>
+        assert(id1 === id2)
+        assert(score1.toDouble ~== score2.toDouble relTol 1e-14)
+      }
+    }
+  }
+
+  test("recommend top k") {
+    val sqlContext = this.sqlContext
+    import sqlContext.implicits._
+    val als = new ALS().setRank(2)
+    val k = 2
+    val users = Seq(
+      (0, Array(6.0f, 4.0f), Array((3, 54.0f), (4, 44.0f))),
+      (1, Array(3.0f, 4.0f), Array((3, 39.0f), (5, 33.0f))),
+      (2, Array(3.0f, 6.0f), Array((3, 51.0f), (5, 45.0f)))
+    ).toDF("user", "features", "expected")
+    val items = Seq(
+      (3, Array(5.0f, 6.0f), Array((0, 54.0f), (2, 51.0f))),
+      (4, Array(6.0f, 2.0f), Array((0, 44.0f), (2, 30.0f))),
+      (5, Array(3.0f, 6.0f), Array((2, 45.0f), (0, 42.0f)))
+    ).toDF("item", "features", "expected")
+    val userFactors = users.select("user", "features").withColumnRenamed("user", "id")
+    val itemFactors = items.select("item", "features").withColumnRenamed("item", "id")
+    // construct model and check recommendations
+    val model = new ALSModel(als.uid, als.getRank, userFactors, itemFactors)
+      .setUserCol("user")
+      .setItemCol("item")
+    // validate user recommendations
+    val topKItems = model.recommendItems(users, k)
+      .select("expected", "predictions")
+      .as[(Seq[(Int, Float)], Seq[(Int, Float)])].rdd.collect()
+    validateRecommendations(topKItems)
+    // validate item recommendations
+    val topKUsers = model.recommendUsers(items, k)
+      .select("expected", "predictions")
+      .as[(Seq[(Int, Float)], Seq[(Int, Float)])].rdd.collect()
+    validateRecommendations(topKUsers)
+    // check that using a subset of input only generates recommendations for that subset
+    val filteredTopK = model.recommendItems(users.filter(users("user") > 0), k)
+    assert(filteredTopK.count == 2)
+  }
 }
 
 class ALSCleanerSuite extends SparkFunSuite {

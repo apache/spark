@@ -90,6 +90,31 @@ private[recommendation] trait ALSModelParams extends Params with HasPredictionCo
       n.toInt
     }
   }
+
+  /**
+   * Param for number of recommendations to make. If set, calling [[ALSModel.transform()]] will
+   * generate the top `k` recommendations for each user or item, depending on the value of
+   * [[recommendFor]].
+   * @group param
+   */
+  val k = new Param[Int](this, "k", "number of recommendations to make. If set, calling " +
+    "'transform` will generate the top 'k' recommended items for each user or item, depending on" +
+    " the value of 'recommendFor'.", ParamValidators.gt(0))
+
+  /** @group getParam */
+  def getK: Int = $(k)
+
+  /**
+   * Param for whether to generate recommendations for users or items.
+   * Supported values: `user`, `item`. If set, [[k]] must also be set.
+   * @group param
+   */
+  val recommendFor = new Param[String](this, "recommendFor", "whether to generate " +
+    "recommendations for users or items. Supported values: 'user', 'item'. " +
+    "If set, 'k' must also be set.", ParamValidators.inArray(Array("user", "item")))
+
+  /** @group getParam */
+  def getRecommendFor: String = $(recommendFor)
 }
 
 /**
@@ -248,7 +273,15 @@ class ALSModel private[ml] (
   @Since("1.3.0")
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
+  /** @group setParam */
   @Since("2.0.0")
+  def setK(value: Int): this.type = set(k, value)
+
+  /** @group setParam */
+  @Since("2.0.0")
+  def setRecommendFor(value: String): this.type = set(recommendFor, value)
+
+  @Since("1.3.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema)
     // Register a UDF for DataFrame, and then
@@ -267,6 +300,55 @@ class ALSModel private[ml] (
         checkedCast(dataset($(itemCol)).cast(DoubleType)) === itemFactors("id"), "left")
       .select(dataset("*"),
         predict(userFactors("features"), itemFactors("features")).as($(predictionCol)))
+  }
+
+  /**
+   * Generate top `num` recommended items for each user (or recommended users for each item) in the
+   * input [[DataFrame]].
+   * @param dataset [[DataFrame]] containing a column of user or item ids for which to recommend.
+   * @param srcFactors user / item factors for which to generate top-k recommendations.
+   * @param dstFactors candidate user / item factors from which to generate top-k recommendations.
+   * @param srcCol name of column containing id for which to recommend.
+   * @param num how many recommended items (or users) to compute for each user (or item)
+   * @return [[DataFrame]] containing `dataset` with a column `predictions` appended
+   */
+  private def recommendUsersOrItems(
+    dataset: DataFrame,
+    srcFactors: DataFrame,
+    dstFactors: DataFrame,
+    srcCol: String,
+    num: Int): DataFrame = {
+    import dataset.sqlContext.implicits._
+    val factors = dataset
+      .join(srcFactors, dataset(srcCol) === srcFactors("id"), "left")
+      .select(srcFactors("id"), srcFactors("features"))
+    val topK = ALSModel.recommendForAll(rank, factors, dstFactors, num)
+      .toDF("id", "predictions")
+    dataset
+      .join(topK, dataset(srcCol) === topK("id"))
+      .select(dataset("*"), topK("predictions"))
+  }
+
+  /**
+   * Generate top `num` recommended items for each user id in the input [[DataFrame]].
+   * @param dataset input [[DataFrame]]. The user id column is set by [[userCol]].
+   * @param num number of items to recommend for each user.
+   * @return input [[DataFrame]], with a column `predictions` appended.
+   */
+  @Since("2.0.0")
+  def recommendItems(dataset: DataFrame, num: Int): DataFrame = {
+    recommendUsersOrItems(dataset, userFactors, itemFactors, $(userCol), num)
+  }
+
+  /**
+   * Generate top `num` recommended users for each item in the input [[DataFrame]].
+   * @param dataset input [[DataFrame]]. The item id column is set by [[itemCol]].
+   * @param num number of users to recommend for each item.
+   * @return input [[DataFrame]], with a column `predictions` appended.
+   */
+  @Since("2.0.0")
+  def recommendUsers(dataset: DataFrame, num: Int): DataFrame = {
+    recommendUsersOrItems(dataset, itemFactors, userFactors, $(itemCol), num)
   }
 
   @Since("1.3.0")
@@ -328,6 +410,33 @@ object ALSModel extends MLReadable[ALSModel] {
       model
     }
   }
+
+  /**
+   * Makes recommendations for all users (or items).
+   *
+   * @param rank rank the dimension of the factor vectors
+   * @param srcFactors src factor to receive recommendations
+   * @param dstFactors dst factor used to make recommendations
+   * @param num number of recommendations for each user (or item)
+   * @return an RDD of (srcId, recommendations) pairs, where recommendations are stored as an array
+   *         of (dstId, score) pairs.
+   */
+  private def recommendForAll(
+    rank: Int,
+    srcFactors: DataFrame,
+    dstFactors: DataFrame,
+    num: Int): RDD[(Int, Array[(Int, Float)])] = {
+    import srcFactors.sqlContext.implicits._
+    import org.apache.spark.mllib.recommendation.MatrixFactorizationModel
+
+    val srcFactorsRDD = srcFactors.as[(Int, Array[Float])].rdd
+    val dstFactorsRDD = dstFactors.as[(Int, Array[Float])].rdd
+    MatrixFactorizationModel.recommendForAll(rank, srcFactorsRDD, dstFactorsRDD, num)
+  }
+}
+
+object ALSModelUtil {
+
 }
 
 /**
