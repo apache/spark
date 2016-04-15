@@ -228,7 +228,7 @@ class CrossValidator(Estimator, ValidatorParams, MLReadable, MLWritable):
         """
         Sets the value of :py:attr:`numFolds`.
         """
-        self._paramMap[self.numFolds] = value
+        self._set(numFolds=value)
         return self
 
     @since("1.4.0")
@@ -479,7 +479,7 @@ class TrainValidationSplit(Estimator, ValidatorParams, MLReadable, MLWritable):
         """
         Sets the value of :py:attr:`trainRatio`.
         """
-        self._paramMap[self.trainRatio] = value
+        self._set(trainRatio=value)
         return self
 
     @since("2.0.0")
