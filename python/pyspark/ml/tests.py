@@ -43,7 +43,7 @@ import tempfile
 import numpy as np
 
 from pyspark.ml import Estimator, Model, Pipeline, PipelineModel, Transformer
-from pyspark.ml.classification import LogisticRegression, DecisionTreeClassifier
+from pyspark.ml.classification import LogisticRegression, DecisionTreeClassifier, OneVsRest
 from pyspark.ml.clustering import KMeans
 from pyspark.ml.evaluation import BinaryClassificationEvaluator, RegressionEvaluator
 from pyspark.ml.feature import *
@@ -848,6 +848,36 @@ class TrainingSummaryTest(PySparkTestCase):
         # one check is enough to verify a summary is returned, Scala version runs full test
         sameSummary = model.evaluate(df)
         self.assertAlmostEqual(sameSummary.areaUnderROC, s.areaUnderROC)
+
+
+class OneVsRestTests(PySparkTestCase):
+
+    def test_copy(self):
+        sqlContext = SQLContext(self.sc)
+        df = sqlContext.createDataFrame([(0.0, Vectors.dense(1.0, 0.8)),
+                                         (1.0, Vectors.sparse(2, [], [])),
+                                         (2.0, Vectors.dense(0.5, 0.5))],
+                                        ["label", "features"])
+        lr = LogisticRegression(maxIter=5, regParam=0.01)
+        ovr = OneVsRest(classifier=lr)
+        ovr1 = ovr.copy({lr.maxIter: 10})
+        self.assertEqual(ovr.getClassifier().getMaxIter(), 5)
+        self.assertEqual(ovr1.getClassifier().getMaxIter(), 10)
+        model = ovr.fit(df)
+        model1 = model.copy({model.predictionCol: "indexed"})
+        self.assertEqual(model1.getPredictionCol(), "indexed")
+
+    def test_output_columns(self):
+        sqlContext = SQLContext(self.sc)
+        df = sqlContext.createDataFrame([(0.0, Vectors.dense(1.0, 0.8)),
+                                         (1.0, Vectors.sparse(2, [], [])),
+                                         (2.0, Vectors.dense(0.5, 0.5))],
+                                        ["label", "features"])
+        lr = LogisticRegression(maxIter=5, regParam=0.01)
+        ovr = OneVsRest(classifier=lr)
+        model = ovr.fit(df)
+        output = model.transform(df)
+        self.assertEqual(output.columns, ["label", "features", "prediction"])
 
 
 class HashingTFTest(PySparkTestCase):
