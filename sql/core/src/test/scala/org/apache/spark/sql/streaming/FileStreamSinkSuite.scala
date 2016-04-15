@@ -19,6 +19,7 @@ package org.apache.spark.sql.streaming
 
 import org.apache.spark.sql.{Row, StreamTest}
 import org.apache.spark.sql.execution.streaming.{FileStreamSinkWriter, MemoryStream}
+import org.apache.spark.sql.execution.datasources.parquet
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
@@ -30,19 +31,20 @@ class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
     val path = Utils.createTempDir()
     path.delete()
 
+    val fileFormat = new parquet.DefaultSource()
+
     def writeRange(start: Int, end: Int): Unit = {
       val df = sqlContext.range(start, end, 1, 1)
         .select($"id", lit(100).as("data"), lit(1000).as("dummy"))
 
       val attributes = df.logicalPlan.output
 
-
       val writer = new FileStreamSinkWriter(
         df,
-        new org.apache.spark.sql.execution.datasources.parquet.DefaultSource(),
+        fileFormat,
         path.toString,
-        partitionColumnNames = Seq("id")
-      )
+        partitionColumnNames = Seq("id"),
+        Map.empty)
 
       val writtenFiles = writer.write()
     }

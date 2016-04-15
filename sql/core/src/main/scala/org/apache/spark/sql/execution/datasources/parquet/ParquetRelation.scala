@@ -382,15 +382,19 @@ private[sql] class DefaultSource
   }
 }
 
+/**
+ * A factory for generating OutputWriters for writing parquet files. This implemented is different
+ * from the [[ParquetOutputWriter]] as this does not use any [[OutputCommitter]]. It simply
+ * writes the data to the path used to generate the output writer. Callers of this factory
+ * has to ensure which files are to be considered as committed.
+ */
 private[sql] class ParquetOutputWriterFactory(
     sqlConf: SQLConf,
     dataSchema: StructType,
     hadoopConf: Configuration,
-    options: Map[String, String])
-  extends OutputWriterFactory {
+    options: Map[String, String]) extends OutputWriterFactory {
 
-  @transient private val preparedHadoopConf = {
-
+  private val serializableConf: SerializableConfiguration = {
     val job = Job.getInstance(hadoopConf)
     val conf = ContextUtil.getConfiguration(job)
     val parquetOptions = new ParquetOptions(options, sqlConf)
@@ -426,49 +430,55 @@ private[sql] class ParquetOutputWriterFactory(
 
     // Sets compression scheme
     conf.set(ParquetOutputFormat.COMPRESSION, parquetOptions.compressionCodec)
-
-    conf
+    new SerializableConfiguration(conf)
   }
 
-  private val serializableConf = new SerializableConfiguration(preparedHadoopConf)
+  /**
+   * Returns a [[OutputWriter]] that writes data to the give path without using
+   * [[OutputCommitter]].
+   */
+  override private[sql] def newWriter(path: String): OutputWriter = new OutputWriter {
 
-  override private[sql] def newInstance(path: String): OutputWriter = {
-    new OutputWriter {
-      private val hadoopAttemptContext = new TaskAttemptContextImpl(
-        serializableConf.value,
-        new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0))
+    // Create TaskAttemptContext that is used to pass on Configuration to the ParquetRecordWriter
+    private val hadoopTaskAttempId = new TaskAttemptID(new TaskID(new JobID, TaskType.MAP, 0), 0)
+    private val hadoopAttemptContext = new TaskAttemptContextImpl(
+      serializableConf.value, hadoopTaskAttempId)
 
-      private val recordWriter: RecordWriter[Void, InternalRow] = {
-        new ParquetOutputFormat[InternalRow]() {
-          override def getOutputCommitter(context: TaskAttemptContext): OutputCommitter = {
-            null
-          }
+    // Instance of ParquetRecordWriter that does not use OutputCommitter
+    private val recordWriter = createNoCommitterRecordWriter(path, hadoopAttemptContext)
 
-          override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
-            new Path(path)
-          }
-        }.getRecordWriter(hadoopAttemptContext)
-      }
-
-      override def write(row: Row): Unit = {
-        throw new UnsupportedOperationException("call writeInternal")
-      }
-
-      override protected[sql] def writeInternal(row: InternalRow): Unit = {
-        recordWriter.write(null, row)
-      }
-
-      override def close(): Unit = recordWriter.close(hadoopAttemptContext)
+    override def write(row: Row): Unit = {
+      throw new UnsupportedOperationException("call writeInternal")
     }
+
+    protected[sql] override def writeInternal(row: InternalRow): Unit = {
+      recordWriter.write(null, row)
+    }
+
+    override def close(): Unit = recordWriter.close(hadoopAttemptContext)
   }
 
+  /** Create a [[ParquetRecordWriter]] that writes the given path without using OutputCommitter */
+  private def createNoCommitterRecordWriter(
+      path: String,
+      hadoopAttemptContext: TaskAttemptContext): RecordWriter[Void, InternalRow] = {
+    // Custom ParquetOutputFormat that disable use of committer and writes to the given path
+    val outputFormat = new ParquetOutputFormat[InternalRow]() {
+      override def getOutputCommitter(c: TaskAttemptContext): OutputCommitter = { null }
+      override def getDefaultWorkFile(c: TaskAttemptContext, ext: String): Path = { new Path(path) }
+    }
+    outputFormat.getRecordWriter(hadoopAttemptContext)
+  }
+
+  /** Disable the use of the older API. */
   private[sql] def newInstance(
-    path: String,
-    bucketId: Option[Int],
-    dataSchema: StructType,
-    context: TaskAttemptContext): OutputWriter = {
-    throw new UnsupportedOperationException("this verison of newInstance not supported for " +
-      "ParquetOutputWriterFactory")
+      path: String,
+      bucketId: Option[Int],
+      dataSchema: StructType,
+      context: TaskAttemptContext): OutputWriter = {
+    throw new UnsupportedOperationException(
+      "this verison of newInstance not supported for " +
+        "ParquetOutputWriterFactory")
   }
 }
 

@@ -39,8 +39,9 @@ object FileStreamSink {
 }
 
 /**
- * A sink that writes out results to parquet files.  Each batch is written out to a unique
- * directory. After all of the files in a batch have been successfully written, the list of
+ * A sink that writes out results to parquet files.  Each batch is written out using
+ * [[FileStreamSinkWriter]] to a unique set of files without using an OutputCommitter. Instead,
+ * after all of the files in a batch have been successfully written, the list of
  * file paths is appended to the log atomically. In the case of partial failures, some duplicate
  * data may be present in the target directory, but only one copy of each file will be present
  * in the log.
@@ -50,8 +51,7 @@ class FileStreamSink(
     path: String,
     fileFormat: FileFormat,
     partitionColumnNames: Seq[String],
-    options: Map[String, String]
-  ) extends Sink with Logging {
+    options: Map[String, String]) extends Sink with Logging {
 
   private val basePath = new Path(path)
   private val logPath = new Path(basePath, FileStreamSink.metadataDir)
@@ -80,7 +80,7 @@ class FileStreamSinkWriter(
     fileFormat: FileFormat,
     basePath: String,
     partitionColumnNames: Seq[String],
-    options: Map[String, String] = Map.empty) extends Serializable with Logging {
+    options: Map[String, String]) extends Serializable with Logging {
 
   PartitioningUtils.validatePartitionColumnDataTypes(
     data.schema, partitionColumnNames, data.sqlContext.conf.caseSensitiveAnalysis)
@@ -122,25 +122,28 @@ class FileStreamSinkWriter(
     }
   }
 
+  /** Generate a new output writer from the writer factory */
   private def newOutputWriter(path: Path): OutputWriter = {
-    val newWriter = outputWriterFactory.newInstance(path.toString)
+    val newWriter = outputWriterFactory.newWriter(path.toString)
     newWriter.initConverter(dataSchema)
     newWriter
   }
 
+  /** Write the dataframe to a files */
   def write(): Array[String] = {
     data.sqlContext.sparkContext.runJob(
       data.queryExecution.toRdd,
       (taskContext: TaskContext, iterator: Iterator[InternalRow]) => {
         if (partitionColumns.isEmpty) {
-          Seq(writePartition(iterator))
+          Seq(writePartitionToSingleFile(iterator))
         } else {
-          writePartitionWithDynamicPartitioning(iterator)
+          writePartitionToPartitionedFiles(iterator)
         }
       }).flatten
   }
 
-  def writePartition(iterator: Iterator[InternalRow]): String = {
+  /** Writes a RDD partition to a single file without dynamic partitioning. */
+  def writePartitionToSingleFile(iterator: Iterator[InternalRow]): String = {
     var writer: OutputWriter = null
     try {
       val path = new Path(basePath, UUID.randomUUID.toString)
@@ -164,7 +167,8 @@ class FileStreamSinkWriter(
     }
   }
 
-  def writePartitionWithDynamicPartitioning(iterator: Iterator[InternalRow]): Seq[String] = {
+  /** Writes a RDD partition to multiple dynamically partitioned files. */
+  def writePartitionToPartitionedFiles(iterator: Iterator[InternalRow]): Seq[String] = {
 
     // Returns the partitioning columns for sorting
     val getSortingKey = UnsafeProjection.create(partitionColumns, dataColumns)
@@ -172,12 +176,11 @@ class FileStreamSinkWriter(
     // Returns the data columns to be written given an input row
     val getOutputRow = UnsafeProjection.create(writeColumns, dataColumns)
 
-    // Returns the partition path given a partition key.
+    // Returns the partition path given a partition key
     val getPartitionString =
       UnsafeProjection.create(Concat(partitionStringExpression) :: Nil, partitionColumns)
 
-    // Sorts the data before write, so that we only need one writer at the same time.
-    // TODO: inject a local sort operator in planning.
+    // Sort the data before write, so that we only need one writer at the same time.
     val sorter = new UnsafeKVExternalSorter(
       partitionColumns.toStructType,
       StructType.fromAttributes(writeColumns),
@@ -189,17 +192,19 @@ class FileStreamSinkWriter(
       val currentRow = iterator.next()
       sorter.insertKV(getSortingKey(currentRow), getOutputRow(currentRow))
     }
-    logInfo(s"Sorting complete. Writing out partition files one at a time.")
+    logDebug(s"Sorting complete. Writing out partition files one at a time.")
 
     val sortedIterator = sorter.sortedIterator()
     val paths = new ArrayBuffer[String]
 
-    // If anything below fails, we should abort the task.
+    // Writes the sorted data to partitioned files, one for each unique key
     var currentWriter: OutputWriter = null
     try {
       var currentKey: UnsafeRow = null
       while (sortedIterator.next()) {
         val nextKey = sortedIterator.getKey
+
+        // If key changes, close current writer, and open a new writer to a new partitioned file
         if (currentKey != nextKey) {
           if (currentWriter != null) {
             currentWriter.close()
@@ -210,9 +215,8 @@ class FileStreamSinkWriter(
           val path = new Path(new Path(basePath, partitionPath), UUID.randomUUID.toString)
           paths += path.toString
           currentWriter = newOutputWriter(path)
-           // println(s"Writing partition $currentKey to $path")
+          logDebug(s"Writing partition $currentKey to $path")
         }
-        // println(s"Writing ${sortedIterator.getValue}")
         currentWriter.writeInternal(sortedIterator.getValue)
       }
       if (currentWriter != null) {
