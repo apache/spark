@@ -24,7 +24,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, Dataset, Row, SQLContext}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, LeafExpression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, ExpressionDescription, LeafExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -535,6 +535,9 @@ case class SetDatabaseCommand(databaseName: String) extends RunnableCommand {
 /**
  * Returns the current database of metadataHive.
  */
+@ExpressionDescription(
+  usage = "_FUNC_() - Returns the current database.",
+  extended = "> SELECT _FUNC_()")
 case class CurrentDatabase(ctx: SQLContext)
   extends LeafExpression with CodegenFallback {
   override def dataType: DataType = StringType
