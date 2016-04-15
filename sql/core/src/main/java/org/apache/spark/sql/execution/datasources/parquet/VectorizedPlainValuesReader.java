@@ -33,6 +33,7 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
   private byte[] buffer;
   private int offset;
   private int bitOffset; // Only used for booleans.
+  private ByteBuffer byteBuffer; // used to wrap the byte array buffer
   
   private final static boolean bigEndianPlatform = ByteOrder.nativeOrder().equals(ByteOrder.BIG_ENDIAN);
 
@@ -43,6 +44,9 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
   public void initFromPage(int valueCount, byte[] bytes, int offset) throws IOException {
     this.buffer = bytes;
     this.offset = offset + Platform.BYTE_ARRAY_OFFSET;
+    if (bigEndianPlatform) {
+      byteBuffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN);
+    }
   }
 
   @Override
@@ -135,7 +139,7 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
     if (!bigEndianPlatform) {
       v = Platform.getFloat(buffer, offset);
     } else {
-      v = ByteBuffer.wrap(buffer).order(ByteOrder.LITTLE_ENDIAN).getFloat(offset - Platform.BYTE_ARRAY_OFFSET);
+      v = byteBuffer.getFloat(offset - Platform.BYTE_ARRAY_OFFSET);
     }
     offset += 4;
     return v;
@@ -147,7 +151,7 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
     if (!bigEndianPlatform) {
       v = Platform.getDouble(buffer, offset);      
     } else {
-      v = ByteBuffer.wrap(buffer).order(ByteOrder.LITTLE_ENDIAN).getDouble(offset - Platform.BYTE_ARRAY_OFFSET);
+      v = byteBuffer.getDouble(offset - Platform.BYTE_ARRAY_OFFSET);
     }
     offset += 8;
     return v;
