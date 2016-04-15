@@ -86,28 +86,21 @@ class VectorizedHashMapGenerator(
        |  private org.apache.spark.sql.execution.vectorized.ColumnarBatch batch;
        |  private org.apache.spark.sql.execution.vectorized.ColumnarBatch aggregateBufferBatch;
        |  private int[] buckets;
-       |  private int numBuckets;
-       |  private int maxSteps;
+       |  private int capacity = 1 << 16;
+       |  private double loadFactor = 0.5;
+       |  private int numBuckets = (int) (capacity / loadFactor);
+       |  private int maxSteps = 2;
        |  private int numRows = 0;
        |  private org.apache.spark.sql.types.StructType schema = $generatedSchema
        |  private org.apache.spark.sql.types.StructType aggregateBufferSchema =
        |    $generatedAggBufferSchema
        |
        |  public $generatedClassName() {
-       |    // TODO: These should be generated based on the schema
-       |    int DEFAULT_CAPACITY = 1 << 16;
-       |    double DEFAULT_LOAD_FACTOR = 0.25;
-       |    int DEFAULT_MAX_STEPS = 2;
-       |    assert (DEFAULT_CAPACITY > 0 && ((DEFAULT_CAPACITY & (DEFAULT_CAPACITY - 1)) == 0));
-       |    this.maxSteps = DEFAULT_MAX_STEPS;
-       |    numBuckets = (int) (DEFAULT_CAPACITY / DEFAULT_LOAD_FACTOR);
-       |
        |    batch = org.apache.spark.sql.execution.vectorized.ColumnarBatch.allocate(schema,
-       |      org.apache.spark.memory.MemoryMode.ON_HEAP, DEFAULT_CAPACITY);
-       |
+       |      org.apache.spark.memory.MemoryMode.ON_HEAP, capacity);
        |    // TODO: Possibly generate this projection in TungstenAggregate directly
        |    aggregateBufferBatch = org.apache.spark.sql.execution.vectorized.ColumnarBatch.allocate(
-       |      aggregateBufferSchema, org.apache.spark.memory.MemoryMode.ON_HEAP, DEFAULT_CAPACITY);
+       |      aggregateBufferSchema, org.apache.spark.memory.MemoryMode.ON_HEAP, capacity);
        |    for (int i = 0 ; i < aggregateBufferBatch.numCols(); i++) {
        |       aggregateBufferBatch.setColumn(i, batch.column(i+${groupingKeys.length}));
        |    }
@@ -130,9 +123,11 @@ class VectorizedHashMapGenerator(
    */
   private def generateHashFunction(): String = {
     s"""
-       |// TODO: Improve this hash function
        |private long hash($groupingKeySignature) {
-       |  return ${groupingKeys.map(_._2).mkString(" | ")};
+       |  long h = 0;
+       |  ${groupingKeys.map(key => s"h = (h ^ (0x9e3779b9)) + ${key._2} + (h << 6) + (h >>> 2);")
+            .mkString("\n")}
+       |  return h;
        |}
      """.stripMargin
   }
@@ -201,15 +196,20 @@ class VectorizedHashMapGenerator(
        |  while (step < maxSteps) {
        |    // Return bucket index if it's either an empty slot or already contains the key
        |    if (buckets[idx] == -1) {
-       |      ${groupingKeys.zipWithIndex.map(k =>
-                s"batch.column(${k._2}).putLong(numRows, ${k._1._2});").mkString("\n")}
-       |      ${bufferValues.zipWithIndex.map(k =>
-                s"batch.column(${groupingKeys.length + k._2}).putNull(numRows);")
-                .mkString("\n")}
-       |      buckets[idx] = numRows++;
-       |      batch.setNumRows(numRows);
-       |      aggregateBufferBatch.setNumRows(numRows);
-       |      return aggregateBufferBatch.getRow(buckets[idx]);
+       |      if (numRows < capacity) {
+       |        ${groupingKeys.zipWithIndex.map(k =>
+                  s"batch.column(${k._2}).putLong(numRows, ${k._1._2});").mkString("\n")}
+       |        ${bufferValues.zipWithIndex.map(k =>
+                  s"batch.column(${groupingKeys.length + k._2}).putNull(numRows);")
+                  .mkString("\n")}
+       |        buckets[idx] = numRows++;
+       |        batch.setNumRows(numRows);
+       |        aggregateBufferBatch.setNumRows(numRows);
+       |        return aggregateBufferBatch.getRow(buckets[idx]);
+       |      } else {
+       |        // No more space
+       |        return null;
+       |      }
        |    } else if (equals(idx, ${groupingKeys.map(_._2).mkString(", ")})) {
        |      return aggregateBufferBatch.getRow(buckets[idx]);
        |    }
