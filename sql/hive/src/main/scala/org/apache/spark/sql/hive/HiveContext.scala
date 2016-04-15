@@ -52,7 +52,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.command.{ExecutedCommand, SetCommand}
 import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.hive.execution.{DescribeHiveTableCommand, HiveNativeCommand}
-import org.apache.spark.sql.internal.{PersistentState, SQLConf}
+import org.apache.spark.sql.internal.{SharedState, SQLConf}
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -65,9 +65,9 @@ import org.apache.spark.util.Utils
  * @since 1.0.0
  */
 class HiveContext private[hive](
-    persistentState: PersistentState,
+    sharedState: SharedState,
     isRootContext: Boolean)
-  extends SQLContext(persistentState, isRootContext, true) with Logging {
+  extends SQLContext(sharedState, isRootContext, true) with Logging {
 
   self =>
 

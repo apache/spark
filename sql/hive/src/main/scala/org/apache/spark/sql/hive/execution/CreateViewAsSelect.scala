@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions.Alias
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.execution.command.RunnableCommand
-import org.apache.spark.sql.hive.{HivePersistentState, HiveContext, HiveMetastoreTypes, SQLBuilder}
+import org.apache.spark.sql.hive.{HiveSharedState, HiveContext, HiveMetastoreTypes, SQLBuilder}
 
 /**
  * Create Hive view on non-hive-compatible tables by specifying schema ourselves instead of
@@ -47,7 +47,7 @@ private[hive] case class CreateViewAsSelect(
   private val tableIdentifier = tableDesc.identifier
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
-    val hivePersistentState = sqlContext.persistentState.asInstanceOf[HivePersistentState]
+    val hivePersistentState = sqlContext.sharedState.asInstanceOf[HiveSharedState]
 
     sqlContext.sessionState.catalog.tableExists(tableIdentifier) match {
       case true if allowExisting =>

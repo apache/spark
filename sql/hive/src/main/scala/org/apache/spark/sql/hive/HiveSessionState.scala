@@ -38,7 +38,7 @@ import org.apache.spark.sql.types.DataType
  */
 private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) {
 
-  val hivePersistentState = ctx.persistentState.asInstanceOf[HivePersistentState]
+  val hivePersistentState = ctx.sharedState.asInstanceOf[HiveSharedState]
 
   /**
    * A Hive client used for execution.

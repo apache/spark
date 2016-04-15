@@ -27,7 +27,7 @@ import org.apache.spark.sql.execution.ui.SQLListener
 /**
  * A class that holds all state shared across sessions in a given [[SQLContext]].
  */
-private[sql] class PersistentState(val sparkContext: SparkContext) {
+private[sql] class SharedState(val sparkContext: SparkContext) {
 
   /**
    * Class for caching query results reused in future executions.

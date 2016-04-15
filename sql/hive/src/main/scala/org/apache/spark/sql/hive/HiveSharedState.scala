@@ -19,14 +19,14 @@ package org.apache.spark.sql.hive
 
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.hive.client.{HiveClient, HiveClientImpl}
-import org.apache.spark.sql.internal.PersistentState
+import org.apache.spark.sql.internal.SharedState
 
 
 /**
  * A class that holds all state shared across sessions in a given [[HiveContext]].
  */
-private[sql] class HivePersistentState(override val sparkContext: SparkContext)
-  extends PersistentState(sparkContext) {
+private[sql] class HiveSharedState(override val sparkContext: SparkContext)
+  extends SharedState(sparkContext) {
 
   // TODO: just share the IsolatedClientLoader instead of the client instances themselves
 

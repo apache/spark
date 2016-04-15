@@ -73,11 +73,11 @@ object TestHive
  * test cases that rely on TestHive must be serialized.
  */
 class TestHiveContext private[hive](
-    _persistentState: TestHivePersistentState,
-    val warehousePath: File,
-    val scratchDirPath: File,
-    metastoreTemporaryConf: Map[String, String],
-    isRootContext: Boolean)
+                                     _persistentState: TestHiveSharedState,
+                                     val warehousePath: File,
+                                     val scratchDirPath: File,
+                                     metastoreTemporaryConf: Map[String, String],
+                                     isRootContext: Boolean)
   extends HiveContext(_persistentState, isRootContext) { self =>
 
   private def this(
@@ -86,7 +86,7 @@ class TestHiveContext private[hive](
       scratchDirPath: File,
       metastoreTemporaryConf: Map[String, String]) {
     this(
-      new TestHivePersistentState(sc, warehousePath, scratchDirPath, metastoreTemporaryConf),
+      new TestHiveSharedState(sc, warehousePath, scratchDirPath, metastoreTemporaryConf),
       warehousePath,
       scratchDirPath,
       metastoreTemporaryConf,
@@ -517,12 +517,12 @@ private[hive] class TestHiveFunctionRegistry extends SimpleFunctionRegistry {
 }
 
 
-private[hive] class TestHivePersistentState(
+private[hive] class TestHiveSharedState(
     sc: SparkContext,
     warehousePath: File,
     scratchDirPath: File,
     metastoreTemporaryConf: Map[String, String])
-  extends HivePersistentState(sc) {
+  extends HiveSharedState(sc) {
 
   override val metadataHive: HiveClient = {
     TestHiveContext.newClientForMetadata(
