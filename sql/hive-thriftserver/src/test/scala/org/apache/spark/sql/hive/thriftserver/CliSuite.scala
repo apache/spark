@@ -38,8 +38,6 @@ import org.apache.spark.util.Utils
  * A test suite for the `spark-sql` CLI tool.  Note that all test cases share the same temporary
  * Hive metastore and warehouse.
  */
-// TODO: Re-enable it
-@org.scalatest.Ignore
 class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
   val warehousePath = Utils.createTempDir()
   val metastorePath = Utils.createTempDir()

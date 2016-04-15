@@ -77,6 +77,9 @@ class HiveContext private[hive](
 
   logDebug("create HiveContext")
 
+  override def newSession(): HiveContext =
+    new HiveContext(sharedState, isRootContext = false)
+
   // TODO: Move the implementation of analyze to its command.
   /*
   /**
