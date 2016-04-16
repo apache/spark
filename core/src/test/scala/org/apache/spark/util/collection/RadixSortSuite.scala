@@ -24,6 +24,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
 import org.apache.spark.unsafe.array.LongArray
 import org.apache.spark.unsafe.memory.MemoryBlock
+import org.apache.spark.util.Benchmark
 import org.apache.spark.util.collection.unsafe.sort.{PrefixComparator, PrefixComparators}
 import org.apache.spark.util.random.XORShiftRandom
 
@@ -136,9 +137,28 @@ class RadixSortSuite extends SparkFunSuite with Logging {
     }
   }
 
-  test("benchmark small values") {
-  }
-
-  test("benchmark large values") {
+  test("benchmark sort") {
+    val size = 100000
+    val rand = new XORShiftRandom(123)
+    val benchmark = new Benchmark("radix sort", size)
+    benchmark.addTimerCase("sort one byte") { timer =>
+      val (_, buffer) = generateTestData(size, rand.nextLong & 0xff)
+      timer.startTiming()
+      RadixSort.sort(buffer, size, 0, 7, false, false)
+      timer.stopTiming()
+    }
+    benchmark.addTimerCase("sort two bytes") { timer =>
+      val (_, buffer) = generateTestData(size, rand.nextLong & 0xffff)
+      timer.startTiming()
+      RadixSort.sort(buffer, size, 0, 7, false, false)
+      timer.stopTiming()
+    }
+    benchmark.addTimerCase("sort eight bytes") { timer =>
+      val (_, buffer) = generateTestData(size, rand.nextLong)
+      timer.startTiming()
+      RadixSort.sort(buffer, size, 0, 7, false, false)
+      timer.stopTiming()
+    }
+    benchmark.run
   }
 }
