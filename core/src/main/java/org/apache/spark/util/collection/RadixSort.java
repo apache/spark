@@ -23,18 +23,14 @@ public class RadixSort {
   public static boolean enabled = true;
 
   public static int sort(
-      LongArray array,
-      int dataLen,
-      int dataOffset,
-      int tmpOffset,
-      int startByteIdx,
-      int endByteIdx) {
+      LongArray array, int dataLen, int startByteIdx, int endByteIdx, boolean desc) {
     assert enabled : "Radix sort is disabled.";
     assert startByteIdx >= 0 : "startByteIdx (" + startByteIdx + ") should >= 0";
     assert endByteIdx <= 7 : "endByteIdx (" + endByteIdx + ") should <= 7";
     assert startByteIdx <= endByteIdx;
-    assert dataOffset + dataLen <= array.size();
-    assert tmpOffset + dataLen <= array.size();
+    assert dataLen * 2 <= array.size();
+    int dataOffset = 0;
+    int tmpOffset = dataLen;
     if (dataLen > 0) {
       // Optimization: make a pre-pass to determine which byte indices we can skip for sorting.
       // If all the byte values at a particular index are the same we don't need to sort it.
@@ -48,7 +44,7 @@ public class RadixSort {
       long bitsChanged = andMask ^ orMask;
       for (int i = startByteIdx; i <= endByteIdx; i++) {
         if (((bitsChanged >>> (i * 8)) & 0xff) != 0) {
-          sortAtByte(array, i, dataLen, dataOffset, tmpOffset);
+          sortAtByte(array, i, dataLen, dataOffset, tmpOffset, desc);
           int tmp = dataOffset;
           dataOffset = tmpOffset;
           tmpOffset = tmp;
@@ -59,8 +55,8 @@ public class RadixSort {
   }
 
   private static void sortAtByte(
-      LongArray array, int byteIdx, int dataLen, int dataOffset, int tmpOffset) {
-    int[] tmpOffsets = getOffsets(array, byteIdx, dataLen, dataOffset, tmpOffset);
+      LongArray array, int byteIdx, int dataLen, int dataOffset, int tmpOffset, boolean desc) {
+    int[] tmpOffsets = getOffsets(array, byteIdx, dataLen, dataOffset, tmpOffset, desc);
     for (int i = dataOffset; i < dataOffset + dataLen; i++) {
       long value = array.get(i);
       int bucket = (int)((value >>> (byteIdx * 8)) & 0xff);
@@ -70,16 +66,24 @@ public class RadixSort {
 
   // TODO(ekl) it might be worth pre-computing these up-front for all bytes.
   private static int[] getOffsets(
-      LongArray array, int byteIdx, int dataLen, int dataOffset, int tmpOffset) {
+      LongArray array, int byteIdx, int dataLen, int dataOffset, int tmpOffset, boolean desc) {
     int[] tmpOffsets = new int[256];
     for (int i = 0; i < dataLen; i++) {
       tmpOffsets[(int)((array.get(dataOffset + i) >>> (byteIdx * 8)) & 0xff)]++;
     }
-    int accum = 0;
-    for (int i = 0; i < 256; i++) {
-      int tmp = tmpOffsets[i];
-      tmpOffsets[i] = tmpOffset + accum;
-      accum += tmp;
+    if (desc) {
+      int pos = dataLen;
+      for (int i=0; i < 256; i++) {
+        pos -= tmpOffsets[i];
+        tmpOffsets[i] = tmpOffset + pos;
+      }
+    } else {
+      int pos = 0;
+      for (int i = 0; i < 256; i++) {
+        int tmp = tmpOffsets[i];
+        tmpOffsets[i] = tmpOffset + pos;
+        pos += tmp;
+      }
     }
     return tmpOffsets;
   }
@@ -98,6 +102,7 @@ public class RadixSort {
     assert startByteIdx >= 0 : "startByteIdx (" + startByteIdx + ") should >= 0";
     assert endByteIdx <= 7 : "endByteIdx (" + endByteIdx + ") should <= 7";
     assert startByteIdx <= endByteIdx;
+    assert dataLen * 4 <= array.size();
     assert dataOffset + dataLen * 2 <= array.size();
     assert tmpOffset + dataLen * 2 <= array.size();
     if (dataLen > 0) {

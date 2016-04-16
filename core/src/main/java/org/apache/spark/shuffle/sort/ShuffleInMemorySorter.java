@@ -154,8 +154,7 @@ final class ShuffleInMemorySorter {
     int offset = 0;
     long start = System.nanoTime();
     if (useRadix) {
-      assert(pos * 2 <= array.size());
-      offset = RadixSort.sort(array, pos, 0, pos, 5, 7);
+      offset = RadixSort.sort(array, pos, 5, 7);
     } else {
       sorter.sort(array, 0, pos, SORT_COMPARATOR);
     }
