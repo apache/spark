@@ -141,19 +141,25 @@ class RadixSortSuite extends SparkFunSuite with Logging {
     val size = 100000
     val rand = new XORShiftRandom(123)
     val benchmark = new Benchmark("radix sort", size)
-    benchmark.addTimerCase("sort one byte") { timer =>
+    benchmark.addTimerCase("reference Arrays.sort") { timer =>
+      val (ref, _) = generateTestData(size, rand.nextLong)
+      timer.startTiming()
+      Arrays.sort(ref, toJavaComparator(PrefixComparators.BINARY))
+      timer.stopTiming()
+    }
+    benchmark.addTimerCase("radix sort one byte") { timer =>
       val (_, buffer) = generateTestData(size, rand.nextLong & 0xff)
       timer.startTiming()
       RadixSort.sort(buffer, size, 0, 7, false, false)
       timer.stopTiming()
     }
-    benchmark.addTimerCase("sort two bytes") { timer =>
+    benchmark.addTimerCase("radix sort two bytes") { timer =>
       val (_, buffer) = generateTestData(size, rand.nextLong & 0xffff)
       timer.startTiming()
       RadixSort.sort(buffer, size, 0, 7, false, false)
       timer.stopTiming()
     }
-    benchmark.addTimerCase("sort eight bytes") { timer =>
+    benchmark.addTimerCase("radix sort eight bytes") { timer =>
       val (_, buffer) = generateTestData(size, rand.nextLong)
       timer.startTiming()
       RadixSort.sort(buffer, size, 0, 7, false, false)
