@@ -21,6 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionsException
 import org.apache.spark.sql.catalyst.util.StringUtils
 
 /**
@@ -237,9 +238,7 @@ class InMemoryCatalog extends ExternalCatalog {
     if (!ignoreIfNotExists) {
       val missingSpecs = partSpecs.collect { case s if !existingParts.contains(s) => s }
       if (missingSpecs.nonEmpty) {
-        val missingSpecsStr = missingSpecs.mkString("\n===\n")
-        throw new AnalysisException("The following partitions do not exist in database " +
-          s"'$db' table '$table':\n$missingSpecsStr")
+        throw new NoSuchPartitionsException(db = db, table = table, specs = missingSpecs)
       }
     }
     partSpecs.foreach(existingParts.remove)

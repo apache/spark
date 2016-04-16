@@ -186,6 +186,17 @@ class HiveDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         // add partition will not delete the data
         assert(dirSet.forall(dir => dir.listFiles.nonEmpty))
 
+        intercept[AnalysisException] {
+          sql(
+            s"""
+               |ALTER TABLE $externalTab DROP PARTITION (ds='2008-04-08'),
+               |PARTITION (ds='2008-04-09', unknown='12')
+             """.stripMargin)
+        }
+        // illegal drop partition statement will not drop any partition
+        assert(catalog.listPartitions(TableIdentifier(externalTab)).map(_.spec).toSet ==
+          Set(Map("ds" -> "2008-04-08", "hr" -> "12"), Map("ds" -> "2008-04-09", "hr" -> "11")))
+
         sql(s"DROP TABLE $externalTab")
         // drop table will not delete the data of external table
         assert(dirSet.forall(dir => dir.listFiles.nonEmpty))
