@@ -70,7 +70,6 @@ class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("assert_true") {
-    // False values of assert_true: false, 0, null, ""
     intercept[RuntimeException] {
       checkEvaluation(AssertTrue(Literal(false, BooleanType)), null)
     }
