@@ -431,7 +431,7 @@ private[sql] object StatFunctions extends Logging {
       s"exceed 1e4. Currently $columnSize")
     val table = counts.groupBy(_.get(0)).map { case (col1Item, rows) =>
       val countsRow = new GenericMutableRow(columnSize + 1)
-      rows.foreach { (row: Row) =>
+      rows.foreach { row =>
         // row.get(0) is column 1
         // row.get(1) is column 2
         // row.get(2) is the frequency
