@@ -33,7 +33,7 @@ import org.apache.spark.util.Utils
 class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
   import testImplicits._
 
-  test("FileStreamSinkWriter - writing and appending unpartitioned data") {
+  test("FileStreamSinkWriter - unpartitioned data") {
     val path = Utils.createTempDir()
     path.delete()
 
@@ -63,7 +63,7 @@ class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
     checkAnswer(sqlContext.read.load(path.getCanonicalPath), (0 until 20).map(Row(_, 100)))
   }
 
-  test("FileStreamSinkWriter - writing and appending partitioned data") {
+  test("FileStreamSinkWriter - partitioned data") {
     implicit val e = ExpressionEncoder[java.lang.Long]
     val path = Utils.createTempDir()
     path.delete()
@@ -153,6 +153,7 @@ class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
       query.processAllAvailable()
     }
 
+    // TODO (tdas): Test partition column can be read or not
     val outputDf = sqlContext.read.parquet(outputDir)
     checkDataset(
       outputDf.as[Int],

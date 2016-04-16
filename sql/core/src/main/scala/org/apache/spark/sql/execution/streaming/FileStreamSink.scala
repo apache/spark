@@ -232,7 +232,7 @@ class FileStreamSinkWriter(
           val path = new Path(new Path(basePath, partitionPath), UUID.randomUUID.toString)
           paths += path.toString
           currentWriter = newOutputWriter(path)
-          logDebug(s"Writing partition $currentKey to $path")
+          logInfo(s"Writing partition $currentKey to $path")
         }
         currentWriter.writeInternal(sortedIterator.getValue)
       }
