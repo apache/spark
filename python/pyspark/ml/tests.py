@@ -621,6 +621,8 @@ class PersistenceTest(PySparkTestCase):
         lr_path = path + "/lr"
         lr.save(lr_path)
         lr2 = LinearRegression.load(lr_path)
+        self.assertEqual(lr.uid, lr2.uid)
+        self.assertEqual(type(lr.uid), type(lr2.uid))
         self.assertEqual(lr2.uid, lr2.maxIter.parent,
                          "Loaded LinearRegression instance uid (%s) did not match Param's uid (%s)"
                          % (lr2.uid, lr2.maxIter.parent))

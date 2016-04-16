@@ -254,7 +254,7 @@ class JavaModel(JavaTransformer, Model):
         """
         super(JavaModel, self).__init__(java_model)
         if java_model is not None:
-            self.uid = java_model.uid()
+            self._resetUid(java_model.uid())
 
     def copy(self, extra=None):
         """
