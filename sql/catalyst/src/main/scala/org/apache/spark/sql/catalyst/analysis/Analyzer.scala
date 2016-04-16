@@ -69,7 +69,7 @@ class Analyzer(
     }
   }
 
-  private val fixedPoint = FixedPoint(maxIterations)
+  protected val fixedPoint = FixedPoint(maxIterations)
 
   /**
    * Override to provide additional rules for the "Resolution" batch.

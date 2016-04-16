@@ -18,12 +18,6 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.SparkFunSuite
-<<<<<<< HEAD
-=======
-import org.apache.spark.sql.catalyst.analysis.EmptyFunctionRegistry
-import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
-import org.apache.spark.sql.catalyst.optimizer.Optimizer
->>>>>>> master
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 

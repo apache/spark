@@ -39,7 +39,7 @@ import org.apache.spark.sql.types._
 abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
   extends RuleExecutor[LogicalPlan] {
 
-  private val fixedPoint = FixedPoint(conf.optimizerMaxIterations)
+  protected val fixedPoint = FixedPoint(conf.optimizerMaxIterations)
 
   def batches: Seq[Batch] = {
     // Technically some of the rules in Finish Analysis are not optimizer rules and belong more

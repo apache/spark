@@ -29,5 +29,5 @@ class SparkOptimizer(
   extends Optimizer(catalog, conf) {
 
   override def batches: Seq[Batch] = super.batches :+ Batch(
-    "User Provided Optimizers", FixedPoint(100), experimentalMethods.extraOptimizations: _*)
+    "User Provided Optimizers", fixedPoint, experimentalMethods.extraOptimizations: _*)
 }
