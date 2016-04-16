@@ -38,7 +38,7 @@ private[columnar] trait ColumnAccessor {
 
   def hasNext: Boolean
 
-  def extractTo(row: MutableRow, ordinal: Int)
+  def extractTo(row: MutableRow, ordinal: Int): Unit
 
   protected def underlyingBuffer: ByteBuffer
 }

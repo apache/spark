@@ -20,7 +20,7 @@ package org.apache.spark.mllib.linalg
 import com.github.fommil.netlib.{BLAS => NetlibBLAS, F2jBLAS}
 import com.github.fommil.netlib.BLAS.{getInstance => NativeBLAS}
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 
 /**
  * BLAS routines for MLlib's vectors and matrices.

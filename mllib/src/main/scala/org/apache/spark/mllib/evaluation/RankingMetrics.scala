@@ -22,9 +22,9 @@ import java.{lang => jl}
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
-import org.apache.spark.Logging
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 
 /**

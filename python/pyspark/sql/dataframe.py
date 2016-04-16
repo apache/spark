@@ -60,7 +60,7 @@ class DataFrame(object):
         people = sqlContext.read.parquet("...")
         department = sqlContext.read.parquet("...")
 
-        people.filter(people.age > 30).join(department, people.deptId == department.id)) \
+        people.filter(people.age > 30).join(department, people.deptId == department.id)\
           .groupBy(department.name, "gender").agg({"salary": "avg", "age": "max"})
 
     .. note:: Experimental
@@ -241,6 +241,20 @@ class DataFrame(object):
         return list(_load_from_socket(port, BatchedSerializer(PickleSerializer())))
 
     @ignore_unicode_prefix
+    @since(2.0)
+    def toLocalIterator(self):
+        """
+        Returns an iterator that contains all of the rows in this :class:`DataFrame`.
+        The iterator will consume as much memory as the largest partition in this DataFrame.
+
+        >>> list(df.toLocalIterator())
+        [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
+        """
+        with SCCallSiteSync(self._sc) as css:
+            port = self._jdf.toPythonIterator()
+        return _load_from_socket(port, BatchedSerializer(PickleSerializer()))
+
+    @ignore_unicode_prefix
     @since(1.3)
     def limit(self, num):
         """Limits the result count to the number specified.
@@ -360,7 +374,7 @@ class DataFrame(object):
 
         >>> df.repartition(10).rdd.getNumPartitions()
         10
-        >>> data = df.unionAll(df).repartition("age")
+        >>> data = df.union(df).repartition("age")
         >>> data.show()
         +---+-----+
         |age| name|
@@ -911,14 +925,24 @@ class DataFrame(object):
         """
         return self.groupBy().agg(*exprs)
 
+    @since(2.0)
+    def union(self, other):
+        """ Return a new :class:`DataFrame` containing union of rows in this
+        frame and another frame.
+
+        This is equivalent to `UNION ALL` in SQL. To do a SQL-style set union
+        (that does deduplication of elements), use this function followed by a distinct.
+        """
+        return DataFrame(self._jdf.union(other._jdf), self.sql_ctx)
+
     @since(1.3)
     def unionAll(self, other):
         """ Return a new :class:`DataFrame` containing union of rows in this
         frame and another frame.
 
-        This is equivalent to `UNION ALL` in SQL.
+        .. note:: Deprecated in 2.0, use union instead.
         """
-        return DataFrame(self._jdf.unionAll(other._jdf), self.sql_ctx)
+        return self.union(other)
 
     @since(1.3)
     def intersect(self, other):

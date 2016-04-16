@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.internal
 
-import org.apache.spark.sql.{ContinuousQueryManager, SQLContext, UDFRegistration}
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, Catalog, FunctionRegistry, SimpleCatalog}
+import org.apache.spark.sql.{ContinuousQueryManager, ExperimentalMethods, SQLContext, UDFRegistration}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry}
+import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -40,15 +41,22 @@ private[sql] class SessionState(ctx: SQLContext) {
    */
   lazy val conf = new SQLConf
 
-  /**
-   * Internal catalog for managing table and database states.
-   */
-  lazy val catalog: Catalog = new SimpleCatalog(conf)
+  lazy val experimentalMethods = new ExperimentalMethods
 
   /**
    * Internal catalog for managing functions registered by the user.
    */
   lazy val functionRegistry: FunctionRegistry = FunctionRegistry.builtin.copy()
+
+  /**
+   * Internal catalog for managing table and database states.
+   */
+  lazy val catalog =
+    new SessionCatalog(
+      ctx.externalCatalog,
+      ctx.functionResourceLoader,
+      functionRegistry,
+      conf)
 
   /**
    * Interface exposed to the user for registering user-defined functions.
@@ -59,44 +67,31 @@ private[sql] class SessionState(ctx: SQLContext) {
    * Logical query plan analyzer for resolving unresolved attributes and relations.
    */
   lazy val analyzer: Analyzer = {
-    new Analyzer(catalog, functionRegistry, conf) {
+    new Analyzer(catalog, conf) {
       override val extendedResolutionRules =
-        python.ExtractPythonUDFs ::
         PreInsertCastAndRename ::
         DataSourceAnalysis ::
         (if (conf.runSQLOnFile) new ResolveDataSource(ctx) :: Nil else Nil)
 
-      override val extendedCheckRules = Seq(datasources.PreWriteCheck(catalog))
+      override val extendedCheckRules = Seq(datasources.PreWriteCheck(conf, catalog))
     }
   }
 
   /**
    * Logical query plan optimizer.
    */
-  lazy val optimizer: Optimizer = new SparkOptimizer(ctx)
+  lazy val optimizer: Optimizer = new SparkOptimizer(catalog, conf, experimentalMethods)
 
   /**
    * Parser that extracts expressions, plans, table identifiers etc. from SQL texts.
    */
-  lazy val sqlParser: ParserInterface = new SparkQl(conf)
+  lazy val sqlParser: ParserInterface = SparkSqlParser
 
   /**
    * Planner that converts optimized logical plans to physical plans.
    */
-  lazy val planner: SparkPlanner = new SparkPlanner(ctx)
-
-  /**
-   * Prepares a planned [[SparkPlan]] for execution by inserting shuffle operations and internal
-   * row format conversions as needed.
-   */
-  lazy val prepareForExecution = new RuleExecutor[SparkPlan] {
-    override val batches: Seq[Batch] = Seq(
-      Batch("Subquery", Once, PlanSubqueries(ctx)),
-      Batch("Add exchange", Once, EnsureRequirements(ctx)),
-      Batch("Whole stage codegen", Once, CollapseCodegenStages(ctx)),
-      Batch("Reuse duplicated exchanges", Once, ReuseExchange(ctx))
-    )
-  }
+  def planner: SparkPlanner =
+    new SparkPlanner(ctx.sparkContext, conf, experimentalMethods.extraStrategies)
 
   /**
    * An interface to register custom [[org.apache.spark.sql.util.QueryExecutionListener]]s
@@ -108,5 +103,5 @@ private[sql] class SessionState(ctx: SQLContext) {
    * Interface to start and stop [[org.apache.spark.sql.ContinuousQuery]]s.
    */
   lazy val continuousQueryManager: ContinuousQueryManager = new ContinuousQueryManager(ctx)
-
 }
+

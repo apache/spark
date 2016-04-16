@@ -17,12 +17,14 @@
 
 package org.apache.spark.ml.clustering
 
+import org.apache.hadoop.fs.{FileSystem, Path}
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
-import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+import org.apache.spark.sql.{DataFrame, Dataset, Row, SQLContext}
 
 
 object LDASuite {
@@ -62,7 +64,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
 
   val k: Int = 5
   val vocabSize: Int = 30
-  @transient var dataset: DataFrame = _
+  @transient var dataset: Dataset[_] = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -138,16 +140,18 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
       new LDA().setTopicConcentration(-1.1)
     }
 
-    // validateParams()
-    lda.validateParams()
+    val dummyDF = sqlContext.createDataFrame(Seq(
+      (1, Vectors.dense(1.0, 2.0)))).toDF("id", "features")
+    // validate parameters
+    lda.transformSchema(dummyDF.schema)
     lda.setDocConcentration(1.1)
-    lda.validateParams()
+    lda.transformSchema(dummyDF.schema)
     lda.setDocConcentration(Range(0, lda.getK).map(_ + 2.0).toArray)
-    lda.validateParams()
+    lda.transformSchema(dummyDF.schema)
     lda.setDocConcentration(Range(0, lda.getK - 1).map(_ + 2.0).toArray)
     withClue("LDA docConcentration validity check failed for bad array length") {
       intercept[IllegalArgumentException] {
-        lda.validateParams()
+        lda.transformSchema(dummyDF.schema)
       }
     }
 
@@ -258,5 +262,42 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
     val lda = new LDA()
     testEstimatorAndModelReadWrite(lda, dataset,
       LDASuite.allParamSettings ++ Map("optimizer" -> "em"), checkModelData)
+  }
+
+  test("EM LDA checkpointing: save last checkpoint") {
+    // Checkpoint dir is set by MLlibTestSparkContext
+    val lda = new LDA().setK(2).setSeed(1).setOptimizer("em").setMaxIter(3).setCheckpointInterval(1)
+    val model_ = lda.fit(dataset)
+    assert(model_.isInstanceOf[DistributedLDAModel])
+    val model = model_.asInstanceOf[DistributedLDAModel]
+
+    // There should be 1 checkpoint remaining.
+    assert(model.getCheckpointFiles.length === 1)
+    val fs = FileSystem.get(sqlContext.sparkContext.hadoopConfiguration)
+    assert(fs.exists(new Path(model.getCheckpointFiles.head)))
+    model.deleteCheckpointFiles()
+    assert(model.getCheckpointFiles.isEmpty)
+  }
+
+  test("EM LDA checkpointing: remove last checkpoint") {
+    // Checkpoint dir is set by MLlibTestSparkContext
+    val lda = new LDA().setK(2).setSeed(1).setOptimizer("em").setMaxIter(3).setCheckpointInterval(1)
+      .setKeepLastCheckpoint(false)
+    val model_ = lda.fit(dataset)
+    assert(model_.isInstanceOf[DistributedLDAModel])
+    val model = model_.asInstanceOf[DistributedLDAModel]
+
+    assert(model.getCheckpointFiles.isEmpty)
+  }
+
+  test("EM LDA disable checkpointing") {
+    // Checkpoint dir is set by MLlibTestSparkContext
+    val lda = new LDA().setK(2).setSeed(1).setOptimizer("em").setMaxIter(3)
+      .setCheckpointInterval(-1)
+    val model_ = lda.fit(dataset)
+    assert(model_.isInstanceOf[DistributedLDAModel])
+    val model = model_.asInstanceOf[DistributedLDAModel]
+
+    assert(model.getCheckpointFiles.isEmpty)
   }
 }

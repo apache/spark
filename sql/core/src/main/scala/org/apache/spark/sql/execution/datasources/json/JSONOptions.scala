@@ -19,7 +19,8 @@ package org.apache.spark.sql.execution.datasources.json
 
 import com.fasterxml.jackson.core.{JsonFactory, JsonParser}
 
-import org.apache.spark.sql.execution.datasources.CompressionCodecs
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.execution.datasources.{CompressionCodecs, ParseModes}
 
 /**
  * Options for the JSON data source.
@@ -28,14 +29,14 @@ import org.apache.spark.sql.execution.datasources.CompressionCodecs
  */
 private[sql] class JSONOptions(
     @transient private val parameters: Map[String, String])
-  extends Serializable  {
+  extends Logging with Serializable  {
 
   val samplingRatio =
     parameters.get("samplingRatio").map(_.toDouble).getOrElse(1.0)
   val primitivesAsString =
     parameters.get("primitivesAsString").map(_.toBoolean).getOrElse(false)
-  val floatAsBigDecimal =
-    parameters.get("floatAsBigDecimal").map(_.toBoolean).getOrElse(false)
+  val prefersDecimal =
+    parameters.get("prefersDecimal").map(_.toBoolean).getOrElse(false)
   val allowComments =
     parameters.get("allowComments").map(_.toBoolean).getOrElse(false)
   val allowUnquotedFieldNames =
@@ -49,6 +50,17 @@ private[sql] class JSONOptions(
   val allowBackslashEscapingAnyCharacter =
     parameters.get("allowBackslashEscapingAnyCharacter").map(_.toBoolean).getOrElse(false)
   val compressionCodec = parameters.get("compression").map(CompressionCodecs.getCodecClassName)
+  private val parseMode = parameters.getOrElse("mode", "PERMISSIVE")
+  val columnNameOfCorruptRecord = parameters.get("columnNameOfCorruptRecord")
+
+  // Parse mode flags
+  if (!ParseModes.isValidMode(parseMode)) {
+    logWarning(s"$parseMode is not a valid parse mode. Using ${ParseModes.DEFAULT}.")
+  }
+
+  val failFast = ParseModes.isFailFastMode(parseMode)
+  val dropMalformed = ParseModes.isDropMalformedMode(parseMode)
+  val permissive = ParseModes.isPermissiveMode(parseMode)
 
   /** Sets config options on a Jackson [[JsonFactory]]. */
   def setJacksonOptions(factory: JsonFactory): Unit = {

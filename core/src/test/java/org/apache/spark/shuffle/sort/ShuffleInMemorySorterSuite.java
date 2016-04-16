@@ -80,7 +80,7 @@ public class ShuffleInMemorySorterSuite {
         sorter.expandPointerArray(consumer.allocateArray(sorter.numRecords() * 2));
       }
       final long recordAddress = memoryManager.encodePageNumberAndOffset(dataPage, position);
-      final byte[] strBytes = str.getBytes("utf-8");
+      final byte[] strBytes = str.getBytes(StandardCharsets.UTF_8);
       Platform.putInt(baseObject, position, strBytes.length);
       position += 4;
       Platform.copyMemory(

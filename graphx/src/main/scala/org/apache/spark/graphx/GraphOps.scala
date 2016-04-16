@@ -276,7 +276,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
         if (Random.nextDouble() < probability) { Some(vidVvals._1) }
         else { None }
       }
-      if (selectedVertices.count > 1) {
+      if (selectedVertices.count > 0) {
         found = true
         val collectedVertices = selectedVertices.collect()
         retVal = collectedVertices(Random.nextInt(collectedVertices.length))
@@ -415,11 +415,11 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
   }
 
   /**
-    * Compute the connected component membership of each vertex and return a graph with the vertex
-    * value containing the lowest vertex id in the connected component containing that vertex.
-    *
-    * @see [[org.apache.spark.graphx.lib.ConnectedComponents$#run]]
-    */
+   * Compute the connected component membership of each vertex and return a graph with the vertex
+   * value containing the lowest vertex id in the connected component containing that vertex.
+   *
+   * @see [[org.apache.spark.graphx.lib.ConnectedComponents$#run]]
+   */
   def connectedComponents(): Graph[VertexId, ED] = {
     ConnectedComponents.run(graph)
   }

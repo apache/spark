@@ -24,7 +24,7 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{DoubleType, NumericType, StructType}
 
@@ -66,7 +66,6 @@ class OneHotEncoder(override val uid: String) extends Transformer
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   override def transformSchema(schema: StructType): StructType = {
-    validateParams()
     val inputColName = $(inputCol)
     val outputColName = $(outputCol)
 
@@ -122,7 +121,8 @@ class OneHotEncoder(override val uid: String) extends Transformer
     StructType(outputFields)
   }
 
-  override def transform(dataset: DataFrame): DataFrame = {
+  @Since("2.0.0")
+  override def transform(dataset: Dataset[_]): DataFrame = {
     // schema transformation
     val inputColName = $(inputCol)
     val outputColName = $(outputCol)

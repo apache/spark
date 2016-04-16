@@ -71,6 +71,15 @@ object Canonicalize extends {
     case GreaterThanOrEqual(l, r) if l.hashCode() > r.hashCode() => LessThanOrEqual(r, l)
     case LessThanOrEqual(l, r) if l.hashCode() > r.hashCode() => GreaterThanOrEqual(r, l)
 
+    case Not(GreaterThan(l, r)) if l.hashCode() > r.hashCode() => GreaterThan(r, l)
+    case Not(GreaterThan(l, r)) => LessThanOrEqual(l, r)
+    case Not(LessThan(l, r)) if l.hashCode() > r.hashCode() => LessThan(r, l)
+    case Not(LessThan(l, r)) => GreaterThanOrEqual(l, r)
+    case Not(GreaterThanOrEqual(l, r)) if l.hashCode() > r.hashCode() => GreaterThanOrEqual(r, l)
+    case Not(GreaterThanOrEqual(l, r)) => LessThan(l, r)
+    case Not(LessThanOrEqual(l, r)) if l.hashCode() > r.hashCode() => LessThanOrEqual(r, l)
+    case Not(LessThanOrEqual(l, r)) => GreaterThan(l, r)
+
     case _ => e
   }
 }

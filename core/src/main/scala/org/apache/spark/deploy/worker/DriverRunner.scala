@@ -25,11 +25,12 @@ import scala.collection.JavaConverters._
 import com.google.common.io.Files
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf}
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.{DriverDescription, SparkHadoopUtil}
 import org.apache.spark.deploy.DeployMessages.DriverStateChanged
 import org.apache.spark.deploy.master.DriverState
 import org.apache.spark.deploy.master.DriverState.DriverState
+import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.{Clock, SystemClock, Utils}
 
@@ -217,7 +218,7 @@ private[deploy] class DriverRunner(
 }
 
 private[deploy] trait Sleeper {
-  def sleep(seconds: Int)
+  def sleep(seconds: Int): Unit
 }
 
 // Needed because ProcessBuilder is a final class and cannot be mocked

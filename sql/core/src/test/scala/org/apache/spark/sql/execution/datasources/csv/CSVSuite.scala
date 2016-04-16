@@ -45,6 +45,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   private val disableCommentsFile = "disable_comments.csv"
   private val boolFile = "bool.csv"
   private val simpleSparseFile = "simple_sparse.csv"
+  private val unescapedQuotesFile = "unescaped-quotes.csv"
 
   private def testFile(fileName: String): String = {
     Thread.currentThread().getContextClassLoader.getResource(fileName).toString
@@ -140,6 +141,17 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     verifyCars(cars, withHeader = true)
   }
 
+  test("parse unescaped quotes with maxCharsPerColumn") {
+    val rows = sqlContext.read
+      .format("csv")
+      .option("maxCharsPerColumn", "4")
+      .load(testFile(unescapedQuotesFile))
+
+    val expectedRows = Seq(Row("\"a\"b", "ccc", "ddd"), Row("ab", "cc\"c", "ddd\""))
+
+    checkAnswer(rows, expectedRows)
+  }
+
   test("bad encoding name") {
     val exception = intercept[UnsupportedCharsetException] {
       sqlContext
@@ -160,12 +172,13 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
          |OPTIONS (path "${testFile(carsFile8859)}", header "true",
          |charset "iso-8859-1", delimiter "þ")
       """.stripMargin.replaceAll("\n", " "))
-    //scalstyle:on
+    // scalastyle:on
 
     verifyCars(sqlContext.table("carsTable"), withHeader = true)
   }
 
   test("test aliases sep and encoding for delimiter and charset") {
+    // scalastyle:off
     val cars = sqlContext
       .read
       .format("csv")
@@ -173,6 +186,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       .option("encoding", "iso-8859-1")
       .option("sep", "þ")
       .load(testFile(carsFile8859))
+    // scalastyle:on
 
     verifyCars(cars, withHeader = true)
   }
