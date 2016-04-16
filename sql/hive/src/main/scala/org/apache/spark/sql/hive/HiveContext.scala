@@ -49,6 +49,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.{ExecutedCommand, SetCommand}
 import org.apache.spark.sql.execution.ui.SQLListener
 import org.apache.spark.sql.hive.client._
+import org.apache.spark.sql.hive.execution.AnalyzeTable
 import org.apache.spark.sql.hive.execution.{DescribeHiveTableCommand, HiveNativeCommand}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf._
@@ -217,6 +218,19 @@ class HiveContext private[hive](
   protected[hive] def invalidateTable(tableName: String): Unit = {
     val tableIdent = sessionState.sqlParser.parseTableIdentifier(tableName)
     sessionState.catalog.invalidateTable(tableIdent)
+  }
+
+  /**
+   * Analyzes the given table in the current database to generate statistics, which will be
+   * used in query optimizations.
+   *
+   * Right now, it only supports Hive tables and it only updates the size of a Hive table
+   * in the Hive metastore.
+   *
+   * @since 1.2.0
+   */
+  def analyze(tableName: String) {
+    AnalyzeTable(tableName).run(self)
   }
 
   override def setConf(key: String, value: String): Unit = {
