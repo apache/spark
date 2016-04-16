@@ -385,7 +385,7 @@ abstract class HiveComparisonTest
           var query: TestHive.QueryExecution = null
           try {
             query = {
-              val originalQuery = new TestHive.QueryExecution(queryString)
+              val originalQuery = new TestHive.QueryExecution(TestHive.rewritePaths(queryString))
               val containsCommands = originalQuery.analyzed.collectFirst {
                 case _: Command => ()
                 case _: LogicalInsertIntoHiveTable => ()

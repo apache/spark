@@ -223,7 +223,7 @@ class TestHiveContext private[hive](
    * Replaces relative paths to the parent directory "../" with hiveDevHome since this is how the
    * hive test cases assume the system is set up.
    */
-  private def rewritePaths(cmd: String): String =
+  def rewritePaths(cmd: String): String =
     if (cmd.toUpperCase contains "LOAD DATA") {
       val testDataLocation =
         hiveDevHome.map(_.getCanonicalPath).getOrElse(inRepoTests.getCanonicalPath)

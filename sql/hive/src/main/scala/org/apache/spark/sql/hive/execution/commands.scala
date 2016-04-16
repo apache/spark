@@ -322,7 +322,7 @@ case class LoadData(
 
       hiveClient.loadPartition(
         path,
-        table.unquotedString,
+        targetTable.identifier.unquotedString,
         orderedPartitionSpec,
         isOverwrite,
         holdDDLTime = false,
@@ -331,7 +331,7 @@ case class LoadData(
     } else {
       hiveClient.loadTable(
         path,
-        table.unquotedString,
+        targetTable.identifier.unquotedString,
         isOverwrite,
         holdDDLTime = false)
     }
