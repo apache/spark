@@ -80,7 +80,7 @@ private[sql] class SessionState(ctx: SQLContext) {
   /**
    * Logical query plan optimizer.
    */
-  lazy val optimizer: Optimizer = new SparkOptimizer(experimentalMethods)
+  lazy val optimizer: Optimizer = new SparkOptimizer(conf, catalog, experimentalMethods)
 
   /**
    * Parser that extracts expressions, plans, table identifiers etc. from SQL texts.
