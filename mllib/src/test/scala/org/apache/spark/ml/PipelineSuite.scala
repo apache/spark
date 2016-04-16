@@ -207,9 +207,6 @@ class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     val stages1 = Array(new WritableStage("a"))
     val steps = stages0 ++ stages1
     val p = new Pipeline().setStages(steps)
-
-    p.stages.w(steps)
-    new ParamPair(p.stages, steps)
   }
 }
 
