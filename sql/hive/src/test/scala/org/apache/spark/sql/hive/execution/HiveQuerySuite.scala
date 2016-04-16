@@ -946,6 +946,11 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
     val testData = TestHive.getHiveFile("data/files/issue-4077-data.txt").getCanonicalPath
 
+    // Non-existing inpath
+    intercept[AnalysisException] {
+      sql("""LOAD DATA LOCAL INPATH "/non-existing/data.txt" INTO TABLE non_part_table""")
+    }
+
     // LOAD DATA INTO non-partitioned table can't specify partition
     intercept[AnalysisException] {
       sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE non_part_table PARTITION(ds="1")""")
@@ -981,6 +986,11 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
     sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE part_table PARTITION(c="1", d="2")""")
     assert(sql("SELECT time, id FROM part_table WHERE c = '1' AND d = '2'").collect()
+      === sql("SELECT * FROM non_part_table").collect())
+
+    // Different order of partition columns.
+    sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE part_table PARTITION(d="1", c="2")""")
+    assert(sql("SELECT time, id FROM part_table WHERE c = '2' AND d = '1'").collect()
       === sql("SELECT * FROM non_part_table").collect())
 
     sql("DROP TABLE non_part_table")

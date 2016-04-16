@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.hive.execution
 
+import java.io.File
 import java.util
 
 import org.apache.hadoop.hive.metastore.MetaStoreUtils
@@ -310,6 +311,11 @@ case class LoadData(
         throw new AnalysisException(
           "LOAD DATA to non-partitioned table cannot specify partition.")
       }
+    }
+
+    if (!new File(path).exists()) {
+      throw new AnalysisException(
+        s"LOAD DATA with non-existing path: $path")
     }
 
     val hiveClient = sqlContext.asInstanceOf[HiveContext].metadataHive
