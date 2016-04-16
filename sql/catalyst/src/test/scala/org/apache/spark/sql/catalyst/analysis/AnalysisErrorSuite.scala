@@ -24,8 +24,8 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete, Count}
+import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
 
@@ -443,5 +443,40 @@ class AnalysisErrorSuite extends AnalysisTest {
           AttributeReference("c", MapType(IntegerType, StringType))(exprId = ExprId(4)))))
 
     assertAnalysisError(plan2, "map type expression `a` cannot be used in join conditions" :: Nil)
+  }
+
+  test("PredicateSubQuery is used outside of a filter") {
+    val a = AttributeReference("a", IntegerType)()
+    val b = AttributeReference("b", IntegerType)()
+    val plan = Project(
+      Seq(a, Alias(InSubQuery(a, LocalRelation(b)), "c")()),
+      LocalRelation(a))
+    assertAnalysisError(plan, "Predicate sub-queries can only be used in a Filter" :: Nil)
+  }
+
+  test("PredicateSubQuery is used is a nested condition") {
+    val a = AttributeReference("a", IntegerType)()
+    val b = AttributeReference("b", IntegerType)()
+    val c = AttributeReference("c", BooleanType)()
+    val plan1 = Filter(Cast(InSubQuery(a, LocalRelation(b)), BooleanType), LocalRelation(a))
+    assertAnalysisError(plan1, "Predicate sub-queries cannot be used in nested conditions" :: Nil)
+
+    val plan2 = Filter(Or(InSubQuery(a, LocalRelation(b)), c), LocalRelation(a, c))
+    assertAnalysisError(plan2, "Predicate sub-queries cannot be used in nested conditions" :: Nil)
+  }
+
+  test("PredicateSubQuery correlated predicate is nested in an outer join") {
+    val a = AttributeReference("a", IntegerType)()
+    val b = AttributeReference("b", IntegerType)()
+    val c = AttributeReference("c", IntegerType)()
+    val plan = Filter(
+      Exists(
+        Join(
+          LocalRelation(b),
+          Filter(EqualTo(a, c), LocalRelation(c)),
+          LeftOuter,
+          Option(EqualTo(b, c)))),
+      LocalRelation(a))
+    assertAnalysisError(plan, "Accessing outer query column is not allowed in outer joins" :: Nil)
   }
 }

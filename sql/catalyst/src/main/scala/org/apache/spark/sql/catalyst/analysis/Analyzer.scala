@@ -859,8 +859,8 @@ class Analyzer(
   object ResolveSubquery extends Rule[LogicalPlan] with PredicateHelper {
 
     /**
-     * Resolve the correlated predicates in a sub-queries [[Filter]]s (WHERE or HAVING) by using the
-     * plan the predicates should be correlated to.
+     * Resolve the correlated predicates in the [[Filter]] clauses (e.g. WHERE or HAVING) of a
+     * sub-query by using the plan the predicates should be correlated to.
      */
     private def resolveCorrelatedPredicates(q: LogicalPlan, p: LogicalPlan): LogicalPlan = {
       q transformUp {
