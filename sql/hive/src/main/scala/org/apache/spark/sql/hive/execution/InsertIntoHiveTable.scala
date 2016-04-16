@@ -118,8 +118,8 @@ case class InsertIntoHiveTable(
       }
 
       // Report error if dynamic partition strict mode is on but no static partition is found
-      if (numStaticPartitions == 0 &&
-        sc.sessionState.hiveconf.getVar(HiveConf.ConfVars.DYNAMICPARTITIONINGMODE).equalsIgnoreCase("strict")) {
+      if (numStaticPartitions == 0 && sc.sessionState.hiveconf.getVar(
+          HiveConf.ConfVars.DYNAMICPARTITIONINGMODE).equalsIgnoreCase("strict")) {
         throw new SparkException(ErrorMsg.DYNAMIC_PARTITION_STRICT_MODE.getMsg)
       }
 
