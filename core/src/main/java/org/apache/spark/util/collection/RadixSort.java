@@ -23,7 +23,8 @@ public class RadixSort {
   public static boolean enabled = true;
 
   public static int sort(
-      LongArray array, int dataLen, int startByteIdx, int endByteIdx, boolean desc) {
+      LongArray array, int dataLen, int startByteIdx, int endByteIdx,
+      boolean desc, boolean signed) {
     assert enabled : "Radix sort is disabled.";
     assert startByteIdx >= 0 : "startByteIdx (" + startByteIdx + ") should >= 0";
     assert endByteIdx <= 7 : "endByteIdx (" + endByteIdx + ") should <= 7";
@@ -44,7 +45,7 @@ public class RadixSort {
       long bitsChanged = andMask ^ orMask;
       for (int i = startByteIdx; i <= endByteIdx; i++) {
         if (((bitsChanged >>> (i * 8)) & 0xff) != 0) {
-          sortAtByte(array, i, dataLen, dataOffset, tmpOffset, desc);
+          sortAtByte(array, i, dataLen, dataOffset, tmpOffset, desc, signed && i == endByteIdx);
           int tmp = dataOffset;
           dataOffset = tmpOffset;
           tmpOffset = tmp;
@@ -55,8 +56,9 @@ public class RadixSort {
   }
 
   private static void sortAtByte(
-      LongArray array, int byteIdx, int dataLen, int dataOffset, int tmpOffset, boolean desc) {
-    int[] tmpOffsets = getOffsets(array, byteIdx, dataLen, dataOffset, tmpOffset, desc);
+      LongArray array, int byteIdx, int dataLen, int dataOffset, int tmpOffset,
+      boolean desc, boolean signed) {
+    int[] tmpOffsets = getOffsets(array, byteIdx, dataLen, dataOffset, tmpOffset, desc, signed);
     for (int i = dataOffset; i < dataOffset + dataLen; i++) {
       long value = array.get(i);
       int bucket = (int)((value >>> (byteIdx * 8)) & 0xff);
@@ -66,22 +68,24 @@ public class RadixSort {
 
   // TODO(ekl) it might be worth pre-computing these up-front for all bytes.
   private static int[] getOffsets(
-      LongArray array, int byteIdx, int dataLen, int dataOffset, int tmpOffset, boolean desc) {
+      LongArray array, int byteIdx, int dataLen, int dataOffset, int tmpOffset,
+      boolean desc, boolean signed) {
     int[] tmpOffsets = new int[256];
     for (int i = 0; i < dataLen; i++) {
       tmpOffsets[(int)((array.get(dataOffset + i) >>> (byteIdx * 8)) & 0xff)]++;
     }
+    int start = signed ? 128 : 0;
     if (desc) {
       int pos = dataLen;
-      for (int i=0; i < 256; i++) {
-        pos -= tmpOffsets[i];
-        tmpOffsets[i] = tmpOffset + pos;
+      for (int i = start; i < start + 256; i++) {
+        pos -= tmpOffsets[i & 0xff];
+        tmpOffsets[i & 0xff] = tmpOffset + pos;
       }
     } else {
       int pos = 0;
-      for (int i = 0; i < 256; i++) {
-        int tmp = tmpOffsets[i];
-        tmpOffsets[i] = tmpOffset + pos;
+      for (int i = start; i < start + 256; i++) {
+        int tmp = tmpOffsets[i & 0xff];
+        tmpOffsets[i & 0xff] = tmpOffset + pos;
         pos += tmp;
       }
     }

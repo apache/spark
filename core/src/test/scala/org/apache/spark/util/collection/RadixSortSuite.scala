@@ -28,7 +28,7 @@ import org.apache.spark.util.collection.unsafe.sort.{PrefixComparator, PrefixCom
 import org.apache.spark.util.random.XORShiftRandom
 
 class RadixSortSuite extends SparkFunSuite with Logging {
-  private val N = 10000  // default size of test data
+  private val N = 100  // default size of test data
   private val NUM_FUZZ_ROUNDS = 10
 
   private def generateTestData(size: Int, rand: => Long): (Array[JLong], LongArray) = {
@@ -62,7 +62,7 @@ class RadixSortSuite extends SparkFunSuite with Logging {
     val rand = new XORShiftRandom(123)
     val (ref, buffer) = generateTestData(N, rand.nextLong)
     Arrays.sort(ref, toJavaComparator(PrefixComparators.BINARY))
-    val outOffset = RadixSort.sort(buffer, N, 0, 7, false)
+    val outOffset = RadixSort.sort(buffer, N, 0, 7, false, false)
     val result = collectToArray(buffer, outOffset, N)
     assert(ref.view == result.view)
   }
@@ -71,7 +71,7 @@ class RadixSortSuite extends SparkFunSuite with Logging {
     val rand = new XORShiftRandom(123)
     val (ref, buffer) = generateTestData(N, rand.nextLong)
     Arrays.sort(ref, toJavaComparator(PrefixComparators.BINARY_DESC))
-    val outOffset = RadixSort.sort(buffer, N, 0, 7, true)
+    val outOffset = RadixSort.sort(buffer, N, 0, 7, true, false)
     val result = collectToArray(buffer, outOffset, N)
     assert(ref.view == result.view)
   }
@@ -84,9 +84,30 @@ class RadixSortSuite extends SparkFunSuite with Logging {
         return PrefixComparators.BINARY.compare(a & 0xffffff0000L, b & 0xffffff0000L)
       }
     }))
-    val outOffset = RadixSort.sort(buffer, N, 2, 4, false)
+    val outOffset = RadixSort.sort(buffer, N, 2, 4, false, false)
     val result = collectToArray(buffer, outOffset, N)
     assert(ref.view == result.view)
+  }
+
+  test("sort twos complement integers") {
+    val rand = new XORShiftRandom(123)
+    val (ref, buffer) = generateTestData(N, rand.nextLong)
+    Arrays.sort(ref, toJavaComparator(PrefixComparators.LONG))
+    val outOffset = RadixSort.sort(buffer, N, 0, 7, false, true)
+    val result = collectToArray(buffer, outOffset, N)
+    assert(ref.view == result.view)
+  }
+
+  test("sort twos complement integers descending") {
+    val rand = new XORShiftRandom(123)
+    val (ref, buffer) = generateTestData(N, rand.nextLong)
+    Arrays.sort(ref, toJavaComparator(PrefixComparators.LONG_DESC))
+    val outOffset = RadixSort.sort(buffer, N, 0, 7, true, true)
+    val result = collectToArray(buffer, outOffset, N)
+    assert(ref.view == result.view)
+  }
+
+  test("sort key prefix array") {
   }
 
   test("sort fuzz test") {
@@ -104,12 +125,8 @@ class RadixSortSuite extends SparkFunSuite with Logging {
           tmp
         }
         val (ref, buffer) = generateTestData(N, rand.nextLong & mask)
-        Arrays.sort(ref, toJavaComparator(new PrefixComparator {
-          override def compare(a: Long, b: Long): Int = {
-            return PrefixComparators.BINARY.compare(a, b)
-          }
-        }))
-        val outOffset = RadixSort.sort(buffer, N, 0, 7, false)
+        Arrays.sort(ref, toJavaComparator(PrefixComparators.BINARY))
+        val outOffset = RadixSort.sort(buffer, N, 0, 7, false, false)
         val result = collectToArray(buffer, outOffset, N)
         assert(ref.view == result.view)
       }
@@ -117,15 +134,6 @@ class RadixSortSuite extends SparkFunSuite with Logging {
       case t: Throwable =>
         throw new Exception("Failed with seed: " + seed, t)
     }
-  }
-
-  test("sort twos complement integers") {
-  }
-
-  test("sort twos complement integers descending") {
-  }
-
-  test("sort key prefix array") {
   }
 
   test("benchmark small values") {
