@@ -68,14 +68,12 @@ private[spark] object InternalAccumulator {
 
   // Names of output metrics
   object output {
-    val WRITE_METHOD = OUTPUT_METRICS_PREFIX + "writeMethod"
     val BYTES_WRITTEN = OUTPUT_METRICS_PREFIX + "bytesWritten"
     val RECORDS_WRITTEN = OUTPUT_METRICS_PREFIX + "recordsWritten"
   }
 
   // Names of input metrics
   object input {
-    val READ_METHOD = INPUT_METRICS_PREFIX + "readMethod"
     val BYTES_READ = INPUT_METRICS_PREFIX + "bytesRead"
     val RECORDS_READ = INPUT_METRICS_PREFIX + "recordsRead"
   }
@@ -110,8 +108,6 @@ private[spark] object InternalAccumulator {
       case UPDATED_BLOCK_STATUSES => UpdatedBlockStatusesAccumulatorParam
       case shuffleRead.LOCAL_BLOCKS_FETCHED => IntAccumulatorParam
       case shuffleRead.REMOTE_BLOCKS_FETCHED => IntAccumulatorParam
-      case input.READ_METHOD => StringAccumulatorParam
-      case output.WRITE_METHOD => StringAccumulatorParam
       case _ => LongAccumulatorParam
     }
   }
@@ -165,7 +161,6 @@ private[spark] object InternalAccumulator {
    */
   def createInputAccums(): Seq[Accumulator[_]] = {
     Seq[String](
-      input.READ_METHOD,
       input.BYTES_READ,
       input.RECORDS_READ).map(create)
   }
@@ -175,7 +170,6 @@ private[spark] object InternalAccumulator {
    */
   def createOutputAccums(): Seq[Accumulator[_]] = {
     Seq[String](
-      output.WRITE_METHOD,
       output.BYTES_WRITTEN,
       output.RECORDS_WRITTEN).map(create)
   }

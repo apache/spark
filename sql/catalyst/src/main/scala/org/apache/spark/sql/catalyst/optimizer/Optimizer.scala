@@ -20,7 +20,9 @@ package org.apache.spark.sql.catalyst.optimizer
 import scala.annotation.tailrec
 import scala.collection.immutable.HashSet
 
-import org.apache.spark.sql.catalyst.analysis.{CleanupAliases, DistinctAggregationRewriter, EliminateSubqueryAliases}
+import org.apache.spark.sql.catalyst.{CatalystConf, SimpleCatalystConf}
+import org.apache.spark.sql.catalyst.analysis.{CleanupAliases, DistinctAggregationRewriter, EliminateSubqueryAliases, EmptyFunctionRegistry}
+import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
@@ -34,7 +36,11 @@ import org.apache.spark.sql.types._
  * Abstract class all optimizers should inherit of, contains the standard batches (extending
  * Optimizers can override this.
  */
-abstract class Optimizer extends RuleExecutor[LogicalPlan] {
+abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
+  extends RuleExecutor[LogicalPlan] {
+
+  protected val fixedPoint = FixedPoint(conf.optimizerMaxIterations)
+
   def batches: Seq[Batch] = {
     // Technically some of the rules in Finish Analysis are not optimizer rules and belong more
     // in the analyzer, because they are needed for correctness (e.g. ComputeCurrentTime).
@@ -43,6 +49,7 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
     Batch("Finish Analysis", Once,
       EliminateSubqueryAliases,
       ComputeCurrentTime,
+      GetCurrentDatabase(sessionCatalog),
       DistinctAggregationRewriter) ::
     //////////////////////////////////////////////////////////////////////////////////////////
     // Optimizer rules start here
@@ -54,12 +61,12 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
     //   since the other rules might make two separate Unions operators adjacent.
     Batch("Union", Once,
       CombineUnions) ::
-    Batch("Replace Operators", FixedPoint(100),
+    Batch("Replace Operators", fixedPoint,
       ReplaceIntersectWithSemiJoin,
       ReplaceDistinctWithAggregate) ::
-    Batch("Aggregate", FixedPoint(100),
+    Batch("Aggregate", fixedPoint,
       RemoveLiteralFromGroupExpressions) ::
-    Batch("Operator Optimizations", FixedPoint(100),
+    Batch("Operator Optimizations", fixedPoint,
       // Operator push down
       SetOperationPushDown,
       SamplePushDown,
@@ -90,11 +97,11 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       SimplifyCasts,
       SimplifyCaseConversionExpressions,
       EliminateSerialization) ::
-    Batch("Decimal Optimizations", FixedPoint(100),
+    Batch("Decimal Optimizations", fixedPoint,
       DecimalAggregates) ::
-    Batch("Typed Filter Optimization", FixedPoint(100),
+    Batch("Typed Filter Optimization", fixedPoint,
       EmbedSerializerInFilter) ::
-    Batch("LocalRelation", FixedPoint(100),
+    Batch("LocalRelation", fixedPoint,
       ConvertToLocalRelation) ::
     Batch("Subquery", Once,
       OptimizeSubqueries) :: Nil
@@ -112,12 +119,19 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
 }
 
 /**
- * Non-abstract representation of the standard Spark optimizing strategies
+ * An optimizer used in test code.
  *
  * To ensure extendability, we leave the standard rules in the abstract optimizer rules, while
  * specific rules go to the subclasses
  */
-object DefaultOptimizer extends Optimizer
+object SimpleTestOptimizer extends SimpleTestOptimizer
+
+class SimpleTestOptimizer extends Optimizer(
+  new SessionCatalog(
+    new InMemoryCatalog,
+    EmptyFunctionRegistry,
+    new SimpleCatalystConf(caseSensitiveAnalysis = true)),
+  new SimpleCatalystConf(caseSensitiveAnalysis = true))
 
 /**
  * Pushes operations down into a Sample.
@@ -300,11 +314,9 @@ object SetOperationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       assert(children.nonEmpty)
       val (deterministic, nondeterministic) = partitionByDeterministic(condition)
       val newFirstChild = Filter(deterministic, children.head)
-      val newOtherChildren = children.tail.map {
-        child => {
-          val rewrites = buildRewrites(children.head, child)
-          Filter(pushToRight(deterministic, rewrites), child)
-        }
+      val newOtherChildren = children.tail.map { child =>
+        val rewrites = buildRewrites(children.head, child)
+        Filter(pushToRight(deterministic, rewrites), child)
       }
       Filter(nondeterministic, Union(newFirstChild +: newOtherChildren))
 
@@ -346,7 +358,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
     case a @ Project(_, e @ Expand(_, _, grandChild)) if (e.outputSet -- a.references).nonEmpty =>
       val newOutput = e.output.filter(a.references.contains(_))
       val newProjects = e.projections.map { proj =>
-        proj.zip(e.output).filter { case (e, a) =>
+        proj.zip(e.output).filter { case (_, a) =>
           newOutput.contains(a)
         }.unzip._1
       }
@@ -1395,6 +1407,16 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
     plan transformAllExpressions {
       case CurrentDate() => currentDate
       case CurrentTimestamp() => currentTime
+    }
+  }
+}
+
+/** Replaces the expression of CurrentDatabase with the current database name. */
+case class GetCurrentDatabase(sessionCatalog: SessionCatalog) extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    plan transformAllExpressions {
+      case CurrentDatabase() =>
+        Literal.create(sessionCatalog.getCurrentDatabase, StringType)
     }
   }
 }

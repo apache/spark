@@ -190,11 +190,11 @@ private class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanceSlack:
 
     // initializes/resets to start iterating from the beginning
     def resetIterator(): Iterator[(String, Partition)] = {
-      val iterators = (0 to 2).map( x =>
-        prev.partitions.iterator.flatMap(p => {
+      val iterators = (0 to 2).map { x =>
+        prev.partitions.iterator.flatMap { p =>
           if (currPrefLocs(p).size > x) Some((currPrefLocs(p)(x), p)) else None
-        } )
-      )
+        }
+      }
       iterators.reduceLeft((x, y) => x ++ y)
     }
 

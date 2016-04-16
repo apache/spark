@@ -105,7 +105,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * Return a new RDD by applying a function to all elements of this RDD.
    */
   def mapToDouble[R](f: DoubleFunction[T]): JavaDoubleRDD = {
-    new JavaDoubleRDD(rdd.map(x => f.call(x).doubleValue()))
+    new JavaDoubleRDD(rdd.map(f.call(_).doubleValue()))
   }
 
   /**
@@ -131,7 +131,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    */
   def flatMapToDouble(f: DoubleFlatMapFunction[T]): JavaDoubleRDD = {
     def fn: (T) => Iterator[jl.Double] = (x: T) => f.call(x).asScala
-    new JavaDoubleRDD(rdd.flatMap(fn).map((x: jl.Double) => x.doubleValue()))
+    new JavaDoubleRDD(rdd.flatMap(fn).map(_.doubleValue()))
   }
 
   /**
@@ -173,7 +173,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
     def fn: (Iterator[T]) => Iterator[jl.Double] = {
       (x: Iterator[T]) => f.call(x.asJava).asScala
     }
-    new JavaDoubleRDD(rdd.mapPartitions(fn).map((x: jl.Double) => x.doubleValue()))
+    new JavaDoubleRDD(rdd.mapPartitions(fn).map(_.doubleValue()))
   }
 
   /**
@@ -196,7 +196,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
       (x: Iterator[T]) => f.call(x.asJava).asScala
     }
     new JavaDoubleRDD(rdd.mapPartitions(fn, preservesPartitioning)
-      .map(x => x.doubleValue()))
+      .map(_.doubleValue()))
   }
 
   /**
@@ -215,7 +215,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * Applies a function f to each partition of this RDD.
    */
   def foreachPartition(f: VoidFunction[java.util.Iterator[T]]) {
-    rdd.foreachPartition((x => f.call(x.asJava)))
+    rdd.foreachPartition(x => f.call(x.asJava))
   }
 
   /**

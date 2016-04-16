@@ -59,7 +59,7 @@ object SqlNetworkWordCount {
     val words = lines.flatMap(_.split(" "))
 
     // Convert RDDs of the words DStream to DataFrame and run SQL query
-    words.foreachRDD { (rdd: RDD[String], time: Time) =>
+    words.foreachRDD { (rdd, time) =>
       // Get the singleton instance of SQLContext
       val sqlContext = SQLContextSingleton.getInstance(rdd.sparkContext)
       import sqlContext.implicits._

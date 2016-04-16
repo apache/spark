@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.Analyzer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.execution.SparkPlanner
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.hive.client.{HiveClient, HiveClientImpl}
 import org.apache.spark.sql.hive.execution.HiveSqlParser
 import org.apache.spark.sql.internal.{SessionState, SQLConf}
 
@@ -46,6 +47,16 @@ private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx)
     ctx.setConf(c.getAllProperties)
     c
   }
+
+  /**
+   * A Hive client used for execution.
+   */
+  val executionHive: HiveClientImpl = ctx.hiveSharedState.executionHive.newSession()
+
+  /**
+   * A Hive client used for interacting with the metastore.
+   */
+  val metadataHive: HiveClient = ctx.hiveSharedState.metadataHive.newSession()
 
   override lazy val conf: SQLConf = new SQLConf {
     override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
