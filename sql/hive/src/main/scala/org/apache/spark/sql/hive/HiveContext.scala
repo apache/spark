@@ -61,19 +61,6 @@ import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 /**
- * Returns the current database of metadataHive.
- */
-private[hive] case class CurrentDatabase(ctx: HiveContext)
-  extends LeafExpression with CodegenFallback {
-  override def dataType: DataType = StringType
-  override def foldable: Boolean = true
-  override def nullable: Boolean = false
-  override def eval(input: InternalRow): Any = {
-    UTF8String.fromString(ctx.sessionState.catalog.getCurrentDatabase)
-  }
-}
-
-/**
  * An instance of the Spark SQL execution engine that integrates with data stored in Hive.
  * Configuration for Hive is read from hive-site.xml on the classpath.
  *
@@ -132,11 +119,6 @@ class HiveContext private[hive](
 
   @transient
   protected[sql] override lazy val sessionState = new HiveSessionState(self)
-
-  // The Hive UDF current_database() is foldable, will be evaluated by optimizer,
-  // but the optimizer can't access the SessionState of metadataHive.
-  sessionState.functionRegistry.registerFunction(
-    "current_database", (e: Seq[Expression]) => new CurrentDatabase(self))
 
   /**
    * When true, enables an experimental feature where metastore tables that use the parquet SerDe
@@ -429,7 +411,7 @@ private[hive] object HiveContext extends Logging {
       | Location of the jars that should be used to instantiate the HiveMetastoreClient.
       | This property can be one of three options: "
       | 1. "builtin"
-      |   Use Hive ${hiveExecutionVersion}, which is bundled with the Spark assembly jar when
+      |   Use Hive ${hiveExecutionVersion}, which is bundled with the Spark assembly when
       |   <code>-Phive</code> is enabled. When this option is chosen,
       |   <code>spark.sql.hive.metastore.version</code> must be either
       |   <code>${hiveExecutionVersion}</code> or not defined.

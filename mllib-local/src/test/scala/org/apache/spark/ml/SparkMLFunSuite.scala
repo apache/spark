@@ -17,12 +17,14 @@
 
 package org.apache.spark.ml
 
-import org.scalatest.FunSuite // scalastyle:ignore funsuite
+// scalastyle:off
+import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
-// This is testing if the new build works. To be removed soon.
-class DummyTestingSuite extends FunSuite { // scalastyle:ignore funsuite
-
-  test("This is testing if the new build works.") {
-    assert(DummyTesting.add10(15) === 25)
-  }
+/**
+ * Base abstract class for all unit tests in Spark for handling common functionality.
+ */
+private[spark] abstract class SparkMLFunSuite
+  extends FunSuite
+  with BeforeAndAfterAll {
+  // scalastyle:on
 }

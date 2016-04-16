@@ -28,7 +28,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.catalyst.CatalystConf
-import org.apache.spark.util.Utils
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines the configuration options for Spark SQL.
@@ -51,6 +50,11 @@ object SQLConf {
     def apply(key: String): ConfigBuilder = new ConfigBuilder(key).onCreate(register)
 
   }
+
+  val OPTIMIZER_MAX_ITERATIONS = SQLConfigBuilder("spark.sql.optimizer.maxIterations")
+    .doc("The max number of iterations the optimizer and analyzer runs")
+    .intConf
+    .createWithDefault(100)
 
   val ALLOW_MULTIPLE_CONTEXTS = SQLConfigBuilder("spark.sql.allowMultipleContexts")
     .doc("When set to true, creating multiple SQLContexts/HiveContexts is allowed. " +
@@ -437,6 +441,13 @@ object SQLConf {
     .stringConf
     .createOptional
 
+  // TODO: This is still WIP and shouldn't be turned on without extensive test coverage
+  val COLUMNAR_AGGREGATE_MAP_ENABLED = SQLConfigBuilder("spark.sql.codegen.aggregate.map.enabled")
+    .internal()
+    .doc("When true, aggregate with keys use an in-memory columnar map to speed up execution.")
+    .booleanConf
+    .createWithDefault(false)
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
     val EXTERNAL_SORT = "spark.sql.planner.externalSort"
@@ -466,6 +477,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
     new java.util.HashMap[String, String]())
 
   /** ************************ Spark SQL Params/Hints ******************* */
+
+  def optimizerMaxIterations: Int = getConf(OPTIMIZER_MAX_ITERATIONS)
 
   def checkpointLocation: String = getConf(CHECKPOINT_LOCATION)
 
@@ -560,6 +573,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def dataFrameRetainGroupColumns: Boolean = getConf(DATAFRAME_RETAIN_GROUP_COLUMNS)
 
   def runSQLOnFile: Boolean = getConf(RUN_SQL_ON_FILES)
+
+  def columnarAggregateMapEnabled: Boolean = getConf(COLUMNAR_AGGREGATE_MAP_ENABLED)
 
   override def orderByOrdinal: Boolean = getConf(ORDER_BY_ORDINAL)
 
