@@ -280,7 +280,7 @@ class CodegenContext {
       case _ if isPrimitiveType(jt) =>
         s"$batch.column($ordinal).put${primitiveTypeName(jt)}($row, $value);"
       case t: DecimalType => s"$batch.column($ordinal).putDecimal($row, $value, ${t.precision});"
-      case udt: UserDefinedType[_] => setColumnarBatch(batch, row, udt.sqlType, ordinal, value)
+      case t: StringType => s"$batch.column($ordinal).putByteArray($row, $value.getBytes());"
       case _ => throw new IllegalArgumentException("cannot generate code for unsupported type")
     }
   }

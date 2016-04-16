@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.types.{LongType, StructType}
+import org.apache.spark.sql.types.{DecimalType, StringType, StructType}
 import org.apache.spark.unsafe.KVIterator
 
 case class TungstenAggregate(
@@ -445,7 +445,9 @@ case class TungstenAggregate(
 
     // Enable vectorized hash map for all primitive data types during partial aggregation
     isVectorizedHashMapEnabled = sqlContext.conf.columnarAggregateMapEnabled &&
-      (groupingKeySchema ++ bufferSchema).forall(f => ctx.isPrimitiveType(f.dataType)) &&
+      (groupingKeySchema ++ bufferSchema).forall(f => ctx.isPrimitiveType(f.dataType) ||
+        f.dataType.isInstanceOf[DecimalType] || f.dataType.isInstanceOf[StringType]) &&
+      bufferSchema.forall(!_.dataType.isInstanceOf[StringType]) &&
       modes.forall(mode => mode == Partial || mode == PartialMerge)
     vectorizedHashMapTerm = ctx.freshName("vectorizedHashMap")
     val vectorizedHashMapClassName = ctx.freshName("VectorizedHashMap")
