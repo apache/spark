@@ -22,7 +22,6 @@ import java.net.URI
 import java.util
 
 import org.apache.hadoop.hive.metastore.MetaStoreUtils
-import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -361,7 +360,7 @@ case class LoadData(
           val absolutePath = if (uriPath != null && uriPath.startsWith("/")) {
             uriPath
           } else {
-            s"/user/${UserGroupInformation.getCurrentUser().getShortUserName()}/$uriPath"
+            s"/user/${System.getProperty("user.name")}/$uriPath"
           }
           new URI(scheme, authority, absolutePath, uri.getQuery(), uri.getFragment())
         }
