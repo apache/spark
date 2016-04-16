@@ -710,6 +710,8 @@ object MimaExcludes {
       ) ++ Seq(
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.SparkContext.preferredNodeLocationData_="),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.SparkContext.org$apache$spark$SparkContext$$assertNotStopped"),
         ProblemFilters.exclude[MissingClassProblem](
           "org.apache.spark.rdd.MapPartitionsWithPreparationRDD"),
         ProblemFilters.exclude[MissingClassProblem](
