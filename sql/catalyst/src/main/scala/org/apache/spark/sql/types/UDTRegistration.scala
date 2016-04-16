@@ -20,6 +20,7 @@ package org.apache.spark.sql.types
 import scala.collection.mutable
 
 import org.apache.spark.SparkException
+import org.apache.spark.internal.Logging
 
 /**
  * This object keeps the mappings between user classes and their User Defined Types (UDTs).
@@ -28,7 +29,7 @@ import org.apache.spark.SparkException
  * alterntive approach to register UDTs for user classes.
  */
 private[spark]
-object UDTRegistration extends Serializable {
+object UDTRegistration extends Serializable with Logging {
 
   /** The mapping between the Class between UserDefinedType and user classes. */
   private val udtMap: mutable.Map[String, Class[_]] =
@@ -56,12 +57,12 @@ object UDTRegistration extends Serializable {
    */
   def register(userClass: Class[_], udtClass: Class[_]): Unit = {
     if (udtMap.contains(userClass.getName)) {
-      throw new SparkException(s"${userClass.getName} is already registered.")
+      logWarning(s"Cannot register UDT for ${userClass.getName}, which is already registered.")
     } else {
       if (classOf[UserDefinedType[_]].isAssignableFrom(udtClass)) {
         udtMap += ((userClass.getName, udtClass))
       } else {
-        throw new SparkException(s"${userClass.getName} is not an UserDefinedType.")
+        throw new SparkException(s"${udtClass.getName} is not an UserDefinedType.")
       }
     }
   }
