@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.{CatalystConf, SimpleCatalystConf}
-
 import scala.annotation.tailrec
 import scala.collection.immutable.HashSet
+
+import org.apache.spark.sql.catalyst.{CatalystConf, SimpleCatalystConf}
 import org.apache.spark.sql.catalyst.analysis.{CleanupAliases, DistinctAggregationRewriter, EliminateSubqueryAliases, EmptyFunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
@@ -36,7 +36,7 @@ import org.apache.spark.sql.types._
  * Abstract class all optimizers should inherit of, contains the standard batches (extending
  * Optimizers can override this.
  */
-abstract class Optimizer(catalog: SessionCatalog, conf: CatalystConf)
+abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
   extends RuleExecutor[LogicalPlan] {
 
   private val fixedPoint = FixedPoint(conf.optimizerMaxIterations)
@@ -49,6 +49,7 @@ abstract class Optimizer(catalog: SessionCatalog, conf: CatalystConf)
     Batch("Finish Analysis", Once,
       EliminateSubqueryAliases,
       ComputeCurrentTime,
+      GetCurrentDatabase(sessionCatalog),
       DistinctAggregationRewriter) ::
     //////////////////////////////////////////////////////////////////////////////////////////
     // Optimizer rules start here
@@ -1408,6 +1409,16 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
     plan transformAllExpressions {
       case CurrentDate() => currentDate
       case CurrentTimestamp() => currentTime
+    }
+  }
+}
+
+/** Replaces the expression of CurrentDatabase with the current database name. */
+case class GetCurrentDatabase(sessionCatalog: SessionCatalog) extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    plan transformAllExpressions {
+      case CurrentDatabase() =>
+        Literal.create(sessionCatalog.getCurrentDatabase, StringType)
     }
   }
 }
