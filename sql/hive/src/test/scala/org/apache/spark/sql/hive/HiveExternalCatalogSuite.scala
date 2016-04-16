@@ -18,12 +18,10 @@
 package org.apache.spark.sql.hive
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.util.VersionInfo
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.hive.client.{HiveClient, IsolatedClientLoader}
-import org.apache.spark.util.Utils
+import org.apache.spark.sql.hive.client.HiveClient
 
 /**
  * Test suite for the [[HiveExternalCatalog]].
@@ -31,11 +29,9 @@ import org.apache.spark.util.Utils
 class HiveExternalCatalogSuite extends CatalogTestCases {
 
   private val client: HiveClient = {
-    IsolatedClientLoader.forVersion(
-      hiveMetastoreVersion = HiveContext.hiveExecutionVersion,
-      hadoopVersion = VersionInfo.getVersion,
-      sparkConf = new SparkConf(),
-      hadoopConf = new Configuration()).createClient()
+    // We create a metastore at a temp location to avoid any potential
+    // conflict of having multiple connections to a single derby instance.
+    HiveContext.newClientForExecution(new SparkConf, new Configuration)
   }
 
   protected override val utils: CatalogTestUtils = new CatalogTestUtils {
