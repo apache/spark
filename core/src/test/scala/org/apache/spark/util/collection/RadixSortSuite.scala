@@ -25,7 +25,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.unsafe.array.LongArray
 import org.apache.spark.unsafe.memory.MemoryBlock
 import org.apache.spark.util.Benchmark
-import org.apache.spark.util.collection.unsafe.sort.{PrefixComparator, PrefixComparators}
+import org.apache.spark.util.collection.unsafe.sort._
 import org.apache.spark.util.random.XORShiftRandom
 
 class RadixSortSuite extends SparkFunSuite with Logging {
@@ -36,6 +36,13 @@ class RadixSortSuite extends SparkFunSuite with Logging {
     val ref = Array.tabulate[Long](size) { i => rand }
     val extended = ref ++ Array.fill[Long](size)(0)
     (ref.map(i => new JLong(i)), new LongArray(MemoryBlock.fromLongArray(extended)))
+  }
+
+  private def generateKeyPrefixTestData(size: Int, rand: => Long): (LongArray, LongArray) = {
+    val ref = Array.tabulate[Long](size * 2) { i => rand }
+    val extended = ref ++ Array.fill[Long](size * 2)(0)
+    (new LongArray(MemoryBlock.fromLongArray(ref)),
+     new LongArray(MemoryBlock.fromLongArray(extended)))
   }
 
   private def collectToArray(array: LongArray, offset: Int, length: Int): Array[Long] = {
@@ -109,6 +116,13 @@ class RadixSortSuite extends SparkFunSuite with Logging {
   }
 
   test("sort key prefix array") {
+    val rand = new XORShiftRandom(123)
+    val (buf1, buf2) = generateKeyPrefixTestData(N, rand.nextLong & 0xff)
+    UnsafeSortTestUtil.sortKeyPrefixArrayByPrefix(buf1, N)
+    val res1 = collectToArray(buf1, 0, N * 2)
+    val outOffset = RadixSort.sortKeyPrefixArray(buf2, N, 0, N * 2, 0, 7)
+    val res2 = collectToArray(buf2, outOffset, N * 2)
+    assert(res1.view == res2.view)
   }
 
   test("sort fuzz test") {
@@ -137,7 +151,7 @@ class RadixSortSuite extends SparkFunSuite with Logging {
     }
   }
 
-  test("benchmark sort") {
+  test("benchmark single long sort") {
     val size = 1000000
     val rand = new XORShiftRandom(123)
     val benchmark = new Benchmark("radix sort", size)
