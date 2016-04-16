@@ -29,6 +29,8 @@ import org.apache.spark.sql.hive.client.HiveClient
 class HiveExternalCatalogSuite extends CatalogTestCases {
 
   private val client: HiveClient = {
+    // We create a metastore at a temp location to avoid any potential
+    // conflict of having multiple connections to a single derby instance.
     HiveContext.newClientForExecution(new SparkConf, new Configuration)
   }
 
