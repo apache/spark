@@ -96,7 +96,7 @@ private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx)
   /**
    * Parser for HiveQl query texts.
    */
-  override lazy val sqlParser: ParserInterface = HiveSqlParser
+  override lazy val sqlParser: ParserInterface = new HiveSqlParser(hiveconf)
 
   /**
    * Planner that takes into account Hive-specific strategies.
