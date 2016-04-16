@@ -51,6 +51,11 @@ object SQLConf {
 
   }
 
+  val OPTIMIZER_MAX_ITERATIONS = SQLConfigBuilder("spark.sql.optimizer.maxIterations")
+    .doc("The max number of iterations the optimizer and analyzer runs")
+    .intConf
+    .createWithDefault(100)
+
   val ALLOW_MULTIPLE_CONTEXTS = SQLConfigBuilder("spark.sql.allowMultipleContexts")
     .doc("When set to true, creating multiple SQLContexts/HiveContexts is allowed. " +
       "When set to false, only one SQLContext/HiveContext is allowed to be created " +
@@ -472,6 +477,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
     new java.util.HashMap[String, String]())
 
   /** ************************ Spark SQL Params/Hints ******************* */
+
+  def optimizerMaxIterations: Int = getConf(OPTIMIZER_MAX_ITERATIONS)
 
   def checkpointLocation: String = getConf(CHECKPOINT_LOCATION)
 
