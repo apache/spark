@@ -733,6 +733,16 @@ class CliTests(unittest.TestCase):
                 '-c', 'NOT JSON'])
         )
 
+    def test_variables(self):
+        cli.variables(self.parser.parse_args([
+            'variables', '-s', 'foo', '{"foo":"bar"}']))
+        cli.variables(self.parser.parse_args([
+            'variables', '-g', 'foo']))
+        cli.variables(self.parser.parse_args([
+            'variables', '-g', 'baz', '-d', 'bar']))
+        cli.variables(self.parser.parse_args([
+            'variables']))
+
 
 class WebUiTests(unittest.TestCase):
     def setUp(self):

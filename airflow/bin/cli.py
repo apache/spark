@@ -22,7 +22,7 @@ import airflow
 from airflow import jobs, settings
 from airflow import configuration as conf
 from airflow.executors import DEFAULT_EXECUTOR
-from airflow.models import DagModel, DagBag, TaskInstance, DagPickle, DagRun
+from airflow.models import DagModel, DagBag, TaskInstance, DagPickle, DagRun, Variable
 from airflow.utils import db as db_utils
 from airflow.utils import logging as logging_utils
 from airflow.utils.state import State
@@ -141,6 +141,25 @@ def trigger_dag(args):
         session.add(trigger)
         logging.info("Created {}".format(trigger))
     session.commit()
+
+
+def variables(args):
+    if args.get:
+        try:
+            var = Variable.get(args.get,
+                               deserialize_json=args.json,
+                               default_var=args.default)
+            print(var)
+        except ValueError as e:
+            print(e)
+    if args.set:
+        Variable.set(args.set[0], args.set[1])
+    if not args.set and not args.get:
+        # list all variables
+        session = settings.Session()
+        vars = session.query(Variable)
+        msg = "\n".join(var.key for var in vars)
+        print(msg)
 
 
 def pause(args, dag=None):
@@ -489,7 +508,7 @@ def worker(args):
 
         worker.run(**options)
         sp.kill()
-        
+
 
 def initdb(args):  # noqa
     print("DB: " + repr(settings.engine.url))
@@ -576,7 +595,7 @@ def kerberos(args):  # noqa
 
 
 Arg = namedtuple(
-    'Arg', ['flags', 'help', 'action', 'default', 'nargs', 'type', 'choices'])
+    'Arg', ['flags', 'help', 'action', 'default', 'nargs', 'type', 'choices', 'metavar'])
 Arg.__new__.__defaults__ = (None, None, None, None, None, None, None)
 
 
@@ -665,6 +684,25 @@ class CLIFactory(object):
         'conf': Arg(
             ('-c', '--conf'),
             "json string that gets pickled into the DagRun's conf attribute"),
+        # variables
+        'set': Arg(
+            ("-s", "--set"),
+            nargs=2,
+            metavar=('KEY', 'VAL'),
+            help="Set a variable"),
+        'get': Arg(
+            ("-g", "--get"),
+            metavar='KEY',
+            help="Get value of a variable"),
+        'default': Arg(
+            ("-d", "--default"),
+            metavar="VAL",
+            default=None,
+            help="Default value returned if variable does not exist"),
+        'json': Arg(
+            ("-j", "--json"),
+            help="Deserialize JSON variable",
+            action="store_true"),
         # kerberos
         'principal': Arg(
             ("principal",), "kerberos principal",
@@ -794,6 +832,10 @@ class CLIFactory(object):
             'func': trigger_dag,
             'help': "Trigger a DAG run",
             'args': ('dag_id', 'subdir', 'run_id', 'conf'),
+        }, {
+            'func': variables,
+            'help': "List all variables",
+            "args": ('set', 'get', 'json', 'default'),
         }, {
             'func': kerberos,
             'help': "Start a kerberos ticket renewer",
