@@ -49,26 +49,12 @@ public final class ByteBufferColumnVector extends ColumnVector {
     super(capacity, type, MemoryMode.ON_HEAP);
     if (this.resultArray != null || DecimalType.isByteArrayDecimalType(type)) {
       throw new NotImplementedException();
-    } else if (type instanceof BooleanType) {
-      data = buffer.array();
-      offset = Platform.BYTE_ARRAY_OFFSET + buffer.position();
-    } else if (type instanceof ByteType) {
-      data = buffer.array();
-      offset = Platform.BYTE_ARRAY_OFFSET + buffer.position();
-    } else if (type instanceof ShortType) {
-      data = buffer.array();
-      offset = Platform.BYTE_ARRAY_OFFSET + buffer.position();
-    } else if (type instanceof IntegerType || type instanceof DateType ||
-            DecimalType.is32BitDecimalType(type)) {
-      data = buffer.array();
-      offset = Platform.BYTE_ARRAY_OFFSET + buffer.position();
-    } else if (type instanceof LongType || DecimalType.is64BitDecimalType(type)) {
-      data = buffer.array();
-      offset = Platform.BYTE_ARRAY_OFFSET + buffer.position();
-    } else if (type instanceof FloatType) {
-      data = buffer.array();
-      offset = Platform.BYTE_ARRAY_OFFSET + buffer.position();
-    } else if (type instanceof DoubleType) {
+    } else if (type instanceof BooleanType || type instanceof ByteType ||
+               type instanceof ShortType ||
+               type instanceof IntegerType || type instanceof DateType ||
+               DecimalType.is32BitDecimalType(type) ||
+               type instanceof LongType || DecimalType.is64BitDecimalType(type) ||
+               (type instanceof FloatType) || (type instanceof DoubleType)) {
       data = buffer.array();
       offset = Platform.BYTE_ARRAY_OFFSET + buffer.position();
     } else if (resultStruct != null) {
@@ -187,11 +173,8 @@ public final class ByteBufferColumnVector extends ColumnVector {
 
   @Override
   public final byte getByte(int rowId) {
-    if (dictionary == null) {
-      return Platform.getByte(data, offset + rowId);
-    } else {
-      return (byte) dictionary.decodeToInt(dictionaryIds.getInt(rowId));
-    }
+    assert(dictionary == null);
+    return Platform.getByte(data, offset + rowId);
   }
 
   //
@@ -217,11 +200,8 @@ public final class ByteBufferColumnVector extends ColumnVector {
 
   @Override
   public final short getShort(int rowId) {
-    if (dictionary == null) {
-      return Platform.getShort(data, offset + rowId * 2);
-    } else {
-      return (short) dictionary.decodeToInt(dictionaryIds.getInt(rowId));
-    }
+    assert(dictionary == null);
+    return Platform.getShort(data, offset + rowId * 2);
   }
 
 
@@ -253,11 +233,8 @@ public final class ByteBufferColumnVector extends ColumnVector {
 
   @Override
   public final int getInt(int rowId) {
-    if (dictionary == null) {
-      return Platform.getInt(data, offset + rowId * 4);
-    } else {
-      return dictionary.decodeToInt(dictionaryIds.getInt(rowId));
-    }
+    assert(dictionary == null);
+    return Platform.getInt(data, offset + rowId * 4);
   }
 
   //
@@ -272,7 +249,7 @@ public final class ByteBufferColumnVector extends ColumnVector {
   @Override
   public final void putLongs(int rowId, int count, long value) {
     for (int i = 0; i < count; ++i) {
-      Platform.getLong(data, offset + (i + rowId) * 8);
+      Platform.putLong(data, offset + (i + rowId) * 8, value);
     }
   }
 
@@ -288,11 +265,8 @@ public final class ByteBufferColumnVector extends ColumnVector {
 
   @Override
   public final long getLong(int rowId) {
-    if (dictionary == null) {
-      return Platform.getLong(data, offset + rowId * 8);
-    } else {
-      return dictionary.decodeToLong(dictionaryIds.getInt(rowId));
-    }
+    assert(dictionary == null);
+    return Platform.getLong(data, offset + rowId * 8);
   }
 
   //
@@ -320,11 +294,8 @@ public final class ByteBufferColumnVector extends ColumnVector {
 
   @Override
   public final float getFloat(int rowId) {
-    if (dictionary == null) {
-      return Platform.getFloat(data, offset + rowId * 4);
-    } else {
-      return dictionary.decodeToFloat(dictionaryIds.getInt(rowId));
-    }
+    assert(dictionary == null);
+    return Platform.getFloat(data, offset + rowId * 4);
   }
 
   //
@@ -351,11 +322,8 @@ public final class ByteBufferColumnVector extends ColumnVector {
 
   @Override
   public final double getDouble(int rowId) {
-    if (dictionary == null) {
-      return Platform.getDouble(data, offset + rowId * 8);
-    } else {
-      return dictionary.decodeToDouble(dictionaryIds.getInt(rowId));
-    }
+    assert(dictionary == null);
+    return Platform.getDouble(data, offset + rowId * 8);
   }
 
   //
