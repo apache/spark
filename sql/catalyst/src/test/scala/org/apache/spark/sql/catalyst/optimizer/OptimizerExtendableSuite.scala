@@ -15,12 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst
+package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.analysis.EmptyFunctionRegistry
-import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
-import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 
@@ -40,10 +37,7 @@ class OptimizerExtendableSuite extends SparkFunSuite {
    * This class represents a dummy extended optimizer that takes the batches of the
    * Optimizer and adds custom ones.
    */
-  class ExtendedOptimizer
-    extends Optimizer(
-      EmptyConf,
-      new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, EmptyConf)) {
+  class ExtendedOptimizer extends SimpleTestOptimizer {
 
     // rules set to DummyRule, would not be executed anyways
     val myBatches: Seq[Batch] = {
