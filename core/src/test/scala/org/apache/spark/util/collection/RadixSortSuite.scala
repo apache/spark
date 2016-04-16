@@ -119,8 +119,8 @@ class RadixSortSuite extends SparkFunSuite with Logging {
     val rand = new XORShiftRandom(123)
     val (buf1, buf2) = generateKeyPrefixTestData(N, rand.nextLong & 0xff)
     UnsafeSortTestUtil.sortKeyPrefixArrayByPrefix(buf1, N)
-    val res1 = collectToArray(buf1, 0, N * 2)
     val outOffset = RadixSort.sortKeyPrefixArray(buf2, N, 0, N * 2, 0, 7)
+    val res1 = collectToArray(buf1, 0, N * 2)
     val res2 = collectToArray(buf2, outOffset, N * 2)
     assert(res1.view == res2.view)
   }
@@ -183,6 +183,12 @@ class RadixSortSuite extends SparkFunSuite with Logging {
       val (_, buffer) = generateTestData(size, rand.nextLong)
       timer.startTiming()
       RadixSort.sort(buffer, size, 0, 7, false, false)
+      timer.stopTiming()
+    }
+    benchmark.addTimerCase("radix sort key prefix array") { timer =>
+      val (_, buf2) = generateKeyPrefixTestData(size, rand.nextLong)
+      timer.startTiming()
+      RadixSort.sortKeyPrefixArray(buf2, size, 0, size * 2, 0, 7)
       timer.stopTiming()
     }
     benchmark.run
