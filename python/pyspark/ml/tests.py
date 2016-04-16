@@ -534,6 +534,8 @@ class CrossValidatorTests(PySparkTestCase):
         cvModel.save(cvModelPath)
         loadedModel = CrossValidatorModel.load(cvModelPath)
         self.assertEqual(loadedModel.bestModel.uid, cvModel.bestModel.uid)
+        for index in range(len(loadedModel.avgMetrics)):
+            self.assertTrue(abs(loadedModel.avgMetrics[index] - cvModel.avgMetrics[index]) < 0.0001)
 
 
 class TrainValidationSplitTests(PySparkTestCase):
