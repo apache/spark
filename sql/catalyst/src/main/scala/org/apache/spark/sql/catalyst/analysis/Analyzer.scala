@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import scala.annotation.tailrec
-import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.AnalysisException
@@ -107,9 +106,7 @@ class Analyzer(
     Batch("UDF", Once,
       HandleNullInputsForUDF),
     Batch("Cleanup", fixedPoint,
-      CleanupAliases),
-    Batch("Rewrite", Once,
-      RewriteSubquery)
+      CleanupAliases)
   )
 
   /**
@@ -884,119 +881,6 @@ class Analyzer(
             // First resolve as much of the sub-query as possible. After that we use the children of
             // this plan to resolve the remaining correlated predicates.
             e.withNewPlan(q.children.foldLeft(execute(e.query))(resolveCorrelatedPredicates))
-        }
-    }
-  }
-
-  /**
-   * This rule rewrites filtering sub-queries into left semi/anti joins. The following predicates
-   * are supported:
-   * a. EXISTS/NOT EXISTS will be rewritten as semi/anti join, unresolved conditions in Filter
-   *    will be pulled out as the join conditions.
-   * b. IN/NOT IN will be rewritten as semi/anti join, unresolved conditions in the Filter will
-   *    be pulled out as join conditions, value = selected column will also be used as join
-   *    condition.
-   */
-  object RewriteSubquery extends Rule[LogicalPlan] with PredicateHelper {
-    private def hasCorrelatedSubquery(e: Expression): Boolean = {
-      e.find(_.isInstanceOf[CorrelatedSubqueryExpression]).isDefined
-    }
-
-    /**
-     * Extract all correlated predicates from a given sub-query. The sub-query will be rewritten
-     * without the correlated predicates. The predicates will be combined using AND. This method
-     * returns the rewritten sub-query and the resulting extracted predicate.
-     */
-    private def extractCorrelatedPredicates(
-        q: LogicalPlan,
-        p: LogicalPlan): (LogicalPlan, Option[Expression]) = {
-      val fs = mutable.Set.empty[LogicalPlan]
-      val references: Set[Expression] = p.output.toSet
-      val predicates = ArrayBuffer[Expression]()
-      val transformed = q transform {
-        case f @ Filter(cond, child) =>
-          val (correlated, local) = splitConjunctivePredicates(cond).partition { e =>
-            e.find(references.contains).isDefined
-          }
-          predicates ++= correlated
-          correlated match {
-            case Nil =>
-              f
-            case xs if local.nonEmpty =>
-              val newFilter = Filter(local.reduce(And), child)
-              fs += newFilter
-              newFilter
-            case xs =>
-              fs += child
-              child
-          }
-        case j: Join if j.joinType != Inner && fs.nonEmpty && j.find(fs.contains).isDefined =>
-          failAnalysis("accessing columns of outer query inside join is not supported")
-      }
-      (transformed, predicates.reduceOption(And))
-    }
-
-    /**
-     * Returns a resolved subquery and predicate that will be used to rewrite the IN subquery as
-     * semi join (predicate will be used as join condition).
-     */
-    private def rewriteInSubquery(
-        value: Expression,
-        subquery: LogicalPlan,
-        query: LogicalPlan): (LogicalPlan, Expression) = {
-      val (resolved, joinCondition) = extractCorrelatedPredicates(subquery, query)
-
-      // Extract the columns on the expression side.
-      val columns = value match {
-        case CreateStruct(cs) => cs
-        case c => Seq(c)
-      }
-
-      // The number of left and right expressions must be equal.
-      if (columns.length != resolved.output.length) {
-        throw new AnalysisException(s"the number of fields in value (${columns.length}) does" +
-          s" not match with the number of columns in subquery (${resolved.output.length})")
-      }
-      val conditions = joinCondition.toSeq ++ columns.zip(resolved.output).map {
-        case (e, a) =>
-          // Check the left and right dataTypes.
-          if (e.dataType != a.dataType) {
-            throw new AnalysisException(
-              s"data type of value (${e.dataType}) does not match with subquery (${a.dataType})")
-          }
-          EqualTo(e, a)
-      }
-
-      (resolved, conditions.reduceLeft(And))
-    }
-
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case f @ Filter(condition, child) if f.resolved =>
-        val (withSubquery, withoutSubquery) =
-          splitConjunctivePredicates(condition).partition(hasCorrelatedSubquery)
-
-        // Construct the pruned filter condition.
-        val newFilter: LogicalPlan = withoutSubquery match {
-          case Nil => child
-          case conditions => Filter(conditions.reduce(And), child)
-        }
-
-        // Filter the plan by applying left semi and left anti joins.
-        withSubquery.foldLeft(newFilter) {
-          case (p, Exists(sub)) =>
-            val (resolved, joinCondition) = extractCorrelatedPredicates(sub, p)
-            Join(p, resolved, LeftSemi, joinCondition)
-          case (p, Not(Exists(sub))) =>
-            val (resolved, joinCondition) = extractCorrelatedPredicates(sub, p)
-            Join(p, resolved, LeftAnti, joinCondition)
-          case (p, InSubQuery(value, sub)) =>
-            val (resolved, cond) = rewriteInSubquery(value, sub, p)
-            Join(p, resolved, LeftSemi, Some(cond))
-          case (p, Not(InSubQuery(value, sub))) =>
-            val (resolved, cond) = rewriteInSubquery(value, sub, p)
-            Join(p, resolved, LeftAnti, Some(cond))
-          case (_, e) =>
-            failAnalysis(s"Only top-level correlated subqueries are supported: $e")
         }
     }
   }

@@ -24,6 +24,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.ImperativeAggregate
+import org.apache.spark.sql.catalyst.optimizer.RewritePredicateSubquery
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreeNode
@@ -197,7 +198,10 @@ abstract class QueryTest extends PlanTest {
   }
 
   private def checkJsonFormat(df: DataFrame): Unit = {
-    val logicalPlan = df.queryExecution.analyzed
+    // Get the analyzed plan and rewrite the PredicateSubqueries in order to make sure that
+    // RDD and Data resolution does not break.
+    val logicalPlan = RewritePredicateSubquery(df.queryExecution.analyzed)
+
     // bypass some cases that we can't handle currently.
     logicalPlan.transform {
       case _: ObjectOperator => return

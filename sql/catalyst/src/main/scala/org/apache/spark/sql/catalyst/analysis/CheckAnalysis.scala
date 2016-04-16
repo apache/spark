@@ -20,14 +20,15 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.plans.UsingJoin
+import org.apache.spark.sql.catalyst.optimizer.RewritePredicateSubquery._
+import org.apache.spark.sql.catalyst.plans.{Inner, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
 
 /**
  * Throws user facing errors when passed invalid queries that fail to analyze.
  */
-trait CheckAnalysis {
+trait CheckAnalysis extends PredicateHelper {
 
   /**
    * Override to provide additional checks for correct analysis.
@@ -109,6 +110,28 @@ trait CheckAnalysis {
             failAnalysis(
               s"filter expression '${f.condition.sql}' " +
                 s"of type ${f.condition.dataType.simpleString} is not a boolean.")
+
+          case f @ Filter(condition, child) =>
+            // Make sure no correlated predicate is in an OUTER join, because this would change the
+            // semantics of the join.
+            lazy val attributes: Set[Expression] = child.output.toSet
+            def checkCorrelatedPredicates(p: PredicateSubquery): Unit = p.query.foreach {
+              case j @ Join(left, right, jt, _) if jt != Inner =>
+                j.transformAllExpressions {
+                  case e if attributes.contains(e) =>
+                    failAnalysis(s"Accessing outer query column is not allowed in outer joins: $e")
+                }
+              case _ =>
+            }
+            splitConjunctivePredicates(condition).foreach {
+              case p: PredicateSubquery =>
+                checkCorrelatedPredicates(p)
+              case Not(p: PredicateSubquery) =>
+                checkCorrelatedPredicates(p)
+              case e if PredicateSubquery.hasPredicateSubquery(e) =>
+                failAnalysis(s"Predicate sub-queries cannot be used in nested conditions: $e")
+              case e =>
+            }
 
           case j @ Join(_, _, UsingJoin(_, cols), _) =>
             val from = operator.inputSet.map(_.name).mkString(", ")
@@ -208,6 +231,9 @@ trait CheckAnalysis {
                 |Unions can only be performed on tables with the same number of columns,
                 | but one table has '${firstError.output.length}' columns and another table has
                 | '${s.children.head.output.length}' columns""".stripMargin)
+
+          case p if p.expressions.exists(PredicateSubquery.hasPredicateSubquery) =>
+            failAnalysis(s"Predicate sub-queries can only be used in a Filter: $p")
 
           case _ => // Fallbacks to the following checks
         }

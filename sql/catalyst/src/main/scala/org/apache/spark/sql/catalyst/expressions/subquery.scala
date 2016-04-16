@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
@@ -81,51 +82,80 @@ case class ScalarSubquery(
 }
 
 /**
- * Base interface for (potentially) correlated subquery expressions.
+ * A predicate subquery checks the existence of a value in a sub-query. We currently only allow
+ * [[PredicateSubquery]] expressions within a Filter plan (i.e. WHERE or a HAVING clause). This will
+ * be rewritten into a left semi/anti join during analysis.
  */
-abstract class CorrelatedSubqueryExpression extends SubqueryExpression {
-  override def plan: LogicalPlan = SubqueryAlias(toString, query)
+abstract class PredicateSubquery extends SubqueryExpression with Unevaluable with Predicate {
+  override def nullable: Boolean = false
+}
+
+object PredicateSubquery {
+  def hasPredicateSubquery(e: Expression): Boolean = {
+    e.find(_.isInstanceOf[PredicateSubquery]).isDefined
+  }
 }
 
 /**
- * The [[InSubQuery]] allows us to use a subquery as the (single) argument in an [[In]] predicate.
- * Such predicates are typically used to filter query results. For example (SQL):
+ * The [[InSubQuery]] predicate checks the existence of a value in a sub-query. For example (SQL):
  * {{{
  *   SELECT  *
  *   FROM    a
  *   WHERE   a.id IN (SELECT  id
  *                    FROM    b)
  * }}}
- *
- * Currently we only allow [[InSubQuery]] expressions within a Filter plan (i.e. WHERE or a HAVING
- * clause). This will be rewritten into a left semi/anti join during analysis.
  */
-case class InSubQuery(value: Expression, query: LogicalPlan)
-  extends CorrelatedSubqueryExpression with Unevaluable  {
-  override def dataType: DataType = BooleanType
+case class InSubQuery(value: Expression, query: LogicalPlan) extends PredicateSubquery {
   override def children: Seq[Expression] = value :: Nil
-  override def nullable: Boolean = true
+  override lazy val resolved: Boolean = value.resolved && query.resolved
+  override def plan: LogicalPlan = SubqueryAlias(toString, query)
   override def withNewPlan(plan: LogicalPlan): InSubQuery = InSubQuery(value, plan)
+
+  /**
+   * The unwrapped value side expressions.
+   */
+  lazy val expressions: Seq[Expression] = value match {
+    case CreateStruct(cols) => cols
+    case col => Seq(col)
+  }
+
+  /**
+   * Check if the number of columns and the data types on both sides match.
+   */
+  override def checkInputDataTypes(): TypeCheckResult = {
+    // Check the number of arguments.
+    if (expressions.length != query.output.length) {
+      TypeCheckResult.TypeCheckFailure(
+        s"The number of fields in the value (${expressions.length}) does not match with " +
+          s"the number of columns in the subquery (${query.output.length})")
+    }
+
+    // Check the argument types.
+    expressions.zip(query.output).zipWithIndex.foreach {
+      case ((e, a), i) if e.dataType != a.dataType =>
+        TypeCheckResult.TypeCheckFailure(
+          s"The data type of value[$i](${e.dataType}) does not match " +
+            s"subquery column '${a.name}' (${a.dataType}).")
+      case _ =>
+    }
+
+    TypeCheckResult.TypeCheckSuccess
+  }
 }
 
 /**
  * The [[Exists]] expression checks if a row exists in a subquery given some correlated condition.
- * This is typically used to filter query results. For example (SQL):
- * {{{5
+ * For example (SQL):
+ * {{{
  *   SELECT  *
  *   FROM    a
  *   WHERE   EXISTS (SELECT  *
  *                   FROM    b
  *                   WHERE   b.id = a.id)
  * }}}
- *
- * Currently we only allow [[Exists]] expressions within a Filter plan (i.e. WHERE or a HAVING
- * clause). This will be rewritten into a left semi/anti join during analysis.
  */
-case class Exists(query: LogicalPlan)
-  extends CorrelatedSubqueryExpression with Unevaluable with Predicate {
-  override def dataType: DataType = BooleanType
+case class Exists(query: LogicalPlan) extends PredicateSubquery {
   override def children: Seq[Expression] = Nil
-  override def nullable: Boolean = false
+  override def plan: LogicalPlan = SubqueryAlias(toString, query)
   override def withNewPlan(plan: LogicalPlan): Exists = Exists(plan)
 }

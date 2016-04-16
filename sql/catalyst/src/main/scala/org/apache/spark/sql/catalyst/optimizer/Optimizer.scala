@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.annotation.tailrec
 import scala.collection.immutable.HashSet
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.analysis.{CleanupAliases, DistinctAggregationRewriter, EliminateSubqueryAliases}
 import org.apache.spark.sql.catalyst.expressions._
@@ -41,6 +42,7 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
     // However, because we also use the analyzer to canonicalized queries (for view definition),
     // we do not eliminate subqueries or compute current time in the analyzer.
     Batch("Finish Analysis", Once,
+      RewritePredicateSubquery,
       EliminateSubqueryAliases,
       ComputeCurrentTime,
       DistinctAggregationRewriter) ::
@@ -1385,6 +1387,84 @@ object EmbedSerializerInFilter extends Rule[LogicalPlan] {
           case a: Attribute if a == d.output.head => d.deserializer.child
         }
         Filter(newCondition, d.child)
+      }
+  }
+}
+
+/**
+ * This rule rewrites predicate sub-queries into left semi/anti joins. The following predicates
+ * are supported:
+ * a. EXISTS/NOT EXISTS will be rewritten as semi/anti join, unresolved conditions in Filter
+ *    will be pulled out as the join conditions.
+ * b. IN/NOT IN will be rewritten as semi/anti join, unresolved conditions in the Filter will
+ *    be pulled out as join conditions, value = selected column will also be used as join
+ *    condition.
+ */
+object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
+  /**
+   * Extract all correlated predicates from a given sub-query. The sub-query will be rewritten
+   * without the extracted predicates. This method returns the rewritten sub-query and the
+   * combined (AND) extracted predicate.
+   */
+  private def extractCorrelatedPredicates(
+      q: LogicalPlan,
+      p: LogicalPlan): (LogicalPlan, Option[Expression]) = {
+    val references: Set[Expression] = p.output.toSet
+    val predicates = ArrayBuffer[Expression]()
+    val transformed = q transform {
+      case f @ Filter(cond, child) =>
+        val (correlated, local) = splitConjunctivePredicates(cond).partition { e =>
+          e.find(references.contains).isDefined
+        }
+        predicates ++= correlated
+        correlated match {
+          case Nil => f
+          case xs if local.nonEmpty => Filter(local.reduce(And), child)
+          case xs => child
+        }
+    }
+    (transformed, predicates.reduceOption(And))
+  }
+
+  /**
+   * Prepare an [[InSubQuery]] by rewriting it (in case of correlated predicates) and by
+   * constructing the required join condition. Both the rewritten subquery and the constructed
+   * join condition are returned.
+   */
+  private def rewriteInSubquery(
+      subquery: InSubQuery,
+      query: LogicalPlan): (LogicalPlan, Expression) = {
+    val expressions = subquery.expressions
+    val (resolved, joinCondition) = extractCorrelatedPredicates(subquery.query, query)
+    val conditions = joinCondition.toSeq ++ expressions.zip(resolved.output).map(EqualTo.tupled)
+    (resolved, conditions.reduceLeft(And))
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case f @ Filter(condition, child) =>
+      val (withSubquery, withoutSubquery) =
+        splitConjunctivePredicates(condition).partition(PredicateSubquery.hasPredicateSubquery)
+
+      // Construct the pruned filter condition.
+      val newFilter: LogicalPlan = withoutSubquery match {
+        case Nil => child
+        case conditions => Filter(conditions.reduce(And), child)
+      }
+
+      // Filter the plan by applying left semi and left anti joins.
+      withSubquery.foldLeft(newFilter) {
+        case (p, Exists(sub)) =>
+          val (resolved, joinCondition) = extractCorrelatedPredicates(sub, p)
+          Join(p, resolved, LeftSemi, joinCondition)
+        case (p, Not(Exists(sub))) =>
+          val (resolved, joinCondition) = extractCorrelatedPredicates(sub, p)
+          Join(p, resolved, LeftAnti, joinCondition)
+        case (p, in: InSubQuery) =>
+          val (resolved, cond) = rewriteInSubquery(in, p)
+          Join(p, resolved, LeftSemi, Option(cond))
+        case (p, Not(in: InSubQuery)) =>
+          val (resolved, cond) = rewriteInSubquery(in, p)
+          Join(p, resolved, LeftAnti, Option(cond))
       }
   }
 }
