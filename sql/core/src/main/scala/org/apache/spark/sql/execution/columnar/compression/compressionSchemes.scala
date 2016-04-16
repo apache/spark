@@ -66,7 +66,46 @@ private[columnar] case object PassThrough extends CompressionScheme {
     override def decompress(capacity: Int): (ByteBuffer, ByteBuffer) = {
       val nullsBuffer = buffer.duplicate().order(ByteOrder.nativeOrder())
       nullsBuffer.rewind()
-      (buffer, nullsBuffer)
+      val nullCount = ByteBufferHelper.getInt(nullsBuffer)
+      if (nullCount == 0) {
+        nullsBuffer.rewind()
+        (buffer, nullsBuffer)
+      } else {
+        val unitSize = columnType.dataType match {
+          case _: BooleanType => 1
+          case _: ByteType => 1
+          case _: ShortType => 2
+          case _: IntegerType => 4
+          case _: LongType => 8
+          case _: FloatType => 4
+          case _: DoubleType => 8
+          case _ => throw new IllegalStateException("Not supported type in PassThru.")
+        }
+        var nextNullIndex = ByteBufferHelper.getInt(nullsBuffer)
+        var pos = 0
+        var seenNulls = 0
+        val out = ByteBuffer.allocate(capacity * unitSize).order(ByteOrder.nativeOrder())
+        while (buffer.hasRemaining) {
+          if (pos != nextNullIndex) {
+             val len = nextNullIndex - pos
+             assert(len * unitSize < Int.MaxValue)
+             ByteBufferHelper.copyMemory(buffer, out, len * unitSize)
+             pos += len
+          } else {
+            seenNulls += 1
+            nextNullIndex = if (seenNulls < nullCount) {
+              ByteBufferHelper.getInt(nullsBuffer)
+            } else {
+              capacity
+            }
+            out.position(out.position + unitSize)
+            pos += 1
+          }
+        }
+        out.rewind()
+        nullsBuffer.rewind()
+        (out, nullsBuffer)
+      }
     }
   }
 }
@@ -178,7 +217,7 @@ private[columnar] case object RunLengthEncoding extends CompressionScheme {
 
     override def decompress(capacity: Int): (ByteBuffer, ByteBuffer) = {
       val nullsBuffer = buffer.duplicate().order(ByteOrder.nativeOrder())
-      nullsBuffer.rewind
+      nullsBuffer.rewind()
       val nullCount = ByteBufferHelper.getInt(nullsBuffer)
       var nextNullIndex = if (nullCount > 0) ByteBufferHelper.getInt(nullsBuffer) else -1
       var pos = 0
@@ -426,7 +465,7 @@ private[columnar] case object DictionaryEncoding extends CompressionScheme {
 
     override def decompress(capacity: Int): (ByteBuffer, ByteBuffer) = {
       val nullsBuffer = buffer.duplicate().order(ByteOrder.nativeOrder())
-      nullsBuffer.rewind
+      nullsBuffer.rewind()
       val nullCount = ByteBufferHelper.getInt(nullsBuffer)
       var nextNullIndex = if (nullCount > 0) ByteBufferHelper.getInt(nullsBuffer) else -1
       var pos = 0
@@ -568,7 +607,7 @@ private[columnar] case object BooleanBitSet extends CompressionScheme {
       var visitedLocal: Int = 0
       val out = ByteBuffer.allocate(capacity).order(ByteOrder.nativeOrder())
       val nullsBuffer = buffer.duplicate().order(ByteOrder.nativeOrder())
-      nullsBuffer.rewind
+      nullsBuffer.rewind()
       val nullCount = ByteBufferHelper.getInt(nullsBuffer)
       var nextNullIndex = if (nullCount > 0) ByteBufferHelper.getInt(nullsBuffer) else -1
       var pos = 0
@@ -682,7 +721,7 @@ private[columnar] case object IntDelta extends CompressionScheme {
       var prevLocal: Int = 0
       val out = ByteBuffer.allocate(capacity * 4).order(ByteOrder.nativeOrder())
       val nullsBuffer = buffer.duplicate().order(ByteOrder.nativeOrder())
-      nullsBuffer.rewind
+      nullsBuffer.rewind()
       val nullCount = ByteBufferHelper.getInt(nullsBuffer)
       var nextNullIndex = if (nullCount > 0) ByteBufferHelper.getInt(nullsBuffer) else -1
       var pos = 0

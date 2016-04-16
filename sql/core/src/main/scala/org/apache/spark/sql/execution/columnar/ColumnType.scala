@@ -84,6 +84,15 @@ private[columnar] object ByteBufferHelper {
     buffer.position(pos + 8)
     Platform.putLong(buffer.array(), Platform.BYTE_ARRAY_OFFSET + pos, value)
   }
+
+  def copyMemory(src: ByteBuffer, dst: ByteBuffer, len: Int): Unit = {
+    val srcPos = src.position()
+    val dstPos = dst.position()
+    src.position(srcPos + len)
+    dst.position(dstPos + len)
+    Platform.copyMemory(src.array(), Platform.BYTE_ARRAY_OFFSET + srcPos,
+      dst.array(), Platform.BYTE_ARRAY_OFFSET + dstPos, len)
+  }
 }
 
 /**
