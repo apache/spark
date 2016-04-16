@@ -318,10 +318,11 @@ case class LoadData(
 
     val loadPath =
       if (isLocal) {
-        if (!new File(path).exists()) {
+        val uri = Utils.resolveURI(path)
+        if (!new File(uri.getPath()).exists()) {
           throw new AnalysisException(s"LOAD DATA with non-existing path: $path")
         }
-        Utils.resolveURI(path)
+        uri
       } else {
         val uri = new URI(path)
         if (uri.getScheme() != null && uri.getAuthority() != null) {
@@ -375,7 +376,7 @@ case class LoadData(
       }
 
       hiveClient.loadPartition(
-        path,
+        loadPath.toString,
         targetTable.identifier.unquotedString,
         orderedPartitionSpec,
         isOverwrite,
@@ -384,7 +385,7 @@ case class LoadData(
         isSkewedStoreAsSubdir = false)
     } else {
       hiveClient.loadTable(
-        path,
+        loadPath.toString,
         targetTable.identifier.unquotedString,
         isOverwrite,
         holdDDLTime = false)

@@ -992,7 +992,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     sql("DROP TABLE part_table")
   }
 
-  test("LOAD DATA: input path check") {
+  test("LOAD DATA: input path") {
     sql(
       """
         |CREATE EXTERNAL TABLE non_part_table (time TIMESTAMP, id INT)
@@ -1013,6 +1013,16 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
     assert(sql("SELECT time FROM non_part_table LIMIT 2").collect()
       === Array(Row(java.sql.Timestamp.valueOf("2014-12-11 00:00:00")), Row(null)))
+
+    // Use URI as LOCAL inpath
+    val uri = "file:" + testData
+    sql(s"""LOAD DATA LOCAL INPATH "$uri" INTO TABLE non_part_table""")
+
+    // Incorrect URI
+    val incorrectUri = "file:/" + testData
+    intercept[AnalysisException] {
+      sql(s"""LOAD DATA LOCAL INPATH "$incorrectUri" INTO TABLE non_part_table""")
+    }
 
     // Unset default URI Scheme and Authority: throw exception
     TestHive.sparkContext.hadoopConfiguration.unset("fs.default.name")
