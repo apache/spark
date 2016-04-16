@@ -337,6 +337,7 @@ object FunctionRegistry {
     expression[SparkPartitionID]("spark_partition_id"),
     expression[InputFileName]("input_file_name"),
     expression[MonotonicallyIncreasingID]("monotonically_increasing_id"),
+    expression[CurrentDatabase]("current_database"),
 
     // grouping sets
     expression[Cube]("cube"),
