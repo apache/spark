@@ -275,17 +275,28 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupp
       val columns = (output zip colVars).map { case (attr, colVar) =>
         new ColumnVectorReference(colVar, rowidx, attr.dataType, attr.nullable).gen(ctx) }
     s"""
-       | $columnarBatchClz batch = ($columnarBatchClz) $batch;
+       | while (true) {
+       |   if (${idx} == 0) {
+       |     if (${ctx.columnarItrName}.hasNext()) {
+       |       ${batch} = ${ctx.columnarItrName}.next();
+       |     } else {
+       |       cleanup();
+       |       break;
+       |     }
+       |   }
        |
-       | if ($idx == 0) {
-       |   ${columnAssigns.mkString("", "\n", "")}
-       | }
+       |   $columnarBatchClz batch = ($columnarBatchClz) $batch;
+       |   if ($idx == 0) {
+       |     ${columnAssigns.mkString("", "\n", "")}
+       |   }
        |
-       | int $numrows = batch.numRows();
-       | while ($idx < $numrows) {
-       |   int $rowidx = $idx++;
-       |   ${consume(ctx, columns, null).trim}
-       |   if (shouldStop()) return;
+       |   int $numrows = batch.numRows();
+       |   while ($idx < $numrows) {
+       |     int $rowidx = $idx++;
+       |     ${consume(ctx, columns, null).trim}
+       |     if (shouldStop()) return;
+       |   }
+       |   $idx = 0;
        | }
      """.stripMargin
     }
@@ -368,6 +379,8 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
       child.asInstanceOf[CodegenSupport].produce(ctx, this)
     } else null
 
+    ctx.addMutableState("scala.collection.Iterator", ctx.columnarItrName,
+       s"${ctx.columnarItrName} = null;")
     ctx.addMutableState("Object", ctx.columnarBatchName, s"${ctx.columnarBatchName} = null;")
     ctx.addMutableState("int", ctx.columnarBatchIdxName, s"${ctx.columnarBatchIdxName} = 0;")
 
@@ -379,20 +392,8 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
      """
     } else {
       s"""
-      private void processBatch(scala.collection.Iterator itr) throws java.io.IOException {
-        while (true) {
-          if (${ctx.columnarBatchIdxName} == 0) {
-            if (itr.hasNext()) {
-              ${ctx.columnarBatchName} = itr.next();
-            } else {
-              cleanup();
-              return;
-            }
-          }
-          ${codeCol.trim}
-
-          ${ctx.columnarBatchIdxName} = 0;
-        }
+      private void processBatch() throws java.io.IOException {
+        ${codeCol.trim}
       }
 
       private void processRow() throws java.io.IOException {
@@ -401,6 +402,7 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
 
       private void cleanup() {
         ${ctx.columnarBatchName} = null;
+        ${ctx.columnarItrName} = null;
         ${ctx.cleanupMutableStates()}
       }
 
@@ -409,13 +411,15 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
         if (${ctx.columnarBatchName} != null) {
           columnItr = (org.apache.spark.sql.execution.columnar.ColumnarIterator)
             ${ctx.inputHolder};
-          processBatch(columnItr.getInput());
+          ${ctx.columnarItrName} = columnItr.getInput();
+          processBatch();
         } else if (${ctx.inputHolder} instanceof
           org.apache.spark.sql.execution.columnar.ColumnarIterator &&
           ((columnItr = (org.apache.spark.sql.execution.columnar.ColumnarIterator)
               ${ctx.inputHolder}).isSupportColumnarCodeGen())) {
           ${ctx.columnarBatchIdxName} = 0;
-          processBatch(columnItr.getInput());
+          ${ctx.columnarItrName} = columnItr.getInput();
+          processBatch();
         } else {
           processRow();
         }
