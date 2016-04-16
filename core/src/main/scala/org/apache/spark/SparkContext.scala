@@ -2454,7 +2454,7 @@ object SparkContext extends Logging {
           cm.initialize(scheduler, backend)
           (backend, scheduler)
         } catch {
-          case e: Exception => {
+          case NonFatal(e) => {
             throw new SparkException("External scheduler cannot be instantiated", e)
           }
         }
@@ -2463,15 +2463,13 @@ object SparkContext extends Logging {
 
   private def getClusterManager(url: String): Option[ExternalClusterManager] = {
     val loader = Utils.getContextOrSparkClassLoader
-    val serviceLoader = ServiceLoader.load(classOf[ExternalClusterManager], loader)
-
-    serviceLoader.asScala.filter(_.canCreate(url)).toList match {
-      // exactly one registered manager
-      case head :: Nil => Some(head)
-      case Nil => None
-      case multipleMgrs => sys.error(s"Multiple Cluster Managers ($multipleMgrs) registered " +
+    val serviceLoaders =
+    ServiceLoader.load(classOf[ExternalClusterManager], loader).asScala.filter(_.canCreate(url))
+    if (serviceLoaders.size > 1) {
+      throw new SparkException(s"Multiple Cluster Managers ($serviceLoaders) registered " +
           s"for the url $url:")
     }
+    serviceLoaders.headOption
   }
 }
 

@@ -38,12 +38,11 @@ private class DummyExternalClusterManager extends ExternalClusterManager {
   def canCreate(masterURL: String): Boolean = masterURL == "myclusterManager"
 
   def createTaskScheduler(sc: SparkContext,
-                          masterURL: String): TaskScheduler = new DummyTaskScheduler
+      masterURL: String): TaskScheduler = new DummyTaskScheduler
 
   def createSchedulerBackend(sc: SparkContext,
-                             masterURL: String,
-                             scheduler: TaskScheduler): SchedulerBackend =
-    new DummySchedulerBackend()
+      masterURL: String,
+      scheduler: TaskScheduler): SchedulerBackend = new DummySchedulerBackend()
 
   def initialize(scheduler: TaskScheduler, backend: SchedulerBackend): Unit = {}
 
@@ -62,7 +61,7 @@ private class DummyTaskScheduler extends TaskScheduler {
   override def start(): Unit = {}
   override def stop(): Unit = {}
   override def submitTasks(taskSet: TaskSet): Unit = {}
-  override def cancelTasks(stageId: Int, interruptThread: Boolean) {}
+  override def cancelTasks(stageId: Int, interruptThread: Boolean): Unit = {}
   override def setDAGScheduler(dagScheduler: DAGScheduler): Unit = {}
   override def defaultParallelism(): Int = 2
   override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {}

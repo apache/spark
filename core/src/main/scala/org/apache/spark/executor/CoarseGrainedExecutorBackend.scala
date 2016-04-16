@@ -136,7 +136,12 @@ private[spark] class CoarseGrainedExecutorBackend(
     }
   }
 
-  def exitExecutor(): Unit = System.exit(1)
+  /**
+   * This function can be overloaded by other child classes to handle
+   * executor exits differently. For e.g. when an executor goes down,
+   * back-end may not want to take the parent process down.
+   */
+  protected def exitExecutor(): Unit = System.exit(1)
 }
 
 private[spark] object CoarseGrainedExecutorBackend extends Logging {
