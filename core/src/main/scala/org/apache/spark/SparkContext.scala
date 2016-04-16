@@ -2464,9 +2464,8 @@ object SparkContext extends Logging {
           cm.initialize(scheduler, backend)
           (backend, scheduler)
         } catch {
-          case NonFatal(e) => {
+          case NonFatal(e) =>
             throw new SparkException("External scheduler cannot be instantiated", e)
-          }
         }
     }
   }
