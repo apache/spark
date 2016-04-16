@@ -68,7 +68,7 @@ public class RadixSort {
     }
   }
 
-  // TODO(ekl) it might be worth pre-computing these up-front for all bytes
+  // TODO(ekl) it might be worth pre-computing these up-front for all bytes.
   private static int[] getOffsets(
       LongArray array, int byteIdx, int dataLen, int dataOffset, int tmpOffset) {
     int[] tmpOffsets = new int[256];
@@ -83,6 +83,10 @@ public class RadixSort {
     }
     return tmpOffsets;
   }
+
+  //
+  // Specialization of the sort for key-prefix arrays.
+  //
 
   public static int sortKeyPrefixArray(
       LongArray array,
@@ -133,7 +137,6 @@ public class RadixSort {
     }
   }
 
-  // TODO(ekl) it might be worth pre-computing these up-front for all bytes
   private static int[] getKeyPrefixArrayOffsets(
       LongArray array, int byteIdx, int dataLen, int dataOffset, int tmpOffset) {
     int[] tmpOffsets = new int[256];
