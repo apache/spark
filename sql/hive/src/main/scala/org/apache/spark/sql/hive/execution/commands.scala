@@ -18,9 +18,11 @@
 package org.apache.spark.sql.hive.execution
 
 import java.io.File
+import java.net.URI
 import java.util
 
 import org.apache.hadoop.hive.metastore.MetaStoreUtils
+import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -33,6 +35,7 @@ import org.apache.spark.sql.execution.datasources.{BucketSpec, DataSource, Logic
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 /**
  * Analyzes the given table in the current database to generate statistics, which will be
@@ -313,10 +316,55 @@ case class LoadData(
       }
     }
 
-    if (!new File(path).exists()) {
-      throw new AnalysisException(
-        s"LOAD DATA with non-existing path: $path")
-    }
+    val loadPath =
+      if (isLocal) {
+        if (!new File(path).exists()) {
+          throw new AnalysisException(s"LOAD DATA with non-existing path: $path")
+        }
+        Utils.resolveURI(path)
+      } else {
+        val uri = new URI(path)
+        if (uri.getScheme() != null && uri.getAuthority() != null) {
+          uri
+        } else {
+          // Follow Hive's behavior:
+          // If no schema or authority is provided with non-local inpath,
+          // we will use hadoop configuration "fs.default.name".
+          val defaultFSConf = sqlContext.sparkContext.hadoopConfiguration.get("fs.default.name")
+          val defaultFS = if (defaultFSConf == null) {
+            new URI("")
+          } else {
+            new URI(defaultFSConf)
+          }
+
+          val scheme = if (uri.getScheme() != null) {
+            uri.getScheme()
+          } else {
+            defaultFS.getScheme()
+          }
+          val authority = if (uri.getAuthority() != null) {
+            uri.getAuthority()
+          } else {
+            defaultFS.getAuthority()
+          }
+
+          if (scheme == null) {
+            throw new AnalysisException(
+              "LOAD DATA with non-local path must specify URI Scheme.")
+          }
+
+          // Follow Hive's behavior:
+          // If LOCAL is not specified, and the path is relative,
+          // then the path is interpreted relative to "/user/<username>"
+          val uriPath = uri.getPath()
+          val absolutePath = if (uriPath != null && uriPath.startsWith("/")) {
+            uriPath
+          } else {
+            s"/user/${UserGroupInformation.getCurrentUser().getShortUserName()}/$uriPath"
+          }
+          new URI(scheme, authority, absolutePath, uri.getQuery(), uri.getFragment())
+        }
+      }
 
     val hiveClient = sqlContext.asInstanceOf[HiveContext].metadataHive
 

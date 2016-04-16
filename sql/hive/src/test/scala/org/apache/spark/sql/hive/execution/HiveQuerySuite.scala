@@ -946,11 +946,6 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
     val testData = TestHive.getHiveFile("data/files/issue-4077-data.txt").getCanonicalPath
 
-    // Non-existing inpath
-    intercept[AnalysisException] {
-      sql("""LOAD DATA LOCAL INPATH "/non-existing/data.txt" INTO TABLE non_part_table""")
-    }
-
     // LOAD DATA INTO non-partitioned table can't specify partition
     intercept[AnalysisException] {
       sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE non_part_table PARTITION(ds="1")""")
@@ -995,6 +990,37 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
     sql("DROP TABLE non_part_table")
     sql("DROP TABLE part_table")
+  }
+
+  test("LOAD DATA: input path check") {
+    sql(
+      """
+        |CREATE EXTERNAL TABLE non_part_table (time TIMESTAMP, id INT)
+        |ROW FORMAT DELIMITED
+        |FIELDS TERMINATED BY ','
+        |LINES TERMINATED BY '\n'
+      """.stripMargin)
+
+    // Non-existing inpath
+    intercept[AnalysisException] {
+      sql("""LOAD DATA LOCAL INPATH "/non-existing/data.txt" INTO TABLE non_part_table""")
+    }
+
+    val testData = TestHive.getHiveFile("data/files/issue-4077-data.txt").getCanonicalPath
+
+    // Non-local inpath: without URI Scheme and Authority
+    sql(s"""LOAD DATA INPATH "$testData" INTO TABLE non_part_table""")
+
+    assert(sql("SELECT time FROM non_part_table LIMIT 2").collect()
+      === Array(Row(java.sql.Timestamp.valueOf("2014-12-11 00:00:00")), Row(null)))
+
+    // Unset default URI Scheme and Authority: throw exception
+    TestHive.sparkContext.hadoopConfiguration.unset("fs.default.name")
+    intercept[AnalysisException] {
+      sql(s"""LOAD DATA INPATH "$testData" INTO TABLE non_part_table""")
+    }
+
+    sql("DROP TABLE non_part_table")
   }
 
   test("CREATE TEMPORARY FUNCTION") {
