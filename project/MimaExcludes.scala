@@ -630,6 +630,7 @@ object MimaExcludes {
         ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.getLocalProperty"),
         // [SPARK-14617] Remove deprecated APIs in TaskMetrics
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.executor.InputMetrics$"),
+<<<<<<< HEAD
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.executor.OutputMetrics$")
       ) ++ Seq(
         // [SPARK-14483][WEBUI] Display user name foreach job and query
@@ -638,6 +639,13 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.scheduler.SparkListenerJobStart$"),
         ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.SparkListenerJobStart.apply")
      )
+=======
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.executor.OutputMetrics$"),
+        // [SPARK-14628] Simplify task metrics by always tracking read/write metrics
+        ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.executor.InputMetrics.readMethod"),
+        ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.executor.OutputMetrics.writeMethod")
+      )
+>>>>>>> 8a87f7d5c85f8bfa67432737cb200f5503755a65
     case v if v.startsWith("1.6") =>
       Seq(
         MimaBuild.excludeSparkPackage("deploy"),
