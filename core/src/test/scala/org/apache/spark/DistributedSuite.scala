@@ -320,7 +320,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
           Thread.sleep(200)
         }
       } catch {
-        case _: Throwable => { Thread.sleep(10) }
+        case _: Throwable => Thread.sleep(10)
           // Do nothing. We might see exceptions because block manager
           // is racing this thread to remove entries from the driver.
       }
