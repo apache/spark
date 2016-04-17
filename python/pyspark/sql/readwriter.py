@@ -440,20 +440,27 @@ class DataFrameWriter(object):
         self._jwrite = self._jwrite.queryName(queryName)
         return self
 
+    @keyword_only
     @since(2.0)
-    def trigger(self, trigger):
+    def trigger(self, processingTime=None):
         """Set the trigger for the stream query. If this is not set it will run the query as fast
         as possible, which is equivalent to setting the trigger to ``ProcessingTime('0 seconds')``.
 
-        :param trigger: a :class:`Trigger`.
+        :param processingTime: a processing time interval as a string, e.g. '5 seconds', '1 minute'.
 
         >>> from pyspark.sql.streaming import ProcessingTime
         >>> # trigger the query for execution every 5 seconds
-        >>> writer = sdf.write.trigger(ProcessingTime('5 seconds'))
+        >>> writer = sdf.write.trigger(processingTime='5 seconds')
         """
-        from pyspark.sql.streaming import Trigger
-        if not trigger or Trigger._is_subclass(trigger):
-            raise ValueError('The trigger must be of the Trigger class. Got: %s' % trigger)
+        from pyspark.sql.streaming import ProcessingTime
+        trigger = None
+        if processingTime is not None:
+            if type(processingTime) != str or len(processingTime.strip()) == 0:
+                raise ValueError('The processing time must be a non empty string. Got: %s' %
+                                 processingTime)
+            trigger = ProcessingTime(processingTime)
+        if trigger is None:
+            raise ValueError('A trigger was not provided. Supported triggers: processingTime.')
         self._jwrite = self._jwrite.trigger(trigger._to_java_trigger(self._sqlContext))
         return self
 
@@ -491,7 +498,7 @@ class DataFrameWriter(object):
     @ignore_unicode_prefix
     @since(2.0)
     def startStream(self, path=None, format=None, mode=None, partitionBy=None,
-                    queryName=None, checkpointLocation=None, trigger=None, **options):
+                    queryName=None, **options):
         """Saves the contents of the :class:`DataFrame` to a data source.
 
         The data source is specified by the ``format`` and a set of ``options``.
@@ -500,7 +507,6 @@ class DataFrameWriter(object):
 
         :param path: the path in a Hadoop supported file system
         :param format: the format used to save
-        :param mode: specifies the behavior of the save operation when data already exists.
 
             * ``append``: Append contents of this :class:`DataFrame` to existing data.
             * ``overwrite``: Overwrite existing data.
@@ -508,43 +514,30 @@ class DataFrameWriter(object):
             * ``error`` (default case): Throw an exception if data already exists.
         :param partitionBy: names of partitioning columns
         :param queryName: unique name for the query
-        :param trigger: Set the trigger for the stream query. The default value is
-           `ProcessingTime(0)` and it will run as fast as possible.
-        :param checkpointLocation: An optional location for checkpointing state and metadata.
-        :param options: all other string options
+        :param options: All other string options. You may want to provide a `checkpointLocation`
+            for most streams, however it is not required for a `memory` stream.
 
-        >>> temp = tempfile.mkdtemp()
-        >>> cq = sdf.write.format('text').startStream(os.path.join(temp, 'out'),
-        ...     checkpointLocation=os.path.join(temp, 'chk'))
+        >>> cq = sdf.write.format('memory').startStream()
         >>> cq.isActive
         True
         >>> cq.stop()
         >>> cq.isActive
         False
-        >>> from pyspark.sql.streaming import ProcessingTime
-        >>> cq = sdf.write.startStream(os.path.join(temp, 'out'), format='text',
-        ...     queryName='my_query', trigger=ProcessingTime('5 seconds'),
-        ...     checkpointLocation=os.path.join(temp, 'chk'))
+        >>> cq = sdf.write.trigger(processingTime='5 seconds').startStream(
+        ...     queryName='my_query', format='memory')
         >>> cq.name
         u'my_query'
         >>> cq.isActive
         True
         >>> cq.stop()
         """
-        self.mode(mode).options(**options)
+        self.options(**options)
         if partitionBy is not None:
             self.partitionBy(partitionBy)
         if format is not None:
             self.format(format)
         if queryName is not None:
             self.queryName(queryName)
-        if checkpointLocation is not None:
-            if type(checkpointLocation) != str or len(checkpointLocation.strip()) == 0:
-                raise ValueError('The checkpointLocation must be a non-empty string. Got: %s' %
-                                 checkpointLocation)
-            self.option('checkpointLocation', checkpointLocation)
-        if trigger is not None:
-            self.trigger(trigger)
         if path is None:
             return self._cq(self._jwrite.startStream())
         else:
