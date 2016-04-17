@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
@@ -88,6 +87,7 @@ case class ScalarSubquery(
  */
 abstract class PredicateSubquery extends SubqueryExpression with Unevaluable with Predicate {
   override def nullable: Boolean = false
+  override def plan: LogicalPlan = SubqueryAlias(prettyName, query)
 }
 
 object PredicateSubquery {
@@ -108,7 +108,6 @@ object PredicateSubquery {
 case class InSubQuery(value: Expression, query: LogicalPlan) extends PredicateSubquery {
   override def children: Seq[Expression] = value :: Nil
   override lazy val resolved: Boolean = value.resolved && query.resolved
-  override def plan: LogicalPlan = SubqueryAlias(toString, query)
   override def withNewPlan(plan: LogicalPlan): InSubQuery = InSubQuery(value, plan)
 
   /**
@@ -156,6 +155,5 @@ case class InSubQuery(value: Expression, query: LogicalPlan) extends PredicateSu
  */
 case class Exists(query: LogicalPlan) extends PredicateSubquery {
   override def children: Seq[Expression] = Nil
-  override def plan: LogicalPlan = SubqueryAlias(toString, query)
   override def withNewPlan(plan: LogicalPlan): Exists = Exists(plan)
 }

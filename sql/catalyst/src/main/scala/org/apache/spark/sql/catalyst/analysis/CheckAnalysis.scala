@@ -111,7 +111,7 @@ trait CheckAnalysis extends PredicateHelper {
                 s"of type ${f.condition.dataType.simpleString} is not a boolean.")
 
           case f @ Filter(condition, child) =>
-            // Make sure no correlated predicate is in an OUTER join, because this would change the
+            // Make sure no correlated predicate is in an OUTER join, because this could change the
             // semantics of the join.
             lazy val attributes: Set[Expression] = child.output.toSet
             def checkCorrelatedPredicates(p: PredicateSubquery): Unit = p.query.foreach {
@@ -125,6 +125,9 @@ trait CheckAnalysis extends PredicateHelper {
             splitConjunctivePredicates(condition).foreach {
               case p: PredicateSubquery =>
                 checkCorrelatedPredicates(p)
+              case Not(InSubQuery(_, query)) if query.output.exists(_.nullable) =>
+                failAnalysis("NOT IN with nullable subquery is not supported. " +
+                  "Please use a non-nullable sub-query or rewrite this using NOT EXISTS.")
               case Not(p: PredicateSubquery) =>
                 checkCorrelatedPredicates(p)
               case e if PredicateSubquery.hasPredicateSubquery(e) =>

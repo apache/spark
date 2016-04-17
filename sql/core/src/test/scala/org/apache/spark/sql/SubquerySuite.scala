@@ -45,10 +45,17 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
     row(null, 5.0),
     row(6, null)).toDF("c", "d")
 
+  lazy val t = Seq(
+    (2, 3.0),
+    (2, 3.0),
+    (3, 2.0),
+    (4, 1.0)).toDF("c", "d")
+
   protected override def beforeAll(): Unit = {
     super.beforeAll()
     l.registerTempTable("l")
     r.registerTempTable("r")
+    t.registerTempTable("t")
   }
 
   test("simple uncorrelated scalar subquery") {
@@ -127,9 +134,8 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(
       sql("select * from l where not exists(select * from r where l.a = r.c and l.b < r.d)"),
-      Row(1, 2.0) :: Row(1, 2.0) ::
-        Row(3, 3.0) :: Row(null, null) ::
-        Row(null, 5.0) :: Row(6, null) :: Nil)
+      Row(1, 2.0) :: Row(1, 2.0) :: Row(3, 3.0) ::
+      Row(null, null) :: Row(null, 5.0) :: Row(6, null) :: Nil)
   }
 
   test("IN predicate subquery") {
@@ -138,27 +144,32 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       Row(2, 1.0) :: Row(2, 1.0) :: Row(3, 3.0) :: Row(6, null) :: Nil)
 
     checkAnswer(
+      sql("select * from l where l.a in (select c from r where l.b < r.d)"),
+      Row(2, 1.0) :: Row(2, 1.0) :: Nil)
+
+    checkAnswer(
       sql("select * from l where l.a in (select c from r) and l.a > 2 and l.b is not null"),
       Row(3, 3.0) :: Nil)
   }
 
   test("NOT IN predicate subquery") {
     checkAnswer(
-      sql("select * from l where a not in(select c from r)"),
-      Row(1, 2.0) :: Row(1, 2.0) :: Row(null, null) :: Row(null, 5.0) :: Nil)
+      sql("select * from l where a not in(select c from t)"),
+      Row(1, 2.0) :: Row(1, 2.0) :: Row(6, null) :: Nil)
 
     checkAnswer(
-      sql("select * from l where a not in(select c from r where d is not null)"),
-      Row(1, 2.0) :: Row(1, 2.0) ::
-        Row(null, null) :: Row(null, 5.0) ::
-        Row(6, null) :: Nil)
+      sql("select * from l where a not in(select c from t where b < d)"),
+      Row(1, 2.0) :: Row(1, 2.0) :: Row(3, 3.0) :: Nil)
+
+    checkAnswer(
+      sql("select * from l where a not in(select c from t where c > 10 and b < d)"),
+      Row(1, 2.0) :: Row(1, 2.0) :: Row(2, 1.0) :: Row(2, 1.0) ::
+      Row(3, 3.0) :: Row(null, null) :: Row(null, 5.0) :: Row(6, null) :: Nil)
   }
 
   test("complex IN predicate subquery") {
     checkAnswer(
-      sql("select * from l where (a, b) not in(select c, d from r)"),
-      Row(1, 2.0) :: Row(1, 2.0) :: Row(2, 1.0) ::
-        Row(2, 1.0) :: Row(3, 3.0) :: Row(null, null) ::
-        Row(null, 5.0) :: Row(6, null) :: Nil)
+      sql("select * from l where (a, b) not in(select c, d from t)"),
+      Row(1, 2.0) :: Row(1, 2.0) :: Row(2, 1.0) :: Row(2, 1.0) :: Row(3, 3.0) :: Nil)
   }
 }

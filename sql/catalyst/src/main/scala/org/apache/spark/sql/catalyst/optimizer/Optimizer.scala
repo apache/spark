@@ -19,8 +19,9 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.annotation.tailrec
 import scala.collection.immutable.HashSet
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{CleanupAliases, DistinctAggregationRewriter, EliminateSubqueryAliases}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -1402,28 +1403,54 @@ object EmbedSerializerInFilter extends Rule[LogicalPlan] {
  */
 object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
   /**
-   * Extract all correlated predicates from a given sub-query. The sub-query will be rewritten
-   * without the extracted predicates. This method returns the rewritten sub-query and the
-   * combined (AND) extracted predicate.
+   * Pull out all correlated predicates from a given sub-query. This method removes the correlated
+   * predicates from sub-query [[Filter]]s and adds the references of these predicates to
+   * all intermediate [[Project]] clauses (if they are missing) in order to be able to evaluate the
+   * predicates in the join condition.
+   *
+   * This method returns the rewritten sub-query and the combined (AND) extracted predicate.
    */
-  private def extractCorrelatedPredicates(
-      q: LogicalPlan,
-      p: LogicalPlan): (LogicalPlan, Option[Expression]) = {
-    val references: Set[Expression] = p.output.toSet
-    val predicates = ArrayBuffer[Expression]()
-    val transformed = q transform {
+  private def pullOutCorrelatedPredicates(
+      subquery: LogicalPlan,
+      query: LogicalPlan): (LogicalPlan, Option[Expression]) = {
+    val references: Set[Expression] = query.output.toSet
+    val predicateMap = mutable.Map.empty[LogicalPlan, Seq[Expression]]
+    val transformed = subquery transformUp {
       case f @ Filter(cond, child) =>
+        // Find all correlated predicates.
         val (correlated, local) = splitConjunctivePredicates(cond).partition { e =>
           e.find(references.contains).isDefined
         }
-        predicates ++= correlated
+        // Rewrite the filter without the correlated predicates if any.
         correlated match {
           case Nil => f
-          case xs if local.nonEmpty => Filter(local.reduce(And), child)
-          case xs => child
+          case xs if local.nonEmpty =>
+            val newFilter = Filter(local.reduce(And), child)
+            predicateMap += newFilter -> correlated
+            newFilter
+          case xs =>
+            predicateMap += child -> correlated
+            child
+        }
+      case p @ Project(expressions, child) =>
+        // Find all pulled out predicates defined in the Project's subtree.
+        val localPredicates = p.collect(predicateMap).flatten
+
+        // Determine which correlated predicate references are missing from this project.
+        val localPredicateReferences = localPredicates
+          .map(_.references)
+          .reduceOption(_ ++ _)
+          .getOrElse(AttributeSet.empty)
+        val missingReferences = localPredicateReferences -- p.references -- query.outputSet
+
+        // Create a new project if we need to add missing references.
+        if (missingReferences.nonEmpty) {
+          Project(expressions ++ missingReferences, child)
+        } else {
+          p
         }
     }
-    (transformed, predicates.reduceOption(And))
+    (transformed, predicateMap.values.flatten.reduceOption(And))
   }
 
   /**
@@ -1435,7 +1462,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
       subquery: InSubQuery,
       query: LogicalPlan): (LogicalPlan, Expression) = {
     val expressions = subquery.expressions
-    val (resolved, joinCondition) = extractCorrelatedPredicates(subquery.query, query)
+    val (resolved, joinCondition) = pullOutCorrelatedPredicates(subquery.query, query)
     val conditions = joinCondition.toSeq ++ expressions.zip(resolved.output).map(EqualTo.tupled)
     (resolved, conditions.reduceLeft(And))
   }
@@ -1454,17 +1481,43 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
       // Filter the plan by applying left semi and left anti joins.
       withSubquery.foldLeft(newFilter) {
         case (p, Exists(sub)) =>
-          val (resolved, joinCondition) = extractCorrelatedPredicates(sub, p)
+          val (resolved, joinCondition) = pullOutCorrelatedPredicates(sub, p)
           Join(p, resolved, LeftSemi, joinCondition)
         case (p, Not(Exists(sub))) =>
-          val (resolved, joinCondition) = extractCorrelatedPredicates(sub, p)
+          val (resolved, joinCondition) = pullOutCorrelatedPredicates(sub, p)
           Join(p, resolved, LeftAnti, joinCondition)
         case (p, in: InSubQuery) =>
           val (resolved, cond) = rewriteInSubquery(in, p)
           Join(p, resolved, LeftSemi, Option(cond))
         case (p, Not(in: InSubQuery)) =>
+          // This is a NULL-aware (left) anti join (NAAJ).
+          // We currently only allow subqueries with non-nullable fields. In this way we can plan a
+          // regular ANTI join, instead of a much more complex NAAJ (which is not yet available in
+          // Spark SQL). In order to get the NAAJ semantically right, we need to add a filter to
+          // left hand side of the query that checks that either all columns are non-null or that
+          // the right hand side is empty.
           val (resolved, cond) = rewriteInSubquery(in, p)
-          Join(p, resolved, LeftAnti, Option(cond))
+
+          // Make absolutely sure that the rewritten query contains no nullable fields. We re-check
+          // this here because the rewritten query can contain pulled-up nullable columns.
+          if (resolved.output.exists(_.nullable)) {
+            throw new AnalysisException("NOT IN with nullable subquery is not supported. " +
+              "Please use a non-nullable sub-query or rewrite this using NOT EXISTS.")
+          }
+
+          // Construct filter for the left hand side
+          val count = Alias(AggregateExpression(Count(Literal(1)), Complete, false), "cnt")()
+          val isEmpty = EqualTo(ScalarSubquery(Aggregate(Nil, Seq(count), resolved)), Literal(0L))
+          val isNotNullOpt = cond.references.intersect(p.outputSet)
+            .filter(_.nullable)
+            .map(IsNotNull)
+            .reduceOption(And)
+          val filtered = isNotNullOpt match {
+            case Some(isNotNull) => Filter(Or(isNotNull, isEmpty), p)
+            case None => p
+          }
+
+          Join(filtered, resolved, LeftAnti, Option(cond))
       }
   }
 }
