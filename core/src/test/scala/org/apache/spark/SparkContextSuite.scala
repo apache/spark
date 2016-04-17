@@ -319,4 +319,16 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
       assert(sc.getConf.getInt("spark.executor.instances", 0) === 6)
     }
   }
+
+
+  test("localPropertyies are inherited by spawned threads.") {
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+    sc.setLocalProperty("testProperty", "testValue")
+    var result = "unset";
+    val thread = new Thread(){ override def run() = {result = sc.getLocalProperty("testProperty")}}
+    thread.start()
+    thread.join()
+    sc.stop()
+    assert(result == "testValue")
+  }
 }
