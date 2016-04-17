@@ -28,7 +28,7 @@ import org.apache.spark.sql.types._
  */
 abstract class ColumnarIterator extends Iterator[InternalRow] {
   def initialize(input: Iterator[CachedBatch], columnTypes: Array[DataType],
-    columnIndexes: Array[Int], columnNullables: Array[Boolean]): Unit
+    columnIndexes: Array[Int]): Unit
   def getInput: Iterator[CachedBatch]
   def getColumnIndexes: Array[Int]
   def isSupportColumnarCodeGen: Boolean
@@ -184,7 +184,6 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
         private scala.collection.Iterator input = null;
         private DataType[] columnTypes = null;
         private int[] columnIndexes = null;
-        private boolean[] columnNullables = null;
 
         ${ctx.declareMutableStates()}
 
@@ -194,12 +193,10 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
           this.mutableRow = new MutableUnsafeRow(rowWriter);
         }
 
-        public void initialize(Iterator input, DataType[] columnTypes, int[] columnIndexes,
-                               boolean columnNullables[]) {
+        public void initialize(Iterator input, DataType[] columnTypes, int[] columnIndexes) {
           this.input = input;
           this.columnTypes = columnTypes;
           this.columnIndexes = columnIndexes;
-          this.columnNullables = columnNullables;
         }
 
         ${ctx.declareAddedFunctions()}
