@@ -464,13 +464,13 @@ class SessionCatalog(
 
   /**
    * Verify if the input partition spec exactly matches the existing defined partition spec
-   * That is, the columns and the sequence must be the same.
+   * The columns must be the same but the orders could be different.
    */
   private def requireExactMatchedPartitionSpec(
       input: Seq[String],
       defined: Seq[String],
       tableName: TableIdentifier): Unit = {
-    if (input != defined) {
+    if (input.sorted != defined.sorted) {
       throw new AnalysisException(
         s"Partition spec is invalid. The spec (${input.mkString(", ")}) must match " +
         s"the partition spec (${defined.mkString(", ")}) defined in table '$tableName'")

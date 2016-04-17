@@ -465,8 +465,10 @@ class SessionCatalogSuite extends SparkFunSuite {
     assert(catalogPartitionsEqual(externalCatalog, "mydb", "tbl", Seq(part1, part2)))
     // Create partitions without explicitly specifying database
     sessionCatalog.setCurrentDatabase("mydb")
-    sessionCatalog.createPartitions(TableIdentifier("tbl"), Seq(part3), ignoreIfExists = false)
-    assert(catalogPartitionsEqual(externalCatalog, "mydb", "tbl", Seq(part1, part2, part3)))
+    sessionCatalog.createPartitions(
+      TableIdentifier("tbl"), Seq(partWithMixedOrder), ignoreIfExists = false)
+    assert(catalogPartitionsEqual(
+      externalCatalog, "mydb", "tbl", Seq(part1, part2, partWithMixedOrder)))
   }
 
   test("create partitions when database/table does not exist") {
