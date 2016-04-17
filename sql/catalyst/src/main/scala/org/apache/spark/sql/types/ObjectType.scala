@@ -41,4 +41,6 @@ private[sql] case class ObjectType(cls: Class[_]) extends DataType {
     throw new UnsupportedOperationException("No size estimation available for objects.")
 
   def asNullable: DataType = this
+
+  override def simpleString: String = cls.getName
 }
