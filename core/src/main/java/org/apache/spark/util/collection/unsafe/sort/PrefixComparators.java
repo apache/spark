@@ -62,32 +62,44 @@ public class PrefixComparators {
   }
 
   //
-  // Standard prefix comparators. The following classes signal to sorters parameters for radix
-  // sort that can be used instead of a comparison-based sort.
+  // Standard prefix comparators that support radix sort.
   //
 
-  public static final class UnsignedPrefixComparator extends PrefixComparator {
+  public static abstract class RadixSortSupport extends PrefixComparator {
+    public abstract boolean sortDescending();
+    public abstract boolean sortSigned();
+  }
+
+  public static final class UnsignedPrefixComparator extends RadixSortSupport {
+    @Override public final boolean sortDescending() { return false; }
+    @Override public final boolean sortSigned() { return false; }
     @Override
     public final int compare(long aPrefix, long bPrefix) {
       return UnsignedLongs.compare(aPrefix, bPrefix);
     }
   }
 
-  public static final class UnsignedPrefixComparatorDesc extends PrefixComparator {
+  public static final class UnsignedPrefixComparatorDesc extends RadixSortSupport {
+    @Override public final boolean sortDescending() { return true; }
+    @Override public final boolean sortSigned() { return false; }
     @Override
     public final int compare(long bPrefix, long aPrefix) {
       return UnsignedLongs.compare(aPrefix, bPrefix);
     }
   }
 
-  public static final class SignedPrefixComparator extends PrefixComparator {
+  public static final class SignedPrefixComparator extends RadixSortSupport {
+    @Override public final boolean sortDescending() { return false; }
+    @Override public final boolean sortSigned() { return true; }
     @Override
     public final int compare(long a, long b) {
       return (a < b) ? -1 : (a > b) ? 1 : 0;
     }
   }
 
-  public static final class SignedPrefixComparatorDesc extends PrefixComparator {
+  public static final class SignedPrefixComparatorDesc extends RadixSortSupport {
+    @Override public final boolean sortDescending() { return true; }
+    @Override public final boolean sortSigned() { return true; }
     @Override
     public final int compare(long b, long a) {
       return (a < b) ? -1 : (a > b) ? 1 : 0;

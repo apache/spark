@@ -252,7 +252,7 @@ public final class UnsafeInMemorySorter {
     int offset = 0;
     if (sorter != null) {
       if (useRadix) {
-        offset = RadixSort.sortKeyPrefixArray(array, pos / 2, 0, pos, 0, 7);
+        offset = RadixSort.sortKeyPrefixArray(array, pos / 2, 0, pos, 0, 7, false, false);
       } else {
         sorter.sort(array, 0, pos / 2, sortComparator);
       }
