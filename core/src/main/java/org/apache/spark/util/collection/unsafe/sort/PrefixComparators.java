@@ -28,44 +28,32 @@ import org.apache.spark.util.Utils;
 public class PrefixComparators {
   private PrefixComparators() {}
 
-  public static final StringPrefixComparator STRING = new StringPrefixComparator();
-  public static final StringPrefixComparatorDesc STRING_DESC = new StringPrefixComparatorDesc();
-  public static final BinaryPrefixComparator BINARY = new BinaryPrefixComparator();
-  public static final BinaryPrefixComparatorDesc BINARY_DESC = new BinaryPrefixComparatorDesc();
-  public static final LongPrefixComparator LONG = new LongPrefixComparator();
-  public static final LongPrefixComparatorDesc LONG_DESC = new LongPrefixComparatorDesc();
-  public static final DoublePrefixComparator DOUBLE = new DoublePrefixComparator();
-  public static final DoublePrefixComparatorDesc DOUBLE_DESC = new DoublePrefixComparatorDesc();
+  public static final PrefixComparator STRING = new UnsignedPrefixComparator();
+  public static final PrefixComparator STRING_DESC = new UnsignedPrefixComparatorDesc();
+  public static final PrefixComparator BINARY = new UnsignedPrefixComparator();
+  public static final PrefixComparator BINARY_DESC = new UnsignedPrefixComparatorDesc();
+  public static final PrefixComparator LONG = new SignedPrefixComparator();
+  public static final PrefixComparator LONG_DESC = new SignedPrefixComparatorDesc();
+  public static final PrefixComparator DOUBLE = new SignedPrefixComparator();
+  public static final PrefixComparator DOUBLE_DESC = new SignedPrefixComparatorDesc();
 
   //
-  // Public classes
+  // Utility classes that define computePrefix() for input types
   //
 
-  public static final class StringPrefixComparator extends UnsignedBinaryPrefixComparator {
+  public static final class StringPrefixComparator {
     public static long computePrefix(UTF8String value) {
       return value == null ? 0L : value.getPrefix();
     }
   }
 
-  public static final class StringPrefixComparatorDesc extends UnsignedBinaryPrefixComparatorDesc {
-  }
-
-  public static final class BinaryPrefixComparator extends UnsignedBinaryPrefixComparator {
+  public static final class BinaryPrefixComparator {
     public static long computePrefix(byte[] bytes) {
       return ByteArray.getPrefix(bytes);
     }
   }
 
-  public static final class BinaryPrefixComparatorDesc extends UnsignedBinaryPrefixComparatorDesc {
-  }
-
-  public static final class LongPrefixComparator extends TwosComplementPrefixComparator {
-  }
-
-  public static final class LongPrefixComparatorDesc extends TwosComplementPrefixComparatorDesc {
-  }
-
-  public static final class DoublePrefixComparator extends TwosComplementPrefixComparator {
+  public static final class DoublePrefixComparator {
     public static long computePrefix(double value) {
       // Java's doubleToLongBits already canonicalizes all NaN values to the lowest possible NaN,
       // so there's nothing special we need to do here.
@@ -73,36 +61,33 @@ public class PrefixComparators {
     }
   }
 
-  public static final class DoublePrefixComparatorDesc extends TwosComplementPrefixComparator {
-  }
-
   //
-  // Abstract base classes for prefix comparators. These classes signal to sorters whether
-  // (and how) radix sort can be used instead of comparison-based sorts.
+  // Standard prefix comparators. The following classes signal to sorters parameters for radix
+  // sort that can be used instead of a comparison-based sort.
   //
 
-  private static abstract class UnsignedBinaryPrefixComparator extends PrefixComparator {
+  public static final class UnsignedPrefixComparator extends PrefixComparator {
     @Override
     public final int compare(long aPrefix, long bPrefix) {
       return UnsignedLongs.compare(aPrefix, bPrefix);
     }
   }
 
-  private static abstract class UnsignedBinaryPrefixComparatorDesc extends PrefixComparator {
+  public static final class UnsignedPrefixComparatorDesc extends PrefixComparator {
     @Override
     public final int compare(long bPrefix, long aPrefix) {
       return UnsignedLongs.compare(aPrefix, bPrefix);
     }
   }
 
-  private static abstract class TwosComplementPrefixComparator extends PrefixComparator {
+  public static final class SignedPrefixComparator extends PrefixComparator {
     @Override
     public final int compare(long a, long b) {
       return (a < b) ? -1 : (a > b) ? 1 : 0;
     }
   }
 
-  private static abstract class TwosComplementPrefixComparatorDesc extends PrefixComparator {
+  public static final class SignedPrefixComparatorDesc extends PrefixComparator {
     @Override
     public final int compare(long b, long a) {
       return (a < b) ? -1 : (a > b) ? 1 : 0;
