@@ -264,15 +264,15 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupp
       val batch = WholeStageCodegen.columnarBatchName
       val itr = WholeStageCodegen.columnarItrName
       val idx = WholeStageCodegen.columnarBatchIdxName
+      ctx.addMutableState(s"$columnarBatchClz", batch, s"$batch = null;", s"$batch = null;")
       ctx.addMutableState("scala.collection.Iterator", itr, s"$itr = null;", s"$itr = null;")
-      ctx.addMutableState("Object", batch, s"$batch = null;", s"$batch = null;")
       ctx.addMutableState("int", idx, s"$idx = 0;")
       val rowidx = ctx.freshName("rowIdx")
       val numrows = ctx.freshName("numRows")
       val colVars = output.indices.map(i => ctx.freshName("col" + i))
       val columnAssigns = colVars.zipWithIndex.map { case (name, i) =>
         ctx.addMutableState(columnVectorClz, name, s"$name = null;", s"$name = null;")
-        s"$name = batch.column((($columnarItrClz)$input).getColumnIndexes()[$i]);" }
+        s"$name = $batch.column((($columnarItrClz)$input).getColumnIndexes()[$i]);" }
 
       val columns = (output zip colVars).map { case (attr, colVar) =>
         new ColumnVectorReference(colVar, rowidx, attr.dataType, attr.nullable).gen(ctx) }
@@ -280,19 +280,15 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupp
        | while (true) {
        |   if ($idx == 0) {
        |     if ($itr.hasNext()) {
-       |       $batch = $itr.next();
+       |       $batch = ($columnarBatchClz)($itr.next());
        |     } else {
        |       cleanup();
        |       break;
        |     }
-       |   }
-       |
-       |   $columnarBatchClz batch = ($columnarBatchClz)$batch;
-       |   if ($idx == 0) {
        |     ${columnAssigns.mkString("", "\n", "")}
        |   }
        |
-       |   int $numrows = batch.numRows();
+       |   int $numrows = $batch.numRows();
        |   while ($idx < $numrows) {
        |     int $rowidx = $idx++;
        |     ${consume(ctx, columns, null).trim}
@@ -385,6 +381,7 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
     } else {
       ctx.isRow = false
       val codeCol = child.asInstanceOf[CodegenSupport].produce(ctx, this)
+      val columnItr = ctx.freshName("columnItr")
 
       val columnarItrClz = "org.apache.spark.sql.execution.columnar.ColumnarIterator"
       s"""
@@ -401,15 +398,15 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
       }
 
       protected void processNext() throws java.io.IOException {
-        $columnarItrClz columnItr = null;
+        $columnarItrClz $columnItr = null;
         if (${WholeStageCodegen.columnarBatchName} != null) {
-          columnItr = ($columnarItrClz)${ctx.iteratorInput};
-          ${WholeStageCodegen.columnarItrName} = columnItr.getInput();
+          $columnItr = ($columnarItrClz)${ctx.iteratorInput};
+          ${WholeStageCodegen.columnarItrName} = $columnItr.getInput();
           processBatch();
         } else if (${ctx.iteratorInput} instanceof $columnarItrClz &&
-          ((columnItr = ($columnarItrClz)${ctx.iteratorInput}).isSupportColumnarCodeGen())) {
+          (($columnItr = ($columnarItrClz)${ctx.iteratorInput}).isSupportColumnarCodeGen())) {
           ${WholeStageCodegen.columnarBatchIdxName} = 0;
-          ${WholeStageCodegen.columnarItrName} = columnItr.getInput();
+          ${WholeStageCodegen.columnarItrName} = $columnItr.getInput();
           processBatch();
         } else {
           processRow();
