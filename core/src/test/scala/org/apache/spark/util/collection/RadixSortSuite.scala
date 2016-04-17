@@ -48,7 +48,9 @@ class RadixSortSuite extends SparkFunSuite with Logging {
     RadixSortType("twos complement desc", PrefixComparators.LONG_DESC, 0, 7, true, true),
     RadixSortType(
       "binary data partial",
-      new PrefixComparator {
+      new PrefixComparators.RadixSortSupport {
+        override def sortDescending = false
+        override def sortSigned = false
         override def compare(a: Long, b: Long): Int = {
           return PrefixComparators.BINARY.compare(a & 0xffffff0000L, b & 0xffffff0000L)
         }
@@ -90,6 +92,12 @@ class RadixSortSuite extends SparkFunSuite with Logging {
   }
 
   for (sortType <- SORT_TYPES_TO_TEST) {
+    test("radix support for " + sortType.name) {
+      val s = sortType.referenceComparator.asInstanceOf[PrefixComparators.RadixSortSupport]
+      assert(s.sortDescending() == sortType.descending)
+      assert(s.sortSigned() == sortType.signed)
+    }
+
     test("sort " + sortType.name) {
       val rand = new XORShiftRandom(123)
       val (ref, buffer) = generateTestData(N, rand.nextLong)
