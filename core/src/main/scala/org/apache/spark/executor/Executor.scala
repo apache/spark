@@ -153,6 +153,21 @@ private[spark] class Executor(
     }
   }
 
+  /**
+   * Function to kill the running tasks in an executor.
+   * This can be called by executor back-ends to kill the
+   * tasks instead of taking the JVM down.
+   * @param interruptThread whether to interrupt the task thread
+   */
+  def killAllTasks(interruptThread: Boolean) : Unit = {
+    // kill all the running tasks
+    for (taskRunner <- runningTasks.values().asScala) {
+      if (taskRunner != null) {
+        taskRunner.kill(interruptThread)
+      }
+    }
+  }
+
   def stop(): Unit = {
     env.metricsSystem.report()
     heartbeater.shutdown()
