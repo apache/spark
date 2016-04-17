@@ -62,9 +62,13 @@ public class PrefixComparators {
   }
 
   //
-  // Standard prefix comparators that define orderings compatible with radix sort.
+  // Standard prefix comparators compatible with radix sort
   //
 
+  /**
+   * Provides radix sort parameters. Comparators implementing this indicate implicitly that the
+   * ordering they define is compatible with radix sort.
+   */
   public static abstract class RadixSortSupport extends PrefixComparator {
     public abstract boolean sortDescending();
     public abstract boolean sortSigned();
