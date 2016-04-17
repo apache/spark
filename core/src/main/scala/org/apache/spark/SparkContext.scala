@@ -338,6 +338,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     override protected def initialValue(): Properties = new Properties()
   }
 
+  // Thread Local variable that can be used by users to pass information down the stack
+  protected[spark] val uninheritableLocalProperties = new ThreadLocal[Properties] {
+    override protected def initialValue(): Properties = new Properties()
+  }
+
   /* ------------------------------------------------------------------------------------- *
    | Initialization. This code initializes the context in a manner that is exception-safe. |
    | All internal fields holding state are initialized here, and any error prompts the     |
@@ -595,11 +600,22 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     }
   }
 
-  private[spark] def getLocalProperties: Properties = localProperties.get()
+  private[spark] def getLocalProperties: (Properties, Properties) =
+    (localProperties.get(), uninheritableLocalProperties.get())
 
-  private[spark] def setLocalProperties(props: Properties) {
+  private[spark] def setLocalProperties(bothProps: (Properties, Properties)) {
+    val props = bothProps._1
+    val uninheritableProps = bothProps._2
     localProperties.set(props)
+    uninheritableLocalProperties.set(uninheritableProps)
   }
+
+  private def setProperty(props: Properties, key: String, value: String) =
+    if (value == null) {
+      props.remove(key)
+    } else {
+      props.setProperty(key, value)
+    }
 
   /**
    * Set a local property that affects jobs submitted from this thread, such as the Spark fair
@@ -612,20 +628,29 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * implementation of thread pools have worker threads spawn other worker threads.
    * As a result, local properties may propagate unpredictably.
    */
-  def setLocalProperty(key: String, value: String) {
-    if (value == null) {
-      localProperties.get.remove(key)
-    } else {
-      localProperties.get.setProperty(key, value)
-    }
-  }
+  def setLocalProperty(key: String, value: String): Unit =
+    setProperty(localProperties.get, key, value)
+
+  /**
+   * Set a local property that affects jobs submitted from this thread, such as the Spark fair
+   * scheduler pool. User-defined properties may also be set here. These properties are propagated
+   * through to worker tasks and can be accessed there via
+   * [[org.apache.spark.TaskContext#getLocalProperty]].
+   *
+   * Properties set through this method will *not* be inherited by spawned threads.
+   */
+  def setUninheritableLocalProperty(key: String, value: String): Unit =
+    setProperty(uninheritableLocalProperties.get, key, value)
+
 
   /**
    * Get a local property set in this thread, or null if it is missing. See
    * [[org.apache.spark.SparkContext.setLocalProperty]].
    */
-  def getLocalProperty(key: String): String =
-    Option(localProperties.get).map(_.getProperty(key)).orNull
+  def getLocalProperty(key: String): String = {
+    lazy val inheritableProperty = Option(localProperties.get).map(_.getProperty(key)).orNull
+    Option(uninheritableLocalProperties.get).map(_.getProperty(key)).getOrElse(inheritableProperty)
+  }
 
   /** Set a human readable description of the current job. */
   def setJobDescription(value: String) {

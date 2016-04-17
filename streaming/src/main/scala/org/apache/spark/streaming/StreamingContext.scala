@@ -202,7 +202,8 @@ class StreamingContext private[streaming] (
 
   // Copy of thread-local properties from SparkContext. These properties will be set in all tasks
   // submitted by this StreamingContext after start.
-  private[streaming] val savedProperties = new AtomicReference[Properties](new Properties)
+  private[streaming] val savedProperties =
+    new AtomicReference[(Properties, Properties)]((new Properties, new Properties))
 
   private[streaming] def getStartSite(): CallSite = startSite.get()
 
@@ -580,7 +581,7 @@ class StreamingContext private[streaming] (
               sparkContext.clearJobGroup()
               sparkContext.setLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, "false")
               savedProperties.set(SerializationUtils.clone(
-                sparkContext.localProperties.get()).asInstanceOf[Properties])
+                sparkContext.localProperties.get()).asInstanceOf[(Properties, Properties)])
               scheduler.start()
             }
             state = StreamingContextState.ACTIVE

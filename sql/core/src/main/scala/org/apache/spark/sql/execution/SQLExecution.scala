@@ -43,7 +43,7 @@ private[sql] object SQLExecution {
     val oldExecutionId = sc.getLocalProperty(EXECUTION_ID_KEY)
     if (oldExecutionId == null) {
       val executionId = SQLExecution.nextExecutionId
-      sc.setLocalProperty(EXECUTION_ID_KEY, executionId.toString)
+      sc.setUninheritableLocalProperty(EXECUTION_ID_KEY, executionId.toString)
       val r = try {
         val callSite = Utils.getCallSite()
         sqlContext.sparkContext.listenerBus.post(SparkListenerSQLExecutionStart(
@@ -56,7 +56,7 @@ private[sql] object SQLExecution {
             executionId, System.currentTimeMillis()))
         }
       } finally {
-        sc.setLocalProperty(EXECUTION_ID_KEY, null)
+        sc.setUninheritableLocalProperty(EXECUTION_ID_KEY, null)
       }
       r
     } else {
@@ -86,10 +86,10 @@ private[sql] object SQLExecution {
   def withExecutionId[T](sc: SparkContext, executionId: String)(body: => T): T = {
     val oldExecutionId = sc.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     try {
-      sc.setLocalProperty(SQLExecution.EXECUTION_ID_KEY, executionId)
+      sc.setUninheritableLocalProperty(SQLExecution.EXECUTION_ID_KEY, executionId)
       body
     } finally {
-      sc.setLocalProperty(SQLExecution.EXECUTION_ID_KEY, oldExecutionId)
+      sc.setUninheritableLocalProperty(SQLExecution.EXECUTION_ID_KEY, oldExecutionId)
     }
   }
 }
