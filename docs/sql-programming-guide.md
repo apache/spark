@@ -1651,7 +1651,7 @@ SELECT * FROM jsonTable
 Spark SQL also supports reading and writing data stored in [Apache Hive](http://hive.apache.org/).
 However, since Hive has a large number of dependencies, it is not included in the default Spark assembly.
 Hive support is enabled by adding the `-Phive` and `-Phive-thriftserver` flags to Spark's build.
-This command builds a new assembly jar that includes Hive. Note that this Hive assembly jar must also be present
+This command builds a new assembly directory that includes Hive. Note that this Hive assembly directory must also be present
 on all of the worker nodes, as they will need access to the Hive serialization and deserialization libraries
 (SerDes) in order to access data stored in Hive.
 
@@ -1770,7 +1770,7 @@ The following options can be used to configure the version of Hive that is used 
       property can be one of three options:
       <ol>
         <li><code>builtin</code></li>
-        Use Hive 1.2.1, which is bundled with the Spark assembly jar when <code>-Phive</code> is
+        Use Hive 1.2.1, which is bundled with the Spark assembly when <code>-Phive</code> is
         enabled. When this option is chosen, <code>spark.sql.hive.metastore.version</code> must be
         either <code>1.2.1</code> or not defined.
         <li><code>maven</code></li>

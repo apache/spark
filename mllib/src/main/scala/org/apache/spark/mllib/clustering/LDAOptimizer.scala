@@ -466,11 +466,7 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
       val stat = BDM.zeros[Double](k, vocabSize)
       var gammaPart = List[BDV[Double]]()
       nonEmptyDocs.foreach { case (_, termCounts: Vector) =>
-        val ids: List[Int] = termCounts match {
-          case v: DenseVector => (0 until v.size).toList
-          case v: SparseVector => v.indices.toList
-        }
-        val (gammad, sstats) = OnlineLDAOptimizer.variationalTopicInference(
+        val (gammad, sstats, ids) = OnlineLDAOptimizer.variationalTopicInference(
           termCounts, expElogbetaBc.value, alpha, gammaShape, k)
         stat(::, ids) := stat(::, ids).toDenseMatrix + sstats
         gammaPart = gammad :: gammaPart
@@ -563,13 +559,16 @@ private[clustering] object OnlineLDAOptimizer {
    * An optimization (Lee, Seung: Algorithms for non-negative matrix factorization, NIPS 2001)
    * avoids explicit computation of variational parameter `phi`.
    * @see [[http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.31.7566]]
+   *
+   * @return Returns a tuple of `gammad` - estimate of gamma, the topic distribution, `sstatsd` -
+   *         statistics for updating lambda and `ids` - list of termCounts vector indices.
    */
   private[clustering] def variationalTopicInference(
       termCounts: Vector,
       expElogbeta: BDM[Double],
       alpha: breeze.linalg.Vector[Double],
       gammaShape: Double,
-      k: Int): (BDV[Double], BDM[Double]) = {
+      k: Int): (BDV[Double], BDM[Double], List[Int]) = {
     val (ids: List[Int], cts: Array[Double]) = termCounts match {
       case v: DenseVector => ((0 until v.size).toList, v.values)
       case v: SparseVector => (v.indices.toList, v.values)
@@ -596,6 +595,6 @@ private[clustering] object OnlineLDAOptimizer {
     }
 
     val sstatsd = expElogthetad.asDenseMatrix.t * (ctsVector :/ phiNorm).asDenseMatrix
-    (gammad, sstatsd)
+    (gammad, sstatsd, ids)
   }
 }
