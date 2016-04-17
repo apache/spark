@@ -1490,6 +1490,36 @@ class Dataset[T] private[sql](
    * Randomly splits this [[Dataset]] with the provided weights.
    *
    * @param weights weights for splits, will be normalized if they don't sum to 1.
+   * @param localSort Whether the partitions should be sorted.
+   * @param seed Seed for sampling.
+   *
+   * For Java API, use [[randomSplitAsList]].
+   *
+   * @group typedrel
+   * @since 2.0.0
+   */
+  def randomSplit(weights: Array[Double], localSort : Boolean, seed: Long): Array[Dataset[T]] = {
+    val sum = weights.sum
+    val normalizedCumWeights = weights.map(_ / sum).scanLeft(0.0d)(_ + _)
+    val plan = if (localSort) {
+      // It is possible that the underlying dataframe doesn't guarantee the ordering of rows in its
+      // constituent partitions each time a split is materialized which could result in
+      // overlapping splits. To prevent this, we explicitly sort each input partition to make the
+      // ordering deterministic.
+      Sort(logicalPlan.output.map(SortOrder(_, Ascending)), global = false, logicalPlan)
+    } else {
+      logicalPlan
+    }
+    normalizedCumWeights.sliding(2).map { x =>
+      new Dataset[T](
+        sqlContext, Sample(x(0), x(1), withReplacement = false, seed, plan)(), encoder)
+    }.toArray
+  }
+
+  /**
+   * Randomly splits this [[Dataset]] with the provided weights.
+   *
+   * @param weights weights for splits, will be normalized if they don't sum to 1.
    * @param seed Seed for sampling.
    *
    * For Java API, use [[randomSplitAsList]].
@@ -1498,17 +1528,7 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   def randomSplit(weights: Array[Double], seed: Long): Array[Dataset[T]] = {
-    // It is possible that the underlying dataframe doesn't guarantee the ordering of rows in its
-    // constituent partitions each time a split is materialized which could result in
-    // overlapping splits. To prevent this, we explicitly sort each input partition to make the
-    // ordering deterministic.
-    val sorted = Sort(logicalPlan.output.map(SortOrder(_, Ascending)), global = false, logicalPlan)
-    val sum = weights.sum
-    val normalizedCumWeights = weights.map(_ / sum).scanLeft(0.0d)(_ + _)
-    normalizedCumWeights.sliding(2).map { x =>
-      new Dataset[T](
-        sqlContext, Sample(x(0), x(1), withReplacement = false, seed, sorted)(), encoder)
-    }.toArray
+    randomSplit(weights, true, seed)
   }
 
   /**
