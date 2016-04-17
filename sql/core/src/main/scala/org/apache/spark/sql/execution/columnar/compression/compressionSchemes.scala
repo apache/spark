@@ -69,7 +69,7 @@ private[columnar] case object PassThrough extends CompressionScheme {
       val nullCount = ByteBufferHelper.getInt(nullsBuffer)
       if (nullCount == 0) {
         nullsBuffer.rewind()
-        (buffer, nullsBuffer)
+        (buffer.duplicate().order(ByteOrder.nativeOrder()), nullsBuffer)
       } else {
         val unitSize = columnType.dataType match {
           case _: BooleanType => 1
@@ -210,6 +210,7 @@ private[columnar] case object RunLengthEncoding extends CompressionScheme {
       } else {
         valueCount += 1
       }
+
       columnType.setField(row, ordinal, currentValue)
     }
 
