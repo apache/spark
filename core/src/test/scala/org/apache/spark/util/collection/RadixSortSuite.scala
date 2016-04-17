@@ -29,8 +29,31 @@ import org.apache.spark.util.collection.unsafe.sort._
 import org.apache.spark.util.random.XORShiftRandom
 
 class RadixSortSuite extends SparkFunSuite with Logging {
-  private val N = 100  // default size of test data
-  private val NUM_FUZZ_ROUNDS = 10
+  private val N = 10000  // default size of test data
+
+  /**
+   * Describes a type of sort to test, e.g. two's complement descending. Each sort type has
+   * a defined reference ordering as well as radix sort parameters that can be used to
+   * reproduce the given ordering.
+   */
+  case class RadixSortType(
+    name: String,
+    referenceComparator: PrefixComparator,
+    startByteIdx: Int, endByteIdx: Int, descending: Boolean, signed: Boolean)
+  
+  val SORT_TYPES_TO_TEST = Seq(
+    RadixSortType("binary data asc", PrefixComparators.BINARY, 0, 7, false, false),
+    RadixSortType("binary data desc", PrefixComparators.BINARY_DESC, 0, 7, true, false),
+    RadixSortType("twos complement asc", PrefixComparators.LONG, 0, 7, false, true),
+    RadixSortType("twos complement desc", PrefixComparators.LONG_DESC, 0, 7, true, true),
+    RadixSortType(
+      "binary data partial",
+      new PrefixComparator {
+        override def compare(a: Long, b: Long): Int = {
+          return PrefixComparators.BINARY.compare(a & 0xffffff0000L, b & 0xffffff0000L)
+        }
+      },
+      2, 4, false, false))
 
   private def generateTestData(size: Int, rand: => Long): (Array[JLong], LongArray) = {
     val ref = Array.tabulate[Long](size) { i => rand }
@@ -66,72 +89,39 @@ class RadixSortSuite extends SparkFunSuite with Logging {
     }
   }
 
-  test("sort binary data") {
-    val rand = new XORShiftRandom(123)
-    val (ref, buffer) = generateTestData(N, rand.nextLong)
-    Arrays.sort(ref, toJavaComparator(PrefixComparators.BINARY))
-    val outOffset = RadixSort.sort(buffer, N, 0, 7, false, false)
-    val result = collectToArray(buffer, outOffset, N)
-    assert(ref.view == result.view)
+  for (sortType <- SORT_TYPES_TO_TEST) {
+    test("sort " + sortType.name) {
+      val rand = new XORShiftRandom(123)
+      val (ref, buffer) = generateTestData(N, rand.nextLong)
+      Arrays.sort(ref, toJavaComparator(sortType.referenceComparator))
+      val outOffset = RadixSort.sort(
+        buffer, N, sortType.startByteIdx, sortType.endByteIdx,
+        sortType.descending, sortType.signed)
+      val result = collectToArray(buffer, outOffset, N)
+      assert(ref.view == result.view)
+    }
+
+    test("sort key prefix " + sortType.name) {
+      val rand = new XORShiftRandom(123)
+      val (buf1, buf2) = generateKeyPrefixTestData(N, rand.nextLong & 0xff)
+      UnsafeSortTestUtil.sortKeyPrefixArrayByPrefix(buf1, N, sortType.referenceComparator)
+      val outOffset = RadixSort.sortKeyPrefixArray(
+        buf2, N, 0, N * 2, sortType.startByteIdx, sortType.endByteIdx,
+        sortType.descending, sortType.signed)
+      val res1 = collectToArray(buf1, 0, N * 2)
+      val res2 = collectToArray(buf2, outOffset, N * 2)
+      assert(res1.view == res2.view)
+    }
   }
 
-  test("sort binary data descending") {
-    val rand = new XORShiftRandom(123)
-    val (ref, buffer) = generateTestData(N, rand.nextLong)
-    Arrays.sort(ref, toJavaComparator(PrefixComparators.BINARY_DESC))
-    val outOffset = RadixSort.sort(buffer, N, 0, 7, true, false)
-    val result = collectToArray(buffer, outOffset, N)
-    assert(ref.view == result.view)
-  }
-
-  test("partial sort binary data") {
-    val rand = new XORShiftRandom(123)
-    val (ref, buffer) = generateTestData(N, rand.nextLong)
-    Arrays.sort(ref, toJavaComparator(new PrefixComparator {
-      override def compare(a: Long, b: Long): Int = {
-        return PrefixComparators.BINARY.compare(a & 0xffffff0000L, b & 0xffffff0000L)
-      }
-    }))
-    val outOffset = RadixSort.sort(buffer, N, 2, 4, false, false)
-    val result = collectToArray(buffer, outOffset, N)
-    assert(ref.view == result.view)
-  }
-
-  test("sort twos complement integers") {
-    val rand = new XORShiftRandom(123)
-    val (ref, buffer) = generateTestData(N, rand.nextLong)
-    Arrays.sort(ref, toJavaComparator(PrefixComparators.LONG))
-    val outOffset = RadixSort.sort(buffer, N, 0, 7, false, true)
-    val result = collectToArray(buffer, outOffset, N)
-    assert(ref.view == result.view)
-  }
-
-  test("sort twos complement integers descending") {
-    val rand = new XORShiftRandom(123)
-    val (ref, buffer) = generateTestData(N, rand.nextLong)
-    Arrays.sort(ref, toJavaComparator(PrefixComparators.LONG_DESC))
-    val outOffset = RadixSort.sort(buffer, N, 0, 7, true, true)
-    val result = collectToArray(buffer, outOffset, N)
-    assert(ref.view == result.view)
-  }
-
-  test("sort key prefix array") {
-    val rand = new XORShiftRandom(123)
-    val (buf1, buf2) = generateKeyPrefixTestData(N, rand.nextLong & 0xff)
-    UnsafeSortTestUtil.sortKeyPrefixArrayByPrefix(buf1, N)
-    val outOffset = RadixSort.sortKeyPrefixArray(buf2, N, 0, N * 2, 0, 7)
-    val res1 = collectToArray(buf1, 0, N * 2)
-    val res2 = collectToArray(buf2, outOffset, N * 2)
-    assert(res1.view == res2.view)
-  }
-
-  test("sort fuzz test") {
+  // Radix sort is sensitive to the value distribution at different bit indices (e.g., we may
+  // omit a sort on a byte if all values are equal). Try with some randomly generated cases.
+  test("fuzz test with random bitmasks") {
     var seed = 0L
     try {
-      for (i <- 0 to NUM_FUZZ_ROUNDS) {
+      for (i <- 0 to 10) {
         seed = System.nanoTime
         val rand = new XORShiftRandom(seed)
-        // Generate a random mask to test RadixSort's behavior with different bit fields missing
         val mask = {
           var tmp = ~0L
           for (i <- 0 to rand.nextInt(5)) {
@@ -151,44 +141,56 @@ class RadixSortSuite extends SparkFunSuite with Logging {
     }
   }
 
-  test("benchmark single long sort") {
-    val size = 1000000
+  ignore("microbenchmarks") {
+    val size = 30000000
     val rand = new XORShiftRandom(123)
-    val benchmark = new Benchmark("radix sort", size)
+    val benchmark = new Benchmark("radix sort " + size, size)
     benchmark.addTimerCase("reference Arrays.sort") { timer =>
-      val (ref, _) = generateTestData(size, rand.nextLong)
+      val ref = Array.tabulate[Long](size) { i => rand.nextLong }
       timer.startTiming()
-      Arrays.sort(ref, toJavaComparator(PrefixComparators.BINARY))
-      timer.stopTiming()
-    }
-    benchmark.addTimerCase("radix sort trivial") { timer =>
-      val (_, buffer) = generateTestData(size, 0xffffffffL)
-      timer.startTiming()
-      RadixSort.sort(buffer, size, 0, 7, false, false)
+      Arrays.sort(ref)
       timer.stopTiming()
     }
     benchmark.addTimerCase("radix sort one byte") { timer =>
-      val (_, buffer) = generateTestData(size, rand.nextLong & 0xff)
+      val array = new Array[Long](size * 2)
+      var i = 0
+      while (i < size) {
+        array(i) = rand.nextLong & 0xff
+        i += 1
+      }
+      val buf = new LongArray(MemoryBlock.fromLongArray(array))
       timer.startTiming()
-      RadixSort.sort(buffer, size, 0, 7, false, false)
+      RadixSort.sort(buf, size, 0, 7, false, false)
       timer.stopTiming()
     }
     benchmark.addTimerCase("radix sort two bytes") { timer =>
-      val (_, buffer) = generateTestData(size, rand.nextLong & 0xffff)
+      val array = new Array[Long](size * 2)
+      var i = 0
+      while (i < size) {
+        array(i) = rand.nextLong & 0xffff
+        i += 1
+      }
+      val buf = new LongArray(MemoryBlock.fromLongArray(array))
       timer.startTiming()
-      RadixSort.sort(buffer, size, 0, 7, false, false)
+      RadixSort.sort(buf, size, 0, 7, false, false)
       timer.stopTiming()
     }
     benchmark.addTimerCase("radix sort eight bytes") { timer =>
-      val (_, buffer) = generateTestData(size, rand.nextLong)
+      val array = new Array[Long](size * 2)
+      var i = 0
+      while (i < size) {
+        array(i) = rand.nextLong
+        i += 1
+      }
+      val buf = new LongArray(MemoryBlock.fromLongArray(array))
       timer.startTiming()
-      RadixSort.sort(buffer, size, 0, 7, false, false)
+      RadixSort.sort(buf, size, 0, 7, false, false)
       timer.stopTiming()
     }
     benchmark.addTimerCase("radix sort key prefix array") { timer =>
       val (_, buf2) = generateKeyPrefixTestData(size, rand.nextLong)
       timer.startTiming()
-      RadixSort.sortKeyPrefixArray(buf2, size, 0, size * 2, 0, 7)
+      RadixSort.sortKeyPrefixArray(buf2, size, 0, size * 2, 0, 7, false, false)
       timer.stopTiming()
     }
     benchmark.run

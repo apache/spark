@@ -23,14 +23,14 @@ import org.apache.spark.unsafe.array.LongArray
 import org.apache.spark.util.collection.Sorter
 
 object UnsafeSortTestUtil {
-  def sortKeyPrefixArrayByPrefix(array: LongArray, length: Int): Unit = {
+  def sortKeyPrefixArrayByPrefix(array: LongArray, length: Int, cmp: PrefixComparator): Unit = {
     val referenceSort = new Sorter(UnsafeSortDataFormat.INSTANCE)
     referenceSort.sort(
       array, 0, length, new Comparator[RecordPointerAndKeyPrefix] {
         override def compare(
             r1: RecordPointerAndKeyPrefix,
             r2: RecordPointerAndKeyPrefix): Int = {
-          PrefixComparators.BINARY.compare(r1.keyPrefix, r2.keyPrefix)
+          cmp.compare(r1.keyPrefix, r2.keyPrefix)
         }
       })
   }

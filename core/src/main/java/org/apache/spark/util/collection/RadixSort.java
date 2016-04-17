@@ -25,7 +25,6 @@ public class RadixSort {
   public static int sort(
       LongArray array, int dataLen, int startByteIdx, int endByteIdx,
       boolean desc, boolean signed) {
-    assert enabled : "Radix sort is disabled.";
     assert startByteIdx >= 0 : "startByteIdx (" + startByteIdx + ") should >= 0";
     assert endByteIdx <= 7 : "endByteIdx (" + endByteIdx + ") should <= 7";
     assert startByteIdx <= endByteIdx;
@@ -58,38 +57,41 @@ public class RadixSort {
   private static void sortAtByte(
       LongArray array, int byteIdx, int dataLen, int dataOffset, int tmpOffset,
       boolean desc, boolean signed) {
-    int[] tmpOffsets = getOffsets(array, byteIdx, dataLen, dataOffset, tmpOffset, desc, signed);
+    int[] offsets = getCounts(array, byteIdx, dataLen, dataOffset);
+    transformCountsToOffsets(offsets, dataLen, tmpOffset, desc, signed);
     for (int i = dataOffset; i < dataOffset + dataLen; i++) {
       long value = array.get(i);
       int bucket = (int)((value >>> (byteIdx * 8)) & 0xff);
-      array.set(tmpOffsets[bucket]++, value);
+      array.set(offsets[bucket]++, value);
     }
   }
 
   // TODO(ekl) it might be worth pre-computing these up-front for all bytes.
-  private static int[] getOffsets(
-      LongArray array, int byteIdx, int dataLen, int dataOffset, int tmpOffset,
-      boolean desc, boolean signed) {
-    int[] tmpOffsets = new int[256];
+  private static int[] getCounts(LongArray array, int byteIdx, int dataLen, int dataOffset) {
+    int[] counts = new int[256];
     for (int i = 0; i < dataLen; i++) {
-      tmpOffsets[(int)((array.get(dataOffset + i) >>> (byteIdx * 8)) & 0xff)]++;
+      counts[(int)((array.get(dataOffset + i) >>> (byteIdx * 8)) & 0xff)]++;
     }
+    return counts;
+  }
+  
+  private static void transformCountsToOffsets(
+      int[] counts, int dataLen, int tmpOffset, boolean desc, boolean signed) {
     int start = signed ? 128 : 0;
     if (desc) {
       int pos = dataLen;
       for (int i = start; i < start + 256; i++) {
-        pos -= tmpOffsets[i & 0xff];
-        tmpOffsets[i & 0xff] = tmpOffset + pos;
+        pos -= counts[i & 0xff];
+        counts[i & 0xff] = tmpOffset + pos;
       }
     } else {
       int pos = 0;
       for (int i = start; i < start + 256; i++) {
-        int tmp = tmpOffsets[i & 0xff];
-        tmpOffsets[i & 0xff] = tmpOffset + pos;
+        int tmp = counts[i & 0xff];
+        counts[i & 0xff] = tmpOffset + pos;
         pos += tmp;
       }
     }
-    return tmpOffsets;
   }
 
   //
@@ -102,7 +104,9 @@ public class RadixSort {
       int dataOffset,
       int tmpOffset,
       int startByteIdx,
-      int endByteIdx) {
+      int endByteIdx,
+      boolean desc,
+      boolean signed) {
     assert startByteIdx >= 0 : "startByteIdx (" + startByteIdx + ") should >= 0";
     assert endByteIdx <= 7 : "endByteIdx (" + endByteIdx + ") should <= 7";
     assert startByteIdx <= endByteIdx;
@@ -122,7 +126,8 @@ public class RadixSort {
       long bitsChanged = andMask ^ orMask;
       for (int i = startByteIdx; i <= endByteIdx; i++) {
         if (((bitsChanged >>> (i * 8)) & 0xff) != 0) {
-          sortKeyPrefixArrayAtByte(array, i, dataLen, dataOffset, tmpOffset);
+          sortKeyPrefixArrayAtByte(
+            array, i, dataLen, dataOffset, tmpOffset, desc, signed && i == endByteIdx);
           int tmp = dataOffset;
           dataOffset = tmpOffset;
           tmpOffset = tmp;
@@ -133,31 +138,27 @@ public class RadixSort {
   }
 
   private static void sortKeyPrefixArrayAtByte(
-      LongArray array, int byteIdx, int dataLen, int dataOffset, int tmpOffset) {
-    int[] tmpOffsets = getKeyPrefixArrayOffsets(array, byteIdx, dataLen, dataOffset, tmpOffset);
+      LongArray array, int byteIdx, int dataLen, int dataOffset, int tmpOffset,
+      boolean desc, boolean signed) {
+    int[] offsets = getKeyPrefixArrayCounts(array, byteIdx, dataLen, dataOffset);
+    transformCountsToOffsets(offsets, dataLen * 2, tmpOffset, desc, signed);
     for (int i = dataOffset; i < dataOffset + dataLen * 2; i += 2) {
       long key = array.get(i);
       long prefix = array.get(i + 1);
       int bucket = (int)((prefix >>> (byteIdx * 8)) & 0xff);
-      int offset = tmpOffsets[bucket];
-      tmpOffsets[bucket] += 2;
+      int offset = offsets[bucket];
+      offsets[bucket] += 2;
       array.set(offset, key);
       array.set(offset + 1, prefix);
     }
   }
 
-  private static int[] getKeyPrefixArrayOffsets(
-      LongArray array, int byteIdx, int dataLen, int dataOffset, int tmpOffset) {
-    int[] tmpOffsets = new int[256];
+  private static int[] getKeyPrefixArrayCounts(
+      LongArray array, int byteIdx, int dataLen, int dataOffset) {
+    int[] counts = new int[256];
     for (int i = 0; i < dataLen * 2; i += 2) {
-      tmpOffsets[(int)((array.get(dataOffset + i + 1) >>> (byteIdx * 8)) & 0xff)] += 2;
+      counts[(int)((array.get(dataOffset + i + 1) >>> (byteIdx * 8)) & 0xff)] += 2;
     }
-    int accum = 0;
-    for (int i = 0; i < 256; i++) {
-      int tmp = tmpOffsets[i];
-      tmpOffsets[i] = tmpOffset + accum;
-      accum += tmp;
-    }
-    return tmpOffsets;
+    return counts;
   }
 }
