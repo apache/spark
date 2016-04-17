@@ -371,17 +371,6 @@ class SessionCatalog(
       tableName: TableIdentifier,
       parts: Seq[CatalogTablePartition],
       ignoreIfExists: Boolean): Unit = {
-    val tableMetadata = getTableMetadata(tableName)
-    // Verify if the parts exactly match the partition spec of the table
-    // That is, the columns and the sequence must be the same.
-    parts.foreach { p =>
-      if (tableMetadata.partitionColumnNames != p.spec.keys.toSeq) {
-        throw new AnalysisException(s"Partition spec is invalid. The spec " +
-          s"(${p.spec.keys.mkString(", ")}) must match the partition spec " +
-          s"(${tableMetadata.partitionColumnNames.mkString(", ")}) " +
-          s"defined in table '$tableName'")
-      }
-    }
     val db = tableName.database.getOrElse(currentDb)
     val table = formatTableName(tableName.table)
     externalCatalog.createPartitions(db, table, parts, ignoreIfExists)
@@ -395,16 +384,6 @@ class SessionCatalog(
       tableName: TableIdentifier,
       parts: Seq[TablePartitionSpec],
       ignoreIfNotExists: Boolean): Unit = {
-    val tableMetadata = getTableMetadata(tableName)
-    // Verify if the parts start with the partitioning columns of the table
-    parts.foreach { p =>
-      if (!tableMetadata.partitionColumnNames.startsWith(p.keys.toSeq)) {
-        throw new AnalysisException(s"Partition spec is invalid. The spec " +
-          s"(${p.keys.mkString(", ")}) must be contained within the partition spec " +
-          s"(${tableMetadata.partitionColumnNames.mkString(", ")}) " +
-          s"defined in table '$tableName'")
-      }
-    }
     val db = tableName.database.getOrElse(currentDb)
     val table = formatTableName(tableName.table)
     externalCatalog.dropPartitions(db, table, parts, ignoreIfNotExists)
@@ -420,16 +399,6 @@ class SessionCatalog(
       tableName: TableIdentifier,
       specs: Seq[TablePartitionSpec],
       newSpecs: Seq[TablePartitionSpec]): Unit = {
-    val tableMetadata = getTableMetadata(tableName)
-    // verify if old and new specs are exactly identical to the partitioning columns of the table
-    Seq(specs, newSpecs).flatten.foreach { p =>
-      if (tableMetadata.partitionColumnNames != p.keys.toSeq) {
-        throw new AnalysisException(s"Partition spec is invalid. The spec " +
-          s"(${p.keys.mkString(", ")}) in the specs must match the partition spec " +
-          s"(${tableMetadata.partitionColumnNames.mkString(", ")}) " +
-          s"defined in table '$tableName'")
-      }
-    }
     val db = tableName.database.getOrElse(currentDb)
     val table = formatTableName(tableName.table)
     externalCatalog.renamePartitions(db, table, specs, newSpecs)
@@ -445,17 +414,6 @@ class SessionCatalog(
    * this becomes a no-op.
    */
   def alterPartitions(tableName: TableIdentifier, parts: Seq[CatalogTablePartition]): Unit = {
-    val tableMetadata = getTableMetadata(tableName)
-    // todo: check if Hive support a partial match for alter partition set location
-    // verify if the spec is exactly identical to the partitioning columns of the table
-    parts.foreach { p =>
-      if (tableMetadata.partitionColumnNames != p.spec.keys.toSeq) {
-        throw new AnalysisException(s"Partition spec is invalid. The spec " +
-          s"(${p.spec.keys.mkString(", ")}) must match the partition spec " +
-          s"(${tableMetadata.partitionColumnNames.mkString(", ")}) " +
-          s"defined in table '$tableName'")
-      }
-    }
     val db = tableName.database.getOrElse(currentDb)
     val table = formatTableName(tableName.table)
     externalCatalog.alterPartitions(db, table, parts)
@@ -466,15 +424,6 @@ class SessionCatalog(
    * If no database is specified, assume the table is in the current database.
    */
   def getPartition(tableName: TableIdentifier, spec: TablePartitionSpec): CatalogTablePartition = {
-    val tableMetadata = getTableMetadata(tableName)
-    // verify if the spec is exactly identical to the partitioning columns of the table
-    if (tableMetadata.partitionColumnNames != spec.keys.toSeq) {
-      throw new AnalysisException(s"Partition spec is invalid. The spec " +
-        s"(${spec.keys.mkString(", ")}) in the specs must match the partition spec " +
-        s"(${tableMetadata.partitionColumnNames.mkString(", ")}) " +
-        s"defined in table '$tableName'")
-    }
-
     val db = tableName.database.getOrElse(currentDb)
     val table = formatTableName(tableName.table)
     externalCatalog.getPartition(db, table, spec)

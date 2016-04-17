@@ -491,31 +491,6 @@ class SessionCatalogSuite extends SparkFunSuite {
       TableIdentifier("tbl2", Some("db2")), Seq(part1), ignoreIfExists = true)
   }
 
-  test("create partitions that do not match the part spec") {
-    val catalog = new SessionCatalog(newBasicCatalog())
-    var e = intercept[AnalysisException] {
-      catalog.createPartitions(
-        TableIdentifier("tbl2", Some("db2")),
-        Seq(part1, partWithLessColumns), ignoreIfExists = false)
-    }
-    assert(e.getMessage.contains("Partition spec is invalid. The spec (a) must match " +
-      "the partition spec (a, b) defined in table '`db2`.`tbl2`'"))
-    e = intercept[AnalysisException] {
-      catalog.createPartitions(
-        TableIdentifier("tbl2", Some("db2")),
-        Seq(part1, partWithMoreColumns), ignoreIfExists = true)
-    }
-    assert(e.getMessage.contains("Partition spec is invalid. The spec (a, b, c) must match " +
-      "the partition spec (a, b) defined in table '`db2`.`tbl2`'"))
-    e = intercept[AnalysisException] {
-      catalog.createPartitions(
-        TableIdentifier("tbl2", Some("db2")),
-        Seq(partWithUnknownColumns, part1), ignoreIfExists = true)
-    }
-    assert(e.getMessage.contains("Partition spec is invalid. The spec (a, unknown) must match " +
-      "the partition spec (a, b) defined in table '`db2`.`tbl2`'"))
-  }
-
   test("drop partitions") {
     val externalCatalog = newBasicCatalog()
     val sessionCatalog = new SessionCatalog(externalCatalog)
@@ -571,37 +546,6 @@ class SessionCatalogSuite extends SparkFunSuite {
       TableIdentifier("tbl2", Some("db2")),
       Seq(part3.spec),
       ignoreIfNotExists = true)
-  }
-
-  test("drop partitions with invalid partition spec") {
-    val catalog = new SessionCatalog(newBasicCatalog())
-    var e = intercept[AnalysisException] {
-      catalog.dropPartitions(
-        TableIdentifier("tbl2", Some("db2")),
-        Seq(partWithMoreColumns.spec),
-        ignoreIfNotExists = false)
-    }
-    assert(e.getMessage.contains(
-      "Partition spec is invalid. The spec (a, b, c) must be contained" +
-        " within the partition spec (a, b) defined in table '`db2`.`tbl2`'"))
-    e = intercept[AnalysisException] {
-      catalog.dropPartitions(
-        TableIdentifier("tbl2", Some("db2")),
-        Seq(partWithUnknownColumns.spec),
-        ignoreIfNotExists = false)
-    }
-    assert(e.getMessage.contains(
-      "Partition spec is invalid. The spec (a, unknown) must be contained" +
-        " within the partition spec (a, b) defined in table '`db2`.`tbl2`'"))
-    // This is valid in HiveSessionCatalog, but invalid in SessionCatalog
-    e = intercept[AnalysisException] {
-      catalog.dropPartitions(
-        TableIdentifier("tbl2", Some("db2")),
-        Seq(partWithLessColumns.spec),
-        ignoreIfNotExists = false)
-    }
-    assert(e.getMessage.contains(
-      "The following partitions not found in table 'tbl2' database 'db2':\nMap(a -> 1)"))
   }
 
   test("get partition") {
