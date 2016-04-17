@@ -111,12 +111,10 @@ class InMemoryCatalog extends ExternalCatalog {
   }
 
   override def alterDatabase(dbDefinition: CatalogDatabase): Unit = synchronized {
-    requireDbExists(dbDefinition.name)
     catalog(dbDefinition.name).db = dbDefinition
   }
 
   override def getDatabase(db: String): CatalogDatabase = synchronized {
-    requireDbExists(db)
     catalog(db).db
   }
 
@@ -142,7 +140,6 @@ class InMemoryCatalog extends ExternalCatalog {
       db: String,
       tableDefinition: CatalogTable,
       ignoreIfExists: Boolean): Unit = synchronized {
-    requireDbExists(db)
     val table = tableDefinition.identifier.table
     if (tableExists(db, table)) {
       if (!ignoreIfExists) {
@@ -157,7 +154,6 @@ class InMemoryCatalog extends ExternalCatalog {
       db: String,
       table: String,
       ignoreIfNotExists: Boolean): Unit = synchronized {
-    requireDbExists(db)
     if (tableExists(db, table)) {
       catalog(db).tables.remove(table)
     } else {
@@ -190,12 +186,10 @@ class InMemoryCatalog extends ExternalCatalog {
   }
 
   override def tableExists(db: String, table: String): Boolean = synchronized {
-    requireDbExists(db)
     catalog(db).tables.contains(table)
   }
 
   override def listTables(db: String): Seq[String] = synchronized {
-    requireDbExists(db)
     catalog(db).tables.keySet.toSeq
   }
 
@@ -283,7 +277,6 @@ class InMemoryCatalog extends ExternalCatalog {
   // --------------------------------------------------------------------------
 
   override def createFunction(db: String, func: CatalogFunction): Unit = synchronized {
-    requireDbExists(db)
     if (functionExists(db, func.identifier.funcName)) {
       throw new AlreadyExistFunctionException(db = db, func = func.identifier.funcName)
     } else {
@@ -309,12 +302,10 @@ class InMemoryCatalog extends ExternalCatalog {
   }
 
   override def functionExists(db: String, funcName: String): Boolean = {
-    requireDbExists(db)
     catalog(db).functions.contains(funcName)
   }
 
   override def listFunctions(db: String, pattern: String): Seq[String] = synchronized {
-    requireDbExists(db)
     StringUtils.filterPattern(catalog(db).functions.keysIterator.toSeq, pattern)
   }
 

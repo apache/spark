@@ -38,12 +38,6 @@ import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
 abstract class ExternalCatalog {
   import ExternalCatalog._
 
-  protected def requireDbExists(db: String): Unit = {
-    if (!databaseExists(db)) {
-      throw new NoSuchDatabaseException(db)
-    }
-  }
-
   // --------------------------------------------------------------------------
   // Databases
   // --------------------------------------------------------------------------

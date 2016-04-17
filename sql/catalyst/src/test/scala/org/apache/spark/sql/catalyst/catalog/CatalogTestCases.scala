@@ -70,10 +70,6 @@ abstract class CatalogTestCases extends SparkFunSuite with BeforeAndAfterEach {
     assert(db1.description.contains("db1"))
   }
 
-  test("get database should throw exception when the database does not exist") {
-    intercept[AnalysisException] { newBasicCatalog().getDatabase("db_that_does_not_exist") }
-  }
-
   test("list databases without pattern") {
     val catalog = newBasicCatalog()
     assert(catalog.listDatabases().toSet == Set("default", "db1", "db2"))
@@ -139,12 +135,6 @@ abstract class CatalogTestCases extends SparkFunSuite with BeforeAndAfterEach {
     assert(newDb1.properties.get("good") == Some("true"))
   }
 
-  test("alter database should throw exception when the database does not exist") {
-    intercept[AnalysisException] {
-      newBasicCatalog().alterDatabase(newDb("does_not_exist"))
-    }
-  }
-
   // --------------------------------------------------------------------------
   // Tables
   // --------------------------------------------------------------------------
@@ -167,13 +157,6 @@ abstract class CatalogTestCases extends SparkFunSuite with BeforeAndAfterEach {
 
   test("drop table when database/table does not exist") {
     val catalog = newBasicCatalog()
-    // Should always throw exception when the database does not exist
-    intercept[AnalysisException] {
-      catalog.dropTable("unknown_db", "unknown_table", ignoreIfNotExists = false)
-    }
-    intercept[AnalysisException] {
-      catalog.dropTable("unknown_db", "unknown_table", ignoreIfNotExists = true)
-    }
     // Should throw exception when the table does not exist, if ignoreIfNotExists is false
     intercept[AnalysisException] {
       catalog.dropTable("db2", "unknown_table", ignoreIfNotExists = false)
@@ -190,9 +173,6 @@ abstract class CatalogTestCases extends SparkFunSuite with BeforeAndAfterEach {
 
   test("rename table when database/table does not exist") {
     val catalog = newBasicCatalog()
-    intercept[AnalysisException] {
-      catalog.renameTable("unknown_db", "unknown_table", "unknown_table")
-    }
     intercept[AnalysisException] {
       catalog.renameTable("db2", "unknown_table", "unknown_table")
     }
@@ -211,9 +191,6 @@ abstract class CatalogTestCases extends SparkFunSuite with BeforeAndAfterEach {
   test("alter table when database/table does not exist") {
     val catalog = newBasicCatalog()
     intercept[AnalysisException] {
-      catalog.alterTable("unknown_db", newTable("tbl1", "unknown_db"))
-    }
-    intercept[AnalysisException] {
       catalog.alterTable("db2", newTable("unknown_table", "db2"))
     }
   }
@@ -225,23 +202,18 @@ abstract class CatalogTestCases extends SparkFunSuite with BeforeAndAfterEach {
   test("get table when database/table does not exist") {
     val catalog = newBasicCatalog()
     intercept[AnalysisException] {
-      catalog.getTable("unknown_db", "unknown_table")
-    }
-    intercept[AnalysisException] {
       catalog.getTable("db2", "unknown_table")
     }
   }
 
   test("list tables without pattern") {
     val catalog = newBasicCatalog()
-    intercept[AnalysisException] { catalog.listTables("unknown_db") }
     assert(catalog.listTables("db1").toSet == Set.empty)
     assert(catalog.listTables("db2").toSet == Set("tbl1", "tbl2"))
   }
 
   test("list tables with pattern") {
     val catalog = newBasicCatalog()
-    intercept[AnalysisException] { catalog.listTables("unknown_db", "*") }
     assert(catalog.listTables("db1", "*").toSet == Set.empty)
     assert(catalog.listTables("db2", "*").toSet == Set("tbl1", "tbl2"))
     assert(catalog.listTables("db2", "tbl*").toSet == Set("tbl1", "tbl2"))
@@ -262,9 +234,6 @@ abstract class CatalogTestCases extends SparkFunSuite with BeforeAndAfterEach {
 
   test("create partitions when database/table does not exist") {
     val catalog = newBasicCatalog()
-    intercept[AnalysisException] {
-      catalog.createPartitions("does_not_exist", "tbl1", Seq(), ignoreIfExists = false)
-    }
     intercept[AnalysisException] {
       catalog.createPartitions("db2", "does_not_exist", Seq(), ignoreIfExists = false)
     }
@@ -296,10 +265,6 @@ abstract class CatalogTestCases extends SparkFunSuite with BeforeAndAfterEach {
     val catalog = newBasicCatalog()
     intercept[AnalysisException] {
       catalog.dropPartitions(
-        "does_not_exist", "tbl1", Seq(), ignoreIfNotExists = false)
-    }
-    intercept[AnalysisException] {
-      catalog.dropPartitions(
         "db2", "does_not_exist", Seq(), ignoreIfNotExists = false)
     }
   }
@@ -326,9 +291,6 @@ abstract class CatalogTestCases extends SparkFunSuite with BeforeAndAfterEach {
   test("get partition when database/table does not exist") {
     val catalog = newBasicCatalog()
     intercept[AnalysisException] {
-      catalog.getPartition("does_not_exist", "tbl1", part1.spec)
-    }
-    intercept[AnalysisException] {
       catalog.getPartition("db2", "does_not_exist", part1.spec)
     }
   }
@@ -348,9 +310,6 @@ abstract class CatalogTestCases extends SparkFunSuite with BeforeAndAfterEach {
 
   test("rename partitions when database/table does not exist") {
     val catalog = newBasicCatalog()
-    intercept[AnalysisException] {
-      catalog.renamePartitions("does_not_exist", "tbl1", Seq(part1.spec), Seq(part2.spec))
-    }
     intercept[AnalysisException] {
       catalog.renamePartitions("db2", "does_not_exist", Seq(part1.spec), Seq(part2.spec))
     }
@@ -392,9 +351,6 @@ abstract class CatalogTestCases extends SparkFunSuite with BeforeAndAfterEach {
   test("alter partitions when database/table does not exist") {
     val catalog = newBasicCatalog()
     intercept[AnalysisException] {
-      catalog.alterPartitions("does_not_exist", "tbl1", Seq(part1))
-    }
-    intercept[AnalysisException] {
       catalog.alterPartitions("db2", "does_not_exist", Seq(part1))
     }
   }
@@ -410,13 +366,6 @@ abstract class CatalogTestCases extends SparkFunSuite with BeforeAndAfterEach {
     assert(catalog.listFunctions("mydb", "*").toSet == Set("myfunc"))
   }
 
-  test("create function when database does not exist") {
-    val catalog = newBasicCatalog()
-    intercept[AnalysisException] {
-      catalog.createFunction("does_not_exist", newFunc())
-    }
-  }
-
   test("create function that already exists") {
     val catalog = newBasicCatalog()
     intercept[AnalysisException] {
@@ -429,13 +378,6 @@ abstract class CatalogTestCases extends SparkFunSuite with BeforeAndAfterEach {
     assert(catalog.listFunctions("db2", "*").toSet == Set("func1"))
     catalog.dropFunction("db2", "func1")
     assert(catalog.listFunctions("db2", "*").isEmpty)
-  }
-
-  test("drop function when database does not exist") {
-    val catalog = newBasicCatalog()
-    intercept[AnalysisException] {
-      catalog.dropFunction("does_not_exist", "something")
-    }
   }
 
   test("drop function that does not exist") {
@@ -455,13 +397,6 @@ abstract class CatalogTestCases extends SparkFunSuite with BeforeAndAfterEach {
     }
   }
 
-  test("get function when database does not exist") {
-    val catalog = newBasicCatalog()
-    intercept[AnalysisException] {
-      catalog.getFunction("does_not_exist", "func1")
-    }
-  }
-
   test("rename function") {
     val catalog = newBasicCatalog()
     val newName = "funcky"
@@ -473,7 +408,9 @@ abstract class CatalogTestCases extends SparkFunSuite with BeforeAndAfterEach {
     intercept[AnalysisException] { catalog.renameFunction("db2", "does_not_exist", "me") }
   }
 
-  test("rename function when database does not exist") {
+  // So far, rename function is not used in SessionCatalog.
+  // Thus, this test case is unable to move SessionCatalogSuite.
+  ignore("rename function when database does not exist") {
     val catalog = newBasicCatalog()
     intercept[AnalysisException] {
       catalog.renameFunction("does_not_exist", "func1", "func5")
