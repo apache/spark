@@ -20,7 +20,7 @@ import warnings
 from pyspark import since
 from pyspark.ml.param.shared import *
 from pyspark.ml.util import *
-from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaCallable
+from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaWrapper
 from pyspark.mllib.common import inherit_doc
 from pyspark.sql import DataFrame
 
@@ -28,6 +28,7 @@ from pyspark.sql import DataFrame
 __all__ = ['AFTSurvivalRegression', 'AFTSurvivalRegressionModel',
            'DecisionTreeRegressor', 'DecisionTreeRegressionModel',
            'GBTRegressor', 'GBTRegressionModel',
+           'GeneralizedLinearRegression', 'GeneralizedLinearRegressionModel',
            'IsotonicRegression', 'IsotonicRegressionModel',
            'LinearRegression', 'LinearRegressionModel',
            'LinearRegressionSummary', 'LinearRegressionTrainingSummary',
@@ -187,7 +188,7 @@ class LinearRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
         return LinearRegressionSummary(java_lr_summary)
 
 
-class LinearRegressionSummary(JavaCallable):
+class LinearRegressionSummary(JavaWrapper):
     """
     .. note:: Experimental
 
@@ -477,7 +478,7 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         """
         Sets the value of :py:attr:`isotonic`.
         """
-        self._paramMap[self.isotonic] = value
+        self._set(isotonic=value)
         return self
 
     def getIsotonic(self):
@@ -490,7 +491,7 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         """
         Sets the value of :py:attr:`featureIndex`.
         """
-        self._paramMap[self.featureIndex] = value
+        self._set(featureIndex=value)
         return self
 
     def getFeatureIndex(self):
@@ -540,7 +541,7 @@ class TreeEnsembleParams(DecisionTreeParams):
         """
         Sets the value of :py:attr:`subsamplingRate`.
         """
-        self._paramMap[self.subsamplingRate] = value
+        self._set(subsamplingRate=value)
         return self
 
     @since("1.4.0")
@@ -570,7 +571,7 @@ class TreeRegressorParams(Params):
         """
         Sets the value of :py:attr:`impurity`.
         """
-        self._paramMap[self.impurity] = value
+        self._set(impurity=value)
         return self
 
     @since("1.4.0")
@@ -603,7 +604,7 @@ class RandomForestParams(TreeEnsembleParams):
         """
         Sets the value of :py:attr:`numTrees`.
         """
-        self._paramMap[self.numTrees] = value
+        self._set(numTrees=value)
         return self
 
     @since("1.4.0")
@@ -618,7 +619,7 @@ class RandomForestParams(TreeEnsembleParams):
         """
         Sets the value of :py:attr:`featureSubsetStrategy`.
         """
-        self._paramMap[self.featureSubsetStrategy] = value
+        self._set(featureSubsetStrategy=value)
         return self
 
     @since("1.4.0")
@@ -901,7 +902,8 @@ class RandomForestRegressionModel(TreeEnsembleModels, JavaMLWritable, JavaMLRead
 
 @inherit_doc
 class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
-                   GBTParams, HasCheckpointInterval, HasStepSize, HasSeed):
+                   GBTParams, HasCheckpointInterval, HasStepSize, HasSeed, JavaMLWritable,
+                   JavaMLReadable):
     """
     `http://en.wikipedia.org/wiki/Gradient_boosting Gradient-Boosted Trees (GBTs)`
     learning algorithm for regression.
@@ -924,6 +926,18 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
     >>> test1 = sqlContext.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
     >>> model.transform(test1).head().prediction
     1.0
+    >>> gbtr_path = temp_path + "gbtr"
+    >>> gbt.save(gbtr_path)
+    >>> gbt2 = GBTRegressor.load(gbtr_path)
+    >>> gbt2.getMaxDepth()
+    2
+    >>> model_path = temp_path + "gbtr_model"
+    >>> model.save(model_path)
+    >>> model2 = GBTRegressionModel.load(model_path)
+    >>> model.featureImportances == model2.featureImportances
+    True
+    >>> model.treeWeights == model2.treeWeights
+    True
 
     .. versionadded:: 1.4.0
     """
@@ -977,7 +991,7 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
         """
         Sets the value of :py:attr:`lossType`.
         """
-        self._paramMap[self.lossType] = value
+        self._set(lossType=value)
         return self
 
     @since("1.4.0")
@@ -988,7 +1002,7 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
         return self.getOrDefault(self.lossType)
 
 
-class GBTRegressionModel(TreeEnsembleModels):
+class GBTRegressionModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable):
     """
     Model fitted by GBTRegressor.
 
@@ -1112,7 +1126,7 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         """
         Sets the value of :py:attr:`censorCol`.
         """
-        self._paramMap[self.censorCol] = value
+        self._set(censorCol=value)
         return self
 
     @since("1.6.0")
@@ -1127,7 +1141,7 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         """
         Sets the value of :py:attr:`quantileProbabilities`.
         """
-        self._paramMap[self.quantileProbabilities] = value
+        self._set(quantileProbabilities=value)
         return self
 
     @since("1.6.0")
@@ -1142,7 +1156,7 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         """
         Sets the value of :py:attr:`quantilesCol`.
         """
-        self._paramMap[self.quantilesCol] = value
+        self._set(quantilesCol=value)
         return self
 
     @since("1.6.0")
@@ -1195,6 +1209,150 @@ class AFTSurvivalRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
         Predicted value
         """
         return self._call_java("predict", features)
+
+
+@inherit_doc
+class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, HasPredictionCol,
+                                  HasFitIntercept, HasMaxIter, HasTol, HasRegParam, HasWeightCol,
+                                  HasSolver, JavaMLWritable, JavaMLReadable):
+    """
+    Generalized Linear Regression.
+
+    Fit a Generalized Linear Model specified by giving a symbolic description of the linear
+    predictor (link function) and a description of the error distribution (family). It supports
+    "gaussian", "binomial", "poisson" and "gamma" as family. Valid link functions for each family
+    is listed below. The first link function of each family is the default one.
+    - "gaussian" -> "identity", "log", "inverse"
+    - "binomial" -> "logit", "probit", "cloglog"
+    - "poisson"  -> "log", "identity", "sqrt"
+    - "gamma"    -> "inverse", "identity", "log"
+
+    .. seealso:: `GLM <https://en.wikipedia.org/wiki/Generalized_linear_model>`_
+
+    >>> from pyspark.mllib.linalg import Vectors
+    >>> df = sqlContext.createDataFrame([
+    ...     (1.0, Vectors.dense(0.0, 0.0)),
+    ...     (1.0, Vectors.dense(1.0, 2.0)),
+    ...     (2.0, Vectors.dense(0.0, 0.0)),
+    ...     (2.0, Vectors.dense(1.0, 1.0)),], ["label", "features"])
+    >>> glr = GeneralizedLinearRegression(family="gaussian", link="identity")
+    >>> model = glr.fit(df)
+    >>> abs(model.transform(df).head().prediction - 1.5) < 0.001
+    True
+    >>> model.coefficients
+    DenseVector([1.5..., -1.0...])
+    >>> abs(model.intercept - 1.5) < 0.001
+    True
+    >>> glr_path = temp_path + "/glr"
+    >>> glr.save(glr_path)
+    >>> glr2 = GeneralizedLinearRegression.load(glr_path)
+    >>> glr.getFamily() == glr2.getFamily()
+    True
+    >>> model_path = temp_path + "/glr_model"
+    >>> model.save(model_path)
+    >>> model2 = GeneralizedLinearRegressionModel.load(model_path)
+    >>> model.intercept == model2.intercept
+    True
+    >>> model.coefficients[0] == model2.coefficients[0]
+    True
+
+    .. versionadded:: 2.0.0
+    """
+
+    family = Param(Params._dummy(), "family", "The name of family which is a description of " +
+                   "the error distribution to be used in the model. Supported options: " +
+                   "gaussian(default), binomial, poisson and gamma.")
+    link = Param(Params._dummy(), "link", "The name of link function which provides the " +
+                 "relationship between the linear predictor and the mean of the distribution " +
+                 "function. Supported options: identity, log, inverse, logit, probit, cloglog " +
+                 "and sqrt.")
+
+    @keyword_only
+    def __init__(self, labelCol="label", featuresCol="features", predictionCol="prediction",
+                 family="gaussian", link=None, fitIntercept=True, maxIter=25, tol=1e-6,
+                 regParam=0.0, weightCol=None, solver="irls"):
+        """
+        __init__(self, labelCol="label", featuresCol="features", predictionCol="prediction", \
+                 family="gaussian", link=None, fitIntercept=True, maxIter=25, tol=1e-6, \
+                 regParam=0.0, weightCol=None, solver="irls")
+        """
+        super(GeneralizedLinearRegression, self).__init__()
+        self._java_obj = self._new_java_obj(
+            "org.apache.spark.ml.regression.GeneralizedLinearRegression", self.uid)
+        self._setDefault(family="gaussian", maxIter=25, tol=1e-6, regParam=0.0, solver="irls")
+        kwargs = self.__init__._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    @since("2.0.0")
+    def setParams(self, labelCol="label", featuresCol="features", predictionCol="prediction",
+                  family="gaussian", link=None, fitIntercept=True, maxIter=25, tol=1e-6,
+                  regParam=0.0, weightCol=None, solver="irls"):
+        """
+        setParams(self, labelCol="label", featuresCol="features", predictionCol="prediction", \
+                  family="gaussian", link=None, fitIntercept=True, maxIter=25, tol=1e-6, \
+                  regParam=0.0, weightCol=None, solver="irls")
+        Sets params for generalized linear regression.
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
+
+    def _create_model(self, java_model):
+        return GeneralizedLinearRegressionModel(java_model)
+
+    @since("2.0.0")
+    def setFamily(self, value):
+        """
+        Sets the value of :py:attr:`family`.
+        """
+        self._set(family=value)
+        return self
+
+    @since("2.0.0")
+    def getFamily(self):
+        """
+        Gets the value of family or its default value.
+        """
+        return self.getOrDefault(self.family)
+
+    @since("2.0.0")
+    def setLink(self, value):
+        """
+        Sets the value of :py:attr:`link`.
+        """
+        self._set(link=value)
+        return self
+
+    @since("2.0.0")
+    def getLink(self):
+        """
+        Gets the value of link or its default value.
+        """
+        return self.getOrDefault(self.link)
+
+
+class GeneralizedLinearRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
+    """
+    Model fitted by GeneralizedLinearRegression.
+
+    .. versionadded:: 2.0.0
+    """
+
+    @property
+    @since("2.0.0")
+    def coefficients(self):
+        """
+        Model coefficients.
+        """
+        return self._call_java("coefficients")
+
+    @property
+    @since("2.0.0")
+    def intercept(self):
+        """
+        Model intercept.
+        """
+        return self._call_java("intercept")
 
 
 if __name__ == "__main__":

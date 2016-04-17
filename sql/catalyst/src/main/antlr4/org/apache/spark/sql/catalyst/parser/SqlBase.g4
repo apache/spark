@@ -55,6 +55,8 @@ statement
         rowFormat?  createFileFormat? locationSpec?
         (TBLPROPERTIES tablePropertyList)?
         (AS? query)?                                                   #createTable
+    | CREATE TABLE (IF NOT EXISTS)? target=tableIdentifier
+        LIKE source=tableIdentifier                                    #createTableLike
     | ANALYZE TABLE tableIdentifier partitionSpec? COMPUTE STATISTICS
         (identifier | FOR COLUMNS identifierSeq?)?                     #analyze
     | ALTER (TABLE | VIEW) from=tableIdentifier
@@ -136,10 +138,7 @@ statement
     ;
 
 hiveNativeCommands
-    : createTableHeader LIKE tableIdentifier
-        rowFormat?  createFileFormat? locationSpec?
-        (TBLPROPERTIES tablePropertyList)?
-    | DELETE FROM tableIdentifier (WHERE booleanExpression)?
+    : DELETE FROM tableIdentifier (WHERE booleanExpression)?
     | TRUNCATE TABLE tableIdentifier partitionSpec?
         (COLUMNS identifierList)?
     | SHOW COLUMNS (FROM | IN) tableIdentifier ((FROM|IN) identifier)?
@@ -148,7 +147,7 @@ hiveNativeCommands
     | ROLLBACK WORK?
     | SHOW PARTITIONS tableIdentifier partitionSpec?
     | DFS .*?
-    | (CREATE | ALTER | DROP | SHOW | DESC | DESCRIBE | MSCK | LOAD) .*?
+    | (CREATE | ALTER | DROP | SHOW | DESC | DESCRIBE | LOAD) .*?
     ;
 
 unsupportedHiveNativeCommands
@@ -177,6 +176,7 @@ unsupportedHiveNativeCommands
     | kw1=UNLOCK kw2=DATABASE
     | kw1=CREATE kw2=TEMPORARY kw3=MACRO
     | kw1=DROP kw2=TEMPORARY kw3=MACRO
+    | kw1=MSCK kw2=REPAIR kw3=TABLE
     ;
 
 createTableHeader
@@ -271,8 +271,7 @@ createFileFormat
     ;
 
 fileFormat
-    : INPUTFORMAT inFmt=STRING OUTPUTFORMAT outFmt=STRING (SERDE serdeCls=STRING)?
-      (INPUTDRIVER inDriver=STRING OUTPUTDRIVER outDriver=STRING)?                         #tableFileFormat
+    : INPUTFORMAT inFmt=STRING OUTPUTFORMAT outFmt=STRING (SERDE serdeCls=STRING)?         #tableFileFormat
     | identifier                                                                           #genericFileFormat
     ;
 
@@ -651,7 +650,7 @@ nonReserved
     | AFTER | CASCADE | RESTRICT | BUCKETS | CLUSTERED | SORTED | PURGE | INPUTFORMAT | OUTPUTFORMAT
     | INPUTDRIVER | OUTPUTDRIVER | DBPROPERTIES | DFS | TRUNCATE | METADATA | REPLICATION | COMPUTE
     | STATISTICS | ANALYZE | PARTITIONED | EXTERNAL | DEFINED | RECORDWRITER
-    | REVOKE | GRANT | LOCK | UNLOCK | MSCK | EXPORT | IMPORT | LOAD | VALUES | COMMENT | ROLE
+    | REVOKE | GRANT | LOCK | UNLOCK | MSCK | REPAIR | EXPORT | IMPORT | LOAD | VALUES | COMMENT | ROLE
     | ROLES | COMPACTIONS | PRINCIPALS | TRANSACTIONS | INDEX | INDEXES | LOCKS | OPTION
     ;
 
@@ -867,6 +866,7 @@ GRANT: 'GRANT';
 LOCK: 'LOCK';
 UNLOCK: 'UNLOCK';
 MSCK: 'MSCK';
+REPAIR: 'REPAIR';
 EXPORT: 'EXPORT';
 IMPORT: 'IMPORT';
 LOAD: 'LOAD';
