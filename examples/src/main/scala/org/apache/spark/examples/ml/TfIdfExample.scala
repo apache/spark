@@ -20,7 +20,7 @@ package org.apache.spark.examples.ml
 
 import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
-import org.apache.spark.ml.feature.{HashingTF, IDF, Tokenizer}
+import org.apache.spark.ml.feature.{CountVectorizer, HashingTF, IDF, Tokenizer}
 // $example off$
 import org.apache.spark.sql.SQLContext
 
@@ -43,6 +43,8 @@ object TfIdfExample {
     val hashingTF = new HashingTF()
       .setInputCol("words").setOutputCol("rawFeatures").setNumFeatures(20)
     val featurizedData = hashingTF.transform(wordsData)
+    // alternatively, CountVectorizer can also be used to get term frequency vectors
+
     val idf = new IDF().setInputCol("rawFeatures").setOutputCol("features")
     val idfModel = idf.fit(featurizedData)
     val rescaledData = idfModel.transform(featurizedData)
