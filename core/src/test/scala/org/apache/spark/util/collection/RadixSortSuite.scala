@@ -42,8 +42,8 @@ class RadixSortSuite extends SparkFunSuite with Logging {
     startByteIdx: Int, endByteIdx: Int, descending: Boolean, signed: Boolean)
   
   val SORT_TYPES_TO_TEST = Seq(
-    RadixSortType("binary data asc", PrefixComparators.BINARY, 0, 7, false, false),
-    RadixSortType("binary data desc", PrefixComparators.BINARY_DESC, 0, 7, true, false),
+    RadixSortType("unsigned binary data asc", PrefixComparators.BINARY, 0, 7, false, false),
+    RadixSortType("unsigned binary data desc", PrefixComparators.BINARY_DESC, 0, 7, true, false),
     RadixSortType("twos complement asc", PrefixComparators.LONG, 0, 7, false, true),
     RadixSortType("twos complement desc", PrefixComparators.LONG_DESC, 0, 7, true, true),
     RadixSortType(
@@ -142,7 +142,7 @@ class RadixSortSuite extends SparkFunSuite with Logging {
   }
 
   ignore("microbenchmarks") {
-    val size = 30000000
+    val size = 50000000
     val rand = new XORShiftRandom(123)
     val benchmark = new Benchmark("radix sort " + size, size)
     benchmark.addTimerCase("reference Arrays.sort") { timer =>

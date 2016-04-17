@@ -101,6 +101,8 @@ class PrefixComparatorsSuite extends SparkFunSuite with PropertyChecks {
   test("double prefix comparator handles NaNs properly") {
     val nan1: Double = java.lang.Double.longBitsToDouble(0x7ff0000000000001L)
     val nan2: Double = java.lang.Double.longBitsToDouble(0x7fffffffffffffffL)
+    assert(
+      java.lang.Double.doubleToRawLongBits(nan1) != java.lang.Double.doubleToRawLongBits(nan2))
     assert(nan1.isNaN)
     assert(nan2.isNaN)
     val nan1Prefix = PrefixComparators.DoublePrefixComparator.computePrefix(nan1)
@@ -110,4 +112,12 @@ class PrefixComparatorsSuite extends SparkFunSuite with PropertyChecks {
     assert(PrefixComparators.DOUBLE.compare(nan1Prefix, doubleMaxPrefix) === 1)
   }
 
+  test("double prefix comparator handles negative NaNs properly") {
+    val negativeNan: Double = java.lang.Double.longBitsToDouble(0xfff0000000000001L)
+    assert(negativeNan.isNaN)
+    assert(java.lang.Double.doubleToRawLongBits(negativeNan) < 0)
+    val prefix = PrefixComparators.DoublePrefixComparator.computePrefix(negativeNan)
+    val doubleMaxPrefix = PrefixComparators.DoublePrefixComparator.computePrefix(Double.MaxValue)
+    assert(PrefixComparators.DOUBLE.compare(prefix, doubleMaxPrefix) === 1)
+  }
 }
