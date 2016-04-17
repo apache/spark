@@ -62,7 +62,7 @@ public class PrefixComparators {
   }
 
   //
-  // Standard prefix comparators that support radix sort.
+  // Standard prefix comparators that define orderings compatible with radix sort.
   //
 
   public static abstract class RadixSortSupport extends PrefixComparator {
