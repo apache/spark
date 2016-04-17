@@ -249,7 +249,7 @@ object RandomForestRegressionModel extends MLReadable[RandomForestRegressionMode
 
     override def load(path: String): RandomForestRegressionModel = {
       implicit val format = DefaultFormats
-      val (metadata: Metadata, treesData: Array[(Metadata, Node)]) =
+      val (metadata: Metadata, treesData: Array[(Metadata, Node)], treeWeights: Array[Double]) =
         EnsembleModelReadWrite.loadImpl(path, sqlContext, className, treeClassName)
       val numFeatures = (metadata.metadata \ "numFeatures").extract[Int]
       val numTrees = (metadata.metadata \ "numTrees").extract[Int]

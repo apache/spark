@@ -512,3 +512,15 @@ object XxHash64Function extends InterpretedHashFunction {
     XXH64.hashUnsafeBytes(base, offset, len, seed)
   }
 }
+
+/**
+ * Returns the current database of the SessionCatalog.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_() - Returns the current database.",
+  extended = "> SELECT _FUNC_()")
+private[sql] case class CurrentDatabase() extends LeafExpression with Unevaluable {
+  override def dataType: DataType = StringType
+  override def foldable: Boolean = true
+  override def nullable: Boolean = false
+}
