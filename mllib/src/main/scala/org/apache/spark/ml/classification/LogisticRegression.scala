@@ -100,7 +100,8 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
    * The class with largest value p/t is predicted, where p is the original probability of that
    * class and t is the class' threshold.
    *
-   * Note: When [[setThresholds()]] is called, any user-set value for [[threshold]] will be cleared.
+   * Note: After being re-enabled once multi-class logistic regression is included, when
+   *      [[setThresholds()]] is called any user-set value for [[threshold]] will be cleared.
    *       If both [[threshold]] and [[thresholds]] are set in a ParamMap, then they must be
    *       equivalent.
    *
