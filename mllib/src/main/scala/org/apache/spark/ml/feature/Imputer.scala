@@ -112,9 +112,9 @@ class Imputer @Since("2.0.0")(override val uid: String)
   override def fit(dataset: Dataset[_]): ImputerModel = {
     val ic = col($(inputCol))
     val filtered = dataset.select(ic.cast(DoubleType))
-      .filter(ic.isNotNull && !ic.isNaN && ic =!= $(missingValue))
+      .filter(ic.isNotNull && ic =!= $(missingValue))
     val surrogate = $(strategy) match {
-      case "mean" => filtered.select(avg($(inputCol))).first().getDouble(0)
+      case "mean" => filtered.filter(!ic.isNaN).select(avg($(inputCol))).first().getDouble(0)
       case "median" => filtered.stat.approxQuantile($(inputCol), Array(0.5), 0.001)(0)
       case "mode" => filtered.rdd.map(r => r.getDouble(0)).map(d => (d, 1)).reduceByKey(_ + _)
         .sortBy(-_._2).first()._1
@@ -168,7 +168,6 @@ class ImputerModel private[ml](
       case _: NumericType =>
         val ic = col($(inputCol)).cast(DoubleType)
         dataset.withColumn($(outputCol), when(ic.isNull, surrogate)
-          .when(ic.isNaN, surrogate)
           .when(ic === $(missingValue), surrogate)
           .otherwise(ic)
           .cast(inputType))
