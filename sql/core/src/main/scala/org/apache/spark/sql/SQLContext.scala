@@ -41,7 +41,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.ShowTablesCommand
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.ui.{SQLListener, SQLTab}
-import org.apache.spark.sql.internal.{SessionState, SQLConf}
+import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ExecutionListenerManager
@@ -63,17 +63,14 @@ import org.apache.spark.util.Utils
  * @since 1.0.0
  */
 class SQLContext private[sql](
-    @transient val sparkContext: SparkContext,
-    @transient protected[sql] val cacheManager: CacheManager,
-    @transient private[sql] val listener: SQLListener,
-    val isRootContext: Boolean,
-    @transient private[sql] val externalCatalog: ExternalCatalog)
+    @transient protected[sql] val sharedState: SharedState,
+    val isRootContext: Boolean)
   extends Logging with Serializable {
 
   self =>
 
   def this(sc: SparkContext) = {
-    this(sc, new CacheManager, SQLContext.createListenerAndUI(sc), true, new InMemoryCatalog)
+    this(new SharedState(sc), true)
   }
 
   def this(sparkContext: JavaSparkContext) = this(sparkContext.sc)
@@ -100,20 +97,20 @@ class SQLContext private[sql](
     }
   }
 
+  def sparkContext: SparkContext = sharedState.sparkContext
+
+  protected[sql] def cacheManager: CacheManager = sharedState.cacheManager
+  protected[sql] def listener: SQLListener = sharedState.listener
+  protected[sql] def externalCatalog: ExternalCatalog = sharedState.externalCatalog
+
   /**
-   * Returns a SQLContext as new session, with separated SQL configurations, temporary tables,
-   * registered functions, but sharing the same SparkContext, CacheManager, SQLListener and SQLTab.
+   * Returns a [[SQLContext]] as new session, with separated SQL configurations, temporary
+   * tables, registered functions, but sharing the same [[SparkContext]], cached data and
+   * other things.
    *
    * @since 1.6.0
    */
-  def newSession(): SQLContext = {
-    new SQLContext(
-      sparkContext = sparkContext,
-      cacheManager = cacheManager,
-      listener = listener,
-      isRootContext = false,
-      externalCatalog = externalCatalog)
-  }
+  def newSession(): SQLContext = new SQLContext(sharedState, isRootContext = false)
 
   /**
    * Per-session state, e.g. configuration, functions, temporary tables etc.
