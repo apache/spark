@@ -149,7 +149,7 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
     val accumUpdates = taskContext.taskMetrics.accumulatorUpdates()
     assert(accumUpdates.size > 0)
     assert(accumUpdates.forall(_.internal))
-    val testAccum = taskContext.taskMetrics.getAccum(TEST_ACCUM)
+    val testAccum = taskContext.taskMetrics.testAccum.get
     assert(accumUpdates.exists(_.id == testAccum.id))
   }
 
@@ -160,7 +160,7 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
     sc.addSparkListener(listener)
     // Have each task add 1 to the internal accumulator
     val rdd = sc.parallelize(1 to 100, numPartitions).mapPartitions { iter =>
-      TaskContext.get().taskMetrics().getAccum(TEST_ACCUM) += 1
+      TaskContext.get().taskMetrics().testAccum.get += 1
       iter
     }
     // Register asserts in job completion callback to avoid flakiness
@@ -196,17 +196,17 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
     val rdd = sc.parallelize(1 to 100, numPartitions)
       .map { i => (i, i) }
       .mapPartitions { iter =>
-        TaskContext.get().taskMetrics().getAccum(TEST_ACCUM) += 1
+        TaskContext.get().taskMetrics().testAccum.get += 1
         iter
       }
       .reduceByKey { case (x, y) => x + y }
       .mapPartitions { iter =>
-        TaskContext.get().taskMetrics().getAccum(TEST_ACCUM) += 10
+        TaskContext.get().taskMetrics().testAccum.get += 10
         iter
       }
       .repartition(numPartitions * 2)
       .mapPartitions { iter =>
-        TaskContext.get().taskMetrics().getAccum(TEST_ACCUM) += 100
+        TaskContext.get().taskMetrics().testAccum.get += 100
         iter
       }
     // Register asserts in job completion callback to avoid flakiness
@@ -236,7 +236,7 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
     // This should retry both stages in the scheduler. Note that we only want to fail the
     // first stage attempt because we want the stage to eventually succeed.
     val x = sc.parallelize(1 to 100, numPartitions)
-      .mapPartitions { iter => TaskContext.get().taskMetrics().getAccum(TEST_ACCUM) += 1; iter }
+      .mapPartitions { iter => TaskContext.get().taskMetrics().testAccum.get += 1; iter }
       .groupBy(identity)
     val sid = x.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]].shuffleHandle.shuffleId
     val rdd = x.mapPartitionsWithIndex { case (i, iter) =>

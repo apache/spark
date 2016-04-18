@@ -43,7 +43,7 @@ private[spark] class TaskContextImpl(
   /**
    * Metrics associated with this task.
    */
-  override val taskMetrics: TaskMetrics = new TaskMetrics(initialAccumulators)
+  override val taskMetrics: TaskMetrics = new TaskMetrics
 
   /** List of callback functions to execute when the task completes. */
   @transient private val onCompleteCallbacks = new ArrayBuffer[TaskCompletionListener]

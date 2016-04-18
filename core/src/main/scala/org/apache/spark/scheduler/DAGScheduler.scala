@@ -1088,7 +1088,7 @@ class DAGScheduler(
     val task = event.task
     val stage = stageIdToStage(task.stageId)
     try {
-      event.accumUpdates.foreach { ainfo =>
+      event.accumUpdates.filterNot(_.internal).foreach { ainfo =>
         assert(ainfo.update.isDefined, "accumulator from task should have a partial value")
         val id = ainfo.id
         val partialValue = ainfo.update.get

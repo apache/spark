@@ -269,9 +269,7 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
     val execId = "exe-1"
 
     def makeTaskMetrics(base: Int): TaskMetrics = {
-      val accums = InternalAccumulator.createAll()
-      accums.foreach(Accumulators.register)
-      val taskMetrics = new TaskMetrics(accums)
+      val taskMetrics = new TaskMetrics
       val shuffleReadMetrics = taskMetrics.createTempShuffleReadMetrics()
       val shuffleWriteMetrics = taskMetrics.shuffleWriteMetrics
       val inputMetrics = taskMetrics.inputMetrics

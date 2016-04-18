@@ -162,8 +162,8 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     }.count()
     // The one that counts failed values should be 4x the one that didn't,
     // since we ran each task 4 times
-    assert(Accumulators.get(acc1.id).get.value === 40L)
-    assert(Accumulators.get(acc2.id).get.value === 10L)
+    assert(acc1.value === 40L)
+    assert(acc2.value === 10L)
   }
 
   test("failed tasks collect only accumulators whose values count during failures") {
