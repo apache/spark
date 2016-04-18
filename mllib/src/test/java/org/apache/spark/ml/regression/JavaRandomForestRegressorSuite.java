@@ -22,16 +22,18 @@ import java.util.HashMap;
 import java.util.Map;
 
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.mllib.classification.LogisticRegressionSuite;
-import org.apache.spark.ml.impl.TreeTests;
+import org.apache.spark.ml.tree.impl.TreeTests;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Row;
 
 
 public class JavaRandomForestRegressorSuite implements Serializable {
@@ -57,8 +59,8 @@ public class JavaRandomForestRegressorSuite implements Serializable {
 
     JavaRDD<LabeledPoint> data = sc.parallelize(
       LogisticRegressionSuite.generateLogisticInputAsList(A, B, nPoints, 42), 2).cache();
-    Map<Integer, Integer> categoricalFeatures = new HashMap<Integer, Integer>();
-    DataFrame dataFrame = TreeTests.setMetadata(data, categoricalFeatures, 0);
+    Map<Integer, Integer> categoricalFeatures = new HashMap<>();
+    Dataset<Row> dataFrame = TreeTests.setMetadata(data, categoricalFeatures, 0);
 
     // This tests setters. Training with various options is tested in Scala.
     RandomForestRegressor rf = new RandomForestRegressor()
@@ -79,6 +81,24 @@ public class JavaRandomForestRegressorSuite implements Serializable {
     for (String featureSubsetStrategy: RandomForestRegressor.supportedFeatureSubsetStrategies()) {
       rf.setFeatureSubsetStrategy(featureSubsetStrategy);
     }
+    String realStrategies[] = {".1", ".10", "0.10", "0.1", "0.9", "1.0"};
+    for (String strategy: realStrategies) {
+      rf.setFeatureSubsetStrategy(strategy);
+    }
+    String integerStrategies[] = {"1", "10", "100", "1000", "10000"};
+    for (String strategy: integerStrategies) {
+      rf.setFeatureSubsetStrategy(strategy);
+    }
+    String invalidStrategies[] = {"-.1", "-.10", "-0.10", ".0", "0.0", "1.1", "0"};
+    for (String strategy: invalidStrategies) {
+      try {
+        rf.setFeatureSubsetStrategy(strategy);
+        Assert.fail("Expected exception to be thrown for invalid strategies");
+      } catch (Exception e) {
+        Assert.assertTrue(e instanceof IllegalArgumentException);
+      }
+    }
+
     RandomForestRegressionModel model = rf.fit(dataFrame);
 
     model.transform(dataFrame);

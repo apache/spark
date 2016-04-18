@@ -24,7 +24,8 @@ import org.apache.spark.ml.regression.LinearRegression;
 import org.apache.spark.ml.regression.LinearRegressionModel;
 import org.apache.spark.ml.regression.LinearRegressionTrainingSummary;
 import org.apache.spark.mllib.linalg.Vectors;
-import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
 // $example off$
 
@@ -36,7 +37,7 @@ public class JavaLinearRegressionWithElasticNetExample {
 
     // $example on$
     // Load training data
-    DataFrame training = sqlContext.read().format("libsvm")
+    Dataset<Row> training = sqlContext.read().format("libsvm")
       .load("data/mllib/sample_linear_regression_data.txt");
 
     LinearRegression lr = new LinearRegression()

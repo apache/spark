@@ -376,6 +376,25 @@ object Decimal {
 
   def apply(value: String): Decimal = new Decimal().set(BigDecimal(value))
 
+  // This is used for RowEncoder to handle Decimal inside external row.
+  def fromDecimal(value: Any): Decimal = {
+    value match {
+      case j: java.math.BigDecimal => apply(j)
+      case d: Decimal => d
+    }
+  }
+
+  /**
+   * Creates a decimal from unscaled, precision and scale without checking the bounds.
+   */
+  def createUnsafe(unscaled: Long, precision: Int, scale: Int): Decimal = {
+    val dec = new Decimal()
+    dec.longVal = unscaled
+    dec._precision = precision
+    dec._scale = scale
+    dec
+  }
+
   // Evidence parameters for Decimal considered either as Fractional or Integral. We provide two
   // parameters inheriting from a common trait since both traits define mkNumericOps.
   // See scala.math's Numeric.scala for examples for Scala's built-in types.

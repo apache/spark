@@ -24,7 +24,7 @@ import scala.language.existentials
 import com.google.common.cache.{CacheBuilder, CacheLoader}
 import org.codehaus.janino.ClassBodyEvaluator
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
@@ -37,6 +37,8 @@ import org.apache.spark.util.Utils
  * Java source for evaluating an [[Expression]] given a [[InternalRow]] of input.
  *
  * @param code The sequence of statements required to evaluate the expression.
+ *             It should be empty string, if `isNull` and `value` are already existed, or no code
+ *             needed to evaluate them (literals).
  * @param isNull A term that holds a boolean value representing whether the expression evaluated
  *                 to null.
  * @param value A term for a (possibly primitive) value of the result of the evaluation. Not
@@ -56,10 +58,10 @@ class CodegenContext {
   val references: mutable.ArrayBuffer[Any] = new mutable.ArrayBuffer[Any]()
 
   /**
-    * Add an object to `references`, create a class member to access it.
-    *
-    * Returns the name of class member.
-    */
+   * Add an object to `references`, create a class member to access it.
+   *
+   * Returns the name of class member.
+   */
   def addReferenceObj(name: String, obj: Any, className: String = null): String = {
     val term = freshName(name)
     val idx = references.length
@@ -70,10 +72,20 @@ class CodegenContext {
   }
 
   /**
-    * Holding a list of generated columns as input of current operator, will be used by
-    * BoundReference to generate code.
-    */
+   * Holding a list of generated columns as input of current operator, will be used by
+   * BoundReference to generate code.
+   */
   var currentVars: Seq[ExprCode] = null
+
+  /**
+   * Whether should we copy the result rows or not.
+   *
+   * If any operator inside WholeStageCodegen generate multiple rows from a single row (for
+   * example, Join), this should be true.
+   *
+   * If an operator starts a new pipeline, this should be reset to false before calling `consume()`.
+   */
+  var copyResult: Boolean = false
 
   /**
    * Holding expressions' mutable states like `MonotonicallyIncreasingID.count` as a
@@ -124,7 +136,7 @@ class CodegenContext {
    * For expressions that appear more than once, generate additional code to prevent
    * recomputing the value.
    *
-   * For example, consider two exprsesion generated from this SQL statement:
+   * For example, consider two expression generated from this SQL statement:
    *  SELECT (col1 + col2), (col1 + col2) / col3.
    *
    *  equivalentExpressions will match the tree containing `col1 + col2` and it will only
@@ -138,7 +150,7 @@ class CodegenContext {
   // Foreach expression that is participating in subexpression elimination, the state to use.
   val subExprEliminationExprs = mutable.HashMap.empty[Expression, SubExprEliminationState]
 
-  // The collection of sub-exression result resetting methods that need to be called on each row.
+  // The collection of sub-expression result resetting methods that need to be called on each row.
   val subexprFunctions = mutable.ArrayBuffer.empty[String]
 
   def declareAddedFunctions(): String = {
@@ -157,14 +169,14 @@ class CodegenContext {
   final var INPUT_ROW = "i"
 
   /**
-    * The map from a variable name to it's next ID.
-    */
+   * The map from a variable name to it's next ID.
+   */
   private val freshNameIds = new mutable.HashMap[String, Int]
   freshNameIds += INPUT_ROW -> 1
 
   /**
-    * A prefix used to generate fresh name.
-    */
+   * A prefix used to generate fresh name.
+   */
   var freshNamePrefix = ""
 
   /**
@@ -222,8 +234,8 @@ class CodegenContext {
   }
 
   /**
-    * Update a column in MutableRow from ExprCode.
-    */
+   * Update a column in MutableRow from ExprCode.
+   */
   def updateColumn(
       row: String,
       dataType: DataType,
@@ -497,7 +509,7 @@ class CodegenContext {
 
   /**
    * Checks and sets up the state and codegen for subexpression elimination. This finds the
-   * common subexpresses, generates the functions that evaluate those expressions and populates
+   * common subexpressions, generates the functions that evaluate those expressions and populates
    * the mapping of common subexpressions to the generated functions.
    */
   private def subexpressionElimination(expressions: Seq[Expression]) = {
@@ -507,7 +519,7 @@ class CodegenContext {
     // Get all the expressions that appear at least twice and set up the state for subexpression
     // elimination.
     val commonExprs = equivalentExpressions.getAllEquivalentExprs.filter(_.size > 1)
-    commonExprs.foreach(e => {
+    commonExprs.foreach { e =>
       val expr = e.head
       val fnName = freshName("evalExpr")
       val isNull = s"${fnName}IsNull"
@@ -549,7 +561,7 @@ class CodegenContext {
       subexprFunctions += s"$fnName($INPUT_ROW);"
       val state = SubExprEliminationState(isNull, value)
       e.foreach(subExprEliminationExprs.put(_, state))
-    })
+    }
   }
 
   /**
@@ -614,15 +626,15 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
 
 object CodeGenerator extends Logging {
   /**
-    * Compile the Java source code into a Java class, using Janino.
-    */
+   * Compile the Java source code into a Java class, using Janino.
+   */
   def compile(code: String): GeneratedClass = {
     cache.get(code)
   }
 
   /**
-    * Compile the Java source code into a Java class, using Janino.
-    */
+   * Compile the Java source code into a Java class, using Janino.
+   */
   private[this] def doCompile(code: String): GeneratedClass = {
     val evaluator = new ClassBodyEvaluator()
     evaluator.setParentClassLoader(Utils.getContextOrSparkClassLoader)
@@ -649,7 +661,7 @@ object CodeGenerator extends Logging {
     logDebug({
       // Only add extra debugging info to byte code when we are going to print the source code.
       evaluator.setDebuggingInformation(true, true, false)
-      formatted
+      s"\n$formatted"
     })
 
     try {

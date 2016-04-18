@@ -501,7 +501,7 @@ class StandaloneDynamicAllocationSuite
     master.self.askWithRetry[MasterStateResponse](RequestMasterState)
   }
 
-  /** Get the applictions that are active from Master */
+  /** Get the applications that are active from Master */
   private def getApplications(): Seq[ApplicationInfo] = {
     getMasterState.activeApps
   }
@@ -561,7 +561,7 @@ class StandaloneDynamicAllocationSuite
       when(endpointRef.address).thenReturn(mockAddress)
       val message = RegisterExecutor(id, endpointRef, 10, Map.empty)
       val backend = sc.schedulerBackend.asInstanceOf[CoarseGrainedSchedulerBackend]
-      backend.driverEndpoint.askWithRetry[CoarseGrainedClusterMessage](message)
+      backend.driverEndpoint.askWithRetry[Boolean](message)
     }
   }
 

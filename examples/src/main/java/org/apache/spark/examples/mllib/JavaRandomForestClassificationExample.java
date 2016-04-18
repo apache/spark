@@ -50,7 +50,7 @@ public class JavaRandomForestClassificationExample {
     // Train a RandomForest model.
     // Empty categoricalFeaturesInfo indicates all features are continuous.
     Integer numClasses = 2;
-    HashMap<Integer, Integer> categoricalFeaturesInfo = new HashMap<Integer, Integer>();
+    HashMap<Integer, Integer> categoricalFeaturesInfo = new HashMap<>();
     Integer numTrees = 3; // Use more in practice.
     String featureSubsetStrategy = "auto"; // Let the algorithm choose.
     String impurity = "gini";
@@ -67,7 +67,7 @@ public class JavaRandomForestClassificationExample {
       testData.mapToPair(new PairFunction<LabeledPoint, Double, Double>() {
         @Override
         public Tuple2<Double, Double> call(LabeledPoint p) {
-          return new Tuple2<Double, Double>(model.predict(p.features()), p.label());
+          return new Tuple2<>(model.predict(p.features()), p.label());
         }
       });
     Double testErr =
@@ -85,5 +85,7 @@ public class JavaRandomForestClassificationExample {
     RandomForestModel sameModel = RandomForestModel.load(jsc.sc(),
       "target/tmp/myRandomForestClassificationModel");
     // $example off$
+
+    jsc.stop();
   }
 }

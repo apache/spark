@@ -20,7 +20,7 @@ package org.apache.spark.mllib.linalg
 import com.github.fommil.netlib.{BLAS => NetlibBLAS, F2jBLAS}
 import com.github.fommil.netlib.BLAS.{getInstance => NativeBLAS}
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 
 /**
  * BLAS routines for MLlib's vectors and matrices.
@@ -420,7 +420,7 @@ private[spark] object BLAS extends Serializable with Logging {
     val AcolPtrs = A.colPtrs
 
     // Slicing is easy in this case. This is the optimal multiplication setting for sparse matrices
-    if (A.isTransposed){
+    if (A.isTransposed) {
       var colCounterForB = 0
       if (!B.isTransposed) { // Expensive to put the check inside the loop
         while (colCounterForB < nB) {

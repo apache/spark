@@ -21,7 +21,7 @@ import java.util.Random
 
 import org.scalatest.Matchers._
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.test.SharedSQLContext
@@ -57,7 +57,7 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
       val splits = data.randomSplit(Array[Double](1, 2, 3), seed)
       assert(splits.length == 3, "wrong number of splits")
 
-      assert(splits.reduce((a, b) => a.unionAll(b)).sort("id").collect().toList ==
+      assert(splits.reduce((a, b) => a.union(b)).sort("id").collect().toList ==
         data.collect().toList, "incomplete or wrong split")
 
       val s = splits.map(_.count())
@@ -80,7 +80,7 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
     // Verify that the splits span the entire dataset
     assert(splits.flatMap(_.collect()).toSet == data.collect().toSet)
 
-    // Verify that the splits don't overalap
+    // Verify that the splits don't overlap
     assert(splits(0).intersect(splits(1)).collect().isEmpty)
 
     // Verify that the results are deterministic across multiple runs
