@@ -1160,7 +1160,7 @@ class MultilayerPerceptronClassificationModel(JavaModel, JavaMLWritable, JavaMLR
         return self._call_java("weights")
 
 
-class OneVsRestParam(HasFeaturesCol, HasLabelCol, HasPredictionCol):
+class OneVsRestParams(HasFeaturesCol, HasLabelCol, HasPredictionCol):
     """
     Parameters for OneVsRest and OneVsRestModel.
     """
@@ -1186,7 +1186,7 @@ class OneVsRestParam(HasFeaturesCol, HasLabelCol, HasPredictionCol):
 
 
 @inherit_doc
-class OneVsRest(Estimator, OneVsRestParam, MLReadable, MLWritable):
+class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
     """
     Reduction of Multiclass Classification to Binary Classification.
     Performs reduction using one against all strategy.
@@ -1340,7 +1340,7 @@ class OneVsRest(Estimator, OneVsRestParam, MLReadable, MLWritable):
         return _java_obj
 
 
-class OneVsRestModel(Model, OneVsRestParam, MLReadable, MLWritable):
+class OneVsRestModel(Model, OneVsRestParams, MLReadable, MLWritable):
     """
     Model fitted by OneVsRest.
     This stores the models resulting from training k binary classifiers: one for each class.
