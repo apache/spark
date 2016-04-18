@@ -168,12 +168,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   protected def waitForSubqueries(): Unit = {
     // fill in the result of subqueries
     subqueryResults.foreach { case (e, futureResult) =>
-      val rows = try {
-        Await.result(futureResult, Duration.Inf)
-      } catch {
-        case NonFatal(t) =>
-          throw new Exception("Exception occurred while waiting for subquery", t)
-      }
+      val rows = ThreadUtils.awaitResult(futureResult, Duration.Inf)
       if (rows.length > 1) {
         sys.error(s"more than one row returned by a subquery used as an expression:\n${e.plan}")
       }

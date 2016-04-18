@@ -20,7 +20,6 @@ package org.apache.spark.scheduler
 import java.io.File
 import java.util.concurrent.TimeoutException
 
-import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
@@ -33,7 +32,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark._
 import org.apache.spark.rdd.{FakeOutputCommitter, RDD}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
  * Unit tests for the output commit coordination functionality.
@@ -160,7 +159,7 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
     // It's an error if the job completes successfully even though no committer was authorized,
     // so throw an exception if the job was allowed to complete.
     intercept[TimeoutException] {
-      Await.result(futureAction, 5 seconds)
+      ThreadUtils.awaitResult(futureAction, 5 seconds)
     }
     assert(tempDir.list().size === 0)
   }

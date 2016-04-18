@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.ThreadUtils
 
 /**
  * Additional tests for code generation.
@@ -43,7 +44,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
       }
     }
 
-    futures.foreach(Await.result(_, 10.seconds))
+    futures.foreach(ThreadUtils.awaitResult(_, 10.seconds))
   }
 
   test("SPARK-8443: split wide projections into blocks due to JVM code size limit") {

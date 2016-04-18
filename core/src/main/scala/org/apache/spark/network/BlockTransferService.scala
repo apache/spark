@@ -20,15 +20,15 @@ package org.apache.spark.network
 import java.io.Closeable
 import java.nio.ByteBuffer
 
-import scala.concurrent.{Await, Future, Promise}
+import scala.concurrent.{Future, Promise}
 import scala.concurrent.duration.Duration
 import scala.reflect.ClassTag
-import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.shuffle.{BlockFetchingListener, ShuffleClient}
 import org.apache.spark.storage.{BlockId, StorageLevel}
+import org.apache.spark.util.ThreadUtils
 
 private[spark]
 abstract class BlockTransferService extends ShuffleClient with Closeable with Logging {
@@ -101,13 +101,7 @@ abstract class BlockTransferService extends ShuffleClient with Closeable with Lo
           result.success(new NioManagedBuffer(ret))
         }
       })
-
-    try {
-      Await.result(result.future, Duration.Inf)
-    } catch {
-      case NonFatal(t) =>
-        throw new Exception("Exception occurred while fetching block", t)
-    }
+    ThreadUtils.awaitResult(result.future, Duration.Inf)
   }
 
   /**
@@ -125,11 +119,6 @@ abstract class BlockTransferService extends ShuffleClient with Closeable with Lo
       level: StorageLevel,
       classTag: ClassTag[_]): Unit = {
     val future = uploadBlock(hostname, port, execId, blockId, blockData, level, classTag)
-    try {
-      Await.result(future, Duration.Inf)
-    } catch {
-      case NonFatal(t) =>
-        throw new Exception("Exception occurred while fetching block", t)
-    }
+    ThreadUtils.awaitResult(future, Duration.Inf)
   }
 }

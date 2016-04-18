@@ -17,10 +17,9 @@
 
 package org.apache.spark.streaming.receiver
 
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.language.{existentials, postfixOps}
-import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -208,12 +207,7 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
 
     // Combine the futures, wait for both to complete, and return the write ahead log record handle
     val combinedFuture = storeInBlockManagerFuture.zip(storeInWriteAheadLogFuture).map(_._2)
-    val walRecordHandle = try {
-      Await.result(combinedFuture, blockStoreTimeout)
-    } catch {
-      case NonFatal(t) =>
-        throw new Exception("Exception occurred while waiting for blocks to be written", t)
-    }
+    val walRecordHandle = ThreadUtils.awaitResult(combinedFuture, blockStoreTimeout)
     WriteAheadLogBasedStoreResult(blockId, numRecords, walRecordHandle)
   }
 

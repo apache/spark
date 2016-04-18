@@ -19,12 +19,11 @@ package org.apache.spark.rpc
 
 import java.util.concurrent.TimeoutException
 
-import scala.concurrent.{Await, Awaitable}
+import scala.concurrent.Future
 import scala.concurrent.duration._
-import scala.util.control.NonFatal
 
 import org.apache.spark.SparkConf
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
  * An exception thrown if RpcTimeout modifies a [[TimeoutException]].
@@ -66,19 +65,13 @@ private[spark] class RpcTimeout(val duration: FiniteDuration, val timeoutProp: S
   /**
    * Wait for the completed result and return it. If the result is not available within this
    * timeout, throw a [[RpcTimeoutException]] to indicate which configuration controls the timeout.
-   * @param  awaitable  the `Awaitable` to be awaited
-   * @throws RpcTimeoutException if after waiting for the specified time `awaitable`
+   *
+   * @param  future  the `Future` to be awaited
+   * @throws RpcTimeoutException if after waiting for the specified time `future`
    *         is still not ready
    */
-  def awaitResult[T](awaitable: Awaitable[T]): T = {
-    try {
-      try {
-        Await.result(awaitable, duration)
-      } catch addMessageIfTimeout
-    } catch {
-      case NonFatal(t) =>
-        throw new Exception("Exception occurred while waiting on future", t)
-    }
+  def awaitResult[T](future: Future[T]): T = {
+    ThreadUtils.awaitResult(future.recover(addMessageIfTimeout)(ThreadUtils.sameThread), duration)
   }
 }
 
