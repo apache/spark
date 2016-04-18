@@ -880,10 +880,17 @@ class SQLTests(ReusedPySparkTestCase):
         shutil.rmtree(tmpPath)
 
     def test_stream_save_options(self):
-        df = self.df
+        df = self.sqlCtx.read.format('text').stream('python/test_support/sql/streaming')
         tmpPath = tempfile.mkdtemp()
         shutil.rmtree(tmpPath)
-        
+        self.assertTrue(df.isStreaming)
+        out = os.path.join(tmpPath, 'out')
+        chk = os.path.join(tmpPath, 'chk')
+        cq = df.write.option('checkpointLocation', chk)\
+            .queryName("this_query").startStream(path=out, format='parquet')
+        self.assertEqual(cq.name, "this_query")
+        self.assertTrue(cq.isActive)
+        cq.stop()
         shutil.rmtree(tmpPath)
 
     def test_help_command(self):

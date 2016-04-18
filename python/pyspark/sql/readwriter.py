@@ -497,9 +497,8 @@ class DataFrameWriter(object):
 
     @ignore_unicode_prefix
     @since(2.0)
-    def startStream(self, path=None, format=None, mode=None, partitionBy=None,
-                    queryName=None, **options):
-        """Saves the contents of the :class:`DataFrame` to a data source.
+    def startStream(self, path=None, format=None, partitionBy=None, queryName=None, **options):
+        """Streams the contents of the :class:`DataFrame` to a data source.
 
         The data source is specified by the ``format`` and a set of ``options``.
         If ``format`` is not specified, the default data source configured by
