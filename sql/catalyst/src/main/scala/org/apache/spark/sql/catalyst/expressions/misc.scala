@@ -49,9 +49,9 @@ case class Md5(child: Expression) extends UnaryExpression with ImplicitCastInput
   protected override def nullSafeEval(input: Any): Any =
     UTF8String.fromString(DigestUtils.md5Hex(input.asInstanceOf[Array[Byte]]))
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c =>
-      s"UTF8String.fromString(org.apache.commons.codec.digest.DigestUtils.md5Hex($c))")
+          s"UTF8String.fromString(org.apache.commons.codec.digest.DigestUtils.md5Hex($c))")
   }
 }
 
@@ -102,7 +102,7 @@ case class Sha2(left: Expression, right: Expression)
     }
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val digestUtils = "org.apache.commons.codec.digest.DigestUtils"
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
       s"""
@@ -147,10 +147,9 @@ case class Sha1(child: Expression) extends UnaryExpression with ImplicitCastInpu
   protected override def nullSafeEval(input: Any): Any =
     UTF8String.fromString(DigestUtils.sha1Hex(input.asInstanceOf[Array[Byte]]))
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c =>
-      s"UTF8String.fromString(org.apache.commons.codec.digest.DigestUtils.sha1Hex($c))"
-    )
+          s"UTF8String.fromString(org.apache.commons.codec.digest.DigestUtils.sha1Hex($c))")
   }
 }
 
@@ -173,15 +172,15 @@ case class Crc32(child: Expression) extends UnaryExpression with ImplicitCastInp
     checksum.getValue
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val CRC32 = "java.util.zip.CRC32"
     nullSafeCodeGen(ctx, ev, value => {
-      s"""
-        $CRC32 checksum = new $CRC32();
-        checksum.update($value, 0, $value.length);
-        ${ev.value} = checksum.getValue();
-      """
-    })
+          s"""
+            $CRC32 checksum = new $CRC32();
+            checksum.update($value, 0, $value.length);
+            ${ev.value} = checksum.getValue();
+          """
+        })
   }
 }
 
@@ -244,7 +243,7 @@ abstract class HashExpression[E] extends Expression {
 
   protected def computeHash(value: Any, dataType: DataType, seed: E): E
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     ev.isNull = "false"
     val childrenHash = children.map { child =>
       val childGen = child.genCode(ctx)
@@ -253,10 +252,9 @@ abstract class HashExpression[E] extends Expression {
       }
     }.mkString("\n")
 
-    s"""
+    ev.copy(s"""
       ${ctx.javaType(dataType)} ${ev.value} = $seed;
-      $childrenHash
-    """
+      $childrenHash""")
   }
 
   private def nullSafeElementHash(
@@ -477,12 +475,12 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
 
   protected override def nullSafeEval(input: Any): Any = input
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, c =>
-      s"""
-         | System.err.println("Result of ${child.simpleString} is " + $c);
-         | ${ev.value} = $c;
-       """.stripMargin)
+          s"""
+             | System.err.println("Result of ${child.simpleString} is " + $c);
+             | ${ev.value} = $c;
+           """.stripMargin)
   }
 }
 
@@ -510,15 +508,12 @@ case class AssertTrue(child: Expression) extends UnaryExpression with ImplicitCa
     }
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval = child.genCode(ctx)
-    ev.isNull = "true"
-    ev.value = "null"
-    s"""${eval.code}
+    ExprCode(code = s"""${eval.code}
        |if (${eval.isNull} || !${eval.value}) {
        |  throw new RuntimeException("'${child.simpleString}' is not true.");
-       |}
-     """.stripMargin
+       |}""".stripMargin, isNull = "true", value = "null")
   }
 
   override def sql: String = s"assert_true(${child.sql})"
