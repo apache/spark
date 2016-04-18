@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.test.SQLTestData._
 
@@ -193,8 +194,21 @@ class UDFSuite extends QueryTest with SharedSQLContext {
     assert(sql("SELECT intExpected(1.0)").head().getInt(0) === 1)
   }
 
+  test("udf in interpreted projection") {
+    sqlContext.udf.register("testDataFunc", (n: Int, s: String) => { (n, s) })
+
+    // TakeOrderedAndProject uses InterpretedProjection to do projection
+    // So this SQL will call interpreted version of ScalaUDF
+    checkAnswer(
+      sql("""
+           | SELECT testDataFunc(t.key, t.value) FROM
+           | (SELECT key, value FROM testData ORDER BY key) t LIMIT 100
+          """.stripMargin).toDF(), testData.select(struct("key", "value")))
+  }
+
   test("udf in different types") {
     sqlContext.udf.register("testDataFunc", (n: Int, s: String) => { (n, s) })
+    sqlContext.udf.register("testDataFunc2", (ns: Row) => { (ns.getInt(0), ns.getString(1)) })
     sqlContext.udf.register("decimalDataFunc",
       (a: java.math.BigDecimal, b: java.math.BigDecimal) => { (a, b) })
     sqlContext.udf.register("binaryDataFunc", (a: Array[Byte], b: Int) => { (a, b) })
@@ -208,6 +222,9 @@ class UDFSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       sql("SELECT tmp.t.* FROM (SELECT testDataFunc(key, value) AS t from testData) tmp").toDF(),
       testData)
+    checkAnswer(
+      sql("SELECT testDataFunc2(s) AS t from complexData").toDF(),
+      complexData.select("s"))
     checkAnswer(
       sql("""
            | SELECT tmp.t.* FROM
