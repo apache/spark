@@ -1777,6 +1777,23 @@ object functions {
   def round(e: Column, scale: Int): Column = withExpr { Round(e.expr, Literal(scale)) }
 
   /**
+   * Returns the value of the column `e` rounded to 0 decimal places with HALF_EVEN round mode.
+   *
+   * @group math_funcs
+   * @since 2.0.0
+   */
+  def bround(e: Column): Column = bround(e, 0)
+
+  /**
+   * Round the value of `e` to `scale` decimal places with HALF_EVEN round mode
+   * if `scale` >= 0 or at integral part when `scale` < 0.
+   *
+   * @group math_funcs
+   * @since 2.0.0
+   */
+  def bround(e: Column, scale: Int): Column = withExpr { BRound(e.expr, Literal(scale)) }
+
+  /**
    * Shift the given value numBits left. If the given value is a long value, this function
    * will return a long value else it will return an integer value.
    *

@@ -779,7 +779,6 @@ case class Logarithm(left: Expression, right: Expression)
 /**
  * Round the `child`'s result to `scale` decimal place when `scale` >= 0
  * or round at integral part when `scale` < 0.
- * For example, round(31.415, 2) = 31.42 and round(31.415, -1) = 30.
  *
  * Child of IntegralType would round to itself when `scale` >= 0.
  * Child of FractionalType whose value is NaN or Infinite would always round to itself.
@@ -789,16 +788,12 @@ case class Logarithm(left: Expression, right: Expression)
  *
  * @param child expr to be round, all [[NumericType]] is allowed as Input
  * @param scale new scale to be round to, this should be a constant int at runtime
+ * @param mode rounding mode (e.g. HALF_UP, HALF_UP)
+ * @param modeStr rounding mode string name (e.g. "ROUND_HALF_UP", "ROUND_HALF_EVEN")
  */
-@ExpressionDescription(
-  usage = "_FUNC_(x, d) - Round x to d decimal places.",
-  extended = "> SELECT _FUNC_(12.3456, 1);\n 12.3")
-case class Round(child: Expression, scale: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes {
-
-  import BigDecimal.RoundingMode.HALF_UP
-
-  def this(child: Expression) = this(child, Literal(0))
+abstract class RoundBase(child: Expression, scale: Expression,
+    mode: BigDecimal.RoundingMode.Value, modeStr: String)
+  extends BinaryExpression with Serializable with ImplicitCastInputTypes {
 
   override def left: Expression = child
   override def right: Expression = scale
@@ -853,28 +848,28 @@ case class Round(child: Expression, scale: Expression)
     child.dataType match {
       case _: DecimalType =>
         val decimal = input1.asInstanceOf[Decimal]
-        if (decimal.changePrecision(decimal.precision, _scale)) decimal else null
+        if (decimal.changePrecision(decimal.precision, _scale, mode)) decimal else null
       case ByteType =>
-        BigDecimal(input1.asInstanceOf[Byte]).setScale(_scale, HALF_UP).toByte
+        BigDecimal(input1.asInstanceOf[Byte]).setScale(_scale, mode).toByte
       case ShortType =>
-        BigDecimal(input1.asInstanceOf[Short]).setScale(_scale, HALF_UP).toShort
+        BigDecimal(input1.asInstanceOf[Short]).setScale(_scale, mode).toShort
       case IntegerType =>
-        BigDecimal(input1.asInstanceOf[Int]).setScale(_scale, HALF_UP).toInt
+        BigDecimal(input1.asInstanceOf[Int]).setScale(_scale, mode).toInt
       case LongType =>
-        BigDecimal(input1.asInstanceOf[Long]).setScale(_scale, HALF_UP).toLong
+        BigDecimal(input1.asInstanceOf[Long]).setScale(_scale, mode).toLong
       case FloatType =>
         val f = input1.asInstanceOf[Float]
         if (f.isNaN || f.isInfinite) {
           f
         } else {
-          BigDecimal(f.toDouble).setScale(_scale, HALF_UP).toFloat
+          BigDecimal(f.toDouble).setScale(_scale, mode).toFloat
         }
       case DoubleType =>
         val d = input1.asInstanceOf[Double]
         if (d.isNaN || d.isInfinite) {
           d
         } else {
-          BigDecimal(d).setScale(_scale, HALF_UP).toDouble
+          BigDecimal(d).setScale(_scale, mode).toDouble
         }
     }
   }
@@ -885,7 +880,8 @@ case class Round(child: Expression, scale: Expression)
     val evaluationCode = child.dataType match {
       case _: DecimalType =>
         s"""
-        if (${ce.value}.changePrecision(${ce.value}.precision(), ${_scale})) {
+        if (${ce.value}.changePrecision(${ce.value}.precision(), ${_scale},
+            java.math.BigDecimal.${modeStr})) {
           ${ev.value} = ${ce.value};
         } else {
           ${ev.isNull} = true;
@@ -894,7 +890,7 @@ case class Round(child: Expression, scale: Expression)
         if (_scale < 0) {
           s"""
           ${ev.value} = new java.math.BigDecimal(${ce.value}).
-            setScale(${_scale}, java.math.BigDecimal.ROUND_HALF_UP).byteValue();"""
+            setScale(${_scale}, java.math.BigDecimal.${modeStr}).byteValue();"""
         } else {
           s"${ev.value} = ${ce.value};"
         }
@@ -902,7 +898,7 @@ case class Round(child: Expression, scale: Expression)
         if (_scale < 0) {
           s"""
           ${ev.value} = new java.math.BigDecimal(${ce.value}).
-            setScale(${_scale}, java.math.BigDecimal.ROUND_HALF_UP).shortValue();"""
+            setScale(${_scale}, java.math.BigDecimal.${modeStr}).shortValue();"""
         } else {
           s"${ev.value} = ${ce.value};"
         }
@@ -910,7 +906,7 @@ case class Round(child: Expression, scale: Expression)
         if (_scale < 0) {
           s"""
           ${ev.value} = new java.math.BigDecimal(${ce.value}).
-            setScale(${_scale}, java.math.BigDecimal.ROUND_HALF_UP).intValue();"""
+            setScale(${_scale}, java.math.BigDecimal.${modeStr}).intValue();"""
         } else {
           s"${ev.value} = ${ce.value};"
         }
@@ -918,7 +914,7 @@ case class Round(child: Expression, scale: Expression)
         if (_scale < 0) {
           s"""
           ${ev.value} = new java.math.BigDecimal(${ce.value}).
-            setScale(${_scale}, java.math.BigDecimal.ROUND_HALF_UP).longValue();"""
+            setScale(${_scale}, java.math.BigDecimal.${modeStr}).longValue();"""
         } else {
           s"${ev.value} = ${ce.value};"
         }
@@ -928,7 +924,7 @@ case class Round(child: Expression, scale: Expression)
             ${ev.value} = ${ce.value};
           } else {
             ${ev.value} = java.math.BigDecimal.valueOf(${ce.value}).
-              setScale(${_scale}, java.math.BigDecimal.ROUND_HALF_UP).floatValue();
+              setScale(${_scale}, java.math.BigDecimal.${modeStr}).floatValue();
           }"""
       case DoubleType => // if child eval to NaN or Infinity, just return it.
         s"""
@@ -936,7 +932,7 @@ case class Round(child: Expression, scale: Expression)
             ${ev.value} = ${ce.value};
           } else {
             ${ev.value} = java.math.BigDecimal.valueOf(${ce.value}).
-              setScale(${_scale}, java.math.BigDecimal.ROUND_HALF_UP).doubleValue();
+              setScale(${_scale}, java.math.BigDecimal.${modeStr}).doubleValue();
           }"""
     }
 
@@ -956,4 +952,31 @@ case class Round(child: Expression, scale: Expression)
       """
     }
   }
+}
+
+/**
+ * Round an expression to d decimal places using HALF_UP rounding mode.
+ * round(2.5) == 3.0, round(3.5) == 4.0.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(x, d) - Round x to d decimal places using HALF_UP rounding mode.",
+  extended = "> SELECT _FUNC_(2.5, 0);\n 3.0")
+case class Round(child: Expression, scale: Expression)
+  extends RoundBase(child, scale, BigDecimal.RoundingMode.HALF_UP, "ROUND_HALF_UP")
+    with Serializable with ImplicitCastInputTypes {
+  def this(child: Expression) = this(child, Literal(0))
+}
+
+/**
+ * Round an expression to d decimal places using HALF_EVEN rounding mode,
+ * also known as Gaussian rounding or bankers' rounding.
+ * round(2.5) = 2.0, round(3.5) = 4.0.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(x, d) - Round x to d decimal places using HALF_EVEN rounding mode.",
+  extended = "> SELECT _FUNC_(2.5, 0);\n 2.0")
+case class BRound(child: Expression, scale: Expression)
+  extends RoundBase(child, scale, BigDecimal.RoundingMode.HALF_EVEN, "ROUND_HALF_EVEN")
+    with Serializable with ImplicitCastInputTypes {
+  def this(child: Expression) = this(child, Literal(0))
 }
