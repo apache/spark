@@ -214,7 +214,7 @@ class TestHiveContext private[hive](
    * Override QueryExecution with special debug workflow.
    */
   class QueryExecution(logicalPlan: LogicalPlan)
-    extends super.QueryExecution(logicalPlan) {
+    extends HiveQueryExecution(self, logicalPlan) {
     def this(sql: String) = this(sessionState.sqlParser.parsePlan(sql))
     override lazy val analyzed = {
       val describedTables = logical match {
