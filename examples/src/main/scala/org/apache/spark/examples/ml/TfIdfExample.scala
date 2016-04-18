@@ -20,7 +20,7 @@ package org.apache.spark.examples.ml
 
 import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
-import org.apache.spark.ml.feature.{CountVectorizer, HashingTF, IDF, Tokenizer}
+import org.apache.spark.ml.feature.{HashingTF, IDF, Tokenizer}
 // $example off$
 import org.apache.spark.sql.SQLContext
 
