@@ -613,7 +613,8 @@ case class TungstenAggregate(
     val updateRowInVectorizedHashMap: Option[String] = {
       if (isVectorizedHashMapEnabled) {
         ctx.INPUT_ROW = vectorizedRowBuffer
-        val vectorizedRowEvals = updateExpr.map(BindReferences.bindReference(_, inputAttr).genCode(ctx))
+        val vectorizedRowEvals =
+          updateExpr.map(BindReferences.bindReference(_, inputAttr).genCode(ctx))
         val updateVectorizedRow = vectorizedRowEvals.zipWithIndex.map { case (ev, i) =>
           val dt = updateExpr(i).dataType
           ctx.updateColumn(vectorizedRowBuffer, dt, i, ev, updateExpr(i).nullable)

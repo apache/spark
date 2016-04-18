@@ -170,7 +170,8 @@ case class BroadcastHashJoin(
       val eval = evaluateRequiredVariables(buildPlan.output, buildVars, expr.references)
       // filter the output via condition
       ctx.currentVars = input ++ buildVars
-      val ev = BindReferences.bindReference(expr, streamedPlan.output ++ buildPlan.output).genCode(ctx)
+      val ev =
+        BindReferences.bindReference(expr, streamedPlan.output ++ buildPlan.output).genCode(ctx)
       s"""
          |$eval
          |${ev.code}
@@ -244,7 +245,8 @@ case class BroadcastHashJoin(
       // evaluate the variables from build side that used by condition
       val eval = evaluateRequiredVariables(buildPlan.output, buildVars, expr.references)
       ctx.currentVars = input ++ buildVars
-      val ev = BindReferences.bindReference(expr, streamedPlan.output ++ buildPlan.output).genCode(ctx)
+      val ev =
+        BindReferences.bindReference(expr, streamedPlan.output ++ buildPlan.output).genCode(ctx)
       s"""
          |boolean $conditionPassed = true;
          |${eval.trim}
