@@ -1502,7 +1502,9 @@ class Dataset[T] private[sql](
     // constituent partitions each time a split is materialized which could result in
     // overlapping splits. To prevent this, we explicitly sort each input partition to make the
     // ordering deterministic.
-    val sorted = Sort(logicalPlan.output.map(SortOrder(_, Ascending)), global = false, logicalPlan)
+    // MapType cannot be sorted.
+    val sorted = Sort(logicalPlan.output.filterNot(_.dataType.isInstanceOf[MapType])
+      .map(SortOrder(_, Ascending)), global = false, logicalPlan)
     val sum = weights.sum
     val normalizedCumWeights = weights.map(_ / sum).scanLeft(0.0d)(_ + _)
     normalizedCumWeights.sliding(2).map { x =>
