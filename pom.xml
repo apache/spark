@@ -345,7 +345,16 @@
         <scope>provided</scope>
       </dependency>
       <!-- End of shaded deps -->
-
+      <dependency>
+        <groupId>edu.berkeley</groupId>
+        <artifactId>sparrow</artifactId>
+        <version>1.0-SNAPSHOT</version>
+      </dependency>
+      <dependency>
+        <groupId>ch.epfl</groupId>
+        <artifactId>eagle</artifactId>
+        <version>1.0-PROTOTYPE</version>
+      </dependency>
       <dependency>
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-lang3</artifactId>

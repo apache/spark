@@ -28,7 +28,7 @@ import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef}
  * @param freeCores  The current number of cores available for work on the executor
  * @param totalCores The total number of cores available to the executor
  */
-private[cluster] class ExecutorData(
+private[scheduler] class ExecutorData(
    val executorEndpoint: RpcEndpointRef,
    val executorAddress: RpcAddress,
    override val executorHost: String,
