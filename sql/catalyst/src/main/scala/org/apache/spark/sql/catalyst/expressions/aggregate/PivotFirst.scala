@@ -51,24 +51,23 @@ object PivotFirst {
 }
 
 /**
-  * PivotFirst is a aggregate function used in the second phase of a two phase pivot to do the
-  * required rearrangement of values into pivoted form.
-  *
-  * For example on an input of
-  * A | B
-  * --+--
-  * x | 1
-  * y | 2
-  * z | 3
-  *
-  * with pivotColumn=A, valueColumn=B, and pivotColumnValues=[z,y] the output is [3,2].
-  *
-  * @param pivotColumn column that determines which output position to put valueColumn in.
-  * @param valueColumn the column that is being rearranged.
-  * @param pivotColumnValues the list of pivotColumn values in the order of desired output. Values
-  *                          not listed here will be ignored.
-  */
-
+ * PivotFirst is a aggregate function used in the second phase of a two phase pivot to do the
+ * required rearrangement of values into pivoted form.
+ *
+ * For example on an input of
+ * A | B
+ * --+--
+ * x | 1
+ * y | 2
+ * z | 3
+ *
+ * with pivotColumn=A, valueColumn=B, and pivotColumnValues=[z,y] the output is [3,2].
+ *
+ * @param pivotColumn column that determines which output position to put valueColumn in.
+ * @param valueColumn the column that is being rearranged.
+ * @param pivotColumnValues the list of pivotColumn values in the order of desired output. Values
+ *                          not listed here will be ignored.
+ */
 case class PivotFirst(
   pivotColumn: Expression,
   valueColumn: Expression,
