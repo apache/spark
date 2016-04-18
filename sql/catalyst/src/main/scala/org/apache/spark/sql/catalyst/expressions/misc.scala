@@ -487,6 +487,44 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
 }
 
 /**
+ * A function throws an exception if 'condition' is not true.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(condition) - Throw an exception if 'condition' is not true.")
+case class AssertTrue(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+
+  override def nullable: Boolean = true
+
+  override def inputTypes: Seq[DataType] = Seq(BooleanType)
+
+  override def dataType: DataType = NullType
+
+  override def prettyName: String = "assert_true"
+
+  override def eval(input: InternalRow) : Any = {
+    val v = child.eval(input)
+    if (v == null || java.lang.Boolean.FALSE.equals(v)) {
+      throw new RuntimeException(s"'${child.simpleString}' is not true!")
+    } else {
+      null
+    }
+  }
+
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+    val eval = child.gen(ctx)
+    ev.isNull = "true"
+    ev.value = "null"
+    s"""${eval.code}
+       |if (${eval.isNull} || !${eval.value}) {
+       |  throw new RuntimeException("'${child.simpleString}' is not true.");
+       |}
+     """.stripMargin
+  }
+
+  override def sql: String = s"assert_true(${child.sql})"
+}
+
+/**
  * A xxHash64 64-bit hash expression.
  */
 case class XxHash64(children: Seq[Expression], seed: Long) extends HashExpression[Long] {
