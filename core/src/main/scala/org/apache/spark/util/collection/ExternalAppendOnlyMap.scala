@@ -112,7 +112,7 @@ class ExternalAppendOnlyMap[K, V, C](
   private val keyComparator = new HashComparator[K]
   private val ser = serializer.newInstance()
 
-  private var memoryOrDiskIterator: Iterator[(K, C)] = null
+  private var inMemoryOrDiskIterator: Iterator[(K, C)] = null
 
   /**
    * Number of files this map has spilled so far.
@@ -176,19 +176,34 @@ class ExternalAppendOnlyMap[K, V, C](
   }
 
   /**
-   * Spill in-memory map to a temporary file on disk.
+   * Sort the existing contents of the in-memory map and spill them to a temporary file on disk.
    */
-  override protected[this] def spill(collection: SizeTracker): Boolean = {
-    var spillIterator: Iterator[(K, C)] = null
-    if (collection == null) {
-      // Spill is called by TaskMemoryManager when there is not enough memory for the task.
-      assert(memoryOrDiskIterator != null)
-      spillIterator = memoryOrDiskIterator
-      logInfo(s"Task ${context.taskAttemptId} force spilling in-memory map to disk and " +
-        s"it will release ${org.apache.spark.util.Utils.bytesToString(getUsed())} memory")
-    } else {
-      spillIterator = currentMap.destructiveSortedIterator(keyComparator)
-    }
+  override protected[this] def spill(collection: SizeTracker): Unit = {
+    val inMemoryIterator = currentMap.destructiveSortedIterator(keyComparator)
+    val diskMapIterator = spillMemoryIteratorToDisk(inMemoryIterator)
+    spilledMaps.append(diskMapIterator)
+  }
+
+  /**
+   * Force to spilling the current in-memory collection to disk to release memory,
+   * It will be called by TaskMemoryManager when there is not enough memory for the task.
+   */
+  override protected[this] def forceSpill(): Boolean = {
+    assert(inMemoryOrDiskIterator != null)
+    val inMemoryIterator = inMemoryOrDiskIterator
+    logInfo(s"Task ${context.taskAttemptId} force spilling in-memory map to disk and " +
+      s"it will release ${org.apache.spark.util.Utils.bytesToString(getUsed())} memory")
+    val diskMapIterator = spillMemoryIteratorToDisk(inMemoryIterator)
+    inMemoryOrDiskIterator = diskMapIterator
+    currentMap = null
+    true
+  }
+
+  /**
+   * Spill the in-memory Iterator to a temporary file on disk.
+   */
+  private[this] def spillMemoryIteratorToDisk(inMemoryIterator: Iterator[(K, C)])
+      : DiskMapIterator = {
     val (blockId, file) = diskBlockManager.createTempLocalBlock()
     curWriteMetrics = new ShuffleWriteMetrics()
     var writer = blockManager.getDiskWriter(blockId, file, ser, fileBufferSize, curWriteMetrics)
@@ -209,8 +224,8 @@ class ExternalAppendOnlyMap[K, V, C](
 
     var success = false
     try {
-      while (spillIterator.hasNext) {
-        val kv = spillIterator.next()
+      while (inMemoryIterator.hasNext) {
+        val kv = inMemoryIterator.next()
         writer.write(kv._1, kv._2)
         objectsWritten += 1
 
@@ -243,14 +258,7 @@ class ExternalAppendOnlyMap[K, V, C](
       }
     }
 
-    val diskMapIterator = new DiskMapIterator(file, blockId, batchSizes)
-    if (collection == null) {
-      memoryOrDiskIterator = diskMapIterator
-      currentMap = null
-    } else {
-      spilledMaps.append(diskMapIterator)
-    }
-    true
+    new DiskMapIterator(file, blockId, batchSizes)
   }
 
   /**
@@ -258,13 +266,13 @@ class ExternalAppendOnlyMap[K, V, C](
    * If this iterator is forced spill to disk to release memory when there is not enough memory,
    * it returns pairs from an on-disk map.
    */
-  def destructiveIterator(mapIterator: Iterator[(K, C)]): Iterator[(K, C)] = {
-    memoryOrDiskIterator = mapIterator
+  def destructiveIterator(inMemoryIterator: Iterator[(K, C)]): Iterator[(K, C)] = {
+    inMemoryOrDiskIterator = inMemoryIterator
     new Iterator[(K, C)] {
 
-      override def hasNext = memoryOrDiskIterator.hasNext
+      override def hasNext = inMemoryOrDiskIterator.hasNext
 
-      override def next() = memoryOrDiskIterator.next()
+      override def next() = inMemoryOrDiskIterator.next()
     }
   }
   /**
@@ -566,7 +574,7 @@ class ExternalAppendOnlyMap[K, V, C](
   private def hashKey(kc: (K, C)): Int = ExternalAppendOnlyMap.hash(kc._1)
 
   override def toString(): String = {
-    return this.getClass.getName + "@" + java.lang.Integer.toHexString(this.hashCode())
+    this.getClass.getName + "@" + java.lang.Integer.toHexString(this.hashCode())
   }
 }
 

@@ -31,7 +31,13 @@ private[spark] abstract class Spillable[C](taskMemoryManager: TaskMemoryManager)
    *
    * @param collection collection to spill to disk
    */
-  protected def spill(collection: C): Boolean
+  protected def spill(collection: C): Unit
+
+  /**
+   * Force to spilling the current in-memory collection to disk to release memory,
+   * It will be called by TaskMemoryManager when there is not enough memory for the task.
+   */
+  protected def forceSpill(): Boolean
 
   // Number of elements read from input since last spill
   protected def elementsRead: Long = _elementsRead
@@ -95,7 +101,7 @@ private[spark] abstract class Spillable[C](taskMemoryManager: TaskMemoryManager)
    */
   override def spill(size: Long, trigger: MemoryConsumer): Long = {
     if (trigger != this && taskMemoryManager.getTungstenMemoryMode == MemoryMode.ON_HEAP) {
-      val isSpilled = spill(null.asInstanceOf[C])
+      val isSpilled = forceSpill()
       if (!isSpilled) {
         0L
       } else {

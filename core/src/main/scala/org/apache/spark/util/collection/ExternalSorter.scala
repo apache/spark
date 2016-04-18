@@ -135,7 +135,7 @@ private[spark] class ExternalSorter[K, V, C](
 
   private var isShuffleSort: Boolean = true
   var forceSpillFile: Option[SpilledFile] = None
-  private var memoryOrDiskIterator: Iterator[((Int, K), C)] = null
+  private var inMemoryOrDiskIterator: Iterator[((Int, K), C)] = null
 
   // A comparator for keys K that orders them within a partition to allow aggregation or sorting.
   // Can be a partial ordering by hash code if a total ordering is not provided through by the
@@ -229,48 +229,48 @@ private[spark] class ExternalSorter[K, V, C](
   }
 
   /**
-   * Spill our in-memory collection to a sorted file.
-   *
+   * Spill our in-memory collection to a sorted file that we can merge later.
+   * We add this file into `spilledFiles` to find it later.
    * @param collection whichever collection we're using (map or buffer)
    */
-  override protected[this] def spill(collection: WritablePartitionedPairCollection[K, C])
-      : Boolean = {
-    var spillIterator: WritablePartitionedIterator = null
-    if (collection == null) {
-      // Spill is called by TaskMemoryManager when there is not enough memory for the task.
-      if (isShuffleSort) {
-        false
-      } else {
-        assert(memoryOrDiskIterator != null)
-        val it = memoryOrDiskIterator
-        spillIterator = new WritablePartitionedIterator {
-          private[this] var cur = if (it.hasNext) it.next() else null
+  override protected[this] def spill(collection: WritablePartitionedPairCollection[K, C]): Unit = {
+    val inMemoryIterator = collection.destructiveSortedWritablePartitionedIterator(comparator)
+    val spillFile = spillMemoryIteratorToDisk(inMemoryIterator)
+    spills.append(spillFile)
+  }
 
-          def writeNext(writer: DiskBlockObjectWriter): Unit = {
-            writer.write(cur._1._2, cur._2)
-            cur = if (it.hasNext) it.next() else null
-          }
-
-          def hasNext(): Boolean = cur != null
-
-          def nextPartition(): Int = cur._1._1
-        }
-        logInfo(s"Task ${context.taskAttemptId} force spilling in-memory map to disk and " +
-          s" it will release ${org.apache.spark.util.Utils.bytesToString(getUsed())} memory")
-        forceSpillFile = Some(spillMemoryToDisk(spillIterator))
-        val spillReader = new SpillReader(forceSpillFile.get)
-        memoryOrDiskIterator = (0 until numPartitions).iterator.flatMap { p =>
-          val iterator = spillReader.readNextPartition()
-          iterator.map(cur => ((p, cur._1), cur._2))
-        }
-        map = null
-        buffer = null
-        true
-      }
+  /**
+   * Force to spilling the current in-memory collection to disk to release memory,
+   * It will be called by TaskMemoryManager when there is not enough memory for the task.
+   */
+  override protected[this] def forceSpill(): Boolean = {
+    if (isShuffleSort) {
+      false
     } else {
-      spillIterator = collection.destructiveSortedWritablePartitionedIterator(comparator)
-      val spillFile = spillMemoryToDisk(spillIterator)
-      spills.append(spillFile)
+      assert(inMemoryOrDiskIterator != null)
+      val it = inMemoryOrDiskIterator
+      val inMemoryIterator = new WritablePartitionedIterator {
+        private[this] var cur = if (it.hasNext) it.next() else null
+
+        def writeNext(writer: DiskBlockObjectWriter): Unit = {
+          writer.write(cur._1._2, cur._2)
+          cur = if (it.hasNext) it.next() else null
+        }
+
+        def hasNext(): Boolean = cur != null
+
+        def nextPartition(): Int = cur._1._1
+      }
+      logInfo(s"Task ${context.taskAttemptId} force spilling in-memory map to disk and " +
+        s" it will release ${org.apache.spark.util.Utils.bytesToString(getUsed())} memory")
+      forceSpillFile = Some(spillMemoryIteratorToDisk(inMemoryIterator))
+      val spillReader = new SpillReader(forceSpillFile.get)
+      inMemoryOrDiskIterator = (0 until numPartitions).iterator.flatMap { p =>
+        val iterator = spillReader.readNextPartition()
+        iterator.map(cur => ((p, cur._1), cur._2))
+      }
+      map = null
+      buffer = null
       true
     }
   }
@@ -278,7 +278,8 @@ private[spark] class ExternalSorter[K, V, C](
   /**
    * Spill contents of in-memory iterator to a temporary file on disk.
    */
-  private def spillMemoryToDisk(memoryIterator: WritablePartitionedIterator): SpilledFile = {
+  private[this] def spillMemoryIteratorToDisk(inMemoryIterator: WritablePartitionedIterator)
+      : SpilledFile = {
     // Because these files may be read during shuffle, their compression must be controlled by
     // spark.shuffle.compress instead of spark.shuffle.spill.compress, so we need to use
     // createTempShuffleBlock here; see SPARK-3426 for more context.
@@ -315,11 +316,11 @@ private[spark] class ExternalSorter[K, V, C](
 
     var success = false
     try {
-      while (memoryIterator.hasNext) {
-        val partitionId = memoryIterator.nextPartition()
+      while (inMemoryIterator.hasNext) {
+        val partitionId = inMemoryIterator.nextPartition()
         require(partitionId >= 0 && partitionId < numPartitions,
           s"partition Id: ${partitionId} should be in the range [0, ${numPartitions})")
-        memoryIterator.writeNext(writer)
+        inMemoryIterator.writeNext(writer)
         elementsPerPartition(partitionId) += 1
         objectsWritten += 1
 
@@ -651,12 +652,12 @@ private[spark] class ExternalSorter[K, V, C](
     if (isShuffleSort) {
       memoryIterator
     } else {
-      memoryOrDiskIterator = memoryIterator
+      inMemoryOrDiskIterator = memoryIterator
       new Iterator[((Int, K), C)] {
 
-        override def hasNext = memoryOrDiskIterator.hasNext
+        override def hasNext = inMemoryOrDiskIterator.hasNext
 
-        override def next() = memoryOrDiskIterator.next()
+        override def next() = inMemoryOrDiskIterator.next()
       }
     }
   }
@@ -766,7 +767,7 @@ private[spark] class ExternalSorter[K, V, C](
   }
 
   override def toString(): String = {
-    return this.getClass.getName + "@" + java.lang.Integer.toHexString(this.hashCode())
+    this.getClass.getName + "@" + java.lang.Integer.toHexString(this.hashCode())
   }
 
   /**
