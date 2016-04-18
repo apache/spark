@@ -50,12 +50,7 @@ case class ExprCode(var code: String, var isNull: String, var value: String)
  * A context for codegen, tracking a list of objects that could be passed into generated Java
  * function.
  */
-class CodegenContext(codegenConf: CodegenConf) {
-
-  /**
-   * Code-generation related configuration (e.g. the maximum number of switches supported)
-   */
-  val conf: CodegenConf = codegenConf
+class CodegenContext {
 
   /**
    * Holding a list of objects that could be used passed into generated class.
@@ -625,7 +620,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
    * expressions that don't support codegen
    */
   def newCodeGenContext(): CodegenContext = {
-    new CodegenContext(EmptyCodegenConf)
+    new CodegenContext
   }
 }
 
