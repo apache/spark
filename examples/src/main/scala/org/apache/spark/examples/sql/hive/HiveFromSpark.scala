@@ -18,9 +18,9 @@
 // scalastyle:off println
 package org.apache.spark.examples.sql.hive
 
-import com.google.common.io.{ByteStreams, Files}
-
 import java.io.File
+
+import com.google.common.io.{ByteStreams, Files}
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql._
@@ -63,7 +63,7 @@ object HiveFromSpark {
     val rddFromSql = sql("SELECT key, value FROM src WHERE key < 10 ORDER BY key")
 
     println("Result of RDD.map:")
-    val rddAsStrings = rddFromSql.map {
+    val rddAsStrings = rddFromSql.rdd.map {
       case Row(key: Int, value: String) => s"Key: $key, Value: $value"
     }
 

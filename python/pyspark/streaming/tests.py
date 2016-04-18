@@ -46,7 +46,6 @@ from pyspark.storagelevel import StorageLevel
 from pyspark.streaming.context import StreamingContext
 from pyspark.streaming.kafka import Broker, KafkaUtils, OffsetRange, TopicAndPartition
 from pyspark.streaming.flume import FlumeUtils
-from pyspark.streaming.mqtt import MQTTUtils
 from pyspark.streaming.kinesis import KinesisUtils, InitialPositionInStream
 from pyspark.streaming.listener import StreamingListener
 
@@ -279,8 +278,10 @@ class BasicOperationTests(PySparkStreamingTestCase):
 
         def func(dstream):
             return dstream.countByValue()
-        expected = [[4], [4], [3]]
-        self._test_func(input, func, expected)
+        expected = [[(1, 2), (2, 2), (3, 2), (4, 2)],
+                    [(5, 2), (6, 2), (7, 1), (8, 1)],
+                    [("a", 2), ("b", 1), ("", 1)]]
+        self._test_func(input, func, expected, sort=True)
 
     def test_groupByKey(self):
         """Basic operation test for DStream.groupByKey."""
@@ -400,6 +401,26 @@ class BasicOperationTests(PySparkStreamingTestCase):
             return dstream.updateStateByKey(updater)
 
         expected = [[0], [0, 1], [0, 1, 2], [0, 1, 2, 3], [0, 1, 2, 3, 4]]
+        expected = [[('k', v)] for v in expected]
+        self._test_func(input, func, expected)
+
+    def test_update_state_by_key_initial_rdd(self):
+
+        def updater(vs, s):
+            if not s:
+                s = []
+            s.extend(vs)
+            return s
+
+        initial = [('k', [0, 1])]
+        initial = self.sc.parallelize(initial, 1)
+
+        input = [[('k', i)] for i in range(2, 5)]
+
+        def func(dstream):
+            return dstream.updateStateByKey(updater, initialRDD=initial)
+
+        expected = [[0, 1, 2], [0, 1, 2, 3], [0, 1, 2, 3, 4]]
         expected = [[('k', v)] for v in expected]
         self._test_func(input, func, expected)
 
@@ -631,7 +652,16 @@ class WindowFunctionTests(PySparkStreamingTestCase):
         def func(dstream):
             return dstream.countByValueAndWindow(2.5, .5)
 
-        expected = [[1], [2], [3], [4], [5], [6], [6], [6], [6], [6]]
+        expected = [[(0, 1)],
+                    [(0, 2), (1, 1)],
+                    [(0, 3), (1, 2), (2, 1)],
+                    [(0, 4), (1, 3), (2, 2), (3, 1)],
+                    [(0, 5), (1, 4), (2, 3), (3, 2), (4, 1)],
+                    [(0, 5), (1, 5), (2, 4), (3, 3), (4, 2), (5, 1)],
+                    [(0, 4), (1, 4), (2, 4), (3, 3), (4, 2), (5, 1)],
+                    [(0, 3), (1, 3), (2, 3), (3, 3), (4, 2), (5, 1)],
+                    [(0, 2), (1, 2), (2, 2), (3, 2), (4, 2), (5, 1)],
+                    [(0, 1), (1, 1), (2, 1), (3, 1), (4, 1), (5, 1)]]
         self._test_func(input, func, expected)
 
     def test_group_by_key_and_window(self):
@@ -975,18 +1005,15 @@ class KafkaStreamTests(PySparkStreamingTestCase):
 
     def setUp(self):
         super(KafkaStreamTests, self).setUp()
-
-        kafkaTestUtilsClz = self.ssc._jvm.java.lang.Thread.currentThread().getContextClassLoader()\
-            .loadClass("org.apache.spark.streaming.kafka.KafkaTestUtils")
-        self._kafkaTestUtils = kafkaTestUtilsClz.newInstance()
+        self._kafkaTestUtils = self.ssc._jvm.org.apache.spark.streaming.kafka.KafkaTestUtils()
         self._kafkaTestUtils.setup()
 
     def tearDown(self):
+        super(KafkaStreamTests, self).tearDown()
+
         if self._kafkaTestUtils is not None:
             self._kafkaTestUtils.teardown()
             self._kafkaTestUtils = None
-
-        super(KafkaStreamTests, self).tearDown()
 
     def _randomTopic(self):
         return "topic-%d" % random.randint(0, 10000)
@@ -1150,6 +1177,55 @@ class KafkaStreamTests(PySparkStreamingTestCase):
         self.assertNotEqual(topic_and_partition_a, topic_and_partition_d)
 
     @unittest.skipIf(sys.version >= "3", "long type not support")
+    def test_kafka_direct_stream_transform_with_checkpoint(self):
+        """Test the Python direct Kafka stream transform with checkpoint correctly recovered."""
+        topic = self._randomTopic()
+        sendData = {"a": 1, "b": 2, "c": 3}
+        kafkaParams = {"metadata.broker.list": self._kafkaTestUtils.brokerAddress(),
+                       "auto.offset.reset": "smallest"}
+
+        self._kafkaTestUtils.createTopic(topic)
+        self._kafkaTestUtils.sendMessages(topic, sendData)
+
+        offsetRanges = []
+
+        def transformWithOffsetRanges(rdd):
+            for o in rdd.offsetRanges():
+                offsetRanges.append(o)
+            return rdd
+
+        self.ssc.stop(False)
+        self.ssc = None
+        tmpdir = "checkpoint-test-%d" % random.randint(0, 10000)
+
+        def setup():
+            ssc = StreamingContext(self.sc, 0.5)
+            ssc.checkpoint(tmpdir)
+            stream = KafkaUtils.createDirectStream(ssc, [topic], kafkaParams)
+            stream.transform(transformWithOffsetRanges).count().pprint()
+            return ssc
+
+        try:
+            ssc1 = StreamingContext.getOrCreate(tmpdir, setup)
+            ssc1.start()
+            self.wait_for(offsetRanges, 1)
+            self.assertEqual(offsetRanges, [OffsetRange(topic, 0, long(0), long(6))])
+
+            # To make sure some checkpoint is written
+            time.sleep(3)
+            ssc1.stop(False)
+            ssc1 = None
+
+            # Restart again to make sure the checkpoint is recovered correctly
+            ssc2 = StreamingContext.getOrCreate(tmpdir, setup)
+            ssc2.start()
+            ssc2.awaitTermination(3)
+            ssc2.stop(stopSparkContext=False, stopGraceFully=True)
+            ssc2 = None
+        finally:
+            shutil.rmtree(tmpdir)
+
+    @unittest.skipIf(sys.version >= "3", "long type not support")
     def test_kafka_rdd_message_handler(self):
         """Test Python direct Kafka RDD MessageHandler."""
         topic = self._randomTopic()
@@ -1191,10 +1267,7 @@ class FlumeStreamTests(PySparkStreamingTestCase):
 
     def setUp(self):
         super(FlumeStreamTests, self).setUp()
-
-        utilsClz = self.ssc._jvm.java.lang.Thread.currentThread().getContextClassLoader() \
-            .loadClass("org.apache.spark.streaming.flume.FlumeTestUtils")
-        self._utils = utilsClz.newInstance()
+        self._utils = self.ssc._jvm.org.apache.spark.streaming.flume.FlumeTestUtils()
 
     def tearDown(self):
         if self._utils is not None:
@@ -1259,10 +1332,7 @@ class FlumePollingStreamTests(PySparkStreamingTestCase):
     maxAttempts = 5
 
     def setUp(self):
-        utilsClz = \
-            self.sc._jvm.java.lang.Thread.currentThread().getContextClassLoader() \
-                .loadClass("org.apache.spark.streaming.flume.PollingFlumeTestUtils")
-        self._utils = utilsClz.newInstance()
+        self._utils = self.sc._jvm.org.apache.spark.streaming.flume.PollingFlumeTestUtils()
 
     def tearDown(self):
         if self._utils is not None:
@@ -1333,68 +1403,6 @@ class FlumePollingStreamTests(PySparkStreamingTestCase):
         self._testMultipleTimes(self._testFlumePollingMultipleHosts)
 
 
-class MQTTStreamTests(PySparkStreamingTestCase):
-    timeout = 20  # seconds
-    duration = 1
-
-    def setUp(self):
-        super(MQTTStreamTests, self).setUp()
-
-        MQTTTestUtilsClz = self.ssc._jvm.java.lang.Thread.currentThread().getContextClassLoader() \
-            .loadClass("org.apache.spark.streaming.mqtt.MQTTTestUtils")
-        self._MQTTTestUtils = MQTTTestUtilsClz.newInstance()
-        self._MQTTTestUtils.setup()
-
-    def tearDown(self):
-        if self._MQTTTestUtils is not None:
-            self._MQTTTestUtils.teardown()
-            self._MQTTTestUtils = None
-
-        super(MQTTStreamTests, self).tearDown()
-
-    def _randomTopic(self):
-        return "topic-%d" % random.randint(0, 10000)
-
-    def _startContext(self, topic):
-        # Start the StreamingContext and also collect the result
-        stream = MQTTUtils.createStream(self.ssc, "tcp://" + self._MQTTTestUtils.brokerUri(), topic)
-        result = []
-
-        def getOutput(_, rdd):
-            for data in rdd.collect():
-                result.append(data)
-
-        stream.foreachRDD(getOutput)
-        self.ssc.start()
-        return result
-
-    def test_mqtt_stream(self):
-        """Test the Python MQTT stream API."""
-        sendData = "MQTT demo for spark streaming"
-        topic = self._randomTopic()
-        result = self._startContext(topic)
-
-        def retry():
-            self._MQTTTestUtils.publishData(topic, sendData)
-            # Because "publishData" sends duplicate messages, here we should use > 0
-            self.assertTrue(len(result) > 0)
-            self.assertEqual(sendData, result[0])
-
-        # Retry it because we don't know when the receiver will start.
-        self._retry_or_timeout(retry)
-
-    def _retry_or_timeout(self, test_func):
-        start_time = time.time()
-        while True:
-            try:
-                test_func()
-                break
-            except:
-                if time.time() - start_time > self.timeout:
-                    raise
-                time.sleep(0.01)
-
-
 class KinesisStreamTests(PySparkStreamingTestCase):
 
     def test_kinesis_stream_api(self):
@@ -1418,10 +1426,7 @@ class KinesisStreamTests(PySparkStreamingTestCase):
 
         import random
         kinesisAppName = ("KinesisStreamTests-%d" % abs(random.randint(0, 10000000)))
-        kinesisTestUtilsClz = \
-            self.sc._jvm.java.lang.Thread.currentThread().getContextClassLoader() \
-                .loadClass("org.apache.spark.streaming.kinesis.KinesisTestUtils")
-        kinesisTestUtils = kinesisTestUtilsClz.newInstance()
+        kinesisTestUtils = self.ssc._jvm.org.apache.spark.streaming.kinesis.KinesisTestUtils()
         try:
             kinesisTestUtils.createStream()
             aWSCredentials = kinesisTestUtils.getAWSCredentials()
@@ -1477,7 +1482,7 @@ def search_kafka_assembly_jar():
         raise Exception(
             ("Failed to find Spark Streaming kafka assembly jar in %s. " % kafka_assembly_dir) +
             "You need to build Spark with "
-            "'build/sbt assembly/assembly streaming-kafka-assembly/assembly' or "
+            "'build/sbt assembly/package streaming-kafka-assembly/assembly' or "
             "'build/mvn package' before running this test.")
     elif len(jars) > 1:
         raise Exception(("Found multiple Spark Streaming Kafka assembly JARs: %s; please "
@@ -1503,43 +1508,9 @@ def search_flume_assembly_jar():
         return jars[0]
 
 
-def search_mqtt_assembly_jar():
-    SPARK_HOME = os.environ["SPARK_HOME"]
-    mqtt_assembly_dir = os.path.join(SPARK_HOME, "external/mqtt-assembly")
-    jars = search_jar(mqtt_assembly_dir, "spark-streaming-mqtt-assembly")
-    if not jars:
-        raise Exception(
-            ("Failed to find Spark Streaming MQTT assembly jar in %s. " % mqtt_assembly_dir) +
-            "You need to build Spark with "
-            "'build/sbt assembly/assembly streaming-mqtt-assembly/assembly' or "
-            "'build/mvn package' before running this test")
-    elif len(jars) > 1:
-        raise Exception(("Found multiple Spark Streaming MQTT assembly JARs: %s; please "
-                         "remove all but one") % (", ".join(jars)))
-    else:
-        return jars[0]
-
-
-def search_mqtt_test_jar():
-    SPARK_HOME = os.environ["SPARK_HOME"]
-    mqtt_test_dir = os.path.join(SPARK_HOME, "external/mqtt")
-    jars = glob.glob(
-        os.path.join(mqtt_test_dir, "target/scala-*/spark-streaming-mqtt-test-*.jar"))
-    if not jars:
-        raise Exception(
-            ("Failed to find Spark Streaming MQTT test jar in %s. " % mqtt_test_dir) +
-            "You need to build Spark with "
-            "'build/sbt assembly/assembly streaming-mqtt/test:assembly'")
-    elif len(jars) > 1:
-        raise Exception(("Found multiple Spark Streaming MQTT test JARs: %s; please "
-                         "remove all but one") % (", ".join(jars)))
-    else:
-        return jars[0]
-
-
 def search_kinesis_asl_assembly_jar():
     SPARK_HOME = os.environ["SPARK_HOME"]
-    kinesis_asl_assembly_dir = os.path.join(SPARK_HOME, "extras/kinesis-asl-assembly")
+    kinesis_asl_assembly_dir = os.path.join(SPARK_HOME, "external/kinesis-asl-assembly")
     jars = search_jar(kinesis_asl_assembly_dir, "spark-streaming-kinesis-asl-assembly")
     if not jars:
         return None
@@ -1555,24 +1526,21 @@ kinesis_test_environ_var = "ENABLE_KINESIS_TESTS"
 are_kinesis_tests_enabled = os.environ.get(kinesis_test_environ_var) == '1'
 
 if __name__ == "__main__":
+    from pyspark.streaming.tests import *
     kafka_assembly_jar = search_kafka_assembly_jar()
     flume_assembly_jar = search_flume_assembly_jar()
-    mqtt_assembly_jar = search_mqtt_assembly_jar()
-    mqtt_test_jar = search_mqtt_test_jar()
     kinesis_asl_assembly_jar = search_kinesis_asl_assembly_jar()
 
     if kinesis_asl_assembly_jar is None:
         kinesis_jar_present = False
-        jars = "%s,%s,%s,%s" % (kafka_assembly_jar, flume_assembly_jar, mqtt_assembly_jar,
-                                mqtt_test_jar)
+        jars = "%s,%s" % (kafka_assembly_jar, flume_assembly_jar)
     else:
         kinesis_jar_present = True
-        jars = "%s,%s,%s,%s,%s" % (kafka_assembly_jar, flume_assembly_jar, mqtt_assembly_jar,
-                                   mqtt_test_jar, kinesis_asl_assembly_jar)
+        jars = "%s,%s,%s" % (kafka_assembly_jar, flume_assembly_jar, kinesis_asl_assembly_jar)
 
     os.environ["PYSPARK_SUBMIT_ARGS"] = "--jars %s pyspark-shell" % jars
     testcases = [BasicOperationTests, WindowFunctionTests, StreamingContextTests, CheckpointTests,
-                 KafkaStreamTests, FlumeStreamTests, FlumePollingStreamTests, MQTTStreamTests,
+                 KafkaStreamTests, FlumeStreamTests, FlumePollingStreamTests,
                  StreamingListenerTests]
 
     if kinesis_jar_present is True:
@@ -1580,7 +1548,7 @@ if __name__ == "__main__":
     elif are_kinesis_tests_enabled is False:
         sys.stderr.write("Skipping all Kinesis Python tests as the optional Kinesis project was "
                          "not compiled into a JAR. To run these tests, "
-                         "you need to build Spark with 'build/sbt -Pkinesis-asl assembly/assembly "
+                         "you need to build Spark with 'build/sbt -Pkinesis-asl assembly/package "
                          "streaming-kinesis-asl-assembly/assembly' or "
                          "'build/mvn -Pkinesis-asl package' before running this test.")
     else:
@@ -1588,7 +1556,7 @@ if __name__ == "__main__":
             ("Failed to find Spark Streaming Kinesis assembly jar in %s. "
              % kinesis_asl_assembly_dir) +
             "You need to build Spark with 'build/sbt -Pkinesis-asl "
-            "assembly/assembly streaming-kinesis-asl-assembly/assembly'"
+            "assembly/package streaming-kinesis-asl-assembly/assembly'"
             "or 'build/mvn -Pkinesis-asl package' before running this test.")
 
     sys.stderr.write("Running tests: %s \n" % (str(testcases)))

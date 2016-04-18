@@ -19,8 +19,8 @@ package org.apache.spark.streaming.util
 import java.io._
 import java.nio.ByteBuffer
 import java.util.{Iterator => JIterator}
+import java.util.concurrent.{CountDownLatch, RejectedExecutionException, ThreadPoolExecutor, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.concurrent.{RejectedExecutionException, TimeUnit, CountDownLatch, ThreadPoolExecutor}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -31,17 +31,16 @@ import scala.language.{implicitConversions, postfixOps}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.mockito.ArgumentCaptor
-import org.mockito.Matchers.{eq => meq}
-import org.mockito.Matchers._
+import org.mockito.Matchers.{eq => meq, _}
 import org.mockito.Mockito._
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterEach, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.concurrent.Eventually._
-import org.scalatest.{PrivateMethodTester, BeforeAndAfterEach, BeforeAndAfter}
 import org.scalatest.mock.MockitoSugar
 
-import org.apache.spark.streaming.scheduler._
-import org.apache.spark.util.{CompletionIterator, ThreadUtils, ManualClock, Utils}
 import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.streaming.scheduler._
+import org.apache.spark.util.{CompletionIterator, ManualClock, ThreadUtils, Utils}
 
 /** Common tests for WriteAheadLogs that we would like to test with different configurations. */
 abstract class CommonWriteAheadLogTests(
@@ -75,12 +74,12 @@ abstract class CommonWriteAheadLogTests(
 
   test(testPrefix + "read all logs") {
     // Write data manually for testing reading through WriteAheadLog
-    val writtenData = (1 to 10).map { i =>
+    val writtenData = (1 to 10).flatMap { i =>
       val data = generateRandomData()
       val file = testDir + s"/log-$i-$i"
       writeDataManually(data, file, allowBatching)
       data
-    }.flatten
+    }
 
     val logDirectoryPath = new Path(testDir)
     val fileSystem = HdfsUtils.getFileSystemForPath(logDirectoryPath, hadoopConf)
@@ -155,7 +154,7 @@ abstract class CommonWriteAheadLogTests(
     // Recover old files and generate a second set of log files
     val dataToWrite2 = generateRandomData()
     manualClock.advance(100000)
-    writeDataUsingWriteAheadLog(testDir, dataToWrite2, closeFileAfterWrite, allowBatching ,
+    writeDataUsingWriteAheadLog(testDir, dataToWrite2, closeFileAfterWrite, allowBatching,
       manualClock)
     val logFiles2 = getLogFilesInDirectory(testDir)
     assert(logFiles2.size > logFiles1.size)
@@ -194,12 +193,12 @@ abstract class CommonWriteAheadLogTests(
 
   test(testPrefix + "parallel recovery not enabled if closeFileAfterWrite = false") {
     // write some data
-    val writtenData = (1 to 10).map { i =>
+    val writtenData = (1 to 10).flatMap { i =>
       val data = generateRandomData()
       val file = testDir + s"/log-$i-$i"
       writeDataManually(data, file, allowBatching)
       data
-    }.flatten
+    }
 
     val wal = createWriteAheadLog(testDir, closeFileAfterWrite, allowBatching)
     // create iterator but don't materialize it
@@ -229,7 +228,9 @@ class FileBasedWriteAheadLogSuite
      the list of files.
      */
     val numThreads = 8
-    val tpool = ThreadUtils.newDaemonFixedThreadPool(numThreads, "wal-test-thread-pool")
+    val fpool = ThreadUtils.newForkJoinPool("wal-test-thread-pool", numThreads)
+    val executionContext = ExecutionContext.fromExecutorService(fpool)
+
     class GetMaxCounter {
       private val value = new AtomicInteger()
       @volatile private var max: Int = 0
@@ -259,7 +260,8 @@ class FileBasedWriteAheadLogSuite
       val t = new Thread() {
         override def run() {
           // run the calculation on a separate thread so that we can release the latch
-          val iterator = FileBasedWriteAheadLog.seqToParIterator[Int, Int](tpool, testSeq, handle)
+          val iterator = FileBasedWriteAheadLog.seqToParIterator[Int, Int](executionContext,
+            testSeq, handle)
           collected = iterator.toSeq
         }
       }
@@ -274,7 +276,7 @@ class FileBasedWriteAheadLogSuite
       // make sure we didn't open too many Iterators
       assert(counter.getMax() <= numThreads)
     } finally {
-      tpool.shutdownNow()
+      fpool.shutdownNow()
     }
   }
 
@@ -432,6 +434,7 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
   private val queueLength = PrivateMethod[Int]('getQueueLength)
 
   override def beforeEach(): Unit = {
+    super.beforeEach()
     wal = mock[WriteAheadLog]
     walHandle = mock[WriteAheadLogRecordHandle]
     walBatchingThreadPool = ThreadUtils.newDaemonFixedThreadPool(8, "wal-test-thread-pool")
@@ -439,8 +442,12 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
   }
 
   override def afterEach(): Unit = {
-    if (walBatchingExecutionContext != null) {
-      walBatchingExecutionContext.shutdownNow()
+    try {
+      if (walBatchingExecutionContext != null) {
+        walBatchingExecutionContext.shutdownNow()
+      }
+    } finally {
+      super.afterEach()
     }
   }
 
@@ -480,7 +487,7 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
     p
   }
 
-  test("BatchedWriteAheadLog - name log with aggregated entries with the timestamp of last entry") {
+  test("BatchedWriteAheadLog - name log with the highest timestamp of aggregated entries") {
     val blockingWal = new BlockingWriteAheadLog(wal, walHandle)
     val batchedWal = new BatchedWriteAheadLog(blockingWal, sparkConf)
 
@@ -500,8 +507,14 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
     // rest of the records will be batched while it takes time for 3 to get written
     writeAsync(batchedWal, event2, 5L)
     writeAsync(batchedWal, event3, 8L)
-    writeAsync(batchedWal, event4, 12L)
-    writeAsync(batchedWal, event5, 10L)
+    // we would like event 5 to be written before event 4 in order to test that they get
+    // sorted before being aggregated
+    writeAsync(batchedWal, event5, 12L)
+    eventually(timeout(1 second)) {
+      assert(blockingWal.isBlocked)
+      assert(batchedWal.invokePrivate(queueLength()) === 3)
+    }
+    writeAsync(batchedWal, event4, 10L)
     eventually(timeout(1 second)) {
       assert(walBatchingThreadPool.getActiveCount === 5)
       assert(batchedWal.invokePrivate(queueLength()) === 4)
@@ -517,7 +530,7 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
       // the file name should be the timestamp of the last record, as events should be naturally
       // in order of timestamp, and we need the last element.
       val bufferCaptor = ArgumentCaptor.forClass(classOf[ByteBuffer])
-      verify(wal, times(1)).write(bufferCaptor.capture(), meq(10L))
+      verify(wal, times(1)).write(bufferCaptor.capture(), meq(12L))
       val records = BatchedWriteAheadLog.deaggregate(bufferCaptor.getValue).map(byteBufferToString)
       assert(records.toSet === queuedEvents)
     }
@@ -694,7 +707,8 @@ object WriteAheadLogSuite {
     val logDirectoryPath = new Path(directory)
     val fileSystem = HdfsUtils.getFileSystemForPath(logDirectoryPath, hadoopConf)
 
-    if (fileSystem.exists(logDirectoryPath) && fileSystem.getFileStatus(logDirectoryPath).isDir) {
+    if (fileSystem.exists(logDirectoryPath) &&
+        fileSystem.getFileStatus(logDirectoryPath).isDirectory) {
       fileSystem.listStatus(logDirectoryPath).map { _.getPath() }.sortBy {
         _.getName().split("-")(1).toLong
       }.map {

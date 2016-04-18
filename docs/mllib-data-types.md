@@ -1,7 +1,7 @@
 ---
 layout: global
 title: Data Types - MLlib
-displayTitle: <a href="mllib-guide.html">MLlib</a> - Data Types
+displayTitle: Data Types - MLlib
 ---
 
 * Table of contents
@@ -11,7 +11,7 @@ MLlib supports local vectors and matrices stored on a single machine,
 as well as distributed matrices backed by one or more RDDs.
 Local vectors and local matrices are simple data models 
 that serve as public interfaces. The underlying linear algebra operations are provided by
-[Breeze](http://www.scalanlp.org/) and [jblas](http://jblas.org/).
+[Breeze](http://www.scalanlp.org/).
 A training example used in supervised learning is called a "labeled point" in MLlib.
 
 ## Local vector

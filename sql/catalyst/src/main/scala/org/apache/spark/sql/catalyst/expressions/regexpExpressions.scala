@@ -59,12 +59,16 @@ trait StringRegexExpression extends ImplicitCastInputTypes {
       matches(regex, input1.asInstanceOf[UTF8String].toString)
     }
   }
+
+  override def sql: String = s"${left.sql} ${prettyName.toUpperCase} ${right.sql}"
 }
 
 
 /**
  * Simple RegEx pattern matching function
  */
+@ExpressionDescription(
+  usage = "str _FUNC_ pattern - Returns true if str matches pattern and false otherwise.")
 case class Like(left: Expression, right: Expression)
   extends BinaryExpression with StringRegexExpression {
 
@@ -74,7 +78,7 @@ case class Like(left: Expression, right: Expression)
 
   override def toString: String = s"$left LIKE $right"
 
-  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override protected def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     val patternClass = classOf[Pattern].getName
     val escapeFunc = StringUtils.getClass.getName.stripSuffix("$") + ".escapeLikeRegex"
     val pattern = ctx.freshName("pattern")
@@ -115,7 +119,8 @@ case class Like(left: Expression, right: Expression)
   }
 }
 
-
+@ExpressionDescription(
+  usage = "str _FUNC_ regexp - Returns true if str matches regexp and false otherwise.")
 case class RLike(left: Expression, right: Expression)
   extends BinaryExpression with StringRegexExpression {
 
@@ -123,7 +128,7 @@ case class RLike(left: Expression, right: Expression)
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).find(0)
   override def toString: String = s"$left RLIKE $right"
 
-  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override protected def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     val patternClass = classOf[Pattern].getName
     val pattern = ctx.freshName("pattern")
 
@@ -167,6 +172,9 @@ case class RLike(left: Expression, right: Expression)
 /**
  * Splits str around pat (pattern is a regular expression).
  */
+@ExpressionDescription(
+  usage = "_FUNC_(str, regex) - Splits str around occurrences that match regex",
+  extended = "> SELECT _FUNC_('oneAtwoBthreeC', '[ABC]');\n ['one', 'two', 'three']")
 case class StringSplit(str: Expression, pattern: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
@@ -180,7 +188,7 @@ case class StringSplit(str: Expression, pattern: Expression)
     new GenericArrayData(strings.asInstanceOf[Array[Any]])
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     val arrayClass = classOf[GenericArrayData].getName
     nullSafeCodeGen(ctx, ev, (str, pattern) =>
       // Array in java is covariant, so we don't need to cast UTF8String[] to Object[].
@@ -196,6 +204,9 @@ case class StringSplit(str: Expression, pattern: Expression)
  *
  * NOTE: this expression is not THREAD-SAFE, as it has some internal mutable status.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(str, regexp, rep) - replace all substrings of str that match regexp with rep.",
+  extended = "> SELECT _FUNC_('100-200', '(\\d+)', 'num');\n 'num-num'")
 case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expression)
   extends TernaryExpression with ImplicitCastInputTypes {
 
@@ -236,7 +247,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
   override def children: Seq[Expression] = subject :: regexp :: rep :: Nil
   override def prettyName: String = "regexp_replace"
 
-  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override protected def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     val termLastRegex = ctx.freshName("lastRegex")
     val termPattern = ctx.freshName("pattern")
 
@@ -287,6 +298,9 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
  *
  * NOTE: this expression is not THREAD-SAFE, as it has some internal mutable status.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(str, regexp[, idx]) - extracts a group that matches regexp.",
+  extended = "> SELECT _FUNC_('100-200', '(\\d+)-(\\d+)', 1);\n '100'")
 case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expression)
   extends TernaryExpression with ImplicitCastInputTypes {
   def this(s: Expression, r: Expression) = this(s, r, Literal(1))
@@ -316,7 +330,7 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
   override def children: Seq[Expression] = subject :: regexp :: idx :: Nil
   override def prettyName: String = "regexp_extract"
 
-  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override protected def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     val termLastRegex = ctx.freshName("lastRegex")
     val termPattern = ctx.freshName("pattern")
     val classNamePattern = classOf[Pattern].getCanonicalName

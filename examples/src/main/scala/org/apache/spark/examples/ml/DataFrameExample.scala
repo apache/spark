@@ -44,10 +44,10 @@ object DataFrameExample {
   def main(args: Array[String]) {
     val defaultParams = Params()
 
-    val parser = new OptionParser[Params]("DatasetExample") {
-      head("Dataset: an example app using DataFrame as a Dataset for ML.")
+    val parser = new OptionParser[Params]("DataFrameExample") {
+      head("DataFrameExample: an example app using DataFrame for ML.")
       opt[String]("input")
-        .text(s"input path to dataset")
+        .text(s"input path to dataframe")
         .action((x, c) => c.copy(input = x))
       checkConfig { params =>
         success
@@ -79,7 +79,7 @@ object DataFrameExample {
     labelSummary.show()
 
     // Convert features column to an RDD of vectors.
-    val features = df.select("features").map { case Row(v: Vector) => v }
+    val features = df.select("features").rdd.map { case Row(v: Vector) => v }
     val featureSummary = features.aggregate(new MultivariateOnlineSummarizer())(
       (summary, feat) => summary.add(feat),
       (sum1, sum2) => sum1.merge(sum2))
@@ -88,7 +88,7 @@ object DataFrameExample {
     // Save the records in a parquet file.
     val tmpDir = Files.createTempDir()
     tmpDir.deleteOnExit()
-    val outputDir = new File(tmpDir, "dataset").toString
+    val outputDir = new File(tmpDir, "dataframe").toString
     println(s"Saving to $outputDir as Parquet file.")
     df.write.parquet(outputDir)
 

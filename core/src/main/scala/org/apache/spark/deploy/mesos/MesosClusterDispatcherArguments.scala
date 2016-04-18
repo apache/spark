@@ -17,6 +17,8 @@
 
 package org.apache.spark.deploy.mesos
 
+import scala.annotation.tailrec
+
 import org.apache.spark.SparkConf
 import org.apache.spark.util.{IntParam, Utils}
 
@@ -34,6 +36,7 @@ private[mesos] class MesosClusterDispatcherArguments(args: Array[String], conf: 
 
   propertiesFile = Utils.loadDefaultSparkProperties(conf, propertiesFile)
 
+  @tailrec
   private def parse(args: List[String]): Unit = args match {
     case ("--host" | "-h") :: value :: tail =>
       Utils.checkHost(value, "Please use hostname " + value)
@@ -44,7 +47,7 @@ private[mesos] class MesosClusterDispatcherArguments(args: Array[String], conf: 
       port = value
       parse(tail)
 
-    case ("--webui-port" | "-p") :: IntParam(value) :: tail =>
+    case ("--webui-port") :: IntParam(value) :: tail =>
       webUiPort = value
       parse(tail)
 
@@ -73,14 +76,13 @@ private[mesos] class MesosClusterDispatcherArguments(args: Array[String], conf: 
     case ("--help") :: tail =>
       printUsageAndExit(0)
 
-    case Nil => {
+    case Nil =>
       if (masterUrl == null) {
         // scalastyle:off println
         System.err.println("--master is required")
         // scalastyle:on println
         printUsageAndExit(1)
       }
-    }
 
     case _ =>
       printUsageAndExit(1)

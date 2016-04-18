@@ -18,18 +18,25 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.{Since, Experimental}
-import org.apache.spark.ml.param.{ParamMap, Param}
+import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.ml.param.{Param, ParamMap}
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.util._
-import org.apache.spark.sql.{SQLContext, DataFrame, Row}
+import org.apache.spark.sql.{DataFrame, Dataset, Row, SQLContext}
 import org.apache.spark.sql.types.StructType
 
 /**
  * :: Experimental ::
- * Implements the transforms which are defined by SQL statement.
- * Currently we only support SQL syntax like 'SELECT ... FROM __THIS__'
+ * Implements the transformations which are defined by SQL statement.
+ * Currently we only support SQL syntax like 'SELECT ... FROM __THIS__ ...'
  * where '__THIS__' represents the underlying table of the input dataset.
+ * The select clause specifies the fields, constants, and expressions to display in
+ * the output, it can be any select clause that Spark SQL supports. Users can also
+ * use Spark SQL built-in function and UDFs to operate on these selected columns.
+ * For example, [[SQLTransformer]] supports statements like:
+ *  - SELECT a, a + b AS a_b FROM __THIS__
+ *  - SELECT a, SQRT(b) AS b_sqrt FROM __THIS__ where a > 5
+ *  - SELECT a, b, SUM(c) AS c_sum FROM __THIS__ GROUP BY a, b
  */
 @Experimental
 @Since("1.6.0")
@@ -56,13 +63,12 @@ class SQLTransformer @Since("1.6.0") (override val uid: String) extends Transfor
 
   private val tableIdentifier: String = "__THIS__"
 
-  @Since("1.6.0")
-  override def transform(dataset: DataFrame): DataFrame = {
+  @Since("2.0.0")
+  override def transform(dataset: Dataset[_]): DataFrame = {
     val tableName = Identifiable.randomUID(uid)
     dataset.registerTempTable(tableName)
     val realStatement = $(statement).replace(tableIdentifier, tableName)
-    val outputDF = dataset.sqlContext.sql(realStatement)
-    outputDF
+    dataset.sqlContext.sql(realStatement)
   }
 
   @Since("1.6.0")
@@ -71,8 +77,11 @@ class SQLTransformer @Since("1.6.0") (override val uid: String) extends Transfor
     val sqlContext = SQLContext.getOrCreate(sc)
     val dummyRDD = sc.parallelize(Seq(Row.empty))
     val dummyDF = sqlContext.createDataFrame(dummyRDD, schema)
-    dummyDF.registerTempTable(tableIdentifier)
-    val outputSchema = sqlContext.sql($(statement)).schema
+    val tableName = Identifiable.randomUID(uid)
+    val realStatement = $(statement).replace(tableIdentifier, tableName)
+    dummyDF.registerTempTable(tableName)
+    val outputSchema = sqlContext.sql(realStatement).schema
+    sqlContext.dropTempTable(tableName)
     outputSchema
   }
 

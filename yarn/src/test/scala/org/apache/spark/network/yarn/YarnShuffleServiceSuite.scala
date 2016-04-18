@@ -34,6 +34,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
   private[yarn] var yarnConfig: YarnConfiguration = new YarnConfiguration
 
   override def beforeEach(): Unit = {
+    super.beforeEach()
     yarnConfig.set(YarnConfiguration.NM_AUX_SERVICES, "spark_shuffle")
     yarnConfig.set(YarnConfiguration.NM_AUX_SERVICE_FMT.format("spark_shuffle"),
       classOf[YarnShuffleService].getCanonicalName)
@@ -54,17 +55,21 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
   var s3: YarnShuffleService = null
 
   override def afterEach(): Unit = {
-    if (s1 != null) {
-      s1.stop()
-      s1 = null
-    }
-    if (s2 != null) {
-      s2.stop()
-      s2 = null
-    }
-    if (s3 != null) {
-      s3.stop()
-      s3 = null
+    try {
+      if (s1 != null) {
+        s1.stop()
+        s1 = null
+      }
+      if (s2 != null) {
+        s2.stop()
+        s2 = null
+      }
+      if (s3 != null) {
+        s3.stop()
+        s3 = null
+      }
+    } finally {
+      super.afterEach()
     }
   }
 

@@ -18,6 +18,7 @@
 package org.apache.spark.shuffle.hash
 
 import org.apache.spark._
+import org.apache.spark.internal.Logging
 import org.apache.spark.shuffle._
 
 /**
@@ -33,6 +34,8 @@ private[spark] class HashShuffleManager(conf: SparkConf) extends ShuffleManager 
   }
 
   private val fileShuffleBlockResolver = new FileShuffleBlockResolver(conf)
+
+  override val shortName: String = "hash"
 
   /* Register a shuffle with the manager and obtain a handle for it to pass to tasks. */
   override def registerShuffle[K, V, C](

@@ -17,10 +17,11 @@
 
 package org.apache.spark.network.netty
 
-import org.apache.spark.network.BlockDataManager
-import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.mockito.Mockito.mock
 import org.scalatest._
+
+import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
+import org.apache.spark.network.BlockDataManager
 
 class NettyBlockTransferServiceSuite
   extends SparkFunSuite
@@ -31,14 +32,18 @@ class NettyBlockTransferServiceSuite
   private var service1: NettyBlockTransferService = _
 
   override def afterEach() {
-    if (service0 != null) {
-      service0.close()
-      service0 = null
-    }
+    try {
+      if (service0 != null) {
+        service0.close()
+        service0 = null
+      }
 
-    if (service1 != null) {
-      service1.close()
-      service1 = null
+      if (service1 != null) {
+        service1.close()
+        service1 = null
+      }
+    } finally {
+      super.afterEach()
     }
   }
 
@@ -75,7 +80,7 @@ class NettyBlockTransferServiceSuite
       .set("spark.blockManager.port", port.toString)
     val securityManager = new SecurityManager(conf)
     val blockDataManager = mock(classOf[BlockDataManager])
-    val service = new NettyBlockTransferService(conf, securityManager, numCores = 1)
+    val service = new NettyBlockTransferService(conf, securityManager, "localhost", numCores = 1)
     service.init(blockDataManager)
     service
   }

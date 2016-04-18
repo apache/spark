@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.text.DecimalFormat
+import java.text.{DecimalFormat, DecimalFormatSymbols}
 import java.util.{HashMap, Locale, Map => JMap}
 
 import org.apache.spark.sql.catalyst.InternalRow
@@ -35,6 +35,9 @@ import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
  * An expression that concatenates multiple input strings into a single string.
  * If any input is null, concat returns null.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(str1, str2, ..., strN) - Returns the concatenation of str1, str2, ..., strN",
+  extended = "> SELECT _FUNC_('Spark','SQL');\n 'SparkSQL'")
 case class Concat(children: Seq[Expression]) extends Expression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq.fill(children.size)(StringType)
@@ -48,7 +51,7 @@ case class Concat(children: Seq[Expression]) extends Expression with ImplicitCas
     UTF8String.concat(inputs : _*)
   }
 
-  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override protected def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     val evals = children.map(_.gen(ctx))
     val inputs = evals.map { eval =>
       s"${eval.isNull} ? null : ${eval.value}"
@@ -70,6 +73,10 @@ case class Concat(children: Seq[Expression]) extends Expression with ImplicitCas
  *
  * Returns null if the separator is null. Otherwise, concat_ws skips all null values.
  */
+@ExpressionDescription(
+  usage =
+    "_FUNC_(sep, [str | array(str)]+) - Returns the concatenation of the strings separated by sep.",
+  extended = "> SELECT _FUNC_(' ', Spark', 'SQL');\n 'Spark SQL'")
 case class ConcatWs(children: Seq[Expression])
   extends Expression with ImplicitCastInputTypes {
 
@@ -99,7 +106,7 @@ case class ConcatWs(children: Seq[Expression])
     UTF8String.concatWs(flatInputs.head, flatInputs.tail : _*)
   }
 
-  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override protected def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     if (children.forall(_.dataType == StringType)) {
       // All children are strings. In that case we can construct a fixed size array.
       val evals = children.map(_.gen(ctx))
@@ -178,7 +185,7 @@ case class Upper(child: Expression)
 
   override def convert(v: UTF8String): UTF8String = v.toUpperCase
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     defineCodeGen(ctx, ev, c => s"($c).toUpperCase()")
   }
 }
@@ -188,12 +195,12 @@ case class Upper(child: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(str) - Returns str with all characters changed to lowercase",
-  extended = "> SELECT _FUNC_('SparkSql');\n'sparksql'")
+  extended = "> SELECT _FUNC_('SparkSql');\n 'sparksql'")
 case class Lower(child: Expression) extends UnaryExpression with String2StringExpression {
 
   override def convert(v: UTF8String): UTF8String = v.toLowerCase
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     defineCodeGen(ctx, ev, c => s"($c).toLowerCase()")
   }
 }
@@ -218,7 +225,7 @@ trait StringPredicate extends Predicate with ImplicitCastInputTypes {
 case class Contains(left: Expression, right: Expression)
     extends BinaryExpression with StringPredicate {
   override def compare(l: UTF8String, r: UTF8String): Boolean = l.contains(r)
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     defineCodeGen(ctx, ev, (c1, c2) => s"($c1).contains($c2)")
   }
 }
@@ -229,7 +236,7 @@ case class Contains(left: Expression, right: Expression)
 case class StartsWith(left: Expression, right: Expression)
     extends BinaryExpression with StringPredicate {
   override def compare(l: UTF8String, r: UTF8String): Boolean = l.startsWith(r)
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     defineCodeGen(ctx, ev, (c1, c2) => s"($c1).startsWith($c2)")
   }
 }
@@ -240,7 +247,7 @@ case class StartsWith(left: Expression, right: Expression)
 case class EndsWith(left: Expression, right: Expression)
     extends BinaryExpression with StringPredicate {
   override def compare(l: UTF8String, r: UTF8String): Boolean = l.endsWith(r)
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     defineCodeGen(ctx, ev, (c1, c2) => s"($c1).endsWith($c2)")
   }
 }
@@ -270,6 +277,11 @@ object StringTranslate {
  * The translate will happen when any character in the string matching with the character
  * in the `matchingExpr`.
  */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """_FUNC_(input, from, to) - Translates the input string by replacing the characters present in the from string with the corresponding characters in the to string""",
+  extended = "> SELECT _FUNC_('AaBbCc', 'abc', '123');\n 'A1B2C3'")
+// scalastyle:on line.size.limit
 case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replaceExpr: Expression)
   extends TernaryExpression with ImplicitCastInputTypes {
 
@@ -286,30 +298,30 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
     srcEval.asInstanceOf[UTF8String].translate(dict)
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     val termLastMatching = ctx.freshName("lastMatching")
     val termLastReplace = ctx.freshName("lastReplace")
     val termDict = ctx.freshName("dict")
     val classNameDict = classOf[JMap[Character, Character]].getCanonicalName
 
-    ctx.addMutableState("UTF8String", termLastMatching, s"${termLastMatching} = null;")
-    ctx.addMutableState("UTF8String", termLastReplace, s"${termLastReplace} = null;")
-    ctx.addMutableState(classNameDict, termDict, s"${termDict} = null;")
+    ctx.addMutableState("UTF8String", termLastMatching, s"$termLastMatching = null;")
+    ctx.addMutableState("UTF8String", termLastReplace, s"$termLastReplace = null;")
+    ctx.addMutableState(classNameDict, termDict, s"$termDict = null;")
 
     nullSafeCodeGen(ctx, ev, (src, matching, replace) => {
       val check = if (matchingExpr.foldable && replaceExpr.foldable) {
-        s"${termDict} == null"
+        s"$termDict == null"
       } else {
-        s"!${matching}.equals(${termLastMatching}) || !${replace}.equals(${termLastReplace})"
+        s"!$matching.equals($termLastMatching) || !$replace.equals($termLastReplace)"
       }
       s"""if ($check) {
         // Not all of them is literal or matching or replace value changed
-        ${termLastMatching} = ${matching}.clone();
-        ${termLastReplace} = ${replace}.clone();
-        ${termDict} = org.apache.spark.sql.catalyst.expressions.StringTranslate
-          .buildDict(${termLastMatching}, ${termLastReplace});
+        $termLastMatching = $matching.clone();
+        $termLastReplace = $replace.clone();
+        $termDict = org.apache.spark.sql.catalyst.expressions.StringTranslate
+          .buildDict($termLastMatching, $termLastReplace);
       }
-      ${ev.value} = ${src}.translate(${termDict});
+      ${ev.value} = $src.translate($termDict);
       """
     })
   }
@@ -325,6 +337,12 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
  * delimited list (right). Returns 0, if the string wasn't found or if the given
  * string (left) contains a comma.
  */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """_FUNC_(str, str_array) - Returns the index (1-based) of the given string (left) in the comma-delimited list (right).
+    Returns 0, if the string wasn't found or if the given string (left) contains a comma.""",
+  extended = "> SELECT _FUNC_('ab','abc,b,ab,c,def');\n 3")
+// scalastyle:on
 case class FindInSet(left: Expression, right: Expression) extends BinaryExpression
     with ImplicitCastInputTypes {
 
@@ -333,18 +351,23 @@ case class FindInSet(left: Expression, right: Expression) extends BinaryExpressi
   override protected def nullSafeEval(word: Any, set: Any): Any =
     set.asInstanceOf[UTF8String].findInSet(word.asInstanceOf[UTF8String])
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     nullSafeCodeGen(ctx, ev, (word, set) =>
       s"${ev.value} = $set.findInSet($word);"
     )
   }
 
   override def dataType: DataType = IntegerType
+
+  override def prettyName: String = "find_in_set"
 }
 
 /**
  * A function that trim the spaces from both ends for the specified string.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(str) - Removes the leading and trailing space characters from str.",
+  extended = "> SELECT _FUNC_('    SparkSQL   ');\n 'SparkSQL'")
 case class StringTrim(child: Expression)
   extends UnaryExpression with String2StringExpression {
 
@@ -352,7 +375,7 @@ case class StringTrim(child: Expression)
 
   override def prettyName: String = "trim"
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     defineCodeGen(ctx, ev, c => s"($c).trim()")
   }
 }
@@ -360,6 +383,9 @@ case class StringTrim(child: Expression)
 /**
  * A function that trim the spaces from left end for given string.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(str) - Removes the leading space characters from str.",
+  extended = "> SELECT _FUNC_('    SparkSQL   ');\n 'SparkSQL   '")
 case class StringTrimLeft(child: Expression)
   extends UnaryExpression with String2StringExpression {
 
@@ -367,7 +393,7 @@ case class StringTrimLeft(child: Expression)
 
   override def prettyName: String = "ltrim"
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     defineCodeGen(ctx, ev, c => s"($c).trimLeft()")
   }
 }
@@ -375,6 +401,9 @@ case class StringTrimLeft(child: Expression)
 /**
  * A function that trim the spaces from right end for given string.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(str) - Removes the trailing space characters from str.",
+  extended = "> SELECT _FUNC_('    SparkSQL   ');\n '    SparkSQL'")
 case class StringTrimRight(child: Expression)
   extends UnaryExpression with String2StringExpression {
 
@@ -382,7 +411,7 @@ case class StringTrimRight(child: Expression)
 
   override def prettyName: String = "rtrim"
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     defineCodeGen(ctx, ev, c => s"($c).trimRight()")
   }
 }
@@ -394,6 +423,9 @@ case class StringTrimRight(child: Expression)
  *
  * NOTE: that this is not zero based, but 1-based index. The first character in str has index 1.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(str, substr) - Returns the (1-based) index of the first occurrence of substr in str.",
+  extended = "> SELECT _FUNC_('SparkSQL', 'SQL');\n 6")
 case class StringInstr(str: Expression, substr: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
@@ -408,7 +440,7 @@ case class StringInstr(str: Expression, substr: Expression)
 
   override def prettyName: String = "instr"
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     defineCodeGen(ctx, ev, (l, r) =>
       s"($l).indexOf($r, 0) + 1")
   }
@@ -420,6 +452,15 @@ case class StringInstr(str: Expression, substr: Expression)
  * returned. If count is negative, every to the right of the final delimiter (counting from the
  * right) is returned. substring_index performs a case-sensitive match when searching for delim.
  */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """_FUNC_(str, delim, count) - Returns the substring from str before count occurrences of the delimiter delim.
+    If count is positive, everything to the left of the final delimiter (counting from the
+    left) is returned. If count is negative, everything to the right of the final delimiter
+    (counting from the right) is returned. Substring_index performs a case-sensitive match
+    when searching for delim.""",
+  extended = "> SELECT _FUNC_('www.apache.org', '.', 2);\n 'www.apache'")
+// scalastyle:on line.size.limit
 case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr: Expression)
  extends TernaryExpression with ImplicitCastInputTypes {
 
@@ -434,7 +475,7 @@ case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr:
       count.asInstanceOf[Int])
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     defineCodeGen(ctx, ev, (str, delim, count) => s"$str.subStringIndex($delim, $count)")
   }
 }
@@ -443,6 +484,12 @@ case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr:
  * A function that returns the position of the first occurrence of substr
  * in given string after position pos.
  */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """_FUNC_(substr, str[, pos]) - Returns the position of the first occurrence of substr in str after position pos.
+    The given pos and return value are 1-based.""",
+  extended = "> SELECT _FUNC_('bar', 'foobarbar', 5);\n 7")
+// scalastyle:on line.size.limit
 case class StringLocate(substr: Expression, str: Expression, start: Expression)
   extends TernaryExpression with ImplicitCastInputTypes {
 
@@ -477,7 +524,7 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
     }
   }
 
-  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override protected def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     val substrGen = substr.gen(ctx)
     val strGen = str.gen(ctx)
     val startGen = start.gen(ctx)
@@ -508,6 +555,11 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
 /**
  * Returns str, left-padded with pad to a length of len.
  */
+@ExpressionDescription(
+  usage = """_FUNC_(str, len, pad) - Returns str, left-padded with pad to a length of len.
+    If str is longer than len, the return value is shortened to len characters.""",
+  extended = "> SELECT _FUNC_('hi', 5, '??');\n '???hi'\n" +
+    "> SELECT _FUNC_('hi', 1, '??');\n 'h'")
 case class StringLPad(str: Expression, len: Expression, pad: Expression)
   extends TernaryExpression with ImplicitCastInputTypes {
 
@@ -519,7 +571,7 @@ case class StringLPad(str: Expression, len: Expression, pad: Expression)
     str.asInstanceOf[UTF8String].lpad(len.asInstanceOf[Int], pad.asInstanceOf[UTF8String])
   }
 
-  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override protected def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     defineCodeGen(ctx, ev, (str, len, pad) => s"$str.lpad($len, $pad)")
   }
 
@@ -529,6 +581,11 @@ case class StringLPad(str: Expression, len: Expression, pad: Expression)
 /**
  * Returns str, right-padded with pad to a length of len.
  */
+@ExpressionDescription(
+  usage = """_FUNC_(str, len, pad) - Returns str, right-padded with pad to a length of len.
+    If str is longer than len, the return value is shortened to len characters.""",
+  extended = "> SELECT _FUNC_('hi', 5, '??');\n 'hi???'\n" +
+    "> SELECT _FUNC_('hi', 1, '??');\n 'h'")
 case class StringRPad(str: Expression, len: Expression, pad: Expression)
   extends TernaryExpression with ImplicitCastInputTypes {
 
@@ -540,7 +597,7 @@ case class StringRPad(str: Expression, len: Expression, pad: Expression)
     str.asInstanceOf[UTF8String].rpad(len.asInstanceOf[Int], pad.asInstanceOf[UTF8String])
   }
 
-  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override protected def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     defineCodeGen(ctx, ev, (str, len, pad) => s"$str.rpad($len, $pad)")
   }
 
@@ -550,6 +607,11 @@ case class StringRPad(str: Expression, len: Expression, pad: Expression)
 /**
  * Returns the input formatted according do printf-style format strings
  */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(String format, Obj... args) - Returns a formatted string from printf-style format strings.",
+  extended = "> SELECT _FUNC_(\"Hello World %d %s\", 100, \"days\");\n 'Hello World 100 days'")
+// scalastyle:on line.size.limit
 case class FormatString(children: Expression*) extends Expression with ImplicitCastInputTypes {
 
   require(children.nonEmpty, "format_string() should take at least 1 argument")
@@ -576,7 +638,7 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
     }
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     val pattern = children.head.gen(ctx)
 
     val argListGen = children.tail.map(x => (x.dataType, x.gen(ctx)))
@@ -616,25 +678,33 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
 }
 
 /**
- * Returns string, with the first letter of each word in uppercase.
+ * Returns string, with the first letter of each word in uppercase, all other letters in lowercase.
  * Words are delimited by whitespace.
  */
+@ExpressionDescription(
+  usage =
+   """_FUNC_(str) - Returns str with the first letter of each word in uppercase.
+     All other letters are in lowercase. Words are delimited by white space.""",
+  extended = "> SELECT initcap('sPark sql');\n 'Spark Sql'")
 case class InitCap(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[DataType] = Seq(StringType)
   override def dataType: DataType = StringType
 
   override def nullSafeEval(string: Any): Any = {
-    string.asInstanceOf[UTF8String].toTitleCase
+    string.asInstanceOf[UTF8String].toLowerCase.toTitleCase
   }
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
-    defineCodeGen(ctx, ev, str => s"$str.toTitleCase()")
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+    defineCodeGen(ctx, ev, str => s"$str.toLowerCase().toTitleCase()")
   }
 }
 
 /**
  * Returns the string which repeat the given string value n times.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(str, n) - Returns the string which repeat the given string value n times.",
+  extended = "> SELECT _FUNC_('123', 2);\n '123123'")
 case class StringRepeat(str: Expression, times: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
@@ -649,7 +719,7 @@ case class StringRepeat(str: Expression, times: Expression)
 
   override def prettyName: String = "repeat"
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     defineCodeGen(ctx, ev, (l, r) => s"($l).repeat($r)")
   }
 }
@@ -657,12 +727,15 @@ case class StringRepeat(str: Expression, times: Expression)
 /**
  * Returns the reversed given string.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(str) - Returns the reversed given string.",
+  extended = "> SELECT _FUNC_('Spark SQL');\n 'LQS krapS'")
 case class StringReverse(child: Expression) extends UnaryExpression with String2StringExpression {
   override def convert(v: UTF8String): UTF8String = v.reverse()
 
   override def prettyName: String = "reverse"
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     defineCodeGen(ctx, ev, c => s"($c).reverse()")
   }
 }
@@ -670,6 +743,9 @@ case class StringReverse(child: Expression) extends UnaryExpression with String2
 /**
  * Returns a n spaces string.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(n) - Returns a n spaces string.",
+  extended = "> SELECT _FUNC_(2);\n '  '")
 case class StringSpace(child: Expression)
   extends UnaryExpression with ImplicitCastInputTypes {
 
@@ -681,7 +757,7 @@ case class StringSpace(child: Expression)
     UTF8String.blankString(if (length < 0) 0 else length)
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     nullSafeCodeGen(ctx, ev, (length) =>
       s"""${ev.value} = UTF8String.blankString(($length < 0) ? 0 : $length);""")
   }
@@ -692,7 +768,14 @@ case class StringSpace(child: Expression)
 /**
  * A function that takes a substring of its first argument starting at a given position.
  * Defined for String and Binary types.
+ *
+ * NOTE: that this is not zero based, but 1-based index. The first character in str has index 1.
  */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(str, pos[, len]) - Returns the substring of str that starts at pos and is of length len or the slice of byte array that starts at pos and is of length len.",
+  extended = "> SELECT _FUNC_('Spark SQL', 5);\n 'k SQL'\n> SELECT _FUNC_('Spark SQL', -3);\n 'SQL'\n> SELECT _FUNC_('Spark SQL', 5, 1);\n 'k'")
+// scalastyle:on line.size.limit
 case class Substring(str: Expression, pos: Expression, len: Expression)
   extends TernaryExpression with ImplicitCastInputTypes {
 
@@ -716,7 +799,7 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
     }
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
 
     defineCodeGen(ctx, ev, (string, pos, len) => {
       str.dataType match {
@@ -730,6 +813,9 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
 /**
  * A function that return the length of the given string or binary expression.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(str | binary) - Returns the length of str or number of bytes in binary data.",
+  extended = "> SELECT _FUNC_('Spark SQL');\n 9")
 case class Length(child: Expression) extends UnaryExpression with ExpectsInputTypes {
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(StringType, BinaryType))
@@ -739,7 +825,7 @@ case class Length(child: Expression) extends UnaryExpression with ExpectsInputTy
     case BinaryType => value.asInstanceOf[Array[Byte]].length
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     child.dataType match {
       case StringType => defineCodeGen(ctx, ev, c => s"($c).numChars()")
       case BinaryType => defineCodeGen(ctx, ev, c => s"($c).length")
@@ -750,6 +836,9 @@ case class Length(child: Expression) extends UnaryExpression with ExpectsInputTy
 /**
  * A function that return the Levenshtein distance between the two given strings.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(str1, str2) - Returns the Levenshtein distance between the two given strings.",
+  extended = "> SELECT _FUNC_('kitten', 'sitting');\n 3")
 case class Levenshtein(left: Expression, right: Expression) extends BinaryExpression
     with ImplicitCastInputTypes {
 
@@ -759,7 +848,7 @@ case class Levenshtein(left: Expression, right: Expression) extends BinaryExpres
   protected override def nullSafeEval(leftValue: Any, rightValue: Any): Any =
     leftValue.asInstanceOf[UTF8String].levenshteinDistance(rightValue.asInstanceOf[UTF8String])
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     nullSafeCodeGen(ctx, ev, (left, right) =>
       s"${ev.value} = $left.levenshteinDistance($right);")
   }
@@ -768,6 +857,9 @@ case class Levenshtein(left: Expression, right: Expression) extends BinaryExpres
 /**
  * A function that return soundex code of the given string expression.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(str) - Returns soundex code of the string.",
+  extended = "> SELECT _FUNC_('Miller');\n 'M460'")
 case class SoundEx(child: Expression) extends UnaryExpression with ExpectsInputTypes {
 
   override def dataType: DataType = StringType
@@ -776,7 +868,7 @@ case class SoundEx(child: Expression) extends UnaryExpression with ExpectsInputT
 
   override def nullSafeEval(input: Any): Any = input.asInstanceOf[UTF8String].soundex()
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     defineCodeGen(ctx, ev, c => s"$c.soundex()")
   }
 }
@@ -784,6 +876,10 @@ case class SoundEx(child: Expression) extends UnaryExpression with ExpectsInputT
 /**
  * Returns the numeric value of the first character of str.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(str) - Returns the numeric value of the first character of str.",
+  extended = "> SELECT _FUNC_('222');\n 50\n" +
+    "> SELECT _FUNC_(2);\n 50")
 case class Ascii(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def dataType: DataType = IntegerType
@@ -798,7 +894,7 @@ case class Ascii(child: Expression) extends UnaryExpression with ImplicitCastInp
     }
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     nullSafeCodeGen(ctx, ev, (child) => {
       val bytes = ctx.freshName("bytes")
       s"""
@@ -815,6 +911,8 @@ case class Ascii(child: Expression) extends UnaryExpression with ImplicitCastInp
 /**
  * Converts the argument from binary to a base 64 string.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(bin) - Convert the argument from binary to a base 64 string.")
 case class Base64(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def dataType: DataType = StringType
@@ -826,18 +924,19 @@ case class Base64(child: Expression) extends UnaryExpression with ImplicitCastIn
         bytes.asInstanceOf[Array[Byte]]))
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     nullSafeCodeGen(ctx, ev, (child) => {
       s"""${ev.value} = UTF8String.fromBytes(
             org.apache.commons.codec.binary.Base64.encodeBase64($child));
        """})
   }
-
 }
 
 /**
  * Converts the argument from a base 64 string to BINARY.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(str) - Convert the argument from a base 64 string to binary.")
 case class UnBase64(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def dataType: DataType = BinaryType
@@ -846,7 +945,7 @@ case class UnBase64(child: Expression) extends UnaryExpression with ImplicitCast
   protected override def nullSafeEval(string: Any): Any =
     org.apache.commons.codec.binary.Base64.decodeBase64(string.asInstanceOf[UTF8String].toString)
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     nullSafeCodeGen(ctx, ev, (child) => {
       s"""
          ${ev.value} = org.apache.commons.codec.binary.Base64.decodeBase64($child.toString());
@@ -859,6 +958,8 @@ case class UnBase64(child: Expression) extends UnaryExpression with ImplicitCast
  * (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
  * If either argument is null, the result will also be null.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(bin, str) - Decode the first argument using the second argument character set.")
 case class Decode(bin: Expression, charset: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
@@ -872,7 +973,7 @@ case class Decode(bin: Expression, charset: Expression)
     UTF8String.fromString(new String(input1.asInstanceOf[Array[Byte]], fromCharset))
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     nullSafeCodeGen(ctx, ev, (bytes, charset) =>
       s"""
         try {
@@ -888,7 +989,9 @@ case class Decode(bin: Expression, charset: Expression)
  * Encodes the first argument into a BINARY using the provided character set
  * (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16').
  * If either argument is null, the result will also be null.
-*/
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(str, str) - Encode the first argument using the second argument character set.")
 case class Encode(value: Expression, charset: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
@@ -902,7 +1005,7 @@ case class Encode(value: Expression, charset: Expression)
     input1.asInstanceOf[UTF8String].toString.getBytes(toCharset)
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     nullSafeCodeGen(ctx, ev, (string, charset) =>
       s"""
         try {
@@ -918,12 +1021,18 @@ case class Encode(value: Expression, charset: Expression)
  * and returns the result as a string. If D is 0, the result has no decimal point or
  * fractional part.
  */
+@ExpressionDescription(
+  usage = """_FUNC_(X, D) - Formats the number X like '#,###,###.##', rounded to D decimal places.
+    If D is 0, the result has no decimal point or fractional part.
+    This is supposed to function like MySQL's FORMAT.""",
+  extended = "> SELECT _FUNC_(12332.123456, 4);\n '12,332.1235'")
 case class FormatNumber(x: Expression, d: Expression)
   extends BinaryExpression with ExpectsInputTypes {
 
   override def left: Expression = x
   override def right: Expression = d
   override def dataType: DataType = StringType
+  override def nullable: Boolean = true
   override def inputTypes: Seq[AbstractDataType] = Seq(NumericType, IntegerType)
 
   // Associated with the pattern, for the last d value, and we will update the
@@ -936,8 +1045,10 @@ case class FormatNumber(x: Expression, d: Expression)
   @transient
   private val pattern: StringBuffer = new StringBuffer()
 
+  // SPARK-13515: US Locale configures the DecimalFormat object to use a dot ('.')
+  // as a decimal separator.
   @transient
-  private val numberFormat: DecimalFormat = new DecimalFormat("")
+  private val numberFormat = new DecimalFormat("", new DecimalFormatSymbols(Locale.US))
 
   override protected def nullSafeEval(xObject: Any, dObject: Any): Any = {
     val dValue = dObject.asInstanceOf[Int]
@@ -960,10 +1071,9 @@ case class FormatNumber(x: Expression, d: Expression)
           pattern.append("0")
         }
       }
-      val dFormat = new DecimalFormat(pattern.toString)
       lastDValue = dValue
 
-      numberFormat.applyPattern(dFormat.toPattern)
+      numberFormat.applyLocalizedPattern(pattern.toString)
     }
 
     x.dataType match {
@@ -978,7 +1088,7 @@ case class FormatNumber(x: Expression, d: Expression)
     }
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     nullSafeCodeGen(ctx, ev, (num, d) => {
 
       def typeHelper(p: String): String = {
@@ -990,6 +1100,11 @@ case class FormatNumber(x: Expression, d: Expression)
 
       val sb = classOf[StringBuffer].getName
       val df = classOf[DecimalFormat].getName
+      val dfs = classOf[DecimalFormatSymbols].getName
+      val l = classOf[Locale].getName
+      // SPARK-13515: US Locale configures the DecimalFormat object to use a dot ('.')
+      // as a decimal separator.
+      val usLocale = "US"
       val lastDValue = ctx.freshName("lastDValue")
       val pattern = ctx.freshName("pattern")
       val numberFormat = ctx.freshName("numberFormat")
@@ -997,7 +1112,8 @@ case class FormatNumber(x: Expression, d: Expression)
       val dFormat = ctx.freshName("dFormat")
       ctx.addMutableState("int", lastDValue, s"$lastDValue = -100;")
       ctx.addMutableState(sb, pattern, s"$pattern = new $sb();")
-      ctx.addMutableState(df, numberFormat, s"""$numberFormat = new $df("");""")
+      ctx.addMutableState(df, numberFormat,
+      s"""$numberFormat = new $df("", new $dfs($l.$usLocale));""")
 
       s"""
         if ($d >= 0) {
@@ -1011,9 +1127,8 @@ case class FormatNumber(x: Expression, d: Expression)
                 $pattern.append("0");
               }
             }
-            $df $dFormat = new $df($pattern.toString());
             $lastDValue = $d;
-            $numberFormat.applyPattern($dFormat.toPattern());
+            $numberFormat.applyLocalizedPattern($pattern.toString());
           }
           ${ev.value} = UTF8String.fromString($numberFormat.format(${typeHelper(num)}));
         } else {

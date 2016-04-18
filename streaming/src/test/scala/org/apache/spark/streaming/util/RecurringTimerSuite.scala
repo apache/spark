@@ -17,7 +17,9 @@
 
 package org.apache.spark.streaming.util
 
-import scala.collection.mutable
+import java.util.concurrent.ConcurrentLinkedQueue
+
+import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 
 import org.scalatest.PrivateMethodTester
@@ -30,34 +32,34 @@ class RecurringTimerSuite extends SparkFunSuite with PrivateMethodTester {
 
   test("basic") {
     val clock = new ManualClock()
-    val results = new mutable.ArrayBuffer[Long]() with mutable.SynchronizedBuffer[Long]
+    val results = new ConcurrentLinkedQueue[Long]()
     val timer = new RecurringTimer(clock, 100, time => {
-      results += time
+      results.add(time)
     }, "RecurringTimerSuite-basic")
     timer.start(0)
     eventually(timeout(10.seconds), interval(10.millis)) {
-      assert(results === Seq(0L))
+      assert(results.asScala.toSeq === Seq(0L))
     }
     clock.advance(100)
     eventually(timeout(10.seconds), interval(10.millis)) {
-      assert(results === Seq(0L, 100L))
+      assert(results.asScala.toSeq === Seq(0L, 100L))
     }
     clock.advance(200)
     eventually(timeout(10.seconds), interval(10.millis)) {
-      assert(results === Seq(0L, 100L, 200L, 300L))
+      assert(results.asScala.toSeq === Seq(0L, 100L, 200L, 300L))
     }
     assert(timer.stop(interruptTimer = true) === 300L)
   }
 
   test("SPARK-10224: call 'callback' after stopping") {
     val clock = new ManualClock()
-    val results = new mutable.ArrayBuffer[Long]() with mutable.SynchronizedBuffer[Long]
+    val results = new ConcurrentLinkedQueue[Long]
     val timer = new RecurringTimer(clock, 100, time => {
-      results += time
+      results.add(time)
     }, "RecurringTimerSuite-SPARK-10224")
     timer.start(0)
     eventually(timeout(10.seconds), interval(10.millis)) {
-      assert(results === Seq(0L))
+      assert(results.asScala.toSeq === Seq(0L))
     }
     @volatile var lastTime = -1L
     // Now RecurringTimer is waiting for the next interval
@@ -77,7 +79,7 @@ class RecurringTimerSuite extends SparkFunSuite with PrivateMethodTester {
     // Then it will find `stopped` is true and exit the loop, but it should call `callback` again
     // before exiting its internal thread.
     thread.join()
-    assert(results === Seq(0L, 100L, 200L))
+    assert(results.asScala.toSeq === Seq(0L, 100L, 200L))
     assert(lastTime === 200L)
   }
 }

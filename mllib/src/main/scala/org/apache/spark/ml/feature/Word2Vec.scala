@@ -26,8 +26,8 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.feature
-import org.apache.spark.mllib.linalg.{BLAS, Vector, VectorUDT, Vectors}
-import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+import org.apache.spark.mllib.linalg.{BLAS, Vector, Vectors, VectorUDT}
+import org.apache.spark.sql.{DataFrame, Dataset, SQLContext}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
@@ -48,6 +48,17 @@ private[feature] trait Word2VecBase extends Params
 
   /** @group getParam */
   def getVectorSize: Int = $(vectorSize)
+
+  /**
+   * The window size (context words from [-window, window]) default 5.
+   * @group expertParam
+   */
+  final val windowSize = new IntParam(
+    this, "windowSize", "the window size (context words from [-window, window])")
+  setDefault(windowSize -> 5)
+
+  /** @group expertGetParam */
+  def getWindowSize: Int = $(windowSize)
 
   /**
    * Number of partitions for sentences of words.
@@ -106,6 +117,9 @@ final class Word2Vec(override val uid: String) extends Estimator[Word2VecModel] 
   /** @group setParam */
   def setVectorSize(value: Int): this.type = set(vectorSize, value)
 
+  /** @group expertSetParam */
+  def setWindowSize(value: Int): this.type = set(windowSize, value)
+
   /** @group setParam */
   def setStepSize(value: Double): this.type = set(stepSize, value)
 
@@ -121,9 +135,10 @@ final class Word2Vec(override val uid: String) extends Estimator[Word2VecModel] 
   /** @group setParam */
   def setMinCount(value: Int): this.type = set(minCount, value)
 
-  override def fit(dataset: DataFrame): Word2VecModel = {
+  @Since("2.0.0")
+  override def fit(dataset: Dataset[_]): Word2VecModel = {
     transformSchema(dataset.schema, logging = true)
-    val input = dataset.select($(inputCol)).map(_.getAs[Seq[String]](0))
+    val input = dataset.select($(inputCol)).rdd.map(_.getAs[Seq[String]](0))
     val wordVectors = new feature.Word2Vec()
       .setLearningRate($(stepSize))
       .setMinCount($(minCount))
@@ -131,6 +146,7 @@ final class Word2Vec(override val uid: String) extends Estimator[Word2VecModel] 
       .setNumPartitions($(numPartitions))
       .setSeed($(seed))
       .setVectorSize($(vectorSize))
+      .setWindowSize($(windowSize))
       .fit(input)
     copyValues(new Word2VecModel(uid, wordVectors).setParent(this))
   }
@@ -204,7 +220,8 @@ class Word2VecModel private[ml] (
    * Transform a sentence column to a vector column to represent the whole sentence. The transform
    * is performed by averaging all word vectors it contains.
    */
-  override def transform(dataset: DataFrame): DataFrame = {
+  @Since("2.0.0")
+  override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     val vectors = wordVectors.getVectors
       .mapValues(vv => Vectors.dense(vv.map(_.toDouble)))

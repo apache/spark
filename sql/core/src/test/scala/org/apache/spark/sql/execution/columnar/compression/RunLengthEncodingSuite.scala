@@ -100,11 +100,11 @@ class RunLengthEncodingSuite extends SparkFunSuite {
     }
 
     test(s"$RunLengthEncoding with $typeName: simple case") {
-      skeleton(2, Seq(0 -> 2, 1 ->2))
+      skeleton(2, Seq(0 -> 2, 1 -> 2))
     }
 
     test(s"$RunLengthEncoding with $typeName: run length == 1") {
-      skeleton(2, Seq(0 -> 1, 1 ->1))
+      skeleton(2, Seq(0 -> 1, 1 -> 1))
     }
 
     test(s"$RunLengthEncoding with $typeName: single long run") {

@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Isotonic regression - MLlib
-displayTitle: <a href="mllib-guide.html">MLlib</a> - Regression
+title: Isotonic regression - spark.mllib
+displayTitle: Regression - spark.mllib
 ---
 
 ## Isotonic regression
@@ -23,7 +23,7 @@ Essentially isotonic regression is a
 [monotonic function](http://en.wikipedia.org/wiki/Monotonic_function)
 best fitting the original data points.
 
-MLlib supports a
+`spark.mllib` supports a
 [pool adjacent violators algorithm](http://doi.org/10.1198/TECH.2010.10111)
 which uses an approach to
 [parallelizing isotonic regression](http://doi.org/10.1007/978-3-642-99789-1_10).

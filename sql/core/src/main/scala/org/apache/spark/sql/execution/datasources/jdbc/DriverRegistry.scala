@@ -21,7 +21,7 @@ import java.sql.{Driver, DriverManager}
 
 import scala.collection.mutable
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
 /**
@@ -50,11 +50,6 @@ object DriverRegistry extends Logging {
         }
       }
     }
-  }
-
-  def getDriverClassName(url: String): String = DriverManager.getDriver(url) match {
-    case wrapper: DriverWrapper => wrapper.wrapped.getClass.getCanonicalName
-    case driver => driver.getClass.getCanonicalName
   }
 }
 
