@@ -19,6 +19,7 @@ package org.apache.spark.sql.streaming
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.StreamTest
+import org.apache.spark.sql.catalyst.analysis.Update
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.expressions.scala.typed
 import org.apache.spark.sql.functions._
@@ -31,6 +32,8 @@ object FailureSinglton {
 class StreamingAggregationSuite extends StreamTest with SharedSQLContext {
 
   import testImplicits._
+
+  override val outputMode = Update
 
   test("simple count") {
     val inputData = MemoryStream[Int]

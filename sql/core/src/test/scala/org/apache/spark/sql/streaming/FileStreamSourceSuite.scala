@@ -63,6 +63,7 @@ class FileStreamSourceTest extends StreamTest with SharedSQLContext {
       format: String,
       path: String,
       schema: Option[StructType] = None): FileStreamSource = {
+    val checkpointLocation = Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
     val reader =
       if (schema.isDefined) {
         sqlContext.read.format(format).schema(schema.get)
@@ -72,7 +73,8 @@ class FileStreamSourceTest extends StreamTest with SharedSQLContext {
     reader.stream(path)
       .queryExecution.analyzed
       .collect { case StreamingRelation(dataSource, _, _) =>
-        dataSource.createSource().asInstanceOf[FileStreamSource]
+        // There is only one source in our tests so just set sourceId to 0
+        dataSource.createSource(s"$checkpointLocation/sources/0").asInstanceOf[FileStreamSource]
       }.head
   }
 
@@ -98,9 +100,8 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
       }
     df.queryExecution.analyzed
       .collect { case StreamingRelation(dataSource, _, _) =>
-        dataSource.createSource().asInstanceOf[FileStreamSource]
-      }.head
-      .schema
+        dataSource.sourceSchema()
+      }.head._2
   }
 
   test("FileStreamSource schema: no path") {
@@ -340,7 +341,6 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
     Utils.deleteRecursively(src)
     Utils.deleteRecursively(tmp)
   }
-
 }
 
 class FileStreamSourceStressTestSuite extends FileStreamSourceTest with SharedSQLContext {

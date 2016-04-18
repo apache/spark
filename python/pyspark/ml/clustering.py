@@ -130,7 +130,7 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
         """
         Sets the value of :py:attr:`k`.
         """
-        self._paramMap[self.k] = value
+        self._set(k=value)
         return self
 
     @since("1.5.0")
@@ -145,7 +145,7 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
         """
         Sets the value of :py:attr:`initMode`.
         """
-        self._paramMap[self.initMode] = value
+        self._set(initMode=value)
         return self
 
     @since("1.5.0")
@@ -160,7 +160,7 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
         """
         Sets the value of :py:attr:`initSteps`.
         """
-        self._paramMap[self.initSteps] = value
+        self._set(initSteps=value)
         return self
 
     @since("1.5.0")
@@ -280,7 +280,7 @@ class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
         """
         Sets the value of :py:attr:`k`.
         """
-        self._paramMap[self.k] = value
+        self._set(k=value)
         return self
 
     @since("2.0.0")
@@ -295,7 +295,7 @@ class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
         """
         Sets the value of :py:attr:`minDivisibleClusterSize`.
         """
-        self._paramMap[self.minDivisibleClusterSize] = value
+        self._set(minDivisibleClusterSize=value)
         return self
 
     @since("2.0.0")

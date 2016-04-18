@@ -20,8 +20,10 @@ package org.apache.spark.sql
 import scala.collection.mutable
 
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.sql.catalyst.analysis.{Append, OutputMode, UnsupportedOperationChecker}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorRef
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.util.ContinuousQueryListener
 
 /**
@@ -172,16 +174,28 @@ class ContinuousQueryManager(sqlContext: SQLContext) {
       checkpointLocation: String,
       df: DataFrame,
       sink: Sink,
-      trigger: Trigger = ProcessingTime(0)): ContinuousQuery = {
+      trigger: Trigger = ProcessingTime(0),
+      outputMode: OutputMode = Append): ContinuousQuery = {
     activeQueriesLock.synchronized {
       if (activeQueries.contains(name)) {
         throw new IllegalArgumentException(
           s"Cannot start query with name $name as a query with that name is already active")
       }
-      val logicalPlan = df.logicalPlan.transform {
+      val analyzedPlan = df.queryExecution.analyzed
+      df.queryExecution.assertAnalyzed()
+
+      if (sqlContext.conf.getConf(SQLConf.UNSUPPORTED_OPERATION_CHECK_ENABLED)) {
+        UnsupportedOperationChecker.checkForStreaming(analyzedPlan, outputMode)
+      }
+
+      var nextSourceId = 0L
+
+      val logicalPlan = analyzedPlan.transform {
         case StreamingRelation(dataSource, _, output) =>
           // Materialize source to avoid creating it in every batch
-          val source = dataSource.createSource()
+          val metadataPath = s"$checkpointLocation/sources/$nextSourceId"
+          val source = dataSource.createSource(metadataPath)
+          nextSourceId += 1
           // We still need to use the previous `output` instead of `source.schema` as attributes in
           // "df.logicalPlan" has already used attributes of the previous `output`.
           StreamingExecutionRelation(source, output)
@@ -192,6 +206,7 @@ class ContinuousQueryManager(sqlContext: SQLContext) {
         checkpointLocation,
         logicalPlan,
         sink,
+        outputMode,
         trigger)
       query.start()
       activeQueries.put(name, query)

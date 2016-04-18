@@ -15,14 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml
+package org.apache.spark.sql.catalyst.analysis
 
-import org.scalatest.FunSuite // scalastyle:ignore funsuite
+sealed trait OutputMode
 
-// This is testing if the new build works. To be removed soon.
-class DummyTestingSuite extends FunSuite { // scalastyle:ignore funsuite
-
-  test("This is testing if the new build works.") {
-    assert(DummyTesting.add10(15) === 25)
-  }
-}
+case object Append extends OutputMode
+case object Update extends OutputMode
