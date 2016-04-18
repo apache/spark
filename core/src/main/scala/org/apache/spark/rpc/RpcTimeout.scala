@@ -19,11 +19,12 @@ package org.apache.spark.rpc
 
 import java.util.concurrent.TimeoutException
 
-import scala.concurrent.Future
+import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
+import scala.util.control.NonFatal
 
-import org.apache.spark.SparkConf
-import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.util.Utils
 
 /**
  * An exception thrown if RpcTimeout modifies a [[TimeoutException]].
@@ -71,7 +72,15 @@ private[spark] class RpcTimeout(val duration: FiniteDuration, val timeoutProp: S
    *         is still not ready
    */
   def awaitResult[T](future: Future[T]): T = {
-    ThreadUtils.awaitResult(future.recover(addMessageIfTimeout)(ThreadUtils.sameThread), duration)
+    val wrapAndRethrow: PartialFunction[Throwable, T] = {
+      case NonFatal(t) =>
+        throw new SparkException("Exception thrown in awaitResult", t)
+    }
+    try {
+      // scalastyle:off awaitresult
+      Await.result(future, duration)
+      // scalastyle:on awaitresult
+    } catch addMessageIfTimeout.orElse(wrapAndRethrow)
   }
 }
 
@@ -81,6 +90,7 @@ private[spark] object RpcTimeout {
   /**
    * Lookup the timeout property in the configuration and create
    * a RpcTimeout with the property key in the description.
+   *
    * @param conf configuration properties containing the timeout
    * @param timeoutProp property key for the timeout in seconds
    * @throws NoSuchElementException if property is not set
@@ -94,6 +104,7 @@ private[spark] object RpcTimeout {
    * Lookup the timeout property in the configuration and create
    * a RpcTimeout with the property key in the description.
    * Uses the given default value if property is not set
+   *
    * @param conf configuration properties containing the timeout
    * @param timeoutProp property key for the timeout in seconds
    * @param defaultValue default timeout value in seconds if property not found
@@ -108,6 +119,7 @@ private[spark] object RpcTimeout {
    * and create a RpcTimeout with the first set property key in the
    * description.
    * Uses the given default value if property is not set
+   *
    * @param conf configuration properties containing the timeout
    * @param timeoutPropList prioritized list of property keys for the timeout in seconds
    * @param defaultValue default timeout value in seconds if no properties found

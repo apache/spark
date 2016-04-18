@@ -24,6 +24,7 @@ import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch, TimeUnit}
 
 import scala.collection.mutable
 import scala.collection.JavaConverters._
+import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
@@ -455,7 +456,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     val e = intercept[SparkException] {
       ThreadUtils.awaitResult(f, 5 seconds)
     }
-    assert("Oops" === e.getMessage)
+    assert("Oops" === e.getCause.getMessage)
 
     env.stop(endpointRef)
   }
@@ -477,7 +478,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
       val e = intercept[SparkException] {
         ThreadUtils.awaitResult(f, 5 seconds)
       }
-      assert("Oops" === e.getMessage)
+      assert("Oops" === e.getCause.getMessage)
     } finally {
       anotherEnv.shutdown()
       anotherEnv.awaitTermination()
@@ -486,6 +487,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   /**
    * Setup an [[RpcEndpoint]] to collect all network events.
+   *
    * @return the [[RpcEndpointRef]] and an `ConcurrentLinkedQueue` that contains network events.
    */
   private def setupNetworkEndpoint(
@@ -619,10 +621,10 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
       anotherEnv.setupEndpointRef(env.address, "sendWithReply-unserializable-error")
     try {
       val f = rpcEndpointRef.ask[String]("hello")
-      val e = intercept[Exception] {
+      val e = intercept[SparkException] {
         ThreadUtils.awaitResult(f, 1 seconds)
       }
-      assert(e.isInstanceOf[NotSerializableException])
+      assert(e.getCause.isInstanceOf[NotSerializableException])
     } finally {
       anotherEnv.shutdown()
       anotherEnv.awaitTermination()
@@ -756,12 +758,14 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     // Ask with delayed response and allow the Future to timeout before ThreadUtils.awaitResult
     val fut3 = rpcEndpointRef.ask[String](NeverReply("goodbye"), shortTimeout)
 
-    // Allow future to complete with failure using plain ThreadUtils.awaitResult, this will return
+    // scalastyle:off awaitresult
+    // Allow future to complete with failure using plain Await.result, this will return
     // once the future is complete to verify addMessageIfTimeout was invoked
     val reply3 =
       intercept[RpcTimeoutException] {
-        ThreadUtils.awaitResult(fut3, 2000 millis)
+        Await.result(fut3, 2000 millis)
       }.getMessage
+    // scalastyle:on awaitresult
 
     // When the future timed out, the recover callback should have used
     // RpcTimeout.addMessageIfTimeout to add the property to the TimeoutException message
