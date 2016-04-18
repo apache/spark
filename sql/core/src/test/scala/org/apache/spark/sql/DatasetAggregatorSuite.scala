@@ -73,6 +73,16 @@ object NameAgg extends Aggregator[AggData, String, String] {
 }
 
 
+object SeqAgg extends Aggregator[AggData, Seq[Int], Seq[Int]] {
+  def zero: Seq[Int] = Nil
+  def reduce(b: Seq[Int], a: AggData): Seq[Int] = a.a +: b
+  def merge(b1: Seq[Int], b2: Seq[Int]): Seq[Int] = b1 ++ b2
+  def finish(r: Seq[Int]): Seq[Int] = r
+  override def bufferEncoder: Encoder[Seq[Int]] = ExpressionEncoder()
+  override def outputEncoder: Encoder[Seq[Int]] = ExpressionEncoder()
+}
+
+
 class ParameterizedTypeSum[IN, OUT : Numeric : Encoder](f: IN => OUT)
   extends Aggregator[IN, OUT, OUT] {
 
@@ -200,4 +210,12 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
         (1279869254, "Some String"))
   }
 
+  test("SPARK-14675: ClassFormatError when use Seq as Aggregator buffer type") {
+    val ds = Seq(AggData(1, "a"), AggData(2, "a")).toDS()
+
+    checkDataset(
+      ds.groupByKey(_.b).agg(SeqAgg.toColumn),
+      "a" -> Seq(1, 2)
+    )
+  }
 }

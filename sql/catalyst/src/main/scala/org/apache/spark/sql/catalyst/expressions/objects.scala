@@ -436,7 +436,7 @@ case class MapObjects private(
 
   override def nullable: Boolean = true
 
-  override def children: Seq[Expression] = lambdaFunction :: inputData :: Nil
+  override def children: Seq[Expression] = Seq(loopVar, lambdaFunction, inputData)
 
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported")
