@@ -30,24 +30,6 @@ from pyspark.mllib.common import inherit_doc
 
 
 @inherit_doc
-class PipelineMLWriter(JavaMLWriter):
-    """
-    Private Pipeline utility class that can save ML instances through their Scala implementation.
-
-    We can currently use JavaMLWriter, rather than MLWriter, since Pipeline implements _to_java.
-    """
-
-
-@inherit_doc
-class PipelineMLReader(JavaMLReader):
-    """
-    Private utility class that can load Pipeline instances through their Scala implementation.
-
-    We can currently use JavaMLReader, rather than MLReader, since Pipeline implements _from_java.
-    """
-
-
-@inherit_doc
 class Pipeline(Estimator, MLReadable, MLWritable):
     """
     A simple pipeline, which acts as an estimator. A Pipeline consists
@@ -154,8 +136,8 @@ class Pipeline(Estimator, MLReadable, MLWritable):
 
     @since("2.0.0")
     def write(self):
-        """Returns an JavaMLWriter instance for this ML instance."""
-        return PipelineMLWriter(self)
+        """Returns an MLWriter instance for this ML instance."""
+        return JavaMLWriter(self)
 
     @since("2.0.0")
     def save(self, path):
@@ -166,7 +148,7 @@ class Pipeline(Estimator, MLReadable, MLWritable):
     @since("2.0.0")
     def read(cls):
         """Returns an MLReader instance for this class."""
-        return PipelineMLReader(cls)
+        return JavaMLReader(cls)
 
     @classmethod
     def _from_java(cls, java_stage):
@@ -202,27 +184,6 @@ class Pipeline(Estimator, MLReadable, MLWritable):
 
 
 @inherit_doc
-class PipelineModelMLWriter(JavaMLWriter):
-    """
-    Private PipelineModel utility class that can save ML instances through their Scala
-    implementation.
-
-    We can (currently) use JavaMLWriter, rather than MLWriter, since PipelineModel implements
-    _to_java.
-    """
-
-
-@inherit_doc
-class PipelineModelMLReader(JavaMLReader):
-    """
-    Private utility class that can load PipelineModel instances through their Scala implementation.
-
-    We can currently use JavaMLReader, rather than MLReader, since PipelineModel implements
-    _from_java.
-    """
-
-
-@inherit_doc
 class PipelineModel(Model, MLReadable, MLWritable):
     """
     Represents a compiled pipeline with transformers and fitted models.
@@ -254,8 +215,8 @@ class PipelineModel(Model, MLReadable, MLWritable):
 
     @since("2.0.0")
     def write(self):
-        """Returns an JavaMLWriter instance for this ML instance."""
-        return PipelineModelMLWriter(self)
+        """Returns an MLWriter instance for this ML instance."""
+        return JavaMLWriter(self)
 
     @since("2.0.0")
     def save(self, path):
@@ -265,8 +226,8 @@ class PipelineModel(Model, MLReadable, MLWritable):
     @classmethod
     @since("2.0.0")
     def read(cls):
-        """Returns an JavaMLReader instance for this class."""
-        return PipelineModelMLReader(cls)
+        """Returns an MLReader instance for this class."""
+        return JavaMLReader(cls)
 
     @classmethod
     def _from_java(cls, java_stage):
