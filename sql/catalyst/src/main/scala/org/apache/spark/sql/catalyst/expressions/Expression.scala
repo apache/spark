@@ -215,7 +215,7 @@ trait Unevaluable extends Expression {
   final override def eval(input: InternalRow = null): Any =
     throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
 
-  final override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
+  final override def protected doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
     throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
 }
 

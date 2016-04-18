@@ -122,7 +122,7 @@ case class GetStructField(child: Expression, ordinal: Int, name: Option[String] 
   protected override def nullSafeEval(input: Any): Any =
     input.asInstanceOf[InternalRow].get(ordinal, childSchema(ordinal).dataType)
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, eval => {
           if (nullable) {
             s"""
@@ -179,7 +179,7 @@ case class GetArrayStructFields(
     new GenericArrayData(result)
   }
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val arrayClass = classOf[GenericArrayData].getName
     nullSafeCodeGen(ctx, ev, eval => {
           val n = ctx.freshName("n")
@@ -239,7 +239,7 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
     }
   }
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
       val index = ctx.freshName("index")
       s"""
@@ -302,7 +302,7 @@ case class GetMapValue(child: Expression, key: Expression)
     }
   }
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val index = ctx.freshName("index")
     val length = ctx.freshName("length")
     val keys = ctx.freshName("keys")

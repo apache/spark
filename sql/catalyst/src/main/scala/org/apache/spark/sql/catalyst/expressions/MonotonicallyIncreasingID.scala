@@ -65,7 +65,7 @@ private[sql] case class MonotonicallyIncreasingID() extends LeafExpression with 
     partitionMask + currentCount
   }
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val countTerm = ctx.freshName("count")
     val partitionMaskTerm = ctx.freshName("partitionMask")
     ctx.addMutableState(ctx.JAVA_LONG, countTerm, s"$countTerm = 0L;")

@@ -59,7 +59,7 @@ case class StaticInvoke(
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = ctx.javaType(dataType)
     val argGen = arguments.map(_.genCode(ctx))
     val argString = argGen.map(_.value).mkString(", ")
@@ -148,7 +148,7 @@ case class Invoke(
     case _ => identity[String] _
   }
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = ctx.javaType(dataType)
     val obj = targetObject.genCode(ctx)
     val argGen = arguments.map(_.genCode(ctx))
@@ -239,7 +239,7 @@ case class NewInstance(
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = ctx.javaType(dataType)
     val argGen = arguments.map(_.genCode(ctx))
     val argString = argGen.map(_.value).mkString(", ")
@@ -302,7 +302,7 @@ case class UnwrapOption(
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported")
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = ctx.javaType(dataType)
     val inputObject = child.genCode(ctx)
 
@@ -335,7 +335,7 @@ case class WrapOption(child: Expression, optType: DataType)
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported")
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val inputObject = child.genCode(ctx)
 
     ev.copy(s"""
@@ -444,7 +444,7 @@ case class MapObjects private(
 
   override def dataType: DataType = ArrayType(lambdaFunction.dataType)
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = ctx.javaType(dataType)
     val elementJavaType = ctx.javaType(loopVar.dataType)
     ctx.addMutableState("boolean", loopVar.isNull, "")
@@ -524,7 +524,7 @@ case class CreateExternalRow(children: Seq[Expression], schema: StructType)
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported")
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val rowClass = classOf[GenericRowWithSchema].getName
     val values = ctx.freshName("values")
     ctx.addMutableState("Object[]", values, "")
@@ -561,7 +561,7 @@ case class EncodeUsingSerializer(child: Expression, kryo: Boolean)
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported")
 
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // Code to initialize the serializer.
     val serializer = ctx.freshName("serializer")
     val (serializerClass, serializerInstanceClass) = {
@@ -601,7 +601,7 @@ case class EncodeUsingSerializer(child: Expression, kryo: Boolean)
 case class DecodeUsingSerializer[T](child: Expression, tag: ClassTag[T], kryo: Boolean)
   extends UnaryExpression with NonSQLExpression {
 
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // Code to initialize the serializer.
     val serializer = ctx.freshName("serializer")
     val (serializerClass, serializerInstanceClass) = {
@@ -646,7 +646,7 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val instanceGen = beanInstance.genCode(ctx)
 
     val initialize = setters.map {
@@ -688,7 +688,7 @@ case class AssertNotNull(child: Expression, walkedTypePath: Seq[String])
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
 
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val childGen = child.genCode(ctx)
 
     val errMsg = "Null value appeared in non-nullable field:" +

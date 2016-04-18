@@ -67,7 +67,7 @@ case class Rand(seed: Long) extends RDG {
     case _ => throw new AnalysisException("Input argument to rand must be an integer literal.")
   })
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val rngTerm = ctx.freshName("rng")
     val className = classOf[XORShiftRandom].getName
     ctx.addMutableState(className, rngTerm,
@@ -90,7 +90,7 @@ case class Randn(seed: Long) extends RDG {
     case _ => throw new AnalysisException("Input argument to randn must be an integer literal.")
   })
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val rngTerm = ctx.freshName("rng")
     val className = classOf[XORShiftRandom].getName
     ctx.addMutableState(className, rngTerm,

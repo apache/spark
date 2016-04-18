@@ -78,7 +78,7 @@ case class Like(left: Expression, right: Expression)
 
   override def toString: String = s"$left LIKE $right"
 
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val patternClass = classOf[Pattern].getName
     val escapeFunc = StringUtils.getClass.getName.stripSuffix("$") + ".escapeLikeRegex"
     val pattern = ctx.freshName("pattern")
@@ -128,7 +128,7 @@ case class RLike(left: Expression, right: Expression)
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).find(0)
   override def toString: String = s"$left RLIKE $right"
 
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val patternClass = classOf[Pattern].getName
     val pattern = ctx.freshName("pattern")
 
@@ -188,7 +188,7 @@ case class StringSplit(str: Expression, pattern: Expression)
     new GenericArrayData(strings.asInstanceOf[Array[Any]])
   }
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val arrayClass = classOf[GenericArrayData].getName
     nullSafeCodeGen(ctx, ev, (str, pattern) =>
       // Array in java is covariant, so we don't need to cast UTF8String[] to Object[].
@@ -247,7 +247,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
   override def children: Seq[Expression] = subject :: regexp :: rep :: Nil
   override def prettyName: String = "regexp_replace"
 
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val termLastRegex = ctx.freshName("lastRegex")
     val termPattern = ctx.freshName("pattern")
 
@@ -330,7 +330,7 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
   override def children: Seq[Expression] = subject :: regexp :: idx :: Nil
   override def prettyName: String = "regexp_extract"
 
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val termLastRegex = ctx.freshName("lastRegex")
     val termPattern = ctx.freshName("pattern")
     val classNamePattern = classOf[Pattern].getCanonicalName

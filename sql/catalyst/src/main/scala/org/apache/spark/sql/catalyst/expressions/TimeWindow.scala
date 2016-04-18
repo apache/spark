@@ -158,7 +158,7 @@ object TimeWindow {
 case class PreciseTimestamp(child: Expression) extends UnaryExpression with ExpectsInputTypes {
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
   override def dataType: DataType = LongType
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval = child.genCode(ctx)
     ev.copy(eval.code +
       s"""boolean ${ev.isNull} = ${eval.isNull};

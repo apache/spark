@@ -91,7 +91,7 @@ case class DateAdd(startDate: Expression, days: Expression)
     start.asInstanceOf[Int] + d.asInstanceOf[Int]
   }
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (sd, d) => {
       s"""${ev.value} = $sd + $d;"""
     })
@@ -119,7 +119,7 @@ case class DateSub(startDate: Expression, days: Expression)
     start.asInstanceOf[Int] - d.asInstanceOf[Int]
   }
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (sd, d) => {
       s"""${ev.value} = $sd - $d;"""
     })
@@ -141,7 +141,7 @@ case class Hour(child: Expression) extends UnaryExpression with ImplicitCastInpu
     DateTimeUtils.getHours(timestamp.asInstanceOf[Long])
   }
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, c => s"$dtu.getHours($c)")
   }
@@ -160,7 +160,7 @@ case class Minute(child: Expression) extends UnaryExpression with ImplicitCastIn
     DateTimeUtils.getMinutes(timestamp.asInstanceOf[Long])
   }
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, c => s"$dtu.getMinutes($c)")
   }
@@ -179,7 +179,7 @@ case class Second(child: Expression) extends UnaryExpression with ImplicitCastIn
     DateTimeUtils.getSeconds(timestamp.asInstanceOf[Long])
   }
 
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, c => s"$dtu.getSeconds($c)")
   }
@@ -198,7 +198,7 @@ case class DayOfYear(child: Expression) extends UnaryExpression with ImplicitCas
     DateTimeUtils.getDayInYear(date.asInstanceOf[Int])
   }
 
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, c => s"$dtu.getDayInYear($c)")
   }
@@ -217,7 +217,7 @@ case class Year(child: Expression) extends UnaryExpression with ImplicitCastInpu
     DateTimeUtils.getYear(date.asInstanceOf[Int])
   }
 
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, c => s"$dtu.getYear($c)")
   }
@@ -235,7 +235,7 @@ case class Quarter(child: Expression) extends UnaryExpression with ImplicitCastI
     DateTimeUtils.getQuarter(date.asInstanceOf[Int])
   }
 
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, c => s"$dtu.getQuarter($c)")
   }
@@ -254,7 +254,7 @@ case class Month(child: Expression) extends UnaryExpression with ImplicitCastInp
     DateTimeUtils.getMonth(date.asInstanceOf[Int])
   }
 
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, c => s"$dtu.getMonth($c)")
   }
@@ -273,7 +273,7 @@ case class DayOfMonth(child: Expression) extends UnaryExpression with ImplicitCa
     DateTimeUtils.getDayOfMonth(date.asInstanceOf[Int])
   }
 
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, c => s"$dtu.getDayOfMonth($c)")
   }
@@ -300,7 +300,7 @@ case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCa
     c.get(Calendar.WEEK_OF_YEAR)
   }
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, time => {
           val cal = classOf[Calendar].getName
           val c = ctx.freshName("cal")
@@ -335,7 +335,7 @@ case class DateFormatClass(left: Expression, right: Expression) extends BinaryEx
     UTF8String.fromString(sdf.format(new java.util.Date(timestamp.asInstanceOf[Long] / 1000)))
   }
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val sdf = classOf[SimpleDateFormat].getName
     defineCodeGen(ctx, ev, (timestamp, format) => {
       s"""UTF8String.fromString((new $sdf($format.toString()))
@@ -430,7 +430,7 @@ abstract class UnixTime extends BinaryExpression with ExpectsInputTypes {
     }
   }
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     left.dataType match {
       case StringType if right.foldable =>
         val sdf = classOf[SimpleDateFormat].getName
@@ -546,7 +546,7 @@ case class FromUnixTime(sec: Expression, format: Expression)
     }
   }
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val sdf = classOf[SimpleDateFormat].getName
     if (format.foldable) {
       if (constFormat == null) {
@@ -599,7 +599,7 @@ case class LastDay(startDate: Expression) extends UnaryExpression with ImplicitC
     DateTimeUtils.getLastDayOfMonth(date.asInstanceOf[Int])
   }
 
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, sd => s"$dtu.getLastDayOfMonth($sd)")
   }
@@ -640,7 +640,7 @@ case class NextDay(startDate: Expression, dayOfWeek: Expression)
     }
   }
 
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (sd, dowS) => {
       val dateTimeUtilClass = DateTimeUtils.getClass.getName.stripSuffix("$")
       val dayOfWeekTerm = ctx.freshName("dayOfWeek")
@@ -692,7 +692,7 @@ case class TimeAdd(start: Expression, interval: Expression)
       start.asInstanceOf[Long], itvl.months, itvl.microseconds)
   }
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, (sd, i) => {
       s"""$dtu.timestampAddInterval($sd, $i.months, $i.microseconds)"""
@@ -719,7 +719,7 @@ case class FromUTCTimestamp(left: Expression, right: Expression)
       timezone.asInstanceOf[UTF8String].toString)
   }
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     if (right.foldable) {
       val tz = right.eval()
@@ -771,7 +771,7 @@ case class TimeSub(start: Expression, interval: Expression)
       start.asInstanceOf[Long], 0 - itvl.months, 0 - itvl.microseconds)
   }
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, (sd, i) => {
       s"""$dtu.timestampAddInterval($sd, 0 - $i.months, 0 - $i.microseconds)"""
@@ -799,7 +799,7 @@ case class AddMonths(startDate: Expression, numMonths: Expression)
     DateTimeUtils.dateAddMonths(start.asInstanceOf[Int], months.asInstanceOf[Int])
   }
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, (sd, m) => {
       s"""$dtu.dateAddMonths($sd, $m)"""
@@ -829,7 +829,7 @@ case class MonthsBetween(date1: Expression, date2: Expression)
     DateTimeUtils.monthsBetween(t1.asInstanceOf[Long], t2.asInstanceOf[Long])
   }
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, (l, r) => {
       s"""$dtu.monthsBetween($l, $r)"""
@@ -858,7 +858,7 @@ case class ToUTCTimestamp(left: Expression, right: Expression)
       timezone.asInstanceOf[UTF8String].toString)
   }
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     if (right.foldable) {
       val tz = right.eval()
@@ -906,7 +906,7 @@ case class ToDate(child: Expression) extends UnaryExpression with ImplicitCastIn
 
   override def eval(input: InternalRow): Any = child.eval(input)
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, d => d)
   }
 
@@ -953,7 +953,7 @@ case class TruncDate(date: Expression, format: Expression)
     }
   }
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
 
     if (format.foldable) {
@@ -1005,7 +1005,7 @@ case class DateDiff(endDate: Expression, startDate: Expression)
     end.asInstanceOf[Int] - start.asInstanceOf[Int]
   }
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (end, start) => s"$end - $start")
   }
 }

@@ -64,7 +64,7 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
     result
   }
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val first = children(0)
     val rest = children.drop(1)
     val firstEval = first.genCode(ctx)
@@ -112,7 +112,7 @@ case class IsNaN(child: Expression) extends UnaryExpression
     }
   }
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval = child.genCode(ctx)
     child.dataType match {
       case DoubleType | FloatType =>
@@ -153,7 +153,7 @@ case class NaNvl(left: Expression, right: Expression)
     }
   }
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val leftGen = left.genCode(ctx)
     val rightGen = right.genCode(ctx)
     left.dataType match {
@@ -193,7 +193,7 @@ case class IsNull(child: Expression) extends UnaryExpression with Predicate {
     child.eval(input) == null
   }
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval = child.genCode(ctx)
     ExprCode(code = eval.code, isNull = "false", value = eval.isNull)
   }
@@ -214,7 +214,7 @@ case class IsNotNull(child: Expression) extends UnaryExpression with Predicate {
     child.eval(input) != null
   }
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval = child.genCode(ctx)
     ExprCode(code = eval.code, isNull = "false", value = s"(!(${eval.isNull}))")
   }
@@ -252,7 +252,7 @@ case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate
     numNonNulls >= n
   }
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val nonnull = ctx.freshName("nonnull")
     val code = children.map { e =>
       val eval = e.genCode(ctx)

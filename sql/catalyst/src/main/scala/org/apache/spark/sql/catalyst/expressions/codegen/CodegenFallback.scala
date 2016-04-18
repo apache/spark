@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.util.toCommentSafeString
  */
 trait CodegenFallback extends Expression {
 
-  protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     foreach {
       case n: Nondeterministic => n.setInitialValues()
       case _ =>

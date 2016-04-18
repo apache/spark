@@ -59,7 +59,7 @@ case class ReferenceToExpressions(result: Expression, children: Seq[Expression])
     result.eval(projection(input))
   }
 
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val childrenGen = children.map(_.genCode(ctx))
     val childrenVars = childrenGen.zip(children).map {
       case (childGen, child) => LambdaVariable(childGen.value, childGen.isNull, child.dataType)

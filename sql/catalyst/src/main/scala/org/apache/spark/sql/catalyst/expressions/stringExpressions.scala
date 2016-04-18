@@ -51,7 +51,7 @@ case class Concat(children: Seq[Expression]) extends Expression with ImplicitCas
     UTF8String.concat(inputs : _*)
   }
 
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val evals = children.map(_.genCode(ctx))
     val inputs = evals.map { eval =>
       s"${eval.isNull} ? null : ${eval.value}"
@@ -106,7 +106,7 @@ case class ConcatWs(children: Seq[Expression])
     UTF8String.concatWs(flatInputs.head, flatInputs.tail : _*)
   }
 
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     if (children.forall(_.dataType == StringType)) {
       // All children are strings. In that case we can construct a fixed size array.
       val evals = children.map(_.genCode(ctx))
@@ -185,7 +185,7 @@ case class Upper(child: Expression)
 
   override def convert(v: UTF8String): UTF8String = v.toUpperCase
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c => s"($c).toUpperCase()")
   }
 }
@@ -200,7 +200,7 @@ case class Lower(child: Expression) extends UnaryExpression with String2StringEx
 
   override def convert(v: UTF8String): UTF8String = v.toLowerCase
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c => s"($c).toLowerCase()")
   }
 }
@@ -225,7 +225,7 @@ trait StringPredicate extends Predicate with ImplicitCastInputTypes {
 case class Contains(left: Expression, right: Expression)
     extends BinaryExpression with StringPredicate {
   override def compare(l: UTF8String, r: UTF8String): Boolean = l.contains(r)
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) => s"($c1).contains($c2)")
   }
 }
@@ -236,7 +236,7 @@ case class Contains(left: Expression, right: Expression)
 case class StartsWith(left: Expression, right: Expression)
     extends BinaryExpression with StringPredicate {
   override def compare(l: UTF8String, r: UTF8String): Boolean = l.startsWith(r)
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) => s"($c1).startsWith($c2)")
   }
 }
@@ -247,7 +247,7 @@ case class StartsWith(left: Expression, right: Expression)
 case class EndsWith(left: Expression, right: Expression)
     extends BinaryExpression with StringPredicate {
   override def compare(l: UTF8String, r: UTF8String): Boolean = l.endsWith(r)
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) => s"($c1).endsWith($c2)")
   }
 }
@@ -298,7 +298,7 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
     srcEval.asInstanceOf[UTF8String].translate(dict)
   }
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val termLastMatching = ctx.freshName("lastMatching")
     val termLastReplace = ctx.freshName("lastReplace")
     val termDict = ctx.freshName("dict")
@@ -351,7 +351,7 @@ case class FindInSet(left: Expression, right: Expression) extends BinaryExpressi
   override protected def nullSafeEval(word: Any, set: Any): Any =
     set.asInstanceOf[UTF8String].findInSet(word.asInstanceOf[UTF8String])
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (word, set) =>
       s"${ev.value} = $set.findInSet($word);"
     )
@@ -375,7 +375,7 @@ case class StringTrim(child: Expression)
 
   override def prettyName: String = "trim"
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c => s"($c).trim()")
   }
 }
@@ -393,7 +393,7 @@ case class StringTrimLeft(child: Expression)
 
   override def prettyName: String = "ltrim"
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c => s"($c).trimLeft()")
   }
 }
@@ -411,7 +411,7 @@ case class StringTrimRight(child: Expression)
 
   override def prettyName: String = "rtrim"
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c => s"($c).trimRight()")
   }
 }
@@ -440,7 +440,7 @@ case class StringInstr(str: Expression, substr: Expression)
 
   override def prettyName: String = "instr"
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (l, r) =>
       s"($l).indexOf($r, 0) + 1")
   }
@@ -475,7 +475,7 @@ case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr:
       count.asInstanceOf[Int])
   }
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (str, delim, count) => s"$str.subStringIndex($delim, $count)")
   }
 }
@@ -524,7 +524,7 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
     }
   }
 
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val substrGen = substr.genCode(ctx)
     val strGen = str.genCode(ctx)
     val startGen = start.genCode(ctx)
@@ -571,7 +571,7 @@ case class StringLPad(str: Expression, len: Expression, pad: Expression)
     str.asInstanceOf[UTF8String].lpad(len.asInstanceOf[Int], pad.asInstanceOf[UTF8String])
   }
 
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (str, len, pad) => s"$str.lpad($len, $pad)")
   }
 
@@ -597,7 +597,7 @@ case class StringRPad(str: Expression, len: Expression, pad: Expression)
     str.asInstanceOf[UTF8String].rpad(len.asInstanceOf[Int], pad.asInstanceOf[UTF8String])
   }
 
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (str, len, pad) => s"$str.rpad($len, $pad)")
   }
 
@@ -638,7 +638,7 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
     }
   }
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val pattern = children.head.genCode(ctx)
 
     val argListGen = children.tail.map(x => (x.dataType, x.genCode(ctx)))
@@ -693,7 +693,7 @@ case class InitCap(child: Expression) extends UnaryExpression with ImplicitCastI
   override def nullSafeEval(string: Any): Any = {
     string.asInstanceOf[UTF8String].toLowerCase.toTitleCase
   }
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, str => s"$str.toLowerCase().toTitleCase()")
   }
 }
@@ -718,7 +718,7 @@ case class StringRepeat(str: Expression, times: Expression)
 
   override def prettyName: String = "repeat"
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (l, r) => s"($l).repeat($r)")
   }
 }
@@ -734,7 +734,7 @@ case class StringReverse(child: Expression) extends UnaryExpression with String2
 
   override def prettyName: String = "reverse"
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c => s"($c).reverse()")
   }
 }
@@ -756,7 +756,7 @@ case class StringSpace(child: Expression)
     UTF8String.blankString(if (length < 0) 0 else length)
   }
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (length) =>
           s"""${ev.value} = UTF8String.blankString(($length < 0) ? 0 : $length);""")
   }
@@ -798,7 +798,7 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
     }
   }
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
 
     defineCodeGen(ctx, ev, (string, pos, len) => {
       str.dataType match {
@@ -824,7 +824,7 @@ case class Length(child: Expression) extends UnaryExpression with ExpectsInputTy
     case BinaryType => value.asInstanceOf[Array[Byte]].length
   }
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     child.dataType match {
       case StringType => defineCodeGen(ctx, ev, c => s"($c).numChars()")
       case BinaryType => defineCodeGen(ctx, ev, c => s"($c).length")
@@ -847,7 +847,7 @@ case class Levenshtein(left: Expression, right: Expression) extends BinaryExpres
   protected override def nullSafeEval(leftValue: Any, rightValue: Any): Any =
     leftValue.asInstanceOf[UTF8String].levenshteinDistance(rightValue.asInstanceOf[UTF8String])
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (left, right) =>
       s"${ev.value} = $left.levenshteinDistance($right);")
   }
@@ -867,7 +867,7 @@ case class SoundEx(child: Expression) extends UnaryExpression with ExpectsInputT
 
   override def nullSafeEval(input: Any): Any = input.asInstanceOf[UTF8String].soundex()
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c => s"$c.soundex()")
   }
 }
@@ -893,7 +893,7 @@ case class Ascii(child: Expression) extends UnaryExpression with ImplicitCastInp
     }
   }
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (child) => {
           val bytes = ctx.freshName("bytes")
           s"""
@@ -923,7 +923,7 @@ case class Base64(child: Expression) extends UnaryExpression with ImplicitCastIn
         bytes.asInstanceOf[Array[Byte]]))
   }
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (child) => {
           s"""${ev.value} = UTF8String.fromBytes(
                 org.apache.commons.codec.binary.Base64.encodeBase64($child));
@@ -944,7 +944,7 @@ case class UnBase64(child: Expression) extends UnaryExpression with ImplicitCast
   protected override def nullSafeEval(string: Any): Any =
     org.apache.commons.codec.binary.Base64.decodeBase64(string.asInstanceOf[UTF8String].toString)
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (child) => {
           s"""
              ${ev.value} = org.apache.commons.codec.binary.Base64.decodeBase64($child.toString());
@@ -972,7 +972,7 @@ case class Decode(bin: Expression, charset: Expression)
     UTF8String.fromString(new String(input1.asInstanceOf[Array[Byte]], fromCharset))
   }
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (bytes, charset) =>
       s"""
         try {
@@ -1004,7 +1004,7 @@ case class Encode(value: Expression, charset: Expression)
     input1.asInstanceOf[UTF8String].toString.getBytes(toCharset)
   }
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (string, charset) =>
       s"""
         try {
@@ -1087,7 +1087,7 @@ case class FormatNumber(x: Expression, d: Expression)
     }
   }
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (num, d) => {
 
       def typeHelper(p: String): String = {

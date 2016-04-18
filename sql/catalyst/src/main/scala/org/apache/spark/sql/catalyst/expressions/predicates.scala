@@ -99,7 +99,7 @@ case class Not(child: Expression)
 
   protected override def nullSafeEval(input: Any): Any = !input.asInstanceOf[Boolean]
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c => s"!($c)")
   }
 
@@ -157,7 +157,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate
     }
   }
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val valueGen = value.genCode(ctx)
     val listGen = list.map(_.genCode(ctx))
     val listCode = listGen.map(x =>
@@ -216,7 +216,7 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
 
   def getHSet(): Set[Any] = hset
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val setName = classOf[Set[Any]].getName
     val InSetName = classOf[InSet].getName
     val childGen = child.genCode(ctx)
@@ -274,7 +274,7 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
     }
   }
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval1 = left.genCode(ctx)
     val eval2 = right.genCode(ctx)
 
@@ -337,7 +337,7 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
     }
   }
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval1 = left.genCode(ctx)
     val eval2 = right.genCode(ctx)
 
@@ -376,7 +376,7 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
 
 abstract class BinaryComparison extends BinaryOperator with Predicate {
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     if (ctx.isPrimitiveType(left.dataType)
         && left.dataType != BooleanType // java boolean doesn't support > or < operator
         && left.dataType != FloatType
@@ -425,7 +425,7 @@ case class EqualTo(left: Expression, right: Expression)
     }
   }
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) => ctx.genEqual(left.dataType, c1, c2))
   }
 }
@@ -461,7 +461,7 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
     }
   }
 
-  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval1 = left.genCode(ctx)
     val eval2 = right.genCode(ctx)
     val equalCode = ctx.genEqual(left.dataType, eval1.value, eval2.value)

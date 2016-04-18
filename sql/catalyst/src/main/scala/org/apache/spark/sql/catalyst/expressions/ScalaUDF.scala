@@ -989,7 +989,7 @@ case class ScalaUDF(
     converterTerm
   }
 
-  protected override def doGenCode(
+  override def doGenCode(
       ctx: CodegenContext,
       ev: ExprCode): ExprCode = {
 
