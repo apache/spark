@@ -25,6 +25,23 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 class ElementwiseProductSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
+  test("ElementwiseProduct should throw adequate exception on input type mismatch") {
+    val data = Seq(Tuple1("string value"))
+
+    val df = sqlContext.createDataFrame(data).toDF("features")
+
+    val elementwiseProduct = new ElementwiseProduct()
+      .setInputCol("features")
+      .setOutputCol("scaled_features")
+
+    val thrown = intercept[IllegalArgumentException] {
+      elementwiseProduct.transform(df).collect()
+    }
+    assert(thrown.getClass === classOf[IllegalArgumentException])
+    assert(
+      thrown.getMessage == "requirement failed: Input type must be VectorUDT but got StringType.")
+  }
+
   test("read/write") {
     val ep = new ElementwiseProduct()
       .setInputCol("myInputCol")

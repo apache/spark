@@ -55,6 +55,11 @@ class ElementwiseProduct(override val uid: String)
     elemScaler.transform
   }
 
+  override protected def validateInputType(inputType: DataType): Unit = {
+    super.validateInputType(inputType)
+    require(inputType.isInstanceOf[VectorUDT], s"Input type must be VectorUDT but got $inputType.")
+  }
+
   override protected def outputDataType: DataType = new VectorUDT()
 }
 

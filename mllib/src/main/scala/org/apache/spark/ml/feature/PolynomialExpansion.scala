@@ -61,6 +61,7 @@ class PolynomialExpansion(override val uid: String)
   }
 
   override protected def validateInputType(inputType: DataType): Unit = {
+    super.validateInputType(inputType)
     require(inputType.isInstanceOf[VectorUDT], s"Input type must be VectorUDT but got $inputType.")
   }
 
