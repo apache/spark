@@ -608,4 +608,28 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
       }
     }
   }
+
+  test("SPARK-14560 -- force spill an empty collection") {
+    // You should be able to force-spill a collection any time -- even if there is nothing
+    // to spill (eg., nothing has been added, or it just spilled)
+    val conf = createSparkConf(loadDefaults = true, kryo = true)
+    sc = new SparkContext("local", "test", conf)
+    val context = MemoryTestingUtils.fakeTaskContext(sc.env)
+    val sorter =
+      new ExternalSorter[Int, Int, Int](context, None, None, None)
+    sorter.spill()
+    assert(sorter.iterator.toIndexedSeq == IndexedSeq())
+
+
+    val sorter2 =
+      new ExternalSorter[Int, Int, Int](context, None, None, None)
+    val elements = IndexedSeq((1, 1), (2, 2), (5, 5))
+    sorter2.insertAll(elements.iterator)
+    // say the first spill is natural due to the collection being full
+    sorter2.spill()
+    // and then we spill again, even though we haven't added anything else, because something
+    // external requests us to free memory
+    sorter2.spill()
+    assert(sorter2.iterator.toIndexedSeq == elements)
+  }
 }

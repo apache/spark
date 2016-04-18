@@ -63,13 +63,17 @@ private[spark] trait Spillable[C] extends Logging {
   }
 
   final def spill(currentMemory: Long): Unit = {
-    _spillCount += 1
-    logSpillage(currentMemory)
-    spillCollection()
-    _elementsRead = 0
-    _memoryBytesSpilled += currentMemory
-    releaseMemory()
-    resetAfterSpill()
+    if (_elementsRead == 0) {
+      logDebug(s"Skipping spill since ${this} is empty")
+    } else {
+      _spillCount += 1
+      logSpillage(currentMemory)
+      spillCollection()
+      _elementsRead = 0
+      _memoryBytesSpilled += currentMemory
+      releaseMemory()
+      resetAfterSpill()
+    }
   }
 
   // Number of elements read from input since last spill
