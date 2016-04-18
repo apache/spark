@@ -199,9 +199,10 @@ class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with Tim
     val f = sc.parallelize(1 to 100, 4)
               .mapPartitions(itr => { Thread.sleep(20); itr })
               .countAsync()
-    intercept[TimeoutException] {
+    val e = intercept[SparkException] {
       ThreadUtils.awaitResult(f, Duration(20, "milliseconds"))
     }
+    assert(e.getCause.isInstanceOf[TimeoutException])
   }
 
   private def testAsyncAction[R](action: RDD[Int] => FutureAction[R]): Unit = {
