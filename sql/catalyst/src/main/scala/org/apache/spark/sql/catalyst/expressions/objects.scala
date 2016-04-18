@@ -729,8 +729,8 @@ case class GetExternalRowField(
     val row = child.gen(ctx)
 
     val getField = dataType match {
-      case ObjectType(x) if x == classOf[Row] => s"""$row.getStruct($index)"""
-      case _ => s"""(${ctx.boxedType(dataType)}) $row.get($index)"""
+      case ObjectType(x) if x == classOf[Row] => s"""${row.value}.getStruct($index)"""
+      case _ => s"""(${ctx.boxedType(dataType)}) ${row.value}.get($index)"""
     }
 
     ev.isNull = "false"
