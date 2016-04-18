@@ -211,9 +211,10 @@ class KMeans private (
   /**
    * Train a K-means model on the given set of points; `data` should be cached for high
    * performance, because this is an iterative algorithm.
+   * `instr` is used to log instrumentation parameters.
    */
   @Since("0.8.0")
-  def run(data: RDD[Vector]): KMeansModel = {
+  def run(data: RDD[Vector], instr: Instrumentation[clustering.KMeans] = null): KMeansModel = {
 
     if (data.getStorageLevel == StorageLevel.NONE) {
       logWarning("The input data is not directly cached, which may hurt performance if its"
@@ -223,46 +224,11 @@ class KMeans private (
     // Compute squared norms and cache them.
     val norms = data.map(Vectors.norm(_, 2.0))
     norms.persist()
-    val zippedData = data.zip(norms).map { case (v, norm) =>
-      new VectorWithNorm(v, norm)
-    }
-    val model = runAlgorithm(zippedData)
-    norms.unpersist()
-
-    // Warn at the end of the run as well, for increased visibility.
-    if (data.getStorageLevel == StorageLevel.NONE) {
-      logWarning("The input data was not directly cached, which may hurt performance if its"
-        + " parent RDDs are also uncached.")
-    }
-    model
-  }
-
-  /**
-    * Train a K-means model on the given set of points.
-    * `data` should be cached for high performance, because this is an iterative algorithm.
-    * `instr` is used to log instrumentation parameters.
-    */
-  @Since("0.8.0")
-  private[spark] def run(data: RDD[Vector], instr: Instrumentation[clustering.KMeans])
-    : KMeansModel = {
-
-    if (data.getStorageLevel == StorageLevel.NONE) {
-      logWarning("The input data is not directly cached, which may hurt performance if its"
-        + " parent RDDs are also uncached.")
-    }
-
-    // Compute squared norms and cache them.
-    val norms = data.map(Vectors.norm(_, 2.0))
-    norms.persist()
-
-
     val zippedData = data.zip(norms).map { case (v, norm) =>
       new VectorWithNorm(v, norm)
     }
     val model = runAlgorithm(zippedData, instr)
     norms.unpersist()
-
-    instr.logNumFeatures(zippedData.count())
 
     // Warn at the end of the run as well, for increased visibility.
     if (data.getStorageLevel == StorageLevel.NONE) {
