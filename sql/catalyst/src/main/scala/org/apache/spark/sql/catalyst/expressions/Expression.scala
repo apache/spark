@@ -86,23 +86,23 @@ abstract class Expression extends TreeNode[Expression] {
   def eval(input: InternalRow = null): Any
 
   /**
-   * Returns an [[ExprCode]], which contains Java source code that
-   * can be used to generate the result of evaluating the expression on an input row.
+   * Returns an [[ExprCode]], that contains the Java source code to generate the result of
+   * evaluating the expression on an input row.
    *
    * @param ctx a [[CodegenContext]]
    * @return [[ExprCode]]
    */
-  def gen(ctx: CodegenContext): ExprCode = {
+  def genCode(ctx: CodegenContext): ExprCode = {
     ctx.subExprEliminationExprs.get(this).map { subExprState =>
-      // This expression is repeated meaning the code to evaluated has already been added
-      // as a function and called in advance. Just use it.
+      // This expression is repeated which means that the code to evaluate it has already been added
+      // as a function before. In that case, we just re-use it.
       val code = s"/* ${toCommentSafeString(this.toString)} */"
       ExprCode(code, subExprState.isNull, subExprState.value)
     }.getOrElse {
       val isNull = ctx.freshName("isNull")
       val value = ctx.freshName("value")
       val ve = ExprCode("", isNull, value)
-      ve.code = genCode(ctx, ve)
+      ve.code = doGenCode(ctx, ve)
       if (ve.code != "") {
         // Add `this` in the comment.
         ve.copy(s"/* ${toCommentSafeString(this.toString)} */\n" + ve.code.trim)
@@ -121,7 +121,7 @@ abstract class Expression extends TreeNode[Expression] {
    * @param ev an [[ExprCode]] with unique terms.
    * @return Java source code
    */
-  protected def genCode(ctx: CodegenContext, ev: ExprCode): String
+  protected def doGenCode(ctx: CodegenContext, ev: ExprCode): String
 
   /**
    * Returns `true` if this expression and all its children have been resolved to a specific schema
@@ -216,7 +216,7 @@ trait Unevaluable extends Expression {
   final override def eval(input: InternalRow = null): Any =
     throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
 
-  final override protected def genCode(ctx: CodegenContext, ev: ExprCode): String =
+  final override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): String =
     throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
 }
 
@@ -333,7 +333,7 @@ abstract class UnaryExpression extends Expression {
       ctx: CodegenContext,
       ev: ExprCode,
       f: String => String): String = {
-    val childGen = child.gen(ctx)
+    val childGen = child.genCode(ctx)
     val resultCode = f(childGen.value)
 
     if (nullable) {
@@ -424,8 +424,8 @@ abstract class BinaryExpression extends Expression {
       ctx: CodegenContext,
       ev: ExprCode,
       f: (String, String) => String): String = {
-    val leftGen = left.gen(ctx)
-    val rightGen = right.gen(ctx)
+    val leftGen = left.genCode(ctx)
+    val rightGen = right.genCode(ctx)
     val resultCode = f(leftGen.value, rightGen.value)
 
     if (nullable) {
@@ -566,9 +566,9 @@ abstract class TernaryExpression extends Expression {
     ctx: CodegenContext,
     ev: ExprCode,
     f: (String, String, String) => String): String = {
-    val leftGen = children(0).gen(ctx)
-    val midGen = children(1).gen(ctx)
-    val rightGen = children(2).gen(ctx)
+    val leftGen = children(0).genCode(ctx)
+    val midGen = children(1).genCode(ctx)
+    val rightGen = children(2).genCode(ctx)
     val resultCode = f(leftGen.value, midGen.value, rightGen.value)
 
     if (nullable) {

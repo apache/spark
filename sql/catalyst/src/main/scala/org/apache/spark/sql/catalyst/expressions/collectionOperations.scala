@@ -37,7 +37,7 @@ case class Size(child: Expression) extends UnaryExpression with ExpectsInputType
     case _: MapType => value.asInstanceOf[MapData].numElements()
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
     nullSafeCodeGen(ctx, ev, c => s"${ev.value} = ($c).numElements();")
   }
 }
@@ -180,7 +180,7 @@ case class ArrayContains(left: Expression, right: Expression)
     }
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
     nullSafeCodeGen(ctx, ev, (arr, value) => {
       val i = ctx.freshName("i")
       val getValue = ctx.getValue(arr, right.dataType, i)
