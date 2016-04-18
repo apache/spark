@@ -26,18 +26,11 @@ import org.apache.spark.sql.types._
 
 object PivotFirst {
 
-  def supportsDataType(dataType: DataType): Boolean = {
-    try {
-      updateFunction(dataType)
-      true
-    } catch {
-      case _: UnsupportedOperationException => false
-    }
-  }
+  def supportsDataType(dataType: DataType): Boolean = updateFunction.isDefinedAt(dataType)
 
   // Currently UnsafeRow does not support the generic update method (throws
   // UnsupportedOperationException), so we need to explicitly support each DataType.
-  private def updateFunction(dataType: DataType): (MutableRow, Int, Any) => Unit = dataType match {
+  private val updateFunction: PartialFunction[DataType, (MutableRow, Int, Any) => Unit] = {
     case DoubleType =>
       (row, offset, value) => row.setDouble(offset, value.asInstanceOf[Double])
     case IntegerType =>
@@ -54,21 +47,46 @@ object PivotFirst {
       (row, offset, value) => row.setByte(offset, value.asInstanceOf[Byte])
     case d: DecimalType =>
       (row, offset, value) => row.setDecimal(offset, value.asInstanceOf[Decimal], d.precision)
-    case _ => throw new UnsupportedOperationException(
-      s"Unsupported datatype ($dataType) used in PivotFirst, this is a bug."
-    )
   }
 }
 
-case class PivotFirst(pivotColumn: Expression,
-                      valueColumn: Expression,
-                      pivotColumnValues: Seq[Any],
-                      mutableAggBufferOffset: Int = 0,
-                      inputAggBufferOffset: Int = 0) extends ImperativeAggregate {
+/**
+  * PivotFirst is a aggregate function used in the second phase of a two phase pivot to do the
+  * required rearrangement of values into pivoted form.
+  *
+  * For example on an input of
+  * A | B
+  * --+--
+  * x | 1
+  * y | 2
+  * z | 3
+  *
+  * with pivotColumn=A, valueColumn=B, and pivotColumnValues=[z,y] the output is [3,2].
+  *
+  * @param pivotColumn column that determines which output position to put valueColumn in.
+  * @param valueColumn the column that is being rearranged.
+  * @param pivotColumnValues the list of pivotColumn values in the order of desired output. Values
+  *                          not listed here will be ignored.
+  */
 
-  val pivotIndex = HashMap(pivotColumnValues.zipWithIndex: _*)
+case class PivotFirst(
+  pivotColumn: Expression,
+  valueColumn: Expression,
+  pivotColumnValues: Seq[Any],
+  mutableAggBufferOffset: Int = 0,
+  inputAggBufferOffset: Int = 0) extends ImperativeAggregate {
+
+  override val children: Seq[Expression] = pivotColumn :: valueColumn :: Nil
+
+  override lazy val inputTypes: Seq[AbstractDataType] = children.map(_.dataType)
+
+  override val nullable: Boolean = false
 
   val valueDataType = valueColumn.dataType
+
+  override val dataType: DataType = ArrayType(valueDataType)
+
+  val pivotIndex = HashMap(pivotColumnValues.zipWithIndex: _*)
 
   val indexSize = pivotIndex.size
 
@@ -77,6 +95,7 @@ case class PivotFirst(pivotColumn: Expression,
   override def update(mutableAggBuffer: MutableRow, inputRow: InternalRow): Unit = {
     val pivotColValue = pivotColumn.eval(inputRow)
     if (pivotColValue != null) {
+      // We ignore rows whose pivot column value is not in the list of pivot column values.
       val index = pivotIndex.getOrElse(pivotColValue, -1)
       if (index >= 0) {
         val value = valueColumn.eval(inputRow)
@@ -98,6 +117,7 @@ case class PivotFirst(pivotColumn: Expression,
 
   override def initialize(mutableAggBuffer: MutableRow): Unit = valueDataType match {
     case d: DecimalType =>
+      // Per doc of setDecimal we need to do this instead of setNullAt for DecimalType.
       for (i <- 0 until indexSize) {
         mutableAggBuffer.setDecimal(mutableAggBufferOffset + i, null, d.precision)
       }
@@ -129,13 +149,5 @@ case class PivotFirst(pivotColumn: Expression,
 
   override lazy val inputAggBufferAttributes: Seq[AttributeReference] =
     aggBufferAttributes.map(_.newInstance())
-
-  override lazy val inputTypes: Seq[AbstractDataType] = children.map(_.dataType)
-
-  override val nullable: Boolean = false
-
-  override val dataType: DataType = ArrayType(valueDataType)
-
-  override val children: Seq[Expression] = pivotColumn :: valueColumn :: Nil
 }
 
