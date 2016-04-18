@@ -39,7 +39,7 @@ case class Aggregator[K, V, C] (
       context: TaskContext): Iterator[(K, C)] = {
     val combiners = new ExternalAppendOnlyMap[K, V, C](createCombiner, mergeValue, mergeCombiners)
     combiners.insertAll(iter)
-    if (SparkEnv.get.conf.getBoolean("spark.shuffle.spillAfterRead", false)) {
+    if (SparkEnv.get.conf.getBoolean("spark.shuffle.spillAfterRead", true)) {
       combiners.spill()
     }
     updateMetrics(context, combiners)
@@ -51,7 +51,7 @@ case class Aggregator[K, V, C] (
       context: TaskContext): Iterator[(K, C)] = {
     val combiners = new ExternalAppendOnlyMap[K, C, C](identity, mergeCombiners, mergeCombiners)
     combiners.insertAll(iter)
-    if (SparkEnv.get.conf.getBoolean("spark.shuffle.spillAfterRead", false)) {
+    if (SparkEnv.get.conf.getBoolean("spark.shuffle.spillAfterRead", true)) {
       combiners.spill()
     }
     updateMetrics(context, combiners)
