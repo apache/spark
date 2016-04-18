@@ -32,7 +32,6 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.common.`type`.HiveDecimal
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hadoop.hive.ql.parse.VariableSubstitution
 import org.apache.hadoop.hive.serde2.io.{DateWritable, TimestampWritable}
 import org.apache.hadoop.util.VersionInfo
 
@@ -41,17 +40,13 @@ import org.apache.spark.api.java.JavaSparkContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Expression, LeafExpression}
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.command.{ExecutedCommand, SetCommand}
 import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.hive.execution.{AnalyzeTable, DescribeHiveTableCommand, HiveNativeCommand}
-import org.apache.spark.sql.internal.{SharedState, SQLConf}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 /**
@@ -73,8 +68,6 @@ class HiveContext private[hive](
 
   def this(sc: JavaSparkContext) = this(sc.sc)
 
-  import org.apache.spark.sql.hive.HiveContext._
-
   logDebug("create HiveContext")
 
   /**
@@ -87,59 +80,12 @@ class HiveContext private[hive](
   }
 
   @transient
-  protected[sql] override lazy val sessionState = new HiveSessionState(self)
+  protected[sql] override lazy val sessionState = new HiveSessionState(self, hiveSharedState)
 
   protected[hive] def hiveCatalog: HiveExternalCatalog = hiveSharedState.externalCatalog
   protected[hive] def executionHive: HiveClientImpl = sessionState.executionHive
   protected[hive] def metadataHive: HiveClient = sessionState.metadataHive
-
-  /**
-   * When true, enables an experimental feature where metastore tables that use the parquet SerDe
-   * are automatically converted to use the Spark SQL parquet table scan, instead of the Hive
-   * SerDe.
-   */
-  protected[sql] def convertMetastoreParquet: Boolean = getConf(CONVERT_METASTORE_PARQUET)
-
-  /**
-   * When true, also tries to merge possibly different but compatible Parquet schemas in different
-   * Parquet data files.
-   *
-   * This configuration is only effective when "spark.sql.hive.convertMetastoreParquet" is true.
-   */
-  protected[sql] def convertMetastoreParquetWithSchemaMerging: Boolean =
-    getConf(CONVERT_METASTORE_PARQUET_WITH_SCHEMA_MERGING)
-
-  /**
-   * When true, enables an experimental feature where metastore tables that use the Orc SerDe
-   * are automatically converted to use the Spark SQL ORC table scan, instead of the Hive
-   * SerDe.
-   */
-  protected[sql] def convertMetastoreOrc: Boolean = getConf(CONVERT_METASTORE_ORC)
-
-  /**
-   * When true, a table created by a Hive CTAS statement (no USING clause) will be
-   * converted to a data source table, using the data source set by spark.sql.sources.default.
-   * The table in CTAS statement will be converted when it meets any of the following conditions:
-   *   - The CTAS does not specify any of a SerDe (ROW FORMAT SERDE), a File Format (STORED AS), or
-   *     a Storage Hanlder (STORED BY), and the value of hive.default.fileformat in hive-site.xml
-   *     is either TextFile or SequenceFile.
-   *   - The CTAS statement specifies TextFile (STORED AS TEXTFILE) as the file format and no SerDe
-   *     is specified (no ROW FORMAT SERDE clause).
-   *   - The CTAS statement specifies SequenceFile (STORED AS SEQUENCEFILE) as the file format
-   *     and no SerDe is specified (no ROW FORMAT SERDE clause).
-   */
-  protected[sql] def convertCTAS: Boolean = getConf(CONVERT_CTAS)
-
-  /*
-   * hive thrift server use background spark sql thread pool to execute sql queries
-   */
-  protected[hive] def hiveThriftServerAsync: Boolean = getConf(HIVE_THRIFT_SERVER_ASYNC)
-
-  protected[hive] def hiveThriftServerSingleSession: Boolean =
-    sparkContext.conf.getBoolean("spark.sql.hive.thriftServer.singleSession", defaultValue = false)
-
-  @transient
-  protected[sql] lazy val substitutor = new VariableSubstitution()
+  protected[hive] def hiveconf: HiveConf = sessionState.hiveconf
 
   /**
    * Overrides default Hive configurations to avoid breaking changes to Spark SQL users.
@@ -150,12 +96,6 @@ class HiveContext private[hive](
   }
 
   defaultOverrides()
-
-  protected[sql] override def parseSql(sql: String): LogicalPlan = {
-    executionHive.withHiveState {
-      super.parseSql(substitutor.substitute(hiveconf, sql))
-    }
-  }
 
   override protected[sql] def executePlan(plan: LogicalPlan): this.QueryExecution =
     new this.QueryExecution(plan)
@@ -205,21 +145,6 @@ class HiveContext private[hive](
 
   override private[sql] def setConf[T](entry: ConfigEntry[T], value: T): Unit = {
     setConf(entry.key, entry.stringConverter(value))
-  }
-
-  /**
-   * SQLConf and HiveConf contracts:
-   *
-   * 1. create a new o.a.h.hive.ql.session.SessionState for each HiveContext
-   * 2. when the Hive session is first initialized, params in HiveConf will get picked up by the
-   *    SQLConf.  Additionally, any properties set by set() or a SET command inside sql() will be
-   *    set in the SQLConf *as well as* in the HiveConf.
-   */
-  @transient
-  protected[hive] lazy val hiveconf: HiveConf = {
-    val c = executionHive.conf
-    setConf(c.getAllProperties)
-    c
   }
 
   private def functionOrMacroDDLPattern(command: String) = Pattern.compile(

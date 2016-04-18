@@ -192,10 +192,6 @@ class SQLContext private[sql](
     setConf(k, v)
   }
 
-  protected[sql] def parseSql(sql: String): LogicalPlan = sessionState.sqlParser.parsePlan(sql)
-
-  protected[sql] def executeSql(sql: String): QueryExecution = executePlan(parseSql(sql))
-
   protected[sql] def executePlan(plan: LogicalPlan) = new QueryExecution(this, plan)
 
   /**
@@ -759,7 +755,9 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def sql(sqlText: String): DataFrame = {
-    Dataset.ofRows(this, parseSql(sqlText))
+    // TODO(andrew): delegate all parsing to the session!!
+    // Right now we're not substituting things correctly for HiveContext.
+    Dataset.ofRows(this, sessionState.sqlParser.parsePlan(sqlText))
   }
 
   /**

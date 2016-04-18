@@ -116,7 +116,11 @@ private[hive] object HiveSerDe {
  * This is still used for things like creating data source tables, but in the future will be
  * cleaned up to integrate more nicely with [[HiveExternalCatalog]].
  */
-private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveContext)
+// TODO(andrew): once we have SparkSession just pass that in here instead of the context
+private[hive] class HiveMetastoreCatalog(
+    val client: HiveClient,
+    hive: SQLContext,
+    sessionState: HiveSessionState)
   extends Logging {
 
   val conf = hive.conf
@@ -124,9 +128,7 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
   /** A fully qualified identifier for a table (i.e., database.tableName) */
   case class QualifiedTableName(database: String, name: String)
 
-  private def getCurrentDatabase: String = {
-    hive.sessionState.catalog.getCurrentDatabase
-  }
+  private def getCurrentDatabase: String = sessionState.catalog.getCurrentDatabase
 
   def getQualifiedTableName(tableIdent: TableIdentifier): QualifiedTableName = {
     QualifiedTableName(
@@ -299,7 +301,7 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
       CatalogTableType.MANAGED_TABLE
     }
 
-    val maybeSerDe = HiveSerDe.sourceToSerDe(provider, hive.hiveconf)
+    val maybeSerDe = HiveSerDe.sourceToSerDe(provider, sessionState.hiveconf)
     val dataSource =
       DataSource(
         hive,
@@ -443,8 +445,10 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
       alias match {
         // because hive use things like `_c0` to build the expanded text
         // currently we cannot support view from "create view v1(c1) as ..."
-        case None => SubqueryAlias(table.identifier.table, hive.parseSql(viewText))
-        case Some(aliasText) => SubqueryAlias(aliasText, hive.parseSql(viewText))
+        case None =>
+          SubqueryAlias(table.identifier.table, sessionState.sqlParser.parsePlan(viewText))
+        case Some(aliasText) =>
+          SubqueryAlias(aliasText, sessionState.sqlParser.parsePlan(viewText))
       }
     } else {
       MetastoreRelation(
@@ -600,14 +604,14 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
   object ParquetConversions extends Rule[LogicalPlan] {
     private def shouldConvertMetastoreParquet(relation: MetastoreRelation): Boolean = {
       relation.tableDesc.getSerdeClassName.toLowerCase.contains("parquet") &&
-        hive.convertMetastoreParquet
+        sessionState.convertMetastoreParquet
     }
 
     private def convertToParquetRelation(relation: MetastoreRelation): LogicalRelation = {
       val defaultSource = new ParquetDefaultSource()
       val fileFormatClass = classOf[ParquetDefaultSource]
 
-      val mergeSchema = hive.convertMetastoreParquetWithSchemaMerging
+      val mergeSchema = sessionState.convertMetastoreParquetWithSchemaMerging
       val options = Map(
         ParquetRelation.MERGE_SCHEMA -> mergeSchema.toString,
         ParquetRelation.METASTORE_TABLE_NAME -> TableIdentifier(
@@ -652,7 +656,7 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
   object OrcConversions extends Rule[LogicalPlan] {
     private def shouldConvertMetastoreOrc(relation: MetastoreRelation): Boolean = {
       relation.tableDesc.getSerdeClassName.toLowerCase.contains("orc") &&
-        hive.convertMetastoreOrc
+        sessionState.convertMetastoreOrc
     }
 
     private def convertToOrcRelation(relation: MetastoreRelation): LogicalRelation = {
@@ -727,7 +731,7 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
 
         val desc = table.copy(schema = schema)
 
-        if (hive.convertCTAS && table.storage.serde.isEmpty) {
+        if (sessionState.convertCTAS && table.storage.serde.isEmpty) {
           // Do the conversion when spark.sql.hive.convertCTAS is true and the query
           // does not specify any storage format (file format and storage handler).
           if (table.identifier.database.isDefined) {
@@ -815,14 +819,13 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
  * the information from the metastore.
  */
 class MetaStoreFileCatalog(
-    hive: HiveContext,
+    ctx: SQLContext,
     paths: Seq[Path],
     partitionSpecFromHive: PartitionSpec)
-  extends HDFSFileCatalog(hive, Map.empty, paths, Some(partitionSpecFromHive.partitionColumns)) {
-
+  extends HDFSFileCatalog(ctx, Map.empty, paths, Some(partitionSpecFromHive.partitionColumns)) {
 
   override def getStatus(path: Path): Array[FileStatus] = {
-    val fs = path.getFileSystem(hive.sparkContext.hadoopConfiguration)
+    val fs = path.getFileSystem(ctx.sparkContext.hadoopConfiguration)
     fs.listStatus(path)
   }
 

@@ -136,13 +136,13 @@ class TestHiveContext private[hive](
 
   // Override so we can intercept relative paths and rewrite them to point at hive.
   override def runSqlHive(sql: String): Seq[String] =
-    super.runSqlHive(rewritePaths(substitutor.substitute(this.hiveconf, sql)))
+    super.runSqlHive(rewritePaths(sessionState.substitutor.substitute(this.hiveconf, sql)))
 
   override def executePlan(plan: LogicalPlan): this.QueryExecution =
     new this.QueryExecution(plan)
 
   @transient
-  protected[sql] override lazy val sessionState = new HiveSessionState(this) {
+  protected[sql] override lazy val sessionState = new HiveSessionState(this, testHiveSharedState) {
     override lazy val conf: SQLConf = {
       new SQLConf {
         clear()
@@ -215,7 +215,7 @@ class TestHiveContext private[hive](
    */
   class QueryExecution(logicalPlan: LogicalPlan)
     extends super.QueryExecution(logicalPlan) {
-    def this(sql: String) = this(parseSql(sql))
+    def this(sql: String) = this(sessionState.sqlParser.parsePlan(sql))
     override lazy val analyzed = {
       val describedTables = logical match {
         case HiveNativeCommand(describedTable(tbl)) => tbl :: Nil

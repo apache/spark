@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.hive
 
+import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hadoop.hive.ql.parse.VariableSubstitution
+
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.Analyzer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
@@ -30,20 +33,43 @@ import org.apache.spark.sql.internal.{SessionState, SQLConf}
 /**
  * A class that holds all session-specific state in a given [[HiveContext]].
  */
-private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx) {
+// TODO(andrew): once we have SparkSession just pass that in here instead of the context
+private[hive] class HiveSessionState(ctx: SQLContext, sharedState: HiveSharedState)
+  extends SessionState(ctx) {
+
+  self =>
 
   /**
    * A Hive client used for execution.
    */
-  val executionHive: HiveClientImpl = ctx.hiveSharedState.executionHive.newSession()
+  val executionHive: HiveClientImpl = sharedState.executionHive.newSession()
 
   /**
    * A Hive client used for interacting with the metastore.
    */
-  val metadataHive: HiveClient = ctx.hiveSharedState.metadataHive.newSession()
+  val metadataHive: HiveClient = sharedState.metadataHive.newSession()
+
+  /**
+   * A Hive helper class for substituting variables in a SQL statement.
+   */
+  val substitutor = new VariableSubstitution
 
   override lazy val conf: SQLConf = new SQLConf {
     override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
+  }
+
+  /**
+   * SQLConf and HiveConf contracts:
+   *
+   * 1. create a new o.a.h.hive.ql.session.SessionState for each HiveContext
+   * 2. when the Hive session is first initialized, params in HiveConf will get picked up by the
+   *    SQLConf.  Additionally, any properties set by set() or a SET command inside sql() will be
+   *    set in the SQLConf *as well as* in the HiveConf.
+   */
+  val hiveconf: HiveConf = {
+    val c = executionHive.conf
+    conf.setConf(c.getAllProperties)
+    c
   }
 
   /**
@@ -51,9 +77,10 @@ private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx)
    */
   override lazy val catalog = {
     new HiveSessionCatalog(
-      ctx.hiveCatalog,
-      ctx.metadataHive,
+      sharedState.externalCatalog,
+      sharedState.metadataHive,
       ctx,
+      self,
       ctx.functionResourceLoader,
       functionRegistry,
       conf)
@@ -80,7 +107,7 @@ private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx)
   /**
    * Parser for HiveQl query texts.
    */
-  override lazy val sqlParser: ParserInterface = HiveSqlParser
+  override lazy val sqlParser: ParserInterface = new HiveSqlParser(substitutor, hiveconf)
 
   /**
    * Planner that takes into account Hive-specific strategies.
@@ -88,13 +115,14 @@ private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx)
   override def planner: SparkPlanner = {
     new SparkPlanner(ctx.sparkContext, conf, experimentalMethods.extraStrategies)
       with HiveStrategies {
-      override val hiveContext = ctx
+      override val context: SQLContext = ctx
+      override val hiveconf: HiveConf = self.hiveconf
 
       override def strategies: Seq[Strategy] = {
         experimentalMethods.extraStrategies ++ Seq(
           FileSourceStrategy,
           DataSourceStrategy,
-          HiveCommandStrategy(ctx),
+          HiveCommandStrategy,
           HiveDDLStrategy,
           DDLStrategy,
           SpecialLimits,
@@ -112,6 +140,62 @@ private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx)
         )
       }
     }
+  }
+
+  /**
+   * When true, enables an experimental feature where metastore tables that use the parquet SerDe
+   * are automatically converted to use the Spark SQL parquet table scan, instead of the Hive
+   * SerDe.
+   */
+  protected[sql] def convertMetastoreParquet: Boolean = {
+    conf.getConf(HiveContext.CONVERT_METASTORE_PARQUET)
+  }
+
+  /**
+   * When true, also tries to merge possibly different but compatible Parquet schemas in different
+   * Parquet data files.
+   *
+   * This configuration is only effective when "spark.sql.hive.convertMetastoreParquet" is true.
+   */
+  protected[sql] def convertMetastoreParquetWithSchemaMerging: Boolean = {
+    conf.getConf(HiveContext.CONVERT_METASTORE_PARQUET_WITH_SCHEMA_MERGING)
+  }
+
+  /**
+   * When true, enables an experimental feature where metastore tables that use the Orc SerDe
+   * are automatically converted to use the Spark SQL ORC table scan, instead of the Hive
+   * SerDe.
+   */
+  protected[sql] def convertMetastoreOrc: Boolean = {
+    conf.getConf(HiveContext.CONVERT_METASTORE_ORC)
+  }
+
+  /**
+   * When true, a table created by a Hive CTAS statement (no USING clause) will be
+   * converted to a data source table, using the data source set by spark.sql.sources.default.
+   * The table in CTAS statement will be converted when it meets any of the following conditions:
+   *   - The CTAS does not specify any of a SerDe (ROW FORMAT SERDE), a File Format (STORED AS), or
+   *     a Storage Hanlder (STORED BY), and the value of hive.default.fileformat in hive-site.xml
+   *     is either TextFile or SequenceFile.
+   *   - The CTAS statement specifies TextFile (STORED AS TEXTFILE) as the file format and no SerDe
+   *     is specified (no ROW FORMAT SERDE clause).
+   *   - The CTAS statement specifies SequenceFile (STORED AS SEQUENCEFILE) as the file format
+   *     and no SerDe is specified (no ROW FORMAT SERDE clause).
+   */
+  protected[sql] def convertCTAS: Boolean = {
+    conf.getConf(HiveContext.CONVERT_CTAS)
+  }
+
+  /*
+   * hive thrift server use background spark sql thread pool to execute sql queries
+   */
+  protected[hive] def hiveThriftServerAsync: Boolean = {
+    conf.getConf(HiveContext.HIVE_THRIFT_SERVER_ASYNC)
+  }
+
+  protected[hive] def hiveThriftServerSingleSession: Boolean = {
+    ctx.sparkContext.conf.getBoolean(
+      "spark.sql.hive.thriftServer.singleSession", defaultValue = false)
   }
 
 }
