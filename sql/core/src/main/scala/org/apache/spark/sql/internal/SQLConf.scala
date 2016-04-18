@@ -443,23 +443,25 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val FILE_STREAM_SINK_LOG_DELETE = SQLConfigBuilder("spark.sql.sink.file.log.delete")
+  val FILE_STREAM_SINK_LOG_DELETE = SQLConfigBuilder("spark.sql.streaming.fileSink.log.deletion")
     .internal()
-    .doc("Whether deleting the expired log files for FileStreamSink.")
+    .doc("Whether to delete the expired log files in file stream sink.")
     .booleanConf
     .createWithDefault(true)
 
-  val FILE_STREAM_SINK_LOG_COMPACT_LEN = SQLConfigBuilder("spark.sql.sink.file.log.compactLen")
-    .internal()
-    .doc("The frequency to compact the file sink logs.")
-    .intConf
-    .createWithDefault(10)
+  val FILE_STREAM_SINK_LOG_COMPACT_LEN =
+    SQLConfigBuilder("spark.sql.streaming.fileSink.log.compactLen")
+      .internal()
+      .doc("Every how many log files is a compaction triggered.")
+      .intConf
+      .createWithDefault(10)
 
-  val FILE_STREAM_SINK_LOG_EXPIRED_TIME = SQLConfigBuilder("spark.sql.sink.file.log.expired")
-    .internal()
-    .doc("How long in milliseconds a file is guaranteed to be visible for all readers.")
-    .longConf
-    .createWithDefault(3600 * 1000L) // 1 hour
+  val FILE_STREAM_SINK_LOG_EXPIRED_TIME =
+    SQLConfigBuilder("spark.sql.streaming.fileSink.log.expired")
+      .internal()
+      .doc("How long in milliseconds a file is guaranteed to be visible for all readers.")
+      .longConf
+      .createWithDefault(3600 * 1000L) // 1 hour
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"

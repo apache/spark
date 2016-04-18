@@ -76,54 +76,50 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSQLContext {
 
   test("compactLogs") {
     val logs = Seq(
-      FileLog("/a/b/x", 100L, FileStreamSinkLog.ADD_ACTION),
-      FileLog("/a/b/y", 200L, FileStreamSinkLog.ADD_ACTION),
-      FileLog("/a/b/z", 300L, FileStreamSinkLog.ADD_ACTION))
+      SinkFileStatus("/a/b/x", 100L, FileStreamSinkLog.ADD_ACTION),
+      SinkFileStatus("/a/b/y", 200L, FileStreamSinkLog.ADD_ACTION),
+      SinkFileStatus("/a/b/z", 300L, FileStreamSinkLog.ADD_ACTION))
     assert(logs === compactLogs(logs))
 
     val logs2 = Seq(
-      FileLog("/a/b/m", 100L, FileStreamSinkLog.ADD_ACTION),
-      FileLog("/a/b/n", 200L, FileStreamSinkLog.ADD_ACTION),
-      FileLog("/a/b/z", 300L, FileStreamSinkLog.DELETE_ACTION))
+      SinkFileStatus("/a/b/m", 100L, FileStreamSinkLog.ADD_ACTION),
+      SinkFileStatus("/a/b/n", 200L, FileStreamSinkLog.ADD_ACTION),
+      SinkFileStatus("/a/b/z", 300L, FileStreamSinkLog.DELETE_ACTION))
     assert(logs.dropRight(1) ++ logs2.dropRight(1) === compactLogs(logs ++ logs2))
   }
 
   test("serialize") {
-    withSQLConf(SQLConf.FILE_STREAM_SINK_LOG_COMPACT_LEN.key -> "3") {
-      withFileStreamSinkLog { sinkLog =>
-        val logs = Seq(
-          FileLog("/a/b/x", 100L, FileStreamSinkLog.ADD_ACTION),
-          FileLog("/a/b/y", 200L, FileStreamSinkLog.DELETE_ACTION),
-          FileLog("/a/b/z", 300L, FileStreamSinkLog.ADD_ACTION))
+    withFileStreamSinkLog { sinkLog =>
+      val logs = Seq(
+        SinkFileStatus("/a/b/x", 100L, FileStreamSinkLog.ADD_ACTION),
+        SinkFileStatus("/a/b/y", 200L, FileStreamSinkLog.DELETE_ACTION),
+        SinkFileStatus("/a/b/z", 300L, FileStreamSinkLog.ADD_ACTION))
 
-        val expected = s"""${FileStreamSinkLog.VERSION}
-            |{"path":"/a/b/x","size":100,"action":"add"}
-            |{"path":"/a/b/y","size":200,"action":"delete"}
-            |{"path":"/a/b/z","size":300,"action":"add"}""".stripMargin
-        assert(expected === new String(sinkLog.serialize(logs), UTF_8))
+      val expected = s"""${FileStreamSinkLog.VERSION}
+          |{"path":"/a/b/x","size":100,"action":"add"}
+          |{"path":"/a/b/y","size":200,"action":"delete"}
+          |{"path":"/a/b/z","size":300,"action":"add"}""".stripMargin
+      assert(expected === new String(sinkLog.serialize(logs), UTF_8))
 
-        assert(FileStreamSinkLog.VERSION === new String(sinkLog.serialize(Nil), UTF_8))
-      }
+      assert(FileStreamSinkLog.VERSION === new String(sinkLog.serialize(Nil), UTF_8))
     }
   }
 
   test("deserialize") {
-    withSQLConf(SQLConf.FILE_STREAM_SINK_LOG_COMPACT_LEN.key -> "3") {
-      withFileStreamSinkLog { sinkLog =>
-        val logs = s"""${FileStreamSinkLog.VERSION}
-            |{"path":"/a/b/x","size":100,"action":"add"}
-            |{"path":"/a/b/y","size":200,"action":"delete"}
-            |{"path":"/a/b/z","size":300,"action":"add"}""".stripMargin
+    withFileStreamSinkLog { sinkLog =>
+      val logs = s"""${FileStreamSinkLog.VERSION}
+          |{"path":"/a/b/x","size":100,"action":"add"}
+          |{"path":"/a/b/y","size":200,"action":"delete"}
+          |{"path":"/a/b/z","size":300,"action":"add"}""".stripMargin
 
-        val expected = Seq(
-          FileLog("/a/b/x", 100L, FileStreamSinkLog.ADD_ACTION),
-          FileLog("/a/b/y", 200L, FileStreamSinkLog.DELETE_ACTION),
-          FileLog("/a/b/z", 300L, FileStreamSinkLog.ADD_ACTION))
+      val expected = Seq(
+        SinkFileStatus("/a/b/x", 100L, FileStreamSinkLog.ADD_ACTION),
+        SinkFileStatus("/a/b/y", 200L, FileStreamSinkLog.DELETE_ACTION),
+        SinkFileStatus("/a/b/z", 300L, FileStreamSinkLog.ADD_ACTION))
 
-        assert(expected === sinkLog.deserialize(logs.getBytes(UTF_8)))
+      assert(expected === sinkLog.deserialize(logs.getBytes(UTF_8)))
 
-        assert(Nil === sinkLog.deserialize(FileStreamSinkLog.VERSION.getBytes(UTF_8)))
-      }
+      assert(Nil === sinkLog.deserialize(FileStreamSinkLog.VERSION.getBytes(UTF_8)))
     }
   }
 
@@ -144,20 +140,29 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSQLContext {
     withSQLConf(SQLConf.FILE_STREAM_SINK_LOG_COMPACT_LEN.key -> "3") {
       withFileStreamSinkLog { sinkLog =>
         for (batchId <- 0 to 10) {
-          sinkLog.add(batchId, Seq(FileLog("/a/b/" + batchId, 100L, FileStreamSinkLog.ADD_ACTION)))
-          assert(sinkLog.allLogs() === (0 to batchId).map {
-            id => FileLog("/a/b/" + id, 100L, FileStreamSinkLog.ADD_ACTION)
+          sinkLog.add(
+            batchId,
+            Seq(SinkFileStatus("/a/b/" + batchId, 100L, FileStreamSinkLog.ADD_ACTION)))
+          assert(sinkLog.allFiles() === (0 to batchId).map {
+            id => SinkFileStatus("/a/b/" + id, 100L, FileStreamSinkLog.ADD_ACTION)
           })
+          if (isCompactionBatch(batchId, 3)) {
+            // Since batchId is a compaction batch, the batch log file should contain all logs
+            assert(sinkLog.get(batchId).getOrElse(Nil) === (0 to batchId).map {
+              id => SinkFileStatus("/a/b/" + id, 100L, FileStreamSinkLog.ADD_ACTION)
+            })
+          }
         }
       }
     }
   }
 
   test("delete expired file") {
-    withSQLConf(SQLConf.FILE_STREAM_SINK_LOG_COMPACT_LEN.key -> "3",
-      // Set it to 0 so that we can detect the deleting behaviour deterministically
-      SQLConf.FILE_STREAM_SINK_LOG_EXPIRED_TIME.key -> "0"
-    ) {
+    // Set FILE_STREAM_SINK_LOG_EXPIRED_TIME to 0 so that we can detect the deleting behaviour
+    // deterministically
+    withSQLConf(
+      SQLConf.FILE_STREAM_SINK_LOG_COMPACT_LEN.key -> "3",
+      SQLConf.FILE_STREAM_SINK_LOG_EXPIRED_TIME.key -> "0") {
       withFileStreamSinkLog { sinkLog =>
         val metadataPath = new File(sinkLog.metadataPath.toUri.toString)
 
@@ -172,17 +177,17 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSQLContext {
           }.toSet
         }
 
-        sinkLog.add(0, Seq(FileLog("/a/b/0", 100L, FileStreamSinkLog.ADD_ACTION)))
+        sinkLog.add(0, Seq(SinkFileStatus("/a/b/0", 100L, FileStreamSinkLog.ADD_ACTION)))
         assert(Set("0") === listBatchFiles())
-        sinkLog.add(1, Seq(FileLog("/a/b/1", 100L, FileStreamSinkLog.ADD_ACTION)))
+        sinkLog.add(1, Seq(SinkFileStatus("/a/b/1", 100L, FileStreamSinkLog.ADD_ACTION)))
         assert(Set("0", "1") === listBatchFiles())
-        sinkLog.add(2, Seq(FileLog("/a/b/2", 100L, FileStreamSinkLog.ADD_ACTION)))
+        sinkLog.add(2, Seq(SinkFileStatus("/a/b/2", 100L, FileStreamSinkLog.ADD_ACTION)))
         assert(Set("2.compact") === listBatchFiles())
-        sinkLog.add(3, Seq(FileLog("/a/b/3", 100L, FileStreamSinkLog.ADD_ACTION)))
+        sinkLog.add(3, Seq(SinkFileStatus("/a/b/3", 100L, FileStreamSinkLog.ADD_ACTION)))
         assert(Set("2.compact", "3") === listBatchFiles())
-        sinkLog.add(4, Seq(FileLog("/a/b/4", 100L, FileStreamSinkLog.ADD_ACTION)))
+        sinkLog.add(4, Seq(SinkFileStatus("/a/b/4", 100L, FileStreamSinkLog.ADD_ACTION)))
         assert(Set("2.compact", "3", "4") === listBatchFiles())
-        sinkLog.add(5, Seq(FileLog("/a/b/5", 100L, FileStreamSinkLog.ADD_ACTION)))
+        sinkLog.add(5, Seq(SinkFileStatus("/a/b/5", 100L, FileStreamSinkLog.ADD_ACTION)))
         assert(Set("5.compact") === listBatchFiles())
       }
     }
