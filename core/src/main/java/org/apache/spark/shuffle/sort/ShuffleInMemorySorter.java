@@ -48,19 +48,25 @@ final class ShuffleInMemorySorter {
   private LongArray array;
 
   /**
+   * Whether to use radix sort for sorting in-memory partition ids. Radix sort is much faster
+   * but requires additional memory to be reserved memory as pointers are added.
+   */
+  private final boolean useRadixSort;
+
+  /**
    * The position in the pointer array where new records can be inserted.
    */
   private int pos = 0;
 
   private int initialSize;
-  private final boolean useRadix = RadixSort.enabled;
 
-  ShuffleInMemorySorter(MemoryConsumer consumer, int initialSize) {
+  ShuffleInMemorySorter(MemoryConsumer consumer, int initialSize, boolean useRadixSort) {
     this.consumer = consumer;
     assert (initialSize > 0);
     this.initialSize = initialSize;
-    this.array = consumer.allocateArray(initialSize * (useRadix ? 2 : 1));
+    this.array = consumer.allocateArray(initialSize * (useRadixSort ? 2 : 1));
     this.sorter = new Sorter<>(ShuffleSortDataFormat.INSTANCE);
+    this.useRadixSort = useRadixSort;
   }
 
   public void free() {
@@ -89,14 +95,14 @@ final class ShuffleInMemorySorter {
       array.getBaseOffset(),
       newArray.getBaseObject(),
       newArray.getBaseOffset(),
-      array.size() * (useRadix ? 4L : 8L)
+      array.size() * (useRadixSort ? 4L /* other half is unused */: 8L)
     );
     consumer.freeArray(array);
     array = newArray;
   }
 
   public boolean hasSpaceForAnotherRecord() {
-    return pos < array.size() / (useRadix ? 2 : 1);
+    return pos < array.size() / (useRadixSort ? 2 : 1);
   }
 
   public long getMemoryUsage() {
@@ -153,7 +159,7 @@ final class ShuffleInMemorySorter {
   public ShuffleSorterIterator getSortedIterator() {
     int offset = 0;
     long start = System.nanoTime();
-    if (useRadix) {
+    if (useRadixSort) {
       offset = RadixSort.sort(array, pos, 5, 7, false, false);
     } else {
       sorter.sort(array, 0, pos, SORT_COMPARATOR);

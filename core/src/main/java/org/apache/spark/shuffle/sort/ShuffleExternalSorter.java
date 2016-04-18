@@ -115,7 +115,8 @@ final class ShuffleExternalSorter extends MemoryConsumer {
     this.numElementsForSpillThreshold =
       conf.getLong("spark.shuffle.spill.numElementsForceSpillThreshold", Long.MAX_VALUE);
     this.writeMetrics = writeMetrics;
-    this.inMemSorter = new ShuffleInMemorySorter(this, initialSize);
+    this.inMemSorter = new ShuffleInMemorySorter(
+      this, initialSize, conf.getBoolean("spark.shuffle.sort.useRadixSort", true));
     this.peakMemoryUsedBytes = getMemoryUsage();
   }
 

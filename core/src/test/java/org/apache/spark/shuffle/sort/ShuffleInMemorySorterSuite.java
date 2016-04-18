@@ -47,7 +47,7 @@ public class ShuffleInMemorySorterSuite {
 
   @Test
   public void testSortingEmptyInput() {
-    final ShuffleInMemorySorter sorter = new ShuffleInMemorySorter(consumer, 100);
+    final ShuffleInMemorySorter sorter = new ShuffleInMemorySorter(consumer, 100, true);
     final ShuffleInMemorySorter.ShuffleSorterIterator iter = sorter.getSortedIterator();
     Assert.assertFalse(iter.hasNext());
   }
@@ -70,14 +70,14 @@ public class ShuffleInMemorySorterSuite {
       new TaskMemoryManager(new TestMemoryManager(conf), 0);
     final MemoryBlock dataPage = memoryManager.allocatePage(2048, null);
     final Object baseObject = dataPage.getBaseObject();
-    final ShuffleInMemorySorter sorter = new ShuffleInMemorySorter(consumer, 4);
+    final ShuffleInMemorySorter sorter = new ShuffleInMemorySorter(consumer, 4, true);
     final HashPartitioner hashPartitioner = new HashPartitioner(4);
 
     // Write the records into the data page and store pointers into the sorter
     long position = dataPage.getBaseOffset();
     for (String str : dataToSort) {
       if (!sorter.hasSpaceForAnotherRecord()) {
-        sorter.expandPointerArray(consumer.allocateArray(sorter.numRecords() * 4));
+        sorter.expandPointerArray(consumer.allocateArray(sorter.getMemoryUsage() / 8 * 2));
       }
       final long recordAddress = memoryManager.encodePageNumberAndOffset(dataPage, position);
       final byte[] strBytes = str.getBytes(StandardCharsets.UTF_8);
@@ -113,26 +113,29 @@ public class ShuffleInMemorySorterSuite {
   }
 
   @Test
-  public void testSortingManyNumbers() throws Exception {
-    ShuffleInMemorySorter sorter = new ShuffleInMemorySorter(consumer, 4);
-    int[] numbersToSort = new int[50000000];
+  public void testSortingManyNumbersTimSort() throws Exception {
+    testSortingManyNumbers(false);
+  }
+
+  @Test
+  public void testSortingManyNumbersRadixSort() throws Exception {
+    testSortingManyNumbers(true);
+  }
+
+  private void testSortingManyNumbers(boolean useRadix) throws Exception {
+    ShuffleInMemorySorter sorter = new ShuffleInMemorySorter(consumer, 4, useRadix);
+    int[] numbersToSort = new int[128000];
     Random random = new Random(16);
     for (int i = 0; i < numbersToSort.length; i++) {
       if (!sorter.hasSpaceForAnotherRecord()) {
-        sorter.expandPointerArray(consumer.allocateArray(sorter.numRecords() * 4));
+        sorter.expandPointerArray(consumer.allocateArray(sorter.getMemoryUsage() / 8 * 2));
       }
       numbersToSort[i] = random.nextInt(PackedRecordPointer.MAXIMUM_PARTITION_ID + 1);
       sorter.insertRecord(0, numbersToSort[i]);
     }
-    long start = System.nanoTime();
-    System.out.println("system sort");
     Arrays.sort(numbersToSort);
-    System.out.println("end sort: " + (System.nanoTime() - start) / 1e9);
-    System.out.println("radix sort");
-    start = System.nanoTime();
     int[] sorterResult = new int[numbersToSort.length];
     ShuffleInMemorySorter.ShuffleSorterIterator iter = sorter.getSortedIterator();
-    System.out.println("end sort: " + (System.nanoTime() - start) / 1e9);
     int j = 0;
     while (iter.hasNext()) {
       iter.loadNext();

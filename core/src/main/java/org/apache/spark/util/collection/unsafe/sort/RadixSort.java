@@ -21,8 +21,6 @@ import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.LongArray;
 
 public class RadixSort {
-  public static boolean enabled = true;
-
   public static int sort(
       LongArray array, int numRecords, int startByteIndex, int endByteIndex,
       boolean desc, boolean signed) {
