@@ -399,6 +399,8 @@ abstract class UnixTime extends BinaryExpression with ExpectsInputTypes {
   override def nullable: Boolean = true
 
   private lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
+  private lazy val formatter: SimpleDateFormat =
+    Try(new SimpleDateFormat(constFormat.toString)).getOrElse(null)
 
   override def eval(input: InternalRow): Any = {
     val t = left.eval(input)
@@ -411,11 +413,11 @@ abstract class UnixTime extends BinaryExpression with ExpectsInputTypes {
         case TimestampType =>
           t.asInstanceOf[Long] / 1000000L
         case StringType if right.foldable =>
-          if (constFormat != null) {
-            Try(new SimpleDateFormat(constFormat.toString).parse(
-              t.asInstanceOf[UTF8String].toString).getTime / 1000L).getOrElse(null)
-          } else {
+          if (constFormat == null || formatter == null) {
             null
+          } else {
+            Try(formatter.parse(
+              t.asInstanceOf[UTF8String].toString).getTime / 1000L).getOrElse(null)
           }
         case StringType =>
           val f = right.eval(input)
@@ -435,13 +437,14 @@ abstract class UnixTime extends BinaryExpression with ExpectsInputTypes {
       case StringType if right.foldable =>
         val sdf = classOf[SimpleDateFormat].getName
         val fString = if (constFormat == null) null else constFormat.toString
-        val formatter = ctx.freshName("formatter")
         if (fString == null) {
           s"""
             boolean ${ev.isNull} = true;
             ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
           """
         } else {
+          val formatter = ctx.freshName("formatter")
+          ctx.addMutableState(sdf, formatter, s"""$formatter = null;""")
           val eval1 = left.gen(ctx)
           s"""
             ${eval1.code}
@@ -449,7 +452,9 @@ abstract class UnixTime extends BinaryExpression with ExpectsInputTypes {
             ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
             if (!${ev.isNull}) {
               try {
-                $sdf $formatter = new $sdf("$fString");
+                if ($formatter == null) {
+                  $formatter = new $sdf("$fString");
+                }
                 ${ev.value} =
                   $formatter.parse(${eval1.value}.toString()).getTime() / 1000L;
               } catch (java.lang.Throwable e) {
@@ -524,6 +529,8 @@ case class FromUnixTime(sec: Expression, format: Expression)
   override def inputTypes: Seq[AbstractDataType] = Seq(LongType, StringType)
 
   private lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
+  private lazy val formatter: SimpleDateFormat =
+    Try(new SimpleDateFormat(constFormat.toString)).getOrElse(null)
 
   override def eval(input: InternalRow): Any = {
     val time = left.eval(input)
@@ -531,10 +538,10 @@ case class FromUnixTime(sec: Expression, format: Expression)
       null
     } else {
       if (format.foldable) {
-        if (constFormat == null) {
+        if (constFormat == null || formatter == null) {
           null
         } else {
-          Try(UTF8String.fromString(new SimpleDateFormat(constFormat.toString).format(
+          Try(UTF8String.fromString(formatter.format(
             new java.util.Date(time.asInstanceOf[Long] * 1000L)))).getOrElse(null)
         }
       } else {
@@ -559,6 +566,8 @@ case class FromUnixTime(sec: Expression, format: Expression)
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
         """
       } else {
+        val sdfTerm = ctx.freshName("formatter")
+        ctx.addMutableState(sdf, sdfTerm, s"""$sdfTerm = null;""")
         val t = left.gen(ctx)
         s"""
           ${t.code}
@@ -566,7 +575,10 @@ case class FromUnixTime(sec: Expression, format: Expression)
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
           if (!${ev.isNull}) {
             try {
-              ${ev.value} = UTF8String.fromString(new $sdf("${constFormat.toString}").format(
+              if ($sdfTerm == null) {
+                $sdfTerm = new $sdf("${constFormat.toString}");
+              }
+              ${ev.value} = UTF8String.fromString($sdfTerm.format(
                 new java.util.Date(${t.value} * 1000L)));
             } catch (java.lang.Throwable e) {
               ${ev.isNull} = true;
