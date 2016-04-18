@@ -61,25 +61,24 @@ class CachedKafkaConsumer[K, V] private(
    * Sequential forward access will use buffers, but random access will be horribly inefficient.
    */
   def get(offset: Long, timeout: Long): ConsumerRecord[K, V] = {
-    log.debug(s"get $groupId $topic $partition nextOffset $nextOffset requested $offset")
+    log.debug(s"Get $groupId $topic $partition nextOffset $nextOffset requested $offset")
     if (offset != nextOffset) {
-      log.info(s"initial fetch for $groupId $topic $partition $offset")
-      buffer = ju.Collections.emptyList[ConsumerRecord[K, V]]().iterator
+      log.info(s"Initial fetch for $groupId $topic $partition $offset")
       seek(offset)
       poll(timeout)
     }
 
     if (!buffer.hasNext()) { poll(timeout) }
     assert(buffer.hasNext(),
-      s"failed to get records for $groupId $topic $partition $offset after polling for $timeout")
+      s"Failed to get records for $groupId $topic $partition $offset after polling for $timeout")
     var record = buffer.next()
 
     if (record.offset != offset) {
-      log.info(s"buffer miss for $groupId $topic $partition $offset")
+      log.info(s"Buffer miss for $groupId $topic $partition $offset")
       seek(offset)
       poll(timeout)
       assert(buffer.hasNext(),
-        s"failed to get records for $groupId $topic $partition $offset after polling for $timeout")
+        s"Failed to get records for $groupId $topic $partition $offset after polling for $timeout")
       record = buffer.next()
       assert(record.offset == offset,
         s"Got wrong record for $groupId $topic $partition even after seeking to offset $offset")
@@ -90,14 +89,14 @@ class CachedKafkaConsumer[K, V] private(
   }
 
   private def seek(offset: Long): Unit = {
-    log.debug(s"seeking to $topicPartition $offset")
+    log.debug(s"Seeking to $topicPartition $offset")
     consumer.seek(topicPartition, offset)
   }
 
   private def poll(timeout: Long): Unit = {
     val p = consumer.poll(timeout)
     val r = p.records(topicPartition)
-    log.debug(s"polled ${p.partitions()}  ${r.size}")
+    log.debug(s"Polled ${p.partitions()}  ${r.size}")
     buffer = r.iterator
   }
 
@@ -117,7 +116,7 @@ object CachedKafkaConsumer extends Logging {
     maxCapacity: Int,
     loadFactor: Float): Unit = CachedKafkaConsumer.synchronized {
     if (null == cache) {
-      log.info(s"initializing cache $initialCapacity $maxCapacity $loadFactor")
+      log.info(s"Initializing cache $initialCapacity $maxCapacity $loadFactor")
       cache = new ju.LinkedHashMap[CacheKey, CachedKafkaConsumer[_, _]](
         initialCapacity, loadFactor, true) {
         override def removeEldestEntry(
@@ -146,7 +145,7 @@ object CachedKafkaConsumer extends Logging {
       val k = CacheKey(groupId, topic, partition)
       val v = cache.get(k)
       if (null == v) {
-        log.info(s"cache miss for $k")
+        log.info(s"Cache miss for $k")
         log.debug(cache.keySet.toString)
         val c = new CachedKafkaConsumer[K, V](groupId, topic, partition, kafkaParams)
         cache.put(k, c)
@@ -161,7 +160,7 @@ object CachedKafkaConsumer extends Logging {
   def remove(groupId: String, topic: String, partition: Int): Unit =
     CachedKafkaConsumer.synchronized {
       val k = CacheKey(groupId, topic, partition)
-      log.info(s"removing $k from cache")
+      log.info(s"Removing $k from cache")
       val v = cache.get(k)
       if (null != v) {
         v.consumer.close()

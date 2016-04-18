@@ -59,7 +59,7 @@ class KafkaRDD[
 
   assert(false ==
     kafkaParams.get(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG).asInstanceOf[Boolean],
-    ConsumerConfig.AUTO_OFFSET_RESET_CONFIG +
+    ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG +
       " must be set to false for executor kafka params, else offsets may commit before processing")
 
   // TODO is it necessary to have separate configs for initial poll time vs ongoing poll time?

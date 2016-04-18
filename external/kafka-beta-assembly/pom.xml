@@ -28,7 +28,7 @@
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-streaming-kafka-beta-assembly_2.11</artifactId>
   <packaging>jar</packaging>
-  <name>Spark Project External Kafka Assembly</name>
+  <name>Spark Project External Kafka Beta Assembly</name>
   <url>http://spark.apache.org/</url>
 
   <properties>
