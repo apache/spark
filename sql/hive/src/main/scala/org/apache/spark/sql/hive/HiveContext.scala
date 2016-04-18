@@ -45,12 +45,10 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, LeafExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.{ExecutedCommand, SetCommand}
-import org.apache.spark.sql.execution.ui.SQLListener
 import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.hive.execution.{AnalyzeTable, DescribeHiveTableCommand, HiveNativeCommand}
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SharedState, SQLConf}
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -63,32 +61,14 @@ import org.apache.spark.util.Utils
  * @since 1.0.0
  */
 class HiveContext private[hive](
-    sc: SparkContext,
-    cacheManager: CacheManager,
-    listener: SQLListener,
-    @transient private[hive] val executionHive: HiveClientImpl,
-    @transient private[hive] val metadataHive: HiveClient,
-    isRootContext: Boolean,
-    @transient private[sql] val hiveCatalog: HiveExternalCatalog)
-  extends SQLContext(sc, cacheManager, listener, isRootContext, hiveCatalog) with Logging {
+    @transient protected[hive] val hiveSharedState: HiveSharedState,
+    override val isRootContext: Boolean)
+  extends SQLContext(hiveSharedState, isRootContext) with Logging {
+
   self =>
 
-  private def this(sc: SparkContext, execHive: HiveClientImpl, metaHive: HiveClient) {
-    this(
-      sc,
-      new CacheManager,
-      SQLContext.createListenerAndUI(sc),
-      execHive,
-      metaHive,
-      true,
-      new HiveExternalCatalog(metaHive))
-  }
-
   def this(sc: SparkContext) = {
-    this(
-      sc,
-      HiveContext.newClientForExecution(sc.conf, sc.hadoopConfiguration),
-      HiveContext.newClientForMetadata(sc.conf, sc.hadoopConfiguration))
+    this(new HiveSharedState(sc), true)
   }
 
   def this(sc: JavaSparkContext) = this(sc.sc)
@@ -103,18 +83,15 @@ class HiveContext private[hive](
    * and Hive client (both of execution and metadata) with existing HiveContext.
    */
   override def newSession(): HiveContext = {
-    new HiveContext(
-      sc = sc,
-      cacheManager = cacheManager,
-      listener = listener,
-      executionHive = executionHive.newSession(),
-      metadataHive = metadataHive.newSession(),
-      isRootContext = false,
-      hiveCatalog = hiveCatalog)
+    new HiveContext(hiveSharedState, isRootContext = false)
   }
 
   @transient
   protected[sql] override lazy val sessionState = new HiveSessionState(self)
+
+  protected[hive] def hiveCatalog: HiveExternalCatalog = hiveSharedState.externalCatalog
+  protected[hive] def executionHive: HiveClientImpl = sessionState.executionHive
+  protected[hive] def metadataHive: HiveClient = sessionState.metadataHive
 
   /**
    * When true, enables an experimental feature where metastore tables that use the parquet SerDe
@@ -159,7 +136,7 @@ class HiveContext private[hive](
   protected[hive] def hiveThriftServerAsync: Boolean = getConf(HIVE_THRIFT_SERVER_ASYNC)
 
   protected[hive] def hiveThriftServerSingleSession: Boolean =
-    sc.conf.get("spark.sql.hive.thriftServer.singleSession", "false").toBoolean
+    sparkContext.conf.getBoolean("spark.sql.hive.thriftServer.singleSession", defaultValue = false)
 
   @transient
   protected[sql] lazy val substitutor = new VariableSubstitution()
@@ -527,7 +504,9 @@ private[hive] object HiveContext extends Logging {
    * The version of the Hive client that is used here must match the metastore that is configured
    * in the hive-site.xml file.
    */
-  private def newClientForMetadata(conf: SparkConf, hadoopConf: Configuration): HiveClient = {
+  protected[hive] def newClientForMetadata(
+      conf: SparkConf,
+      hadoopConf: Configuration): HiveClient = {
     val hiveConf = new HiveConf(hadoopConf, classOf[HiveConf])
     val configurations = hiveClientConfigurations(hiveConf)
     newClientForMetadata(conf, hiveConf, hadoopConf, configurations)
