@@ -165,7 +165,7 @@ case class TungstenAggregate(
       ctx.addMutableState("boolean", isNull, "")
       ctx.addMutableState(ctx.javaType(e.dataType), value, "")
       // The initial expression should not access any column
-      val ev = e.gen(ctx)
+      val ev = e.genCode(ctx)
       val initVars = s"""
          | $isNull = ${ev.isNull};
          | $value = ${ev.value};
@@ -179,13 +179,13 @@ case class TungstenAggregate(
       // evaluate aggregate results
       ctx.currentVars = bufVars
       val aggResults = functions.map(_.evaluateExpression).map { e =>
-        BindReferences.bindReference(e, aggregateBufferAttributes).gen(ctx)
+        BindReferences.bindReference(e, aggregateBufferAttributes).genCode(ctx)
       }
       val evaluateAggResults = evaluateVariables(aggResults)
       // evaluate result expressions
       ctx.currentVars = aggResults
       val resultVars = resultExpressions.map { e =>
-        BindReferences.bindReference(e, aggregateAttributes).gen(ctx)
+        BindReferences.bindReference(e, aggregateAttributes).genCode(ctx)
       }
       (resultVars, s"""
         |$evaluateAggResults
@@ -196,7 +196,7 @@ case class TungstenAggregate(
       (bufVars, "")
     } else {
       // no aggregate function, the result should be literals
-      val resultVars = resultExpressions.map(_.gen(ctx))
+      val resultVars = resultExpressions.map(_.genCode(ctx))
       (resultVars, evaluateVariables(resultVars))
     }
 
@@ -240,7 +240,7 @@ case class TungstenAggregate(
     }
     ctx.currentVars = bufVars ++ input
     // TODO: support subexpression elimination
-    val aggVals = updateExpr.map(BindReferences.bindReference(_, inputAttrs).gen(ctx))
+    val aggVals = updateExpr.map(BindReferences.bindReference(_, inputAttrs).genCode(ctx))
     // aggregate buffer should be updated atomic
     val updates = aggVals.zipWithIndex.map { case (ev, i) =>
       s"""
@@ -394,25 +394,25 @@ case class TungstenAggregate(
       ctx.currentVars = null
       ctx.INPUT_ROW = keyTerm
       val keyVars = groupingExpressions.zipWithIndex.map { case (e, i) =>
-        BoundReference(i, e.dataType, e.nullable).gen(ctx)
+        BoundReference(i, e.dataType, e.nullable).genCode(ctx)
       }
       val evaluateKeyVars = evaluateVariables(keyVars)
       ctx.INPUT_ROW = bufferTerm
       val bufferVars = aggregateBufferAttributes.zipWithIndex.map { case (e, i) =>
-        BoundReference(i, e.dataType, e.nullable).gen(ctx)
+        BoundReference(i, e.dataType, e.nullable).genCode(ctx)
       }
       val evaluateBufferVars = evaluateVariables(bufferVars)
       // evaluate the aggregation result
       ctx.currentVars = bufferVars
       val aggResults = declFunctions.map(_.evaluateExpression).map { e =>
-        BindReferences.bindReference(e, aggregateBufferAttributes).gen(ctx)
+        BindReferences.bindReference(e, aggregateBufferAttributes).genCode(ctx)
       }
       val evaluateAggResults = evaluateVariables(aggResults)
       // generate the final result
       ctx.currentVars = keyVars ++ aggResults
       val inputAttrs = groupingAttributes ++ aggregateAttributes
       val resultVars = resultExpressions.map { e =>
-        BindReferences.bindReference(e, inputAttrs).gen(ctx)
+        BindReferences.bindReference(e, inputAttrs).genCode(ctx)
       }
       s"""
        $evaluateKeyVars
@@ -437,7 +437,7 @@ case class TungstenAggregate(
       ctx.INPUT_ROW = keyTerm
       ctx.currentVars = null
       val eval = resultExpressions.map{ e =>
-        BindReferences.bindReference(e, groupingAttributes).gen(ctx)
+        BindReferences.bindReference(e, groupingAttributes).genCode(ctx)
       }
       consume(ctx, eval)
     }
@@ -576,7 +576,7 @@ case class TungstenAggregate(
     // generate hash code for key
     val hashExpr = Murmur3Hash(groupingExpressions, 42)
     ctx.currentVars = input
-    val hashEval = BindReferences.bindReference(hashExpr, child.output).gen(ctx)
+    val hashEval = BindReferences.bindReference(hashExpr, child.output).genCode(ctx)
 
     val inputAttr = aggregateBufferAttributes ++ child.output
     ctx.currentVars = new Array[ExprCode](aggregateBufferAttributes.length) ++ input
@@ -613,7 +613,8 @@ case class TungstenAggregate(
     val updateRowInVectorizedHashMap: Option[String] = {
       if (isVectorizedHashMapEnabled) {
         ctx.INPUT_ROW = vectorizedRowBuffer
-        val vectorizedRowEvals = updateExpr.map(BindReferences.bindReference(_, inputAttr).gen(ctx))
+        val vectorizedRowEvals =
+          updateExpr.map(BindReferences.bindReference(_, inputAttr).genCode(ctx))
         val updateVectorizedRow = vectorizedRowEvals.zipWithIndex.map { case (ev, i) =>
           val dt = updateExpr(i).dataType
           ctx.updateColumn(vectorizedRowBuffer, dt, i, ev, updateExpr(i).nullable)
@@ -663,7 +664,7 @@ case class TungstenAggregate(
     val updateRowInUnsafeRowMap: String = {
       ctx.INPUT_ROW = unsafeRowBuffer
       val unsafeRowBufferEvals =
-        updateExpr.map(BindReferences.bindReference(_, inputAttr).gen(ctx))
+        updateExpr.map(BindReferences.bindReference(_, inputAttr).genCode(ctx))
       val updateUnsafeRowBuffer = unsafeRowBufferEvals.zipWithIndex.map { case (ev, i) =>
         val dt = updateExpr(i).dataType
         ctx.updateColumn(unsafeRowBuffer, dt, i, ev, updateExpr(i).nullable)

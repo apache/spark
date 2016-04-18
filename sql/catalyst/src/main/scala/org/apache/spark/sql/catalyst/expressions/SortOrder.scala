@@ -70,8 +70,8 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
 
   override def eval(input: InternalRow): Any = throw new UnsupportedOperationException
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
-    val childCode = child.child.gen(ctx)
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+    val childCode = child.child.genCode(ctx)
     val input = childCode.value
     val BinaryPrefixCmp = classOf[BinaryPrefixComparator].getName
     val DoublePrefixCmp = classOf[DoublePrefixComparator].getName
