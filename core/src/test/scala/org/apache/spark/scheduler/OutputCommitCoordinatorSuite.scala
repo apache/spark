@@ -158,9 +158,10 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
       0 until rdd.partitions.size, resultHandler, () => Unit)
     // It's an error if the job completes successfully even though no committer was authorized,
     // so throw an exception if the job was allowed to complete.
-    intercept[TimeoutException] {
+    val e = intercept[SparkException] {
       ThreadUtils.awaitResult(futureAction, 5 seconds)
     }
+    assert(e.getCause.isInstanceOf[TimeoutException])
     assert(tempDir.list().size === 0)
   }
 
