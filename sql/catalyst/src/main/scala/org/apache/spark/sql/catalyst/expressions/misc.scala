@@ -515,7 +515,7 @@ case class AssertTrue(child: Expression) extends UnaryExpression with ImplicitCa
     ev.isNull = "true"
     ev.value = "null"
     s"""${eval.code}
-       |if (${eval.isNull} || java.lang.Boolean.FALSE.equals("${eval.value}")) {
+       |if (${eval.isNull} || !${eval.value}) {
        |  throw new RuntimeException("'${child.simpleString}' is not true.");
        |}
      """.stripMargin
