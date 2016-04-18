@@ -21,6 +21,8 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
+import org.apache.spark.ml.clustering
+import org.apache.spark.ml.util.Instrumentation
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS.{axpy, scal}
 import org.apache.spark.mllib.util.MLUtils
@@ -236,9 +238,45 @@ class KMeans private (
   }
 
   /**
+    * Train a K-means model on the given set of points.
+    * `data` should be cached for high performance, because this is an iterative algorithm.
+    * `instr` is used to log instrumentation parameters.
+    */
+  @Since("0.8.0")
+  private[spark] def run(data: RDD[Vector], instr: Instrumentation[clustering.KMeans])
+    : KMeansModel = {
+
+    if (data.getStorageLevel == StorageLevel.NONE) {
+      logWarning("The input data is not directly cached, which may hurt performance if its"
+        + " parent RDDs are also uncached.")
+    }
+
+    // Compute squared norms and cache them.
+    val norms = data.map(Vectors.norm(_, 2.0))
+    norms.persist()
+
+
+    val zippedData = data.zip(norms).map { case (v, norm) =>
+      new VectorWithNorm(v, norm)
+    }
+    val model = runAlgorithm(zippedData, instr)
+    norms.unpersist()
+
+    instr.logNumFeatures(zippedData.count())
+
+    // Warn at the end of the run as well, for increased visibility.
+    if (data.getStorageLevel == StorageLevel.NONE) {
+      logWarning("The input data was not directly cached, which may hurt performance if its"
+        + " parent RDDs are also uncached.")
+    }
+    model
+  }
+
+  /**
    * Implementation of K-Means algorithm.
    */
-  private def runAlgorithm(data: RDD[VectorWithNorm]): KMeansModel = {
+  private def runAlgorithm(data: RDD[VectorWithNorm],
+    instr: Instrumentation[clustering.KMeans] = null): KMeansModel = {
 
     val sc = data.sparkContext
 
@@ -286,6 +324,10 @@ class KMeans private (
       val costAccums = activeRuns.map(_ => sc.accumulator(0.0))
 
       val bcActiveCenters = sc.broadcast(activeCenters)
+
+      if (instr != null) {
+        instr.logNumFeatures(bcActiveCenters.value(0)(0).vector.size)
+      }
 
       // Find the sum and count of points mapping to each center
       val totalContribs = data.mapPartitions { points =>
