@@ -72,12 +72,49 @@ object TestHive
  * test cases that rely on TestHive must be serialized.
  */
 class TestHiveContext private[hive](
-    testHiveSharedState: TestHiveSharedState,
+    sc: SparkContext,
+    cacheManager: CacheManager,
+    listener: SQLListener,
+    executionHive: HiveClientImpl,
+    metadataHive: HiveClient,
+    isRootContext: Boolean,
+    hiveCatalog: HiveExternalCatalog,
     val warehousePath: File,
     val scratchDirPath: File,
-    metastoreTemporaryConf: Map[String, String],
-    isRootContext: Boolean)
-  extends HiveContext(testHiveSharedState, isRootContext) { self =>
+    metastoreTemporaryConf: Map[String, String])
+  extends HiveContext(
+    sc,
+    cacheManager,
+    listener,
+    executionHive,
+    metadataHive,
+    isRootContext,
+    hiveCatalog) { self =>
+
+  // Unfortunately, due to the complex interactions between the construction parameters
+  // and the limitations in scala constructors, we need many of these constructors to
+  // provide a shorthand to create a new TestHiveContext with only a SparkContext.
+  // This is not a great design pattern but it's necessary here.
+
+  private def this(
+      sc: SparkContext,
+      executionHive: HiveClientImpl,
+      metadataHive: HiveClient,
+      warehousePath: File,
+      scratchDirPath: File,
+      metastoreTemporaryConf: Map[String, String]) {
+    this(
+      sc,
+      new CacheManager,
+      SQLContext.createListenerAndUI(sc),
+      executionHive,
+      metadataHive,
+      true,
+      new HiveExternalCatalog(metadataHive),
+      warehousePath,
+      scratchDirPath,
+      metastoreTemporaryConf)
+  }
 
   private def this(
       sc: SparkContext,
@@ -85,11 +122,13 @@ class TestHiveContext private[hive](
       scratchDirPath: File,
       metastoreTemporaryConf: Map[String, String]) {
     this(
-      new TestHiveSharedState(sc, warehousePath, scratchDirPath, metastoreTemporaryConf),
+      sc,
+      HiveContext.newClientForExecution(sc.conf, sc.hadoopConfiguration),
+      TestHiveContext.newClientForMetadata(
+        sc.conf, sc.hadoopConfiguration, warehousePath, scratchDirPath, metastoreTemporaryConf),
       warehousePath,
       scratchDirPath,
-      metastoreTemporaryConf,
-      true)
+      metastoreTemporaryConf)
   }
 
   def this(sc: SparkContext) {
@@ -102,11 +141,16 @@ class TestHiveContext private[hive](
 
   override def newSession(): HiveContext = {
     new TestHiveContext(
-      testHiveSharedState,
-      warehousePath,
-      scratchDirPath,
-      metastoreTemporaryConf,
-      isRootContext = false)
+      sc = sc,
+      cacheManager = cacheManager,
+      listener = listener,
+      executionHive = executionHive.newSession(),
+      metadataHive = metadataHive.newSession(),
+      isRootContext = false,
+      hiveCatalog = hiveCatalog,
+      warehousePath = warehousePath,
+      scratchDirPath = scratchDirPath,
+      metastoreTemporaryConf = metastoreTemporaryConf)
   }
 
   // By clearing the port we force Spark to pick a new one.  This allows us to rerun tests
@@ -505,22 +549,6 @@ private[hive] class TestHiveFunctionRegistry extends SimpleFunctionRegistry {
   }
 }
 
-
-private[hive] class TestHiveSharedState(
-    sc: SparkContext,
-    warehousePath: File,
-    scratchDirPath: File,
-    metastoreTemporaryConf: Map[String, String])
-  extends HiveSharedState(sc) {
-
-  override lazy val metadataHive: HiveClient = {
-    TestHiveContext.newClientForMetadata(
-      sc.conf, sc.hadoopConfiguration, warehousePath, scratchDirPath, metastoreTemporaryConf)
-  }
-
-}
-
-
 private[hive] object TestHiveContext {
 
   /**
@@ -535,7 +563,7 @@ private[hive] object TestHiveContext {
   /**
    * Create a [[HiveClient]] used to retrieve metadata from the Hive MetaStore.
    */
-  def newClientForMetadata(
+  private def newClientForMetadata(
       conf: SparkConf,
       hadoopConf: Configuration,
       warehousePath: File,
