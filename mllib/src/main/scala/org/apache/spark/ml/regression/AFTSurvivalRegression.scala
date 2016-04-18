@@ -23,15 +23,16 @@ import breeze.linalg.{DenseVector => BDV}
 import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS}
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{Logging, SparkException}
+import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg.{BLAS, Vector, Vectors, VectorUDT}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DoubleType, StructType}
 import org.apache.spark.storage.StorageLevel
@@ -99,11 +100,10 @@ private[regression] trait AFTSurvivalRegressionParams extends Params
   protected def validateAndTransformSchema(
       schema: StructType,
       fitting: Boolean): StructType = {
-    validateParams()
     SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
     if (fitting) {
       SchemaUtils.checkColumnType(schema, $(censorCol), DoubleType)
-      SchemaUtils.checkColumnType(schema, $(labelCol), DoubleType)
+      SchemaUtils.checkNumericType(schema, $(labelCol))
     }
     if (hasQuantilesCol) {
       SchemaUtils.appendColumn(schema, $(quantilesCol), new VectorUDT)
@@ -183,15 +183,16 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
    * Extract [[featuresCol]], [[labelCol]] and [[censorCol]] from input dataset,
    * and put it in an RDD with strong types.
    */
-  protected[ml] def extractAFTPoints(dataset: DataFrame): RDD[AFTPoint] = {
-    dataset.select($(featuresCol), $(labelCol), $(censorCol)).rdd.map {
-      case Row(features: Vector, label: Double, censor: Double) =>
-        AFTPoint(features, label, censor)
-    }
+  protected[ml] def extractAFTPoints(dataset: Dataset[_]): RDD[AFTPoint] = {
+    dataset.select(col($(featuresCol)), col($(labelCol)).cast(DoubleType), col($(censorCol)))
+      .rdd.map {
+        case Row(features: Vector, label: Double, censor: Double) =>
+          AFTPoint(features, label, censor)
+      }
   }
 
-  @Since("1.6.0")
-  override def fit(dataset: DataFrame): AFTSurvivalRegressionModel = {
+  @Since("2.0.0")
+  override def fit(dataset: Dataset[_]): AFTSurvivalRegressionModel = {
     validateAndTransformSchema(dataset.schema, fitting = true)
     val instances = extractAFTPoints(dataset)
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
@@ -298,8 +299,8 @@ class AFTSurvivalRegressionModel private[ml] (
     math.exp(BLAS.dot(coefficients, features) + intercept)
   }
 
-  @Since("1.6.0")
-  override def transform(dataset: DataFrame): DataFrame = {
+  @Since("2.0.0")
+  override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema)
     val predictUDF = udf { features: Vector => predict(features) }
     val predictQuantilesUDF = udf { features: Vector => predictQuantiles(features)}

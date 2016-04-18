@@ -17,13 +17,14 @@
 
 package org.apache.spark.scheduler
 
-import java.util.Random
+import java.util.{Properties, Random}
 
 import scala.collection.Map
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark._
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.ManualClock
 
 class FakeDAGScheduler(sc: SparkContext, taskScheduler: FakeTaskScheduler)
@@ -137,7 +138,7 @@ class FakeTaskScheduler(sc: SparkContext, liveExecutors: (String, String)* /* ex
 /**
  * A Task implementation that results in a large serialized task.
  */
-class LargeTask(stageId: Int) extends Task[Array[Byte]](stageId, 0, 0, Seq.empty) {
+class LargeTask(stageId: Int) extends Task[Array[Byte]](stageId, 0, 0, Seq.empty, new Properties) {
   val randomBuffer = new Array[Byte](TaskSetManager.TASK_SIZE_TO_WARN_KB * 1024)
   val random = new Random(0)
   random.nextBytes(randomBuffer)
@@ -396,7 +397,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val rescheduleDelay = 300L
     val conf = new SparkConf().
       set("spark.scheduler.executorTaskBlacklistTime", rescheduleDelay.toString).
-      // dont wait to jump locality levels in this test
+      // don't wait to jump locality levels in this test
       set("spark.locality.wait", "0")
 
     sc = new SparkContext("local", "test", conf)

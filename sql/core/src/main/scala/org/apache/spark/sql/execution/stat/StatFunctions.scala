@@ -19,8 +19,8 @@ package org.apache.spark.sql.execution.stat
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.Logging
-import org.apache.spark.sql.{Column, DataFrame, Row}
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
 import org.apache.spark.sql.catalyst.expressions.{Cast, GenericMutableRow}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.functions._
@@ -296,7 +296,7 @@ private[sql] object StatFunctions extends Logging {
     val defaultRelativeError: Double = 0.01
 
     /**
-     * Statisttics from the Greenwald-Khanna paper.
+     * Statistics from the Greenwald-Khanna paper.
      * @param value the sampled value
      * @param g the minimum rank jump from the previous value's minimum rank
      * @param delta the maximum span of the rank.
@@ -454,6 +454,6 @@ private[sql] object StatFunctions extends Logging {
     }
     val schema = StructType(StructField(tableName, StringType) +: headerNames)
 
-    new DataFrame(df.sqlContext, LocalRelation(schema.toAttributes, table)).na.fill(0.0)
+    Dataset.ofRows(df.sqlContext, LocalRelation(schema.toAttributes, table)).na.fill(0.0)
   }
 }

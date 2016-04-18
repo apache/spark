@@ -18,12 +18,11 @@
 package org.apache.spark.deploy.worker.ui
 
 import java.io.File
-import java.net.URI
 import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
 import org.apache.spark.util.logging.RollingFileAppender
@@ -108,20 +107,18 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
       }
 
     val content =
-      <html>
-        <body>
-          {linkToMaster}
-          <div>
-            <div style="float:left; margin-right:10px">{backButton}</div>
-            <div style="float:left;">{range}</div>
-            <div style="float:right; margin-left:10px">{nextButton}</div>
-          </div>
-          <br />
-          <div style="height:500px; overflow:auto; padding:5px;">
-            <pre>{logText}</pre>
-          </div>
-        </body>
-      </html>
+      <div>
+        {linkToMaster}
+        <div>
+          <div style="float:left; margin-right:10px">{backButton}</div>
+          <div style="float:left;">{range}</div>
+          <div style="float:right; margin-left:10px">{nextButton}</div>
+        </div>
+        <br />
+        <div style="height:500px; overflow:auto; padding:5px;">
+          <pre>{logText}</pre>
+        </div>
+      </div>
     UIUtils.basicSparkPage(content, logType + " log page for " + pageName)
   }
 

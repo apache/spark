@@ -64,6 +64,7 @@ private[spark] class Benchmark(
 
     val firstBest = results.head.bestMs
     // The results are going to be processor specific so it is useful to include that.
+    println(Benchmark.getJVMOSInfo())
     println(Benchmark.getProcessorName())
     printf("%-35s %16s %12s %13s %10s\n", name + ":", "Best/Avg Time(ms)", "Rate(M/s)",
       "Per Row(ns)", "Relative")
@@ -91,16 +92,31 @@ private[spark] object Benchmark {
    * This should return something like "Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz"
    */
   def getProcessorName(): String = {
-    if (SystemUtils.IS_OS_MAC_OSX) {
+    val cpu = if (SystemUtils.IS_OS_MAC_OSX) {
       Utils.executeAndGetOutput(Seq("/usr/sbin/sysctl", "-n", "machdep.cpu.brand_string"))
     } else if (SystemUtils.IS_OS_LINUX) {
       Try {
         val grepPath = Utils.executeAndGetOutput(Seq("which", "grep"))
         Utils.executeAndGetOutput(Seq(grepPath, "-m", "1", "model name", "/proc/cpuinfo"))
+        .replaceFirst("model name[\\s*]:[\\s*]", "")
       }.getOrElse("Unknown processor")
     } else {
       System.getenv("PROCESSOR_IDENTIFIER")
     }
+    cpu
+  }
+
+  /**
+   * This should return a user helpful JVM & OS information.
+   * This should return something like
+   * "OpenJDK 64-Bit Server VM 1.8.0_65-b17 on Linux 4.1.13-100.fc21.x86_64"
+   */
+  def getJVMOSInfo(): String = {
+    val vmName = System.getProperty("java.vm.name")
+    val runtimeVersion = System.getProperty("java.runtime.version")
+    val osName = System.getProperty("os.name")
+    val osVersion = System.getProperty("os.version")
+    s"${vmName} ${runtimeVersion} on ${osName} ${osVersion}"
   }
 
   /**

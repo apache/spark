@@ -64,7 +64,7 @@ public class JavaDecisionTreeSuite implements Serializable {
   public void runDTUsingConstructor() {
     List<LabeledPoint> arr = DecisionTreeSuite.generateCategoricalDataPointsAsJavaList();
     JavaRDD<LabeledPoint> rdd = sc.parallelize(arr);
-    HashMap<Integer, Integer> categoricalFeaturesInfo = new HashMap<Integer, Integer>();
+    HashMap<Integer, Integer> categoricalFeaturesInfo = new HashMap<>();
     categoricalFeaturesInfo.put(1, 2); // feature 1 has 2 categories
 
     int maxDepth = 4;
@@ -84,7 +84,7 @@ public class JavaDecisionTreeSuite implements Serializable {
   public void runDTUsingStaticMethods() {
     List<LabeledPoint> arr = DecisionTreeSuite.generateCategoricalDataPointsAsJavaList();
     JavaRDD<LabeledPoint> rdd = sc.parallelize(arr);
-    HashMap<Integer, Integer> categoricalFeaturesInfo = new HashMap<Integer, Integer>();
+    HashMap<Integer, Integer> categoricalFeaturesInfo = new HashMap<>();
     categoricalFeaturesInfo.put(1, 2); // feature 1 has 2 categories
 
     int maxDepth = 4;

@@ -112,7 +112,7 @@ object Cast {
 }
 
 /** Cast the child expression to the target data type. */
-case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
+case class Cast(child: Expression, dataType: DataType) extends UnaryExpression with NullIntolerant {
 
   override def toString: String = s"cast($child as ${dataType.simpleString})"
 
@@ -925,7 +925,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
 
     (c, evPrim, evNull) =>
       s"""
-        final $rowClass $result = new $rowClass(${fieldsCasts.size});
+        final $rowClass $result = new $rowClass(${fieldsCasts.length});
         final InternalRow $tmpRow = $c;
         $fieldsEvalCode
         $evPrim = $result.copy();

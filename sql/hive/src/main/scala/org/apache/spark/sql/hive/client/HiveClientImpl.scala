@@ -22,19 +22,24 @@ import java.io.{File, PrintStream}
 import scala.collection.JavaConverters._
 import scala.language.reflectiveCalls
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.cli.CliSessionState
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.{TableType => HiveTableType}
-import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, FieldSchema, Function => HiveFunction, FunctionType, PrincipalType, ResourceUri}
+import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, FieldSchema, Function => HiveFunction, FunctionType, PrincipalType, ResourceType, ResourceUri}
 import org.apache.hadoop.hive.ql.Driver
-import org.apache.hadoop.hive.ql.metadata.{Hive, Partition => HivePartition, Table => HiveTable}
+import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition, Table => HiveTable}
+import org.apache.hadoop.hive.ql.metadata.{Hive, HiveException}
 import org.apache.hadoop.hive.ql.plan.AddPartitionDesc
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.security.UserGroupInformation
 
-import org.apache.spark.{Logging, SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchPartitionException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Expression
@@ -60,6 +65,8 @@ import org.apache.spark.util.{CircularBuffer, Utils}
  */
 private[hive] class HiveClientImpl(
     override val version: HiveVersion,
+    sparkConf: SparkConf,
+    hadoopConf: Configuration,
     config: Map[String, String],
     initClassLoader: ClassLoader,
     val clientLoader: IsolatedClientLoader)
@@ -90,7 +97,6 @@ private[hive] class HiveClientImpl(
     // instance of SparkConf is needed for the original value of spark.yarn.keytab
     // and spark.yarn.principal set in SparkSubmit, as yarn.Client resets the
     // keytab configuration for the link name in distributed cache
-    val sparkConf = new SparkConf
     if (sparkConf.contains("spark.yarn.principal") && sparkConf.contains("spark.yarn.keytab")) {
       val principalName = sparkConf.get("spark.yarn.principal")
       val keytabFileName = sparkConf.get("spark.yarn.keytab")
@@ -114,7 +120,7 @@ private[hive] class HiveClientImpl(
         // so we should keep `conf` and reuse the existing instance of `CliSessionState`.
         originalState
       } else {
-        val initialConf = new HiveConf(classOf[SessionState])
+        val initialConf = new HiveConf(hadoopConf, classOf[SessionState])
         // HiveConf is a Hadoop Configuration, which has a field of classLoader and
         // the initial value will be the current thread's context class loader
         // (i.e. initClassLoader at here).
@@ -237,10 +243,6 @@ private[hive] class HiveClientImpl(
     state.err = stream
   }
 
-  override def currentDatabase: String = withHiveState {
-    state.getCurrentDatabase
-  }
-
   override def setCurrentDatabase(databaseName: String): Unit = withHiveState {
     if (getDatabaseOption(databaseName).isDefined) {
       state.setCurrentDatabase(databaseName)
@@ -298,8 +300,7 @@ private[hive] class HiveClientImpl(
     logDebug(s"Looking up $dbName.$tableName")
     Option(client.getTable(dbName, tableName, false)).map { h =>
       CatalogTable(
-        specifiedDatabase = Option(h.getDbName),
-        name = h.getTableName,
+        identifier = TableIdentifier(h.getTableName, Option(h.getDbName)),
         tableType = h.getTableType match {
           case HiveTableType.EXTERNAL_TABLE => CatalogTableType.EXTERNAL_TABLE
           case HiveTableType.MANAGED_TABLE => CatalogTableType.MANAGED_TABLE
@@ -366,7 +367,7 @@ private[hive] class HiveClientImpl(
   override def dropPartitions(
       db: String,
       table: String,
-      specs: Seq[Catalog.TablePartitionSpec]): Unit = withHiveState {
+      specs: Seq[ExternalCatalog.TablePartitionSpec]): Unit = withHiveState {
     // TODO: figure out how to drop multiple partitions in one call
     specs.foreach { s => client.dropPartition(db, table, s.values.toList.asJava, true) }
   }
@@ -374,8 +375,8 @@ private[hive] class HiveClientImpl(
   override def renamePartitions(
       db: String,
       table: String,
-      specs: Seq[Catalog.TablePartitionSpec],
-      newSpecs: Seq[Catalog.TablePartitionSpec]): Unit = withHiveState {
+      specs: Seq[ExternalCatalog.TablePartitionSpec],
+      newSpecs: Seq[ExternalCatalog.TablePartitionSpec]): Unit = withHiveState {
     require(specs.size == newSpecs.size, "number of old and new partition specs differ")
     val catalogTable = getTable(db, table)
     val hiveTable = toHiveTable(catalogTable)
@@ -397,7 +398,7 @@ private[hive] class HiveClientImpl(
 
   override def getPartitionOption(
       table: CatalogTable,
-      spec: Catalog.TablePartitionSpec): Option[CatalogTablePartition] = withHiveState {
+      spec: ExternalCatalog.TablePartitionSpec): Option[CatalogTablePartition] = withHiveState {
     val hiveTable = toHiveTable(table)
     val hivePartition = client.getPartition(hiveTable, spec.asJava, false)
     Option(hivePartition).map(fromHivePartition)
@@ -545,19 +546,24 @@ private[hive] class HiveClientImpl(
   }
 
   override def renameFunction(db: String, oldName: String, newName: String): Unit = withHiveState {
-    val catalogFunc = getFunction(db, oldName).copy(name = newName)
+    val catalogFunc = getFunction(db, oldName)
+      .copy(identifier = FunctionIdentifier(newName, Some(db)))
     val hiveFunc = toHiveFunction(catalogFunc, db)
     client.alterFunction(db, oldName, hiveFunc)
   }
 
   override def alterFunction(db: String, func: CatalogFunction): Unit = withHiveState {
-    client.alterFunction(db, func.name, toHiveFunction(func, db))
+    client.alterFunction(db, func.identifier.funcName, toHiveFunction(func, db))
   }
 
   override def getFunctionOption(
       db: String,
       name: String): Option[CatalogFunction] = withHiveState {
-    Option(client.getFunction(db, name)).map(fromHiveFunction)
+    try {
+      Option(client.getFunction(db, name)).map(fromHiveFunction)
+    } catch {
+      case he: HiveException => None
+    }
   }
 
   override def listFunctions(db: String, pattern: String): Seq[String] = withHiveState {
@@ -611,19 +617,32 @@ private[hive] class HiveClientImpl(
       .asInstanceOf[Class[_ <: org.apache.hadoop.hive.ql.io.HiveOutputFormat[_, _]]]
 
   private def toHiveFunction(f: CatalogFunction, db: String): HiveFunction = {
+    val resourceUris = f.resources.map { case (resourceType, resourcePath) =>
+      new ResourceUri(ResourceType.valueOf(resourceType.toUpperCase), resourcePath)
+    }
     new HiveFunction(
-      f.name,
+      f.identifier.funcName,
       db,
       f.className,
       null,
       PrincipalType.USER,
       (System.currentTimeMillis / 1000).toInt,
       FunctionType.JAVA,
-      List.empty[ResourceUri].asJava)
+      resourceUris.asJava)
   }
 
   private def fromHiveFunction(hf: HiveFunction): CatalogFunction = {
-    new CatalogFunction(hf.getFunctionName, hf.getClassName)
+    val name = FunctionIdentifier(hf.getFunctionName, Option(hf.getDbName))
+    val resources = hf.getResourceUris.asScala.map { uri =>
+      val resourceType = uri.getResourceType() match {
+        case ResourceType.ARCHIVE => "archive"
+        case ResourceType.FILE => "file"
+        case ResourceType.JAR => "jar"
+        case r => throw new AnalysisException(s"Unknown resource type: $r")
+      }
+      (resourceType, uri.getUri())
+    }
+    new CatalogFunction(name, hf.getClassName, resources)
   }
 
   private def toHiveColumn(c: CatalogColumn): FieldSchema = {
@@ -639,10 +658,19 @@ private[hive] class HiveClientImpl(
   }
 
   private def toHiveTable(table: CatalogTable): HiveTable = {
-    val hiveTable = new HiveTable(table.database, table.name)
+    val hiveTable = new HiveTable(table.database, table.identifier.table)
+    // For EXTERNAL_TABLE/MANAGED_TABLE, we also need to set EXTERNAL field in
+    // the table properties accodringly. Otherwise, if EXTERNAL_TABLE is the table type
+    // but EXTERNAL field is not set, Hive metastore will change the type to
+    // MANAGED_TABLE (see
+    // metastore/src/java/org/apache/hadoop/hive/metastore/ObjectStore.java#L1095-L1105)
     hiveTable.setTableType(table.tableType match {
-      case CatalogTableType.EXTERNAL_TABLE => HiveTableType.EXTERNAL_TABLE
-      case CatalogTableType.MANAGED_TABLE => HiveTableType.MANAGED_TABLE
+      case CatalogTableType.EXTERNAL_TABLE =>
+        hiveTable.setProperty("EXTERNAL", "TRUE")
+        HiveTableType.EXTERNAL_TABLE
+      case CatalogTableType.MANAGED_TABLE =>
+        hiveTable.setProperty("EXTERNAL", "FALSE")
+        HiveTableType.MANAGED_TABLE
       case CatalogTableType.INDEX_TABLE => HiveTableType.INDEX_TABLE
       case CatalogTableType.VIRTUAL_VIEW => HiveTableType.VIRTUAL_VIEW
     })

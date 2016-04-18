@@ -32,13 +32,21 @@ abstract class ContinuousQueryListener {
   /**
    * Called when a query is started.
    * @note This is called synchronously with
-   *       [[org.apache.spark.sql.DataFrameWriter `DataFrameWriter.stream()`]],
-   *       that is, `onQueryStart` will be called on all listeners before `DataFrameWriter.stream()`
-   *       returns the corresponding [[ContinuousQuery]].
+   *       [[org.apache.spark.sql.DataFrameWriter `DataFrameWriter.startStream()`]],
+   *       that is, `onQueryStart` will be called on all listeners before
+   *       `DataFrameWriter.startStream()` returns the corresponding [[ContinuousQuery]]. Please
+   *       don't block this method as it will block your query.
    */
   def onQueryStarted(queryStarted: QueryStarted)
 
-  /** Called when there is some status update (ingestion rate updated, etc. */
+  /**
+   * Called when there is some status update (ingestion rate updated, etc.)
+   *
+   * @note This method is asynchronous. The status in [[ContinuousQuery]] will always be
+   *       latest no matter when this method is called. Therefore, the status of [[ContinuousQuery]]
+   *       may be changed before/when you process the event. E.g., you may find [[ContinuousQuery]]
+   *       is terminated when you are processing [[QueryProgress]].
+   */
   def onQueryProgress(queryProgress: QueryProgress)
 
   /** Called when a query is stopped, with or without error */

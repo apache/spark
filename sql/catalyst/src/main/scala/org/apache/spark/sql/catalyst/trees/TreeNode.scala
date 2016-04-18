@@ -22,21 +22,19 @@ import java.util.UUID
 import scala.collection.Map
 import scala.collection.mutable.Stack
 
+import org.apache.commons.lang.ClassUtils
 import org.json4s.JsonAST._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.{EmptyRDD, RDD}
-import org.apache.spark.sql.catalyst.{ScalaReflectionLock, TableIdentifier}
 import org.apache.spark.sql.catalyst.ScalaReflection._
+import org.apache.spark.sql.catalyst.ScalaReflectionLock
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.Statistics
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.Utils
 
 /** Used by [[TreeNode.getNodeNumbered]] when traversing the tree for a given number */
@@ -368,20 +366,32 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * @param newArgs the new product arguments.
    */
   def makeCopy(newArgs: Array[AnyRef]): BaseType = attachTree(this, "makeCopy") {
+    // Skip no-arg constructors that are just there for kryo.
     val ctors = getClass.getConstructors.filter(_.getParameterTypes.size != 0)
     if (ctors.isEmpty) {
       sys.error(s"No valid constructor for $nodeName")
     }
-    val defaultCtor = ctors.maxBy(_.getParameterTypes.size)
+    val allArgs: Array[AnyRef] = if (otherCopyArgs.isEmpty) {
+      newArgs
+    } else {
+      newArgs ++ otherCopyArgs
+    }
+    val defaultCtor = ctors.find { ctor =>
+      if (ctor.getParameterTypes.length != allArgs.length) {
+        false
+      } else if (allArgs.contains(null)) {
+        // if there is a `null`, we can't figure out the class, therefore we should just fallback
+        // to older heuristic
+        false
+      } else {
+        val argsArray: Array[Class[_]] = allArgs.map(_.getClass)
+        ClassUtils.isAssignable(argsArray, ctor.getParameterTypes, true /* autoboxing */)
+      }
+    }.getOrElse(ctors.maxBy(_.getParameterTypes.length)) // fall back to older heuristic
 
     try {
       CurrentOrigin.withOrigin(origin) {
-        // Skip no-arg constructors that are just there for kryo.
-        if (otherCopyArgs.isEmpty) {
-          defaultCtor.newInstance(newArgs: _*).asInstanceOf[BaseType]
-        } else {
-          defaultCtor.newInstance((newArgs ++ otherCopyArgs).toArray: _*).asInstanceOf[BaseType]
-        }
+        defaultCtor.newInstance(allArgs.toArray: _*).asInstanceOf[BaseType]
       }
     } catch {
       case e: java.lang.IllegalArgumentException =>
@@ -450,8 +460,51 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
 
   /**
    * All the nodes that will be used to generate tree string.
+   *
+   * For example:
+   *
+   *   WholeStageCodegen
+   *   +-- SortMergeJoin
+   *       |-- InputAdapter
+   *       |   +-- Sort
+   *       +-- InputAdapter
+   *           +-- Sort
+   *
+   * the treeChildren of WholeStageCodegen will be Seq(Sort, Sort), it will generate a tree string
+   * like this:
+   *
+   *   WholeStageCodegen
+   *   : +- SortMergeJoin
+   *   :    :- INPUT
+   *   :    :- INPUT
+   *   :-  Sort
+   *   :-  Sort
    */
   protected def treeChildren: Seq[BaseType] = children
+
+  /**
+   * All the nodes that are parts of this node.
+   *
+   * For example:
+   *
+   *   WholeStageCodegen
+   *   +- SortMergeJoin
+   *      |-- InputAdapter
+   *      |   +-- Sort
+   *      +-- InputAdapter
+   *          +-- Sort
+   *
+   * the innerChildren of WholeStageCodegen will be Seq(SortMergeJoin), it will generate a tree
+   * string like this:
+   *
+   *   WholeStageCodegen
+   *   : +- SortMergeJoin
+   *   :    :- INPUT
+   *   :    :- INPUT
+   *   :-  Sort
+   *   :-  Sort
+   */
+  protected def innerChildren: Seq[BaseType] = Nil
 
   /**
    * Appends the string represent of this node and its children to the given StringBuilder.
@@ -474,6 +527,12 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
 
     builder.append(simpleString)
     builder.append("\n")
+
+    if (innerChildren.nonEmpty) {
+      innerChildren.init.foreach(_.generateTreeString(
+        depth + 2, lastChildren :+ false :+ false, builder))
+      innerChildren.last.generateTreeString(depth + 2, lastChildren :+ false :+ true, builder)
+    }
 
     if (treeChildren.nonEmpty) {
       treeChildren.init.foreach(_.generateTreeString(depth + 1, lastChildren :+ false, builder))

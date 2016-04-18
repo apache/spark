@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.catalog.Catalog.TablePartitionSpec
+import org.apache.spark.sql.catalyst.catalog.ExternalCatalog.TablePartitionSpec
 
 
 /**
@@ -33,7 +33,7 @@ class NoSuchDatabaseException(db: String) extends NoSuchItemException {
 }
 
 class NoSuchTableException(db: String, table: String) extends NoSuchItemException {
-  override def getMessage: String = s"Table $table not found in database $db"
+  override def getMessage: String = s"Table or View $table not found in database $db"
 }
 
 class NoSuchPartitionException(

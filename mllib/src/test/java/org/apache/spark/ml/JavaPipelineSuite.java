@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml;
 
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Row;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -26,7 +28,6 @@ import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.ml.classification.LogisticRegression;
 import org.apache.spark.ml.feature.StandardScaler;
-import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.SQLContext;
 import static org.apache.spark.mllib.classification.LogisticRegressionSuite.generateLogisticInputAsList;
 
@@ -37,7 +38,7 @@ public class JavaPipelineSuite {
 
   private transient JavaSparkContext jsc;
   private transient SQLContext jsql;
-  private transient DataFrame dataset;
+  private transient Dataset<Row> dataset;
 
   @Before
   public void setUp() {
@@ -65,7 +66,7 @@ public class JavaPipelineSuite {
       .setStages(new PipelineStage[] {scaler, lr});
     PipelineModel model = pipeline.fit(dataset);
     model.transform(dataset).registerTempTable("prediction");
-    DataFrame predictions = jsql.sql("SELECT label, probability, prediction FROM prediction");
+    Dataset<Row> predictions = jsql.sql("SELECT label, probability, prediction FROM prediction");
     predictions.collectAsList();
   }
 }

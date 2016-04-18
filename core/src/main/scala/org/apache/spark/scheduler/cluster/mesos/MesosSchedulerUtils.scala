@@ -29,7 +29,8 @@ import org.apache.mesos.{MesosSchedulerDriver, Protos, Scheduler, SchedulerDrive
 import org.apache.mesos.Protos._
 import org.apache.mesos.protobuf.{ByteString, GeneratedMessage}
 
-import org.apache.spark.{Logging, SparkConf, SparkContext, SparkException}
+import org.apache.spark.{SparkConf, SparkContext, SparkException}
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
 /**
@@ -147,8 +148,8 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
   }
 
   /**
-    * Signal that the scheduler has registered with Mesos.
-    */
+   * Signal that the scheduler has registered with Mesos.
+   */
   protected def markRegistered(): Unit = {
     registerLatch.countDown()
   }
@@ -282,11 +283,11 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
    *  are separated by ':'. The ':' implies equality (for singular values) and "is one of" for
    *  multiple values (comma separated). For example:
    *  {{{
-   *  parseConstraintString("tachyon:true;zone:us-east-1a,us-east-1b")
+   *  parseConstraintString("os:centos7;zone:us-east-1a,us-east-1b")
    *  // would result in
    *  <code>
    *  Map(
-   *    "tachyon" -> Set("true"),
+   *    "os" -> Set("centos7"),
    *    "zone":   -> Set("us-east-1a", "us-east-1b")
    *  )
    *  }}}

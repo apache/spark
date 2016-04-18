@@ -25,7 +25,7 @@ nums <- 1:2
 rrdd <- parallelize(sc, nums, 2L)
 
 test_that("using broadcast variable", {
-  randomMat <- matrix(nrow=10, ncol=10, data=rnorm(100))
+  randomMat <- matrix(nrow = 10, ncol = 10, data = rnorm(100))
   randomMatBr <- broadcast(sc, randomMat)
 
   useBroadcast <- function(x) {
@@ -37,7 +37,7 @@ test_that("using broadcast variable", {
 })
 
 test_that("without using broadcast variable", {
-  randomMat <- matrix(nrow=10, ncol=10, data=rnorm(100))
+  randomMat <- matrix(nrow = 10, ncol = 10, data = rnorm(100))
 
   useBroadcast <- function(x) {
     sum(randomMat * x)

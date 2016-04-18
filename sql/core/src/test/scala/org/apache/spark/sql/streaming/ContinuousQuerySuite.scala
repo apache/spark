@@ -27,7 +27,7 @@ class ContinuousQuerySuite extends StreamTest with SharedSQLContext {
   import AwaitTerminationTester._
   import testImplicits._
 
-  test("lifecycle states and awaitTermination") {
+  testQuietly("lifecycle states and awaitTermination") {
     val inputData = MemoryStream[Int]
     val mapped = inputData.toDS().map { 6 / _}
 
@@ -54,12 +54,13 @@ class ContinuousQuerySuite extends StreamTest with SharedSQLContext {
       TestAwaitTermination(ExpectException[SparkException], timeoutMs = 2000),
       TestAwaitTermination(ExpectException[SparkException], timeoutMs = 10),
       AssertOnQuery(
-        q => q.exception.get.startOffset.get === q.streamProgress.toCompositeOffset(Seq(inputData)),
+        q =>
+          q.exception.get.startOffset.get === q.committedOffsets.toCompositeOffset(Seq(inputData)),
         "incorrect start offset on exception")
     )
   }
 
-  test("source and sink statuses") {
+  testQuietly("source and sink statuses") {
     val inputData = MemoryStream[Int]
     val mapped = inputData.toDS().map(6 / _)
 
@@ -68,19 +69,19 @@ class ContinuousQuerySuite extends StreamTest with SharedSQLContext {
       AssertOnQuery(_.sourceStatuses(0).description.contains("Memory")),
       AssertOnQuery(_.sourceStatuses(0).offset === None),
       AssertOnQuery(_.sinkStatus.description.contains("Memory")),
-      AssertOnQuery(_.sinkStatus.offset === None),
+      AssertOnQuery(_.sinkStatus.offset === new CompositeOffset(None :: Nil)),
       AddData(inputData, 1, 2),
       CheckAnswer(6, 3),
       AssertOnQuery(_.sourceStatuses(0).offset === Some(LongOffset(0))),
-      AssertOnQuery(_.sinkStatus.offset === Some(CompositeOffset.fill(LongOffset(0)))),
+      AssertOnQuery(_.sinkStatus.offset === CompositeOffset.fill(LongOffset(0))),
       AddData(inputData, 1, 2),
       CheckAnswer(6, 3, 6, 3),
       AssertOnQuery(_.sourceStatuses(0).offset === Some(LongOffset(1))),
-      AssertOnQuery(_.sinkStatus.offset === Some(CompositeOffset.fill(LongOffset(1)))),
+      AssertOnQuery(_.sinkStatus.offset === CompositeOffset.fill(LongOffset(1))),
       AddData(inputData, 0),
       ExpectFailure[SparkException],
       AssertOnQuery(_.sourceStatuses(0).offset === Some(LongOffset(2))),
-      AssertOnQuery(_.sinkStatus.offset === Some(CompositeOffset.fill(LongOffset(1))))
+      AssertOnQuery(_.sinkStatus.offset === CompositeOffset.fill(LongOffset(1)))
     )
   }
 

@@ -47,7 +47,7 @@ class ExpressionSQLBuilderSuite extends SQLBuilderTest {
   test("binary comparisons") {
     checkSQL('a.int === 'b.int, "(`a` = `b`)")
     checkSQL('a.int <=> 'b.int, "(`a` <=> `b`)")
-    checkSQL('a.int !== 'b.int, "(NOT (`a` = `b`))")
+    checkSQL('a.int =!= 'b.int, "(NOT (`a` = `b`))")
 
     checkSQL('a.int < 'b.int, "(`a` < `b`)")
     checkSQL('a.int <= 'b.int, "(`a` <= `b`)")

@@ -53,7 +53,7 @@ object AttributeSet {
  * cosmetically (e.g., the names have different capitalizations).
  *
  * Note that we do not override equality for Attribute references as it is really weird when
- * `AttributeReference("a"...) == AttrributeReference("b", ...)`. This tactic leads to broken tests,
+ * `AttributeReference("a"...) == AttributeReference("b", ...)`. This tactic leads to broken tests,
  * and also makes doing transformations hard (we always try keep older trees instead of new ones
  * when the transformation was a no-op).
  */
