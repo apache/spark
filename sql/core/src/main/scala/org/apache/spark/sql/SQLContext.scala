@@ -751,8 +751,6 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def sql(sqlText: String): DataFrame = {
-    // TODO(andrew): delegate all parsing to the session!!
-    // Right now we're not substituting things correctly for HiveContext.
     Dataset.ofRows(this, sessionState.sqlParser.parsePlan(sqlText))
   }
 

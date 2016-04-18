@@ -446,8 +446,8 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
 
   protected override def nullSafeEval(input: Any): Any = cast(input)
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
-    val eval = child.gen(ctx)
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+    val eval = child.genCode(ctx)
     val nullSafeCast = nullSafeCastFunction(child.dataType, dataType, ctx)
     eval.code +
       castCode(ctx, eval.value, eval.isNull, ev.value, ev.isNull, dataType, nullSafeCast)

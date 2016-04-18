@@ -143,7 +143,7 @@ class HiveContext private[hive](
     // Also, calling hiveconf will create a default session containing a HiveConf, which
     // will interfer with the creation of executionHive (which is a lazy val). So,
     // we put hiveconf.set at the end of this method.
-    hiveconf.set(key, value)
+    sessionState.hiveconf.set(key, value)
   }
 
   override private[sql] def setConf[T](entry: ConfigEntry[T], value: T): Unit = {

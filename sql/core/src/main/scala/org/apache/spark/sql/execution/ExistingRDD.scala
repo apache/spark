@@ -192,7 +192,7 @@ private[sql] case class RowDataSourceScan(
     val row = ctx.freshName("row")
     ctx.INPUT_ROW = row
     ctx.currentVars = null
-    val columnsRowInput = exprRows.map(_.gen(ctx))
+    val columnsRowInput = exprRows.map(_.genCode(ctx))
     val inputRow = if (outputUnsafeRows) row else null
     s"""
        |while ($input.hasNext()) {
