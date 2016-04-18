@@ -22,17 +22,17 @@ This section covers algorithms for working with features, roughly divided into t
 
 [Term Frequency-Inverse Document Frequency (TF-IDF)](http://en.wikipedia.org/wiki/Tf%E2%80%93idf) is a common text pre-processing step.  In Spark ML, TF-IDF is separate into two parts: TF (+hashing) and IDF.
 
-**TF**: Both `HashingTF` and `CountVectorizer` can be used to get the term frequency. 
+**TF**: Both `HashingTF` and `CountVectorizer` can be used to generate the term frequency vectors. 
 
 `HashingTF` is a `Transformer` which takes sets of terms and converts those sets into 
 fixed-length feature vectors.  In text processing, a "set of terms" might be a bag of words.
 The algorithm combines Term Frequency (TF) counts with the 
 [hashing trick](http://en.wikipedia.org/wiki/Feature_hashing) for dimensionality reduction.
 
-`CountVectorizer` converts text documents to vectors of token counts. Refer to [CountVectorizer
+`CountVectorizer` converts text documents to vectors of term counts. Refer to [CountVectorizer
 ](ml-features.html#countvectorizer) for more details.
 
-**IDF**: `IDF` is an `Estimator` which fits on a dataset and produces an `IDFModel`.  The 
+**IDF**: `IDF` is an `Estimator` which is fit on a dataset and produces an `IDFModel`.  The 
 `IDFModel` takes feature vectors (generally created from `HashingTF` or `CountVectorizer`) and scales each column.  
 Intuitively, it down-weights columns which appear frequently in a corpus.
 
