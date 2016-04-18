@@ -70,7 +70,7 @@ abstract class UnaryMathExpression(val f: Double => Double, name: String)
   // name of function in java.lang.Math
   def funcName: String = name.toLowerCase
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c => s"java.lang.Math.${funcName}($c)")
   }
 }
@@ -88,16 +88,15 @@ abstract class UnaryLogExpression(f: Double => Double, name: String)
     if (d <= yAsymptote) null else f(d)
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, c =>
-      s"""
-        if ($c <= $yAsymptote) {
-          ${ev.isNull} = true;
-        } else {
-          ${ev.value} = java.lang.Math.${funcName}($c);
-        }
-      """
-    )
+          s"""
+            if ($c <= $yAsymptote) {
+              ${ev.isNull} = true;
+            } else {
+              ${ev.value} = java.lang.Math.${funcName}($c);
+            }
+          """)
   }
 }
 
@@ -123,7 +122,7 @@ abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
     f(input1.asInstanceOf[Double], input2.asInstanceOf[Double])
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.${name.toLowerCase}($c1, $c2)")
   }
 }
@@ -197,7 +196,7 @@ case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL"
     case DecimalType.Fixed(precision, scale) => input.asInstanceOf[Decimal].ceil
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     child.dataType match {
       case DecimalType.Fixed(_, 0) => defineCodeGen(ctx, ev, c => s"$c")
       case DecimalType.Fixed(precision, scale) =>
@@ -242,7 +241,7 @@ case class Conv(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expre
       toBase.asInstanceOf[Int])
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val numconv = NumberConverter.getClass.getName.stripSuffix("$")
     nullSafeCodeGen(ctx, ev, (num, from, to) =>
       s"""
@@ -284,7 +283,7 @@ case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLO
     case DecimalType.Fixed(precision, scale) => input.asInstanceOf[Decimal].floor
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     child.dataType match {
       case DecimalType.Fixed(_, 0) => defineCodeGen(ctx, ev, c => s"$c")
       case DecimalType.Fixed(precision, scale) =>
@@ -346,17 +345,17 @@ case class Factorial(child: Expression) extends UnaryExpression with ImplicitCas
     }
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, eval => {
-      s"""
-        if ($eval > 20 || $eval < 0) {
-          ${ev.isNull} = true;
-        } else {
-          ${ev.value} =
-            org.apache.spark.sql.catalyst.expressions.Factorial.factorial($eval);
-        }
-      """
-    })
+          s"""
+            if ($eval > 20 || $eval < 0) {
+              ${ev.isNull} = true;
+            } else {
+              ${ev.value} =
+                org.apache.spark.sql.catalyst.expressions.Factorial.factorial($eval);
+            }
+          """
+        })
   }
 }
 
@@ -370,16 +369,15 @@ case class Log(child: Expression) extends UnaryLogExpression(math.log, "LOG")
   extended = "> SELECT _FUNC_(2);\n 1.0")
 case class Log2(child: Expression)
   extends UnaryLogExpression((x: Double) => math.log(x) / math.log(2), "LOG2") {
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, c =>
-      s"""
-        if ($c <= $yAsymptote) {
-          ${ev.isNull} = true;
-        } else {
-          ${ev.value} = java.lang.Math.log($c) / java.lang.Math.log(2);
-        }
-      """
-    )
+          s"""
+            if ($c <= $yAsymptote) {
+              ${ev.isNull} = true;
+            } else {
+              ${ev.value} = java.lang.Math.log($c) / java.lang.Math.log(2);
+            }
+          """)
   }
 }
 
@@ -458,9 +456,9 @@ case class Bin(child: Expression)
   protected override def nullSafeEval(input: Any): Any =
     UTF8String.fromString(jl.Long.toBinaryString(input.asInstanceOf[Long]))
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c) =>
-      s"UTF8String.fromString(java.lang.Long.toBinaryString($c))")
+          s"UTF8String.fromString(java.lang.Long.toBinaryString($c))")
   }
 }
 
@@ -556,14 +554,14 @@ case class Hex(child: Expression) extends UnaryExpression with ImplicitCastInput
     case StringType => Hex.hex(num.asInstanceOf[UTF8String].getBytes)
   }
 
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (c) => {
-      val hex = Hex.getClass.getName.stripSuffix("$")
-      s"${ev.value} = " + (child.dataType match {
-        case StringType => s"""$hex.hex($c.getBytes());"""
-        case _ => s"""$hex.hex($c);"""
-      })
-    })
+          val hex = Hex.getClass.getName.stripSuffix("$")
+          s"${ev.value} = " + (child.dataType match {
+            case StringType => s"""$hex.hex($c.getBytes());"""
+            case _ => s"""$hex.hex($c);"""
+          })
+        })
   }
 }
 
@@ -584,14 +582,14 @@ case class Unhex(child: Expression) extends UnaryExpression with ImplicitCastInp
   protected override def nullSafeEval(num: Any): Any =
     Hex.unhex(num.asInstanceOf[UTF8String].getBytes)
 
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (c) => {
-      val hex = Hex.getClass.getName.stripSuffix("$")
-      s"""
-        ${ev.value} = $hex.unhex($c.getBytes());
-        ${ev.isNull} = ${ev.value} == null;
-       """
-    })
+          val hex = Hex.getClass.getName.stripSuffix("$")
+          s"""
+            ${ev.value} = $hex.unhex($c.getBytes());
+            ${ev.isNull} = ${ev.value} == null;
+           """
+        })
   }
 }
 
@@ -613,7 +611,7 @@ case class Atan2(left: Expression, right: Expression)
     math.atan2(input1.asInstanceOf[Double] + 0.0, input2.asInstanceOf[Double] + 0.0)
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.atan2($c1 + 0.0, $c2 + 0.0)")
   }
 }
@@ -623,7 +621,7 @@ case class Atan2(left: Expression, right: Expression)
   extended = "> SELECT _FUNC_(2, 3);\n 8.0")
 case class Pow(left: Expression, right: Expression)
   extends BinaryMathExpression(math.pow, "POWER") {
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.pow($c1, $c2)")
   }
 }
@@ -653,7 +651,7 @@ case class ShiftLeft(left: Expression, right: Expression)
     }
   }
 
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (left, right) => s"$left << $right")
   }
 }
@@ -683,7 +681,7 @@ case class ShiftRight(left: Expression, right: Expression)
     }
   }
 
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (left, right) => s"$left >> $right")
   }
 }
@@ -713,7 +711,7 @@ case class ShiftRightUnsigned(left: Expression, right: Expression)
     }
   }
 
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (left, right) => s"$left >>> $right")
   }
 }
@@ -753,7 +751,7 @@ case class Logarithm(left: Expression, right: Expression)
     if (dLeft <= 0.0 || dRight <= 0.0) null else math.log(dRight) / math.log(dLeft)
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     if (left.isInstanceOf[EulerNumber]) {
       nullSafeCodeGen(ctx, ev, (c1, c2) =>
         s"""
@@ -874,7 +872,7 @@ abstract class RoundBase(child: Expression, scale: Expression,
     }
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val ce = child.genCode(ctx)
 
     val evaluationCode = child.dataType match {
@@ -937,19 +935,17 @@ abstract class RoundBase(child: Expression, scale: Expression,
     }
 
     if (scaleV == null) { // if scale is null, no need to eval its child at all
-      s"""
+      ev.copy(s"""
         boolean ${ev.isNull} = true;
-        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-      """
+        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};""")
     } else {
-      s"""
+      ev.copy(s"""
         ${ce.code}
         boolean ${ev.isNull} = ${ce.isNull};
         ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
         if (!${ev.isNull}) {
           $evaluationCode
-        }
-      """
+        }""")
     }
   }
 }

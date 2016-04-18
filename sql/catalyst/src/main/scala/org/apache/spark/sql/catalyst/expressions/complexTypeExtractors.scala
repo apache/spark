@@ -122,22 +122,22 @@ case class GetStructField(child: Expression, ordinal: Int, name: Option[String] 
   protected override def nullSafeEval(input: Any): Any =
     input.asInstanceOf[InternalRow].get(ordinal, childSchema(ordinal).dataType)
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, eval => {
-      if (nullable) {
-        s"""
-          if ($eval.isNullAt($ordinal)) {
-            ${ev.isNull} = true;
+          if (nullable) {
+            s"""
+              if ($eval.isNullAt($ordinal)) {
+                ${ev.isNull} = true;
+              } else {
+                ${ev.value} = ${ctx.getValue(eval, dataType, ordinal.toString)};
+              }
+            """
           } else {
-            ${ev.value} = ${ctx.getValue(eval, dataType, ordinal.toString)};
+            s"""
+              ${ev.value} = ${ctx.getValue(eval, dataType, ordinal.toString)};
+            """
           }
-        """
-      } else {
-        s"""
-          ${ev.value} = ${ctx.getValue(eval, dataType, ordinal.toString)};
-        """
-      }
-    })
+        })
   }
 }
 
@@ -179,31 +179,31 @@ case class GetArrayStructFields(
     new GenericArrayData(result)
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val arrayClass = classOf[GenericArrayData].getName
     nullSafeCodeGen(ctx, ev, eval => {
-      val n = ctx.freshName("n")
-      val values = ctx.freshName("values")
-      val j = ctx.freshName("j")
-      val row = ctx.freshName("row")
-      s"""
-        final int $n = $eval.numElements();
-        final Object[] $values = new Object[$n];
-        for (int $j = 0; $j < $n; $j++) {
-          if ($eval.isNullAt($j)) {
-            $values[$j] = null;
-          } else {
-            final InternalRow $row = $eval.getStruct($j, $numFields);
-            if ($row.isNullAt($ordinal)) {
-              $values[$j] = null;
-            } else {
-              $values[$j] = ${ctx.getValue(row, field.dataType, ordinal.toString)};
+          val n = ctx.freshName("n")
+          val values = ctx.freshName("values")
+          val j = ctx.freshName("j")
+          val row = ctx.freshName("row")
+          s"""
+            final int $n = $eval.numElements();
+            final Object[] $values = new Object[$n];
+            for (int $j = 0; $j < $n; $j++) {
+              if ($eval.isNullAt($j)) {
+                $values[$j] = null;
+              } else {
+                final InternalRow $row = $eval.getStruct($j, $numFields);
+                if ($row.isNullAt($ordinal)) {
+                  $values[$j] = null;
+                } else {
+                  $values[$j] = ${ctx.getValue(row, field.dataType, ordinal.toString)};
+                }
+              }
             }
-          }
-        }
-        ${ev.value} = new $arrayClass($values);
-      """
-    })
+            ${ev.value} = new $arrayClass($values);
+          """
+        })
   }
 }
 
@@ -239,7 +239,7 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
     }
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
       val index = ctx.freshName("index")
       s"""
@@ -302,7 +302,7 @@ case class GetMapValue(child: Expression, key: Expression)
     }
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  protected override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val index = ctx.freshName("index")
     val length = ctx.freshName("length")
     val keys = ctx.freshName("keys")
