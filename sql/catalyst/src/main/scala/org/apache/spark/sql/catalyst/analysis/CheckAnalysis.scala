@@ -129,6 +129,8 @@ trait CheckAnalysis extends PredicateHelper {
                 failOnCorrelatedReference(right, "a LEFT (OUTER) JOIN")
               case Union(_ :: xs) =>
                 xs.foreach(failOnCorrelatedReference(_, "a UNION"))
+              case s: SetOperation =>
+                failOnCorrelatedReference(s.right, "an INTERSECT/EXCEPT")
               case _ =>
             }
             splitConjunctivePredicates(condition).foreach {
