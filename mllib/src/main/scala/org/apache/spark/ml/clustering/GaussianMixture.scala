@@ -24,12 +24,15 @@ import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param.{IntParam, ParamMap, Params}
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
+import org.apache.spark.mllib.api.python.SerDe
 import org.apache.spark.mllib.clustering.{GaussianMixture => MLlibGM, GaussianMixtureModel => MLlibGMModel}
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.stat.distribution.MultivariateGaussian
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{IntegerType, StructType}
+
+import scala.collection.JavaConverters
 
 
 /**
@@ -103,6 +106,15 @@ class GaussianMixtureModel private[ml] (
 
   @Since("2.0.0")
   def gaussians: Array[MultivariateGaussian] = parentModel.gaussians
+
+  @Since("2.0.0")
+  def gaussiansPyDump: Array[Byte] = {
+    val tmp_gaussians = parentModel.gaussians
+    val modelGaussians = tmp_gaussians.map { gaussian =>
+      Array[Any](gaussian.mu, gaussian.sigma)
+    }
+    SerDe.dumps(JavaConverters.seqAsJavaListConverter(modelGaussians).asJava)
+  }
 
   @Since("2.0.0")
   override def write: MLWriter = new GaussianMixtureModel.GaussianMixtureModelWriter(this)
