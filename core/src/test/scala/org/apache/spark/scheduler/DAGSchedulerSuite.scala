@@ -1144,7 +1144,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     // SPARK-9809 -- this stage is submitted without a task for each partition (because some of
     // the shuffle map output is still available from stage 0); make sure we've still got internal
     // accumulators setup
-    assert(scheduler.stageIdToStage(2).internalAccumulators.nonEmpty)
+    assert(scheduler.stageIdToStage(2).latestInfo.internalAccumulators.nonEmpty)
     completeShuffleMapStageSuccessfully(2, 0, 2)
     completeNextResultStageWithSuccess(3, 1, idx => idx + 1234)
     assert(results === Map(0 -> 1234, 1 -> 1235))

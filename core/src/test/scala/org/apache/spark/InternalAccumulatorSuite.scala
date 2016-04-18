@@ -59,11 +59,9 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
     assert(getParam(shuffleWrite.RECORDS_WRITTEN) === LongAccumulatorParam)
     assert(getParam(shuffleWrite.WRITE_TIME) === LongAccumulatorParam)
     // input
-    assert(getParam(input.READ_METHOD) === StringAccumulatorParam)
     assert(getParam(input.RECORDS_READ) === LongAccumulatorParam)
     assert(getParam(input.BYTES_READ) === LongAccumulatorParam)
     // output
-    assert(getParam(output.WRITE_METHOD) === StringAccumulatorParam)
     assert(getParam(output.RECORDS_WRITTEN) === LongAccumulatorParam)
     assert(getParam(output.BYTES_WRITTEN) === LongAccumulatorParam)
     // default to Long
@@ -77,18 +75,15 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
     val executorRunTime = create(EXECUTOR_RUN_TIME)
     val updatedBlockStatuses = create(UPDATED_BLOCK_STATUSES)
     val shuffleRemoteBlocksRead = create(shuffleRead.REMOTE_BLOCKS_FETCHED)
-    val inputReadMethod = create(input.READ_METHOD)
     assert(executorRunTime.name === Some(EXECUTOR_RUN_TIME))
     assert(updatedBlockStatuses.name === Some(UPDATED_BLOCK_STATUSES))
     assert(shuffleRemoteBlocksRead.name === Some(shuffleRead.REMOTE_BLOCKS_FETCHED))
-    assert(inputReadMethod.name === Some(input.READ_METHOD))
     assert(executorRunTime.value.isInstanceOf[Long])
     assert(updatedBlockStatuses.value.isInstanceOf[Seq[_]])
     // We cannot assert the type of the value directly since the type parameter is erased.
     // Instead, try casting a `Seq` of expected type and see if it fails in run time.
     updatedBlockStatuses.setValueAny(Seq.empty[(BlockId, BlockStatus)])
     assert(shuffleRemoteBlocksRead.value.isInstanceOf[Int])
-    assert(inputReadMethod.value.isInstanceOf[String])
     // default to Long
     val anything = create(METRICS_PREFIX + "anything")
     assert(anything.value.isInstanceOf[Long])

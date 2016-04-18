@@ -150,19 +150,77 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
       */
   }
 
-  ignore("aggregate with keys") {
+  ignore("aggregate with linear keys") {
     val N = 20 << 20
 
-    runBenchmark("Aggregate w keys", N) {
-      sqlContext.range(N).selectExpr("(id & 65535) as k").groupBy("k").sum().collect()
+    val benchmark = new Benchmark("Aggregate w keys", N)
+    def f(): Unit = sqlContext.range(N).selectExpr("(id & 65535) as k").groupBy("k").sum().collect()
+
+    benchmark.addCase(s"codegen = F") { iter =>
+      sqlContext.setConf("spark.sql.codegen.wholeStage", "false")
+      f()
     }
 
+    benchmark.addCase(s"codegen = T hashmap = F") { iter =>
+      sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
+      sqlContext.setConf("spark.sql.codegen.aggregate.map.enabled", "false")
+      f()
+    }
+
+    benchmark.addCase(s"codegen = T hashmap = T") { iter =>
+      sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
+      sqlContext.setConf("spark.sql.codegen.aggregate.map.enabled", "true")
+      f()
+    }
+
+    benchmark.run()
+
     /*
-      Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
-      Aggregate w keys:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-      -------------------------------------------------------------------------------------------
-      Aggregate w keys codegen=false           2429 / 2644          8.6         115.8       1.0X
-      Aggregate w keys codegen=true            1535 / 1571         13.7          73.2       1.6X
+    Java HotSpot(TM) 64-Bit Server VM 1.8.0_73-b02 on Mac OS X 10.11.4
+    Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
+    Aggregate w keys:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    -------------------------------------------------------------------------------------------
+    codegen = F                              2067 / 2166         10.1          98.6       1.0X
+    codegen = T hashmap = F                  1149 / 1321         18.3          54.8       1.8X
+    codegen = T hashmap = T                   388 /  475         54.0          18.5       5.3X
+    */
+  }
+
+  ignore("aggregate with randomized keys") {
+    val N = 20 << 20
+
+    val benchmark = new Benchmark("Aggregate w keys", N)
+    sqlContext.range(N).selectExpr("id", "floor(rand() * 10000) as k").registerTempTable("test")
+
+    def f(): Unit = sqlContext.sql("select k, k, sum(id) from test group by k, k").collect()
+
+    benchmark.addCase(s"codegen = F") { iter =>
+      sqlContext.setConf("spark.sql.codegen.wholeStage", "false")
+      f()
+    }
+
+    benchmark.addCase(s"codegen = T hashmap = F") { iter =>
+      sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
+      sqlContext.setConf("spark.sql.codegen.aggregate.map.enabled", "false")
+      f()
+    }
+
+    benchmark.addCase(s"codegen = T hashmap = T") { iter =>
+      sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
+      sqlContext.setConf("spark.sql.codegen.aggregate.map.enabled", "true")
+      f()
+    }
+
+    benchmark.run()
+
+    /*
+    Java HotSpot(TM) 64-Bit Server VM 1.8.0_73-b02 on Mac OS X 10.11.4
+    Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
+    Aggregate w keys:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    -------------------------------------------------------------------------------------------
+    codegen = F                              2517 / 2608          8.3         120.0       1.0X
+    codegen = T hashmap = F                  1484 / 1560         14.1          70.8       1.7X
+    codegen = T hashmap = T                   794 /  908         26.4          37.9       3.2X
     */
   }
 
