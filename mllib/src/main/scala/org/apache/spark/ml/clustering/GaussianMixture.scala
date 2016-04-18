@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.clustering
 
+import scala.collection.JavaConverters
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.{Experimental, Since}
@@ -31,8 +33,6 @@ import org.apache.spark.mllib.stat.distribution.MultivariateGaussian
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{IntegerType, StructType}
-
-import scala.collection.JavaConverters
 
 
 /**
