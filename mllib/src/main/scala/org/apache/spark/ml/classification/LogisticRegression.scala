@@ -92,7 +92,8 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
   }
 
   /**
-   * This functionality is currently disabled.
+   * This functionality is currently disabled. It will be re-enabled once multi-class logistic
+   * regression is included in ML.
    *
    * Set thresholds in multiclass (or binary) classification to adjust the probability of
    * predicting each class. Array must have length equal to the number of classes, with values >= 0.
