@@ -645,7 +645,7 @@ private[spark] class ExternalSorter[K, V, C](
       blockId: BlockId,
       outputFile: File): Array[Long] = {
 
-    val writeMetrics = context.taskMetrics().registerShuffleWriteMetrics()
+    val writeMetrics = context.taskMetrics().shuffleWriteMetrics
 
     // Track location of each range in the output file
     val lengths = new Array[Long](numPartitions)
