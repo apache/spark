@@ -360,7 +360,7 @@ public class SparkLauncher {
    * @return A process handle for the Spark app.
    */
   public Process launch() throws IOException {
-    return createBuilder().start();
+    return createProcessBuilder().start();
   }
 
   /**
@@ -413,7 +413,7 @@ public class SparkLauncher {
 
     String loggerPrefix = getClass().getPackage().getName();
     String loggerName = String.format("%s.app.%s", loggerPrefix, appName);
-    ProcessBuilder pb = createBuilder().redirectErrorStream(true);
+    ProcessBuilder pb = createProcessBuilder().redirectErrorStream(true);
     pb.environment().put(LauncherProtocol.ENV_LAUNCHER_PORT,
       String.valueOf(LauncherServer.getServerInstance().getPort()));
     pb.environment().put(LauncherProtocol.ENV_LAUNCHER_SECRET, handle.getSecret());
@@ -427,7 +427,7 @@ public class SparkLauncher {
     return handle;
   }
 
-  private ProcessBuilder createBuilder() {
+  public ProcessBuilder createProcessBuilder() {
     List<String> cmd = new ArrayList<>();
     String script = isWindows() ? "spark-submit.cmd" : "spark-submit";
     cmd.add(join(File.separator, builder.getSparkHome(), "bin", script));
