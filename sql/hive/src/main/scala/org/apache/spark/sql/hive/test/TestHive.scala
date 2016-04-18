@@ -112,9 +112,9 @@ class TestHiveContext private[hive](
   // By clearing the port we force Spark to pick a new one.  This allows us to rerun tests
   // without restarting the JVM.
   System.clearProperty("spark.hostPort")
-  CommandProcessorFactory.clean(hiveconf)
+  CommandProcessorFactory.clean(sessionState.hiveconf)
 
-  hiveconf.set("hive.plan.serialization.format", "javaXML")
+  sessionState.hiveconf.set("hive.plan.serialization.format", "javaXML")
 
   // A snapshot of the entries in the starting SQLConf
   // We save this because tests can mutate this singleton object if they want
@@ -136,7 +136,7 @@ class TestHiveContext private[hive](
 
   // Override so we can intercept relative paths and rewrite them to point at hive.
   override def runSqlHive(sql: String): Seq[String] =
-    super.runSqlHive(rewritePaths(substitutor.substitute(this.hiveconf, sql)))
+    super.runSqlHive(rewritePaths(substitutor.substitute(sessionState.hiveconf, sql)))
 
   override def executePlan(plan: LogicalPlan): this.QueryExecution =
     new this.QueryExecution(plan)
@@ -461,7 +461,7 @@ class TestHiveContext private[hive](
         foreach { udfName => FunctionRegistry.unregisterTemporaryUDF(udfName) }
 
       // Some tests corrupt this value on purpose, which breaks the RESET call below.
-      hiveconf.set("fs.default.name", new File(".").toURI.toString)
+      sessionState.hiveconf.set("fs.default.name", new File(".").toURI.toString)
       // It is important that we RESET first as broken hooks that might have been set could break
       // other sql exec here.
       executionHive.runSqlHive("RESET")
@@ -476,7 +476,7 @@ class TestHiveContext private[hive](
 
       // In case a test changed any of these values, restore all the original ones here.
       TestHiveContext.hiveClientConfigurations(
-        hiveconf, warehousePath, scratchDirPath, metastoreTemporaryConf)
+        sessionState.hiveconf, warehousePath, scratchDirPath, metastoreTemporaryConf)
           .foreach { case (k, v) => metadataHive.runSqlHive(s"SET $k=$v") }
       defaultOverrides()
 

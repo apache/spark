@@ -153,7 +153,7 @@ class HiveContext private[hive](
 
   protected[sql] override def parseSql(sql: String): LogicalPlan = {
     executionHive.withHiveState {
-      super.parseSql(substitutor.substitute(hiveconf, sql))
+      super.parseSql(substitutor.substitute(sessionState.hiveconf, sql))
     }
   }
 
@@ -200,26 +200,11 @@ class HiveContext private[hive](
     // Also, calling hiveconf will create a default session containing a HiveConf, which
     // will interfer with the creation of executionHive (which is a lazy val). So,
     // we put hiveconf.set at the end of this method.
-    hiveconf.set(key, value)
+    sessionState.hiveconf.set(key, value)
   }
 
   override private[sql] def setConf[T](entry: ConfigEntry[T], value: T): Unit = {
     setConf(entry.key, entry.stringConverter(value))
-  }
-
-  /**
-   * SQLConf and HiveConf contracts:
-   *
-   * 1. create a new o.a.h.hive.ql.session.SessionState for each HiveContext
-   * 2. when the Hive session is first initialized, params in HiveConf will get picked up by the
-   *    SQLConf.  Additionally, any properties set by set() or a SET command inside sql() will be
-   *    set in the SQLConf *as well as* in the HiveConf.
-   */
-  @transient
-  protected[hive] lazy val hiveconf: HiveConf = {
-    val c = executionHive.conf
-    setConf(c.getAllProperties)
-    c
   }
 
   private def functionOrMacroDDLPattern(command: String) = Pattern.compile(

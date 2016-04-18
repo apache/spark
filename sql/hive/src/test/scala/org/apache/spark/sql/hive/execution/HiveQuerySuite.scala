@@ -1157,11 +1157,11 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       collectResults(sql(s"SET $testKey=$testVal"))
     }
 
-    assert(hiveconf.get(testKey, "") === testVal)
+    assert(sessionState.hiveconf.get(testKey, "") === testVal)
     assertResult(defaults ++ Set(testKey -> testVal))(collectResults(sql("SET")))
 
     sql(s"SET ${testKey + testKey}=${testVal + testVal}")
-    assert(hiveconf.get(testKey + testKey, "") == testVal + testVal)
+    assert(sessionState.hiveconf.get(testKey + testKey, "") == testVal + testVal)
     assertResult(defaults ++ Set(testKey -> testVal, (testKey + testKey) -> (testVal + testVal))) {
       collectResults(sql("SET"))
     }
