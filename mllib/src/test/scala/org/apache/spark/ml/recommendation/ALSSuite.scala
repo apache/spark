@@ -570,7 +570,7 @@ class ALSSuite
     ).toDF("item", "features", "expected")
     val userFactors = users.select("user", "features").withColumnRenamed("user", "id")
     val itemFactors = items.select("item", "features").withColumnRenamed("item", "id")
-    // construct model and check recommendations
+    // construct model
     val model = new ALSModel(als.uid, als.getRank, userFactors, itemFactors)
       .setUserCol("user")
       .setItemCol("item")
@@ -585,8 +585,17 @@ class ALSSuite
       .as[(Seq[(Int, Float)], Seq[(Int, Float)])].rdd.collect()
     validateRecommendations(topKUsers)
     // check that using a subset of input only generates recommendations for that subset
-    val filteredTopK = model.recommendItems(users.filter(users("user") > 0), k)
-    assert(filteredTopK.count == 2)
+    assert(model.recommendItems(users.filter(users("user") > 0), k).count == 2)
+    assert(model.recommendUsers(items.filter(items("item") < 4), k).count == 1)
+  }
+
+  test("invalid recommend params") {
+    intercept[IllegalArgumentException] {
+      val als = new ALS().setK(0)
+    }
+    intercept[IllegalArgumentException] {
+      val als = new ALS().setRecommendFor("foo")
+    }
   }
 }
 
@@ -766,6 +775,9 @@ object ALSSuite extends Logging {
     "checkpointInterval" -> 20,
     "intermediateStorageLevel" -> "MEMORY_ONLY",
     "finalStorageLevel" -> "MEMORY_AND_DISK_SER"
+    "checkpointInterval" -> 20,
+    "k" -> 10,
+    "recommendFor" -> "user"
   )
 
   // Helper functions to generate test data we share between ALS test suites

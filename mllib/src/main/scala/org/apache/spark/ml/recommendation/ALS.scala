@@ -97,8 +97,8 @@ private[recommendation] trait ALSModelParams extends Params with HasPredictionCo
    * [[recommendFor]].
    * @group param
    */
-  val k = new Param[Int](this, "k", "number of recommendations to make. If set, calling " +
-    "'transform` will generate the top 'k' recommended items for each user or item, depending on" +
+  val k = new IntParam(this, "k", "number of recommendations to make. If set, calling " +
+    "'transform` will generate the top 'k' recommendations for each user or item, depending on" +
     " the value of 'recommendFor'.", ParamValidators.gt(0))
 
   /** @group getParam */
@@ -540,6 +540,14 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
   /** @group expertSetParam */
   @Since("2.0.0")
   def setFinalStorageLevel(value: String): this.type = set(finalStorageLevel, value)
+
+  /** @group setParam */
+  @Since("2.0.0")
+  def setK(value: Int): this.type = set(k, value)
+
+  /** @group setParam */
+  @Since("2.0.0")
+  def setRecommendFor(value: String): this.type = set(recommendFor, value)
 
   /**
    * Sets both numUserBlocks and numItemBlocks to the specific value.
