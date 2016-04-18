@@ -107,11 +107,11 @@ class TestHiveContext private[hive](
       isRootContext = false)
   }
 
-  protected[sql] override def sessionState = {
+  protected[sql] override def sessionState: TestHiveSessionState = {
     sparkSession.sessionState.asInstanceOf[TestHiveSessionState]
   }
 
-  protected[sql] override def sharedState = {
+  protected[sql] override def sharedState: TestHiveSharedState = {
     sparkSession.sharedState.asInstanceOf[TestHiveSharedState]
   }
 
@@ -195,7 +195,7 @@ class TestHiveContext private[hive](
    */
   class QueryExecution(logicalPlan: LogicalPlan)
     extends HiveQueryExecution(self, logicalPlan) {
-    def this(sql: String) = this(sessionState.sqlParser.parsePlan(sql))
+    def this(sql: String) = this(parseSql(sql))
     override lazy val analyzed = {
       val describedTables = logical match {
         case HiveNativeCommand(describedTable(tbl)) => tbl :: Nil

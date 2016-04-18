@@ -46,10 +46,10 @@ private[sql] class HiveSessionCatalog(
     externalCatalog: HiveExternalCatalog,
     client: HiveClient,
     context: SQLContext,
-    sessionState: HiveSessionState,
     functionResourceLoader: FunctionResourceLoader,
     functionRegistry: FunctionRegistry,
-    conf: SQLConf)
+    conf: SQLConf,
+    hiveconf: HiveConf)
   extends SessionCatalog(externalCatalog, functionResourceLoader, functionRegistry, conf) {
 
   override def setCurrentDatabase(db: String): Unit = {
@@ -76,7 +76,7 @@ private[sql] class HiveSessionCatalog(
   // ----------------------------------------------------------------
 
   override def getDefaultDBPath(db: String): String = {
-    val defaultPath = sessionState.hiveconf.getVar(HiveConf.ConfVars.METASTOREWAREHOUSE)
+    val defaultPath = hiveconf.getVar(HiveConf.ConfVars.METASTOREWAREHOUSE)
     new Path(new Path(defaultPath), db + ".db").toString
   }
 
@@ -84,7 +84,7 @@ private[sql] class HiveSessionCatalog(
   // essentially a cache for metastore tables. However, it relies on a lot of session-specific
   // things so it would be a lot of work to split its functionality between HiveSessionCatalog
   // and HiveCatalog. We should still do it at some point...
-  private val metastoreCatalog = new HiveMetastoreCatalog(client, context, sessionState)
+  private val metastoreCatalog = new HiveMetastoreCatalog(context)
 
   val ParquetConversions: Rule[LogicalPlan] = metastoreCatalog.ParquetConversions
   val OrcConversions: Rule[LogicalPlan] = metastoreCatalog.OrcConversions

@@ -30,9 +30,9 @@ class ConcurrentHiveSuite extends SparkFunSuite with BeforeAndAfterAll {
         conf.set("spark.ui.enabled", "false")
         val ts =
           new TestHiveContext(new SparkContext("local", s"TestSQLContext$i", conf))
-        ts.executePlan(ts.sessionState.sqlParser.parsePlan("SHOW TABLES")).toRdd.collect()
-        ts.executePlan(ts.sessionState.sqlParser.parsePlan("SELECT * FROM src")).toRdd.collect()
-        ts.executePlan(ts.sessionState.sqlParser.parsePlan("SHOW TABLES")).toRdd.collect()
+        ts.executeSql("SHOW TABLES").toRdd.collect()
+        ts.executeSql("SELECT * FROM src").toRdd.collect()
+        ts.executeSql("SHOW TABLES").toRdd.collect()
       }
     }
   }

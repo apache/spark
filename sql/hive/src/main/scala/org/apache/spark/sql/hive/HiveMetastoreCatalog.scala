@@ -116,19 +116,16 @@ private[hive] object HiveSerDe {
  * This is still used for things like creating data source tables, but in the future will be
  * cleaned up to integrate more nicely with [[HiveExternalCatalog]].
  */
-// TODO(andrew): once we have SparkSession just pass that in here instead of the context
-private[hive] class HiveMetastoreCatalog(
-    val client: HiveClient,
-    hive: SQLContext,
-    sessionState: HiveSessionState)
-  extends Logging {
-
+private[hive] class HiveMetastoreCatalog(hive: SQLContext) extends Logging {
   val conf = hive.conf
+  val sessionState = hive.sessionState.asInstanceOf[HiveSessionState]
+  val client = hive.sharedState.asInstanceOf[HiveSharedState].metadataHive
+  val hiveconf = sessionState.hiveconf
 
   /** A fully qualified identifier for a table (i.e., database.tableName) */
   case class QualifiedTableName(database: String, name: String)
 
-  private def getCurrentDatabase: String = sessionState.catalog.getCurrentDatabase
+  private def getCurrentDatabase: String = hive.sessionState.catalog.getCurrentDatabase
 
   def getQualifiedTableName(tableIdent: TableIdentifier): QualifiedTableName = {
     QualifiedTableName(
@@ -301,7 +298,7 @@ private[hive] class HiveMetastoreCatalog(
       CatalogTableType.MANAGED_TABLE
     }
 
-    val maybeSerDe = HiveSerDe.sourceToSerDe(provider, sessionState.hiveconf)
+    val maybeSerDe = HiveSerDe.sourceToSerDe(provider, hiveconf)
     val dataSource =
       DataSource(
         hive,
@@ -446,9 +443,9 @@ private[hive] class HiveMetastoreCatalog(
         // because hive use things like `_c0` to build the expanded text
         // currently we cannot support view from "create view v1(c1) as ..."
         case None =>
-          SubqueryAlias(table.identifier.table, sessionState.sqlParser.parsePlan(viewText))
+          SubqueryAlias(table.identifier.table, hive.parseSql(viewText))
         case Some(aliasText) =>
-          SubqueryAlias(aliasText, sessionState.sqlParser.parsePlan(viewText))
+          SubqueryAlias(aliasText, hive.parseSql(viewText))
       }
     } else {
       MetastoreRelation(

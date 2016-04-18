@@ -188,6 +188,10 @@ class SQLContext private[sql](
    */
   def getAllConfs: immutable.Map[String, String] = conf.getAllConfs
 
+  protected[sql] def parseSql(sql: String): LogicalPlan = sessionState.sqlParser.parsePlan(sql)
+
+  protected[sql] def executeSql(sql: String): QueryExecution = executePlan(parseSql(sql))
+
   protected[sql] def executePlan(plan: LogicalPlan) = new QueryExecution(this, plan)
 
   /**

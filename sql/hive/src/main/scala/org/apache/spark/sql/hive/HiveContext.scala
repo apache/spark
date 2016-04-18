@@ -78,11 +78,11 @@ class HiveContext private[hive](
     new HiveContext(sparkSession.newSession(), isRootContext = false)
   }
 
-  protected[sql] override def sessionState = {
+  protected[sql] override def sessionState: HiveSessionState = {
     sparkSession.sessionState.asInstanceOf[HiveSessionState]
   }
 
-  protected[sql] override def sharedState = {
+  protected[sql] override def sharedState: HiveSharedState = {
     sparkSession.sharedState.asInstanceOf[HiveSharedState]
   }
 

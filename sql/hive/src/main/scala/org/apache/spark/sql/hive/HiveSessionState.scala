@@ -80,10 +80,10 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
       sharedState.externalCatalog,
       sharedState.metadataHive,
       ctx,
-      self,
       ctx.functionResourceLoader,
       functionRegistry,
-      conf)
+      conf,
+      hiveconf)
   }
 
   /**

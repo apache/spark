@@ -38,7 +38,6 @@ protected[sql] class HiveQueryExecution(ctx: SQLContext, logicalPlan: LogicalPla
     case ExecutedCommand(desc: DescribeHiveTableCommand) =>
       // If it is a describe command for a Hive table, we want to have the output format
       // be similar with Hive.
-      // TODO(andrew): this might be a problem. This uses the wrong session state under the hood.
       desc.run(ctx).map {
         case Row(name: String, dataType: String, comment) =>
           Seq(name, dataType,
