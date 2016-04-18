@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.util.collection
+package org.apache.spark.util.collection.unsafe.sort
 
 import java.lang.{Long => JLong}
 import java.util.{Arrays, Comparator}
@@ -25,7 +25,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.unsafe.array.LongArray
 import org.apache.spark.unsafe.memory.MemoryBlock
 import org.apache.spark.util.Benchmark
-import org.apache.spark.util.collection.unsafe.sort._
+import org.apache.spark.util.collection.Sorter
 import org.apache.spark.util.random.XORShiftRandom
 
 class RadixSortSuite extends SparkFunSuite with Logging {
@@ -112,7 +112,14 @@ class RadixSortSuite extends SparkFunSuite with Logging {
     test("sort key prefix " + sortType.name) {
       val rand = new XORShiftRandom(123)
       val (buf1, buf2) = generateKeyPrefixTestData(N, rand.nextLong & 0xff)
-      UnsafeSortTestUtil.sortKeyPrefixArrayByPrefix(buf1, N, sortType.referenceComparator)
+      new Sorter(UnsafeSortDataFormat.INSTANCE).sort(
+        buf1, 0, N, new Comparator[RecordPointerAndKeyPrefix] {
+          override def compare(
+              r1: RecordPointerAndKeyPrefix,
+              r2: RecordPointerAndKeyPrefix): Int = {
+            sortType.referenceComparator.compare(r1.keyPrefix, r2.keyPrefix)
+          }
+        })
       val outOffset = RadixSort.sortKeyPrefixArray(
         buf2, N, 0, N * 2, sortType.startByteIdx, sortType.endByteIdx,
         sortType.descending, sortType.signed)
@@ -149,8 +156,8 @@ class RadixSortSuite extends SparkFunSuite with Logging {
     }
   }
 
-  ignore("microbenchmarks") {
-    val size = 50000000
+  test("microbenchmarks") {
+    val size = 25000000
     val rand = new XORShiftRandom(123)
     val benchmark = new Benchmark("radix sort " + size, size)
     benchmark.addTimerCase("reference Arrays.sort") { timer =>
@@ -202,5 +209,19 @@ class RadixSortSuite extends SparkFunSuite with Logging {
       timer.stopTiming()
     }
     benchmark.run
+
+    /**
+     Running benchmark: radix sort 25000000
+     OpenJDK 64-Bit Server VM 1.8.0_66-internal-b17 on Linux 4.2.0-35-generic
+     Intel(R) Xeon(R) CPU E5-1650 v3 @ 3.50GHz
+     
+     radix sort 25000000:                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+     -------------------------------------------------------------------------------------------
+     reference Arrays.sort                    1939 / 1960         12.9          77.6       1.0X
+     radix sort one byte                       127 /  159        196.7           5.1      15.3X
+     radix sort two bytes                      239 /  311        104.4           9.6       8.1X
+     radix sort eight bytes                    896 /  905         27.9          35.8       2.2X
+     radix sort key prefix array              1435 / 1503         17.4          57.4       1.4X
+    */
   }
 }

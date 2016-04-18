@@ -22,8 +22,8 @@ import java.util.Comparator;
 import org.apache.spark.memory.MemoryConsumer;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.LongArray;
-import org.apache.spark.util.collection.RadixSort;
 import org.apache.spark.util.collection.Sorter;
+import org.apache.spark.util.collection.unsafe.sort.RadixSort;
 
 final class ShuffleInMemorySorter {
 
