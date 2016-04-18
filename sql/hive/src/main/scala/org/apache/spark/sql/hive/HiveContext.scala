@@ -41,10 +41,9 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.execution.command.{ExecutedCommand, SetCommand}
 import org.apache.spark.sql.hive.client._
-import org.apache.spark.sql.hive.execution.{AnalyzeTable, DescribeHiveTableCommand, HiveNativeCommand}
-import org.apache.spark.sql.internal.{SharedState, SQLConf}
+import org.apache.spark.sql.hive.execution.AnalyzeTable
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -146,12 +145,11 @@ class HiveContext private[hive](
     setConf(entry.key, entry.stringConverter(value))
   }
 
-  private def functionOrMacroDDLPattern(command: String) = Pattern.compile(
-    ".*(create|drop)\\s+(temporary\\s+)?(function|macro).+", Pattern.DOTALL).matcher(command)
-
   protected[hive] def runSqlHive(sql: String): Seq[String] = {
     val command = sql.trim.toLowerCase
-    if (functionOrMacroDDLPattern(command).matches()) {
+    val functionOrMacroDDLPattern = Pattern.compile(
+      ".*(create|drop)\\s+(temporary\\s+)?(function|macro).+", Pattern.DOTALL)
+    if (functionOrMacroDDLPattern.matcher(command).matches()) {
       executionHive.runSqlHive(sql)
     } else if (command.startsWith("set")) {
       metadataHive.runSqlHive(sql)
