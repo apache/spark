@@ -64,17 +64,17 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
     result
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
     val first = children(0)
     val rest = children.drop(1)
-    val firstEval = first.gen(ctx)
+    val firstEval = first.genCode(ctx)
     s"""
       ${firstEval.code}
       boolean ${ev.isNull} = ${firstEval.isNull};
       ${ctx.javaType(dataType)} ${ev.value} = ${firstEval.value};
     """ +
       rest.map { e =>
-      val eval = e.gen(ctx)
+      val eval = e.genCode(ctx)
       s"""
         if (${ev.isNull}) {
           ${eval.code}
@@ -113,8 +113,8 @@ case class IsNaN(child: Expression) extends UnaryExpression
     }
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
-    val eval = child.gen(ctx)
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+    val eval = child.genCode(ctx)
     child.dataType match {
       case DoubleType | FloatType =>
         s"""
@@ -155,9 +155,9 @@ case class NaNvl(left: Expression, right: Expression)
     }
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
-    val leftGen = left.gen(ctx)
-    val rightGen = right.gen(ctx)
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+    val leftGen = left.genCode(ctx)
+    val rightGen = right.genCode(ctx)
     left.dataType match {
       case DoubleType | FloatType =>
         s"""
@@ -196,8 +196,8 @@ case class IsNull(child: Expression) extends UnaryExpression with Predicate {
     child.eval(input) == null
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
-    val eval = child.gen(ctx)
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+    val eval = child.genCode(ctx)
     ev.isNull = "false"
     ev.value = eval.isNull
     eval.code
@@ -219,8 +219,8 @@ case class IsNotNull(child: Expression) extends UnaryExpression with Predicate {
     child.eval(input) != null
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
-    val eval = child.gen(ctx)
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+    val eval = child.genCode(ctx)
     ev.isNull = "false"
     ev.value = s"(!(${eval.isNull}))"
     eval.code
@@ -259,10 +259,10 @@ case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate
     numNonNulls >= n
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
     val nonnull = ctx.freshName("nonnull")
     val code = children.map { e =>
-      val eval = e.gen(ctx)
+      val eval = e.genCode(ctx)
       e.dataType match {
         case DoubleType | FloatType =>
           s"""

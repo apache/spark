@@ -99,7 +99,7 @@ case class Not(child: Expression)
 
   protected override def nullSafeEval(input: Any): Any = !input.asInstanceOf[Boolean]
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
     defineCodeGen(ctx, ev, c => s"!($c)")
   }
 
@@ -157,9 +157,9 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate
     }
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
-    val valueGen = value.gen(ctx)
-    val listGen = list.map(_.gen(ctx))
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+    val valueGen = value.genCode(ctx)
+    val listGen = list.map(_.genCode(ctx))
     val listCode = listGen.map(x =>
       s"""
         if (!${ev.value}) {
@@ -216,10 +216,10 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
 
   def getHSet(): Set[Any] = hset
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
     val setName = classOf[Set[Any]].getName
     val InSetName = classOf[InSet].getName
-    val childGen = child.gen(ctx)
+    val childGen = child.genCode(ctx)
     ctx.references += this
     val hsetTerm = ctx.freshName("hset")
     val hasNullTerm = ctx.freshName("hasNull")
@@ -274,9 +274,9 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
     }
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
-    val eval1 = left.gen(ctx)
-    val eval2 = right.gen(ctx)
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+    val eval1 = left.genCode(ctx)
+    val eval2 = right.genCode(ctx)
 
     // The result should be `false`, if any of them is `false` whenever the other is null or not.
     if (!left.nullable && !right.nullable) {
@@ -339,9 +339,9 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
     }
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
-    val eval1 = left.gen(ctx)
-    val eval2 = right.gen(ctx)
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+    val eval1 = left.genCode(ctx)
+    val eval2 = right.genCode(ctx)
 
     // The result should be `true`, if any of them is `true` whenever the other is null or not.
     if (!left.nullable && !right.nullable) {
@@ -379,7 +379,7 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
 
 abstract class BinaryComparison extends BinaryOperator with Predicate {
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
     if (ctx.isPrimitiveType(left.dataType)
         && left.dataType != BooleanType // java boolean doesn't support > or < operator
         && left.dataType != FloatType
@@ -428,7 +428,7 @@ case class EqualTo(left: Expression, right: Expression)
     }
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
     defineCodeGen(ctx, ev, (c1, c2) => ctx.genEqual(left.dataType, c1, c2))
   }
 }
@@ -464,9 +464,9 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
     }
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
-    val eval1 = left.gen(ctx)
-    val eval2 = right.gen(ctx)
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+    val eval1 = left.genCode(ctx)
+    val eval2 = right.genCode(ctx)
     val equalCode = ctx.genEqual(left.dataType, eval1.value, eval2.value)
     ev.isNull = "false"
     eval1.code + eval2.code + s"""

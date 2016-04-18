@@ -48,7 +48,7 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
     new GenericArrayData(children.map(_.eval(input)).toArray)
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
     val arrayClass = classOf[GenericArrayData].getName
     val values = ctx.freshName("values")
     s"""
@@ -56,7 +56,7 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
       final Object[] $values = new Object[${children.size}];
     """ +
       children.zipWithIndex.map { case (e, i) =>
-        val eval = e.gen(ctx)
+        val eval = e.genCode(ctx)
         eval.code + s"""
           if (${eval.isNull}) {
             $values[$i] = null;
@@ -115,7 +115,7 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
     new ArrayBasedMapData(new GenericArrayData(keyArray), new GenericArrayData(valueArray))
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
     val arrayClass = classOf[GenericArrayData].getName
     val mapClass = classOf[ArrayBasedMapData].getName
     val keyArray = ctx.freshName("keyArray")
@@ -128,7 +128,7 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
       final Object[] $valueArray = new Object[${values.size}];
     """ + keys.zipWithIndex.map {
       case (key, i) =>
-        val eval = key.gen(ctx)
+        val eval = key.genCode(ctx)
         s"""
           ${eval.code}
           if (${eval.isNull}) {
@@ -139,7 +139,7 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
         """
     }.mkString("\n") + values.zipWithIndex.map {
       case (value, i) =>
-        val eval = value.gen(ctx)
+        val eval = value.genCode(ctx)
         s"""
           ${eval.code}
           if (${eval.isNull}) {
@@ -181,7 +181,7 @@ case class CreateStruct(children: Seq[Expression]) extends Expression {
     InternalRow(children.map(_.eval(input)): _*)
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
     val rowClass = classOf[GenericInternalRow].getName
     val values = ctx.freshName("values")
     s"""
@@ -189,7 +189,7 @@ case class CreateStruct(children: Seq[Expression]) extends Expression {
       final Object[] $values = new Object[${children.size}];
     """ +
       children.zipWithIndex.map { case (e, i) =>
-        val eval = e.gen(ctx)
+        val eval = e.genCode(ctx)
         eval.code + s"""
           if (${eval.isNull}) {
             $values[$i] = null;
@@ -262,7 +262,7 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
     InternalRow(valExprs.map(_.eval(input)): _*)
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
     val rowClass = classOf[GenericInternalRow].getName
     val values = ctx.freshName("values")
     s"""
@@ -270,7 +270,7 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
       final Object[] $values = new Object[${valExprs.size}];
     """ +
       valExprs.zipWithIndex.map { case (e, i) =>
-        val eval = e.gen(ctx)
+        val eval = e.genCode(ctx)
         eval.code + s"""
           if (${eval.isNull}) {
             $values[$i] = null;
@@ -314,7 +314,7 @@ case class CreateStructUnsafe(children: Seq[Expression]) extends Expression {
     InternalRow(children.map(_.eval(input)): _*)
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
     val eval = GenerateUnsafeProjection.createCode(ctx, children)
     ev.isNull = eval.isNull
     ev.value = eval.value
@@ -354,7 +354,7 @@ case class CreateNamedStructUnsafe(children: Seq[Expression]) extends Expression
     InternalRow(valExprs.map(_.eval(input)): _*)
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
     val eval = GenerateUnsafeProjection.createCode(ctx, valExprs)
     ev.isNull = eval.isNull
     ev.value = eval.value

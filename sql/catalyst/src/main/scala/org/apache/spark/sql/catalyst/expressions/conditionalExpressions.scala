@@ -55,10 +55,10 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
     }
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
-    val condEval = predicate.gen(ctx)
-    val trueEval = trueValue.gen(ctx)
-    val falseEval = falseValue.gen(ctx)
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+    val condEval = predicate.genCode(ctx)
+    val trueEval = trueValue.genCode(ctx)
+    val falseEval = falseValue.genCode(ctx)
 
     s"""
       ${condEval.code}
@@ -147,11 +147,11 @@ case class CaseWhen(branches: Seq[(Expression, Expression)], elseValue: Option[E
     branches.length < CaseWhen.MAX_NUM_CASES_FOR_CODEGEN
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
     if (!shouldCodegen) {
       // Fallback to interpreted mode if there are too many branches, as it may reach the
       // 64K limit (limit on bytecode size for a single function).
-      return super[CodegenFallback].genCode(ctx, ev)
+      return super[CodegenFallback].doGenCode(ctx, ev)
     }
     // Generate code that looks like:
     //
@@ -172,8 +172,8 @@ case class CaseWhen(branches: Seq[(Expression, Expression)], elseValue: Option[E
     //   }
     // }
     val cases = branches.map { case (condExpr, valueExpr) =>
-      val cond = condExpr.gen(ctx)
-      val res = valueExpr.gen(ctx)
+      val cond = condExpr.genCode(ctx)
+      val res = valueExpr.genCode(ctx)
       s"""
         ${cond.code}
         if (!${cond.isNull} && ${cond.value}) {
@@ -187,7 +187,7 @@ case class CaseWhen(branches: Seq[(Expression, Expression)], elseValue: Option[E
     var generatedCode = cases.mkString("", "\nelse {\n", "\nelse {\n")
 
     elseValue.foreach { elseExpr =>
-      val res = elseExpr.gen(ctx)
+      val res = elseExpr.genCode(ctx)
       generatedCode +=
         s"""
           ${res.code}
@@ -230,6 +230,7 @@ object CaseWhen {
 
   /**
    * A factory method to facilitate the creation of this expression when used in parsers.
+   *
    * @param branches Expressions at even position are the branch conditions, and expressions at odd
    *                 position are branch values.
    */
@@ -297,8 +298,8 @@ case class Least(children: Seq[Expression]) extends Expression {
     })
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
-    val evalChildren = children.map(_.gen(ctx))
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+    val evalChildren = children.map(_.genCode(ctx))
     val first = evalChildren(0)
     val rest = evalChildren.drop(1)
     def updateEval(eval: ExprCode): String = {
@@ -358,8 +359,8 @@ case class Greatest(children: Seq[Expression]) extends Expression {
     })
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
-    val evalChildren = children.map(_.gen(ctx))
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+    val evalChildren = children.map(_.genCode(ctx))
     val first = evalChildren(0)
     val rest = evalChildren.drop(1)
     def updateEval(eval: ExprCode): String = {

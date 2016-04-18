@@ -526,7 +526,7 @@ class CodegenContext {
       val value = s"${fnName}Value"
 
       // Generate the code for this expression tree and wrap it in a function.
-      val code = expr.gen(this)
+      val code = expr.genCode(this)
       val fn =
         s"""
            |private void $fnName(InternalRow $INPUT_ROW) {
@@ -572,7 +572,7 @@ class CodegenContext {
   def generateExpressions(expressions: Seq[Expression],
       doSubexpressionElimination: Boolean = false): Seq[ExprCode] = {
     if (doSubexpressionElimination) subexpressionElimination(expressions)
-    expressions.map(e => e.gen(this))
+    expressions.map(e => e.genCode(this))
   }
 }
 
