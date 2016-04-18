@@ -2174,7 +2174,7 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
                      "the minimum number of times a token must appear to be included in the " +
                      "word2vec model's vocabulary", typeConverter=TypeConverters.toInt)
     windowSize = Param(Params._dummy(), "windowSize",
-                       "the window size (context words from [-window, window])",
+                       "the window size (context words from [-window, window]). Default value is 5",
                        typeConverter=TypeConverters.toInt)
 
     @keyword_only
@@ -2253,7 +2253,7 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
         """
         Sets the value of :py:attr:`windowSize`.
         """
-        self._paramMap[self.windowSize] = value
+        self._set(windowSize=value)
         return self
 
     @since("2.0.0")

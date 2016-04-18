@@ -340,8 +340,7 @@ class ParamTests(PySparkTestCase):
         self.assertEqual(len(params), 1)
 
     def test_word2vec_param(self):
-        model = Word2Vec() \
-            .setWindowSize(6)
+        model = Word2Vec().setWindowSize(6)
         # Check windowSize is set properly
         self.assertEqual(model.getWindowSize(), 6)
 
