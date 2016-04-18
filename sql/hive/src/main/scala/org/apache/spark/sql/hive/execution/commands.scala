@@ -105,7 +105,8 @@ case class AnalyzeTable(tableName: String) extends RunnableCommand {
           Option(tableParameters.get(StatsSetupConst.TOTAL_SIZE))
             .map(_.toLong)
             .getOrElse(0L)
-        val newTotalSize = getFileSizeForTable(hiveContext.hiveconf, relation.hiveQlTable)
+        val newTotalSize =
+          getFileSizeForTable(hiveContext.sessionState.hiveconf, relation.hiveQlTable)
         // Update the Hive metastore if the total size of the table is different than the size
         // recorded in the Hive metastore.
         // This logic is based on org.apache.hadoop.hive.ql.exec.StatsTask.aggregateStats().
