@@ -1448,6 +1448,54 @@ class Row(tuple):
         else:
             return "<Row(%s)>" % ", ".join(self)
 
+    def __eq__(self, other):
+        """
+        Test for equality with `other`.
+
+        :param other: other Row for comparison
+
+        >>> Row(name="Alice", age=11) == Row(age=11, name="Alice")
+        True
+        >>> R1 = Row('a', 'b')
+        >>> R2 = Row('b', 'a')
+        >>> R1(1, 2) == R2(2, 1)
+        True
+        >>> Row('a', 'b') == Row('b', 'a')
+        False
+        >>> R3 = Row('a', 'c')
+        >>> R1(1, 2) == R3(1, 2)
+        False
+        """
+        if isinstance(other, Row) and not (hasattr(self, "__fields__") ^ hasattr(other, "__fields__")):
+            if hasattr(self, "__fields__"):
+                return len(self.__fields__) == len(other.__fields__) and \
+                    set(self.__fields__).intersection(other.__fields__) == set(self.__fields__) and \
+                    all([self[k] == other[k] for k in self.__fields__])
+            else:
+                return super(Row, self).__eq__(other)
+        else:
+            return False
+
+    def __ne__(self, other):
+        """
+        Test for inequality with `other`.
+
+        :param other: other Row for comparison
+
+        >>> Row(name="Alice", age=11) != Row(age=11, name="Alice")
+        False
+        >>> R1 = Row('a', 'b')
+        >>> R2 = Row('b', 'a')
+        >>> R1(1, 2) != R2(2, 1)
+        False
+        >>> Row('a', 'b') != Row('b', 'a')
+        True
+        >>> R3 = Row('a', 'c')
+        >>> R1(1, 2) != R3(1, 2)
+        True
+        """
+        return not self.__eq__(other)
+
 
 class DateConverter(object):
     def can_convert(self, obj):

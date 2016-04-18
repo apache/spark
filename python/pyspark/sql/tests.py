@@ -658,7 +658,7 @@ class SQLTests(ReusedPySparkTestCase):
         df = self.df
         g = df.groupBy()
         self.assertEqual([99, 100], sorted(g.agg({'key': 'max', 'value': 'count'}).collect()[0]))
-        self.assertEqual([Row(**{"AVG(key#0)": 49.5})], g.mean().collect())
+        self.assertEqual([Row(**{"avg(key)": 49.5})], g.mean().collect())
 
         from pyspark.sql import functions
         self.assertEqual((0, u'99'),
@@ -1200,10 +1200,11 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(df.schema.simpleString(), "struct<key:string,value:string>")
         self.assertEqual(df.collect(), [Row(key=str(i), value=str(i)) for i in range(100)])
 
-        # field names can differ.
+        # field names can be changed.
         df = rdd.toDF(" a: int, b: string ")
+        renamed_data = [Row(a=row['key'], b=row['value']) for row in data]
         self.assertEqual(df.schema.simpleString(), "struct<a:int,b:string>")
-        self.assertEqual(df.collect(), data)
+        self.assertEqual(df.collect(), renamed_data)
 
         # number of fields must match.
         self.assertRaisesRegexp(Exception, "Length of object",
@@ -1216,12 +1217,12 @@ class SQLTests(ReusedPySparkTestCase):
         # flat schema values will be wrapped into row.
         df = rdd.map(lambda row: row.key).toDF("int")
         self.assertEqual(df.schema.simpleString(), "struct<value:int>")
-        self.assertEqual(df.collect(), [Row(key=i) for i in range(100)])
+        self.assertEqual(df.collect(), [Row(value=i) for i in range(100)])
 
         # users can use DataType directly instead of data type string.
         df = rdd.map(lambda row: row.key).toDF(IntegerType())
         self.assertEqual(df.schema.simpleString(), "struct<value:int>")
-        self.assertEqual(df.collect(), [Row(key=i) for i in range(100)])
+        self.assertEqual(df.collect(), [Row(value=i) for i in range(100)])
 
 
 class HiveContextSQLTests(ReusedPySparkTestCase):
