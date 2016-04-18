@@ -143,7 +143,7 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
           val splitFiles = selectedPartitions.flatMap { partition =>
             partition.files.flatMap { file =>
               val blockLocations = getBlockLocations(file)
-              (0L to file.getLen by maxSplitBytes).map { offset =>
+              (0L until file.getLen by maxSplitBytes).map { offset =>
                 val remaining = file.getLen - offset
                 val size = if (remaining > maxSplitBytes) maxSplitBytes else remaining
                 val hosts = getBlockHosts(blockLocations, offset, size)

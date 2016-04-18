@@ -29,10 +29,9 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
 import org.apache.parquet.hadoop.ParquetOutputCommitter
 
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.DataSourceScan
-import org.apache.spark.sql.execution.datasources.{FileScanRDD, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{FileScanRDD, LocalityTestFileSystem, LogicalRelation}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
@@ -724,15 +723,5 @@ class AlwaysFailParquetOutputCommitter(
 
   override def commitJob(context: JobContext): Unit = {
     sys.error("Intentional job commitment failure for testing purpose.")
-  }
-}
-
-class LocalityTestFileSystem extends RawLocalFileSystem {
-  private val invocations = new AtomicInteger(0)
-
-  override def getFileBlockLocations(
-      file: FileStatus, start: Long, len: Long): Array[BlockLocation] = {
-    val count = invocations.getAndAdd(1)
-    Array(new BlockLocation(Array(s"host$count:50010"), Array(s"host$count"), 0, len))
   }
 }
