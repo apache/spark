@@ -718,7 +718,7 @@ class SchedulerJob(BaseJob):
 
                 self.runs += 1
                 try:
-                    if self.num_runs % self.refresh_dags_every == 0:
+                    if self.runs % self.refresh_dags_every == 0:
                         dagbag = models.DagBag(self.subdir, sync_to_db=True)
                     else:
                         dagbag.collect_dags(only_if_updated=True)
