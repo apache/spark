@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.execution.aggregate
 
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, DeclarativeAggregate}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.types._
 
 /**
@@ -40,15 +41,32 @@ import org.apache.spark.sql.types._
  */
 class VectorizedHashMapGenerator(
     ctx: CodegenContext,
+    aggregateExpressions: Seq[AggregateExpression],
     generatedClassName: String,
     groupingKeySchema: StructType,
     bufferSchema: StructType) {
-
   case class Buffer(dataType: DataType, name: String)
   val groupingKeys = groupingKeySchema.map(k => Buffer(k.dataType, ctx.freshName("key")))
   val bufferValues = bufferSchema.map(k => Buffer(k.dataType, ctx.freshName("value")))
   val groupingKeySignature = groupingKeys.map(key => (ctx.javaType(key.dataType), key.name))
     .map(_.productIterator.toList.mkString(" ")).mkString(", ")
+  val buffVars: Seq[ExprCode] = {
+    val functions = aggregateExpressions.map(_.aggregateFunction.asInstanceOf[DeclarativeAggregate])
+    val initExpr = functions.flatMap(f => f.initialValues)
+    initExpr.map { e =>
+      val isNull = ctx.freshName("bufIsNull")
+      val value = ctx.freshName("bufValue")
+      ctx.addMutableState("boolean", isNull, "")
+      ctx.addMutableState(ctx.javaType(e.dataType), value, "")
+      val ev = e.genCode(ctx)
+      val initVars =
+        s"""
+           | $isNull = ${ev.isNull};
+           | $value = ${ev.value};
+       """.stripMargin
+      ExprCode(ev.code + initVars, isNull, value)
+    }
+  }
 
   def generate(): String = {
     s"""
@@ -72,17 +90,29 @@ class VectorizedHashMapGenerator(
     val generatedSchema: String =
       s"""
          |new org.apache.spark.sql.types.StructType()
-         |${(groupingKeySchema ++ bufferSchema).map(key =>
-          s""".add("${key.name}", org.apache.spark.sql.types.DataTypes.${key.dataType})""")
-          .mkString("\n")};
+         |${(groupingKeySchema ++ bufferSchema).map { key =>
+            key.dataType match {
+              case d: DecimalType =>
+                s""".add("${key.name}", org.apache.spark.sql.types.DataTypes.createDecimalType(
+                   |${d.precision}, ${d.scale}))""".stripMargin
+              case _ =>
+                s""".add("${key.name}", org.apache.spark.sql.types.DataTypes.${key.dataType})"""
+            }
+          }.mkString("\n")};
       """.stripMargin
 
     val generatedAggBufferSchema: String =
       s"""
          |new org.apache.spark.sql.types.StructType()
-         |${bufferSchema.map(key =>
-        s""".add("${key.name}", org.apache.spark.sql.types.DataTypes.${key.dataType})""")
-        .mkString("\n")};
+         |${bufferSchema.map { key =>
+            key.dataType match {
+              case d: DecimalType =>
+                s""".add("${key.name}", org.apache.spark.sql.types.DataTypes.createDecimalType(
+                    |${d.precision}, ${d.scale}))""".stripMargin
+              case _ =>
+                s""".add("${key.name}", org.apache.spark.sql.types.DataTypes.${key.dataType})"""
+            }
+          }.mkString("\n")};
       """.stripMargin
 
     s"""
@@ -156,7 +186,8 @@ class VectorizedHashMapGenerator(
     s"""
        |private boolean equals(int idx, $groupingKeySignature) {
        |  return ${groupingKeys.zipWithIndex.map { case (key: Buffer, ordinal: Int) =>
-            s"""${ctx.getValue("batch", "buckets[idx]", key.dataType, ordinal)} == ${key.name}"""
+            s"""${ctx.genEqual(key.dataType,
+              ctx.getValue("batch", "buckets[idx]", key.dataType, ordinal), key.name)}"""
           }.mkString(" && ")};
        |}
      """.stripMargin
@@ -209,8 +240,10 @@ class VectorizedHashMapGenerator(
        |        ${groupingKeys.zipWithIndex.map { case (key: Buffer, ordinal: Int) =>
                   ctx.setValue("batch", "numRows", key.dataType, ordinal, key.name)
                 }.mkString("\n")}
+       |        ${buffVars.map(_.code).mkString("\n")}
        |        ${bufferValues.zipWithIndex.map { case (key: Buffer, ordinal: Int) =>
-                  s"batch.column(${groupingKeys.length + ordinal}).putNull(numRows);"
+                  ctx.updateColumn("batch", "numRows", key.dataType, groupingKeys.length + ordinal,
+                    buffVars(ordinal), nullable = true)
                 }.mkString("\n")}
        |        buckets[idx] = numRows++;
        |        batch.setNumRows(numRows);
@@ -257,13 +290,11 @@ class VectorizedHashMapGenerator(
     def hashInt(i: String): String = s"int $result = $i;"
     def hashLong(l: String): String = s"long $result = $l;"
     def hashBytes(b: String): String = {
-      val bytes = ctx.freshName("bytes")
       val hash = ctx.freshName("hash")
       s"""
          |int $result = 0;
-         |byte[] $bytes = $b.getBytes();
-         |for (int i = 0; i < $bytes.length; i++) {
-         |  ${computeHash(s"$bytes[i]", ByteType, hash, ctx)}
+         |for (int i = 0; i < $b.length; i++) {
+         |  ${computeHash(s"$b[i]", ByteType, hash, ctx)}
          |  $result = ($result ^ (0x9e3779b9)) + $hash + ($result << 6) + ($result >>> 2);
          |}
        """.stripMargin
@@ -285,7 +316,7 @@ class VectorizedHashMapGenerator(
             ${hashBytes(bytes)}
           """
         }
-      case StringType => hashBytes(input)
+      case StringType => hashBytes(s"$input.getBytes()")
     }
   }
 }

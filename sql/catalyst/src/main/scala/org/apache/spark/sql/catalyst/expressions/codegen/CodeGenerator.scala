@@ -281,7 +281,43 @@ class CodegenContext {
         s"$batch.column($ordinal).put${primitiveTypeName(jt)}($row, $value);"
       case t: DecimalType => s"$batch.column($ordinal).putDecimal($row, $value, ${t.precision});"
       case t: StringType => s"$batch.column($ordinal).putByteArray($row, $value.getBytes());"
-      case _ => throw new IllegalArgumentException("cannot generate code for unsupported type")
+      case _ =>
+        throw new IllegalArgumentException(s"cannot generate code for unsupported type: $dataType")
+    }
+  }
+
+  /**
+   * Returns the specialized code to set a given value in a column vector for a given `DataType`
+   * that could potentially be nullable.
+   */
+  def updateColumn(
+      batch: String,
+      row: String,
+      dataType: DataType,
+      ordinal: Int,
+      ev: ExprCode,
+      nullable: Boolean): String = {
+    if (nullable) {
+      // Can't call setNullAt on DecimalType, because we need to keep the offset
+      if (dataType.isInstanceOf[DecimalType]) {
+        s"""
+           if (!${ev.isNull}) {
+             ${setValue(batch, row, dataType, ordinal, ev.value)}
+           } else {
+             ${setValue(batch, row, dataType, ordinal, "null")}
+           }
+         """
+      } else {
+        s"""
+           if (!${ev.isNull}) {
+             ${setValue(batch, row, dataType, ordinal, ev.value)}
+           } else {
+             $batch.column($ordinal).putNull($row);
+           }
+         """
+      }
+    } else {
+      s"""${setValue(batch, row, dataType, ordinal, ev.value)};"""
     }
   }
 
@@ -298,7 +334,7 @@ class CodegenContext {
       case StringType =>
         s"$batch.column($ordinal).getUTF8String($row)"
       case _ =>
-        throw new IllegalArgumentException("cannot generate code for unsupported type")
+        throw new IllegalArgumentException(s"cannot generate code for unsupported type: $dataType")
     }
   }
 
