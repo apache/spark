@@ -117,6 +117,11 @@ private[spark] class Client(
 
   private var appId: ApplicationId = null
 
+  // The app staging dir based on the STAGING_DIR configuration if configured
+  // otherwise based on the users home directory.
+  private val appStagingBaseDir = sparkConf.get(STAGING_DIR).map { new Path(_) }
+    .getOrElse(FileSystem.get(hadoopConf).getHomeDirectory())
+
   def reportLauncherState(state: SparkAppHandle.State): Unit = {
     launcherBackend.setState(state)
   }
@@ -182,8 +187,8 @@ private[spark] class Client(
     val appStagingDir = getAppStagingDir(appId)
     try {
       val preserveFiles = sparkConf.get(PRESERVE_STAGING_FILES)
-      val fs = FileSystem.get(hadoopConf)
-      val stagingDirPath = getAppStagingDirPath(sparkConf, fs, appStagingDir)
+      val stagingDirPath = new Path(appStagingBaseDir, appStagingDir)
+      val fs = stagingDirPath.getFileSystem(hadoopConf)
       if (!preserveFiles && fs.exists(stagingDirPath)) {
         logInfo("Deleting staging directory " + stagingDirPath)
         fs.delete(stagingDirPath, true)
@@ -356,8 +361,8 @@ private[spark] class Client(
     logInfo("Preparing resources for our AM container")
     // Upload Spark and the application JAR to the remote file system if necessary,
     // and add them as local resources to the application master.
-    val fs = FileSystem.get(hadoopConf)
-    val dst = getAppStagingDirPath(sparkConf, fs, appStagingDir)
+    val dst = new Path(appStagingBaseDir, appStagingDir)
+    val fs = dst.getFileSystem(hadoopConf)
     val nns = YarnSparkHadoopUtil.get.getNameNodesToAccess(sparkConf) + dst
     YarnSparkHadoopUtil.get.obtainTokensForNamenodes(nns, hadoopConf, credentials)
     // Used to keep track of URIs added to the distributed cache. If the same URI is added
@@ -667,8 +672,7 @@ private[spark] class Client(
     env("SPARK_YARN_STAGING_DIR") = stagingDir
     env("SPARK_USER") = UserGroupInformation.getCurrentUser().getShortUserName()
     if (loginFromKeytab) {
-      val remoteFs = FileSystem.get(hadoopConf)
-      val stagingDirPath = getAppStagingDirPath(sparkConf, remoteFs, stagingDir)
+      val stagingDirPath = new Path(appStagingBaseDir, stagingDir)
       val credentialsFile = "credentials-" + UUID.randomUUID().toString
       sparkConf.set(CREDENTIALS_FILE_PATH, new Path(stagingDirPath, credentialsFile).toString)
       logInfo(s"Credentials file set to: $credentialsFile")
@@ -1436,18 +1440,6 @@ private object Client extends Logging {
   /** Returns whether the URI is a "local:" URI. */
   def isLocalUri(uri: String): Boolean = {
     uri.startsWith(s"$LOCAL_SCHEME:")
-  }
-
-  /**
-   *  Returns the app staging dir based on the STAGING_DIR configuration if configured
-   *  otherwise based on the users home directory.
-   */
-  private def getAppStagingDirPath(
-      conf: SparkConf,
-      fs: FileSystem,
-      appStagingDir: String): Path = {
-    val baseDir = conf.get(STAGING_DIR).map { new Path(_) }.getOrElse(fs.getHomeDirectory())
-    new Path(baseDir, appStagingDir)
   }
 
 }
