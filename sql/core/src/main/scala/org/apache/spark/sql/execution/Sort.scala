@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, GenerateUnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.physical.{Distribution, OrderedDistribution, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.util.collection.RadixSort;
+import org.apache.spark.util.collection.unsafe.sort.RadixSort;
 
 /**
  * Performs (external) sorting.
@@ -50,15 +50,10 @@ case class Sort(
   override def requiredChildDistribution: Seq[Distribution] =
     if (global) OrderedDistribution(sortOrder) :: Nil else UnspecifiedDistribution :: Nil
 
-  private val useRadixSort = RadixSort.enabled && sortOrder.length == 1 &&
-    (sortOrder.head.dataType match {
-    case BooleanType | ByteType | ShortType | IntegerType | LongType | DateType | TimestampType =>
-      true
-    case _ =>
-      false
-  })
+  private val canUseRadixSort = (
+    sortOrder.length == 1 && SortPrefixUtils.canSortFullyWithPrefix(sortOrder.head))
 
-  private val labels = if (useRadixSort) " (radix)" else " (tim)"
+  private val labels = if (canUseRadixSort) " (radix)" else " (tim)"
 
   override private[sql] lazy val metrics = Map(
     "sortTime" -> SQLMetrics.createLongMetric(sparkContext, "sort time" + labels),
@@ -82,7 +77,8 @@ case class Sort(
 
     val pageSize = SparkEnv.get.memoryManager.pageSizeBytes
     val sorter = new UnsafeExternalRowSorter(
-      schema, ordering, prefixComparator, prefixComputer, pageSize, useRadixSort)
+      schema, ordering, prefixComparator, prefixComputer, pageSize,
+      sparkContext.getConf.getBoolean("spark.sql.sort.useRadixSort", true) && canUseRadixSort)
 
     if (testSpillFrequency > 0) {
       sorter.setTestSpillFrequency(testSpillFrequency)

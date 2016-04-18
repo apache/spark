@@ -73,7 +73,12 @@ public final class UnsafeInMemorySorter {
   private final Sorter<RecordPointerAndKeyPrefix, LongArray> sorter;
   @Nullable
   private final Comparator<RecordPointerAndKeyPrefix> sortComparator;
-  private boolean useRadix;
+
+  /**
+   * If non-null, specifies that radix sort should be used instead of TimSort.
+   */
+  @Nullable
+  private final PrefixComparators.RadixSortSupport radixSortSupport;
 
   /**
    * Within this buffer, position {@code 2 * i} holds a pointer pointer to the record at
@@ -94,9 +99,9 @@ public final class UnsafeInMemorySorter {
     final RecordComparator recordComparator,
     final PrefixComparator prefixComparator,
     int initialSize,
-    boolean useRadix) {
+    boolean useRadixSort) {
     this(consumer, memoryManager, recordComparator, prefixComparator,
-      consumer.allocateArray(initialSize * (useRadix ? 4 : 2)), useRadix);
+      consumer.allocateArray(initialSize * 2), useRadixSort);
   }
 
   public UnsafeInMemorySorter(
@@ -105,17 +110,22 @@ public final class UnsafeInMemorySorter {
       final RecordComparator recordComparator,
       final PrefixComparator prefixComparator,
       LongArray array,
-      boolean useRadix) {
+      boolean useRadixSort) {
     this.consumer = consumer;
     this.memoryManager = memoryManager;
     this.initialSize = array.size();
-    this.useRadix = useRadix;
     if (recordComparator != null) {
       this.sorter = new Sorter<>(UnsafeSortDataFormat.INSTANCE);
       this.sortComparator = new SortComparator(recordComparator, prefixComparator, memoryManager);
+      if (useRadixSort && prefixComparator instanceof PrefixComparators.RadixSortSupport) {
+        this.radixSortSupport = (PrefixComparators.RadixSortSupport)prefixComparator;
+      } else {
+        this.radixSortSupport = null;
+      }
     } else {
       this.sorter = null;
       this.sortComparator = null;
+      this.radixSortSupport = null;
     }
     this.array = array;
   }
@@ -150,7 +160,7 @@ public final class UnsafeInMemorySorter {
   }
 
   public boolean hasSpaceForAnotherRecord() {
-    return pos + 2 <= (array.size() / (useRadix ? 2 : 1));
+    return pos + 2 <= (array.size() / (this.radixSortSupport != null ? 2 : 1));
   }
 
   public void expandPointerArray(LongArray newArray) {
@@ -162,7 +172,7 @@ public final class UnsafeInMemorySorter {
       array.getBaseOffset(),
       newArray.getBaseObject(),
       newArray.getBaseOffset(),
-      array.size() * (useRadix ? 4L : 8L));
+      array.size() * (this.radixSortSupport != null ? 4L : 8L));
     consumer.freeArray(array);
     array = newArray;
   }
@@ -251,8 +261,9 @@ public final class UnsafeInMemorySorter {
   public SortedIterator getSortedIterator() {
     int offset = 0;
     if (sorter != null) {
-      if (useRadix) {
-        offset = RadixSort.sortKeyPrefixArray(array, pos / 2, 0, pos, 0, 7, false, false);
+      if (this.radixSortSupport != null) {
+        offset = RadixSort.sortKeyPrefixArray(
+          array, pos / 2, 0, 7, radixSortSupport.sortDescending(), radixSortSupport.sortSigned());
       } else {
         sorter.sort(array, 0, pos / 2, sortComparator);
       }

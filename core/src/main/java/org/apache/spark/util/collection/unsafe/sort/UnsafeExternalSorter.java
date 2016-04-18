@@ -76,7 +76,6 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
   private long pageCursor = -1;
   private long peakMemoryUsedBytes = 0;
   private volatile SpillableIterator readingIterator = null;
-  private boolean useRadix;
 
   public static UnsafeExternalSorter createWithExistingInMemorySorter(
       TaskMemoryManager taskMemoryManager,
@@ -106,9 +105,10 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       PrefixComparator prefixComparator,
       int initialSize,
       long pageSizeBytes,
-      boolean useRadix) {
+      boolean useRadixSort) {
     return new UnsafeExternalSorter(taskMemoryManager, blockManager, serializerManager,
-      taskContext, recordComparator, prefixComparator, initialSize, pageSizeBytes, null, useRadix);
+      taskContext, recordComparator, prefixComparator, initialSize, pageSizeBytes, null,
+      useRadixSort);
   }
 
   private UnsafeExternalSorter(
@@ -121,9 +121,8 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       int initialSize,
       long pageSizeBytes,
       @Nullable UnsafeInMemorySorter existingInMemorySorter,
-      boolean useRadix) {
+      boolean useRadixSort) {
     super(taskMemoryManager, pageSizeBytes);
-    this.useRadix = useRadix;
     this.taskMemoryManager = taskMemoryManager;
     this.blockManager = blockManager;
     this.serializerManager = serializerManager;
@@ -137,7 +136,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
 
     if (existingInMemorySorter == null) {
       this.inMemSorter = new UnsafeInMemorySorter(
-        this, taskMemoryManager, recordComparator, prefixComparator, initialSize, useRadix);
+        this, taskMemoryManager, recordComparator, prefixComparator, initialSize, useRadixSort);
     } else {
       this.inMemSorter = existingInMemorySorter;
     }

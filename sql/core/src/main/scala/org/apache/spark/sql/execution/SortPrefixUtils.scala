@@ -52,6 +52,22 @@ object SortPrefixUtils {
   }
 
   /**
+   * @return whether the specified SortOrder can be satisfied with a radix sort on the prefix.
+   */
+  def canSortFullyWithPrefix(sortOrder: SortOrder): Boolean = {
+    sortOrder.dataType match {
+      case BooleanType | ByteType | ShortType | IntegerType | LongType | DateType | TimestampType =>
+        true
+      case dt: DecimalType if dt.precision - dt.scale <= Decimal.MAX_LONG_DIGITS =>
+        true
+      case FloatType | DoubleType =>
+        true
+      case _ =>
+        false
+    }
+  }
+
+  /**
    * Creates the prefix comparator for the first field in the given schema, in ascending order.
    */
   def getPrefixComparator(schema: StructType): PrefixComparator = {

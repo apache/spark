@@ -116,8 +116,6 @@ public class RadixSort {
   public static int sortKeyPrefixArray(
       LongArray array,
       int numRecords,
-      int dataIndex,
-      int tmpIndex,
       int startByteIndex,
       int endByteIndex,
       boolean desc,
@@ -126,8 +124,8 @@ public class RadixSort {
     assert endByteIndex <= 7 : "endByteIndex (" + endByteIndex + ") should <= 7";
     assert startByteIndex <= endByteIndex;
     assert numRecords * 4 <= array.size();
-    assert dataIndex + numRecords * 2 <= array.size();
-    assert tmpIndex + numRecords * 2 <= array.size();
+    int dataIndex = 0;
+    int tmpIndex = numRecords * 2;
     if (numRecords > 0) {
       long[][] counts = getKeyPrefixArrayCounts(array, numRecords, startByteIndex, endByteIndex);
       for (int i = startByteIndex; i <= endByteIndex; i++) {

@@ -121,7 +121,7 @@ class RadixSortSuite extends SparkFunSuite with Logging {
           }
         })
       val outOffset = RadixSort.sortKeyPrefixArray(
-        buf2, N, 0, N * 2, sortType.startByteIdx, sortType.endByteIdx,
+        buf2, N, sortType.startByteIdx, sortType.endByteIdx,
         sortType.descending, sortType.signed)
       val res1 = collectToArray(buf1, 0, N * 2)
       val res2 = collectToArray(buf2, outOffset, N * 2)
@@ -156,7 +156,7 @@ class RadixSortSuite extends SparkFunSuite with Logging {
     }
   }
 
-  test("microbenchmarks") {
+  ignore("microbenchmarks") {
     val size = 25000000
     val rand = new XORShiftRandom(123)
     val benchmark = new Benchmark("radix sort " + size, size)
@@ -205,7 +205,7 @@ class RadixSortSuite extends SparkFunSuite with Logging {
     benchmark.addTimerCase("radix sort key prefix array") { timer =>
       val (_, buf2) = generateKeyPrefixTestData(size, rand.nextLong)
       timer.startTiming()
-      RadixSort.sortKeyPrefixArray(buf2, size, 0, size * 2, 0, 7, false, false)
+      RadixSort.sortKeyPrefixArray(buf2, size, 0, 7, false, false)
       timer.stopTiming()
     }
     benchmark.run
