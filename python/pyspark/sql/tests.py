@@ -884,7 +884,7 @@ class SQLTests(ReusedPySparkTestCase):
         try:
             df.write.trigger('5 seconds')
             self.fail("Should have thrown an exception")
-        except e as TypeError:
+        except TypeError:
             # should throw error
             pass
 
