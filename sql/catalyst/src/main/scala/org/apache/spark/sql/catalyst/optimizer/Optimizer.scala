@@ -1472,13 +1472,13 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
   private def pullOutCorrelatedPredicates(
       subquery: LogicalPlan,
       query: LogicalPlan): (LogicalPlan, Option[Expression]) = {
-    val references: Set[Expression] = query.output.toSet
+    val references = query.outputSet
     val predicateMap = mutable.Map.empty[LogicalPlan, Seq[Expression]]
     val transformed = subquery transformUp {
       case f @ Filter(cond, child) =>
         // Find all correlated predicates.
         val (correlated, local) = splitConjunctivePredicates(cond).partition { e =>
-          e.find(references.contains).isDefined
+          e.references.intersect(references).nonEmpty
         }
         // Rewrite the filter without the correlated predicates if any.
         correlated match {

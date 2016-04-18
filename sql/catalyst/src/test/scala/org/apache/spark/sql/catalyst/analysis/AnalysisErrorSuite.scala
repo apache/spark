@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete, Count}
-import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter}
+import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
@@ -465,11 +465,12 @@ class AnalysisErrorSuite extends AnalysisTest {
     assertAnalysisError(plan2, "Predicate sub-queries cannot be used in nested conditions" :: Nil)
   }
 
-  test("PredicateSubQuery correlated predicate is nested in an outer join") {
+  test("PredicateSubQuery correlated predicate is nested in an illegal plan") {
     val a = AttributeReference("a", IntegerType)()
     val b = AttributeReference("b", IntegerType)()
     val c = AttributeReference("c", IntegerType)()
-    val plan = Filter(
+
+    val plan1 = Filter(
       Exists(
         Join(
           LocalRelation(b),
@@ -477,7 +478,27 @@ class AnalysisErrorSuite extends AnalysisTest {
           LeftOuter,
           Option(EqualTo(b, c)))),
       LocalRelation(a))
-    assertAnalysisError(plan, "Accessing outer query column is not allowed in outer joins" :: Nil)
+    assertAnalysisError(plan1, "Accessing outer query column is not allowed in" :: Nil)
+
+    val plan2 = Filter(
+      Exists(
+        Join(
+          Filter(EqualTo(a, c), LocalRelation(c)),
+          LocalRelation(b),
+          RightOuter,
+          Option(EqualTo(b, c)))),
+      LocalRelation(a))
+    assertAnalysisError(plan2, "Accessing outer query column is not allowed in" :: Nil)
+
+    val plan3 = Filter(
+      Exists(Aggregate(Seq.empty, Seq.empty, Filter(EqualTo(a, c), LocalRelation(c)))),
+      LocalRelation(a))
+    assertAnalysisError(plan3, "Accessing outer query column is not allowed in" :: Nil)
+
+    val plan4 = Filter(
+      Exists(Union(LocalRelation(b), Filter(EqualTo(a, c), LocalRelation(c)))),
+      LocalRelation(a))
+    assertAnalysisError(plan4, "Accessing outer query column is not allowed in" :: Nil)
   }
 
   test("NOT IN is used with a nullable sub-query") {
