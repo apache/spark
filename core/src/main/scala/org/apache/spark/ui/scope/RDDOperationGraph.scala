@@ -17,6 +17,8 @@
 
 package org.apache.spark.ui.scope
 
+import java.util.Objects
+
 import scala.collection.mutable
 import scala.collection.mutable.{ListBuffer, StringBuilder}
 
@@ -86,7 +88,7 @@ private[ui] class RDDOperationCluster(val id: String, private var _name: String)
 
   override def hashCode(): Int = {
     val state = Seq(_childClusters, id, _name)
-    state.map(_.hashCode()).foldLeft(0)((a, b) => 31 * a + b)
+    state.map(Objects.hashCode).foldLeft(0)((a, b) => 31 * a + b)
   }
 }
 
