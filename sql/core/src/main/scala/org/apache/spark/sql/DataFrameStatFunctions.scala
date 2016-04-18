@@ -123,7 +123,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
   /**
    * Python-friendly version of [[approxQuantile()]]
    */
-  private[spark] def approxQuantileMultiCols(
+  private[spark] def approxQuantile(
       cols: List[String],
       probabilities: List[Double],
       relativeError: Double): java.util.List[java.util.List[Double]] = {

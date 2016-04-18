@@ -1377,21 +1377,23 @@ class DataFrame(object):
         :return:  the approximate quantiles at the given probabilities. If
           the input `col` is a string, the output is a list of float. If the
           input `col` is a list or tuple of strings, the output is also a
-          list, but each element in it is a list of float (list of list of
-          float).
+          list, but each element in it is a list of float, i.e., the output
+          is a list of list of float.
         """
         if not isinstance(col, (str, list, tuple)):
-            raise ValueError("col should be a string or list or tuple.")
+            raise ValueError("col should be a string, list or tuple.")
+
         isStr = False
         if isinstance(col, str):
             isStr = True
-            col = [col]
+
         if isinstance(col, tuple):
             col = list(col)
-        for c in col:
-            if not isinstance(c, str):
-                raise ValueError("columns should be strings.")
-        col = _to_list(self._sc, col)
+        if isinstance(col, list):
+            for c in col:
+                if not isinstance(c, str):
+                    raise ValueError("columns should be strings.")
+            col = _to_list(self._sc, col)
 
         if not isinstance(probabilities, (list, tuple)):
             raise ValueError("probabilities should be a list or tuple")
@@ -1406,11 +1408,11 @@ class DataFrame(object):
             raise ValueError("relativeError should be numerical (float, int, long) >= 0.")
         relativeError = float(relativeError)
 
-        jaqs = self._jdf.stat().approxQuantileMultiCols(col, probabilities, relativeError)
-        res = [list(jaq) for jaq in jaqs]
+        jaq = self._jdf.stat().approxQuantile(col, probabilities, relativeError)
         if isStr:
-            return res[0]
-        return res
+            return list(jaq)
+        else:
+            return [list(j) for j in jaq]
 
     @since(1.4)
     def corr(self, col1, col2, method=None):
