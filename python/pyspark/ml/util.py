@@ -17,7 +17,6 @@
 
 import sys
 import uuid
-from functools import wraps
 
 if sys.version > '3':
     basestring = str

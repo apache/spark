@@ -37,6 +37,7 @@ Public classes:
 
 """
 
+from functools import wraps
 import types
 
 from pyspark.conf import SparkConf
