@@ -19,7 +19,8 @@ package org.apache.spark.sql.sources
 
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.TaskContext
+import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.types.StructType
 
 class CommitFailureTestSource extends SimpleTextSource {
@@ -40,6 +41,20 @@ class CommitFailureTestSource extends SimpleTextSource {
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
         new SimpleTextOutputWriter(path, context) {
+          var failed = false
+          TaskContext.get().addTaskFailureListener { (t: TaskContext, e: Throwable) =>
+            failed = true
+            SimpleTextRelation.callbackCalled = true
+          }
+
+          override def write(row: Row): Unit = {
+            if (SimpleTextRelation.failWriter) {
+              sys.error("Intentional task writer failure for testing purpose.")
+
+            }
+            super.write(row)
+          }
+
           override def close(): Unit = {
             super.close()
             sys.error("Intentional task commitment failure for testing purpose.")

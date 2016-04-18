@@ -65,6 +65,9 @@ class SimpleTextSource extends FileFormat with DataSourceRegister {
       filters: Seq[Filter],
       options: Map[String, String]): (PartitionedFile) => Iterator[InternalRow] = {
 
+    SimpleTextRelation.requiredColumns = requiredSchema.fieldNames
+    SimpleTextRelation.pushedFilters = filters.toSet
+
     val fieldTypes = dataSchema.map(_.dataType)
     val inputAttributes = dataSchema.toAttributes
     val outputAttributes = requiredSchema.flatMap { field =>
@@ -144,4 +147,21 @@ class AppendingTextOutputFormat(outputFile: Path) extends TextOutputFormat[NullW
     val name = FileOutputFormat.getOutputName(context)
     new Path(outputFile, s"$name-${numberFormat.format(split)}-$uniqueWriteJobId")
   }
+}
+
+object SimpleTextRelation {
+  // Used to test column pruning
+  var requiredColumns: Seq[String] = Nil
+
+  // Used to test filter push-down
+  var pushedFilters: Set[Filter] = Set.empty
+
+  // Used to test failed committer
+  var failCommitter = false
+
+  // Used to test failed writer
+  var failWriter = false
+
+  // Used to test failure callback
+  var callbackCalled = false
 }
