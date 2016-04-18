@@ -510,8 +510,8 @@ case class AssertTrue(child: Expression) extends UnaryExpression with ImplicitCa
     }
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
-    val eval = child.gen(ctx)
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+    val eval = child.genCode(ctx)
     ev.isNull = "true"
     ev.value = "null"
     s"""${eval.code}
