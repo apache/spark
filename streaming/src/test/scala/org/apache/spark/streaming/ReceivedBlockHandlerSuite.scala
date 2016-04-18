@@ -204,26 +204,26 @@ class ReceivedBlockHandlerSuite
     sparkConf.set("spark.storage.unrollFraction", "0.4")
     // Block Manager with 12000 * 0.4 = 4800 bytes of free space for unroll
     blockManager = createBlockManager(12000, sparkConf)
+    // This block is way too large to possibly be cached in memory:
+    def hugeBlock: IteratorBlock = IteratorBlock(List.fill(100)(new Array[Byte](1000)).iterator)
 
     // there is not enough space to store this block in MEMORY,
     // But BlockManager will be able to serialize this block to WAL
     // and hence count returns correct value.
-     testRecordcount(false, StorageLevel.MEMORY_ONLY,
-      IteratorBlock((List.fill(70)(new Array[Byte](100))).iterator), blockManager, Some(70))
+    testRecordcount(false, StorageLevel.MEMORY_ONLY, hugeBlock, blockManager, Some(100))
 
     // there is not enough space to store this block in MEMORY,
     // But BlockManager will be able to serialize this block to DISK
     // and hence count returns correct value.
-    testRecordcount(true, StorageLevel.MEMORY_AND_DISK,
-      IteratorBlock((List.fill(70)(new Array[Byte](100))).iterator), blockManager, Some(70))
+    testRecordcount(true, StorageLevel.MEMORY_AND_DISK, hugeBlock, blockManager, Some(100))
 
     // there is not enough space to store this block With MEMORY_ONLY StorageLevel.
     // BlockManager will not be able to unroll this block
     // and hence it will not tryToPut this block, resulting the SparkException
     storageLevel = StorageLevel.MEMORY_ONLY
     withBlockManagerBasedBlockHandler { handler =>
-      val thrown = intercept[SparkException] {
-        storeSingleBlock(handler, IteratorBlock((List.fill(70)(new Array[Byte](100))).iterator))
+      intercept[SparkException] {
+        storeSingleBlock(handler, hugeBlock)
       }
     }
   }
