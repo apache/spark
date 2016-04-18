@@ -62,7 +62,6 @@ class SparkClassCommandBuilder extends AbstractCommandBuilder {
       javaOptsKeys.add("SPARK_HISTORY_OPTS");
       memKey = "SPARK_DAEMON_MEMORY";
     } else if (className.equals("org.apache.spark.executor.CoarseGrainedExecutorBackend")) {
-      javaOptsKeys.add("SPARK_JAVA_OPTS");
       javaOptsKeys.add("SPARK_EXECUTOR_OPTS");
       memKey = "SPARK_EXECUTOR_MEMORY";
     } else if (className.equals("org.apache.spark.executor.MesosExecutorBackend")) {
@@ -76,7 +75,6 @@ class SparkClassCommandBuilder extends AbstractCommandBuilder {
       javaOptsKeys.add("SPARK_SHUFFLE_OPTS");
       memKey = "SPARK_DAEMON_MEMORY";
     } else {
-      javaOptsKeys.add("SPARK_JAVA_OPTS");
       memKey = "SPARK_DRIVER_MEMORY";
     }
 
