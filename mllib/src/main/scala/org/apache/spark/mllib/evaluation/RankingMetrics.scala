@@ -155,6 +155,32 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
     }.mean()
   }
 
+  /**
+   * Returns the mean reciprocal rank (MRR) of all the queries.
+   * If a query has an empty ground truth set, the reciprocal rank will be zero and a log
+   * warning is generated.
+   */
+  lazy val meanReciprocalRank: Double = {
+    predictionAndLabels.map { case (pred, lab) =>
+      val labSet = lab.toSet
+
+      if (labSet.nonEmpty) {
+        var i = 0
+        var reciprocalRank = 0.0
+        while (i < pred.length && reciprocalRank == 0.0) {
+          if (labSet.contains(pred(i))) {
+            reciprocalRank = 1.0 / (i + 1)
+          }
+          i += 1
+        }
+        reciprocalRank
+      } else {
+        logWarning("Empty ground truth set, check input data")
+        0.0
+      }
+    }.mean()
+  }
+
 }
 
 object RankingMetrics {
