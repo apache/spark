@@ -341,6 +341,11 @@ class ParamTests(PySparkTestCase):
         params = param_store.params  # should not invoke the property 'test_property'
         self.assertEqual(len(params), 1)
 
+    def test_word2vec_param(self):
+        model = Word2Vec().setWindowSize(6)
+        # Check windowSize is set properly
+        self.assertEqual(model.getWindowSize(), 6)
+
 
 class FeatureTests(PySparkTestCase):
 
