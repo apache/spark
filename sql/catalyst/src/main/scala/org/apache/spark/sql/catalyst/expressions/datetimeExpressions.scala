@@ -355,7 +355,8 @@ abstract class UnixTime extends BinaryExpression with ExpectsInputTypes {
   override def nullable: Boolean = true
 
   private lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
-  private var formatter: SimpleDateFormat = _
+  private lazy val formatter: SimpleDateFormat =
+    Try(new SimpleDateFormat(constFormat.toString)).getOrElse(null)
 
   override def eval(input: InternalRow): Any = {
     val t = left.eval(input)
@@ -368,14 +369,11 @@ abstract class UnixTime extends BinaryExpression with ExpectsInputTypes {
         case TimestampType =>
           t.asInstanceOf[Long] / 1000000L
         case StringType if right.foldable =>
-          if (constFormat != null) {
-            if (formatter == null) {
-              formatter = Try(new SimpleDateFormat(constFormat.toString)).getOrElse(null)
-            }
+          if (constFormat == null || formatter == null) {
+            null
+          } else {
             Try(formatter.parse(
               t.asInstanceOf[UTF8String].toString).getTime / 1000L).getOrElse(null)
-          } else {
-            null
           }
         case StringType =>
           val f = right.eval(input)
