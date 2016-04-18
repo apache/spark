@@ -879,6 +879,15 @@ class SQLTests(ReusedPySparkTestCase):
 
         shutil.rmtree(tmpPath)
 
+    def test_stream_trigger_takes_keyword_args(self):
+        df = self.sqlCtx.read.format('text').stream('python/test_support/sql/streaming')
+        try:
+            df.write.trigger('5 seconds')
+            self.fail("Should have thrown an exception")
+        except e as TypeError:
+            # should throw error
+            pass
+
     def test_stream_save_options(self):
         df = self.sqlCtx.read.format('text').stream('python/test_support/sql/streaming')
         tmpPath = tempfile.mkdtemp()
