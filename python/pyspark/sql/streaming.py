@@ -19,7 +19,7 @@ from abc import ABCMeta, abstractmethod
 
 from pyspark import since
 
-__all__ = ["ContinuousQuery", "ProcessingTime"]
+__all__ = ["ContinuousQuery"]
 
 
 class ContinuousQuery(object):
