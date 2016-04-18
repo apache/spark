@@ -44,7 +44,6 @@ import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-
 private[spark] object HiveUtils extends Logging {
 
   def withHiveExternalCatalog(sc: SparkContext): SparkContext = {

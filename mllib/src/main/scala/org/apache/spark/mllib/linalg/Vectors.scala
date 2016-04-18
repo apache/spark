@@ -39,8 +39,6 @@ import org.apache.spark.sql.types._
 
 /**
  * Represents a numeric vector, whose index type is Int and value type is Double.
- *
- * Note: Users should not implement this interface.
  */
 @SQLUserDefinedType(udt = classOf[VectorUDT])
 @Since("1.0.0")

@@ -75,7 +75,7 @@ class StreamExecution(
   /** The current batchId or -1 if execution has not yet been initialized. */
   private var currentBatchId: Long = -1
 
-  /** All stream sources present the query plan. */
+  /** All stream sources present in the query plan. */
   private val sources =
     logicalPlan.collect { case s: StreamingExecutionRelation => s.source }
 

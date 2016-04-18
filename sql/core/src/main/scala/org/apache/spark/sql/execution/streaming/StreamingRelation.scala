@@ -33,7 +33,7 @@ object StreamingRelation {
  * [[org.apache.spark.sql.catalyst.plans.logical.LogicalPlan]]. This is only used for creating
  * a streaming [[org.apache.spark.sql.DataFrame]] from [[org.apache.spark.sql.DataFrameReader]].
  * It should be used to create [[Source]] and converted to [[StreamingExecutionRelation]] when
- * passing to [StreamExecution]] to run a query.
+ * passing to [[StreamExecution]] to run a query.
  */
 case class StreamingRelation(dataSource: DataSource, sourceName: String, output: Seq[Attribute])
   extends LeafNode {
