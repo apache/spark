@@ -841,6 +841,51 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     }
   }
 
+  test("SPARK-14699: RpcEnv.shutdown should not fire onDisconnected events") {
+    env.setupEndpoint("SPARK-14699", new RpcEndpoint {
+      override val rpcEnv: RpcEnv = env
+
+      override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+        case m => context.reply(m)
+      }
+    })
+
+    @volatile var onStopCalled = false
+    @volatile var onDisconnectedCalled = false
+    @volatile var onNetworkErrorCalled = false
+    val anotherEnv = createRpcEnv(new SparkConf(), "remote", 0)
+    anotherEnv.setupEndpoint("SPARK-14699", new RpcEndpoint {
+      override val rpcEnv = anotherEnv
+
+      override def receive: PartialFunction[Any, Unit] = {
+        case m =>
+      }
+
+      override def onDisconnected(remoteAddress: RpcAddress): Unit = {
+        onDisconnectedCalled = true
+      }
+
+      override def onNetworkError(cause: Throwable, remoteAddress: RpcAddress): Unit = {
+        onNetworkErrorCalled = true
+      }
+
+      override def onStop(): Unit = {
+        onStopCalled = true
+      }
+    })
+
+    val ref = anotherEnv.setupEndpointRef(env.address, "SPARK-14699")
+    // Make sure the connect is set up
+    assert(ref.askWithRetry[String]("hello") === "hello")
+    anotherEnv.shutdown()
+    anotherEnv.awaitTermination()
+
+    env.stop(ref)
+
+    assert(onStopCalled === true)
+    assert(onDisconnectedCalled === false)
+    assert(onNetworkErrorCalled === false)
+  }
 }
 
 class UnserializableClass
