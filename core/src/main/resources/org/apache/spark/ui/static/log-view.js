@@ -46,7 +46,7 @@ function disableMoreButton() {
 }
 
 function noNewAlert() {
-  var alert = $(".no-new-alert")
+  var alert = $(".no-new-alert");
   alert.css("display", "block");
   window.setTimeout(function () {alert.css("display", "none");}, 4000);
 }
@@ -60,7 +60,7 @@ function loadMore() {
     url: "/log" + baseParams + "&offset=" + offset + "&byteLength=" + moreByteLength,
     success: function (data) {
       var oldHeight = $(".log-content")[0].scrollHeight;
-      var newlineIndex = data.indexOf('\n')
+      var newlineIndex = data.indexOf('\n');
       var dataInfo = data.substring(0, newlineIndex).match(/\d+/g);
       var retStartByte = dataInfo[0];
       var retLogLength = dataInfo[2];
@@ -92,7 +92,7 @@ function loadNew() {
           type: "GET",
           url: "/log" + baseParams + "&byteLength=" + newDataLen,
           success: function (data) {
-            var newlineIndex = data.indexOf('\n')
+            var newlineIndex = data.indexOf('\n');
             var dataInfo = data.substring(0, newlineIndex).match(/\d+/g);
             var retStartByte = dataInfo[0];
             var retEndByte = dataInfo[1];

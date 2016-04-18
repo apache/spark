@@ -74,7 +74,7 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
 
     val (logText, startByte, endByte, logLength) = getLog(logDir, logType, offset, byteLength)
     val linkToMaster = <p><a href={worker.activeMasterWebUiUrl}>Back to Master</a></p>
-    val curLogLength = endByte - startByte;
+    val curLogLength = endByte - startByte
     val range =
       <span id="log-data">
         Showing {curLogLength} Bytes: {startByte.toString} - {endByte.toString} of {logLength}
