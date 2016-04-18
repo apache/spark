@@ -69,8 +69,15 @@ class EquivalentExpressions {
    */
   def addExprTree(root: Expression, ignoreLeaf: Boolean = true): Unit = {
     val skip = root.isInstanceOf[LeafExpression] && ignoreLeaf
-    // the children of CodegenFallback will not be used to generate code (call eval() instead)
-    if (!skip && !addExpr(root) && !root.isInstanceOf[CodegenFallback]) {
+    // There are some special expressions that we should not recurse into children.
+    //   1. CodegenFallback: it's children will not be used to generate code (call eval() instead)
+    //   2. ReferenceToExpressions: it's kind of an explicit sub-expression elimination.
+    val shouldRecurse = root match {
+      case _: CodegenFallback => false
+      case _: ReferenceToExpressions => false
+      case _ => true
+    }
+    if (!skip && !addExpr(root) && shouldRecurse) {
       root.children.foreach(addExprTree(_, ignoreLeaf))
     }
   }

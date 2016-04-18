@@ -126,11 +126,9 @@ case class TypedAggregateExpression(
   override lazy val mergeExpressions: Seq[Expression] = {
     val leftBuffer = bufferDeserializer transform {
       case a: AttributeReference => a.left
-      case l: LambdaVariable => l.copy(value = l.value + "_left", isNull = l.isNull + "_left")
     }
     val rightBuffer = bufferDeserializer transform {
       case a: AttributeReference => a.right
-      case l: LambdaVariable => l.copy(value = l.value + "_right", isNull = l.isNull + "_right")
     }
     val merged = Invoke(
       aggregatorLiteral,
