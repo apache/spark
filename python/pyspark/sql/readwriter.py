@@ -444,11 +444,10 @@ class DataFrameWriter(object):
     @since(2.0)
     def trigger(self, processingTime=None):
         """Set the trigger for the stream query. If this is not set it will run the query as fast
-        as possible, which is equivalent to setting the trigger to ``ProcessingTime('0 seconds')``.
+        as possible, which is equivalent to setting the trigger to ``processingTime='0 seconds'``.
 
         :param processingTime: a processing time interval as a string, e.g. '5 seconds', '1 minute'.
 
-        >>> from pyspark.sql.streaming import ProcessingTime
         >>> # trigger the query for execution every 5 seconds
         >>> writer = sdf.write.trigger(processingTime='5 seconds')
         """
