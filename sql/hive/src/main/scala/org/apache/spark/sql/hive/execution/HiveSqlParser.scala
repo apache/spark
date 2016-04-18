@@ -33,8 +33,6 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkSqlAstBuilder
 import org.apache.spark.sql.execution.command.{CreateTable, CreateTableLike}
 import org.apache.spark.sql.hive.{CreateTableAsSelect => CTAS, CreateViewAsSelect => CreateView, HiveSerDe}
-import org.apache.spark.sql.hive.{HiveGenericUDTF, HiveMetastoreTypes, HiveSerDe}
-import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 
 /**
  * Concrete parser for HiveQl statements.
@@ -75,20 +73,6 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
   override def visitExecuteNativeCommand(
       ctx: ExecuteNativeCommandContext): LogicalPlan = withOrigin(ctx) {
     HiveNativeCommand(command(ctx))
-  }
-
-  /**
-   * Fail an unsupported Hive native command.
-   */
-  override def visitFailNativeCommand(
-      ctx: FailNativeCommandContext): LogicalPlan = withOrigin(ctx) {
-    val keywords = if (ctx.kws != null) {
-      Seq(ctx.kws.kw1, ctx.kws.kw2, ctx.kws.kw3).filter(_ != null).map(_.getText).mkString(" ")
-    } else {
-      // SET ROLE is the exception to the rule, because we handle this before other SET commands.
-      "SET ROLE"
-    }
-    throw new ParseException(s"Unsupported operation: $keywords", ctx)
   }
 
   /**

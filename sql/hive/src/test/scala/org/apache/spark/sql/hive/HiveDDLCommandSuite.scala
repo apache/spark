@@ -47,7 +47,7 @@ class HiveDDLCommandSuite extends PlanTest {
     val e = intercept[ParseException] {
       parser.parsePlan(sql)
     }
-    assert(e.getMessage.toLowerCase.contains("unsupported"))
+    assert(e.getMessage.toLowerCase.contains("operation not allowed"))
   }
 
   test("Test CTAS #1") {
