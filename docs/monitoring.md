@@ -230,22 +230,15 @@ where `[base-app-id]` is the YARN application ID.
 <table class="table">
   <tr><th>Endpoint</th><th>Meaning</th></tr>
   <tr>
-    <td><code>/applications</code></td>
-    <td>A list of all applications</td>
-  </tr>
-  <tr>
-    <td></td>
-    <td><code>?status=[completed|running]</code> list only applications in the chosen state</td>
-  </tr>
-  <tr>
-    <td></td>
-    <td><code>?minDate=[date]</code> earliest date/time to list. Examples:
+    <td ><code>/applications</code></td>
+    <td>A list of all applications
+    <br>
+    <code>?status=[completed|running]</code> list only applications in the chosen state
+    <br>
+    <code>?minDate=[date]</code> earliest date/time to list. Examples:
     <br><code>?minDate=2015-02-10</code>
-    <br><code>?minDate=2015-02-03T16:42:40.000GMT</code></td>
-  </tr>
-  <tr>
-    <td></td>
-    <td><code>?maxDate=[date]</code> latest date/time to list; uses same format as <code>minDate</code></td>
+    <br><code>?minDate=2015-02-03T16:42:40.000GMT</code>
+    <br><code>?maxDate=[date]</code> latest date/time to list; uses same format as <code>minDate</code></td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/jobs</code></td>
@@ -311,12 +304,13 @@ where `[base-app-id]` is the YARN application ID.
   </tr>
   <tr>
     <td><code>/applications/[base-app-id]/logs</code></td>
-    <td>Download the event logs for all attempts of the given application as a zip file.
+    <td>Download the event logs for all attempts of the given application as files within
+    a zip file.
     </td>
   </tr>
   <tr>
     <td><code>/applications/[base-app-id]/[attempt-id]/logs</code></td>
-    <td>Download the event logs for a specific application as a zip file</td>
+    <td>Download the event logs for a specific application as a zip file.</td>
   </tr>
 </table>
 
