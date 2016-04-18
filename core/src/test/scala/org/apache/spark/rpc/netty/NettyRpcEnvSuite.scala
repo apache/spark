@@ -17,7 +17,7 @@
 
 package org.apache.spark.rpc.netty
 
-import org.apache.spark.{SparkConf, SparkException, SecurityManager}
+import org.apache.spark._
 import org.apache.spark.rpc._
 
 class NettyRpcEnvSuite extends RpcEnvSuite {
