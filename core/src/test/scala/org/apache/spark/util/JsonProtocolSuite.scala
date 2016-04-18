@@ -1111,6 +1111,14 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      "Shuffle Write Time": 1500,
       |      "Shuffle Records Written": 12
       |    },
+      |    "Input Metrics" : {
+      |      "Bytes Read" : 0,
+      |      "Records Read" : 0
+      |    },
+      |    "Output Metrics" : {
+      |      "Bytes Written" : 0,
+      |      "Records Written" : 0
+      |    },
       |    "Updated Blocks": [
       |      {
       |        "Block ID": "rdd_0_0",
@@ -1187,6 +1195,14 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "Result Serialization Time": 700,
       |    "Memory Bytes Spilled": 800,
       |    "Disk Bytes Spilled": 0,
+      |    "Shuffle Read Metrics" : {
+      |      "Remote Blocks Fetched" : 0,
+      |      "Local Blocks Fetched" : 0,
+      |      "Fetch Wait Time" : 0,
+      |      "Remote Bytes Read" : 0,
+      |      "Local Bytes Read" : 0,
+      |      "Total Records Read" : 0
+      |    },
       |    "Shuffle Write Metrics": {
       |      "Shuffle Bytes Written": 1200,
       |      "Shuffle Write Time": 1500,
@@ -1195,6 +1211,10 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "Input Metrics": {
       |      "Bytes Read": 2100,
       |      "Records Read": 21
+      |    },
+      |     "Output Metrics" : {
+      |      "Bytes Written" : 0,
+      |      "Records Written" : 0
       |    },
       |    "Updated Blocks": [
       |      {
@@ -1272,6 +1292,19 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "Result Serialization Time": 700,
       |    "Memory Bytes Spilled": 800,
       |    "Disk Bytes Spilled": 0,
+      |    "Shuffle Read Metrics" : {
+      |      "Remote Blocks Fetched" : 0,
+      |      "Local Blocks Fetched" : 0,
+      |      "Fetch Wait Time" : 0,
+      |      "Remote Bytes Read" : 0,
+      |      "Local Bytes Read" : 0,
+      |      "Total Records Read" : 0
+      |    },
+      |    "Shuffle Write Metrics" : {
+      |      "Shuffle Bytes Written" : 0,
+      |      "Shuffle Write Time" : 0,
+      |      "Shuffle Records Written" : 0
+      |    },
       |    "Input Metrics": {
       |      "Bytes Read": 2100,
       |      "Records Read": 21

@@ -58,11 +58,6 @@ class InputMetrics private (_bytesRead: Accumulator[Long], _recordsRead: Accumul
    */
   def recordsRead: Long = _recordsRead.localValue
 
-  /**
-   * Returns true if this metrics has been updated before.
-   */
-  def isUpdated: Boolean = (bytesRead | recordsRead) != 0
-
   private[spark] def incBytesRead(v: Long): Unit = _bytesRead.add(v)
   private[spark] def incRecordsRead(v: Long): Unit = _recordsRead.add(v)
   private[spark] def setBytesRead(v: Long): Unit = _bytesRead.setValue(v)

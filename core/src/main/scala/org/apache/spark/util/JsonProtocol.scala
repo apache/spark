@@ -326,39 +326,27 @@ private[spark] object JsonProtocol {
   }
 
   def taskMetricsToJson(taskMetrics: TaskMetrics): JValue = {
-    val shuffleReadMetrics: JValue = if (taskMetrics.shuffleReadMetrics.isUpdated) {
+    val shuffleReadMetrics: JValue =
       ("Remote Blocks Fetched" -> taskMetrics.shuffleReadMetrics.remoteBlocksFetched) ~
         ("Local Blocks Fetched" -> taskMetrics.shuffleReadMetrics.localBlocksFetched) ~
         ("Fetch Wait Time" -> taskMetrics.shuffleReadMetrics.fetchWaitTime) ~
         ("Remote Bytes Read" -> taskMetrics.shuffleReadMetrics.remoteBytesRead) ~
         ("Local Bytes Read" -> taskMetrics.shuffleReadMetrics.localBytesRead) ~
         ("Total Records Read" -> taskMetrics.shuffleReadMetrics.recordsRead)
-    } else {
-      JNothing
-    }
-    val shuffleWriteMetrics: JValue = if (taskMetrics.shuffleWriteMetrics.isUpdated) {
+    val shuffleWriteMetrics: JValue =
       ("Shuffle Bytes Written" -> taskMetrics.shuffleWriteMetrics.bytesWritten) ~
         ("Shuffle Write Time" -> taskMetrics.shuffleWriteMetrics.writeTime) ~
         ("Shuffle Records Written" -> taskMetrics.shuffleWriteMetrics.recordsWritten)
-    } else {
-      JNothing
-    }
-    val inputMetrics: JValue = if (taskMetrics.inputMetrics.isUpdated) {
+    val inputMetrics: JValue =
       ("Bytes Read" -> taskMetrics.inputMetrics.bytesRead) ~
         ("Records Read" -> taskMetrics.inputMetrics.recordsRead)
-    } else {
-      JNothing
-    }
-    val outputMetrics: JValue = if (taskMetrics.outputMetrics.isUpdated) {
+    val outputMetrics: JValue =
       ("Bytes Written" -> taskMetrics.outputMetrics.bytesWritten) ~
         ("Records Written" -> taskMetrics.outputMetrics.recordsWritten)
-    } else {
-      JNothing
-    }
     val updatedBlocks =
       JArray(taskMetrics.updatedBlockStatuses.toList.map { case (id, status) =>
         ("Block ID" -> id.toString) ~
-        ("Status" -> blockStatusToJson(status))
+          ("Status" -> blockStatusToJson(status))
       })
     ("Executor Deserialize Time" -> taskMetrics.executorDeserializeTime) ~
     ("Executor Run Time" -> taskMetrics.executorRunTime) ~
