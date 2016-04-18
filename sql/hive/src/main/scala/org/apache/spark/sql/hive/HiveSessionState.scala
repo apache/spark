@@ -33,11 +33,11 @@ import org.apache.spark.sql.internal.{SessionState, SQLConf}
 /**
  * A class that holds all session-specific state in a given [[HiveContext]].
  */
-// TODO(andrew): once we have SparkSession just pass that in here instead of the context
-private[hive] class HiveSessionState(ctx: SQLContext, sharedState: HiveSharedState)
-  extends SessionState(ctx) {
+private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) {
 
   self =>
+
+  private val sharedState: HiveSharedState = ctx.sharedState.asInstanceOf[HiveSharedState]
 
   /**
    * A Hive client used for execution.
@@ -54,7 +54,7 @@ private[hive] class HiveSessionState(ctx: SQLContext, sharedState: HiveSharedSta
    */
   val substitutor = new VariableSubstitution
 
-  override lazy val conf: SQLConf = new SQLConf {
+  override def newConf(): SQLConf = new SQLConf {
     override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
   }
 

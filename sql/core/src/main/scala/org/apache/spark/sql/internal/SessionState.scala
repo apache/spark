@@ -34,10 +34,19 @@ private[sql] class SessionState(ctx: SQLContext) {
   // Note: These are all lazy vals because they depend on each other (e.g. conf) and we
   // want subclasses to override some of the fields. Otherwise, we would get a lot of NPEs.
 
+  protected def newConf(): SQLConf = new SQLConf
+
   /**
    * SQL-specific key-value configurations.
    */
-  lazy val conf = new SQLConf
+  final lazy val conf: SQLConf = {
+    val _conf = newConf()
+    // Extract `spark.sql.*` entries and put it in our SQLConf.
+    // Subclasses may additionally set these entries in other confs.
+    _conf.setConf(SQLContext.getSQLProperties(ctx.sparkContext.getConf))
+    _conf
+  }
+
 
   lazy val experimentalMethods = new ExperimentalMethods
 
@@ -102,4 +111,3 @@ private[sql] class SessionState(ctx: SQLContext) {
    */
   lazy val continuousQueryManager: ContinuousQueryManager = new ContinuousQueryManager(ctx)
 }
-

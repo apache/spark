@@ -63,14 +63,18 @@ import org.apache.spark.util.Utils
  * @since 1.0.0
  */
 class SQLContext private[sql](
-    @transient protected[sql] val sharedState: SharedState,
+    @transient private val sparkSession: SparkSession,
     val isRootContext: Boolean)
   extends Logging with Serializable {
 
   self =>
 
+  private[sql] def this(sparkSession: SparkSession) = {
+    this(sparkSession, true)
+  }
+
   def this(sc: SparkContext) = {
-    this(new SharedState(sc), true)
+    this(new SparkSession(sc))
   }
 
   def this(sparkContext: JavaSparkContext) = this(sparkContext.sc)
@@ -97,11 +101,14 @@ class SQLContext private[sql](
     }
   }
 
-  def sparkContext: SparkContext = sharedState.sparkContext
-
+  protected[sql] def sessionState: SessionState = sparkSession.sessionState
+  protected[sql] def sharedState: SharedState = sparkSession.sharedState
+  protected[sql] def conf: SQLConf = sessionState.conf
   protected[sql] def cacheManager: CacheManager = sharedState.cacheManager
   protected[sql] def listener: SQLListener = sharedState.listener
   protected[sql] def externalCatalog: ExternalCatalog = sharedState.externalCatalog
+
+  def sparkContext: SparkContext = sharedState.sparkContext
 
   /**
    * Returns a [[SQLContext]] as new session, with separated SQL configurations, temporary
@@ -110,14 +117,9 @@ class SQLContext private[sql](
    *
    * @since 1.6.0
    */
-  def newSession(): SQLContext = new SQLContext(sharedState, isRootContext = false)
-
-  /**
-   * Per-session state, e.g. configuration, functions, temporary tables etc.
-   */
-  @transient
-  protected[sql] lazy val sessionState: SessionState = new SessionState(self)
-  protected[spark] def conf: SQLConf = sessionState.conf
+  def newSession(): SQLContext = {
+    new SQLContext(sparkSession.newSession(), isRootContext = false)
+  }
 
   /**
    * An interface to register custom [[org.apache.spark.sql.util.QueryExecutionListener]]s
@@ -185,12 +187,6 @@ class SQLContext private[sql](
    * @since 1.0.0
    */
   def getAllConfs: immutable.Map[String, String] = conf.getAllConfs
-
-  // Extract `spark.sql.*` entries and put it in our SQLConf.
-  // Subclasses may additionally set these entries in other confs.
-  SQLContext.getSQLProperties(sparkContext.getConf).asScala.foreach { case (k, v) =>
-    setConf(k, v)
-  }
 
   protected[sql] def executePlan(plan: LogicalPlan) = new QueryExecution(this, plan)
 

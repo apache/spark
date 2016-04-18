@@ -32,16 +32,14 @@ import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions.ExpressionInfo
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.CacheManager
 import org.apache.spark.sql.execution.command.CacheTableCommand
-import org.apache.spark.sql.execution.ui.SQLListener
 import org.apache.spark.sql.hive._
-import org.apache.spark.sql.hive.client.{HiveClient, HiveClientImpl}
+import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.hive.execution.HiveNativeCommand
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.{ShutdownHookManager, Utils}
@@ -72,12 +70,12 @@ object TestHive
  * test cases that rely on TestHive must be serialized.
  */
 class TestHiveContext private[hive](
-    testHiveSharedState: TestHiveSharedState,
+    sparkSession: SparkSession,
     val warehousePath: File,
     val scratchDirPath: File,
     metastoreTemporaryConf: Map[String, String],
     isRootContext: Boolean)
-  extends HiveContext(testHiveSharedState, isRootContext) { self =>
+  extends HiveContext(sparkSession, isRootContext) { self =>
 
   private def this(
       sc: SparkContext,
@@ -85,7 +83,7 @@ class TestHiveContext private[hive](
       scratchDirPath: File,
       metastoreTemporaryConf: Map[String, String]) {
     this(
-      new TestHiveSharedState(sc, warehousePath, scratchDirPath, metastoreTemporaryConf),
+      new TestHiveSparkSession(sc, warehousePath, scratchDirPath, metastoreTemporaryConf),
       warehousePath,
       scratchDirPath,
       metastoreTemporaryConf,
@@ -102,11 +100,19 @@ class TestHiveContext private[hive](
 
   override def newSession(): HiveContext = {
     new TestHiveContext(
-      testHiveSharedState,
+      sparkSession.newSession(),
       warehousePath,
       scratchDirPath,
       metastoreTemporaryConf,
       isRootContext = false)
+  }
+
+  protected[sql] override def sessionState = {
+    sparkSession.sessionState.asInstanceOf[TestHiveSessionState]
+  }
+
+  protected[sql] override def sharedState = {
+    sparkSession.sharedState.asInstanceOf[TestHiveSharedState]
   }
 
   // By clearing the port we force Spark to pick a new one.  This allows us to rerun tests
@@ -140,32 +146,6 @@ class TestHiveContext private[hive](
 
   override def executePlan(plan: LogicalPlan): this.QueryExecution =
     new this.QueryExecution(plan)
-
-  @transient
-  protected[sql] override lazy val sessionState = new HiveSessionState(this, testHiveSharedState) {
-    override lazy val conf: SQLConf = {
-      new SQLConf {
-        clear()
-        override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
-        override def clear(): Unit = {
-          super.clear()
-          TestHiveContext.overrideConfs.map {
-            case (key, value) => setConfString(key, value)
-          }
-        }
-      }
-    }
-
-    override lazy val functionRegistry = {
-      // We use TestHiveFunctionRegistry at here to track functions that have been explicitly
-      // unregistered (through TestHiveFunctionRegistry.unregisterFunction method).
-      val fr = new TestHiveFunctionRegistry
-      org.apache.spark.sql.catalyst.analysis.FunctionRegistry.expressions.foreach {
-        case (name, (info, builder)) => fr.registerFunction(name, info, builder)
-      }
-      fr
-    }
-  }
 
   /**
    * Returns the value of specified environmental variable as a [[java.io.File]] after checking
@@ -489,6 +469,24 @@ class TestHiveContext private[hive](
 
 }
 
+
+private[hive] class TestHiveSparkSession(
+    sc: SparkContext,
+    warehousePath: File,
+    scratchDirPath: File,
+    metastoreTemporaryConf: Map[String, String])
+  extends SparkSession(sc) {
+
+  self =>
+
+  override lazy val sharedState =
+    new TestHiveSharedState(sc, warehousePath, scratchDirPath, metastoreTemporaryConf)
+
+  override lazy val sessionState =
+    new TestHiveSessionState(new SQLContext(self))
+}
+
+
 private[hive] class TestHiveFunctionRegistry extends SimpleFunctionRegistry {
 
   private val removedFunctions =
@@ -516,6 +514,35 @@ private[hive] class TestHiveSharedState(
   override lazy val metadataHive: HiveClient = {
     TestHiveContext.newClientForMetadata(
       sc.conf, sc.hadoopConfiguration, warehousePath, scratchDirPath, metastoreTemporaryConf)
+  }
+
+}
+
+
+protected[hive] class TestHiveSessionState(sqlContext: SQLContext)
+  extends HiveSessionState(sqlContext) {
+
+  override def newConf(): SQLConf = {
+    new SQLConf {
+      clear()
+      override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
+      override def clear(): Unit = {
+        super.clear()
+        TestHiveContext.overrideConfs.map {
+          case (key, value) => setConfString(key, value)
+        }
+      }
+    }
+  }
+
+  override lazy val functionRegistry = {
+    // We use TestHiveFunctionRegistry at here to track functions that have been explicitly
+    // unregistered (through TestHiveFunctionRegistry.unregisterFunction method).
+    val fr = new TestHiveFunctionRegistry
+    org.apache.spark.sql.catalyst.analysis.FunctionRegistry.expressions.foreach {
+      case (name, (info, builder)) => fr.registerFunction(name, info, builder)
+    }
+    fr
   }
 
 }

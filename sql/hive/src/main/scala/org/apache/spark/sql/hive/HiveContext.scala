@@ -55,14 +55,14 @@ import org.apache.spark.util.Utils
  * @since 1.0.0
  */
 class HiveContext private[hive](
-    @transient protected[hive] val hiveSharedState: HiveSharedState,
-    override val isRootContext: Boolean)
-  extends SQLContext(hiveSharedState, isRootContext) with Logging {
+    @transient private val sparkSession: SparkSession,
+    isRootContext: Boolean)
+  extends SQLContext(sparkSession, isRootContext) with Logging {
 
   self =>
 
   def this(sc: SparkContext) = {
-    this(new HiveSharedState(sc), true)
+    this(new SparkSession(sc), true)
   }
 
   def this(sc: JavaSparkContext) = this(sc.sc)
@@ -75,13 +75,18 @@ class HiveContext private[hive](
    * and Hive client (both of execution and metadata) with existing HiveContext.
    */
   override def newSession(): HiveContext = {
-    new HiveContext(hiveSharedState, isRootContext = false)
+    new HiveContext(sparkSession.newSession(), isRootContext = false)
   }
 
-  @transient
-  protected[sql] override lazy val sessionState = new HiveSessionState(self, hiveSharedState)
+  protected[sql] override def sessionState = {
+    sparkSession.sessionState.asInstanceOf[HiveSessionState]
+  }
 
-  protected[hive] def hiveCatalog: HiveExternalCatalog = hiveSharedState.externalCatalog
+  protected[sql] override def sharedState = {
+    sparkSession.sharedState.asInstanceOf[HiveSharedState]
+  }
+
+  protected[hive] def hiveCatalog: HiveExternalCatalog = sharedState.externalCatalog
   protected[hive] def executionHive: HiveClientImpl = sessionState.executionHive
   protected[hive] def metadataHive: HiveClient = sessionState.metadataHive
   protected[hive] def hiveconf: HiveConf = sessionState.hiveconf
