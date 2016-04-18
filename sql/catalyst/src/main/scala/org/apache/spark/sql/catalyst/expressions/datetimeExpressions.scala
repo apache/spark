@@ -484,7 +484,8 @@ case class FromUnixTime(sec: Expression, format: Expression)
   override def inputTypes: Seq[AbstractDataType] = Seq(LongType, StringType)
 
   private lazy val constFormat: UTF8String = right.eval().asInstanceOf[UTF8String]
-  private var formatter: SimpleDateFormat = _
+  private lazy val formatter: SimpleDateFormat =
+    Try(new SimpleDateFormat(constFormat.toString)).getOrElse(null)
 
   override def eval(input: InternalRow): Any = {
     val time = left.eval(input)
@@ -492,12 +493,9 @@ case class FromUnixTime(sec: Expression, format: Expression)
       null
     } else {
       if (format.foldable) {
-        if (constFormat == null) {
+        if (constFormat == null || formatter == null) {
           null
         } else {
-          if (formatter == null) {
-            formatter = Try(new SimpleDateFormat(constFormat.toString)).getOrElse(null)
-          }
           Try(UTF8String.fromString(formatter.format(
             new java.util.Date(time.asInstanceOf[Long] * 1000L)))).getOrElse(null)
         }
