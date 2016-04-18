@@ -442,6 +442,14 @@ object SQLConf {
     .stringConf
     .createOptional
 
+  val UNSUPPORTED_OPERATION_CHECK_ENABLED =
+    SQLConfigBuilder("spark.sql.streaming.unsupportedOperationCheck")
+      .internal()
+      .doc("When true, the logical plan for continuous query will be checked for unsupported" +
+        " operations.")
+      .booleanConf
+      .createWithDefault(true)
+
   // TODO: This is still WIP and shouldn't be turned on without extensive test coverage
   val COLUMNAR_AGGREGATE_MAP_ENABLED = SQLConfigBuilder("spark.sql.codegen.aggregate.map.enabled")
     .internal()

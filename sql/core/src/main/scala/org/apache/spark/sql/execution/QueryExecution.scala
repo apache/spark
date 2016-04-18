@@ -20,9 +20,11 @@ package org.apache.spark.sql.execution
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReuseExchange}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * The primary workflow for executing relational queries using Spark.  Designed to allow easy
@@ -43,10 +45,17 @@ class QueryExecution(val sqlContext: SQLContext, val logical: LogicalPlan) {
       throw ae
   }
 
+  def assertSupported(): Unit = {
+    if (sqlContext.conf.getConf(SQLConf.UNSUPPORTED_OPERATION_CHECK_ENABLED)) {
+      UnsupportedOperationChecker.checkForBatch(analyzed)
+    }
+  }
+
   lazy val analyzed: LogicalPlan = sqlContext.sessionState.analyzer.execute(logical)
 
   lazy val withCachedData: LogicalPlan = {
     assertAnalyzed()
+    assertSupported()
     sqlContext.cacheManager.useCachedData(analyzed)
   }
 
