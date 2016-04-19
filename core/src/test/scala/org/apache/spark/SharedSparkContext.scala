@@ -27,7 +27,7 @@ trait SharedSparkContext extends BeforeAndAfterAll { self: Suite =>
 
   def sc: SparkContext = _sc
 
-  var conf = new SparkConf(false)
+  var conf = new SparkConf(true)
 
   override def beforeAll() {
     super.beforeAll()
