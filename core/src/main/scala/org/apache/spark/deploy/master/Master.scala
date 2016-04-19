@@ -77,6 +77,7 @@ private[deploy] class Master(
   val idToApp = new HashMap[String, ApplicationInfo]
   private val waitingApps = new ArrayBuffer[ApplicationInfo]
   val apps = new HashSet[ApplicationInfo]
+  private val waitingAppsWhileRecovering = new ArrayBuffer[ApplicationInfo]
 
   private val idToWorker = new HashMap[String, WorkerInfo]
   private val addressToWorker = new HashMap[RpcAddress, WorkerInfo]
@@ -571,6 +572,9 @@ private[deploy] class Master(
     }
 
     state = RecoveryState.ALIVE
+    // Re-register the apps which were omitted during the Recovering phase.
+    waitingAppsWhileRecovering.foreach(registerApplication)
+    waitingAppsWhileRecovering.clear()
     schedule()
     logInfo("Recovery complete - resuming operations!")
   }
@@ -818,7 +822,13 @@ private[deploy] class Master(
   private def registerApplication(app: ApplicationInfo): Unit = {
     val appAddress = app.driver.address
     if (addressToApp.contains(appAddress)) {
-      logInfo("Attempted to re-register application at same address: " + appAddress)
+      if (state == RecoveryState.RECOVERING) {
+        logInfo("Attempted to re-register application at same address: " + appAddress + " in the " +
+          "Recovering Mode")
+        waitingAppsWhileRecovering += app
+      } else {
+        logInfo("Attempted to re-register application at same address: " + appAddress)
+      }
       return
     }
 
