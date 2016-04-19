@@ -201,7 +201,9 @@ abstract class QueryTest extends PlanTest {
     val logicalPlan = df.queryExecution.analyzed
     // bypass some cases that we can't handle currently.
     logicalPlan.transform {
-      case _: ObjectOperator => return
+      case _: ObjectConsumer => return
+      case _: ObjectProducer => return
+      case _: AppendColumns => return
       case _: LogicalRelation => return
       case _: MemoryPlan => return
     }.transformAllExpressions {
