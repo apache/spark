@@ -110,13 +110,17 @@ class CodegenContext {
   }
 
   def declareMutableStates(): String = {
-    mutableStates.map { case (javaType, variableName, _) =>
+    // It's possible that we add same mutable state twice, e.g. the `mergeExpressions` in
+    // `TypedAggregateExpression`, we should call `distinct` here to remove the duplicated ones.
+    mutableStates.distinct.map { case (javaType, variableName, _) =>
       s"private $javaType $variableName;"
     }.mkString("\n")
   }
 
   def initMutableStates(): String = {
-    mutableStates.map(_._3).mkString("\n")
+    // It's possible that we add same mutable state twice, e.g. the `mergeExpressions` in
+    // `TypedAggregateExpression`, we should call `distinct` here to remove the duplicated ones.
+    mutableStates.distinct.map(_._3).mkString("\n")
   }
 
   /**
@@ -519,14 +523,14 @@ class CodegenContext {
     // Get all the expressions that appear at least twice and set up the state for subexpression
     // elimination.
     val commonExprs = equivalentExpressions.getAllEquivalentExprs.filter(_.size > 1)
-    commonExprs.foreach(e => {
+    commonExprs.foreach { e =>
       val expr = e.head
       val fnName = freshName("evalExpr")
       val isNull = s"${fnName}IsNull"
       val value = s"${fnName}Value"
 
       // Generate the code for this expression tree and wrap it in a function.
-      val code = expr.gen(this)
+      val code = expr.genCode(this)
       val fn =
         s"""
            |private void $fnName(InternalRow $INPUT_ROW) {
@@ -561,7 +565,7 @@ class CodegenContext {
       subexprFunctions += s"$fnName($INPUT_ROW);"
       val state = SubExprEliminationState(isNull, value)
       e.foreach(subExprEliminationExprs.put(_, state))
-    })
+    }
   }
 
   /**
@@ -572,7 +576,7 @@ class CodegenContext {
   def generateExpressions(expressions: Seq[Expression],
       doSubexpressionElimination: Boolean = false): Seq[ExprCode] = {
     if (doSubexpressionElimination) subexpressionElimination(expressions)
-    expressions.map(e => e.gen(this))
+    expressions.map(e => e.genCode(this))
   }
 }
 

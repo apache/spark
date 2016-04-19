@@ -77,6 +77,55 @@ test_that("glm and predict", {
   expect_equal(length(predict(lm(y ~ x))), 15)
 })
 
+test_that("glm summary", {
+  # gaussian family
+  training <- suppressWarnings(createDataFrame(sqlContext, iris))
+  stats <- summary(glm(Sepal_Width ~ Sepal_Length + Species, data = training))
+
+  rStats <- summary(glm(Sepal.Width ~ Sepal.Length + Species, data = iris))
+
+  coefs <- unlist(stats$coefficients)
+  rCoefs <- unlist(rStats$coefficients)
+  expect_true(all(abs(rCoefs - coefs) < 1e-4))
+  expect_true(all(
+    rownames(stats$coefficients) ==
+    c("(Intercept)", "Sepal_Length", "Species_versicolor", "Species_virginica")))
+  expect_equal(stats$dispersion, rStats$dispersion)
+  expect_equal(stats$null.deviance, rStats$null.deviance)
+  expect_equal(stats$deviance, rStats$deviance)
+  expect_equal(stats$df.null, rStats$df.null)
+  expect_equal(stats$df.residual, rStats$df.residual)
+  expect_equal(stats$aic, rStats$aic)
+
+  # binomial family
+  df <- suppressWarnings(createDataFrame(sqlContext, iris))
+  training <- df[df$Species %in% c("versicolor", "virginica"), ]
+  stats <- summary(glm(Species ~ Sepal_Length + Sepal_Width, data = training,
+    family = binomial(link = "logit")))
+
+  rTraining <- iris[iris$Species %in% c("versicolor", "virginica"), ]
+  rStats <- summary(glm(Species ~ Sepal.Length + Sepal.Width, data = rTraining,
+    family = binomial(link = "logit")))
+
+  coefs <- unlist(stats$coefficients)
+  rCoefs <- unlist(rStats$coefficients)
+  expect_true(all(abs(rCoefs - coefs) < 1e-4))
+  expect_true(all(
+    rownames(stats$coefficients) ==
+    c("(Intercept)", "Sepal_Length", "Sepal_Width")))
+  expect_equal(stats$dispersion, rStats$dispersion)
+  expect_equal(stats$null.deviance, rStats$null.deviance)
+  expect_equal(stats$deviance, rStats$deviance)
+  expect_equal(stats$df.null, rStats$df.null)
+  expect_equal(stats$df.residual, rStats$df.residual)
+  expect_equal(stats$aic, rStats$aic)
+
+  # Test summary works on base GLM models
+  baseModel <- stats::glm(Sepal.Width ~ Sepal.Length + Species, data = iris)
+  baseSummary <- summary(baseModel)
+  expect_true(abs(baseSummary$deviance - 12.19313) < 1e-4)
+})
+
 test_that("kmeans", {
   newIris <- iris
   newIris$Species <- NULL

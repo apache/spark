@@ -75,7 +75,7 @@ case class HiveTableScan(
   // Create a local copy of hiveconf,so that scan specific modifications should not impact
   // other queries
   @transient
-  private[this] val hiveExtraConf = new HiveConf(context.hiveconf)
+  private[this] val hiveExtraConf = new HiveConf(context.sessionState.hiveconf)
 
   // append columns ids and names before broadcast
   addColumnMetadataToConf(hiveExtraConf)
