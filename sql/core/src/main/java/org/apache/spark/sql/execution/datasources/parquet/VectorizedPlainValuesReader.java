@@ -17,8 +17,6 @@
 package org.apache.spark.sql.execution.datasources.parquet;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 
 import org.apache.spark.sql.execution.vectorized.ColumnVector;
 import org.apache.spark.unsafe.Platform;
@@ -30,12 +28,9 @@ import org.apache.parquet.io.api.Binary;
  * An implementation of the Parquet PLAIN decoder that supports the vectorized interface.
  */
 public class VectorizedPlainValuesReader extends ValuesReader implements VectorizedValuesReader {
-  private byte[] buffer;
-  private int offset;
+  protected byte[] buffer;
+  protected int offset;
   private int bitOffset; // Only used for booleans.
-  private ByteBuffer byteBuffer; // used to wrap the byte array buffer
-  
-  private final static boolean bigEndianPlatform = ByteOrder.nativeOrder().equals(ByteOrder.BIG_ENDIAN);
 
   public VectorizedPlainValuesReader() {
   }
@@ -44,9 +39,6 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
   public void initFromPage(int valueCount, byte[] bytes, int offset) throws IOException {
     this.buffer = bytes;
     this.offset = offset + Platform.BYTE_ARRAY_OFFSET;
-    if (bigEndianPlatform) {
-      byteBuffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN);
-    }
   }
 
   @Override
@@ -55,7 +47,7 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
   }
 
   @Override
-  public final void readBooleans(int total, ColumnVector c, int rowId) {
+  public void readBooleans(int total, ColumnVector c, int rowId) {
     // TODO: properly vectorize this
     for (int i = 0; i < total; i++) {
       c.putBoolean(rowId + i, readBoolean());
@@ -63,31 +55,31 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
   }
 
   @Override
-  public final void readIntegers(int total, ColumnVector c, int rowId) {
+  public void readIntegers(int total, ColumnVector c, int rowId) {
     c.putIntsLittleEndian(rowId, total, buffer, offset - Platform.BYTE_ARRAY_OFFSET);
     offset += 4 * total;
   }
 
   @Override
-  public final void readLongs(int total, ColumnVector c, int rowId) {
+  public void readLongs(int total, ColumnVector c, int rowId) {
     c.putLongsLittleEndian(rowId, total, buffer, offset - Platform.BYTE_ARRAY_OFFSET);
     offset += 8 * total;
   }
 
   @Override
-  public final void readFloats(int total, ColumnVector c, int rowId) {
+  public void readFloats(int total, ColumnVector c, int rowId) {
     c.putFloats(rowId, total, buffer, offset - Platform.BYTE_ARRAY_OFFSET);
     offset += 4 * total;
   }
 
   @Override
-  public final void readDoubles(int total, ColumnVector c, int rowId) {
+  public void readDoubles(int total, ColumnVector c, int rowId) {
     c.putDoubles(rowId, total, buffer, offset - Platform.BYTE_ARRAY_OFFSET);
     offset += 8 * total;
   }
 
   @Override
-  public final void readBytes(int total, ColumnVector c, int rowId) {
+  public void readBytes(int total, ColumnVector c, int rowId) {
     for (int i = 0; i < total; i++) {
       // Bytes are stored as a 4-byte little endian int. Just read the first byte.
       // TODO: consider pushing this in ColumnVector by adding a readBytes with a stride.
@@ -97,7 +89,7 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
   }
 
   @Override
-  public final boolean readBoolean() {
+  public boolean readBoolean() {
     byte b = Platform.getByte(buffer, offset);
     boolean v = (b & (1 << bitOffset)) != 0;
     bitOffset += 1;
@@ -109,56 +101,40 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
   }
 
   @Override
-  public final int readInteger() {
+  public int readInteger() {
     int v = Platform.getInt(buffer, offset);
-    if (bigEndianPlatform) {
-      v = java.lang.Integer.reverseBytes(v);
-    }
     offset += 4;
     return v;
   }
 
   @Override
-  public final long readLong() {
+  public long readLong() {
     long v = Platform.getLong(buffer, offset);
-    if (bigEndianPlatform) {
-      v = java.lang.Long.reverseBytes(v);
-    }
     offset += 8;
     return v;
   }
 
   @Override
-  public final byte readByte() {
+  public byte readByte() {
     return (byte)readInteger();
   }
 
   @Override
-  public final float readFloat() {
-    float v;
-    if (!bigEndianPlatform) {
-      v = Platform.getFloat(buffer, offset);
-    } else {
-      v = byteBuffer.getFloat(offset - Platform.BYTE_ARRAY_OFFSET);
-    }
+  public float readFloat() {
+    float v = Platform.getFloat(buffer, offset);
     offset += 4;
     return v;
   }
 
   @Override
-  public final double readDouble() {
-    double v;
-    if (!bigEndianPlatform) {
-      v = Platform.getDouble(buffer, offset);
-    } else {
-      v = byteBuffer.getDouble(offset - Platform.BYTE_ARRAY_OFFSET);
-    }
+  public double readDouble() {
+    double v = Platform.getDouble(buffer, offset);
     offset += 8;
     return v;
   }
 
   @Override
-  public final void readBinary(int total, ColumnVector v, int rowId) {
+  public void readBinary(int total, ColumnVector v, int rowId) {
     for (int i = 0; i < total; i++) {
       int len = readInteger();
       int start = offset;
@@ -168,7 +144,7 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
   }
 
   @Override
-  public final Binary readBinary(int len) {
+  public Binary readBinary(int len) {
     Binary result = Binary.fromByteArray(buffer, offset - Platform.BYTE_ARRAY_OFFSET, len);
     offset += len;
     return result;

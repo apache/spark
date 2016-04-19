@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.parquet;
 
 import java.io.IOException;
+import java.nio.ByteOrder;
 
 import org.apache.commons.lang.NotImplementedException;
 import org.apache.parquet.bytes.BytesUtils;
@@ -90,6 +91,8 @@ public class VectorizedColumnReader {
 
   private final PageReader pageReader;
   private final ColumnDescriptor descriptor;
+
+  private final static boolean bigEndianPlatform = ByteOrder.nativeOrder().equals(ByteOrder.BIG_ENDIAN);
 
   public VectorizedColumnReader(ColumnDescriptor descriptor, PageReader pageReader)
       throws IOException {
@@ -466,6 +469,10 @@ public class VectorizedColumnReader {
     } else {
       if (dataEncoding != Encoding.PLAIN) {
         throw new NotImplementedException("Unsupported encoding: " + dataEncoding);
+      }
+      
+      if (bigEndianPlatform) {
+        this.dataColumn = new VectorizedPlainValuesReaderBE();
       }
       this.dataColumn = new VectorizedPlainValuesReader();
       this.useDictionary = false;

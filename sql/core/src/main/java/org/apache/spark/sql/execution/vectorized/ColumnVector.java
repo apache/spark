@@ -18,6 +18,7 @@ package org.apache.spark.sql.execution.vectorized;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.nio.ByteOrder;
 
 import org.apache.commons.lang.NotImplementedException;
 import org.apache.parquet.column.Dictionary;
@@ -57,6 +58,9 @@ import org.apache.spark.unsafe.types.UTF8String;
  * ColumnVectors are intended to be reused.
  */
 public abstract class ColumnVector implements AutoCloseable {
+
+  private final static boolean bigEndianPlatform = ByteOrder.nativeOrder().equals(ByteOrder.BIG_ENDIAN);
+  
   /**
    * Allocates a column to store elements of `type` on or off heap.
    * Capacity is the initial capacity of the vector and it will grow as necessary. Capacity is
@@ -64,9 +68,17 @@ public abstract class ColumnVector implements AutoCloseable {
    */
   public static ColumnVector allocate(int capacity, DataType type, MemoryMode mode) {
     if (mode == MemoryMode.OFF_HEAP) {
-      return new OffHeapColumnVector(capacity, type);
+      if (bigEndianPlatform) {
+        return new OffHeapColumnVectorBE(capacity, type);
+      } else {
+        return new OffHeapColumnVector(capacity, type);
+      }
     } else {
-      return new OnHeapColumnVector(capacity, type);
+      if (bigEndianPlatform) {
+        return new OnHeapColumnVectorBE(capacity, type);
+      } else {
+        return new OnHeapColumnVector(capacity, type);
+      }
     }
   }
 

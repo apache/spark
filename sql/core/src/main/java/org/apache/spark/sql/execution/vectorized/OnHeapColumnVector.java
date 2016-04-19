@@ -16,8 +16,6 @@
  */
 package org.apache.spark.sql.execution.vectorized;
 
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 import java.util.Arrays;
 
 import org.apache.spark.memory.MemoryMode;
@@ -28,10 +26,7 @@ import org.apache.spark.unsafe.Platform;
  * A column backed by an in memory JVM array. This stores the NULLs as a byte per value
  * and a java array for the values.
  */
-public final class OnHeapColumnVector extends ColumnVector {
-  
-  private final static boolean bigEndianPlatform = ByteOrder.nativeOrder().equals(ByteOrder.BIG_ENDIAN);
-  
+public class OnHeapColumnVector extends ColumnVector {
   // The data stored in these arrays need to maintain binary compatible. We can
   // directly pass this buffer to external components.
 
@@ -41,10 +36,10 @@ public final class OnHeapColumnVector extends ColumnVector {
   // Array for each type. Only 1 is populated for any type.
   private byte[] byteData;
   private short[] shortData;
-  private int[] intData;
-  private long[] longData;
-  private float[] floatData;
-  private double[] doubleData;
+  protected int[] intData;
+  protected long[] longData;
+  protected float[] floatData;
+  protected double[] doubleData;
 
   // Only set if type is Array.
   private int[] arrayLengths;
@@ -216,11 +211,10 @@ public final class OnHeapColumnVector extends ColumnVector {
   @Override
   public void putIntsLittleEndian(int rowId, int count, byte[] src, int srcIndex) {
     int srcOffset = srcIndex + Platform.BYTE_ARRAY_OFFSET;
-    for (int i = 0; i < count; ++i, srcOffset += 4) {
+    for (int i = 0; i < count; ++i) {
       intData[i + rowId] = Platform.getInt(src, srcOffset);
-      if (bigEndianPlatform) {
-        intData[i + rowId] = java.lang.Integer.reverseBytes(intData[i + rowId]);
-      }
+      srcIndex += 4;
+      srcOffset += 4;
     }
   }
 
@@ -257,11 +251,10 @@ public final class OnHeapColumnVector extends ColumnVector {
   @Override
   public void putLongsLittleEndian(int rowId, int count, byte[] src, int srcIndex) {
     int srcOffset = srcIndex + Platform.BYTE_ARRAY_OFFSET;
-    for (int i = 0; i < count; ++i, srcOffset += 8) {
+    for (int i = 0; i < count; ++i) {
       longData[i + rowId] = Platform.getLong(src, srcOffset);
-      if (bigEndianPlatform) {
-        longData[i + rowId] = java.lang.Long.reverseBytes(longData[i + rowId]);
-      }
+      srcIndex += 8;
+      srcOffset += 8;
     }
   }
 
@@ -293,15 +286,8 @@ public final class OnHeapColumnVector extends ColumnVector {
 
   @Override
   public void putFloats(int rowId, int count, byte[] src, int srcIndex) {
-    if (!bigEndianPlatform) {
-      Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex, floatData,
-          Platform.DOUBLE_ARRAY_OFFSET + rowId * 4, count * 4);
-    } else {
-      ByteBuffer bb = ByteBuffer.wrap(src).order(ByteOrder.LITTLE_ENDIAN);
-      for (int i = 0; i < count; ++i) {
-        floatData[i + rowId] = bb.getFloat(srcIndex + (4 * i));
-      }
-    }
+    Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex,
+        floatData, Platform.DOUBLE_ARRAY_OFFSET + rowId * 4, count * 4);
   }
 
   @Override
@@ -334,15 +320,8 @@ public final class OnHeapColumnVector extends ColumnVector {
 
   @Override
   public void putDoubles(int rowId, int count, byte[] src, int srcIndex) {
-    if (!bigEndianPlatform) {
-      Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex, doubleData,
-          Platform.DOUBLE_ARRAY_OFFSET + rowId * 8, count * 8);
-    } else {
-      ByteBuffer bb = ByteBuffer.wrap(src).order(ByteOrder.LITTLE_ENDIAN);
-      for (int i = 0; i < count; ++i) {
-        doubleData[i + rowId] = bb.getDouble(srcIndex + (8 * i));
-      }
-    }
+    Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex, doubleData,
+        Platform.DOUBLE_ARRAY_OFFSET + rowId * 8, count * 8);
   }
 
   @Override
