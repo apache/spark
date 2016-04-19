@@ -73,6 +73,8 @@ class EquivalentExpressions {
     //   1. CodegenFallback: it's children will not be used to generate code (call eval() instead)
     //   2. ReferenceToExpressions: it's kind of an explicit sub-expression elimination.
     val shouldRecurse = root match {
+      // TODO: some expressions implements `CodegenFallback` but can still do codegen,
+      // e.g. `CaseWhen`, we should support them.
       case _: CodegenFallback => false
       case _: ReferenceToExpressions => false
       case _ => true
