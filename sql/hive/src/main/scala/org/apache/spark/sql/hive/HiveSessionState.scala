@@ -153,13 +153,15 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
   //  Helper methods, partially leftover from pre-2.0 days
   // ------------------------------------------------------
 
-  override def executePlan(plan: LogicalPlan) = new HiveQueryExecution(ctx, plan)
+  override def executePlan(plan: LogicalPlan): HiveQueryExecution = {
+    new HiveQueryExecution(ctx, plan)
+  }
 
   /**
    * Overrides default Hive configurations to avoid breaking changes to Spark SQL users.
    *  - allow SQL11 keywords to be used as identifiers
    */
-  private[sql] def setDefaultOverrideConfs(): Unit = {
+  def setDefaultOverrideConfs(): Unit = {
     setConf(ConfVars.HIVE_SUPPORT_SQL11_RESERVED_KEYWORDS.varname, "false")
   }
 

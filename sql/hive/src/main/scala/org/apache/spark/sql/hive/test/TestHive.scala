@@ -245,7 +245,8 @@ class TestHiveContext private[hive](
       }
     }),
     TestTable("srcpart1", () => {
-      sessionState.runNativeSql("CREATE TABLE srcpart1 (key INT, value STRING) PARTITIONED BY (ds STRING, hr INT)")
+      sessionState.runNativeSql(
+        "CREATE TABLE srcpart1 (key INT, value STRING) PARTITIONED BY (ds STRING, hr INT)")
       for (ds <- Seq("2008-04-08", "2008-04-09"); hr <- 11 to 12) {
         sessionState.runNativeSql(
           s"""LOAD DATA LOCAL INPATH '${getHiveFile("data/files/kv1.txt")}'
