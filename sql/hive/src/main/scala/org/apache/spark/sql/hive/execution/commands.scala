@@ -45,8 +45,7 @@ private[hive]
 case class AnalyzeTable(tableName: String) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
-    val sessionState = sqlContext.sessionState
-    val hiveContext = sqlContext.asInstanceOf[HiveContext]
+    val sessionState = sqlContext.sessionState.asInstanceOf[HiveSessionState]
     val tableIdent = sessionState.sqlParser.parseTableIdentifier(tableName)
     val relation = EliminateSubqueryAliases(sessionState.catalog.lookupRelation(tableIdent))
 
@@ -60,7 +59,7 @@ case class AnalyzeTable(tableName: String) extends RunnableCommand {
         // Can we use fs.getContentSummary in future?
         // Seems fs.getContentSummary returns wrong table size on Jenkins. So we use
         // countFileSize to count the table size.
-        val stagingDir = hiveContext.sessionState.metadataHive.getConf(
+        val stagingDir = sessionState.metadataHive.getConf(
           HiveConf.ConfVars.STAGINGDIR.varname,
           HiveConf.ConfVars.STAGINGDIR.defaultStrVal)
 
@@ -106,7 +105,7 @@ case class AnalyzeTable(tableName: String) extends RunnableCommand {
             .map(_.toLong)
             .getOrElse(0L)
         val newTotalSize =
-          getFileSizeForTable(hiveContext.sessionState.hiveconf, relation.hiveQlTable)
+          getFileSizeForTable(sessionState.hiveconf, relation.hiveQlTable)
         // Update the Hive metastore if the total size of the table is different than the size
         // recorded in the Hive metastore.
         // This logic is based on org.apache.hadoop.hive.ql.exec.StatsTask.aggregateStats().
@@ -144,9 +143,8 @@ private[hive]
 case class AddFile(path: String) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
-    val hiveContext = sqlContext.asInstanceOf[HiveContext]
-    hiveContext.sessionState.runNativeSql(s"ADD FILE $path")
-    hiveContext.sparkContext.addFile(path)
+    sqlContext.sessionState.runNativeSql(s"ADD FILE $path")
+    sqlContext.sparkContext.addFile(path)
     Seq.empty[Row]
   }
 }
