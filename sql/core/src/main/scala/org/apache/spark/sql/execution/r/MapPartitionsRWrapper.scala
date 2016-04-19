@@ -25,7 +25,7 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.Row
 
 /**
- * Physical plan node that applies the given R function to each partition.
+ * A function wrapper that applies the given R function to each partition.
  */
 private[sql] case class MapPartitionsRWrapper(
    func: Array[Byte],
