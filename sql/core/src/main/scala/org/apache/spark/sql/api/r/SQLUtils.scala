@@ -145,7 +145,7 @@ private[sql] object SQLUtils {
       packageNames: Array[Byte],
       broadcastVars: Array[Object],
       schema: StructType): DataFrame = {
-    val bv =  broadcastVars.map(x => x.asInstanceOf[Broadcast[Object]])
+    val bv = broadcastVars.map(x => x.asInstanceOf[Broadcast[Object]])
     val realSchema =
       if (schema == null) {
         SERIALIZED_R_DATA_SCHEMA

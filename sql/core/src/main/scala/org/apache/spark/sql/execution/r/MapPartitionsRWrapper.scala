@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.execution.r
 
-import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.api.r.RRunner
 import org.apache.spark.api.r.SerializationFormats
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.api.r.SQLUtils._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.Row
@@ -55,7 +55,7 @@ private[sql] case class MapPartitionsRWrapper(
 
     if (serializer == SerializationFormats.ROW) {
       outputIter.map { bytes => bytesToRow(bytes, schema) }
-    } else{
+    } else {
       outputIter.map { bytes => Row.fromSeq(bytes :: Nil) }
     }
   }
