@@ -70,12 +70,14 @@ case class TungstenAggregate(
     }
   }
 
-  // This is for testing. We force TungstenAggregationIterator to fall back to sort-based
-  // aggregation once it has processed a given number of input rows.
-  private val testFallbackStartsAt: Option[Int] = {
+  // This is for testing. We force TungstenAggregationIterator to fall back to the unsafe row hash
+  // map and/or the sort-based aggregation once it has processed a given number of input rows.
+  private val testFallbackStartsAt: Option[(Int, Int)] = {
     sqlContext.getConf("spark.sql.TungstenAggregate.testFallbackStartsAt", null) match {
       case null | "" => None
-      case fallbackStartsAt => Some(fallbackStartsAt.toInt)
+      case fallbackStartsAt =>
+        val splits = fallbackStartsAt.split(",").map(_.trim)
+        Some((splits.head.toInt, splits.last.toInt))
     }
   }
 
@@ -127,8 +129,8 @@ case class TungstenAggregate(
     !aggregateExpressions.exists(_.aggregateFunction.isInstanceOf[ImperativeAggregate])
   }
 
-  override def upstreams(): Seq[RDD[InternalRow]] = {
-    child.asInstanceOf[CodegenSupport].upstreams()
+  override def inputRDDs(): Seq[RDD[InternalRow]] = {
+    child.asInstanceOf[CodegenSupport].inputRDDs()
   }
 
   protected override def doProduce(ctx: CodegenContext): String = {
@@ -163,7 +165,7 @@ case class TungstenAggregate(
       ctx.addMutableState("boolean", isNull, "")
       ctx.addMutableState(ctx.javaType(e.dataType), value, "")
       // The initial expression should not access any column
-      val ev = e.gen(ctx)
+      val ev = e.genCode(ctx)
       val initVars = s"""
          | $isNull = ${ev.isNull};
          | $value = ${ev.value};
@@ -177,13 +179,13 @@ case class TungstenAggregate(
       // evaluate aggregate results
       ctx.currentVars = bufVars
       val aggResults = functions.map(_.evaluateExpression).map { e =>
-        BindReferences.bindReference(e, aggregateBufferAttributes).gen(ctx)
+        BindReferences.bindReference(e, aggregateBufferAttributes).genCode(ctx)
       }
       val evaluateAggResults = evaluateVariables(aggResults)
       // evaluate result expressions
       ctx.currentVars = aggResults
       val resultVars = resultExpressions.map { e =>
-        BindReferences.bindReference(e, aggregateAttributes).gen(ctx)
+        BindReferences.bindReference(e, aggregateAttributes).genCode(ctx)
       }
       (resultVars, s"""
         |$evaluateAggResults
@@ -194,7 +196,7 @@ case class TungstenAggregate(
       (bufVars, "")
     } else {
       // no aggregate function, the result should be literals
-      val resultVars = resultExpressions.map(_.gen(ctx))
+      val resultVars = resultExpressions.map(_.genCode(ctx))
       (resultVars, evaluateVariables(resultVars))
     }
 
@@ -238,7 +240,7 @@ case class TungstenAggregate(
     }
     ctx.currentVars = bufVars ++ input
     // TODO: support subexpression elimination
-    val aggVals = updateExpr.map(BindReferences.bindReference(_, inputAttrs).gen(ctx))
+    val aggVals = updateExpr.map(BindReferences.bindReference(_, inputAttrs).genCode(ctx))
     // aggregate buffer should be updated atomic
     val updates = aggVals.zipWithIndex.map { case (ev, i) =>
       s"""
@@ -261,7 +263,15 @@ case class TungstenAggregate(
     .map(_.asInstanceOf[DeclarativeAggregate])
   private val bufferSchema = StructType.fromAttributes(aggregateBufferAttributes)
 
-  // The name for HashMap
+  // The name for Vectorized HashMap
+  private var vectorizedHashMapTerm: String = _
+
+  // We currently only enable vectorized hashmap for long key/value types and partial aggregates
+  private val isVectorizedHashMapEnabled: Boolean = sqlContext.conf.columnarAggregateMapEnabled &&
+    (groupingKeySchema ++ bufferSchema).forall(_.dataType == LongType) &&
+    modes.forall(mode => mode == Partial || mode == PartialMerge)
+
+  // The name for UnsafeRow HashMap
   private var hashMapTerm: String = _
   private var sorterTerm: String = _
 
@@ -384,25 +394,25 @@ case class TungstenAggregate(
       ctx.currentVars = null
       ctx.INPUT_ROW = keyTerm
       val keyVars = groupingExpressions.zipWithIndex.map { case (e, i) =>
-        BoundReference(i, e.dataType, e.nullable).gen(ctx)
+        BoundReference(i, e.dataType, e.nullable).genCode(ctx)
       }
       val evaluateKeyVars = evaluateVariables(keyVars)
       ctx.INPUT_ROW = bufferTerm
       val bufferVars = aggregateBufferAttributes.zipWithIndex.map { case (e, i) =>
-        BoundReference(i, e.dataType, e.nullable).gen(ctx)
+        BoundReference(i, e.dataType, e.nullable).genCode(ctx)
       }
       val evaluateBufferVars = evaluateVariables(bufferVars)
       // evaluate the aggregation result
       ctx.currentVars = bufferVars
       val aggResults = declFunctions.map(_.evaluateExpression).map { e =>
-        BindReferences.bindReference(e, aggregateBufferAttributes).gen(ctx)
+        BindReferences.bindReference(e, aggregateBufferAttributes).genCode(ctx)
       }
       val evaluateAggResults = evaluateVariables(aggResults)
       // generate the final result
       ctx.currentVars = keyVars ++ aggResults
       val inputAttrs = groupingAttributes ++ aggregateAttributes
       val resultVars = resultExpressions.map { e =>
-        BindReferences.bindReference(e, inputAttrs).gen(ctx)
+        BindReferences.bindReference(e, inputAttrs).genCode(ctx)
       }
       s"""
        $evaluateKeyVars
@@ -427,7 +437,7 @@ case class TungstenAggregate(
       ctx.INPUT_ROW = keyTerm
       ctx.currentVars = null
       val eval = resultExpressions.map{ e =>
-        BindReferences.bindReference(e, groupingAttributes).gen(ctx)
+        BindReferences.bindReference(e, groupingAttributes).genCode(ctx)
       }
       consume(ctx, eval)
     }
@@ -437,17 +447,18 @@ case class TungstenAggregate(
     val initAgg = ctx.freshName("initAgg")
     ctx.addMutableState("boolean", initAgg, s"$initAgg = false;")
 
-    // create AggregateHashMap
-    val isAggregateHashMapEnabled: Boolean = false
-    val isAggregateHashMapSupported: Boolean =
-      (groupingKeySchema ++ bufferSchema).forall(_.dataType == LongType)
-    val aggregateHashMapTerm = ctx.freshName("aggregateHashMap")
-    val aggregateHashMapClassName = ctx.freshName("GeneratedAggregateHashMap")
-    val aggregateHashMapGenerator = new ColumnarAggMapCodeGenerator(ctx, aggregateHashMapClassName,
+    vectorizedHashMapTerm = ctx.freshName("vectorizedHashMap")
+    val vectorizedHashMapClassName = ctx.freshName("VectorizedHashMap")
+    val vectorizedHashMapGenerator = new VectorizedHashMapGenerator(ctx, vectorizedHashMapClassName,
       groupingKeySchema, bufferSchema)
-    if (isAggregateHashMapEnabled && isAggregateHashMapSupported) {
-      ctx.addMutableState(aggregateHashMapClassName, aggregateHashMapTerm,
-        s"$aggregateHashMapTerm = new $aggregateHashMapClassName();")
+    // Create a name for iterator from vectorized HashMap
+    val iterTermForVectorizedHashMap = ctx.freshName("vectorizedHashMapIter")
+    if (isVectorizedHashMapEnabled) {
+      ctx.addMutableState(vectorizedHashMapClassName, vectorizedHashMapTerm,
+        s"$vectorizedHashMapTerm = new $vectorizedHashMapClassName();")
+      ctx.addMutableState(
+        "java.util.Iterator<org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row>",
+        iterTermForVectorizedHashMap, "")
     }
 
     // create hashMap
@@ -465,10 +476,13 @@ case class TungstenAggregate(
     val doAgg = ctx.freshName("doAggregateWithKeys")
     ctx.addNewFunction(doAgg,
       s"""
-        ${if (isAggregateHashMapSupported) aggregateHashMapGenerator.generate() else ""}
+        ${if (isVectorizedHashMapEnabled) vectorizedHashMapGenerator.generate() else ""}
         private void $doAgg() throws java.io.IOException {
           $hashMapTerm = $thisPlan.createHashMap();
           ${child.asInstanceOf[CodegenSupport].produce(ctx, this)}
+
+          ${if (isVectorizedHashMapEnabled) {
+              s"$iterTermForVectorizedHashMap = $vectorizedHashMapTerm.rowIterator();"} else ""}
 
           $iterTerm = $thisPlan.finishAggregate($hashMapTerm, $sorterTerm);
         }
@@ -484,6 +498,34 @@ case class TungstenAggregate(
     // so `copyResult` should be reset to `false`.
     ctx.copyResult = false
 
+    // Iterate over the aggregate rows and convert them from ColumnarBatch.Row to UnsafeRow
+    def outputFromGeneratedMap: Option[String] = {
+      if (isVectorizedHashMapEnabled) {
+        val row = ctx.freshName("vectorizedHashMapRow")
+        ctx.currentVars = null
+        ctx.INPUT_ROW = row
+        var schema: StructType = groupingKeySchema
+        bufferSchema.foreach(i => schema = schema.add(i))
+        val generateRow = GenerateUnsafeProjection.createCode(ctx, schema.toAttributes.zipWithIndex
+          .map { case (attr, i) => BoundReference(i, attr.dataType, attr.nullable) })
+        Option(
+          s"""
+             | while ($iterTermForVectorizedHashMap.hasNext()) {
+             |   $numOutput.add(1);
+             |   org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row $row =
+             |     (org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row)
+             |     $iterTermForVectorizedHashMap.next();
+             |   ${generateRow.code}
+             |   ${consume(ctx, Seq.empty, {generateRow.value})}
+             |
+             |   if (shouldStop()) return;
+             | }
+             |
+             | $vectorizedHashMapTerm.close();
+           """.stripMargin)
+      } else None
+    }
+
     s"""
      if (!$initAgg) {
        $initAgg = true;
@@ -491,6 +533,8 @@ case class TungstenAggregate(
      }
 
      // output the result
+     ${outputFromGeneratedMap.getOrElse("")}
+
      while ($iterTerm.next()) {
        $numOutput.add(1);
        UnsafeRow $keyTerm = (UnsafeRow) $iterTerm.getKey();
@@ -511,10 +555,13 @@ case class TungstenAggregate(
 
     // create grouping key
     ctx.currentVars = input
-    val keyCode = GenerateUnsafeProjection.createCode(
+    val unsafeRowKeyCode = GenerateUnsafeProjection.createCode(
       ctx, groupingExpressions.map(e => BindReferences.bindReference[Expression](e, child.output)))
-    val key = keyCode.value
-    val buffer = ctx.freshName("aggBuffer")
+    val vectorizedRowKeys = ctx.generateExpressions(
+      groupingExpressions.map(e => BindReferences.bindReference[Expression](e, child.output)))
+    val unsafeRowKeys = unsafeRowKeyCode.value
+    val unsafeRowBuffer = ctx.freshName("unsafeRowAggBuffer")
+    val vectorizedRowBuffer = ctx.freshName("vectorizedAggBuffer")
 
     // only have DeclarativeAggregate
     val updateExpr = aggregateExpressions.flatMap { e =>
@@ -529,60 +576,129 @@ case class TungstenAggregate(
     // generate hash code for key
     val hashExpr = Murmur3Hash(groupingExpressions, 42)
     ctx.currentVars = input
-    val hashEval = BindReferences.bindReference(hashExpr, child.output).gen(ctx)
+    val hashEval = BindReferences.bindReference(hashExpr, child.output).genCode(ctx)
 
     val inputAttr = aggregateBufferAttributes ++ child.output
     ctx.currentVars = new Array[ExprCode](aggregateBufferAttributes.length) ++ input
-    ctx.INPUT_ROW = buffer
-    // TODO: support subexpression elimination
-    val evals = updateExpr.map(BindReferences.bindReference(_, inputAttr).gen(ctx))
-    val updates = evals.zipWithIndex.map { case (ev, i) =>
-      val dt = updateExpr(i).dataType
-      ctx.updateColumn(buffer, dt, i, ev, updateExpr(i).nullable)
-    }
 
-    val (checkFallback, resetCoulter, incCounter) = if (testFallbackStartsAt.isDefined) {
+    val (checkFallbackForGeneratedHashMap, checkFallbackForBytesToBytesMap, resetCounter,
+    incCounter) = if (testFallbackStartsAt.isDefined) {
       val countTerm = ctx.freshName("fallbackCounter")
       ctx.addMutableState("int", countTerm, s"$countTerm = 0;")
-      (s"$countTerm < ${testFallbackStartsAt.get}", s"$countTerm = 0;", s"$countTerm += 1;")
+      (s"$countTerm < ${testFallbackStartsAt.get._1}",
+        s"$countTerm < ${testFallbackStartsAt.get._2}", s"$countTerm = 0;", s"$countTerm += 1;")
     } else {
-      ("true", "", "")
+      ("true", "true", "", "")
     }
+
+    // We first generate code to probe and update the vectorized hash map. If the probe is
+    // successful the corresponding vectorized row buffer will hold the mutable row
+    val findOrInsertInVectorizedHashMap: Option[String] = {
+      if (isVectorizedHashMapEnabled) {
+        Option(
+          s"""
+             |if ($checkFallbackForGeneratedHashMap) {
+             |  ${vectorizedRowKeys.map(_.code).mkString("\n")}
+             |  if (${vectorizedRowKeys.map("!" + _.isNull).mkString(" && ")}) {
+             |    $vectorizedRowBuffer = $vectorizedHashMapTerm.findOrInsert(
+             |        ${vectorizedRowKeys.map(_.value).mkString(", ")});
+             |  }
+             |}
+         """.stripMargin)
+      } else {
+        None
+      }
+    }
+
+    val updateRowInVectorizedHashMap: Option[String] = {
+      if (isVectorizedHashMapEnabled) {
+        ctx.INPUT_ROW = vectorizedRowBuffer
+        val vectorizedRowEvals =
+          updateExpr.map(BindReferences.bindReference(_, inputAttr).genCode(ctx))
+        val updateVectorizedRow = vectorizedRowEvals.zipWithIndex.map { case (ev, i) =>
+          val dt = updateExpr(i).dataType
+          ctx.updateColumn(vectorizedRowBuffer, dt, i, ev, updateExpr(i).nullable)
+        }
+        Option(
+          s"""
+             |// evaluate aggregate function
+             |${evaluateVariables(vectorizedRowEvals)}
+             |// update vectorized row
+             |${updateVectorizedRow.mkString("\n").trim}
+           """.stripMargin)
+      } else None
+    }
+
+    // Next, we generate code to probe and update the unsafe row hash map.
+    val findOrInsertInUnsafeRowMap: String = {
+      s"""
+         | if ($vectorizedRowBuffer == null) {
+         |   // generate grouping key
+         |   ${unsafeRowKeyCode.code.trim}
+         |   ${hashEval.code.trim}
+         |   if ($checkFallbackForBytesToBytesMap) {
+         |     // try to get the buffer from hash map
+         |     $unsafeRowBuffer =
+         |       $hashMapTerm.getAggregationBufferFromUnsafeRow($unsafeRowKeys, ${hashEval.value});
+         |   }
+         |   if ($unsafeRowBuffer == null) {
+         |     if ($sorterTerm == null) {
+         |       $sorterTerm = $hashMapTerm.destructAndCreateExternalSorter();
+         |     } else {
+         |       $sorterTerm.merge($hashMapTerm.destructAndCreateExternalSorter());
+         |     }
+         |     $resetCounter
+         |     // the hash map had be spilled, it should have enough memory now,
+         |     // try  to allocate buffer again.
+         |     $unsafeRowBuffer =
+         |       $hashMapTerm.getAggregationBufferFromUnsafeRow($unsafeRowKeys, ${hashEval.value});
+         |     if ($unsafeRowBuffer == null) {
+         |       // failed to allocate the first page
+         |       throw new OutOfMemoryError("No enough memory for aggregation");
+         |     }
+         |   }
+         | }
+       """.stripMargin
+    }
+
+    val updateRowInUnsafeRowMap: String = {
+      ctx.INPUT_ROW = unsafeRowBuffer
+      val unsafeRowBufferEvals =
+        updateExpr.map(BindReferences.bindReference(_, inputAttr).genCode(ctx))
+      val updateUnsafeRowBuffer = unsafeRowBufferEvals.zipWithIndex.map { case (ev, i) =>
+        val dt = updateExpr(i).dataType
+        ctx.updateColumn(unsafeRowBuffer, dt, i, ev, updateExpr(i).nullable)
+      }
+      s"""
+         |// evaluate aggregate function
+         |${evaluateVariables(unsafeRowBufferEvals)}
+         |// update unsafe row buffer
+         |${updateUnsafeRowBuffer.mkString("\n").trim}
+           """.stripMargin
+    }
+
 
     // We try to do hash map based in-memory aggregation first. If there is not enough memory (the
     // hash map will return null for new key), we spill the hash map to disk to free memory, then
     // continue to do in-memory aggregation and spilling until all the rows had been processed.
     // Finally, sort the spilled aggregate buffers by key, and merge them together for same key.
     s"""
-     // generate grouping key
-     ${keyCode.code.trim}
-     ${hashEval.code.trim}
-     UnsafeRow $buffer = null;
-     if ($checkFallback) {
-       // try to get the buffer from hash map
-       $buffer = $hashMapTerm.getAggregationBufferFromUnsafeRow($key, ${hashEval.value});
-     }
-     if ($buffer == null) {
-       if ($sorterTerm == null) {
-         $sorterTerm = $hashMapTerm.destructAndCreateExternalSorter();
-       } else {
-         $sorterTerm.merge($hashMapTerm.destructAndCreateExternalSorter());
-       }
-       $resetCoulter
-       // the hash map had be spilled, it should have enough memory now,
-       // try  to allocate buffer again.
-       $buffer = $hashMapTerm.getAggregationBufferFromUnsafeRow($key, ${hashEval.value});
-       if ($buffer == null) {
-         // failed to allocate the first page
-         throw new OutOfMemoryError("No enough memory for aggregation");
-       }
-     }
+     UnsafeRow $unsafeRowBuffer = null;
+     org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row $vectorizedRowBuffer = null;
+
+     ${findOrInsertInVectorizedHashMap.getOrElse("")}
+
+     $findOrInsertInUnsafeRowMap
+
      $incCounter
 
-     // evaluate aggregate function
-     ${evaluateVariables(evals)}
-     // update aggregate buffer
-     ${updates.mkString("\n").trim}
+     if ($vectorizedRowBuffer != null) {
+       // update vectorized row
+       ${updateRowInVectorizedHashMap.getOrElse("")}
+     } else {
+       // update unsafe row
+       $updateRowInUnsafeRowMap
+     }
      """
   }
 

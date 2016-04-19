@@ -64,7 +64,7 @@ case class ScriptTransformation(
 
   override def producedAttributes: AttributeSet = outputSet -- inputSet
 
-  private val serializedHiveConf = new SerializableConfiguration(sc.hiveconf)
+  private val serializedHiveConf = new SerializableConfiguration(sc.sessionState.hiveconf)
 
   protected override def doExecute(): RDD[InternalRow] = {
     def processIterator(inputIterator: Iterator[InternalRow]): Iterator[InternalRow] = {

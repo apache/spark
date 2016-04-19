@@ -177,7 +177,7 @@ private[sql] case class RowDataSourceScan(
     s"Scan $nodeName${output.mkString("[", ",", "]")}${metadataEntries.mkString(" ", ", ", "")}"
   }
 
-  override def upstreams(): Seq[RDD[InternalRow]] = {
+  override def inputRDDs(): Seq[RDD[InternalRow]] = {
     rdd :: Nil
   }
 
@@ -192,7 +192,7 @@ private[sql] case class RowDataSourceScan(
     val row = ctx.freshName("row")
     ctx.INPUT_ROW = row
     ctx.currentVars = null
-    val columnsRowInput = exprRows.map(_.gen(ctx))
+    val columnsRowInput = exprRows.map(_.genCode(ctx))
     val inputRow = if (outputUnsafeRows) row else null
     s"""
        |while ($input.hasNext()) {
@@ -228,7 +228,7 @@ private[sql] case class BatchedDataSourceScan(
     s"BatchedScan $nodeName${output.mkString("[", ",", "]")}$metadataStr"
   }
 
-  override def upstreams(): Seq[RDD[InternalRow]] = {
+  override def inputRDDs(): Seq[RDD[InternalRow]] = {
     rdd :: Nil
   }
 

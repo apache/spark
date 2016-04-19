@@ -67,15 +67,13 @@ case class Rand(seed: Long) extends RDG {
     case _ => throw new AnalysisException("Input argument to rand must be an integer literal.")
   })
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val rngTerm = ctx.freshName("rng")
     val className = classOf[XORShiftRandom].getName
     ctx.addMutableState(className, rngTerm,
       s"$rngTerm = new $className(${seed}L + org.apache.spark.TaskContext.getPartitionId());")
-    ev.isNull = "false"
-    s"""
-      final ${ctx.javaType(dataType)} ${ev.value} = $rngTerm.nextDouble();
-    """
+    ev.copy(code = s"""
+      final ${ctx.javaType(dataType)} ${ev.value} = $rngTerm.nextDouble();""", isNull = "false")
   }
 }
 
@@ -92,14 +90,12 @@ case class Randn(seed: Long) extends RDG {
     case _ => throw new AnalysisException("Input argument to randn must be an integer literal.")
   })
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val rngTerm = ctx.freshName("rng")
     val className = classOf[XORShiftRandom].getName
     ctx.addMutableState(className, rngTerm,
       s"$rngTerm = new $className(${seed}L + org.apache.spark.TaskContext.getPartitionId());")
-    ev.isNull = "false"
-    s"""
-      final ${ctx.javaType(dataType)} ${ev.value} = $rngTerm.nextGaussian();
-    """
+    ev.copy(code = s"""
+      final ${ctx.javaType(dataType)} ${ev.value} = $rngTerm.nextGaussian();""", isNull = "false")
   }
 }

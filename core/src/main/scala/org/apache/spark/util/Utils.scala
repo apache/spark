@@ -1598,6 +1598,7 @@ private[spark] object Utils extends Logging {
 
   /**
    * Timing method based on iterations that permit JVM JIT optimization.
+   *
    * @param numIters number of iterations
    * @param f function to be executed. If prepare is not None, the running time of each call to f
    *          must be an order of magnitude longer than one millisecond for accurate timing.
@@ -1639,6 +1640,7 @@ private[spark] object Utils extends Logging {
 
   /**
    * Creates a symlink.
+   *
    * @param src absolute path to the source
    * @param dst relative path for the destination
    */

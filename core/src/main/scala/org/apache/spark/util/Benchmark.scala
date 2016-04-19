@@ -42,6 +42,10 @@ private[spark] class Benchmark(
     outputPerIteration: Boolean = false) {
   val benchmarks = mutable.ArrayBuffer.empty[Benchmark.Case]
 
+  /**
+   * Adds a case to run when run() is called. The given function will be run for several
+   * iterations to collect timing statistics.
+   */
   def addCase(name: String)(f: Int => Unit): Unit = {
     addTimerCase(name) { timer =>
       timer.startTiming()
@@ -50,6 +54,11 @@ private[spark] class Benchmark(
     }
   }
 
+  /**
+   * Adds a case with manual timing control. When the function is run, timing does not start
+   * until timer.startTiming() is called within the given function. The corresponding
+   * timer.stopTiming() method must be called before the function returns.
+   */
   def addTimerCase(name: String)(f: Benchmark.Timer => Unit): Unit = {
     benchmarks += Benchmark.Case(name, f)
   }
@@ -92,8 +101,11 @@ private[spark] class Benchmark(
 }
 
 private[spark] object Benchmark {
+
   /**
    * Object available to benchmark code to control timing e.g. to exclude set-up time.
+   *
+   * @param iteration specifies this is the nth iteration of running the benchmark case
    */
   class Timer(val iteration: Int) {
     private var accumulatedTime: Long = 0L
@@ -128,9 +140,9 @@ private[spark] object Benchmark {
       Utils.executeAndGetOutput(Seq("/usr/sbin/sysctl", "-n", "machdep.cpu.brand_string"))
     } else if (SystemUtils.IS_OS_LINUX) {
       Try {
-        val grepPath = Utils.executeAndGetOutput(Seq("which", "grep")).trim
+        val grepPath = Utils.executeAndGetOutput(Seq("which", "grep")).stripLineEnd
         Utils.executeAndGetOutput(Seq(grepPath, "-m", "1", "model name", "/proc/cpuinfo"))
-        .replaceFirst("model name[\\s*]:[\\s*]", "")
+        .stripLineEnd.replaceFirst("model name[\\s*]:[\\s*]", "")
       }.getOrElse("Unknown processor")
     } else {
       System.getenv("PROCESSOR_IDENTIFIER")

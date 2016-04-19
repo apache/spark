@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql.streaming
 
-import org.scalatest.concurrent.Eventually._
-
-import org.apache.spark.sql.{DataFrame, Row, SQLContext, StreamTest}
+import org.apache.spark.sql._
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.sources.StreamSourceProvider
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
@@ -107,6 +106,35 @@ class StreamSuite extends StreamTest with SharedSQLContext {
     val df = sqlContext.read.format(classOf[FakeDefaultSource].getName).stream()
     assertDF(df)
     assertDF(df)
+  }
+
+  test("unsupported queries") {
+    val streamInput = MemoryStream[Int]
+    val batchInput = Seq(1, 2, 3).toDS()
+
+    def assertError(expectedMsgs: Seq[String])(body: => Unit): Unit = {
+      val e = intercept[AnalysisException] {
+        body
+      }
+      expectedMsgs.foreach { s => assert(e.getMessage.contains(s)) }
+    }
+
+    // Running streaming plan as a batch query
+    assertError("startStream" :: Nil) {
+      streamInput.toDS.map { i => i }.count()
+    }
+
+    // Running non-streaming plan with as a streaming query
+    assertError("without streaming sources" :: "startStream" :: Nil) {
+      val ds = batchInput.map { i => i }
+      testStream(ds)()
+    }
+
+    // Running streaming plan that cannot be incrementalized
+    assertError("not supported" :: "streaming" :: Nil) {
+      val ds = streamInput.toDS.map { i => i }.sort()
+      testStream(ds)()
+    }
   }
 }
 

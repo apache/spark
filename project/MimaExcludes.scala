@@ -49,6 +49,10 @@ object MimaExcludes {
           "org.apache.spark.status.api.v1.ApplicationAttemptInfo.this"),
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.status.api.v1.ApplicationAttemptInfo.<init>$default$5"),
+        // SPARK-14042 Add custom coalescer support
+        ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.rdd.RDD.coalesce"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.rdd.PartitionCoalescer$LocationIterator"),
+        ProblemFilters.exclude[IncompatibleTemplateDefProblem]("org.apache.spark.rdd.PartitionCoalescer"),
         // SPARK-12600 Remove SQL deprecated methods
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SQLContext$QueryExecution"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SQLContext$SparkPlanner"),
@@ -630,7 +634,24 @@ object MimaExcludes {
         ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.getLocalProperty"),
         // [SPARK-14617] Remove deprecated APIs in TaskMetrics
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.executor.InputMetrics$"),
-        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.executor.OutputMetrics$")
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.executor.OutputMetrics$"),
+        // [SPARK-14628] Simplify task metrics by always tracking read/write metrics
+        ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.executor.InputMetrics.readMethod"),
+        ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.executor.OutputMetrics.writeMethod")
+      ) ++ Seq(
+        // SPARK-14628: Always track input/output/shuffle metrics
+        ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ShuffleReadMetrics.totalBlocksFetched"),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.status.api.v1.ShuffleReadMetrics.this"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.TaskMetrics.inputMetrics"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.TaskMetrics.outputMetrics"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.TaskMetrics.shuffleWriteMetrics"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.TaskMetrics.shuffleReadMetrics"),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.status.api.v1.TaskMetrics.this"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.TaskMetricDistributions.inputMetrics"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.TaskMetricDistributions.outputMetrics"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.TaskMetricDistributions.shuffleWriteMetrics"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.TaskMetricDistributions.shuffleReadMetrics"),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.status.api.v1.TaskMetricDistributions.this")
       )
     case v if v.startsWith("1.6") =>
       Seq(

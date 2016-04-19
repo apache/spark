@@ -43,9 +43,8 @@ case class InputFileName() extends LeafExpression with Nondeterministic {
     InputFileNameHolder.getInputFileName()
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
-    ev.isNull = "false"
-    s"final ${ctx.javaType(dataType)} ${ev.value} = " +
-      "org.apache.spark.rdd.InputFileNameHolder.getInputFileName();"
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    ev.copy(code = s"final ${ctx.javaType(dataType)} ${ev.value} = " +
+      "org.apache.spark.rdd.InputFileNameHolder.getInputFileName();", isNull = "false")
   }
 }
