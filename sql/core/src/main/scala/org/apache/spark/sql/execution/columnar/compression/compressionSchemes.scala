@@ -269,7 +269,7 @@ private[columnar] case object RunLengthEncoding extends CompressionScheme {
               if (seenNulls < nullCount) {
                 nextNullIndex = ByteBufferHelper.getInt(nullsBuffer)
               }
-              out.position(out.position + 2)
+              out.position(out.position + 1)
             }
             pos += 1
           }
@@ -603,7 +603,7 @@ private[columnar] case object BooleanBitSet extends CompressionScheme {
     override def hasNext: Boolean = visited < count
 
     override def decompress(capacity: Int): (ByteBuffer, ByteBuffer) = {
-      val countLocal = ByteBufferHelper.getInt(buffer)
+      val countLocal = count
       var currentWordLocal: Long = 0
       var visitedLocal: Int = 0
       val out = ByteBuffer.allocate(capacity).order(ByteOrder.nativeOrder())
@@ -623,7 +623,7 @@ private[columnar] case object BooleanBitSet extends CompressionScheme {
             currentWordLocal = ByteBufferHelper.getLong(buffer)
           }
 
-          out.put(if (((currentWord >> bit) & 1) != 0) 1: Byte else 0: Byte)
+          out.put(if (((currentWordLocal >> bit) & 1) != 0) 1: Byte else 0: Byte)
         } else {
           seenNulls += 1
           if (seenNulls < nullCount) {
@@ -831,7 +831,7 @@ private[columnar] case object LongDelta extends CompressionScheme {
 
     override def decompress(capacity: Int): (ByteBuffer, ByteBuffer) = {
       var prevLocal: Long = 0
-      val out = ByteBuffer.allocate(capacity * 4).order(ByteOrder.nativeOrder())
+      val out = ByteBuffer.allocate(capacity * 8).order(ByteOrder.nativeOrder())
       val nullsBuffer = buffer.duplicate().order(ByteOrder.nativeOrder())
       nullsBuffer.rewind
       val nullCount = ByteBufferHelper.getInt(nullsBuffer)
