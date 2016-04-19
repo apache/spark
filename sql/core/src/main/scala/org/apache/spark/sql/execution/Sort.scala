@@ -52,13 +52,10 @@ case class Sort(
 
   private val enableRadixSort = sqlContext.conf.enableRadixSort
 
-  // TODO(ekl) remove this before merging
-  private var labels = " (unknown)"
-
   override private[sql] lazy val metrics = Map(
-    "sortTime" -> SQLMetrics.createLongMetric(sparkContext, "sort time" + labels),
-    "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size" + labels),
-    "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size" + labels))
+    "sortTime" -> SQLMetrics.createLongMetric(sparkContext, "sort time"),
+    "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
+    "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"))
 
   def createSorter(): UnsafeExternalRowSorter = {
     val ordering = newOrdering(sortOrder, output)
@@ -69,11 +66,6 @@ case class Sort(
 
     val canUseRadixSort = enableRadixSort && sortOrder.length == 1 &&
       SortPrefixUtils.canSortFullyWithPrefix(boundSortExpression)
-
-    if (canUseRadixSort)
-      labels = " (radix)"
-    else
-      labels = " (tim)"
 
     // The generator for prefix
     val prefixProjection = UnsafeProjection.create(Seq(SortPrefix(boundSortExpression)))
