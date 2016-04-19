@@ -1944,6 +1944,7 @@
               <spark.master.rest.enabled>false</spark.master.rest.enabled>
               <spark.ui.enabled>false</spark.ui.enabled>
               <spark.ui.showConsoleProgress>false</spark.ui.showConsoleProgress>
+              <spark.sql.catalogImplementation>in-memory</spark.sql.catalogImplementation>
               <spark.unsafe.exceptionOnMemoryLeak>true</spark.unsafe.exceptionOnMemoryLeak>
               <!-- Needed by sql/hive tests. -->
               <test.src.tables>src</test.src.tables>
@@ -1992,6 +1993,7 @@
               <spark.testing>1</spark.testing>
               <spark.ui.enabled>false</spark.ui.enabled>
               <spark.ui.showConsoleProgress>false</spark.ui.showConsoleProgress>
+              <spark.sql.catalogImplementation>in-memory</spark.sql.catalogImplementation>
               <spark.unsafe.exceptionOnMemoryLeak>true</spark.unsafe.exceptionOnMemoryLeak>
               <!-- Needed by sql/hive tests. -->
               <test.src.tables>__not_used__</test.src.tables>

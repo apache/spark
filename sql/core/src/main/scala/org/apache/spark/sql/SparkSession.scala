@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.internal.{SessionState, SharedState}
 import org.apache.spark.util.Utils
 
@@ -47,13 +47,13 @@ class SparkSession private(
   @transient
   protected[sql] lazy val sharedState: SharedState = {
     existingSharedState.getOrElse(
-      SparkSession.reflect(SparkSession.DEFAULT_SHARED_STATE_CLASS_NAME, sparkContext))
+      SparkSession.reflect(SparkSession.sharedStateClassName(sparkContext.conf), sparkContext))
   }
 
   @transient
   protected[sql] lazy val sessionState: SessionState = {
     SparkSession.reflect(
-      SparkSession.DEFAULT_SESSION_STATE_CLASS_NAME,
+      SparkSession.sessionStateClassName(sparkContext.conf),
       new SQLContext(self, isRootContext = false))
   }
 
@@ -64,6 +64,28 @@ private object SparkSession {
 
   private val DEFAULT_SHARED_STATE_CLASS_NAME = "org.apache.spark.sql.hive.HiveSharedState"
   private val DEFAULT_SESSION_STATE_CLASS_NAME = "org.apache.spark.sql.hive.HiveSessionState"
+
+  private def sharedStateClassName(conf: SparkConf): String = {
+    conf.getOption("spark.sql.catalogImplementation") match {
+      case Some("hive") => "org.apache.spark.sql.hive.HiveSharedState"
+      case Some("in-memory") => classOf[SharedState].getCanonicalName
+      case Some(unknown) =>
+        throw new IllegalArgumentException(
+          s"Unexpected catalog implementation '$unknown'; must be 'hive' or 'in-memory'")
+      case None => DEFAULT_SHARED_STATE_CLASS_NAME
+    }
+  }
+
+  private def sessionStateClassName(conf: SparkConf): String = {
+    conf.getOption("spark.sql.catalogImplementation") match {
+      case Some("hive") => "org.apache.spark.sql.hive.HiveSessionState"
+      case Some("in-memory") => classOf[SessionState].getCanonicalName
+      case Some(unknown) =>
+        throw new IllegalArgumentException(
+          s"Unexpected catalog implementation '$unknown'; must be 'hive' or 'in-memory'")
+      case None => DEFAULT_SESSION_STATE_CLASS_NAME
+    }
+  }
 
   /**
    * Helper method to create an instance of [[T]] using a single-arg constructor that

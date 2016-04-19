@@ -718,6 +718,7 @@ object TestSettings {
     javaOptions in Test += "-Dspark.master.rest.enabled=false",
     javaOptions in Test += "-Dspark.ui.enabled=false",
     javaOptions in Test += "-Dspark.ui.showConsoleProgress=false",
+    javaOptions in Test += "-Dspark.sql.catalogImplementation=in-memory",
     javaOptions in Test += "-Dspark.unsafe.exceptionOnMemoryLeak=true",
     javaOptions in Test += "-Dsun.io.serialization.extendedDebugInfo=true",
     javaOptions in Test += "-Dderby.system.durability=test",

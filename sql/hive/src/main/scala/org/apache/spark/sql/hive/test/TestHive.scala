@@ -55,7 +55,8 @@ object TestHive
         .set("spark.sql.hive.metastore.barrierPrefixes",
           "org.apache.spark.sql.hive.execution.PairSerDe")
         // SPARK-8910
-        .set("spark.ui.enabled", "false")))
+        .set("spark.ui.enabled", "false")
+        .set("spark.sql.catalogImplementation", "hive")))
 
 
 /**
