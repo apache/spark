@@ -608,4 +608,20 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
       }
     }
   }
+
+  test("force to spill for sorting") {
+    val conf = createSparkConf(loadDefaults = false, kryo = false)
+      .set("spark.shuffle.memoryFraction", "0.01")
+      .set("spark.memory.useLegacyMode", "true")
+      .set("spark.shuffle.sort.bypassMergeThreshold", "0")
+    sc = new SparkContext("local", "test", conf)
+    val N = 2e6.toInt
+    val p = new org.apache.spark.HashPartitioner(10)
+    val p2 = new org.apache.spark.HashPartitioner(5)
+    sc.parallelize(1 to N, 10)
+      .map { x => (x % 10000) -> x.toLong }
+      .repartitionAndSortWithinPartitions(p2)
+      .repartitionAndSortWithinPartitions(p)
+      .count()
+  }
 }

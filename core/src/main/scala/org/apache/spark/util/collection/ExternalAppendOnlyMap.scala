@@ -115,7 +115,7 @@ class ExternalAppendOnlyMap[K, V, C](
   private val keyComparator = new HashComparator[K]
   private val ser = serializer.newInstance()
 
-  private var inMemoryOrDiskIterator: Iterator[(K, C)] = null
+  private var readingIterator: SpillableIterator = null
 
   /**
    * Number of files this map has spilled so far.
@@ -192,14 +192,12 @@ class ExternalAppendOnlyMap[K, V, C](
    * It will be called by TaskMemoryManager when there is not enough memory for the task.
    */
   override protected[this] def forceSpill(): Boolean = {
-    assert(inMemoryOrDiskIterator != null)
-    val inMemoryIterator = inMemoryOrDiskIterator
-    logInfo(s"Task ${context.taskAttemptId} force spilling in-memory map to disk and " +
-      s"it will release ${org.apache.spark.util.Utils.bytesToString(getUsed())} memory")
-    val diskMapIterator = spillMemoryIteratorToDisk(inMemoryIterator)
-    inMemoryOrDiskIterator = diskMapIterator
-    currentMap = null
-    true
+    assert(readingIterator != null)
+    val isSpilled = readingIterator.spill()
+    if (isSpilled) {
+      currentMap = null
+    }
+    isSpilled
   }
 
   /**
@@ -270,14 +268,10 @@ class ExternalAppendOnlyMap[K, V, C](
    * it returns pairs from an on-disk map.
    */
   def destructiveIterator(inMemoryIterator: Iterator[(K, C)]): Iterator[(K, C)] = {
-    inMemoryOrDiskIterator = inMemoryIterator
-    new Iterator[(K, C)] {
-
-      override def hasNext = inMemoryOrDiskIterator.hasNext
-
-      override def next() = inMemoryOrDiskIterator.next()
-    }
+    readingIterator = new SpillableIterator(inMemoryIterator)
+    readingIterator
   }
+
   /**
    * Return a destructive iterator that merges the in-memory map with the spilled maps.
    * If no spill has occurred, simply return the in-memory map's iterator.
@@ -571,6 +565,39 @@ class ExternalAppendOnlyMap[K, V, C](
     }
 
     context.addTaskCompletionListener(context => cleanup())
+  }
+
+  private[this] class SpillableIterator(var upstream: Iterator[(K, C)])
+    extends Iterator[(K, C)] {
+
+    private var nextUpstream: Iterator[(K, C)] = null
+
+    private var cur: (K, C) = null
+
+    def spill(): Boolean = synchronized {
+      if (upstream == null || nextUpstream != null) {
+        false
+      } else {
+        logInfo(s"Task ${context.taskAttemptId} force spilling in-memory map to disk and " +
+          s"it will release ${org.apache.spark.util.Utils.bytesToString(getUsed())} memory")
+        nextUpstream = spillMemoryIteratorToDisk(upstream)
+        true
+      }
+    }
+
+    override def hasNext: Boolean = synchronized {
+      if (nextUpstream != null) {
+        upstream = nextUpstream
+        nextUpstream = null
+      }
+      val r = upstream.hasNext
+      if (r) {
+        cur = upstream.next()
+      }
+      r
+    }
+
+    override def next(): (K, C) = cur
   }
 
   /** Convenience function to hash the given (K, C) pair by the key. */

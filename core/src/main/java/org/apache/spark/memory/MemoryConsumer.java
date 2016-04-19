@@ -134,7 +134,7 @@ public abstract class MemoryConsumer {
   /**
    * Allocates a heap memory of `size`.
    */
-  public long allocateHeapExecutionMemory(long size) {
+  public long acquireOnHeapMemory(long size) {
     long granted =
         taskMemoryManager.acquireExecutionMemory(size, MemoryMode.ON_HEAP, this);
     used += granted;
@@ -144,7 +144,7 @@ public abstract class MemoryConsumer {
   /**
    * Release N bytes of heap memory.
    */
-  public void freeHeapExecutionMemory(long size) {
+  public void freeOnHeapMemory(long size) {
     taskMemoryManager.releaseExecutionMemory(size, MemoryMode.ON_HEAP, this);
     used -= size;
   }

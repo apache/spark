@@ -418,4 +418,18 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
+  test("force to spill for external aggregation") {
+    val conf = createSparkConf(loadDefaults = false)
+      .set("spark.shuffle.memoryFraction", "0.01")
+      .set("spark.memory.useLegacyMode", "true")
+      .set("spark.shuffle.sort.bypassMergeThreshold", "0")
+    sc = new SparkContext("local", "test", conf)
+    val N = 2e6.toInt
+    sc.parallelize(1 to N, 10)
+      .map { i => (i, i) }
+      .groupByKey()
+      .reduceByKey(_ ++ _)
+      .count()
+  }
+
 }
