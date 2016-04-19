@@ -93,7 +93,7 @@ public final class UnsafeKVExternalSorter {
       // Since we will not grow the array, it's fine to pass `null` as consumer.
       final UnsafeInMemorySorter inMemSorter = new UnsafeInMemorySorter(
         null, taskMemoryManager, recordComparator, prefixComparator, map.getArray(),
-        false /* TODO(ekl) we can only spill if the BytesToBytes load factor is <= 0.5 */);
+        false /* TODO(ekl) we can only radix sort if the BytesToBytes load factor is <= 0.5 */);
 
       // We cannot use the destructive iterator here because we are reusing the existing memory
       // pages in BytesToBytesMap to hold records during sorting.
