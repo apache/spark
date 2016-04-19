@@ -17,17 +17,15 @@
 
 package org.apache.spark
 
-import org.apache.spark.executor.TaskMetrics
-
 import scala.collection.mutable.ArrayBuffer
+
+import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.shuffle.FetchFailedException
-import org.apache.spark.storage.{BlockId, BlockStatus}
 
 
 class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
   import InternalAccumulator._
-  import AccumulatorParam._
 
   override def afterEach(): Unit = {
     try {
