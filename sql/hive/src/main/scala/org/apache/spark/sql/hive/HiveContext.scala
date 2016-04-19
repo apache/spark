@@ -29,12 +29,9 @@ import scala.collection.mutable.HashMap
 import scala.language.implicitConversions
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.common.`type`.HiveDecimal
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hadoop.hive.ql.metadata.Table
 import org.apache.hadoop.hive.ql.parse.VariableSubstitution
 import org.apache.hadoop.hive.serde2.io.{DateWritable, TimestampWritable}
 import org.apache.hadoop.util.VersionInfo
@@ -45,33 +42,17 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.{Expression, LeafExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.{ExecutedCommand, SetCommand}
-import org.apache.spark.sql.execution.ui.SQLListener
 import org.apache.spark.sql.hive.client._
-import org.apache.spark.sql.hive.execution.{DescribeHiveTableCommand, HiveNativeCommand}
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.hive.execution.{AnalyzeTable, DescribeHiveTableCommand, HiveNativeCommand}
+import org.apache.spark.sql.internal.{SharedState, SQLConf}
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
-
-/**
- * Returns the current database of metadataHive.
- */
-private[hive] case class CurrentDatabase(ctx: HiveContext)
-  extends LeafExpression with CodegenFallback {
-  override def dataType: DataType = StringType
-  override def foldable: Boolean = true
-  override def nullable: Boolean = false
-  override def eval(input: InternalRow): Any = {
-    UTF8String.fromString(ctx.sessionState.catalog.getCurrentDatabase)
-  }
-}
 
 /**
  * An instance of the Spark SQL execution engine that integrates with data stored in Hive.
@@ -80,32 +61,14 @@ private[hive] case class CurrentDatabase(ctx: HiveContext)
  * @since 1.0.0
  */
 class HiveContext private[hive](
-    sc: SparkContext,
-    cacheManager: CacheManager,
-    listener: SQLListener,
-    @transient private[hive] val executionHive: HiveClientImpl,
-    @transient private[hive] val metadataHive: HiveClient,
-    isRootContext: Boolean,
-    @transient private[sql] val hiveCatalog: HiveExternalCatalog)
-  extends SQLContext(sc, cacheManager, listener, isRootContext, hiveCatalog) with Logging {
+    @transient protected[hive] val hiveSharedState: HiveSharedState,
+    override val isRootContext: Boolean)
+  extends SQLContext(hiveSharedState, isRootContext) with Logging {
+
   self =>
 
-  private def this(sc: SparkContext, execHive: HiveClientImpl, metaHive: HiveClient) {
-    this(
-      sc,
-      new CacheManager,
-      SQLContext.createListenerAndUI(sc),
-      execHive,
-      metaHive,
-      true,
-      new HiveExternalCatalog(metaHive))
-  }
-
   def this(sc: SparkContext) = {
-    this(
-      sc,
-      HiveContext.newClientForExecution(sc.conf, sc.hadoopConfiguration),
-      HiveContext.newClientForMetadata(sc.conf, sc.hadoopConfiguration))
+    this(new HiveSharedState(sc), true)
   }
 
   def this(sc: JavaSparkContext) = this(sc.sc)
@@ -120,23 +83,15 @@ class HiveContext private[hive](
    * and Hive client (both of execution and metadata) with existing HiveContext.
    */
   override def newSession(): HiveContext = {
-    new HiveContext(
-      sc = sc,
-      cacheManager = cacheManager,
-      listener = listener,
-      executionHive = executionHive.newSession(),
-      metadataHive = metadataHive.newSession(),
-      isRootContext = false,
-      hiveCatalog = hiveCatalog)
+    new HiveContext(hiveSharedState, isRootContext = false)
   }
 
   @transient
   protected[sql] override lazy val sessionState = new HiveSessionState(self)
 
-  // The Hive UDF current_database() is foldable, will be evaluated by optimizer,
-  // but the optimizer can't access the SessionState of metadataHive.
-  sessionState.functionRegistry.registerFunction(
-    "current_database", (e: Seq[Expression]) => new CurrentDatabase(self))
+  protected[hive] def hiveCatalog: HiveExternalCatalog = hiveSharedState.externalCatalog
+  protected[hive] def executionHive: HiveClientImpl = sessionState.executionHive
+  protected[hive] def metadataHive: HiveClient = sessionState.metadataHive
 
   /**
    * When true, enables an experimental feature where metastore tables that use the parquet SerDe
@@ -181,7 +136,7 @@ class HiveContext private[hive](
   protected[hive] def hiveThriftServerAsync: Boolean = getConf(HIVE_THRIFT_SERVER_ASYNC)
 
   protected[hive] def hiveThriftServerSingleSession: Boolean =
-    sc.conf.get("spark.sql.hive.thriftServer.singleSession", "false").toBoolean
+    sparkContext.conf.getBoolean("spark.sql.hive.thriftServer.singleSession", defaultValue = false)
 
   @transient
   protected[sql] lazy val substitutor = new VariableSubstitution()
@@ -198,7 +153,7 @@ class HiveContext private[hive](
 
   protected[sql] override def parseSql(sql: String): LogicalPlan = {
     executionHive.withHiveState {
-      super.parseSql(substitutor.substitute(hiveconf, sql))
+      super.parseSql(substitutor.substitute(sessionState.hiveconf, sql))
     }
   }
 
@@ -233,77 +188,7 @@ class HiveContext private[hive](
    * @since 1.2.0
    */
   def analyze(tableName: String) {
-    val tableIdent = sessionState.sqlParser.parseTableIdentifier(tableName)
-    val relation = EliminateSubqueryAliases(sessionState.catalog.lookupRelation(tableIdent))
-
-    relation match {
-      case relation: MetastoreRelation =>
-        // This method is mainly based on
-        // org.apache.hadoop.hive.ql.stats.StatsUtils.getFileSizeForTable(HiveConf, Table)
-        // in Hive 0.13 (except that we do not use fs.getContentSummary).
-        // TODO: Generalize statistics collection.
-        // TODO: Why fs.getContentSummary returns wrong size on Jenkins?
-        // Can we use fs.getContentSummary in future?
-        // Seems fs.getContentSummary returns wrong table size on Jenkins. So we use
-        // countFileSize to count the table size.
-        val stagingDir = metadataHive.getConf(HiveConf.ConfVars.STAGINGDIR.varname,
-          HiveConf.ConfVars.STAGINGDIR.defaultStrVal)
-
-        def calculateTableSize(fs: FileSystem, path: Path): Long = {
-          val fileStatus = fs.getFileStatus(path)
-          val size = if (fileStatus.isDirectory) {
-            fs.listStatus(path)
-              .map { status =>
-                if (!status.getPath().getName().startsWith(stagingDir)) {
-                  calculateTableSize(fs, status.getPath)
-                } else {
-                  0L
-                }
-              }
-              .sum
-          } else {
-            fileStatus.getLen
-          }
-
-          size
-        }
-
-        def getFileSizeForTable(conf: HiveConf, table: Table): Long = {
-          val path = table.getPath
-          var size: Long = 0L
-          try {
-            val fs = path.getFileSystem(conf)
-            size = calculateTableSize(fs, path)
-          } catch {
-            case e: Exception =>
-              logWarning(
-                s"Failed to get the size of table ${table.getTableName} in the " +
-                s"database ${table.getDbName} because of ${e.toString}", e)
-              size = 0L
-          }
-
-          size
-        }
-
-        val tableParameters = relation.hiveQlTable.getParameters
-        val oldTotalSize =
-          Option(tableParameters.get(StatsSetupConst.TOTAL_SIZE))
-            .map(_.toLong)
-            .getOrElse(0L)
-        val newTotalSize = getFileSizeForTable(hiveconf, relation.hiveQlTable)
-        // Update the Hive metastore if the total size of the table is different than the size
-        // recorded in the Hive metastore.
-        // This logic is based on org.apache.hadoop.hive.ql.exec.StatsTask.aggregateStats().
-        if (newTotalSize > 0 && newTotalSize != oldTotalSize) {
-          sessionState.catalog.alterTable(
-            relation.table.copy(
-              properties = relation.table.properties +
-                (StatsSetupConst.TOTAL_SIZE -> newTotalSize.toString)))
-        }
-      case otherRelation =>
-        throw new UnsupportedOperationException(
-          s"Analyze only works for Hive tables, but $tableName is a ${otherRelation.nodeName}")
-    }
+    AnalyzeTable(tableName).run(self)
   }
 
   override def setConf(key: String, value: String): Unit = {
@@ -315,26 +200,11 @@ class HiveContext private[hive](
     // Also, calling hiveconf will create a default session containing a HiveConf, which
     // will interfer with the creation of executionHive (which is a lazy val). So,
     // we put hiveconf.set at the end of this method.
-    hiveconf.set(key, value)
+    sessionState.hiveconf.set(key, value)
   }
 
   override private[sql] def setConf[T](entry: ConfigEntry[T], value: T): Unit = {
     setConf(entry.key, entry.stringConverter(value))
-  }
-
-  /**
-   * SQLConf and HiveConf contracts:
-   *
-   * 1. create a new o.a.h.hive.ql.session.SessionState for each HiveContext
-   * 2. when the Hive session is first initialized, params in HiveConf will get picked up by the
-   *    SQLConf.  Additionally, any properties set by set() or a SET command inside sql() will be
-   *    set in the SQLConf *as well as* in the HiveConf.
-   */
-  @transient
-  protected[hive] lazy val hiveconf: HiveConf = {
-    val c = executionHive.conf
-    setConf(c.getAllProperties)
-    c
   }
 
   private def functionOrMacroDDLPattern(command: String) = Pattern.compile(
@@ -429,7 +299,7 @@ private[hive] object HiveContext extends Logging {
       | Location of the jars that should be used to instantiate the HiveMetastoreClient.
       | This property can be one of three options: "
       | 1. "builtin"
-      |   Use Hive ${hiveExecutionVersion}, which is bundled with the Spark assembly jar when
+      |   Use Hive ${hiveExecutionVersion}, which is bundled with the Spark assembly when
       |   <code>-Phive</code> is enabled. When this option is chosen,
       |   <code>spark.sql.hive.metastore.version</code> must be either
       |   <code>${hiveExecutionVersion}</code> or not defined.
@@ -619,7 +489,9 @@ private[hive] object HiveContext extends Logging {
    * The version of the Hive client that is used here must match the metastore that is configured
    * in the hive-site.xml file.
    */
-  private def newClientForMetadata(conf: SparkConf, hadoopConf: Configuration): HiveClient = {
+  protected[hive] def newClientForMetadata(
+      conf: SparkConf,
+      hadoopConf: Configuration): HiveClient = {
     val hiveConf = new HiveConf(hadoopConf, classOf[HiveConf])
     val configurations = hiveClientConfigurations(hiveConf)
     newClientForMetadata(conf, hiveConf, hadoopConf, configurations)

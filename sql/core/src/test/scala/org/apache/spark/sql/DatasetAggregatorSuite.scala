@@ -19,7 +19,6 @@ package org.apache.spark.sql
 
 import scala.language.postfixOps
 
-import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.expressions.scala.typed
 import org.apache.spark.sql.functions._
@@ -83,6 +82,15 @@ class ParameterizedTypeSum[IN, OUT : Numeric : Encoder](f: IN => OUT)
   override def finish(reduction: OUT): OUT = reduction
   override def bufferEncoder: Encoder[OUT] = implicitly[Encoder[OUT]]
   override def outputEncoder: Encoder[OUT] = implicitly[Encoder[OUT]]
+}
+
+object RowAgg extends Aggregator[Row, Int, Int] {
+  def zero: Int = 0
+  def reduce(b: Int, a: Row): Int = a.getInt(0) + b
+  def merge(b1: Int, b2: Int): Int = b1 + b2
+  def finish(r: Int): Int = r
+  override def bufferEncoder: Encoder[Int] = Encoders.scalaInt
+  override def outputEncoder: Encoder[Int] = Encoders.scalaInt
 }
 
 
@@ -200,4 +208,8 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
         (1279869254, "Some String"))
   }
 
+  test("aggregator in DataFrame/Dataset[Row]") {
+    val df = Seq(1 -> "a", 2 -> "b", 3 -> "b").toDF("i", "j")
+    checkAnswer(df.groupBy($"j").agg(RowAgg.toColumn), Row("a", 1) :: Row("b", 5) :: Nil)
+  }
 }

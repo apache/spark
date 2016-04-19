@@ -65,9 +65,8 @@ private[hive] object SparkSQLEnv extends Logging {
       hiveContext.setConf("spark.sql.hive.version", HiveContext.hiveExecutionVersion)
 
       if (log.isDebugEnabled) {
-        hiveContext.hiveconf.getAllProperties.asScala.toSeq.sorted.foreach { case (k, v) =>
-          logDebug(s"HiveConf var: $k=$v")
-        }
+        hiveContext.sessionState.hiveconf.getAllProperties.asScala.toSeq.sorted
+          .foreach { case (k, v) => logDebug(s"HiveConf var: $k=$v") }
       }
     }
   }
