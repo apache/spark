@@ -28,8 +28,8 @@ import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.Logging
 import org.apache.spark.deploy.yarn.config._
+import org.apache.spark.internal.Logging
 
 private case class CacheEntry(
   uri: URI,
