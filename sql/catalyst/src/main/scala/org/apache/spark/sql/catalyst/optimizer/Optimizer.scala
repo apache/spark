@@ -21,11 +21,10 @@ import scala.annotation.tailrec
 import scala.collection.immutable.HashSet
 import scala.collection.mutable
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystConf, SimpleCatalystConf}
 import org.apache.spark.sql.catalyst.analysis.{CleanupAliases, DistinctAggregationRewriter, EliminateSubqueryAliases, EmptyFunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
-import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.{InSubQuery, _}
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.planning.{ExtractFiltersAndInnerJoins, Unions}
@@ -1470,7 +1469,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
    */
   private def pullOutCorrelatedPredicates(
       subquery: LogicalPlan,
-      query: LogicalPlan): (LogicalPlan, Option[Expression]) = {
+      query: LogicalPlan): (LogicalPlan, Seq[Expression]) = {
     val references = query.outputSet
     val predicateMap = mutable.Map.empty[LogicalPlan, Seq[Expression]]
     val transformed = subquery transformUp {
@@ -1508,7 +1507,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           p
         }
     }
-    (transformed, predicateMap.values.flatten.reduceOption(And))
+    (transformed, predicateMap.values.flatten.toSeq)
   }
 
   /**
@@ -1516,13 +1515,12 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
    * constructing the required join condition. Both the rewritten subquery and the constructed
    * join condition are returned.
    */
-  private def rewriteInSubquery(
-      subquery: InSubQuery,
-      query: LogicalPlan): (LogicalPlan, Expression) = {
-    val expressions = subquery.expressions
-    val (resolved, joinCondition) = pullOutCorrelatedPredicates(subquery.query, query)
-    val conditions = joinCondition.toSeq ++ expressions.zip(resolved.output).map(EqualTo.tupled)
-    (resolved, conditions.reduceLeft(And))
+  private def pullOutCorrelatedPredicates(
+      in: InSubQuery,
+      query: LogicalPlan): (LogicalPlan, Seq[Expression]) = {
+    val (resolved, joinCondition) = pullOutCorrelatedPredicates(in.query, query)
+    val conditions = joinCondition ++ in.expressions.zip(resolved.output).map(EqualTo.tupled)
+    (resolved, conditions)
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -1539,43 +1537,25 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
       // Filter the plan by applying left semi and left anti joins.
       withSubquery.foldLeft(newFilter) {
         case (p, Exists(sub)) =>
-          val (resolved, joinCondition) = pullOutCorrelatedPredicates(sub, p)
-          Join(p, resolved, LeftSemi, joinCondition)
+          val (resolved, conditions) = pullOutCorrelatedPredicates(sub, p)
+          Join(p, resolved, LeftSemi, conditions.reduceOption(And))
         case (p, Not(Exists(sub))) =>
-          val (resolved, joinCondition) = pullOutCorrelatedPredicates(sub, p)
-          Join(p, resolved, LeftAnti, joinCondition)
+          val (resolved, conditions) = pullOutCorrelatedPredicates(sub, p)
+          Join(p, resolved, LeftAnti, conditions.reduceOption(And))
         case (p, in: InSubQuery) =>
-          val (resolved, cond) = rewriteInSubquery(in, p)
-          Join(p, resolved, LeftSemi, Option(cond))
+          val (resolved, conditions) = pullOutCorrelatedPredicates(in, p)
+          Join(p, resolved, LeftSemi, conditions.reduceOption(And))
         case (p, Not(in: InSubQuery)) =>
+          val (resolved, conditions) = pullOutCorrelatedPredicates(in, p)
           // This is a NULL-aware (left) anti join (NAAJ).
-          // We currently only allow subqueries with non-nullable fields. In this way we can plan a
-          // regular ANTI join, instead of a much more complex NAAJ (which is not yet available in
-          // Spark SQL). In order to get the NAAJ semantically right, we need to add a filter to
-          // left hand side of the query that checks that either all columns are non-null or that
-          // the right hand side is empty.
-          val (resolved, cond) = rewriteInSubquery(in, p)
+          // Construct the condition. A NULL in one of the conditions is regarded as a positive
+          // result; such a row will be filtered out by the Anti-Join operator.
+          val anyNull = conditions.map(IsNull).reduceLeft(Or)
+          val condition = conditions.reduceLeft(And)
 
-          // Make absolutely sure that the rewritten query contains no nullable fields. We re-check
-          // this here because the rewritten query can contain pulled-up nullable columns.
-          if (resolved.output.exists(_.nullable)) {
-            throw new AnalysisException("NOT IN with nullable subquery is not supported. " +
-              "Please use a non-nullable sub-query or rewrite this using NOT EXISTS.")
-          }
-
-          // Construct filter for the left hand side
-          val count = Alias(AggregateExpression(Count(Literal(1)), Complete, false), "cnt")()
-          val isEmpty = EqualTo(ScalarSubquery(Aggregate(Nil, Seq(count), resolved)), Literal(0L))
-          val isNotNullOpt = cond.references.intersect(p.outputSet)
-            .filter(_.nullable)
-            .map(IsNotNull)
-            .reduceOption(And)
-          val filtered = isNotNullOpt match {
-            case Some(isNotNull) => Filter(Or(isNotNull, isEmpty), p)
-            case None => p
-          }
-
-          Join(filtered, resolved, LeftAnti, Option(cond))
+          // Note that will almost certainly be planned as a Broadcast Nested Loop join. Use EXISTS
+          // if performance matters to you.
+          Join(p, resolved, LeftAnti, Option(Or(anyNull, condition)))
       }
   }
 }

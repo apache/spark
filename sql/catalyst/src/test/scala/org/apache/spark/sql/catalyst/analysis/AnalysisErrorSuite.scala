@@ -500,14 +500,4 @@ class AnalysisErrorSuite extends AnalysisTest {
       LocalRelation(a))
     assertAnalysisError(plan4, "Accessing outer query column is not allowed in" :: Nil)
   }
-
-  test("NOT IN is used with a nullable sub-query") {
-    val a = AttributeReference("a", IntegerType)()
-    val b = AttributeReference("b", IntegerType)()
-    val plan = Filter(Not(InSubQuery(a, LocalRelation(b))), LocalRelation(a))
-    assertAnalysisError(
-      plan,
-      "NOT IN with nullable subquery is not supported." ::
-      "Please use a non-nullable sub-query or rewrite this using NOT EXISTS." :: Nil)
-  }
 }

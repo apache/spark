@@ -136,9 +136,6 @@ trait CheckAnalysis extends PredicateHelper {
             splitConjunctivePredicates(condition).foreach {
               case p: PredicateSubquery =>
                 checkForCorrelatedReferences(p)
-              case Not(InSubQuery(_, query)) if query.output.exists(_.nullable) =>
-                failAnalysis("NOT IN with nullable subquery is not supported. " +
-                  "Please use a non-nullable sub-query or rewrite this using NOT EXISTS.")
               case Not(p: PredicateSubquery) =>
                 checkForCorrelatedReferences(p)
               case e if PredicateSubquery.hasPredicateSubquery(e) =>

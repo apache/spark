@@ -45,11 +45,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
     row(null, 5.0),
     row(6, null)).toDF("c", "d")
 
-  lazy val t = Seq(
-    (2, 3.0),
-    (2, 3.0),
-    (3, 2.0),
-    (4, 1.0)).toDF("c", "d")
+  lazy val t = r.filter($"c".isNotNull && $"d".isNotNull)
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()
@@ -154,22 +150,32 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
 
   test("NOT IN predicate subquery") {
     checkAnswer(
-      sql("select * from l where a not in(select c from t)"),
-      Row(1, 2.0) :: Row(1, 2.0) :: Row(6, null) :: Nil)
+      sql("select * from l where a not in(select c from r)"),
+      Nil)
+
+    checkAnswer(
+      sql("select * from l where a not in(select c from r where c is not null)"),
+      Row(1, 2.0) :: Row(1, 2.0) :: Nil)
 
     checkAnswer(
       sql("select * from l where a not in(select c from t where b < d)"),
       Row(1, 2.0) :: Row(1, 2.0) :: Row(3, 3.0) :: Nil)
 
+    // Empty sub-query
     checkAnswer(
-      sql("select * from l where a not in(select c from t where c > 10 and b < d)"),
+      sql("select * from l where a not in(select c from r where c > 10 and b < d)"),
       Row(1, 2.0) :: Row(1, 2.0) :: Row(2, 1.0) :: Row(2, 1.0) ::
       Row(3, 3.0) :: Row(null, null) :: Row(null, 5.0) :: Row(6, null) :: Nil)
+
   }
 
   test("complex IN predicate subquery") {
     checkAnswer(
-      sql("select * from l where (a, b) not in(select c, d from t)"),
+      sql("select * from l where (a, b) not in(select c, d from r)"),
+      Nil)
+
+    checkAnswer(
+      sql("select * from l where (a, b) not in(select c, d from t) and (a + b) is not null"),
       Row(1, 2.0) :: Row(1, 2.0) :: Row(2, 1.0) :: Row(2, 1.0) :: Row(3, 3.0) :: Nil)
   }
 }
