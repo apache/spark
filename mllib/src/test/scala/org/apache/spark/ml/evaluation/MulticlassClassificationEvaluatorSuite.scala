@@ -38,7 +38,6 @@ class MulticlassClassificationEvaluatorSuite
   }
 
   test("should support all NumericType labels and not support other types") {
-    val evaluator = new MulticlassClassificationEvaluator().setMetricName("recall")
-    MLTestingUtils.checkNumericTypes(evaluator, sqlContext)
+    MLTestingUtils.checkNumericTypes(new MulticlassClassificationEvaluator, sqlContext)
   }
 }

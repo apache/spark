@@ -20,7 +20,7 @@ package org.apache.spark.ml.evaluation
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.regression.LinearRegression
-import org.apache.spark.ml.util.DefaultReadWriteTest
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.util.{LinearDataGenerator, MLlibTestSparkContext}
 import org.apache.spark.mllib.util.TestingUtils._
 
@@ -82,5 +82,9 @@ class RegressionEvaluatorSuite
       .setLabelCol("myLabel")
       .setMetricName("r2")
     testDefaultReadWrite(evaluator)
+  }
+
+  test("should support all NumericType labels and not support other types") {
+    MLTestingUtils.checkNumericTypes(new RegressionEvaluator, sqlContext)
   }
 }

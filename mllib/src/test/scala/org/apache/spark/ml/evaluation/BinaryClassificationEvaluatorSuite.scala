@@ -70,9 +70,7 @@ class BinaryClassificationEvaluatorSuite
   }
 
   test("should support all NumericType labels and not support other types") {
-    val evaluator = new BinaryClassificationEvaluator()
-      .setRawPredictionCol("prediction")
-      .setMetricName("areaUnderPR")
+    val evaluator = new BinaryClassificationEvaluator().setRawPredictionCol("prediction")
     MLTestingUtils.checkNumericTypes(evaluator, sqlContext)
   }
 }
