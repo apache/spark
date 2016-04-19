@@ -155,6 +155,10 @@ private[state] object StateStore extends Logging {
     loadedProviders.contains(storeId)
   }
 
+  def isMaintenanceRunning: Boolean = loadedProviders.synchronized {
+    maintenanceTask != null
+  }
+
   /** Unload and stop all state store providers */
   def stop(): Unit = loadedProviders.synchronized {
     loadedProviders.clear()
