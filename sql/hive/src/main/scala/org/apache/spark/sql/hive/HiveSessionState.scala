@@ -17,11 +17,14 @@
 
 package org.apache.spark.sql.hive
 
+import org.apache.hadoop.hive.conf.HiveConf
+
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry}
+import org.apache.spark.sql.catalyst.analysis.Analyzer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
-import org.apache.spark.sql.execution.{python, SparkPlanner}
+import org.apache.spark.sql.execution.SparkPlanner
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.hive.client.{HiveClient, HiveClientImpl}
 import org.apache.spark.sql.hive.execution.HiveSqlParser
 import org.apache.spark.sql.internal.{SessionState, SQLConf}
 
@@ -30,6 +33,30 @@ import org.apache.spark.sql.internal.{SessionState, SQLConf}
  * A class that holds all session-specific state in a given [[HiveContext]].
  */
 private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx) {
+
+  /**
+   * SQLConf and HiveConf contracts:
+   *
+   * 1. create a new o.a.h.hive.ql.session.SessionState for each [[HiveContext]]
+   * 2. when the Hive session is first initialized, params in HiveConf will get picked up by the
+   *    SQLConf.  Additionally, any properties set by set() or a SET command inside sql() will be
+   *    set in the SQLConf *as well as* in the HiveConf.
+   */
+  lazy val hiveconf: HiveConf = {
+    val c = ctx.executionHive.conf
+    ctx.setConf(c.getAllProperties)
+    c
+  }
+
+  /**
+   * A Hive client used for execution.
+   */
+  val executionHive: HiveClientImpl = ctx.hiveSharedState.executionHive.newSession()
+
+  /**
+   * A Hive client used for interacting with the metastore.
+   */
+  val metadataHive: HiveClient = ctx.hiveSharedState.metadataHive.newSession()
 
   override lazy val conf: SQLConf = new SQLConf {
     override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
@@ -69,7 +96,7 @@ private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx)
   /**
    * Parser for HiveQl query texts.
    */
-  override lazy val sqlParser: ParserInterface = HiveSqlParser
+  override lazy val sqlParser: ParserInterface = new HiveSqlParser(hiveconf)
 
   /**
    * Planner that takes into account Hive-specific strategies.

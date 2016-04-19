@@ -31,7 +31,7 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton {
 
   test("parse analyze commands") {
     def assertAnalyzeCommand(analyzeCommand: String, c: Class[_]) {
-      val parsed = HiveSqlParser.parsePlan(analyzeCommand)
+      val parsed = hiveContext.sessionState.sqlParser.parsePlan(analyzeCommand)
       val operators = parsed.collect {
         case a: AnalyzeTable => a
         case o => o

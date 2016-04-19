@@ -70,7 +70,7 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener, conf: Spar
     executorToLogUrls(eid) = executorAdded.executorInfo.logUrlMap
     executorToTotalCores(eid) = executorAdded.executorInfo.totalCores
     executorToTasksMax(eid) = executorToTotalCores(eid) / conf.getInt("spark.task.cpus", 1)
-    executorIdToData(eid) = ExecutorUIData(executorAdded.time)
+    executorIdToData(eid) = new ExecutorUIData(executorAdded.time)
   }
 
   override def onExecutorRemoved(
@@ -119,26 +119,19 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener, conf: Spar
       // Update shuffle read/write
       val metrics = taskEnd.taskMetrics
       if (metrics != null) {
-        metrics.inputMetrics.foreach { inputMetrics =>
-          executorToInputBytes(eid) =
-            executorToInputBytes.getOrElse(eid, 0L) + inputMetrics.bytesRead
-          executorToInputRecords(eid) =
-            executorToInputRecords.getOrElse(eid, 0L) + inputMetrics.recordsRead
-        }
-        metrics.outputMetrics.foreach { outputMetrics =>
-          executorToOutputBytes(eid) =
-            executorToOutputBytes.getOrElse(eid, 0L) + outputMetrics.bytesWritten
-          executorToOutputRecords(eid) =
-            executorToOutputRecords.getOrElse(eid, 0L) + outputMetrics.recordsWritten
-        }
-        metrics.shuffleReadMetrics.foreach { shuffleRead =>
-          executorToShuffleRead(eid) =
-            executorToShuffleRead.getOrElse(eid, 0L) + shuffleRead.remoteBytesRead
-        }
-        metrics.shuffleWriteMetrics.foreach { shuffleWrite =>
-          executorToShuffleWrite(eid) =
-            executorToShuffleWrite.getOrElse(eid, 0L) + shuffleWrite.bytesWritten
-        }
+        executorToInputBytes(eid) =
+          executorToInputBytes.getOrElse(eid, 0L) + metrics.inputMetrics.bytesRead
+        executorToInputRecords(eid) =
+          executorToInputRecords.getOrElse(eid, 0L) + metrics.inputMetrics.recordsRead
+        executorToOutputBytes(eid) =
+          executorToOutputBytes.getOrElse(eid, 0L) + metrics.outputMetrics.bytesWritten
+        executorToOutputRecords(eid) =
+          executorToOutputRecords.getOrElse(eid, 0L) + metrics.outputMetrics.recordsWritten
+
+        executorToShuffleRead(eid) =
+          executorToShuffleRead.getOrElse(eid, 0L) + metrics.shuffleReadMetrics.remoteBytesRead
+        executorToShuffleWrite(eid) =
+          executorToShuffleWrite.getOrElse(eid, 0L) + metrics.shuffleWriteMetrics.bytesWritten
         executorToJvmGCTime(eid) = executorToJvmGCTime.getOrElse(eid, 0L) + metrics.jvmGCTime
       }
     }
