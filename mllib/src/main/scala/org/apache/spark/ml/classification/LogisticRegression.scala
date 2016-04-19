@@ -23,7 +23,7 @@ import breeze.linalg.{DenseVector => BDV}
 import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS, OWLQN => BreezeOWLQN}
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException}
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.Instance
@@ -159,9 +159,7 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
 @Since("1.2.0")
 @Experimental
 class LogisticRegression @Since("1.2.0") (
-    @Since("1.4.0") override val uid: String,
-    @Since("2.0.0") val numFeatures: Int = 0,
-    @Since("2.0.0") val numClasses: Int = 0)
+    @Since("1.4.0") override val uid: String)
   extends ProbabilisticClassifier[Vector, LogisticRegression, LogisticRegressionModel]
   with LogisticRegressionParams with DefaultParamsWritable with Logging {
 
@@ -460,13 +458,6 @@ class LogisticRegression @Since("1.2.0") (
 
   @Since("1.4.0")
   override def copy(extra: ParamMap): LogisticRegression = defaultCopy(extra)
-
-  @Since("2.0.0")
-  override def toString: String = {
-    val td = getDefault(threshold)
-    s"${super.toString}, numClasses = ${numClasses}, " +
-      s"numFeatures = ${numFeatures} threshold = ${td.getOrElse("None")}"
-  }
 }
 
 @Since("1.6.0")
@@ -634,6 +625,13 @@ class LogisticRegressionModel private[spark] (
    */
   @Since("1.6.0")
   override def write: MLWriter = new LogisticRegressionModel.LogisticRegressionModelWriter(this)
+
+  @Since("2.0.0")
+  override def toString: String = {
+    val td = getDefault(threshold)
+    s"${super.toString}, numClasses = $numClasses, " +
+      s"numFeatures = $numFeatures threshold = ${td.getOrElse("None")}"
+  }
 }
 
 

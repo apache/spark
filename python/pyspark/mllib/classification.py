@@ -265,6 +265,7 @@ class LogisticRegressionModel(LinearClassificationModel):
     def __repr__(self):
         return self._call_java("toString")
 
+
 class LogisticRegressionWithSGD(object):
     """
     .. versionadded:: 0.9.0
