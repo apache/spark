@@ -60,20 +60,20 @@ class FileStreamSinkLog(sqlContext: SQLContext, path: String)
   /**
    * If we delete the old files after compaction at once, there is a race condition in S3: other
    * processes may see the old files are deleted but still cannot see the compaction file. The user
-   * should set a reasonable `fileExpiredTimeMS`. We will wait until then so that the compaction
+   * should set a reasonable `fileCleanupDelayMs`. We will wait until then so that the compaction
    * file is guaranteed to be visible for all readers
    */
-  private val fileExpiredTimeMs = sqlContext.getConf(SQLConf.FILE_STREAM_SINK_LOG_EXPIRED_TIME)
+  private val fileCleanupDelayMs = sqlContext.getConf(SQLConf.FILE_SINK_LOG_CLEANUP_DELAY)
 
-  private val isDeletingExpiredLog = sqlContext.getConf(SQLConf.FILE_STREAM_SINK_LOG_DELETE)
+  private val isDeletingExpiredLog = sqlContext.getConf(SQLConf.FILE_SINK_LOG_DELETION)
 
-  private val compactLength = sqlContext.getConf(SQLConf.FILE_STREAM_SINK_LOG_COMPACT_LEN)
-  require(compactLength > 0,
-    s"Please set ${SQLConf.FILE_STREAM_SINK_LOG_COMPACT_LEN.key} (was $compactLength) " +
+  private val compactInterval = sqlContext.getConf(SQLConf.FILE_SINK_LOG_COMPACT_INTERVAL)
+  require(compactInterval > 0,
+    s"Please set ${SQLConf.FILE_SINK_LOG_COMPACT_INTERVAL.key} (was $compactInterval) " +
       "to a positive value.")
 
   override def batchIdToPath(batchId: Long): Path = {
-    if (isCompactionBatch(batchId, compactLength)) {
+    if (isCompactionBatch(batchId, compactInterval)) {
       new Path(metadataPath, s"$batchId$COMPACT_FILE_SUFFIX")
     } else {
       new Path(metadataPath, batchId.toString)
@@ -110,7 +110,7 @@ class FileStreamSinkLog(sqlContext: SQLContext, path: String)
   }
 
   override def add(batchId: Long, logs: Seq[SinkFileStatus]): Boolean = {
-    if (isCompactionBatch(batchId, compactLength)) {
+    if (isCompactionBatch(batchId, compactInterval)) {
       compact(batchId, logs)
     } else {
       super.add(batchId, logs)
@@ -127,7 +127,7 @@ class FileStreamSinkLog(sqlContext: SQLContext, path: String)
     // race condition.
     while (true) {
       if (latestId >= 0) {
-        val startId = getAllValidBatches(latestId, compactLength)(0)
+        val startId = getAllValidBatches(latestId, compactInterval)(0)
         try {
           val logs = get(Some(startId), Some(latestId)).flatMap(_._2)
           return compactLogs(logs).toArray
@@ -155,7 +155,7 @@ class FileStreamSinkLog(sqlContext: SQLContext, path: String)
    * corresponding `batchId` file. It will delete expired files as well if enabled.
    */
   private def compact(batchId: Long, logs: Seq[SinkFileStatus]): Boolean = {
-    val validBatches = getValidBatchesBeforeCompactionBatch(batchId, compactLength)
+    val validBatches = getValidBatchesBeforeCompactionBatch(batchId, compactInterval)
     val allLogs = validBatches.flatMap(batchId => get(batchId)).flatten ++ logs
     if (super.add(batchId, compactLogs(allLogs))) {
       if (isDeletingExpiredLog) {
@@ -172,10 +172,10 @@ class FileStreamSinkLog(sqlContext: SQLContext, path: String)
    * Since all logs before `compactionBatchId` are compacted and written into the
    * `compactionBatchId` log file, they can be removed. However, due to the eventual consistency of
    * S3, the compaction file may not be seen by other processes at once. So we only delete files
-   * created `fileExpiredTimeMs` milliseconds ago.
+   * created `fileCleanupDelayMs` milliseconds ago.
    */
   private def deleteExpiredLog(compactionBatchId: Long): Unit = {
-    val expiredTime = System.currentTimeMillis() - fileExpiredTimeMs
+    val expiredTime = System.currentTimeMillis() - fileCleanupDelayMs
     fileManager.list(metadataPath, new PathFilter {
       override def accept(path: Path): Boolean = {
         try {
@@ -206,27 +206,27 @@ object FileStreamSinkLog {
 
   /**
    * Returns if this is a compaction batch. FileStreamSinkLog will compact old logs every
-   * `compactLength` commits.
+   * `compactInterval` commits.
    *
-   * E.g., if `compactLength` is 3, then 2, 5, 8, ... are all compaction batches.
+   * E.g., if `compactInterval` is 3, then 2, 5, 8, ... are all compaction batches.
    */
-  def isCompactionBatch(batchId: Long, compactLength: Int): Boolean = {
-    (batchId + 1) % compactLength == 0
+  def isCompactionBatch(batchId: Long, compactInterval: Int): Boolean = {
+    (batchId + 1) % compactInterval == 0
   }
 
   /**
    * Returns all valid batches before the specified `compactionBatchId`. They contain all logs we
    * need to do a new compaction.
    *
-   * E.g., if `compactLength` is 3 and `compactionBatchId` is 5, this method should returns
+   * E.g., if `compactInterval` is 3 and `compactionBatchId` is 5, this method should returns
    * `Seq(2, 3, 4)` (Note: it includes the previous compaction batch 2).
    */
   def getValidBatchesBeforeCompactionBatch(
       compactionBatchId: Long,
-      compactLength: Int): Seq[Long] = {
-    assert(isCompactionBatch(compactionBatchId, compactLength),
+      compactInterval: Int): Seq[Long] = {
+    assert(isCompactionBatch(compactionBatchId, compactInterval),
       s"$compactionBatchId is not a compaction batch")
-    (math.max(0, compactionBatchId - compactLength)) until compactionBatchId
+    (math.max(0, compactionBatchId - compactInterval)) until compactionBatchId
   }
 
   /**
@@ -234,9 +234,9 @@ object FileStreamSinkLog {
    * return itself. Otherwise, it will find the previous compaction batch and return all batches
    * between it and `batchId`.
    */
-  def getAllValidBatches(batchId: Long, compactLength: Long): Seq[Long] = {
+  def getAllValidBatches(batchId: Long, compactInterval: Long): Seq[Long] = {
     assert(batchId >= 0)
-    val start = math.max(0, (batchId + 1) / compactLength * compactLength - 1)
+    val start = math.max(0, (batchId + 1) / compactInterval * compactInterval - 1)
     start to batchId
   }
 

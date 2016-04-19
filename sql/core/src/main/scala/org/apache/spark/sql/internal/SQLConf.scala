@@ -18,6 +18,7 @@
 package org.apache.spark.sql.internal
 
 import java.util.{NoSuchElementException, Properties}
+import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
 import scala.collection.immutable
@@ -443,24 +444,25 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val FILE_STREAM_SINK_LOG_DELETE = SQLConfigBuilder("spark.sql.streaming.fileSink.log.deletion")
+  val FILE_SINK_LOG_DELETION = SQLConfigBuilder("spark.sql.streaming.fileSink.log.deletion")
     .internal()
     .doc("Whether to delete the expired log files in file stream sink.")
     .booleanConf
     .createWithDefault(true)
 
-  val FILE_STREAM_SINK_LOG_COMPACT_LEN =
-    SQLConfigBuilder("spark.sql.streaming.fileSink.log.compactLen")
+  val FILE_SINK_LOG_COMPACT_INTERVAL =
+    SQLConfigBuilder("spark.sql.streaming.fileSink.log.compactInterval")
       .internal()
-      .doc("Every how many log files is a compaction triggered.")
+      .doc("Number of log files after which all the previous files " +
+        "are compacted into the next log file.")
       .intConf
       .createWithDefault(10)
 
-  val FILE_STREAM_SINK_LOG_EXPIRED_TIME =
-    SQLConfigBuilder("spark.sql.streaming.fileSink.log.expired")
+  val FILE_SINK_LOG_CLEANUP_DELAY =
+    SQLConfigBuilder("spark.sql.streaming.fileSink.log.cleanupDelay")
       .internal()
       .doc("How long in milliseconds a file is guaranteed to be visible for all readers.")
-      .longConf
+      .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(3600 * 1000L) // 1 hour
 
   object Deprecated {

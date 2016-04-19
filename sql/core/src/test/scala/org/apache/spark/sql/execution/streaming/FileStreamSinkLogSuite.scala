@@ -37,41 +37,41 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSQLContext {
   }
 
   test("isCompactionBatch") {
-    assert(false === isCompactionBatch(0, compactLength = 3))
-    assert(false === isCompactionBatch(1, compactLength = 3))
-    assert(true === isCompactionBatch(2, compactLength = 3))
-    assert(false === isCompactionBatch(3, compactLength = 3))
-    assert(false === isCompactionBatch(4, compactLength = 3))
-    assert(true === isCompactionBatch(5, compactLength = 3))
+    assert(false === isCompactionBatch(0, compactInterval = 3))
+    assert(false === isCompactionBatch(1, compactInterval = 3))
+    assert(true === isCompactionBatch(2, compactInterval = 3))
+    assert(false === isCompactionBatch(3, compactInterval = 3))
+    assert(false === isCompactionBatch(4, compactInterval = 3))
+    assert(true === isCompactionBatch(5, compactInterval = 3))
   }
 
   test("getValidBatchesBeforeCompactionBatch") {
     intercept[AssertionError] {
-      getValidBatchesBeforeCompactionBatch(0, compactLength = 3)
+      getValidBatchesBeforeCompactionBatch(0, compactInterval = 3)
     }
     intercept[AssertionError] {
-      getValidBatchesBeforeCompactionBatch(1, compactLength = 3)
+      getValidBatchesBeforeCompactionBatch(1, compactInterval = 3)
     }
-    assert(Seq(0, 1) === getValidBatchesBeforeCompactionBatch(2, compactLength = 3))
+    assert(Seq(0, 1) === getValidBatchesBeforeCompactionBatch(2, compactInterval = 3))
     intercept[AssertionError] {
-      getValidBatchesBeforeCompactionBatch(3, compactLength = 3)
+      getValidBatchesBeforeCompactionBatch(3, compactInterval = 3)
     }
     intercept[AssertionError] {
-      getValidBatchesBeforeCompactionBatch(4, compactLength = 3)
+      getValidBatchesBeforeCompactionBatch(4, compactInterval = 3)
     }
-    assert(Seq(2, 3, 4) === getValidBatchesBeforeCompactionBatch(5, compactLength = 3))
+    assert(Seq(2, 3, 4) === getValidBatchesBeforeCompactionBatch(5, compactInterval = 3))
   }
 
   test("getAllValidBatches") {
-    assert(Seq(0) === getAllValidBatches(0, compactLength = 3))
-    assert(Seq(0, 1) === getAllValidBatches(1, compactLength = 3))
-    assert(Seq(2) === getAllValidBatches(2, compactLength = 3))
-    assert(Seq(2, 3) === getAllValidBatches(3, compactLength = 3))
-    assert(Seq(2, 3, 4) === getAllValidBatches(4, compactLength = 3))
-    assert(Seq(5) === getAllValidBatches(5, compactLength = 3))
-    assert(Seq(5, 6) === getAllValidBatches(6, compactLength = 3))
-    assert(Seq(5, 6, 7) === getAllValidBatches(7, compactLength = 3))
-    assert(Seq(8) === getAllValidBatches(8, compactLength = 3))
+    assert(Seq(0) === getAllValidBatches(0, compactInterval = 3))
+    assert(Seq(0, 1) === getAllValidBatches(1, compactInterval = 3))
+    assert(Seq(2) === getAllValidBatches(2, compactInterval = 3))
+    assert(Seq(2, 3) === getAllValidBatches(3, compactInterval = 3))
+    assert(Seq(2, 3, 4) === getAllValidBatches(4, compactInterval = 3))
+    assert(Seq(5) === getAllValidBatches(5, compactInterval = 3))
+    assert(Seq(5, 6) === getAllValidBatches(6, compactInterval = 3))
+    assert(Seq(5, 6, 7) === getAllValidBatches(7, compactInterval = 3))
+    assert(Seq(8) === getAllValidBatches(8, compactInterval = 3))
   }
 
   test("compactLogs") {
@@ -124,7 +124,7 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSQLContext {
   }
 
   test("batchIdToPath") {
-    withSQLConf(SQLConf.FILE_STREAM_SINK_LOG_COMPACT_LEN.key -> "3") {
+    withSQLConf(SQLConf.FILE_SINK_LOG_COMPACT_INTERVAL.key -> "3") {
       withFileStreamSinkLog { sinkLog =>
         assert("0" === sinkLog.batchIdToPath(0).getName)
         assert("1" === sinkLog.batchIdToPath(1).getName)
@@ -137,20 +137,19 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSQLContext {
   }
 
   test("compact") {
-    withSQLConf(SQLConf.FILE_STREAM_SINK_LOG_COMPACT_LEN.key -> "3") {
+    withSQLConf(SQLConf.FILE_SINK_LOG_COMPACT_INTERVAL.key -> "3") {
       withFileStreamSinkLog { sinkLog =>
         for (batchId <- 0 to 10) {
           sinkLog.add(
             batchId,
             Seq(SinkFileStatus("/a/b/" + batchId, 100L, FileStreamSinkLog.ADD_ACTION)))
-          assert(sinkLog.allFiles() === (0 to batchId).map {
+          val expectedFiles = (0 to batchId).map {
             id => SinkFileStatus("/a/b/" + id, 100L, FileStreamSinkLog.ADD_ACTION)
-          })
+          }
+          assert(sinkLog.allFiles() === expectedFiles)
           if (isCompactionBatch(batchId, 3)) {
             // Since batchId is a compaction batch, the batch log file should contain all logs
-            assert(sinkLog.get(batchId).getOrElse(Nil) === (0 to batchId).map {
-              id => SinkFileStatus("/a/b/" + id, 100L, FileStreamSinkLog.ADD_ACTION)
-            })
+            assert(sinkLog.get(batchId).getOrElse(Nil) === expectedFiles)
           }
         }
       }
@@ -158,11 +157,11 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSQLContext {
   }
 
   test("delete expired file") {
-    // Set FILE_STREAM_SINK_LOG_EXPIRED_TIME to 0 so that we can detect the deleting behaviour
+    // Set FILE_SINK_LOG_CLEANUP_DELAY to 0 so that we can detect the deleting behaviour
     // deterministically
     withSQLConf(
-      SQLConf.FILE_STREAM_SINK_LOG_COMPACT_LEN.key -> "3",
-      SQLConf.FILE_STREAM_SINK_LOG_EXPIRED_TIME.key -> "0") {
+      SQLConf.FILE_SINK_LOG_COMPACT_INTERVAL.key -> "3",
+      SQLConf.FILE_SINK_LOG_CLEANUP_DELAY.key -> "0") {
       withFileStreamSinkLog { sinkLog =>
         val metadataPath = new File(sinkLog.metadataPath.toUri.toString)
 
