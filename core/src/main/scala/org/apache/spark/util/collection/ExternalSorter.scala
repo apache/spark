@@ -785,10 +785,12 @@ private[spark] class ExternalSorter[K, V, C](
 
     private var nextUpstream: Iterator[((Int, K), C)] = null
 
-    private var cur: ((Int, K), C) = null
+    private var cur: ((Int, K), C) = readNext()
+
+    private var hasSpilled: Boolean = false
 
     def spill(): Boolean = synchronized {
-      if (upstream == null || nextUpstream != null) {
+      if (hasSpilled) {
         false
       } else {
         val inMemoryIterator = new WritablePartitionedIterator {
@@ -812,22 +814,29 @@ private[spark] class ExternalSorter[K, V, C](
           val iterator = spillReader.readNextPartition()
           iterator.map(cur => ((p, cur._1), cur._2))
         }
+        hasSpilled = true
         true
       }
     }
 
-    override def hasNext: Boolean = synchronized {
+    def readNext(): ((Int, K), C) = synchronized {
       if (nextUpstream != null) {
         upstream = nextUpstream
         nextUpstream = null
       }
-      val r = upstream.hasNext
-      if (r) {
-        cur = upstream.next()
+      if (upstream.hasNext) {
+        upstream.next()
+      } else {
+        null
       }
-      r
     }
 
-    override def next(): ((Int, K), C) = cur
+    override def hasNext(): Boolean = cur != null
+
+    override def next(): ((Int, K), C) = {
+      val r = cur
+      cur = readNext()
+      r
+    }
   }
 }

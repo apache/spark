@@ -572,32 +572,41 @@ class ExternalAppendOnlyMap[K, V, C](
 
     private var nextUpstream: Iterator[(K, C)] = null
 
-    private var cur: (K, C) = null
+    private var cur: (K, C) = readNext()
+
+    private var hasSpilled: Boolean = false
 
     def spill(): Boolean = synchronized {
-      if (upstream == null || nextUpstream != null) {
+      if (hasSpilled) {
         false
       } else {
         logInfo(s"Task ${context.taskAttemptId} force spilling in-memory map to disk and " +
           s"it will release ${org.apache.spark.util.Utils.bytesToString(getUsed())} memory")
         nextUpstream = spillMemoryIteratorToDisk(upstream)
+        hasSpilled = true
         true
       }
     }
 
-    override def hasNext: Boolean = synchronized {
+    def readNext(): (K, C) = synchronized {
       if (nextUpstream != null) {
         upstream = nextUpstream
         nextUpstream = null
       }
-      val r = upstream.hasNext
-      if (r) {
-        cur = upstream.next()
+      if (upstream.hasNext) {
+        upstream.next()
+      } else {
+        null
       }
-      r
     }
 
-    override def next(): (K, C) = cur
+    override def hasNext(): Boolean = cur != null
+
+    override def next(): (K, C) = {
+      val r = cur
+      cur = readNext()
+      r
+    }
   }
 
   /** Convenience function to hash the given (K, C) pair by the key. */

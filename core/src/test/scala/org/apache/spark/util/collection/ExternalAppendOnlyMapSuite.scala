@@ -422,9 +422,10 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite with LocalSparkContext {
     val conf = createSparkConf(loadDefaults = false)
       .set("spark.shuffle.memoryFraction", "0.01")
       .set("spark.memory.useLegacyMode", "true")
+      .set("spark.testing.memory", "100000000")
       .set("spark.shuffle.sort.bypassMergeThreshold", "0")
     sc = new SparkContext("local", "test", conf)
-    val N = 2e6.toInt
+    val N = 2e5.toInt
     sc.parallelize(1 to N, 10)
       .map { i => (i, i) }
       .groupByKey()
