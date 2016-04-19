@@ -38,11 +38,8 @@ import org.apache.hadoop.util.VersionInfo
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.api.java.JavaSparkContext
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.hive.client._
-import org.apache.spark.sql.hive.execution.AnalyzeTable
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.types._
@@ -91,95 +88,6 @@ class HiveContext private[hive](
   protected[hive] def metadataHive: HiveClient = sessionState.metadataHive
   protected[hive] def hiveconf: HiveConf = sessionState.hiveconf
 
-  /**
-   * Overrides default Hive configurations to avoid breaking changes to Spark SQL users.
-   *  - allow SQL11 keywords to be used as identifiers
-   */
-  private[sql] def defaultOverrides() = {
-    setConf(ConfVars.HIVE_SUPPORT_SQL11_RESERVED_KEYWORDS.varname, "false")
-  }
-
-  defaultOverrides()
-
-  override protected[sql] def executePlan(plan: LogicalPlan) = new HiveQueryExecution(self, plan)
-
-  /**
-   * Invalidate and refresh all the cached the metadata of the given table. For performance reasons,
-   * Spark SQL or the external data source library it uses might cache certain metadata about a
-   * table, such as the location of blocks. When those change outside of Spark SQL, users should
-   * call this function to invalidate the cache.
-   *
-   * @since 1.3.0
-   */
-  def refreshTable(tableName: String): Unit = {
-    val tableIdent = sessionState.sqlParser.parseTableIdentifier(tableName)
-    sessionState.catalog.refreshTable(tableIdent)
-  }
-
-  protected[hive] def invalidateTable(tableName: String): Unit = {
-    val tableIdent = sessionState.sqlParser.parseTableIdentifier(tableName)
-    sessionState.catalog.invalidateTable(tableIdent)
-  }
-
-  /**
-   * Analyzes the given table in the current database to generate statistics, which will be
-   * used in query optimizations.
-   *
-   * Right now, it only supports Hive tables and it only updates the size of a Hive table
-   * in the Hive metastore.
-   *
-   * @since 1.2.0
-   */
-  def analyze(tableName: String) {
-    AnalyzeTable(tableName).run(self)
-  }
-
-  override def setConf(key: String, value: String): Unit = {
-    super.setConf(key, value)
-    executionHive.runSqlHive(s"SET $key=$value")
-    metadataHive.runSqlHive(s"SET $key=$value")
-    // If users put any Spark SQL setting in the spark conf (e.g. spark-defaults.conf),
-    // this setConf will be called in the constructor of the SQLContext.
-    // Also, calling hiveconf will create a default session containing a HiveConf, which
-    // will interfer with the creation of executionHive (which is a lazy val). So,
-    // we put hiveconf.set at the end of this method.
-    sessionState.hiveconf.set(key, value)
-  }
-
-  override private[sql] def setConf[T](entry: ConfigEntry[T], value: T): Unit = {
-    setConf(entry.key, entry.stringConverter(value))
-  }
-
-  protected[hive] def runSqlHive(sql: String): Seq[String] = {
-    val command = sql.trim.toLowerCase
-    val functionOrMacroDDLPattern = Pattern.compile(
-      ".*(create|drop)\\s+(temporary\\s+)?(function|macro).+", Pattern.DOTALL)
-    if (functionOrMacroDDLPattern.matcher(command).matches()) {
-      executionHive.runSqlHive(sql)
-    } else if (command.startsWith("set")) {
-      metadataHive.runSqlHive(sql)
-      executionHive.runSqlHive(sql)
-    } else {
-      metadataHive.runSqlHive(sql)
-    }
-  }
-
-  /**
-   * Executes a SQL query without parsing it, but instead passing it directly to Hive.
-   * This is currently only used for DDLs and will be removed as soon as Spark can parse
-   * all supported Hive DDLs itself.
-   */
-  protected[sql] override def runNativeSql(sqlText: String): Seq[Row] = {
-    runSqlHive(sqlText).map { s => Row(s) }
-  }
-
-  protected[sql] override def addJar(path: String): Unit = {
-    // Add jar to Hive and classloader
-    executionHive.addJar(path)
-    metadataHive.addJar(path)
-    Thread.currentThread().setContextClassLoader(executionHive.clientLoader.classLoader)
-    super.addJar(path)
-  }
 }
 
 

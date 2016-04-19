@@ -145,7 +145,7 @@ case class AddFile(path: String) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
-    hiveContext.runSqlHive(s"ADD FILE $path")
+    hiveContext.sessionState.runNativeSql(s"ADD FILE $path")
     hiveContext.sparkContext.addFile(path)
     Seq.empty[Row]
   }

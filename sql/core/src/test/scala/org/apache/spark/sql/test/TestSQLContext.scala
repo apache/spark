@@ -37,7 +37,7 @@ private[sql] class TestSQLContext(sc: SparkContext) extends SQLContext(sc) { sel
 
   @transient
   protected[sql] override lazy val sessionState: SessionState = new SessionState(self) {
-    override def newConf(): SQLConf = {
+    override lazy val conf: SQLConf = {
       new SQLConf {
         clear()
         override def clear(): Unit = {

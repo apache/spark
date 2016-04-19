@@ -352,7 +352,7 @@ abstract class HiveComparisonTest
                     case _: ExplainCommand =>
                       // No need to execute EXPLAIN queries as we don't check the output.
                       Nil
-                    case _ => TestHive.runSqlHive(queryString)
+                    case _ => TestHive.sessionState.runNativeSql(queryString)
                   }
 
                   // We need to add a new line to non-empty answers so we can differentiate Seq()
@@ -563,7 +563,7 @@ abstract class HiveComparisonTest
             // something must have gone seriously wrong.
             try {
               new TestHive.QueryExecution("SELECT key FROM src").stringResult()
-              TestHive.runSqlHive("SELECT key FROM src")
+              TestHive.sessionState.runNativeSql("SELECT key FROM src")
             } catch {
               case e: Exception =>
                 logError(s"FATAL ERROR: Canary query threw $e This implies that the " +

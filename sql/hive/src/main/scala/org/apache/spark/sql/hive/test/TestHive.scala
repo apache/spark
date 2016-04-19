@@ -137,15 +137,13 @@ class TestHiveContext private[hive](
 
   /** The location of the compiled hive distribution */
   lazy val hiveHome = envVarToFile("HIVE_HOME")
+
   /** The location of the hive source code. */
-  lazy val hiveDevHome = envVarToFile("HIVE_DEV_HOME")
-
-  // Override so we can intercept relative paths and rewrite them to point at hive.
-  override def runSqlHive(sql: String): Seq[String] =
-    super.runSqlHive(rewritePaths(sessionState.substitutor.substitute(hiveconf, sql)))
-
-  override def executePlan(plan: LogicalPlan): this.QueryExecution =
-    new this.QueryExecution(plan)
+  lazy val hiveDevHome = {
+    val f = envVarToFile("HIVE_DEV_HOME")
+    sessionState.setHiveDevHome(f)
+    f
+  }
 
   /**
    * Returns the value of specified environmental variable as a [[java.io.File]] after checking
@@ -155,29 +153,20 @@ class TestHiveContext private[hive](
     Option(System.getenv(envVar)).map(new File(_))
   }
 
-  /**
-   * Replaces relative paths to the parent directory "../" with hiveDevHome since this is how the
-   * hive test cases assume the system is set up.
-   */
-  private def rewritePaths(cmd: String): String =
-    if (cmd.toUpperCase contains "LOAD DATA") {
-      val testDataLocation =
-        hiveDevHome.map(_.getCanonicalPath).getOrElse(inRepoTests.getCanonicalPath)
-      cmd.replaceAll("\\.\\./\\.\\./", testDataLocation + "/")
-    } else {
-      cmd
-    }
-
   val hiveFilesTemp = File.createTempFile("catalystHiveFiles", "")
   hiveFilesTemp.delete()
   hiveFilesTemp.mkdir()
   ShutdownHookManager.registerShutdownDeleteDir(hiveFilesTemp)
 
-  val inRepoTests = if (System.getProperty("user.dir").endsWith("sql" + File.separator + "hive")) {
-    new File("src" + File.separator + "test" + File.separator + "resources" + File.separator)
-  } else {
-    new File("sql" + File.separator + "hive" + File.separator + "src" + File.separator + "test" +
-      File.separator + "resources")
+  val inRepoTests: File = {
+    val f = if (System.getProperty("user.dir").endsWith("sql" + File.separator + "hive")) {
+      new File("src" + File.separator + "test" + File.separator + "resources" + File.separator)
+    } else {
+      new File("sql" + File.separator + "hive" + File.separator + "src" + File.separator + "test" +
+        File.separator + "resources")
+    }
+    sessionState.setInRepoTests(f)
+    f
   }
 
   def getHiveFile(path: String): File = {
@@ -246,19 +235,19 @@ class TestHiveContext private[hive](
       "CREATE TABLE src1 (key INT, value STRING)".cmd,
       s"LOAD DATA LOCAL INPATH '${getHiveFile("data/files/kv3.txt")}' INTO TABLE src1".cmd),
     TestTable("srcpart", () => {
-      runSqlHive(
+      sessionState.runNativeSql(
         "CREATE TABLE srcpart (key INT, value STRING) PARTITIONED BY (ds STRING, hr STRING)")
       for (ds <- Seq("2008-04-08", "2008-04-09"); hr <- Seq("11", "12")) {
-        runSqlHive(
+        sessionState.runNativeSql(
           s"""LOAD DATA LOCAL INPATH '${getHiveFile("data/files/kv1.txt")}'
              |OVERWRITE INTO TABLE srcpart PARTITION (ds='$ds',hr='$hr')
            """.stripMargin)
       }
     }),
     TestTable("srcpart1", () => {
-      runSqlHive("CREATE TABLE srcpart1 (key INT, value STRING) PARTITIONED BY (ds STRING, hr INT)")
+      sessionState.runNativeSql("CREATE TABLE srcpart1 (key INT, value STRING) PARTITIONED BY (ds STRING, hr INT)")
       for (ds <- Seq("2008-04-08", "2008-04-09"); hr <- 11 to 12) {
-        runSqlHive(
+        sessionState.runNativeSql(
           s"""LOAD DATA LOCAL INPATH '${getHiveFile("data/files/kv1.txt")}'
              |OVERWRITE INTO TABLE srcpart1 PARTITION (ds='$ds',hr='$hr')
            """.stripMargin)
@@ -269,7 +258,7 @@ class TestHiveContext private[hive](
       import org.apache.hadoop.mapred.{SequenceFileInputFormat, SequenceFileOutputFormat}
       import org.apache.thrift.protocol.TBinaryProtocol
 
-      runSqlHive(
+      sessionState.runNativeSql(
         s"""
          |CREATE TABLE src_thrift(fake INT)
          |ROW FORMAT SERDE '${classOf[ThriftDeserializer].getName}'
@@ -282,7 +271,7 @@ class TestHiveContext private[hive](
          |OUTPUTFORMAT '${classOf[SequenceFileOutputFormat[_, _]].getName}'
         """.stripMargin)
 
-      runSqlHive(
+      sessionState.runNativeSql(
         s"LOAD DATA LOCAL INPATH '${getHiveFile("data/files/complex.seq")}' INTO TABLE src_thrift")
     }),
     TestTable("serdeins",
@@ -448,17 +437,17 @@ class TestHiveContext private[hive](
       metadataHive.runSqlHive("RESET")
       // For some reason, RESET does not reset the following variables...
       // https://issues.apache.org/jira/browse/HIVE-9004
-      runSqlHive("set hive.table.parameters.default=")
-      runSqlHive("set datanucleus.cache.collections=true")
-      runSqlHive("set datanucleus.cache.collections.lazy=true")
+      sessionState.runNativeSql("set hive.table.parameters.default=")
+      sessionState.runNativeSql("set datanucleus.cache.collections=true")
+      sessionState.runNativeSql("set datanucleus.cache.collections.lazy=true")
       // Lots of tests fail if we do not change the partition whitelist from the default.
-      runSqlHive("set hive.metastore.partition.name.whitelist.pattern=.*")
+      sessionState.runNativeSql("set hive.metastore.partition.name.whitelist.pattern=.*")
 
       // In case a test changed any of these values, restore all the original ones here.
       TestHiveContext.hiveClientConfigurations(
         sessionState.hiveconf, warehousePath, scratchDirPath, metastoreTemporaryConf)
           .foreach { case (k, v) => metadataHive.runSqlHive(s"SET $k=$v") }
-      defaultOverrides()
+      sessionState.setDefaultOverrideConfs()
 
       sessionState.catalog.setCurrentDatabase("default")
     } catch {
@@ -522,7 +511,15 @@ private[hive] class TestHiveSharedState(
 protected[hive] class TestHiveSessionState(sqlContext: SQLContext)
   extends HiveSessionState(sqlContext) {
 
-  override def newConf(): SQLConf = {
+  // Hack alert: These will be set in TestHiveContext constructor. Due to initialization order
+  // constraints we can't pass them in through the session state constructor. Sorry to build on
+  // top of this mess!
+  private var hiveDevHome: Option[File] = None
+  private var inRepoTests: File = _
+  def setHiveDevHome(f: Option[File]): Unit = { hiveDevHome = f }
+  def setInRepoTests(f: File): Unit = { inRepoTests = f }
+
+  override lazy val conf: SQLConf = {
     new SQLConf {
       clear()
       override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
@@ -543,6 +540,25 @@ protected[hive] class TestHiveSessionState(sqlContext: SQLContext)
       case (name, (info, builder)) => fr.registerFunction(name, info, builder)
     }
     fr
+  }
+
+  // Override so we can intercept relative paths and rewrite them to point at hive.
+  override def runNativeSql(sql: String): Seq[String] = {
+    super.runNativeSql(rewritePaths(substitutor.substitute(hiveconf, sql)))
+  }
+
+  /**
+   * Replaces relative paths to the parent directory "../" with hiveDevHome since this is how the
+   * hive test cases assume the system is set up.
+   */
+  private def rewritePaths(cmd: String): String = {
+    if (cmd.toUpperCase contains "LOAD DATA") {
+      val testDataLocation =
+        hiveDevHome.map(_.getCanonicalPath).getOrElse(inRepoTests.getCanonicalPath)
+      cmd.replaceAll("\\.\\./\\.\\./", testDataLocation + "/")
+    } else {
+      cmd
+    }
   }
 
 }

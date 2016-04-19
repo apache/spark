@@ -116,7 +116,7 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton {
     // Try to analyze a temp table
     sql("""SELECT * FROM src""").registerTempTable("tempTable")
     intercept[UnsupportedOperationException] {
-      hiveContext.analyze("tempTable")
+      hiveContext.sessionState.analyze("tempTable")
     }
     hiveContext.sessionState.catalog.dropTable(
       TableIdentifier("tempTable"), ignoreIfNotExists = true)

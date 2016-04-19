@@ -134,7 +134,7 @@ class SQLContext private[sql](
    * @group config
    * @since 1.0.0
    */
-  def setConf(props: Properties): Unit = conf.setConf(props)
+  def setConf(props: Properties): Unit = sessionState.setConf(props)
 
   /** Set the given Spark SQL configuration property. */
   private[sql] def setConf[T](entry: ConfigEntry[T], value: T): Unit = conf.setConf(entry, value)
@@ -145,7 +145,7 @@ class SQLContext private[sql](
    * @group config
    * @since 1.0.0
    */
-  def setConf(key: String, value: String): Unit = conf.setConfString(key, value)
+  def setConf(key: String, value: String): Unit = sessionState.setConf(key, value)
 
   /**
    * Return the value of Spark SQL configuration property for the given key.
@@ -192,7 +192,9 @@ class SQLContext private[sql](
 
   protected[sql] def executeSql(sql: String): QueryExecution = executePlan(parseSql(sql))
 
-  protected[sql] def executePlan(plan: LogicalPlan) = new QueryExecution(this, plan)
+  protected[sql] def executePlan(plan: LogicalPlan): QueryExecution = {
+    sessionState.executePlan(plan)
+  }
 
   /**
    * Add a jar to SQLContext
@@ -764,7 +766,7 @@ class SQLContext private[sql](
    * as Spark can parse all supported Hive DDLs itself.
    */
   private[sql] def runNativeSql(sqlText: String): Seq[Row] = {
-    throw new UnsupportedOperationException
+    sessionState.runNativeSql(sqlText).map { r => Row(r) }
   }
 
   /**
