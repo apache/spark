@@ -473,6 +473,10 @@ case class CollapseCodegenStages(conf: SQLConf) extends Rule[SparkPlan] {
    * Inserts a WholeStageCodegen on top of those that support codegen.
    */
   private def insertWholeStageCodegen(plan: SparkPlan): SparkPlan = plan match {
+    // For operators that will output domain object, do not insert WholeStageCodegen for it as
+    // domain object can not be written into unsafe row.
+    case plan if plan.output.length == 1 && plan.output.head.dataType.isInstanceOf[ObjectType] =>
+      plan.withNewChildren(plan.children.map(insertWholeStageCodegen))
     case plan: CodegenSupport if supportCodegen(plan) =>
       WholeStageCodegen(insertInputAdapter(plan))
     case other =>

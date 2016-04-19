@@ -153,29 +153,16 @@ object SamplePushDown extends Rule[LogicalPlan] {
  * representation of data item.  For example back to back map operations.
  */
 object EliminateSerialization extends Rule[LogicalPlan] {
-  // TODO: find a more general way to do this optimization.
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case m @ MapPartitions(_, deserializer, _, child: ObjectOperator)
-        if !deserializer.isInstanceOf[Attribute] &&
-          deserializer.dataType == child.outputObject.dataType =>
-      val childWithoutSerialization = child.withObjectOutput
-      m.copy(
-        deserializer = childWithoutSerialization.output.head,
-        child = childWithoutSerialization)
-
-    case m @ MapElements(_, deserializer, _, child: ObjectOperator)
-        if !deserializer.isInstanceOf[Attribute] &&
-          deserializer.dataType == child.outputObject.dataType =>
-      val childWithoutSerialization = child.withObjectOutput
-      m.copy(
-        deserializer = childWithoutSerialization.output.head,
-        child = childWithoutSerialization)
-
-    case d @ DeserializeToObject(_, s: SerializeFromObject)
+    case d @ DeserializeToObject(_, _, s: SerializeFromObject)
         if d.outputObjectType == s.inputObjectType =>
       // Adds an extra Project here, to preserve the output expr id of `DeserializeToObject`.
       val objAttr = Alias(s.child.output.head, "obj")(exprId = d.output.head.exprId)
       Project(objAttr :: Nil, s.child)
+
+    case a @ AppendColumns(_, _, _, s: SerializeFromObject)
+        if a.deserializer.dataType == s.inputObjectType =>
+      AppendColumnsWithObject(a.func, s.serializer, a.serializer, s.child)
   }
 }
 
@@ -366,9 +353,9 @@ object ColumnPruning extends Rule[LogicalPlan] {
       }
       a.copy(child = Expand(newProjects, newOutput, grandChild))
 
-    // Prunes the unused columns from child of MapPartitions
-    case mp @ MapPartitions(_, _, _, child) if (child.outputSet -- mp.references).nonEmpty =>
-      mp.copy(child = prunedChild(child, mp.references))
+    // Prunes the unused columns from child of `DeserializeToObject`
+    case d @ DeserializeToObject(_, _, child) if (child.outputSet -- d.references).nonEmpty =>
+      d.copy(child = prunedChild(child, d.references))
 
     // Prunes the unused columns from child of Aggregate/Expand/Generate
     case a @ Aggregate(_, _, child) if (child.outputSet -- a.references).nonEmpty =>
@@ -1453,7 +1440,7 @@ object EmbedSerializerInFilter extends Rule[LogicalPlan] {
         s
       } else {
         val newCondition = condition transform {
-          case a: Attribute if a == d.output.head => d.deserializer.child
+          case a: Attribute if a == d.output.head => d.deserializer
         }
         Filter(newCondition, d.child)
       }
