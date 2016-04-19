@@ -19,10 +19,10 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.{Partition, TaskContext}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.rdd.{InputFileNameHolder, RDD}
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.execution.vectorized.ColumnarBatch
 
 /**
  * A single file that should be read, along with partition column values that
@@ -55,7 +55,7 @@ class FileScanRDD(
 
   override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
     val iterator = new Iterator[Object] with AutoCloseable {
-      private val inputMetrics = context.taskMetrics().registerInputMetrics(DataReadMethod.Hadoop)
+      private val inputMetrics = context.taskMetrics().inputMetrics
       private val existingBytesRead = inputMetrics.bytesRead
 
       // Find a function that will return the FileSystem bytes read by this thread. Do this before
@@ -87,17 +87,21 @@ class FileScanRDD(
 
       def hasNext = (currentIterator != null && currentIterator.hasNext) || nextIterator()
       def next() = {
-        inputMetrics.incRecordsRead(1)
+        val nextElement = currentIterator.next()
+        nextElement match {
+          case c: ColumnarBatch => inputMetrics.incRecordsRead(c.numRows())
+          case _ => inputMetrics.incRecordsRead(1)
+        }
         if (inputMetrics.recordsRead % SparkHadoopUtil.UPDATE_INPUT_METRICS_INTERVAL_RECORDS == 0) {
           updateBytesRead()
         }
-        currentIterator.next()
+        nextElement
       }
 
       /** Advances to the next file. Returns true if a new non-empty iterator is available. */
       private def nextIterator(): Boolean = {
+        updateBytesReadWithFileSize()
         if (files.hasNext) {
-          updateBytesReadWithFileSize()
           currentFile = files.next()
           logInfo(s"Reading File $currentFile")
           InputFileNameHolder.setInputFileName(currentFile.filePath)
