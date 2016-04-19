@@ -40,6 +40,7 @@ class MultiSQLContextsSuite extends SparkFunSuite with BeforeAndAfterAll {
         .setAppName("test")
         .set("spark.ui.enabled", "false")
         .set("spark.driver.allowMultipleContexts", "true")
+        .set("spark.sql.catalogImplementation", "in-memory")
   }
 
   override protected def afterAll(): Unit = {
