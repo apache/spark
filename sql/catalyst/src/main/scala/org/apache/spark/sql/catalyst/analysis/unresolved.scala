@@ -153,7 +153,7 @@ case class UnresolvedGenerator(name: String, children: Seq[Expression]) extends 
   override def eval(input: InternalRow = null): TraversableOnce[InternalRow] =
     throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
 
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): String =
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
     throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
 
   override def terminate(): TraversableOnce[InternalRow] =

@@ -54,7 +54,7 @@ case class ScalarSubquery(
 
   override def eval(input: InternalRow): Any = result
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     Literal.create(result, dataType).doGenCode(ctx, ev)
   }
 }

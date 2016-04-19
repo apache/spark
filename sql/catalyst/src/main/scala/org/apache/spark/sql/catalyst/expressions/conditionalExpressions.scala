@@ -55,12 +55,12 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
     }
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val condEval = predicate.genCode(ctx)
     val trueEval = trueValue.genCode(ctx)
     val falseEval = falseValue.genCode(ctx)
 
-    s"""
+    ev.copy(code = s"""
       ${condEval.code}
       boolean ${ev.isNull} = false;
       ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
@@ -72,8 +72,7 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
         ${falseEval.code}
         ${ev.isNull} = ${falseEval.isNull};
         ${ev.value} = ${falseEval.value};
-      }
-    """
+      }""")
   }
 
   override def toString: String = s"if ($predicate) $trueValue else $falseValue"
@@ -147,7 +146,7 @@ case class CaseWhen(branches: Seq[(Expression, Expression)], elseValue: Option[E
     branches.length < CaseWhen.MAX_NUM_CASES_FOR_CODEGEN
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     if (!shouldCodegen) {
       // Fallback to interpreted mode if there are too many branches, as it may reach the
       // 64K limit (limit on bytecode size for a single function).
@@ -198,11 +197,10 @@ case class CaseWhen(branches: Seq[(Expression, Expression)], elseValue: Option[E
 
     generatedCode += "}\n" * cases.size
 
-    s"""
+    ev.copy(code = s"""
       boolean ${ev.isNull} = true;
       ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-      $generatedCode
-    """
+      $generatedCode""")
   }
 
   override def toString: String = {
@@ -298,7 +296,7 @@ case class Least(children: Seq[Expression]) extends Expression {
     })
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val evalChildren = children.map(_.genCode(ctx))
     val first = evalChildren(0)
     val rest = evalChildren.drop(1)
@@ -312,12 +310,11 @@ case class Least(children: Seq[Expression]) extends Expression {
         }
       """
     }
-    s"""
+    ev.copy(code = s"""
       ${first.code}
       boolean ${ev.isNull} = ${first.isNull};
       ${ctx.javaType(dataType)} ${ev.value} = ${first.value};
-      ${rest.map(updateEval).mkString("\n")}
-    """
+      ${rest.map(updateEval).mkString("\n")}""")
   }
 }
 
@@ -359,7 +356,7 @@ case class Greatest(children: Seq[Expression]) extends Expression {
     })
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val evalChildren = children.map(_.genCode(ctx))
     val first = evalChildren(0)
     val rest = evalChildren.drop(1)
@@ -373,12 +370,11 @@ case class Greatest(children: Seq[Expression]) extends Expression {
         }
       """
     }
-    s"""
+    ev.copy(code = s"""
       ${first.code}
       boolean ${ev.isNull} = ${first.isNull};
       ${ctx.javaType(dataType)} ${ev.value} = ${first.value};
-      ${rest.map(updateEval).mkString("\n")}
-    """
+      ${rest.map(updateEval).mkString("\n")}""")
   }
 }
 
