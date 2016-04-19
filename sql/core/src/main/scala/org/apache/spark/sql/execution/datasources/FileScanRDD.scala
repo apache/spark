@@ -88,9 +88,12 @@ class FileScanRDD(
       def hasNext = (currentIterator != null && currentIterator.hasNext) || nextIterator()
       def next() = {
         val nextElement = currentIterator.next()
-        nextElement match {
-          case c: ColumnarBatch => inputMetrics.incRecordsRead(c.numRows())
-          case _ => inputMetrics.incRecordsRead(1)
+        // TODO: we should have a better separation of row based and batch based scan, so that we
+        // don't need to run this `if` for every record.
+        if (nextElement.isInstanceOf[ColumnarBatch]) {
+          inputMetrics.incRecordsRead(nextElement.asInstanceOf[ColumnarBatch].numRows())
+        } else {
+          inputMetrics.incRecordsRead(1)
         }
         if (inputMetrics.recordsRead % SparkHadoopUtil.UPDATE_INPUT_METRICS_INTERVAL_RECORDS == 0) {
           updateBytesRead()
