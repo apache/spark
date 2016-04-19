@@ -30,7 +30,7 @@ trait Command
 /**
  * Returned for the "DESCRIBE FUNCTION [EXTENDED] functionName" command.
  * @param functionName The function to be described.
- * @param isExtended   True if "DESCRIBE FUNCTION EXTENDED" is used. Otherwise, false.
+ * @param isExtended True if "DESCRIBE FUNCTION EXTENDED" is used. Otherwise, false.
  */
 private[sql] case class DescribeFunction(
     functionName: String,
