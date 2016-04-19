@@ -35,7 +35,7 @@ import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkEnv, SparkException, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
  * Common tests for an RpcEnv implementation.
@@ -415,7 +415,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     })
 
     val f = endpointRef.ask[String]("Hi")
-    val ack = Await.result(f, 5 seconds)
+    val ack = ThreadUtils.awaitResult(f, 5 seconds)
     assert("ack" === ack)
 
     env.stop(endpointRef)
@@ -435,7 +435,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     val rpcEndpointRef = anotherEnv.setupEndpointRef(env.address, "sendWithReply-remotely")
     try {
       val f = rpcEndpointRef.ask[String]("hello")
-      val ack = Await.result(f, 5 seconds)
+      val ack = ThreadUtils.awaitResult(f, 5 seconds)
       assert("ack" === ack)
     } finally {
       anotherEnv.shutdown()
@@ -454,9 +454,9 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
 
     val f = endpointRef.ask[String]("Hi")
     val e = intercept[SparkException] {
-      Await.result(f, 5 seconds)
+      ThreadUtils.awaitResult(f, 5 seconds)
     }
-    assert("Oops" === e.getMessage)
+    assert("Oops" === e.getCause.getMessage)
 
     env.stop(endpointRef)
   }
@@ -476,9 +476,9 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     try {
       val f = rpcEndpointRef.ask[String]("hello")
       val e = intercept[SparkException] {
-        Await.result(f, 5 seconds)
+        ThreadUtils.awaitResult(f, 5 seconds)
       }
-      assert("Oops" === e.getMessage)
+      assert("Oops" === e.getCause.getMessage)
     } finally {
       anotherEnv.shutdown()
       anotherEnv.awaitTermination()
@@ -487,6 +487,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   /**
    * Setup an [[RpcEndpoint]] to collect all network events.
+   *
    * @return the [[RpcEndpointRef]] and an `ConcurrentLinkedQueue` that contains network events.
    */
   private def setupNetworkEndpoint(
@@ -620,10 +621,10 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
       anotherEnv.setupEndpointRef(env.address, "sendWithReply-unserializable-error")
     try {
       val f = rpcEndpointRef.ask[String]("hello")
-      val e = intercept[Exception] {
-        Await.result(f, 1 seconds)
+      val e = intercept[SparkException] {
+        ThreadUtils.awaitResult(f, 1 seconds)
       }
-      assert(e.isInstanceOf[NotSerializableException])
+      assert(e.getCause.isInstanceOf[NotSerializableException])
     } finally {
       anotherEnv.shutdown()
       anotherEnv.awaitTermination()
@@ -754,15 +755,17 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     // RpcTimeout.awaitResult should have added the property to the TimeoutException message
     assert(reply2.contains(shortTimeout.timeoutProp))
 
-    // Ask with delayed response and allow the Future to timeout before Await.result
+    // Ask with delayed response and allow the Future to timeout before ThreadUtils.awaitResult
     val fut3 = rpcEndpointRef.ask[String](NeverReply("goodbye"), shortTimeout)
 
+    // scalastyle:off awaitresult
     // Allow future to complete with failure using plain Await.result, this will return
     // once the future is complete to verify addMessageIfTimeout was invoked
     val reply3 =
       intercept[RpcTimeoutException] {
         Await.result(fut3, 2000 millis)
       }.getMessage
+    // scalastyle:on awaitresult
 
     // When the future timed out, the recover callback should have used
     // RpcTimeout.addMessageIfTimeout to add the property to the TimeoutException message
