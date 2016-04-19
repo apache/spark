@@ -42,6 +42,10 @@ private[spark] class Benchmark(
     outputPerIteration: Boolean = false) {
   val benchmarks = mutable.ArrayBuffer.empty[Benchmark.Case]
 
+  /**
+   * Adds a case to run when run() is called. The given function will be run for several
+   * iterations to collect timing statistics.
+   */
   def addCase(name: String)(f: Int => Unit): Unit = {
     addTimerCase(name) { timer =>
       timer.startTiming()
@@ -50,6 +54,11 @@ private[spark] class Benchmark(
     }
   }
 
+  /**
+   * Adds a case with manual timing control. When the function is run, timing does not start
+   * until timer.startTiming() is called within the given function. The corresponding
+   * timer.stopTiming() method must be called before the function returns.
+   */
   def addTimerCase(name: String)(f: Benchmark.Timer => Unit): Unit = {
     benchmarks += Benchmark.Case(name, f)
   }
