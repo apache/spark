@@ -70,7 +70,7 @@ object MLTestingUtils extends SparkFunSuite {
     val types =
       Seq(ShortType, LongType, IntegerType, FloatType, ByteType, DoubleType, DecimalType(10, 0))
     types.map(t => t -> df.select(col(labelColName).cast(t), col(featuresColName)))
-      .map { case (t, d) => t -> TreeTests.setMetadata(d, 2, labelColName) }
+      .map { case (t, d) => t -> TreeTests.setMetadata(d, 2, labelColName, featuresColName) }
       .toMap
   }
 
@@ -92,7 +92,8 @@ object MLTestingUtils extends SparkFunSuite {
     types
       .map(t => t -> df.select(col(labelColName).cast(t), col(featuresColName)))
       .map { case (t, d) =>
-        t -> TreeTests.setMetadata(d, 0, labelColName).withColumn(censorColName, lit(0.0))
+        t -> TreeTests.setMetadata(d, 0, labelColName, featuresColName)
+          .withColumn(censorColName, lit(0.0))
       }
       .toMap
   }
