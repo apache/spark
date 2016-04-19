@@ -37,109 +37,44 @@ class EliminateSerializationSuite extends PlanTest {
 
   implicit private def productEncoder[T <: Product : TypeTag] = ExpressionEncoder[T]()
   implicit private def intEncoder = ExpressionEncoder[Int]()
-  private val func = identity[Iterator[(Int, Int)]] _
-  private val func2 = identity[Iterator[OtherTuple]] _
 
-  def assertNumSerializations(count: Int, plan: LogicalPlan): Unit = {
-    val serializations = plan collect {
-      case s: SerializeFromObject => s
-    }
-
-    val deserializations = plan collect {
-      case d: DeserializeToObject => d
-      // `MapGroups` takes input row and outputs domain object, it's also kind if deserialization.
-      case m: MapGroups => m
-    }
-
-    assert(serializations.length == deserializations.length,
-      "serializations and deserializations must appear in pair")
-
-    if (serializations.size != count) {
-      fail(
-        s"""
-           |Wrong number of serializations in plan: ${serializations.size} != $count
-           |$plan
-         """.stripMargin)
-    }
+  test("back to back serialization") {
+    val input = LocalRelation('obj.obj(classOf[(Int, Int)]))
+    val plan = input.serialize[(Int, Int)].deserialize[(Int, Int)].analyze
+    val optimized = Optimize.execute(plan)
+    val expected = input.select('obj.as("obj")).analyze
+    comparePlans(optimized, expected)
   }
 
-  test("back to back MapPartitions") {
-    val input = LocalRelation('_1.int, '_2.int)
-    val plan =
-      MapPartitions(func,
-        MapPartitions(func, input))
-
-    val optimized = Optimize.execute(plan.analyze)
-    assertNumSerializations(1, optimized)
+  test("back to back serialization with object change") {
+    val input = LocalRelation('obj.obj(classOf[OtherTuple]))
+    val plan = input.serialize[OtherTuple].deserialize[(Int, Int)].analyze
+    val optimized = Optimize.execute(plan)
+    comparePlans(optimized, plan)
   }
 
-  test("back to back with object change") {
-    val input = LocalRelation('_1.int, '_2.int)
-    val plan =
-      MapPartitions(func,
-        MapPartitions(func2, input))
+  test("back to back serialization in AppendColumns") {
+    val input = LocalRelation('obj.obj(classOf[(Int, Int)]))
+    val func = (item: (Int, Int)) => item._1
+    val plan = AppendColumns(func, input.serialize[(Int, Int)]).analyze
 
-    val optimized = Optimize.execute(plan.analyze)
-    assertNumSerializations(2, optimized)
-  }
+    val optimized = Optimize.execute(plan)
 
-  test("Filter under MapPartition") {
-    val input = LocalRelation('_1.int, '_2.int)
-    val filter = input.filter((tuple: (Int, Int)) => tuple._1 > 1)
-    val map = MapPartitions(func, filter)
-
-    val optimized = Optimize.execute(map.analyze)
-    assertNumSerializations(1, optimized)
-  }
-
-  test("Filter under MapPartition with object change") {
-    val input = LocalRelation('_1.int, '_2.int)
-    val filter = input.filter((tuple: OtherTuple) => tuple._1 > 1)
-    val map = MapPartitions(func, filter)
-
-    val optimized = Optimize.execute(map.analyze)
-    assertNumSerializations(2, optimized)
-  }
-
-  test("MapGroups under MapPartition") {
-    val input = LocalRelation('_1.int, '_2.int)
-    val append = AppendColumns((tuple: OtherTuple) => tuple._1, input)
-    val aggFunc: (Int, Iterator[OtherTuple]) => Iterator[OtherTuple] =
-      (key, values) => Iterator(OtherTuple(1, 1))
-    val agg = MapGroups(aggFunc, append.newColumns, input.output, append)
-    val map = MapPartitions(func2, agg)
-
-    val optimized = Optimize.execute(map.analyze)
-    assertNumSerializations(1, optimized)
-  }
-
-  test("MapGroups under MapPartition with object change") {
-    val input = LocalRelation('_1.int, '_2.int)
-    val append = AppendColumns((tuple: OtherTuple) => tuple._1, input)
-    val aggFunc: (Int, Iterator[OtherTuple]) => Iterator[OtherTuple] =
-      (key, values) => Iterator(OtherTuple(1, 1))
-    val agg = MapGroups(aggFunc, append.newColumns, input.output, append)
-    val map = MapPartitions(func, agg)
-
-    val optimized = Optimize.execute(map.analyze)
-    assertNumSerializations(2, optimized)
-  }
-
-  test("MapPartitions under AppendColumns") {
-    val input = LocalRelation('_1.int, '_2.int)
-    val map = MapPartitions(func2, input)
-    val appendFunc = (tuple: OtherTuple) => tuple._1
-    val append = AppendColumns(appendFunc, map)
-
-    val optimized = Optimize.execute(append.analyze)
-
-    val mapWithoutSer = map.asInstanceOf[SerializeFromObject].child
     val expected = AppendColumnsWithObject(
-      appendFunc.asInstanceOf[Any => Any],
-      productEncoder[OtherTuple].namedExpressions,
+      func.asInstanceOf[Any => Any],
+      productEncoder[(Int, Int)].namedExpressions,
       intEncoder.namedExpressions,
-      mapWithoutSer).analyze
+      input).analyze
 
     comparePlans(optimized, expected)
+  }
+
+  test("back to back serialization in AppendColumns with object change") {
+    val input = LocalRelation('obj.obj(classOf[OtherTuple]))
+    val func = (item: (Int, Int)) => item._1
+    val plan = AppendColumns(func, input.serialize[OtherTuple]).analyze
+
+    val optimized = Optimize.execute(plan)
+    comparePlans(optimized, plan)
   }
 }
