@@ -515,16 +515,18 @@ class DataFrameWriter(object):
         :param options: All other string options. You may want to provide a `checkpointLocation`
             for most streams, however it is not required for a `memory` stream.
 
-        >>> cq = sdf.write.format('memory').startStream()
+        >>> cq = sdf.write.format('memory').queryName('this_query').startStream()
         >>> cq.isActive
         True
+        >>> cq.name
+        u'this_query'
         >>> cq.stop()
         >>> cq.isActive
         False
         >>> cq = sdf.write.trigger(processingTime='5 seconds').startStream(
-        ...     queryName='my_query', format='memory')
+        ...     queryName='that_query', format='memory')
         >>> cq.name
-        u'my_query'
+        u'that_query'
         >>> cq.isActive
         True
         >>> cq.stop()
