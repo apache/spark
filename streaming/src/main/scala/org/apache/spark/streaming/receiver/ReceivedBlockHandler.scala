@@ -20,6 +20,7 @@ package org.apache.spark.streaming.receiver
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.language.{existentials, postfixOps}
+import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -189,14 +190,19 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
 
     // Store the block in block manager
     val storeInBlockManagerFuture = Future {
-      val putSucceeded = blockManager.putBytes(
-        blockId,
-        serializedBlock,
-        effectiveStorageLevel,
-        tellMaster = true)
-      if (!putSucceeded) {
-        throw new SparkException(
-          s"Could not store $blockId to block manager with storage level $storageLevel")
+      try {
+        val putSucceeded = blockManager.putBytes(
+          blockId,
+          serializedBlock,
+          effectiveStorageLevel,
+          tellMaster = true)
+        if (!putSucceeded) {
+          logWarning(
+            s"Could not store $blockId to block manager with storage level $storageLevel")
+        }
+      } catch {
+        case NonFatal(t) =>
+          logError(s"Could not store $blockId to block manager with storage level $storageLevel", t)
       }
     }
 

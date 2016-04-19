@@ -179,6 +179,7 @@ object FunctionRegistry {
     expression[Atan]("atan"),
     expression[Atan2]("atan2"),
     expression[Bin]("bin"),
+    expression[BRound]("bround"),
     expression[Cbrt]("cbrt"),
     expression[Ceil]("ceil"),
     expression[Ceil]("ceiling"),
@@ -328,6 +329,7 @@ object FunctionRegistry {
     expression[SortArray]("sort_array"),
 
     // misc functions
+    expression[AssertTrue]("assert_true"),
     expression[Crc32]("crc32"),
     expression[Md5]("md5"),
     expression[Murmur3Hash]("hash"),

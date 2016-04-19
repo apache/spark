@@ -70,8 +70,8 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
 
   override def eval(input: InternalRow): Any = throw new UnsupportedOperationException
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
-    val childCode = child.child.gen(ctx)
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val childCode = child.child.genCode(ctx)
     val input = childCode.value
     val BinaryPrefixCmp = classOf[BinaryPrefixComparator].getName
     val DoublePrefixCmp = classOf[DoublePrefixComparator].getName
@@ -104,14 +104,14 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
       case _ => (0L, "0L")
     }
 
-    childCode.code +
-    s"""
-      |long ${ev.value} = ${nullValue}L;
-      |boolean ${ev.isNull} = false;
-      |if (!${childCode.isNull}) {
-      |  ${ev.value} = $prefixCode;
-      |}
-    """.stripMargin
+    ev.copy(code = childCode.code +
+      s"""
+         |long ${ev.value} = ${nullValue}L;
+         |boolean ${ev.isNull} = false;
+         |if (!${childCode.isNull}) {
+         |  ${ev.value} = $prefixCode;
+         |}
+      """.stripMargin)
   }
 
   override def dataType: DataType = LongType
