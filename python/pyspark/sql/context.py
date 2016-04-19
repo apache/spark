@@ -150,8 +150,9 @@ class SQLContext(object):
     def getConf(self, key, defaultValue=None):
         """Returns the value of Spark SQL configuration property for the given key.
 
-        If the key is not set, returns defaultValue, if set, otherwise, return the
-        system default.
+        If the key is not set and defaultValue is not None, return
+        defaultValue. If the key is not set and defaultValue is None, return
+        the system default value.
 
         >>> sqlContext.getConf("spark.sql.shuffle.partitions")
         u'200'
