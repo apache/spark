@@ -113,19 +113,15 @@ case class ColumnVectorReference(
 
   override def eval(input: InternalRow): Any = null
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = ctx.javaType(dataType)
     val value = ctx.getValue(columnVar, dataType, ordinal)
     if (nullable) {
-      s"""
+      ev.copy(code = s"""
         boolean ${ev.isNull} = ${columnVar}.isNullAt($ordinal);
-        $javaType ${ev.value} = ${ev.isNull} ? ${ctx.defaultValue(dataType)} : ($value);
-      """
+        $javaType ${ev.value} = ${ev.isNull} ? ${ctx.defaultValue(dataType)} : ($value);""")
     } else {
-      ev.isNull = "false"
-      s"""
-        $javaType ${ev.value} = $value;
-      """
+      ev.copy(code = s"""$javaType ${ev.value} = $value;""", isNull = "false")
     }
   }
 }

@@ -275,7 +275,7 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupp
         s"$name = $batch.column((($columnarItrClz)$input).getColumnIndexes()[$i]);" }
 
       val columns = (output zip colVars).map { case (attr, colVar) =>
-        new ColumnVectorReference(colVar, rowidx, attr.dataType, attr.nullable).gen(ctx) }
+        new ColumnVectorReference(colVar, rowidx, attr.dataType, attr.nullable).genCode(ctx) }
     s"""
        | while (true) {
        |   if ($idx == 0) {
