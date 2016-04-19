@@ -953,7 +953,7 @@ private[spark] object JsonProtocol {
       val properties = new Properties
       mapFromJson(json).foreach { case (k, v) => properties.setProperty(k, v) }
       properties
-    }.getOrElse(null)
+    }.orNull
   }
 
   def UUIDFromJson(json: JValue): UUID = {

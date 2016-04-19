@@ -1447,7 +1447,7 @@ class DAGScheduler(
       job: ActiveJob,
       failureReason: String,
       exception: Option[Throwable] = None): Unit = {
-    val error = new SparkException(failureReason, exception.getOrElse(null))
+    val error = new SparkException(failureReason, exception.orNull)
     var ableToCancelStages = true
 
     val shouldInterruptThread =
