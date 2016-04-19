@@ -293,7 +293,7 @@ class DenseVector(Vector):
         s = s[start + 1: end]
 
         try:
-            values = [float(val) for val in s.split(',')]
+            values = [float(val) for val in s.split(',')] if s else []
         except ValueError:
             raise ValueError("Unable to parse values from %s" % s)
         return DenseVector(values)
@@ -586,7 +586,7 @@ class SparseVector(Vector):
         new_s = s[ind_start + 1: ind_end]
         ind_list = new_s.split(',') if new_s else []
         try:
-            indices = [int(ind) for ind in ind_list] 
+            indices = [int(ind) for ind in ind_list]
         except ValueError:
             raise ValueError("Unable to parse indices from %s." % new_s)
         s = s[ind_end + 1:].strip()
