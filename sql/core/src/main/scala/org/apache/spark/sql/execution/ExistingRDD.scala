@@ -177,7 +177,7 @@ private[sql] case class RowDataSourceScan(
     s"Scan $nodeName${output.mkString("[", ",", "]")}${metadataEntries.mkString(" ", ", ", "")}"
   }
 
-  override def upstreams(): Seq[RDD[InternalRow]] = {
+  override def inputRDDs(): Seq[RDD[InternalRow]] = {
     rdd :: Nil
   }
 
@@ -228,7 +228,7 @@ private[sql] case class BatchedDataSourceScan(
     s"BatchedScan $nodeName${output.mkString("[", ",", "]")}$metadataStr"
   }
 
-  override def upstreams(): Seq[RDD[InternalRow]] = {
+  override def inputRDDs(): Seq[RDD[InternalRow]] = {
     rdd :: Nil
   }
 

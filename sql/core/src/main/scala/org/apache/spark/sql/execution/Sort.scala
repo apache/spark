@@ -100,8 +100,8 @@ case class Sort(
 
   override def usedInputs: AttributeSet = AttributeSet(Seq.empty)
 
-  override def upstreams(): Seq[RDD[InternalRow]] = {
-    child.asInstanceOf[CodegenSupport].upstreams()
+  override def inputRDDs(): Seq[RDD[InternalRow]] = {
+    child.asInstanceOf[CodegenSupport].inputRDDs()
   }
 
   // Name of sorter variable used in codegen.
