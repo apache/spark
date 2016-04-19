@@ -1042,7 +1042,7 @@ case class ScalaUDF(
       s"(${ctx.boxedType(dataType)})${catalystConverterTerm}" +
         s".apply($funcTerm.apply(${funcArguments.mkString(", ")}));"
 
-    ev.copy(s"""
+    ev.copy(code = s"""
       $evalCode
       ${converters.mkString("\n")}
       $callFunc

@@ -256,7 +256,7 @@ case class Divide(left: Expression, right: Expression)
       s"($javaType)(${eval1.value} $symbol ${eval2.value})"
     }
     if (!left.nullable && !right.nullable) {
-      ev.copy(s"""
+      ev.copy(code = s"""
         ${eval2.code}
         boolean ${ev.isNull} = false;
         $javaType ${ev.value} = ${ctx.defaultValue(javaType)};
@@ -267,7 +267,7 @@ case class Divide(left: Expression, right: Expression)
           ${ev.value} = $divide;
         }""")
     } else {
-      ev.copy(s"""
+      ev.copy(code = s"""
         ${eval2.code}
         boolean ${ev.isNull} = false;
         $javaType ${ev.value} = ${ctx.defaultValue(javaType)};
@@ -333,7 +333,7 @@ case class Remainder(left: Expression, right: Expression)
       s"($javaType)(${eval1.value} $symbol ${eval2.value})"
     }
     if (!left.nullable && !right.nullable) {
-      ev.copy(s"""
+      ev.copy(code = s"""
         ${eval2.code}
         boolean ${ev.isNull} = false;
         $javaType ${ev.value} = ${ctx.defaultValue(javaType)};
@@ -344,7 +344,7 @@ case class Remainder(left: Expression, right: Expression)
           ${ev.value} = $remainder;
         }""")
     } else {
-      ev.copy(s"""
+      ev.copy(code = s"""
         ${eval2.code}
         boolean ${ev.isNull} = false;
         $javaType ${ev.value} = ${ctx.defaultValue(javaType)};
@@ -394,7 +394,7 @@ case class MaxOf(left: Expression, right: Expression)
     val eval2 = right.genCode(ctx)
     val compCode = ctx.genComp(dataType, eval1.value, eval2.value)
 
-    ev.copy(eval1.code + eval2.code + s"""
+    ev.copy(code = eval1.code + eval2.code + s"""
       boolean ${ev.isNull} = false;
       ${ctx.javaType(left.dataType)} ${ev.value} =
         ${ctx.defaultValue(left.dataType)};
@@ -449,7 +449,7 @@ case class MinOf(left: Expression, right: Expression)
     val eval2 = right.genCode(ctx)
     val compCode = ctx.genComp(dataType, eval1.value, eval2.value)
 
-    ev.copy(eval1.code + eval2.code + s"""
+    ev.copy(code = eval1.code + eval2.code + s"""
       boolean ${ev.isNull} = false;
       ${ctx.javaType(left.dataType)} ${ev.value} =
         ${ctx.defaultValue(left.dataType)};

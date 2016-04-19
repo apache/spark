@@ -337,7 +337,7 @@ abstract class UnaryExpression extends Expression {
 
     if (nullable) {
       val nullSafeEval = ctx.nullSafeExec(child.nullable, childGen.isNull)(resultCode)
-      ev.copy(s"""
+      ev.copy(code = s"""
         ${childGen.code}
         boolean ${ev.isNull} = ${childGen.isNull};
         ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
@@ -436,7 +436,7 @@ abstract class BinaryExpression extends Expression {
           }
       }
 
-      ev.copy(s"""
+      ev.copy(code = s"""
         boolean ${ev.isNull} = true;
         ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
         $nullSafeEval
@@ -579,7 +579,7 @@ abstract class TernaryExpression extends Expression {
           }
       }
 
-      ev.copy(s"""
+      ev.copy(code = s"""
         boolean ${ev.isNull} = true;
         ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
         $nullSafeEval""")

@@ -60,7 +60,7 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
     val trueEval = trueValue.genCode(ctx)
     val falseEval = falseValue.genCode(ctx)
 
-    ev.copy(s"""
+    ev.copy(code = s"""
       ${condEval.code}
       boolean ${ev.isNull} = false;
       ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
@@ -197,7 +197,7 @@ case class CaseWhen(branches: Seq[(Expression, Expression)], elseValue: Option[E
 
     generatedCode += "}\n" * cases.size
 
-    ev.copy(s"""
+    ev.copy(code = s"""
       boolean ${ev.isNull} = true;
       ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
       $generatedCode""")
@@ -310,7 +310,7 @@ case class Least(children: Seq[Expression]) extends Expression {
         }
       """
     }
-    ev.copy(s"""
+    ev.copy(code = s"""
       ${first.code}
       boolean ${ev.isNull} = ${first.isNull};
       ${ctx.javaType(dataType)} ${ev.value} = ${first.value};
@@ -370,7 +370,7 @@ case class Greatest(children: Seq[Expression]) extends Expression {
         }
       """
     }
-    ev.copy(s"""
+    ev.copy(code = s"""
       ${first.code}
       boolean ${ev.isNull} = ${first.isNull};
       ${ctx.javaType(dataType)} ${ev.value} = ${first.value};

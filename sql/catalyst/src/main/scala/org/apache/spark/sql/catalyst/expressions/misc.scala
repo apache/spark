@@ -253,7 +253,7 @@ abstract class HashExpression[E] extends Expression {
       }
     }.mkString("\n")
 
-    ev.copy(s"""
+    ev.copy(code = s"""
       ${ctx.javaType(dataType)} ${ev.value} = $seed;
       $childrenHash""")
   }

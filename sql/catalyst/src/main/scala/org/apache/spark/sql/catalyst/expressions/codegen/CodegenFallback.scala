@@ -37,7 +37,7 @@ trait CodegenFallback extends Expression {
     ctx.references += this
     val objectTerm = ctx.freshName("obj")
     if (nullable) {
-      ev.copy(s"""
+      ev.copy(code = s"""
         /* expression: ${toCommentSafeString(this.toString)} */
         Object $objectTerm = ((Expression) references[$idx]).eval($input);
         boolean ${ev.isNull} = $objectTerm == null;

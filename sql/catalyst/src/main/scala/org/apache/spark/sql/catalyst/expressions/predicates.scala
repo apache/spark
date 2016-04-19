@@ -172,7 +172,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate
           }
         }
        """).mkString("\n")
-    ev.copy(s"""
+    ev.copy(code = s"""
       ${valueGen.code}
       boolean ${ev.value} = false;
       boolean ${ev.isNull} = ${valueGen.isNull};
@@ -226,7 +226,7 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
     ctx.addMutableState(setName, hsetTerm,
       s"$hsetTerm = (($InSetName)references[${ctx.references.size - 1}]).getHSet();")
     ctx.addMutableState("boolean", hasNullTerm, s"$hasNullTerm = $hsetTerm.contains(null);")
-    ev.copy(s"""
+    ev.copy(code = s"""
       ${childGen.code}
       boolean ${ev.isNull} = ${childGen.isNull};
       boolean ${ev.value} = false;
@@ -289,7 +289,7 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
           ${ev.value} = ${eval2.value};
         }""", isNull = "false")
     } else {
-      ev.copy(s"""
+      ev.copy(code = s"""
         ${eval1.code}
         boolean ${ev.isNull} = false;
         boolean ${ev.value} = false;
@@ -353,7 +353,7 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
           ${ev.value} = ${eval2.value};
         }""", isNull = "false")
     } else {
-      ev.copy(s"""
+      ev.copy(code = s"""
         ${eval1.code}
         boolean ${ev.isNull} = false;
         boolean ${ev.value} = true;

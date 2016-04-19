@@ -51,7 +51,7 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val arrayClass = classOf[GenericArrayData].getName
     val values = ctx.freshName("values")
-    ev.copy(s"""
+    ev.copy(code = s"""
       final boolean ${ev.isNull} = false;
       final Object[] $values = new Object[${children.size}];""" +
       children.zipWithIndex.map { case (e, i) =>
@@ -121,7 +121,7 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
     val valueArray = ctx.freshName("valueArray")
     val keyData = s"new $arrayClass($keyArray)"
     val valueData = s"new $arrayClass($valueArray)"
-    ev.copy(s"""
+    ev.copy(code = s"""
       final boolean ${ev.isNull} = false;
       final Object[] $keyArray = new Object[${keys.size}];
       final Object[] $valueArray = new Object[${values.size}];""" +
@@ -182,7 +182,7 @@ case class CreateStruct(children: Seq[Expression]) extends Expression {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val rowClass = classOf[GenericInternalRow].getName
     val values = ctx.freshName("values")
-    ev.copy(s"""
+    ev.copy(code = s"""
       boolean ${ev.isNull} = false;
       final Object[] $values = new Object[${children.size}];""" +
       children.zipWithIndex.map { case (e, i) =>
@@ -261,7 +261,7 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val rowClass = classOf[GenericInternalRow].getName
     val values = ctx.freshName("values")
-    ev.copy(s"""
+    ev.copy(code = s"""
       boolean ${ev.isNull} = false;
       final Object[] $values = new Object[${valExprs.size}];""" +
       valExprs.zipWithIndex.map { case (e, i) =>

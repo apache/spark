@@ -160,7 +160,7 @@ case class PreciseTimestamp(child: Expression) extends UnaryExpression with Expe
   override def dataType: DataType = LongType
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval = child.genCode(ctx)
-    ev.copy(eval.code +
+    ev.copy(code = eval.code +
       s"""boolean ${ev.isNull} = ${eval.isNull};
          |${ctx.javaType(dataType)} ${ev.value} = ${eval.value};
        """.stripMargin)

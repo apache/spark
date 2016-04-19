@@ -72,7 +72,7 @@ case class StaticInvoke(
       }
 
       val argsNonNull = s"!(${argGen.map(_.isNull).mkString(" || ")})"
-      ev.copy(s"""
+      ev.copy(code = s"""
         ${argGen.map(_.code).mkString("\n")}
 
         boolean ${ev.isNull} = !$argsNonNull;
@@ -84,7 +84,7 @@ case class StaticInvoke(
         }
        """)
     } else {
-      ev.copy(s"""
+      ev.copy(code = s"""
         ${argGen.map(_.code).mkString("\n")}
 
         $javaType ${ev.value} = $objectName.$functionName($argString);
@@ -178,7 +178,7 @@ case class Invoke(
       """
     }
 
-    ev.copy(s"""
+    ev.copy(code = s"""
       ${obj.code}
       ${argGen.map(_.code).mkString("\n")}
       $evaluate
@@ -261,7 +261,7 @@ case class NewInstance(
     if (propagateNull && argGen.nonEmpty) {
       val argsNonNull = s"!(${argGen.map(_.isNull).mkString(" || ")})"
 
-      ev.copy(s"""
+      ev.copy(code = s"""
         $setup
 
         boolean ${ev.isNull} = true;
@@ -272,7 +272,7 @@ case class NewInstance(
         }
        """)
     } else {
-      ev.copy(s"""
+      ev.copy(code = s"""
         $setup
 
         final $javaType ${ev.value} = $constructorCall;
@@ -306,7 +306,7 @@ case class UnwrapOption(
     val javaType = ctx.javaType(dataType)
     val inputObject = child.genCode(ctx)
 
-    ev.copy(s"""
+    ev.copy(code = s"""
       ${inputObject.code}
 
       boolean ${ev.isNull} = ${inputObject.value} == null || ${inputObject.value}.isEmpty();
@@ -338,7 +338,7 @@ case class WrapOption(child: Expression, optType: DataType)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val inputObject = child.genCode(ctx)
 
-    ev.copy(s"""
+    ev.copy(code = s"""
       ${inputObject.code}
 
       boolean ${ev.isNull} = false;
@@ -474,7 +474,7 @@ case class MapObjects private(
       s"${loopVar.isNull} = ${genInputData.isNull} || ${loopVar.value} == null;"
     }
 
-    ev.copy(s"""
+    ev.copy(code = s"""
       ${genInputData.code}
 
       boolean ${ev.isNull} = ${genInputData.value} == null;
@@ -541,7 +541,7 @@ case class CreateExternalRow(children: Seq[Expression], schema: StructType)
     }
     val childrenCode = ctx.splitExpressions(ctx.INPUT_ROW, childrenCodes)
     val schemaField = ctx.addReferenceObj("schema", schema)
-    ev.copy(s"""
+    ev.copy(code = s"""
       boolean ${ev.isNull} = false;
       $values = new Object[${children.size}];
       $childrenCode
@@ -579,7 +579,7 @@ case class EncodeUsingSerializer(child: Expression, kryo: Boolean)
 
     // Code to serialize.
     val input = child.genCode(ctx)
-    ev.copy(s"""
+    ev.copy(code = s"""
       ${input.code}
       final boolean ${ev.isNull} = ${input.isNull};
       ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
@@ -619,7 +619,7 @@ case class DecodeUsingSerializer[T](child: Expression, tag: ClassTag[T], kryo: B
 
     // Code to serialize.
     val input = child.genCode(ctx)
-    ev.copy(s"""
+    ev.copy(code = s"""
       ${input.code}
       final boolean ${ev.isNull} = ${input.isNull};
       ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
@@ -661,7 +661,7 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
     ev.isNull = instanceGen.isNull
     ev.value = instanceGen.value
 
-    ev.copy(s"""
+    ev.copy(code = s"""
       ${instanceGen.code}
       if (!${instanceGen.isNull}) {
         ${initialize.mkString("\n")}

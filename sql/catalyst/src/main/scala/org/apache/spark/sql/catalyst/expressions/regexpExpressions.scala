@@ -93,7 +93,7 @@ case class Like(left: Expression, right: Expression)
 
         // We don't use nullSafeCodeGen here because we don't want to re-evaluate right again.
         val eval = left.genCode(ctx)
-        ev.copy(s"""
+        ev.copy(code = s"""
           ${eval.code}
           boolean ${ev.isNull} = ${eval.isNull};
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
@@ -102,7 +102,7 @@ case class Like(left: Expression, right: Expression)
           }
         """)
       } else {
-        ev.copy(s"""
+        ev.copy(code = s"""
           boolean ${ev.isNull} = true;
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
         """)
@@ -142,7 +142,7 @@ case class RLike(left: Expression, right: Expression)
 
         // We don't use nullSafeCodeGen here because we don't want to re-evaluate right again.
         val eval = left.genCode(ctx)
-        ev.copy(s"""
+        ev.copy(code = s"""
           ${eval.code}
           boolean ${ev.isNull} = ${eval.isNull};
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
@@ -151,7 +151,7 @@ case class RLike(left: Expression, right: Expression)
           }
         """)
       } else {
-        ev.copy(s"""
+        ev.copy(code = s"""
           boolean ${ev.isNull} = true;
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
         """)

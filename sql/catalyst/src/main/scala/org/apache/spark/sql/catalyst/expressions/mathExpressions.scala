@@ -937,11 +937,11 @@ abstract class RoundBase(child: Expression, scale: Expression,
     }
 
     if (scaleV == null) { // if scale is null, no need to eval its child at all
-      ev.copy(s"""
+      ev.copy(code = s"""
         boolean ${ev.isNull} = true;
         ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};""")
     } else {
-      ev.copy(s"""
+      ev.copy(code = s"""
         ${ce.code}
         boolean ${ev.isNull} = ${ce.isNull};
         ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};

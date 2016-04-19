@@ -437,12 +437,12 @@ abstract class UnixTime extends BinaryExpression with ExpectsInputTypes {
         val fString = if (constFormat == null) null else constFormat.toString
         val formatter = ctx.freshName("formatter")
         if (fString == null) {
-          ev.copy(s"""
+          ev.copy(code = s"""
             boolean ${ev.isNull} = true;
             ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};""")
         } else {
           val eval1 = left.genCode(ctx)
-          ev.copy(s"""
+          ev.copy(code = s"""
             ${eval1.code}
             boolean ${ev.isNull} = ${eval1.isNull};
             ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
@@ -470,7 +470,7 @@ abstract class UnixTime extends BinaryExpression with ExpectsInputTypes {
         })
       case TimestampType =>
         val eval1 = left.genCode(ctx)
-        ev.copy(s"""
+        ev.copy(code = s"""
           ${eval1.code}
           boolean ${ev.isNull} = ${eval1.isNull};
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
@@ -480,7 +480,7 @@ abstract class UnixTime extends BinaryExpression with ExpectsInputTypes {
       case DateType =>
         val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
         val eval1 = left.genCode(ctx)
-        ev.copy(s"""
+        ev.copy(code = s"""
           ${eval1.code}
           boolean ${ev.isNull} = ${eval1.isNull};
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
@@ -550,12 +550,12 @@ case class FromUnixTime(sec: Expression, format: Expression)
     val sdf = classOf[SimpleDateFormat].getName
     if (format.foldable) {
       if (constFormat == null) {
-        ev.copy(s"""
+        ev.copy(code = s"""
           boolean ${ev.isNull} = true;
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};""")
       } else {
         val t = left.genCode(ctx)
-        ev.copy(s"""
+        ev.copy(code = s"""
           ${t.code}
           boolean ${ev.isNull} = ${t.isNull};
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
@@ -724,7 +724,7 @@ case class FromUTCTimestamp(left: Expression, right: Expression)
     if (right.foldable) {
       val tz = right.eval()
       if (tz == null) {
-        ev.copy(s"""
+        ev.copy(code = s"""
            |boolean ${ev.isNull} = true;
            |long ${ev.value} = 0;
          """.stripMargin)
@@ -733,7 +733,7 @@ case class FromUTCTimestamp(left: Expression, right: Expression)
         val tzClass = classOf[TimeZone].getName
         ctx.addMutableState(tzClass, tzTerm, s"""$tzTerm = $tzClass.getTimeZone("$tz");""")
         val eval = left.genCode(ctx)
-        ev.copy(s"""
+        ev.copy(code = s"""
            |${eval.code}
            |boolean ${ev.isNull} = ${eval.isNull};
            |long ${ev.value} = 0;
@@ -863,7 +863,7 @@ case class ToUTCTimestamp(left: Expression, right: Expression)
     if (right.foldable) {
       val tz = right.eval()
       if (tz == null) {
-        ev.copy(s"""
+        ev.copy(code = s"""
            |boolean ${ev.isNull} = true;
            |long ${ev.value} = 0;
          """.stripMargin)
@@ -872,7 +872,7 @@ case class ToUTCTimestamp(left: Expression, right: Expression)
         val tzClass = classOf[TimeZone].getName
         ctx.addMutableState(tzClass, tzTerm, s"""$tzTerm = $tzClass.getTimeZone("$tz");""")
         val eval = left.genCode(ctx)
-        ev.copy(s"""
+        ev.copy(code = s"""
            |${eval.code}
            |boolean ${ev.isNull} = ${eval.isNull};
            |long ${ev.value} = 0;
@@ -958,12 +958,12 @@ case class TruncDate(date: Expression, format: Expression)
 
     if (format.foldable) {
       if (truncLevel == -1) {
-        ev.copy(s"""
+        ev.copy(code = s"""
           boolean ${ev.isNull} = true;
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};""")
       } else {
         val d = date.genCode(ctx)
-        ev.copy(s"""
+        ev.copy(code = s"""
           ${d.code}
           boolean ${ev.isNull} = ${d.isNull};
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};

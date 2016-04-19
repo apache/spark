@@ -104,7 +104,7 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
       case _ => (0L, "0L")
     }
 
-    ev.copy(childCode.code +
+    ev.copy(code = childCode.code +
       s"""
          |long ${ev.value} = ${nullValue}L;
          |boolean ${ev.isNull} = false;

@@ -68,7 +68,7 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
     val first = children(0)
     val rest = children.drop(1)
     val firstEval = first.genCode(ctx)
-    ev.copy(s"""
+    ev.copy(code = s"""
       ${firstEval.code}
       boolean ${ev.isNull} = ${firstEval.isNull};
       ${ctx.javaType(dataType)} ${ev.value} = ${firstEval.value};""" +
@@ -116,7 +116,7 @@ case class IsNaN(child: Expression) extends UnaryExpression
     val eval = child.genCode(ctx)
     child.dataType match {
       case DoubleType | FloatType =>
-        ev.copy(s"""
+        ev.copy(code = s"""
           ${eval.code}
           boolean ${ev.isNull} = false;
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
@@ -158,7 +158,7 @@ case class NaNvl(left: Expression, right: Expression)
     val rightGen = right.genCode(ctx)
     left.dataType match {
       case DoubleType | FloatType =>
-        ev.copy(s"""
+        ev.copy(code = s"""
           ${leftGen.code}
           boolean ${ev.isNull} = false;
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
@@ -277,7 +277,7 @@ case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate
           """
       }
     }.mkString("\n")
-    ev.copy(s"""
+    ev.copy(code = s"""
       int $nonnull = 0;
       $code
       boolean ${ev.isNull} = false;
