@@ -60,9 +60,9 @@ class HashingTF(val numFeatures: Int) extends Serializable {
   }
 
   /**
-    * Set the hash algorithm used when mapping term to integer.
-    * (default: murmur3)
-    */
+   * Set the hash algorithm used when mapping term to integer.
+   * (default: murmur3)
+   */
   @Since("2.0.0")
   def setHashAlgorithm(value: String): this.type = {
     hashAlgorithm = value
@@ -77,8 +77,8 @@ class HashingTF(val numFeatures: Int) extends Serializable {
   def indexOf(term: Any): Int = Utils.nonNegativeMod(term.##, numFeatures)
 
   /**
-    * Returns the index of the input term by different hash algorithms.
-    */
+   * Returns the index of the input term by different hash algorithms.
+   */
   @Since("2.0.0")
   def indexOfTerm(hashAlgorithm: String)(term: Any): Int = {
     if (hashAlgorithm == Murmur3) {
@@ -138,14 +138,14 @@ object HashingTF {
   private val seed = 42
 
   /**
-    * Calculate a hash code value for the term object using the native Scala implementation.
-    */
+   * Calculate a hash code value for the term object using the native Scala implementation.
+   */
   private[spark] def nativeHash(term: Any): Int = term.##
 
   /**
-    * Calculate a hash code value for the term object using
-    * Austin Appleby's MurmurHash 3 algorithm (MurmurHash3_x86_32).
-    */
+   * Calculate a hash code value for the term object using
+   * Austin Appleby's MurmurHash 3 algorithm (MurmurHash3_x86_32).
+   */
   private[spark] def murmur3Hash(term: Any): Int = {
     term match {
       case null => seed

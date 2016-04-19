@@ -64,11 +64,11 @@ class HashingTF(override val uid: String)
     "than integer counts")
 
   /**
-    * The hash algorithm used when mapping term to integer.
-    * Supported options: "murmur3" and "native".
-    * (Default = "murmur3")
-    * @group param
-    */
+   * The hash algorithm used when mapping term to integer.
+   * Supported options: "murmur3" and "native".
+   * (Default = "murmur3")
+   * @group param
+   */
   val hashAlgorithm = new Param[String](this, "hashAlgorithm", "The hash algorithm used when " +
     "mapping term to integer. Supported options: murmur3(default) and native.",
     ParamValidators.inArray[String](feature.HashingTF.supportedHashAlgorithms.toArray))
