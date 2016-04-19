@@ -95,7 +95,7 @@ class RadixSortSuite extends SparkFunSuite with Logging {
 
   private def referenceKeyPrefixSort(buf: LongArray, lo: Int, hi: Int, refCmp: PrefixComparator) {
     new Sorter(UnsafeSortDataFormat.INSTANCE).sort(
-      buf, 0, N, new Comparator[RecordPointerAndKeyPrefix] {
+      buf, lo, hi, new Comparator[RecordPointerAndKeyPrefix] {
         override def compare(
             r1: RecordPointerAndKeyPrefix,
             r2: RecordPointerAndKeyPrefix): Int = {
@@ -189,6 +189,13 @@ class RadixSortSuite extends SparkFunSuite with Logging {
     val size = 25000000
     val rand = new XORShiftRandom(123)
     val benchmark = new Benchmark("radix sort " + size, size)
+    benchmark.addTimerCase("reference TimSort key prefix array") { timer =>
+      val array = Array.tabulate[Long](size * 2) { i => rand.nextLong }
+      val buf = new LongArray(MemoryBlock.fromLongArray(array))
+      timer.startTiming()
+      referenceKeyPrefixSort(buf, 0, size, PrefixComparators.BINARY)
+      timer.stopTiming()
+    }
     benchmark.addTimerCase("reference Arrays.sort") { timer =>
       val ref = Array.tabulate[Long](size) { i => rand.nextLong }
       timer.startTiming()
@@ -240,17 +247,18 @@ class RadixSortSuite extends SparkFunSuite with Logging {
     benchmark.run
 
     /**
-     Running benchmark: radix sort 25000000
-     OpenJDK 64-Bit Server VM 1.8.0_66-internal-b17 on Linux 4.2.0-35-generic
-     Intel(R) Xeon(R) CPU E5-1650 v3 @ 3.50GHz
-     
-     radix sort 25000000:                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-     -------------------------------------------------------------------------------------------
-     reference Arrays.sort                    1939 / 1960         12.9          77.6       1.0X
-     radix sort one byte                       127 /  159        196.7           5.1      15.3X
-     radix sort two bytes                      239 /  311        104.4           9.6       8.1X
-     radix sort eight bytes                    896 /  905         27.9          35.8       2.2X
-     radix sort key prefix array              1435 / 1503         17.4          57.4       1.4X
+      Running benchmark: radix sort 25000000
+      Java HotSpot(TM) 64-Bit Server VM 1.8.0_66-b17 on Linux 3.13.0-44-generic
+      Intel(R) Core(TM) i7-4600U CPU @ 2.10GHz
+
+      radix sort 25000000:                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+      -------------------------------------------------------------------------------------------
+      reference TimSort key prefix array     15546 / 15859          1.6         621.9       1.0X
+      reference Arrays.sort                    2416 / 2446         10.3          96.6       6.4X
+      radix sort one byte                       133 /  137        188.4           5.3     117.2X
+      radix sort two bytes                      255 /  258         98.2          10.2      61.1X
+      radix sort eight bytes                    991 /  997         25.2          39.6      15.7X
+      radix sort key prefix array              1540 / 1563         16.2          61.6      10.1X
     */
   }
 }
