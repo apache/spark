@@ -104,7 +104,9 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
     Batch("LocalRelation", fixedPoint,
       ConvertToLocalRelation) ::
     Batch("Subquery", Once,
-      OptimizeSubqueries) :: Nil
+      OptimizeSubqueries) ::
+    Batch("OptimizeCodegen", Once,
+      OptimizeCodegen(conf)) :: Nil
   }
 
   /**
@@ -860,6 +862,16 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
         // headOption (rather than head) added above is just a extra (and unnecessary) safeguard.
         branches.head._2
     }
+  }
+}
+
+/**
+ * Optimizes expressions by replacing according to CodeGen configuration.
+ */
+case class OptimizeCodegen(conf: CatalystConf) extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+    case e @ CaseWhen(branches, _) if branches.size < conf.maxCaseBranchesForCodegen =>
+      e.toCodegen()
   }
 }
 
