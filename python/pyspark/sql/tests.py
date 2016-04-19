@@ -915,6 +915,9 @@ class SQLTests(ReusedPySparkTestCase):
             .format('parquet').option('path', out).startStream()
         self.assertEqual(cq.name, 'this_query')
         self.assertTrue(cq.isActive)
+        cq.processAllAvailable()
+        self.assertTrue(len([f for f in os.listdir(out) if 'parquet' in f]) > 0)
+        self.assertTrue(len(os.listdir(chk)) > 0)
         cq.stop()
         shutil.rmtree(tmpPath)
 
@@ -932,6 +935,11 @@ class SQLTests(ReusedPySparkTestCase):
                                                  checkpointLocation=chk)
         self.assertEqual(cq.name, 'this_query')
         self.assertTrue(cq.isActive)
+        cq.processAllAvailable()
+        self.assertTrue(len([f for f in os.listdir(out) if 'parquet' in f]) > 0)
+        self.assertTrue(len(os.listdir(chk)) > 0)
+        self.assertTrue(len(os.listdir(fake1)) == 0)
+        self.assertTrue(len(os.listdir(fake2)) == 0)
         cq.stop()
         shutil.rmtree(tmpPath)
 
@@ -951,7 +959,7 @@ class SQLTests(ReusedPySparkTestCase):
         except ValueError:
             pass
         now = time.time()
-        res = cq.awaitTermination(2600) # test should take at least 2 seconds
+        res = cq.awaitTermination(2600)  # test should take at least 2 seconds
         duration = time.time() - now
         self.assertTrue(duration >= 2)
         self.assertFalse(res)

@@ -71,6 +71,16 @@ class ContinuousQuery(object):
             return self._jcq.awaitTermination()
 
     @since(2.0)
+    def processAllAvailable(self):
+        """Blocks until all available data in the source has been processed an committed to the
+        sink. This method is intended for testing. Note that in the case of continually arriving
+        data, this method may block forever. Additionally, this method is only guaranteed to block
+        until data that has been synchronously appended data to a stream source prior to invocation.
+        (i.e. `getOffset` must immediately reflect the addition).
+        """
+        return self._jcq.processAllAvailable()
+
+    @since(2.0)
     def stop(self):
         """Stop this continuous query.
         """
