@@ -153,13 +153,11 @@ class ExternalAppendOnlyMap[K, V, C](
 
     while (entries.hasNext) {
       curEntry = entries.next()
-      val estimatedSize = currentMap.estimateSize()
+      val estimatedSize = estimateUsedMemory
       if (estimatedSize > _peakMemoryUsedBytes) {
         _peakMemoryUsedBytes = estimatedSize
       }
-      if (maybeSpill(currentMap, estimatedSize)) {
-        currentMap = new SizeTrackingAppendOnlyMap[K, C]
-      }
+      maybeSpill(estimatedSize)
       currentMap.changeValue(curEntry._1, update)
       addElementsRead()
     }
@@ -178,10 +176,18 @@ class ExternalAppendOnlyMap[K, V, C](
     insertAll(entries.iterator)
   }
 
+  def estimateUsedMemory(): Long = {
+    currentMap.estimateSize()
+  }
+
+  protected def resetAfterSpill(): Unit = {
+    currentMap = new SizeTrackingAppendOnlyMap[K, C]
+  }
+
   /**
    * Sort the existing contents of the in-memory map and spill them to a temporary file on disk.
    */
-  override protected[this] def spill(collection: SizeTracker): Unit = {
+  override protected[this] def spillCollection(): Unit = {
     val (blockId, file) = diskBlockManager.createTempLocalBlock()
     curWriteMetrics = new ShuffleWriteMetrics()
     var writer = blockManager.getDiskWriter(blockId, file, ser, fileBufferSize, curWriteMetrics)
@@ -534,6 +540,13 @@ class ExternalAppendOnlyMap[K, V, C](
 
   /** Convenience function to hash the given (K, C) pair by the key. */
   private def hashKey(kc: (K, C)): Int = ExternalAppendOnlyMap.hash(kc._1)
+
+  /**
+   * To prevent debug code from printing out the contents of the iterator, and destroying the data
+   */
+  override def toString(): String = {
+    getClass().getSimpleName + "@" + System.identityHashCode(this)
+  }
 }
 
 private[spark] object ExternalAppendOnlyMap {
