@@ -1317,9 +1317,9 @@ class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable,
                            typeConverter=TypeConverters.toInt)
     gaps = Param(Params._dummy(), "gaps", "whether regex splits on gaps (True) or matches tokens")
     pattern = Param(Params._dummy(), "pattern", "regex pattern (Java dialect) used for tokenizing",
-                    TypeConverters.toString)
+                    typeConverter=TypeConverters.toString)
     toLowercase = Param(Params._dummy(), "toLowercase", "whether to convert all characters to " +
-                        "lowercase before tokenizing", TypeConverters.toBoolean)
+                        "lowercase before tokenizing", typeConverter=TypeConverters.toBoolean)
 
     @keyword_only
     def __init__(self, minTokenLength=1, gaps=True, pattern="\\s+", inputCol=None,
@@ -1430,7 +1430,8 @@ class SQLTransformer(JavaTransformer, JavaMLReadable, JavaMLWritable):
     .. versionadded:: 1.6.0
     """
 
-    statement = Param(Params._dummy(), "statement", "SQL statement", TypeConverters.toString)
+    statement = Param(Params._dummy(), "statement", "SQL statement",
+                      typeConverter=TypeConverters.toString)
 
     @keyword_only
     def __init__(self, statement=None):
@@ -1504,9 +1505,10 @@ class StandardScaler(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, J
     .. versionadded:: 1.4.0
     """
 
-    withMean = Param(Params._dummy(), "withMean", "Center data with mean", TypeConverters.toBoolean)
+    withMean = Param(Params._dummy(), "withMean", "Center data with mean",
+                     typeConverter=TypeConverters.toBoolean)
     withStd = Param(Params._dummy(), "withStd", "Scale to unit standard deviation",
-                    TypeConverters.toBoolean)
+                    typeConverter=TypeConverters.toBoolean)
 
     @keyword_only
     def __init__(self, withMean=False, withStd=True, inputCol=None, outputCol=None):
@@ -1754,7 +1756,7 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadabl
     stopWords = Param(Params._dummy(), "stopWords", "The words to be filtered out",
                       typeConverter=TypeConverters.toListString)
     caseSensitive = Param(Params._dummy(), "caseSensitive", "whether to do a case sensitive " +
-                          "comparison over the stop words", TypeConverters.toBoolean)
+                          "comparison over the stop words", typeConverter=TypeConverters.toBoolean)
 
     @keyword_only
     def __init__(self, inputCol=None, outputCol=None, stopWords=None,
@@ -2510,7 +2512,8 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, JavaMLReadable, JavaM
     .. versionadded:: 1.5.0
     """
 
-    formula = Param(Params._dummy(), "formula", "R model formula", TypeConverters.toString)
+    formula = Param(Params._dummy(), "formula", "R model formula",
+                    typeConverter=TypeConverters.toString)
 
     @keyword_only
     def __init__(self, formula=None, featuresCol="features", labelCol="label"):
