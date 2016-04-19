@@ -66,15 +66,15 @@ class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     >>> from pyspark.mllib.linalg import Vectors
 
     >>> data = [(Vectors.dense([-0.1, -0.05 ]),),
-    ...          (Vectors.dense([-0.01, -0.1]),),
-    ...          (Vectors.dense([0.9, 0.8]),),
-    ...          (Vectors.dense([0.75, 0.935]),),
-    ...          (Vectors.dense([-0.83, -0.68]),),
-    ...          (Vectors.dense([-0.91, -0.76]),)]
+    ...         (Vectors.dense([-0.01, -0.1]),),
+    ...         (Vectors.dense([0.9, 0.8]),),
+    ...         (Vectors.dense([0.75, 0.935]),),
+    ...         (Vectors.dense([-0.83, -0.68]),),
+    ...         (Vectors.dense([-0.91, -0.76]),)]
     >>> df = sqlContext.createDataFrame(data, ["features"])
-    >>> gaussianmixture = GaussianMixture(k=3, tol=0.0001,
-    ...                                    maxIter=50, seed=10)
-    >>> model = gaussianmixture.fit(df)
+    >>> gm = GaussianMixture(k=3, tol=0.0001,
+    ...                                    maxIter=10, seed=10)
+    >>> model = gm.fit(df)
     >>> weights = model.weights
     >>> len(weights)
     3
@@ -95,9 +95,9 @@ class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     >>> rows[2].prediction == rows[3].prediction
     True
     >>> gmm_path = temp_path + "/gmm"
-    >>> gaussianmixture.save(gmm_path)
-    >>> gaussianmixture2 = GaussianMixture.load(gmm_path)
-    >>> gaussianmixture2.getK()
+    >>> gm.save(gmm_path)
+    >>> gm2 = GaussianMixture.load(gmm_path)
+    >>> gm2.getK()
     3
     >>> model_path = temp_path + "/gmm_model"
     >>> model.save(model_path)
@@ -155,7 +155,7 @@ class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
         """
         Sets the value of :py:attr:`k`.
         """
-        self._paramMap[self.k] = value
+        self._set(k=value)
         return self
 
     @since("2.0.0")
