@@ -424,7 +424,7 @@ class TestHiveContext private[hive](
       loadedTables.clear()
       sessionState.catalog.clearTempTables()
       sessionState.catalog.invalidateCache()
-      metadataHive.reset()
+      sessionState.metadataHive.reset()
 
       FunctionRegistry.getFunctionNames.asScala.filterNot(originalUDFs.contains(_)).
         foreach { udfName => FunctionRegistry.unregisterTemporaryUDF(udfName) }
@@ -433,8 +433,8 @@ class TestHiveContext private[hive](
       sessionState.hiveconf.set("fs.default.name", new File(".").toURI.toString)
       // It is important that we RESET first as broken hooks that might have been set could break
       // other sql exec here.
-      executionHive.runSqlHive("RESET")
-      metadataHive.runSqlHive("RESET")
+      sessionState.executionHive.runSqlHive("RESET")
+      sessionState.metadataHive.runSqlHive("RESET")
       // For some reason, RESET does not reset the following variables...
       // https://issues.apache.org/jira/browse/HIVE-9004
       sessionState.runNativeSql("set hive.table.parameters.default=")
@@ -446,7 +446,7 @@ class TestHiveContext private[hive](
       // In case a test changed any of these values, restore all the original ones here.
       TestHiveContext.hiveClientConfigurations(
         sessionState.hiveconf, warehousePath, scratchDirPath, metastoreTemporaryConf)
-          .foreach { case (k, v) => metadataHive.runSqlHive(s"SET $k=$v") }
+          .foreach { case (k, v) => sessionState.metadataHive.runSqlHive(s"SET $k=$v") }
       sessionState.setDefaultOverrideConfs()
 
       sessionState.catalog.setCurrentDatabase("default")

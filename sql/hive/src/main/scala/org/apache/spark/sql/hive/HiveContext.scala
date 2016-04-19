@@ -64,8 +64,6 @@ class HiveContext private[hive](
 
   def this(sc: JavaSparkContext) = this(sc.sc)
 
-  logDebug("create HiveContext")
-
   /**
    * Returns a new HiveContext as new session, which will have separated SQLConf, UDF/UDAF,
    * temporary tables and SessionState, but sharing the same CacheManager, IsolatedClientLoader
@@ -82,11 +80,6 @@ class HiveContext private[hive](
   protected[sql] override def sharedState: HiveSharedState = {
     sparkSession.sharedState.asInstanceOf[HiveSharedState]
   }
-
-  protected[hive] def hiveCatalog: HiveExternalCatalog = sharedState.externalCatalog
-  protected[hive] def executionHive: HiveClientImpl = sessionState.executionHive
-  protected[hive] def metadataHive: HiveClient = sessionState.metadataHive
-  protected[hive] def hiveconf: HiveConf = sessionState.hiveconf
 
 }
 

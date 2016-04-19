@@ -30,7 +30,8 @@ class HiveContextSuite extends SparkFunSuite {
       "org.apache.spark.sql.hive.execution.PairSerDe")
     assert(TestHive.initialSQLConf.getConfString("spark.sql.hive.metastore.barrierPrefixes") ==
       "org.apache.spark.sql.hive.execution.PairSerDe")
-    assert(TestHive.metadataHive.getConf("spark.sql.hive.metastore.barrierPrefixes", "") ==
+    assert(TestHive.sessionState.metadataHive.getConf(
+      "spark.sql.hive.metastore.barrierPrefixes", "") ==
       "org.apache.spark.sql.hive.execution.PairSerDe")
   }
 

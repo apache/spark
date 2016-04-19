@@ -45,7 +45,7 @@ case class InsertIntoHiveTable(
 
   @transient val sc: HiveContext = sqlContext.asInstanceOf[HiveContext]
   @transient private lazy val hiveContext = new Context(sc.sessionState.hiveconf)
-  @transient private lazy val client = sc.metadataHive
+  @transient private lazy val client = sc.sessionState.metadataHive
 
   def output: Seq[Attribute] = Seq.empty
 
