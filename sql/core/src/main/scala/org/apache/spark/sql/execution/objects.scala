@@ -36,8 +36,8 @@ case class DeserializeToObject(
     child: SparkPlan) extends UnaryNode with CodegenSupport {
   override def output: Seq[Attribute] = deserializer.toAttribute :: Nil
 
-  override def upstreams(): Seq[RDD[InternalRow]] = {
-    child.asInstanceOf[CodegenSupport].upstreams()
+  override def inputRDDs(): Seq[RDD[InternalRow]] = {
+    child.asInstanceOf[CodegenSupport].inputRDDs()
   }
 
   protected override def doProduce(ctx: CodegenContext): String = {
@@ -69,8 +69,8 @@ case class SerializeFromObject(
     child: SparkPlan) extends UnaryNode with CodegenSupport {
   override def output: Seq[Attribute] = serializer.map(_.toAttribute)
 
-  override def upstreams(): Seq[RDD[InternalRow]] = {
-    child.asInstanceOf[CodegenSupport].upstreams()
+  override def inputRDDs(): Seq[RDD[InternalRow]] = {
+    child.asInstanceOf[CodegenSupport].inputRDDs()
   }
 
   protected override def doProduce(ctx: CodegenContext): String = {
@@ -153,8 +153,8 @@ case class MapElements(
     child: SparkPlan) extends UnaryNode with ObjectOperator with CodegenSupport {
   override def output: Seq[Attribute] = serializer.map(_.toAttribute)
 
-  override def upstreams(): Seq[RDD[InternalRow]] = {
-    child.asInstanceOf[CodegenSupport].upstreams()
+  override def inputRDDs(): Seq[RDD[InternalRow]] = {
+    child.asInstanceOf[CodegenSupport].inputRDDs()
   }
 
   protected override def doProduce(ctx: CodegenContext): String = {
