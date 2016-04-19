@@ -110,16 +110,16 @@ public class RadixSort {
     long[][] counts = new long[8][];
     // Optimization: do a fast pre-pass to determine which byte indices we can skip for sorting.
     // If all the byte values at a particular index are the same we don't need to count it.
-    long bitwiseMin = 0;
-    long bitwiseMax = ~0L;
+    long bitwiseMax = 0;
+    long bitwiseMin = ~0L;
     long maxOffset = array.getBaseOffset() + numRecords * 8;
     Object baseObject = array.getBaseObject();
     for (long offset = array.getBaseOffset(); offset < maxOffset; offset += 8) {
       long value = Platform.getLong(baseObject, offset);
-      bitwiseMin |= value;
-      bitwiseMax &= value;
+      bitwiseMax |= value;
+      bitwiseMin &= value;
     }
-    long bitsChanged = bitwiseMax ^ bitwiseMin;
+    long bitsChanged = bitwiseMin ^ bitwiseMax;
     // Compute counts for each byte index.
     for (int i = startByteIndex; i <= endByteIndex; i++) {
       if (((bitsChanged >>> (i * 8)) & 0xff) != 0) {
@@ -207,16 +207,16 @@ public class RadixSort {
   private static long[][] getKeyPrefixArrayCounts(
       LongArray array, int numRecords, int startByteIndex, int endByteIndex) {
     long[][] counts = new long[8][];
-    long bitwiseMin = 0;
-    long bitwiseMax = ~0L;
+    long bitwiseMax = 0;
+    long bitwiseMin = ~0L;
     long limit = array.getBaseOffset() + numRecords * 16;
     Object baseObject = array.getBaseObject();
     for (long offset = array.getBaseOffset(); offset < limit; offset += 16) {
       long value = Platform.getLong(baseObject, offset + 8);
-      bitwiseMin |= value;
-      bitwiseMax &= value;
+      bitwiseMax |= value;
+      bitwiseMin &= value;
     }
-    long bitsChanged = bitwiseMax ^ bitwiseMin;
+    long bitsChanged = bitwiseMin ^ bitwiseMax;
     for (int i = startByteIndex; i <= endByteIndex; i++) {
       if (((bitsChanged >>> (i * 8)) & 0xff) != 0) {
         counts[i] = new long[256];

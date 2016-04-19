@@ -42,7 +42,7 @@ class RadixSortSuite extends SparkFunSuite with Logging {
     name: String,
     referenceComparator: PrefixComparator,
     startByteIdx: Int, endByteIdx: Int, descending: Boolean, signed: Boolean)
-  
+
   val SORT_TYPES_TO_TEST = Seq(
     RadixSortType("unsigned binary data asc", PrefixComparators.BINARY, 0, 7, false, false),
     RadixSortType("unsigned binary data desc", PrefixComparators.BINARY_DESC, 0, 7, true, false),
