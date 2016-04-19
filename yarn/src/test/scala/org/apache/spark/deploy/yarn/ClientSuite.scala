@@ -308,7 +308,7 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
 
     val client = createClient(sparkConf)
     val tempDir = Utils.createTempDir()
-    client.prepareLocalResources(tempDir.getAbsolutePath(), Nil)
+    client.prepareLocalResources(new Path(tempDir.getAbsolutePath()), Nil)
 
     // Only jar2 will be added to SECONDARY_JARS, jar3 which has the same name with jar1 will be
     // ignored.
