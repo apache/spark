@@ -174,7 +174,11 @@ class TaskMetrics private[spark] () extends Serializable {
     }
   }
 
-  private[spark] lazy val internalAccums: Seq[Accumulable[_, _]] = {
+  // Only used for test
+  private[spark] val testAccum =
+    sys.props.get("spark.testing").map(_ => TaskMetrics.createAccum[Long](TEST_ACCUM))
+
+  @transient private[spark] lazy val internalAccums: Seq[Accumulable[_, _]] = {
     val in = inputMetrics
     val out = outputMetrics
     val sr = shuffleReadMetrics
@@ -183,21 +187,25 @@ class TaskMetrics private[spark] () extends Serializable {
       _resultSerializationTime, _memoryBytesSpilled, _diskBytesSpilled, _peakExecutionMemory,
       _updatedBlockStatuses, sr._remoteBlocksFetched, sr._localBlocksFetched, sr._remoteBytesRead,
       sr._localBytesRead, sr._fetchWaitTime, sr._recordsRead, sw._bytesWritten, sw._recordsWritten,
-      sw._writeTime, in._bytesRead, in._recordsRead, out._bytesWritten, out._recordsWritten)
+      sw._writeTime, in._bytesRead, in._recordsRead, out._bytesWritten, out._recordsWritten) ++
+      testAccum
   }
 
   /* ========================== *
    |        OTHER THINGS        |
    * ========================== */
 
+  private[spark] def registerAccums(sc: SparkContext): Unit = {
+    internalAccums.foreach { accum =>
+      Accumulators.register(accum)
+      sc.cleaner.foreach(_.registerAccumulatorForCleanup(accum))
+    }
+  }
+
   /**
    * External accumulators registered with this task.
    */
-  private val externalAccums = new ArrayBuffer[Accumulable[_, _]]
-
-  // Only used for test
-  private[spark] val testAccum =
-    sys.props.get("spark.testing").map(_ => TaskMetrics.createAccum[Long](TEST_ACCUM))
+  @transient private lazy val externalAccums = new ArrayBuffer[Accumulable[_, _]]
 
   private[spark] def registerAccumulator(a: Accumulable[_, _]): Unit = {
     externalAccums += a
@@ -211,7 +219,7 @@ class TaskMetrics private[spark] () extends Serializable {
    * not the aggregated value across multiple tasks.
    */
   def accumulatorUpdates(): Seq[AccumulableInfo] = {
-    (internalAccums ++ testAccum ++ externalAccums).map { a => a.toInfo(Some(a.localValue), None) }
+    (internalAccums ++ externalAccums).map { a => a.toInfo(Some(a.localValue), None) }
   }
 }
 

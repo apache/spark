@@ -1029,7 +1029,7 @@ class DAGScheduler(
             val locs = taskIdToLocations(id)
             val part = stage.rdd.partitions(id)
             new ShuffleMapTask(stage.id, stage.latestInfo.attemptId,
-              taskBinary, part, locs, stage.latestInfo.internalAccumulators, properties)
+              taskBinary, part, locs, stage.latestInfo.taskMetrics, properties)
           }
 
         case stage: ResultStage =>
@@ -1039,7 +1039,7 @@ class DAGScheduler(
             val part = stage.rdd.partitions(p)
             val locs = taskIdToLocations(id)
             new ResultTask(stage.id, stage.latestInfo.attemptId,
-              taskBinary, part, locs, id, properties, stage.latestInfo.internalAccumulators)
+              taskBinary, part, locs, id, properties, stage.latestInfo.taskMetrics)
           }
       }
     } catch {
@@ -1088,7 +1088,7 @@ class DAGScheduler(
     val task = event.task
     val stage = stageIdToStage(task.stageId)
     try {
-      event.accumUpdates.filterNot(_.internal).foreach { ainfo =>
+      event.accumUpdates.foreach { ainfo =>
         assert(ainfo.update.isDefined, "accumulator from task should have a partial value")
         val id = ainfo.id
         val partialValue = ainfo.update.get

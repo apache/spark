@@ -26,7 +26,7 @@ import org.apache.spark.TaskContext
  * A Task implementation that fails to serialize.
  */
 private[spark] class NotSerializableFakeTask(myId: Int, stageId: Int)
-  extends Task[Array[Byte]](stageId, 0, 0, Seq.empty, new Properties) {
+  extends Task[Array[Byte]](stageId, 0, 0, null, new Properties) {
 
   override def runTask(context: TaskContext): Array[Byte] = Array.empty[Byte]
   override def preferredLocations: Seq[TaskLocation] = Seq[TaskLocation]()

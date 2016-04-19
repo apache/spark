@@ -20,11 +20,12 @@ package org.apache.spark.scheduler
 import java.util.Properties
 
 import org.apache.spark.TaskContext
+import org.apache.spark.executor.TaskMetrics
 
 class FakeTask(
     stageId: Int,
     prefLocs: Seq[TaskLocation] = Nil)
-  extends Task[Int](stageId, 0, 0, Seq.empty, new Properties) {
+  extends Task[Int](stageId, 0, 0, new TaskMetrics, new Properties) {
   override def runTask(context: TaskContext): Int = 0
   override def preferredLocations: Seq[TaskLocation] = prefLocs
 }
