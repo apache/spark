@@ -49,7 +49,7 @@ case class Size(child: Expression) extends UnaryExpression with ExpectsInputType
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(array(array, ascendingOrder)) - Sorts the input array in ascending order according to the natural ordering of the array elements.",
+  usage = "_FUNC_(array(obj1, obj2, ...), ascendingOrder) - Sorts the input array in ascending order according to the natural ordering of the array elements.",
   extended = " > SELECT _FUNC_(array('b', 'd', 'c', 'a'), true);\n 'a', 'b', 'c', 'd'")
 // scalastyle:on line.size.limit
 case class SortArray(base: Expression, ascendingOrder: Expression)
