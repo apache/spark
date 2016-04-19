@@ -27,7 +27,7 @@ import org.apache.spark.sql.hive.execution.{DescribeHiveTableCommand, HiveNative
 /**
  * A [[QueryExecution]] with hive specific features.
  */
-protected[sql] class HiveQueryExecution(ctx: SQLContext, logicalPlan: LogicalPlan)
+protected[hive] class HiveQueryExecution(ctx: SQLContext, logicalPlan: LogicalPlan)
   extends QueryExecution(ctx, logicalPlan) {
 
   /**

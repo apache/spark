@@ -74,7 +74,7 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
    */
   val hiveconf: HiveConf = {
     val c = executionHive.conf
-    conf.setConf(c.getAllProperties)
+    setConf(c.getAllProperties)
     c
   }
 
@@ -186,7 +186,6 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
    * Right now, it only supports Hive tables and it only updates the size of a Hive table
    * in the Hive metastore.
    */
-  // TODO: not used at the moment
   override def analyze(tableName: String): Unit = {
     AnalyzeTable(tableName).run(ctx)
   }

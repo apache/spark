@@ -117,10 +117,10 @@ private[hive] object HiveSerDe {
  * cleaned up to integrate more nicely with [[HiveExternalCatalog]].
  */
 private[hive] class HiveMetastoreCatalog(hive: SQLContext) extends Logging {
-  val conf = hive.conf
-  val sessionState = hive.sessionState.asInstanceOf[HiveSessionState]
-  val client = hive.sharedState.asInstanceOf[HiveSharedState].metadataHive
-  val hiveconf = sessionState.hiveconf
+  private val conf = hive.conf
+  private val sessionState = hive.sessionState.asInstanceOf[HiveSessionState]
+  private val client = hive.sharedState.asInstanceOf[HiveSharedState].metadataHive
+  private val hiveconf = sessionState.hiveconf
 
   /** A fully qualified identifier for a table (i.e., database.tableName) */
   case class QualifiedTableName(database: String, name: String)
@@ -442,10 +442,8 @@ private[hive] class HiveMetastoreCatalog(hive: SQLContext) extends Logging {
       alias match {
         // because hive use things like `_c0` to build the expanded text
         // currently we cannot support view from "create view v1(c1) as ..."
-        case None =>
-          SubqueryAlias(table.identifier.table, hive.parseSql(viewText))
-        case Some(aliasText) =>
-          SubqueryAlias(aliasText, hive.parseSql(viewText))
+        case None => SubqueryAlias(table.identifier.table, hive.parseSql(viewText))
+        case Some(aliasText) => SubqueryAlias(aliasText, hive.parseSql(viewText))
       }
     } else {
       MetastoreRelation(
