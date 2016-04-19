@@ -728,8 +728,8 @@ case class GetExternalRowField(
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported")
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
-    val row = child.gen(ctx)
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+    val row = child.genCode(ctx)
 
     val getField = dataType match {
       case ObjectType(x) if x == classOf[Row] => s"""${row.value}.getStruct($index)"""
