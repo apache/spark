@@ -2017,6 +2017,39 @@ test_that("Histogram", {
   df <- as.DataFrame(sqlContext, data.frame(x = c(1, 2, 3, 4, 100)))
   expect_equal(histogram(df, "x")$counts, c(4, 0, 0, 0, 0, 0, 0, 0, 0, 1))
 })
+
+test_that("dapply() on a DataFrame", {
+  df <- createDataFrame (sqlContext, mtcars)
+  df1 <- dapply(df, function(x) { x }, schema(df))
+  result <- collect(df1)
+  expected <- mtcars
+  rownames(expected) <- NULL
+  expect_identical(expected, result)
+
+  df1 <- dapply(df, function(x) { x + 1 }, schema(df))
+  result <- collect(df1)
+  expected <- mtcars + 1
+  rownames(expected) <- NULL
+  expect_identical(expected, result)
+
+  schema <- structType(structField("a", "double"), structField("b", "double"))
+  df1 <- dapply(df, function(x) { x[, 1:2, drop = F] }, schema)
+  result <- collect(df1)
+  expected <- mtcars[, 1:2, drop = F]
+  names(expected) <- c("a", "b")
+  rownames(expected) <- NULL
+  expect_identical(expected, result)
+
+  df1 <- dapply(df, function(x) { x + 1 })
+  schema <- structType(structField("a", "double"), structField("b", "double"))
+  df2 <- dapply(df1, function(x) { x[, 1:2, drop = F] }, schema)
+  result <- collect(df2)
+  expected <- (mtcars + 1)[, 1:2, drop = F]
+  names(expected) <- c("a", "b")
+  rownames(expected) <- NULL
+  expect_identical(expected, result)
+})
+
 unlink(parquetPath)
 unlink(jsonPath)
 unlink(jsonPathNa)

@@ -84,6 +84,10 @@ broadcastElap <- elapsedSecs()
 # as number of partitions to create.
 numPartitions <- SparkR:::readInt(inputCon)
 
+# If true, working for RDD
+# If false, working for DataFrame
+isDataFrame <- as.logical(SparkR:::readInt(inputCon))
+
 isEmpty <- SparkR:::readInt(inputCon)
 
 if (isEmpty != 0) {
@@ -100,7 +104,20 @@ if (isEmpty != 0) {
     # Timing reading input data for execution
     inputElap <- elapsedSecs()
 
-    output <- computeFunc(partition, data)
+    if (isDataFrame) {
+      if (deserializer == "row") {
+        # Transform the list of rows into a data.frame
+        data <- do.call(rbind.data.frame, c(data, stringsAsFactors = FALSE))
+      }
+      output <- computeFunc(data)
+      if (serializer == "row") {
+        # Transform the result data.frame back to a list of rows
+        output <- split(output, seq(nrow(output)))
+      }
+    } else {
+      output <- computeFunc(partition, data)
+    }
+
     # Timing computing
     computeElap <- elapsedSecs()
 

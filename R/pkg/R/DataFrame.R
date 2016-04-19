@@ -1125,6 +1125,41 @@ setMethod("summarize",
             agg(x, ...)
           })
 
+#' dapply
+#'
+#' Apply a function to each partition of a DataFrame.
+#'
+#' @param x A DataFrame
+#' @param func A function to be applied to each partition of the DataFrame.
+#' @param schema Optional. The schema of the resulting DataFrame after the function is applied.
+#'               If NULL, the content of the resulting DataFrame is serialized R data.
+#' @family DataFrame functions
+#' @rdname dapply
+#' @name dapply
+#' @export
+setMethod("dapply",
+          signature(x = "DataFrame", func = "function"),
+          function(x, func, schema = NULL) {
+            if (!is.null(schema)) {
+              stopifnot(class(schema) == "structType")
+            }
+
+            packageNamesArr <- serialize(.sparkREnv[[".packages"]],
+                                         connection = NULL)
+
+            broadcastArr <- lapply(ls(.broadcastNames),
+                                   function(name) { get(name, .broadcastNames) })
+
+            sdf <- callJStatic(
+                     "org.apache.spark.sql.api.r.SQLUtils",
+                     "dapply",
+                     x@sdf,
+                     serialize(cleanClosure(func), connection = NULL),
+                     packageNamesArr,
+                     broadcastArr,
+                     schema$jobj)
+            dataFrame(sdf)
+          })
 
 ############################## RDD Map Functions ##################################
 # All of the following functions mirror the existing RDD map functions,           #
