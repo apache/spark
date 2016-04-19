@@ -30,6 +30,7 @@ import org.json4s.jackson.JsonMethods.{compact, parse => parseJson, render}
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.{AlphaComponent, Since}
+import org.apache.spark.ml.{linalg => newlinalg}
 import org.apache.spark.mllib.util.NumericParser
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
@@ -180,6 +181,13 @@ sealed trait Vector extends Serializable {
    */
   @Since("1.6.0")
   def toJson: String
+
+  /**
+   * Convert this vector to the new mllib-local representation.
+   * This does NOT copy the data; it copies references.
+   */
+  private[spark]
+  def toNew: newlinalg.Vector
 }
 
 /**
@@ -573,6 +581,15 @@ object Vectors {
 
   /** Max number of nonzero entries used in computing hash code. */
   private[linalg] val MAX_HASH_NNZ = 128
+
+  /** Convert new linalg type to spark.mllib type.  Light copy; only copies references */
+  private[spark]
+  def fromNew(v: newlinalg.Vector): Vector = v match {
+    case dv: newlinalg.DenseVector =>
+      DenseVector.fromNew(dv)
+    case sv: newlinalg.SparseVector =>
+      SparseVector.fromNew(sv)
+  }
 }
 
 /**
@@ -686,6 +703,11 @@ class DenseVector @Since("1.0.0") (
     val jValue = ("type" -> 1) ~ ("values" -> values.toSeq)
     compact(render(jValue))
   }
+
+  private[spark]
+  override def toNew: newlinalg.DenseVector = {
+    new newlinalg.DenseVector(values)
+  }
 }
 
 @Since("1.3.0")
@@ -694,6 +716,12 @@ object DenseVector {
   /** Extracts the value array from a dense vector. */
   @Since("1.3.0")
   def unapply(dv: DenseVector): Option[Array[Double]] = Some(dv.values)
+
+  /** Convert new linalg type to spark.mllib type.  Light copy; only copies references */
+  private[spark]
+  def fromNew(v: newlinalg.DenseVector): DenseVector = {
+    new DenseVector(v.values)
+  }
 }
 
 /**
@@ -882,6 +910,11 @@ class SparseVector @Since("1.0.0") (
       ("values" -> values.toSeq)
     compact(render(jValue))
   }
+
+  private[spark]
+  override def toNew: newlinalg.SparseVector = {
+    new newlinalg.SparseVector(size, indices, values)
+  }
 }
 
 @Since("1.3.0")
@@ -889,4 +922,10 @@ object SparseVector {
   @Since("1.3.0")
   def unapply(sv: SparseVector): Option[(Int, Array[Int], Array[Double])] =
     Some((sv.size, sv.indices, sv.values))
+
+  /** Convert new linalg type to spark.mllib type.  Light copy; only copies references */
+  private[spark]
+  def fromNew(v: newlinalg.SparseVector): SparseVector = {
+    new SparseVector(v.size, v.indices, v.values)
+  }
 }

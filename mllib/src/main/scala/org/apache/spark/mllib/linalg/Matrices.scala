@@ -24,7 +24,8 @@ import scala.collection.mutable.{ArrayBuffer, ArrayBuilder => MArrayBuilder, Has
 import breeze.linalg.{CSCMatrix => BSM, DenseMatrix => BDM, Matrix => BM}
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
-import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.annotation.Since
+import org.apache.spark.ml.{linalg => newlinalg}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 import org.apache.spark.sql.catalyst.util.GenericArrayData
@@ -158,6 +159,13 @@ sealed trait Matrix extends Serializable {
    */
   @Since("1.5.0")
   def numActives: Int
+
+  /**
+   * Convert this matrix to the new mllib-local representation.
+   * This does NOT copy the data; it copies references.
+   */
+  private[spark]
+  def toNew: newlinalg.Matrix
 }
 
 private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
@@ -419,6 +427,11 @@ class DenseMatrix @Since("1.3.0") (
       }
     }
   }
+
+  private[spark]
+  override def toNew: newlinalg.DenseMatrix = {
+    new newlinalg.DenseMatrix(numRows, numCols, values, isTransposed)
+  }
 }
 
 /**
@@ -514,6 +527,12 @@ object DenseMatrix {
       i += 1
     }
     matrix
+  }
+
+  /** Convert new linalg type to spark.mllib type.  Light copy; only copies references */
+  private[spark]
+  def fromNew(m: newlinalg.DenseMatrix): DenseMatrix = {
+    new DenseMatrix(m.numRows, m.numCols, m.values, m.isTransposed)
   }
 }
 
@@ -721,6 +740,11 @@ class SparseMatrix @Since("1.3.0") (
       }
     }
   }
+
+  private[spark]
+  override def toNew: newlinalg.SparseMatrix = {
+    new newlinalg.SparseMatrix(numRows, numCols, colPtrs, rowIndices, values, isTransposed)
+  }
 }
 
 /**
@@ -894,6 +918,12 @@ object SparseMatrix {
         val nnzVals = entries.filter(v => v._1 != 0.0)
         SparseMatrix.fromCOO(n, n, nnzVals.map(v => (v._2, v._2, v._1)))
     }
+  }
+
+  /** Convert new linalg type to spark.mllib type.  Light copy; only copies references */
+  private[spark]
+  def fromNew(m: newlinalg.SparseMatrix): SparseMatrix = {
+    new SparseMatrix(m.numRows, m.numCols, m.colPtrs, m.rowIndices, m.values, m.isTransposed)
   }
 }
 
@@ -1176,5 +1206,14 @@ object Matrices {
       }
       SparseMatrix.fromCOO(numRows, numCols, entries)
     }
+  }
+
+  /** Convert new linalg type to spark.mllib type.  Light copy; only copies references */
+  private[spark]
+  def fromNew(m: newlinalg.Matrix): Matrix = m match {
+    case dm: newlinalg.DenseMatrix =>
+      DenseMatrix.fromNew(dm)
+    case sm: newlinalg.SparseMatrix =>
+      SparseMatrix.fromNew(sm)
   }
 }
