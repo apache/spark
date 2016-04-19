@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources.{DataSourceAnalysis, PreInsertCastAndRename, ResolveDataSource}
 import org.apache.spark.sql.util.ExecutionListenerManager
+import org.apache.spark.internal.config.ConfigEntry
 
 
 /**
@@ -128,6 +129,11 @@ private[sql] class SessionState(ctx: SQLContext) {
 
   final def setConf(properties: Properties): Unit = {
     properties.asScala.foreach { case (k, v) => setConf(k, v) }
+  }
+
+  final def setConf[T](entry: ConfigEntry[T], value: T): Unit = {
+    conf.setConf(entry, value)
+    setConf(entry.key, entry.stringConverter(value))
   }
 
   def setConf(key: String, value: String): Unit = {

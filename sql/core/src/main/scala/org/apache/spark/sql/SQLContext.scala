@@ -136,8 +136,12 @@ class SQLContext private[sql](
    */
   def setConf(props: Properties): Unit = sessionState.setConf(props)
 
-  /** Set the given Spark SQL configuration property. */
-  private[sql] def setConf[T](entry: ConfigEntry[T], value: T): Unit = conf.setConf(entry, value)
+  /**
+   * Set the given Spark SQL configuration property.
+   */
+  private[sql] def setConf[T](entry: ConfigEntry[T], value: T): Unit = {
+    sessionState.setConf(entry, value)
+  }
 
   /**
    * Set the given Spark SQL configuration property.
