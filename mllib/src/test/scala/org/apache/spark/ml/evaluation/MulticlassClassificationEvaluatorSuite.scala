@@ -19,7 +19,7 @@ package org.apache.spark.ml.evaluation
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.DefaultReadWriteTest
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
 class MulticlassClassificationEvaluatorSuite
@@ -35,5 +35,10 @@ class MulticlassClassificationEvaluatorSuite
       .setLabelCol("myLabel")
       .setMetricName("recall")
     testDefaultReadWrite(evaluator)
+  }
+
+  test("should support all NumericType labels and not support other types") {
+    val evaluator = new MulticlassClassificationEvaluator().setMetricName("recall")
+    MLTestingUtils.checkNumericTypes(evaluator, sqlContext)
   }
 }

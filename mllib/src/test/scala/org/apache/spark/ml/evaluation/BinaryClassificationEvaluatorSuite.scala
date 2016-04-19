@@ -19,10 +19,9 @@ package org.apache.spark.ml.evaluation
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.{MLTestingUtils, DefaultReadWriteTest}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.types.DoubleType
 
 class BinaryClassificationEvaluatorSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
@@ -72,11 +71,8 @@ class BinaryClassificationEvaluatorSuite
 
   test("should support all NumericType labels and not support other types") {
     val evaluator = new BinaryClassificationEvaluator()
-      .setMetricName("areaUnderPR")
       .setRawPredictionCol("prediction")
-    val dfs = MLTestingUtils.genClassifDFWithNumericLabelCol(sqlContext, "label", "prediction")
-    val expected = evaluator.evaluate(dfs(DoubleType))
-    val actuals = dfs.keys.filter(_ != DoubleType).map(t => evaluator.evaluate(dfs(t)))
-    actuals.foreach(actual => assert(expected === actual))
+      .setMetricName("areaUnderPR")
+    MLTestingUtils.checkNumericTypes(evaluator, sqlContext)
   }
 }
