@@ -118,7 +118,7 @@ private[hive] class TestHiveSparkSession(
     this(
       sc,
       Utils.createTempDir(namePrefix = "warehouse"),
-      TestHiveSparkSession.makeScratchDir(),
+      TestHiveContext.makeScratchDir(),
       HiveContext.newTemporaryConfiguration(useInMemoryDerby = false),
       None)
   }
@@ -179,18 +179,30 @@ private[hive] class TestHiveSparkSession(
     Option(System.getenv(envVar)).map(new File(_))
   }
 
+  /**
+   * Replaces relative paths to the parent directory "../" with hiveDevHome since this is how the
+   * hive test cases assume the system is set up.
+   */
+  private[hive] def rewritePaths(cmd: String): String =
+    if (cmd.toUpperCase contains "LOAD DATA") {
+      val testDataLocation =
+        hiveDevHome.map(_.getCanonicalPath).getOrElse(inRepoTests.getCanonicalPath)
+      cmd.replaceAll("\\.\\./\\.\\./", testDataLocation + "/")
+    } else {
+      cmd
+    }
+
   val hiveFilesTemp = File.createTempFile("catalystHiveFiles", "")
   hiveFilesTemp.delete()
   hiveFilesTemp.mkdir()
   ShutdownHookManager.registerShutdownDeleteDir(hiveFilesTemp)
 
-  val inRepoTests: File =
-    if (System.getProperty("user.dir").endsWith("sql" + File.separator + "hive")) {
-      new File("src" + File.separator + "test" + File.separator + "resources" + File.separator)
-    } else {
-      new File("sql" + File.separator + "hive" + File.separator + "src" + File.separator + "test" +
-        File.separator + "resources")
-    }
+  val inRepoTests = if (System.getProperty("user.dir").endsWith("sql" + File.separator + "hive")) {
+    new File("src" + File.separator + "test" + File.separator + "resources" + File.separator)
+  } else {
+    new File("sql" + File.separator + "hive" + File.separator + "src" + File.separator + "test" +
+      File.separator + "resources")
+  }
 
   def getHiveFile(path: String): File = {
     val stripped = path.replaceAll("""\.\.\/""", "").replace('/', File.separatorChar)
@@ -401,20 +413,6 @@ private[hive] class TestHiveSparkSession(
   }
 
   /**
-   * Replaces relative paths to the parent directory "../" with hiveDevHome since this is how the
-   * hive test cases assume the system is set up.
-   */
-  private[hive] def rewritePaths(cmd: String): String = {
-    if (cmd.toUpperCase contains "LOAD DATA") {
-      val testDataLocation =
-        hiveDevHome.map(_.getCanonicalPath).getOrElse(inRepoTests.getCanonicalPath)
-      cmd.replaceAll("\\.\\./\\.\\./", testDataLocation + "/")
-    } else {
-      cmd
-    }
-  }
-
-  /**
    * Records the UDFs present when the server starts, so we can delete ones that are created by
    * tests.
    */
@@ -458,7 +456,7 @@ private[hive] class TestHiveSparkSession(
       sessionState.runNativeSql("set hive.metastore.partition.name.whitelist.pattern=.*")
 
       // In case a test changed any of these values, restore all the original ones here.
-      TestHiveSparkSession.hiveClientConfigurations(
+      TestHiveContext.hiveClientConfigurations(
         sessionState.hiveconf, warehousePath, scratchDirPath, metastoreTemporaryConf)
           .foreach { case (k, v) => sessionState.metadataHive.runSqlHive(s"SET $k=$v") }
       sessionState.setDefaultOverrideConfs()
@@ -486,7 +484,7 @@ private[hive] class TestHiveQueryExecution(
     this(TestHive.sparkSession, sql)
   }
 
-  override lazy val analyzed = {
+  override lazy val analyzed: LogicalPlan = {
     val describedTables = logical match {
       case HiveNativeCommand(sparkSession.describedTable(tbl)) => tbl :: Nil
       case CacheTableCommand(tbl, _, _) => tbl :: Nil
@@ -506,6 +504,23 @@ private[hive] class TestHiveQueryExecution(
 }
 
 
+private[hive] class TestHiveFunctionRegistry extends SimpleFunctionRegistry {
+
+  private val removedFunctions =
+    collection.mutable.ArrayBuffer.empty[(String, (ExpressionInfo, FunctionBuilder))]
+
+  def unregisterFunction(name: String): Unit = {
+    functionBuilders.remove(name).foreach(f => removedFunctions += name -> f)
+  }
+
+  def restore(): Unit = {
+    removedFunctions.foreach {
+      case (name, (info, builder)) => registerFunction(name, info, builder)
+    }
+  }
+}
+
+
 private[hive] class TestHiveSharedState(
     sc: SparkContext,
     warehousePath: File,
@@ -514,7 +529,7 @@ private[hive] class TestHiveSharedState(
   extends HiveSharedState(sc) {
 
   override lazy val metadataHive: HiveClient = {
-    TestHiveSparkSession.newClientForMetadata(
+    TestHiveContext.newClientForMetadata(
       sc.conf, sc.hadoopConfiguration, warehousePath, scratchDirPath, metastoreTemporaryConf)
   }
 }
@@ -529,7 +544,7 @@ private[hive] class TestHiveSessionState(sparkSession: TestHiveSparkSession)
       override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
       override def clear(): Unit = {
         super.clear()
-        TestHiveSparkSession.overrideConfs.map {
+        TestHiveContext.overrideConfs.map {
           case (key, value) => setConfString(key, value)
         }
       }
@@ -557,24 +572,7 @@ private[hive] class TestHiveSessionState(sparkSession: TestHiveSparkSession)
 }
 
 
-private[hive] class TestHiveFunctionRegistry extends SimpleFunctionRegistry {
-
-  private val removedFunctions =
-    collection.mutable.ArrayBuffer.empty[(String, (ExpressionInfo, FunctionBuilder))]
-
-  def unregisterFunction(name: String): Unit = {
-    functionBuilders.remove(name).foreach(f => removedFunctions += name -> f)
-  }
-
-  def restore(): Unit = {
-    removedFunctions.foreach {
-      case (name, (info, builder)) => registerFunction(name, info, builder)
-    }
-  }
-}
-
-
-private[hive] object TestHiveSparkSession {
+private[hive] object TestHiveContext {
 
   /**
    * A map used to store all confs that need to be overridden in sql/hive unit tests.
@@ -605,7 +603,7 @@ private[hive] object TestHiveSparkSession {
   /**
    * Configurations needed to create a [[HiveClient]].
    */
-  private def hiveClientConfigurations(
+  def hiveClientConfigurations(
       hiveconf: HiveConf,
       warehousePath: File,
       scratchDirPath: File,
@@ -617,7 +615,7 @@ private[hive] object TestHiveSparkSession {
       ConfVars.METASTORE_CLIENT_CONNECT_RETRY_DELAY.varname -> "1")
   }
 
-  private def makeScratchDir(): File = {
+  def makeScratchDir(): File = {
     val scratchDir = Utils.createTempDir(namePrefix = "scratch")
     scratchDir.delete()
     scratchDir

@@ -1150,7 +1150,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
     // "SET" itself returns all config variables currently specified in SQLConf.
     // TODO: Should we be listing the default here always? probably...
-    assert(sql("SET").collect().size === TestHiveSparkSession.overrideConfs.size)
+    assert(sql("SET").collect().size === TestHiveContext.overrideConfs.size)
 
     val defaults = collectResults(sql("SET"))
     assertResult(Set(testKey -> testVal)) {
