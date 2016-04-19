@@ -118,7 +118,8 @@ object UDTRegistration extends Serializable with Logging {
               s"an UserDefinedType for ${userClass.getName}")
         }
       } else {
-        null
+        throw new SparkException(
+          s"Can not load in UserDefinedType ${udtClassName} for user class ${userClass.getName}.")
       }
     }
   }

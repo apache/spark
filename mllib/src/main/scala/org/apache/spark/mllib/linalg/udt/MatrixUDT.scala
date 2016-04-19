@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.udt
+package org.apache.spark.mllib.linalg.udt
 
 import org.apache.spark.ml.linalg.{DenseMatrix, Matrix, SparseMatrix}
 import org.apache.spark.sql.catalyst.InternalRow

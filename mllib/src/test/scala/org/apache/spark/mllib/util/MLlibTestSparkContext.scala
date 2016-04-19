@@ -24,13 +24,17 @@ import org.scalatest.Suite
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.ml.util.TempDirectory
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.{SQLContext, SQLImplicits}
 import org.apache.spark.util.Utils
 
 trait MLlibTestSparkContext extends TempDirectory { self: Suite =>
   @transient var sc: SparkContext = _
   @transient var sqlContext: SQLContext = _
   @transient var checkpointDir: String = _
+
+  protected object testImplicits extends SQLImplicits {
+    protected override def _sqlContext: SQLContext = self.sqlContext
+  }
 
   override def beforeAll() {
     super.beforeAll()

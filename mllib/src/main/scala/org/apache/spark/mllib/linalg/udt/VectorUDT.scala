@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.udt
+package org.apache.spark.mllib.linalg.udt
 
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector}

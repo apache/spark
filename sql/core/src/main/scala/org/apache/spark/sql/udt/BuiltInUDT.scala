@@ -24,14 +24,13 @@ import org.apache.spark.sql.types.UDTRegistration
  * into UDTRegistration.
  */
 private[sql] object BuiltInUDT {
-  // VectorUDT and MatrixUDT in test package org.apache.spark.sql for test purpose.
   val preloadedUDT =
-    ("org.apache.spark.ml.linalg.Vector", "org.apache.spark.sql.udt.VectorUDT") ::
-    ("org.apache.spark.ml.linalg.DenseVector", "org.apache.spark.sql.udt.VectorUDT") ::
-    ("org.apache.spark.ml.linalg.SparseVector", "org.apache.spark.sql.udt.VectorUDT") ::
-    ("org.apache.spark.ml.linalg.Matrix", "org.apache.spark.sql.udt.MatrixUDT") ::
-    ("org.apache.spark.ml.linalg.DenseMatrix", "org.apache.spark.sql.udt.MatrixUDT") ::
-    ("org.apache.spark.ml.linalg.SparseMatrix", "org.apache.spark.sql.udt.MatrixUDT") ::
+    ("org.apache.spark.ml.linalg.Vector", "org.apache.spark.mllib.linalg.udt.VectorUDT") ::
+    ("org.apache.spark.ml.linalg.DenseVector", "org.apache.spark.mllib.linalg.udt.VectorUDT") ::
+    ("org.apache.spark.ml.linalg.SparseVector", "org.apache.spark.mllib.linalg.udt.VectorUDT") ::
+    ("org.apache.spark.ml.linalg.Matrix", "org.apache.spark.mllib.linalg.udt.MatrixUDT") ::
+    ("org.apache.spark.ml.linalg.DenseMatrix", "org.apache.spark.mllib.linalg.udt.MatrixUDT") ::
+    ("org.apache.spark.ml.linalg.SparseMatrix", "org.apache.spark.mllib.linalg.udt.MatrixUDT") ::
     Nil
 
   def preloadBuiltInUDT: Unit = {
