@@ -2693,7 +2693,6 @@ setMethod("histogram",
 
               # TODO: This will be when improved SPARK-9325 or SPARK-13436 are fixed
               getColumn(df, colname)
-              #eval(parse(text = paste0("df$", colname)))
             } else if (class(col) == "Column") {
               # Append the given column to the dataset. This is to support Columns that
               # don't belong to the DataFrame but are rather expressions
