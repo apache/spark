@@ -400,10 +400,10 @@ class VectorsSuite extends SparkFunSuite with Logging {
     val sv0: Vector = sv.asInstanceOf[Vector]
     val dv0: Vector = dv.asInstanceOf[Vector]
 
-    val newSV: newlinalg.SparseVector = sv.toNew
-    val newDV: newlinalg.DenseVector = dv.toNew
-    val newSV0: newlinalg.Vector = sv0.toNew
-    val newDV0: newlinalg.Vector = dv0.toNew
+    val newSV: newlinalg.SparseVector = sv.asML
+    val newDV: newlinalg.DenseVector = dv.asML
+    val newSV0: newlinalg.Vector = sv0.asML
+    val newDV0: newlinalg.Vector = dv0.asML
     assert(newSV0.isInstanceOf[newlinalg.SparseVector])
     assert(newDV0.isInstanceOf[newlinalg.DenseVector])
     assert(sv.toArray === newSV.toArray)
@@ -411,10 +411,10 @@ class VectorsSuite extends SparkFunSuite with Logging {
     assert(sv0.toArray === newSV0.toArray)
     assert(dv0.toArray === newDV0.toArray)
 
-    val oldSV: SparseVector = SparseVector.fromNew(newSV)
-    val oldDV: DenseVector = DenseVector.fromNew(newDV)
-    val oldSV0: Vector = Vectors.fromNew(newSV0)
-    val oldDV0: Vector = Vectors.fromNew(newDV0)
+    val oldSV: SparseVector = SparseVector.fromML(newSV)
+    val oldDV: DenseVector = DenseVector.fromML(newDV)
+    val oldSV0: Vector = Vectors.fromML(newSV0)
+    val oldDV0: Vector = Vectors.fromML(newDV0)
     assert(oldSV0.isInstanceOf[SparseVector])
     assert(oldDV0.isInstanceOf[DenseVector])
     assert(oldSV.toArray === newSV.toArray)

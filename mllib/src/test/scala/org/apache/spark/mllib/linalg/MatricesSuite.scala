@@ -538,10 +538,10 @@ class MatricesSuite extends SparkFunSuite {
       assert(oldM.numRows === newM.numRows)
     }
 
-    val newSM: newlinalg.SparseMatrix = sm.toNew
-    val newDM: newlinalg.DenseMatrix = dm.toNew
-    val newSM0: newlinalg.Matrix = sm0.toNew
-    val newDM0: newlinalg.Matrix = dm0.toNew
+    val newSM: newlinalg.SparseMatrix = sm.asML
+    val newDM: newlinalg.DenseMatrix = dm.asML
+    val newSM0: newlinalg.Matrix = sm0.asML
+    val newDM0: newlinalg.Matrix = dm0.asML
     assert(newSM0.isInstanceOf[newlinalg.SparseMatrix])
     assert(newDM0.isInstanceOf[newlinalg.DenseMatrix])
     compare(sm, newSM)
@@ -549,10 +549,10 @@ class MatricesSuite extends SparkFunSuite {
     compare(sm0, newSM0)
     compare(dm0, newDM0)
 
-    val oldSM: SparseMatrix = SparseMatrix.fromNew(newSM)
-    val oldDM: DenseMatrix = DenseMatrix.fromNew(newDM)
-    val oldSM0: Matrix = Matrices.fromNew(newSM0)
-    val oldDM0: Matrix = Matrices.fromNew(newDM0)
+    val oldSM: SparseMatrix = SparseMatrix.fromML(newSM)
+    val oldDM: DenseMatrix = DenseMatrix.fromML(newDM)
+    val oldSM0: Matrix = Matrices.fromML(newSM0)
+    val oldDM0: Matrix = Matrices.fromML(newDM0)
     assert(oldSM0.isInstanceOf[SparseMatrix])
     assert(oldDM0.isInstanceOf[DenseMatrix])
     compare(oldSM, newSM)

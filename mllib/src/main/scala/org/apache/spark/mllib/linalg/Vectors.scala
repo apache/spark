@@ -187,7 +187,7 @@ sealed trait Vector extends Serializable {
    * This does NOT copy the data; it copies references.
    */
   private[spark]
-  def toNew: newlinalg.Vector
+  def asML: newlinalg.Vector
 }
 
 /**
@@ -584,11 +584,11 @@ object Vectors {
 
   /** Convert new linalg type to spark.mllib type.  Light copy; only copies references */
   private[spark]
-  def fromNew(v: newlinalg.Vector): Vector = v match {
+  def fromML(v: newlinalg.Vector): Vector = v match {
     case dv: newlinalg.DenseVector =>
-      DenseVector.fromNew(dv)
+      DenseVector.fromML(dv)
     case sv: newlinalg.SparseVector =>
-      SparseVector.fromNew(sv)
+      SparseVector.fromML(sv)
   }
 }
 
@@ -705,7 +705,7 @@ class DenseVector @Since("1.0.0") (
   }
 
   private[spark]
-  override def toNew: newlinalg.DenseVector = {
+  override def asML: newlinalg.DenseVector = {
     new newlinalg.DenseVector(values)
   }
 }
@@ -719,7 +719,7 @@ object DenseVector {
 
   /** Convert new linalg type to spark.mllib type.  Light copy; only copies references */
   private[spark]
-  def fromNew(v: newlinalg.DenseVector): DenseVector = {
+  def fromML(v: newlinalg.DenseVector): DenseVector = {
     new DenseVector(v.values)
   }
 }
@@ -912,7 +912,7 @@ class SparseVector @Since("1.0.0") (
   }
 
   private[spark]
-  override def toNew: newlinalg.SparseVector = {
+  override def asML: newlinalg.SparseVector = {
     new newlinalg.SparseVector(size, indices, values)
   }
 }
@@ -925,7 +925,7 @@ object SparseVector {
 
   /** Convert new linalg type to spark.mllib type.  Light copy; only copies references */
   private[spark]
-  def fromNew(v: newlinalg.SparseVector): SparseVector = {
+  def fromML(v: newlinalg.SparseVector): SparseVector = {
     new SparseVector(v.size, v.indices, v.values)
   }
 }

@@ -165,7 +165,7 @@ sealed trait Matrix extends Serializable {
    * This does NOT copy the data; it copies references.
    */
   private[spark]
-  def toNew: newlinalg.Matrix
+  def asML: newlinalg.Matrix
 }
 
 private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
@@ -429,7 +429,7 @@ class DenseMatrix @Since("1.3.0") (
   }
 
   private[spark]
-  override def toNew: newlinalg.DenseMatrix = {
+  override def asML: newlinalg.DenseMatrix = {
     new newlinalg.DenseMatrix(numRows, numCols, values, isTransposed)
   }
 }
@@ -531,7 +531,7 @@ object DenseMatrix {
 
   /** Convert new linalg type to spark.mllib type.  Light copy; only copies references */
   private[spark]
-  def fromNew(m: newlinalg.DenseMatrix): DenseMatrix = {
+  def fromML(m: newlinalg.DenseMatrix): DenseMatrix = {
     new DenseMatrix(m.numRows, m.numCols, m.values, m.isTransposed)
   }
 }
@@ -742,7 +742,7 @@ class SparseMatrix @Since("1.3.0") (
   }
 
   private[spark]
-  override def toNew: newlinalg.SparseMatrix = {
+  override def asML: newlinalg.SparseMatrix = {
     new newlinalg.SparseMatrix(numRows, numCols, colPtrs, rowIndices, values, isTransposed)
   }
 }
@@ -922,7 +922,7 @@ object SparseMatrix {
 
   /** Convert new linalg type to spark.mllib type.  Light copy; only copies references */
   private[spark]
-  def fromNew(m: newlinalg.SparseMatrix): SparseMatrix = {
+  def fromML(m: newlinalg.SparseMatrix): SparseMatrix = {
     new SparseMatrix(m.numRows, m.numCols, m.colPtrs, m.rowIndices, m.values, m.isTransposed)
   }
 }
@@ -1210,10 +1210,10 @@ object Matrices {
 
   /** Convert new linalg type to spark.mllib type.  Light copy; only copies references */
   private[spark]
-  def fromNew(m: newlinalg.Matrix): Matrix = m match {
+  def fromML(m: newlinalg.Matrix): Matrix = m match {
     case dm: newlinalg.DenseMatrix =>
-      DenseMatrix.fromNew(dm)
+      DenseMatrix.fromML(dm)
     case sm: newlinalg.SparseMatrix =>
-      SparseMatrix.fromNew(sm)
+      SparseMatrix.fromML(sm)
   }
 }
