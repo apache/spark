@@ -75,7 +75,7 @@ public final class UnsafeInMemorySorter {
   private final Comparator<RecordPointerAndKeyPrefix> sortComparator;
 
   /**
-   * If non-null, specifies that radix sort should be used instead of TimSort.
+   * If non-null, specifies the radix sort parameters and that radix sort will be used.
    */
   @Nullable
   private final PrefixComparators.RadixSortSupport radixSortSupport;
@@ -160,7 +160,7 @@ public final class UnsafeInMemorySorter {
   }
 
   public boolean hasSpaceForAnotherRecord() {
-    return pos + 2 <= (array.size() / (this.radixSortSupport != null ? 2 : 1));
+    return pos + 1 < (array.size() / (this.radixSortSupport != null ? 2 : 1));
   }
 
   public void expandPointerArray(LongArray newArray) {
@@ -172,7 +172,7 @@ public final class UnsafeInMemorySorter {
       array.getBaseOffset(),
       newArray.getBaseObject(),
       newArray.getBaseOffset(),
-      array.size() * (this.radixSortSupport != null ? 4L : 8L));
+      array.size() * (this.radixSortSupport != null ? 4L /* second half unused */: 8L));
     consumer.freeArray(array);
     array = newArray;
   }

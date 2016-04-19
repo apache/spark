@@ -354,12 +354,6 @@ class SparkContext(object):
         """
         return self._jsc.sc().defaultMinPartitions()
 
-    def addSparkListener(self, listener):
-        """
-        Shut down the SparkContext.
-        """
-        self._jsc.sc().addSparkListener(listener)
-
     def stop(self):
         """
         Shut down the SparkContext.

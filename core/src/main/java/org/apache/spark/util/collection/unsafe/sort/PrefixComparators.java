@@ -37,10 +37,6 @@ public class PrefixComparators {
   public static final PrefixComparator DOUBLE = new SignedPrefixComparator();
   public static final PrefixComparator DOUBLE_DESC = new SignedPrefixComparatorDesc();
 
-  //
-  // Utility classes that define computePrefix() for input types
-  //
-
   public static final class StringPrefixComparator {
     public static long computePrefix(UTF8String value) {
       return value == null ? 0L : value.getPrefix();
@@ -61,18 +57,21 @@ public class PrefixComparators {
     }
   }
 
+  /**
+   * Provides radix sort parameters. Comparators implementing this also are indicating that the
+   * ordering they define is compatible with radix sort.
+   */
+  public static abstract class RadixSortSupport extends PrefixComparator {
+    /** @return Whether the sort should be descending in binary sort order. */
+    public abstract boolean sortDescending();
+
+    /** @return Whether the sort should take into account the sign bit. */
+    public abstract boolean sortSigned();
+  }
+
   //
   // Standard prefix comparator implementations
   //
-
-  /**
-   * Provides radix sort parameters. Comparators implementing this indicate that the ordering
-   * they define is compatible with radix sort.
-   */
-  public static abstract class RadixSortSupport extends PrefixComparator {
-    public abstract boolean sortDescending();
-    public abstract boolean sortSigned();
-  }
 
   public static final class UnsignedPrefixComparator extends RadixSortSupport {
     @Override public final boolean sortDescending() { return false; }

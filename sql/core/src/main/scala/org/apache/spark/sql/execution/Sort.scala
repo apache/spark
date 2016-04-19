@@ -77,8 +77,7 @@ case class Sort(
 
     val pageSize = SparkEnv.get.memoryManager.pageSizeBytes
     val sorter = new UnsafeExternalRowSorter(
-      schema, ordering, prefixComparator, prefixComputer, pageSize,
-      sparkContext.getConf.getBoolean("spark.sql.sort.useRadixSort", true) && canUseRadixSort)
+      schema, ordering, prefixComparator, prefixComputer, pageSize, canUseRadixSort)
 
     if (testSpillFrequency > 0) {
       sorter.setTestSpillFrequency(testSpillFrequency)

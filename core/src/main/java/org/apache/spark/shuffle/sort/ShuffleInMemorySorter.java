@@ -95,7 +95,7 @@ final class ShuffleInMemorySorter {
       array.getBaseOffset(),
       newArray.getBaseObject(),
       newArray.getBaseOffset(),
-      array.size() * (useRadixSort ? 4L /* other half is unused */: 8L)
+      array.size() * (useRadixSort ? 4L /* second half unused */: 8L)
     );
     consumer.freeArray(array);
     array = newArray;
@@ -158,13 +158,11 @@ final class ShuffleInMemorySorter {
    */
   public ShuffleSorterIterator getSortedIterator() {
     int offset = 0;
-    long start = System.nanoTime();
     if (useRadixSort) {
       offset = RadixSort.sort(array, pos, 5, 7, false, false);
     } else {
       sorter.sort(array, 0, pos, SORT_COMPARATOR);
     }
-    System.out.println((System.nanoTime() - start) / 1e9);
     return new ShuffleSorterIterator(pos, array, offset);
   }
 }

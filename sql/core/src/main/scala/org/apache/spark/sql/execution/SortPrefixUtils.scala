@@ -52,7 +52,21 @@ object SortPrefixUtils {
   }
 
   /**
-   * @return whether the specified SortOrder can be satisfied with a radix sort on the prefix.
+   * Creates the prefix comparator for the first field in the given schema, in ascending order.
+   */
+  def getPrefixComparator(schema: StructType): PrefixComparator = {
+    if (schema.nonEmpty) {
+      val field = schema.head
+      getPrefixComparator(SortOrder(BoundReference(0, field.dataType, field.nullable), Ascending))
+    } else {
+      new PrefixComparator {
+        override def compare(prefix1: Long, prefix2: Long): Int = 0
+      }
+    }
+  }
+
+  /**
+   * Returns whether the specified SortOrder can be satisfied with a radix sort on the prefix.
    */
   def canSortFullyWithPrefix(sortOrder: SortOrder): Boolean = {
     sortOrder.dataType match {
@@ -68,17 +82,10 @@ object SortPrefixUtils {
   }
 
   /**
-   * Creates the prefix comparator for the first field in the given schema, in ascending order.
+   * Returns whether the fully sorting on the specified key field is possible with radix sort.
    */
-  def getPrefixComparator(schema: StructType): PrefixComparator = {
-    if (schema.nonEmpty) {
-      val field = schema.head
-      getPrefixComparator(SortOrder(BoundReference(0, field.dataType, field.nullable), Ascending))
-    } else {
-      new PrefixComparator {
-        override def compare(prefix1: Long, prefix2: Long): Int = 0
-      }
-    }
+  def canSortFullyWithPrefix(field: StructField): Boolean = {
+    canSortFullyWithPrefix(SortOrder(BoundReference(0, field.dataType, field.nullable), Ascending))
   }
 
   /**
