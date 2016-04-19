@@ -54,6 +54,6 @@ class StreamFileCatalog(sqlContext: SQLContext, path: Path) extends FileCatalog 
   override def refresh(): Unit = {}
 
   override def allFiles(): Seq[FileStatus] = {
-    fs.listStatus(metadataLog.allFiles().map(f => new Path(f.path)))
+    metadataLog.allFiles().map(_.toFileStatus)
   }
 }

@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.streaming
 import java.io.IOException
 import java.nio.charset.StandardCharsets.UTF_8
 
-import org.apache.hadoop.fs.{Path, PathFilter}
+import org.apache.hadoop.fs.{FileStatus, Path, PathFilter}
 import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
 import org.json4s.jackson.Serialization.{read, write}
@@ -32,11 +32,27 @@ import org.apache.spark.sql.internal.SQLConf
  * The status of a file outputted by [[FileStreamSink]]. A file is visible only if it appears in
  * the sink log and its action is not "delete".
  *
- * @param path the file path
- * @param size the file size
+ * @param path the file path.
+ * @param size the file size.
+ * @param isDir whether this file is a directory.
+ * @param modificationTime the file last modification time.
+ * @param blockReplication the block replication.
+ * @param blockSize the block size.
  * @param action the file action. Must be either "add" or "delete".
  */
-case class SinkFileStatus(path: String, size: Long, action: String)
+case class SinkFileStatus(
+    path: String,
+    size: Long,
+    isDir: Boolean,
+    modificationTime: Long,
+    blockReplication: Int,
+    blockSize: Long,
+    action: String) {
+
+  def toFileStatus: FileStatus = {
+    new FileStatus(size, isDir, blockReplication, blockSize, modificationTime, new Path(path))
+  }
+}
 
 /**
  * A special log for [[FileStreamSink]]. It will write one log file for each batch. The first line

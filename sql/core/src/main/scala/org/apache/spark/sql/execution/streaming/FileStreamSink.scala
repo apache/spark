@@ -52,7 +52,14 @@ class FileStreamSink(
       logInfo(s"Skipping already committed batch $batchId")
     } else {
       val files = fs.listStatus(writeFiles(data)).map { f =>
-        SinkFileStatus(f.getPath.toUri.toString, f.getLen, FileStreamSinkLog.ADD_ACTION)
+        SinkFileStatus(
+          path = f.getPath.toUri.toString,
+          size = f.getLen,
+          isDir = f.isDirectory,
+          modificationTime = f.getModificationTime,
+          blockReplication = f.getReplication,
+          blockSize = f.getBlockSize,
+          action = FileStreamSinkLog.ADD_ACTION)
       }
       if (fileLog.add(batchId, files)) {
         logInfo(s"Committed batch $batchId")
