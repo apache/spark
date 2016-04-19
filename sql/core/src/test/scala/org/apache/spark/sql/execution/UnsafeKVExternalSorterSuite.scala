@@ -22,6 +22,7 @@ import java.util.Properties
 import scala.util.Random
 
 import org.apache.spark._
+import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.memory.{TaskMemoryManager, TestMemoryManager}
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
@@ -120,7 +121,8 @@ class UnsafeKVExternalSorterSuite extends SparkFunSuite with SharedSQLContext {
       attemptNumber = 0,
       taskMemoryManager = taskMemMgr,
       localProperties = new Properties,
-      metricsSystem = null))
+      metricsSystem = null,
+      taskMetrics = new TaskMetrics))
 
     val sorter = new UnsafeKVExternalSorter(
       keySchema, valueSchema, SparkEnv.get.blockManager, SparkEnv.get.serializerManager, pageSize)

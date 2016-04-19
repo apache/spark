@@ -26,6 +26,7 @@ import scala.util.control.NonFatal
 import org.scalatest.Matchers
 
 import org.apache.spark.{SparkConf, SparkFunSuite, TaskContext, TaskContextImpl}
+import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.memory.{TaskMemoryManager, TestMemoryManager}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
@@ -74,7 +75,8 @@ class UnsafeFixedWidthAggregationMapSuite
         attemptNumber = 0,
         taskMemoryManager = taskMemoryManager,
         localProperties = new Properties,
-        metricsSystem = null))
+        metricsSystem = null,
+        taskMetrics = new TaskMetrics))
 
       try {
         f
