@@ -391,9 +391,13 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
 
         // Having
         val withHaving = withProject.optional(having) {
-          // Note that we added a cast to boolean. If the expression itself is already boolean,
-          // the optimizer will get rid of the unnecessary cast.
-          Filter(Cast(expression(having), BooleanType), withProject)
+          // Note that we add a cast to non-predicate expressions. If the expression itself is
+          // already boolean, the optimizer will get rid of the unnecessary cast.
+          val predicate = expression(having) match {
+            case p: Predicate => p
+            case e => Cast(e, BooleanType)
+          }
+          Filter(predicate, withProject)
         }
 
         // Distinct
@@ -866,10 +870,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   }
 
   /**
-   * Create a filtering correlated sub-query. This is not supported yet.
+   * Create a filtering correlated sub-query (EXISTS).
    */
   override def visitExists(ctx: ExistsContext): Expression = {
-    throw new ParseException("EXISTS clauses are not supported.", ctx)
+    Exists(plan(ctx.query))
   }
 
   /**
@@ -944,7 +948,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
           GreaterThanOrEqual(e, expression(ctx.lower)),
           LessThanOrEqual(e, expression(ctx.upper))))
       case SqlBaseParser.IN if ctx.query != null =>
-        throw new ParseException("IN with a Sub-query is currently not supported.", ctx)
+        invertIfNotDefined(InSubQuery(e, plan(ctx.query)))
       case SqlBaseParser.IN =>
         invertIfNotDefined(In(e, ctx.expression.asScala.map(expression)))
       case SqlBaseParser.LIKE =>

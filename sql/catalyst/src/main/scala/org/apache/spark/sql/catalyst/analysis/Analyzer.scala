@@ -855,25 +855,35 @@ class Analyzer(
   }
 
   /**
-   * This rule resolve subqueries inside expressions.
+   * This rule resolves sub-queries inside expressions.
    *
-   * Note: CTE are handled in CTESubstitution.
+   * Note: CTEs are handled in CTESubstitution.
    */
   object ResolveSubquery extends Rule[LogicalPlan] with PredicateHelper {
 
-    private def hasSubquery(e: Expression): Boolean = {
-      e.find(_.isInstanceOf[SubqueryExpression]).isDefined
-    }
-
-    private def hasSubquery(q: LogicalPlan): Boolean = {
-      q.expressions.exists(hasSubquery)
+    /**
+     * Resolve the correlated predicates in the [[Filter]] clauses (e.g. WHERE or HAVING) of a
+     * sub-query by using the plan the predicates should be correlated to.
+     */
+    private def resolveCorrelatedPredicates(q: LogicalPlan, p: LogicalPlan): LogicalPlan = {
+      q transformUp {
+        case f @ Filter(cond, child) if child.resolved && !f.resolved =>
+          val newCond = resolveExpression(cond, p, throws = false)
+          if (!cond.fastEquals(newCond)) {
+            Filter(newCond, child)
+          } else {
+            f
+          }
+      }
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case q: LogicalPlan if q.childrenResolved && hasSubquery(q) =>
+      case q: LogicalPlan if q.childrenResolved =>
         q transformExpressions {
           case e: SubqueryExpression if !e.query.resolved =>
-            e.withNewPlan(execute(e.query))
+            // First resolve as much of the sub-query as possible. After that we use the children of
+            // this plan to resolve the remaining correlated predicates.
+            e.withNewPlan(q.children.foldLeft(execute(e.query))(resolveCorrelatedPredicates))
         }
     }
   }
