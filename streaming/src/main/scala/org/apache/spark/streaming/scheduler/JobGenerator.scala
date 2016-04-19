@@ -154,9 +154,9 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
       graph.stop()
     }
 
-    // Stop the event loop and checkpoint writer
-    if (shouldCheckpoint) checkpointWriter.stop()
+    // First stop the event loop, then stop the checkpoint writer; see SPARK-14701
     eventLoop.stop()
+    if (shouldCheckpoint) checkpointWriter.stop()
     logInfo("Stopped JobGenerator")
   }
 
