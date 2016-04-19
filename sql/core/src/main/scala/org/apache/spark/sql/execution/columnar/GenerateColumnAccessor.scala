@@ -28,10 +28,11 @@ import org.apache.spark.sql.types._
  */
 abstract class ColumnarIterator extends Iterator[InternalRow] {
   def initialize(input: Iterator[CachedBatch], columnTypes: Array[DataType],
-    columnIndexes: Array[Int]): Unit
+    columnIndexes: Array[Int], inMemoryColumnarTableScan: InMemoryColumnarTableScan): Unit
   def getInput: Iterator[CachedBatch]
   def getColumnIndexes: Array[Int]
   def isSupportColumnarCodeGen: Boolean
+  def incrementReadPartitionAccumulator: Unit
 }
 
 /**
@@ -163,6 +164,7 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
       import org.apache.spark.sql.types.DataType;
       import org.apache.spark.sql.catalyst.expressions.codegen.BufferHolder;
       import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter;
+      import org.apache.spark.sql.execution.columnar.InMemoryColumnarTableScan;
       import org.apache.spark.sql.execution.columnar.MutableUnsafeRow;
 
       public SpecificColumnarIterator generate(Object[] references) {
@@ -176,7 +178,9 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
         private UnsafeRow unsafeRow = new UnsafeRow($numFields);
         private BufferHolder bufferHolder = new BufferHolder(unsafeRow);
         private UnsafeRowWriter rowWriter = new UnsafeRowWriter(bufferHolder, $numFields);
+        private InMemoryColumnarTableScan inMemoryColumnarTableScan = null;
         private MutableUnsafeRow mutableRow = null;
+        private boolean readPartitionIncremented = false;
 
         private int currentRow = 0;
         private int numRowsInBatch = 0;
@@ -193,10 +197,12 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
           this.mutableRow = new MutableUnsafeRow(rowWriter);
         }
 
-        public void initialize(Iterator input, DataType[] columnTypes, int[] columnIndexes) {
+        public void initialize(Iterator input, DataType[] columnTypes,
+          int[] columnIndexes, InMemoryColumnarTableScan inMemoryColumnarTableScan) {
           this.input = input;
           this.columnTypes = columnTypes;
           this.columnIndexes = columnIndexes;
+          this.inMemoryColumnarTableScan = inMemoryColumnarTableScan;
         }
 
         ${ctx.declareAddedFunctions()}
@@ -235,6 +241,13 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
 
         public boolean isSupportColumnarCodeGen() {
           return ${_isSupportColumnarCodeGen};
+        }
+
+        public void incrementReadPartitionAccumulator() {
+          if (!readPartitionIncremented) {
+            inMemoryColumnarTableScan.incrementReadPartitionAccumulator();
+            readPartitionIncremented = true;
+          }
         }
       }"""
 

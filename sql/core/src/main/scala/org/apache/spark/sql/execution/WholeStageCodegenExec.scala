@@ -276,6 +276,13 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupp
 
       val columns = (output zip colVars).map { case (attr, colVar) =>
         new ColumnVectorReference(colVar, rowidx, attr.dataType, attr.nullable).genCode(ctx) }
+      val enableAccumulators: Boolean =
+        sqlContext.getConf("spark.sql.inMemoryTableScanStatistics.enable", "false").toBoolean
+      val incrementReadPartitionAccumulator = if (enableAccumulators) {
+        s"""
+         (($columnarItrClz)$input).incrementReadPartitionAccumulator();
+       """.trim
+      } else ""
     s"""
        | while (true) {
        |   if ($idx == 0) {
@@ -283,6 +290,7 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupp
        |       cleanup();
        |       break;
        |     }
+       |     $incrementReadPartitionAccumulator
        |     $batch = ($columnarBatchClz)($itr.next());
        |     ${columnAssigns.mkString("", "\n", "")}
        |   }
@@ -400,9 +408,7 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
 
       protected void processNext() throws java.io.IOException {
         $columnarItrClz $columnItr = null;
-        if (${WholeStageCodegen.columnarBatchName} != null) {
-          $columnItr = ($columnarItrClz)${ctx.iteratorInput};
-          ${WholeStageCodegen.columnarItrName} = $columnItr.getInput();
+        if (${WholeStageCodegen.columnarItrName} != null) {
           processBatch();
         } else if (${ctx.iteratorInput} instanceof $columnarItrClz &&
           (($columnItr = ($columnarItrClz)${ctx.iteratorInput}).isSupportColumnarCodeGen())) {

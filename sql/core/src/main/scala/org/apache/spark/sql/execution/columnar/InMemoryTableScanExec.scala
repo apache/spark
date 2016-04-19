@@ -110,6 +110,10 @@ private[sql] case class InMemoryTableScanExec(
   lazy val readPartitions = sparkContext.longAccumulator
   lazy val readBatches = sparkContext.longAccumulator
 
+  def incrementReadPartitionAccumulator(): Unit = {
+    readPartitions += 1
+  }
+
   private val inMemoryPartitionPruningEnabled = sqlContext.conf.inMemoryPartitionPruning
 
   protected override def doExecute(): RDD[InternalRow] = {
@@ -172,9 +176,11 @@ private[sql] case class InMemoryTableScanExec(
         case other => other
       }.toArray
       val columnarIterator = GenerateColumnAccessor.generate(columnTypes)
-      columnarIterator.initialize(withMetrics, columnTypes, requestedColumnIndices.toArray)
-      if (enableAccumulators && columnarIterator.hasNext) {
-        readPartitions.add(1)
+      columnarIterator.initialize(withMetrics, columnTypes, requestedColumnIndices.toArray,
+        if (!enableAccumulators) null else this)
+      if (enableAccumulators && !columnarIterator.isSupportColumnarCodeGen &&
+        columnarIterator.hasNext) {
+        incrementReadPartitionAccumulator
       }
       columnarIterator
     }
