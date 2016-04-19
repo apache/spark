@@ -27,7 +27,6 @@ import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
-import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
@@ -38,7 +37,6 @@ import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.streaming.{Sink, Source}
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.SerializableConfiguration
-import org.apache.spark.util.collection.BitSet
 
 /**
  * ::DeveloperApi::
@@ -621,14 +619,6 @@ class HDFSFileCatalog(
 
   def getStatus(path: Path): Array[FileStatus] = leafDirToChildrenFiles(path)
 
-  private implicit class LocatedFileStatusIterator(iterator: RemoteIterator[LocatedFileStatus])
-    extends Iterator[LocatedFileStatus] {
-
-    override def hasNext: Boolean = iterator.hasNext
-
-    override def next(): LocatedFileStatus = iterator.next()
-  }
-
   private def listLeafFiles(paths: Seq[Path]): mutable.LinkedHashSet[FileStatus] = {
     if (paths.length >= sqlContext.conf.parallelPartitionDiscoveryThreshold) {
       HadoopFsRelation.listLeafFilesInParallel(paths, hadoopConf, sqlContext.sparkContext)
@@ -640,21 +630,24 @@ class HDFSFileCatalog(
         val jobConf = new JobConf(hadoopConf, this.getClass)
         val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
 
-        // NOTE:
-        //
-        //  - `FileSystem.listLocatedStatus` returns a `RemoteIterator`. Hadoop has optimized this
-        //    method so that `LocatedFileStatus`es are fetched in batch. So it's OK to use it
-        //    here. It would be problematic for Spark versions older than 2.0 since we needed to
-        //    support Hadoop 1.x back then.
-        //
-        //  - Although S3/S3A/S3N file system can be quite slow for remote file metadata
-        //    operations, calling `listLocatedStatus` does no harm here since these file system
-        //    implementations don't actually issue RPC for this method.
-        val stats = Try(fs.listLocatedStatus(path).toArray).getOrElse(Array.empty)
-        if (pathFilter != null) {
-          stats.filter(f => pathFilter.accept(f.getPath))
-        } else {
-          stats
+        val statuses = {
+          val stats = Try(fs.listStatus(path)).getOrElse(Array.empty)
+          if (pathFilter != null) stats.filter(f => pathFilter.accept(f.getPath)) else stats
+        }
+
+        statuses.map {
+          case f: LocatedFileStatus => f
+
+          // NOTE:
+          //
+          // - Although S3/S3A/S3N file system can be quite slow for remote file metadata
+          //   operations, calling `getFileBlockLocations` does no harm here since these file system
+          //   implementations don't actually issue RPC for this method.
+          //
+          // - Here we are calling `getFileBlockLocations` in a sequential manner, but it should a
+          //   a big deal since we always use to `listLeafFilesInParallel` when the number of paths
+          //   exceeds threshold.
+          case f => new LocatedFileStatus(f, fs.getFileBlockLocations(f, 0, f.getLen))
         }
       }.filterNot { status =>
         val name = status.getPath.getName
@@ -776,15 +769,15 @@ private[sql] object HadoopFsRelation extends Logging {
       // Dummy jobconf to get to the pathFilter defined in configuration
       val jobConf = new JobConf(fs.getConf, this.getClass)
       val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
-      val statuses =
-        if (pathFilter != null) {
-          val (dirs, files) = fs.listStatus(status.getPath, pathFilter).partition(_.isDirectory)
-          files ++ dirs.flatMap(dir => listLeafFiles(fs, dir))
-        } else {
-          val (dirs, files) = fs.listStatus(status.getPath).partition(_.isDirectory)
-          files ++ dirs.flatMap(dir => listLeafFiles(fs, dir))
-        }
-      statuses.filterNot(status => shouldFilterOut(status.getPath.getName))
+      val statuses = {
+        val (dirs, files) = fs.listStatus(status.getPath).partition(_.isDirectory)
+        val stats = files ++ dirs.flatMap(dir => listLeafFiles(fs, dir))
+        if (pathFilter != null) stats.filter(f => pathFilter.accept(f.getPath)) else stats
+      }
+      statuses.filterNot(status => shouldFilterOut(status.getPath.getName)).map {
+        case f: LocatedFileStatus => f
+        case f => new LocatedFileStatus(f, fs.getFileBlockLocations(f, 0, f.getLen))
+      }
     }
   }
 
@@ -792,6 +785,12 @@ private[sql] object HadoopFsRelation extends Logging {
   // well with `SerializableWritable`.  So there seems to be no way to serialize a `FileStatus`.
   // Here we use `FakeFileStatus` to extract key components of a `FileStatus` to serialize it from
   // executor side and reconstruct it on driver side.
+  case class FakeBlockLocation(
+      names: Array[String],
+      hosts: Array[String],
+      offset: Long,
+      length: Long)
+
   case class FakeFileStatus(
       path: String,
       length: Long,
@@ -799,7 +798,8 @@ private[sql] object HadoopFsRelation extends Logging {
       blockReplication: Short,
       blockSize: Long,
       modificationTime: Long,
-      accessTime: Long)
+      accessTime: Long,
+      blockLocations: Array[FakeBlockLocation])
 
   def listLeafFilesInParallel(
       paths: Seq[Path],
@@ -814,6 +814,20 @@ private[sql] object HadoopFsRelation extends Logging {
       val fs = path.getFileSystem(serializableConfiguration.value)
       Try(listLeafFiles(fs, fs.getFileStatus(path))).getOrElse(Array.empty)
     }.map { status =>
+      val blockLocations = status match {
+        case f: LocatedFileStatus =>
+          f.getBlockLocations.map { loc =>
+            FakeBlockLocation(
+              loc.getNames,
+              loc.getHosts,
+              loc.getOffset,
+              loc.getLength)
+          }
+
+        case _ =>
+          Array.empty[FakeBlockLocation]
+      }
+
       FakeFileStatus(
         status.getPath.toString,
         status.getLen,
@@ -821,12 +835,19 @@ private[sql] object HadoopFsRelation extends Logging {
         status.getReplication,
         status.getBlockSize,
         status.getModificationTime,
-        status.getAccessTime)
+        status.getAccessTime,
+        blockLocations)
     }.collect()
 
     val hadoopFakeStatuses = fakeStatuses.map { f =>
-      new FileStatus(
-        f.length, f.isDir, f.blockReplication, f.blockSize, f.modificationTime, new Path(f.path))
+      val blockLocations = f.blockLocations.map { loc =>
+        new BlockLocation(loc.names, loc.hosts, loc.offset, loc.length)
+      }
+      new LocatedFileStatus(
+        new FileStatus(
+          f.length, f.isDir, f.blockReplication, f.blockSize, f.modificationTime, new Path(f.path)),
+        blockLocations
+      )
     }
     mutable.LinkedHashSet(hadoopFakeStatuses: _*)
   }

@@ -683,20 +683,28 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         df1.coalesce(1).write.mode("overwrite").format(dataSourceName).save(path)
         df1.coalesce(1).write.mode("append").format(dataSourceName).save(path)
 
-        val df2 = sqlContext.read
-          .format(dataSourceName)
-          .option("dataSchema", df1.schema.json)
-          .load(path)
+        def checkLocality(): Unit = {
+          val df2 = sqlContext.read
+            .format(dataSourceName)
+            .option("dataSchema", df1.schema.json)
+            .load(path)
 
-        val Some(fileScanRDD) = df2.queryExecution.executedPlan.collectFirst {
-          case scan: DataSourceScan if scan.rdd.isInstanceOf[FileScanRDD] =>
-            scan.rdd.asInstanceOf[FileScanRDD]
+          val Some(fileScanRDD) = df2.queryExecution.executedPlan.collectFirst {
+            case scan: DataSourceScan if scan.rdd.isInstanceOf[FileScanRDD] =>
+              scan.rdd.asInstanceOf[FileScanRDD]
+          }
+
+          val partitions = fileScanRDD.partitions
+          val preferredLocations = partitions.flatMap(fileScanRDD.preferredLocations)
+
+          assert(preferredLocations.distinct.length == 2)
         }
 
-        val partitions = fileScanRDD.partitions
-        val preferredLocations = partitions.flatMap(fileScanRDD.preferredLocations)
+        checkLocality()
 
-        assert(preferredLocations.distinct.length == 2)
+        withSQLConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "0") {
+          checkLocality()
+        }
       }
     }
   }
