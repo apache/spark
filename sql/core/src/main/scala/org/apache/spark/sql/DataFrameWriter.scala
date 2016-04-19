@@ -124,7 +124,9 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 1.4.0
    */
   def option(key: String, value: String): DataFrameWriter = {
-    this.extraOptions += (key -> value)
+    if (value != null) {
+      this.extraOptions += (key -> value)
+    }
     this
   }
 

@@ -369,6 +369,9 @@ class DataFrameWriter(object):
     @since(1.5)
     def option(self, key, value):
         """Adds an output option for the underlying data source.
+
+        >>> csvpath = os.path.join(tempfile.mkdtemp(), 'data')
+        >>> df.write.option('quote', None).format('csv').save(csvpath)
         """
         self._jwrite = self._jwrite.option(key, to_str(value))
         return self
