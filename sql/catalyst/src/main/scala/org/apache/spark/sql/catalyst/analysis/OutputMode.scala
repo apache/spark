@@ -15,16 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.sql.catalyst.analysis
 
-import org.scalatest.BeforeAndAfterAll
+sealed trait OutputMode
 
-class HashShuffleSuite extends ShuffleSuite with BeforeAndAfterAll {
-
-  // This test suite should run all tests in ShuffleSuite with hash-based shuffle.
-
-  override def beforeAll() {
-    super.beforeAll()
-    conf.set("spark.shuffle.manager", "hash")
-  }
-}
+case object Append extends OutputMode
+case object Update extends OutputMode

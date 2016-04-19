@@ -182,8 +182,8 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
     for (folds <- 2 to 10) {
       for (seed <- 1 to 5) {
         val foldedRdds = kFold(data, folds, seed)
-        assert(foldedRdds.size === folds)
-        foldedRdds.map { case (training, validation) =>
+        assert(foldedRdds.length === folds)
+        foldedRdds.foreach { case (training, validation) =>
           val result = validation.union(training).collect().sorted
           val validationSize = validation.collect().size.toFloat
           assert(validationSize > 0, "empty validation data")

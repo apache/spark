@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.io.{File, FileOutputStream}
+import java.io.{File, FileInputStream, FileOutputStream}
 import java.net.URI
 import java.util.Properties
 
@@ -283,6 +283,36 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
     client.prepareLocalResources(temp.getAbsolutePath(), Nil)
     verify(client).copyFileToRemote(any(classOf[Path]), meq(new Path(jar.toURI())), anyShort())
     classpath(client) should contain (buildPath(PWD, LOCALIZED_LIB_DIR, "*"))
+  }
+
+  test("ignore same name jars") {
+    val libs = Utils.createTempDir()
+    val jarsDir = new File(libs, "jars")
+    assert(jarsDir.mkdir())
+    new FileOutputStream(new File(libs, "RELEASE")).close()
+    val userLibs = Utils.createTempDir()
+
+    val jar1 = TestUtils.createJarWithFiles(Map(), jarsDir)
+    val jar2 = TestUtils.createJarWithFiles(Map(), userLibs)
+    // Copy jar2 to jar3 with same name
+    val jar3 = {
+      val target = new File(userLibs, new File(jar1.toURI).getName)
+      val input = new FileInputStream(jar2.getPath)
+      val output = new FileOutputStream(target)
+      Utils.copyStream(input, output, closeStreams = true)
+      target.toURI.toURL
+    }
+
+    val sparkConf = new SparkConfWithEnv(Map("SPARK_HOME" -> libs.getAbsolutePath))
+      .set(JARS_TO_DISTRIBUTE, Seq(jar2.getPath, jar3.getPath))
+
+    val client = createClient(sparkConf)
+    val tempDir = Utils.createTempDir()
+    client.prepareLocalResources(tempDir.getAbsolutePath(), Nil)
+
+    // Only jar2 will be added to SECONDARY_JARS, jar3 which has the same name with jar1 will be
+    // ignored.
+    sparkConf.get(SECONDARY_JARS) should be (Some(Seq(new File(jar2.toURI).getName)))
   }
 
   object Fixtures {
