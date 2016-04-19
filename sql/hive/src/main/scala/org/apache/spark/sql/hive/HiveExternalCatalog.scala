@@ -25,7 +25,6 @@ import org.apache.thrift.TException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.NoSuchItemException
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.hive.client.HiveClient
 
@@ -66,8 +65,6 @@ private[spark] class HiveExternalCatalog(client: HiveClient) extends ExternalCat
     try {
       body
     } catch {
-      case e: NoSuchItemException =>
-        throw new AnalysisException(e.getMessage)
       case NonFatal(e) if isClientException(e) =>
         throw new AnalysisException(e.getClass.getCanonicalName + ": " + e.getMessage)
     }
@@ -182,6 +179,10 @@ private[spark] class HiveExternalCatalog(client: HiveClient) extends ExternalCat
     client.getTable(db, table)
   }
 
+  override def getTableOption(db: String, table: String): Option[CatalogTable] = withClient {
+    client.getTableOption(db, table)
+  }
+
   override def tableExists(db: String, table: String): Boolean = withClient {
     client.getTableOption(db, table).isDefined
   }
@@ -215,26 +216,7 @@ private[spark] class HiveExternalCatalog(client: HiveClient) extends ExternalCat
       parts: Seq[TablePartitionSpec],
       ignoreIfNotExists: Boolean): Unit = withClient {
     requireTableExists(db, table)
-    // Note: Unfortunately Hive does not currently support `ignoreIfNotExists` so we
-    // need to implement it here ourselves. This is currently somewhat expensive because
-    // we make multiple synchronous calls to Hive for each partition we want to drop.
-    val partsToDrop =
-      if (ignoreIfNotExists) {
-        parts.filter { spec =>
-          try {
-            getPartition(db, table, spec)
-            true
-          } catch {
-            // Filter out the partitions that do not actually exist
-            case _: AnalysisException => false
-          }
-        }
-      } else {
-        parts
-      }
-    if (partsToDrop.nonEmpty) {
-      client.dropPartitions(db, table, partsToDrop)
-    }
+    client.dropPartitions(db, table, parts, ignoreIfNotExists)
   }
 
   override def renamePartitions(
@@ -272,7 +254,12 @@ private[spark] class HiveExternalCatalog(client: HiveClient) extends ExternalCat
   override def createFunction(
       db: String,
       funcDefinition: CatalogFunction): Unit = withClient {
-    client.createFunction(db, funcDefinition)
+    // Hive's metastore is case insensitive. However, Hive's createFunction does
+    // not normalize the function name (unlike the getFunction part). So,
+    // we are normalizing the function name.
+    val functionName = funcDefinition.identifier.funcName.toLowerCase
+    val functionIdentifier = funcDefinition.identifier.copy(funcName = functionName)
+    client.createFunction(db, funcDefinition.copy(identifier = functionIdentifier))
   }
 
   override def dropFunction(db: String, name: String): Unit = withClient {
@@ -283,12 +270,12 @@ private[spark] class HiveExternalCatalog(client: HiveClient) extends ExternalCat
     client.renameFunction(db, oldName, newName)
   }
 
-  override def alterFunction(db: String, funcDefinition: CatalogFunction): Unit = withClient {
-    client.alterFunction(db, funcDefinition)
-  }
-
   override def getFunction(db: String, funcName: String): CatalogFunction = withClient {
     client.getFunction(db, funcName)
+  }
+
+  override def functionExists(db: String, funcName: String): Boolean = withClient {
+    client.functionExists(db, funcName)
   }
 
   override def listFunctions(db: String, pattern: String): Seq[String] = withClient {

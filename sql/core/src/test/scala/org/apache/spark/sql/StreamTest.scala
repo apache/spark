@@ -33,9 +33,11 @@ import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.Span
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.sql.catalyst.analysis.{Append, OutputMode}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.util.Utils
 
@@ -66,13 +68,15 @@ import org.apache.spark.util.Utils
 trait StreamTest extends QueryTest with Timeouts {
 
   implicit class RichSource(s: Source) {
-    def toDF(): DataFrame = Dataset.ofRows(sqlContext, StreamingRelation(s))
+    def toDF(): DataFrame = Dataset.ofRows(sqlContext, StreamingExecutionRelation(s))
 
-    def toDS[A: Encoder](): Dataset[A] = Dataset(sqlContext, StreamingRelation(s))
+    def toDS[A: Encoder](): Dataset[A] = Dataset(sqlContext, StreamingExecutionRelation(s))
   }
 
   /** How long to wait for an active stream to catch up when checking a result. */
   val streamingTimeout = 10.seconds
+
+  val outputMode: OutputMode = Append
 
   /** A trait for actions that can be performed while testing a streaming DataFrame. */
   trait StreamAction
@@ -227,12 +231,14 @@ trait StreamTest extends QueryTest with Timeouts {
          |$testActions
          |
          |== Stream ==
+         |Output Mode: $outputMode
          |Stream state: $currentOffsets
          |Thread state: $threadState
          |${if (streamDeathCause != null) stackTraceToString(streamDeathCause) else ""}
          |
          |== Sink ==
          |${sink.toDebugString}
+         |
          |
          |== Plan ==
          |${if (currentStream != null) currentStream.lastExecution else ""}
@@ -292,7 +298,8 @@ trait StreamTest extends QueryTest with Timeouts {
                   StreamExecution.nextName,
                   metadataRoot,
                   stream,
-                  sink)
+                  sink,
+                  outputMode = outputMode)
                 .asInstanceOf[StreamExecution]
             currentStream.microBatchThread.setUncaughtExceptionHandler(
               new UncaughtExceptionHandler {

@@ -21,6 +21,7 @@ from functools import wraps
 
 if sys.version > '3':
     basestring = str
+    unicode = str
 
 from pyspark import SparkContext, since
 from pyspark.mllib.common import inherit_doc
@@ -67,10 +68,10 @@ class Identifiable(object):
     @classmethod
     def _randomUID(cls):
         """
-        Generate a unique id for the object. The default implementation
+        Generate a unique unicode id for the object. The default implementation
         concatenates the class name, "_", and 12 random hex chars.
         """
-        return cls.__name__ + "_" + uuid.uuid4().hex[12:]
+        return unicode(cls.__name__ + "_" + uuid.uuid4().hex[12:])
 
 
 @inherit_doc
@@ -99,7 +100,7 @@ class MLWriter(object):
 @inherit_doc
 class JavaMLWriter(MLWriter):
     """
-    (Private) Specialization of :py:class:`MLWriter` for :py:class:`JavaWrapper` types
+    (Private) Specialization of :py:class:`MLWriter` for :py:class:`JavaParams` types
     """
 
     def __init__(self, instance):
@@ -178,7 +179,7 @@ class MLReader(object):
 @inherit_doc
 class JavaMLReader(MLReader):
     """
-    (Private) Specialization of :py:class:`MLReader` for :py:class:`JavaWrapper` types
+    (Private) Specialization of :py:class:`MLReader` for :py:class:`JavaParams` types
     """
 
     def __init__(self, clazz):

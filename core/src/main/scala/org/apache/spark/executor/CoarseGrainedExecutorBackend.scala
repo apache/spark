@@ -57,16 +57,14 @@ private[spark] class CoarseGrainedExecutorBackend(
     rpcEnv.asyncSetupEndpointRefByURI(driverUrl).flatMap { ref =>
       // This is a very fast action so we can use "ThreadUtils.sameThread"
       driver = Some(ref)
-      ref.ask[RegisterExecutorResponse](RegisterExecutor(executorId, self, cores, extractLogUrls))
+      ref.ask[Boolean](RegisterExecutor(executorId, self, cores, extractLogUrls))
     }(ThreadUtils.sameThread).onComplete {
       // This is a very fast action so we can use "ThreadUtils.sameThread"
-      case Success(msg) => Utils.tryLogNonFatalError {
-        Option(self).foreach(_.send(msg)) // msg must be RegisterExecutorResponse
-      }
-      case Failure(e) => {
+      case Success(msg) =>
+        // Always receive `true`. Just ignore it
+      case Failure(e) =>
         logError(s"Cannot register with driver: $driverUrl", e)
-        System.exit(1)
-      }
+        exitExecutor(1)
     }(ThreadUtils.sameThread)
   }
 
@@ -83,12 +81,12 @@ private[spark] class CoarseGrainedExecutorBackend(
 
     case RegisterExecutorFailed(message) =>
       logError("Slave registration failed: " + message)
-      System.exit(1)
+      exitExecutor(1)
 
     case LaunchTask(data) =>
       if (executor == null) {
         logError("Received LaunchTask command but executor was null")
-        System.exit(1)
+        exitExecutor(1)
       } else {
         val taskDesc = ser.deserialize[TaskDescription](data.value)
         logInfo("Got assigned task " + taskDesc.taskId)
@@ -99,7 +97,7 @@ private[spark] class CoarseGrainedExecutorBackend(
     case KillTask(taskId, _, interruptThread) =>
       if (executor == null) {
         logError("Received KillTask command but executor was null")
-        System.exit(1)
+        exitExecutor(1)
       } else {
         executor.killTask(taskId, interruptThread)
       }
@@ -129,7 +127,7 @@ private[spark] class CoarseGrainedExecutorBackend(
       logInfo(s"Driver from $remoteAddress disconnected during shutdown")
     } else if (driver.exists(_.address == remoteAddress)) {
       logError(s"Driver $remoteAddress disassociated! Shutting down.")
-      System.exit(1)
+      exitExecutor(1)
     } else {
       logWarning(s"An unknown ($remoteAddress) driver disconnected.")
     }
@@ -142,6 +140,13 @@ private[spark] class CoarseGrainedExecutorBackend(
       case None => logWarning(s"Drop $msg because has not yet connected to driver")
     }
   }
+
+  /**
+   * This function can be overloaded by other child classes to handle
+   * executor exits differently. For e.g. when an executor goes down,
+   * back-end may not want to take the parent process down.
+   */
+  protected def exitExecutor(code: Int): Unit = System.exit(code)
 }
 
 private[spark] object CoarseGrainedExecutorBackend extends Logging {

@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.commons.lang.StringUtils
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
@@ -33,6 +34,28 @@ case class TimeWindow(
   with ImplicitCastInputTypes
   with Unevaluable
   with NonSQLExpression {
+
+  //////////////////////////
+  // SQL Constructors
+  //////////////////////////
+
+  def this(
+      timeColumn: Expression,
+      windowDuration: Expression,
+      slideDuration: Expression,
+      startTime: Expression) = {
+    this(timeColumn, TimeWindow.parseExpression(windowDuration),
+      TimeWindow.parseExpression(windowDuration), TimeWindow.parseExpression(startTime))
+  }
+
+  def this(timeColumn: Expression, windowDuration: Expression, slideDuration: Expression) = {
+    this(timeColumn, TimeWindow.parseExpression(windowDuration),
+      TimeWindow.parseExpression(windowDuration), 0)
+  }
+
+  def this(timeColumn: Expression, windowDuration: Expression) = {
+    this(timeColumn, windowDuration, windowDuration)
+  }
 
   override def child: Expression = timeColumn
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
@@ -104,6 +127,18 @@ object TimeWindow {
     cal.microseconds
   }
 
+  /**
+   * Parses the duration expression to generate the long value for the original constructor so
+   * that we can use `window` in SQL.
+   */
+  private def parseExpression(expr: Expression): Long = expr match {
+    case NonNullLiteral(s, StringType) => getIntervalInMicroSeconds(s.toString)
+    case IntegerLiteral(i) => i.toLong
+    case NonNullLiteral(l, LongType) => l.toString.toLong
+    case _ => throw new AnalysisException("The duration and time inputs to window must be " +
+      "an integer, long or string literal.")
+  }
+
   def apply(
       timeColumn: Expression,
       windowDuration: String,
@@ -123,11 +158,11 @@ object TimeWindow {
 case class PreciseTimestamp(child: Expression) extends UnaryExpression with ExpectsInputTypes {
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
   override def dataType: DataType = LongType
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
-    val eval = child.gen(ctx)
-    eval.code +
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val eval = child.genCode(ctx)
+    ev.copy(code = eval.code +
       s"""boolean ${ev.isNull} = ${eval.isNull};
          |${ctx.javaType(dataType)} ${ev.value} = ${eval.value};
-       """.stripMargin
+       """.stripMargin)
   }
 }

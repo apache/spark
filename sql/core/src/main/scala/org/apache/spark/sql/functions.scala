@@ -154,6 +154,8 @@ object functions {
   /**
    * Aggregate function: returns the approximate number of distinct items in a group.
    *
+   * @param rsd maximum estimation error allowed (default = 0.05)
+   *
    * @group agg_funcs
    * @since 1.3.0
    */
@@ -163,6 +165,8 @@ object functions {
 
   /**
    * Aggregate function: returns the approximate number of distinct items in a group.
+   *
+   * @param rsd maximum estimation error allowed (default = 0.05)
    *
    * @group agg_funcs
    * @since 1.3.0
@@ -1773,6 +1777,23 @@ object functions {
   def round(e: Column, scale: Int): Column = withExpr { Round(e.expr, Literal(scale)) }
 
   /**
+   * Returns the value of the column `e` rounded to 0 decimal places with HALF_EVEN round mode.
+   *
+   * @group math_funcs
+   * @since 2.0.0
+   */
+  def bround(e: Column): Column = bround(e, 0)
+
+  /**
+   * Round the value of `e` to `scale` decimal places with HALF_EVEN round mode
+   * if `scale` >= 0 or at integral part when `scale` < 0.
+   *
+   * @group math_funcs
+   * @since 2.0.0
+   */
+  def bround(e: Column, scale: Int): Column = withExpr { BRound(e.expr, Literal(scale)) }
+
+  /**
    * Shift the given value numBits left. If the given value is a long value, this function
    * will return a long value else it will return an integer value.
    *
@@ -2574,8 +2595,7 @@ object functions {
    * processing time.
    *
    * @param timeColumn The column or the expression to use as the timestamp for windowing by time.
-   *                   The time can be as TimestampType or LongType, however when using LongType,
-   *                   the time must be given in seconds.
+   *                   The time column must be of TimestampType.
    * @param windowDuration A string specifying the width of the window, e.g. `10 minutes`,
    *                       `1 second`. Check [[org.apache.spark.unsafe.types.CalendarInterval]] for
    *                       valid duration identifiers.
@@ -2629,8 +2649,7 @@ object functions {
    * processing time.
    *
    * @param timeColumn The column or the expression to use as the timestamp for windowing by time.
-   *                   The time can be as TimestampType or LongType, however when using LongType,
-   *                   the time must be given in seconds.
+   *                   The time column must be of TimestampType.
    * @param windowDuration A string specifying the width of the window, e.g. `10 minutes`,
    *                       `1 second`. Check [[org.apache.spark.unsafe.types.CalendarInterval]] for
    *                       valid duration identifiers.
@@ -2672,8 +2691,7 @@ object functions {
    * processing time.
    *
    * @param timeColumn The column or the expression to use as the timestamp for windowing by time.
-   *                   The time can be as TimestampType or LongType, however when using LongType,
-   *                   the time must be given in seconds.
+   *                   The time column must be of TimestampType.
    * @param windowDuration A string specifying the width of the window, e.g. `10 minutes`,
    *                       `1 second`. Check [[org.apache.spark.unsafe.types.CalendarInterval]] for
    *                       valid duration identifiers.

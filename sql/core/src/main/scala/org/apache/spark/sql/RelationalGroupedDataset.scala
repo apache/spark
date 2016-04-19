@@ -208,7 +208,11 @@ class RelationalGroupedDataset protected[sql](
    */
   @scala.annotation.varargs
   def agg(expr: Column, exprs: Column*): DataFrame = {
-    toDF((expr +: exprs).map(_.expr))
+    toDF((expr +: exprs).map {
+      case typed: TypedColumn[_, _] =>
+        typed.withInputType(df.unresolvedTEncoder.deserializer, df.logicalPlan.output).expr
+      case c => c.expr
+    })
   }
 
   /**
@@ -408,7 +412,7 @@ private[sql] object RelationalGroupedDataset {
   private[sql] object RollupType extends GroupType
 
   /**
-    * To indicate it's the PIVOT
-    */
+   * To indicate it's the PIVOT
+   */
   private[sql] case class PivotType(pivotCol: Expression, values: Seq[Literal]) extends GroupType
 }

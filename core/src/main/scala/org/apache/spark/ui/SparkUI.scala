@@ -80,6 +80,10 @@ private[spark] class SparkUI private (
   }
   initialize()
 
+  def getSparkUser: String = {
+    environmentListener.systemProperties.toMap.get("user.name").getOrElse("<unknown>")
+  }
+
   def getAppName: String = appName
 
   def setAppId(id: String): Unit = {

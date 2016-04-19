@@ -70,28 +70,28 @@ private[streaming] abstract class ReceiverSupervisor(
   @volatile private[streaming] var receiverState = Initialized
 
   /** Push a single data item to backend data store. */
-  def pushSingle(data: Any)
+  def pushSingle(data: Any): Unit
 
   /** Store the bytes of received data as a data block into Spark's memory. */
   def pushBytes(
       bytes: ByteBuffer,
       optionalMetadata: Option[Any],
       optionalBlockId: Option[StreamBlockId]
-    )
+    ): Unit
 
   /** Store a iterator of received data as a data block into Spark's memory. */
   def pushIterator(
       iterator: Iterator[_],
       optionalMetadata: Option[Any],
       optionalBlockId: Option[StreamBlockId]
-    )
+    ): Unit
 
   /** Store an ArrayBuffer of received data as a data block into Spark's memory. */
   def pushArrayBuffer(
       arrayBuffer: ArrayBuffer[_],
       optionalMetadata: Option[Any],
       optionalBlockId: Option[StreamBlockId]
-    )
+    ): Unit
 
   /**
    * Create a custom [[BlockGenerator]] that the receiver implementation can directly control
@@ -103,7 +103,7 @@ private[streaming] abstract class ReceiverSupervisor(
   def createBlockGenerator(blockGeneratorListener: BlockGeneratorListener): BlockGenerator
 
   /** Report errors. */
-  def reportError(message: String, throwable: Throwable)
+  def reportError(message: String, throwable: Throwable): Unit
 
   /**
    * Called when supervisor is started.

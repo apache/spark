@@ -25,29 +25,32 @@ from pyspark.ml.util import _jvm
 from pyspark.mllib.common import inherit_doc, _java2py, _py2java
 
 
-@inherit_doc
-class JavaWrapper(Params):
+class JavaWrapper(object):
     """
-    Utility class to help create wrapper classes from Java/Scala
-    implementations of pipeline components.
+    Wrapper class for a Java companion object
     """
-
-    __metaclass__ = ABCMeta
-
-    def __init__(self):
-        """
-        Initialize the wrapped java object to None
-        """
+    def __init__(self, java_obj=None):
         super(JavaWrapper, self).__init__()
-        #: The wrapped Java companion object. Subclasses should initialize
-        #: it properly. The param values in the Java object should be
-        #: synced with the Python wrapper in fit/transform/evaluate/copy.
-        self._java_obj = None
+        self._java_obj = java_obj
+
+    @classmethod
+    def _create_from_java_class(cls, java_class, *args):
+        """
+        Construct this object from given Java classname and arguments
+        """
+        java_obj = JavaWrapper._new_java_obj(java_class, *args)
+        return cls(java_obj)
+
+    def _call_java(self, name, *args):
+        m = getattr(self._java_obj, name)
+        sc = SparkContext._active_spark_context
+        java_args = [_py2java(sc, arg) for arg in args]
+        return _java2py(sc, m(*java_args))
 
     @staticmethod
     def _new_java_obj(java_class, *args):
         """
-        Construct a new Java object.
+        Returns a new Java object.
         """
         sc = SparkContext._active_spark_context
         java_obj = _jvm()
@@ -55,6 +58,18 @@ class JavaWrapper(Params):
             java_obj = getattr(java_obj, name)
         java_args = [_py2java(sc, arg) for arg in args]
         return java_obj(*java_args)
+
+
+@inherit_doc
+class JavaParams(JavaWrapper, Params):
+    """
+    Utility class to help create wrapper classes from Java/Scala
+    implementations of pipeline components.
+    """
+    #: The param values in the Java object should be
+    #: synced with the Python wrapper in fit/transform/evaluate/copy.
+
+    __metaclass__ = ABCMeta
 
     def _make_java_param_pair(self, param, value):
         """
@@ -76,6 +91,17 @@ class JavaWrapper(Params):
                 pair = self._make_java_param_pair(param, paramMap[param])
                 self._java_obj.set(pair)
 
+    def _transfer_param_map_to_java(self, pyParamMap):
+        """
+        Transforms a Python ParamMap into a Java ParamMap.
+        """
+        paramMap = JavaWrapper._new_java_obj("org.apache.spark.ml.param.ParamMap")
+        for param in self.params:
+            if param in pyParamMap:
+                pair = self._make_java_param_pair(param, pyParamMap[param])
+                paramMap.put([pair])
+        return paramMap
+
     def _transfer_params_from_java(self):
         """
         Transforms the embedded params from the companion Java object.
@@ -86,7 +112,19 @@ class JavaWrapper(Params):
                 java_param = self._java_obj.getParam(param.name)
                 if self._java_obj.isDefined(java_param):
                     value = _java2py(sc, self._java_obj.getOrDefault(java_param))
-                    self._paramMap[param] = value
+                    self._set(**{param.name: value})
+
+    def _transfer_param_map_from_java(self, javaParamMap):
+        """
+        Transforms a Java ParamMap into a Python ParamMap.
+        """
+        sc = SparkContext._active_spark_context
+        paramMap = dict()
+        for pair in javaParamMap.toList():
+            param = pair.param()
+            if self.hasParam(str(param.name())):
+                paramMap[self.getParam(param.name())] = _java2py(sc, pair.value())
+        return paramMap
 
     @staticmethod
     def _empty_java_param_map():
@@ -128,7 +166,7 @@ class JavaWrapper(Params):
         stage_name = java_stage.getClass().getName().replace("org.apache.spark", "pyspark")
         # Generate a default new instance from the stage_name class.
         py_type = __get_class(stage_name)
-        if issubclass(py_type, JavaWrapper):
+        if issubclass(py_type, JavaParams):
             # Load information from java_stage to the instance.
             py_stage = py_type()
             py_stage._java_obj = java_stage
@@ -143,7 +181,7 @@ class JavaWrapper(Params):
 
 
 @inherit_doc
-class JavaEstimator(Estimator, JavaWrapper):
+class JavaEstimator(JavaParams, Estimator):
     """
     Base class for :py:class:`Estimator`s that wrap Java/Scala
     implementations.
@@ -176,7 +214,7 @@ class JavaEstimator(Estimator, JavaWrapper):
 
 
 @inherit_doc
-class JavaTransformer(Transformer, JavaWrapper):
+class JavaTransformer(JavaParams, Transformer):
     """
     Base class for :py:class:`Transformer`s that wrap Java/Scala
     implementations. Subclasses should ensure they have the transformer Java object
@@ -191,7 +229,7 @@ class JavaTransformer(Transformer, JavaWrapper):
 
 
 @inherit_doc
-class JavaModel(Model, JavaTransformer):
+class JavaModel(JavaTransformer, Model):
     """
     Base class for :py:class:`Model`s that wrap Java/Scala
     implementations. Subclasses should inherit this class before
@@ -204,7 +242,7 @@ class JavaModel(Model, JavaTransformer):
         """
         Initialize this instance with a Java model object.
         Subclasses should call this constructor, initialize params,
-        and then call _transformer_params_from_java.
+        and then call _transfer_params_from_java.
 
         This instance can be instantiated without specifying java_model,
         it will be assigned after that, but this scenario only used by
@@ -214,10 +252,9 @@ class JavaModel(Model, JavaTransformer):
         these wrappers depend on pyspark.ml.util (both directly and via
         other ML classes).
         """
-        super(JavaModel, self).__init__()
+        super(JavaModel, self).__init__(java_model)
         if java_model is not None:
-            self._java_obj = java_model
-            self.uid = java_model.uid()
+            self._resetUid(java_model.uid())
 
     def copy(self, extra=None):
         """
@@ -236,9 +273,3 @@ class JavaModel(Model, JavaTransformer):
             that._java_obj = self._java_obj.copy(self._empty_java_param_map())
             that._transfer_params_to_java()
         return that
-
-    def _call_java(self, name, *args):
-        m = getattr(self._java_obj, name)
-        sc = SparkContext._active_spark_context
-        java_args = [_py2java(sc, arg) for arg in args]
-        return _java2py(sc, m(*java_args))

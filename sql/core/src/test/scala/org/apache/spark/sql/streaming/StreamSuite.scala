@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql.streaming
 
-import org.apache.spark.sql.{Row, StreamTest}
+import org.apache.spark.sql._
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.sources.StreamSourceProvider
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 class StreamSuite extends StreamTest with SharedSQLContext {
 
@@ -80,5 +83,99 @@ class StreamSuite extends StreamTest with SharedSQLContext {
     testStream(evens)(
       AddData(inputData, 1, 2, 3, 4),
       CheckAnswer(2, 4))
+  }
+
+  test("DataFrame reuse") {
+    def assertDF(df: DataFrame) {
+      withTempDir { outputDir =>
+        withTempDir { checkpointDir =>
+          val query = df.write.format("parquet")
+            .option("checkpointLocation", checkpointDir.getAbsolutePath)
+            .startStream(outputDir.getAbsolutePath)
+          try {
+            query.processAllAvailable()
+            val outputDf = sqlContext.read.parquet(outputDir.getAbsolutePath).as[Long]
+            checkDataset[Long](outputDf, (0L to 10L).toArray: _*)
+          } finally {
+            query.stop()
+          }
+        }
+      }
+    }
+
+    val df = sqlContext.read.format(classOf[FakeDefaultSource].getName).stream()
+    assertDF(df)
+    assertDF(df)
+  }
+
+  test("unsupported queries") {
+    val streamInput = MemoryStream[Int]
+    val batchInput = Seq(1, 2, 3).toDS()
+
+    def assertError(expectedMsgs: Seq[String])(body: => Unit): Unit = {
+      val e = intercept[AnalysisException] {
+        body
+      }
+      expectedMsgs.foreach { s => assert(e.getMessage.contains(s)) }
+    }
+
+    // Running streaming plan as a batch query
+    assertError("startStream" :: Nil) {
+      streamInput.toDS.map { i => i }.count()
+    }
+
+    // Running non-streaming plan with as a streaming query
+    assertError("without streaming sources" :: "startStream" :: Nil) {
+      val ds = batchInput.map { i => i }
+      testStream(ds)()
+    }
+
+    // Running streaming plan that cannot be incrementalized
+    assertError("not supported" :: "streaming" :: Nil) {
+      val ds = streamInput.toDS.map { i => i }.sort()
+      testStream(ds)()
+    }
+  }
+}
+
+/**
+ * A fake StreamSourceProvider thats creates a fake Source that cannot be reused.
+ */
+class FakeDefaultSource extends StreamSourceProvider {
+
+  private val fakeSchema = StructType(StructField("a", IntegerType) :: Nil)
+
+  override def sourceSchema(
+      sqlContext: SQLContext,
+      schema: Option[StructType],
+      providerName: String,
+      parameters: Map[String, String]): (String, StructType) = ("fakeSource", fakeSchema)
+
+  override def createSource(
+      sqlContext: SQLContext,
+      metadataPath: String,
+      schema: Option[StructType],
+      providerName: String,
+      parameters: Map[String, String]): Source = {
+    // Create a fake Source that emits 0 to 10.
+    new Source {
+      private var offset = -1L
+
+      override def schema: StructType = StructType(StructField("a", IntegerType) :: Nil)
+
+      override def getOffset: Option[Offset] = {
+        if (offset >= 10) {
+          None
+        } else {
+          offset += 1
+          Some(LongOffset(offset))
+        }
+      }
+
+      override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
+        val startOffset = start.map(_.asInstanceOf[LongOffset].offset).getOrElse(-1L) + 1
+        sqlContext.range(startOffset, end.asInstanceOf[LongOffset].offset + 1).toDF("a")
+      }
+    }
   }
 }

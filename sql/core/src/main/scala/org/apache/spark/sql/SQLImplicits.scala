@@ -44,33 +44,56 @@ abstract class SQLImplicits {
   }
 
   /** @since 1.6.0 */
-  implicit def newProductEncoder[T <: Product : TypeTag]: Encoder[T] = ExpressionEncoder()
+  implicit def newProductEncoder[T <: Product : TypeTag]: Encoder[T] = Encoders.product[T]
 
   // Primitives
 
   /** @since 1.6.0 */
-  implicit def newIntEncoder: Encoder[Int] = ExpressionEncoder()
+  implicit def newIntEncoder: Encoder[Int] = Encoders.scalaInt
 
   /** @since 1.6.0 */
-  implicit def newLongEncoder: Encoder[Long] = ExpressionEncoder()
+  implicit def newLongEncoder: Encoder[Long] = Encoders.scalaLong
 
   /** @since 1.6.0 */
-  implicit def newDoubleEncoder: Encoder[Double] = ExpressionEncoder()
+  implicit def newDoubleEncoder: Encoder[Double] = Encoders.scalaDouble
 
   /** @since 1.6.0 */
-  implicit def newFloatEncoder: Encoder[Float] = ExpressionEncoder()
+  implicit def newFloatEncoder: Encoder[Float] = Encoders.scalaFloat
 
   /** @since 1.6.0 */
-  implicit def newByteEncoder: Encoder[Byte] = ExpressionEncoder()
+  implicit def newByteEncoder: Encoder[Byte] = Encoders.scalaByte
 
   /** @since 1.6.0 */
-  implicit def newShortEncoder: Encoder[Short] = ExpressionEncoder()
+  implicit def newShortEncoder: Encoder[Short] = Encoders.scalaShort
 
   /** @since 1.6.0 */
-  implicit def newBooleanEncoder: Encoder[Boolean] = ExpressionEncoder()
+  implicit def newBooleanEncoder: Encoder[Boolean] = Encoders.scalaBoolean
 
   /** @since 1.6.0 */
-  implicit def newStringEncoder: Encoder[String] = ExpressionEncoder()
+  implicit def newStringEncoder: Encoder[String] = Encoders.STRING
+
+  // Boxed primitives
+
+  /** @since 2.0.0 */
+  implicit def newBoxedIntEncoder: Encoder[java.lang.Integer] = Encoders.INT
+
+  /** @since 2.0.0 */
+  implicit def newBoxedLongEncoder: Encoder[java.lang.Long] = Encoders.LONG
+
+  /** @since 2.0.0 */
+  implicit def newBoxedDoubleEncoder: Encoder[java.lang.Double] = Encoders.DOUBLE
+
+  /** @since 2.0.0 */
+  implicit def newBoxedFloatEncoder: Encoder[java.lang.Float] = Encoders.FLOAT
+
+  /** @since 2.0.0 */
+  implicit def newBoxedByteEncoder: Encoder[java.lang.Byte] = Encoders.BYTE
+
+  /** @since 2.0.0 */
+  implicit def newBoxedShortEncoder: Encoder[java.lang.Short] = Encoders.SHORT
+
+  /** @since 2.0.0 */
+  implicit def newBoxedBooleanEncoder: Encoder[java.lang.Boolean] = Encoders.BOOLEAN
 
   // Seqs
 

@@ -55,6 +55,8 @@ statement
         rowFormat?  createFileFormat? locationSpec?
         (TBLPROPERTIES tablePropertyList)?
         (AS? query)?                                                   #createTable
+    | CREATE TABLE (IF NOT EXISTS)? target=tableIdentifier
+        LIKE source=tableIdentifier                                    #createTableLike
     | ANALYZE TABLE tableIdentifier partitionSpec? COMPUTE STATISTICS
         (identifier | FOR COLUMNS identifierSeq?)?                     #analyze
     | ALTER (TABLE | VIEW) from=tableIdentifier
@@ -104,6 +106,7 @@ statement
         REPLACE COLUMNS '(' colTypeList ')' (CASCADE | RESTRICT)?      #replaceColumns
     | DROP TABLE (IF EXISTS)? tableIdentifier PURGE?
         (FOR METADATA? REPLICATION '(' STRING ')')?                    #dropTable
+    | DROP VIEW (IF EXISTS)? tableIdentifier                           #dropTable
     | CREATE (OR REPLACE)? VIEW (IF NOT EXISTS)? tableIdentifier
         identifierCommentList? (COMMENT STRING)?
         (PARTITIONED ON identifierList)?
@@ -116,6 +119,8 @@ statement
     | SHOW TABLES ((FROM | IN) db=identifier)?
         (LIKE? pattern=STRING)?                                        #showTables
     | SHOW DATABASES (LIKE pattern=STRING)?                            #showDatabases
+    | SHOW TBLPROPERTIES table=tableIdentifier
+        ('(' key=tablePropertyKey ')')?                                #showTblProperties
     | SHOW FUNCTIONS (LIKE? (qualifiedName | pattern=STRING))?         #showFunctions
     | (DESC | DESCRIBE) FUNCTION EXTENDED? qualifiedName               #describeFunction
     | (DESC | DESCRIBE) option=(EXTENDED | FORMATTED)?
@@ -133,20 +138,16 @@ statement
     ;
 
 hiveNativeCommands
-    : createTableHeader LIKE tableIdentifier
-        rowFormat?  createFileFormat? locationSpec?
-        (TBLPROPERTIES tablePropertyList)?
-    | DELETE FROM tableIdentifier (WHERE booleanExpression)?
+    : DELETE FROM tableIdentifier (WHERE booleanExpression)?
     | TRUNCATE TABLE tableIdentifier partitionSpec?
         (COLUMNS identifierList)?
-    | DROP VIEW (IF EXISTS)? qualifiedName
     | SHOW COLUMNS (FROM | IN) tableIdentifier ((FROM|IN) identifier)?
     | START TRANSACTION (transactionMode (',' transactionMode)*)?
     | COMMIT WORK?
     | ROLLBACK WORK?
     | SHOW PARTITIONS tableIdentifier partitionSpec?
     | DFS .*?
-    | (CREATE | ALTER | DROP | SHOW | DESC | DESCRIBE | MSCK | LOAD) .*?
+    | (CREATE | ALTER | DROP | SHOW | DESC | DESCRIBE | LOAD) .*?
     ;
 
 unsupportedHiveNativeCommands
@@ -175,6 +176,7 @@ unsupportedHiveNativeCommands
     | kw1=UNLOCK kw2=DATABASE
     | kw1=CREATE kw2=TEMPORARY kw3=MACRO
     | kw1=DROP kw2=TEMPORARY kw3=MACRO
+    | kw1=MSCK kw2=REPAIR kw3=TABLE
     ;
 
 createTableHeader
@@ -269,8 +271,7 @@ createFileFormat
     ;
 
 fileFormat
-    : INPUTFORMAT inFmt=STRING OUTPUTFORMAT outFmt=STRING (SERDE serdeCls=STRING)?
-      (INPUTDRIVER inDriver=STRING OUTPUTDRIVER outDriver=STRING)?                         #tableFileFormat
+    : INPUTFORMAT inFmt=STRING OUTPUTFORMAT outFmt=STRING (SERDE serdeCls=STRING)?         #tableFileFormat
     | identifier                                                                           #genericFileFormat
     ;
 
@@ -378,6 +379,7 @@ joinType
     | LEFT SEMI
     | RIGHT OUTER?
     | FULL OUTER?
+    | LEFT? ANTI
     ;
 
 joinCriteria
@@ -466,15 +468,15 @@ booleanExpression
 //  https://github.com/antlr/antlr4/issues/780
 //  https://github.com/antlr/antlr4/issues/781
 predicated
-    : valueExpression predicate[$valueExpression.ctx]?
+    : valueExpression predicate?
     ;
 
-predicate[ParserRuleContext value]
-    : NOT? BETWEEN lower=valueExpression AND upper=valueExpression        #between
-    | NOT? IN '(' expression (',' expression)* ')'                        #inList
-    | NOT? IN '(' query ')'                                               #inSubquery
-    | NOT? like=(RLIKE | LIKE) pattern=valueExpression                    #like
-    | IS NOT? NULL                                                        #nullPredicate
+predicate
+    : NOT? kind=BETWEEN lower=valueExpression AND upper=valueExpression
+    | NOT? kind=IN '(' expression (',' expression)* ')'
+    | NOT? kind=IN '(' query ')'
+    | NOT? kind=(RLIKE | LIKE) pattern=valueExpression
+    | IS NOT? kind=NULL
     ;
 
 valueExpression
@@ -643,13 +645,14 @@ nonReserved
     | NO | DATA
     | START | TRANSACTION | COMMIT | ROLLBACK | WORK | ISOLATION | LEVEL
     | SNAPSHOT | READ | WRITE | ONLY
-    | SORT | CLUSTER | DISTRIBUTE UNSET | TBLPROPERTIES | SKEWED | STORED | DIRECTORIES | LOCATION
+    | SORT | CLUSTER | DISTRIBUTE | UNSET | TBLPROPERTIES | SKEWED | STORED | DIRECTORIES | LOCATION
     | EXCHANGE | ARCHIVE | UNARCHIVE | FILEFORMAT | TOUCH | COMPACT | CONCATENATE | CHANGE | FIRST
     | AFTER | CASCADE | RESTRICT | BUCKETS | CLUSTERED | SORTED | PURGE | INPUTFORMAT | OUTPUTFORMAT
     | INPUTDRIVER | OUTPUTDRIVER | DBPROPERTIES | DFS | TRUNCATE | METADATA | REPLICATION | COMPUTE
     | STATISTICS | ANALYZE | PARTITIONED | EXTERNAL | DEFINED | RECORDWRITER
-    | REVOKE | GRANT | LOCK | UNLOCK | MSCK | EXPORT | IMPORT | LOAD | VALUES | COMMENT | ROLE
+    | REVOKE | GRANT | LOCK | UNLOCK | MSCK | REPAIR | EXPORT | IMPORT | LOAD | VALUES | COMMENT | ROLE
     | ROLES | COMPACTIONS | PRINCIPALS | TRANSACTIONS | INDEX | INDEXES | LOCKS | OPTION
+    | ASC | DESC | LIMIT | RENAME | SETS
     ;
 
 SELECT: 'SELECT';
@@ -864,6 +867,7 @@ GRANT: 'GRANT';
 LOCK: 'LOCK';
 UNLOCK: 'UNLOCK';
 MSCK: 'MSCK';
+REPAIR: 'REPAIR';
 EXPORT: 'EXPORT';
 IMPORT: 'IMPORT';
 LOAD: 'LOAD';
@@ -876,6 +880,7 @@ INDEX: 'INDEX';
 INDEXES: 'INDEXES';
 LOCKS: 'LOCKS';
 OPTION: 'OPTION';
+ANTI: 'ANTI';
 
 STRING
     : '\'' ( ~('\''|'\\') | ('\\' .) )* '\''

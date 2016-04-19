@@ -86,6 +86,16 @@ public class JavaDatasetSuite implements Serializable {
   }
 
   @Test
+  public void testToLocalIterator() {
+    List<String> data = Arrays.asList("hello", "world");
+    Dataset<String> ds = context.createDataset(data, Encoders.STRING());
+    Iterator<String> iter = ds.toLocalIterator();
+    Assert.assertEquals("hello", iter.next());
+    Assert.assertEquals("world", iter.next());
+    Assert.assertFalse(iter.hasNext());
+  }
+
+  @Test
   public void testCommonOperation() {
     List<String> data = Arrays.asList("hello", "world");
     Dataset<String> ds = context.createDataset(data, Encoders.STRING());
@@ -442,6 +452,16 @@ public class JavaDatasetSuite implements Serializable {
       new JavaSerializable("hello"), new JavaSerializable("world"));
     Dataset<JavaSerializable> ds = context.createDataset(data, encoder);
     Assert.assertEquals(data, ds.collectAsList());
+  }
+
+  @Test
+  public void testRandomSplit() {
+    List<String> data = Arrays.asList("hello", "world", "from", "spark");
+    Dataset<String> ds = context.createDataset(data, Encoders.STRING());
+    double[] arraySplit = {1, 2, 3};
+
+    List<Dataset<String>> randomSplit =  ds.randomSplitAsList(arraySplit, 1);
+    Assert.assertEquals("wrong number of splits", randomSplit.size(), 3);
   }
 
   /**
