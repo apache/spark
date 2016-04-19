@@ -19,8 +19,11 @@ package org.apache.spark.ml.clustering
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.util.DefaultReadWriteTest
+import org.apache.spark.mllib.linalg.{Matrix, Vector}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.functions._
+
 
 
 class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
@@ -78,7 +81,7 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
     val model = gm.fit(dataset)
     assert(model.hasParent)
     assert(model.weights.length === k)
-    assert(model.gaussians.length === k)
+    assert(model.gaussians.collect.size === k)
 
     val transformed = model.transform(dataset)
     val expectedColumns = Array("features", predictionColName, probabilityColName)
@@ -108,8 +111,14 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
   test("read/write") {
     def checkModelData(model: GaussianMixtureModel, model2: GaussianMixtureModel): Unit = {
       assert(model.weights === model2.weights)
-      assert(model.gaussians.map(_.mu) === model2.gaussians.map(_.mu))
-      assert(model.gaussians.map(_.sigma) === model2.gaussians.map(_.sigma))
+      val gaussians = model.gaussians
+      val mus = gaussians.select(col("mu")).collect().map{_.getAs[Vector]("mu")}
+      val sigmas = gaussians.select(col("sigma")).collect().map{_.getAs[Matrix]("sigma")}
+      val gaussians2 = model2.gaussians
+      val mus2 = gaussians2.select(col("mu")).collect().map{_.getAs[Vector]("mu")}
+      val sigmas2 = gaussians2.select(col("sigma")).collect().map{_.getAs[Matrix]("sigma")}
+      assert(mus === mus2)
+      assert(sigmas === sigmas2)
     }
     val gm = new GaussianMixture()
     testEstimatorAndModelReadWrite(gm, dataset,

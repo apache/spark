@@ -52,9 +52,7 @@ class GaussianMixtureModel(JavaModel, JavaMLWritable, JavaMLReadable):
         Array of MultivariateGaussian where gaussians[i] represents
         the Multivariate Gaussian (Normal) Distribution for Gaussian i.
         """
-        return [
-            MultivariateGaussian(gaussian[0], gaussian[1])
-            for gaussian in self._call_java("gaussiansPyDump")]
+        return self._call_java("gaussians")
 
 
 @inherit_doc
@@ -67,30 +65,33 @@ class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
 
     >>> from pyspark.mllib.linalg import Vectors
 
-    >>> data1 = [(Vectors.dense([-0.1, -0.05 ]),),
+    >>> data = [(Vectors.dense([-0.1, -0.05 ]),),
     ...          (Vectors.dense([-0.01, -0.1]),),
     ...          (Vectors.dense([0.9, 0.8]),),
     ...          (Vectors.dense([0.75, 0.935]),),
     ...          (Vectors.dense([-0.83, -0.68]),),
     ...          (Vectors.dense([-0.91, -0.76]),)]
-    >>> df1 = sqlContext.createDataFrame(data1, ["features"])
+    >>> df = sqlContext.createDataFrame(data, ["features"])
     >>> gaussianmixture = GaussianMixture(k=3, tol=0.0001,
     ...                                    maxIter=50, seed=10)
-    >>> model = gaussianmixture.fit(df1)
+    >>> model = gaussianmixture.fit(df)
     >>> weights = model.weights
     >>> len(weights)
     3
     >>> gaussians = model.gaussians
-    >>> len(gaussians)
-    3
-    >>> transformed = model.transform(df1).select("features", "prediction")
+    >>> gaussians.show()
+    +--------------------+--------------------+
+    |                  mu|               sigma|
+    +--------------------+--------------------+
+    |[-0.0550000000000...|0.002025000000000...|
+    |[0.82499999999999...|0.005625000000000...|
+    |[-0.87,-0.7200000...|0.001600000000000...|
+    +--------------------+--------------------+
+    ...
+    >>> transformed = model.transform(df).select("features", "prediction")
     >>> rows = transformed.collect()
-    >>> rows[0].prediction == rows[2].prediction
-    False
     >>> rows[4].prediction == rows[5].prediction
     True
-    >>> rows[1].prediction == rows[5].prediction
-    False
     >>> rows[2].prediction == rows[3].prediction
     True
     >>> gmm_path = temp_path + "/gmm"
@@ -103,16 +104,15 @@ class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     >>> model2 = GaussianMixtureModel.load(model_path)
     >>> model2.weights == model.weights
     True
-    >>> model2.gaussians == model.gaussians
-    True
-    >>> mus, sigmas = list(
-    ...     zip(*[(g.mu, g.sigma) for g in model.gaussians]))
-    >>> sameMus, sameSigmas = list(
-    ...     zip(*[(g.mu, g.sigma) for g in model2.gaussians]))
-    >>> mus == sameMus
-    True
-    >>> sigmas == sameSigmas
-    True
+    >>> model2.gaussians.show()
+    +--------------------+--------------------+
+    |                  mu|               sigma|
+    +--------------------+--------------------+
+    |[-0.0550000000000...|0.002025000000000...|
+    |[0.82499999999999...|0.005625000000000...|
+    |[-0.87,-0.7200000...|0.001600000000000...|
+    +--------------------+--------------------+
+    ...
 
     .. versionadded:: 2.0.0
     """
