@@ -31,17 +31,17 @@ class ShuffleReadMetrics private[spark] () extends Serializable {
   import InternalAccumulator._
 
   private[executor] val _remoteBlocksFetched =
-    TaskMetrics.createAccum[Int](shuffleRead.REMOTE_BLOCKS_FETCHED)
+    TaskMetrics.createIntAccum(shuffleRead.REMOTE_BLOCKS_FETCHED)
   private[executor] val _localBlocksFetched =
-    TaskMetrics.createAccum[Int](shuffleRead.LOCAL_BLOCKS_FETCHED)
+    TaskMetrics.createIntAccum(shuffleRead.LOCAL_BLOCKS_FETCHED)
   private[executor] val _remoteBytesRead =
-    TaskMetrics.createAccum[Long](shuffleRead.REMOTE_BYTES_READ)
+    TaskMetrics.createLongAccum(shuffleRead.REMOTE_BYTES_READ)
   private[executor] val _localBytesRead =
-    TaskMetrics.createAccum[Long](shuffleRead.LOCAL_BYTES_READ)
+    TaskMetrics.createLongAccum(shuffleRead.LOCAL_BYTES_READ)
   private[executor] val _fetchWaitTime =
-    TaskMetrics.createAccum[Long](shuffleRead.FETCH_WAIT_TIME)
+    TaskMetrics.createLongAccum(shuffleRead.FETCH_WAIT_TIME)
   private[executor] val _recordsRead =
-    TaskMetrics.createAccum[Long](shuffleRead.RECORDS_READ)
+    TaskMetrics.createLongAccum(shuffleRead.RECORDS_READ)
 
   /**
    * Number of remote blocks fetched in this shuffle by this task.

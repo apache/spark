@@ -31,11 +31,11 @@ class ShuffleWriteMetrics private[spark] () extends Serializable {
   import InternalAccumulator._
 
   private[executor] val _bytesWritten =
-    TaskMetrics.createAccum[Long](shuffleWrite.BYTES_WRITTEN)
+    TaskMetrics.createLongAccum(shuffleWrite.BYTES_WRITTEN)
   private[executor] val _recordsWritten =
-    TaskMetrics.createAccum[Long](shuffleWrite.RECORDS_WRITTEN)
+    TaskMetrics.createLongAccum(shuffleWrite.RECORDS_WRITTEN)
   private[executor] val _writeTime =
-    TaskMetrics.createAccum[Long](shuffleWrite.WRITE_TIME)
+    TaskMetrics.createLongAccum(shuffleWrite.WRITE_TIME)
 
   /**
    * Number of bytes written for the shuffle by this task.

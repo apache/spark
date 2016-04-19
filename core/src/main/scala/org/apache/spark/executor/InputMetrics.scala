@@ -42,8 +42,8 @@ object DataReadMethod extends Enumeration with Serializable {
 class InputMetrics private[spark] () extends Serializable {
   import InternalAccumulator._
 
-  private[executor] val _bytesRead = TaskMetrics.createAccum[Long](input.BYTES_READ)
-  private[executor] val _recordsRead = TaskMetrics.createAccum[Long](input.RECORDS_READ)
+  private[executor] val _bytesRead = TaskMetrics.createLongAccum(input.BYTES_READ)
+  private[executor] val _recordsRead = TaskMetrics.createLongAccum(input.RECORDS_READ)
 
   /**
    * Total number of bytes read.

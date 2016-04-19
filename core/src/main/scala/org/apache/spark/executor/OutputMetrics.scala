@@ -41,8 +41,8 @@ object DataWriteMethod extends Enumeration with Serializable {
 class OutputMetrics private[spark] () extends Serializable {
   import InternalAccumulator._
 
-  private[executor] val _bytesWritten = TaskMetrics.createAccum[Long](output.BYTES_WRITTEN)
-  private[executor] val _recordsWritten = TaskMetrics.createAccum[Long](output.RECORDS_WRITTEN)
+  private[executor] val _bytesWritten = TaskMetrics.createLongAccum(output.BYTES_WRITTEN)
+  private[executor] val _recordsWritten = TaskMetrics.createLongAccum(output.RECORDS_WRITTEN)
 
   /**
    * Total number of bytes written.

@@ -36,7 +36,7 @@ private[spark] class TaskContextImpl(
     override val taskMemoryManager: TaskMemoryManager,
     localProperties: Properties,
     @transient private val metricsSystem: MetricsSystem,
-    val taskMetrics: TaskMetrics)
+    override val taskMetrics: TaskMetrics)
   extends TaskContext
   with Logging {
 

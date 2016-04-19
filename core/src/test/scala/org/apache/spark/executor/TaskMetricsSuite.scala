@@ -194,9 +194,7 @@ class TaskMetricsSuite extends SparkFunSuite {
   }
 
   test("additional accumulables") {
-    val internalAccums = InternalAccumulator.createAll()
     val tm = new TaskMetrics
-    assert(tm.accumulatorUpdates().size === internalAccums.size)
     val acc1 = new Accumulator(0, IntAccumulatorParam, Some("a"))
     val acc2 = new Accumulator(0, IntAccumulatorParam, Some("b"))
     val acc3 = new Accumulator(0, IntAccumulatorParam, Some("c"))
@@ -227,11 +225,11 @@ class TaskMetricsSuite extends SparkFunSuite {
     assert(newUpdates(acc4.id).countFailedValues)
     assert(newUpdates.values.map(_.update).forall(_.isDefined))
     assert(newUpdates.values.map(_.value).forall(_.isEmpty))
-    assert(newUpdates.size === internalAccums.size + 4)
+    assert(newUpdates.size === tm.internalAccums.size + 4)
   }
 
   test("from accumulator updates") {
-    val accumUpdates1 = InternalAccumulator.createAll().map { a =>
+    val accumUpdates1 = TaskMetrics.empty.internalAccums.map { a =>
       AccumulableInfo(a.id, a.name, Some(3L), None, a.isInternal, a.countFailedValues)
     }
     val metrics1 = TaskMetrics.fromAccumulatorUpdates(accumUpdates1)

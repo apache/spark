@@ -17,7 +17,6 @@
 
 package org.apache.spark
 
-import java.util.Properties
 import java.util.concurrent.Semaphore
 import javax.annotation.concurrent.GuardedBy
 
@@ -401,7 +400,6 @@ private class SaveInfoListener extends SparkListener {
  */
 private[spark] class DummyTask(
     metrics: TaskMetrics,
-    val externalAccums: Seq[Accumulator[_]])
-  extends Task[Int](0, 0, 0, metrics, new Properties) {
+    val externalAccums: Seq[Accumulator[_]]) extends Task[Int](0, 0, 0, metrics) {
   override def runTask(c: TaskContext): Int = 1
 }
