@@ -326,7 +326,7 @@ class DataFrame(object):
         return self
 
     @since(1.3)
-    def unpersist(self, blocking=True):
+    def unpersist(self, blocking=False):
         """Marks the :class:`DataFrame` as non-persistent, and remove all blocks for it from
         memory and disk.
         """
