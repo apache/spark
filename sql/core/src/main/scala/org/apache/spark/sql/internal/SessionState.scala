@@ -21,6 +21,7 @@ import java.util.Properties
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.sql.{ContinuousQueryManager, ExperimentalMethods, SQLContext, UDFRegistration}
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
@@ -30,7 +31,6 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources.{DataSourceAnalysis, PreInsertCastAndRename, ResolveDataSource}
 import org.apache.spark.sql.util.ExecutionListenerManager
-import org.apache.spark.internal.config.ConfigEntry
 
 
 /**
