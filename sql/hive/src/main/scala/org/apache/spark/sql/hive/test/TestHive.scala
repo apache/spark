@@ -32,6 +32,7 @@ import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 
 import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.internal.config.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
@@ -469,6 +470,8 @@ private[hive] class TestHiveSparkSession(
   extends SparkSession(sc) {
 
   self =>
+
+  assume(sc.conf.get(CATALOG_IMPLEMENTATION) == "hive")
 
   override lazy val sharedState =
     new TestHiveSharedState(sc, warehousePath, scratchDirPath, metastoreTemporaryConf)

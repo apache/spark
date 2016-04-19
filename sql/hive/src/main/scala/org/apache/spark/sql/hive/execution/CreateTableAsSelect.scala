@@ -43,7 +43,6 @@ case class CreateTableAsSelect(
   override def children: Seq[LogicalPlan] = Seq(query)
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
-    val hiveContext = sqlContext.asInstanceOf[HiveContext]
     lazy val metastoreRelation: MetastoreRelation = {
       import org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
       import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
@@ -69,24 +68,24 @@ case class CreateTableAsSelect(
         withFormat
       }
 
-      hiveContext.sessionState.catalog.createTable(withSchema, ignoreIfExists = false)
+      sqlContext.sessionState.catalog.createTable(withSchema, ignoreIfExists = false)
 
       // Get the Metastore Relation
-      hiveContext.sessionState.catalog.lookupRelation(tableIdentifier) match {
+      sqlContext.sessionState.catalog.lookupRelation(tableIdentifier) match {
         case r: MetastoreRelation => r
       }
     }
     // TODO ideally, we should get the output data ready first and then
     // add the relation into catalog, just in case of failure occurs while data
     // processing.
-    if (hiveContext.sessionState.catalog.tableExists(tableIdentifier)) {
+    if (sqlContext.sessionState.catalog.tableExists(tableIdentifier)) {
       if (allowExisting) {
         // table already exists, will do nothing, to keep consistent with Hive
       } else {
         throw new AnalysisException(s"$tableIdentifier already exists.")
       }
     } else {
-      hiveContext.executePlan(InsertIntoTable(metastoreRelation, Map(), query, true, false)).toRdd
+      sqlContext.executePlan(InsertIntoTable(metastoreRelation, Map(), query, true, false)).toRdd
     }
 
     Seq.empty[Row]
