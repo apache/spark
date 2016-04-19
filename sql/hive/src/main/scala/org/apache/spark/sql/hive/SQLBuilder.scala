@@ -288,8 +288,9 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
 
   private def isGroupingSet(a: Aggregate, e: Expand, p: Project): Boolean = {
     assert(a.child == e && e.child == p)
-    a.groupingExpressions.forall(_.isInstanceOf[Attribute]) &&
-      sameOutput(e.output, p.child.output ++ a.groupingExpressions.map(_.asInstanceOf[Attribute]))
+    a.groupingExpressions.forall(_.isInstanceOf[Attribute]) && sameOutput(
+      e.output.drop(p.child.output.length),
+      a.groupingExpressions.map(_.asInstanceOf[Attribute]))
   }
 
   private def groupingSetToSQL(
@@ -302,13 +303,10 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
     val gid = expand.output.last
 
     val numOriginalOutput = project.child.output.length
-    // Assumption: Aggregate's groupingExpressions is composed of
-    // 1) the attributes of aliased group by expressions
-    // 2) gid, which is always the last one
-    val groupByAttributes = agg.groupingExpressions.dropRight(1).map(_.asInstanceOf[Attribute])
     // Assumption: Project's projectList is composed of
     // 1) the original output (Project's child.output),
     // 2) the aliased group by expressions.
+    val groupByAttributes = project.output.drop(numOriginalOutput)
     val groupByExprs = project.projectList.drop(numOriginalOutput).map(_.asInstanceOf[Alias].child)
     val groupingSQL = groupByExprs.map(_.sql).mkString(", ")
 

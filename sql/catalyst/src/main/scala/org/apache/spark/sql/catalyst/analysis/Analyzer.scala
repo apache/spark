@@ -300,6 +300,9 @@ class Analyzer(
           a.toAttribute.withNullability((nonNullBitmask & 1 << idx) == 0)
         }
 
+        val expand = Expand(x.bitmasks, groupByAliases, groupByAttributes, gid, x.child)
+        val finalGroupingAttrs = expand.output.drop(x.child.output.length)
+
         val aggregations: Seq[NamedExpression] = x.aggregations.map { case expr =>
           // collect all the found AggregateExpression, so we can check an expression is part of
           // any AggregateExpression or not.
@@ -321,15 +324,12 @@ class Analyzer(
               if (index == -1) {
                 e
               } else {
-                groupByAttributes(index)
+                finalGroupingAttrs(index)
               }
           }.asInstanceOf[NamedExpression]
         }
 
-        Aggregate(
-          groupByAttributes :+ gid,
-          aggregations,
-          Expand(x.bitmasks, groupByAliases, groupByAttributes, gid, x.child))
+        Aggregate(finalGroupingAttrs, aggregations, expand)
 
       case f @ Filter(cond, child) if hasGroupingFunction(cond) =>
         val groupingExprs = findGroupingExprs(child)
