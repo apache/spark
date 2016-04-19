@@ -134,7 +134,6 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     ).toDF("id", "a", "b")
     val model = formula.fit(original)
     val result = model.transform(original)
-    val resultSchema = model.transformSchema(original.schema)
     val expected = spark.createDataFrame(
       Seq(
         ("male", "foo", 4, Vectors.dense(0.0, 1.0, 4.0), 1.0),
