@@ -24,7 +24,7 @@ import java.sql.{Date, DriverManager, SQLException, Statement}
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.{Await, ExecutionContext, Future, Promise}
+import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.concurrent.duration._
 import scala.io.Source
 import scala.util.{Random, Try}
@@ -40,7 +40,7 @@ import org.apache.thrift.protocol.TBinaryProtocol
 import org.apache.thrift.transport.TSocket
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
@@ -373,9 +373,10 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
         // slightly more conservatively than may be strictly necessary.
         Thread.sleep(1000)
         statement.cancel()
-        val e = intercept[SQLException] {
-          Await.result(f, 3.minute)
-        }
+        val e = intercept[SparkException] {
+          ThreadUtils.awaitResult(f, 3.minute)
+        }.getCause
+        assert(e.isInstanceOf[SQLException])
         assert(e.getMessage.contains("cancelled"))
 
         // Cancellation is a no-op if spark.sql.hive.thriftServer.async=false
@@ -391,7 +392,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
           // might race and complete before we issue the cancel.
           Thread.sleep(1000)
           statement.cancel()
-          val rs1 = Await.result(sf, 3.minute)
+          val rs1 = ThreadUtils.awaitResult(sf, 3.minute)
           rs1.next()
           assert(rs1.getInt(1) === math.pow(5, 5))
           rs1.close()
@@ -814,7 +815,7 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
       process
     }
 
-    Await.result(serverStarted.future, SERVER_STARTUP_TIMEOUT)
+    ThreadUtils.awaitResult(serverStarted.future, SERVER_STARTUP_TIMEOUT)
   }
 
   private def stopThriftServer(): Unit = {

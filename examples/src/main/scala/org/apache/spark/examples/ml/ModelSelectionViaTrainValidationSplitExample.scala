@@ -25,6 +25,14 @@ import org.apache.spark.ml.tuning.{ParamGridBuilder, TrainValidationSplit}
 // $example off$
 import org.apache.spark.sql.SQLContext
 
+/**
+ * A simple example demonstrating model selection using TrainValidationSplit.
+ *
+ * Run with
+ * {{{
+ * bin/run-example ml.ModelSelectionViaTrainValidationSplitExample
+ * }}}
+ */
 object ModelSelectionViaTrainValidationSplitExample {
 
   def main(args: Array[String]): Unit = {

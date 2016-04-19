@@ -27,6 +27,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.analysis.OutputMode
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
@@ -48,6 +49,7 @@ class StreamExecution(
     checkpointRoot: String,
     private[sql] val logicalPlan: LogicalPlan,
     val sink: Sink,
+    val outputMode: OutputMode,
     val trigger: Trigger) extends ContinuousQuery with Logging {
 
   /** An monitor used to wait/notify when batches complete. */
@@ -314,8 +316,13 @@ class StreamExecution(
     }
 
     val optimizerStart = System.nanoTime()
-    lastExecution =
-        new IncrementalExecution(sqlContext, newPlan, checkpointFile("state"), currentBatchId)
+    lastExecution = new IncrementalExecution(
+      sqlContext,
+      newPlan,
+      outputMode,
+      checkpointFile("state"),
+      currentBatchId)
+
     lastExecution.executedPlan
     val optimizerTime = (System.nanoTime() - optimizerStart).toDouble / 1000000
     logDebug(s"Optimized batch in ${optimizerTime}ms")
