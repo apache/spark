@@ -111,7 +111,7 @@ public class RadixSort {
     // Optimization: do a fast pre-pass to determine which byte indices we can skip for sorting.
     // If all the byte values at a particular index are the same we don't need to count it.
     long bitwiseMax = 0;
-    long bitwiseMin = ~0L;
+    long bitwiseMin = -1L;
     long maxOffset = array.getBaseOffset() + numRecords * 8;
     Object baseObject = array.getBaseObject();
     for (long offset = array.getBaseOffset(); offset < maxOffset; offset += 8) {
@@ -208,7 +208,7 @@ public class RadixSort {
       LongArray array, int numRecords, int startByteIndex, int endByteIndex) {
     long[][] counts = new long[8][];
     long bitwiseMax = 0;
-    long bitwiseMin = ~0L;
+    long bitwiseMin = -1L;
     long limit = array.getBaseOffset() + numRecords * 16;
     Object baseObject = array.getBaseObject();
     for (long offset = array.getBaseOffset(); offset < limit; offset += 16) {

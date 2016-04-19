@@ -17,6 +17,7 @@
 
 package org.apache.spark.shuffle.sort;
 
+import java.lang.Long;
 import java.util.Comparator;
 
 import org.apache.spark.memory.MemoryConsumer;
@@ -54,6 +55,11 @@ final class ShuffleInMemorySorter {
   private final boolean useRadixSort;
 
   /**
+   * Set to 2x for radix sort to reserve extra memory for sorting, otherwise 1x.
+   */
+  private final int memoryAllocationFactor;
+
+  /**
    * The position in the pointer array where new records can be inserted.
    */
   private int pos = 0;
@@ -64,9 +70,10 @@ final class ShuffleInMemorySorter {
     this.consumer = consumer;
     assert (initialSize > 0);
     this.initialSize = initialSize;
-    this.array = consumer.allocateArray(initialSize * (useRadixSort ? 2 : 1));
-    this.sorter = new Sorter<>(ShuffleSortDataFormat.INSTANCE);
     this.useRadixSort = useRadixSort;
+    this.memoryAllocationFactor = useRadixSort ? 2 : 1;
+    this.array = consumer.allocateArray(initialSize * memoryAllocationFactor);
+    this.sorter = new Sorter<>(ShuffleSortDataFormat.INSTANCE);
   }
 
   public void free() {
@@ -95,18 +102,18 @@ final class ShuffleInMemorySorter {
       array.getBaseOffset(),
       newArray.getBaseObject(),
       newArray.getBaseOffset(),
-      array.size() * (useRadixSort ? 4L /* second half unused */: 8L)
+      array.size() * (Long.BYTES / memoryAllocationFactor)
     );
     consumer.freeArray(array);
     array = newArray;
   }
 
   public boolean hasSpaceForAnotherRecord() {
-    return pos < array.size() / (useRadixSort ? 2 : 1);
+    return pos < array.size() / memoryAllocationFactor;
   }
 
   public long getMemoryUsage() {
-    return array.size() * 8L;
+    return array.size() * Long.BYTES;
   }
 
   /**
@@ -159,7 +166,10 @@ final class ShuffleInMemorySorter {
   public ShuffleSorterIterator getSortedIterator() {
     int offset = 0;
     if (useRadixSort) {
-      offset = RadixSort.sort(array, pos, 5, 7, false, false);
+      offset = RadixSort.sort(
+        array, pos,
+        PackedRecordPointer.PARTITION_ID_START_BYTE_INDEX,
+        PackedRecordPointer.PARTITION_ID_END_BYTE_INDEX, false, false);
     } else {
       sorter.sort(array, 0, pos, SORT_COMPARATOR);
     }

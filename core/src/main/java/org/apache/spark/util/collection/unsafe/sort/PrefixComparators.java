@@ -34,8 +34,8 @@ public class PrefixComparators {
   public static final PrefixComparator BINARY_DESC = new UnsignedPrefixComparatorDesc();
   public static final PrefixComparator LONG = new SignedPrefixComparator();
   public static final PrefixComparator LONG_DESC = new SignedPrefixComparatorDesc();
-  public static final PrefixComparator DOUBLE = new SignedPrefixComparator();
-  public static final PrefixComparator DOUBLE_DESC = new SignedPrefixComparatorDesc();
+  public static final PrefixComparator DOUBLE = new UnsignedPrefixComparator();
+  public static final PrefixComparator DOUBLE_DESC = new UnsignedPrefixComparatorDesc();
 
   public static final class StringPrefixComparator {
     public static long computePrefix(UTF8String value) {
@@ -50,10 +50,18 @@ public class PrefixComparators {
   }
 
   public static final class DoublePrefixComparator {
+    /**
+     * Converts the double into a value that compares correctly as an unsigned long. For more
+     * details see http://stereopsis.com/radix.html.
+     */
     public static long computePrefix(double value) {
-      // Java's doubleToLongBits already canonicalizes all NaN values to the lowest possible NaN,
-      // so there's nothing special we need to do here.
-      return Double.doubleToLongBits(value);
+      // Java's doubleToLongBits already canonicalizes all NaN values to the smallest possible
+      // positive NaN, so there's nothing special we need to do for NaNs.
+      long bits = Double.doubleToLongBits(value);
+      // Negative floats compare backwards due to their sign-magnitude representation, so flip
+      // all the bits in this case.
+      long mask = -(bits >>> 63) | 0x8000000000000000L;
+      return bits ^ mask;
     }
   }
 

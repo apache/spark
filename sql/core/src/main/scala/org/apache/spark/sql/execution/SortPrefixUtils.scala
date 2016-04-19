@@ -70,11 +70,14 @@ object SortPrefixUtils {
    */
   def canSortFullyWithPrefix(sortOrder: SortOrder): Boolean = {
     sortOrder.dataType match {
-      case BooleanType | ByteType | ShortType | IntegerType | LongType | DateType | TimestampType =>
+      // TODO(ekl) long-type is problematic because it's null prefix representation collides with
+      // the lowest possible long value. Handle this special case outside radix sort.
+      case LongType if sortOrder.nullable =>
+        false
+      case BooleanType | ByteType | ShortType | IntegerType | LongType | DateType |
+           TimestampType | FloatType | DoubleType =>
         true
       case dt: DecimalType if dt.precision - dt.scale <= Decimal.MAX_LONG_DIGITS =>
-        true
-      case FloatType | DoubleType =>
         true
       case _ =>
         false

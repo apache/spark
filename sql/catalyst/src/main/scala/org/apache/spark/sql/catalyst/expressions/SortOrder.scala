@@ -84,8 +84,7 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
       case DateType | TimestampType =>
         (Long.MinValue, s"(long) $input")
       case FloatType | DoubleType =>
-        (DoublePrefixComparator.computePrefix(Double.NegativeInfinity),
-          s"$DoublePrefixCmp.computePrefix((double)$input)")
+        (0L, s"$DoublePrefixCmp.computePrefix((double)$input)")
       case StringType => (0L, s"$input.getPrefix()")
       case BinaryType => (0L, s"$BinaryPrefixCmp.computePrefix($input)")
       case dt: DecimalType if dt.precision - dt.scale <= Decimal.MAX_LONG_DIGITS =>

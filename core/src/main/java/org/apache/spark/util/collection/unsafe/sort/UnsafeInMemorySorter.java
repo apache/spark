@@ -17,6 +17,7 @@
 
 package org.apache.spark.util.collection.unsafe.sort;
 
+import java.lang.Long;
 import java.util.Comparator;
 
 import org.apache.avro.reflect.Nullable;
@@ -81,6 +82,11 @@ public final class UnsafeInMemorySorter {
   private final PrefixComparators.RadixSortSupport radixSortSupport;
 
   /**
+   * Set to 2x for radix sort to reserve extra memory for sorting, otherwise 1x.
+   */
+  private final int memoryAllocationFactor;
+
+  /**
    * Within this buffer, position {@code 2 * i} holds a pointer pointer to the record at
    * index {@code i}, while position {@code 2 * i + 1} in the array holds an 8-byte key prefix.
    */
@@ -127,6 +133,7 @@ public final class UnsafeInMemorySorter {
       this.sortComparator = null;
       this.radixSortSupport = null;
     }
+    this.memoryAllocationFactor = this.radixSortSupport != null ? 2 : 1;
     this.array = array;
   }
 
@@ -156,11 +163,11 @@ public final class UnsafeInMemorySorter {
   }
 
   public long getMemoryUsage() {
-    return array.size() * 8L;
+    return array.size() * Long.BYTES;
   }
 
   public boolean hasSpaceForAnotherRecord() {
-    return pos + 1 < (array.size() / (this.radixSortSupport != null ? 2 : 1));
+    return pos + 1 < (array.size() / memoryAllocationFactor);
   }
 
   public void expandPointerArray(LongArray newArray) {
@@ -172,7 +179,7 @@ public final class UnsafeInMemorySorter {
       array.getBaseOffset(),
       newArray.getBaseObject(),
       newArray.getBaseOffset(),
-      array.size() * (this.radixSortSupport != null ? 4L /* second half unused */: 8L));
+      array.size() * (Long.BYTES / memoryAllocationFactor));
     consumer.freeArray(array);
     array = newArray;
   }
@@ -262,6 +269,8 @@ public final class UnsafeInMemorySorter {
     int offset = 0;
     if (sorter != null) {
       if (this.radixSortSupport != null) {
+        // TODO(ekl) we should handle NULL values before radix sort for efficiency, since they
+        // force a full-width sort (and we cannot radix-sort nullable long fields at all).
         offset = RadixSort.sortKeyPrefixArray(
           array, pos / 2, 0, 7, radixSortSupport.sortDescending(), radixSortSupport.sortSigned());
       } else {

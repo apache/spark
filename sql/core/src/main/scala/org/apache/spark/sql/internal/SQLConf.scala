@@ -90,7 +90,9 @@ object SQLConf {
 
   val RADIX_SORT_ENABLED = SQLConfigBuilder("spark.sql.sort.enableRadixSort")
     .internal()
-    .doc("When true, enable use of radix sort when possible.")
+    .doc("When true, enable use of radix sort when possible. Radix sort is much faster but " +
+      "requires additional memory to be reserved up-front. The memory overhead may be " +
+      "significant when sorting very small rows (up to 50% more in this case).")
     .booleanConf
     .createWithDefault(true)
 

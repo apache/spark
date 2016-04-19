@@ -17,6 +17,7 @@
 
 package org.apache.spark.shuffle.sort;
 
+import java.lang.Long;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Random;
@@ -81,7 +82,8 @@ public class ShuffleInMemorySorterSuite {
     long position = dataPage.getBaseOffset();
     for (String str : dataToSort) {
       if (!sorter.hasSpaceForAnotherRecord()) {
-        sorter.expandPointerArray(consumer.allocateArray(sorter.getMemoryUsage() / 8 * 2));
+        sorter.expandPointerArray(
+          consumer.allocateArray(sorter.getMemoryUsage() / Long.BYTES * 2));
       }
       final long recordAddress = memoryManager.encodePageNumberAndOffset(dataPage, position);
       final byte[] strBytes = str.getBytes(StandardCharsets.UTF_8);

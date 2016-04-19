@@ -50,12 +50,10 @@ case class Sort(
   override def requiredChildDistribution: Seq[Distribution] =
     if (global) OrderedDistribution(sortOrder) :: Nil else UnspecifiedDistribution :: Nil
 
-  private val canUseRadixSort = (
-    sqlContext.conf.enableRadixSort && sortOrder.length == 1 &&
-    SortPrefixUtils.canSortFullyWithPrefix(sortOrder.head))
+  private val enableRadixSort = sqlContext.conf.enableRadixSort
 
-  // TODO(ekl) remove these before merging
-  private val labels = if (canUseRadixSort) " (radix)" else " (tim)"
+  // TODO(ekl) remove this before merging
+  private var labels = " (unknown)"
 
   override private[sql] lazy val metrics = Map(
     "sortTime" -> SQLMetrics.createLongMetric(sparkContext, "sort time" + labels),
@@ -68,6 +66,14 @@ case class Sort(
     // The comparator for comparing prefix
     val boundSortExpression = BindReferences.bindReference(sortOrder.head, output)
     val prefixComparator = SortPrefixUtils.getPrefixComparator(boundSortExpression)
+
+    val canUseRadixSort = enableRadixSort && sortOrder.length == 1 &&
+      SortPrefixUtils.canSortFullyWithPrefix(boundSortExpression)
+
+    if (canUseRadixSort)
+      labels = " (radix)"
+    else
+      labels = " (tim)"
 
     // The generator for prefix
     val prefixProjection = UnsafeProjection.create(Seq(SortPrefix(boundSortExpression)))
