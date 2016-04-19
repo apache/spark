@@ -58,7 +58,7 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
     }
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = ctx.javaType(dataType)
     val value = ctx.getValue(ctx.INPUT_ROW, dataType, ordinal.toString)
     if (ctx.currentVars != null && ctx.currentVars(ordinal) != null) {
@@ -67,17 +67,13 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
       ev.value = oev.value
       val code = oev.code
       oev.code = ""
-      code
+      ev.copy(code = code)
     } else if (nullable) {
-      s"""
+      ev.copy(code = s"""
         boolean ${ev.isNull} = ${ctx.INPUT_ROW}.isNullAt($ordinal);
-        $javaType ${ev.value} = ${ev.isNull} ? ${ctx.defaultValue(dataType)} : ($value);
-      """
+        $javaType ${ev.value} = ${ev.isNull} ? ${ctx.defaultValue(dataType)} : ($value);""")
     } else {
-      ev.isNull = "false"
-      s"""
-        $javaType ${ev.value} = $value;
-      """
+      ev.copy(code = s"""$javaType ${ev.value} = $value;""", isNull = "false")
     }
   }
 }

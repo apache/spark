@@ -35,7 +35,7 @@ case class NonFoldableLiteral(value: Any, dataType: DataType) extends LeafExpres
 
   override def eval(input: InternalRow): Any = value
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     Literal.create(value, dataType).doGenCode(ctx, ev)
   }
 }
