@@ -22,7 +22,7 @@ import java.io.File
 import org.apache.commons.io.FileUtils
 import org.apache.commons.io.filefilter.{DirectoryFileFilter, RegexFileFilter}
 
-import org.apache.spark.sql.{Row, StreamTest}
+import org.apache.spark.sql.{ContinuousQuery, Row, StreamTest}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.datasources.parquet
 import org.apache.spark.sql.execution.streaming.{FileStreamSinkWriter, MemoryStream}
@@ -119,17 +119,29 @@ class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
     val outputDir = Utils.createTempDir(namePrefix = "stream.output").getCanonicalPath
     val checkpointDir = Utils.createTempDir(namePrefix = "stream.checkpoint").getCanonicalPath
 
-    val query =
-      df.write
-        .format("parquet")
-        .option("checkpointLocation", checkpointDir)
-        .startStream(outputDir)
+    var query: ContinuousQuery = null
 
-    inputData.addData(1, 2, 3)
-    failAfter(streamingTimeout) { query.processAllAvailable() }
+    try {
+      query =
+        df.write
+          .format("parquet")
+          .option("checkpointLocation", checkpointDir)
+          .startStream(outputDir)
 
-    val outputDf = sqlContext.read.parquet(outputDir).as[Int]
-    checkDataset(outputDf, 1, 2, 3)
+      inputData.addData(1, 2, 3)
+
+      failAfter(streamingTimeout) {
+        query.processAllAvailable()
+      }
+
+      val outputDf = sqlContext.read.parquet(outputDir).as[Int]
+      checkDataset(outputDf, 1, 2, 3)
+
+    } finally {
+      if (query != null) {
+        query.stop()
+      }
+    }
   }
 
   test("FileStreamSink - partitioned writing and batch reading [IGNORES PARTITION COLUMN]") {
@@ -139,25 +151,72 @@ class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
     val outputDir = Utils.createTempDir(namePrefix = "stream.output").getCanonicalPath
     val checkpointDir = Utils.createTempDir(namePrefix = "stream.checkpoint").getCanonicalPath
 
-    val query =
-      ds.map(i => (i, i * 1000))
-        .toDF("id", "value")
-        .write
-        .format("parquet")
-        .partitionBy("id")
-        .option("checkpointLocation", checkpointDir)
-        .startStream(outputDir)
+    var query: ContinuousQuery = null
 
-    inputData.addData(1, 2, 3)
-    failAfter(streamingTimeout) {
-      query.processAllAvailable()
+    try {
+       query =
+        ds.map(i => (i, i * 1000))
+          .toDF("id", "value")
+          .write
+          .format("parquet")
+          .partitionBy("id")
+          .option("checkpointLocation", checkpointDir)
+          .startStream(outputDir)
+
+      inputData.addData(1, 2, 3)
+      failAfter(streamingTimeout) {
+        query.processAllAvailable()
+      }
+
+      // TODO (tdas): Test partition column can be read or not
+      val outputDf = sqlContext.read.parquet(outputDir)
+      checkDataset(
+        outputDf.as[Int],
+        1000, 2000, 3000)
+
+    } finally {
+      if (query != null) {
+        query.stop()
+      }
+    }
+  }
+
+  test("FileStreamSink - supported formats") {
+    def testFormat(format: Option[String]): Unit = {
+      val inputData = MemoryStream[Int]
+      val ds = inputData.toDS()
+
+      val outputDir = Utils.createTempDir(namePrefix = "stream.output").getCanonicalPath
+      val checkpointDir = Utils.createTempDir(namePrefix = "stream.checkpoint").getCanonicalPath
+
+      var query: ContinuousQuery = null
+
+      try {
+        val writer =
+          ds.map(i => (i, i * 1000))
+            .toDF("id", "value")
+            .write
+        if (format.nonEmpty) {
+          writer.format(format.get)
+        }
+        query = writer
+            .option("checkpointLocation", checkpointDir)
+            .startStream(outputDir)
+      } finally {
+        if (query != null) {
+          query.stop()
+        }
+      }
     }
 
-    // TODO (tdas): Test partition column can be read or not
-    val outputDf = sqlContext.read.parquet(outputDir)
-    checkDataset(
-      outputDf.as[Int],
-      1000, 2000, 3000)
+    testFormat(None) // should not throw error as default format parquet when not specified
+    testFormat(Some("parquet"))
+    val e = intercept[UnsupportedOperationException] {
+      testFormat(Some("text"))
+    }
+    Seq("text", "not support", "stream").foreach { s =>
+      assert(e.getMessage.contains(s))
+    }
   }
 
   private def checkFilesExist(dir: File, expectedFiles: Seq[String], msg: String): Unit = {

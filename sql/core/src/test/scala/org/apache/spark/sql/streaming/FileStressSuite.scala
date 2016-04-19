@@ -41,11 +41,11 @@ import org.apache.spark.util.Utils
 class FileStressSuite extends StreamTest with SharedSQLContext {
   import testImplicits._
 
-  test("fault tolerance stress test - unpartitioned output") {
+  testQuietly("fault tolerance stress test - unpartitioned output") {
     stressTest(partitionWrites = false)
   }
 
-  test("fault tolerance stress test - partitioned output") {
+  testQuietly("fault tolerance stress test - partitioned output") {
     stressTest(partitionWrites = true)
   }
 
