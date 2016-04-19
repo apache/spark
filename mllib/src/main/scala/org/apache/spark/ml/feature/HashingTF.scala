@@ -20,7 +20,7 @@ package org.apache.spark.ml.feature
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.AttributeGroup
-import org.apache.spark.ml.param.{BooleanParam, IntParam, ParamMap, ParamValidators}
+import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.feature
@@ -63,7 +63,18 @@ class HashingTF(override val uid: String)
     "This is useful for discrete probabilistic models that model binary events rather " +
     "than integer counts")
 
-  setDefault(numFeatures -> (1 << 18), binary -> false)
+  /**
+    * The hash algorithm used when mapping term to integer.
+    * Supported options: "murmur3" and "native".
+    * (Default = "murmur3")
+    * @group param
+    */
+  val hashAlgorithm = new Param[String](this, "hashAlgorithm", "The hash algorithm used when " +
+    "mapping term to integer. Supported options: murmur3(default) and native.",
+    ParamValidators.inArray[String](feature.HashingTF.supportedHashAlgorithms.toArray))
+
+  setDefault(numFeatures -> (1 << 18), binary -> false,
+    hashAlgorithm -> feature.HashingTF.Murmur3)
 
   /** @group getParam */
   def getNumFeatures: Int = $(numFeatures)
@@ -77,10 +88,18 @@ class HashingTF(override val uid: String)
   /** @group setParam */
   def setBinary(value: Boolean): this.type = set(binary, value)
 
+  /** @group getParam */
+  def getHashAlgorithm: String = $(hashAlgorithm)
+
+  /** @group setParam */
+  def setHashAlgorithm(value: String): this.type = set(hashAlgorithm, value)
+
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema)
-    val hashingTF = new feature.HashingTF($(numFeatures)).setBinary($(binary))
+    val hashingTF = new feature.HashingTF($(numFeatures))
+      .setBinary($(binary))
+      .setHashAlgorithm($(hashAlgorithm))
     val t = udf { terms: Seq[_] => hashingTF.transform(terms) }
     val metadata = outputSchema($(outputCol)).metadata
     dataset.select(col("*"), t(col($(inputCol))).as($(outputCol), metadata))
