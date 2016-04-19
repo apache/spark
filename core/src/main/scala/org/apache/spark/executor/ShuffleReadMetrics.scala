@@ -53,7 +53,7 @@ class ShuffleReadMetrics private (
    * many places only to merge their values together later. In the future, we should revisit
    * whether this is needed.
    *
-   * A better alternative is [[TaskMetrics.registerTempShuffleReadMetrics]] followed by
+   * A better alternative is [[TaskMetrics.createTempShuffleReadMetrics]] followed by
    * [[TaskMetrics.mergeShuffleReadMetrics]].
    */
   private[spark] def this() {
