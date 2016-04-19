@@ -584,9 +584,9 @@ class SparseVector(Vector):
         if ind_end == -1:
             raise ValueError("Indices array should end with ']'")
         new_s = s[ind_start + 1: ind_end]
-        ind_list = new_s.split(',')
+        ind_list = new_s.split(',') if new_s else []
         try:
-            indices = [int(ind) for ind in ind_list]
+            indices = [int(ind) for ind in ind_list] 
         except ValueError:
             raise ValueError("Unable to parse indices from %s." % new_s)
         s = s[ind_end + 1:].strip()
@@ -597,7 +597,8 @@ class SparseVector(Vector):
         val_end = s.find(']')
         if val_end == -1:
             raise ValueError("Values array should end with ']'.")
-        val_list = s[val_start + 1: val_end].split(',')
+        val_s = s[val_start + 1: val_end]
+        val_list = val_s.split(',') if val_s else []
         try:
             values = [float(val) for val in val_list]
         except ValueError:
