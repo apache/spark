@@ -104,6 +104,8 @@ private[spark] object Benchmark {
 
   /**
    * Object available to benchmark code to control timing e.g. to exclude set-up time.
+   *
+   * @param iteration specifies this is the nth iteration of running the benchmark case
    */
   class Timer(val iteration: Int) {
     private var accumulatedTime: Long = 0L
