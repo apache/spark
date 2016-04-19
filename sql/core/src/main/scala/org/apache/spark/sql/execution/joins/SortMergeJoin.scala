@@ -226,7 +226,7 @@ case class SortMergeJoin(
       keys: Seq[Expression],
       input: Seq[Attribute]): Seq[ExprCode] = {
     ctx.INPUT_ROW = row
-    keys.map(BindReferences.bindReference(_, input).gen(ctx))
+    keys.map(BindReferences.bindReference(_, input).genCode(ctx))
   }
 
   private def copyKeys(ctx: CodegenContext, vars: Seq[ExprCode]): Seq[ExprCode] = {
@@ -376,7 +376,7 @@ case class SortMergeJoin(
   private def createRightVar(ctx: CodegenContext, rightRow: String): Seq[ExprCode] = {
     ctx.INPUT_ROW = rightRow
     right.output.zipWithIndex.map { case (a, i) =>
-      BoundReference(i, a.dataType, a.nullable).gen(ctx)
+      BoundReference(i, a.dataType, a.nullable).genCode(ctx)
     }
   }
 
@@ -427,7 +427,7 @@ case class SortMergeJoin(
       val (rightBefore, rightAfter) = splitVarsByCondition(right.output, rightVars)
       // Generate code for condition
       ctx.currentVars = leftVars ++ rightVars
-      val cond = BindReferences.bindReference(condition.get, output).gen(ctx)
+      val cond = BindReferences.bindReference(condition.get, output).genCode(ctx)
       // evaluate the columns those used by condition before loop
       val before = s"""
            |boolean $loaded = false;
