@@ -463,7 +463,7 @@ object SQLConf {
       .internal()
       .doc("How long in milliseconds a file is guaranteed to be visible for all readers.")
       .timeConf(TimeUnit.MILLISECONDS)
-      .createWithDefault(3600 * 1000L) // 1 hour
+      .createWithDefault(60 * 1000L) // 10 minutes
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
