@@ -577,6 +577,12 @@ setGeneric("saveDF", function(df, path, source = NULL, mode = "error", ...) {
   standardGeneric("saveDF")
 })
 
+#' @rdname write.jdbc
+#' @export
+setGeneric("write.jdbc", function(x, url, tableName, mode = "error", ...) {
+  standardGeneric("write.jdbc")
+})
+
 #' @rdname write.json
 #' @export
 setGeneric("write.json", function(x, path) { standardGeneric("write.json") })
