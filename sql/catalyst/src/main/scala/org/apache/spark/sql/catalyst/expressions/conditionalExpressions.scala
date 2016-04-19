@@ -55,12 +55,12 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
     }
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val condEval = predicate.genCode(ctx)
     val trueEval = trueValue.genCode(ctx)
     val falseEval = falseValue.genCode(ctx)
 
-    s"""
+    ev.copy(code = s"""
       ${condEval.code}
       boolean ${ev.isNull} = false;
       ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
@@ -72,8 +72,7 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
         ${falseEval.code}
         ${ev.isNull} = ${falseEval.isNull};
         ${ev.value} = ${falseEval.value};
-      }
-    """
+      }""")
   }
 
   override def toString: String = s"if ($predicate) $trueValue else $falseValue"
@@ -82,18 +81,15 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
 }
 
 /**
- * Case statements of the form "CASE WHEN a THEN b [WHEN c THEN d]* [ELSE e] END".
- * When a = true, returns b; when c = true, returns d; else returns e.
+ * Abstract parent class for common logic in CaseWhen and CaseWhenCodegen.
  *
  * @param branches seq of (branch condition, branch value)
  * @param elseValue optional value for the else branch
  */
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = "CASE WHEN a THEN b [WHEN c THEN d]* [ELSE e] END - When a = true, returns b; when c = true, return d; else return e.")
-// scalastyle:on line.size.limit
-case class CaseWhen(branches: Seq[(Expression, Expression)], elseValue: Option[Expression] = None)
-  extends Expression with CodegenFallback {
+abstract class CaseWhenBase(
+    branches: Seq[(Expression, Expression)],
+    elseValue: Option[Expression])
+  extends Expression with Serializable {
 
   override def children: Seq[Expression] = branches.flatMap(b => b._1 :: b._2 :: Nil) ++ elseValue
 
@@ -143,16 +139,58 @@ case class CaseWhen(branches: Seq[(Expression, Expression)], elseValue: Option[E
     }
   }
 
-  def shouldCodegen: Boolean = {
-    branches.length < CaseWhen.MAX_NUM_CASES_FOR_CODEGEN
+  override def toString: String = {
+    val cases = branches.map { case (c, v) => s" WHEN $c THEN $v" }.mkString
+    val elseCase = elseValue.map(" ELSE " + _).getOrElse("")
+    "CASE" + cases + elseCase + " END"
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
-    if (!shouldCodegen) {
-      // Fallback to interpreted mode if there are too many branches, as it may reach the
-      // 64K limit (limit on bytecode size for a single function).
-      return super[CodegenFallback].doGenCode(ctx, ev)
-    }
+  override def sql: String = {
+    val cases = branches.map { case (c, v) => s" WHEN ${c.sql} THEN ${v.sql}" }.mkString
+    val elseCase = elseValue.map(" ELSE " + _.sql).getOrElse("")
+    "CASE" + cases + elseCase + " END"
+  }
+}
+
+
+/**
+ * Case statements of the form "CASE WHEN a THEN b [WHEN c THEN d]* [ELSE e] END".
+ * When a = true, returns b; when c = true, returns d; else returns e.
+ *
+ * @param branches seq of (branch condition, branch value)
+ * @param elseValue optional value for the else branch
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "CASE WHEN a THEN b [WHEN c THEN d]* [ELSE e] END - When a = true, returns b; when c = true, return d; else return e.")
+// scalastyle:on line.size.limit
+case class CaseWhen(
+    val branches: Seq[(Expression, Expression)],
+    val elseValue: Option[Expression] = None)
+  extends CaseWhenBase(branches, elseValue) with CodegenFallback with Serializable {
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    super[CodegenFallback].doGenCode(ctx, ev)
+  }
+
+  def toCodegen(): CaseWhenCodegen = {
+    CaseWhenCodegen(branches, elseValue)
+  }
+}
+
+/**
+ * CaseWhen expression used when code generation condition is satisfied.
+ * OptimizeCodegen optimizer replaces CaseWhen into CaseWhenCodegen.
+ *
+ * @param branches seq of (branch condition, branch value)
+ * @param elseValue optional value for the else branch
+ */
+case class CaseWhenCodegen(
+    val branches: Seq[(Expression, Expression)],
+    val elseValue: Option[Expression] = None)
+  extends CaseWhenBase(branches, elseValue) with Serializable {
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // Generate code that looks like:
     //
     // condA = ...
@@ -198,32 +236,15 @@ case class CaseWhen(branches: Seq[(Expression, Expression)], elseValue: Option[E
 
     generatedCode += "}\n" * cases.size
 
-    s"""
+    ev.copy(code = s"""
       boolean ${ev.isNull} = true;
       ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-      $generatedCode
-    """
-  }
-
-  override def toString: String = {
-    val cases = branches.map { case (c, v) => s" WHEN $c THEN $v" }.mkString
-    val elseCase = elseValue.map(" ELSE " + _).getOrElse("")
-    "CASE" + cases + elseCase + " END"
-  }
-
-  override def sql: String = {
-    val cases = branches.map { case (c, v) => s" WHEN ${c.sql} THEN ${v.sql}" }.mkString
-    val elseCase = elseValue.map(" ELSE " + _.sql).getOrElse("")
-    "CASE" + cases + elseCase + " END"
+      $generatedCode""")
   }
 }
 
 /** Factory methods for CaseWhen. */
 object CaseWhen {
-
-  // The maximum number of switches supported with codegen.
-  val MAX_NUM_CASES_FOR_CODEGEN = 20
-
   def apply(branches: Seq[(Expression, Expression)], elseValue: Expression): CaseWhen = {
     CaseWhen(branches, Option(elseValue))
   }
@@ -243,7 +264,6 @@ object CaseWhen {
     CaseWhen(cases, elseValue)
   }
 }
-
 
 /**
  * Case statements of the form "CASE a WHEN b THEN c [WHEN d THEN e]* [ELSE f] END".
@@ -298,7 +318,7 @@ case class Least(children: Seq[Expression]) extends Expression {
     })
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val evalChildren = children.map(_.genCode(ctx))
     val first = evalChildren(0)
     val rest = evalChildren.drop(1)
@@ -312,12 +332,11 @@ case class Least(children: Seq[Expression]) extends Expression {
         }
       """
     }
-    s"""
+    ev.copy(code = s"""
       ${first.code}
       boolean ${ev.isNull} = ${first.isNull};
       ${ctx.javaType(dataType)} ${ev.value} = ${first.value};
-      ${rest.map(updateEval).mkString("\n")}
-    """
+      ${rest.map(updateEval).mkString("\n")}""")
   }
 }
 
@@ -359,7 +378,7 @@ case class Greatest(children: Seq[Expression]) extends Expression {
     })
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val evalChildren = children.map(_.genCode(ctx))
     val first = evalChildren(0)
     val rest = evalChildren.drop(1)
@@ -373,12 +392,11 @@ case class Greatest(children: Seq[Expression]) extends Expression {
         }
       """
     }
-    s"""
+    ev.copy(code = s"""
       ${first.code}
       boolean ${ev.isNull} = ${first.isNull};
       ${ctx.javaType(dataType)} ${ev.value} = ${first.value};
-      ${rest.map(updateEval).mkString("\n")}
-    """
+      ${rest.map(updateEval).mkString("\n")}""")
   }
 }
 

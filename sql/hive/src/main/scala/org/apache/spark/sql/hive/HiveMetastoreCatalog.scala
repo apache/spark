@@ -503,11 +503,12 @@ private[hive] class HiveMetastoreCatalog(hive: SQLContext) extends Logging {
     }
   }
 
-  private def convertToLogicalRelation(metastoreRelation: MetastoreRelation,
-                                       options: Map[String, String],
-                                       defaultSource: FileFormat,
-                                       fileFormatClass: Class[_ <: FileFormat],
-                                       fileType: String): LogicalRelation = {
+  private def convertToLogicalRelation(
+      metastoreRelation: MetastoreRelation,
+      options: Map[String, String],
+      defaultSource: FileFormat,
+      fileFormatClass: Class[_ <: FileFormat],
+      fileType: String): LogicalRelation = {
     val metastoreSchema = StructType.fromAttributes(metastoreRelation.output)
     val tableIdentifier =
       QualifiedTableName(metastoreRelation.databaseName, metastoreRelation.tableName)

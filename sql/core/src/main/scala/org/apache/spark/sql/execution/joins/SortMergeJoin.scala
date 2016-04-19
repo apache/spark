@@ -216,7 +216,7 @@ case class SortMergeJoin(
     joinType == Inner
   }
 
-  override def upstreams(): Seq[RDD[InternalRow]] = {
+  override def inputRDDs(): Seq[RDD[InternalRow]] = {
     left.execute() :: right.execute() :: Nil
   }
 
