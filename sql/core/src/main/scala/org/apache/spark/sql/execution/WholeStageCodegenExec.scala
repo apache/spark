@@ -279,12 +279,11 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupp
     s"""
        | while (true) {
        |   if ($idx == 0) {
-       |     if ($itr.hasNext()) {
-       |       $batch = ($columnarBatchClz)($itr.next());
-       |     } else {
+       |     if (!$itr.hasNext()) {
        |       cleanup();
        |       break;
        |     }
+       |     $batch = ($columnarBatchClz)($itr.next());
        |     ${columnAssigns.mkString("", "\n", "")}
        |   }
        |
@@ -355,6 +354,8 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
     "pipelineTime" -> SQLMetrics.createTimingMetric(sparkContext,
       WholeStageCodegenExec.PIPELINE_DURATION_METRIC))
 
+  var enableColumnCodeGen: Boolean = false
+
   /**
    * Generates code for this subtree.
    *
@@ -369,7 +370,7 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
       c.asInstanceOf[CodegenSupport].useUnsafeRow
     ).isDefined
     val useInMemoryColumnar = child.find(c => c.isInstanceOf[InMemoryColumnarTableScan]).isDefined
-    val enableColumnCodeGen = ctx.enableColumnCodeGen && !useUnsafeRow && useInMemoryColumnar &&
+    enableColumnCodeGen = ctx.enableColumnCodeGen && !useUnsafeRow && useInMemoryColumnar &&
       sqlContext.getConf(SQLConf.COLUMN_VECTOR_CODEGEN.key).toBoolean
 
     val codeProcessNext = if (!enableColumnCodeGen) {

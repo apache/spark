@@ -85,6 +85,37 @@ class BooleanBitSetSuite extends SparkFunSuite {
     assert(!decoder.hasNext)
   }
 
+  def skeletonForDecompress(count: Int) {
+
+    val builder = TestCompressibleColumnBuilder(new NoopColumnStats, BOOLEAN, BooleanBitSet)
+    val rows = Seq.fill[InternalRow](count)(makeRandomRow(BOOLEAN))
+    val values = rows.map(_.getBoolean(0))
+
+    rows.foreach(builder.appendFrom(_, 0))
+    val buffer = builder.build()
+
+    // ----------------
+    // Tests decompress
+    // ----------------
+
+    // Rewinds, skips column header and 4 more bytes for compression scheme ID
+    val headerSize = CompressionScheme.columnHeaderSize(buffer)
+    buffer.position(headerSize)
+    assertResult(BooleanBitSet.typeId, "Wrong compression scheme ID")(buffer.getInt())
+
+    val decoder = BooleanBitSet.decoder(buffer, BOOLEAN)
+    val (decodeBuffer, nullsBuffer) = decoder.decompress(values.length)
+
+    if (values.nonEmpty) {
+      values.zipWithIndex.foreach { case (b: Boolean, index: Int) =>
+        assertResult(b, s"Wrong ${index}-th decoded boolean value") {
+          if (decodeBuffer.get() == 1) true else false
+        }
+      }
+    }
+    assert(!decodeBuffer.hasRemaining)
+  }
+
   test(s"$BooleanBitSet: empty") {
     skeleton(0)
   }
@@ -103,5 +134,25 @@ class BooleanBitSetSuite extends SparkFunSuite {
 
   test(s"$BooleanBitSet: multiple words and 1 more bit") {
     skeleton(BITS_PER_LONG * 2 + 1)
+  }
+
+  test(s"$BooleanBitSet: empty for decompression()") {
+    skeletonForDecompress(0)
+  }
+
+  test(s"$BooleanBitSet: less than 1 word for decompression()") {
+    skeletonForDecompress(BITS_PER_LONG - 1)
+  }
+
+  test(s"$BooleanBitSet: exactly 1 word for decompression()") {
+    skeletonForDecompress(BITS_PER_LONG)
+  }
+
+  test(s"$BooleanBitSet: multiple whole words for decompression()") {
+    skeletonForDecompress(BITS_PER_LONG * 2)
+  }
+
+  test(s"$BooleanBitSet: multiple words and 1 more bit for decompression()") {
+    skeletonForDecompress(BITS_PER_LONG * 2 + 1)
   }
 }

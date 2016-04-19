@@ -43,6 +43,12 @@ import org.apache.spark.unsafe.types.UTF8String
  * WARNING: This only works with HeapByteBuffer
  */
 private[columnar] object ByteBufferHelper {
+  def getShort(buffer: ByteBuffer): Short = {
+    val pos = buffer.position()
+    buffer.position(pos + 2)
+    Platform.getShort(buffer.array(), Platform.BYTE_ARRAY_OFFSET + pos)
+  }
+
   def getInt(buffer: ByteBuffer): Int = {
     val pos = buffer.position()
     buffer.position(pos + 4)
