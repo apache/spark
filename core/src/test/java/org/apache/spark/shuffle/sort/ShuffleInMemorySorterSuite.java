@@ -34,6 +34,8 @@ import org.apache.spark.unsafe.memory.MemoryBlock;
 
 public class ShuffleInMemorySorterSuite {
 
+  protected boolean shouldUseRadixSort() { return false; }
+
   final TestMemoryManager memoryManager =
     new TestMemoryManager(new SparkConf().set("spark.memory.offHeap.enabled", "false"));
   final TaskMemoryManager taskMemoryManager = new TaskMemoryManager(memoryManager, 0);
@@ -47,7 +49,8 @@ public class ShuffleInMemorySorterSuite {
 
   @Test
   public void testSortingEmptyInput() {
-    final ShuffleInMemorySorter sorter = new ShuffleInMemorySorter(consumer, 100, true);
+    final ShuffleInMemorySorter sorter = new ShuffleInMemorySorter(
+      consumer, 100, shouldUseRadixSort());
     final ShuffleInMemorySorter.ShuffleSorterIterator iter = sorter.getSortedIterator();
     Assert.assertFalse(iter.hasNext());
   }
@@ -70,7 +73,8 @@ public class ShuffleInMemorySorterSuite {
       new TaskMemoryManager(new TestMemoryManager(conf), 0);
     final MemoryBlock dataPage = memoryManager.allocatePage(2048, null);
     final Object baseObject = dataPage.getBaseObject();
-    final ShuffleInMemorySorter sorter = new ShuffleInMemorySorter(consumer, 4, true);
+    final ShuffleInMemorySorter sorter = new ShuffleInMemorySorter(
+      consumer, 4, shouldUseRadixSort());
     final HashPartitioner hashPartitioner = new HashPartitioner(4);
 
     // Write the records into the data page and store pointers into the sorter
@@ -113,17 +117,8 @@ public class ShuffleInMemorySorterSuite {
   }
 
   @Test
-  public void testSortingManyNumbersTimSort() throws Exception {
-    testSortingManyNumbers(false);
-  }
-
-  @Test
-  public void testSortingManyNumbersRadixSort() throws Exception {
-    testSortingManyNumbers(true);
-  }
-
-  private void testSortingManyNumbers(boolean useRadix) throws Exception {
-    ShuffleInMemorySorter sorter = new ShuffleInMemorySorter(consumer, 4, useRadix);
+  public void testSortingManyNumbers() throws Exception {
+    ShuffleInMemorySorter sorter = new ShuffleInMemorySorter(consumer, 4, shouldUseRadixSort());
     int[] numbersToSort = new int[128000];
     Random random = new Random(16);
     for (int i = 0; i < numbersToSort.length; i++) {
