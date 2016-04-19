@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import scala.beans.{BeanInfo, BeanProperty}
 
+import org.apache.spark.SparkException
 import org.apache.spark.ml.linalg._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
@@ -71,6 +72,12 @@ private[sql] case class MyVectorPoint(
 private[sql] case class MyMatrixPoint(
     @BeanProperty label: Double,
     @BeanProperty matrix: Matrix)
+
+private[sql] class TestUserClass {
+}
+
+private[sql] class NonUserDefinedType {
+}
 
 private[sql] class MyDVectorUDT extends UserDefinedType[DVector] {
 
@@ -135,6 +142,16 @@ class UDTRegistrationSuite extends QueryTest with SharedSQLContext with ParquetT
   private lazy val pointsRDD2 = Seq(
     MyPoint(1.0, new MyDVector2(Array(0.1, 1.0))),
     MyPoint(0.0, new MyDVector2(Array(0.2, 2.0)))).toDF()
+
+  test("register non-UserDefinedType") {
+    intercept[SparkException] {
+      UDTRegistration.register(classOf[TestUserClass], classOf[NonUserDefinedType])
+    }
+    UDTRegistration.register(classOf[TestUserClass], "org.apache.spark.sql.NonUserDefinedType")
+    intercept[SparkException] {
+      UDTRegistration.getUDTFor(classOf[TestUserClass])
+    }
+  }
 
   test("preloaded VectorUDT") {
     val dv0 = Vectors.dense(Array.empty[Double])

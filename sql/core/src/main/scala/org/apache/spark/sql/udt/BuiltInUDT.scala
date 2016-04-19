@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.udt
 
-import org.apache.spark.ml.linalg.{DenseMatrix, DenseVector, Matrix, SparseMatrix, SparseVector, Vector}
 import org.apache.spark.sql.types.UDTRegistration
 
 /**
@@ -25,13 +24,15 @@ import org.apache.spark.sql.types.UDTRegistration
  * into UDTRegistration.
  */
 private[sql] object BuiltInUDT {
+  // VectorUDT and MatrixUDT in test package org.apache.spark.sql for test purpose.
   val preloadedUDT =
-    (classOf[Vector], classOf[VectorUDT]) ::
-    (classOf[DenseVector], classOf[VectorUDT]) ::
-    (classOf[SparseVector], classOf[VectorUDT]) ::
-    (classOf[Matrix], classOf[MatrixUDT]) ::
-    (classOf[DenseMatrix], classOf[MatrixUDT]) ::
-    (classOf[SparseMatrix], classOf[MatrixUDT]) :: Nil
+    ("org.apache.spark.ml.linalg.Vector", "org.apache.spark.sql.udt.VectorUDT") ::
+    ("org.apache.spark.ml.linalg.DenseVector", "org.apache.spark.sql.udt.VectorUDT") ::
+    ("org.apache.spark.ml.linalg.SparseVector", "org.apache.spark.sql.udt.VectorUDT") ::
+    ("org.apache.spark.ml.linalg.Matrix", "org.apache.spark.sql.udt.MatrixUDT") ::
+    ("org.apache.spark.ml.linalg.DenseMatrix", "org.apache.spark.sql.udt.MatrixUDT") ::
+    ("org.apache.spark.ml.linalg.SparseMatrix", "org.apache.spark.sql.udt.MatrixUDT") ::
+    Nil
 
   def preloadBuiltInUDT: Unit = {
     preloadedUDT.foreach { case (userClass, udtClass) =>

@@ -21,6 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
+import org.apache.spark.util.Utils
 
 /**
  * This object keeps the mappings between user classes and their User Defined Types (UDTs).
@@ -32,8 +33,8 @@ private[spark]
 object UDTRegistration extends Serializable with Logging {
 
   /** The mapping between the Class between UserDefinedType and user classes. */
-  private val udtMap: mutable.Map[String, Class[_]] =
-    mutable.HashMap.empty[String, Class[_]]
+  private val udtMap: mutable.Map[String, String] =
+    mutable.HashMap.empty[String, String]
 
   /**
    * Queries if a given user class is already registered or not.
@@ -51,19 +52,52 @@ object UDTRegistration extends Serializable with Logging {
 
   /**
    * Registers an UserDefinedType to an user class. If the user class is already registered
-   * with another UserDefinedType, an exception will be thrown.
+   * with another UserDefinedType, warning log message will be shown.
    * @param userClass Class object of user class
    * @param udtClass the Class object of UserDefinedType
    */
-  def register(userClass: Class[_], udtClass: Class[_]): Unit = {
-    if (udtMap.contains(userClass.getName)) {
-      logWarning(s"Cannot register UDT for ${userClass.getName}, which is already registered.")
+  def register(userClass: Class[_], udtClass: Class[_]): Unit =
+    register(userClass.getName, udtClass)
+
+  /**
+   * Registers an UserDefinedType to an user class. If the user class is already registered
+   * with another UserDefinedType, warning log message will be shown.
+   * @param userClass the name of user class
+   * @param udtClass the Class object of UserDefinedType
+   */
+  def register(userClass: String, udtClass: Class[_]): Unit = {
+    if (udtMap.contains(userClass)) {
+      logWarning(s"Cannot register UDT for ${userClass}, which is already registered.")
     } else {
       if (classOf[UserDefinedType[_]].isAssignableFrom(udtClass)) {
-        udtMap += ((userClass.getName, udtClass))
+        udtMap += ((userClass, udtClass.getName))
       } else {
         throw new SparkException(s"${udtClass.getName} is not an UserDefinedType.")
       }
+    }
+  }
+
+  /**
+   * Registers an UserDefinedType to an user class. If the user class is already registered
+   * with another UserDefinedType, warning log message will be shown.
+   * @param userClass the Class object of user class
+   * @param udtClass the name of UserDefinedType class for the given userClass
+   */
+  def register(userClass: Class[_], udtClass: String): Unit = register(userClass.getName, udtClass)
+
+  /**
+   * Registers an UserDefinedType to an user class. If the user class is already registered
+   * with another UserDefinedType, warning log message will be shown.
+   * @param userClass the name of user class
+   * @param udtClass the name of UserDefinedType class for the given userClass
+   */
+  def register(userClass: String, udtClass: String): Unit = {
+    if (udtMap.contains(userClass)) {
+      logWarning(s"Cannot register UDT for ${userClass}, which is already registered.")
+    } else {
+      // When register UDT with class name, we can't check if the UDT class is an UserDefinedType,
+      // or not. The check is deferred.
+      udtMap += ((userClass, udtClass))
     }
   }
 
@@ -72,6 +106,20 @@ object UDTRegistration extends Serializable with Logging {
    * @param userClass Class object of user class
    * @return Option value of the Class object of UserDefinedType
    */
-  def getUDTFor(userClass: Class[_]): Option[Class[_]] =
-    udtMap.get(userClass.getName)
+  def getUDTFor(userClass: Class[_]): Option[Class[_]] = {
+    udtMap.get(userClass.getName).map { udtClassName =>
+      if (Utils.classIsLoadable(udtClassName)) {
+        val udtClass = Utils.classForName(udtClassName)
+        if (classOf[UserDefinedType[_]].isAssignableFrom(udtClass)) {
+          udtClass
+        } else {
+          throw new SparkException(
+            s"${udtClass.getName} is not an UserDefinedType. Please make sure registering " +
+              s"an UserDefinedType for ${userClass.getName}")
+        }
+      } else {
+        null
+      }
+    }
+  }
 }
