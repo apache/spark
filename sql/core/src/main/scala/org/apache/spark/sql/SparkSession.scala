@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkConf, SparkContext}
@@ -83,10 +84,12 @@ private object SparkSession {
    * Helper method to create an instance of [[T]] using a single-arg constructor that
    * accepts an [[Arg]].
    */
-  private def reflect[T, Arg <: AnyRef](className: String, ctorArg: Arg): T = {
+  private def reflect[T, Arg <: AnyRef](
+      className: String,
+      ctorArg: Arg)(implicit ctorArgTag: ClassTag[Arg]): T = {
     try {
       val clazz = Utils.classForName(className)
-      val ctor = clazz.getDeclaredConstructor(ctorArg.getClass)
+      val ctor = clazz.getDeclaredConstructor(ctorArgTag.runtimeClass)
       ctor.newInstance(ctorArg).asInstanceOf[T]
     } catch {
       case NonFatal(e) =>
