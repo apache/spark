@@ -43,10 +43,9 @@ import tempfile
 import numpy as np
 
 from pyspark.ml import Estimator, Model, Pipeline, PipelineModel, Transformer
-from pyspark.ml.classification import (
-    LogisticRegression, DecisionTreeClassifier, OneVsRest, OneVsRestModel)
+from pyspark.ml.classification import *
 from pyspark.ml.clustering import KMeans
-from pyspark.ml.evaluation import BinaryClassificationEvaluator, RegressionEvaluator
+from pyspark.ml.evaluation import *
 from pyspark.ml.feature import *
 from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.param.shared import HasMaxIter, HasInputCol, HasSeed
@@ -664,6 +663,9 @@ class PersistenceTest(PySparkTestCase):
         This currently supports:
          - basic types
          - Pipeline, PipelineModel
+         - CrossValidator, CrossValidatorModel
+         - TrainValidationSplit, TrainValidationSplitModel
+         - OneVsRest, OneVsRestModel
         This checks:
          - uid
          - type
@@ -684,6 +686,50 @@ class PersistenceTest(PySparkTestCase):
             self.assertEqual(len(m1.stages), len(m2.stages))
             for s1, s2 in zip(m1.stages, m2.stages):
                 self._compare_pipelines(s1, s2)
+        elif isinstance(m1, OneVsRestParams):
+            # Check the equality of classifiers (value and parent).
+            self._compare_pipelines(m1.getClassifier(), m2.getClassifier())
+            self.assertEqual(m1.classifier.parent, m2.classifier.parent)
+
+            # Check the equality of other params (value and parent).
+            for p in m1.params:
+                if p.name != "classifier":
+                    self.assertEqual(m1.getOrDefault(p), m2.getOrDefault(p))
+                    self.assertEqual(p.parent, m2.getParam(p.name).parent)
+
+            # Check extra attributes of OneVsRestModel.
+            if isinstance(m1, OneVsRestModel):
+                self.assertEqual(len(m1.models), len(m2.models))
+                for x, y in zip(m1.models, m2.models):
+                    self._compare_pipelines(x, y)
+        elif isinstance(m1, ValidatorParams):
+            # Check the equality of estimators (value and parent).
+            self._compare_pipelines(m1.getEstimator(), m2.getEstimator())
+            self.assertEqual(m1.estimator.parent, m2.estimator.parent)
+
+            # Check the equality of evaluators (value and parent).
+            self._compare_pipelines(m1.getEvaluator(), m2.getEvaluator())
+            self.assertEqual(m1.evaluator.parent, m2.evaluator.parent)
+
+            # Check the equality of estimator parameter maps (value and parent).
+            self.assertEqual(len(m1.getEstimatorParamMaps()), len(m2.getEstimatorParamMaps()))
+            for map1, map2 in zip(m1.getEstimatorParamMaps(), m2.getEstimatorParamMaps()):
+                self.assertDictEqual(map1, map2)
+            self.assertEqual(m1.estimatorParamMaps.parent, m2.estimatorParamMaps.parent)
+
+            # Check extra attributes/params.
+            if isinstance(m1, CrossValidator):
+                self.assertEqual(m1.getNumFolds(), m2.getNumFolds())
+                self.assertEqual(m1.numFolds.parent, m2.numFolds.parent)
+            elif isinstance(m1, CrossValidatorModel):
+                self._compare_pipelines(m1.bestModel, m2.bestModel)
+            elif isinstance(m1, TrainValidationSplit):
+                self.assertEqual(m1.getTrainRatio(), m2.getTrainRatio())
+                self.assertEqual(m1.trainRatio.parent, m2.trainRatio.parent)
+            elif isinstance(m1, TrainValidationSplitModel):
+                self._compare_pipelines(m1.bestModel, m2.bestModel)
+            else:
+                raise RuntimeError("_compare_pipelines does not yet support type: %s" % type(m1))
         else:
             raise RuntimeError("_compare_pipelines does not yet support type: %s" % type(m1))
 
@@ -739,6 +785,47 @@ class PersistenceTest(PySparkTestCase):
             model_path = temp_path + "/pipeline-model"
             model.save(model_path)
             loaded_model = PipelineModel.load(model_path)
+            self._compare_pipelines(model, loaded_model)
+        finally:
+            try:
+                rmtree(temp_path)
+            except OSError:
+                pass
+
+    def test_nested_meta_algorithms_persistence(self):
+        temp_path = tempfile.mkdtemp()
+        try:
+            df = self.sc.parallelize([
+                Row(label=0.0, features=Vectors.dense(1.0, 0.8)),
+                Row(label=0.0, features=Vectors.dense(0.8, 0.8)),
+                Row(label=0.0, features=Vectors.dense(1.0, 1.2)),
+                Row(label=1.0, features=Vectors.sparse(2, [], [])),
+                Row(label=1.0, features=Vectors.sparse(2, [0], [0.1])),
+                Row(label=1.0, features=Vectors.sparse(2, [1], [0.1])),
+                Row(label=2.0, features=Vectors.dense(0.5, 0.5)),
+                Row(label=2.0, features=Vectors.dense(0.3, 0.5)),
+                Row(label=2.0, features=Vectors.dense(0.5, 0.6))]).toDF()
+            lr = LogisticRegression()
+            ovr = OneVsRest(classifier=lr)
+            tvs_grid = ParamGridBuilder().addGrid(lr.maxIter, [1, 5]).build()
+            tvs_evaluator = MulticlassClassificationEvaluator()
+            tvs = TrainValidationSplit(estimator=ovr, estimatorParamMaps=tvs_grid,
+                                       evaluator=tvs_evaluator, trainRatio=1)
+            cv_grid = ParamGridBuilder().addGrid(lr.regParam, [0.1, 0.01]).build()
+            cv_evaluator = MulticlassClassificationEvaluator()
+            cv = CrossValidator(estimator=tvs, estimatorParamMaps=cv_grid, evaluator=cv_evaluator,
+                                numFolds=2)
+
+            model = cv.fit(df)
+
+            path = temp_path + "/nested-meta-algorithm"
+            cv.save(path)
+            loaded = CrossValidator.load(path)
+            self._compare_pipelines(cv, loaded)
+
+            model_path = temp_path + "/nested-meta-model"
+            model.save(model_path)
+            loaded_model = CrossValidator.load(model_path)
             self._compare_pipelines(model, loaded_model)
         finally:
             try:

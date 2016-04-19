@@ -29,7 +29,7 @@ from pyspark.sql.functions import rand
 from pyspark.mllib.common import inherit_doc, _py2java
 
 __all__ = ['ParamGridBuilder', 'CrossValidator', 'CrossValidatorModel', 'TrainValidationSplit',
-           'TrainValidationSplitModel']
+           'TrainValidationSplitModel', 'ValidatorParams']
 
 
 class ParamGridBuilder(object):

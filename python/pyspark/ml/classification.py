@@ -39,7 +39,7 @@ __all__ = ['LogisticRegression', 'LogisticRegressionModel',
            'RandomForestClassifier', 'RandomForestClassificationModel',
            'NaiveBayes', 'NaiveBayesModel',
            'MultilayerPerceptronClassifier', 'MultilayerPerceptronClassificationModel',
-           'OneVsRest', 'OneVsRestModel']
+           'OneVsRest', 'OneVsRestModel', 'OneVsRestParams']
 
 
 @inherit_doc
@@ -1249,7 +1249,8 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
         assert isinstance(classifier, HasRawPredictionCol),\
             "Classifier %s doesn't extend from HasRawPredictionCol." % type(classifier)
 
-        numClasses = int(dataset.agg({labelCol: "max"}).head()["max("+labelCol+")"]) + 1
+        maxLabel = dataset.agg({labelCol: "max"})
+        numClasses = int(maxLabel.head()["max("+labelCol+")"]) + 1
 
         multiclassLabeled = dataset.select(labelCol, featuresCol)
 
