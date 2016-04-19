@@ -351,6 +351,103 @@ class PairDStreamFunctions[K, V](self: DStream[(K, V)])
   }
 
   /**
+    * Return a new DStream that contains the list of individual events that matched the specified
+    * pattern over a sliding window. Empty DStream is returned if no matches found. The pattern
+    * search is for events partitioned by the Key K.
+    * 1. The pattern is a regular expression over the predicate function names
+    *    (keys in the predicates map).
+    * 2. Each predicate function (value in the predicates map) receives the current event along
+    * with a WindowState variable that contains the first and immediately prior event in the
+    * window. It returns a boolean to indicate if the current event matched the predicate condition.
+    * 3. For each event, the predicates map is looped through and each predicate function invoked
+    * till first one returns true
+    *
+    * @param pattern     regular expression that represents the composite event being searched for
+    * @param predicates  map of individual predicate names to predicates functions. The pattern
+    *                    parameter is a regular expression over these names.
+    * @param valuesOrderedBy function that returns the attribute which orders the events within a
+    *                        key
+    * @param windowDuration width of the window; must be a multiple of this DStream's
+    *                       batching interval
+    * @param slideDuration  sliding interval of the window (i.e., the interval after which
+    *                       the new DStream will generate RDDs); must be a multiple of this
+    *                       DStream's batching interval
+    */
+  def patternMatchByKeyAndWindow(
+      pattern: scala.util.matching.Regex,
+      predicates: Map[String, (V, WindowState) => Boolean],
+      valuesOrderedBy: V => Long, // TODO return type to be made a generic type
+      windowDuration: Duration,
+      slideDuration: Duration,
+      numPartitions: Int = ssc.sc.defaultParallelism
+    ): DStream[(K, List[V])] = ssc.withScope {
+    patternMatchByKeyAndWindow(pattern, predicates, valuesOrderedBy,
+      windowDuration, slideDuration, defaultPartitioner(numPartitions)
+    )
+  }
+
+  def patternMatchByKeyAndWindow(
+      pattern: scala.util.matching.Regex,
+      predicates: Map[String, (V, WindowState) => Boolean],
+      valuesOrderedBy: V => Long, // TODO return type to be made a generic type
+      windowDuration: Duration,
+      slideDuration: Duration,
+      partitioner: Partitioner
+    ): DStream[(K, List[V])] = ssc.withScope {
+    new KeyedPatternMatchDStream[K, V](
+      self, pattern, predicates, valuesOrderedBy,
+      windowDuration, slideDuration, partitioner
+    )
+  }
+
+  /**
+    * Return a new DStream that contains the list of individual events that matched the specified
+    * pattern over a sliding window. Empty DStream is returned if no matches found. The pattern
+    * search is ordered over the Key K.
+    * 1. The pattern is a regular expression over the predicate function names
+    * (keys in the predicates map).
+    * 2. Each predicate function (value in the predicates map) receives the current event
+    * along with a WindowState variable that contains the first and immediately prior event
+    * in the window. It returns a boolean to indicate if the current event matched the predicate
+    * condition.
+    * 3. For each event, the predicates map is looped through and each predicate function invoked
+    * till first one returns true
+    *
+    * @param pattern     regular expression that represents the composite event being searched for
+    * @param predicates  map of individual predicate names to predicates functions. The pattern
+    *                    parameter is a regular expression over these names.
+    * @param windowDuration width of the window; must be a multiple of this DStream's
+    *                       batching interval
+    * @param slideDuration  sliding interval of the window (i.e., the interval after which
+    *                       the new DStream will generate RDDs); must be a multiple of this
+    *                       DStream's batching interval
+
+    */
+  def patternMatchByWindow(
+      pattern: scala.util.matching.Regex,
+      predicates: Map[String, (V, WindowState) => Boolean],
+      windowDuration: Duration,
+      slideDuration: Duration,
+      numPartitions: Int = ssc.sc.defaultParallelism
+    ): DStream[List[V]] = ssc.withScope {
+    patternMatchByWindow(pattern, predicates,
+      windowDuration, slideDuration, defaultPartitioner(numPartitions)
+    )
+  }
+
+  def patternMatchByWindow(
+      pattern: scala.util.matching.Regex,
+      predicates: Map[String, (V, WindowState) => Boolean],
+      windowDuration: Duration,
+      slideDuration: Duration,
+      partitioner: Partitioner
+   ): DStream[List[V]] = ssc.withScope {
+   new PatternMatchedDStream[K, V](
+      self, pattern, predicates,
+      windowDuration, slideDuration, partitioner
+   )
+ }
+  /**
    * :: Experimental ::
    * Return a [[MapWithStateDStream]] by applying a function to every key-value element of
    * `this` stream, while maintaining some state data for each unique key. The mapping function

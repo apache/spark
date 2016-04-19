@@ -47,13 +47,15 @@ object PatternMatchedDStream {
 case class WindowState(first: Any, prev: Any) {}
 
 private[streaming]
-class PatternMatchedDStream[T: ClassTag](
-                                          parent: DStream[T],
-                                          pattern: scala.util.matching.Regex,
-                                          predicates: Map[String, (T, WindowState) => Boolean],
-                                          _windowDuration: Duration,
-                                          _slideDuration: Duration
-                                        ) extends DStream[List[T]](parent.ssc) {
+class PatternMatchedDStream[K: ClassTag, V: ClassTag](
+    parent: DStream[(K, V)],
+    pattern: scala.util.matching.Regex,
+    predicates: Map[String, (V, WindowState) => Boolean],
+    _windowDuration: Duration,
+    _slideDuration: Duration,
+    partitioner: Partitioner)
+    (implicit ord: Ordering[K]
+  ) extends DStream[List[V]](parent.ssc) {
 
   require(_windowDuration.isMultipleOf(parent.slideDuration),
     "The window duration of PatternMatchedDStream (" + _windowDuration + ") " +
@@ -65,8 +67,32 @@ class PatternMatchedDStream[T: ClassTag](
       "must be multiple of the slide duration of parent DStream (" + parent.slideDuration + ")"
   )
 
-  var brdcst = ssc.sparkContext.broadcast((0L, None: Option[T]))
-  private def maxTStream(in: DStream[(Long, (T, Option[T]))]) : DStream[(Long, T)] = {
+  var brdcst = ssc.sparkContext.broadcast((0L, None: Option[V]))
+
+  private def keyWithPreviousEvent(in: DStream[(K, V)]) : DStream[(Long, (V, Option[V]))] = {
+    val sortedStream = in.transform(rdd => rdd.sortByKey(true, rdd.partitions.size))
+      .map{case(k, v) => v}
+    val keyedRdd = sortedStream.transform((rdd, time) => {
+      val brdcstCopy = brdcst
+      rdd.zipWithIndex().map(i => {
+        (i._2 + brdcstCopy.value._1 + 1, i._1)})
+    })
+
+    val previousEventRdd = keyedRdd.map(x => { (x._1 + 1, x._2)})
+    keyedRdd.leftOuterJoin(previousEventRdd, partitioner).transform(rdd => rdd.sortByKey())
+      .transform(rdd => {
+        val brdcstCopy = brdcst
+        rdd.map(x => {
+          if (x._2._2 == None) {
+            (x._1, (x._2._1, brdcstCopy.value._2))
+          }
+          else { x }
+        })
+      })
+  }
+  val sortedprevMappedStream = keyWithPreviousEvent(parent)
+
+  private def getMaxIdAndElemStream(in: DStream[(Long, (V, Option[V]))]) : DStream[(Long, V)] = {
     in.reduce((e1, e2) => {
       if (e1._1 > e2._1) {
         e1
@@ -75,226 +101,127 @@ class PatternMatchedDStream[T: ClassTag](
       }
     }).map(max => (max._1, max._2._1))
   }
-
-  private def keyWithPreviousEvent(in: DStream[T]) : DStream[(Long, (T, Option[T]))] = {
-    /* val keyedRdd = in.transform((rdd, time) => {
-      val offset = System.nanoTime()
-      rdd.zipWithIndex().map(i => {
-        (i._2 + offset, i._1)})
-    }) */
-    val keyedRdd = in.transform((rdd, time) => {
-      val brdcstCopy = brdcst
-      val n = rdd.zipWithIndex().map(i => {
-        (i._2 + brdcstCopy.value._1 + 1, i._1)})
-      /* n.mapPartitionsWithIndex{ (index, itr) => {
-        println(index + " - " + itr.toList)
-        itr.toList.map(x => (index, x)).iterator }} */
-      n
-    })
-
-    val previousEventRdd = keyedRdd.map(x => (x._1 + 1, x._2))
-    val o = keyedRdd.leftOuterJoin(previousEventRdd, 3).transform(rdd => rdd.sortByKey())
-      .transform(rdd => {
-        val brdcstCopy = brdcst
-        rdd.map(x => {
-          if (x._2._2 == None) {
-            (x._1, (x._2._1, brdcstCopy.value._2))
-          }
-          else {
-            x
-          }
-        })
-      })
-    /* .map(x => {
-      if (x._2._2 == None) {
-        println("joined broadcast = " + brdcstCopy.value._2)
-        (x._1, (x._2._1, brdcstCopy.value._2))
-      }
-      else {
-        x
-      }
-    })*/
-    //o.map(x => { println(x) ; x})
-    o
-  }
-
-  val sortedprevMappedStream = keyWithPreviousEvent(parent)
-  val maxKeyStream = maxTStream(sortedprevMappedStream)
+  val maxIdAndElemStream = getMaxIdAndElemStream(sortedprevMappedStream)
 
   super.persist(StorageLevel.MEMORY_ONLY_SER)
   sortedprevMappedStream.persist(StorageLevel.MEMORY_ONLY_SER)
-  maxKeyStream.persist(StorageLevel.MEMORY_ONLY_SER)
+  maxIdAndElemStream.persist(StorageLevel.MEMORY_ONLY_SER)
 
   def windowDuration: Duration = _windowDuration
 
-  override def dependencies: List[DStream[_]] = List(sortedprevMappedStream, maxKeyStream)
+  override def dependencies: List[DStream[_]] = List(sortedprevMappedStream, maxIdAndElemStream)
 
   override def slideDuration: Duration = _slideDuration
 
   override val mustCheckpoint = true
 
-  override def persist(storageLevel: StorageLevel): DStream[List[T]] = {
+  override def persist(storageLevel: StorageLevel): DStream[List[V]] = {
     super.persist(storageLevel)
     sortedprevMappedStream.persist(storageLevel)
-    maxKeyStream.persist(storageLevel)
+    maxIdAndElemStream.persist(storageLevel)
     this
   }
 
-  override def checkpoint(interval: Duration): DStream[List[T]] = {
+  override def checkpoint(interval: Duration): DStream[List[V]] = {
     super.checkpoint(interval)
     this
   }
 
   override def parentRememberDuration: Duration = rememberDuration + windowDuration
 
+  import scala.collection.mutable.ListBuffer
 
-  val applyRegex = (rdd: RDD[(Long, (String, T))]) => {
+  /**
+    * This algo applies the regex within each partition rather than globally.
+    * Benefits may include better latency when NO matches across partition boundaries.
+    * However to account for the latter, need a separate algo.
+    */
+  val applyRegexPerPartition = (rdd: RDD[(Long, (String, V))]) => {
     val patternCopy = pattern
-    import scala.collection.mutable.ListBuffer
-    // var ctr = -1
-    // val t = rdd.groupBy(_ => { ctr = ctr + 1; ctr % 3 } )
-    /* val builder = new scala.collection.mutable.StringBuilder()
-    val map = scala.collection.mutable.HashMap[Long, Tuple2[Long, T]]()
-    var curLen = 1L
-    val matcher = rdd.map(x => {
-      builder.append(" " + x._2._1)
-      map.put(curLen, (x._1, x._2._2))
-      curLen += x._2._1.length + 1
-      (x._1, x._2._2)
-    }) */
-
-
     val temp = rdd.mapPartitionsWithIndex{ (index, itr) => itr.toList.map(
-      x => (index, x)).iterator }
-    val zero = new Aggregator[T]()
+      x => (index, x)).iterator  }
+    val zero = new Aggregator[V]()
     val t = temp.aggregateByKey(zero)(
       (set, v) => set.append(v._2._1, v._2._2),
       (set1, set2) => set1 ++= set2)
 
     t.flatMap(x => {
-      //println(x._2.builder.toString())
       val it = patternCopy.findAllIn(x._2.builder.toString())
-      val o = ListBuffer[List[T]]()
+      val o = ListBuffer[List[V]]()
       for (one <- it) {
         var len = 0
         var ctr = 0
-        val list = ListBuffer[T]()
+        val list = ListBuffer[V]()
         one.split(" ").map(sub => {
           val id = x._2.map.get(it.start + len)
           list += id.get
+          // Todo not implemented window break when match found.
           len += sub.length + 1
         })
         o += list.toList
       }
       o.toList
     })
-
-
-    /*val it = patternCopy.findAllIn(builder.toString())
-    val o = ListBuffer[List[Long]]()
-    for (one <- it) {
-
-      var len = 0
-      var ctr = 0
-      val list = ListBuffer[Long]()
-      one.split(" ").map(sub => {
-        val id = map.get(it.start + len)
-        // list += id.get._2
-        list += id.get._1
-        len += sub.length + 1
-      })
-      o += list.toList
-    }
-
-    val l = o.toList */
-
-    /* var b = false
-    rdd.flatMap(x => {
-      if (!b) {
-        b = true
-        val it = patternCopy.findAllIn(builder.toString())
-        val o = ListBuffer[List[T]]()
-        for (one <- it) {
-          //println(one)
-          var len = 0
-          var ctr = 0
-          val list = ListBuffer[T]()
-          one.split(" ").map(sub => {
-            val id = map.get(it.start + len)
-            list += id.get._2
-            len += sub.length + 1
-          })
-          o += list.toList
-        }
-
-        //println(o.toList)
-        o.toList
-      }
-      else {
-        List(List())
-      }
-    }) */
   }
 
+  /**
+    * This algo applies the regex globally by simply moving ALL
+    * data to a single partition.
+    */
+  val applyRegex = (rdd: RDD[(Long, (String, V))]) => {
+    val patternCopy = pattern
+    val stream = rdd.groupBy(_ => "all")
+      .map(_._2)
+      .map(x => {
+        val it = x.iterator
+        val builder = new scala.collection.mutable.StringBuilder()
+        val map = scala.collection.mutable.HashMap[Long, Tuple2[Long, V]] ()
+        var curLen = 1L
+        while (it.hasNext) {
+          val i = it.next()
+          builder.append(" " + i._2._1)
+          map.put(curLen, (i._1, i._2._2))
+          curLen += i._2._1.length + 1
+        }
+        (builder.toString(), map)
+      })
+    val tracker = PatternMatchedDStream.getInstance(this.ssc.sparkContext)
 
+    stream.flatMap(y => {
+      val it = patternCopy.findAllIn(y._1)
+      val o = ListBuffer[List[V]] ()
+      for (one <- it) {
+        var len = 0
+        var ctr = 0
+        val list = ListBuffer[V] ()
+        one.split(" ").map(sub => {
+          val id = y._2.get(it.start + len)
+          list += id.get._2
+          // publish last seen match, so that dont repeat in a sliding window
+          if (tracker.toString.toLong < id.get._1) {
+            tracker.setValue(id.get._1)
+          }
+          len += sub.length + 1
+        })
+        o += list.toList
+      }
+      o.toList
+    })
+  }
 
-  /* val stream = rdd.groupBy(_ => "all")
-   /*val f1 = (rd: (Long, (String, T))) => {
-     rd._1
-   }
-   val stream = rdd.groupBy(f1, new PatternMatchPartitioner(rdd.partitioner.get)) */
-     .map(_._2)
-     .map(x => {
-       val it = x.iterator
-       val builder = new scala.collection.mutable.StringBuilder()
-       val map = scala.collection.mutable.HashMap[Long, Tuple2[Long, T]] ()
-       var curLen = 1L
-       while (it.hasNext) {
-         val i = it.next()
-         builder.append(" " + i._2._1)
-         map.put(curLen, (i._1, i._2._2))
-         curLen += i._2._1.length + 1
-       }
-       (builder.toString(), map)
-     })
-   val tracker = PatternMatchedDStream.getInstance(this.ssc.sparkContext)
-
-   stream.flatMap(y => {
-     val it = patternCopy.findAllIn(y._1)
-     val o = ListBuffer[List[T]] ()
-     for (one <- it) {
-       var len = 0
-       var ctr = 0
-       val list = ListBuffer[T] ()
-       one.split(" ").map(sub => {
-         val id = y._2.get(it.start + len)
-         list += id.get._2
-         if (tracker.toString.toLong < id.get._1) {
-           tracker.setValue(id.get._1)
-         }
-         len += sub.length + 1
-       })
-       o += list.toList
-     }
-     o.toList
-   })
- } */
-
-  private def getLastMaxKey(rdds: Seq[RDD[(Long, T)]]): (Long, Option[T]) = {
+  private def getLastMaxIdAndElem(rdds: Seq[RDD[(Long, V)]]): (Long, Option[V]) = {
     if (rdds.length > 0) {
       (0 to rdds.size-1).map(i => {
         if (!rdds(rdds.size-1-i).isEmpty()) {
-          // return rdds(rdds.size-1-i).reduce((e1, e2) => { if (e1._1 > e2._1) e1 else e2 })
           val r = rdds(rdds.size-1-i).reduce((e1, e2) => { if (e1._1 > e2._1) e1 else e2 })
           return (r._1, Some(r._2))
         }
       })
     }
-    (0L, None: Option[T])
-    //None: Option[(Long, T)]
+    (0L, None: Option[V])
   }
 
-  override def compute(validTime: Time): Option[RDD[List[T]]] = {
+  override def compute(validTime: Time): Option[RDD[List[V]]] = {
     val predicatesCopy = predicates
     val patternCopy = pattern;
     val currentWindow = new Interval(validTime - windowDuration + parent.slideDuration, validTime)
@@ -302,9 +229,9 @@ class PatternMatchedDStream[T: ClassTag](
 
 
     // first get the row with max key in the last window and broadcast it
-    val oldMaxStreamRDDs = maxKeyStream.slice(previousWindow)
-    //val brdcst = ssc.sparkContext.broadcast(getLastMaxKey(oldMaxStreamRDDs))
-    brdcst = ssc.sparkContext.broadcast(getLastMaxKey(oldMaxStreamRDDs))
+    // IMP: Dont touch current window till after this broadcast
+    val oldMaxStreamRDDs = maxIdAndElemStream.slice(previousWindow)
+    brdcst = ssc.sparkContext.broadcast(getLastMaxIdAndElem(oldMaxStreamRDDs))
 
     val rddsInWindow = sortedprevMappedStream.slice(currentWindow)
 
@@ -327,25 +254,14 @@ class PatternMatchedDStream[T: ClassTag](
       } else {
         0L
       }
-      //val newRDD = windowRDD.filter(x => x._1 > shift)
+      val newRDD = windowRDD.filter(x => x._1 > shift)
 
-      val first = windowRDD.first()
-      val taggedRDD = windowRDD.map(x => {
+      // loop through and get the predicate string for each event.
+      val first = newRDD.first()
+      val taggedRDD = newRDD.map(x => {
         var isMatch = false
         var matchName = "NAN"
         for (predicate <- predicatesCopy if !isMatch) {
-          /* val prev = x._2._2 match {
-            case Some(i) => i.asInstanceOf[T]
-            case None => {
-              if (first._1 == x._1) { // this is the first in window
-                first._2._1
-              }
-              else { // this is a batchInterval boundary
-                brdcst.value.get
-              }
-            }
-          }
-          isMatch = predicate._2(x._2._1, WindowState(first._2._1, x._2._2.getOrElse(prev))) */
           isMatch = predicate._2(x._2._1, WindowState(first._2._1, x._2._2.getOrElse(first._2._1)))
           if (isMatch) {
             matchName = predicate._1
@@ -361,27 +277,11 @@ class PatternMatchedDStream[T: ClassTag](
   }
 }
 
-/*
-class PatternMatchPartitioner(parent: Partitioner) extends Partitioner {
-
-  override def numPartitions: Int = parent.numPartitions
-  override def getPartition(key: Any): Int = {
-    val ret = parent.getPartition(key)
-    println( key + " : " + ret )
-    ret
-  }
-  // Java equals method to let Spark compare our Partitioner objects
-  override def equals(other: Any): Boolean = other match {
-    case dnp: PatternMatchPartitioner =>
-      dnp.numPartitions == numPartitions
-    case _ =>
-      false
-  }
-}
-*/
-
-class Aggregator[T: ClassTag](val builder: scala.collection.mutable.StringBuilder,
-                              val map: scala.collection.mutable.HashMap[Long, T] ) extends Serializable {
+private[streaming]
+class Aggregator[T: ClassTag](
+    val builder: scala.collection.mutable.StringBuilder,
+    val map: scala.collection.mutable.HashMap[Long, T]
+  ) extends Serializable {
 
   var curLen = 1L
 
