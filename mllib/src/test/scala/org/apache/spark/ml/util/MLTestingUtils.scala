@@ -19,6 +19,7 @@ package org.apache.spark.ml.util
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree.impl.TreeTests
 import org.apache.spark.mllib.linalg.Vectors
@@ -47,9 +48,27 @@ object MLTestingUtils extends SparkFunSuite {
     val actuals = dfs.keys.filter(_ != DoubleType).map(t => estimator.fit(dfs(t)))
     actuals.foreach(actual => check(expected, actual))
 
-    val dfWithStringLabels = generateDFWithStringLabelCol(sqlContext)
+    val dfWithStringLabels = sqlContext.createDataFrame(Seq(
+      ("0", Vectors.dense(0, 2, 3), 0.0)
+    )).toDF("label", "features", "censor")
     val thrown = intercept[IllegalArgumentException] {
       estimator.fit(dfWithStringLabels)
+    }
+    assert(thrown.getMessage contains
+      "Column label must be of type NumericType but was actually of type StringType")
+  }
+
+  def checkNumericTypes[T <: Evaluator](evaluator: T, sqlContext: SQLContext): Unit = {
+    val dfs = genEvaluatorDFWithNumericLabelCol(sqlContext, "label", "prediction")
+    val expected = evaluator.evaluate(dfs(DoubleType))
+    val actuals = dfs.keys.filter(_ != DoubleType).map(t => evaluator.evaluate(dfs(t)))
+    actuals.foreach(actual => assert(expected === actual))
+
+    val dfWithStringLabels = sqlContext.createDataFrame(Seq(
+      ("0", 0d)
+    )).toDF("label", "prediction")
+    val thrown = intercept[IllegalArgumentException] {
+      evaluator.evaluate(dfWithStringLabels)
     }
     assert(thrown.getMessage contains
       "Column label must be of type NumericType but was actually of type StringType")
@@ -98,16 +117,22 @@ object MLTestingUtils extends SparkFunSuite {
       .toMap
   }
 
-  def generateDFWithStringLabelCol(
+  def genEvaluatorDFWithNumericLabelCol(
       sqlContext: SQLContext,
       labelColName: String = "label",
-      featuresColName: String = "features",
-      censorColName: String = "censor"): DataFrame =
-    sqlContext.createDataFrame(Seq(
-      ("0", Vectors.dense(0, 2, 3), 0.0),
-      ("1", Vectors.dense(0, 3, 1), 1.0),
-      ("0", Vectors.dense(0, 2, 2), 0.0),
-      ("1", Vectors.dense(0, 3, 9), 1.0),
-      ("0", Vectors.dense(0, 2, 6), 0.0)
-    )).toDF(labelColName, featuresColName, censorColName)
+      predictionColName: String = "prediction"): Map[NumericType, DataFrame] = {
+    val df = sqlContext.createDataFrame(Seq(
+      (0, 0d),
+      (1, 1d),
+      (2, 2d),
+      (3, 3d),
+      (4, 4d)
+    )).toDF(labelColName, predictionColName)
+
+    val types =
+      Seq(ShortType, LongType, IntegerType, FloatType, ByteType, DoubleType, DecimalType(10, 0))
+    types
+      .map(t => t -> df.select(col(labelColName).cast(t), col(predictionColName)))
+      .toMap
+  }
 }
