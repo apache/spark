@@ -17,7 +17,6 @@
 
 package org.apache.spark.ml.tuning
 
-import scala.annotation.varargs
 import scala.collection.mutable
 
 import org.apache.spark.annotation.{Experimental, Since}
