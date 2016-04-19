@@ -54,6 +54,7 @@ case class Sort(
     sqlContext.conf.enableRadixSort && sortOrder.length == 1 &&
     SortPrefixUtils.canSortFullyWithPrefix(sortOrder.head))
 
+  // TODO(ekl) remove these before merging
   private val labels = if (canUseRadixSort) " (radix)" else " (tim)"
 
   override private[sql] lazy val metrics = Map(
