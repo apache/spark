@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.linalg.udt
+package org.apache.spark.ml.linalg.udt
 
 import scala.beans.{BeanInfo, BeanProperty}
 
@@ -27,43 +27,12 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.types._
 
 @BeanInfo
-private[mllib] case class MyVectorPoint(
-    @BeanProperty label: Double,
-    @BeanProperty vector: Vector)
-
-@BeanInfo
-private[mllib] case class MyMatrixPoint(
+private[ml] case class MyMatrixPoint(
     @BeanProperty label: Double,
     @BeanProperty matrix: Matrix)
 
-class UDTSuite extends SparkFunSuite with MLlibTestSparkContext {
+class MatrixUDTSuite extends SparkFunSuite with MLlibTestSparkContext {
   import testImplicits._
-
-  test("preloaded VectorUDT") {
-    val dv0 = Vectors.dense(Array.empty[Double])
-    val dv1 = Vectors.dense(1.0, 2.0)
-    val sv0 = Vectors.sparse(2, Array.empty, Array.empty)
-    val sv1 = Vectors.sparse(2, Array(1), Array(2.0))
-
-    val vectorRDD = Seq(
-      MyVectorPoint(1.0, dv0),
-      MyVectorPoint(2.0, dv1),
-      MyVectorPoint(3.0, sv0),
-      MyVectorPoint(4.0, sv1)).toDF()
-
-    val labels: RDD[Double] = vectorRDD.select('label).rdd.map { case Row(v: Double) => v }
-    val labelsArrays: Array[Double] = labels.collect()
-    assert(labelsArrays.size === 4)
-    assert(labelsArrays.sorted === Array(1.0, 2.0, 3.0, 4.0))
-
-    val vectors: RDD[Vector] =
-      vectorRDD.select('vector).rdd.map { case Row(v: Vector) => v }
-    val vectorsArrays: Array[Vector] = vectors.collect()
-    assert(vectorsArrays.contains(dv0))
-    assert(vectorsArrays.contains(dv1))
-    assert(vectorsArrays.contains(sv0))
-    assert(vectorsArrays.contains(sv1))
-  }
 
   test("preloaded MatrixUDT") {
     val dm1 = new DenseMatrix(2, 2, Array(0.9, 1.2, 2.3, 9.8))

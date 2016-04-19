@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.linalg.udt
+package org.apache.spark.ml.linalg.udt
 
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector}
@@ -31,7 +31,7 @@ import org.apache.spark.sql.types._
  * via [[org.apache.spark.sql.Dataset]].
  */
 @AlphaComponent
-class VectorUDT extends UserDefinedType[Vector] {
+private[ml] class VectorUDT extends UserDefinedType[Vector] {
 
   override def sqlType: StructType = {
     // type: 0 = sparse, 1 = dense

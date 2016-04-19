@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.linalg.udt
+package org.apache.spark.ml.linalg.udt
 
 import org.apache.spark.ml.linalg.{DenseMatrix, Matrix, SparseMatrix}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -23,7 +23,11 @@ import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.types._
 
-private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
+/**
+ * User-defined type for [[Matrix]] in [[mllib-local]] which allows easy interaction with SQL
+ * via [[org.apache.spark.sql.Dataset]].
+ */
+private[ml] class MatrixUDT extends UserDefinedType[Matrix] {
 
   override def sqlType: StructType = {
     // type: 0 = sparse, 1 = dense
