@@ -51,7 +51,8 @@ case class Sort(
     if (global) OrderedDistribution(sortOrder) :: Nil else UnspecifiedDistribution :: Nil
 
   private val canUseRadixSort = (
-    sortOrder.length == 1 && SortPrefixUtils.canSortFullyWithPrefix(sortOrder.head))
+    sqlContext.conf.enableRadixSort && sortOrder.length == 1 &&
+    SortPrefixUtils.canSortFullyWithPrefix(sortOrder.head))
 
   private val labels = if (canUseRadixSort) " (radix)" else " (tim)"
 

@@ -105,10 +105,10 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       PrefixComparator prefixComparator,
       int initialSize,
       long pageSizeBytes,
-      boolean useRadixSort) {
+      boolean canUseRadixSort) {
     return new UnsafeExternalSorter(taskMemoryManager, blockManager, serializerManager,
       taskContext, recordComparator, prefixComparator, initialSize, pageSizeBytes, null,
-      useRadixSort);
+      canUseRadixSort);
   }
 
   private UnsafeExternalSorter(
@@ -121,7 +121,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       int initialSize,
       long pageSizeBytes,
       @Nullable UnsafeInMemorySorter existingInMemorySorter,
-      boolean useRadixSort) {
+      boolean canUseRadixSort) {
     super(taskMemoryManager, pageSizeBytes);
     this.taskMemoryManager = taskMemoryManager;
     this.blockManager = blockManager;
@@ -136,7 +136,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
 
     if (existingInMemorySorter == null) {
       this.inMemSorter = new UnsafeInMemorySorter(
-        this, taskMemoryManager, recordComparator, prefixComparator, initialSize, useRadixSort);
+        this, taskMemoryManager, recordComparator, prefixComparator, initialSize, canUseRadixSort);
     } else {
       this.inMemSorter = existingInMemorySorter;
     }

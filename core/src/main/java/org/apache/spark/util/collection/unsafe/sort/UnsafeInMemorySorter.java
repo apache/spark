@@ -99,9 +99,9 @@ public final class UnsafeInMemorySorter {
     final RecordComparator recordComparator,
     final PrefixComparator prefixComparator,
     int initialSize,
-    boolean useRadixSort) {
+    boolean canUseRadixSort) {
     this(consumer, memoryManager, recordComparator, prefixComparator,
-      consumer.allocateArray(initialSize * 2), useRadixSort);
+      consumer.allocateArray(initialSize * 2), canUseRadixSort);
   }
 
   public UnsafeInMemorySorter(
@@ -110,14 +110,14 @@ public final class UnsafeInMemorySorter {
       final RecordComparator recordComparator,
       final PrefixComparator prefixComparator,
       LongArray array,
-      boolean useRadixSort) {
+      boolean canUseRadixSort) {
     this.consumer = consumer;
     this.memoryManager = memoryManager;
     this.initialSize = array.size();
     if (recordComparator != null) {
       this.sorter = new Sorter<>(UnsafeSortDataFormat.INSTANCE);
       this.sortComparator = new SortComparator(recordComparator, prefixComparator, memoryManager);
-      if (useRadixSort && prefixComparator instanceof PrefixComparators.RadixSortSupport) {
+      if (canUseRadixSort && prefixComparator instanceof PrefixComparators.RadixSortSupport) {
         this.radixSortSupport = (PrefixComparators.RadixSortSupport)prefixComparator;
       } else {
         this.radixSortSupport = null;

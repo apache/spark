@@ -60,7 +60,7 @@ public final class UnsafeExternalRowSorter {
       PrefixComparator prefixComparator,
       PrefixComputer prefixComputer,
       long pageSizeBytes,
-      boolean useRadixSort) throws IOException {
+      boolean canUseRadixSort) throws IOException {
     this.schema = schema;
     this.prefixComputer = prefixComputer;
     final SparkEnv sparkEnv = SparkEnv.get();
@@ -74,7 +74,7 @@ public final class UnsafeExternalRowSorter {
       prefixComparator,
       /* initialSize */ 4096,
       pageSizeBytes,
-      useRadixSort
+      canUseRadixSort
     );
   }
 
