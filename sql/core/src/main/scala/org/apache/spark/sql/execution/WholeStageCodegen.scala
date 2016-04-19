@@ -74,10 +74,10 @@ trait CodegenSupport extends SparkPlan {
    *
    * Note: right now we support up to two RDDs.
    */
-  def upstreams(): Seq[RDD[InternalRow]]
+  def inputRDDs(): Seq[RDD[InternalRow]]
 
   /**
-   * Returns Java source code to process the rows from upstream.
+   * Returns Java source code to process the rows from input RDD.
    */
   final def produce(ctx: CodegenContext, parent: CodegenSupport): String = {
     this.parent = parent
@@ -234,13 +234,13 @@ case class InputAdapter(child: SparkPlan) extends UnaryNode with CodegenSupport 
     child.doExecuteBroadcast()
   }
 
-  override def upstreams(): Seq[RDD[InternalRow]] = {
+  override def inputRDDs(): Seq[RDD[InternalRow]] = {
     child.execute() :: Nil
   }
 
   override def doProduce(ctx: CodegenContext): String = {
     val input = ctx.freshName("input")
-    // Right now, InputAdapter is only used when there is one upstream.
+    // Right now, InputAdapter is only used when there is one input RDD.
     ctx.addMutableState("scala.collection.Iterator", input, s"$input = inputs[0];")
     val row = ctx.freshName("row")
     s"""
@@ -272,7 +272,7 @@ object WholeStageCodegen {
  *
  * -> execute()
  *     |
- *  doExecute() --------->   upstreams() -------> upstreams() ------> execute()
+ *  doExecute() --------->   inputRDDs() -------> inputRDDs() ------> execute()
  *     |
  *     +----------------->   produce()
  *                             |
@@ -350,8 +350,8 @@ case class WholeStageCodegen(child: SparkPlan) extends UnaryNode with CodegenSup
 
     val durationMs = longMetric("pipelineTime")
 
-    val rdds = child.asInstanceOf[CodegenSupport].upstreams()
-    assert(rdds.size <= 2, "Up to two upstream RDDs can be supported")
+    val rdds = child.asInstanceOf[CodegenSupport].inputRDDs()
+    assert(rdds.size <= 2, "Up to two input RDDs can be supported")
     if (rdds.length == 1) {
       rdds.head.mapPartitionsWithIndex { (index, iter) =>
         val clazz = CodeGenerator.compile(cleanedSource)
@@ -367,7 +367,7 @@ case class WholeStageCodegen(child: SparkPlan) extends UnaryNode with CodegenSup
         }
       }
     } else {
-      // Right now, we support up to two upstreams.
+      // Right now, we support up to two input RDDs.
       rdds.head.zipPartitions(rdds(1)) { (leftIter, rightIter) =>
         val partitionIndex = TaskContext.getPartitionId()
         val clazz = CodeGenerator.compile(cleanedSource)
@@ -385,7 +385,7 @@ case class WholeStageCodegen(child: SparkPlan) extends UnaryNode with CodegenSup
     }
   }
 
-  override def upstreams(): Seq[RDD[InternalRow]] = {
+  override def inputRDDs(): Seq[RDD[InternalRow]] = {
     throw new UnsupportedOperationException
   }
 
