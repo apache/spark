@@ -127,7 +127,17 @@ class ReceivedBlockHandlerSuite
 
   test("BlockManagerBasedBlockHandler - handle errors in storing block") {
     withBlockManagerBasedBlockHandler { handler =>
-      testErrorHandling(handler)
+      // Handle error in iterator (e.g. divide-by-zero error)
+      intercept[Exception] {
+        val iterator = (10 to (-10, -1)).toIterator.map { _ / 0 }
+        handler.storeBlock(StreamBlockId(1, 1), IteratorBlock(iterator))
+      }
+
+      // Handler error in block manager storing (e.g. too big block)
+      intercept[SparkException] {
+        val byteBuffer = ByteBuffer.wrap(new Array[Byte](blockManagerSize + 1))
+        handler.storeBlock(StreamBlockId(1, 1), ByteBufferBlock(byteBuffer))
+      }
     }
   }
 
@@ -167,7 +177,15 @@ class ReceivedBlockHandlerSuite
 
   test("WriteAheadLogBasedBlockHandler - handle errors in storing block") {
     withWriteAheadLogBasedBlockHandler { handler =>
-      testErrorHandling(handler)
+      // Handle error in iterator (e.g. divide-by-zero error)
+      intercept[Exception] {
+        val iterator = (10 to (-10, -1)).toIterator.map { _ / 0 }
+        handler.storeBlock(StreamBlockId(1, 1), IteratorBlock(iterator))
+      }
+
+      // Throws no errors when storing blocks that are too large to be cached
+      val byteBuffer = ByteBuffer.wrap(new Array[Byte](blockManagerSize + 1))
+      handler.storeBlock(StreamBlockId(1, 1), ByteBufferBlock(byteBuffer))
     }
   }
 
@@ -204,26 +222,26 @@ class ReceivedBlockHandlerSuite
     sparkConf.set("spark.storage.unrollFraction", "0.4")
     // Block Manager with 12000 * 0.4 = 4800 bytes of free space for unroll
     blockManager = createBlockManager(12000, sparkConf)
+    // This block is way too large to possibly be cached in memory:
+    def hugeBlock: IteratorBlock = IteratorBlock(List.fill(100)(new Array[Byte](1000)).iterator)
 
     // there is not enough space to store this block in MEMORY,
     // But BlockManager will be able to serialize this block to WAL
     // and hence count returns correct value.
-     testRecordcount(false, StorageLevel.MEMORY_ONLY,
-      IteratorBlock((List.fill(70)(new Array[Byte](100))).iterator), blockManager, Some(70))
+    testRecordcount(false, StorageLevel.MEMORY_ONLY, hugeBlock, blockManager, Some(100))
 
     // there is not enough space to store this block in MEMORY,
     // But BlockManager will be able to serialize this block to DISK
     // and hence count returns correct value.
-    testRecordcount(true, StorageLevel.MEMORY_AND_DISK,
-      IteratorBlock((List.fill(70)(new Array[Byte](100))).iterator), blockManager, Some(70))
+    testRecordcount(true, StorageLevel.MEMORY_AND_DISK, hugeBlock, blockManager, Some(100))
 
     // there is not enough space to store this block With MEMORY_ONLY StorageLevel.
     // BlockManager will not be able to unroll this block
     // and hence it will not tryToPut this block, resulting the SparkException
     storageLevel = StorageLevel.MEMORY_ONLY
     withBlockManagerBasedBlockHandler { handler =>
-      val thrown = intercept[SparkException] {
-        storeSingleBlock(handler, IteratorBlock((List.fill(70)(new Array[Byte](100))).iterator))
+      intercept[SparkException] {
+        storeSingleBlock(handler, hugeBlock)
       }
     }
   }
@@ -344,21 +362,6 @@ class ReceivedBlockHandlerSuite
     storeAndVerify(blocks.map { b => IteratorBlock(b.toIterator) })
     storeAndVerify(blocks.map { b => ArrayBufferBlock(new ArrayBuffer ++= b) })
     storeAndVerify(blocks.map { b => ByteBufferBlock(dataToByteBuffer(b).toByteBuffer) })
-  }
-
-  /** Test error handling when blocks that cannot be stored */
-  private def testErrorHandling(receivedBlockHandler: ReceivedBlockHandler) {
-    // Handle error in iterator (e.g. divide-by-zero error)
-    intercept[Exception] {
-      val iterator = (10 to (-10, -1)).toIterator.map { _ / 0 }
-      receivedBlockHandler.storeBlock(StreamBlockId(1, 1), IteratorBlock(iterator))
-    }
-
-    // Handler error in block manager storing (e.g. too big block)
-    intercept[SparkException] {
-      val byteBuffer = ByteBuffer.wrap(new Array[Byte](blockManagerSize + 1))
-      receivedBlockHandler.storeBlock(StreamBlockId(1, 1), ByteBufferBlock(byteBuffer))
-    }
   }
 
   /** Instantiate a BlockManagerBasedBlockHandler and run a code with it */
