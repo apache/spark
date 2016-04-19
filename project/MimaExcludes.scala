@@ -634,6 +634,10 @@ object MimaExcludes {
         // [SPARK-14628] Simplify task metrics by always tracking read/write metrics
         ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.executor.InputMetrics.readMethod"),
         ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.executor.OutputMetrics.writeMethod")
+      ) ++ Seq(
+         // [SPARK-14407] Hides HadoopFsRelation related data source API into execution package
+         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.OutputWriter"),
+         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.OutputWriterFactory")
       )
     case v if v.startsWith("1.6") =>
       Seq(
