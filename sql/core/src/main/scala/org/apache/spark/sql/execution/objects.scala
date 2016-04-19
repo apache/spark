@@ -36,8 +36,8 @@ case class DeserializeToObject(
     child: SparkPlan) extends UnaryNode with CodegenSupport {
   override def output: Seq[Attribute] = deserializer.toAttribute :: Nil
 
-  override def upstreams(): Seq[RDD[InternalRow]] = {
-    child.asInstanceOf[CodegenSupport].upstreams()
+  override def inputRDDs(): Seq[RDD[InternalRow]] = {
+    child.asInstanceOf[CodegenSupport].inputRDDs()
   }
 
   protected override def doProduce(ctx: CodegenContext): String = {
@@ -48,7 +48,7 @@ case class DeserializeToObject(
     val bound = ExpressionCanonicalizer.execute(
       BindReferences.bindReference(deserializer, child.output))
     ctx.currentVars = input
-    val resultVars = bound.gen(ctx) :: Nil
+    val resultVars = bound.genCode(ctx) :: Nil
     consume(ctx, resultVars)
   }
 
@@ -69,8 +69,8 @@ case class SerializeFromObject(
     child: SparkPlan) extends UnaryNode with CodegenSupport {
   override def output: Seq[Attribute] = serializer.map(_.toAttribute)
 
-  override def upstreams(): Seq[RDD[InternalRow]] = {
-    child.asInstanceOf[CodegenSupport].upstreams()
+  override def inputRDDs(): Seq[RDD[InternalRow]] = {
+    child.asInstanceOf[CodegenSupport].inputRDDs()
   }
 
   protected override def doProduce(ctx: CodegenContext): String = {
@@ -82,7 +82,7 @@ case class SerializeFromObject(
       ExpressionCanonicalizer.execute(BindReferences.bindReference(expr, child.output))
     }
     ctx.currentVars = input
-    val resultVars = bound.map(_.gen(ctx))
+    val resultVars = bound.map(_.genCode(ctx))
     consume(ctx, resultVars)
   }
 
@@ -153,8 +153,8 @@ case class MapElements(
     child: SparkPlan) extends UnaryNode with ObjectOperator with CodegenSupport {
   override def output: Seq[Attribute] = serializer.map(_.toAttribute)
 
-  override def upstreams(): Seq[RDD[InternalRow]] = {
-    child.asInstanceOf[CodegenSupport].upstreams()
+  override def inputRDDs(): Seq[RDD[InternalRow]] = {
+    child.asInstanceOf[CodegenSupport].inputRDDs()
   }
 
   protected override def doProduce(ctx: CodegenContext): String = {
@@ -173,13 +173,13 @@ case class MapElements(
     val bound = ExpressionCanonicalizer.execute(
       BindReferences.bindReference(callFunc, child.output))
     ctx.currentVars = input
-    val evaluated = bound.gen(ctx)
+    val evaluated = bound.genCode(ctx)
 
     val resultObj = LambdaVariable(evaluated.value, evaluated.isNull, resultObjType)
     val outputFields = serializer.map(_ transform {
       case _: BoundReference => resultObj
     })
-    val resultVars = outputFields.map(_.gen(ctx))
+    val resultVars = outputFields.map(_.genCode(ctx))
     s"""
       ${evaluated.code}
       ${consume(ctx, resultVars)}

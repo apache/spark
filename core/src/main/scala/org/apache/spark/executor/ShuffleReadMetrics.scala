@@ -102,11 +102,6 @@ class ShuffleReadMetrics private (
    */
   def totalBlocksFetched: Int = remoteBlocksFetched + localBlocksFetched
 
-  /**
-   * Returns true if this metrics has been updated before.
-   */
-  def isUpdated: Boolean = (totalBytesRead | totalBlocksFetched | recordsRead | fetchWaitTime) != 0
-
   private[spark] def incRemoteBlocksFetched(v: Int): Unit = _remoteBlocksFetched.add(v)
   private[spark] def incLocalBlocksFetched(v: Int): Unit = _localBlocksFetched.add(v)
   private[spark] def incRemoteBytesRead(v: Long): Unit = _remoteBytesRead.add(v)

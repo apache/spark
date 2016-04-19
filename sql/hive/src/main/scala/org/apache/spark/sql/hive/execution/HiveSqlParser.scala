@@ -39,8 +39,8 @@ import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 /**
  * Concrete parser for HiveQl statements.
  */
-object HiveSqlParser extends AbstractSqlParser {
-  val astBuilder = new HiveSqlAstBuilder
+class HiveSqlParser(hiveConf: HiveConf) extends AbstractSqlParser {
+  val astBuilder = new HiveSqlAstBuilder(hiveConf)
 
   override protected def nativeCommand(sqlText: String): LogicalPlan = {
     HiveNativeCommand(sqlText)
@@ -50,24 +50,8 @@ object HiveSqlParser extends AbstractSqlParser {
 /**
  * Builder that converts an ANTLR ParseTree into a LogicalPlan/Expression/TableIdentifier.
  */
-class HiveSqlAstBuilder extends SparkSqlAstBuilder {
+class HiveSqlAstBuilder(hiveConf: HiveConf) extends SparkSqlAstBuilder {
   import ParserUtils._
-
-  /**
-   * Get the current Hive Configuration.
-   */
-  private[this] def hiveConf: HiveConf = {
-    var ss = SessionState.get()
-    // SessionState is lazy initialization, it can be null here
-    if (ss == null) {
-      val original = Thread.currentThread().getContextClassLoader
-      val conf = new HiveConf(classOf[SessionState])
-      conf.setClassLoader(original)
-      ss = new SessionState(conf)
-      SessionState.start(ss)
-    }
-    ss.getConf
-  }
 
   /**
    * Pass a command to Hive using a [[HiveNativeCommand]].

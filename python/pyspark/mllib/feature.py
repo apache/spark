@@ -617,6 +617,7 @@ class Word2Vec(object):
         self.numIterations = 1
         self.seed = random.randint(0, sys.maxsize)
         self.minCount = 5
+        self.windowSize = 5
 
     @since('1.2.0')
     def setVectorSize(self, vectorSize):
@@ -669,6 +670,14 @@ class Word2Vec(object):
         self.minCount = minCount
         return self
 
+    @since('2.0.0')
+    def setWindowSize(self, windowSize):
+        """
+        Sets window size (default: 5).
+        """
+        self.windowSize = windowSize
+        return self
+
     @since('1.2.0')
     def fit(self, data):
         """
@@ -682,7 +691,7 @@ class Word2Vec(object):
         jmodel = callMLlibFunc("trainWord2VecModel", data, int(self.vectorSize),
                                float(self.learningRate), int(self.numPartitions),
                                int(self.numIterations), int(self.seed),
-                               int(self.minCount))
+                               int(self.minCount), int(self.windowSize))
         return Word2VecModel(jmodel)
 
 

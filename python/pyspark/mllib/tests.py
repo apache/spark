@@ -1027,13 +1027,15 @@ class Word2VecTests(MLlibTestCase):
             .setNumPartitions(2) \
             .setNumIterations(10) \
             .setSeed(1024) \
-            .setMinCount(3)
+            .setMinCount(3) \
+            .setWindowSize(6)
         self.assertEqual(model.vectorSize, 2)
         self.assertTrue(model.learningRate < 0.02)
         self.assertEqual(model.numPartitions, 2)
         self.assertEqual(model.numIterations, 10)
         self.assertEqual(model.seed, 1024)
         self.assertEqual(model.minCount, 3)
+        self.assertEqual(model.windowSize, 6)
 
     def test_word2vec_get_vectors(self):
         data = [
