@@ -149,7 +149,7 @@ case class Expand(
       val firstExpr = projections.head(col)
       if (sameOutput(col)) {
         // This column is the same across all output rows. Just generate code for it here.
-        BindReferences.bindReference(firstExpr, child.output).gen(ctx)
+        BindReferences.bindReference(firstExpr, child.output).genCode(ctx)
       } else {
         val isNull = ctx.freshName("isNull")
         val value = ctx.freshName("value")
@@ -166,7 +166,7 @@ case class Expand(
       var updateCode = ""
       for (col <- exprs.indices) {
         if (!sameOutput(col)) {
-          val ev = BindReferences.bindReference(exprs(col), child.output).gen(ctx)
+          val ev = BindReferences.bindReference(exprs(col), child.output).genCode(ctx)
           updateCode +=
             s"""
                |${ev.code}

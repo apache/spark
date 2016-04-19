@@ -989,7 +989,7 @@ case class ScalaUDF(
     converterTerm
   }
 
-  override def genCode(
+  override def doGenCode(
       ctx: CodegenContext,
       ev: ExprCode): String = {
 
@@ -1024,7 +1024,7 @@ case class ScalaUDF(
         s"[$funcExpressionIdx]).userDefinedFunc());")
 
     // codegen for children expressions
-    val evals = children.map(_.gen(ctx))
+    val evals = children.map(_.genCode(ctx))
 
     // Generate the codes for expressions and calling user-defined function
     // We need to get the boxedType of dataType's javaType here. Because for the dataType

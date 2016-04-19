@@ -55,6 +55,8 @@ abstract class RDG extends LeafExpression with Nondeterministic {
 }
 
 /** Generate a random column with i.i.d. uniformly distributed values in [0, 1). */
+@ExpressionDescription(
+  usage = "_FUNC_(a) - Returns a random column with i.i.d. uniformly distributed values in [0, 1).")
 case class Rand(seed: Long) extends RDG {
   override protected def evalInternal(input: InternalRow): Double = rng.nextDouble()
 
@@ -65,7 +67,7 @@ case class Rand(seed: Long) extends RDG {
     case _ => throw new AnalysisException("Input argument to rand must be an integer literal.")
   })
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
     val rngTerm = ctx.freshName("rng")
     val className = classOf[XORShiftRandom].getName
     ctx.addMutableState(className, rngTerm,
@@ -78,6 +80,8 @@ case class Rand(seed: Long) extends RDG {
 }
 
 /** Generate a random column with i.i.d. gaussian random distribution. */
+@ExpressionDescription(
+  usage = "_FUNC_(a) - Returns a random column with i.i.d. gaussian random distribution.")
 case class Randn(seed: Long) extends RDG {
   override protected def evalInternal(input: InternalRow): Double = rng.nextGaussian()
 
@@ -88,7 +92,7 @@ case class Randn(seed: Long) extends RDG {
     case _ => throw new AnalysisException("Input argument to randn must be an integer literal.")
   })
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
     val rngTerm = ctx.freshName("rng")
     val className = classOf[XORShiftRandom].getName
     ctx.addMutableState(className, rngTerm,

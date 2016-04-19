@@ -26,22 +26,21 @@ import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 
-import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkSqlAstBuilder
-import org.apache.spark.sql.hive.{CreateTableAsSelect => CTAS, CreateViewAsSelect => CreateView}
-import org.apache.spark.sql.hive.{HiveGenericUDTF, HiveSerDe}
+import org.apache.spark.sql.execution.command.{CreateTable, CreateTableLike}
+import org.apache.spark.sql.hive.{CreateTableAsSelect => CTAS, CreateViewAsSelect => CreateView, HiveSerDe}
+import org.apache.spark.sql.hive.{HiveGenericUDTF, HiveMetastoreTypes, HiveSerDe}
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 
 /**
  * Concrete parser for HiveQl statements.
  */
-object HiveSqlParser extends AbstractSqlParser {
-  val astBuilder = new HiveSqlAstBuilder
+class HiveSqlParser(hiveConf: HiveConf) extends AbstractSqlParser {
+  val astBuilder = new HiveSqlAstBuilder(hiveConf)
 
   override protected def nativeCommand(sqlText: String): LogicalPlan = {
     HiveNativeCommand(sqlText)
@@ -51,24 +50,8 @@ object HiveSqlParser extends AbstractSqlParser {
 /**
  * Builder that converts an ANTLR ParseTree into a LogicalPlan/Expression/TableIdentifier.
  */
-class HiveSqlAstBuilder extends SparkSqlAstBuilder {
+class HiveSqlAstBuilder(hiveConf: HiveConf) extends SparkSqlAstBuilder {
   import ParserUtils._
-
-  /**
-   * Get the current Hive Configuration.
-   */
-  private[this] def hiveConf: HiveConf = {
-    var ss = SessionState.get()
-    // SessionState is lazy initialization, it can be null here
-    if (ss == null) {
-      val original = Thread.currentThread().getContextClassLoader
-      val conf = new HiveConf(classOf[SessionState])
-      conf.setClassLoader(original)
-      ss = new SessionState(conf)
-      SessionState.start(ss)
-    }
-    ss.getConf
-  }
 
   /**
    * Pass a command to Hive using a [[HiveNativeCommand]].
@@ -104,19 +87,6 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
   }
 
   /**
-   * Create a [[DropTable]] command.
-   */
-  override def visitDropTable(ctx: DropTableContext): LogicalPlan = withOrigin(ctx) {
-    if (ctx.PURGE != null) {
-      logWarning("PURGE option is ignored.")
-    }
-    if (ctx.REPLICATION != null) {
-      logWarning("REPLICATION clause is ignored.")
-    }
-    DropTable(visitTableIdentifier(ctx.tableIdentifier).toString, ctx.EXISTS != null)
-  }
-
-  /**
    * Create an [[AnalyzeTable]] command. This currently only implements the NOSCAN option (other
    * options are passed on to Hive) e.g.:
    * {{{
@@ -134,83 +104,126 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
   }
 
   /**
-   * Create a [[CatalogStorageFormat]]. This is part of the [[CreateTableAsSelect]] command.
+   * Create a [[CatalogStorageFormat]] for creating tables.
    */
   override def visitCreateFileFormat(
       ctx: CreateFileFormatContext): CatalogStorageFormat = withOrigin(ctx) {
-    if (ctx.storageHandler == null) {
-      typedVisit[CatalogStorageFormat](ctx.fileFormat)
-    } else {
-      visitStorageHandler(ctx.storageHandler)
+    (ctx.fileFormat, ctx.storageHandler) match {
+      // Expected format: INPUTFORMAT input_format OUTPUTFORMAT output_format
+      case (c: TableFileFormatContext, null) =>
+          visitTableFileFormat(c)
+      // Expected format: SEQUENCEFILE | TEXTFILE | RCFILE | ORC | PARQUET | AVRO
+      case (c: GenericFileFormatContext, null) =>
+        visitGenericFileFormat(c)
+      case (null, storageHandler) =>
+        throw new ParseException("Operation not allowed: ... STORED BY storage_handler ...", ctx)
+      case _ =>
+        throw new ParseException("expected either STORED AS or STORED BY, not both", ctx)
     }
   }
 
   /**
-   * Create a [[CreateTableAsSelect]] command.
+   * Create a table, returning either a [[CreateTable]] or a [[CreateTableAsSelect]].
+   *
+   * This is not used to create datasource tables, which is handled through
+   * "CREATE TABLE ... USING ...".
+   *
+   * Note: several features are currently not supported - temporary tables, bucketing,
+   * skewed columns and storage handlers (STORED BY).
+   *
+   * Expected format:
+   * {{{
+   *   CREATE [TEMPORARY] [EXTERNAL] TABLE [IF NOT EXISTS] [db_name.]table_name
+   *   [(col1 data_type [COMMENT col_comment], ...)]
+   *   [COMMENT table_comment]
+   *   [PARTITIONED BY (col3 data_type [COMMENT col_comment], ...)]
+   *   [CLUSTERED BY (col1, ...) [SORTED BY (col1 [ASC|DESC], ...)] INTO num_buckets BUCKETS]
+   *   [SKEWED BY (col1, col2, ...) ON ((col_value, col_value, ...), ...) [STORED AS DIRECTORIES]]
+   *   [ROW FORMAT row_format]
+   *   [STORED AS file_format | STORED BY storage_handler_class [WITH SERDEPROPERTIES (...)]]
+   *   [LOCATION path]
+   *   [TBLPROPERTIES (property_name=property_value, ...)]
+   *   [AS select_statement];
+   * }}}
    */
-  override def visitCreateTable(ctx: CreateTableContext): LogicalPlan = {
-    if (ctx.query == null) {
-      HiveNativeCommand(command(ctx))
-    } else {
-      // Get the table header.
-      val (table, temp, ifNotExists, external) = visitCreateTableHeader(ctx.createTableHeader)
-      val tableType = if (external) {
-        CatalogTableType.EXTERNAL_TABLE
-      } else {
-        CatalogTableType.MANAGED_TABLE
-      }
-
-      // Unsupported clauses.
-      if (temp) {
-        logWarning("TEMPORARY clause is ignored.")
-      }
-      if (ctx.bucketSpec != null) {
-        // TODO add this - we need cluster columns in the CatalogTable for this to work.
-        logWarning("CLUSTERED BY ... [ORDERED BY ...] INTO ... BUCKETS clause is ignored.")
-      }
-      if (ctx.skewSpec != null) {
-        logWarning("SKEWED BY ... ON ... [STORED AS DIRECTORIES] clause is ignored.")
-      }
-
-      // Create the schema.
-      val schema = Option(ctx.columns).toSeq.flatMap(visitCatalogColumns(_, _.toLowerCase))
-
-      // Get the column by which the table is partitioned.
-      val partitionCols = Option(ctx.partitionColumns).toSeq.flatMap(visitCatalogColumns(_))
-
-      // Create the storage.
-      def format(fmt: ParserRuleContext): CatalogStorageFormat = {
-        Option(fmt).map(typedVisit[CatalogStorageFormat]).getOrElse(EmptyStorageFormat)
-      }
-      // Default storage.
-      val defaultStorageType = hiveConf.getVar(HiveConf.ConfVars.HIVEDEFAULTFILEFORMAT)
-      val hiveSerDe = HiveSerDe.sourceToSerDe(defaultStorageType, hiveConf).getOrElse {
-        HiveSerDe(
-          inputFormat = Option("org.apache.hadoop.mapred.TextInputFormat"),
-          outputFormat = Option("org.apache.hadoop.hive.ql.io.IgnoreKeyTextOutputFormat"))
-      }
-      // Defined storage.
-      val fileStorage = format(ctx.createFileFormat)
-      val rowStorage = format(ctx.rowFormat)
-      val storage = CatalogStorageFormat(
-        Option(ctx.locationSpec).map(visitLocationSpec),
-        fileStorage.inputFormat.orElse(hiveSerDe.inputFormat),
-        fileStorage.outputFormat.orElse(hiveSerDe.outputFormat),
-        rowStorage.serde.orElse(hiveSerDe.serde).orElse(fileStorage.serde),
-        rowStorage.serdeProperties ++ fileStorage.serdeProperties
-      )
-
-      val tableDesc = CatalogTable(
-        identifier = table,
-        tableType = tableType,
-        schema = schema,
-        partitionColumns = partitionCols,
-        storage = storage,
-        properties = Option(ctx.tablePropertyList).map(visitTablePropertyList).getOrElse(Map.empty),
-        // TODO support the sql text - have a proper location for this!
-        viewText = Option(ctx.STRING).map(string))
-      CTAS(tableDesc, plan(ctx.query), ifNotExists)
+  override def visitCreateTable(ctx: CreateTableContext): LogicalPlan = withOrigin(ctx) {
+    val (name, temp, ifNotExists, external) = visitCreateTableHeader(ctx.createTableHeader)
+    // TODO: implement temporary tables
+    if (temp) {
+      throw new ParseException(
+        "CREATE TEMPORARY TABLE is not supported yet. " +
+        "Please use registerTempTable as an alternative.", ctx)
     }
+    if (ctx.skewSpec != null) {
+      throw new ParseException("Operation not allowed: CREATE TABLE ... SKEWED BY ...", ctx)
+    }
+    if (ctx.bucketSpec != null) {
+      throw new ParseException("Operation not allowed: CREATE TABLE ... CLUSTERED BY ...", ctx)
+    }
+    val tableType = if (external) {
+      CatalogTableType.EXTERNAL_TABLE
+    } else {
+      CatalogTableType.MANAGED_TABLE
+    }
+    val comment = Option(ctx.STRING).map(string)
+    val partitionCols = Option(ctx.partitionColumns).toSeq.flatMap(visitCatalogColumns)
+    val cols = Option(ctx.columns).toSeq.flatMap(visitCatalogColumns)
+    val properties = Option(ctx.tablePropertyList).map(visitTablePropertyList).getOrElse(Map.empty)
+    val selectQuery = Option(ctx.query).map(plan)
+
+    // Note: Hive requires partition columns to be distinct from the schema, so we need
+    // to include the partition columns here explicitly
+    val schema = cols ++ partitionCols
+
+    // Storage format
+    val defaultStorage: CatalogStorageFormat = {
+      val defaultStorageType = hiveConf.getVar(HiveConf.ConfVars.HIVEDEFAULTFILEFORMAT)
+      val defaultHiveSerde = HiveSerDe.sourceToSerDe(defaultStorageType, hiveConf)
+      CatalogStorageFormat(
+        locationUri = None,
+        inputFormat = defaultHiveSerde.flatMap(_.inputFormat)
+          .orElse(Some("org.apache.hadoop.mapred.TextInputFormat")),
+        outputFormat = defaultHiveSerde.flatMap(_.outputFormat)
+          .orElse(Some("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat")),
+        // Note: Keep this unspecified because we use the presence of the serde to decide
+        // whether to convert a table created by CTAS to a datasource table.
+        serde = None,
+        serdeProperties = Map())
+    }
+    val fileStorage = Option(ctx.createFileFormat).map(visitCreateFileFormat)
+      .getOrElse(EmptyStorageFormat)
+    val rowStorage = Option(ctx.rowFormat).map(visitRowFormat).getOrElse(EmptyStorageFormat)
+    val location = Option(ctx.locationSpec).map(visitLocationSpec)
+    val storage = CatalogStorageFormat(
+      locationUri = location,
+      inputFormat = fileStorage.inputFormat.orElse(defaultStorage.inputFormat),
+      outputFormat = fileStorage.outputFormat.orElse(defaultStorage.outputFormat),
+      serde = rowStorage.serde.orElse(fileStorage.serde).orElse(defaultStorage.serde),
+      serdeProperties = rowStorage.serdeProperties ++ fileStorage.serdeProperties)
+
+    // TODO support the sql text - have a proper location for this!
+    val tableDesc = CatalogTable(
+      identifier = name,
+      tableType = tableType,
+      storage = storage,
+      schema = schema,
+      partitionColumnNames = partitionCols.map(_.name),
+      properties = properties,
+      comment = comment)
+
+    selectQuery match {
+      case Some(q) => CTAS(tableDesc, q, ifNotExists)
+      case None => CreateTable(tableDesc, ifNotExists)
+    }
+  }
+
+  /**
+   * Create a [[CreateTableLike]] command.
+   */
+  override def visitCreateTableLike(ctx: CreateTableLikeContext): LogicalPlan = withOrigin(ctx) {
+    val targetTable = visitTableIdentifier(ctx.target)
+    val sourceTable = visitTableIdentifier(ctx.source)
+    CreateTableLike(targetTable, sourceTable, ctx.EXISTS != null)
   }
 
   /**
@@ -229,9 +242,6 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
     if (ctx.identifierList != null) {
       throw new ParseException(s"Operation not allowed: partitioned views", ctx)
     } else {
-      if (ctx.STRING != null) {
-        logWarning("COMMENT clause is ignored.")
-      }
       val identifiers = Option(ctx.identifierCommentList).toSeq.flatMap(_.identifierComment.asScala)
       val schema = identifiers.map { ic =>
         CatalogColumn(ic.identifier.getText, null, nullable = true, Option(ic.STRING).map(string))
@@ -239,6 +249,7 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
       createView(
         ctx,
         ctx.tableIdentifier,
+        comment = Option(ctx.STRING).map(string),
         schema,
         ctx.query,
         Option(ctx.tablePropertyList).map(visitTablePropertyList).getOrElse(Map.empty),
@@ -255,6 +266,7 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
     createView(
       ctx,
       ctx.tableIdentifier,
+      comment = None,
       Seq.empty,
       ctx.query,
       Map.empty,
@@ -268,6 +280,7 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
   private def createView(
       ctx: ParserRuleContext,
       name: TableIdentifierContext,
+      comment: Option[String],
       schema: Seq[CatalogColumn],
       query: QueryContext,
       properties: Map[String, String],
@@ -281,7 +294,8 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
       storage = EmptyStorageFormat,
       properties = properties,
       viewOriginalText = sql,
-      viewText = sql)
+      viewText = sql,
+      comment = comment)
     CreateView(tableDesc, plan(query), allowExist, replace, command(ctx))
   }
 
@@ -296,7 +310,8 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
       recordReader: Token,
       schemaLess: Boolean): HiveScriptIOSchema = {
     if (recordWriter != null || recordReader != null) {
-      logWarning("Used defined record reader/writer classes are currently ignored.")
+      throw new ParseException(
+        "Unsupported operation: Used defined record reader/writer classes.", ctx)
     }
 
     // Decode and input/output format.
@@ -363,24 +378,19 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
   private val EmptyStorageFormat = CatalogStorageFormat(None, None, None, None, Map.empty)
 
   /**
-   * Create a [[CatalogStorageFormat]]. The INPUTDRIVER and OUTPUTDRIVER clauses are currently
-   * ignored.
+   * Create a [[CatalogStorageFormat]].
    */
   override def visitTableFileFormat(
       ctx: TableFileFormatContext): CatalogStorageFormat = withOrigin(ctx) {
-    import ctx._
-    if (inDriver != null || outDriver != null) {
-      logWarning("INPUTDRIVER ... OUTPUTDRIVER ... clauses are ignored.")
-    }
     EmptyStorageFormat.copy(
-      inputFormat = Option(string(inFmt)),
-      outputFormat = Option(string(outFmt)),
-      serde = Option(serdeCls).map(string)
+      inputFormat = Option(string(ctx.inFmt)),
+      outputFormat = Option(string(ctx.outFmt)),
+      serde = Option(ctx.serdeCls).map(string)
     )
   }
 
   /**
-   * Resolve a [[HiveSerDe]] based on the format name given.
+   * Resolve a [[HiveSerDe]] based on the name given and return it as a [[CatalogStorageFormat]].
    */
   override def visitGenericFileFormat(
       ctx: GenericFileFormatContext): CatalogStorageFormat = withOrigin(ctx) {
@@ -397,11 +407,28 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
   }
 
   /**
-   * Storage Handlers are currently not supported in the statements we support (CTAS).
+   * Create a [[RowFormat]] used for creating tables.
+   *
+   * Example format:
+   * {{{
+   *   SERDE serde_name [WITH SERDEPROPERTIES (k1=v1, k2=v2, ...)]
+   * }}}
+   *
+   * OR
+   *
+   * {{{
+   *   DELIMITED [FIELDS TERMINATED BY char [ESCAPED BY char]]
+   *   [COLLECTION ITEMS TERMINATED BY char]
+   *   [MAP KEYS TERMINATED BY char]
+   *   [LINES TERMINATED BY char]
+   *   [NULL DEFINED AS char]
+   * }}}
    */
-  override def visitStorageHandler(
-      ctx: StorageHandlerContext): CatalogStorageFormat = withOrigin(ctx) {
-    throw new ParseException("Storage Handlers are currently unsupported.", ctx)
+  private def visitRowFormat(ctx: RowFormatContext): CatalogStorageFormat = withOrigin(ctx) {
+    ctx match {
+      case serde: RowFormatSerdeContext => visitRowFormatSerde(serde)
+      case delimited: RowFormatDelimitedContext => visitRowFormatDelimited(delimited)
+    }
   }
 
   /**
@@ -444,13 +471,15 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
   /**
    * Create a sequence of [[CatalogColumn]]s from a column list
    */
-  private def visitCatalogColumns(
-      ctx: ColTypeListContext,
-      formatter: String => String = identity): Seq[CatalogColumn] = withOrigin(ctx) {
+  private def visitCatalogColumns(ctx: ColTypeListContext): Seq[CatalogColumn] = withOrigin(ctx) {
     ctx.colType.asScala.map { col =>
       CatalogColumn(
-        formatter(col.identifier.getText),
-        col.dataType.getText.toLowerCase, // TODO validate this?
+        col.identifier.getText.toLowerCase,
+        // Note: for types like "STRUCT<myFirstName: STRING, myLastName: STRING>" we can't
+        // just convert the whole type string to lower case, otherwise the struct field names
+        // will no longer be case sensitive. Instead, we rely on our parser to get the proper
+        // case before passing it to Hive.
+        CatalystSqlParser.parseDataType(col.dataType.getText).simpleString,
         nullable = true,
         Option(col.STRING).map(string))
     }

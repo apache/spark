@@ -22,6 +22,7 @@ import array
 import sys
 if sys.version > '3':
     xrange = range
+    basestring = str
 
 try:
     import xmlrunner
@@ -42,7 +43,8 @@ import tempfile
 import numpy as np
 
 from pyspark.ml import Estimator, Model, Pipeline, PipelineModel, Transformer
-from pyspark.ml.classification import LogisticRegression, DecisionTreeClassifier
+from pyspark.ml.classification import (
+    LogisticRegression, DecisionTreeClassifier, OneVsRest, OneVsRestModel)
 from pyspark.ml.clustering import KMeans
 from pyspark.ml.evaluation import BinaryClassificationEvaluator, RegressionEvaluator
 from pyspark.ml.feature import *
@@ -52,7 +54,7 @@ from pyspark.ml.regression import LinearRegression, DecisionTreeRegressor
 from pyspark.ml.tuning import *
 from pyspark.ml.util import keyword_only
 from pyspark.ml.util import MLWritable, MLWriter
-from pyspark.ml.wrapper import JavaWrapper
+from pyspark.ml.wrapper import JavaParams
 from pyspark.mllib.linalg import Vectors, DenseVector, SparseVector
 from pyspark.sql import DataFrame, SQLContext, Row
 from pyspark.sql.functions import rand
@@ -339,6 +341,11 @@ class ParamTests(PySparkTestCase):
         params = param_store.params  # should not invoke the property 'test_property'
         self.assertEqual(len(params), 1)
 
+    def test_word2vec_param(self):
+        model = Word2Vec().setWindowSize(6)
+        # Check windowSize is set properly
+        self.assertEqual(model.getWindowSize(), 6)
+
 
 class FeatureTests(PySparkTestCase):
 
@@ -398,6 +405,8 @@ class FeatureTests(PySparkTestCase):
         self.assertEqual(stopWordRemover.getInputCol(), "input")
         transformedDF = stopWordRemover.transform(dataset)
         self.assertEqual(transformedDF.head().output, ["panda"])
+        self.assertEqual(type(stopWordRemover.getStopWords()), list)
+        self.assertTrue(isinstance(stopWordRemover.getStopWords()[0], basestring))
         # Custom
         stopwords = ["panda"]
         stopWordRemover.setStopWords(stopwords)
@@ -405,6 +414,22 @@ class FeatureTests(PySparkTestCase):
         self.assertEqual(stopWordRemover.getStopWords(), stopwords)
         transformedDF = stopWordRemover.transform(dataset)
         self.assertEqual(transformedDF.head().output, ["a"])
+
+    def test_count_vectorizer_with_binary(self):
+        sqlContext = SQLContext(self.sc)
+        dataset = sqlContext.createDataFrame([
+            (0, "a a a b b c".split(' '), SparseVector(3, {0: 1.0, 1: 1.0, 2: 1.0}),),
+            (1, "a a".split(' '), SparseVector(3, {0: 1.0}),),
+            (2, "a b".split(' '), SparseVector(3, {0: 1.0, 1: 1.0}),),
+            (3, "c".split(' '), SparseVector(3, {2: 1.0}),)], ["id", "words", "expected"])
+        cv = CountVectorizer(binary=True, inputCol="words", outputCol="features")
+        model = cv.fit(dataset)
+
+        transformedList = model.transform(dataset).select("features", "expected").collect()
+
+        for r in transformedList:
+            feature, expected = r
+            self.assertEqual(feature, expected)
 
 
 class HasInducedError(Params):
@@ -602,6 +627,8 @@ class PersistenceTest(PySparkTestCase):
         lr_path = path + "/lr"
         lr.save(lr_path)
         lr2 = LinearRegression.load(lr_path)
+        self.assertEqual(lr.uid, lr2.uid)
+        self.assertEqual(type(lr.uid), type(lr2.uid))
         self.assertEqual(lr2.uid, lr2.maxIter.parent,
                          "Loaded LinearRegression instance uid (%s) did not match Param's uid (%s)"
                          % (lr2.uid, lr2.maxIter.parent))
@@ -644,7 +671,7 @@ class PersistenceTest(PySparkTestCase):
         """
         self.assertEqual(m1.uid, m2.uid)
         self.assertEqual(type(m1), type(m2))
-        if isinstance(m1, JavaWrapper):
+        if isinstance(m1, JavaParams):
             self.assertEqual(len(m1.params), len(m2.params))
             for p in m1.params:
                 self.assertEqual(m1.getOrDefault(p), m2.getOrDefault(p))
@@ -829,6 +856,77 @@ class TrainingSummaryTest(PySparkTestCase):
         # one check is enough to verify a summary is returned, Scala version runs full test
         sameSummary = model.evaluate(df)
         self.assertAlmostEqual(sameSummary.areaUnderROC, s.areaUnderROC)
+
+
+class OneVsRestTests(PySparkTestCase):
+
+    def test_copy(self):
+        sqlContext = SQLContext(self.sc)
+        df = sqlContext.createDataFrame([(0.0, Vectors.dense(1.0, 0.8)),
+                                         (1.0, Vectors.sparse(2, [], [])),
+                                         (2.0, Vectors.dense(0.5, 0.5))],
+                                        ["label", "features"])
+        lr = LogisticRegression(maxIter=5, regParam=0.01)
+        ovr = OneVsRest(classifier=lr)
+        ovr1 = ovr.copy({lr.maxIter: 10})
+        self.assertEqual(ovr.getClassifier().getMaxIter(), 5)
+        self.assertEqual(ovr1.getClassifier().getMaxIter(), 10)
+        model = ovr.fit(df)
+        model1 = model.copy({model.predictionCol: "indexed"})
+        self.assertEqual(model1.getPredictionCol(), "indexed")
+
+    def test_output_columns(self):
+        sqlContext = SQLContext(self.sc)
+        df = sqlContext.createDataFrame([(0.0, Vectors.dense(1.0, 0.8)),
+                                         (1.0, Vectors.sparse(2, [], [])),
+                                         (2.0, Vectors.dense(0.5, 0.5))],
+                                        ["label", "features"])
+        lr = LogisticRegression(maxIter=5, regParam=0.01)
+        ovr = OneVsRest(classifier=lr)
+        model = ovr.fit(df)
+        output = model.transform(df)
+        self.assertEqual(output.columns, ["label", "features", "prediction"])
+
+    def test_save_load(self):
+        temp_path = tempfile.mkdtemp()
+        sqlContext = SQLContext(self.sc)
+        df = sqlContext.createDataFrame([(0.0, Vectors.dense(1.0, 0.8)),
+                                         (1.0, Vectors.sparse(2, [], [])),
+                                         (2.0, Vectors.dense(0.5, 0.5))],
+                                        ["label", "features"])
+        lr = LogisticRegression(maxIter=5, regParam=0.01)
+        ovr = OneVsRest(classifier=lr)
+        model = ovr.fit(df)
+        ovrPath = temp_path + "/ovr"
+        ovr.save(ovrPath)
+        loadedOvr = OneVsRest.load(ovrPath)
+        self.assertEqual(loadedOvr.getFeaturesCol(), ovr.getFeaturesCol())
+        self.assertEqual(loadedOvr.getLabelCol(), ovr.getLabelCol())
+        self.assertEqual(loadedOvr.getClassifier().uid, ovr.getClassifier().uid)
+        modelPath = temp_path + "/ovrModel"
+        model.save(modelPath)
+        loadedModel = OneVsRestModel.load(modelPath)
+        for m, n in zip(model.models, loadedModel.models):
+            self.assertEqual(m.uid, n.uid)
+
+
+class HashingTFTest(PySparkTestCase):
+
+    def test_apply_binary_term_freqs(self):
+        sqlContext = SQLContext(self.sc)
+
+        df = sqlContext.createDataFrame([(0, ["a", "a", "b", "c", "c", "c"])], ["id", "words"])
+        n = 100
+        hashingTF = HashingTF()
+        hashingTF.setInputCol("words").setOutputCol("features").setNumFeatures(n).setBinary(True)
+        output = hashingTF.transform(df)
+        features = output.select("features").first().features.toArray()
+        expected = Vectors.sparse(n, {(ord("a") % n): 1.0,
+                                      (ord("b") % n): 1.0,
+                                      (ord("c") % n): 1.0}).toArray()
+        for i in range(0, n):
+            self.assertAlmostEqual(features[i], expected[i], 14, "Error at " + str(i) +
+                                   ": expected " + str(expected[i]) + ", got " + str(features[i]))
 
 
 if __name__ == "__main__":

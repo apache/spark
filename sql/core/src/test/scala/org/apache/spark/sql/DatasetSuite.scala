@@ -471,6 +471,10 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
         (JavaData(2), JavaData(2))))
   }
 
+  test("SPARK-14696: implicit encoders for boxed types") {
+    assert(sqlContext.range(1).map { i => i : java.lang.Long }.head == 0L)
+  }
+
   test("SPARK-11894: Incorrect results are returned when using null") {
     val nullInt = null.asInstanceOf[java.lang.Integer]
     val ds1 = Seq((nullInt, "1"), (new java.lang.Integer(22), "2")).toDS()
@@ -619,6 +623,12 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val streaming = MemoryStream[Int].toDS().toDF("b")
     val df = streaming.join(static, Seq("b"))
     assert(df.isStreaming, "streaming Dataset returned false for 'isStreaming'.")
+  }
+
+  test("SPARK-14554: Dataset.map may generate wrong java code for wide table") {
+    val wideDF = sqlContext.range(10).select(Seq.tabulate(1000) {i => ('id + i).as(s"c$i")} : _*)
+    // Make sure the generated code for this plan can compile and execute.
+    checkDataset(wideDF.map(_.getLong(0)), 0L until 10 : _*)
   }
 }
 

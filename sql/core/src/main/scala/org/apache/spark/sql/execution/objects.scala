@@ -51,7 +51,7 @@ case class DeserializeToObject(
     val bound = ExpressionCanonicalizer.execute(
       BindReferences.bindReference(deserializer, child.output))
     ctx.currentVars = input
-    val resultVars = bound.gen(ctx) :: Nil
+    val resultVars = bound.genCode(ctx) :: Nil
     consume(ctx, resultVars)
   }
 
@@ -86,7 +86,7 @@ case class SerializeFromObject(
       ExpressionCanonicalizer.execute(BindReferences.bindReference(expr, child.output))
     }
     ctx.currentVars = input
-    val resultVars = bound.map(_.gen(ctx))
+    val resultVars = bound.map(_.genCode(ctx))
     consume(ctx, resultVars)
   }
 
@@ -187,7 +187,7 @@ case class MapElements(
     val bound = ExpressionCanonicalizer.execute(
       BindReferences.bindReference(callFunc, child.output))
     ctx.currentVars = input
-    val resultVars = bound.gen(ctx) :: Nil
+    val resultVars = bound.genCode(ctx) :: Nil
 
     consume(ctx, resultVars)
   }

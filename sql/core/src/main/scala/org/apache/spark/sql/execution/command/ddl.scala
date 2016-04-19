@@ -17,13 +17,17 @@
 
 package org.apache.spark.sql.execution.command
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable}
+import org.apache.spark.sql.catalyst.catalog.{CatalogTablePartition, CatalogTableType, SessionCatalog}
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalog.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.types._
+
 
 
 // Note: The definition of these commands are based on the ones described in
@@ -176,26 +180,48 @@ case class DescribeDatabase(
 }
 
 /**
- * A command that renames a table/view.
+ * Drops a table/view from the metastore and removes it if it is cached.
  *
  * The syntax of this command is:
  * {{{
- *    ALTER TABLE table1 RENAME TO table2;
- *    ALTER VIEW view1 RENAME TO view2;
+ *   DROP TABLE [IF EXISTS] table_name;
+ *   DROP VIEW [IF EXISTS] [db_name.]view_name;
  * }}}
  */
-case class AlterTableRename(
-    oldName: TableIdentifier,
-    newName: TableIdentifier)
-  extends RunnableCommand {
+case class DropTable(
+    tableName: TableIdentifier,
+    ifExists: Boolean,
+    isView: Boolean) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val catalog = sqlContext.sessionState.catalog
-    catalog.invalidateTable(oldName)
-    catalog.renameTable(oldName, newName)
+    if (!catalog.tableExists(tableName)) {
+      if (!ifExists) {
+        val objectName = if (isView) "View" else "Table"
+        logError(s"$objectName '${tableName.quotedString}' does not exist")
+      }
+    } else {
+      // If the command DROP VIEW is to drop a table or DROP TABLE is to drop a view
+      // issue an exception.
+      catalog.getTableMetadataOption(tableName).map(_.tableType match {
+        case CatalogTableType.VIRTUAL_VIEW if !isView =>
+          throw new AnalysisException(
+            "Cannot drop a view with DROP TABLE. Please use DROP VIEW instead")
+        case o if o != CatalogTableType.VIRTUAL_VIEW && isView =>
+          throw new AnalysisException(
+            s"Cannot drop a table with DROP VIEW. Please use DROP TABLE instead")
+        case _ =>
+      })
+      try {
+        sqlContext.cacheManager.tryUncacheQuery(sqlContext.table(tableName.quotedString))
+      } catch {
+        case NonFatal(e) => log.warn(s"${e.getMessage}", e)
+      }
+      catalog.invalidateTable(tableName)
+      catalog.dropTable(tableName, ifExists)
+    }
     Seq.empty[Row]
   }
-
 }
 
 /**
@@ -209,11 +235,13 @@ case class AlterTableRename(
  */
 case class AlterTableSetProperties(
     tableName: TableIdentifier,
-    properties: Map[String, String])
+    properties: Map[String, String],
+    isView: Boolean)
   extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val catalog = sqlContext.sessionState.catalog
+    DDLUtils.verifyAlterTableType(catalog, tableName, isView)
     val table = catalog.getTableMetadata(tableName)
     val newProperties = table.properties ++ properties
     if (DDLUtils.isDatasourceTable(newProperties)) {
@@ -239,11 +267,13 @@ case class AlterTableSetProperties(
 case class AlterTableUnsetProperties(
     tableName: TableIdentifier,
     propKeys: Seq[String],
-    ifExists: Boolean)
+    ifExists: Boolean,
+    isView: Boolean)
   extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val catalog = sqlContext.sessionState.catalog
+    DDLUtils.verifyAlterTableType(catalog, tableName, isView)
     val table = catalog.getTableMetadata(tableName)
     if (DDLUtils.isDatasourceTable(table)) {
       throw new AnalysisException(
@@ -303,53 +333,94 @@ case class AlterTableSerDeProperties(
 }
 
 /**
- * Add Partition in ALTER TABLE/VIEW: add the table/view partitions.
+ * Add Partition in ALTER TABLE: add the table partitions.
+ *
  * 'partitionSpecsAndLocs': the syntax of ALTER VIEW is identical to ALTER TABLE,
  * EXCEPT that it is ILLEGAL to specify a LOCATION clause.
  * An error message will be issued if the partition exists, unless 'ifNotExists' is true.
+ *
+ * The syntax of this command is:
+ * {{{
+ *   ALTER TABLE table ADD [IF NOT EXISTS] PARTITION spec [LOCATION 'loc1']
+ * }}}
  */
 case class AlterTableAddPartition(
     tableName: TableIdentifier,
     partitionSpecsAndLocs: Seq[(TablePartitionSpec, Option[String])],
-    ifNotExists: Boolean)(sql: String)
-  extends NativeDDLCommand(sql) with Logging
+    ifNotExists: Boolean)
+  extends RunnableCommand {
 
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    val catalog = sqlContext.sessionState.catalog
+    val table = catalog.getTableMetadata(tableName)
+    if (DDLUtils.isDatasourceTable(table)) {
+      throw new AnalysisException(
+        "alter table add partition is not allowed for tables defined using the datasource API")
+    }
+    val parts = partitionSpecsAndLocs.map { case (spec, location) =>
+      // inherit table storage format (possibly except for location)
+      CatalogTablePartition(spec, table.storage.copy(locationUri = location))
+    }
+    catalog.createPartitions(tableName, parts, ignoreIfExists = ifNotExists)
+    Seq.empty[Row]
+  }
+
+}
+
+/**
+ * Alter a table partition's spec.
+ *
+ * The syntax of this command is:
+ * {{{
+ *   ALTER TABLE table PARTITION spec1 RENAME TO PARTITION spec2;
+ * }}}
+ */
 case class AlterTableRenamePartition(
     tableName: TableIdentifier,
     oldPartition: TablePartitionSpec,
-    newPartition: TablePartitionSpec)(sql: String)
-  extends NativeDDLCommand(sql) with Logging
+    newPartition: TablePartitionSpec)
+  extends RunnableCommand {
 
-case class AlterTableExchangePartition(
-    fromTableName: TableIdentifier,
-    toTableName: TableIdentifier,
-    spec: TablePartitionSpec)(sql: String)
-  extends NativeDDLCommand(sql) with Logging
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    sqlContext.sessionState.catalog.renamePartitions(
+      tableName, Seq(oldPartition), Seq(newPartition))
+    Seq.empty[Row]
+  }
+
+}
 
 /**
- * Drop Partition in ALTER TABLE/VIEW: to drop a particular partition for a table/view.
+ * Drop Partition in ALTER TABLE: to drop a particular partition for a table.
+ *
  * This removes the data and metadata for this partition.
  * The data is actually moved to the .Trash/Current directory if Trash is configured,
  * unless 'purge' is true, but the metadata is completely lost.
  * An error message will be issued if the partition does not exist, unless 'ifExists' is true.
  * Note: purge is always false when the target is a view.
+ *
+ * The syntax of this command is:
+ * {{{
+ *   ALTER TABLE table DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...] [PURGE];
+ * }}}
  */
 case class AlterTableDropPartition(
     tableName: TableIdentifier,
     specs: Seq[TablePartitionSpec],
-    ifExists: Boolean,
-    purge: Boolean)(sql: String)
-  extends NativeDDLCommand(sql) with Logging
+    ifExists: Boolean)
+  extends RunnableCommand {
 
-case class AlterTableArchivePartition(
-    tableName: TableIdentifier,
-    spec: TablePartitionSpec)(sql: String)
-  extends NativeDDLCommand(sql) with Logging
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    val catalog = sqlContext.sessionState.catalog
+    val table = catalog.getTableMetadata(tableName)
+    if (DDLUtils.isDatasourceTable(table)) {
+      throw new AnalysisException(
+        "alter table drop partition is not allowed for tables defined using the datasource API")
+    }
+    catalog.dropPartitions(tableName, specs, ignoreIfNotExists = ifExists)
+    Seq.empty[Row]
+  }
 
-case class AlterTableUnarchivePartition(
-    tableName: TableIdentifier,
-    spec: TablePartitionSpec)(sql: String)
-  extends NativeDDLCommand(sql) with Logging
+}
 
 case class AlterTableSetFileFormat(
     tableName: TableIdentifier,
@@ -408,22 +479,6 @@ case class AlterTableSetLocation(
 
 }
 
-case class AlterTableTouch(
-    tableName: TableIdentifier,
-    partitionSpec: Option[TablePartitionSpec])(sql: String)
-  extends NativeDDLCommand(sql) with Logging
-
-case class AlterTableCompact(
-    tableName: TableIdentifier,
-    partitionSpec: Option[TablePartitionSpec],
-    compactType: String)(sql: String)
-  extends NativeDDLCommand(sql) with Logging
-
-case class AlterTableMerge(
-    tableName: TableIdentifier,
-    partitionSpec: Option[TablePartitionSpec])(sql: String)
-  extends NativeDDLCommand(sql) with Logging
-
 case class AlterTableChangeCol(
     tableName: TableIdentifier,
     partitionSpec: Option[TablePartitionSpec],
@@ -461,6 +516,25 @@ private object DDLUtils {
 
   def isDatasourceTable(table: CatalogTable): Boolean = {
     isDatasourceTable(table.properties)
+  }
+
+  /**
+   * If the command ALTER VIEW is to alter a table or ALTER TABLE is to alter a view,
+   * issue an exception [[AnalysisException]].
+   */
+  def verifyAlterTableType(
+      catalog: SessionCatalog,
+      tableIdentifier: TableIdentifier,
+      isView: Boolean): Unit = {
+    catalog.getTableMetadataOption(tableIdentifier).map(_.tableType match {
+      case CatalogTableType.VIRTUAL_VIEW if !isView =>
+        throw new AnalysisException(
+          "Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead")
+      case o if o != CatalogTableType.VIRTUAL_VIEW && isView =>
+        throw new AnalysisException(
+          s"Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead")
+      case _ =>
+    })
   }
 }
 

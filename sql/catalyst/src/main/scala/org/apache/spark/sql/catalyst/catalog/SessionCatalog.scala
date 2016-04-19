@@ -21,6 +21,7 @@ import java.io.File
 
 import scala.collection.mutable
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystConf, SimpleCatalystConf}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
@@ -41,7 +42,7 @@ class SessionCatalog(
     externalCatalog: ExternalCatalog,
     functionResourceLoader: FunctionResourceLoader,
     functionRegistry: FunctionRegistry,
-    conf: CatalystConf) {
+    conf: CatalystConf) extends Logging {
   import ExternalCatalog._
 
   def this(
@@ -175,6 +176,17 @@ class SessionCatalog(
     externalCatalog.getTable(db, table)
   }
 
+  /**
+   * Retrieve the metadata of an existing metastore table.
+   * If no database is specified, assume the table is in the current database.
+   * If the specified table is not found in the database then return None if it doesn't exist.
+   */
+  def getTableMetadataOption(name: TableIdentifier): Option[CatalogTable] = {
+    val db = name.database.getOrElse(currentDb)
+    val table = formatTableName(name.table)
+    externalCatalog.getTableOption(db, table)
+  }
+
   // -------------------------------------------------------------
   // | Methods that interact with temporary and metastore tables |
   // -------------------------------------------------------------
@@ -229,7 +241,13 @@ class SessionCatalog(
     val db = name.database.getOrElse(currentDb)
     val table = formatTableName(name.table)
     if (name.database.isDefined || !tempTables.contains(table)) {
-      externalCatalog.dropTable(db, table, ignoreIfNotExists)
+      // When ignoreIfNotExists is false, no exception is issued when the table does not exist.
+      // Instead, log it as an error message.
+      if (externalCatalog.tableExists(db, table)) {
+        externalCatalog.dropTable(db, table, ignoreIfNotExists = true)
+      } else if (!ignoreIfNotExists) {
+        logError(s"Table or View '${name.quotedString}' does not exist")
+      }
     } else {
       tempTables.remove(table)
     }
@@ -283,7 +301,7 @@ class SessionCatalog(
    * explicitly specified.
    */
   def isTemporaryTable(name: TableIdentifier): Boolean = {
-    !name.database.isDefined && tempTables.contains(formatTableName(name.table))
+    name.database.isEmpty && tempTables.contains(formatTableName(name.table))
   }
 
   /**
