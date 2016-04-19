@@ -916,7 +916,10 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(cq.name, 'this_query')
         self.assertTrue(cq.isActive)
         cq.processAllAvailable()
-        self.assertTrue(len([f for f in os.listdir(out) if 'parquet' in f]) > 0)
+        output_files = []
+        for _, _, files in os.walk(out):
+            output_files.extend([f for f in files if 'parquet' in f and not f.startswith('.')])
+        self.assertTrue(len(output_files) > 0)
         self.assertTrue(len(os.listdir(chk)) > 0)
         cq.stop()
         shutil.rmtree(tmpPath)
@@ -936,7 +939,10 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(cq.name, 'this_query')
         self.assertTrue(cq.isActive)
         cq.processAllAvailable()
-        self.assertTrue(len([f for f in os.listdir(out) if 'parquet' in f]) > 0)
+        output_files = []
+        for _, _, files in os.walk(out):
+            output_files.extend([f for f in files if 'parquet' in f and not f.startswith('.')])
+        self.assertTrue(len(output_files) > 0)
         self.assertTrue(len(os.listdir(chk)) > 0)
         self.assertTrue(len(os.listdir(fake1)) == 0)
         self.assertTrue(len(os.listdir(fake2)) == 0)
