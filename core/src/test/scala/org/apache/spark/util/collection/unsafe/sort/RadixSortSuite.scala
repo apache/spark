@@ -20,6 +20,8 @@ package org.apache.spark.util.collection.unsafe.sort
 import java.lang.{Long => JLong}
 import java.util.{Arrays, Comparator}
 
+import scala.util.Random
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
 import org.apache.spark.unsafe.array.LongArray
@@ -29,7 +31,7 @@ import org.apache.spark.util.collection.Sorter
 import org.apache.spark.util.random.XORShiftRandom
 
 class RadixSortSuite extends SparkFunSuite with Logging {
-  private val N = 10000  // default size of test data
+  private val N = 10000  // scale this down for more readable results
 
   /**
    * Describes a type of sort to test, e.g. two's complement descending. Each sort type has
@@ -91,6 +93,42 @@ class RadixSortSuite extends SparkFunSuite with Logging {
     }
   }
 
+  private def referenceKeyPrefixSort(buf: LongArray, lo: Int, hi: Int, refCmp: PrefixComparator) {
+    new Sorter(UnsafeSortDataFormat.INSTANCE).sort(
+      buf, 0, N, new Comparator[RecordPointerAndKeyPrefix] {
+        override def compare(
+            r1: RecordPointerAndKeyPrefix,
+            r2: RecordPointerAndKeyPrefix): Int = {
+          refCmp.compare(r1.keyPrefix, r2.keyPrefix)
+        }
+      })
+  }
+
+  private def fuzzTest(name: String)(testFn: Long => Unit): Unit = {
+    test(name) {
+      var seed = 0L
+      try {
+        for (i <- 0 to 10) {
+          seed = System.nanoTime
+          testFn(seed)
+        }
+      } catch {
+        case t: Throwable =>
+          throw new Exception("Failed with seed: " + seed, t)
+      }
+    }
+  }
+
+  // Radix sort is sensitive to the value distribution at different bit indices (e.g., we may
+  // omit a sort on a byte if all values are equal). This generates random good test masks.
+  def randomBitMask(rand: Random): Long = {
+    var tmp = ~0L
+    for (i <- 0 to rand.nextInt(5)) {
+      tmp &= rand.nextLong
+    }
+    tmp
+  }
+
   for (sortType <- SORT_TYPES_TO_TEST) {
     test("radix support for " + sortType.name) {
       val s = sortType.referenceComparator.asInstanceOf[PrefixComparators.RadixSortSupport]
@@ -112,14 +150,7 @@ class RadixSortSuite extends SparkFunSuite with Logging {
     test("sort key prefix " + sortType.name) {
       val rand = new XORShiftRandom(123)
       val (buf1, buf2) = generateKeyPrefixTestData(N, rand.nextLong & 0xff)
-      new Sorter(UnsafeSortDataFormat.INSTANCE).sort(
-        buf1, 0, N, new Comparator[RecordPointerAndKeyPrefix] {
-          override def compare(
-              r1: RecordPointerAndKeyPrefix,
-              r2: RecordPointerAndKeyPrefix): Int = {
-            sortType.referenceComparator.compare(r1.keyPrefix, r2.keyPrefix)
-          }
-        })
+      referenceKeyPrefixSort(buf1, 0, N, sortType.referenceComparator)
       val outOffset = RadixSort.sortKeyPrefixArray(
         buf2, N, sortType.startByteIdx, sortType.endByteIdx,
         sortType.descending, sortType.signed)
@@ -127,32 +158,30 @@ class RadixSortSuite extends SparkFunSuite with Logging {
       val res2 = collectToArray(buf2, outOffset, N * 2)
       assert(res1.view == res2.view)
     }
-  }
 
-  // Radix sort is sensitive to the value distribution at different bit indices (e.g., we may
-  // omit a sort on a byte if all values are equal). Try with some randomly generated cases.
-  test("fuzz test with random bitmasks") {
-    var seed = 0L
-    try {
-      for (i <- 0 to 10) {
-        seed = System.nanoTime
-        val rand = new XORShiftRandom(seed)
-        val mask = {
-          var tmp = ~0L
-          for (i <- 0 to rand.nextInt(5)) {
-            tmp &= rand.nextLong
-          }
-          tmp
-        }
-        val (ref, buffer) = generateTestData(N, rand.nextLong & mask)
-        Arrays.sort(ref, toJavaComparator(PrefixComparators.BINARY))
-        val outOffset = RadixSort.sort(buffer, N, 0, 7, false, false)
-        val result = collectToArray(buffer, outOffset, N)
-        assert(ref.view == result.view)
-      }
-    } catch {
-      case t: Throwable =>
-        throw new Exception("Failed with seed: " + seed, t)
+    fuzzTest(s"fuzz test ${sortType.name} with random bitmasks") { seed =>
+      val rand = new XORShiftRandom(seed)
+      val mask = randomBitMask(rand)
+      val (ref, buffer) = generateTestData(N, rand.nextLong & mask)
+      Arrays.sort(ref, toJavaComparator(sortType.referenceComparator))
+      val outOffset = RadixSort.sort(
+        buffer, N, sortType.startByteIdx, sortType.endByteIdx,
+        sortType.descending, sortType.signed)
+      val result = collectToArray(buffer, outOffset, N)
+      assert(ref.view == result.view)
+    }
+
+    fuzzTest(s"fuzz test key prefix ${sortType.name} with random bitmasks") { seed =>
+      val rand = new XORShiftRandom(seed)
+      val mask = randomBitMask(rand)
+      val (buf1, buf2) = generateKeyPrefixTestData(N, rand.nextLong & mask)
+      referenceKeyPrefixSort(buf1, 0, N, sortType.referenceComparator)
+      val outOffset = RadixSort.sortKeyPrefixArray(
+        buf2, N, sortType.startByteIdx, sortType.endByteIdx,
+        sortType.descending, sortType.signed)
+      val res1 = collectToArray(buf1, 0, N * 2)
+      val res2 = collectToArray(buf2, outOffset, N * 2)
+      assert(res1.view == res2.view)
     }
   }
 
