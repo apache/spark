@@ -535,7 +535,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def wholeStageMaxNumFields: Int = getConf(WHOLESTAGE_MAX_NUM_FIELDS)
 
-  def maxCaseBranches: Int = getConf(MAX_CASES_BRANCHES)
+  def maxCaseBranchesForCodegen: Int = getConf(MAX_CASES_BRANCHES)
 
   def exchangeReuseEnabled: Boolean = getConf(EXCHANGE_REUSE_ENABLED)
 

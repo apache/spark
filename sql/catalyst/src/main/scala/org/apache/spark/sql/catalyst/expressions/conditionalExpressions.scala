@@ -172,6 +172,10 @@ case class CaseWhen(
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     super[CodegenFallback].doGenCode(ctx, ev)
   }
+
+  def toCodegen(): CaseWhenCodegen = {
+    CaseWhenCodegen(branches, elseValue)
+  }
 }
 
 /**
@@ -258,13 +262,6 @@ object CaseWhen {
     }.toArray.toSeq  // force materialization to make the seq serializable
     val elseValue = if (branches.size % 2 == 1) Some(branches.last) else None
     CaseWhen(cases, elseValue)
-  }
-}
-
-/** Factory methods for CaseWhenCodegen. */
-object CaseWhenCodegen {
-  def apply(branches: Seq[(Expression, Expression)], elseValue: Expression): CaseWhenCodegen = {
-    CaseWhenCodegen(branches, Option(elseValue))
   }
 }
 

@@ -41,10 +41,62 @@ class OptimizeCodegenSuite extends PlanTest {
   test("Codegen only when the number of branches is small.") {
     assertEquivalent(
       CaseWhen(Seq((TrueLiteral, Literal(1))), Literal(2)),
-      CaseWhenCodegen(Seq((TrueLiteral, Literal(1))), Literal(2)))
+      CaseWhen(Seq((TrueLiteral, Literal(1))), Literal(2)).toCodegen())
 
     assertEquivalent(
       CaseWhen(List.fill(100)(TrueLiteral, Literal(1)), Literal(2)),
       CaseWhen(List.fill(100)(TrueLiteral, Literal(1)), Literal(2)))
+  }
+
+  test("Nested CaseWhen Codegen.") {
+    assertEquivalent(
+      CaseWhen(
+        Seq((CaseWhen(Seq((TrueLiteral, Literal(1))), Literal(2)), Literal(3))),
+        CaseWhen(Seq((TrueLiteral, Literal(4))), Literal(5))),
+      CaseWhen(
+        Seq((CaseWhen(Seq((TrueLiteral, Literal(1))), Literal(2)).toCodegen(), Literal(3))),
+        CaseWhen(Seq((TrueLiteral, Literal(4))), Literal(5)).toCodegen()).toCodegen())
+  }
+
+  test("Multiple CaseWhen in one operator.") {
+    val plan = OneRowRelation
+      .select(
+        CaseWhen(Seq((TrueLiteral, Literal(1))), Literal(2)),
+        CaseWhen(Seq((FalseLiteral, Literal(3))), Literal(4)),
+        CaseWhen(List.fill(20)((TrueLiteral, Literal(0))), Literal(0)),
+        CaseWhen(Seq((TrueLiteral, Literal(5))), Literal(6))).analyze
+    val correctAnswer = OneRowRelation
+      .select(
+        CaseWhen(Seq((TrueLiteral, Literal(1))), Literal(2)).toCodegen(),
+        CaseWhen(Seq((FalseLiteral, Literal(3))), Literal(4)).toCodegen(),
+        CaseWhen(List.fill(20)((TrueLiteral, Literal(0))), Literal(0)),
+        CaseWhen(Seq((TrueLiteral, Literal(5))), Literal(6)).toCodegen()).analyze
+    val optimized = Optimize.execute(plan)
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("Multiple CaseWhen in different operators") {
+    val plan = OneRowRelation
+      .select(
+        CaseWhen(Seq((TrueLiteral, Literal(1))), Literal(2)),
+        CaseWhen(Seq((FalseLiteral, Literal(3))), Literal(4)),
+        CaseWhen(List.fill(20)((TrueLiteral, Literal(0))), Literal(0)))
+      .where(
+        LessThan(
+          CaseWhen(Seq((TrueLiteral, Literal(5))), Literal(6)),
+          CaseWhen(List.fill(20)((TrueLiteral, Literal(0))), Literal(0)))
+      ).analyze
+    val correctAnswer = OneRowRelation
+      .select(
+        CaseWhen(Seq((TrueLiteral, Literal(1))), Literal(2)).toCodegen(),
+        CaseWhen(Seq((FalseLiteral, Literal(3))), Literal(4)).toCodegen(),
+        CaseWhen(List.fill(20)((TrueLiteral, Literal(0))), Literal(0)))
+      .where(
+        LessThan(
+          CaseWhen(Seq((TrueLiteral, Literal(5))), Literal(6)).toCodegen(),
+          CaseWhen(List.fill(20)((TrueLiteral, Literal(0))), Literal(0)))
+      ).analyze
+    val optimized = Optimize.execute(plan)
+    comparePlans(optimized, correctAnswer)
   }
 }

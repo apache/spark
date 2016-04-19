@@ -870,8 +870,8 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
  */
 case class OptimizeCodegen(conf: CatalystConf) extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-    case e @ CaseWhen(branches, elseCase) if branches.size < conf.maxCaseBranches =>
-      CaseWhenCodegen(branches, elseCase)
+    case e @ CaseWhen(branches, elseCase) if branches.size < conf.maxCaseBranchesForCodegen =>
+      e.toCodegen()
   }
 }
 
