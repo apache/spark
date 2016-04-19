@@ -253,10 +253,9 @@ abstract class HashExpression[E] extends Expression {
       }
     }.mkString("\n")
 
-    s"""
+    ev.copy(s"""
       ${ctx.javaType(dataType)} ${ev.value} = $seed;
-      $childrenHash
-    """
+      $childrenHash""")
   }
 
   private def nullSafeElementHash(
