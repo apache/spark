@@ -123,7 +123,8 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
                   threshold=0.5, thresholds=None, probabilityCol="probability",
-                  rawPredictionCol="rawPrediction", standardization=True, weightCol=None):
+                  rawPredictionCol="rawPrediction", standardization=True, weightCol=None,
+                  numFeatures=0, numClasses=0):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
@@ -135,6 +136,8 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         kwargs = self.setParams._input_kwargs
         self._set(**kwargs)
         self._checkThresholdConsistency()
+        self._numFeatures = int(numFeatures)
+        self._numClasses = int(numClasses)
         return self
 
     def _create_model(self, java_model):
@@ -203,6 +206,9 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
             if abs(t2 - t) >= 1E-5:
                 raise ValueError("Logistic Regression getThreshold found inconsistent values for" +
                                  " threshold (%g) and thresholds (equivalent to %g)" % (t2, t))
+
+    def __repr__(self):
+        return self._call_java("toString")
 
 
 class LogisticRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
