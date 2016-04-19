@@ -47,7 +47,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
 
   override def beforeAll() {
     super.beforeAll()
-    TestHive.cacheTables = true
+    TestHive.setCacheTables(true)
     // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
     TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
     // Add Locale setting
@@ -66,7 +66,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
 
   override def afterAll() {
     try {
-      TestHive.cacheTables = false
+      TestHive.setCacheTables(false)
       TimeZone.setDefault(originalTimeZone)
       Locale.setDefault(originalLocale)
       TestHive.setConf(SQLConf.COLUMN_BATCH_SIZE, originalColumnBatchSize)
