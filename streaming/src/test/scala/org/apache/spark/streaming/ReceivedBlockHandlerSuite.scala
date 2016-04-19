@@ -127,7 +127,17 @@ class ReceivedBlockHandlerSuite
 
   test("BlockManagerBasedBlockHandler - handle errors in storing block") {
     withBlockManagerBasedBlockHandler { handler =>
-      testErrorHandling(handler)
+      // Handle error in iterator (e.g. divide-by-zero error)
+      intercept[Exception] {
+        val iterator = (10 to (-10, -1)).toIterator.map { _ / 0 }
+        handler.storeBlock(StreamBlockId(1, 1), IteratorBlock(iterator))
+      }
+
+      // Handler error in block manager storing (e.g. too big block)
+      intercept[SparkException] {
+        val byteBuffer = ByteBuffer.wrap(new Array[Byte](blockManagerSize + 1))
+        handler.storeBlock(StreamBlockId(1, 1), ByteBufferBlock(byteBuffer))
+      }
     }
   }
 
@@ -167,7 +177,15 @@ class ReceivedBlockHandlerSuite
 
   test("WriteAheadLogBasedBlockHandler - handle errors in storing block") {
     withWriteAheadLogBasedBlockHandler { handler =>
-      testErrorHandling(handler)
+      // Handle error in iterator (e.g. divide-by-zero error)
+      intercept[Exception] {
+        val iterator = (10 to (-10, -1)).toIterator.map { _ / 0 }
+        handler.storeBlock(StreamBlockId(1, 1), IteratorBlock(iterator))
+      }
+
+      // Throws no errors when storing blocks that are too large to be cached
+      val byteBuffer = ByteBuffer.wrap(new Array[Byte](blockManagerSize + 1))
+      handler.storeBlock(StreamBlockId(1, 1), ByteBufferBlock(byteBuffer))
     }
   }
 
@@ -344,21 +362,6 @@ class ReceivedBlockHandlerSuite
     storeAndVerify(blocks.map { b => IteratorBlock(b.toIterator) })
     storeAndVerify(blocks.map { b => ArrayBufferBlock(new ArrayBuffer ++= b) })
     storeAndVerify(blocks.map { b => ByteBufferBlock(dataToByteBuffer(b).toByteBuffer) })
-  }
-
-  /** Test error handling when blocks that cannot be stored */
-  private def testErrorHandling(receivedBlockHandler: ReceivedBlockHandler) {
-    // Handle error in iterator (e.g. divide-by-zero error)
-    intercept[Exception] {
-      val iterator = (10 to (-10, -1)).toIterator.map { _ / 0 }
-      receivedBlockHandler.storeBlock(StreamBlockId(1, 1), IteratorBlock(iterator))
-    }
-
-    // Handler error in block manager storing (e.g. too big block)
-    intercept[SparkException] {
-      val byteBuffer = ByteBuffer.wrap(new Array[Byte](blockManagerSize + 1))
-      receivedBlockHandler.storeBlock(StreamBlockId(1, 1), ByteBufferBlock(byteBuffer))
-    }
   }
 
   /** Instantiate a BlockManagerBasedBlockHandler and run a code with it */
