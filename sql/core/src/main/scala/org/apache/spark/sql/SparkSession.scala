@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.internal.config.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.internal.{SessionState, SharedState}
 import org.apache.spark.util.Utils
 
@@ -64,28 +65,17 @@ class SparkSession private(
 
 private object SparkSession {
 
-  private val DEFAULT_SHARED_STATE_CLASS_NAME = "org.apache.spark.sql.hive.HiveSharedState"
-  private val DEFAULT_SESSION_STATE_CLASS_NAME = "org.apache.spark.sql.hive.HiveSessionState"
-
   private def sharedStateClassName(conf: SparkConf): String = {
-    conf.getOption("spark.sql.catalogImplementation") match {
-      case Some("hive") => "org.apache.spark.sql.hive.HiveSharedState"
-      case Some("in-memory") => classOf[SharedState].getCanonicalName
-      case Some(unknown) =>
-        throw new IllegalArgumentException(
-          s"Unexpected catalog implementation '$unknown'; must be 'hive' or 'in-memory'")
-      case None => DEFAULT_SHARED_STATE_CLASS_NAME
+    conf.get(CATALOG_IMPLEMENTATION) match {
+      case "hive" => "org.apache.spark.sql.hive.HiveSharedState"
+      case "in-memory" => classOf[SharedState].getCanonicalName
     }
   }
 
   private def sessionStateClassName(conf: SparkConf): String = {
-    conf.getOption("spark.sql.catalogImplementation") match {
-      case Some("hive") => "org.apache.spark.sql.hive.HiveSessionState"
-      case Some("in-memory") => classOf[SessionState].getCanonicalName
-      case Some(unknown) =>
-        throw new IllegalArgumentException(
-          s"Unexpected catalog implementation '$unknown'; must be 'hive' or 'in-memory'")
-      case None => DEFAULT_SESSION_STATE_CLASS_NAME
+    conf.get(CATALOG_IMPLEMENTATION) match {
+      case "hive" => "org.apache.spark.sql.hive.HiveSessionState"
+      case "in-memory" => classOf[SessionState].getCanonicalName
     }
   }
 

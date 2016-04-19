@@ -23,6 +23,7 @@ import scala.tools.nsc.GenericRunnerSettings
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.CATALOG_IMPLEMENTATION
 import org.apache.spark.util.Utils
 import org.apache.spark.sql.SQLContext
 
@@ -92,16 +93,22 @@ object Main extends Logging {
   }
 
   def createSQLContext(): SQLContext = {
-    val name = "org.apache.spark.sql.hive.HiveContext"
-    val loader = Utils.getContextOrSparkClassLoader
-    try {
-      sqlContext = loader.loadClass(name).getConstructor(classOf[SparkContext])
-        .newInstance(sparkContext).asInstanceOf[SQLContext]
-      logInfo("Created sql context (with Hive support)..")
-    } catch {
-      case _: java.lang.ClassNotFoundException | _: java.lang.NoClassDefFoundError =>
-        sqlContext = new SQLContext(sparkContext)
-        logInfo("Created sql context..")
+    val shouldTryHiveContext = sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "hive"
+    if (shouldTryHiveContext) {
+      val name = "org.apache.spark.sql.hive.HiveContext"
+      val loader = Utils.getContextOrSparkClassLoader
+      try {
+        sqlContext = loader.loadClass(name).getConstructor(classOf[SparkContext])
+          .newInstance(sparkContext).asInstanceOf[SQLContext]
+        logInfo("Created sql context (with Hive support)..")
+      } catch {
+        case _: java.lang.ClassNotFoundException | _: java.lang.NoClassDefFoundError =>
+          sqlContext = new SQLContext(sparkContext)
+          logInfo("Created sql context..")
+      }
+    } else {
+      sqlContext = new SQLContext(sparkContext)
+      logInfo("Created sql context..")
     }
     sqlContext
   }
