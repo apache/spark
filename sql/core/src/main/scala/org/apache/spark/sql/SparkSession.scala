@@ -47,12 +47,14 @@ class SparkSession private(
   @transient
   protected[sql] lazy val sharedState: SharedState = {
     existingSharedState.getOrElse(
-      SparkSession.reflect(SparkSession.sharedStateClassName(sparkContext.conf), sparkContext))
+      SparkSession.reflect[SharedState, SparkContext](
+        SparkSession.sharedStateClassName(sparkContext.conf),
+        sparkContext))
   }
 
   @transient
   protected[sql] lazy val sessionState: SessionState = {
-    SparkSession.reflect(
+    SparkSession.reflect[SessionState, SQLContext](
       SparkSession.sessionStateClassName(sparkContext.conf),
       new SQLContext(self, isRootContext = false))
   }

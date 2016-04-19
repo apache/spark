@@ -41,28 +41,27 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
 
   self =>
 
-  private val sharedState: HiveSharedState = ctx.sharedState.asInstanceOf[HiveSharedState]
+  private lazy val sharedState: HiveSharedState = ctx.sharedState.asInstanceOf[HiveSharedState]
 
   /**
    * A Hive client used for execution.
    */
-  val executionHive: HiveClientImpl = sharedState.executionHive.newSession()
+  lazy val executionHive: HiveClientImpl = sharedState.executionHive.newSession()
 
   /**
    * A Hive client used for interacting with the metastore.
    */
-  val metadataHive: HiveClient = sharedState.metadataHive.newSession()
+  lazy val metadataHive: HiveClient = sharedState.metadataHive.newSession()
 
   /**
    * A Hive helper class for substituting variables in a SQL statement.
    */
-  val substitutor = new VariableSubstitution
+  lazy val substitutor = new VariableSubstitution
 
   override lazy val conf: SQLConf = new SQLConf {
     override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
   }
 
-  setDefaultOverrideConfs()
 
   /**
    * SQLConf and HiveConf contracts:
@@ -72,11 +71,11 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
    *    SQLConf.  Additionally, any properties set by set() or a SET command inside sql() will be
    *    set in the SQLConf *as well as* in the HiveConf.
    */
-  val hiveconf: HiveConf = {
-    val c = executionHive.conf
-    setConf(c.getAllProperties)
-    c
-  }
+  lazy val hiveconf: HiveConf = executionHive.conf
+
+  // Set some default confs
+  setDefaultOverrideConfs()
+  setConf(hiveconf.getAllProperties)
 
   /**
    * Internal catalog for managing table and database states.
