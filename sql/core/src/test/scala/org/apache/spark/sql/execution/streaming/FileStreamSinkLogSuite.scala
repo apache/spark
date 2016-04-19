@@ -45,6 +45,15 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSQLContext {
     assert(true === isCompactionBatch(5, compactInterval = 3))
   }
 
+  test("nextCompactionBatchId") {
+    assert(2 === nextCompactionBatchId(0, compactInterval = 3))
+    assert(2 === nextCompactionBatchId(1, compactInterval = 3))
+    assert(5 === nextCompactionBatchId(2, compactInterval = 3))
+    assert(5 === nextCompactionBatchId(3, compactInterval = 3))
+    assert(5 === nextCompactionBatchId(4, compactInterval = 3))
+    assert(8 === nextCompactionBatchId(5, compactInterval = 3))
+  }
+
   test("getValidBatchesBeforeCompactionBatch") {
     intercept[AssertionError] {
       getValidBatchesBeforeCompactionBatch(0, compactInterval = 3)

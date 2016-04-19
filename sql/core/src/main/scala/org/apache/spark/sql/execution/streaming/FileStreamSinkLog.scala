@@ -59,9 +59,10 @@ class FileStreamSinkLog(sqlContext: SQLContext, path: String)
 
   /**
    * If we delete the old files after compaction at once, there is a race condition in S3: other
-   * processes may see the old files are deleted but still cannot see the compaction file. The user
-   * should set a reasonable `fileCleanupDelayMs`. We will wait until then so that the compaction
-   * file is guaranteed to be visible for all readers
+   * processes may see the old files are deleted but still cannot see the compaction file using
+   * "list". The `allFiles` handles this by looking for the next compaction file directly, however,
+   * a live lock may happen if the compaction happens too frequently: one processing keeps deleting
+   * old files while another one keeps retrying. Setting a reasonable cleanup delay could avoid it.
    */
   private val fileCleanupDelayMs = sqlContext.getConf(SQLConf.FILE_SINK_LOG_CLEANUP_DELAY)
 
@@ -135,11 +136,10 @@ class FileStreamSinkLog(sqlContext: SQLContext, path: String)
           case e: IOException =>
             // Another process using `FileStreamSink` may delete the batch files when
             // `StreamFileCatalog` are reading. However, it only happens when a compaction is
-            // deleting old files. If so, we should retry to read the batches. Otherwise, this is
-            // a real IO issue and we should throw it.
-            val preLatestId = latestId
-            latestId = getLatest().map(_._1).getOrElse(-1L)
-            if (preLatestId == latestId) {
+            // deleting old files. If so, let's try the next compaction batch and we should find it.
+            // Otherwise, this is a real IO issue and we should throw it.
+            latestId = nextCompactionBatchId(latestId, compactInterval)
+            get(latestId).getOrElse {
               throw e
             }
         }
@@ -251,5 +251,12 @@ object FileStreamSinkLog {
     } else {
       logs.filter(f => !deletedFiles.contains(f.path))
     }
+  }
+
+  /**
+   * Returns the next compaction batch id after `batchId`.
+   */
+  def nextCompactionBatchId(batchId: Long, compactInterval: Long): Long = {
+    (batchId + compactInterval + 1) / compactInterval * compactInterval - 1
   }
 }
