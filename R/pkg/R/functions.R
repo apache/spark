@@ -2688,18 +2688,26 @@ setMethod("histogram",
                 stop("Specified colname does not belong to the given DataFrame.")
               }
 
-              # Filter NA values in the target column
+              # Filter NA values in the target column and remove all other columns
               df <- na.omit(df[, colname])
 
               # TODO: This will be when improved SPARK-9325 or SPARK-13436 are fixed
-              eval(parse(text = paste0("df$", colname)))
+              getColumn(df, colname)
+              #eval(parse(text = paste0("df$", colname)))
             } else if (class(col) == "Column") {
-              # Append the given column to the dataset
+              # Append the given column to the dataset. This is to support Columns that
+              # don't belong to the DataFrame but are rather expressions
               df$x <- col
+
+              # Filter NA values in the target column. Cannot remove all other columns
+              # since given Column may be an expression on one or more existing columns
+              df <- na.omit(df)
+
               colname <- "x"
               col
             }
 
+            # At this point, df only has one column: the one to compute the histogram from
             stats <- collect(describe(df[, colname]))
             min <- as.numeric(stats[4, 2])
             max <- as.numeric(stats[5, 2])
