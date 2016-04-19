@@ -815,7 +815,7 @@ class SQLTests(ReusedPySparkTestCase):
         struct1 = StructType().add("f1", StringType(), True).add("f2", StringType(), True, None)
         self.assertIs(struct1["f1"], struct1.fields[0])
         self.assertIs(struct1[0], struct1.fields[0])
-        self.assertEqual(struct1[0:1], struct1.fields[0:1])
+        self.assertEqual(struct1[0:1], StructType(struct1.fields[0:1]))
         with self.assertRaises(KeyError):
             not_a_field = struct1["f9"]
         with self.assertRaises(IndexError):

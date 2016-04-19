@@ -540,11 +540,13 @@ class StructType(DataType):
                 return _dict_fields[key]
             except KeyError:
                 raise KeyError('No StructField named {}'.format(key))
-        elif isinstance(key, (int, slice)):
+        elif isinstance(key, int):
             try:
                 return self.fields[key]
             except IndexError:
                 raise IndexError('StructType index out of range')
+        elif isinstance(key, slice):
+            return StructType(self.fields[key])
         else:
             raise TypeError('StructType keys should be strings, integers or slices')
 
