@@ -473,8 +473,9 @@ public class VectorizedColumnReader {
       
       if (bigEndianPlatform) {
         this.dataColumn = new VectorizedPlainValuesReaderBE();
+      } else {
+        this.dataColumn = new VectorizedPlainValuesReader();
       }
-      this.dataColumn = new VectorizedPlainValuesReader();
       this.useDictionary = false;
     }
 
