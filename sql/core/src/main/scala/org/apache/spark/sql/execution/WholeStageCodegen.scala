@@ -118,7 +118,7 @@ trait CodegenSupport extends SparkPlan {
         ctx.currentVars = null
         ctx.INPUT_ROW = row
         output.zipWithIndex.map { case (attr, i) =>
-          BoundReference(i, attr.dataType, attr.nullable).gen(ctx)
+          BoundReference(i, attr.dataType, attr.nullable).genCode(ctx)
         }
       } else {
         assert(outputVars != null)

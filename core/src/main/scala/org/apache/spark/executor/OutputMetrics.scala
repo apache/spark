@@ -54,11 +54,6 @@ class OutputMetrics private[spark] () extends Serializable {
    */
   def recordsWritten: Long = _recordsWritten.localValue
 
-  /**
-   * Returns true if this metrics has been updated before.
-   */
-  def isUpdated: Boolean = (bytesWritten | recordsWritten) != 0
-
   private[spark] def setBytesWritten(v: Long): Unit = _bytesWritten.setValue(v)
   private[spark] def setRecordsWritten(v: Long): Unit = _recordsWritten.setValue(v)
 }

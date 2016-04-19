@@ -53,7 +53,7 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan)
     val exprs = projectList.map(x =>
       ExpressionCanonicalizer.execute(BindReferences.bindReference(x, child.output)))
     ctx.currentVars = input
-    val resultVars = exprs.map(_.gen(ctx))
+    val resultVars = exprs.map(_.genCode(ctx))
     // Evaluation of non-deterministic expressions can't be deferred.
     val nonDeterministicAttrs = projectList.filterNot(_.deterministic).map(_.toAttribute)
     s"""
@@ -122,7 +122,7 @@ case class Filter(condition: Expression, child: SparkPlan)
       val evaluated = evaluateRequiredVariables(child.output, in, c.references)
 
       // Generate the code for the predicate.
-      val ev = ExpressionCanonicalizer.execute(bound).gen(ctx)
+      val ev = ExpressionCanonicalizer.execute(bound).genCode(ctx)
       val nullCheck = if (bound.nullable) {
         s"${ev.isNull} || "
       } else {

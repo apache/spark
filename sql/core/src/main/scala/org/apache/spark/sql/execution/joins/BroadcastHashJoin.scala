@@ -118,7 +118,7 @@ case class BroadcastHashJoin(
     ctx.currentVars = input
     if (streamedKeys.length == 1 && streamedKeys.head.dataType == LongType) {
       // generate the join key as Long
-      val ev = streamedKeys.head.gen(ctx)
+      val ev = streamedKeys.head.genCode(ctx)
       (ev, ev.isNull)
     } else {
       // generate the join key as UnsafeRow
@@ -134,7 +134,7 @@ case class BroadcastHashJoin(
     ctx.currentVars = null
     ctx.INPUT_ROW = matched
     buildPlan.output.zipWithIndex.map { case (a, i) =>
-      val ev = BoundReference(i, a.dataType, a.nullable).gen(ctx)
+      val ev = BoundReference(i, a.dataType, a.nullable).genCode(ctx)
       if (joinType == Inner) {
         ev
       } else {
@@ -170,7 +170,8 @@ case class BroadcastHashJoin(
       val eval = evaluateRequiredVariables(buildPlan.output, buildVars, expr.references)
       // filter the output via condition
       ctx.currentVars = input ++ buildVars
-      val ev = BindReferences.bindReference(expr, streamedPlan.output ++ buildPlan.output).gen(ctx)
+      val ev =
+        BindReferences.bindReference(expr, streamedPlan.output ++ buildPlan.output).genCode(ctx)
       s"""
          |$eval
          |${ev.code}
@@ -244,7 +245,8 @@ case class BroadcastHashJoin(
       // evaluate the variables from build side that used by condition
       val eval = evaluateRequiredVariables(buildPlan.output, buildVars, expr.references)
       ctx.currentVars = input ++ buildVars
-      val ev = BindReferences.bindReference(expr, streamedPlan.output ++ buildPlan.output).gen(ctx)
+      val ev =
+        BindReferences.bindReference(expr, streamedPlan.output ++ buildPlan.output).genCode(ctx)
       s"""
          |boolean $conditionPassed = true;
          |${eval.trim}

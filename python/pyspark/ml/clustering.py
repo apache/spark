@@ -92,7 +92,8 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
     initMode = Param(Params._dummy(), "initMode",
                      "the initialization algorithm. This can be either \"random\" to " +
                      "choose random points as initial cluster centers, or \"k-means||\" " +
-                     "to use a parallel variant of k-means++", TypeConverters.toString)
+                     "to use a parallel variant of k-means++",
+                     typeConverter=TypeConverters.toString)
     initSteps = Param(Params._dummy(), "initSteps", "steps for k-means initialization mode",
                       typeConverter=TypeConverters.toInt)
 
