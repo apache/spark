@@ -44,11 +44,10 @@ private[sql] case class SparkPartitionID() extends LeafExpression with Nondeterm
 
   override protected def evalInternal(input: InternalRow): Int = partitionId
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val idTerm = ctx.freshName("partitionId")
     ctx.addMutableState(ctx.JAVA_INT, idTerm,
       s"$idTerm = org.apache.spark.TaskContext.getPartitionId();")
-    ev.isNull = "false"
-    s"final ${ctx.javaType(dataType)} ${ev.value} = $idTerm;"
+    ev.copy(code = s"final ${ctx.javaType(dataType)} ${ev.value} = $idTerm;", isNull = "false")
   }
 }
