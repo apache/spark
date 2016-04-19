@@ -944,8 +944,8 @@ class SQLTests(ReusedPySparkTestCase):
             output_files.extend([f for f in files if 'parquet' in f and not f.startswith('.')])
         self.assertTrue(len(output_files) > 0)
         self.assertTrue(len(os.listdir(chk)) > 0)
-        self.assertTrue(len(os.listdir(fake1)) == 0)
-        self.assertTrue(len(os.listdir(fake2)) == 0)
+        self.assertFalse(os.path.isdir(fake1))  # should not have been created
+        self.assertFalse(os.path.isdir(fake2))  # should not have been created
         cq.stop()
         shutil.rmtree(tmpPath)
 
