@@ -27,6 +27,7 @@ import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.Object
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution._
@@ -47,7 +48,8 @@ case class HiveTableScan(
     requestedAttributes: Seq[Attribute],
     relation: MetastoreRelation,
     partitionPruningPred: Seq[Expression])(
-    @transient val context: HiveContext)
+    @transient val context: SQLContext,
+    @transient val hiveconf: HiveConf)
   extends LeafNode {
 
   require(partitionPruningPred.isEmpty || relation.hiveQlTable.isPartitioned,
@@ -75,7 +77,7 @@ case class HiveTableScan(
   // Create a local copy of hiveconf,so that scan specific modifications should not impact
   // other queries
   @transient
-  private[this] val hiveExtraConf = new HiveConf(context.sessionState.hiveconf)
+  private[this] val hiveExtraConf = new HiveConf(hiveconf)
 
   // append columns ids and names before broadcast
   addColumnMetadataToConf(hiveExtraConf)

@@ -15,22 +15,23 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.execution
+package org.apache.spark.ui.scope
 
-import org.apache.spark.sql.{Row, SQLContext}
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.execution.command.RunnableCommand
-import org.apache.spark.sql.hive.HiveSessionState
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.SparkFunSuite
 
-private[hive]
-case class HiveNativeCommand(sql: String) extends RunnableCommand {
+class RDDOperationGraphSuite extends SparkFunSuite {
+  test("Test simple cluster equals") {
+    // create a 2-cluster chain with a child
+    val c1 = new RDDOperationCluster("1", "Bender")
+    val c2 = new RDDOperationCluster("2", "Hal")
+    c1.attachChildCluster(c2)
+    c1.attachChildNode(new RDDOperationNode(3, "Marvin", false, "collect!"))
 
-  override def output: Seq[AttributeReference] =
-    Seq(AttributeReference("result", StringType, nullable = false)())
+    // create an equal cluster, but without the child node
+    val c1copy = new RDDOperationCluster("1", "Bender")
+    val c2copy = new RDDOperationCluster("2", "Hal")
+    c1copy.attachChildCluster(c2copy)
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.sessionState.asInstanceOf[HiveSessionState].runNativeSql(sql).map(Row(_))
+    assert(c1 == c1copy)
   }
-
 }
