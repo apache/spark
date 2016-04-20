@@ -383,8 +383,8 @@ object ScalaReflection extends ScalaReflection {
           dataType = ObjectType(udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt()))
         Invoke(obj, "deserialize", ObjectType(udt.userClass), getPath :: Nil)
 
-      case t if UDTRegistration.exists(getClassFromType(t)) =>
-        val udt = UDTRegistration.getUDTFor(getClassFromType(t)).get.newInstance()
+      case t if UDTRegistration.exists(getClassNameFromType(t)) =>
+        val udt = UDTRegistration.getUDTFor(getClassNameFromType(t)).get.newInstance()
           .asInstanceOf[UserDefinedType[_]]
         val obj = NewInstance(
           udt.getClass,
@@ -440,7 +440,6 @@ object ScalaReflection extends ScalaReflection {
     if (!inputObject.dataType.isInstanceOf[ObjectType]) {
       inputObject
     } else {
-      val className = getClassNameFromType(tpe)
       tpe match {
         case t if t <:< localTypeOf[Option[_]] =>
           val TypeRef(_, _, Seq(optType)) = t
@@ -606,8 +605,8 @@ object ScalaReflection extends ScalaReflection {
             dataType = ObjectType(udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt()))
           Invoke(obj, "serialize", udt.sqlType, inputObject :: Nil)
 
-        case t if UDTRegistration.exists(getClassFromType(t)) =>
-          val udt = UDTRegistration.getUDTFor(getClassFromType(t)).get.newInstance()
+        case t if UDTRegistration.exists(getClassNameFromType(t)) =>
+          val udt = UDTRegistration.getUDTFor(getClassNameFromType(t)).get.newInstance()
             .asInstanceOf[UserDefinedType[_]]
           val obj = NewInstance(
             udt.getClass,
@@ -683,8 +682,8 @@ object ScalaReflection extends ScalaReflection {
       case t if t.typeSymbol.annotations.exists(_.tpe =:= typeOf[SQLUserDefinedType]) =>
         val udt = getClassFromType(t).getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance()
         Schema(udt, nullable = true)
-      case t if UDTRegistration.exists(getClassFromType(t)) =>
-        val udt = UDTRegistration.getUDTFor(getClassFromType(t)).get.newInstance()
+      case t if UDTRegistration.exists(getClassNameFromType(t)) =>
+        val udt = UDTRegistration.getUDTFor(getClassNameFromType(t)).get.newInstance()
           .asInstanceOf[UserDefinedType[_]]
         Schema(udt, nullable = true)
       case t if t <:< localTypeOf[Option[_]] =>

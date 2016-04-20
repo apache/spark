@@ -106,8 +106,15 @@ object UDTRegistration extends Serializable with Logging {
    * @param userClass Class object of user class
    * @return Option value of the Class object of UserDefinedType
    */
-  def getUDTFor(userClass: Class[_]): Option[Class[_]] = {
-    udtMap.get(userClass.getName).map { udtClassName =>
+  def getUDTFor(userClass: Class[_]): Option[Class[_]] = getUDTFor(userClass.getName)
+
+  /**
+   * Returns the Class of UserDefinedType for the name of a given user class.
+   * @param userClass class name of user class
+   * @return Option value of the Class object of UserDefinedType
+   */
+  def getUDTFor(userClass: String): Option[Class[_]] = {
+    udtMap.get(userClass).map { udtClassName =>
       if (Utils.classIsLoadable(udtClassName)) {
         val udtClass = Utils.classForName(udtClassName)
         if (classOf[UserDefinedType[_]].isAssignableFrom(udtClass)) {
@@ -115,11 +122,11 @@ object UDTRegistration extends Serializable with Logging {
         } else {
           throw new SparkException(
             s"${udtClass.getName} is not an UserDefinedType. Please make sure registering " +
-              s"an UserDefinedType for ${userClass.getName}")
+              s"an UserDefinedType for ${userClass}")
         }
       } else {
         throw new SparkException(
-          s"Can not load in UserDefinedType ${udtClassName} for user class ${userClass.getName}.")
+          s"Can not load in UserDefinedType ${udtClassName} for user class ${userClass}.")
       }
     }
   }
