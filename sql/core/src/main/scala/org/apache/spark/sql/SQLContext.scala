@@ -204,7 +204,7 @@ class SQLContext private[sql](
    * Add a jar to SQLContext
    */
   protected[sql] def addJar(path: String): Unit = {
-    sparkContext.addJar(path)
+    sessionState.addJar(path)
   }
 
   /** A [[FunctionResourceLoader]] that can be used in SessionCatalog. */
