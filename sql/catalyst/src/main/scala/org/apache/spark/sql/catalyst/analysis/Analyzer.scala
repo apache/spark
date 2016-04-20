@@ -283,7 +283,7 @@ class Analyzer(
 
       // Ensure all the expressions have been resolved.
       case x: GroupingSets if x.expressions.forall(_.resolved) =>
-        val gid = AttributeReference(VirtualColumn.groupingIdName, IntegerType, false)()
+        val gid = VirtualColumn.groupingIdAttribute
 
         // Expand works by setting grouping expressions to null as determined by the bitmasks. To
         // prevent these null values from being used in an aggregate instead of the original value
@@ -1680,6 +1680,12 @@ object CleanupAliases extends Rule[LogicalPlan] {
       Window(cleanedWindowExprs, partitionSpec.map(trimAliases),
         orderSpec.map(trimAliases(_).asInstanceOf[SortOrder]), child)
 
+    case Expand(projections, child) =>
+      val cleanedProjections = projections.map { projection =>
+        projection.map(trimNonTopLevelAliases(_).asInstanceOf[NamedExpression])
+      }
+      Expand(cleanedProjections, child)
+
     // Operators that operate on objects should only have expressions from encoders, which should
     // never have extra aliases.
     case o: ObjectConsumer => o
@@ -1761,11 +1767,12 @@ object TimeWindowing extends Rule[LogicalPlan] {
           val windowEnd = windowStart + window.windowDuration
 
           CreateNamedStruct(
-            Literal(WINDOW_START) :: windowStart ::
-            Literal(WINDOW_END) :: windowEnd :: Nil)
+            Literal(WINDOW_START) :: TimestampFromLong(windowStart) ::
+            Literal(WINDOW_END) :: TimestampFromLong(windowEnd) :: Nil)
         }
 
-        val projections = windows.map(_ +: p.children.head.output)
+        val projections =
+          windows.map(Alias(_, "window")(exprId = windowAttr.exprId) +: p.children.head.output)
 
         val filterExpr =
           window.timeColumn >= windowAttr.getField(WINDOW_START) &&
@@ -1773,7 +1780,7 @@ object TimeWindowing extends Rule[LogicalPlan] {
 
         val expandedPlan =
           Filter(filterExpr,
-            Expand(projections, windowAttr +: child.output, child))
+            Expand(projections, child))
 
         val substitutedPlan = p transformExpressions {
           case t: TimeWindow => windowAttr

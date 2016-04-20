@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression,
 import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.types.{IntegerType, StringType}
 
 class ColumnPruningSuite extends PlanTest {
 
@@ -111,9 +111,8 @@ class ColumnPruningSuite extends PlanTest {
         Seq(sum('c).as("sum")),
         Expand(
           Seq(
-            Seq('a, 'b, 'c, Literal.create(null, StringType), 1),
-            Seq('a, 'b, 'c, 'a, 2)),
-          Seq('a, 'b, 'c, 'aa.int, 'gid.int),
+            Seq('a, 'b, 'c, Alias(Literal.create(null, IntegerType), "aa")(), Alias(1, "gid")()),
+            Seq('a, 'b, 'c, Alias('a, "aa")(), Alias(2, "gid")())),
           input)).analyze
     val optimized = Optimize.execute(query)
 
@@ -123,9 +122,8 @@ class ColumnPruningSuite extends PlanTest {
         Seq(sum('c).as("sum")),
         Expand(
           Seq(
-            Seq('c, Literal.create(null, StringType), 1),
-            Seq('c, 'a, 2)),
-          Seq('c, 'aa.int, 'gid.int),
+            Seq('c, Alias(Literal.create(null, IntegerType), "aa")(), Alias(1, "gid")()),
+            Seq('c, Alias('a, "aa")(), Alias(2, "gid")())),
           Project(Seq('a, 'c),
             input))).analyze
 

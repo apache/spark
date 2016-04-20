@@ -166,3 +166,19 @@ case class PreciseTimestamp(child: Expression) extends UnaryExpression with Expe
        """.stripMargin)
   }
 }
+
+/**
+ * Expression used internally to convert a Long to TimestampType without losing
+ * precision, i.e. in microseconds. Used in time windowing.
+ */
+case class TimestampFromLong(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+  override def inputTypes: Seq[AbstractDataType] = Seq(LongType)
+  override def dataType: DataType = TimestampType
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+    val eval = child.gen(ctx)
+    eval.code +
+      s"""boolean ${ev.isNull} = ${eval.isNull};
+         |${ctx.javaType(dataType)} ${ev.value} = ${eval.value};
+       """.stripMargin
+  }
+}

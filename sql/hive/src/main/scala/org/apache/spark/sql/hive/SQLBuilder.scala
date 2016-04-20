@@ -110,7 +110,7 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
     case p: Project =>
       projectToSQL(p, isDistinct = false)
 
-    case a @ Aggregate(_, _, e @ Expand(_, _, p: Project)) if isGroupingSet(a, e, p) =>
+    case a @ Aggregate(_, _, e @ Expand(_, p: Project)) if isGroupingSet(a, e, p) =>
       groupingSetToSQL(a, e, p)
 
     case p: Aggregate =>
@@ -330,7 +330,7 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
     val aggExprs = agg.aggregateExpressions.map { case aggExpr =>
       val originalAggExpr = aggExpr.transformDown {
         // grouping_id() is converted to VirtualColumn.groupingIdName by Analyzer. Revert it back.
-        case ar: AttributeReference if ar == gid => GroupingID(Nil)
+        case ar: AttributeReference if ar.exprId == gid.exprId => GroupingID(Nil)
         case ar: AttributeReference if groupByAttrMap.contains(ar) => groupByAttrMap(ar)
         case a @ Cast(BitwiseAnd(
             ShiftRight(ar: AttributeReference, Literal(value: Any, IntegerType)),
