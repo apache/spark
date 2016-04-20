@@ -122,4 +122,121 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       checkAnswer(sql("SHOW TBLPROPERTIES parquet_temp"), Nil)
     }
   }
+
+  test("LOAD DATA") {
+    withTable("non_part_table", "part_table") {
+      sql(
+        """
+          |CREATE TABLE non_part_table (time TIMESTAMP, id INT)
+          |ROW FORMAT DELIMITED
+          |FIELDS TERMINATED BY ','
+          |LINES TERMINATED BY '\n'
+        """.stripMargin)
+
+      val testData = hiveContext.getHiveFile("data/files/issue-4077-data.txt").getCanonicalPath
+
+      // LOAD DATA INTO non-partitioned table can't specify partition
+      intercept[AnalysisException] {
+        sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE non_part_table PARTITION(ds="1")""")
+      }
+
+      sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE non_part_table""")
+      checkAnswer(
+        sql("SELECT time FROM non_part_table"),
+        Row(java.sql.Timestamp.valueOf("2014-12-11 00:00:00")) :: Row(null) :: Nil)
+
+      sql(
+        """
+          |CREATE TABLE part_table (time TIMESTAMP, id INT)
+          |PARTITIONED BY (c STRING, d STRING)
+          |ROW FORMAT DELIMITED
+          |FIELDS TERMINATED BY ','
+          |LINES TERMINATED BY '\n'
+        """.stripMargin)
+
+      // LOAD DATA INTO partitioned table must specify partition
+      intercept[AnalysisException] {
+        sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE part_table""")
+      }
+
+      intercept[AnalysisException] {
+        sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE part_table PARTITION(c="1")""")
+      }
+      intercept[AnalysisException] {
+        sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE part_table PARTITION(d="1")""")
+      }
+      intercept[AnalysisException] {
+        sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE part_table PARTITION(c="1", k="2")""")
+      }
+
+      sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE part_table PARTITION(c="1", d="2")""")
+      checkAnswer(
+        sql("SELECT time, id FROM part_table WHERE c = '1' AND d = '2'"),
+        sql("SELECT * FROM non_part_table").collect())
+
+      // Different order of partition columns.
+      sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE part_table PARTITION(d="1", c="2")""")
+      checkAnswer(
+        sql("SELECT time, id FROM part_table WHERE c = '2' AND d = '1'"),
+        sql("SELECT * FROM non_part_table").collect())
+    }
+  }
+
+  test("LOAD DATA: input path") {
+    withTable("non_part_table") {
+      sql(
+        """
+          |CREATE TABLE non_part_table (time TIMESTAMP, id INT)
+          |ROW FORMAT DELIMITED
+          |FIELDS TERMINATED BY ','
+          |LINES TERMINATED BY '\n'
+        """.stripMargin)
+
+      // Non-existing inpath
+      intercept[AnalysisException] {
+        sql("""LOAD DATA LOCAL INPATH "/non-existing/data.txt" INTO TABLE non_part_table""")
+      }
+
+      val testData = hiveContext.getHiveFile("data/files/issue-4077-data.txt").getCanonicalPath
+
+      // Non-local inpath: without URI Scheme and Authority
+      sql(s"""LOAD DATA INPATH "$testData" INTO TABLE non_part_table""")
+      checkAnswer(
+        sql("SELECT time FROM non_part_table"),
+        Row(java.sql.Timestamp.valueOf("2014-12-11 00:00:00")) :: Row(null) :: Nil)
+
+      // Use URI as LOCAL inpath:
+      // file:/path/to/data/files/issue-4077-data.txt
+      val uri = "file:" + testData
+      sql(s"""LOAD DATA LOCAL INPATH "$uri" INTO TABLE non_part_table""")
+
+      checkAnswer(
+        sql("SELECT time FROM non_part_table"),
+        Row(java.sql.Timestamp.valueOf("2014-12-11 00:00:00")) ::
+          Row(java.sql.Timestamp.valueOf("2014-12-11 00:00:00")) :: Row(null) :: Row(null) :: Nil)
+
+      // Use URI as non-LOCAL inpath
+      sql(s"""LOAD DATA INPATH "$uri" INTO TABLE non_part_table""")
+
+      checkAnswer(
+        sql("SELECT time FROM non_part_table"),
+        Row(java.sql.Timestamp.valueOf("2014-12-11 00:00:00")) ::
+          Row(java.sql.Timestamp.valueOf("2014-12-11 00:00:00")) ::
+          Row(java.sql.Timestamp.valueOf("2014-12-11 00:00:00")) ::
+          Row(null) :: Row(null) :: Row(null) :: Nil)
+
+      // Incorrect URI:
+      // file://path/to/data/files/issue-4077-data.txt
+      val incorrectUri = "file:/" + testData
+      intercept[AnalysisException] {
+        sql(s"""LOAD DATA LOCAL INPATH "$incorrectUri" INTO TABLE non_part_table""")
+      }
+
+      // Unset default URI Scheme and Authority: throw exception
+      hiveContext.sparkContext.hadoopConfiguration.unset("fs.default.name")
+      intercept[AnalysisException] {
+        sql(s"""LOAD DATA INPATH "$testData" INTO TABLE non_part_table""")
+      }
+    }
+  }
 }
