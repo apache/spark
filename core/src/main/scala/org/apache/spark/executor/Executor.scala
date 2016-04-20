@@ -293,16 +293,14 @@ private[spark] class Executor(
         val valueBytes = resultSer.serialize(value)
         val afterSerialization = System.currentTimeMillis()
 
-        for (m <- task.metrics) {
-          // Deserialization happens in two parts: first, we deserialize a Task object, which
-          // includes the Partition. Second, Task.run() deserializes the RDD and function to be run.
-          m.setExecutorDeserializeTime(
-            (taskStart - deserializeStartTime) + task.executorDeserializeTime)
-          // We need to subtract Task.run()'s deserialization time to avoid double-counting
-          m.setExecutorRunTime((taskFinish - taskStart) - task.executorDeserializeTime)
-          m.setJvmGCTime(computeTotalGcTime() - startGCTime)
-          m.setResultSerializationTime(afterSerialization - beforeSerialization)
-        }
+        // Deserialization happens in two parts: first, we deserialize a Task object, which
+        // includes the Partition. Second, Task.run() deserializes the RDD and function to be run.
+        task.metrics.setExecutorDeserializeTime(
+          (taskStart - deserializeStartTime) + task.executorDeserializeTime)
+        // We need to subtract Task.run()'s deserialization time to avoid double-counting
+        task.metrics.setExecutorRunTime((taskFinish - taskStart) - task.executorDeserializeTime)
+        task.metrics.setJvmGCTime(computeTotalGcTime() - startGCTime)
+        task.metrics.setResultSerializationTime(afterSerialization - beforeSerialization)
 
         // Note: accumulator updates must be collected after TaskMetrics is updated
         val accumUpdates = task.collectAccumulatorUpdates()
@@ -357,10 +355,8 @@ private[spark] class Executor(
           // Collect latest accumulator values to report back to the driver
           val accumulatorUpdates: Seq[AccumulableInfo] =
             if (task != null) {
-              task.metrics.foreach { m =>
-                m.setExecutorRunTime(System.currentTimeMillis() - taskStart)
-                m.setJvmGCTime(computeTotalGcTime() - startGCTime)
-              }
+              task.metrics.setExecutorRunTime(System.currentTimeMillis() - taskStart)
+              task.metrics.setJvmGCTime(computeTotalGcTime() - startGCTime)
               task.collectAccumulatorUpdates(taskFailed = true)
             } else {
               Seq.empty[AccumulableInfo]
@@ -485,11 +481,9 @@ private[spark] class Executor(
 
     for (taskRunner <- runningTasks.values().asScala) {
       if (taskRunner.task != null) {
-        taskRunner.task.metrics.foreach { metrics =>
-          metrics.mergeShuffleReadMetrics()
-          metrics.setJvmGCTime(curGCTime - taskRunner.startGCTime)
-          accumUpdates += ((taskRunner.taskId, metrics.accumulatorUpdates()))
-        }
+        taskRunner.task.metrics.mergeShuffleReadMetrics()
+        taskRunner.task.metrics.setJvmGCTime(curGCTime - taskRunner.startGCTime)
+        accumUpdates += ((taskRunner.taskId, taskRunner.task.metrics.accumulatorUpdates()))
       }
     }
 
