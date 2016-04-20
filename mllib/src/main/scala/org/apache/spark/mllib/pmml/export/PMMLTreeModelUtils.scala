@@ -37,10 +37,10 @@ private[mllib] object PMMLTreeModelUtils {
       case Algo.Regression => MiningFunctionType.REGRESSION
     }
 
-    val treeModel = new org.dmg.pmml.TreeModel()
-      .withModelName(modelName)
-      .withFunctionName(miningFunctionType)
-      .withSplitCharacteristic(TreeModel.SplitCharacteristic.BINARY_SPLIT)
+    val treeModel = new TreeModel()
+      .setModelName(modelName)
+      .setFunctionName(miningFunctionType)
+      .setSplitCharacteristic(TreeModel.SplitCharacteristic.BINARY_SPLIT)
 
     var (rootNode, miningFields, dataFields, classes) = buildStub(dtModel.topNode, dtModel.algo)
 
@@ -49,14 +49,14 @@ private[mllib] object PMMLTreeModelUtils {
 
       case Algo.Classification =>
         miningFields = miningFields :+ new MiningField()
-          .withName(FieldName.create("class"))
-          .withUsageType(FieldUsageType.PREDICTED)
+          .setName(FieldName.create("class"))
+          .setUsageType(FieldUsageType.PREDICTED)
 
         val dataField = new DataField()
-          .withName(FieldName.create("class"))
-          .withOpType(OpType.CATEGORICAL)
-          .withValues(classes.asJava)
-          .withDataType(DataType.DOUBLE)
+          .setName(FieldName.create("class"))
+          .setOpType(OpType.CATEGORICAL)
+          .addValues(classes: _*)
+          .setDataType(DataType.DOUBLE)
 
         dataFields = dataFields :+ dataField
 
@@ -66,14 +66,14 @@ private[mllib] object PMMLTreeModelUtils {
         dataFields = dataFields :+ dataField
 
         miningFields = miningFields :+ new MiningField()
-          .withName(targetField)
-          .withUsageType(FieldUsageType.TARGET)
+          .setName(targetField)
+          .setUsageType(FieldUsageType.TARGET)
 
     }
 
-    val miningSchema = new MiningSchema().withMiningFields(miningFields.asJava)
+    val miningSchema = new MiningSchema().addMiningFields(miningFields: _*)
 
-    treeModel.withNode(rootNode).withMiningSchema(miningSchema)
+    treeModel.setNode(rootNode).setMiningSchema(miningSchema)
 
     (treeModel, dataFields)
   }
@@ -90,9 +90,9 @@ private[mllib] object PMMLTreeModelUtils {
 
       // get rootPMML node for the MLLib node
       val rootPMMLNode = new PMMLNode()
-        .withId(rootNode.id.toString)
-        .withScore(rootNode.predict.predict.toString)
-        .withPredicate(predicate)
+        .setId(rootNode.id.toString)
+        .setScore(rootNode.predict.predict.toString)
+        .setPredicate(predicate)
 
       var leftPredicate: Predicate = new True()
       var rightPredicate: Predicate = new True()
@@ -104,8 +104,8 @@ private[mllib] object PMMLTreeModelUtils {
         if (dataFields.get(dataField.getName.getValue).isEmpty) {
           dataFields.put(dataField.getName.getValue, dataField)
           miningFields += new MiningField()
-            .withName(dataField.getName)
-            .withUsageType(FieldUsageType.ACTIVE)
+            .setName(dataField.getName)
+            .setUsageType(FieldUsageType.ACTIVE)
 
         } else if (dataField.getOpType != OpType.CONTINUOUS) {
           appendCategories(
@@ -119,12 +119,12 @@ private[mllib] object PMMLTreeModelUtils {
       // if left node exist, add the node
       if (rootNode.leftNode.isDefined) {
         val leftNode = buildStubInternal(rootNode.leftNode.get, leftPredicate)
-        rootPMMLNode.withNodes(leftNode)
+        rootPMMLNode.addNodes(leftNode)
       }
       // if right node exist, add the node
       if (rootNode.rightNode.isDefined) {
         val rightNode = buildStubInternal(rootNode.rightNode.get, rightPredicate)
-        rootPMMLNode.withNodes(rightNode)
+        rootPMMLNode.addNodes(rightNode)
       }
 
       // add to the list of classes
@@ -165,7 +165,7 @@ private[mllib] object PMMLTreeModelUtils {
 
       values.foreach(category => {
         if (existingValues.get(category.getValue).isEmpty) {
-          dtField.withValues(category)
+          dtField.addValues(category)
         }
       })
     }
@@ -190,11 +190,11 @@ private[mllib] object PMMLTreeModelUtils {
           val value = split.threshold.toString
           if (isLeft) {
             new SimplePredicate(field, SimplePredicate.Operator.LESS_OR_EQUAL)
-              .withValue(value)
+              .setValue(value)
           }
           else {
             new SimplePredicate(field, SimplePredicate.Operator.GREATER_THAN)
-              .withValue(value)
+              .setValue(value)
           }
 
         case FeatureType.Categorical =>
@@ -204,11 +204,11 @@ private[mllib] object PMMLTreeModelUtils {
                 for (category <- split.categories)
                   yield
                   new SimplePredicate(field, SimplePredicate.Operator.EQUAL)
-                    .withValue(category.toString)
+                    .setValue(category.toString)
 
               val compoundPredicate = new CompoundPredicate()
-                .withBooleanOperator(CompoundPredicate.BooleanOperator.OR)
-                .withPredicates(predicates.asJava)
+                .setBooleanOperator(CompoundPredicate.BooleanOperator.OR)
+                .addPredicates(predicates: _*)
 
               compoundPredicate
             } else {
@@ -220,7 +220,7 @@ private[mllib] object PMMLTreeModelUtils {
 
             if (isLeft) {
               new SimplePredicate(field, SimplePredicate.Operator.EQUAL)
-                .withValue(value)
+                .setValue(value)
             }
             else {
               new True()
@@ -239,17 +239,17 @@ private[mllib] object PMMLTreeModelUtils {
     if (!mllibNode.isLeaf && mllibNode.split.isDefined) {
       val split = mllibNode.split.get
       val dataField = new DataField()
-        .withName(fieldName)
-        .withDataType(DataType.fromValue(split.threshold.getClass.getSimpleName.toLowerCase))
-        .withOpType(OpType.fromValue(split.featureType.toString.toLowerCase))
+        .setName(fieldName)
+        .setDataType(DataType.fromValue(split.threshold.getClass.getSimpleName.toLowerCase))
+        .setOpType(OpType.fromValue(split.featureType.toString.toLowerCase))
 
       split.featureType match {
-        case FeatureType.Continuous => dataField.withOpType(OpType.CONTINUOUS)
+        case FeatureType.Continuous => dataField.setOpType(OpType.CONTINUOUS)
         case FeatureType.Categorical =>
-          dataField.withOpType(OpType.CATEGORICAL)
+          dataField.setOpType(OpType.CATEGORICAL)
           val categories = split.categories
-            .map(category => new PMMLValue(category.toString)).asJava
-          dataField.withValues(categories)
+            .map(category => new PMMLValue(category.toString))
+            dataField.addValues(categories: _*)
       }
 
       Some(dataField)
