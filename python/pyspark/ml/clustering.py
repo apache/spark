@@ -364,17 +364,9 @@ class LDAModel(JavaModel):
 
     @since("2.0.0")
     def describeTopics(self, maxTermsPerTopic=10):
-        """ Return the topics described by their top-weighted terms.
+        """Return the topics described by their top-weighted terms.
 
         WARNING: If vocabSize and k are large, this can return a large object!
-
-        :param maxTermsPerTopic: Maximum number of terms to collect for each topic.
-               Default value of 10.
-        :return: Local DataFrame with one topic per Row, with columns:
-                - "topic": IntegerType: topic index
-                - "termIndices": ArrayType(IntegerType): term indices, sorted in order of decreasing
-                             term importance
-                - "termWeights": ArrayType(DoubleType): corresponding sorted term weights
         """
         return self._call_java("describeTopics", maxTermsPerTopic)
 
@@ -470,22 +462,22 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
                                "Concentration parameter (commonly named \"beta\" or \"eta\") for "
                                "the prior placed on topic' distributions over terms.")
     topicDistributionCol = Param(Params._dummy(), "topicDistributionCol",
-                              "Output column with estimates of the topic mixture distribution for "
-                              "each document (often called \"theta\" in the literature). Returns "
-                              "a vector of zeros for an empty document.")
+                                 "Output column with estimates of the topic mixture distribution "
+                                 "for each document (often called \"theta\" in the literature). "
+                                 "Returns a vector of zeros for an empty document.")
 
     @keyword_only
     def __init__(self, featuresCol="features", k=10,
                  optimizer="online", learningOffset=1024.0, learningDecay=0.51,
                  subsamplingRate=0.05, optimizeDocConcentration=True,
-                 checkpointInterval=10, maxIter=20, docConcentration = None,
-                 topicConcentration = None, topicDistributionCol = "topicDistribution", seed=None):
+                 checkpointInterval=10, maxIter=20, docConcentration=None,
+                 topicConcentration=None, topicDistributionCol="topicDistribution", seed=None):
         """
         __init__(self, featuresCol="features", k=10, \
                  optimizer="online", learningOffset=1024.0, learningDecay=0.51, \
                  subsamplingRate=0.05, optimizeDocConcentration=True, \
-                 checkpointInterval=10, maxIter=20, docConcentration = None, \
-                 topicConcentration = None, topicDistributionCol = "topicDistribution", seed=None):
+                 checkpointInterval=10, maxIter=20, docConcentration=None, \
+                 topicConcentration=None, topicDistributionCol="topicDistribution", seed=None):
         """
         super(LDA, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.clustering.LDA", self.uid)
@@ -506,16 +498,16 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
     def setParams(self, featuresCol="features", k=10,
                   optimizer="online", learningOffset=1024.0, learningDecay=0.51,
                   subsamplingRate=0.05, optimizeDocConcentration=True,
-                  checkpointInterval=10, maxIter=20, docConcentration = None,
-                  topicConcentration = None,
-                  topicDistributionCol = "topicDistribution", seed=None):
+                  checkpointInterval=10, maxIter=20, docConcentration=None,
+                  topicConcentration=None,
+                  topicDistributionCol="topicDistribution", seed=None):
         """
         setParams(self, featuresCol="features", k=10, \
                   optimizer="online", learningOffset=1024.0, learningDecay=0.51, \
                   subsamplingRate=0.05, optimizeDocConcentration=True, \
-                  checkpointInterval=10, maxIter=20, docConcentration = None,
-                  topicConcentration = None,
-                  topicDistributionCol = "topicDistribution", seed=None):
+                  checkpointInterval=10, maxIter=20, docConcentration=None,
+                  topicConcentration=None,
+                  topicDistributionCol="topicDistribution", seed=None):
 
         Sets params for LDA.
         """
