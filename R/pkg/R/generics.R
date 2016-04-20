@@ -753,7 +753,7 @@ setGeneric("bitwiseNOT", function(x) { standardGeneric("bitwiseNOT") })
 
 #' @rdname bround
 #' @export
-setGeneric("bround", function(x, scale) { standardGeneric("bround") })
+setGeneric("bround", function(x, ...) { standardGeneric("bround") })
 
 #' @rdname cbrt
 #' @export

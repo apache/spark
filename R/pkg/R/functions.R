@@ -1019,8 +1019,8 @@ setMethod("round",
 #' @export
 #' @examples \dontrun{bround(df$c, 0)}
 setMethod("bround",
-          signature(x = "Column", scale = "numeric"),
-          function(x, scale) {
+          signature(x = "Column"),
+          function(x, scale = 0) {
             jc <- callJStatic("org.apache.spark.sql.functions", "bround", x@jc, as.integer(scale))
             column(jc)
           })
