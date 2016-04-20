@@ -39,6 +39,7 @@ case class OutputOperationInfo(
     description: String,
     startTime: Option[Long],
     endTime: Option[Long],
+    jobGenTime:  Option[Long],
     failureReason: Option[String]) {
 
   /**
