@@ -80,6 +80,7 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
 
   /**
    * Param for link prediction (linear predictor) column name.
+   * Default is empty, which means we do not output link prediction.
    * @group param
    */
   @Since("2.0.0")
@@ -711,7 +712,10 @@ class GeneralizedLinearRegressionModel private[ml] (
     familyAndLink.fitted(eta)
   }
 
-  protected def predictLink(features: Vector): Double = {
+  /**
+   * Calculate the link prediction (linear predictor) of the given instance.
+   */
+  private def predictLink(features: Vector): Double = {
     BLAS.dot(features, coefficients) + intercept
   }
 
