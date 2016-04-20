@@ -82,10 +82,7 @@ def identify_changed_files_from_git_commits(patch_sha, target_branch=None, targe
         run_cmd(['git', 'fetch', 'origin', str(target_branch+':'+target_branch)])
     else:
         diff_target = target_ref
-    run_cmd(['git', 'config', 'user.name', '"Apache Spark"'])
-    run_cmd(['git', 'config', 'user.email', '"dev@spark.apache.org"'])
-    run_cmd(['git', 'rebase', diff_target])
-    raw_output = subprocess.check_output(['git', 'diff', '--name-only', patch_sha, diff_target],
+    raw_output = subprocess.check_output(['git', 'diff', '--name-only', 'HEAD~2'],
                                          universal_newlines=True)
     # Remove any empty strings
     return [f for f in raw_output.split('\n') if f]
