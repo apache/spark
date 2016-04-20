@@ -191,36 +191,45 @@ private[sql] object StateStore extends Logging {
    */
   private def doMaintenance(): Unit = {
     logDebug("Doing maintenance")
-    loadedProviders.synchronized { loadedProviders.toSeq }.foreach { case (id, provider) =>
-      try {
-        if (verifyIfStoreInstanceActive(id)) {
-          provider.doMaintenance()
-        } else {
-          unload(id)
-          logInfo(s"Unloaded $provider")
+    if (SparkEnv.get == null) {
+      stop()
+    } else {
+      loadedProviders.synchronized { loadedProviders.toSeq }.foreach { case (id, provider) =>
+        try {
+          if (verifyIfStoreInstanceActive(id)) {
+            provider.doMaintenance()
+          } else {
+            unload(id)
+            logInfo(s"Unloaded $provider")
+          }
+        } catch {
+          case NonFatal(e) =>
+            logWarning(s"Error managing $provider, stopping management thread")
+            stop()
         }
-      } catch {
-        case NonFatal(e) =>
-          logWarning(s"Error managing $provider, stopping management thread")
-          stop()
       }
     }
   }
 
   private def reportActiveStoreInstance(storeId: StateStoreId): Unit = {
-    val host = SparkEnv.get.blockManager.blockManagerId.host
-    val executorId = SparkEnv.get.blockManager.blockManagerId.executorId
-    coordinatorRef.foreach(_.reportActiveInstance(storeId, host, executorId))
-    logDebug(s"Reported that the loaded instance $storeId is active")
-
+    if (SparkEnv.get != null) {
+      val host = SparkEnv.get.blockManager.blockManagerId.host
+      val executorId = SparkEnv.get.blockManager.blockManagerId.executorId
+      coordinatorRef.foreach(_.reportActiveInstance(storeId, host, executorId))
+      logDebug(s"Reported that the loaded instance $storeId is active")
+    }
   }
 
   private def verifyIfStoreInstanceActive(storeId: StateStoreId): Boolean = {
-    val executorId = SparkEnv.get.blockManager.blockManagerId.executorId
-    val verified =
-      coordinatorRef.map(_.verifyIfInstanceActive(storeId, executorId)).getOrElse(false)
-    logDebug(s"Verified whether the loaded instance $storeId is active: $verified" )
-    verified
+    if (SparkEnv.get != null) {
+      val executorId = SparkEnv.get.blockManager.blockManagerId.executorId
+      val verified =
+        coordinatorRef.map(_.verifyIfInstanceActive(storeId, executorId)).getOrElse(false)
+      logDebug(s"Verified whether the loaded instance $storeId is active: $verified")
+      verified
+    } else {
+      false
+    }
   }
 
   private def coordinatorRef: Option[StateStoreCoordinatorRef] = synchronized {

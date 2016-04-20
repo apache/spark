@@ -430,6 +430,7 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
       require(SparkEnv.get === null)
       eventually(timeout(10 seconds)) {
         assert(!StateStore.isLoaded(storeId))
+        assert(!StateStore.isMaintenanceRunning)
       }
     }
   }
