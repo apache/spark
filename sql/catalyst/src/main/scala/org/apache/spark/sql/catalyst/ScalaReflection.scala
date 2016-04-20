@@ -374,10 +374,8 @@ object ScalaReflection extends ScalaReflection {
           newInstance
         }
 
-      case t if Utils.classIsLoadable(className) &&
-        Utils.classForName(className).isAnnotationPresent(classOf[SQLUserDefinedType]) =>
-        val udt = Utils.classForName(className)
-          .getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance()
+      case t if t.typeSymbol.annotations.exists(_.tpe =:= typeOf[SQLUserDefinedType]) =>
+        val udt = getClassFromType(t).getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance()
         val obj = NewInstance(
           udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt(),
           Nil,
@@ -432,7 +430,6 @@ object ScalaReflection extends ScalaReflection {
     if (!inputObject.dataType.isInstanceOf[ObjectType]) {
       inputObject
     } else {
-      val className = getClassNameFromType(tpe)
       tpe match {
         case t if t <:< localTypeOf[Option[_]] =>
           val TypeRef(_, _, Seq(optType)) = t
@@ -589,9 +586,8 @@ object ScalaReflection extends ScalaReflection {
         case t if t <:< localTypeOf[java.lang.Boolean] =>
           Invoke(inputObject, "booleanValue", BooleanType)
 
-        case t if Utils.classIsLoadable(className) &&
-          Utils.classForName(className).isAnnotationPresent(classOf[SQLUserDefinedType]) =>
-          val udt = Utils.classForName(className)
+        case t if t.typeSymbol.annotations.exists(_.tpe =:= typeOf[SQLUserDefinedType]) =>
+          val udt = getClassFromType(t)
             .getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance()
           val obj = NewInstance(
             udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt(),
@@ -637,24 +633,6 @@ object ScalaReflection extends ScalaReflection {
    * Retrieves the runtime class corresponding to the provided type.
    */
   def getClassFromType(tpe: Type): Class[_] = mirror.runtimeClass(tpe.erasure.typeSymbol.asClass)
-}
-
-/**
- * Support for generating catalyst schemas for scala objects.  Note that unlike its companion
- * object, this trait able to work in both the runtime and the compile time (macro) universe.
- */
-trait ScalaReflection {
-  /** The universe we work in (runtime or macro) */
-  val universe: scala.reflect.api.Universe
-
-  /** The mirror used to access types in the universe */
-  def mirror: universe.Mirror
-
-  import universe._
-
-  // The Predef.Map is scala.collection.immutable.Map.
-  // Since the map values can be mutable, we explicitly import scala.collection.Map at here.
-  import scala.collection.Map
 
   case class Schema(dataType: DataType, nullable: Boolean)
 
@@ -668,36 +646,22 @@ trait ScalaReflection {
   def schemaFor[T: TypeTag]: Schema = schemaFor(localTypeOf[T])
 
   /**
-   * Return the Scala Type for `T` in the current classloader mirror.
+   * Returns a catalyst DataType and its nullability for the given Scala Type using reflection.
    *
-   * Use this method instead of the convenience method `universe.typeOf`, which
-   * assumes that all types can be found in the classloader that loaded scala-reflect classes.
-   * That's not necessarily the case when running using Eclipse launchers or even
-   * Sbt console or test (without `fork := true`).
-   *
-   * @see SPARK-5281
+   * Unlike `schemaFor`, this method won't throw exception for un-supported type, it will return
+   * `NullType` silently instead.
    */
-  // SPARK-13640: Synchronize this because TypeTag.tpe is not thread-safe in Scala 2.10.
-  def localTypeOf[T: TypeTag]: `Type` = ScalaReflectionLock.synchronized {
-    val tag = implicitly[TypeTag[T]]
-    tag.in(mirror).tpe.normalize
+  def silentSchemaFor(tpe: `Type`): Schema = try {
+    schemaFor(tpe)
+  } catch {
+    case _: UnsupportedOperationException => Schema(NullType, nullable = true)
   }
 
   /** Returns a catalyst DataType and its nullability for the given Scala Type using reflection. */
   def schemaFor(tpe: `Type`): Schema = ScalaReflectionLock.synchronized {
-    val className = getClassNameFromType(tpe)
-
     tpe match {
-
-      case t if Utils.classIsLoadable(className) &&
-        Utils.classForName(className).isAnnotationPresent(classOf[SQLUserDefinedType]) =>
-
-        // Note: We check for classIsLoadable above since Utils.classForName uses Java reflection,
-        //       whereas className is from Scala reflection.  This can make it hard to find classes
-        //       in some cases, such as when a class is enclosed in an object (in which case
-        //       Java appends a '$' to the object name but Scala does not).
-        val udt = Utils.classForName(className)
-          .getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance()
+      case t if t.typeSymbol.annotations.exists(_.tpe =:= typeOf[SQLUserDefinedType]) =>
+        val udt = getClassFromType(t).getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance()
         Schema(udt, nullable = true)
       case t if t <:< localTypeOf[Option[_]] =>
         val TypeRef(_, _, Seq(optType)) = t
@@ -748,17 +712,39 @@ trait ScalaReflection {
         throw new UnsupportedOperationException(s"Schema for type $other is not supported")
     }
   }
+}
+
+/**
+ * Support for generating catalyst schemas for scala objects.  Note that unlike its companion
+ * object, this trait able to work in both the runtime and the compile time (macro) universe.
+ */
+trait ScalaReflection {
+  /** The universe we work in (runtime or macro) */
+  val universe: scala.reflect.api.Universe
+
+  /** The mirror used to access types in the universe */
+  def mirror: universe.Mirror
+
+  import universe._
+
+  // The Predef.Map is scala.collection.immutable.Map.
+  // Since the map values can be mutable, we explicitly import scala.collection.Map at here.
+  import scala.collection.Map
 
   /**
-   * Returns a catalyst DataType and its nullability for the given Scala Type using reflection.
+   * Return the Scala Type for `T` in the current classloader mirror.
    *
-   * Unlike `schemaFor`, this method won't throw exception for un-supported type, it will return
-   * `NullType` silently instead.
+   * Use this method instead of the convenience method `universe.typeOf`, which
+   * assumes that all types can be found in the classloader that loaded scala-reflect classes.
+   * That's not necessarily the case when running using Eclipse launchers or even
+   * Sbt console or test (without `fork := true`).
+   *
+   * @see SPARK-5281
    */
-  def silentSchemaFor(tpe: `Type`): Schema = try {
-    schemaFor(tpe)
-  } catch {
-    case _: UnsupportedOperationException => Schema(NullType, nullable = true)
+  // SPARK-13640: Synchronize this because TypeTag.tpe is not thread-safe in Scala 2.10.
+  def localTypeOf[T: TypeTag]: `Type` = ScalaReflectionLock.synchronized {
+    val tag = implicitly[TypeTag[T]]
+    tag.in(mirror).tpe.normalize
   }
 
   /**
