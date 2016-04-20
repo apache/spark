@@ -883,12 +883,16 @@ class Analyzer(
                   try {
                     val outerAttrOpt = outer.resolve(nameParts, resolver)
                     if (outerAttrOpt.isDefined) {
-                      // Create an alias for the attribute come from outer table, or it may conflict
-                      // with others from subquery
-                      val alias = Alias(outerAttrOpt.get, "outer")()
-                      val attr = alias.toAttribute
-                      aliases += attr -> alias
-                      attr
+                      val outerAttr = outerAttrOpt.get
+                      if (q.inputSet.contains(outerAttr)) {
+                        // Got a conflict, create an alias for the attribute come from outer table
+                        val alias = Alias(outerAttr, outerAttr.toString)()
+                        val attr = alias.toAttribute
+                        aliases += attr -> alias
+                        attr
+                      } else {
+                        outerAttr
+                      }
                     } else {
                       u
                     }
