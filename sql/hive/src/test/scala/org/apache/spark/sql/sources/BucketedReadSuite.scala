@@ -256,6 +256,10 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
         val t2 = hiveContext.table("bucketed_table2")
         val joined = t1.join(t2, joinCondition(t1, t2, joinColumns))
 
+        joined.sort("bucketed_table1.k", "bucketed_table2.k").collect()
+
+        df1.join(df2, joinCondition(df1, df2, joinColumns)).sort("df1.k", "df2.k").collect()
+
         // First check the result is corrected.
         checkAnswer(
           joined.sort("bucketed_table1.k", "bucketed_table2.k"),
@@ -301,8 +305,8 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
   }
 
   test("only shuffle one side when 2 bucketed tables have different bucket keys") {
-    val bucketSpec1 = Some(BucketSpec(8, Seq("i"), Nil))
-    val bucketSpec2 = Some(BucketSpec(8, Seq("j"), Nil))
+    val bucketSpec1 = Some(BucketSpec(5, Seq("i"), Nil))
+    val bucketSpec2 = Some(BucketSpec(5, Seq("j"), Nil))
     testBucketing(bucketSpec1, bucketSpec2, Seq("i"), shuffleLeft = false, shuffleRight = true)
   }
 
