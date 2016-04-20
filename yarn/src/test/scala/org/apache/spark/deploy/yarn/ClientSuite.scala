@@ -147,7 +147,7 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
 
     val tempDir = Utils.createTempDir()
     try {
-      client.prepareLocalResources(tempDir.getAbsolutePath(), Nil)
+      client.prepareLocalResources(new Path(tempDir.getAbsolutePath()), Nil)
       sparkConf.get(APP_JAR) should be (Some(USER))
 
       // The non-local path should be propagated by name only, since it will end up in the app's
@@ -238,7 +238,7 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
     val client = createClient(sparkConf)
 
     val tempDir = Utils.createTempDir()
-    client.prepareLocalResources(tempDir.getAbsolutePath(), Nil)
+    client.prepareLocalResources(new Path(tempDir.getAbsolutePath()), Nil)
 
     assert(sparkConf.get(SPARK_JARS) ===
       Some(Seq(s"local:${jar4.getPath()}", s"local:${single.getAbsolutePath()}/*")))
@@ -260,14 +260,14 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
 
     val sparkConf = new SparkConf().set(SPARK_ARCHIVE, archive.getPath())
     val client = createClient(sparkConf)
-    client.prepareLocalResources(temp.getAbsolutePath(), Nil)
+    client.prepareLocalResources(new Path(temp.getAbsolutePath()), Nil)
 
     verify(client).copyFileToRemote(any(classOf[Path]), meq(new Path(archive.toURI())), anyShort())
     classpath(client) should contain (buildPath(PWD, LOCALIZED_LIB_DIR, "*"))
 
     sparkConf.set(SPARK_ARCHIVE, LOCAL_SCHEME + ":" + archive.getPath())
     intercept[IllegalArgumentException] {
-      client.prepareLocalResources(temp.getAbsolutePath(), Nil)
+      client.prepareLocalResources(new Path(temp.getAbsolutePath()), Nil)
     }
   }
 
@@ -280,7 +280,7 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
 
     val sparkConf = new SparkConfWithEnv(Map("SPARK_HOME" -> temp.getAbsolutePath()))
     val client = createClient(sparkConf)
-    client.prepareLocalResources(temp.getAbsolutePath(), Nil)
+    client.prepareLocalResources(new Path(temp.getAbsolutePath()), Nil)
     verify(client).copyFileToRemote(any(classOf[Path]), meq(new Path(jar.toURI())), anyShort())
     classpath(client) should contain (buildPath(PWD, LOCALIZED_LIB_DIR, "*"))
   }
@@ -308,7 +308,7 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
 
     val client = createClient(sparkConf)
     val tempDir = Utils.createTempDir()
-    client.prepareLocalResources(tempDir.getAbsolutePath(), Nil)
+    client.prepareLocalResources(new Path(tempDir.getAbsolutePath()), Nil)
 
     // Only jar2 will be added to SECONDARY_JARS, jar3 which has the same name with jar1 will be
     // ignored.
