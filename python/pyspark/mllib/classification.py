@@ -262,6 +262,7 @@ class LogisticRegressionModel(LinearClassificationModel):
         model.setThreshold(threshold)
         return model
 
+    @since("2.0.0")
     def __repr__(self):
         return self._call_java("toString")
 

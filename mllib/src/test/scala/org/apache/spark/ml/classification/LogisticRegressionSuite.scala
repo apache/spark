@@ -941,7 +941,7 @@ class LogisticRegressionSuite
       lr, isClassification = true, sqlContext) { (expected, actual) =>
         assert(expected.intercept === actual.intercept)
         assert(expected.coefficients.toArray === actual.coefficients.toArray)
-    }
+      }
   }
 
   test("toString") {
@@ -950,7 +950,6 @@ class LogisticRegressionSuite
     val expected: String = "lrModeltest, numClasses = 2, numFeatures = 3 threshold = 0.5"
     assert(lrModel.toString === expected)
   }
-
 }
 
 object LogisticRegressionSuite {
