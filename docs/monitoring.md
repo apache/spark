@@ -190,7 +190,7 @@ The history server can be configured as follows:
     </td>
   </tr>
   <tr>
-    <td>spark.history.fs.num.processing.threads</td>
+    <td>spark.history.fs.numReplayThreads</td>
     <td>25% of available cores</td>
     <td>
       Number of threads that will be used by history server to process event logs.

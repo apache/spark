@@ -79,7 +79,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   private val NOT_STARTED = "<Not Started>"
 
-  private val SPARK_HISTORY_FS_NUM_PROCESSING_THREADS = "spark.history.fs.num.processing.threads"
+  private val SPARK_HISTORY_FS_NUM_REPLAY_THREADS = "spark.history.fs.numReplayThreads"
 
   // Interval between safemode checks.
   private val SAFEMODE_CHECK_INTERVAL_S = conf.getTimeAsSeconds(
@@ -92,7 +92,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   private val CLEAN_INTERVAL_S = conf.getTimeAsSeconds("spark.history.fs.cleaner.interval", "1d")
 
   // Number of threads used to replay event logs.
-  private val NUM_PROCESSING_THREADS = conf.getInt(SPARK_HISTORY_FS_NUM_PROCESSING_THREADS,
+  private val NUM_PROCESSING_THREADS = conf.getInt(SPARK_HISTORY_FS_NUM_REPLAY_THREADS,
     Math.ceil(Runtime.getRuntime.availableProcessors() / 4f).toInt)
 
   private val logDir = conf.getOption("spark.history.fs.logDirectory")
