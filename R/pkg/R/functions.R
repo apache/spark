@@ -1012,6 +1012,8 @@ setMethod("round",
 #'
 #' Returns the value of the column `e` rounded to `scale` decimal places using HALF_EVEN rounding
 #' mode if `scale` >= 0 or at integral part when `scale` < 0.
+#' Also known as Gaussian rounding or bankers' rounding that rounds to the nearest even number.
+#' bround(2.5, 0) = 2, bround(3.5, 0) = 4.
 #'
 #' @rdname bround
 #' @name bround
