@@ -249,4 +249,5 @@ private[hive] trait HiveClient {
   /** Used for testing only.  Removes all metadata from this instance of Hive. */
   def reset(): Unit
 
+  def showCreateTable(db: String, table: String): String
 }
