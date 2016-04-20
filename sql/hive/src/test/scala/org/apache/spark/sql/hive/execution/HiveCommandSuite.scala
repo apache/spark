@@ -61,6 +61,7 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         |PARTITION(year = 2016, month = 4, hour = 10, minute = 10, sec = 10, extra = 1) SELECT 3, 3
       """.stripMargin)
     sql("CREATE VIEW parquet_view1 as select * from parquet_tab4")
+    sql("create table tab_complex (col1 map <int, string>, col2 struct <f1: int, f2: String>)")
   }
 
   override protected def afterAll(): Unit = {
@@ -71,6 +72,7 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       sql("DROP VIEW IF EXISTS parquet_view1")
       sql("DROP TABLE IF EXISTS parquet_tab4")
       sql("DROP TABLE IF EXISTS parquet_tab5")
+      sql("DROP TABLE IF EXISTS tab_complex")
     } finally {
       super.afterAll()
     }
@@ -170,6 +172,26 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       sql("DESCRIBE parquet_tab2 invalidCol")
     }.getMessage
     assert(message4.contains("Error in getting fields from serde.Invalid Field invalidCol"))
+  }
+
+  test("describe column - nested") {
+    checkAnswer(
+      sql("describe tab_complex col1.$key$"),
+      Row("$key$", "int", "from deserializer") :: Nil)
+    checkAnswer(
+      sql("describe tab_complex col1.$value$"),
+      Row("$value$", "string", "from deserializer") :: Nil)
+    checkAnswer(
+      sql("describe tab_complex col1"),
+      Row("col1", "map<int,string>", "from deserializer") :: Nil)
+    checkAnswer(
+      sql("describe tab_complex col2.f1"),
+      Row("f1", "int", "from deserializer") :: Nil)
+    checkAnswer(
+      sql("describe tab_complex col2"),
+      Row("f1", "int", "from deserializer") ::
+        Row("f2", "string", "from deserializer") :: Nil
+    )
   }
 
   test("LOAD DATA") {

@@ -231,7 +231,7 @@ describeFuncName
     ;
 
 describeColName
-    : identifier ('.' (identifier | STRING))*
+    : identifier ('.' colpathIdentifier)*
     ;
 
 ctes
@@ -452,6 +452,10 @@ rowFormat
 
 tableIdentifier
     : (db=identifier '.')? table=identifier
+    ;
+
+colpathIdentifier
+    : identifier | ELEM_TYPE | KEY_TYPE | VALUE_TYPE
     ;
 
 namedExpression
@@ -902,6 +906,9 @@ OPTION: 'OPTION';
 ANTI: 'ANTI';
 LOCAL: 'LOCAL';
 INPATH: 'INPATH';
+KEY_TYPE: '$KEY$';
+VALUE_TYPE: '$VALUE$';
+ELEM_TYPE: '$ELEM$';
 
 STRING
     : '\'' ( ~('\''|'\\') | ('\\' .) )* '\''

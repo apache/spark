@@ -349,17 +349,15 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
 
    /**
     * A column path can be specified as an parameter to describe command. It is a dot separated
-    * elements where the last element can be a String.
-    * TODO - check with Herman
+    * list of identifiers with three special kinds of identifiers namely '$elem$', '$key$' and
+    * '$value$' which are used to represent array element, map key and values respectively.
     */
    override def visitDescribeColName(ctx: DescribeColNameContext): String = {
-     var result = ctx.identifier.asScala.map ( _.getText).mkString(".")
-     val elementStr = ctx.STRING().asScala.map(c => string(c)).mkString(".")
-     if (elementStr.nonEmpty) {
-       result ++ "." + elementStr
-     } else {
-       result
+     var result = ctx.identifier.getText
+     if (ctx.colpathIdentifier != null) {
+       result = result  ++ "." ++ ctx.colpathIdentifier.asScala.map { _.getText}.mkString(".")
      }
+     result
    }
 
   /**
