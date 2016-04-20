@@ -186,8 +186,7 @@ sealed trait Vector extends Serializable {
    * Convert this vector to the new mllib-local representation.
    * This does NOT copy the data; it copies references.
    */
-  private[spark]
-  def asML: newlinalg.Vector
+  private[spark] def asML: newlinalg.Vector
 }
 
 /**
@@ -583,8 +582,7 @@ object Vectors {
   private[linalg] val MAX_HASH_NNZ = 128
 
   /** Convert new linalg type to spark.mllib type.  Light copy; only copies references */
-  private[spark]
-  def fromML(v: newlinalg.Vector): Vector = v match {
+  private[spark] def fromML(v: newlinalg.Vector): Vector = v match {
     case dv: newlinalg.DenseVector =>
       DenseVector.fromML(dv)
     case sv: newlinalg.SparseVector =>
@@ -704,8 +702,7 @@ class DenseVector @Since("1.0.0") (
     compact(render(jValue))
   }
 
-  private[spark]
-  override def asML: newlinalg.DenseVector = {
+  private[spark] override def asML: newlinalg.DenseVector = {
     new newlinalg.DenseVector(values)
   }
 }
@@ -718,8 +715,7 @@ object DenseVector {
   def unapply(dv: DenseVector): Option[Array[Double]] = Some(dv.values)
 
   /** Convert new linalg type to spark.mllib type.  Light copy; only copies references */
-  private[spark]
-  def fromML(v: newlinalg.DenseVector): DenseVector = {
+  private[spark] def fromML(v: newlinalg.DenseVector): DenseVector = {
     new DenseVector(v.values)
   }
 }
@@ -911,8 +907,7 @@ class SparseVector @Since("1.0.0") (
     compact(render(jValue))
   }
 
-  private[spark]
-  override def asML: newlinalg.SparseVector = {
+  private[spark] override def asML: newlinalg.SparseVector = {
     new newlinalg.SparseVector(size, indices, values)
   }
 }
@@ -924,8 +919,7 @@ object SparseVector {
     Some((sv.size, sv.indices, sv.values))
 
   /** Convert new linalg type to spark.mllib type.  Light copy; only copies references */
-  private[spark]
-  def fromML(v: newlinalg.SparseVector): SparseVector = {
+  private[spark] def fromML(v: newlinalg.SparseVector): SparseVector = {
     new SparseVector(v.size, v.indices, v.values)
   }
 }

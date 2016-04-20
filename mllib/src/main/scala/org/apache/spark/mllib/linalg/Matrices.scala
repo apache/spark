@@ -164,8 +164,7 @@ sealed trait Matrix extends Serializable {
    * Convert this matrix to the new mllib-local representation.
    * This does NOT copy the data; it copies references.
    */
-  private[spark]
-  def asML: newlinalg.Matrix
+  private[spark] def asML: newlinalg.Matrix
 }
 
 private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
@@ -428,8 +427,7 @@ class DenseMatrix @Since("1.3.0") (
     }
   }
 
-  private[spark]
-  override def asML: newlinalg.DenseMatrix = {
+  private[spark] override def asML: newlinalg.DenseMatrix = {
     new newlinalg.DenseMatrix(numRows, numCols, values, isTransposed)
   }
 }
@@ -530,8 +528,7 @@ object DenseMatrix {
   }
 
   /** Convert new linalg type to spark.mllib type.  Light copy; only copies references */
-  private[spark]
-  def fromML(m: newlinalg.DenseMatrix): DenseMatrix = {
+  private[spark] def fromML(m: newlinalg.DenseMatrix): DenseMatrix = {
     new DenseMatrix(m.numRows, m.numCols, m.values, m.isTransposed)
   }
 }
@@ -741,8 +738,7 @@ class SparseMatrix @Since("1.3.0") (
     }
   }
 
-  private[spark]
-  override def asML: newlinalg.SparseMatrix = {
+  private[spark] override def asML: newlinalg.SparseMatrix = {
     new newlinalg.SparseMatrix(numRows, numCols, colPtrs, rowIndices, values, isTransposed)
   }
 }
@@ -921,8 +917,7 @@ object SparseMatrix {
   }
 
   /** Convert new linalg type to spark.mllib type.  Light copy; only copies references */
-  private[spark]
-  def fromML(m: newlinalg.SparseMatrix): SparseMatrix = {
+  private[spark] def fromML(m: newlinalg.SparseMatrix): SparseMatrix = {
     new SparseMatrix(m.numRows, m.numCols, m.colPtrs, m.rowIndices, m.values, m.isTransposed)
   }
 }
@@ -1209,8 +1204,7 @@ object Matrices {
   }
 
   /** Convert new linalg type to spark.mllib type.  Light copy; only copies references */
-  private[spark]
-  def fromML(m: newlinalg.Matrix): Matrix = m match {
+  private[spark] def fromML(m: newlinalg.Matrix): Matrix = m match {
     case dm: newlinalg.DenseMatrix =>
       DenseMatrix.fromML(dm)
     case sm: newlinalg.SparseMatrix =>
