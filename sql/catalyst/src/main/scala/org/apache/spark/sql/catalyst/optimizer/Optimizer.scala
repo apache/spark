@@ -1476,7 +1476,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
       case f @ Filter(cond, child) =>
         // Find all correlated predicates.
         val (correlated, local) = splitConjunctivePredicates(cond).partition { e =>
-          e.references.intersect(references).nonEmpty
+          (e.references -- child.outputSet).intersect(references).nonEmpty
         }
         // Rewrite the filter without the correlated predicates if any.
         correlated match {
@@ -1536,10 +1536,10 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
 
       // Filter the plan by applying left semi and left anti joins.
       withSubquery.foldLeft(newFilter) {
-        case (p, Exists(sub)) =>
+        case (p, Exists(sub, _)) =>
           val (resolved, conditions) = pullOutCorrelatedPredicates(sub, p)
           Join(p, resolved, LeftSemi, conditions.reduceOption(And))
-        case (p, Not(Exists(sub))) =>
+        case (p, Not(Exists(sub, _))) =>
           val (resolved, conditions) = pullOutCorrelatedPredicates(sub, p)
           Join(p, resolved, LeftAnti, conditions.reduceOption(And))
         case (p, in: InSubQuery) =>

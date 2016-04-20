@@ -865,15 +865,31 @@ class Analyzer(
      * Resolve the correlated predicates in the [[Filter]] clauses (e.g. WHERE or HAVING) of a
      * sub-query by using the plan the predicates should be correlated to.
      */
-    private def resolveCorrelatedPredicates(q: LogicalPlan, p: LogicalPlan): LogicalPlan = {
-      q transformUp {
-        case f @ Filter(cond, child) if child.resolved && !f.resolved =>
-          val newCond = resolveExpression(cond, p, throws = false)
-          if (!cond.fastEquals(newCond)) {
-            Filter(newCond, child)
-          } else {
-            f
-          }
+    private def resolveCorrelatedSubquery(
+        subquery: LogicalPlan,
+        outers: Seq[LogicalPlan]): LogicalPlan = {
+      val analyzed = execute(subquery)
+      if (analyzed.resolved) {
+        analyzed
+      } else {
+        // Only resolve the lowest plan that is not resolved by outer plan, otherwise it could be
+        // resolved by itself
+        val resolvedByOuter = analyzed transformDown {
+          case q: LogicalPlan if q.childrenResolved && !q.resolved =>
+            q transformExpressions {
+              case expr =>
+                outers.foldLeft(expr) { case (e, outer) =>
+                  // TODO: create alias for outer attributes, they may conflict with the attributes
+                  // from children of q.
+                  resolveExpression(e, outer, throws = false)
+                }
+            }
+        }
+        if (resolvedByOuter fastEquals analyzed) {
+          analyzed
+        } else {
+          resolveCorrelatedSubquery(resolvedByOuter, outers)
+        }
       }
     }
 
@@ -883,7 +899,7 @@ class Analyzer(
           case e: SubqueryExpression if !e.query.resolved =>
             // First resolve as much of the sub-query as possible. After that we use the children of
             // this plan to resolve the remaining correlated predicates.
-            e.withNewPlan(q.children.foldLeft(execute(e.query))(resolveCorrelatedPredicates))
+            e.withNewPlan(resolveCorrelatedSubquery(e.query, q.children))
         }
     }
   }
