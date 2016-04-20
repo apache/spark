@@ -23,7 +23,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, SQLContext}
-import org.apache.spark.sql.sources.FileFormat
+import org.apache.spark.sql.execution.datasources.FileFormat
 
 object FileStreamSink {
   // The name of the subdirectory that is used to store metadata about which files are valid.

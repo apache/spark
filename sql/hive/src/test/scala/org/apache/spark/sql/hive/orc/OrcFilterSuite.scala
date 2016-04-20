@@ -27,8 +27,7 @@ import org.apache.spark.sql.{Column, DataFrame, QueryTest}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, LogicalRelation}
-import org.apache.spark.sql.sources.HadoopFsRelation
+import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelation}
 
 /**
  * A test suite that tests ORC filter API based filter pushdown optimization.
