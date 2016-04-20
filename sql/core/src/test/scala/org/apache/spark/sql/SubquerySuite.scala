@@ -181,7 +181,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
 
   test("same column in subquery and outer table") {
     checkAnswer(
-      sql("select a from l l1 where a in (select a as b from l where a < 3 group by a)"),
+      sql("select a from l l1 where a in (select a from l where a < 3 group by a)"),
       Row(1) :: Row(1) :: Row(2) :: Row(2) :: Nil
     )
   }
