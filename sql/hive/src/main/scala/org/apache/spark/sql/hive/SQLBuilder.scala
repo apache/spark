@@ -288,8 +288,9 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
 
   private def isGroupingSet(a: Aggregate, e: Expand, p: Project): Boolean = {
     assert(a.child == e && e.child == p)
-    a.groupingExpressions.forall(_.isInstanceOf[Attribute]) &&
-      sameOutput(e.output, p.child.output ++ a.groupingExpressions.map(_.asInstanceOf[Attribute]))
+    a.groupingExpressions.forall(_.isInstanceOf[Attribute]) && sameOutput(
+      e.output.drop(p.child.output.length),
+      a.groupingExpressions.map(_.asInstanceOf[Attribute]))
   }
 
   private def groupingSetToSQL(
@@ -303,25 +304,28 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
 
     val numOriginalOutput = project.child.output.length
     // Assumption: Aggregate's groupingExpressions is composed of
-    // 1) the attributes of aliased group by expressions
+    // 1) the grouping attributes
     // 2) gid, which is always the last one
     val groupByAttributes = agg.groupingExpressions.dropRight(1).map(_.asInstanceOf[Attribute])
     // Assumption: Project's projectList is composed of
     // 1) the original output (Project's child.output),
     // 2) the aliased group by expressions.
+    val expandedAttributes = project.output.drop(numOriginalOutput)
     val groupByExprs = project.projectList.drop(numOriginalOutput).map(_.asInstanceOf[Alias].child)
     val groupingSQL = groupByExprs.map(_.sql).mkString(", ")
 
     // a map from group by attributes to the original group by expressions.
     val groupByAttrMap = AttributeMap(groupByAttributes.zip(groupByExprs))
+    // a map from expanded attributes to the original group by expressions.
+    val expandedAttrMap = AttributeMap(expandedAttributes.zip(groupByExprs))
 
     val groupingSet: Seq[Seq[Expression]] = expand.projections.map { project =>
       // Assumption: expand.projections is composed of
       // 1) the original output (Project's child.output),
-      // 2) group by attributes(or null literal)
+      // 2) expanded attributes(or null literal)
       // 3) gid, which is always the last one in each project in Expand
       project.drop(numOriginalOutput).dropRight(1).collect {
-        case attr: Attribute if groupByAttrMap.contains(attr) => groupByAttrMap(attr)
+        case attr: Attribute if expandedAttrMap.contains(attr) => expandedAttrMap(attr)
       }
     }
     val groupingSetSQL = "GROUPING SETS(" +
