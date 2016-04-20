@@ -21,11 +21,14 @@ import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.execution.datasources.{OutputWriter, OutputWriterFactory}
 import org.apache.spark.sql.types.StructType
 
 class CommitFailureTestSource extends SimpleTextSource {
   /**
-   * Prepares a write job and returns an [[OutputWriterFactory]].  Client side job preparation can
+   * Prepares a write job and returns an
+   * [[org.apache.spark.sql.execution.datasources.OutputWriterFactory]].
+   * Client side job preparation can
    * be put here.  For example, user defined output committer can be configured here
    * by setting the output committer class in the conf of spark.sql.sources.outputCommitterClass.
    */
