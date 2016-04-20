@@ -958,6 +958,26 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
 
       project.copy(child = Filter(replaceAlias(condition, aliasMap), grandChild))
 
+    // Push [[Filter]] operators through [[Window]] operators. Parts of the predicate that can be
+    // pushed beneath must satisfy three conditions:
+    // 1. involving one and only one column that is part of window partitioning key.
+    // 2. Window partitioning key should be just a sequence of [[AttributeReference]].
+    // 3. deterministic
+    case filter @ Filter(condition, w: Window)
+        if w.partitionSpec.forall(_.isInstanceOf[AttributeReference]) =>
+      val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { cond =>
+        cond.references.size == 1 &&
+          cond.references.subsetOf(AttributeSet(w.partitionSpec.flatMap(_.references))) &&
+          cond.deterministic
+      }
+      if (pushDown.nonEmpty) {
+        val pushDownPredicate = pushDown.reduce(And)
+        val newWindow = w.copy(child = Filter(pushDownPredicate, w.child))
+        if (stayUp.isEmpty) newWindow else Filter(stayUp.reduce(And), newWindow)
+      } else {
+        filter
+      }
+
     case filter @ Filter(condition, aggregate: Aggregate) =>
       // Find all the aliased expressions in the aggregate list that don't include any actual
       // AggregateExpression, and create a map from the alias to the expression
