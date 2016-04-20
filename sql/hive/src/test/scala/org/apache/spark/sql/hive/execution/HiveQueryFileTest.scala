@@ -58,7 +58,7 @@ abstract class HiveQueryFileTest extends HiveComparisonTest {
       } else if (realWhiteList.map(_.r.pattern.matcher(testCaseName).matches()).reduceLeft(_||_) ||
         runAll) {
         // Build a test case and submit it to scala test framework...
-        val queriesString = fileToString(testCaseFile).replace("../../data", testDataPath)
+        val queriesString = fileToString(testCaseFile)
         createQueryTest(testCaseName, queriesString, reset = true, tryWithoutResettingFirst = true)
       } else {
         // Only output warnings for the built in whitelist as this clutters the output when the user
@@ -67,10 +67,5 @@ abstract class HiveQueryFileTest extends HiveComparisonTest {
           ignore(testCaseName) {}
         }
       }
-  }
-
-  private val testDataPath: String = {
-    this.getClass.getResource("hive-test-path-helper.txt").getPath
-      .replace("/hive-test-path-helper.txt", "/data")
   }
 }
