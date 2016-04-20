@@ -15,26 +15,23 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.types;
+package org.apache.spark.ui.scope
 
-import java.lang.annotation.*;
+import org.apache.spark.SparkFunSuite
 
-import org.apache.spark.annotation.DeveloperApi;
+class RDDOperationGraphSuite extends SparkFunSuite {
+  test("Test simple cluster equals") {
+    // create a 2-cluster chain with a child
+    val c1 = new RDDOperationCluster("1", "Bender")
+    val c2 = new RDDOperationCluster("2", "Hal")
+    c1.attachChildCluster(c2)
+    c1.attachChildNode(new RDDOperationNode(3, "Marvin", false, "collect!"))
 
-/**
- * ::DeveloperApi::
- * A user-defined type which can be automatically recognized by a SQLContext and registered.
- * WARNING: UDTs are currently only supported from Scala.
- */
-// TODO: Should I used @Documented ?
-@DeveloperApi
-@Retention(RetentionPolicy.RUNTIME)
-@Target(ElementType.TYPE)
-public @interface SQLUserDefinedType {
+    // create an equal cluster, but without the child node
+    val c1copy = new RDDOperationCluster("1", "Bender")
+    val c2copy = new RDDOperationCluster("2", "Hal")
+    c1copy.attachChildCluster(c2copy)
 
-  /**
-   * Returns an instance of the UserDefinedType which can serialize and deserialize the user
-   * class to and from Catalyst built-in types.
-   */
-  Class<? extends UserDefinedType<?>> udt();
+    assert(c1 == c1copy)
+  }
 }

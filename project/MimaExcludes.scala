@@ -658,6 +658,14 @@ object MimaExcludes {
           "org.apache.spark.api.java.JavaRDDLike.saveAsTextFile"),
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.api.java.JavaRDDLike.saveAsObjectFile")
+      ) ++ Seq(
+        // [SPARK-14407] Hides HadoopFsRelation related data source API into execution package
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.OutputWriter"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.OutputWriterFactory")
+      ) ++ Seq(
+        // SPARK-14704: Create accumulators in TaskMetrics
+        ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.executor.InputMetrics.this"),
+        ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.executor.OutputMetrics.this")
       )
     case v if v.startsWith("1.6") =>
       Seq(
