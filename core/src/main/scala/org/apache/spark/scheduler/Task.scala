@@ -23,7 +23,7 @@ import java.util.Properties
 
 import scala.collection.mutable.HashMap
 
-import org.apache.spark.{Accumulator, SparkEnv, TaskContext, TaskContextImpl}
+import org.apache.spark.{SparkEnv, TaskContext, TaskContextImpl}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.memory.{MemoryMode, TaskMemoryManager}
 import org.apache.spark.metrics.MetricsSystem
@@ -44,17 +44,17 @@ import org.apache.spark.util.{ByteBufferInputStream, ByteBufferOutputStream, Uti
  * @param stageId id of the stage this task belongs to
  * @param stageAttemptId attempt id of the stage this task belongs to
  * @param partitionId index of the number in the RDD
- * @param initialAccumulators initial set of accumulators to be used in this task for tracking
- *                            internal metrics. Other accumulators will be registered later when
- *                            they are deserialized on the executors.
+ * @param metrics a [[TaskMetrics]] that is created at driver side and sent to executor side.
  * @param localProperties copy of thread-local properties set by the user on the driver side.
+ *
+ * The default values for `metrics` and `localProperties` are used by tests only.
  */
 private[spark] abstract class Task[T](
     val stageId: Int,
     val stageAttemptId: Int,
     val partitionId: Int,
-    val initialAccumulators: Seq[Accumulator[_]],
-    @transient var localProperties: Properties) extends Serializable {
+    val metrics: TaskMetrics = new TaskMetrics,
+    @transient var localProperties: Properties = new Properties) extends Serializable {
 
   /**
    * Called by [[org.apache.spark.executor.Executor]] to run this task.
@@ -76,7 +76,7 @@ private[spark] abstract class Task[T](
       taskMemoryManager,
       localProperties,
       metricsSystem,
-      initialAccumulators)
+      metrics)
     TaskContext.setTaskContext(context)
     taskThread = Thread.currentThread()
     if (_killed) {
@@ -127,8 +127,6 @@ private[spark] abstract class Task[T](
 
   // Map output tracker epoch. Will be set by TaskScheduler.
   var epoch: Long = -1
-
-  var metrics: Option[TaskMetrics] = None
 
   // Task context, to be initialized in run().
   @transient protected var context: TaskContextImpl = _

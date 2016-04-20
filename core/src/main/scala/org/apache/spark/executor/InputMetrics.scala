@@ -17,7 +17,7 @@
 
 package org.apache.spark.executor
 
-import org.apache.spark.{Accumulator, InternalAccumulator}
+import org.apache.spark.InternalAccumulator
 import org.apache.spark.annotation.DeveloperApi
 
 
@@ -39,14 +39,11 @@ object DataReadMethod extends Enumeration with Serializable {
  * A collection of accumulators that represents metrics about reading data from external systems.
  */
 @DeveloperApi
-class InputMetrics private (_bytesRead: Accumulator[Long], _recordsRead: Accumulator[Long])
-  extends Serializable {
+class InputMetrics private[spark] () extends Serializable {
+  import InternalAccumulator._
 
-  private[executor] def this(accumMap: Map[String, Accumulator[_]]) {
-    this(
-      TaskMetrics.getAccum[Long](accumMap, InternalAccumulator.input.BYTES_READ),
-      TaskMetrics.getAccum[Long](accumMap, InternalAccumulator.input.RECORDS_READ))
-  }
+  private[executor] val _bytesRead = TaskMetrics.createLongAccum(input.BYTES_READ)
+  private[executor] val _recordsRead = TaskMetrics.createLongAccum(input.RECORDS_READ)
 
   /**
    * Total number of bytes read.
@@ -61,5 +58,4 @@ class InputMetrics private (_bytesRead: Accumulator[Long], _recordsRead: Accumul
   private[spark] def incBytesRead(v: Long): Unit = _bytesRead.add(v)
   private[spark] def incRecordsRead(v: Long): Unit = _recordsRead.add(v)
   private[spark] def setBytesRead(v: Long): Unit = _bytesRead.setValue(v)
-
 }
