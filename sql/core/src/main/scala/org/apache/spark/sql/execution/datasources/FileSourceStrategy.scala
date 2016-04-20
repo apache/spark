@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{BlockLocation, FileStatus, LocatedFileStatus, Path}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
@@ -28,7 +28,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.{DataSourceScan, SparkPlan}
-import org.apache.spark.sql.sources._
 
 /**
  * A strategy for planning scans over collections of files that might be partitioned or bucketed
@@ -120,7 +119,10 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
           logInfo(s"Planning with ${bucketing.numBuckets} buckets")
           val bucketed =
             selectedPartitions.flatMap { p =>
-              p.files.map(f => PartitionedFile(p.values, f.getPath.toUri.toString, 0, f.getLen))
+              p.files.map { f =>
+                val hosts = getBlockHosts(getBlockLocations(f), 0, f.getLen)
+                PartitionedFile(p.values, f.getPath.toUri.toString, 0, f.getLen, hosts)
+              }
             }.groupBy { f =>
               BucketingUtils
                 .getBucketId(new Path(f.filePath).getName)
@@ -139,10 +141,12 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
 
           val splitFiles = selectedPartitions.flatMap { partition =>
             partition.files.flatMap { file =>
-              (0L to file.getLen by maxSplitBytes).map { offset =>
+              val blockLocations = getBlockLocations(file)
+              (0L until file.getLen by maxSplitBytes).map { offset =>
                 val remaining = file.getLen - offset
                 val size = if (remaining > maxSplitBytes) maxSplitBytes else remaining
-                PartitionedFile(partition.values, file.getPath.toUri.toString, offset, size)
+                val hosts = getBlockHosts(blockLocations, offset, size)
+                PartitionedFile(partition.values, file.getPath.toUri.toString, offset, size, hosts)
               }
             }
           }.toArray.sortBy(_.length)(implicitly[Ordering[Long]].reverse)
@@ -206,5 +210,44 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
       withProjections :: Nil
 
     case _ => Nil
+  }
+
+  private def getBlockLocations(file: FileStatus): Array[BlockLocation] = file match {
+    case f: LocatedFileStatus => f.getBlockLocations
+    case f => Array.empty[BlockLocation]
+  }
+
+  // Given locations of all blocks of a single file, `blockLocations`, and an `(offset, length)`
+  // pair that represents a segment of the same file, find out the block that contains the largest
+  // fraction the segment, and returns location hosts of that block. If no such block can be found,
+  // returns an empty array.
+  private def getBlockHosts(
+      blockLocations: Array[BlockLocation], offset: Long, length: Long): Array[String] = {
+    val candidates = blockLocations.map {
+      // The fragment starts from a position within this block
+      case b if b.getOffset <= offset && offset < b.getOffset + b.getLength =>
+        b.getHosts -> (b.getOffset + b.getLength - offset).min(length)
+
+      // The fragment ends at a position within this block
+      case b if offset <= b.getOffset && offset + length < b.getLength =>
+        b.getHosts -> (offset + length - b.getOffset).min(length)
+
+      // The fragment fully contains this block
+      case b if offset <= b.getOffset && b.getOffset + b.getLength <= offset + length =>
+        b.getHosts -> b.getLength
+
+      // The fragment doesn't intersect with this block
+      case b =>
+        b.getHosts -> 0L
+    }.filter { case (hosts, size) =>
+      size > 0L
+    }
+
+    if (candidates.isEmpty) {
+      Array.empty[String]
+    } else {
+      val (hosts, _) = candidates.maxBy { case (_, size) => size }
+      hosts
+    }
   }
 }

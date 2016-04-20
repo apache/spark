@@ -28,7 +28,8 @@ import org.apache.parquet.hadoop.ParquetOutputCommitter
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql._
-import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.DataSourceScan
+import org.apache.spark.sql.execution.datasources.{FileScanRDD, HadoopFsRelation, LocalityTestFileSystem, LogicalRelation}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
@@ -666,6 +667,43 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
     }
     intercept[AnalysisException] {
       df.write.format(dataSourceName).partitionBy("c", "d", "e").saveAsTable("t")
+    }
+  }
+
+  test("Locality support for FileScanRDD") {
+    withHadoopConf(
+      "fs.file.impl" -> classOf[LocalityTestFileSystem].getName,
+      "fs.file.impl.disable.cache" -> "true"
+    ) {
+      withTempPath { dir =>
+        val path = "file://" + dir.getCanonicalPath
+        val df1 = sqlContext.range(4)
+        df1.coalesce(1).write.mode("overwrite").format(dataSourceName).save(path)
+        df1.coalesce(1).write.mode("append").format(dataSourceName).save(path)
+
+        def checkLocality(): Unit = {
+          val df2 = sqlContext.read
+            .format(dataSourceName)
+            .option("dataSchema", df1.schema.json)
+            .load(path)
+
+          val Some(fileScanRDD) = df2.queryExecution.executedPlan.collectFirst {
+            case scan: DataSourceScan if scan.rdd.isInstanceOf[FileScanRDD] =>
+              scan.rdd.asInstanceOf[FileScanRDD]
+          }
+
+          val partitions = fileScanRDD.partitions
+          val preferredLocations = partitions.flatMap(fileScanRDD.preferredLocations)
+
+          assert(preferredLocations.distinct.length == 2)
+        }
+
+        checkLocality()
+
+        withSQLConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "0") {
+          checkLocality()
+        }
+      }
     }
   }
 }

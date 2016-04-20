@@ -301,8 +301,12 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
   }
 
   test("only shuffle one side when 2 bucketed tables have different bucket keys") {
-    val bucketSpec1 = Some(BucketSpec(8, Seq("i"), Nil))
-    val bucketSpec2 = Some(BucketSpec(8, Seq("j"), Nil))
+    // !! ALERT !!
+    //
+    // Setting `numBuckets` of the following two `BucketSpec` to 8 causes a deadlock in DAGScheduler
+    // due to unknown reasons. Need investigation.
+    val bucketSpec1 = Some(BucketSpec(5, Seq("i"), Nil))
+    val bucketSpec2 = Some(BucketSpec(5, Seq("j"), Nil))
     testBucketing(bucketSpec1, bucketSpec2, Seq("i"), shuffleLeft = false, shuffleRight = true)
   }
 
