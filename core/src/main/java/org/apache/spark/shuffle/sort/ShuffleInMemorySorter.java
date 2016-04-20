@@ -72,7 +72,7 @@ final class ShuffleInMemorySorter {
     this.initialSize = initialSize;
     this.useRadixSort = useRadixSort;
     this.memoryAllocationFactor = useRadixSort ? 2 : 1;
-    this.array = consumer.allocateArray(initialSize * memoryAllocationFactor);
+    this.array = consumer.allocateArray(initialSize);
     this.sorter = new Sorter<>(ShuffleSortDataFormat.INSTANCE);
   }
 

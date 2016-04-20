@@ -392,7 +392,20 @@ public class UnsafeShuffleWriterSuite {
   }
 
   @Test
-  public void writeEnoughRecordsToTriggerSortBufferExpansionAndSpill() throws Exception {
+  public void writeEnoughRecordsToTriggerSortBufferExpansionAndSpillRadixOff() throws Exception {
+    conf.set("spark.shuffle.sort.useRadixSort", "false");
+    writeEnoughRecordsToTriggerSortBufferExpansionAndSpill();
+    assertEquals(2, spillFilesCreated.size());
+  }
+
+  @Test
+  public void writeEnoughRecordsToTriggerSortBufferExpansionAndSpillRadixOn() throws Exception {
+    conf.set("spark.shuffle.sort.useRadixSort", "true");
+    writeEnoughRecordsToTriggerSortBufferExpansionAndSpill();
+    assertEquals(3, spillFilesCreated.size());
+  }
+
+  private void writeEnoughRecordsToTriggerSortBufferExpansionAndSpill() throws Exception {
     memoryManager.limit(UnsafeShuffleWriter.INITIAL_SORT_BUFFER_SIZE * 16);
     final UnsafeShuffleWriter<Object, Object> writer = createWriter(false);
     final ArrayList<Product2<Object, Object>> dataToWrite = new ArrayList<>();
@@ -400,7 +413,6 @@ public class UnsafeShuffleWriterSuite {
       dataToWrite.add(new Tuple2<Object, Object>(i, i));
     }
     writer.write(dataToWrite.iterator());
-    assertEquals(2, spillFilesCreated.size());
     writer.stop(true);
     readRecordsFromFile();
     assertSpillFilesWereCleanedUp();
