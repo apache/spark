@@ -50,7 +50,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("SPARK-8443: split wide projections into blocks due to JVM code size limit") {
     val length = 5000
     val expressions = List.fill(length)(EqualTo(Literal(1), Literal(1)))
-    val plan = GenerateMutableProjection.generate(expressions)()
+    val plan = GenerateMutableProjection.generate(expressions)
     val actual = plan(new GenericMutableRow(length)).toSeq(expressions.map(_.dataType))
     val expected = Seq.fill(length)(true)
 
@@ -73,7 +73,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     val expression = CaseWhen((1 to cases).map(generateCase(_)))
 
-    val plan = GenerateMutableProjection.generate(Seq(expression))()
+    val plan = GenerateMutableProjection.generate(Seq(expression))
     val input = new GenericMutableRow(Array[Any](UTF8String.fromString(s"${clauses}:${cases}")))
     val actual = plan(input).toSeq(Seq(expression.dataType))
 
