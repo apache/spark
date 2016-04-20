@@ -793,9 +793,10 @@ class PersistenceTest(PySparkTestCase):
                 pass
 
     def test_nested_meta_algorithms_persistence(self):
+        sqlContext = SQLContext(self.sc)
         temp_path = tempfile.mkdtemp()
         try:
-            df = self.sc.parallelize([
+            df = sqlContext.createDataFrame([
                 Row(label=0.0, features=Vectors.dense(1.0, 0.8)),
                 Row(label=0.0, features=Vectors.dense(0.8, 0.8)),
                 Row(label=0.0, features=Vectors.dense(1.0, 1.2)),
@@ -804,13 +805,17 @@ class PersistenceTest(PySparkTestCase):
                 Row(label=1.0, features=Vectors.sparse(2, [1], [0.1])),
                 Row(label=2.0, features=Vectors.dense(0.5, 0.5)),
                 Row(label=2.0, features=Vectors.dense(0.3, 0.5)),
-                Row(label=2.0, features=Vectors.dense(0.5, 0.6))]).toDF()
+                Row(label=2.0, features=Vectors.dense(0.5, 0.6))])
+
             lr = LogisticRegression()
+
             ovr = OneVsRest(classifier=lr)
+
             tvs_grid = ParamGridBuilder().addGrid(lr.maxIter, [1, 5]).build()
             tvs_evaluator = MulticlassClassificationEvaluator()
             tvs = TrainValidationSplit(estimator=ovr, estimatorParamMaps=tvs_grid,
                                        evaluator=tvs_evaluator, trainRatio=1)
+
             cv_grid = ParamGridBuilder().addGrid(lr.regParam, [0.1, 0.01]).build()
             cv_evaluator = MulticlassClassificationEvaluator()
             cv = CrossValidator(estimator=tvs, estimatorParamMaps=cv_grid, evaluator=cv_evaluator,

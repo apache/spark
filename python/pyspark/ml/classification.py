@@ -1249,8 +1249,9 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
         assert isinstance(classifier, HasRawPredictionCol),\
             "Classifier %s doesn't extend from HasRawPredictionCol." % type(classifier)
 
-        maxLabel = dataset.agg({labelCol: "max"})
-        numClasses = int(maxLabel.head()["max("+labelCol+")"]) + 1
+        maxLabel = dataset.agg({labelCol: "max"}).collect()
+        assert(len(maxLabel) != 0, "No data found in the given dataset.")
+        numClasses = int(maxLabel[0]["max("+labelCol+")"]) + 1
 
         multiclassLabeled = dataset.select(labelCol, featuresCol)
 
