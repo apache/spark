@@ -760,6 +760,10 @@ setGeneric("bin", function(x) { standardGeneric("bin") })
 #' @export
 setGeneric("bitwiseNOT", function(x) { standardGeneric("bitwiseNOT") })
 
+#' @rdname bround
+#' @export
+setGeneric("bround", function(x, ...) { standardGeneric("bround") })
+
 #' @rdname cbrt
 #' @export
 setGeneric("cbrt", function(x) { standardGeneric("cbrt") })
