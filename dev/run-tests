@@ -20,4 +20,5 @@
 FWDIR="$(cd "`dirname $0`"/..; pwd)"
 cd "$FWDIR"
 
-exec python -u ./dev/run-tests.py "$@"
+build/sbt "sql/test-only *StreamingAggregationSuite *StateStore*"
+# exec python -u ./dev/run-tests.py "$@"
