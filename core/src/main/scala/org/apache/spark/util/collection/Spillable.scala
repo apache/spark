@@ -47,13 +47,18 @@ private[spark] abstract class Spillable[C](taskMemoryManager: TaskMemoryManager)
   // It's used for checking spilling frequency
   protected def addElementsRead(): Unit = { _elementsRead += 1 }
 
+  // Initial threshold for the size of a collection before we start tracking its memory usage
+  // For testing only
+  private[this] val initialMemoryThreshold: Long =
+    SparkEnv.get.conf.getLong("spark.shuffle.spill.initialMemoryThreshold", 5 * 1024 * 1024)
+
   // Force this collection to spill when there are this many elements in memory
   // For testing only
   private[this] val numElementsForceSpillThreshold: Long =
     SparkEnv.get.conf.getLong("spark.shuffle.spill.numElementsForceSpillThreshold", Long.MaxValue)
 
   // Threshold for this collection's size in bytes before we start tracking its memory usage
-  private[this] var myMemoryThreshold = 0L
+  private[this] var myMemoryThreshold = initialMemoryThreshold
 
   // Number of elements read from input since last spill
   private[this] var _elementsRead = 0L
@@ -107,7 +112,7 @@ private[spark] abstract class Spillable[C](taskMemoryManager: TaskMemoryManager)
         0L
       } else {
         _elementsRead = 0
-        val freeMemory = myMemoryThreshold
+        val freeMemory = myMemoryThreshold - initialMemoryThreshold
         _memoryBytesSpilled += freeMemory
         releaseMemory()
         freeMemory
@@ -126,8 +131,8 @@ private[spark] abstract class Spillable[C](taskMemoryManager: TaskMemoryManager)
    * Release our memory back to the execution pool so that other tasks can grab it.
    */
   def releaseMemory(): Unit = {
-    freeOnHeapMemory(myMemoryThreshold)
-    myMemoryThreshold = 0L
+    freeOnHeapMemory(myMemoryThreshold - initialMemoryThreshold)
+    myMemoryThreshold = initialMemoryThreshold
   }
 
   /**

@@ -135,8 +135,7 @@ public abstract class MemoryConsumer {
    * Allocates a heap memory of `size`.
    */
   public long acquireOnHeapMemory(long size) {
-    long granted =
-        taskMemoryManager.acquireExecutionMemory(size, MemoryMode.ON_HEAP, this);
+    long granted = taskMemoryManager.acquireExecutionMemory(size, MemoryMode.ON_HEAP, this);
     used += granted;
     return granted;
   }
