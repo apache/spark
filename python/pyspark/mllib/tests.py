@@ -401,6 +401,10 @@ class VectorTests(MLlibTestCase):
         self.assertTrue(Vectors.parse(str(a)), a)
         a = SparseVector(10, [0, 1], [4, 5])
         self.assertTrue(SparseVector.parse(' (10, [0,1 ],[ 4.0,5.0] )'), a)
+        a = DenseVector([])
+        self.assertEqual(Vectors.parse('[]'), a)
+        a = SparseVector(8, [], [])
+        self.assertEqual(Vectors.parse('(8, [], [])'), a)
 
     def test_norms(self):
         a = DenseVector([0, 2, 3, -1])
