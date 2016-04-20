@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import java.io.File
 import java.nio.charset.StandardCharsets.UTF_8
 
 import org.apache.spark.SparkFunSuite
@@ -218,10 +217,10 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSQLContext {
       SQLConf.FILE_SINK_LOG_COMPACT_INTERVAL.key -> "3",
       SQLConf.FILE_SINK_LOG_CLEANUP_DELAY.key -> "0") {
       withFileStreamSinkLog { sinkLog =>
-        val metadataPath = new File(sinkLog.metadataPath.toUri.toString)
+        val fs = sinkLog.metadataPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
 
         def listBatchFiles(): Set[String] = {
-          metadataPath.listFiles().map(_.getName).filter { fileName =>
+          fs.listStatus(sinkLog.metadataPath).map(_.getPath.getName).filter { fileName =>
             try {
               getBatchIdFromFileName(fileName)
               true
