@@ -1863,6 +1863,9 @@ test_that("Method as.data.frame as a synonym for collect()", {
   expect_equal(as.data.frame(irisDF), collect(irisDF))
   irisDF2 <- irisDF[irisDF$Species == "setosa", ]
   expect_equal(as.data.frame(irisDF2), collect(irisDF2))
+
+  # Make sure as.data.frame in the R base package is not covered
+  expect_that(as.data.frame(c(1, 2)), not(throws_error()))
 })
 
 test_that("attach() on a DataFrame", {
