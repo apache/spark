@@ -106,9 +106,8 @@ object CassandraCQLTest {
 
     println("Count: " + casRdd.count)
     val productSaleRDD = casRdd.map {
-      case (key, value) => {
+      case (key, value) =>
         (ByteBufferUtil.string(value.get("prod_id")), ByteBufferUtil.toInt(value.get("quantity")))
-      }
     }
     val aggregatedRDD = productSaleRDD.reduceByKey(_ + _)
     aggregatedRDD.collect().foreach {
@@ -116,11 +115,10 @@ object CassandraCQLTest {
     }
 
     val casoutputCF = aggregatedRDD.map {
-      case (productId, saleCount) => {
+      case (productId, saleCount) =>
         val outKey = Collections.singletonMap("prod_id", ByteBufferUtil.bytes(productId))
         val outVal = Collections.singletonList(ByteBufferUtil.bytes(saleCount))
         (outKey, outVal)
-      }
     }
 
     casoutputCF.saveAsNewAPIHadoopFile(

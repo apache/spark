@@ -25,8 +25,8 @@ import breeze.linalg.{axpy => brzAxpy, inv, svd => brzSvd, DenseMatrix => BDM, D
   MatrixSingularException, SparseVector => BSV}
 import breeze.numerics.{sqrt => brzSqrt}
 
-import org.apache.spark.Logging
 import org.apache.spark.annotation.Since
+import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.stat.{MultivariateOnlineSummarizer, MultivariateStatisticalSummary}
 import org.apache.spark.rdd.RDD

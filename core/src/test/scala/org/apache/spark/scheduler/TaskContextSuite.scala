@@ -17,12 +17,14 @@
 
 package org.apache.spark.scheduler
 
+import java.util.Properties
+
 import org.mockito.Matchers.any
 import org.mockito.Mockito._
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark._
-import org.apache.spark.executor.TaskMetricsSuite
+import org.apache.spark.executor.{Executor, TaskMetrics, TaskMetricsSuite}
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.source.JvmSource
 import org.apache.spark.network.util.JavaUtils
@@ -59,7 +61,8 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     val closureSerializer = SparkEnv.get.closureSerializer.newInstance()
     val func = (c: TaskContext, i: Iterator[String]) => i.next()
     val taskBinary = sc.broadcast(JavaUtils.bufferToArray(closureSerializer.serialize((rdd, func))))
-    val task = new ResultTask[String, String](0, 0, taskBinary, rdd.partitions(0), Seq.empty, 0)
+    val task = new ResultTask[String, String](
+      0, 0, taskBinary, rdd.partitions(0), Seq.empty, 0, new Properties, new TaskMetrics)
     intercept[RuntimeException] {
       task.run(0, 0, null)
     }
@@ -79,7 +82,8 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     val closureSerializer = SparkEnv.get.closureSerializer.newInstance()
     val func = (c: TaskContext, i: Iterator[String]) => i.next()
     val taskBinary = sc.broadcast(JavaUtils.bufferToArray(closureSerializer.serialize((rdd, func))))
-    val task = new ResultTask[String, String](0, 0, taskBinary, rdd.partitions(0), Seq.empty, 0)
+    val task = new ResultTask[String, String](
+      0, 0, taskBinary, rdd.partitions(0), Seq.empty, 0, new Properties, new TaskMetrics)
     intercept[RuntimeException] {
       task.run(0, 0, null)
     }
@@ -167,26 +171,39 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     val param = AccumulatorParam.LongAccumulatorParam
     val acc1 = new Accumulator(0L, param, Some("x"), internal = false, countFailedValues = true)
     val acc2 = new Accumulator(0L, param, Some("y"), internal = false, countFailedValues = false)
-    val initialAccums = InternalAccumulator.createAll()
     // Create a dummy task. We won't end up running this; we just want to collect
     // accumulator updates from it.
-    val task = new Task[Int](0, 0, 0, Seq.empty[Accumulator[_]]) {
+    val taskMetrics = new TaskMetrics
+    val task = new Task[Int](0, 0, 0) {
       context = new TaskContextImpl(0, 0, 0L, 0,
         new TaskMemoryManager(SparkEnv.get.memoryManager, 0L),
+        new Properties,
         SparkEnv.get.metricsSystem,
-        initialAccums)
-      context.taskMetrics.registerAccumulator(acc1)
-      context.taskMetrics.registerAccumulator(acc2)
+        taskMetrics)
+      taskMetrics.registerAccumulator(acc1)
+      taskMetrics.registerAccumulator(acc2)
       override def runTask(tc: TaskContext): Int = 0
     }
     // First, simulate task success. This should give us all the accumulators.
     val accumUpdates1 = task.collectAccumulatorUpdates(taskFailed = false)
-    val accumUpdates2 = (initialAccums ++ Seq(acc1, acc2)).map(TaskMetricsSuite.makeInfo)
+    val accumUpdates2 = (taskMetrics.internalAccums ++ Seq(acc1, acc2))
+      .map(TaskMetricsSuite.makeInfo)
     TaskMetricsSuite.assertUpdatesEquals(accumUpdates1, accumUpdates2)
     // Now, simulate task failures. This should give us only the accums that count failed values.
     val accumUpdates3 = task.collectAccumulatorUpdates(taskFailed = true)
-    val accumUpdates4 = (initialAccums ++ Seq(acc1)).map(TaskMetricsSuite.makeInfo)
+    val accumUpdates4 = (taskMetrics.internalAccums ++ Seq(acc1)).map(TaskMetricsSuite.makeInfo)
     TaskMetricsSuite.assertUpdatesEquals(accumUpdates3, accumUpdates4)
+  }
+
+  test("localProperties are propagated to executors correctly") {
+    sc = new SparkContext("local", "test")
+    sc.setLocalProperty("testPropKey", "testPropValue")
+    val res = sc.parallelize(Array(1), 1).map(i => i).map(i => {
+      val inTask = TaskContext.get().getLocalProperty("testPropKey")
+      val inDeser = Executor.taskDeserializationProps.get().getProperty("testPropKey")
+      s"$inTask,$inDeser"
+    }).collect()
+    assert(res === Array("testPropValue,testPropValue"))
   }
 
 }

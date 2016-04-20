@@ -28,7 +28,7 @@ import org.apache.avro.ipc.NettyTransceiver
 import org.apache.avro.ipc.specific.SpecificRequestor
 import org.jboss.netty.channel.socket.nio.NioClientSocketChannelFactory
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
@@ -79,11 +79,11 @@ private[streaming] class FlumePollingReceiver(
 
   override def onStart(): Unit = {
     // Create the connections to each Flume agent.
-    addresses.foreach(host => {
+    addresses.foreach { host =>
       val transceiver = new NettyTransceiver(host, channelFactory)
       val client = SpecificRequestor.getClient(classOf[SparkFlumeProtocol.Callback], transceiver)
       connections.add(new FlumeConnection(transceiver, client))
-    })
+    }
     for (i <- 0 until parallelism) {
       logInfo("Starting Flume Polling Receiver worker threads..")
       // Threads that pull data from Flume.

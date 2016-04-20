@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.csv
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.types._
 
-class InferSchemaSuite extends SparkFunSuite {
+class CSVInferSchemaSuite extends SparkFunSuite {
 
   test("String fields types are inferred correctly from null types") {
     assert(CSVInferSchema.inferField(NullType, "") == NullType)
@@ -80,7 +80,7 @@ class InferSchemaSuite extends SparkFunSuite {
     assert(CSVInferSchema.inferField(BooleanType, "\\N", "\\N") == BooleanType)
   }
 
-  test("Merging Nulltypes should yeild Nulltype.") {
+  test("Merging Nulltypes should yield Nulltype.") {
     val mergedNullTypes = CSVInferSchema.mergeRowTypes(Array(NullType), Array(NullType))
     assert(mergedNullTypes.deep == Array(NullType).deep)
   }

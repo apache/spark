@@ -23,13 +23,14 @@ import java.util.concurrent.LinkedBlockingQueue
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.{Await, Promise}
+import scala.concurrent.Promise
 import scala.concurrent.duration._
 import scala.util.control.NonFatal
 
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.SparkConf
+import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.JavaUtils
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
  * A wrapper for a WriteAheadLog that batches records before writing data. Handles aggregation
@@ -79,7 +80,8 @@ private[util] class BatchedWriteAheadLog(val wrappedLog: WriteAheadLog, conf: Sp
       }
     }
     if (putSuccessfully) {
-      Await.result(promise.future, WriteAheadLogUtils.getBatchingTimeout(conf).milliseconds)
+      ThreadUtils.awaitResult(
+        promise.future, WriteAheadLogUtils.getBatchingTimeout(conf).milliseconds)
     } else {
       throw new IllegalStateException("close() was called on BatchedWriteAheadLog before " +
         s"write request with time $time could be fulfilled.")

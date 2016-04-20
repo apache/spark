@@ -303,7 +303,7 @@ class LocalLDAModel private[spark] (
       documents.filter(_._2.numNonzeros > 0).map { case (id: Long, termCounts: Vector) =>
         val localElogbeta = ElogbetaBc.value
         var docBound = 0.0D
-        val (gammad: BDV[Double], _) = OnlineLDAOptimizer.variationalTopicInference(
+        val (gammad: BDV[Double], _, _) = OnlineLDAOptimizer.variationalTopicInference(
           termCounts, exp(localElogbeta), brzAlpha, gammaShape, k)
         val Elogthetad: BDV[Double] = LDAUtils.dirichletExpectation(gammad)
 
@@ -354,7 +354,7 @@ class LocalLDAModel private[spark] (
       if (termCounts.numNonzeros == 0) {
         (id, Vectors.zeros(k))
       } else {
-        val (gamma, _) = OnlineLDAOptimizer.variationalTopicInference(
+        val (gamma, _, _) = OnlineLDAOptimizer.variationalTopicInference(
           termCounts,
           expElogbetaBc.value,
           docConcentrationBrz,
@@ -377,7 +377,7 @@ class LocalLDAModel private[spark] (
       if (termCounts.numNonzeros == 0) {
         Vectors.zeros(k)
       } else {
-        val (gamma, _) = OnlineLDAOptimizer.variationalTopicInference(
+        val (gamma, _, _) = OnlineLDAOptimizer.variationalTopicInference(
           termCounts,
           expElogbetaBc.value,
           docConcentrationBrz,
@@ -403,7 +403,7 @@ class LocalLDAModel private[spark] (
     if (document.numNonzeros == 0) {
       Vectors.zeros(this.k)
     } else {
-      val (gamma, _) = OnlineLDAOptimizer.variationalTopicInference(
+      val (gamma, _, _) = OnlineLDAOptimizer.variationalTopicInference(
         document,
         expElogbeta,
         this.docConcentration.toBreeze,
@@ -534,7 +534,8 @@ class DistributedLDAModel private[clustering] (
     @Since("1.5.0") override val docConcentration: Vector,
     @Since("1.5.0") override val topicConcentration: Double,
     private[spark] val iterationTimes: Array[Double],
-    override protected[clustering] val gammaShape: Double = 100)
+    override protected[clustering] val gammaShape: Double = DistributedLDAModel.defaultGammaShape,
+    private[spark] val checkpointFiles: Array[String] = Array.empty[String])
   extends LDAModel {
 
   import LDA._
@@ -806,11 +807,9 @@ class DistributedLDAModel private[clustering] (
 
   override protected def formatVersion = "1.0"
 
-  /**
-   * Java-friendly version of [[topicDistributions]]
-   */
   @Since("1.5.0")
   override def save(sc: SparkContext, path: String): Unit = {
+    // Note: This intentionally does not save checkpointFiles.
     DistributedLDAModel.SaveLoadV1_0.save(
       sc, path, graph, globalTopicTotals, k, vocabSize, docConcentration, topicConcentration,
       iterationTimes, gammaShape)
@@ -821,6 +820,12 @@ class DistributedLDAModel private[clustering] (
 @Experimental
 @Since("1.5.0")
 object DistributedLDAModel extends Loader[DistributedLDAModel] {
+
+  /**
+   * The [[DistributedLDAModel]] constructor's default arguments assume gammaShape = 100
+   * to ensure equivalence in LDAModel.toLocal conversion.
+   */
+  private[clustering] val defaultGammaShape: Double = 100
 
   private object SaveLoadV1_0 {
 

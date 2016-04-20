@@ -34,8 +34,7 @@ class StreamInterceptor implements TransportFrameDecoder.Interceptor {
   private final String streamId;
   private final long byteCount;
   private final StreamCallback callback;
-
-  private volatile long bytesRead;
+  private long bytesRead;
 
   StreamInterceptor(
       TransportResponseHandler handler,

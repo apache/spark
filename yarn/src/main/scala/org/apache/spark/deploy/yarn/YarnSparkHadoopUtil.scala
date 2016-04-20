@@ -65,7 +65,7 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
   override def isYarnMode(): Boolean = { true }
 
   // Return an appropriate (subclass) of Configuration. Creating a config initializes some Hadoop
-  // subsystems. Always create a new config, dont reuse yarnConf.
+  // subsystems. Always create a new config, don't reuse yarnConf.
   override def newConfiguration(conf: SparkConf): Configuration =
     new YarnConfiguration(super.newConfiguration(conf))
 
@@ -135,8 +135,8 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
   }
 
   /**
-    * Obtains token for the Hive metastore and adds them to the credentials.
-    */
+   * Obtains token for the Hive metastore and adds them to the credentials.
+   */
   def obtainTokenForHiveMetastore(
       sparkConf: SparkConf,
       conf: Configuration,
@@ -149,8 +149,8 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
   }
 
   /**
-    * Obtain a security token for HBase.
-    */
+   * Obtain a security token for HBase.
+   */
   def obtainTokenForHBase(
       sparkConf: SparkConf,
       conf: Configuration,
@@ -164,10 +164,10 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
   }
 
   /**
-    * Return whether delegation tokens should be retrieved for the given service when security is
-    * enabled. By default, tokens are retrieved, but that behavior can be changed by setting
-    * a service-specific configuration.
-    */
+   * Return whether delegation tokens should be retrieved for the given service when security is
+   * enabled. By default, tokens are retrieved, but that behavior can be changed by setting
+   * a service-specific configuration.
+   */
   private def shouldGetTokens(conf: SparkConf, service: String): Boolean = {
     conf.getBoolean(s"spark.yarn.security.tokens.${service}.enabled", true)
   }
@@ -217,7 +217,7 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
     // the hive configuration class is a subclass of Hadoop Configuration, so can be cast down
     // to a Configuration and used without reflection
     val hiveConfClass = mirror.classLoader.loadClass("org.apache.hadoop.hive.conf.HiveConf")
-    // using the (Configuration, Class) constructor allows the current configuratin to be included
+    // using the (Configuration, Class) constructor allows the current configuration to be included
     // in the hive config.
     val ctor = hiveConfClass.getDeclaredConstructor(classOf[Configuration],
       classOf[Object].getClass)
@@ -502,7 +502,7 @@ object YarnSparkHadoopUtil {
   /**
    * Getting the initial target number of executors depends on whether dynamic allocation is
    * enabled.
-   * If not using dynamic allocation it gets the number of executors reqeusted by the user.
+   * If not using dynamic allocation it gets the number of executors requested by the user.
    */
   def getInitialTargetExecutorNumber(
       conf: SparkConf,
@@ -512,7 +512,7 @@ object YarnSparkHadoopUtil {
       val initialNumExecutors = conf.get(DYN_ALLOCATION_INITIAL_EXECUTORS)
       val maxNumExecutors = conf.get(DYN_ALLOCATION_MAX_EXECUTORS)
       require(initialNumExecutors >= minNumExecutors && initialNumExecutors <= maxNumExecutors,
-        s"initial executor number $initialNumExecutors must between min executor number" +
+        s"initial executor number $initialNumExecutors must between min executor number " +
           s"$minNumExecutors and max executor number $maxNumExecutors")
 
       initialNumExecutors

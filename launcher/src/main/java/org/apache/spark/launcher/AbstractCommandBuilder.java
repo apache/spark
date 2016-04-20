@@ -19,10 +19,10 @@ package org.apache.spark.launcher;
 
 import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileFilter;
 import java.io.FileInputStream;
 import java.io.InputStreamReader;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -57,7 +57,7 @@ abstract class AbstractCommandBuilder {
   // properties files multiple times.
   private Map<String, String> effectiveConfig;
 
-  public AbstractCommandBuilder() {
+  AbstractCommandBuilder() {
     this.appArgs = new ArrayList<>();
     this.childEnv = new HashMap<>();
     this.conf = new HashMap<>();
@@ -74,7 +74,8 @@ abstract class AbstractCommandBuilder {
    *            SparkLauncher constructor that takes an environment), and may be modified to
    *            include other variables needed by the process to be executed.
    */
-  abstract List<String> buildCommand(Map<String, String> env) throws IOException;
+  abstract List<String> buildCommand(Map<String, String> env)
+      throws IOException, IllegalArgumentException;
 
   /**
    * Builds a list of arguments to run java.
@@ -102,7 +103,7 @@ abstract class AbstractCommandBuilder {
     File javaOpts = new File(join(File.separator, getConfDir(), "java-opts"));
     if (javaOpts.isFile()) {
       BufferedReader br = new BufferedReader(new InputStreamReader(
-          new FileInputStream(javaOpts), "UTF-8"));
+          new FileInputStream(javaOpts), StandardCharsets.UTF_8));
       try {
         String line;
         while ((line = br.readLine()) != null) {
@@ -144,10 +145,26 @@ abstract class AbstractCommandBuilder {
     boolean isTesting = "1".equals(getenv("SPARK_TESTING"));
     if (prependClasses || isTesting) {
       String scala = getScalaVersion();
-      List<String> projects = Arrays.asList("core", "repl", "mllib", "graphx",
-        "streaming", "tools", "sql/catalyst", "sql/core", "sql/hive", "sql/hive-thriftserver",
-        "yarn", "launcher",
-        "common/network-common", "common/network-shuffle", "common/network-yarn");
+      List<String> projects = Arrays.asList(
+        "common/network-common",
+        "common/network-shuffle",
+        "common/network-yarn",
+        "common/sketch",
+        "common/tags",
+        "common/unsafe",
+        "core",
+        "examples",
+        "graphx",
+        "launcher",
+        "mllib",
+        "repl",
+        "sql/catalyst",
+        "sql/core",
+        "sql/hive",
+        "sql/hive-thriftserver",
+        "streaming",
+        "yarn"
+      );
       if (prependClasses) {
         if (!isTesting) {
           System.err.println(
@@ -171,40 +188,13 @@ abstract class AbstractCommandBuilder {
       addToClassPath(cp, String.format("%s/core/target/jars/*", sparkHome));
     }
 
-    // We can't rely on the ENV_SPARK_ASSEMBLY variable to be set. Certain situations, such as
-    // when running unit tests, or user code that embeds Spark and creates a SparkContext
-    // with a local or local-cluster master, will cause this code to be called from an
-    // environment where that env variable is not guaranteed to exist.
-    //
-    // For the testing case, we rely on the test code to set and propagate the test classpath
-    // appropriately.
-    //
-    // For the user code case, we fall back to looking for the Spark assembly under SPARK_HOME.
-    // That duplicates some of the code in the shell scripts that look for the assembly, though.
-    String assembly = getenv(ENV_SPARK_ASSEMBLY);
-    if (assembly == null && !isTesting) {
-      assembly = findAssembly();
-    }
-    addToClassPath(cp, assembly);
-
-    // Datanucleus jars must be included on the classpath. Datanucleus jars do not work if only
-    // included in the uber jar as plugin.xml metadata is lost. Both sbt and maven will populate
-    // "lib_managed/jars/" with the datanucleus jars when Spark is built with Hive
-    File libdir;
-    if (new File(sparkHome, "RELEASE").isFile()) {
-      libdir = new File(sparkHome, "lib");
-    } else {
-      libdir = new File(sparkHome, "lib_managed/jars");
-    }
-
-    if (libdir.isDirectory()) {
-      for (File jar : libdir.listFiles()) {
-        if (jar.getName().startsWith("datanucleus-")) {
-          addToClassPath(cp, jar.getAbsolutePath());
-        }
-      }
-    } else {
-      checkState(isTesting, "Library directory '%s' does not exist.", libdir.getAbsolutePath());
+    // Add Spark jars to the classpath. For the testing case, we rely on the test code to set and
+    // propagate the test classpath appropriately. For normal invocation, look for the jars
+    // directory under SPARK_HOME.
+    boolean isTestingSql = "1".equals(getenv("SPARK_SQL_TESTING"));
+    String jarsDir = findJarsDir(getSparkHome(), getScalaVersion(), !isTesting && !isTestingSql);
+    if (jarsDir != null) {
+      addToClassPath(cp, join(File.separator, jarsDir, "*"));
     }
 
     addToClassPath(cp, getenv("HADOOP_CONF_DIR"));
@@ -301,7 +291,7 @@ abstract class AbstractCommandBuilder {
       FileInputStream fd = null;
       try {
         fd = new FileInputStream(propsFile);
-        props.load(new InputStreamReader(fd, "UTF-8"));
+        props.load(new InputStreamReader(fd, StandardCharsets.UTF_8));
         for (Map.Entry<Object, Object> e : props.entrySet()) {
           e.setValue(e.getValue().toString().trim());
         }
@@ -317,30 +307,6 @@ abstract class AbstractCommandBuilder {
     }
 
     return props;
-  }
-
-  private String findAssembly() {
-    String sparkHome = getSparkHome();
-    File libdir;
-    if (new File(sparkHome, "RELEASE").isFile()) {
-      libdir = new File(sparkHome, "lib");
-      checkState(libdir.isDirectory(), "Library directory '%s' does not exist.",
-          libdir.getAbsolutePath());
-    } else {
-      libdir = new File(sparkHome, String.format("assembly/target/scala-%s", getScalaVersion()));
-    }
-
-    final Pattern re = Pattern.compile("spark-assembly.*hadoop.*\\.jar");
-    FileFilter filter = new FileFilter() {
-      @Override
-      public boolean accept(File file) {
-        return file.isFile() && re.matcher(file.getName()).matches();
-      }
-    };
-    File[] assemblies = libdir.listFiles(filter);
-    checkState(assemblies != null && assemblies.length > 0, "No assemblies found in '%s'.", libdir);
-    checkState(assemblies.length == 1, "Multiple assemblies found in '%s'.", libdir);
-    return assemblies[0].getAbsolutePath();
   }
 
   private String getConfDir() {

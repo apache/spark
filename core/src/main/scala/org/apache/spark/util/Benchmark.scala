@@ -42,7 +42,24 @@ private[spark] class Benchmark(
     outputPerIteration: Boolean = false) {
   val benchmarks = mutable.ArrayBuffer.empty[Benchmark.Case]
 
+  /**
+   * Adds a case to run when run() is called. The given function will be run for several
+   * iterations to collect timing statistics.
+   */
   def addCase(name: String)(f: Int => Unit): Unit = {
+    addTimerCase(name) { timer =>
+      timer.startTiming()
+      f(timer.iteration)
+      timer.stopTiming()
+    }
+  }
+
+  /**
+   * Adds a case with manual timing control. When the function is run, timing does not start
+   * until timer.startTiming() is called within the given function. The corresponding
+   * timer.stopTiming() method must be called before the function returns.
+   */
+  def addTimerCase(name: String)(f: Benchmark.Timer => Unit): Unit = {
     benchmarks += Benchmark.Case(name, f)
   }
 
@@ -64,6 +81,7 @@ private[spark] class Benchmark(
 
     val firstBest = results.head.bestMs
     // The results are going to be processor specific so it is useful to include that.
+    println(Benchmark.getJVMOSInfo())
     println(Benchmark.getProcessorName())
     printf("%-35s %16s %12s %13s %10s\n", name + ":", "Best/Avg Time(ms)", "Rate(M/s)",
       "Per Row(ns)", "Relative")
@@ -83,7 +101,34 @@ private[spark] class Benchmark(
 }
 
 private[spark] object Benchmark {
-  case class Case(name: String, fn: Int => Unit)
+
+  /**
+   * Object available to benchmark code to control timing e.g. to exclude set-up time.
+   *
+   * @param iteration specifies this is the nth iteration of running the benchmark case
+   */
+  class Timer(val iteration: Int) {
+    private var accumulatedTime: Long = 0L
+    private var timeStart: Long = 0L
+
+    def startTiming(): Unit = {
+      assert(timeStart == 0L, "Already started timing.")
+      timeStart = System.nanoTime
+    }
+
+    def stopTiming(): Unit = {
+      assert(timeStart != 0L, "Have not started timing.")
+      accumulatedTime += System.nanoTime - timeStart
+      timeStart = 0L
+    }
+
+    def totalTime(): Long = {
+      assert(timeStart == 0L, "Have not stopped timing.")
+      accumulatedTime
+    }
+  }
+
+  case class Case(name: String, fn: Timer => Unit)
   case class Result(avgMs: Double, bestRate: Double, bestMs: Double)
 
   /**
@@ -91,31 +136,43 @@ private[spark] object Benchmark {
    * This should return something like "Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz"
    */
   def getProcessorName(): String = {
-    if (SystemUtils.IS_OS_MAC_OSX) {
+    val cpu = if (SystemUtils.IS_OS_MAC_OSX) {
       Utils.executeAndGetOutput(Seq("/usr/sbin/sysctl", "-n", "machdep.cpu.brand_string"))
     } else if (SystemUtils.IS_OS_LINUX) {
       Try {
-        val grepPath = Utils.executeAndGetOutput(Seq("which", "grep"))
+        val grepPath = Utils.executeAndGetOutput(Seq("which", "grep")).stripLineEnd
         Utils.executeAndGetOutput(Seq(grepPath, "-m", "1", "model name", "/proc/cpuinfo"))
+        .stripLineEnd.replaceFirst("model name[\\s*]:[\\s*]", "")
       }.getOrElse("Unknown processor")
     } else {
       System.getenv("PROCESSOR_IDENTIFIER")
     }
+    cpu
+  }
+
+  /**
+   * This should return a user helpful JVM & OS information.
+   * This should return something like
+   * "OpenJDK 64-Bit Server VM 1.8.0_65-b17 on Linux 4.1.13-100.fc21.x86_64"
+   */
+  def getJVMOSInfo(): String = {
+    val vmName = System.getProperty("java.vm.name")
+    val runtimeVersion = System.getProperty("java.runtime.version")
+    val osName = System.getProperty("os.name")
+    val osVersion = System.getProperty("os.version")
+    s"${vmName} ${runtimeVersion} on ${osName} ${osVersion}"
   }
 
   /**
    * Runs a single function `f` for iters, returning the average time the function took and
    * the rate of the function.
    */
-  def measure(num: Long, iters: Int, outputPerIteration: Boolean)(f: Int => Unit): Result = {
+  def measure(num: Long, iters: Int, outputPerIteration: Boolean)(f: Timer => Unit): Result = {
     val runTimes = ArrayBuffer[Long]()
     for (i <- 0 until iters + 1) {
-      val start = System.nanoTime()
-
-      f(i)
-
-      val end = System.nanoTime()
-      val runTime = end - start
+      val timer = new Benchmark.Timer(i)
+      f(timer)
+      val runTime = timer.totalTime()
       if (i > 0) {
         runTimes += runTime
       }

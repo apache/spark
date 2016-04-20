@@ -23,11 +23,10 @@ import java.sql.{Date, Timestamp}
 import scala.language.postfixOps
 
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
+import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
-
-case class OtherTuple(_1: String, _2: Int)
 
 class DatasetSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
@@ -46,7 +45,16 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       1, 1, 1)
   }
 
-  test("SPARK-12404: Datatype Helper Serializablity") {
+  test("range") {
+    assert(sqlContext.range(10).map(_ + 1).reduce(_ + _) == 55)
+    assert(sqlContext.range(10).map{ case i: java.lang.Long => i + 1 }.reduce(_ + _) == 55)
+    assert(sqlContext.range(0, 10).map(_ + 1).reduce(_ + _) == 55)
+    assert(sqlContext.range(0, 10).map{ case i: java.lang.Long => i + 1 }.reduce(_ + _) == 55)
+    assert(sqlContext.range(0, 10, 1, 2).map(_ + 1).reduce(_ + _) == 55)
+    assert(sqlContext.range(0, 10, 1, 2).map{ case i: java.lang.Long => i + 1 }.reduce(_ + _) == 55)
+  }
+
+  test("SPARK-12404: Datatype Helper Serializability") {
     val ds = sparkContext.parallelize((
       new Timestamp(0),
       new Date(0),
@@ -64,6 +72,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     assert(ds.first() == item)
     assert(ds.take(1).head == item)
     assert(ds.takeAsList(1).get(0) == item)
+    assert(ds.toLocalIterator().next() === item)
   }
 
   test("coalesce, repartition") {
@@ -298,7 +307,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("groupBy function, reduce") {
     val ds = Seq("abc", "xyz", "hello").toDS()
-    val agged = ds.groupByKey(_.length).reduce(_ + _)
+    val agged = ds.groupByKey(_.length).reduceGroups(_ + _)
 
     checkDataset(
       agged,
@@ -313,55 +322,6 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       count,
       (Tuple1(3), 2L), (Tuple1(5), 1L)
     )
-  }
-
-  test("groupBy columns, map") {
-    val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
-    val grouped = ds.groupByKey($"_1")
-    val agged = grouped.mapGroups { case (g, iter) => (g.getString(0), iter.map(_._2).sum) }
-
-    checkDataset(
-      agged,
-      ("a", 30), ("b", 3), ("c", 1))
-  }
-
-  test("groupBy columns, count") {
-    val ds = Seq("a" -> 1, "b" -> 1, "a" -> 2).toDS()
-    val count = ds.groupByKey($"_1").count()
-
-    checkDataset(
-      count,
-      (Row("a"), 2L), (Row("b"), 1L))
-  }
-
-  test("groupBy columns asKey, map") {
-    val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
-    val grouped = ds.groupByKey($"_1").keyAs[String]
-    val agged = grouped.mapGroups { case (g, iter) => (g, iter.map(_._2).sum) }
-
-    checkDataset(
-      agged,
-      ("a", 30), ("b", 3), ("c", 1))
-  }
-
-  test("groupBy columns asKey tuple, map") {
-    val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
-    val grouped = ds.groupByKey($"_1", lit(1)).keyAs[(String, Int)]
-    val agged = grouped.mapGroups { case (g, iter) => (g, iter.map(_._2).sum) }
-
-    checkDataset(
-      agged,
-      (("a", 1), 30), (("b", 1), 3), (("c", 1), 1))
-  }
-
-  test("groupBy columns asKey class, map") {
-    val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
-    val grouped = ds.groupByKey($"_1".as("a"), lit(1).as("b")).keyAs[ClassData]
-    val agged = grouped.mapGroups { case (g, iter) => (g, iter.map(_._2).sum) }
-
-    checkDataset(
-      agged,
-      (ClassData("a", 1), 30), (ClassData("b", 1), 3), (ClassData("c", 1), 1))
   }
 
   test("typed aggregation: expr") {
@@ -511,6 +471,10 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
         (JavaData(2), JavaData(2))))
   }
 
+  test("SPARK-14696: implicit encoders for boxed types") {
+    assert(sqlContext.range(1).map { i => i : java.lang.Long }.head == 0L)
+  }
+
   test("SPARK-11894: Incorrect results are returned when using null") {
     val nullInt = null.asInstanceOf[java.lang.Integer]
     val ds1 = Seq((nullInt, "1"), (new java.lang.Integer(22), "2")).toDS()
@@ -636,7 +600,41 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       Seq(OuterObject.InnerClass("foo")).toDS(),
       OuterObject.InnerClass("foo"))
   }
+
+  test("SPARK-14000: case class with tuple type field") {
+    checkDataset(
+      Seq(TupleClass((1, "a"))).toDS(),
+      TupleClass(1, "a")
+    )
+  }
+
+  test("isStreaming returns false for static Dataset") {
+    val data = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
+    assert(!data.isStreaming, "static Dataset returned true for 'isStreaming'.")
+  }
+
+  test("isStreaming returns true for streaming Dataset") {
+    val data = MemoryStream[Int].toDS()
+    assert(data.isStreaming, "streaming Dataset returned false for 'isStreaming'.")
+  }
+
+  test("isStreaming returns true after static and streaming Dataset join") {
+    val static = Seq(("a", 1), ("b", 2), ("c", 3)).toDF("a", "b")
+    val streaming = MemoryStream[Int].toDS().toDF("b")
+    val df = streaming.join(static, Seq("b"))
+    assert(df.isStreaming, "streaming Dataset returned false for 'isStreaming'.")
+  }
+
+  test("SPARK-14554: Dataset.map may generate wrong java code for wide table") {
+    val wideDF = sqlContext.range(10).select(Seq.tabulate(1000) {i => ('id + i).as(s"c$i")} : _*)
+    // Make sure the generated code for this plan can compile and execute.
+    checkDataset(wideDF.map(_.getLong(0)), 0L until 10 : _*)
+  }
 }
+
+case class OtherTuple(_1: String, _2: Int)
+
+case class TupleClass(data: (Int, String))
 
 class OuterClass extends Serializable {
   case class InnerClass(a: String)

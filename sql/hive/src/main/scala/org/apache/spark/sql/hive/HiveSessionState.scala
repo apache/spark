@@ -17,11 +17,15 @@
 
 package org.apache.spark.sql.hive
 
+import org.apache.hadoop.hive.conf.HiveConf
+
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry, OverrideCatalog}
+import org.apache.spark.sql.catalyst.analysis.Analyzer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
-import org.apache.spark.sql.execution.{python, SparkPlanner}
+import org.apache.spark.sql.execution.SparkPlanner
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.hive.client.{HiveClient, HiveClientImpl}
+import org.apache.spark.sql.hive.execution.HiveSqlParser
 import org.apache.spark.sql.internal.{SessionState, SQLConf}
 
 
@@ -30,55 +34,81 @@ import org.apache.spark.sql.internal.{SessionState, SQLConf}
  */
 private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx) {
 
+  /**
+   * SQLConf and HiveConf contracts:
+   *
+   * 1. create a new o.a.h.hive.ql.session.SessionState for each [[HiveContext]]
+   * 2. when the Hive session is first initialized, params in HiveConf will get picked up by the
+   *    SQLConf.  Additionally, any properties set by set() or a SET command inside sql() will be
+   *    set in the SQLConf *as well as* in the HiveConf.
+   */
+  lazy val hiveconf: HiveConf = {
+    val c = ctx.executionHive.conf
+    ctx.setConf(c.getAllProperties)
+    c
+  }
+
+  /**
+   * A Hive client used for execution.
+   */
+  val executionHive: HiveClientImpl = ctx.hiveSharedState.executionHive.newSession()
+
+  /**
+   * A Hive client used for interacting with the metastore.
+   */
+  val metadataHive: HiveClient = ctx.hiveSharedState.metadataHive.newSession()
+
   override lazy val conf: SQLConf = new SQLConf {
     override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
   }
 
   /**
-   * A metadata catalog that points to the Hive metastore.
+   * Internal catalog for managing table and database states.
    */
-  override lazy val catalog = new HiveMetastoreCatalog(ctx.metadataHive, ctx) with OverrideCatalog
-
-  /**
-   * Internal catalog for managing functions registered by the user.
-   * Note that HiveUDFs will be overridden by functions registered in this context.
-   */
-  override lazy val functionRegistry: FunctionRegistry = {
-    new HiveFunctionRegistry(FunctionRegistry.builtin.copy(), ctx.executionHive)
+  override lazy val catalog = {
+    new HiveSessionCatalog(
+      ctx.hiveCatalog,
+      ctx.metadataHive,
+      ctx,
+      ctx.functionResourceLoader,
+      functionRegistry,
+      conf)
   }
 
   /**
    * An analyzer that uses the Hive metastore.
    */
   override lazy val analyzer: Analyzer = {
-    new Analyzer(catalog, functionRegistry, conf) {
+    new Analyzer(catalog, conf) {
       override val extendedResolutionRules =
         catalog.ParquetConversions ::
+        catalog.OrcConversions ::
         catalog.CreateTables ::
         catalog.PreInsertionCasts ::
-        python.ExtractPythonUDFs ::
         PreInsertCastAndRename ::
         DataSourceAnalysis ::
         (if (conf.runSQLOnFile) new ResolveDataSource(ctx) :: Nil else Nil)
 
-      override val extendedCheckRules = Seq(PreWriteCheck(catalog))
+      override val extendedCheckRules = Seq(PreWriteCheck(conf, catalog))
     }
   }
 
   /**
    * Parser for HiveQl query texts.
    */
-  override lazy val sqlParser: ParserInterface = new HiveQl(conf)
+  override lazy val sqlParser: ParserInterface = new HiveSqlParser(hiveconf)
 
   /**
    * Planner that takes into account Hive-specific strategies.
    */
-  override lazy val planner: SparkPlanner = {
-    new SparkPlanner(ctx) with HiveStrategies {
+  override def planner: SparkPlanner = {
+    new SparkPlanner(ctx.sparkContext, conf, experimentalMethods.extraStrategies)
+      with HiveStrategies {
       override val hiveContext = ctx
 
       override def strategies: Seq[Strategy] = {
-        ctx.experimental.extraStrategies ++ Seq(
+        experimentalMethods.extraStrategies ++ Seq(
+          FileSourceStrategy,
           DataSourceStrategy,
           HiveCommandStrategy(ctx),
           HiveDDLStrategy,
@@ -89,7 +119,7 @@ private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx)
           DataSinks,
           Scripts,
           Aggregation,
-          LeftSemiJoin,
+          ExistenceJoin,
           EquiJoinSelection,
           BasicOperators,
           BroadcastNestedLoop,

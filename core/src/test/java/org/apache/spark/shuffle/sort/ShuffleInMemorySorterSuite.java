@@ -17,6 +17,7 @@
 
 package org.apache.spark.shuffle.sort;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Random;
 
@@ -41,7 +42,7 @@ public class ShuffleInMemorySorterSuite {
   private static String getStringFromDataPage(Object baseObject, long baseOffset, int strLength) {
     final byte[] strBytes = new byte[strLength];
     Platform.copyMemory(baseObject, baseOffset, strBytes, Platform.BYTE_ARRAY_OFFSET, strLength);
-    return new String(strBytes);
+    return new String(strBytes, StandardCharsets.UTF_8);
   }
 
   @Test
@@ -79,7 +80,7 @@ public class ShuffleInMemorySorterSuite {
         sorter.expandPointerArray(consumer.allocateArray(sorter.numRecords() * 2));
       }
       final long recordAddress = memoryManager.encodePageNumberAndOffset(dataPage, position);
-      final byte[] strBytes = str.getBytes("utf-8");
+      final byte[] strBytes = str.getBytes(StandardCharsets.UTF_8);
       Platform.putInt(baseObject, position, strBytes.length);
       position += 4;
       Platform.copyMemory(

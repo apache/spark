@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive
 
 import java.io.File
 import java.net.{URL, URLClassLoader}
+import java.nio.charset.StandardCharsets
 import java.sql.Timestamp
 import java.util.concurrent.TimeUnit
 import java.util.regex.Pattern
@@ -27,47 +28,31 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
 import scala.language.implicitConversions
 
-import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.hadoop.hive.common.StatsSetupConst
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.common.`type`.HiveDecimal
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hadoop.hive.ql.metadata.Table
 import org.apache.hadoop.hive.ql.parse.VariableSubstitution
 import org.apache.hadoop.hive.serde2.io.{DateWritable, TimestampWritable}
 import org.apache.hadoop.util.VersionInfo
 
-import org.apache.spark.{Logging, SparkContext}
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.api.java.JavaSparkContext
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.{Expression, LeafExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.{ExecutedCommand, SetCommand}
-import org.apache.spark.sql.execution.ui.SQLListener
 import org.apache.spark.sql.hive.client._
-import org.apache.spark.sql.hive.execution.{DescribeHiveTableCommand, HiveNativeCommand}
-import org.apache.spark.sql.internal.SQLConf.SQLConfEntry
-import org.apache.spark.sql.internal.SQLConf.SQLConfEntry._
+import org.apache.spark.sql.hive.execution.{AnalyzeTable, DescribeHiveTableCommand, HiveNativeCommand}
+import org.apache.spark.sql.internal.{SharedState, SQLConf}
+import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
-
-/**
- * Returns the current database of metadataHive.
- */
-private[hive] case class CurrentDatabase(ctx: HiveContext)
-  extends LeafExpression with CodegenFallback {
-  override def dataType: DataType = StringType
-  override def foldable: Boolean = true
-  override def nullable: Boolean = false
-  override def eval(input: InternalRow): Any = {
-    UTF8String.fromString(ctx.metadataHive.currentDatabase)
-  }
-}
 
 /**
  * An instance of the Spark SQL execution engine that integrates with data stored in Hive.
@@ -76,18 +61,16 @@ private[hive] case class CurrentDatabase(ctx: HiveContext)
  * @since 1.0.0
  */
 class HiveContext private[hive](
-    sc: SparkContext,
-    cacheManager: CacheManager,
-    listener: SQLListener,
-    @transient private val execHive: HiveClientImpl,
-    @transient private val metaHive: HiveClient,
-    isRootContext: Boolean)
-  extends SQLContext(sc, cacheManager, listener, isRootContext) with Logging {
+    @transient protected[hive] val hiveSharedState: HiveSharedState,
+    override val isRootContext: Boolean)
+  extends SQLContext(hiveSharedState, isRootContext) with Logging {
+
   self =>
 
   def this(sc: SparkContext) = {
-    this(sc, new CacheManager, SQLContext.createListenerAndUI(sc), null, null, true)
+    this(new HiveSharedState(sc), true)
   }
+
   def this(sc: JavaSparkContext) = this(sc.sc)
 
   import org.apache.spark.sql.hive.HiveContext._
@@ -100,24 +83,15 @@ class HiveContext private[hive](
    * and Hive client (both of execution and metadata) with existing HiveContext.
    */
   override def newSession(): HiveContext = {
-    new HiveContext(
-      sc = sc,
-      cacheManager = cacheManager,
-      listener = listener,
-      execHive = executionHive.newSession(),
-      metaHive = metadataHive.newSession(),
-      isRootContext = false)
+    new HiveContext(hiveSharedState, isRootContext = false)
   }
 
   @transient
   protected[sql] override lazy val sessionState = new HiveSessionState(self)
 
-  protected[sql] override def catalog = sessionState.catalog
-
-  // The Hive UDF current_database() is foldable, will be evaluated by optimizer,
-  // but the optimizer can't access the SessionState of metadataHive.
-  sessionState.functionRegistry.registerFunction(
-    "current_database", (e: Seq[Expression]) => new CurrentDatabase(self))
+  protected[hive] def hiveCatalog: HiveExternalCatalog = hiveSharedState.externalCatalog
+  protected[hive] def executionHive: HiveClientImpl = sessionState.executionHive
+  protected[hive] def metadataHive: HiveClient = sessionState.metadataHive
 
   /**
    * When true, enables an experimental feature where metastore tables that use the parquet SerDe
@@ -136,6 +110,13 @@ class HiveContext private[hive](
     getConf(CONVERT_METASTORE_PARQUET_WITH_SCHEMA_MERGING)
 
   /**
+   * When true, enables an experimental feature where metastore tables that use the Orc SerDe
+   * are automatically converted to use the Spark SQL ORC table scan, instead of the Hive
+   * SerDe.
+   */
+  protected[sql] def convertMetastoreOrc: Boolean = getConf(CONVERT_METASTORE_ORC)
+
+  /**
    * When true, a table created by a Hive CTAS statement (no USING clause) will be
    * converted to a data source table, using the data source set by spark.sql.sources.default.
    * The table in CTAS statement will be converted when it meets any of the following conditions:
@@ -149,72 +130,16 @@ class HiveContext private[hive](
    */
   protected[sql] def convertCTAS: Boolean = getConf(CONVERT_CTAS)
 
-  /**
-   * The version of the hive client that will be used to communicate with the metastore.  Note that
-   * this does not necessarily need to be the same version of Hive that is used internally by
-   * Spark SQL for execution.
-   */
-  protected[hive] def hiveMetastoreVersion: String = getConf(HIVE_METASTORE_VERSION)
-
-  /**
-   * The location of the jars that should be used to instantiate the HiveMetastoreClient.  This
-   * property can be one of three options:
-   *  - a classpath in the standard format for both hive and hadoop.
-   *  - builtin - attempt to discover the jars that were used to load Spark SQL and use those. This
-   *              option is only valid when using the execution version of Hive.
-   *  - maven - download the correct version of hive on demand from maven.
-   */
-  protected[hive] def hiveMetastoreJars: String = getConf(HIVE_METASTORE_JARS)
-
-  /**
-   * A comma separated list of class prefixes that should be loaded using the classloader that
-   * is shared between Spark SQL and a specific version of Hive. An example of classes that should
-   * be shared is JDBC drivers that are needed to talk to the metastore. Other classes that need
-   * to be shared are those that interact with classes that are already shared.  For example,
-   * custom appenders that are used by log4j.
-   */
-  protected[hive] def hiveMetastoreSharedPrefixes: Seq[String] =
-    getConf(HIVE_METASTORE_SHARED_PREFIXES).filterNot(_ == "")
-
-  /**
-   * A comma separated list of class prefixes that should explicitly be reloaded for each version
-   * of Hive that Spark SQL is communicating with.  For example, Hive UDFs that are declared in a
-   * prefix that typically would be shared (i.e. org.apache.spark.*)
-   */
-  protected[hive] def hiveMetastoreBarrierPrefixes: Seq[String] =
-    getConf(HIVE_METASTORE_BARRIER_PREFIXES).filterNot(_ == "")
-
   /*
    * hive thrift server use background spark sql thread pool to execute sql queries
    */
   protected[hive] def hiveThriftServerAsync: Boolean = getConf(HIVE_THRIFT_SERVER_ASYNC)
 
   protected[hive] def hiveThriftServerSingleSession: Boolean =
-    sc.conf.get("spark.sql.hive.thriftServer.singleSession", "false").toBoolean
+    sparkContext.conf.getBoolean("spark.sql.hive.thriftServer.singleSession", defaultValue = false)
 
   @transient
   protected[sql] lazy val substitutor = new VariableSubstitution()
-
-  /**
-   * The copy of the hive client that is used for execution.  Currently this must always be
-   * Hive 13 as this is the version of Hive that is packaged with Spark SQL.  This copy of the
-   * client is used for execution related tasks like registering temporary functions or ensuring
-   * that the ThreadLocal SessionState is correctly populated.  This copy of Hive is *not* used
-   * for storing persistent metadata, and only point to a dummy metastore in a temporary directory.
-   */
-  @transient
-  protected[hive] lazy val executionHive: HiveClientImpl = if (execHive != null) {
-    execHive
-  } else {
-    logInfo(s"Initializing execution hive, version $hiveExecutionVersion")
-    val loader = new IsolatedClientLoader(
-      version = IsolatedClientLoader.hiveVersion(hiveExecutionVersion),
-      execJars = Seq(),
-      config = newTemporaryConfiguration(useInMemoryDerby = true),
-      isolationOn = false,
-      baseClassLoader = Utils.getContextOrSparkClassLoader)
-    loader.createClient().asInstanceOf[HiveClientImpl]
-  }
 
   /**
    * Overrides default Hive configurations to avoid breaking changes to Spark SQL users.
@@ -226,108 +151,9 @@ class HiveContext private[hive](
 
   defaultOverrides()
 
-  /**
-   * The copy of the Hive client that is used to retrieve metadata from the Hive MetaStore.
-   * The version of the Hive client that is used here must match the metastore that is configured
-   * in the hive-site.xml file.
-   */
-  @transient
-  protected[hive] lazy val metadataHive: HiveClient = if (metaHive != null) {
-    metaHive
-  } else {
-    val metaVersion = IsolatedClientLoader.hiveVersion(hiveMetastoreVersion)
-
-    // We instantiate a HiveConf here to read in the hive-site.xml file and then pass the options
-    // into the isolated client loader
-    val metadataConf = new HiveConf()
-
-    val defaultWarehouseLocation = metadataConf.get("hive.metastore.warehouse.dir")
-    logInfo("default warehouse location is " + defaultWarehouseLocation)
-
-    // `configure` goes second to override other settings.
-    val allConfig = metadataConf.asScala.map(e => e.getKey -> e.getValue).toMap ++ configure
-
-    val isolatedLoader = if (hiveMetastoreJars == "builtin") {
-      if (hiveExecutionVersion != hiveMetastoreVersion) {
-        throw new IllegalArgumentException(
-          "Builtin jars can only be used when hive execution version == hive metastore version. " +
-          s"Execution: ${hiveExecutionVersion} != Metastore: ${hiveMetastoreVersion}. " +
-          "Specify a vaild path to the correct hive jars using $HIVE_METASTORE_JARS " +
-          s"or change ${HIVE_METASTORE_VERSION.key} to $hiveExecutionVersion.")
-      }
-
-      // We recursively find all jars in the class loader chain,
-      // starting from the given classLoader.
-      def allJars(classLoader: ClassLoader): Array[URL] = classLoader match {
-        case null => Array.empty[URL]
-        case urlClassLoader: URLClassLoader =>
-          urlClassLoader.getURLs ++ allJars(urlClassLoader.getParent)
-        case other => allJars(other.getParent)
-      }
-
-      val classLoader = Utils.getContextOrSparkClassLoader
-      val jars = allJars(classLoader)
-      if (jars.length == 0) {
-        throw new IllegalArgumentException(
-          "Unable to locate hive jars to connect to metastore. " +
-            "Please set spark.sql.hive.metastore.jars.")
-      }
-
-      logInfo(
-        s"Initializing HiveMetastoreConnection version $hiveMetastoreVersion using Spark classes.")
-      new IsolatedClientLoader(
-        version = metaVersion,
-        execJars = jars.toSeq,
-        config = allConfig,
-        isolationOn = true,
-        barrierPrefixes = hiveMetastoreBarrierPrefixes,
-        sharedPrefixes = hiveMetastoreSharedPrefixes)
-    } else if (hiveMetastoreJars == "maven") {
-      // TODO: Support for loading the jars from an already downloaded location.
-      logInfo(
-        s"Initializing HiveMetastoreConnection version $hiveMetastoreVersion using maven.")
-      IsolatedClientLoader.forVersion(
-        hiveMetastoreVersion = hiveMetastoreVersion,
-        hadoopVersion = VersionInfo.getVersion,
-        config = allConfig,
-        barrierPrefixes = hiveMetastoreBarrierPrefixes,
-        sharedPrefixes = hiveMetastoreSharedPrefixes)
-    } else {
-      // Convert to files and expand any directories.
-      val jars =
-        hiveMetastoreJars
-          .split(File.pathSeparator)
-          .flatMap {
-            case path if new File(path).getName() == "*" =>
-              val files = new File(path).getParentFile().listFiles()
-              if (files == null) {
-                logWarning(s"Hive jar path '$path' does not exist.")
-                Nil
-              } else {
-                files.filter(_.getName().toLowerCase().endsWith(".jar"))
-              }
-            case path =>
-              new File(path) :: Nil
-          }
-          .map(_.toURI.toURL)
-
-      logInfo(
-        s"Initializing HiveMetastoreConnection version $hiveMetastoreVersion " +
-          s"using ${jars.mkString(":")}")
-      new IsolatedClientLoader(
-        version = metaVersion,
-        execJars = jars.toSeq,
-        config = allConfig,
-        isolationOn = true,
-        barrierPrefixes = hiveMetastoreBarrierPrefixes,
-        sharedPrefixes = hiveMetastoreSharedPrefixes)
-    }
-    isolatedLoader.createClient()
-  }
-
   protected[sql] override def parseSql(sql: String): LogicalPlan = {
     executionHive.withHiveState {
-      super.parseSql(substitutor.substitute(hiveconf, sql))
+      super.parseSql(substitutor.substitute(sessionState.hiveconf, sql))
     }
   }
 
@@ -343,13 +169,13 @@ class HiveContext private[hive](
    * @since 1.3.0
    */
   def refreshTable(tableName: String): Unit = {
-    val tableIdent = sqlParser.parseTableIdentifier(tableName)
-    catalog.refreshTable(tableIdent)
+    val tableIdent = sessionState.sqlParser.parseTableIdentifier(tableName)
+    sessionState.catalog.refreshTable(tableIdent)
   }
 
   protected[hive] def invalidateTable(tableName: String): Unit = {
-    val tableIdent = sqlParser.parseTableIdentifier(tableName)
-    catalog.invalidateTable(tableIdent)
+    val tableIdent = sessionState.sqlParser.parseTableIdentifier(tableName)
+    sessionState.catalog.invalidateTable(tableIdent)
   }
 
   /**
@@ -362,77 +188,7 @@ class HiveContext private[hive](
    * @since 1.2.0
    */
   def analyze(tableName: String) {
-    val tableIdent = sqlParser.parseTableIdentifier(tableName)
-    val relation = EliminateSubqueryAliases(catalog.lookupRelation(tableIdent))
-
-    relation match {
-      case relation: MetastoreRelation =>
-        // This method is mainly based on
-        // org.apache.hadoop.hive.ql.stats.StatsUtils.getFileSizeForTable(HiveConf, Table)
-        // in Hive 0.13 (except that we do not use fs.getContentSummary).
-        // TODO: Generalize statistics collection.
-        // TODO: Why fs.getContentSummary returns wrong size on Jenkins?
-        // Can we use fs.getContentSummary in future?
-        // Seems fs.getContentSummary returns wrong table size on Jenkins. So we use
-        // countFileSize to count the table size.
-        val stagingDir = metadataHive.getConf(HiveConf.ConfVars.STAGINGDIR.varname,
-          HiveConf.ConfVars.STAGINGDIR.defaultStrVal)
-
-        def calculateTableSize(fs: FileSystem, path: Path): Long = {
-          val fileStatus = fs.getFileStatus(path)
-          val size = if (fileStatus.isDirectory) {
-            fs.listStatus(path)
-              .map { status =>
-                if (!status.getPath().getName().startsWith(stagingDir)) {
-                  calculateTableSize(fs, status.getPath)
-                } else {
-                  0L
-                }
-              }
-              .sum
-          } else {
-            fileStatus.getLen
-          }
-
-          size
-        }
-
-        def getFileSizeForTable(conf: HiveConf, table: Table): Long = {
-          val path = table.getPath
-          var size: Long = 0L
-          try {
-            val fs = path.getFileSystem(conf)
-            size = calculateTableSize(fs, path)
-          } catch {
-            case e: Exception =>
-              logWarning(
-                s"Failed to get the size of table ${table.getTableName} in the " +
-                s"database ${table.getDbName} because of ${e.toString}", e)
-              size = 0L
-          }
-
-          size
-        }
-
-        val tableParameters = relation.hiveQlTable.getParameters
-        val oldTotalSize =
-          Option(tableParameters.get(StatsSetupConst.TOTAL_SIZE))
-            .map(_.toLong)
-            .getOrElse(0L)
-        val newTotalSize = getFileSizeForTable(hiveconf, relation.hiveQlTable)
-        // Update the Hive metastore if the total size of the table is different than the size
-        // recorded in the Hive metastore.
-        // This logic is based on org.apache.hadoop.hive.ql.exec.StatsTask.aggregateStats().
-        if (newTotalSize > 0 && newTotalSize != oldTotalSize) {
-          catalog.client.alterTable(
-            relation.table.copy(
-              properties = relation.table.properties +
-                (StatsSetupConst.TOTAL_SIZE -> newTotalSize.toString)))
-        }
-      case otherRelation =>
-        throw new UnsupportedOperationException(
-          s"Analyze only works for Hive tables, but $tableName is a ${otherRelation.nodeName}")
-    }
+    AnalyzeTable(tableName).run(self)
   }
 
   override def setConf(key: String, value: String): Unit = {
@@ -444,80 +200,11 @@ class HiveContext private[hive](
     // Also, calling hiveconf will create a default session containing a HiveConf, which
     // will interfer with the creation of executionHive (which is a lazy val). So,
     // we put hiveconf.set at the end of this method.
-    hiveconf.set(key, value)
+    sessionState.hiveconf.set(key, value)
   }
 
-  override private[sql] def setConf[T](entry: SQLConfEntry[T], value: T): Unit = {
+  override private[sql] def setConf[T](entry: ConfigEntry[T], value: T): Unit = {
     setConf(entry.key, entry.stringConverter(value))
-  }
-
-  /** Overridden by child classes that need to set configuration before the client init. */
-  protected def configure(): Map[String, String] = {
-    // Hive 0.14.0 introduces timeout operations in HiveConf, and changes default values of a bunch
-    // of time `ConfVar`s by adding time suffixes (`s`, `ms`, and `d` etc.).  This breaks backwards-
-    // compatibility when users are trying to connecting to a Hive metastore of lower version,
-    // because these options are expected to be integral values in lower versions of Hive.
-    //
-    // Here we enumerate all time `ConfVar`s and convert their values to numeric strings according
-    // to their output time units.
-    Seq(
-      ConfVars.METASTORE_CLIENT_CONNECT_RETRY_DELAY -> TimeUnit.SECONDS,
-      ConfVars.METASTORE_CLIENT_SOCKET_TIMEOUT -> TimeUnit.SECONDS,
-      ConfVars.METASTORE_CLIENT_SOCKET_LIFETIME -> TimeUnit.SECONDS,
-      ConfVars.HMSHANDLERINTERVAL -> TimeUnit.MILLISECONDS,
-      ConfVars.METASTORE_EVENT_DB_LISTENER_TTL -> TimeUnit.SECONDS,
-      ConfVars.METASTORE_EVENT_CLEAN_FREQ -> TimeUnit.SECONDS,
-      ConfVars.METASTORE_EVENT_EXPIRY_DURATION -> TimeUnit.SECONDS,
-      ConfVars.METASTORE_AGGREGATE_STATS_CACHE_TTL -> TimeUnit.SECONDS,
-      ConfVars.METASTORE_AGGREGATE_STATS_CACHE_MAX_WRITER_WAIT -> TimeUnit.MILLISECONDS,
-      ConfVars.METASTORE_AGGREGATE_STATS_CACHE_MAX_READER_WAIT -> TimeUnit.MILLISECONDS,
-      ConfVars.HIVES_AUTO_PROGRESS_TIMEOUT -> TimeUnit.SECONDS,
-      ConfVars.HIVE_LOG_INCREMENTAL_PLAN_PROGRESS_INTERVAL -> TimeUnit.MILLISECONDS,
-      ConfVars.HIVE_STATS_JDBC_TIMEOUT -> TimeUnit.SECONDS,
-      ConfVars.HIVE_STATS_RETRIES_WAIT -> TimeUnit.MILLISECONDS,
-      ConfVars.HIVE_LOCK_SLEEP_BETWEEN_RETRIES -> TimeUnit.SECONDS,
-      ConfVars.HIVE_ZOOKEEPER_SESSION_TIMEOUT -> TimeUnit.MILLISECONDS,
-      ConfVars.HIVE_ZOOKEEPER_CONNECTION_BASESLEEPTIME -> TimeUnit.MILLISECONDS,
-      ConfVars.HIVE_TXN_TIMEOUT -> TimeUnit.SECONDS,
-      ConfVars.HIVE_COMPACTOR_WORKER_TIMEOUT -> TimeUnit.SECONDS,
-      ConfVars.HIVE_COMPACTOR_CHECK_INTERVAL -> TimeUnit.SECONDS,
-      ConfVars.HIVE_COMPACTOR_CLEANER_RUN_INTERVAL -> TimeUnit.MILLISECONDS,
-      ConfVars.HIVE_SERVER2_THRIFT_HTTP_MAX_IDLE_TIME -> TimeUnit.MILLISECONDS,
-      ConfVars.HIVE_SERVER2_THRIFT_HTTP_WORKER_KEEPALIVE_TIME -> TimeUnit.SECONDS,
-      ConfVars.HIVE_SERVER2_THRIFT_HTTP_COOKIE_MAX_AGE -> TimeUnit.SECONDS,
-      ConfVars.HIVE_SERVER2_THRIFT_LOGIN_BEBACKOFF_SLOT_LENGTH -> TimeUnit.MILLISECONDS,
-      ConfVars.HIVE_SERVER2_THRIFT_LOGIN_TIMEOUT -> TimeUnit.SECONDS,
-      ConfVars.HIVE_SERVER2_THRIFT_WORKER_KEEPALIVE_TIME -> TimeUnit.SECONDS,
-      ConfVars.HIVE_SERVER2_ASYNC_EXEC_SHUTDOWN_TIMEOUT -> TimeUnit.SECONDS,
-      ConfVars.HIVE_SERVER2_ASYNC_EXEC_KEEPALIVE_TIME -> TimeUnit.SECONDS,
-      ConfVars.HIVE_SERVER2_LONG_POLLING_TIMEOUT -> TimeUnit.MILLISECONDS,
-      ConfVars.HIVE_SERVER2_SESSION_CHECK_INTERVAL -> TimeUnit.MILLISECONDS,
-      ConfVars.HIVE_SERVER2_IDLE_SESSION_TIMEOUT -> TimeUnit.MILLISECONDS,
-      ConfVars.HIVE_SERVER2_IDLE_OPERATION_TIMEOUT -> TimeUnit.MILLISECONDS,
-      ConfVars.SERVER_READ_SOCKET_TIMEOUT -> TimeUnit.SECONDS,
-      ConfVars.HIVE_LOCALIZE_RESOURCE_WAIT_INTERVAL -> TimeUnit.MILLISECONDS,
-      ConfVars.SPARK_CLIENT_FUTURE_TIMEOUT -> TimeUnit.SECONDS,
-      ConfVars.SPARK_JOB_MONITOR_TIMEOUT -> TimeUnit.SECONDS,
-      ConfVars.SPARK_RPC_CLIENT_CONNECT_TIMEOUT -> TimeUnit.MILLISECONDS,
-      ConfVars.SPARK_RPC_CLIENT_HANDSHAKE_TIMEOUT -> TimeUnit.MILLISECONDS
-    ).map { case (confVar, unit) =>
-      confVar.varname -> hiveconf.getTimeVar(confVar, unit).toString
-    }.toMap
-  }
-
-  /**
-   * SQLConf and HiveConf contracts:
-   *
-   * 1. create a new SessionState for each HiveContext
-   * 2. when the Hive session is first initialized, params in HiveConf will get picked up by the
-   *    SQLConf.  Additionally, any properties set by set() or a SET command inside sql() will be
-   *    set in the SQLConf *as well as* in the HiveConf.
-   */
-  @transient
-  protected[hive] lazy val hiveconf: HiveConf = {
-    val c = executionHive.conf
-    setConf(c.getAllProperties)
-    c
   }
 
   private def functionOrMacroDDLPattern(command: String) = Pattern.compile(
@@ -592,71 +279,326 @@ class HiveContext private[hive](
 }
 
 
-private[hive] object HiveContext {
+private[hive] object HiveContext extends Logging {
   /** The version of hive used internally by Spark SQL. */
   val hiveExecutionVersion: String = "1.2.1"
 
-  val HIVE_METASTORE_VERSION = stringConf("spark.sql.hive.metastore.version",
-    defaultValue = Some(hiveExecutionVersion),
-    doc = "Version of the Hive metastore. Available options are " +
+  val HIVE_METASTORE_VERSION = SQLConfigBuilder("spark.sql.hive.metastore.version")
+    .doc("Version of the Hive metastore. Available options are " +
         s"<code>0.12.0</code> through <code>$hiveExecutionVersion</code>.")
+    .stringConf
+    .createWithDefault(hiveExecutionVersion)
 
-  val HIVE_EXECUTION_VERSION = stringConf(
-    key = "spark.sql.hive.version",
-    defaultValue = Some(hiveExecutionVersion),
-    doc = "Version of Hive used internally by Spark SQL.")
+  val HIVE_EXECUTION_VERSION = SQLConfigBuilder("spark.sql.hive.version")
+    .doc("Version of Hive used internally by Spark SQL.")
+    .stringConf
+    .createWithDefault(hiveExecutionVersion)
 
-  val HIVE_METASTORE_JARS = stringConf("spark.sql.hive.metastore.jars",
-    defaultValue = Some("builtin"),
-    doc = s"""
+  val HIVE_METASTORE_JARS = SQLConfigBuilder("spark.sql.hive.metastore.jars")
+    .doc(s"""
       | Location of the jars that should be used to instantiate the HiveMetastoreClient.
       | This property can be one of three options: "
       | 1. "builtin"
-      |   Use Hive ${hiveExecutionVersion}, which is bundled with the Spark assembly jar when
+      |   Use Hive ${hiveExecutionVersion}, which is bundled with the Spark assembly when
       |   <code>-Phive</code> is enabled. When this option is chosen,
       |   <code>spark.sql.hive.metastore.version</code> must be either
       |   <code>${hiveExecutionVersion}</code> or not defined.
       | 2. "maven"
       |   Use Hive jars of specified version downloaded from Maven repositories.
       | 3. A classpath in the standard format for both Hive and Hadoop.
-    """.stripMargin)
-  val CONVERT_METASTORE_PARQUET = booleanConf("spark.sql.hive.convertMetastoreParquet",
-    defaultValue = Some(true),
-    doc = "When set to false, Spark SQL will use the Hive SerDe for parquet tables instead of " +
+      """.stripMargin)
+    .stringConf
+    .createWithDefault("builtin")
+
+  val CONVERT_METASTORE_PARQUET = SQLConfigBuilder("spark.sql.hive.convertMetastoreParquet")
+    .doc("When set to false, Spark SQL will use the Hive SerDe for parquet tables instead of " +
       "the built in support.")
+    .booleanConf
+    .createWithDefault(true)
 
-  val CONVERT_METASTORE_PARQUET_WITH_SCHEMA_MERGING = booleanConf(
-    "spark.sql.hive.convertMetastoreParquet.mergeSchema",
-    defaultValue = Some(false),
-    doc = "When true, also tries to merge possibly different but compatible Parquet schemas in " +
-      "different Parquet data files. This configuration is only effective " +
-      "when \"spark.sql.hive.convertMetastoreParquet\" is true.")
+  val CONVERT_METASTORE_PARQUET_WITH_SCHEMA_MERGING =
+    SQLConfigBuilder("spark.sql.hive.convertMetastoreParquet.mergeSchema")
+      .doc("When true, also tries to merge possibly different but compatible Parquet schemas in " +
+        "different Parquet data files. This configuration is only effective " +
+        "when \"spark.sql.hive.convertMetastoreParquet\" is true.")
+      .booleanConf
+      .createWithDefault(false)
 
-  val CONVERT_CTAS = booleanConf("spark.sql.hive.convertCTAS",
-    defaultValue = Some(false),
-    doc = "When true, a table created by a Hive CTAS statement (no USING clause) will be " +
+  val CONVERT_CTAS = SQLConfigBuilder("spark.sql.hive.convertCTAS")
+    .doc("When true, a table created by a Hive CTAS statement (no USING clause) will be " +
       "converted to a data source table, using the data source set by spark.sql.sources.default.")
+    .booleanConf
+    .createWithDefault(false)
 
-  val HIVE_METASTORE_SHARED_PREFIXES = stringSeqConf("spark.sql.hive.metastore.sharedPrefixes",
-    defaultValue = Some(jdbcPrefixes),
-    doc = "A comma separated list of class prefixes that should be loaded using the classloader " +
+  val CONVERT_METASTORE_ORC = SQLConfigBuilder("spark.sql.hive.convertMetastoreOrc")
+    .doc("When set to false, Spark SQL will use the Hive SerDe for ORC tables instead of " +
+      "the built in support.")
+    .booleanConf
+    .createWithDefault(true)
+
+  val HIVE_METASTORE_SHARED_PREFIXES = SQLConfigBuilder("spark.sql.hive.metastore.sharedPrefixes")
+    .doc("A comma separated list of class prefixes that should be loaded using the classloader " +
       "that is shared between Spark SQL and a specific version of Hive. An example of classes " +
       "that should be shared is JDBC drivers that are needed to talk to the metastore. Other " +
       "classes that need to be shared are those that interact with classes that are already " +
       "shared. For example, custom appenders that are used by log4j.")
+    .stringConf
+    .toSequence
+    .createWithDefault(jdbcPrefixes)
 
   private def jdbcPrefixes = Seq(
     "com.mysql.jdbc", "org.postgresql", "com.microsoft.sqlserver", "oracle.jdbc")
 
-  val HIVE_METASTORE_BARRIER_PREFIXES = stringSeqConf("spark.sql.hive.metastore.barrierPrefixes",
-    defaultValue = Some(Seq()),
-    doc = "A comma separated list of class prefixes that should explicitly be reloaded for each " +
+  val HIVE_METASTORE_BARRIER_PREFIXES = SQLConfigBuilder("spark.sql.hive.metastore.barrierPrefixes")
+    .doc("A comma separated list of class prefixes that should explicitly be reloaded for each " +
       "version of Hive that Spark SQL is communicating with. For example, Hive UDFs that are " +
       "declared in a prefix that typically would be shared (i.e. <code>org.apache.spark.*</code>).")
+    .stringConf
+    .toSequence
+    .createWithDefault(Nil)
 
-  val HIVE_THRIFT_SERVER_ASYNC = booleanConf("spark.sql.hive.thriftServer.async",
-    defaultValue = Some(true),
-    doc = "When set to true, Hive Thrift server executes SQL queries in an asynchronous way.")
+  val HIVE_THRIFT_SERVER_ASYNC = SQLConfigBuilder("spark.sql.hive.thriftServer.async")
+    .doc("When set to true, Hive Thrift server executes SQL queries in an asynchronous way.")
+    .booleanConf
+    .createWithDefault(true)
+
+  /**
+   * The version of the hive client that will be used to communicate with the metastore.  Note that
+   * this does not necessarily need to be the same version of Hive that is used internally by
+   * Spark SQL for execution.
+   */
+  private def hiveMetastoreVersion(conf: SQLConf): String = {
+    conf.getConf(HIVE_METASTORE_VERSION)
+  }
+
+  /**
+   * The location of the jars that should be used to instantiate the HiveMetastoreClient.  This
+   * property can be one of three options:
+   *  - a classpath in the standard format for both hive and hadoop.
+   *  - builtin - attempt to discover the jars that were used to load Spark SQL and use those. This
+   *              option is only valid when using the execution version of Hive.
+   *  - maven - download the correct version of hive on demand from maven.
+   */
+  private def hiveMetastoreJars(conf: SQLConf): String = {
+    conf.getConf(HIVE_METASTORE_JARS)
+  }
+
+  /**
+   * A comma separated list of class prefixes that should be loaded using the classloader that
+   * is shared between Spark SQL and a specific version of Hive. An example of classes that should
+   * be shared is JDBC drivers that are needed to talk to the metastore. Other classes that need
+   * to be shared are those that interact with classes that are already shared.  For example,
+   * custom appenders that are used by log4j.
+   */
+  private def hiveMetastoreSharedPrefixes(conf: SQLConf): Seq[String] = {
+    conf.getConf(HIVE_METASTORE_SHARED_PREFIXES).filterNot(_ == "")
+  }
+
+  /**
+   * A comma separated list of class prefixes that should explicitly be reloaded for each version
+   * of Hive that Spark SQL is communicating with.  For example, Hive UDFs that are declared in a
+   * prefix that typically would be shared (i.e. org.apache.spark.*)
+   */
+  private def hiveMetastoreBarrierPrefixes(conf: SQLConf): Seq[String] = {
+    conf.getConf(HIVE_METASTORE_BARRIER_PREFIXES).filterNot(_ == "")
+  }
+
+  /**
+   * Configurations needed to create a [[HiveClient]].
+   */
+  private[hive] def hiveClientConfigurations(hiveconf: HiveConf): Map[String, String] = {
+    // Hive 0.14.0 introduces timeout operations in HiveConf, and changes default values of a bunch
+    // of time `ConfVar`s by adding time suffixes (`s`, `ms`, and `d` etc.).  This breaks backwards-
+    // compatibility when users are trying to connecting to a Hive metastore of lower version,
+    // because these options are expected to be integral values in lower versions of Hive.
+    //
+    // Here we enumerate all time `ConfVar`s and convert their values to numeric strings according
+    // to their output time units.
+    Seq(
+      ConfVars.METASTORE_CLIENT_CONNECT_RETRY_DELAY -> TimeUnit.SECONDS,
+      ConfVars.METASTORE_CLIENT_SOCKET_TIMEOUT -> TimeUnit.SECONDS,
+      ConfVars.METASTORE_CLIENT_SOCKET_LIFETIME -> TimeUnit.SECONDS,
+      ConfVars.HMSHANDLERINTERVAL -> TimeUnit.MILLISECONDS,
+      ConfVars.METASTORE_EVENT_DB_LISTENER_TTL -> TimeUnit.SECONDS,
+      ConfVars.METASTORE_EVENT_CLEAN_FREQ -> TimeUnit.SECONDS,
+      ConfVars.METASTORE_EVENT_EXPIRY_DURATION -> TimeUnit.SECONDS,
+      ConfVars.METASTORE_AGGREGATE_STATS_CACHE_TTL -> TimeUnit.SECONDS,
+      ConfVars.METASTORE_AGGREGATE_STATS_CACHE_MAX_WRITER_WAIT -> TimeUnit.MILLISECONDS,
+      ConfVars.METASTORE_AGGREGATE_STATS_CACHE_MAX_READER_WAIT -> TimeUnit.MILLISECONDS,
+      ConfVars.HIVES_AUTO_PROGRESS_TIMEOUT -> TimeUnit.SECONDS,
+      ConfVars.HIVE_LOG_INCREMENTAL_PLAN_PROGRESS_INTERVAL -> TimeUnit.MILLISECONDS,
+      ConfVars.HIVE_STATS_JDBC_TIMEOUT -> TimeUnit.SECONDS,
+      ConfVars.HIVE_STATS_RETRIES_WAIT -> TimeUnit.MILLISECONDS,
+      ConfVars.HIVE_LOCK_SLEEP_BETWEEN_RETRIES -> TimeUnit.SECONDS,
+      ConfVars.HIVE_ZOOKEEPER_SESSION_TIMEOUT -> TimeUnit.MILLISECONDS,
+      ConfVars.HIVE_ZOOKEEPER_CONNECTION_BASESLEEPTIME -> TimeUnit.MILLISECONDS,
+      ConfVars.HIVE_TXN_TIMEOUT -> TimeUnit.SECONDS,
+      ConfVars.HIVE_COMPACTOR_WORKER_TIMEOUT -> TimeUnit.SECONDS,
+      ConfVars.HIVE_COMPACTOR_CHECK_INTERVAL -> TimeUnit.SECONDS,
+      ConfVars.HIVE_COMPACTOR_CLEANER_RUN_INTERVAL -> TimeUnit.MILLISECONDS,
+      ConfVars.HIVE_SERVER2_THRIFT_HTTP_MAX_IDLE_TIME -> TimeUnit.MILLISECONDS,
+      ConfVars.HIVE_SERVER2_THRIFT_HTTP_WORKER_KEEPALIVE_TIME -> TimeUnit.SECONDS,
+      ConfVars.HIVE_SERVER2_THRIFT_HTTP_COOKIE_MAX_AGE -> TimeUnit.SECONDS,
+      ConfVars.HIVE_SERVER2_THRIFT_LOGIN_BEBACKOFF_SLOT_LENGTH -> TimeUnit.MILLISECONDS,
+      ConfVars.HIVE_SERVER2_THRIFT_LOGIN_TIMEOUT -> TimeUnit.SECONDS,
+      ConfVars.HIVE_SERVER2_THRIFT_WORKER_KEEPALIVE_TIME -> TimeUnit.SECONDS,
+      ConfVars.HIVE_SERVER2_ASYNC_EXEC_SHUTDOWN_TIMEOUT -> TimeUnit.SECONDS,
+      ConfVars.HIVE_SERVER2_ASYNC_EXEC_KEEPALIVE_TIME -> TimeUnit.SECONDS,
+      ConfVars.HIVE_SERVER2_LONG_POLLING_TIMEOUT -> TimeUnit.MILLISECONDS,
+      ConfVars.HIVE_SERVER2_SESSION_CHECK_INTERVAL -> TimeUnit.MILLISECONDS,
+      ConfVars.HIVE_SERVER2_IDLE_SESSION_TIMEOUT -> TimeUnit.MILLISECONDS,
+      ConfVars.HIVE_SERVER2_IDLE_OPERATION_TIMEOUT -> TimeUnit.MILLISECONDS,
+      ConfVars.SERVER_READ_SOCKET_TIMEOUT -> TimeUnit.SECONDS,
+      ConfVars.HIVE_LOCALIZE_RESOURCE_WAIT_INTERVAL -> TimeUnit.MILLISECONDS,
+      ConfVars.SPARK_CLIENT_FUTURE_TIMEOUT -> TimeUnit.SECONDS,
+      ConfVars.SPARK_JOB_MONITOR_TIMEOUT -> TimeUnit.SECONDS,
+      ConfVars.SPARK_RPC_CLIENT_CONNECT_TIMEOUT -> TimeUnit.MILLISECONDS,
+      ConfVars.SPARK_RPC_CLIENT_HANDSHAKE_TIMEOUT -> TimeUnit.MILLISECONDS
+    ).map { case (confVar, unit) =>
+      confVar.varname -> hiveconf.getTimeVar(confVar, unit).toString
+    }.toMap
+  }
+
+  /**
+   * Create a [[HiveClient]] used for execution.
+   *
+   * Currently this must always be Hive 13 as this is the version of Hive that is packaged
+   * with Spark SQL. This copy of the client is used for execution related tasks like
+   * registering temporary functions or ensuring that the ThreadLocal SessionState is
+   * correctly populated.  This copy of Hive is *not* used for storing persistent metadata,
+   * and only point to a dummy metastore in a temporary directory.
+   */
+  protected[hive] def newClientForExecution(
+      conf: SparkConf,
+      hadoopConf: Configuration): HiveClientImpl = {
+    logInfo(s"Initializing execution hive, version $hiveExecutionVersion")
+    val loader = new IsolatedClientLoader(
+      version = IsolatedClientLoader.hiveVersion(hiveExecutionVersion),
+      sparkConf = conf,
+      execJars = Seq(),
+      hadoopConf = hadoopConf,
+      config = newTemporaryConfiguration(useInMemoryDerby = true),
+      isolationOn = false,
+      baseClassLoader = Utils.getContextOrSparkClassLoader)
+    loader.createClient().asInstanceOf[HiveClientImpl]
+  }
+
+  /**
+   * Create a [[HiveClient]] used to retrieve metadata from the Hive MetaStore.
+   *
+   * The version of the Hive client that is used here must match the metastore that is configured
+   * in the hive-site.xml file.
+   */
+  protected[hive] def newClientForMetadata(
+      conf: SparkConf,
+      hadoopConf: Configuration): HiveClient = {
+    val hiveConf = new HiveConf(hadoopConf, classOf[HiveConf])
+    val configurations = hiveClientConfigurations(hiveConf)
+    newClientForMetadata(conf, hiveConf, hadoopConf, configurations)
+  }
+
+  protected[hive] def newClientForMetadata(
+      conf: SparkConf,
+      hiveConf: HiveConf,
+      hadoopConf: Configuration,
+      configurations: Map[String, String]): HiveClient = {
+    val sqlConf = new SQLConf
+    sqlConf.setConf(SQLContext.getSQLProperties(conf))
+    val hiveMetastoreVersion = HiveContext.hiveMetastoreVersion(sqlConf)
+    val hiveMetastoreJars = HiveContext.hiveMetastoreJars(sqlConf)
+    val hiveMetastoreSharedPrefixes = HiveContext.hiveMetastoreSharedPrefixes(sqlConf)
+    val hiveMetastoreBarrierPrefixes = HiveContext.hiveMetastoreBarrierPrefixes(sqlConf)
+    val metaVersion = IsolatedClientLoader.hiveVersion(hiveMetastoreVersion)
+
+    val defaultWarehouseLocation = hiveConf.get("hive.metastore.warehouse.dir")
+    logInfo("default warehouse location is " + defaultWarehouseLocation)
+
+    // `configure` goes second to override other settings.
+    val allConfig = hiveConf.asScala.map(e => e.getKey -> e.getValue).toMap ++ configurations
+
+    val isolatedLoader = if (hiveMetastoreJars == "builtin") {
+      if (hiveExecutionVersion != hiveMetastoreVersion) {
+        throw new IllegalArgumentException(
+          "Builtin jars can only be used when hive execution version == hive metastore version. " +
+            s"Execution: $hiveExecutionVersion != Metastore: $hiveMetastoreVersion. " +
+            "Specify a vaild path to the correct hive jars using $HIVE_METASTORE_JARS " +
+            s"or change ${HIVE_METASTORE_VERSION.key} to $hiveExecutionVersion.")
+      }
+
+      // We recursively find all jars in the class loader chain,
+      // starting from the given classLoader.
+      def allJars(classLoader: ClassLoader): Array[URL] = classLoader match {
+        case null => Array.empty[URL]
+        case urlClassLoader: URLClassLoader =>
+          urlClassLoader.getURLs ++ allJars(urlClassLoader.getParent)
+        case other => allJars(other.getParent)
+      }
+
+      val classLoader = Utils.getContextOrSparkClassLoader
+      val jars = allJars(classLoader)
+      if (jars.length == 0) {
+        throw new IllegalArgumentException(
+          "Unable to locate hive jars to connect to metastore. " +
+            "Please set spark.sql.hive.metastore.jars.")
+      }
+
+      logInfo(
+        s"Initializing HiveMetastoreConnection version $hiveMetastoreVersion using Spark classes.")
+      new IsolatedClientLoader(
+        version = metaVersion,
+        sparkConf = conf,
+        hadoopConf = hadoopConf,
+        execJars = jars.toSeq,
+        config = allConfig,
+        isolationOn = true,
+        barrierPrefixes = hiveMetastoreBarrierPrefixes,
+        sharedPrefixes = hiveMetastoreSharedPrefixes)
+    } else if (hiveMetastoreJars == "maven") {
+      // TODO: Support for loading the jars from an already downloaded location.
+      logInfo(
+        s"Initializing HiveMetastoreConnection version $hiveMetastoreVersion using maven.")
+      IsolatedClientLoader.forVersion(
+        hiveMetastoreVersion = hiveMetastoreVersion,
+        hadoopVersion = VersionInfo.getVersion,
+        sparkConf = conf,
+        hadoopConf = hadoopConf,
+        config = allConfig,
+        barrierPrefixes = hiveMetastoreBarrierPrefixes,
+        sharedPrefixes = hiveMetastoreSharedPrefixes)
+    } else {
+      // Convert to files and expand any directories.
+      val jars =
+        hiveMetastoreJars
+          .split(File.pathSeparator)
+          .flatMap {
+          case path if new File(path).getName == "*" =>
+            val files = new File(path).getParentFile.listFiles()
+            if (files == null) {
+              logWarning(s"Hive jar path '$path' does not exist.")
+              Nil
+            } else {
+              files.filter(_.getName.toLowerCase.endsWith(".jar"))
+            }
+          case path =>
+            new File(path) :: Nil
+        }
+          .map(_.toURI.toURL)
+
+      logInfo(
+        s"Initializing HiveMetastoreConnection version $hiveMetastoreVersion " +
+          s"using ${jars.mkString(":")}")
+      new IsolatedClientLoader(
+        version = metaVersion,
+        sparkConf = conf,
+        hadoopConf = hadoopConf,
+        execJars = jars.toSeq,
+        config = allConfig,
+        isolationOn = true,
+        barrierPrefixes = hiveMetastoreBarrierPrefixes,
+        sharedPrefixes = hiveMetastoreSharedPrefixes)
+    }
+    isolatedLoader.createClient()
+  }
 
   /** Constructs a configuration for hive, where the metastore is located in a temp directory. */
   def newTemporaryConfiguration(useInMemoryDerby: Boolean): Map[String, String] = {
@@ -715,7 +657,7 @@ private[hive] object HiveContext {
     case (null, _) => "NULL"
     case (d: Int, DateType) => new DateWritable(d).toString
     case (t: Timestamp, TimestampType) => new TimestampWritable(t).toString
-    case (bin: Array[Byte], BinaryType) => new String(bin, "UTF-8")
+    case (bin: Array[Byte], BinaryType) => new String(bin, StandardCharsets.UTF_8)
     case (decimal: java.math.BigDecimal, DecimalType()) =>
       // Hive strips trailing zeros so use its toString
       HiveDecimal.create(decimal).toString

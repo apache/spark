@@ -20,6 +20,7 @@ package org.apache.spark.ui
 import java.util.{Timer, TimerTask}
 
 import org.apache.spark._
+import org.apache.spark.internal.Logging
 
 /**
  * ConsoleProgressBar shows the progress of stages in the next line of the console. It poll the

@@ -17,6 +17,7 @@
 package org.apache.spark.streaming.kinesis
 
 import java.nio.ByteBuffer
+import java.nio.charset.StandardCharsets
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -51,7 +52,7 @@ private[kinesis] class KPLDataGenerator(regionName: String) extends KinesisDataG
     val shardIdToSeqNumbers = new mutable.HashMap[String, ArrayBuffer[(Int, String)]]()
     data.foreach { num =>
       val str = num.toString
-      val data = ByteBuffer.wrap(str.getBytes())
+      val data = ByteBuffer.wrap(str.getBytes(StandardCharsets.UTF_8))
       val future = producer.addUserRecord(streamName, str, data)
       val kinesisCallBack = new FutureCallback[UserRecordResult]() {
         override def onFailure(t: Throwable): Unit = {} // do nothing

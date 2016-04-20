@@ -15,7 +15,9 @@ exportMethods("glm",
               "predict",
               "summary",
               "kmeans",
-              "fitted")
+              "fitted",
+              "naiveBayes",
+              "survreg")
 
 # Job group lifecycle management methods
 export("setJobGroup",
@@ -99,6 +101,7 @@ exportMethods("arrange",
               "withColumn",
               "withColumnRenamed",
               "write.df",
+              "write.jdbc",
               "write.json",
               "write.parquet",
               "write.text")
@@ -123,6 +126,7 @@ exportMethods("%in%",
               "between",
               "bin",
               "bitwiseNOT",
+              "bround",
               "cast",
               "cbrt",
               "ceil",
@@ -263,6 +267,7 @@ exportMethods("%in%",
               "var_samp",
               "weekofyear",
               "when",
+              "window",
               "year")
 
 exportClasses("GroupedData")
@@ -281,6 +286,7 @@ export("as.DataFrame",
        "loadDF",
        "parquetFile",
        "read.df",
+       "read.jdbc",
        "read.json",
        "read.parquet",
        "read.text",
@@ -289,7 +295,8 @@ export("as.DataFrame",
        "tableToDF",
        "tableNames",
        "tables",
-       "uncacheTable")
+       "uncacheTable",
+       "print.summary.GeneralizedLinearRegressionModel")
 
 export("structField",
        "structField.jobj",

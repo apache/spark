@@ -19,8 +19,6 @@ package org.apache.spark.network.util;
 
 import java.util.NoSuchElementException;
 
-import org.apache.spark.network.util.ConfigProvider;
-
 /** Uses System properties to obtain config values. */
 public class SystemPropertyConfigProvider extends ConfigProvider {
   @Override

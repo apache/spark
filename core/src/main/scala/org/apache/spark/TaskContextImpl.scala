@@ -17,9 +17,12 @@
 
 package org.apache.spark
 
+import java.util.Properties
+
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.internal.Logging
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.metrics.source.Source
@@ -31,15 +34,11 @@ private[spark] class TaskContextImpl(
     override val taskAttemptId: Long,
     override val attemptNumber: Int,
     override val taskMemoryManager: TaskMemoryManager,
+    localProperties: Properties,
     @transient private val metricsSystem: MetricsSystem,
-    initialAccumulators: Seq[Accumulator[_]] = InternalAccumulator.createAll())
+    override val taskMetrics: TaskMetrics = new TaskMetrics)
   extends TaskContext
   with Logging {
-
-  /**
-   * Metrics associated with this task.
-   */
-  override val taskMetrics: TaskMetrics = new TaskMetrics(initialAccumulators)
 
   /** List of callback functions to execute when the task completes. */
   @transient private val onCompleteCallbacks = new ArrayBuffer[TaskCompletionListener]
@@ -116,6 +115,8 @@ private[spark] class TaskContextImpl(
   override def isRunningLocally(): Boolean = false
 
   override def isInterrupted(): Boolean = interrupted
+
+  override def getLocalProperty(key: String): String = localProperties.getProperty(key)
 
   override def getMetricsSources(sourceName: String): Seq[Source] =
     metricsSystem.getSourcesByName(sourceName)

@@ -32,7 +32,6 @@ import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.RunnableCommand
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
-import org.apache.spark.util.Utils
 
 /**
  * A command for writing data to a [[HadoopFsRelation]].  Supports both overwriting and appending.
@@ -88,11 +87,9 @@ private[sql] case class InsertIntoHadoopFsRelation(
       case (SaveMode.ErrorIfExists, true) =>
         throw new AnalysisException(s"path $qualifiedOutputPath already exists.")
       case (SaveMode.Overwrite, true) =>
-        Utils.tryOrIOException {
-          if (!fs.delete(qualifiedOutputPath, true /* recursively */)) {
-            throw new IOException(s"Unable to clear output " +
-              s"directory $qualifiedOutputPath prior to writing to it")
-          }
+        if (!fs.delete(qualifiedOutputPath, true /* recursively */)) {
+          throw new IOException(s"Unable to clear output " +
+            s"directory $qualifiedOutputPath prior to writing to it")
         }
         true
       case (SaveMode.Append, _) | (SaveMode.Overwrite, _) | (SaveMode.ErrorIfExists, false) =>
@@ -114,7 +111,7 @@ private[sql] case class InsertIntoHadoopFsRelation(
       val partitionSet = AttributeSet(partitionColumns)
       val dataColumns = query.output.filterNot(partitionSet.contains)
 
-      val queryExecution = Dataset.newDataFrame(sqlContext, query).queryExecution
+      val queryExecution = Dataset.ofRows(sqlContext, query).queryExecution
       SQLExecution.withNewExecutionId(sqlContext, queryExecution) {
         val relation =
           WriteRelation(

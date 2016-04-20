@@ -17,15 +17,17 @@
 
 package org.apache.spark.ml.clustering
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.param.{IntParam, Param, ParamMap, Params}
+import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
-import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
+import org.apache.spark.ml.util._
 import org.apache.spark.mllib.clustering.
   {BisectingKMeans => MLlibBisectingKMeans, BisectingKMeansModel => MLlibBisectingKMeansModel}
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{IntegerType, StructType}
 
@@ -49,7 +51,7 @@ private[clustering] trait BisectingKMeansParams extends Params
 
   /** @group expertParam */
   @Since("2.0.0")
-  final val minDivisibleClusterSize = new Param[Double](
+  final val minDivisibleClusterSize = new DoubleParam(
     this,
     "minDivisibleClusterSize",
     "the minimum number of points (if >= 1.0) or the minimum proportion",
@@ -81,7 +83,7 @@ private[clustering] trait BisectingKMeansParams extends Params
 class BisectingKMeansModel private[ml] (
     @Since("2.0.0") override val uid: String,
     private val parentModel: MLlibBisectingKMeansModel
-  ) extends Model[BisectingKMeansModel] with BisectingKMeansParams {
+  ) extends Model[BisectingKMeansModel] with BisectingKMeansParams with MLWritable {
 
   @Since("2.0.0")
   override def copy(extra: ParamMap): BisectingKMeansModel = {
@@ -90,7 +92,7 @@ class BisectingKMeansModel private[ml] (
   }
 
   @Since("2.0.0")
-  override def transform(dataset: DataFrame): DataFrame = {
+  override def transform(dataset: Dataset[_]): DataFrame = {
     val predictUDF = udf((vector: Vector) => predict(vector))
     dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
   }
@@ -110,10 +112,48 @@ class BisectingKMeansModel private[ml] (
    * centers.
    */
   @Since("2.0.0")
-  def computeCost(dataset: DataFrame): Double = {
+  def computeCost(dataset: Dataset[_]): Double = {
     SchemaUtils.checkColumnType(dataset.schema, $(featuresCol), new VectorUDT)
     val data = dataset.select(col($(featuresCol))).rdd.map { case Row(point: Vector) => point }
     parentModel.computeCost(data)
+  }
+
+  @Since("2.0.0")
+  override def write: MLWriter = new BisectingKMeansModel.BisectingKMeansModelWriter(this)
+}
+
+object BisectingKMeansModel extends MLReadable[BisectingKMeansModel] {
+  @Since("2.0.0")
+  override def read: MLReader[BisectingKMeansModel] = new BisectingKMeansModelReader
+
+  @Since("2.0.0")
+  override def load(path: String): BisectingKMeansModel = super.load(path)
+
+  /** [[MLWriter]] instance for [[BisectingKMeansModel]] */
+  private[BisectingKMeansModel]
+  class BisectingKMeansModelWriter(instance: BisectingKMeansModel) extends MLWriter {
+
+    override protected def saveImpl(path: String): Unit = {
+      // Save metadata and Params
+      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      val dataPath = new Path(path, "data").toString
+      instance.parentModel.save(sc, dataPath)
+    }
+  }
+
+  private class BisectingKMeansModelReader extends MLReader[BisectingKMeansModel] {
+
+    /** Checked against metadata when loading model */
+    private val className = classOf[BisectingKMeansModel].getName
+
+    override def load(path: String): BisectingKMeansModel = {
+      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val dataPath = new Path(path, "data").toString
+      val mllibModel = MLlibBisectingKMeansModel.load(sc, dataPath)
+      val model = new BisectingKMeansModel(metadata.uid, mllibModel)
+      DefaultParamsReader.getAndSetParams(model, metadata)
+      model
+    }
   }
 }
 
@@ -137,7 +177,7 @@ class BisectingKMeansModel private[ml] (
 @Experimental
 class BisectingKMeans @Since("2.0.0") (
     @Since("2.0.0") override val uid: String)
-  extends Estimator[BisectingKMeansModel] with BisectingKMeansParams {
+  extends Estimator[BisectingKMeansModel] with BisectingKMeansParams with DefaultParamsWritable {
 
   setDefault(
     k -> 4,
@@ -148,7 +188,7 @@ class BisectingKMeans @Since("2.0.0") (
   override def copy(extra: ParamMap): BisectingKMeans = defaultCopy(extra)
 
   @Since("2.0.0")
-  def this() = this(Identifiable.randomUID("bisecting k-means"))
+  def this() = this(Identifiable.randomUID("bisecting-kmeans"))
 
   /** @group setParam */
   @Since("2.0.0")
@@ -175,7 +215,7 @@ class BisectingKMeans @Since("2.0.0") (
   def setMinDivisibleClusterSize(value: Double): this.type = set(minDivisibleClusterSize, value)
 
   @Since("2.0.0")
-  override def fit(dataset: DataFrame): BisectingKMeansModel = {
+  override def fit(dataset: Dataset[_]): BisectingKMeansModel = {
     val rdd = dataset.select(col($(featuresCol))).rdd.map { case Row(point: Vector) => point }
 
     val bkm = new MLlibBisectingKMeans()
@@ -194,3 +234,10 @@ class BisectingKMeans @Since("2.0.0") (
   }
 }
 
+
+@Since("2.0.0")
+object BisectingKMeans extends DefaultParamsReadable[BisectingKMeans] {
+
+  @Since("2.0.0")
+  override def load(path: String): BisectingKMeans = super.load(path)
+}

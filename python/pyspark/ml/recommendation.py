@@ -27,7 +27,7 @@ __all__ = ['ALS', 'ALSModel']
 
 @inherit_doc
 class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, HasRegParam, HasSeed,
-          MLWritable, MLReadable):
+          JavaMLWritable, JavaMLReadable):
     """
     Alternating Least Squares (ALS) matrix factorization.
 
@@ -100,16 +100,25 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
     .. versionadded:: 1.4.0
     """
 
-    rank = Param(Params._dummy(), "rank", "rank of the factorization")
-    numUserBlocks = Param(Params._dummy(), "numUserBlocks", "number of user blocks")
-    numItemBlocks = Param(Params._dummy(), "numItemBlocks", "number of item blocks")
-    implicitPrefs = Param(Params._dummy(), "implicitPrefs", "whether to use implicit preference")
-    alpha = Param(Params._dummy(), "alpha", "alpha for implicit preference")
-    userCol = Param(Params._dummy(), "userCol", "column name for user ids")
-    itemCol = Param(Params._dummy(), "itemCol", "column name for item ids")
-    ratingCol = Param(Params._dummy(), "ratingCol", "column name for ratings")
+    rank = Param(Params._dummy(), "rank", "rank of the factorization",
+                 typeConverter=TypeConverters.toInt)
+    numUserBlocks = Param(Params._dummy(), "numUserBlocks", "number of user blocks",
+                          typeConverter=TypeConverters.toInt)
+    numItemBlocks = Param(Params._dummy(), "numItemBlocks", "number of item blocks",
+                          typeConverter=TypeConverters.toInt)
+    implicitPrefs = Param(Params._dummy(), "implicitPrefs", "whether to use implicit preference",
+                          typeConverter=TypeConverters.toBoolean)
+    alpha = Param(Params._dummy(), "alpha", "alpha for implicit preference",
+                  typeConverter=TypeConverters.toFloat)
+    userCol = Param(Params._dummy(), "userCol", "column name for user ids",
+                    typeConverter=TypeConverters.toString)
+    itemCol = Param(Params._dummy(), "itemCol", "column name for item ids",
+                    typeConverter=TypeConverters.toString)
+    ratingCol = Param(Params._dummy(), "ratingCol", "column name for ratings",
+                      typeConverter=TypeConverters.toString)
     nonnegative = Param(Params._dummy(), "nonnegative",
-                        "whether to use nonnegative constraint for least squares")
+                        "whether to use nonnegative constraint for least squares",
+                        typeConverter=TypeConverters.toBoolean)
 
     @keyword_only
     def __init__(self, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10,
@@ -150,7 +159,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         """
         Sets the value of :py:attr:`rank`.
         """
-        self._paramMap[self.rank] = value
+        self._set(rank=value)
         return self
 
     @since("1.4.0")
@@ -165,7 +174,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         """
         Sets the value of :py:attr:`numUserBlocks`.
         """
-        self._paramMap[self.numUserBlocks] = value
+        self._set(numUserBlocks=value)
         return self
 
     @since("1.4.0")
@@ -180,7 +189,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         """
         Sets the value of :py:attr:`numItemBlocks`.
         """
-        self._paramMap[self.numItemBlocks] = value
+        self._set(numItemBlocks=value)
         return self
 
     @since("1.4.0")
@@ -195,15 +204,15 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         """
         Sets both :py:attr:`numUserBlocks` and :py:attr:`numItemBlocks` to the specific value.
         """
-        self._paramMap[self.numUserBlocks] = value
-        self._paramMap[self.numItemBlocks] = value
+        self._set(numUserBlocks=value)
+        self._set(numItemBlocks=value)
 
     @since("1.4.0")
     def setImplicitPrefs(self, value):
         """
         Sets the value of :py:attr:`implicitPrefs`.
         """
-        self._paramMap[self.implicitPrefs] = value
+        self._set(implicitPrefs=value)
         return self
 
     @since("1.4.0")
@@ -218,7 +227,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         """
         Sets the value of :py:attr:`alpha`.
         """
-        self._paramMap[self.alpha] = value
+        self._set(alpha=value)
         return self
 
     @since("1.4.0")
@@ -233,7 +242,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         """
         Sets the value of :py:attr:`userCol`.
         """
-        self._paramMap[self.userCol] = value
+        self._set(userCol=value)
         return self
 
     @since("1.4.0")
@@ -248,7 +257,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         """
         Sets the value of :py:attr:`itemCol`.
         """
-        self._paramMap[self.itemCol] = value
+        self._set(itemCol=value)
         return self
 
     @since("1.4.0")
@@ -263,7 +272,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         """
         Sets the value of :py:attr:`ratingCol`.
         """
-        self._paramMap[self.ratingCol] = value
+        self._set(ratingCol=value)
         return self
 
     @since("1.4.0")
@@ -278,7 +287,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         """
         Sets the value of :py:attr:`nonnegative`.
         """
-        self._paramMap[self.nonnegative] = value
+        self._set(nonnegative=value)
         return self
 
     @since("1.4.0")
@@ -289,7 +298,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         return self.getOrDefault(self.nonnegative)
 
 
-class ALSModel(JavaModel, MLWritable, MLReadable):
+class ALSModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
     Model fitted by ALS.
 

@@ -19,6 +19,7 @@ package org.apache.spark.deploy.rest
 
 import java.io.{DataOutputStream, FileNotFoundException}
 import java.net.{ConnectException, HttpURLConnection, SocketException, URL}
+import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeoutException
 import javax.servlet.http.HttpServletResponse
 
@@ -26,11 +27,12 @@ import scala.collection.mutable
 import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
 import scala.io.Source
+import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.core.JsonProcessingException
-import com.google.common.base.Charsets
 
-import org.apache.spark.{Logging, SPARK_VERSION => sparkVersion, SparkConf}
+import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf, SparkException}
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
 /**
@@ -211,7 +213,7 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
     try {
       val out = new DataOutputStream(conn.getOutputStream)
       Utils.tryWithSafeFinally {
-        out.write(json.getBytes(Charsets.UTF_8))
+        out.write(json.getBytes(StandardCharsets.UTF_8))
       } {
         out.close()
       }
@@ -257,13 +259,17 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
       }
     }
 
+    // scalastyle:off awaitresult
     try { Await.result(responseFuture, 10.seconds) } catch {
+      // scalastyle:on awaitresult
       case unreachable @ (_: FileNotFoundException | _: SocketException) =>
         throw new SubmitRestConnectionException("Unable to connect to server", unreachable)
       case malformed @ (_: JsonProcessingException | _: SubmitRestProtocolException) =>
         throw new SubmitRestProtocolException("Malformed response received from server", malformed)
       case timeout: TimeoutException =>
         throw new SubmitRestConnectionException("No response from server", timeout)
+      case NonFatal(t) =>
+        throw new SparkException("Exception while waiting for response", t)
     }
   }
 

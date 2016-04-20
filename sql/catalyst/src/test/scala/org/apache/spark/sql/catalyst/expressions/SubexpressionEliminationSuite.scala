@@ -25,7 +25,7 @@ class SubexpressionEliminationSuite extends SparkFunSuite {
     val a: AttributeReference = AttributeReference("name", IntegerType)()
     val b1 = a.withName("name2").withExprId(id)
     val b2 = a.withExprId(id)
-    val b3 = a.withQualifiers("qualifierName" :: Nil)
+    val b3 = a.withQualifier(Some("qualifierName"))
 
     assert(b1 != b2)
     assert(a != b1)

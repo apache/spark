@@ -33,7 +33,7 @@ public interface Message extends Encodable {
   boolean isBodyInFrame();
 
   /** Preceding every serialized Message is its type, which allows us to deserialize it. */
-  public static enum Type implements Encodable {
+  enum Type implements Encodable {
     ChunkFetchRequest(0), ChunkFetchSuccess(1), ChunkFetchFailure(2),
     RpcRequest(3), RpcResponse(4), RpcFailure(5),
     StreamRequest(6), StreamResponse(7), StreamFailure(8),
@@ -41,7 +41,7 @@ public interface Message extends Encodable {
 
     private final byte id;
 
-    private Type(int id) {
+    Type(int id) {
       assert id < 128 : "Cannot have more than 128 message types";
       this.id = (byte) id;
     }

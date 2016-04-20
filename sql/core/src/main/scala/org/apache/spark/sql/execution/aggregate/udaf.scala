@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.aggregate
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, MutableRow, _}
@@ -361,7 +361,7 @@ private[sql] case class ScalaUDAF(
     val inputAttributes = childrenSchema.toAttributes
     log.debug(
       s"Creating MutableProj: $children, inputSchema: $inputAttributes.")
-    GenerateMutableProjection.generate(children, inputAttributes)()
+    GenerateMutableProjection.generate(children, inputAttributes)
   }
 
   private[this] lazy val inputToScalaConverters: Any => Any =

@@ -17,15 +17,15 @@
 
 package org.apache.spark
 
-import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
+import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.LinkedHashSet
 
 import org.apache.avro.{Schema, SchemaNormalization}
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{ConfigEntry, OptionalConfigEntry}
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.util.Utils
 
@@ -57,21 +57,32 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   private val settings = new ConcurrentHashMap[String, String]()
 
   if (loadDefaults) {
+    loadFromSystemProperties(false)
+  }
+
+  private[spark] def loadFromSystemProperties(silent: Boolean): SparkConf = {
     // Load any spark.* system properties
     for ((key, value) <- Utils.getSystemProperties if key.startsWith("spark.")) {
-      set(key, value)
+      set(key, value, silent)
     }
+    this
   }
 
   /** Set a configuration variable. */
   def set(key: String, value: String): SparkConf = {
+    set(key, value, false)
+  }
+
+  private[spark] def set(key: String, value: String, silent: Boolean): SparkConf = {
     if (key == null) {
       throw new NullPointerException("null key")
     }
     if (value == null) {
       throw new NullPointerException("null value for " + key)
     }
-    logDeprecationWarning(key)
+    if (!silent) {
+      logDeprecationWarning(key)
+    }
     settings.put(key, value)
     this
   }
@@ -395,7 +406,11 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
 
   /** Copy this object */
   override def clone: SparkConf = {
-    new SparkConf(false).setAll(getAll)
+    val cloned = new SparkConf(false)
+    settings.entrySet().asScala.foreach { e =>
+      cloned.set(e.getKey(), e.getValue(), true)
+    }
+    cloned
   }
 
   /**
@@ -404,8 +419,10 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
    */
   private[spark] def getenv(name: String): String = System.getenv(name)
 
-  /** Checks for illegal or deprecated config settings. Throws an exception for the former. Not
-    * idempotent - may mutate this conf object to convert deprecated settings to supported ones. */
+  /**
+   * Checks for illegal or deprecated config settings. Throws an exception for the former. Not
+   * idempotent - may mutate this conf object to convert deprecated settings to supported ones.
+   */
   private[spark] def validateSettings() {
     if (contains("spark.local.dir")) {
       val msg = "In Spark 1.0 and later spark.local.dir will be overridden by the value set by " +
@@ -439,9 +456,9 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
           "Set them directly on a SparkConf or in a properties file when using ./bin/spark-submit."
         throw new Exception(msg)
       }
-      if (javaOpts.contains("-Xmx") || javaOpts.contains("-Xms")) {
-        val msg = s"$executorOptsKey is not allowed to alter memory settings (was '$javaOpts'). " +
-          "Use spark.executor.memory instead."
+      if (javaOpts.contains("-Xmx")) {
+        val msg = s"$executorOptsKey is not allowed to specify max heap memory settings " +
+          s"(was '$javaOpts'). Use spark.executor.memory instead."
         throw new Exception(msg)
       }
     }

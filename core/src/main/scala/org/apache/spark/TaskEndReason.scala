@@ -23,6 +23,7 @@ import scala.util.Try
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.Utils
@@ -148,9 +149,7 @@ case class ExceptionFailure(
     this(e, accumUpdates, preserveCause = true)
   }
 
-  def exception: Option[Throwable] = exceptionWrapper.flatMap {
-    (w: ThrowableSerializationWrapper) => Option(w.exception)
-  }
+  def exception: Option[Throwable] = exceptionWrapper.flatMap(w => Option(w.exception))
 
   override def toErrorString: String =
     if (fullStackTrace == null) {

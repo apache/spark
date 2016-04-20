@@ -17,6 +17,7 @@
 
 package org.apache.spark
 
+import java.util.concurrent.Semaphore
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
@@ -27,6 +28,7 @@ import scala.util.control.NonFatal
 import org.scalatest.Matchers
 import org.scalatest.exceptions.TestFailedException
 
+import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
 import org.apache.spark.serializer.JavaSerializer
 
@@ -276,27 +278,24 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
     val acc1 = new Accumulator(0, IntAccumulatorParam, Some("thing"), internal = false)
     val acc2 = new Accumulator(0L, LongAccumulatorParam, Some("thing2"), internal = false)
     val externalAccums = Seq(acc1, acc2)
-    val internalAccums = InternalAccumulator.createAll()
+    val taskMetrics = new TaskMetrics
     // Set some values; these should not be observed later on the "executors"
     acc1.setValue(10)
     acc2.setValue(20L)
-    internalAccums
-      .find(_.name == Some(InternalAccumulator.TEST_ACCUM))
-      .get.asInstanceOf[Accumulator[Long]]
-      .setValue(30L)
+    taskMetrics.testAccum.get.asInstanceOf[Accumulator[Long]].setValue(30L)
     // Simulate the task being serialized and sent to the executors.
-    val dummyTask = new DummyTask(internalAccums, externalAccums)
+    val dummyTask = new DummyTask(taskMetrics, externalAccums)
     val serInstance = new JavaSerializer(new SparkConf).newInstance()
     val taskSer = Task.serializeWithDependencies(
       dummyTask, mutable.HashMap(), mutable.HashMap(), serInstance)
     // Now we're on the executors.
     // Deserialize the task and assert that its accumulators are zero'ed out.
-    val (_, _, taskBytes) = Task.deserializeWithDependencies(taskSer)
+    val (_, _, _, taskBytes) = Task.deserializeWithDependencies(taskSer)
     val taskDeser = serInstance.deserialize[DummyTask](
       taskBytes, Thread.currentThread.getContextClassLoader)
     // Assert that executors see only zeros
     taskDeser.externalAccums.foreach { a => assert(a.localValue == a.zero) }
-    taskDeser.internalAccums.foreach { a => assert(a.localValue == a.zero) }
+    taskDeser.metrics.internalAccums.foreach { a => assert(a.localValue == a.zero) }
   }
 
 }
@@ -341,7 +340,7 @@ private class SaveInfoListener extends SparkListener {
   // Callback to call when a job completes. Parameter is job ID.
   @GuardedBy("this")
   private var jobCompletionCallback: () => Unit = null
-  private var calledJobCompletionCallback: Boolean = false
+  private val jobCompletionSem = new Semaphore(0)
   private var exception: Throwable = null
 
   def getCompletedStageInfos: Seq[StageInfo] = completedStageInfos.toArray.toSeq
@@ -353,12 +352,9 @@ private class SaveInfoListener extends SparkListener {
    * If `jobCompletionCallback` is set, block until the next call has finished.
    * If the callback failed with an exception, throw it.
    */
-  def awaitNextJobCompletion(): Unit = synchronized {
+  def awaitNextJobCompletion(): Unit = {
     if (jobCompletionCallback != null) {
-      while (!calledJobCompletionCallback) {
-        wait()
-      }
-      calledJobCompletionCallback = false
+      jobCompletionSem.acquire()
       if (exception != null) {
         exception = null
         throw exception
@@ -374,7 +370,7 @@ private class SaveInfoListener extends SparkListener {
     jobCompletionCallback = callback
   }
 
-  override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = synchronized {
+  override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
     if (jobCompletionCallback != null) {
       try {
         jobCompletionCallback()
@@ -383,8 +379,7 @@ private class SaveInfoListener extends SparkListener {
         // Otherwise, if `jobCompletionCallback` threw something it wouldn't fail the test.
         case NonFatal(e) => exception = e
       } finally {
-        calledJobCompletionCallback = true
-        notify()
+        jobCompletionSem.release()
       }
     }
   }
@@ -404,8 +399,7 @@ private class SaveInfoListener extends SparkListener {
  * A dummy [[Task]] that contains internal and external [[Accumulator]]s.
  */
 private[spark] class DummyTask(
-    val internalAccums: Seq[Accumulator[_]],
-    val externalAccums: Seq[Accumulator[_]])
-  extends Task[Int](0, 0, 0, internalAccums) {
+    metrics: TaskMetrics,
+    val externalAccums: Seq[Accumulator[_]]) extends Task[Int](0, 0, 0, metrics) {
   override def runTask(c: TaskContext): Int = 1
 }

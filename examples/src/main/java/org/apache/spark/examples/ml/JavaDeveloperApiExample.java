@@ -107,11 +107,11 @@ public class JavaDeveloperApiExample {
 class MyJavaLogisticRegression
   extends Classifier<Vector, MyJavaLogisticRegression, MyJavaLogisticRegressionModel> {
 
-  public MyJavaLogisticRegression() {
+  MyJavaLogisticRegression() {
     init();
   }
 
-  public MyJavaLogisticRegression(String uid) {
+  MyJavaLogisticRegression(String uid) {
     this.uid_ = uid;
     init();
   }
@@ -146,7 +146,7 @@ class MyJavaLogisticRegression
 
   // This method is used by fit().
   // In Java, we have to make it public since Java does not understand Scala's protected modifier.
-  public MyJavaLogisticRegressionModel train(Dataset<Row> dataset) {
+  public MyJavaLogisticRegressionModel train(Dataset<?> dataset) {
     // Extract columns from data using helper method.
     JavaRDD<LabeledPoint> oldDataset = extractLabeledPoints(dataset).toJavaRDD();
 
@@ -177,7 +177,7 @@ class MyJavaLogisticRegressionModel
   private Vector coefficients_;
   public Vector coefficients() { return coefficients_; }
 
-  public MyJavaLogisticRegressionModel(String uid, Vector coefficients) {
+  MyJavaLogisticRegressionModel(String uid, Vector coefficients) {
     this.uid_ = uid;
     this.coefficients_ = coefficients;
   }

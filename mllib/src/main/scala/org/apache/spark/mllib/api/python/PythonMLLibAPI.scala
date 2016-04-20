@@ -19,6 +19,7 @@ package org.apache.spark.mllib.api.python
 
 import java.io.OutputStream
 import java.nio.{ByteBuffer, ByteOrder}
+import java.nio.charset.StandardCharsets
 import java.util.{ArrayList => JArrayList, List => JList, Map => JMap}
 
 import scala.collection.JavaConverters._
@@ -670,6 +671,7 @@ private[python] class PythonMLLibAPI extends Serializable {
    * @param numPartitions number of partitions
    * @param numIterations number of iterations
    * @param seed initial seed for random generator
+   * @param windowSize size of window
    * @return A handle to java Word2VecModelWrapper instance at python side
    */
   def trainWord2VecModel(
@@ -679,7 +681,8 @@ private[python] class PythonMLLibAPI extends Serializable {
       numPartitions: Int,
       numIterations: Int,
       seed: Long,
-      minCount: Int): Word2VecModelWrapper = {
+      minCount: Int,
+      windowSize: Int): Word2VecModelWrapper = {
     val word2vec = new Word2Vec()
       .setVectorSize(vectorSize)
       .setLearningRate(learningRate)
@@ -687,6 +690,7 @@ private[python] class PythonMLLibAPI extends Serializable {
       .setNumIterations(numIterations)
       .setSeed(seed)
       .setMinCount(minCount)
+      .setWindowSize(windowSize)
     try {
       val model = word2vec.fit(dataJRDD.rdd.persist(StorageLevel.MEMORY_AND_DISK_SER))
       new Word2VecModelWrapper(model)
@@ -1204,7 +1208,6 @@ private[python] class PythonMLLibAPI extends Serializable {
 private[spark] object SerDe extends Serializable {
 
   val PYSPARK_PACKAGE = "pyspark.mllib"
-  val LATIN1 = "ISO-8859-1"
 
   /**
    * Base class used for pickle
@@ -1226,7 +1229,7 @@ private[spark] object SerDe extends Serializable {
     def pickle(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
       if (obj == this) {
         out.write(Opcodes.GLOBAL)
-        out.write((module + "\n" + name + "\n").getBytes)
+        out.write((module + "\n" + name + "\n").getBytes(StandardCharsets.UTF_8))
       } else {
         pickler.save(this)  // it will be memorized by Pickler
         saveState(obj, out, pickler)
@@ -1252,7 +1255,8 @@ private[spark] object SerDe extends Serializable {
       if (obj.getClass.isArray) {
         obj.asInstanceOf[Array[Byte]]
       } else {
-        obj.asInstanceOf[String].getBytes(LATIN1)
+        // This must be ISO 8859-1 / Latin 1, not UTF-8, to interoperate correctly
+        obj.asInstanceOf[String].getBytes(StandardCharsets.ISO_8859_1)
       }
     }
 

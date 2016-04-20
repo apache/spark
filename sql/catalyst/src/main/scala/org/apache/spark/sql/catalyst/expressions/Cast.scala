@@ -112,7 +112,7 @@ object Cast {
 }
 
 /** Cast the child expression to the target data type. */
-case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
+case class Cast(child: Expression, dataType: DataType) extends UnaryExpression with NullIntolerant {
 
   override def toString: String = s"cast($child as ${dataType.simpleString})"
 
@@ -446,11 +446,11 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
 
   protected override def nullSafeEval(input: Any): Any = cast(input)
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
-    val eval = child.gen(ctx)
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val eval = child.genCode(ctx)
     val nullSafeCast = nullSafeCastFunction(child.dataType, dataType, ctx)
-    eval.code +
-      castCode(ctx, eval.value, eval.isNull, ev.value, ev.isNull, dataType, nullSafeCast)
+    ev.copy(code = eval.code +
+      castCode(ctx, eval.value, eval.isNull, ev.value, ev.isNull, dataType, nullSafeCast))
   }
 
   // three function arguments are: child.primitive, result.primitive and result.isNull
@@ -898,7 +898,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
     val result = ctx.freshName("result")
     val tmpRow = ctx.freshName("tmpRow")
 
-    val fieldsEvalCode = fieldsCasts.zipWithIndex.map { case (cast, i) => {
+    val fieldsEvalCode = fieldsCasts.zipWithIndex.map { case (cast, i) =>
       val fromFieldPrim = ctx.freshName("ffp")
       val fromFieldNull = ctx.freshName("ffn")
       val toFieldPrim = ctx.freshName("tfp")
@@ -920,7 +920,6 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
           }
         }
        """
-      }
     }.mkString("\n")
 
     (c, evPrim, evNull) =>
