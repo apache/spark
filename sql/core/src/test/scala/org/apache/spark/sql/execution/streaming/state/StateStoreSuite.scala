@@ -31,7 +31,6 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark.{SparkConf, SparkContext, SparkEnv, SparkFunSuite}
 import org.apache.spark.LocalSparkContext._
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
-import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -314,7 +313,7 @@ class StateStoreASuite extends SparkFunSuite with BeforeAndAfter with PrivateMet
   }
 
   test("StateStore.get") {
-    quietly {
+    {
       val dir = Utils.createDirectory(tempDir, Random.nextString(5)).toString
       val storeId = StateStoreId(dir, 0, 0)
       val storeConf = StateStoreConf.empty
@@ -366,7 +365,7 @@ class StateStoreASuite extends SparkFunSuite with BeforeAndAfter with PrivateMet
     val provider = new HDFSBackedStateStoreProvider(
       storeId, keySchema, valueSchema, storeConf, hadoopConf)
 
-    quietly {
+    {
       withSpark(new SparkContext(conf)) { sc =>
         withCoordinatorRef(sc) { coordinatorRef =>
           for (i <- 1 to 20) {
