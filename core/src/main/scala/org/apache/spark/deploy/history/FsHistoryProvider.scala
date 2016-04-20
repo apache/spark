@@ -353,7 +353,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
      * the name of the file being compressed.
      */
     def zipFileToStream(file: Path, entryName: String, outputStream: ZipOutputStream): Unit = {
-      val fs = FileSystem.get(hadoopConf)
+      val fs = file.getFileSystem(hadoopConf)
       val inputStream = fs.open(file, 1 * 1024 * 1024) // 1MB Buffer
       try {
         outputStream.putNextEntry(new ZipEntry(entryName))
@@ -372,7 +372,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
             attempt.attemptId.isEmpty || attemptId.isEmpty || attempt.attemptId.get == attemptId.get
           }.foreach { attempt =>
             val logPath = new Path(logDir, attempt.logPath)
-            zipFileToStream(new Path(logDir, attempt.logPath), attempt.logPath, zipStream)
+            zipFileToStream(logPath, attempt.logPath, zipStream)
           }
         } finally {
           zipStream.close()
