@@ -340,7 +340,7 @@ class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, 
         """
         Sets the value of :py:attr:`binary`.
         """
-        self._paramMap[self.binary] = value
+        self._set(binary=value)
         return self
 
     @since("2.0.0")
@@ -569,7 +569,7 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures, Java
         """
         Sets the value of :py:attr:`binary`.
         """
-        self._paramMap[self.binary] = value
+        self._set(binary=value)
         return self
 
     @since("2.0.0")
