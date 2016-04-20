@@ -53,6 +53,8 @@ private[spark] trait TaskScheduler {
   // Cancel a stage.
   def cancelTasks(stageId: Int, interruptThread: Boolean): Unit
 
+  def zombieTasks(stageId: Int): Unit
+
   // Set the DAG scheduler for upcalls. This is guaranteed to be set before submitTasks is called.
   def setDAGScheduler(dagScheduler: DAGScheduler): Unit
 

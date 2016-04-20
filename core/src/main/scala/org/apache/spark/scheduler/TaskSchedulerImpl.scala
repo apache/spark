@@ -222,6 +222,17 @@ private[spark] class TaskSchedulerImpl(
     }
   }
 
+  override def zombieTasks(stageId: Int): Unit = synchronized {
+    taskSetsByStageIdAndAttempt.get(stageId).foreach { attempts =>
+      attempts.foreach { case (stageAttemptId, tsm) =>
+          if (!tsm.isZombie) {
+            logInfo(s"Mark stage($stageId) taskset ${tsm.taskSet.id} as Zombie")
+            tsm.isZombie = true
+          }
+      }
+    }
+  }
+
   /**
    * Called to indicate that all task attempts (including speculated tasks) associated with the
    * given TaskSetManager have completed, so state associated with the TaskSetManager should be
