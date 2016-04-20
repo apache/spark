@@ -209,9 +209,9 @@ class KMeans private (
   }
 
   /**
-    * Train a K-means model on the given set of points; `data` should be cached for high
-    * performance, because this is an iterative algorithm.
-    */
+   * Train a K-means model on the given set of points; `data` should be cached for high
+   * performance, because this is an iterative algorithm.
+   */
   @Since("0.8.0")
   def run(data: RDD[Vector]): KMeansModel = {
     run(data, None)
