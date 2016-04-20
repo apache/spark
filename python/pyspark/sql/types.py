@@ -531,13 +531,10 @@ class StructType(DataType):
     def __getitem__(self, key):
         """Access fields by name or slice."""
         if isinstance(key, str):
-            _dict_fields = {}
             for field in self:
-                _dict_fields[field.name] = field
-            try:
-                return _dict_fields[key]
-            except KeyError:
-                raise KeyError('No StructField named {0}'.format(key))
+                if field.name == key:
+                    return field
+            raise KeyError('No StructField named {0}'.format(key))
         elif isinstance(key, int):
             try:
                 return self.fields[key]
