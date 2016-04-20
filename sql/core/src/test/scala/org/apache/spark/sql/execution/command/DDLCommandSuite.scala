@@ -771,7 +771,7 @@ class DDLCommandSuite extends PlanTest {
     val parsed5 = parser.parsePlan("DESCRIBE EXTENDED tab1 PARTITION (c1 = 'val1')")
     val expected5 = DescribeCommand(TableIdentifier("tab1", None),
       Some(Map("c1" -> "val1")), None, true)
-    val parsed6 = parser.parsePlan("DESCRIBE EXTENDED tab1 tab1.col1.field1.'$elem$'")
+    val parsed6 = parser.parsePlan("DESCRIBE EXTENDED tab1 tab1.col1.field1.$elem$")
     val expected6 = DescribeCommand(TableIdentifier("tab1", None),
       None, Some("tab1.col1.field1.$elem$"), true)
     comparePlans(parsed1, expected1)

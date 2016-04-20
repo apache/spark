@@ -354,7 +354,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     */
    override def visitDescribeColName(ctx: DescribeColNameContext): String = {
      var result = ctx.identifier.getText
-     if (ctx.colpathIdentifier != null) {
+     if (!ctx.colpathIdentifier.isEmpty) {
        result = result  ++ "." ++ ctx.colpathIdentifier.asScala.map { _.getText}.mkString(".")
      }
      result
