@@ -29,7 +29,8 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 
 import com.google.common.io.Files
-import org.mockito.Mockito.{mock, when}
+import org.mockito.Matchers.any
+import org.mockito.Mockito.{mock, never, verify, when}
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually._
 
@@ -850,29 +851,9 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
       }
     })
 
-    @volatile var onStopCalled = false
-    @volatile var onDisconnectedCalled = false
-    @volatile var onNetworkErrorCalled = false
     val anotherEnv = createRpcEnv(new SparkConf(), "remote", 0)
-    anotherEnv.setupEndpoint("SPARK-14699", new RpcEndpoint {
-      override val rpcEnv = anotherEnv
-
-      override def receive: PartialFunction[Any, Unit] = {
-        case m =>
-      }
-
-      override def onDisconnected(remoteAddress: RpcAddress): Unit = {
-        onDisconnectedCalled = true
-      }
-
-      override def onNetworkError(cause: Throwable, remoteAddress: RpcAddress): Unit = {
-        onNetworkErrorCalled = true
-      }
-
-      override def onStop(): Unit = {
-        onStopCalled = true
-      }
-    })
+    val endpoint = mock(classOf[RpcEndpoint])
+    anotherEnv.setupEndpoint("SPARK-14699", endpoint)
 
     val ref = anotherEnv.setupEndpointRef(env.address, "SPARK-14699")
     // Make sure the connect is set up
@@ -882,9 +863,9 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
 
     env.stop(ref)
 
-    assert(onStopCalled === true)
-    assert(onDisconnectedCalled === false)
-    assert(onNetworkErrorCalled === false)
+    verify(endpoint).onStop()
+    verify(endpoint, never()).onDisconnected(any())
+    verify(endpoint, never()).onNetworkError(any(), any())
   }
 }
 
