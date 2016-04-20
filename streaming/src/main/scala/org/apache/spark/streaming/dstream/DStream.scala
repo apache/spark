@@ -20,13 +20,12 @@ package org.apache.spark.streaming.dstream
 
 import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
 
-
 import scala.collection.mutable.HashMap
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 import scala.util.matching.Regex
 
-import org.apache.spark.{HashPartitioner, SparkContext, SparkException}
+import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{BlockRDD, PairRDDFunctions, RDD, RDDOperationScope}
 import org.apache.spark.storage.StorageLevel
