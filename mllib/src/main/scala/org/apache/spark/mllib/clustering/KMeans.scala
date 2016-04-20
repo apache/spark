@@ -208,15 +208,15 @@ class KMeans private (
     this
   }
 
+  /**
+    * Train a K-means model on the given set of points; `data` should be cached for high
+    * performance, because this is an iterative algorithm.
+    */
+  @Since("0.8.0")
   def run(data: RDD[Vector]): KMeansModel = {
     run(data, None)
   }
 
-  /**
-   * Train a K-means model on the given set of points; `data` should be cached for high
-   * performance, because this is an iterative algorithm.
-   */
-  @Since("0.8.0")
   private[spark] def run(
       data: RDD[Vector],
       instr: Option[Instrumentation[NewKMeans]]): KMeansModel = {
@@ -247,8 +247,8 @@ class KMeans private (
    * Implementation of K-Means algorithm.
    */
   private def runAlgorithm(
-    data: RDD[VectorWithNorm],
-    instr: Option[Instrumentation[NewKMeans]]): KMeansModel = {
+      data: RDD[VectorWithNorm],
+      instr: Option[Instrumentation[NewKMeans]]): KMeansModel = {
 
     val sc = data.sparkContext
 
@@ -284,9 +284,7 @@ class KMeans private (
 
     val iterationStartTime = System.nanoTime()
 
-    if (!instr.isEmpty) {
-      instr.get.logNumFeatures(centers(0)(0).vector.size)
-    }
+    instr.map(_.logNumFeatures(centers(0)(0).vector.size))
 
     // Execute iterations of Lloyd's algorithm until all runs have converged
     while (iteration < maxIterations && !activeRuns.isEmpty) {
