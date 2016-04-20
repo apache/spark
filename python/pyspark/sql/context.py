@@ -146,6 +146,7 @@ class SQLContext(object):
         """
         self._ssql_ctx.setConf(key, value)
 
+    @ignore_unicode_prefix
     @since(1.3)
     def getConf(self, key, defaultValue=None):
         """Returns the value of Spark SQL configuration property for the given key.
