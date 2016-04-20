@@ -77,7 +77,7 @@ object SortPrefixUtils {
       case BooleanType | ByteType | ShortType | IntegerType | LongType | DateType |
            TimestampType | FloatType | DoubleType =>
         true
-      case dt: DecimalType if dt.precision - dt.scale <= Decimal.MAX_LONG_DIGITS =>
+      case dt: DecimalType if dt.precision <= Decimal.MAX_LONG_DIGITS =>
         true
       case _ =>
         false
