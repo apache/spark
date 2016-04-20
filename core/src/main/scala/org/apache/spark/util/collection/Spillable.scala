@@ -58,6 +58,7 @@ private[spark] abstract class Spillable[C](taskMemoryManager: TaskMemoryManager)
     SparkEnv.get.conf.getLong("spark.shuffle.spill.numElementsForceSpillThreshold", Long.MaxValue)
 
   // Threshold for this collection's size in bytes before we start tracking its memory usage
+  // To avoid memory leak for rdd.first(), initialize this to a value orders of magnitude > 0
   private[this] var myMemoryThreshold = initialMemoryThreshold
 
   // Number of elements read from input since last spill
