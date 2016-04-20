@@ -59,7 +59,7 @@ case class StaticInvoke(
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = ctx.javaType(dataType)
     val argGen = arguments.map(_.genCode(ctx))
     val argString = argGen.map(_.value).mkString(", ")
@@ -72,7 +72,7 @@ case class StaticInvoke(
       }
 
       val argsNonNull = s"!(${argGen.map(_.isNull).mkString(" || ")})"
-      s"""
+      ev.copy(code = s"""
         ${argGen.map(_.code).mkString("\n")}
 
         boolean ${ev.isNull} = !$argsNonNull;
@@ -82,14 +82,14 @@ case class StaticInvoke(
           ${ev.value} = $objectName.$functionName($argString);
           $objNullCheck
         }
-       """
+       """)
     } else {
-      s"""
+      ev.copy(code = s"""
         ${argGen.map(_.code).mkString("\n")}
 
         $javaType ${ev.value} = $objectName.$functionName($argString);
         final boolean ${ev.isNull} = ${ev.value} == null;
-      """
+      """)
     }
   }
 }
@@ -148,7 +148,7 @@ case class Invoke(
     case _ => identity[String] _
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = ctx.javaType(dataType)
     val obj = targetObject.genCode(ctx)
     val argGen = arguments.map(_.genCode(ctx))
@@ -178,12 +178,12 @@ case class Invoke(
       """
     }
 
-    s"""
+    ev.copy(code = s"""
       ${obj.code}
       ${argGen.map(_.code).mkString("\n")}
       $evaluate
       $objNullCheck
-    """
+    """)
   }
 
   override def toString: String = s"$targetObject.$functionName"
@@ -239,7 +239,7 @@ case class NewInstance(
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = ctx.javaType(dataType)
     val argGen = arguments.map(_.genCode(ctx))
     val argString = argGen.map(_.value).mkString(", ")
@@ -261,7 +261,7 @@ case class NewInstance(
     if (propagateNull && argGen.nonEmpty) {
       val argsNonNull = s"!(${argGen.map(_.isNull).mkString(" || ")})"
 
-      s"""
+      ev.copy(code = s"""
         $setup
 
         boolean ${ev.isNull} = true;
@@ -270,14 +270,14 @@ case class NewInstance(
           ${ev.value} = $constructorCall;
           ${ev.isNull} = false;
         }
-       """
+       """)
     } else {
-      s"""
+      ev.copy(code = s"""
         $setup
 
         final $javaType ${ev.value} = $constructorCall;
         final boolean ${ev.isNull} = false;
-      """
+      """)
     }
   }
 
@@ -302,17 +302,17 @@ case class UnwrapOption(
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported")
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = ctx.javaType(dataType)
     val inputObject = child.genCode(ctx)
 
-    s"""
+    ev.copy(code = s"""
       ${inputObject.code}
 
       boolean ${ev.isNull} = ${inputObject.value} == null || ${inputObject.value}.isEmpty();
       $javaType ${ev.value} =
         ${ev.isNull} ? ${ctx.defaultValue(dataType)} : ($javaType)${inputObject.value}.get();
-    """
+    """)
   }
 }
 
@@ -335,17 +335,17 @@ case class WrapOption(child: Expression, optType: DataType)
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported")
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val inputObject = child.genCode(ctx)
 
-    s"""
+    ev.copy(code = s"""
       ${inputObject.code}
 
       boolean ${ev.isNull} = false;
       scala.Option ${ev.value} =
         ${inputObject.isNull} ?
         scala.Option$$.MODULE$$.apply(null) : new scala.Some(${inputObject.value});
-    """
+    """)
   }
 }
 
@@ -444,7 +444,7 @@ case class MapObjects private(
 
   override def dataType: DataType = ArrayType(lambdaFunction.dataType)
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = ctx.javaType(dataType)
     val elementJavaType = ctx.javaType(loopVar.dataType)
     ctx.addMutableState("boolean", loopVar.isNull, "")
@@ -474,7 +474,7 @@ case class MapObjects private(
       s"${loopVar.isNull} = ${genInputData.isNull} || ${loopVar.value} == null;"
     }
 
-    s"""
+    ev.copy(code = s"""
       ${genInputData.code}
 
       boolean ${ev.isNull} = ${genInputData.value} == null;
@@ -504,7 +504,7 @@ case class MapObjects private(
         ${ev.isNull} = false;
         ${ev.value} = new ${classOf[GenericArrayData].getName}($convertedArray);
       }
-    """
+    """)
   }
 }
 
@@ -524,7 +524,7 @@ case class CreateExternalRow(children: Seq[Expression], schema: StructType)
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported")
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val rowClass = classOf[GenericRowWithSchema].getName
     val values = ctx.freshName("values")
     ctx.addMutableState("Object[]", values, "")
@@ -541,12 +541,12 @@ case class CreateExternalRow(children: Seq[Expression], schema: StructType)
     }
     val childrenCode = ctx.splitExpressions(ctx.INPUT_ROW, childrenCodes)
     val schemaField = ctx.addReferenceObj("schema", schema)
-    s"""
+    ev.copy(code = s"""
       boolean ${ev.isNull} = false;
       $values = new Object[${children.size}];
       $childrenCode
       final ${classOf[Row].getName} ${ev.value} = new $rowClass($values, this.$schemaField);
-      """
+      """)
   }
 }
 
@@ -561,7 +561,7 @@ case class EncodeUsingSerializer(child: Expression, kryo: Boolean)
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported")
 
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // Code to initialize the serializer.
     val serializer = ctx.freshName("serializer")
     val (serializerClass, serializerInstanceClass) = {
@@ -579,14 +579,14 @@ case class EncodeUsingSerializer(child: Expression, kryo: Boolean)
 
     // Code to serialize.
     val input = child.genCode(ctx)
-    s"""
+    ev.copy(code = s"""
       ${input.code}
       final boolean ${ev.isNull} = ${input.isNull};
       ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
       if (!${ev.isNull}) {
         ${ev.value} = $serializer.serialize(${input.value}, null).array();
       }
-     """
+     """)
   }
 
   override def dataType: DataType = BinaryType
@@ -601,7 +601,7 @@ case class EncodeUsingSerializer(child: Expression, kryo: Boolean)
 case class DecodeUsingSerializer[T](child: Expression, tag: ClassTag[T], kryo: Boolean)
   extends UnaryExpression with NonSQLExpression {
 
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // Code to initialize the serializer.
     val serializer = ctx.freshName("serializer")
     val (serializerClass, serializerInstanceClass) = {
@@ -619,7 +619,7 @@ case class DecodeUsingSerializer[T](child: Expression, tag: ClassTag[T], kryo: B
 
     // Code to serialize.
     val input = child.genCode(ctx)
-    s"""
+    ev.copy(code = s"""
       ${input.code}
       final boolean ${ev.isNull} = ${input.isNull};
       ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
@@ -627,7 +627,7 @@ case class DecodeUsingSerializer[T](child: Expression, tag: ClassTag[T], kryo: B
         ${ev.value} = (${ctx.javaType(dataType)})
           $serializer.deserialize(java.nio.ByteBuffer.wrap(${input.value}), null);
       }
-     """
+     """)
   }
 
   override def dataType: DataType = ObjectType(tag.runtimeClass)
@@ -646,7 +646,7 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val instanceGen = beanInstance.genCode(ctx)
 
     val initialize = setters.map {
@@ -661,12 +661,12 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
     ev.isNull = instanceGen.isNull
     ev.value = instanceGen.value
 
-    s"""
+    ev.copy(code = s"""
       ${instanceGen.code}
       if (!${instanceGen.isNull}) {
         ${initialize.mkString("\n")}
       }
-     """
+     """)
   }
 }
 
@@ -688,7 +688,7 @@ case class AssertNotNull(child: Expression, walkedTypePath: Seq[String])
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
 
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val childGen = child.genCode(ctx)
 
     val errMsg = "Null value appeared in non-nullable field:" +
@@ -698,16 +698,11 @@ case class AssertNotNull(child: Expression, walkedTypePath: Seq[String])
       "(e.g. java.lang.Integer instead of int/scala.Int)."
     val idx = ctx.references.length
     ctx.references += errMsg
-
-    ev.isNull = "false"
-    ev.value = childGen.value
-
-    s"""
+    ExprCode(code = s"""
       ${childGen.code}
 
       if (${childGen.isNull}) {
         throw new RuntimeException((String) references[$idx]);
-      }
-     """
+      }""", isNull = "false", value = childGen.value)
   }
 }

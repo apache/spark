@@ -22,6 +22,38 @@ import org.apache.spark.sql.test.SharedSQLContext
 class SubquerySuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
+  setupTestData()
+
+  val row = identity[(java.lang.Integer, java.lang.Double)](_)
+
+  lazy val l = Seq(
+    row(1, 2.0),
+    row(1, 2.0),
+    row(2, 1.0),
+    row(2, 1.0),
+    row(3, 3.0),
+    row(null, null),
+    row(null, 5.0),
+    row(6, null)).toDF("a", "b")
+
+  lazy val r = Seq(
+    row(2, 3.0),
+    row(2, 3.0),
+    row(3, 2.0),
+    row(4, 1.0),
+    row(null, null),
+    row(null, 5.0),
+    row(6, null)).toDF("c", "d")
+
+  lazy val t = r.filter($"c".isNotNull && $"d".isNotNull)
+
+  protected override def beforeAll(): Unit = {
+    super.beforeAll()
+    l.registerTempTable("l")
+    r.registerTempTable("r")
+    t.registerTempTable("t")
+  }
+
   test("simple uncorrelated scalar subquery") {
     assertResult(Array(Row(1))) {
       sql("select (select 1 as b) as b").collect()
@@ -79,5 +111,71 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       sql("select (select min(value) from subqueryData" +
         " where key = (select max(key) from subqueryData) - 1)").collect()
     }
+  }
+
+  test("EXISTS predicate subquery") {
+    checkAnswer(
+      sql("select * from l where exists(select * from r where l.a = r.c)"),
+      Row(2, 1.0) :: Row(2, 1.0) :: Row(3, 3.0) :: Row(6, null) :: Nil)
+
+    checkAnswer(
+      sql("select * from l where exists(select * from r where l.a = r.c) and l.a <= 2"),
+      Row(2, 1.0) :: Row(2, 1.0) :: Nil)
+  }
+
+  test("NOT EXISTS predicate subquery") {
+    checkAnswer(
+      sql("select * from l where not exists(select * from r where l.a = r.c)"),
+      Row(1, 2.0) :: Row(1, 2.0) :: Row(null, null) :: Row(null, 5.0) :: Nil)
+
+    checkAnswer(
+      sql("select * from l where not exists(select * from r where l.a = r.c and l.b < r.d)"),
+      Row(1, 2.0) :: Row(1, 2.0) :: Row(3, 3.0) ::
+      Row(null, null) :: Row(null, 5.0) :: Row(6, null) :: Nil)
+  }
+
+  test("IN predicate subquery") {
+    checkAnswer(
+      sql("select * from l where l.a in (select c from r)"),
+      Row(2, 1.0) :: Row(2, 1.0) :: Row(3, 3.0) :: Row(6, null) :: Nil)
+
+    checkAnswer(
+      sql("select * from l where l.a in (select c from r where l.b < r.d)"),
+      Row(2, 1.0) :: Row(2, 1.0) :: Nil)
+
+    checkAnswer(
+      sql("select * from l where l.a in (select c from r) and l.a > 2 and l.b is not null"),
+      Row(3, 3.0) :: Nil)
+  }
+
+  test("NOT IN predicate subquery") {
+    checkAnswer(
+      sql("select * from l where a not in(select c from r)"),
+      Nil)
+
+    checkAnswer(
+      sql("select * from l where a not in(select c from r where c is not null)"),
+      Row(1, 2.0) :: Row(1, 2.0) :: Nil)
+
+    checkAnswer(
+      sql("select * from l where a not in(select c from t where b < d)"),
+      Row(1, 2.0) :: Row(1, 2.0) :: Row(3, 3.0) :: Nil)
+
+    // Empty sub-query
+    checkAnswer(
+      sql("select * from l where a not in(select c from r where c > 10 and b < d)"),
+      Row(1, 2.0) :: Row(1, 2.0) :: Row(2, 1.0) :: Row(2, 1.0) ::
+      Row(3, 3.0) :: Row(null, null) :: Row(null, 5.0) :: Row(6, null) :: Nil)
+
+  }
+
+  test("complex IN predicate subquery") {
+    checkAnswer(
+      sql("select * from l where (a, b) not in(select c, d from r)"),
+      Nil)
+
+    checkAnswer(
+      sql("select * from l where (a, b) not in(select c, d from t) and (a + b) is not null"),
+      Row(1, 2.0) :: Row(1, 2.0) :: Row(2, 1.0) :: Row(2, 1.0) :: Row(3, 3.0) :: Nil)
   }
 }
