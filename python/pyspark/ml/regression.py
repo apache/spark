@@ -561,7 +561,7 @@ class TreeRegressorParams(Params):
     impurity = Param(Params._dummy(), "impurity",
                      "Criterion used for information gain calculation (case-insensitive). " +
                      "Supported options: " +
-                     ", ".join(supportedImpurities))
+                     ", ".join(supportedImpurities), typeConverter=TypeConverters.toString)
 
     def __init__(self):
         super(TreeRegressorParams, self).__init__()
@@ -1261,11 +1261,12 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
 
     family = Param(Params._dummy(), "family", "The name of family which is a description of " +
                    "the error distribution to be used in the model. Supported options: " +
-                   "gaussian(default), binomial, poisson and gamma.")
+                   "gaussian(default), binomial, poisson and gamma.",
+                   typeConverter=TypeConverters.toString)
     link = Param(Params._dummy(), "link", "The name of link function which provides the " +
                  "relationship between the linear predictor and the mean of the distribution " +
                  "function. Supported options: identity, log, inverse, logit, probit, cloglog " +
-                 "and sqrt.")
+                 "and sqrt.", typeConverter=TypeConverters.toString)
 
     @keyword_only
     def __init__(self, labelCol="label", featuresCol="features", predictionCol="prediction",
