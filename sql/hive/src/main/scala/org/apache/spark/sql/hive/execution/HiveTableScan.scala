@@ -30,6 +30,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.types.{BooleanType, DataType}
 import org.apache.spark.util.Utils
@@ -52,6 +53,9 @@ case class HiveTableScan(
   require(partitionPruningPred.isEmpty || relation.hiveQlTable.isPartitioned,
     "Partition pruning predicates only supported for partitioned tables.")
 
+  private[sql] override lazy val metrics = Map(
+    "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
+
   override def producedAttributes: AttributeSet = outputSet ++
     AttributeSet(partitionPruningPred.flatMap(_.references))
 
@@ -71,7 +75,7 @@ case class HiveTableScan(
   // Create a local copy of hiveconf,so that scan specific modifications should not impact
   // other queries
   @transient
-  private[this] val hiveExtraConf = new HiveConf(context.hiveconf)
+  private[this] val hiveExtraConf = new HiveConf(context.sessionState.hiveconf)
 
   // append columns ids and names before broadcast
   addColumnMetadataToConf(hiveExtraConf)
@@ -146,9 +150,13 @@ case class HiveTableScan(
           prunePartitions(relation.getHiveQlPartitions(partitionPruningPred)))
       }
     }
+    val numOutputRows = longMetric("numOutputRows")
     rdd.mapPartitionsInternal { iter =>
       val proj = UnsafeProjection.create(schema)
-      iter.map(proj)
+      iter.map { r =>
+        numOutputRows += 1
+        proj(r)
+      }
     }
   }
 

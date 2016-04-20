@@ -17,7 +17,7 @@
 
 package org.apache.spark.executor
 
-import org.apache.spark.{Accumulator, InternalAccumulator}
+import org.apache.spark.InternalAccumulator
 import org.apache.spark.annotation.DeveloperApi
 
 
@@ -27,31 +27,15 @@ import org.apache.spark.annotation.DeveloperApi
  * Operations are not thread-safe.
  */
 @DeveloperApi
-class ShuffleWriteMetrics private (
-    _bytesWritten: Accumulator[Long],
-    _recordsWritten: Accumulator[Long],
-    _writeTime: Accumulator[Long])
-  extends Serializable {
+class ShuffleWriteMetrics private[spark] () extends Serializable {
+  import InternalAccumulator._
 
-  private[executor] def this(accumMap: Map[String, Accumulator[_]]) {
-    this(
-      TaskMetrics.getAccum[Long](accumMap, InternalAccumulator.shuffleWrite.BYTES_WRITTEN),
-      TaskMetrics.getAccum[Long](accumMap, InternalAccumulator.shuffleWrite.RECORDS_WRITTEN),
-      TaskMetrics.getAccum[Long](accumMap, InternalAccumulator.shuffleWrite.WRITE_TIME))
-  }
-
-  /**
-   * Create a new [[ShuffleWriteMetrics]] that is not associated with any particular task.
-   *
-   * This mainly exists for legacy reasons, because we use dummy [[ShuffleWriteMetrics]] in
-   * many places only to merge their values together later. In the future, we should revisit
-   * whether this is needed.
-   *
-   * A better alternative is [[TaskMetrics.registerShuffleWriteMetrics]].
-   */
-  private[spark] def this() {
-    this(InternalAccumulator.createShuffleWriteAccums().map { a => (a.name.get, a) }.toMap)
-  }
+  private[executor] val _bytesWritten =
+    TaskMetrics.createLongAccum(shuffleWrite.BYTES_WRITTEN)
+  private[executor] val _recordsWritten =
+    TaskMetrics.createLongAccum(shuffleWrite.RECORDS_WRITTEN)
+  private[executor] val _writeTime =
+    TaskMetrics.createLongAccum(shuffleWrite.WRITE_TIME)
 
   /**
    * Number of bytes written for the shuffle by this task.

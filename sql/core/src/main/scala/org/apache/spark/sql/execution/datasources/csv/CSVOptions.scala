@@ -17,13 +17,12 @@
 
 package org.apache.spark.sql.execution.datasources.csv
 
-import java.nio.charset.Charset
+import java.nio.charset.StandardCharsets
 
-import org.apache.spark.Logging
-import org.apache.spark.sql.execution.datasources.CompressionCodecs
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.execution.datasources.{CompressionCodecs, ParseModes}
 
-private[sql] class CSVOptions(
-    @transient private val parameters: Map[String, String])
+private[sql] class CSVOptions(@transient private val parameters: Map[String, String])
   extends Logging with Serializable {
 
   private def getChar(paramName: String, default: Char): Char = {
@@ -33,6 +32,19 @@ private[sql] class CSVOptions(
       case Some(value) if value.length == 0 => '\u0000'
       case Some(value) if value.length == 1 => value.charAt(0)
       case _ => throw new RuntimeException(s"$paramName cannot be more than one character")
+    }
+  }
+
+  private def getInt(paramName: String, default: Int): Int = {
+    val paramValue = parameters.get(paramName)
+    paramValue match {
+      case None => default
+      case Some(value) => try {
+        value.toInt
+      } catch {
+        case e: NumberFormatException =>
+          throw new RuntimeException(s"$paramName should be an integer. Found $value")
+      }
     }
   }
 
@@ -49,9 +61,9 @@ private[sql] class CSVOptions(
 
   val delimiter = CSVTypeCast.toChar(
     parameters.getOrElse("sep", parameters.getOrElse("delimiter", ",")))
-  val parseMode = parameters.getOrElse("mode", "PERMISSIVE")
+  private val parseMode = parameters.getOrElse("mode", "PERMISSIVE")
   val charset = parameters.getOrElse("encoding",
-    parameters.getOrElse("charset", Charset.forName("UTF-8").name()))
+    parameters.getOrElse("charset", StandardCharsets.UTF_8.name()))
 
   val quote = getChar("quote", '\"')
   val escape = getChar("escape", '\\')
@@ -61,9 +73,6 @@ private[sql] class CSVOptions(
   val inferSchemaFlag = getBool("inferSchema")
   val ignoreLeadingWhiteSpaceFlag = getBool("ignoreLeadingWhiteSpace")
   val ignoreTrailingWhiteSpaceFlag = getBool("ignoreTrailingWhiteSpace")
-
-  // Limit the number of lines we'll search for a header row that isn't comment-prefixed
-  val MAX_COMMENT_LINES_IN_HEADER = 10
 
   // Parse mode flags
   if (!ParseModes.isValidMode(parseMode)) {
@@ -81,36 +90,13 @@ private[sql] class CSVOptions(
     name.map(CompressionCodecs.getCodecClassName)
   }
 
-  val maxColumns = 20480
+  val maxColumns = getInt("maxColumns", 20480)
 
-  val maxCharsPerColumn = 100000
+  val maxCharsPerColumn = getInt("maxCharsPerColumn", 1000000)
 
   val inputBufferSize = 128
 
   val isCommentSet = this.comment != '\u0000'
 
   val rowSeparator = "\n"
-}
-
-private[csv] object ParseModes {
-  val PERMISSIVE_MODE = "PERMISSIVE"
-  val DROP_MALFORMED_MODE = "DROPMALFORMED"
-  val FAIL_FAST_MODE = "FAILFAST"
-
-  val DEFAULT = PERMISSIVE_MODE
-
-  def isValidMode(mode: String): Boolean = {
-    mode.toUpperCase match {
-      case PERMISSIVE_MODE | DROP_MALFORMED_MODE | FAIL_FAST_MODE => true
-      case _ => false
-    }
-  }
-
-  def isDropMalformedMode(mode: String): Boolean = mode.toUpperCase == DROP_MALFORMED_MODE
-  def isFailFastMode(mode: String): Boolean = mode.toUpperCase == FAIL_FAST_MODE
-  def isPermissiveMode(mode: String): Boolean = if (isValidMode(mode))  {
-    mode.toUpperCase == PERMISSIVE_MODE
-  } else {
-    true // We default to permissive is the mode string is not valid
-  }
 }

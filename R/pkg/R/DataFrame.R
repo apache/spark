@@ -303,8 +303,28 @@ setMethod("colnames",
 #' @rdname columns
 #' @name colnames<-
 setMethod("colnames<-",
-          signature(x = "DataFrame", value = "character"),
+          signature(x = "DataFrame"),
           function(x, value) {
+
+            # Check parameter integrity
+            if (class(value) != "character") {
+              stop("Invalid column names.")
+            }
+
+            if (length(value) != ncol(x)) {
+              stop(
+                "Column names must have the same length as the number of columns in the dataset.")
+            }
+
+            if (any(is.na(value))) {
+              stop("Column names cannot be NA.")
+            }
+
+            # Check if the column names have . in it
+            if (any(regexec(".", value, fixed = TRUE)[[1]][1] != -1)) {
+              stop("Colum names cannot contain the '.' symbol.")
+            }
+
             sdf <- callJMethod(x@sdf, "toDF", as.list(value))
             dataFrame(sdf)
           })
@@ -331,7 +351,7 @@ setMethod("coltypes",
             types <- sapply(dtypes(x), function(x) {x[[2]]})
 
             # Map Spark data types into R's data types using DATA_TYPES environment
-            rTypes <- sapply(types, USE.NAMES=F, FUN=function(x) {
+            rTypes <- sapply(types, USE.NAMES = F, FUN = function(x) {
               # Check for primitive types
               type <- PRIMITIVE_TYPES[[x]]
 
@@ -1759,7 +1779,7 @@ setMethod("merge",
           signature(x = "DataFrame", y = "DataFrame"),
           function(x, y, by = intersect(names(x), names(y)), by.x = by, by.y = by,
                    all = FALSE, all.x = all, all.y = all,
-                   sort = TRUE, suffixes = c("_x","_y"), ... ) {
+                   sort = TRUE, suffixes = c("_x", "_y"), ... ) {
 
             if (length(suffixes) != 2) {
               stop("suffixes must have length 2")
@@ -2276,12 +2296,8 @@ setMethod("fillna",
 #' }
 setMethod("as.data.frame",
           signature(x = "DataFrame"),
-          function(x, ...) {
-            # Check if additional parameters have been passed
-            if (length(list(...)) > 0) {
-              stop(paste("Unused argument(s): ", paste(list(...), collapse=", ")))
-            }
-            collect(x)
+          function(x, row.names = NULL, optional = FALSE, ...) {
+            as.data.frame(collect(x), row.names, optional, ...)
           })
 
 #' The specified DataFrame is attached to the R search path. This means that
@@ -2343,7 +2359,7 @@ setMethod("with",
 #' @examples \dontrun{
 #' # Create a DataFrame from the Iris dataset
 #' irisDF <- createDataFrame(sqlContext, iris)
-#' 
+#'
 #' # Show the structure of the DataFrame
 #' str(irisDF)
 #' }
@@ -2375,13 +2391,13 @@ setMethod("str",
                 # Get the first elements for each column
 
                 firstElements <- if (types[i] == "character") {
-                  paste(paste0("\"", localDF[,i], "\""), collapse = " ")
+                  paste(paste0("\"", localDF[, i], "\""), collapse = " ")
                 } else {
-                  paste(localDF[,i], collapse = " ")
+                  paste(localDF[, i], collapse = " ")
                 }
 
                 # Add the corresponding number of spaces for alignment
-                spaces <- paste(rep(" ", max(nchar(names) - nchar(names[i]))), collapse="")
+                spaces <- paste(rep(" ", max(nchar(names) - nchar(names[i]))), collapse = "")
 
                 # Get the short type. For 'character', it would be 'chr';
                 # 'for numeric', it's 'num', etc.
@@ -2393,7 +2409,7 @@ setMethod("str",
                 # Concatenate the colnames, coltypes, and first
                 # elements of each column
                 line <- paste0(" $ ", names[i], spaces, ": ",
-                               dataType, " ",firstElements)
+                               dataType, " ", firstElements)
 
                 # Chop off extra characters if this is too long
                 cat(substr(line, 1, MAX_CHAR_PER_ROW))
@@ -2447,4 +2463,41 @@ setMethod("drop",
           signature(x = "ANY"),
           function(x) {
             base::drop(x)
+          })
+
+#' Saves the content of the DataFrame to an external database table via JDBC
+#'
+#' Additional JDBC database connection properties can be set (...)
+#'
+#' Also, mode is used to specify the behavior of the save operation when
+#' data already exists in the data source. There are four modes: \cr
+#'  append: Contents of this DataFrame are expected to be appended to existing data. \cr
+#'  overwrite: Existing data is expected to be overwritten by the contents of this DataFrame. \cr
+#'  error: An exception is expected to be thrown. \cr
+#'  ignore: The save operation is expected to not save the contents of the DataFrame
+#'     and to not change the existing data. \cr
+#'
+#' @param x A SparkSQL DataFrame
+#' @param url JDBC database url of the form `jdbc:subprotocol:subname`
+#' @param tableName The name of the table in the external database
+#' @param mode One of 'append', 'overwrite', 'error', 'ignore' save mode (it is 'error' by default)
+#' @family DataFrame functions
+#' @rdname write.jdbc
+#' @name write.jdbc
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlContext <- sparkRSQL.init(sc)
+#' jdbcUrl <- "jdbc:mysql://localhost:3306/databasename"
+#' write.jdbc(df, jdbcUrl, "table", user = "username", password = "password")
+#' }
+setMethod("write.jdbc",
+          signature(x = "DataFrame", url = "character", tableName = "character"),
+          function(x, url, tableName, mode = "error", ...){
+            jmode <- convertToJSaveMode(mode)
+            jprops <- varargsToJProperties(...)
+            write <- callJMethod(x@sdf, "write")
+            write <- callJMethod(write, "mode", jmode)
+            invisible(callJMethod(write, "jdbc", url, tableName, jprops))
           })

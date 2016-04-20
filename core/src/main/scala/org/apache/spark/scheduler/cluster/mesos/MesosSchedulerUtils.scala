@@ -29,7 +29,8 @@ import org.apache.mesos.{MesosSchedulerDriver, Protos, Scheduler, SchedulerDrive
 import org.apache.mesos.Protos._
 import org.apache.mesos.protobuf.{ByteString, GeneratedMessage}
 
-import org.apache.spark.{Logging, SparkConf, SparkContext, SparkException}
+import org.apache.spark.{SparkConf, SparkContext, SparkException}
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
 /**
@@ -123,11 +124,10 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
               markErr()
             }
           } catch {
-            case e: Exception => {
+            case e: Exception =>
               logError("driver.run() failed", e)
               error = Some(e)
               markErr()
-            }
           }
         }
       }.start()
@@ -140,15 +140,15 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
     }
   }
 
-  /**
-   * Signal that the scheduler has registered with Mesos.
-   */
-  protected def getResource(res: JList[Resource], name: String): Double = {
+  def getResource(res: JList[Resource], name: String): Double = {
     // A resource can have multiple values in the offer since it can either be from
     // a specific role or wildcard.
     res.asScala.filter(_.getName == name).map(_.getScalar.getValue).sum
   }
 
+  /**
+   * Signal that the scheduler has registered with Mesos.
+   */
   protected def markRegistered(): Unit = {
     registerLatch.countDown()
   }
@@ -183,7 +183,7 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
     var remain = amountToUse
     var requestedResources = new ArrayBuffer[Resource]
     val remainingResources = resources.asScala.map {
-      case r => {
+      case r =>
         if (remain > 0 &&
           r.getType == Value.Type.SCALAR &&
           r.getScalar.getValue > 0.0 &&
@@ -195,7 +195,6 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
         } else {
           r
         }
-      }
     }
 
     // Filter any resource that has depleted.
@@ -227,7 +226,7 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
    * @return
    */
   protected def toAttributeMap(offerAttributes: JList[Attribute]): Map[String, GeneratedMessage] = {
-    offerAttributes.asScala.map(attr => {
+    offerAttributes.asScala.map { attr =>
       val attrValue = attr.getType match {
         case Value.Type.SCALAR => attr.getScalar
         case Value.Type.RANGES => attr.getRanges
@@ -235,7 +234,7 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
         case Value.Type.TEXT => attr.getText
       }
       (attr.getName, attrValue)
-    }).toMap
+    }.toMap
   }
 
 
@@ -282,11 +281,11 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
    *  are separated by ':'. The ':' implies equality (for singular values) and "is one of" for
    *  multiple values (comma separated). For example:
    *  {{{
-   *  parseConstraintString("tachyon:true;zone:us-east-1a,us-east-1b")
+   *  parseConstraintString("os:centos7;zone:us-east-1a,us-east-1b")
    *  // would result in
    *  <code>
    *  Map(
-   *    "tachyon" -> Set("true"),
+   *    "os" -> Set("centos7"),
    *    "zone":   -> Set("us-east-1a", "us-east-1b")
    *  )
    *  }}}
@@ -337,7 +336,7 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
    * @return memory requirement as (0.1 * <memoryOverhead>) or MEMORY_OVERHEAD_MINIMUM
    *         (whichever is larger)
    */
-  def calculateTotalMemory(sc: SparkContext): Int = {
+  def executorMemory(sc: SparkContext): Int = {
     sc.conf.getInt("spark.mesos.executor.memoryOverhead",
       math.max(MEMORY_OVERHEAD_FRACTION * sc.executorMemory, MEMORY_OVERHEAD_MINIMUM).toInt) +
       sc.executorMemory

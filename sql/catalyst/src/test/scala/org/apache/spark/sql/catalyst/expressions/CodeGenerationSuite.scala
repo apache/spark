@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.ThreadUtils
 
 /**
  * Additional tests for code generation.
@@ -43,7 +44,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
       }
     }
 
-    futures.foreach(Await.result(_, 10.seconds))
+    futures.foreach(ThreadUtils.awaitResult(_, 10.seconds))
   }
 
   test("SPARK-8443: split wide projections into blocks due to JVM code size limit") {
@@ -56,6 +57,27 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     if (!checkResult(actual, expected)) {
       fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
     }
+  }
+
+  test("SPARK-13242: case-when expression with large number of branches (or cases)") {
+    val cases = 50
+    val clauses = 20
+
+    // Generate an individual case
+    def generateCase(n: Int): (Expression, Expression) = {
+      val condition = (1 to clauses)
+        .map(c => EqualTo(BoundReference(0, StringType, false), Literal(s"$c:$n")))
+        .reduceLeft[Expression]((l, r) => Or(l, r))
+      (condition, Literal(n))
+    }
+
+    val expression = CaseWhen((1 to cases).map(generateCase(_)))
+
+    val plan = GenerateMutableProjection.generate(Seq(expression))()
+    val input = new GenericMutableRow(Array[Any](UTF8String.fromString(s"${clauses}:${cases}")))
+    val actual = plan(input).toSeq(Seq(expression.dataType))
+
+    assert(actual(0) == cases)
   }
 
   test("test generated safe and unsafe projection") {

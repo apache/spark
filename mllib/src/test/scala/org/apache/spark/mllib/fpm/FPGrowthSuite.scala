@@ -16,6 +16,8 @@
  */
 package org.apache.spark.mllib.fpm
 
+import scala.language.existentials
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.util.Utils

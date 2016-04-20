@@ -32,7 +32,7 @@ public interface SparkAppHandle {
    *
    * @since 1.6.0
    */
-  public enum State {
+  enum State {
     /** The application has not reported back yet. */
     UNKNOWN(false),
     /** The application has connected to the handle. */

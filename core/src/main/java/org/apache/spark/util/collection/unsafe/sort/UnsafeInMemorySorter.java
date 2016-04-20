@@ -84,6 +84,8 @@ public final class UnsafeInMemorySorter {
    */
   private int pos = 0;
 
+  private long initialSize;
+
   public UnsafeInMemorySorter(
     final MemoryConsumer consumer,
     final TaskMemoryManager memoryManager,
@@ -102,6 +104,7 @@ public final class UnsafeInMemorySorter {
       LongArray array) {
     this.consumer = consumer;
     this.memoryManager = memoryManager;
+    this.initialSize = array.size();
     if (recordComparator != null) {
       this.sorter = new Sorter<>(UnsafeSortDataFormat.INSTANCE);
       this.sortComparator = new SortComparator(recordComparator, prefixComparator, memoryManager);
@@ -123,6 +126,10 @@ public final class UnsafeInMemorySorter {
   }
 
   public void reset() {
+    if (consumer != null) {
+      consumer.freeArray(array);
+      this.array = consumer.allocateArray(initialSize);
+    }
     pos = 0;
   }
 
@@ -164,7 +171,7 @@ public final class UnsafeInMemorySorter {
    */
   public void insertRecord(long recordPointer, long keyPrefix) {
     if (!hasSpaceForAnotherRecord()) {
-      expandPointerArray(consumer.allocateArray(array.size() * 2));
+      throw new IllegalStateException("There is no space for new record");
     }
     array.set(pos, recordPointer);
     pos++;
@@ -172,7 +179,7 @@ public final class UnsafeInMemorySorter {
     pos++;
   }
 
-  public final class SortedIterator extends UnsafeSorterIterator {
+  public final class SortedIterator extends UnsafeSorterIterator implements Cloneable {
 
     private final int numRecords;
     private int position;

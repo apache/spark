@@ -22,9 +22,9 @@ import java.util.Properties
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
+import scala.annotation.tailrec
 import scala.collection.Map
 import scala.collection.mutable.{HashMap, HashSet, Stack}
-import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.language.existentials
 import scala.language.postfixOps
@@ -35,6 +35,7 @@ import org.apache.commons.lang3.SerializationUtils
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd.RDD
@@ -469,6 +470,7 @@ class DAGScheduler(
    * all of that stage's ancestors.
    */
   private def updateJobIdStageIdMaps(jobId: Int, stage: Stage): Unit = {
+    @tailrec
     def updateJobIdStageIdMapsList(stages: List[Stage]) {
       if (stages.nonEmpty) {
         val s = stages.head
@@ -611,7 +613,12 @@ class DAGScheduler(
       properties: Properties): Unit = {
     val start = System.nanoTime
     val waiter = submitJob(rdd, func, partitions, callSite, resultHandler, properties)
-    Await.ready(waiter.completionFuture, atMost = Duration.Inf)
+    // Note: Do not call Await.ready(future) because that calls `scala.concurrent.blocking`,
+    // which causes concurrent SQL executions to fail if a fork-join pool is used. Note that
+    // due to idiosyncrasies in Scala, `awaitPermission` is not actually used anywhere so it's
+    // safe to pass in null here. For more detail, see SPARK-13747.
+    val awaitPermission = null.asInstanceOf[scala.concurrent.CanAwait]
+    waiter.completionFuture.ready(Duration.Inf)(awaitPermission)
     waiter.completionFuture.value.get match {
       case scala.util.Success(_) =>
         logInfo("Job %d finished: %s, took %f s".format
@@ -655,7 +662,7 @@ class DAGScheduler(
 
   /**
    * Submit a shuffle map stage to run independently and get a JobWaiter object back. The waiter
-   * can be used to block until the the job finishes executing or can be used to cancel the job.
+   * can be used to block until the job finishes executing or can be used to cancel the job.
    * This method is used for adaptive query planning, to run map stages and look at statistics
    * about their outputs before submitting downstream stages.
    *
@@ -943,13 +950,6 @@ class DAGScheduler(
     // First figure out the indexes of partition ids to compute.
     val partitionsToCompute: Seq[Int] = stage.findMissingPartitions()
 
-    // Create internal accumulators if the stage has no accumulators initialized.
-    // Reset internal accumulators only if this stage is not partially submitted
-    // Otherwise, we may override existing accumulator values from some tasks
-    if (stage.internalAccumulators.isEmpty || stage.numPartitions == partitionsToCompute.size) {
-      stage.resetInternalAccumulators()
-    }
-
     // Use the scheduling pool, job group, description, etc. from an ActiveJob associated
     // with this Stage
     val properties = jobIdToActiveJob(jobId).properties
@@ -981,7 +981,7 @@ class DAGScheduler(
       case NonFatal(e) =>
         stage.makeNewStageAttempt(partitionsToCompute.size)
         listenerBus.post(SparkListenerStageSubmitted(stage.latestInfo, properties))
-        abortStage(stage, s"Task creation failed: $e\n${e.getStackTraceString}", Some(e))
+        abortStage(stage, s"Task creation failed: $e\n${Utils.exceptionString(e)}", Some(e))
         runningStages -= stage
         return
     }
@@ -1017,7 +1017,7 @@ class DAGScheduler(
         // Abort execution
         return
       case NonFatal(e) =>
-        abortStage(stage, s"Task serialization failed: $e\n${e.getStackTraceString}", Some(e))
+        abortStage(stage, s"Task serialization failed: $e\n${Utils.exceptionString(e)}", Some(e))
         runningStages -= stage
         return
     }
@@ -1029,7 +1029,7 @@ class DAGScheduler(
             val locs = taskIdToLocations(id)
             val part = stage.rdd.partitions(id)
             new ShuffleMapTask(stage.id, stage.latestInfo.attemptId,
-              taskBinary, part, locs, stage.internalAccumulators)
+              taskBinary, part, locs, stage.latestInfo.taskMetrics, properties)
           }
 
         case stage: ResultStage =>
@@ -1039,12 +1039,12 @@ class DAGScheduler(
             val part = stage.rdd.partitions(p)
             val locs = taskIdToLocations(id)
             new ResultTask(stage.id, stage.latestInfo.attemptId,
-              taskBinary, part, locs, id, stage.internalAccumulators)
+              taskBinary, part, locs, id, properties, stage.latestInfo.taskMetrics)
           }
       }
     } catch {
       case NonFatal(e) =>
-        abortStage(stage, s"Task creation failed: $e\n${e.getStackTraceString}", Some(e))
+        abortStage(stage, s"Task creation failed: $e\n${Utils.exceptionString(e)}", Some(e))
         runningStages -= stage
         return
     }
@@ -1141,13 +1141,13 @@ class DAGScheduler(
         null
       }
 
-    // The success case is dealt with separately below.
-    // TODO: Why post it only for failed tasks in cancelled stages? Clarify semantics here.
-    if (event.reason != Success) {
-      val attemptId = task.stageAttemptId
-      listenerBus.post(SparkListenerTaskEnd(
-        stageId, attemptId, taskType, event.reason, event.taskInfo, taskMetrics))
-    }
+    // The stage may have already finished when we get this event -- eg. maybe it was a
+    // speculative task. It is important that we send the TaskEnd event in any case, so listeners
+    // are properly notified and can chose to handle it. For instance, some listeners are
+    // doing their own accounting and if they don't get the task end event they think
+    // tasks are still running when they really aren't.
+    listenerBus.post(SparkListenerTaskEnd(
+       stageId, task.stageAttemptId, taskType, event.reason, event.taskInfo, taskMetrics))
 
     if (!stageIdToStage.contains(task.stageId)) {
       // Skip all the actions if the stage has been cancelled.
@@ -1157,8 +1157,6 @@ class DAGScheduler(
     val stage = stageIdToStage(task.stageId)
     event.reason match {
       case Success =>
-        listenerBus.post(SparkListenerTaskEnd(stageId, stage.latestInfo.attemptId, taskType,
-          event.reason, event.taskInfo, taskMetrics))
         stage.pendingPartitions -= task.partitionId
         task match {
           case rt: ResultTask[_, _] =>

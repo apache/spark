@@ -40,19 +40,6 @@ class LinearRegressionSuite
   @transient var datasetWithWeightConstantLabel: DataFrame = _
   @transient var datasetWithWeightZeroLabel: DataFrame = _
 
-  /*
-     In `LinearRegressionSuite`, we will make sure that the model trained by SparkML
-     is the same as the one trained by R's glmnet package. The following instruction
-     describes how to reproduce the data in R.
-     In a spark-shell, use the following code:
-
-     import org.apache.spark.mllib.util.LinearDataGenerator
-     val data =
-       sc.parallelize(LinearDataGenerator.generateLinearInput(6.3, Array(4.7, 7.2),
-         Array(0.9, -1.3), Array(0.7, 1.2), 10000, 42, 0.1), 2)
-     data.map(x=> x.label + ", " + x.features(0) + ", " + x.features(1)).coalesce(1)
-       .saveAsTextFile("path")
-   */
   override def beforeAll(): Unit = {
     super.beforeAll()
     datasetWithDenseFeature = sqlContext.createDataFrame(
@@ -60,8 +47,8 @@ class LinearRegressionSuite
         intercept = 6.3, weights = Array(4.7, 7.2), xMean = Array(0.9, -1.3),
         xVariance = Array(0.7, 1.2), nPoints = 10000, seed, eps = 0.1), 2))
     /*
-       datasetWithoutIntercept is not needed for correctness testing but is useful for illustrating
-       training model without intercept
+       datasetWithDenseFeatureWithoutIntercept is not needed for correctness testing
+       but is useful for illustrating training model without intercept
      */
     datasetWithDenseFeatureWithoutIntercept = sqlContext.createDataFrame(
       sc.parallelize(LinearDataGenerator.generateLinearInput(
@@ -74,9 +61,9 @@ class LinearRegressionSuite
     val featureSize = 4100
     datasetWithSparseFeature = sqlContext.createDataFrame(
       sc.parallelize(LinearDataGenerator.generateLinearInput(
-        intercept = 0.0, weights = Seq.fill(featureSize)(r.nextDouble).toArray,
-        xMean = Seq.fill(featureSize)(r.nextDouble).toArray,
-        xVariance = Seq.fill(featureSize)(r.nextDouble).toArray, nPoints = 200,
+        intercept = 0.0, weights = Seq.fill(featureSize)(r.nextDouble()).toArray,
+        xMean = Seq.fill(featureSize)(r.nextDouble()).toArray,
+        xVariance = Seq.fill(featureSize)(r.nextDouble()).toArray, nPoints = 200,
         seed, eps = 0.1, sparsity = 0.7), 2))
 
     /*
@@ -117,6 +104,26 @@ class LinearRegressionSuite
         Instance(0.0, 3.0, Vectors.dense(2.0, 11.0)),
         Instance(0.0, 4.0, Vectors.dense(3.0, 13.0))
       ), 2))
+  }
+
+  /**
+   * Enable the ignored test to export the dataset into CSV format,
+   * so we can validate the training accuracy compared with R's glmnet package.
+   */
+  ignore("export test data into CSV format") {
+    datasetWithDenseFeature.rdd.map { case Row(label: Double, features: Vector) =>
+      label + "," + features.toArray.mkString(",")
+    }.repartition(1).saveAsTextFile("target/tmp/LinearRegressionSuite/datasetWithDenseFeature")
+
+    datasetWithDenseFeatureWithoutIntercept.rdd.map {
+      case Row(label: Double, features: Vector) =>
+        label + "," + features.toArray.mkString(",")
+    }.repartition(1).saveAsTextFile(
+      "target/tmp/LinearRegressionSuite/datasetWithDenseFeatureWithoutIntercept")
+
+    datasetWithSparseFeature.rdd.map { case Row(label: Double, features: Vector) =>
+      label + "," + features.toArray.mkString(",")
+    }.repartition(1).saveAsTextFile("target/tmp/LinearRegressionSuite/datasetWithSparseFeature")
   }
 
   test("params") {
@@ -222,7 +229,7 @@ class LinearRegressionSuite
 
       /*
          Then again with the data with no intercept:
-         > coefficientsWithourIntercept
+         > coefficientsWithoutIntercept
           3 x 1 sparse Matrix of class "dgCMatrix"
                                    s0
          (Intercept)           .
@@ -680,23 +687,24 @@ class LinearRegressionSuite
       // Validate that we re-insert a prediction column for evaluation
       val modelNoPredictionColFieldNames
       = modelNoPredictionCol.summary.predictions.schema.fieldNames
-      assert((datasetWithDenseFeature.schema.fieldNames.toSet).subsetOf(
+      assert(datasetWithDenseFeature.schema.fieldNames.toSet.subsetOf(
         modelNoPredictionColFieldNames.toSet))
       assert(modelNoPredictionColFieldNames.exists(s => s.startsWith("prediction_")))
 
       // Residuals in [[LinearRegressionResults]] should equal those manually computed
       val expectedResiduals = datasetWithDenseFeature.select("features", "label")
+        .rdd
         .map { case Row(features: DenseVector, label: Double) =>
-        val prediction =
-          features(0) * model.coefficients(0) + features(1) * model.coefficients(1) +
-            model.intercept
-        label - prediction
-      }
-        .zip(model.summary.residuals.map(_.getDouble(0)))
+          val prediction =
+            features(0) * model.coefficients(0) + features(1) * model.coefficients(1) +
+              model.intercept
+          label - prediction
+        }
+        .zip(model.summary.residuals.rdd.map(_.getDouble(0)))
         .collect()
         .foreach { case (manualResidual: Double, resultResidual: Double) =>
-        assert(manualResidual ~== resultResidual relTol 1E-5)
-      }
+          assert(manualResidual ~== resultResidual relTol 1E-5)
+        }
 
       /*
          # Use the following R code to generate model training results.
@@ -751,7 +759,7 @@ class LinearRegressionSuite
             .sliding(2)
             .forall(x => x(0) >= x(1)))
       } else {
-        // To clalify that the normal solver is used here.
+        // To clarify that the normal solver is used here.
         assert(model.summary.objectiveHistory.length == 1)
         assert(model.summary.objectiveHistory(0) == 0.0)
         val devianceResidualsR = Array(-0.47082, 0.34635)
@@ -956,7 +964,7 @@ class LinearRegressionSuite
        V1  -3.7271     2.9032  -1.284   0.3279
        V2   3.0100     0.6022   4.998   0.0378 *
        ---
-       Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+       Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
 
        (Dispersion parameter for gaussian family taken to be 17.4376)
 
@@ -997,6 +1005,15 @@ class LinearRegressionSuite
     val lr = new LinearRegression()
     testEstimatorAndModelReadWrite(lr, datasetWithWeight, LinearRegressionSuite.allParamSettings,
       checkModelData)
+  }
+
+  test("should support all NumericType labels and not support other types") {
+    val lr = new LinearRegression().setMaxIter(1)
+    MLTestingUtils.checkNumericTypes[LinearRegressionModel, LinearRegression](
+      lr, isClassification = false, sqlContext) { (expected, actual) =>
+        assert(expected.intercept === actual.intercept)
+        assert(expected.coefficients === actual.coefficients)
+      }
   }
 }
 

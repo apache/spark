@@ -99,7 +99,8 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       transfer,
       blockManager,
       blocksByAddress,
-      48 * 1024 * 1024)
+      48 * 1024 * 1024,
+      Int.MaxValue)
 
     // 3 local blocks fetched in initialization
     verify(blockManager, times(3)).getBlockData(any())
@@ -171,7 +172,8 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       transfer,
       blockManager,
       blocksByAddress,
-      48 * 1024 * 1024)
+      48 * 1024 * 1024,
+      Int.MaxValue)
 
     verify(blocks(ShuffleBlockId(0, 0, 0)), times(0)).release()
     iterator.next()._2.close() // close() first block's input stream
@@ -233,7 +235,8 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       transfer,
       blockManager,
       blocksByAddress,
-      48 * 1024 * 1024)
+      48 * 1024 * 1024,
+      Int.MaxValue)
 
     // Continue only after the mock calls onBlockFetchFailure
     sem.acquire()

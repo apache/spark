@@ -36,6 +36,7 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.net.ConnectException;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.regex.Pattern;
@@ -82,7 +83,7 @@ public class JavaCustomReceiver extends Receiver<String> {
     JavaPairDStream<String, Integer> wordCounts = words.mapToPair(
       new PairFunction<String, String, Integer>() {
         @Override public Tuple2<String, Integer> call(String s) {
-          return new Tuple2<String, Integer>(s, 1);
+          return new Tuple2<>(s, 1);
         }
       }).reduceByKey(new Function2<Integer, Integer, Integer>() {
         @Override
@@ -130,7 +131,8 @@ public class JavaCustomReceiver extends Receiver<String> {
       try {
         // connect to the server
         socket = new Socket(host, port);
-        reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+        reader = new BufferedReader(
+            new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
         // Until stopped or connection broken continue reading
         while (!isStopped() && (userInput = reader.readLine()) != null) {
           System.out.println("Received data '" + userInput + "'");

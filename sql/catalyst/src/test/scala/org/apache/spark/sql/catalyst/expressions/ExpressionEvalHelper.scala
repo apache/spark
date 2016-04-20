@@ -24,9 +24,10 @@ import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.optimizer.DefaultOptimizer
+import org.apache.spark.sql.catalyst.optimizer.SimpleTestOptimizer
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
 import org.apache.spark.sql.types.DataType
+import org.apache.spark.util.Utils
 
 /**
  * A few helper functions for expression evaluation testing. Mixin this trait to use them.
@@ -82,7 +83,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
           s"""
             |Code generation of $expression failed:
             |$e
-            |${e.getStackTraceString}
+            |${Utils.exceptionString(e)}
           """.stripMargin)
     }
   }
@@ -152,7 +153,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
       expected: Any,
       inputRow: InternalRow = EmptyRow): Unit = {
     val plan = Project(Alias(expression, s"Optimized($expression)")() :: Nil, OneRowRelation)
-    val optimizedPlan = DefaultOptimizer.execute(plan)
+    val optimizedPlan = SimpleTestOptimizer.execute(plan)
     checkEvaluationWithoutCodegen(optimizedPlan.expressions.head, expected, inputRow)
   }
 

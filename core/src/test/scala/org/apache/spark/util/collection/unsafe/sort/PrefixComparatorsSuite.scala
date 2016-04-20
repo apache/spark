@@ -17,6 +17,8 @@
 
 package org.apache.spark.util.collection.unsafe.sort
 
+import java.nio.charset.StandardCharsets
+
 import com.google.common.primitives.UnsignedBytes
 import org.scalatest.prop.PropertyChecks
 
@@ -87,10 +89,12 @@ class PrefixComparatorsSuite extends SparkFunSuite with PropertyChecks {
     // scalastyle:on
 
     forAll (regressionTests) { (s1: String, s2: String) =>
-      testPrefixComparison(s1.getBytes("UTF-8"), s2.getBytes("UTF-8"))
+      testPrefixComparison(
+        s1.getBytes(StandardCharsets.UTF_8), s2.getBytes(StandardCharsets.UTF_8))
     }
     forAll { (s1: String, s2: String) =>
-      testPrefixComparison(s1.getBytes("UTF-8"), s2.getBytes("UTF-8"))
+      testPrefixComparison(
+        s1.getBytes(StandardCharsets.UTF_8), s2.getBytes(StandardCharsets.UTF_8))
     }
   }
 

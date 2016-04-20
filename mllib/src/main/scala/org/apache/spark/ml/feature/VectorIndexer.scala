@@ -31,7 +31,7 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, VectorUDT}
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.types.{StructField, StructType}
 import org.apache.spark.util.collection.OpenHashSet
@@ -108,12 +108,13 @@ class VectorIndexer(override val uid: String) extends Estimator[VectorIndexerMod
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
-  override def fit(dataset: DataFrame): VectorIndexerModel = {
+  @Since("2.0.0")
+  override def fit(dataset: Dataset[_]): VectorIndexerModel = {
     transformSchema(dataset.schema, logging = true)
     val firstRow = dataset.select($(inputCol)).take(1)
     require(firstRow.length == 1, s"VectorIndexer cannot be fit on an empty dataset.")
     val numFeatures = firstRow(0).getAs[Vector](0).size
-    val vectorDataset = dataset.select($(inputCol)).map { case Row(v: Vector) => v }
+    val vectorDataset = dataset.select($(inputCol)).rdd.map { case Row(v: Vector) => v }
     val maxCats = $(maxCategories)
     val categoryStats: VectorIndexer.CategoryStats = vectorDataset.mapPartitions { iter =>
       val localCatStats = new VectorIndexer.CategoryStats(numFeatures, maxCats)
@@ -126,7 +127,6 @@ class VectorIndexer(override val uid: String) extends Estimator[VectorIndexerMod
   }
 
   override def transformSchema(schema: StructType): StructType = {
-    validateParams()
     // We do not transfer feature metadata since we do not know what types of features we will
     // produce in transform().
     val dataType = new VectorUDT
@@ -346,7 +346,8 @@ class VectorIndexerModel private[ml] (
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
-  override def transform(dataset: DataFrame): DataFrame = {
+  @Since("2.0.0")
+  override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     val newField = prepOutputField(dataset.schema)
     val transformUDF = udf { (vector: Vector) => transformFunc(vector) }
@@ -355,7 +356,6 @@ class VectorIndexerModel private[ml] (
   }
 
   override def transformSchema(schema: StructType): StructType = {
-    validateParams()
     val dataType = new VectorUDT
     require(isDefined(inputCol),
       s"VectorIndexerModel requires input column parameter: $inputCol")

@@ -23,6 +23,7 @@ import scala.util.Try
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.Utils
@@ -118,7 +119,7 @@ case class ExceptionFailure(
     description: String,
     stackTrace: Array[StackTraceElement],
     fullStackTrace: String,
-    exceptionWrapper: Option[ThrowableSerializationWrapper],
+    private val exceptionWrapper: Option[ThrowableSerializationWrapper],
     accumUpdates: Seq[AccumulableInfo] = Seq.empty[AccumulableInfo])
   extends TaskFailedReason {
 
@@ -148,9 +149,7 @@ case class ExceptionFailure(
     this(e, accumUpdates, preserveCause = true)
   }
 
-  def exception: Option[Throwable] = exceptionWrapper.flatMap {
-    (w: ThrowableSerializationWrapper) => Option(w.exception)
-  }
+  def exception: Option[Throwable] = exceptionWrapper.flatMap(w => Option(w.exception))
 
   override def toErrorString: String =
     if (fullStackTrace == null) {
@@ -248,7 +247,6 @@ case class ExecutorLostFailure(
     } else {
       "unrelated to the running tasks"
     }
-    s"ExecutorLostFailure (executor ${execId} exited due to an issue ${exitBehavior})"
     s"ExecutorLostFailure (executor ${execId} exited ${exitBehavior})" +
       reason.map { r => s" Reason: $r" }.getOrElse("")
   }

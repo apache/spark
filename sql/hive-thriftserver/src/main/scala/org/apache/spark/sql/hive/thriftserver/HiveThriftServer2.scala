@@ -29,13 +29,14 @@ import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hive.service.cli.thrift.{ThriftBinaryCLIService, ThriftHttpCLIService}
 import org.apache.hive.service.server.{HiveServer2, HiveServerServerOptionsProcessor}
 
-import org.apache.spark.{Logging, SparkContext}
+import org.apache.spark.SparkContext
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd, SparkListenerJobStart}
-import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 import org.apache.spark.sql.hive.thriftserver.ui.ThriftServerTab
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 
 /**
@@ -54,7 +55,7 @@ object HiveThriftServer2 extends Logging {
   @DeveloperApi
   def startWithContext(sqlContext: HiveContext): Unit = {
     val server = new HiveThriftServer2(sqlContext)
-    server.init(sqlContext.hiveconf)
+    server.init(sqlContext.sessionState.hiveconf)
     server.start()
     listener = new HiveThriftServer2Listener(server, sqlContext.conf)
     sqlContext.sparkContext.addSparkListener(listener)
@@ -82,7 +83,7 @@ object HiveThriftServer2 extends Logging {
 
     try {
       val server = new HiveThriftServer2(SparkSQLEnv.hiveContext)
-      server.init(SparkSQLEnv.hiveContext.hiveconf)
+      server.init(SparkSQLEnv.hiveContext.sessionState.hiveconf)
       server.start()
       logInfo("HiveThriftServer2 started")
       listener = new HiveThriftServer2Listener(server, SparkSQLEnv.hiveContext.conf)

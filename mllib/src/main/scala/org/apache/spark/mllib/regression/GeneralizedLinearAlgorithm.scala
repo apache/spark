@@ -17,8 +17,9 @@
 
 package org.apache.spark.mllib.regression
 
-import org.apache.spark.{Logging, SparkException}
+import org.apache.spark.SparkException
 import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.feature.StandardScaler
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.optimization._
@@ -350,7 +351,7 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
           val partialWeightsArray = scaler.transform(
             Vectors.dense(weightsArray.slice(start, end))).toArray
 
-          System.arraycopy(partialWeightsArray, 0, weightsArray, start, partialWeightsArray.size)
+          System.arraycopy(partialWeightsArray, 0, weightsArray, start, partialWeightsArray.length)
           i += 1
         }
         weights = Vectors.dense(weightsArray)

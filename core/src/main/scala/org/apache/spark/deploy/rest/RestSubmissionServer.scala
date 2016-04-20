@@ -29,7 +29,8 @@ import org.eclipse.jetty.util.thread.QueuedThreadPool
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.{Logging, SPARK_VERSION => sparkVersion, SparkConf}
+import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf}
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
 /**
