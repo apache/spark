@@ -25,8 +25,7 @@ export("setJobGroup",
        "cancelJobGroup")
 
 # Export Utility methods
-export("version",
-       "setLogLevel")
+export("setLogLevel")
 
 exportClasses("DataFrame")
 

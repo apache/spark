@@ -226,19 +226,6 @@ setCheckpointDir <- function(sc, dirName) {
   invisible(callJMethod(sc, "setCheckpointDir", suppressWarnings(normalizePath(dirName))))
 }
 
-#' Get Spark Version
-#'
-#' Get Spark Version
-#' @param sc existing spark context
-#' @examples
-#'\dontrun{
-#' version(sc)
-#'}
-
-version <- function(sc) {
-  callJMethod(sc, "version")
-}
-
 #' Set new log level
 #'
 #' Set new log level: "ALL", "DEBUG", "ERROR", "FATAL", "INFO", "OFF", "TRACE", "WARN"
