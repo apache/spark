@@ -586,7 +586,7 @@ class SparseVector(Vector):
         new_s = s[ind_start + 1: ind_end]
         ind_list = new_s.split(',')
         try:
-            indices = [int(ind) for ind in ind_list if val]
+            indices = [int(ind) for ind in ind_list if ind]
         except ValueError:
             raise ValueError("Unable to parse indices from %s." % new_s)
         s = s[ind_end + 1:].strip()
