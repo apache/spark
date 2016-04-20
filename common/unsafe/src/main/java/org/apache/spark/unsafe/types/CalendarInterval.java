@@ -318,7 +318,7 @@ public final class CalendarInterval implements Serializable {
 
   private void appendUnit(StringBuilder sb, long value, String unit) {
     if (value != 0) {
-      sb.append(" ").append(value).append(" ").append(unit).append("s");
+      sb.append(' ').append(value).append(' ').append(unit).append('s');
     }
   }
 }
