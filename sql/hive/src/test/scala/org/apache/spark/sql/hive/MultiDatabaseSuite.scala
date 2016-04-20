@@ -25,8 +25,9 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
   private lazy val df = sqlContext.range(10).coalesce(1).toDF()
 
   private def checkTablePath(dbName: String, tableName: String): Unit = {
-    val metastoreTable = hiveContext.hiveCatalog.getTable(dbName, tableName)
-    val expectedPath = hiveContext.hiveCatalog.getDatabase(dbName).locationUri + "/" + tableName
+    val metastoreTable = hiveContext.sharedState.externalCatalog.getTable(dbName, tableName)
+    val expectedPath =
+      hiveContext.sharedState.externalCatalog.getDatabase(dbName).locationUri + "/" + tableName
 
     assert(metastoreTable.storage.serdeProperties("path") === expectedPath)
   }
@@ -216,7 +217,7 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
 
           df.write.parquet(s"$path/p=2")
           sql("ALTER TABLE t ADD PARTITION (p=2)")
-          hiveContext.refreshTable("t")
+          hiveContext.sessionState.refreshTable("t")
           checkAnswer(
             sqlContext.table("t"),
             df.withColumn("p", lit(1)).union(df.withColumn("p", lit(2))))
@@ -248,7 +249,7 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
 
         df.write.parquet(s"$path/p=2")
         sql(s"ALTER TABLE $db.t ADD PARTITION (p=2)")
-        hiveContext.refreshTable(s"$db.t")
+        hiveContext.sessionState.refreshTable(s"$db.t")
         checkAnswer(
           sqlContext.table(s"$db.t"),
           df.withColumn("p", lit(1)).union(df.withColumn("p", lit(2))))

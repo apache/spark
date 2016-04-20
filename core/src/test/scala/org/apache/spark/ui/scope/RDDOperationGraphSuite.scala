@@ -15,16 +15,23 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.ui.scope
 
-import org.scalatest.BeforeAndAfterAll
+import org.apache.spark.SparkFunSuite
 
-class HashShuffleSuite extends ShuffleSuite with BeforeAndAfterAll {
+class RDDOperationGraphSuite extends SparkFunSuite {
+  test("Test simple cluster equals") {
+    // create a 2-cluster chain with a child
+    val c1 = new RDDOperationCluster("1", "Bender")
+    val c2 = new RDDOperationCluster("2", "Hal")
+    c1.attachChildCluster(c2)
+    c1.attachChildNode(new RDDOperationNode(3, "Marvin", false, "collect!"))
 
-  // This test suite should run all tests in ShuffleSuite with hash-based shuffle.
+    // create an equal cluster, but without the child node
+    val c1copy = new RDDOperationCluster("1", "Bender")
+    val c2copy = new RDDOperationCluster("2", "Hal")
+    c1copy.attachChildCluster(c2copy)
 
-  override def beforeAll() {
-    super.beforeAll()
-    conf.set("spark.shuffle.manager", "hash")
+    assert(c1 == c1copy)
   }
 }

@@ -245,6 +245,10 @@ package object dsl {
       def struct(attrs: AttributeReference*): AttributeReference =
         struct(StructType.fromAttributes(attrs))
 
+      /** Creates a new AttributeReference of object type */
+      def obj(cls: Class[_]): AttributeReference =
+        AttributeReference(s, ObjectType(cls), nullable = true)()
+
       /** Create a function. */
       def function(exprs: Expression*): UnresolvedFunction =
         UnresolvedFunction(s, exprs, isDistinct = false)
