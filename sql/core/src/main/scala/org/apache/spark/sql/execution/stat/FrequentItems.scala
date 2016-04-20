@@ -19,10 +19,10 @@ package org.apache.spark.sql.execution.stat
 
 import scala.collection.mutable.{Map => MutableMap}
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{Row, Column, DataFrame}
 
 private[sql] object FrequentItems extends Logging {
 
@@ -121,6 +121,6 @@ private[sql] object FrequentItems extends Logging {
       StructField(v._1 + "_freqItems", ArrayType(v._2, false))
     }
     val schema = StructType(outputCols).toAttributes
-    new DataFrame(df.sqlContext, LocalRelation.fromExternalRows(schema, Seq(resultRow)))
+    Dataset.ofRows(df.sqlContext, LocalRelation.fromExternalRows(schema, Seq(resultRow)))
   }
 }

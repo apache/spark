@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Optimization - MLlib
-displayTitle: <a href="mllib-guide.html">MLlib</a> - Optimization
+title: Optimization - spark.mllib
+displayTitle: Optimization - spark.mllib
 ---
 
 * Table of contents
@@ -87,7 +87,7 @@ in the `$t$`-th iteration, with the input parameter `$s=$ stepSize`. Note that s
 step-size for SGD methods can often be delicate in practice and is a topic of active research.
 
 **Gradients.**
-A table of (sub)gradients of the machine learning methods implemented in MLlib, is available in
+A table of (sub)gradients of the machine learning methods implemented in `spark.mllib`, is available in
 the <a href="mllib-classification-regression.html">classification and regression</a> section.
 
 
@@ -140,7 +140,7 @@ other first-order optimization.
 
 ### Choosing an Optimization Method
 
-[Linear methods](mllib-linear-methods.html) use optimization internally, and some linear methods in MLlib support both SGD and L-BFGS.
+[Linear methods](mllib-linear-methods.html) use optimization internally, and some linear methods in `spark.mllib` support both SGD and L-BFGS.
 Different optimization methods can have different convergence guarantees depending on the properties of the objective function, and we cannot cover the literature here.
 In general, when L-BFGS is available, we recommend using it instead of SGD since L-BFGS tends to converge faster (in fewer iterations).
 

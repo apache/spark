@@ -18,13 +18,20 @@
 package org.apache.spark.streaming
 
 import scala.collection.{immutable, mutable, Map}
+import scala.reflect.ClassTag
 import scala.util.Random
 
-import org.apache.spark.SparkFunSuite
+import com.esotericsoftware.kryo.{Kryo, KryoSerializable}
+import com.esotericsoftware.kryo.io.{Input, Output}
+
+import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.serializer._
+import org.apache.spark.streaming.rdd.MapWithStateRDDRecord
 import org.apache.spark.streaming.util.{EmptyStateMap, OpenHashMapBasedStateMap, StateMap}
-import org.apache.spark.util.Utils
 
 class StateMapSuite extends SparkFunSuite {
+
+  private val conf = new SparkConf()
 
   test("EmptyStateMap") {
     val map = new EmptyStateMap[Int, Int]
@@ -122,23 +129,27 @@ class StateMapSuite extends SparkFunSuite {
 
   test("OpenHashMapBasedStateMap - serializing and deserializing") {
     val map1 = new OpenHashMapBasedStateMap[Int, Int]()
+    testSerialization(map1, "error deserializing and serialized empty map")
+
     map1.put(1, 100, 1)
     map1.put(2, 200, 2)
+    testSerialization(map1, "error deserializing and serialized map with data + no delta")
 
-    val map2 = map1.copy()
+    val map2 = map1.copy().asInstanceOf[OpenHashMapBasedStateMap[Int, Int]]
+    // Do not test compaction
+    assert(map2.shouldCompact === false)
+    testSerialization(map2, "error deserializing and serialized map with 1 delta + no new data")
+
     map2.put(3, 300, 3)
     map2.put(4, 400, 4)
+    testSerialization(map2, "error deserializing and serialized map with 1 delta + new data")
 
-    val map3 = map2.copy()
+    val map3 = map2.copy().asInstanceOf[OpenHashMapBasedStateMap[Int, Int]]
+    assert(map3.shouldCompact === false)
+    testSerialization(map3, "error deserializing and serialized map with 2 delta + no new data")
     map3.put(3, 600, 3)
     map3.remove(2)
-
-    // Do not test compaction
-    assert(map3.asInstanceOf[OpenHashMapBasedStateMap[_, _]].shouldCompact === false)
-
-    val deser_map3 = Utils.deserialize[StateMap[Int, Int]](
-      Utils.serialize(map3), Thread.currentThread().getContextClassLoader)
-    assertMap(deser_map3, map3, 1, "Deserialized map not same as original map")
+    testSerialization(map3, "error deserializing and serialized map with 2 delta + new data")
   }
 
   test("OpenHashMapBasedStateMap - serializing and deserializing with compaction") {
@@ -156,11 +167,9 @@ class StateMapSuite extends SparkFunSuite {
     assert(map.deltaChainLength > deltaChainThreshold)
     assert(map.shouldCompact === true)
 
-    val deser_map = Utils.deserialize[OpenHashMapBasedStateMap[Int, Int]](
-      Utils.serialize(map), Thread.currentThread().getContextClassLoader)
+    val deser_map = testSerialization(map, "Deserialized + compacted map not same as original map")
     assert(deser_map.deltaChainLength < deltaChainThreshold)
     assert(deser_map.shouldCompact === false)
-    assertMap(deser_map, map, 1, "Deserialized + compacted map not same as original map")
   }
 
   test("OpenHashMapBasedStateMap - all possible sequences of operations with copies ") {
@@ -173,7 +182,7 @@ class StateMapSuite extends SparkFunSuite {
      *
      * - These operations are done on a test map in "sets". After each set, the map is "copied"
      *   to create a new map, and the next set of operations are done on the new one. This tests
-     *   whether the map data persistes correctly across copies.
+     *   whether the map data persist correctly across copies.
      *
      * - Within each set, there are a number of operations to test whether the map correctly
      *   updates and removes data without affecting the parent state map.
@@ -265,10 +274,25 @@ class StateMapSuite extends SparkFunSuite {
     assertMap(stateMap, refMap.toMap, time, "Final state map does not match reference map")
   }
 
+  private def testSerialization[T: ClassTag](
+      map: OpenHashMapBasedStateMap[T, T], msg: String): OpenHashMapBasedStateMap[T, T] = {
+    testSerialization(new JavaSerializer(conf), map, msg)
+    testSerialization(new KryoSerializer(conf), map, msg)
+  }
+
+  private def testSerialization[T: ClassTag](
+      serializer: Serializer,
+      map: OpenHashMapBasedStateMap[T, T],
+      msg: String): OpenHashMapBasedStateMap[T, T] = {
+    val deserMap = serializeAndDeserialize(serializer, map)
+    assertMap(deserMap, map, 1, msg)
+    deserMap
+  }
+
   // Assert whether all the data and operations on a state map matches that of a reference state map
-  private def assertMap(
-      mapToTest: StateMap[Int, Int],
-      refMapToTestWith: StateMap[Int, Int],
+  private def assertMap[T](
+      mapToTest: StateMap[T, T],
+      refMapToTestWith: StateMap[T, T],
       time: Long,
       msg: String): Unit = {
     withClue(msg) {
@@ -310,5 +334,60 @@ class StateMapSuite extends SparkFunSuite {
         assert(mapToTest.getByTime(t).toSet ===  expectedRecords.toSet)
       }
     }
+  }
+
+  test("OpenHashMapBasedStateMap - serializing and deserializing with KryoSerializable states") {
+    val map = new OpenHashMapBasedStateMap[KryoState, KryoState]()
+    map.put(new KryoState("a"), new KryoState("b"), 1)
+    testSerialization(
+      new KryoSerializer(conf), map, "error deserializing and serialized KryoSerializable states")
+  }
+
+  test("EmptyStateMap - serializing and deserializing") {
+    val map = StateMap.empty[KryoState, KryoState]
+    // Since EmptyStateMap doesn't contains any date, KryoState won't break JavaSerializer.
+    assert(serializeAndDeserialize(new JavaSerializer(conf), map).
+      isInstanceOf[EmptyStateMap[KryoState, KryoState]])
+    assert(serializeAndDeserialize(new KryoSerializer(conf), map).
+      isInstanceOf[EmptyStateMap[KryoState, KryoState]])
+  }
+
+  test("MapWithStateRDDRecord - serializing and deserializing with KryoSerializable states") {
+    val map = new OpenHashMapBasedStateMap[KryoState, KryoState]()
+    map.put(new KryoState("a"), new KryoState("b"), 1)
+
+    val record =
+      MapWithStateRDDRecord[KryoState, KryoState, KryoState](map, Seq(new KryoState("c")))
+    val deserRecord = serializeAndDeserialize(new KryoSerializer(conf), record)
+    assert(!(record eq deserRecord))
+    assert(record.stateMap.getAll().toSeq === deserRecord.stateMap.getAll().toSeq)
+    assert(record.mappedData === deserRecord.mappedData)
+  }
+
+  private def serializeAndDeserialize[T: ClassTag](serializer: Serializer, t: T): T = {
+    val serializerInstance = serializer.newInstance()
+    serializerInstance.deserialize[T](
+      serializerInstance.serialize(t), Thread.currentThread().getContextClassLoader)
+  }
+}
+
+/** A class that only supports Kryo serialization. */
+private[streaming] final class KryoState(var state: String) extends KryoSerializable {
+
+  override def write(kryo: Kryo, output: Output): Unit = {
+    kryo.writeClassAndObject(output, state)
+  }
+
+  override def read(kryo: Kryo, input: Input): Unit = {
+    state = kryo.readClassAndObject(input).asInstanceOf[String]
+  }
+
+  override def equals(other: Any): Boolean = other match {
+    case that: KryoState => state == that.state
+    case _ => false
+  }
+
+  override def hashCode(): Int = {
+    if (state == null) 0 else state.hashCode()
   }
 }

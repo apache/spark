@@ -17,14 +17,20 @@
 
 package org.apache.spark.mllib.util
 
-import org.scalatest.{BeforeAndAfterAll, Suite}
+import java.io.File
+
+import org.apache.hadoop.fs.Path
+import org.scalatest.Suite
 
 import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.ml.util.TempDirectory
 import org.apache.spark.sql.SQLContext
+import org.apache.spark.util.Utils
 
-trait MLlibTestSparkContext extends BeforeAndAfterAll { self: Suite =>
+trait MLlibTestSparkContext extends TempDirectory { self: Suite =>
   @transient var sc: SparkContext = _
   @transient var sqlContext: SQLContext = _
+  @transient var checkpointDir: String = _
 
   override def beforeAll() {
     super.beforeAll()
@@ -32,15 +38,24 @@ trait MLlibTestSparkContext extends BeforeAndAfterAll { self: Suite =>
       .setMaster("local[2]")
       .setAppName("MLlibUnitTest")
     sc = new SparkContext(conf)
+    SQLContext.clearActive()
     sqlContext = new SQLContext(sc)
+    SQLContext.setActive(sqlContext)
+    checkpointDir = Utils.createDirectory(tempDir.getCanonicalPath, "checkpoints").toString
+    sc.setCheckpointDir(checkpointDir)
   }
 
   override def afterAll() {
-    sqlContext = null
-    if (sc != null) {
-      sc.stop()
+    try {
+      Utils.deleteRecursively(new File(checkpointDir))
+      sqlContext = null
+      SQLContext.clearActive()
+      if (sc != null) {
+        sc.stop()
+      }
+      sc = null
+    } finally {
+      super.afterAll()
     }
-    sc = null
-    super.afterAll()
   }
 }

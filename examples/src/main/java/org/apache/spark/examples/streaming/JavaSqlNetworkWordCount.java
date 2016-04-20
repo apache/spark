@@ -17,18 +17,19 @@
 
 package org.apache.spark.examples.streaming;
 
+import java.util.Arrays;
+import java.util.Iterator;
 import java.util.regex.Pattern;
-
-import com.google.common.collect.Lists;
 
 import org.apache.spark.SparkConf;
 import org.apache.spark.SparkContext;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.function.FlatMapFunction;
 import org.apache.spark.api.java.function.Function;
-import org.apache.spark.api.java.function.Function2;
+import org.apache.spark.api.java.function.VoidFunction2;
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
-import org.apache.spark.sql.DataFrame;
 import org.apache.spark.api.java.StorageLevels;
 import org.apache.spark.streaming.Durations;
 import org.apache.spark.streaming.Time;
@@ -72,36 +73,36 @@ public final class JavaSqlNetworkWordCount {
         args[0], Integer.parseInt(args[1]), StorageLevels.MEMORY_AND_DISK_SER);
     JavaDStream<String> words = lines.flatMap(new FlatMapFunction<String, String>() {
       @Override
-      public Iterable<String> call(String x) {
-        return Lists.newArrayList(SPACE.split(x));
+      public Iterator<String> call(String x) {
+        return Arrays.asList(SPACE.split(x)).iterator();
       }
     });
 
     // Convert RDDs of the words DStream to DataFrame and run SQL query
-    words.foreachRDD(new Function2<JavaRDD<String>, Time, Void>() {
+    words.foreachRDD(new VoidFunction2<JavaRDD<String>, Time>() {
       @Override
-      public Void call(JavaRDD<String> rdd, Time time) {
+      public void call(JavaRDD<String> rdd, Time time) {
         SQLContext sqlContext = JavaSQLContextSingleton.getInstance(rdd.context());
 
         // Convert JavaRDD[String] to JavaRDD[bean class] to DataFrame
         JavaRDD<JavaRecord> rowRDD = rdd.map(new Function<String, JavaRecord>() {
+          @Override
           public JavaRecord call(String word) {
             JavaRecord record = new JavaRecord();
             record.setWord(word);
             return record;
           }
         });
-        DataFrame wordsDataFrame = sqlContext.createDataFrame(rowRDD, JavaRecord.class);
+        Dataset<Row> wordsDataFrame = sqlContext.createDataFrame(rowRDD, JavaRecord.class);
 
         // Register as table
         wordsDataFrame.registerTempTable("words");
 
         // Do word count on table using SQL and print it
-        DataFrame wordCountsDataFrame =
+        Dataset<Row> wordCountsDataFrame =
             sqlContext.sql("select word, count(*) as total from words group by word");
         System.out.println("========= " + time + "=========");
         wordCountsDataFrame.show();
-        return null;
       }
     });
 
@@ -112,8 +113,8 @@ public final class JavaSqlNetworkWordCount {
 
 /** Lazily instantiated singleton instance of SQLContext */
 class JavaSQLContextSingleton {
-  static private transient SQLContext instance = null;
-  static public SQLContext getInstance(SparkContext sparkContext) {
+  private static transient SQLContext instance = null;
+  public static SQLContext getInstance(SparkContext sparkContext) {
     if (instance == null) {
       instance = new SQLContext(sparkContext);
     }

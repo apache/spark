@@ -18,12 +18,14 @@
 package org.apache.spark.streaming;
 
 import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.function.VoidFunction;
 import org.apache.spark.streaming.api.java.JavaDStream;
 import org.apache.spark.streaming.api.java.JavaReceiverInputDStream;
 import org.apache.spark.streaming.api.java.JavaStreamingContext;
-import static org.junit.Assert.*;
 
+import com.google.common.io.Closeables;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -36,6 +38,7 @@ import java.io.InputStreamReader;
 import java.io.Serializable;
 import java.net.ConnectException;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class JavaReceiverAPISuite implements Serializable {
@@ -67,12 +70,11 @@ public class JavaReceiverAPISuite implements Serializable {
           return v1 + ".";
         }
       });
-      mapped.foreachRDD(new Function<JavaRDD<String>, Void>() {
+      mapped.foreachRDD(new VoidFunction<JavaRDD<String>>() {
         @Override
-        public Void call(JavaRDD<String> rdd) {
+        public void call(JavaRDD<String> rdd) {
           long count = rdd.count();
           dataCounter.addAndGet(count);
-          return null;
         }
       });
 
@@ -89,7 +91,7 @@ public class JavaReceiverAPISuite implements Serializable {
         Thread.sleep(100);
       }
       ssc.stop();
-      assertTrue(dataCounter.get() > 0);
+      Assert.assertTrue(dataCounter.get() > 0);
     } finally {
       server.stop();
     }
@@ -97,8 +99,8 @@ public class JavaReceiverAPISuite implements Serializable {
 
   private static class JavaSocketReceiver extends Receiver<String> {
 
-    String host = null;
-    int port = -1;
+    private String host = null;
+    private int port = -1;
 
     JavaSocketReceiver(String host_ , int port_) {
       super(StorageLevel.MEMORY_AND_DISK());
@@ -121,14 +123,20 @@ public class JavaReceiverAPISuite implements Serializable {
 
     private void receive() {
       try {
-        Socket socket = new Socket(host, port);
-        BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-        String userInput;
-        while ((userInput = in.readLine()) != null) {
-          store(userInput);
+        Socket socket = null;
+        BufferedReader in = null;
+        try {
+          socket = new Socket(host, port);
+          in = new BufferedReader(
+              new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
+          String userInput;
+          while ((userInput = in.readLine()) != null) {
+            store(userInput);
+          }
+        } finally {
+          Closeables.close(in, /* swallowIOException = */ true);
+          Closeables.close(socket,  /* swallowIOException = */ true);
         }
-        in.close();
-        socket.close();
       } catch(ConnectException ce) {
         ce.printStackTrace();
         restart("Could not connect", ce);

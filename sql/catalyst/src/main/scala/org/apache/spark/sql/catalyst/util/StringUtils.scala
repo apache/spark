@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import java.util.regex.Pattern
+import java.util.regex.{Pattern, PatternSyntaxException}
 
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -52,4 +52,25 @@ object StringUtils {
 
   def isTrueString(s: UTF8String): Boolean = trueStrings.contains(s.toLowerCase)
   def isFalseString(s: UTF8String): Boolean = falseStrings.contains(s.toLowerCase)
+
+  /**
+   * This utility can be used for filtering pattern in the "Like" of "Show Tables / Functions" DDL
+   * @param names the names list to be filtered
+   * @param pattern the filter pattern, only '*' and '|' are allowed as wildcards, others will
+   *                follow regular expression convention, case insensitive match and white spaces
+   *                on both ends will be ignored
+   * @return the filtered names list in order
+   */
+  def filterPattern(names: Seq[String], pattern: String): Seq[String] = {
+    val funcNames = scala.collection.mutable.SortedSet.empty[String]
+    pattern.trim().split("\\|").foreach { subPattern =>
+      try {
+        val regex = ("(?i)" + subPattern.replaceAll("\\*", ".*")).r
+        funcNames ++= names.filter{ name => regex.pattern.matcher(name).matches() }
+      } catch {
+        case _: PatternSyntaxException =>
+      }
+    }
+    funcNames.toSeq
+  }
 }

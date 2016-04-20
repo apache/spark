@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.expressions
 
 import scala.collection.mutable
 
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+
 /**
  * This class is used to compute equality of (sub)expression trees. Expressions can be added
  * to this class and they subsequently query for expression equality. Expression trees are
@@ -29,29 +31,27 @@ class EquivalentExpressions {
    * Wrapper around an Expression that provides semantic equality.
    */
   case class Expr(e: Expression) {
-    val hash = e.semanticHash()
     override def equals(o: Any): Boolean = o match {
       case other: Expr => e.semanticEquals(other.e)
       case _ => false
     }
-    override def hashCode: Int = hash
+    override val hashCode: Int = e.semanticHash()
   }
 
   // For each expression, the set of equivalent expressions.
-  private val equivalenceMap: mutable.HashMap[Expr, mutable.MutableList[Expression]] =
-      new mutable.HashMap[Expr, mutable.MutableList[Expression]]
+  private val equivalenceMap = mutable.HashMap.empty[Expr, mutable.MutableList[Expression]]
 
   /**
    * Adds each expression to this data structure, grouping them with existing equivalent
    * expressions. Non-recursive.
-   * Returns if there was already a matching expression.
+   * Returns true if there was already a matching expression.
    */
   def addExpr(expr: Expression): Boolean = {
     if (expr.deterministic) {
       val e: Expr = Expr(expr)
       val f = equivalenceMap.get(e)
       if (f.isDefined) {
-        f.get.+= (expr)
+        f.get += expr
         true
       } else {
         equivalenceMap.put(e, mutable.MutableList(expr))
@@ -63,23 +63,33 @@ class EquivalentExpressions {
   }
 
   /**
-   * Adds the expression to this datastructure recursively. Stops if a matching expression
+   * Adds the expression to this data structure recursively. Stops if a matching expression
    * is found. That is, if `expr` has already been added, its children are not added.
    * If ignoreLeaf is true, leaf nodes are ignored.
    */
   def addExprTree(root: Expression, ignoreLeaf: Boolean = true): Unit = {
     val skip = root.isInstanceOf[LeafExpression] && ignoreLeaf
-    if (!skip && root.deterministic && !addExpr(root)) {
-     root.children.foreach(addExprTree(_, ignoreLeaf))
+    // There are some special expressions that we should not recurse into children.
+    //   1. CodegenFallback: it's children will not be used to generate code (call eval() instead)
+    //   2. ReferenceToExpressions: it's kind of an explicit sub-expression elimination.
+    val shouldRecurse = root match {
+      // TODO: some expressions implements `CodegenFallback` but can still do codegen,
+      // e.g. `CaseWhen`, we should support them.
+      case _: CodegenFallback => false
+      case _: ReferenceToExpressions => false
+      case _ => true
+    }
+    if (!skip && !addExpr(root) && shouldRecurse) {
+      root.children.foreach(addExprTree(_, ignoreLeaf))
     }
   }
 
   /**
-   * Returns all fo the expression trees that are equivalent to `e`. Returns
+   * Returns all of the expression trees that are equivalent to `e`. Returns
    * an empty collection if there are none.
    */
   def getEquivalentExprs(e: Expression): Seq[Expression] = {
-    equivalenceMap.get(Expr(e)).getOrElse(mutable.MutableList())
+    equivalenceMap.getOrElse(Expr(e), mutable.MutableList())
   }
 
   /**
@@ -90,17 +100,17 @@ class EquivalentExpressions {
   }
 
   /**
-   * Returns the state of the datastructure as a string. If all is false, skips sets of equivalent
-   * expressions with cardinality 1.
+   * Returns the state of the data structure as a string. If `all` is false, skips sets of
+   * equivalent expressions with cardinality 1.
    */
   def debugString(all: Boolean = false): String = {
     val sb: mutable.StringBuilder = new StringBuilder()
     sb.append("Equivalent expressions:\n")
-    equivalenceMap.foreach { case (k, v) => {
+    equivalenceMap.foreach { case (k, v) =>
       if (all || v.length > 1) {
         sb.append("  " + v.mkString(", ")).append("\n")
       }
-    }}
+    }
     sb.toString()
   }
 }

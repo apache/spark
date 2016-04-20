@@ -17,24 +17,24 @@
 
 package org.apache.spark.scheduler
 
-import java.io.{ByteArrayOutputStream, DataInputStream, DataOutputStream}
+import java.io.{DataInputStream, DataOutputStream}
 import java.nio.ByteBuffer
+import java.util.Properties
 
 import scala.collection.mutable.HashMap
 
-import org.apache.spark.metrics.MetricsSystem
-import org.apache.spark.{Accumulator, SparkEnv, TaskContextImpl, TaskContext}
+import org.apache.spark.{Accumulator, SparkEnv, TaskContext, TaskContextImpl}
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.memory.TaskMemoryManager
+import org.apache.spark.memory.{MemoryMode, TaskMemoryManager}
+import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.serializer.SerializerInstance
-import org.apache.spark.util.ByteBufferInputStream
-import org.apache.spark.util.Utils
-
+import org.apache.spark.util.{ByteBufferInputStream, ByteBufferOutputStream, Utils}
 
 /**
  * A unit of execution. We have two kinds of Task's in Spark:
- * - [[org.apache.spark.scheduler.ShuffleMapTask]]
- * - [[org.apache.spark.scheduler.ResultTask]]
+ *
+ *  - [[org.apache.spark.scheduler.ShuffleMapTask]]
+ *  - [[org.apache.spark.scheduler.ResultTask]]
  *
  * A Spark job consists of one or more stages. The very last stage in a job consists of multiple
  * ResultTasks, while earlier stages consist of ShuffleMapTasks. A ResultTask executes the task
@@ -42,56 +42,72 @@ import org.apache.spark.util.Utils
  * and divides the task output to multiple buckets (based on the task's partitioner).
  *
  * @param stageId id of the stage this task belongs to
+ * @param stageAttemptId attempt id of the stage this task belongs to
  * @param partitionId index of the number in the RDD
+ * @param initialAccumulators initial set of accumulators to be used in this task for tracking
+ *                            internal metrics. Other accumulators will be registered later when
+ *                            they are deserialized on the executors.
+ * @param localProperties copy of thread-local properties set by the user on the driver side.
  */
 private[spark] abstract class Task[T](
     val stageId: Int,
     val stageAttemptId: Int,
     val partitionId: Int,
-    internalAccumulators: Seq[Accumulator[Long]]) extends Serializable {
+    val initialAccumulators: Seq[Accumulator[_]],
+    @transient var localProperties: Properties) extends Serializable {
 
   /**
-   * The key of the Map is the accumulator id and the value of the Map is the latest accumulator
-   * local value.
-   */
-  type AccumulatorUpdates = Map[Long, Any]
-
-  /**
-   * Called by [[Executor]] to run this task.
+   * Called by [[org.apache.spark.executor.Executor]] to run this task.
    *
    * @param taskAttemptId an identifier for this task attempt that is unique within a SparkContext.
    * @param attemptNumber how many times this task has been attempted (0 for the first attempt)
    * @return the result of the task along with updates of Accumulators.
    */
   final def run(
-    taskAttemptId: Long,
-    attemptNumber: Int,
-    metricsSystem: MetricsSystem)
-  : (T, AccumulatorUpdates) = {
+      taskAttemptId: Long,
+      attemptNumber: Int,
+      metricsSystem: MetricsSystem): T = {
+    SparkEnv.get.blockManager.registerTask(taskAttemptId)
     context = new TaskContextImpl(
       stageId,
       partitionId,
       taskAttemptId,
       attemptNumber,
       taskMemoryManager,
+      localProperties,
       metricsSystem,
-      internalAccumulators,
-      runningLocally = false)
+      initialAccumulators)
     TaskContext.setTaskContext(context)
-    context.taskMetrics.setHostname(Utils.localHostName())
-    context.taskMetrics.setAccumulatorsUpdater(context.collectInternalAccumulators)
     taskThread = Thread.currentThread()
     if (_killed) {
       kill(interruptThread = false)
     }
     try {
-      (runTask(context), context.collectAccumulators())
+      runTask(context)
+    } catch {
+      case e: Throwable =>
+        // Catch all errors; run task failure callbacks, and rethrow the exception.
+        try {
+          context.markTaskFailed(e)
+        } catch {
+          case t: Throwable =>
+            e.addSuppressed(t)
+        }
+        throw e
     } finally {
+      // Call the task completion callbacks.
       context.markTaskCompleted()
       try {
         Utils.tryLogNonFatalError {
           // Release memory used by this thread for unrolling blocks
-          SparkEnv.get.blockManager.memoryStore.releaseUnrollMemoryForThisTask()
+          SparkEnv.get.blockManager.memoryStore.releaseUnrollMemoryForThisTask(MemoryMode.ON_HEAP)
+          SparkEnv.get.blockManager.memoryStore.releaseUnrollMemoryForThisTask(MemoryMode.OFF_HEAP)
+          // Notify any tasks waiting for execution memory to be freed to wake up and try to
+          // acquire memory again. This makes impossible the scenario where a task sleeps forever
+          // because there are no other tasks left to notify it. Since this is safe to do but may
+          // not be strictly necessary, we should revisit whether we can remove this in the future.
+          val memoryManager = SparkEnv.get.memoryManager
+          memoryManager.synchronized { memoryManager.notifyAll() }
         }
       } finally {
         TaskContext.unset()
@@ -137,6 +153,18 @@ private[spark] abstract class Task[T](
   def executorDeserializeTime: Long = _executorDeserializeTime
 
   /**
+   * Collect the latest values of accumulators used in this task. If the task failed,
+   * filter out the accumulators whose values should not be included on failures.
+   */
+  def collectAccumulatorUpdates(taskFailed: Boolean = false): Seq[AccumulableInfo] = {
+    if (context != null) {
+      context.taskMetrics.accumulatorUpdates().filter { a => !taskFailed || a.countFailedValues }
+    } else {
+      Seq.empty[AccumulableInfo]
+    }
+  }
+
+  /**
    * Kills a task by setting the interrupted flag to true. This relies on the upper level Spark
    * code and user code to properly handle the flag. This function should be idempotent so it can
    * be called multiple times.
@@ -171,7 +199,7 @@ private[spark] object Task {
       serializer: SerializerInstance)
     : ByteBuffer = {
 
-    val out = new ByteArrayOutputStream(4096)
+    val out = new ByteBufferOutputStream(4096)
     val dataOut = new DataOutputStream(out)
 
     // Write currentFiles
@@ -188,11 +216,16 @@ private[spark] object Task {
       dataOut.writeLong(timestamp)
     }
 
+    // Write the task properties separately so it is available before full task deserialization.
+    val propBytes = Utils.serialize(task.localProperties)
+    dataOut.writeInt(propBytes.length)
+    dataOut.write(propBytes)
+
     // Write the task itself and finish
     dataOut.flush()
-    val taskBytes = serializer.serialize(task).array()
-    out.write(taskBytes)
-    ByteBuffer.wrap(out.toByteArray)
+    val taskBytes = serializer.serialize(task)
+    Utils.writeByteBuffer(taskBytes, out)
+    out.toByteBuffer
   }
 
   /**
@@ -203,7 +236,7 @@ private[spark] object Task {
    * @return (taskFiles, taskJars, taskBytes)
    */
   def deserializeWithDependencies(serializedTask: ByteBuffer)
-    : (HashMap[String, Long], HashMap[String, Long], ByteBuffer) = {
+    : (HashMap[String, Long], HashMap[String, Long], Properties, ByteBuffer) = {
 
     val in = new ByteBufferInputStream(serializedTask)
     val dataIn = new DataInputStream(in)
@@ -222,8 +255,13 @@ private[spark] object Task {
       taskJars(dataIn.readUTF()) = dataIn.readLong()
     }
 
+    val propLength = dataIn.readInt()
+    val propBytes = new Array[Byte](propLength)
+    dataIn.readFully(propBytes, 0, propLength)
+    val taskProps = Utils.deserialize[Properties](propBytes)
+
     // Create a sub-buffer for the rest of the data, which is the serialized Task object
     val subBuffer = serializedTask.slice()  // ByteBufferInputStream will have read just up to task
-    (taskFiles, taskJars, subBuffer)
+    (taskFiles, taskJars, taskProps, subBuffer)
   }
 }

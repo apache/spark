@@ -17,8 +17,7 @@
 
 package org.apache.spark.shuffle
 
-import org.apache.spark.{ShuffleDependency, Aggregator, Partitioner}
-import org.apache.spark.serializer.Serializer
+import org.apache.spark.ShuffleDependency
 
 /**
  * A basic ShuffleHandle implementation that just captures registerShuffle's parameters.

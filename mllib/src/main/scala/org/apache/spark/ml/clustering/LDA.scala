@@ -17,19 +17,22 @@
 
 package org.apache.spark.ml.clustering
 
-import org.apache.spark.Logging
-import org.apache.spark.annotation.{Experimental, Since}
-import org.apache.spark.ml.util.{SchemaUtils, Identifiable}
+import org.apache.hadoop.fs.{FileSystem, Path}
+
+import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
+import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.param.shared.{HasCheckpointInterval, HasFeaturesCol, HasSeed, HasMaxIter}
 import org.apache.spark.ml.param._
+import org.apache.spark.ml.param.shared.{HasCheckpointInterval, HasFeaturesCol, HasMaxIter, HasSeed}
+import org.apache.spark.ml.util._
 import org.apache.spark.mllib.clustering.{DistributedLDAModel => OldDistributedLDAModel,
-    EMLDAOptimizer => OldEMLDAOptimizer, LDA => OldLDA, LDAModel => OldLDAModel,
-    LDAOptimizer => OldLDAOptimizer, LocalLDAModel => OldLocalLDAModel,
-    OnlineLDAOptimizer => OldOnlineLDAOptimizer}
-import org.apache.spark.mllib.linalg.{VectorUDT, Vectors, Matrix, Vector}
+  EMLDAOptimizer => OldEMLDAOptimizer, LDA => OldLDA, LDAModel => OldLDAModel,
+  LDAOptimizer => OldLDAOptimizer, LocalLDAModel => OldLocalLDAModel,
+  OnlineLDAOptimizer => OldOnlineLDAOptimizer}
+import org.apache.spark.mllib.impl.PeriodicCheckpointer
+import org.apache.spark.mllib.linalg.{Matrix, Vector, Vectors, VectorUDT}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{SQLContext, DataFrame, Row}
+import org.apache.spark.sql.{DataFrame, Dataset, Row, SQLContext}
 import org.apache.spark.sql.functions.{col, monotonicallyIncreasingId, udf}
 import org.apache.spark.sql.types.StructType
 
@@ -39,6 +42,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
 
   /**
    * Param for the number of topics (clusters) to infer. Must be > 1. Default: 10.
+   *
    * @group param
    */
   @Since("1.6.0")
@@ -171,10 +175,11 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    * This uses a variational approximation following Hoffman et al. (2010), where the approximate
    * distribution is called "gamma."  Technically, this method returns this approximation "gamma"
    * for each document.
+   *
    * @group param
    */
   @Since("1.6.0")
-  final val topicDistributionCol = new Param[String](this, "topicDistribution", "Output column" +
+  final val topicDistributionCol = new Param[String](this, "topicDistributionCol", "Output column" +
     " with estimates of the topic mixture distribution for each document (often called \"theta\"" +
     " in the literature).  Returns a vector of zeros for an empty document.")
 
@@ -185,15 +190,19 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
   def getTopicDistributionCol: String = $(topicDistributionCol)
 
   /**
+   * For Online optimizer only: [[optimizer]] = "online".
+   *
    * A (positive) learning parameter that downweights early iterations. Larger values make early
    * iterations count less.
    * This is called "tau0" in the Online LDA paper (Hoffman et al., 2010)
    * Default: 1024, following Hoffman et al.
+   *
    * @group expertParam
    */
   @Since("1.6.0")
-  final val learningOffset = new DoubleParam(this, "learningOffset", "A (positive) learning" +
-    " parameter that downweights early iterations. Larger values make early iterations count less.",
+  final val learningOffset = new DoubleParam(this, "learningOffset", "(For online optimizer)" +
+    " A (positive) learning parameter that downweights early iterations. Larger values make early" +
+    " iterations count less.",
     ParamValidators.gt(0))
 
   /** @group expertGetParam */
@@ -201,22 +210,27 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
   def getLearningOffset: Double = $(learningOffset)
 
   /**
+   * For Online optimizer only: [[optimizer]] = "online".
+   *
    * Learning rate, set as an exponential decay rate.
    * This should be between (0.5, 1.0] to guarantee asymptotic convergence.
    * This is called "kappa" in the Online LDA paper (Hoffman et al., 2010).
    * Default: 0.51, based on Hoffman et al.
+   *
    * @group expertParam
    */
   @Since("1.6.0")
-  final val learningDecay = new DoubleParam(this, "learningDecay", "Learning rate, set as an" +
-    " exponential decay rate. This should be between (0.5, 1.0] to guarantee asymptotic" +
-    " convergence.", ParamValidators.gt(0))
+  final val learningDecay = new DoubleParam(this, "learningDecay", "(For online optimizer)" +
+    " Learning rate, set as an exponential decay rate. This should be between (0.5, 1.0] to" +
+    " guarantee asymptotic convergence.", ParamValidators.gt(0))
 
   /** @group expertGetParam */
   @Since("1.6.0")
   def getLearningDecay: Double = $(learningDecay)
 
   /**
+   * For Online optimizer only: [[optimizer]] = "online".
+   *
    * Fraction of the corpus to be sampled and used in each iteration of mini-batch gradient descent,
    * in range (0, 1].
    *
@@ -228,11 +242,13 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    *       [[org.apache.spark.mllib.clustering.OnlineLDAOptimizer]].
    *
    * Default: 0.05, i.e., 5% of total documents.
+   *
    * @group param
    */
   @Since("1.6.0")
-  final val subsamplingRate = new DoubleParam(this, "subsamplingRate", "Fraction of the corpus" +
-    " to be sampled and used in each iteration of mini-batch gradient descent, in range (0, 1].",
+  final val subsamplingRate = new DoubleParam(this, "subsamplingRate", "(For online optimizer)" +
+    " Fraction of the corpus to be sampled and used in each iteration of mini-batch" +
+    " gradient descent, in range (0, 1].",
     ParamValidators.inRange(0.0, 1.0, lowerInclusive = false, upperInclusive = true))
 
   /** @group getParam */
@@ -240,33 +256,56 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
   def getSubsamplingRate: Double = $(subsamplingRate)
 
   /**
+   * For Online optimizer only (currently): [[optimizer]] = "online".
+   *
    * Indicates whether the docConcentration (Dirichlet parameter for
    * document-topic distribution) will be optimized during training.
    * Setting this to true will make the model more expressive and fit the training data better.
    * Default: false
+   *
    * @group expertParam
    */
   @Since("1.6.0")
   final val optimizeDocConcentration = new BooleanParam(this, "optimizeDocConcentration",
-    "Indicates whether the docConcentration (Dirichlet parameter for document-topic" +
-      " distribution) will be optimized during training.")
+    "(For online optimizer only, currently) Indicates whether the docConcentration" +
+      " (Dirichlet parameter for document-topic distribution) will be optimized during training.")
 
   /** @group expertGetParam */
   @Since("1.6.0")
   def getOptimizeDocConcentration: Boolean = $(optimizeDocConcentration)
 
   /**
+   * For EM optimizer only: [[optimizer]] = "em".
+   *
+   * If using checkpointing, this indicates whether to keep the last
+   * checkpoint. If false, then the checkpoint will be deleted. Deleting the checkpoint can
+   * cause failures if a data partition is lost, so set this bit with care.
+   * Note that checkpoints will be cleaned up via reference counting, regardless.
+   *
+   * See [[DistributedLDAModel.getCheckpointFiles]] for getting remaining checkpoints and
+   * [[DistributedLDAModel.deleteCheckpointFiles]] for removing remaining checkpoints.
+   *
+   * Default: true
+   *
+   * @group expertParam
+   */
+  @Since("2.0.0")
+  final val keepLastCheckpoint = new BooleanParam(this, "keepLastCheckpoint",
+    "(For EM optimizer) If using checkpointing, this indicates whether to keep the last" +
+      " checkpoint. If false, then the checkpoint will be deleted. Deleting the checkpoint can" +
+      " cause failures if a data partition is lost, so set this bit with care.")
+
+  /** @group expertGetParam */
+  @Since("2.0.0")
+  def getKeepLastCheckpoint: Boolean = $(keepLastCheckpoint)
+
+  /**
    * Validates and transforms the input schema.
+   *
    * @param schema input schema
    * @return output schema
    */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
-    SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
-    SchemaUtils.appendColumn(schema, $(topicDistributionCol), new VectorUDT)
-  }
-
-  @Since("1.6.0")
-  override def validateParams(): Unit = {
     if (isSet(docConcentration)) {
       if (getDocConcentration.length != 1) {
         require(getDocConcentration.length == getK, s"LDA docConcentration was of length" +
@@ -294,6 +333,8 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
             s" must be >= 1.  Found value: $getTopicConcentration")
       }
     }
+    SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
+    SchemaUtils.appendColumn(schema, $(topicDistributionCol), new VectorUDT)
   }
 
   private[clustering] def getOldOptimizer: OldLDAOptimizer = getOptimizer match {
@@ -305,6 +346,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
         .setOptimizeDocConcentration($(optimizeDocConcentration))
     case "em" =>
       new OldEMLDAOptimizer()
+        .setKeepLastCheckpoint($(keepLastCheckpoint))
   }
 }
 
@@ -314,35 +356,36 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
  * Model fitted by [[LDA]].
  *
  * @param vocabSize  Vocabulary size (number of terms or terms in the vocabulary)
- * @param oldLocalModel  Underlying spark.mllib model.
- *                       If this model was produced by Online LDA, then this is the
- *                       only model representation.
- *                       If this model was produced by EM, then this local
- *                       representation may be built lazily.
  * @param sqlContext  Used to construct local DataFrames for returning query results
  */
 @Since("1.6.0")
 @Experimental
-class LDAModel private[ml] (
+sealed abstract class LDAModel private[ml] (
     @Since("1.6.0") override val uid: String,
     @Since("1.6.0") val vocabSize: Int,
-    @Since("1.6.0") protected var oldLocalModel: Option[OldLocalLDAModel],
     @Since("1.6.0") @transient protected val sqlContext: SQLContext)
-  extends Model[LDAModel] with LDAParams with Logging {
+  extends Model[LDAModel] with LDAParams with Logging with MLWritable {
 
-  /** Returns underlying spark.mllib model */
+  // NOTE to developers:
+  //  This abstraction should contain all important functionality for basic LDA usage.
+  //  Specializations of this class can contain expert-only functionality.
+
+  /**
+   * Underlying spark.mllib model.
+   * If this model was produced by Online LDA, then this is the only model representation.
+   * If this model was produced by EM, then this local representation may be built lazily.
+   */
   @Since("1.6.0")
-  protected def getModel: OldLDAModel = oldLocalModel match {
-    case Some(m) => m
-    case None =>
-      // Should never happen.
-      throw new RuntimeException("LDAModel required local model format," +
-        " but the underlying model is missing.")
-  }
+  protected def oldLocalModel: OldLocalLDAModel
+
+  /** Returns underlying spark.mllib model, which may be local or distributed */
+  @Since("1.6.0")
+  protected def getModel: OldLDAModel
 
   /**
    * The features for LDA should be a [[Vector]] representing the word counts in a document.
    * The vector should be of length vocabSize, with counts for each term (word).
+   *
    * @group setParam
    */
   @Since("1.6.0")
@@ -352,21 +395,22 @@ class LDAModel private[ml] (
   @Since("1.6.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
-  @Since("1.6.0")
-  override def copy(extra: ParamMap): LDAModel = {
-    val copied = new LDAModel(uid, vocabSize, oldLocalModel, sqlContext)
-    copyValues(copied, extra).setParent(parent)
-  }
-
-  @Since("1.6.0")
-  override def transform(dataset: DataFrame): DataFrame = {
+  /**
+   * Transforms the input dataset.
+   *
+   * WARNING: If this model is an instance of [[DistributedLDAModel]] (produced when [[optimizer]]
+   *          is set to "em"), this involves collecting a large [[topicsMatrix]] to the driver.
+   *          This implementation may be changed in the future.
+   */
+  @Since("2.0.0")
+  override def transform(dataset: Dataset[_]): DataFrame = {
     if ($(topicDistributionCol).nonEmpty) {
-      val t = udf(oldLocalModel.get.getTopicDistributionMethod(sqlContext.sparkContext))
-      dataset.withColumn($(topicDistributionCol), t(col($(featuresCol))))
+      val t = udf(oldLocalModel.getTopicDistributionMethod(sqlContext.sparkContext))
+      dataset.withColumn($(topicDistributionCol), t(col($(featuresCol)))).toDF
     } else {
       logWarning("LDAModel.transform was called without any output columns. Set an output column" +
         " such as topicDistributionCol to produce results.")
-      dataset
+      dataset.toDF
     }
   }
 
@@ -388,56 +432,50 @@ class LDAModel private[ml] (
    * This is a matrix of size vocabSize x k, where each column is a topic.
    * No guarantees are given about the ordering of the topics.
    *
-   * WARNING: If this model is actually a [[DistributedLDAModel]] instance from EM,
-   *          then this method could involve collecting a large amount of data to the driver
-   *          (on the order of vocabSize x k).
+   * WARNING: If this model is actually a [[DistributedLDAModel]] instance produced by
+   *          the Expectation-Maximization ("em") [[optimizer]], then this method could involve
+   *          collecting a large amount of data to the driver (on the order of vocabSize x k).
    */
   @Since("1.6.0")
-  def topicsMatrix: Matrix = getModel.topicsMatrix
+  def topicsMatrix: Matrix = oldLocalModel.topicsMatrix
 
   /** Indicates whether this instance is of type [[DistributedLDAModel]] */
   @Since("1.6.0")
-  def isDistributed: Boolean = false
+  def isDistributed: Boolean
 
   /**
    * Calculates a lower bound on the log likelihood of the entire corpus.
    *
    * See Equation (16) in the Online LDA paper (Hoffman et al., 2010).
    *
-   * WARNING: If this model was learned via a [[DistributedLDAModel]], this involves collecting
-   *          a large [[topicsMatrix]] to the driver.  This implementation may be changed in the
-   *          future.
+   * WARNING: If this model is an instance of [[DistributedLDAModel]] (produced when [[optimizer]]
+   *          is set to "em"), this involves collecting a large [[topicsMatrix]] to the driver.
+   *          This implementation may be changed in the future.
    *
    * @param dataset  test corpus to use for calculating log likelihood
    * @return variational lower bound on the log likelihood of the entire corpus
    */
-  @Since("1.6.0")
-  def logLikelihood(dataset: DataFrame): Double = oldLocalModel match {
-    case Some(m) =>
-      val oldDataset = LDA.getOldDataset(dataset, $(featuresCol))
-      m.logLikelihood(oldDataset)
-    case None =>
-      // Should never happen.
-      throw new RuntimeException("LocalLDAModel.logLikelihood was called," +
-        " but the underlying model is missing.")
+  @Since("2.0.0")
+  def logLikelihood(dataset: Dataset[_]): Double = {
+    val oldDataset = LDA.getOldDataset(dataset, $(featuresCol))
+    oldLocalModel.logLikelihood(oldDataset)
   }
 
   /**
    * Calculate an upper bound bound on perplexity.  (Lower is better.)
    * See Equation (16) in the Online LDA paper (Hoffman et al., 2010).
    *
+   * WARNING: If this model is an instance of [[DistributedLDAModel]] (produced when [[optimizer]]
+   *          is set to "em"), this involves collecting a large [[topicsMatrix]] to the driver.
+   *          This implementation may be changed in the future.
+   *
    * @param dataset test corpus to use for calculating perplexity
    * @return Variational upper bound on log perplexity per token.
    */
-  @Since("1.6.0")
-  def logPerplexity(dataset: DataFrame): Double = oldLocalModel match {
-    case Some(m) =>
-      val oldDataset = LDA.getOldDataset(dataset, $(featuresCol))
-      m.logPerplexity(oldDataset)
-    case None =>
-      // Should never happen.
-      throw new RuntimeException("LocalLDAModel.logPerplexity was called," +
-        " but the underlying model is missing.")
+  @Since("2.0.0")
+  def logPerplexity(dataset: Dataset[_]): Double = {
+    val oldDataset = LDA.getOldDataset(dataset, $(featuresCol))
+    oldLocalModel.logPerplexity(oldDataset)
   }
 
   /**
@@ -468,10 +506,101 @@ class LDAModel private[ml] (
 /**
  * :: Experimental ::
  *
- * Distributed model fitted by [[LDA]] using Expectation-Maximization (EM).
+ * Local (non-distributed) model fitted by [[LDA]].
+ *
+ * This model stores the inferred topics only; it does not store info about the training dataset.
+ */
+@Since("1.6.0")
+@Experimental
+class LocalLDAModel private[ml] (
+    uid: String,
+    vocabSize: Int,
+    @Since("1.6.0") override protected val oldLocalModel: OldLocalLDAModel,
+    sqlContext: SQLContext)
+  extends LDAModel(uid, vocabSize, sqlContext) {
+
+  @Since("1.6.0")
+  override def copy(extra: ParamMap): LocalLDAModel = {
+    val copied = new LocalLDAModel(uid, vocabSize, oldLocalModel, sqlContext)
+    copyValues(copied, extra).setParent(parent).asInstanceOf[LocalLDAModel]
+  }
+
+  override protected def getModel: OldLDAModel = oldLocalModel
+
+  @Since("1.6.0")
+  override def isDistributed: Boolean = false
+
+  @Since("1.6.0")
+  override def write: MLWriter = new LocalLDAModel.LocalLDAModelWriter(this)
+}
+
+
+@Since("1.6.0")
+object LocalLDAModel extends MLReadable[LocalLDAModel] {
+
+  private[LocalLDAModel]
+  class LocalLDAModelWriter(instance: LocalLDAModel) extends MLWriter {
+
+    private case class Data(
+        vocabSize: Int,
+        topicsMatrix: Matrix,
+        docConcentration: Vector,
+        topicConcentration: Double,
+        gammaShape: Double)
+
+    override protected def saveImpl(path: String): Unit = {
+      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      val oldModel = instance.oldLocalModel
+      val data = Data(instance.vocabSize, oldModel.topicsMatrix, oldModel.docConcentration,
+        oldModel.topicConcentration, oldModel.gammaShape)
+      val dataPath = new Path(path, "data").toString
+      sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+    }
+  }
+
+  private class LocalLDAModelReader extends MLReader[LocalLDAModel] {
+
+    private val className = classOf[LocalLDAModel].getName
+
+    override def load(path: String): LocalLDAModel = {
+      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val dataPath = new Path(path, "data").toString
+      val data = sqlContext.read.parquet(dataPath)
+        .select("vocabSize", "topicsMatrix", "docConcentration", "topicConcentration",
+          "gammaShape")
+        .head()
+      val vocabSize = data.getAs[Int](0)
+      val topicsMatrix = data.getAs[Matrix](1)
+      val docConcentration = data.getAs[Vector](2)
+      val topicConcentration = data.getAs[Double](3)
+      val gammaShape = data.getAs[Double](4)
+      val oldModel = new OldLocalLDAModel(topicsMatrix, docConcentration, topicConcentration,
+        gammaShape)
+      val model = new LocalLDAModel(metadata.uid, vocabSize, oldModel, sqlContext)
+      DefaultParamsReader.getAndSetParams(model, metadata)
+      model
+    }
+  }
+
+  @Since("1.6.0")
+  override def read: MLReader[LocalLDAModel] = new LocalLDAModelReader
+
+  @Since("1.6.0")
+  override def load(path: String): LocalLDAModel = super.load(path)
+}
+
+
+/**
+ * :: Experimental ::
+ *
+ * Distributed model fitted by [[LDA]].
+ * This type of model is currently only produced by Expectation-Maximization (EM).
  *
  * This model stores the inferred topics, the full training dataset, and the topic distribution
  * for each training document.
+ *
+ * @param oldLocalModelOption  Used to implement [[oldLocalModel]] as a lazy val, but keeping
+ *                             [[copy()]] cheap.
  */
 @Since("1.6.0")
 @Experimental
@@ -479,58 +608,38 @@ class DistributedLDAModel private[ml] (
     uid: String,
     vocabSize: Int,
     private val oldDistributedModel: OldDistributedLDAModel,
-    sqlContext: SQLContext)
-  extends LDAModel(uid, vocabSize, None, sqlContext) {
+    sqlContext: SQLContext,
+    private var oldLocalModelOption: Option[OldLocalLDAModel])
+  extends LDAModel(uid, vocabSize, sqlContext) {
+
+  override protected def oldLocalModel: OldLocalLDAModel = {
+    if (oldLocalModelOption.isEmpty) {
+      oldLocalModelOption = Some(oldDistributedModel.toLocal)
+    }
+    oldLocalModelOption.get
+  }
+
+  override protected def getModel: OldLDAModel = oldDistributedModel
 
   /**
    * Convert this distributed model to a local representation.  This discards info about the
    * training dataset.
+   *
+   * WARNING: This involves collecting a large [[topicsMatrix]] to the driver.
    */
   @Since("1.6.0")
-  def toLocal: LDAModel = {
-    if (oldLocalModel.isEmpty) {
-      oldLocalModel = Some(oldDistributedModel.toLocal)
-    }
-    new LDAModel(uid, vocabSize, oldLocalModel, sqlContext)
-  }
-
-  @Since("1.6.0")
-  override protected def getModel: OldLDAModel = oldDistributedModel
+  def toLocal: LocalLDAModel = new LocalLDAModel(uid, vocabSize, oldLocalModel, sqlContext)
 
   @Since("1.6.0")
   override def copy(extra: ParamMap): DistributedLDAModel = {
-    val copied = new DistributedLDAModel(uid, vocabSize, oldDistributedModel, sqlContext)
-    if (oldLocalModel.nonEmpty) copied.oldLocalModel = oldLocalModel
+    val copied =
+      new DistributedLDAModel(uid, vocabSize, oldDistributedModel, sqlContext, oldLocalModelOption)
     copyValues(copied, extra).setParent(parent)
     copied
   }
 
   @Since("1.6.0")
-  override def topicsMatrix: Matrix = {
-    if (oldLocalModel.isEmpty) {
-      oldLocalModel = Some(oldDistributedModel.toLocal)
-    }
-    super.topicsMatrix
-  }
-
-  @Since("1.6.0")
   override def isDistributed: Boolean = true
-
-  @Since("1.6.0")
-  override def logLikelihood(dataset: DataFrame): Double = {
-    if (oldLocalModel.isEmpty) {
-      oldLocalModel = Some(oldDistributedModel.toLocal)
-    }
-    super.logLikelihood(dataset)
-  }
-
-  @Since("1.6.0")
-  override def logPerplexity(dataset: DataFrame): Double = {
-    if (oldLocalModel.isEmpty) {
-      oldLocalModel = Some(oldDistributedModel.toLocal)
-    }
-    super.logPerplexity(dataset)
-  }
 
   /**
    * Log likelihood of the observed tokens in the training set,
@@ -554,6 +663,74 @@ class DistributedLDAModel private[ml] (
    */
   @Since("1.6.0")
   lazy val logPrior: Double = oldDistributedModel.logPrior
+
+  private var _checkpointFiles: Array[String] = oldDistributedModel.checkpointFiles
+
+  /**
+   * If using checkpointing and [[LDA.keepLastCheckpoint]] is set to true, then there may be
+   * saved checkpoint files.  This method is provided so that users can manage those files.
+   *
+   * Note that removing the checkpoints can cause failures if a partition is lost and is needed
+   * by certain [[DistributedLDAModel]] methods.  Reference counting will clean up the checkpoints
+   * when this model and derivative data go out of scope.
+   *
+   * @return  Checkpoint files from training
+   */
+  @DeveloperApi
+  @Since("2.0.0")
+  def getCheckpointFiles: Array[String] = _checkpointFiles
+
+  /**
+   * Remove any remaining checkpoint files from training.
+   *
+   * @see [[getCheckpointFiles]]
+   */
+  @DeveloperApi
+  @Since("2.0.0")
+  def deleteCheckpointFiles(): Unit = {
+    val fs = FileSystem.get(sqlContext.sparkContext.hadoopConfiguration)
+    _checkpointFiles.foreach(PeriodicCheckpointer.removeCheckpointFile(_, fs))
+    _checkpointFiles = Array.empty[String]
+  }
+
+  @Since("1.6.0")
+  override def write: MLWriter = new DistributedLDAModel.DistributedWriter(this)
+}
+
+
+@Since("1.6.0")
+object DistributedLDAModel extends MLReadable[DistributedLDAModel] {
+
+  private[DistributedLDAModel]
+  class DistributedWriter(instance: DistributedLDAModel) extends MLWriter {
+
+    override protected def saveImpl(path: String): Unit = {
+      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      val modelPath = new Path(path, "oldModel").toString
+      instance.oldDistributedModel.save(sc, modelPath)
+    }
+  }
+
+  private class DistributedLDAModelReader extends MLReader[DistributedLDAModel] {
+
+    private val className = classOf[DistributedLDAModel].getName
+
+    override def load(path: String): DistributedLDAModel = {
+      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val modelPath = new Path(path, "oldModel").toString
+      val oldModel = OldDistributedLDAModel.load(sc, modelPath)
+      val model = new DistributedLDAModel(
+        metadata.uid, oldModel.vocabSize, oldModel, sqlContext, None)
+      DefaultParamsReader.getAndSetParams(model, metadata)
+      model
+    }
+  }
+
+  @Since("1.6.0")
+  override def read: MLReader[DistributedLDAModel] = new DistributedLDAModelReader
+
+  @Since("1.6.0")
+  override def load(path: String): DistributedLDAModel = super.load(path)
 }
 
 
@@ -585,18 +762,20 @@ class DistributedLDAModel private[ml] (
 @Since("1.6.0")
 @Experimental
 class LDA @Since("1.6.0") (
-    @Since("1.6.0") override val uid: String) extends Estimator[LDAModel] with LDAParams {
+    @Since("1.6.0") override val uid: String)
+  extends Estimator[LDAModel] with LDAParams with DefaultParamsWritable {
 
   @Since("1.6.0")
   def this() = this(Identifiable.randomUID("lda"))
 
   setDefault(maxIter -> 20, k -> 10, optimizer -> "online", checkpointInterval -> 10,
     learningOffset -> 1024, learningDecay -> 0.51, subsamplingRate -> 0.05,
-    optimizeDocConcentration -> true)
+    optimizeDocConcentration -> true, keepLastCheckpoint -> true)
 
   /**
    * The features for LDA should be a [[Vector]] representing the word counts in a document.
    * The vector should be of length vocabSize, with counts for each term (word).
+   *
    * @group setParam
    */
   @Since("1.6.0")
@@ -654,11 +833,15 @@ class LDA @Since("1.6.0") (
   @Since("1.6.0")
   def setOptimizeDocConcentration(value: Boolean): this.type = set(optimizeDocConcentration, value)
 
+  /** @group expertSetParam */
+  @Since("2.0.0")
+  def setKeepLastCheckpoint(value: Boolean): this.type = set(keepLastCheckpoint, value)
+
   @Since("1.6.0")
   override def copy(extra: ParamMap): LDA = defaultCopy(extra)
 
-  @Since("1.6.0")
-  override def fit(dataset: DataFrame): LDAModel = {
+  @Since("2.0.0")
+  override def fit(dataset: Dataset[_]): LDAModel = {
     transformSchema(dataset.schema, logging = true)
     val oldLDA = new OldLDA()
       .setK($(k))
@@ -673,9 +856,9 @@ class LDA @Since("1.6.0") (
     val oldModel = oldLDA.run(oldData)
     val newModel = oldModel match {
       case m: OldLocalLDAModel =>
-        new LDAModel(uid, m.vocabSize, Some(m), dataset.sqlContext)
+        new LocalLDAModel(uid, m.vocabSize, m, dataset.sqlContext)
       case m: OldDistributedLDAModel =>
-        new DistributedLDAModel(uid, m.vocabSize, m, dataset.sqlContext)
+        new DistributedLDAModel(uid, m.vocabSize, m, dataset.sqlContext, None)
     }
     copyValues(newModel).setParent(this)
   }
@@ -687,15 +870,19 @@ class LDA @Since("1.6.0") (
 }
 
 
-private[clustering] object LDA {
+private[clustering] object LDA extends DefaultParamsReadable[LDA] {
 
   /** Get dataset for spark.mllib LDA */
-  def getOldDataset(dataset: DataFrame, featuresCol: String): RDD[(Long, Vector)] = {
+  def getOldDataset(dataset: Dataset[_], featuresCol: String): RDD[(Long, Vector)] = {
     dataset
       .withColumn("docId", monotonicallyIncreasingId())
       .select("docId", featuresCol)
+      .rdd
       .map { case Row(docId: Long, features: Vector) =>
         (docId, features)
       }
   }
+
+  @Since("1.6.0")
+  override def load(path: String): LDA = super.load(path)
 }

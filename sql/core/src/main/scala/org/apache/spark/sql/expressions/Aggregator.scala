@@ -17,69 +17,91 @@
 
 package org.apache.spark.sql.expressions
 
-import org.apache.spark.sql.catalyst.encoders.{encoderFor, Encoder}
+import org.apache.spark.sql.{Dataset, Encoder, TypedColumn}
+import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete}
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
-import org.apache.spark.sql.{Dataset, DataFrame, TypedColumn}
 
 /**
- * A base class for user-defined aggregations, which can be used in [[DataFrame]] and [[Dataset]]
- * operations to take all of the elements of a group and reduce them to a single value.
+ * A base class for user-defined aggregations, which can be used in [[Dataset]] operations to take
+ * all of the elements of a group and reduce them to a single value.
  *
  * For example, the following aggregator extracts an `int` from a specific class and adds them up:
  * {{{
  *   case class Data(i: Int)
  *
  *   val customSummer =  new Aggregator[Data, Int, Int] {
- *     def zero = 0
- *     def reduce(b: Int, a: Data) = b + a.i
- *     def present(r: Int) = r
+ *     def zero: Int = 0
+ *     def reduce(b: Int, a: Data): Int = b + a.i
+ *     def merge(b1: Int, b2: Int): Int = b1 + b2
+ *     def finish(r: Int): Int = r
  *   }.toColumn()
  *
- *   val ds: Dataset[Data]
+ *   val ds: Dataset[Data] = ...
  *   val aggregated = ds.select(customSummer)
  * }}}
  *
  * Based loosely on Aggregator from Algebird: https://github.com/twitter/algebird
  *
- * @tparam A The input type for the aggregation.
- * @tparam B The type of the intermediate value of the reduction.
- * @tparam C The type of the final result.
+ * @tparam IN The input type for the aggregation.
+ * @tparam BUF The type of the intermediate value of the reduction.
+ * @tparam OUT The type of the final output result.
+ * @since 1.6.0
  */
-abstract class Aggregator[-A, B, C] {
+abstract class Aggregator[-IN, BUF, OUT] extends Serializable {
 
-  /** A zero value for this aggregation. Should satisfy the property that any b + zero = b */
-  def zero: B
+  /**
+   * A zero value for this aggregation. Should satisfy the property that any b + zero = b.
+   * @since 1.6.0
+   */
+  def zero: BUF
 
   /**
    * Combine two values to produce a new value.  For performance, the function may modify `b` and
    * return it instead of constructing new object for b.
+   * @since 1.6.0
    */
-  def reduce(b: B, a: A): B
+  def reduce(b: BUF, a: IN): BUF
 
   /**
-   * Merge two intermediate values
+   * Merge two intermediate values.
+   * @since 1.6.0
    */
-  def merge(b1: B, b2: B): B
+  def merge(b1: BUF, b2: BUF): BUF
 
   /**
    * Transform the output of the reduction.
+   * @since 1.6.0
    */
-  def present(reduction: B): C
+  def finish(reduction: BUF): OUT
 
   /**
-   * Returns this `Aggregator` as a [[TypedColumn]] that can be used in [[Dataset]] or [[DataFrame]]
-   * operations.
+   * Specifies the [[Encoder]] for the intermediate value type.
+   * @since 2.0.0
    */
-  def toColumn(
-      implicit bEncoder: Encoder[B],
-      cEncoder: Encoder[C]): TypedColumn[A, C] = {
+  def bufferEncoder: Encoder[BUF]
+
+  /**
+   * Specifies the [[Encoder]] for the final ouput value type.
+   * @since 2.0.0
+   */
+  def outputEncoder: Encoder[OUT]
+
+  /**
+   * Returns this `Aggregator` as a [[TypedColumn]] that can be used in [[Dataset]].
+   * operations.
+   * @since 1.6.0
+   */
+  def toColumn: TypedColumn[IN, OUT] = {
+    implicit val bEncoder = bufferEncoder
+    implicit val cEncoder = outputEncoder
+
     val expr =
-      new AggregateExpression(
+      AggregateExpression(
         TypedAggregateExpression(this),
         Complete,
-        false)
+        isDistinct = false)
 
-    new TypedColumn[A, C](expr, encoderFor[C])
+    new TypedColumn[IN, OUT](expr, encoderFor[OUT])
   }
 }

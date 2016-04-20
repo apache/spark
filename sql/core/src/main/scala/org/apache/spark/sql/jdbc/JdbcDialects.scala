@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.jdbc
 
-import org.apache.spark.sql.types._
+import java.sql.Connection
+
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.sql.types._
 
 /**
  * :: DeveloperApi ::
@@ -51,7 +53,7 @@ case class JdbcType(databaseTypeDefinition : String, jdbcNullType : Int)
  * for the given Catalyst type.
  */
 @DeveloperApi
-abstract class JdbcDialect {
+abstract class JdbcDialect extends Serializable {
   /**
    * Check if this dialect instance can handle a certain jdbc url.
    * @param url the jdbc url.
@@ -97,6 +99,15 @@ abstract class JdbcDialect {
     s"SELECT * FROM $table WHERE 1=0"
   }
 
+  /**
+   * Override connection specific properties to run before a select is made.  This is in place to
+   * allow dialects that need special treatment to optimize behavior.
+   * @param connection The connection object
+   * @param properties The connection properties.  This is passed through from the relation.
+   */
+  def beforeFetch(connection: Connection, properties: Map[String, String]): Unit = {
+  }
+
 }
 
 /**
@@ -115,7 +126,7 @@ object JdbcDialects {
 
   /**
    * Register a dialect for use on all new matching jdbc [[org.apache.spark.sql.DataFrame]].
-   * Readding an existing dialect will cause a move-to-front.
+   * Reading an existing dialect will cause a move-to-front.
    *
    * @param dialect The new dialect.
    */

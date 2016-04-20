@@ -22,7 +22,7 @@ import java.net.Socket
 
 import py4j.GatewayServer
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
 /**

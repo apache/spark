@@ -27,10 +27,8 @@ import org.apache.spark.ml.feature.VectorIndexer;
 import org.apache.spark.ml.feature.VectorIndexerModel;
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel;
 import org.apache.spark.ml.regression.DecisionTreeRegressor;
-import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.mllib.util.MLUtils;
-import org.apache.spark.rdd.RDD;
-import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
 // $example off$
 
@@ -40,9 +38,9 @@ public class JavaDecisionTreeRegressionExample {
     JavaSparkContext jsc = new JavaSparkContext(conf);
     SQLContext sqlContext = new SQLContext(jsc);
     // $example on$
-    // Load and parse the data file, converting it to a DataFrame.
-    RDD<LabeledPoint> rdd = MLUtils.loadLibSVMFile(jsc.sc(), "data/mllib/sample_libsvm_data.txt");
-    DataFrame data = sqlContext.createDataFrame(rdd, LabeledPoint.class);
+    // Load the data stored in LIBSVM format as a DataFrame.
+    Dataset<Row> data = sqlContext.read().format("libsvm")
+      .load("data/mllib/sample_libsvm_data.txt");
 
     // Automatically identify categorical features, and index them.
     // Set maxCategories so features with > 4 distinct values are treated as continuous.
@@ -53,9 +51,9 @@ public class JavaDecisionTreeRegressionExample {
       .fit(data);
 
     // Split the data into training and test sets (30% held out for testing)
-    DataFrame[] splits = data.randomSplit(new double[]{0.7, 0.3});
-    DataFrame trainingData = splits[0];
-    DataFrame testData = splits[1];
+    Dataset<Row>[] splits = data.randomSplit(new double[]{0.7, 0.3});
+    Dataset<Row> trainingData = splits[0];
+    Dataset<Row> testData = splits[1];
 
     // Train a DecisionTree model.
     DecisionTreeRegressor dt = new DecisionTreeRegressor()
@@ -69,7 +67,7 @@ public class JavaDecisionTreeRegressionExample {
     PipelineModel model = pipeline.fit(trainingData);
 
     // Make predictions.
-    DataFrame predictions = model.transform(testData);
+    Dataset<Row> predictions = model.transform(testData);
 
     // Select example rows to display.
     predictions.select("label", "features").show(5);
@@ -86,5 +84,7 @@ public class JavaDecisionTreeRegressionExample {
       (DecisionTreeRegressionModel) (model.stages()[1]);
     System.out.println("Learned regression tree model:\n" + treeModel.toDebugString());
     // $example off$
+
+    jsc.stop();
   }
 }

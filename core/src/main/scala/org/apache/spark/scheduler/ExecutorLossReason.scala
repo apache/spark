@@ -40,6 +40,8 @@ private[spark] object ExecutorExited {
   }
 }
 
+private[spark] object ExecutorKilled extends ExecutorLossReason("Executor killed by driver.")
+
 /**
  * A loss reason that means we don't yet know why the executor exited.
  *

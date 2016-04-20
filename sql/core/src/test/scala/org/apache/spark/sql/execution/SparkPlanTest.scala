@@ -18,11 +18,10 @@
 package org.apache.spark.sql.execution
 
 import scala.language.implicitConversions
-import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.{DataFrame, DataFrameHolder, Row, SQLContext}
+import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.test.SQLTestUtils
 
@@ -232,10 +231,8 @@ object SparkPlanTest {
   }
 
   private def executePlan(outputPlan: SparkPlan, sqlContext: SQLContext): Seq[Row] = {
-    // A very simple resolver to make writing tests easier. In contrast to the real resolver
-    // this is always case sensitive and does not try to handle scoping or complex type resolution.
-    val resolvedPlan = sqlContext.prepareForExecution.execute(
-      outputPlan transform {
+    val execution = new QueryExecution(sqlContext, null) {
+      override lazy val sparkPlan: SparkPlan = outputPlan transform {
         case plan: SparkPlan =>
           val inputMap = plan.children.flatMap(_.output).map(a => (a.name, a)).toMap
           plan transformExpressions {
@@ -244,8 +241,8 @@ object SparkPlanTest {
                 sys.error(s"Invalid Test: Cannot resolve $u given input $inputMap"))
           }
       }
-    )
-    resolvedPlan.executeCollectPublic().toSeq
+    }
+    execution.executedPlan.executeCollectPublic().toSeq
   }
 }
 

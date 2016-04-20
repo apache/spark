@@ -27,7 +27,7 @@ import javax.annotation.concurrent.GuardedBy
  *             to `Object` to avoid programming errors, since this object should only be used for
  *             synchronization purposes.
  */
-abstract class MemoryPool(lock: Object) {
+private[memory] abstract class MemoryPool(lock: Object) {
 
   @GuardedBy("lock")
   private[this] var _poolSize: Long = 0

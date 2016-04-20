@@ -21,8 +21,10 @@ import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.metric.{SQLMetricParam, SQLMetricValue}
+import org.apache.commons.lang3.StringEscapeUtils
+
+import org.apache.spark.sql.execution.{SparkPlanInfo, WholeStageCodegen}
+import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
  * A graph used for storing information of an executionPlan of DataFrame.
@@ -41,6 +43,16 @@ private[ui] case class SparkPlanGraph(
     dotFile.append("}")
     dotFile.toString()
   }
+
+  /**
+   * All the SparkPlanGraphNodes, including those inside of WholeStageCodegen.
+   */
+  val allNodes: Seq[SparkPlanGraphNode] = {
+    nodes.flatMap {
+      case cluster: SparkPlanGraphCluster => cluster.nodes :+ cluster
+      case node => Seq(node)
+    }
+  }
 }
 
 private[sql] object SparkPlanGraph {
@@ -48,32 +60,73 @@ private[sql] object SparkPlanGraph {
   /**
    * Build a SparkPlanGraph from the root of a SparkPlan tree.
    */
-  def apply(plan: SparkPlan): SparkPlanGraph = {
+  def apply(planInfo: SparkPlanInfo): SparkPlanGraph = {
     val nodeIdGenerator = new AtomicLong(0)
     val nodes = mutable.ArrayBuffer[SparkPlanGraphNode]()
     val edges = mutable.ArrayBuffer[SparkPlanGraphEdge]()
-    buildSparkPlanGraphNode(plan, nodeIdGenerator, nodes, edges)
+    val exchanges = mutable.HashMap[SparkPlanInfo, SparkPlanGraphNode]()
+    buildSparkPlanGraphNode(planInfo, nodeIdGenerator, nodes, edges, null, null, exchanges)
     new SparkPlanGraph(nodes, edges)
   }
 
   private def buildSparkPlanGraphNode(
-      plan: SparkPlan,
+      planInfo: SparkPlanInfo,
       nodeIdGenerator: AtomicLong,
       nodes: mutable.ArrayBuffer[SparkPlanGraphNode],
-      edges: mutable.ArrayBuffer[SparkPlanGraphEdge]): SparkPlanGraphNode = {
-    val metrics = plan.metrics.toSeq.map { case (key, metric) =>
-      SQLPlanMetric(metric.name.getOrElse(key), metric.id,
-        metric.param.asInstanceOf[SQLMetricParam[SQLMetricValue[Any], Any]])
+      edges: mutable.ArrayBuffer[SparkPlanGraphEdge],
+      parent: SparkPlanGraphNode,
+      subgraph: SparkPlanGraphCluster,
+      exchanges: mutable.HashMap[SparkPlanInfo, SparkPlanGraphNode]): Unit = {
+    planInfo.nodeName match {
+      case "WholeStageCodegen" =>
+        val metrics = planInfo.metrics.map { metric =>
+          SQLPlanMetric(metric.name, metric.accumulatorId,
+            SQLMetrics.getMetricParam(metric.metricParam))
+        }
+
+        val cluster = new SparkPlanGraphCluster(
+          nodeIdGenerator.getAndIncrement(),
+          planInfo.nodeName,
+          planInfo.simpleString,
+          mutable.ArrayBuffer[SparkPlanGraphNode](),
+          metrics)
+        nodes += cluster
+
+        buildSparkPlanGraphNode(
+          planInfo.children.head, nodeIdGenerator, nodes, edges, parent, cluster, exchanges)
+      case "InputAdapter" =>
+        buildSparkPlanGraphNode(
+          planInfo.children.head, nodeIdGenerator, nodes, edges, parent, null, exchanges)
+      case "Subquery" if subgraph != null =>
+        // Subquery should not be included in WholeStageCodegen
+        buildSparkPlanGraphNode(planInfo, nodeIdGenerator, nodes, edges, parent, null, exchanges)
+      case "ReusedExchange" =>
+        // Point to the re-used exchange
+        val node = exchanges(planInfo.children.head)
+        edges += SparkPlanGraphEdge(node.id, parent.id)
+      case name =>
+        val metrics = planInfo.metrics.map { metric =>
+          SQLPlanMetric(metric.name, metric.accumulatorId,
+            SQLMetrics.getMetricParam(metric.metricParam))
+        }
+        val node = new SparkPlanGraphNode(
+          nodeIdGenerator.getAndIncrement(), planInfo.nodeName,
+          planInfo.simpleString, planInfo.metadata, metrics)
+        if (subgraph == null) {
+          nodes += node
+        } else {
+          subgraph.nodes += node
+        }
+        if (name.contains("Exchange")) {
+          exchanges += planInfo -> node
+        }
+
+        if (parent != null) {
+          edges += SparkPlanGraphEdge(node.id, parent.id)
+        }
+        planInfo.children.foreach(
+          buildSparkPlanGraphNode(_, nodeIdGenerator, nodes, edges, node, subgraph, exchanges))
     }
-    val node = SparkPlanGraphNode(
-      nodeIdGenerator.getAndIncrement(), plan.nodeName, plan.simpleString, metrics)
-    nodes += node
-    val childrenNodes = plan.children.map(
-      child => buildSparkPlanGraphNode(child, nodeIdGenerator, nodes, edges))
-    for (child <- childrenNodes) {
-      edges += SparkPlanGraphEdge(child.id, node.id)
-    }
-    node
   }
 }
 
@@ -84,29 +137,68 @@ private[sql] object SparkPlanGraph {
  * @param name the name of this SparkPlan node
  * @param metrics metrics that this SparkPlan node will track
  */
-private[ui] case class SparkPlanGraphNode(
-    id: Long, name: String, desc: String, metrics: Seq[SQLPlanMetric]) {
+private[ui] class SparkPlanGraphNode(
+    val id: Long,
+    val name: String,
+    val desc: String,
+    val metadata: Map[String, String],
+    val metrics: Seq[SQLPlanMetric]) {
 
   def makeDotNode(metricsValue: Map[Long, String]): String = {
-    val values = {
-      for (metric <- metrics;
-           value <- metricsValue.get(metric.accumulatorId)) yield {
-        metric.name + ": " + value
-      }
+    val builder = new mutable.StringBuilder(name)
+
+    val values = for {
+      metric <- metrics
+      value <- metricsValue.get(metric.accumulatorId)
+    } yield {
+      metric.name + ": " + value
     }
-    val label = if (values.isEmpty) {
-        name
-      } else {
-        // If there are metrics, display all metrics in a separate line. We should use an escaped
-        // "\n" here to follow the dot syntax.
-        //
-        // Note: whitespace between two "\n"s is to create an empty line between the name of
-        // SparkPlan and metrics. If removing it, it won't display the empty line in UI.
-        name + "\\n \\n" + values.mkString("\\n")
-      }
-    s"""  $id [label="$label"];"""
+
+    if (values.nonEmpty) {
+      // If there are metrics, display each entry in a separate line.
+      // Note: whitespace between two "\n"s is to create an empty line between the name of
+      // SparkPlan and metrics. If removing it, it won't display the empty line in UI.
+      builder ++= "\n \n"
+      builder ++= values.mkString("\n")
+    }
+
+    s"""  $id [label="${StringEscapeUtils.escapeJava(builder.toString())}"];"""
   }
 }
+
+/**
+ * Represent a tree of SparkPlan for WholeStageCodegen.
+ */
+private[ui] class SparkPlanGraphCluster(
+    id: Long,
+    name: String,
+    desc: String,
+    val nodes: mutable.ArrayBuffer[SparkPlanGraphNode],
+    metrics: Seq[SQLPlanMetric])
+  extends SparkPlanGraphNode(id, name, desc, Map.empty, metrics) {
+
+  override def makeDotNode(metricsValue: Map[Long, String]): String = {
+    val duration = metrics.filter(_.name.startsWith(WholeStageCodegen.PIPELINE_DURATION_METRIC))
+    val labelStr = if (duration.nonEmpty) {
+      require(duration.length == 1)
+      val id = duration(0).accumulatorId
+      if (metricsValue.contains(duration(0).accumulatorId)) {
+        name + "\n\n" + metricsValue.get(id).get
+      } else {
+        name
+      }
+    } else {
+      name
+    }
+    s"""
+       |  subgraph cluster${id} {
+       |    label="${StringEscapeUtils.escapeJava(labelStr)}";
+       |    ${nodes.map(_.makeDotNode(metricsValue)).mkString("    \n")}
+       |  }
+     """.stripMargin
+  }
+}
+
 
 /**
  * Represent an edge in the SparkPlan tree. `fromId` is the parent node id, and `toId` is the child

@@ -1,3 +1,0 @@
-import(SparkR)
-export("myfunc")
-      

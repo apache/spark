@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import java.io._
+import java.nio.charset.StandardCharsets
 
 import scala.util.control.NonFatal
 
@@ -27,8 +28,9 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.execution.{SetCommand, ExplainCommand}
+import org.apache.spark.sql.execution.command.{ExplainCommand, SetCommand}
 import org.apache.spark.sql.execution.datasources.DescribeCommand
+import org.apache.spark.sql.hive.{InsertIntoHiveTable => LogicalInsertIntoHiveTable, SQLBuilder}
 import org.apache.spark.sql.hive.test.TestHive
 
 /**
@@ -126,8 +128,16 @@ abstract class HiveComparisonTest
   protected val cacheDigest = java.security.MessageDigest.getInstance("MD5")
   protected def getMd5(str: String): String = {
     val digest = java.security.MessageDigest.getInstance("MD5")
-    digest.update(str.replaceAll(System.lineSeparator(), "\n").getBytes("utf-8"))
+    digest.update(str.replaceAll(System.lineSeparator(), "\n").getBytes(StandardCharsets.UTF_8))
     new java.math.BigInteger(1, digest.digest).toString(16)
+  }
+
+  override protected def afterAll(): Unit = {
+    try {
+      TestHive.reset()
+    } finally {
+      super.afterAll()
+    }
   }
 
   protected def prepareAnswer(
@@ -209,7 +219,11 @@ abstract class HiveComparisonTest
   }
 
   val installHooksCommand = "(?i)SET.*hooks".r
-  def createQueryTest(testCaseName: String, sql: String, reset: Boolean = true) {
+  def createQueryTest(
+      testCaseName: String,
+      sql: String,
+      reset: Boolean = true,
+      tryWithoutResettingFirst: Boolean = false) {
     // testCaseName must not contain ':', which is not allowed to appear in a filename of Windows
     assert(!testCaseName.contains(":"))
 
@@ -240,9 +254,6 @@ abstract class HiveComparisonTest
     test(testCaseName) {
       logDebug(s"=== HIVE TEST: $testCaseName ===")
 
-      // Clear old output for this testcase.
-      outputDirectories.map(new File(_, testCaseName)).filter(_.exists()).foreach(_.delete())
-
       val sqlWithoutComment =
         sql.split("\n").filterNot(l => l.matches("--.*(?<=[^\\\\]);")).mkString("\n")
       val allQueries =
@@ -269,9 +280,30 @@ abstract class HiveComparisonTest
         }.mkString("\n== Console version of this test ==\n", "\n", "\n")
       }
 
-      try {
+      def doTest(reset: Boolean, isSpeculative: Boolean = false): Unit = {
+        // Clear old output for this testcase.
+        outputDirectories.map(new File(_, testCaseName)).filter(_.exists()).foreach(_.delete())
+
         if (reset) {
           TestHive.reset()
+        }
+
+        // Many tests drop indexes on src and srcpart at the beginning, so we need to load those
+        // tables here. Since DROP INDEX DDL is just passed to Hive, it bypasses the analyzer and
+        // thus the tables referenced in those DDL commands cannot be extracted for use by our
+        // test table auto-loading mechanism. In addition, the tests which use the SHOW TABLES
+        // command expect these tables to exist.
+        val hasShowTableCommand = queryList.exists(_.toLowerCase.contains("show tables"))
+        for (table <- Seq("src", "srcpart")) {
+          val hasMatchingQuery = queryList.exists { query =>
+            val normalizedQuery = query.toLowerCase.stripSuffix(";")
+            normalizedQuery.endsWith(table) ||
+              normalizedQuery.contains(s"from $table") ||
+              normalizedQuery.contains(s"from default.$table")
+          }
+          if (hasShowTableCommand || hasMatchingQuery) {
+            TestHive.loadTestTable(table)
+          }
         }
 
         val hiveCacheFiles = queryList.zipWithIndex.map {
@@ -350,14 +382,63 @@ abstract class HiveComparisonTest
 
         // Run w/ catalyst
         val catalystResults = queryList.zip(hiveResults).map { case (queryString, hive) =>
-          val query = new TestHive.QueryExecution(queryString)
-          try { (query, prepareAnswer(query, query.stringResult())) } catch {
+          var query: TestHive.QueryExecution = null
+          try {
+            query = {
+              val originalQuery = new TestHive.QueryExecution(queryString)
+              val containsCommands = originalQuery.analyzed.collectFirst {
+                case _: Command => ()
+                case _: LogicalInsertIntoHiveTable => ()
+              }.nonEmpty
+
+              if (containsCommands) {
+                originalQuery
+              } else {
+                val convertedSQL = try {
+                  new SQLBuilder(originalQuery.analyzed, TestHive).toSQL
+                } catch {
+                  case NonFatal(e) => fail(
+                    s"""Cannot convert the following HiveQL query plan back to SQL query string:
+                        |
+                        |# Original HiveQL query string:
+                        |$queryString
+                        |
+                        |# Resolved query plan:
+                        |${originalQuery.analyzed.treeString}
+                     """.stripMargin, e)
+                }
+
+                try {
+                  val queryExecution = new TestHive.QueryExecution(convertedSQL)
+                  // Trigger the analysis of this converted SQL query.
+                  queryExecution.analyzed
+                  queryExecution
+                } catch {
+                  case NonFatal(e) => fail(
+                    s"""Failed to analyze the converted SQL string:
+                        |
+                        |# Original HiveQL query string:
+                        |$queryString
+                        |
+                        |# Resolved query plan:
+                        |${originalQuery.analyzed.treeString}
+                        |
+                        |# Converted SQL query string:
+                        |$convertedSQL
+                     """.stripMargin, e)
+                }
+              }
+            }
+
+            (query, prepareAnswer(query, query.stringResult()))
+          } catch {
             case e: Throwable =>
               val errorMessage =
                 s"""
                   |Failed to execute query using catalyst:
                   |Error: ${e.getMessage}
                   |${stackTraceToString(e)}
+                  |$queryString
                   |$query
                   |== HIVE - ${hive.size} row(s) ==
                   |${hive.mkString("\n")}
@@ -399,6 +480,10 @@ abstract class HiveComparisonTest
                 val executions = queryList.map(new TestHive.QueryExecution(_))
                 executions.foreach(_.toRdd)
                 val tablesGenerated = queryList.zip(executions).flatMap {
+                  // We should take executedPlan instead of sparkPlan, because in following codes we
+                  // will run the collected plans. As we will do extra processing for sparkPlan such
+                  // as adding exchange, collapsing codegen stages, etc., collecting sparkPlan here
+                  // will cause some errors when running these plans later.
                   case (q, e) => e.executedPlan.collect {
                     case i: InsertIntoHiveTable if tablesRead contains i.table.tableName =>
                       (q, e, i)
@@ -430,12 +515,45 @@ abstract class HiveComparisonTest
                 """.stripMargin
 
               stringToFile(new File(wrongDirectory, testCaseName), errorMessage + consoleTestCase)
-              fail(errorMessage)
+              if (isSpeculative && !reset) {
+                fail("Failed on first run; retrying")
+              } else {
+                fail(errorMessage)
+              }
             }
         }
 
         // Touch passed file.
         new FileOutputStream(new File(passedDirectory, testCaseName)).close()
+      }
+
+      val canSpeculativelyTryWithoutReset: Boolean = {
+        val excludedSubstrings = Seq(
+          "into table",
+          "create table",
+          "drop index"
+        )
+        !queryList.map(_.toLowerCase).exists { query =>
+          excludedSubstrings.exists(s => query.contains(s))
+        }
+      }
+
+      try {
+        try {
+          if (tryWithoutResettingFirst && canSpeculativelyTryWithoutReset) {
+            doTest(reset = false, isSpeculative = true)
+          } else {
+            doTest(reset)
+          }
+        } catch {
+          case tf: org.scalatest.exceptions.TestFailedException =>
+            if (tryWithoutResettingFirst && canSpeculativelyTryWithoutReset) {
+              logWarning("Test failed without reset(); retrying with reset()")
+              doTest(reset = true)
+            } else {
+              throw tf
+            }
+        }
       } catch {
         case tf: org.scalatest.exceptions.TestFailedException => throw tf
         case originalException: Exception =>

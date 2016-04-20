@@ -25,24 +25,27 @@ import java.util.Collections
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{HashMap, ListBuffer}
 
-import org.apache.hadoop.fs.Path
-import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.DataOutputBuffer
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.yarn.api._
+import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.NMClient
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.ipc.YarnRPC
 import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
+import org.apache.spark.{SecurityManager, SparkConf, SparkException}
+import org.apache.spark.deploy.yarn.config._
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 import org.apache.spark.launcher.YarnCommandBuilderUtils
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.Utils
 
-class ExecutorRunnable(
+private[yarn] class ExecutorRunnable(
     container: Container,
     conf: Configuration,
     sparkConf: SparkConf,
@@ -104,7 +107,7 @@ class ExecutorRunnable(
     // If external shuffle service is enabled, register with the Yarn shuffle service already
     // started on the NodeManager and, if authentication is enabled, provide it with our secret
     // key for fetching shuffle files later
-    if (sparkConf.getBoolean("spark.shuffle.service.enabled", false)) {
+    if (sparkConf.get(SHUFFLE_SERVICE_ENABLED)) {
       val secretString = securityMgr.getSecretKey()
       val secretBytes =
         if (secretString != null) {
@@ -144,17 +147,16 @@ class ExecutorRunnable(
 
     // Set the JVM memory
     val executorMemoryString = executorMemory + "m"
-    javaOpts += "-Xms" + executorMemoryString
     javaOpts += "-Xmx" + executorMemoryString
 
     // Set extra Java options for the executor, if defined
-    sys.props.get("spark.executor.extraJavaOptions").foreach { opts =>
+    sparkConf.get(EXECUTOR_JAVA_OPTIONS).foreach { opts =>
       javaOpts ++= Utils.splitCommandString(opts).map(YarnSparkHadoopUtil.escapeForShell)
     }
     sys.env.get("SPARK_JAVA_OPTS").foreach { opts =>
       javaOpts ++= Utils.splitCommandString(opts).map(YarnSparkHadoopUtil.escapeForShell)
     }
-    sys.props.get("spark.executor.extraLibraryPath").foreach { p =>
+    sparkConf.get(EXECUTOR_LIBRARY_PATH).foreach { p =>
       prefixEnv = Some(Client.getClusterPath(sparkConf, Utils.libraryPathEnvPrefix(Seq(p))))
     }
 
@@ -166,7 +168,7 @@ class ExecutorRunnable(
 
     // Certain configs need to be passed here because they are needed before the Executor
     // registers with the Scheduler and transfers the spark configs. Since the Executor backend
-    // uses Akka to connect to the scheduler, the akka settings are needed as well as the
+    // uses RPC to connect to the scheduler, the RPC settings are needed as well as the
     // authentication settings.
     sparkConf.getAll
       .filter { case (k, v) => SparkConf.isExecutorStartupConf(k) }
@@ -184,9 +186,9 @@ class ExecutorRunnable(
         else {
           // If no java_opts specified, default to using -XX:+CMSIncrementalMode
           // It might be possible that other modes/config is being done in
-          // spark.executor.extraJavaOptions, so we dont want to mess with it.
-          // In our expts, using (default) throughput collector has severe perf ramnifications in
-          // multi-tennent machines
+          // spark.executor.extraJavaOptions, so we don't want to mess with it.
+          // In our expts, using (default) throughput collector has severe perf ramifications in
+          // multi-tenant machines
           // The options are based on
           // http://www.oracle.com/technetwork/java/gc-tuning-5-138395.html#0.0.0.%20When%20to%20Use
           // %20the%20Concurrent%20Low%20Pause%20Collector|outline
@@ -286,8 +288,7 @@ class ExecutorRunnable(
 
   private def prepareEnvironment(container: Container): HashMap[String, String] = {
     val env = new HashMap[String, String]()
-    val extraCp = sparkConf.getOption("spark.executor.extraClassPath")
-    Client.populateClasspath(null, yarnConf, sparkConf, env, false, extraCp)
+    Client.populateClasspath(null, yarnConf, sparkConf, env, sparkConf.get(EXECUTOR_CLASS_PATH))
 
     sparkConf.getExecutorEnv.foreach { case (key, value) =>
       // This assumes each executor environment variable set here is a path

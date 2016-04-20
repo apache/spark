@@ -21,12 +21,11 @@ import java.io.IOException
 
 import scala.collection.mutable
 
-import org.apache.hadoop.fs.{Path, FileSystem}
+import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.internal.Logging
 import org.apache.spark.ml.tree.{LearningNode, Split}
-import org.apache.spark.mllib.tree.impl.BaggedPoint
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
@@ -171,7 +170,6 @@ private[spark] class NodeIdCache(
   }
 }
 
-@DeveloperApi
 private[spark] object NodeIdCache {
   /**
    * Initialize the node Id cache with initial node Id values.

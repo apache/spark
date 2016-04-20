@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.expressions.NamedExpression
 import org.scalatest.Matchers._
 
-import org.apache.spark.sql.execution.{Project, TungstenProject}
+import org.apache.spark.sql.catalyst.expressions.NamedExpression
+import org.apache.spark.sql.execution.Project
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -105,10 +105,11 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
       Row("a") :: Nil)
   }
 
-  test("alias") {
+  test("alias and name") {
     val df = Seq((1, Seq(1, 2, 3))).toDF("a", "intList")
     assert(df.select(df("a").as("b")).columns.head === "b")
     assert(df.select(df("a").alias("b")).columns.head === "b")
+    assert(df.select(df("a").name("b")).columns.head === "b")
   }
 
   test("as propagates metadata") {
@@ -298,7 +299,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
       Row(true, true) :: Row(true, true) :: Row(false, false) :: Row(false, false) :: Nil)
 
     checkAnswer(
-      testData.select(isNaN($"a"), isNaN($"b")),
+      testData.select(isnan($"a"), isnan($"b")),
       Row(true, true) :: Row(true, true) :: Row(false, false) :: Row(false, false) :: Nil)
 
     checkAnswer(
@@ -349,7 +350,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
       testData2.collect().toSeq.filter(r => r.getInt(0) == r.getInt(1)))
   }
 
-  test("!==") {
+  test("=!=") {
     val nullData = sqlContext.createDataFrame(sparkContext.parallelize(
       Row(1, 1) ::
       Row(1, 2) ::
@@ -368,6 +369,17 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       nullData.filter($"a" <=> $"b"),
       Row(1, 1) :: Row(null, null) :: Nil)
+
+    val nullData2 = sqlContext.createDataFrame(sparkContext.parallelize(
+        Row("abc") ::
+        Row(null)  ::
+        Row("xyz") :: Nil),
+        StructType(Seq(StructField("a", StringType, true))))
+
+    checkAnswer(
+      nullData2.filter($"a" <=> null),
+      Row(null) :: Nil)
+
   }
 
   test(">") {
@@ -563,28 +575,32 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
       df.select(monotonicallyIncreasingId()),
       Row(0L) :: Row(1L) :: Row((1L << 33) + 0L) :: Row((1L << 33) + 1L) :: Nil
     )
+    checkAnswer(
+      df.select(expr("monotonically_increasing_id()")),
+      Row(0L) :: Row(1L) :: Row((1L << 33) + 0L) :: Row((1L << 33) + 1L) :: Nil
+    )
   }
 
-  test("sparkPartitionId") {
+  test("spark_partition_id") {
     // Make sure we have 2 partitions, each with 2 records.
     val df = sparkContext.parallelize(Seq[Int](), 2).mapPartitions { _ =>
       Iterator(Tuple1(1), Tuple1(2))
     }.toDF("a")
     checkAnswer(
-      df.select(sparkPartitionId()),
+      df.select(spark_partition_id()),
       Row(0) :: Row(0) :: Row(1) :: Row(1) :: Nil
     )
   }
 
-  test("InputFileName") {
+  test("input_file_name") {
     withTempPath { dir =>
       val data = sparkContext.parallelize(0 to 10).toDF("id")
       data.write.parquet(dir.getCanonicalPath)
-      val answer = sqlContext.read.parquet(dir.getCanonicalPath).select(inputFileName())
+      val answer = sqlContext.read.parquet(dir.getCanonicalPath).select(input_file_name())
         .head.getString(0)
       assert(answer.contains(dir.getCanonicalPath))
 
-      checkAnswer(data.select(inputFileName()).limit(1), Row(""))
+      checkAnswer(data.select(input_file_name()).limit(1), Row(""))
     }
   }
 
@@ -614,9 +630,8 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
     }
 
     def checkNumProjects(df: DataFrame, expectedNumProjects: Int): Unit = {
-      val projects = df.queryExecution.executedPlan.collect {
-        case project: Project => project
-        case tungstenProject: TungstenProject => tungstenProject
+      val projects = df.queryExecution.sparkPlan.collect {
+        case tungstenProject: Project => tungstenProject
       }
       assert(projects.size === expectedNumProjects)
     }

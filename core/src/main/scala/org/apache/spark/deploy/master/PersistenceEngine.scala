@@ -17,10 +17,10 @@
 
 package org.apache.spark.deploy.master
 
+import scala.reflect.ClassTag
+
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rpc.RpcEnv
-
-import scala.reflect.ClassTag
 
 /**
  * Allows Master to persist any state that is necessary in order to recover from a failure.
@@ -40,12 +40,12 @@ abstract class PersistenceEngine {
    * Defines how the object is serialized and persisted. Implementation will
    * depend on the store used.
    */
-  def persist(name: String, obj: Object)
+  def persist(name: String, obj: Object): Unit
 
   /**
    * Defines how the object referred by its name is removed from the store.
    */
-  def unpersist(name: String)
+  def unpersist(name: String): Unit
 
   /**
    * Gives all objects, matching a prefix. This defines how objects are

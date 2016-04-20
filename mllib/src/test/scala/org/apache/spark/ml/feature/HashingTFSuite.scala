@@ -20,12 +20,13 @@ package org.apache.spark.ml.feature
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.param.ParamsSuite
+import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.util.Utils
 
-class HashingTFSuite extends SparkFunSuite with MLlibTestSparkContext {
+class HashingTFSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   test("params") {
     ParamsSuite.checkParams(new HashingTF)
@@ -45,9 +46,39 @@ class HashingTFSuite extends SparkFunSuite with MLlibTestSparkContext {
     require(attrGroup.numAttributes === Some(n))
     val features = output.select("features").first().getAs[Vector](0)
     // Assume perfect hash on "a", "b", "c", and "d".
-    def idx(any: Any): Int = Utils.nonNegativeMod(any.##, n)
+    def idx: Any => Int = featureIdx(n)
     val expected = Vectors.sparse(n,
       Seq((idx("a"), 2.0), (idx("b"), 2.0), (idx("c"), 1.0), (idx("d"), 1.0)))
     assert(features ~== expected absTol 1e-14)
+  }
+
+  test("applying binary term freqs") {
+    val df = sqlContext.createDataFrame(Seq(
+      (0, "a a b c c c".split(" ").toSeq)
+    )).toDF("id", "words")
+    val n = 100
+    val hashingTF = new HashingTF()
+        .setInputCol("words")
+        .setOutputCol("features")
+        .setNumFeatures(n)
+        .setBinary(true)
+    val output = hashingTF.transform(df)
+    val features = output.select("features").first().getAs[Vector](0)
+    def idx: Any => Int = featureIdx(n)  // Assume perfect hash on input features
+    val expected = Vectors.sparse(n,
+      Seq((idx("a"), 1.0), (idx("b"), 1.0), (idx("c"), 1.0)))
+    assert(features ~== expected absTol 1e-14)
+  }
+
+  test("read/write") {
+    val t = new HashingTF()
+      .setInputCol("myInputCol")
+      .setOutputCol("myOutputCol")
+      .setNumFeatures(10)
+    testDefaultReadWrite(t)
+  }
+
+  private def featureIdx(numFeatures: Int)(term: Any): Int = {
+    Utils.nonNegativeMod(term.##, numFeatures)
   }
 }

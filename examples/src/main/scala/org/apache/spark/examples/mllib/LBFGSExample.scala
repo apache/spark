@@ -18,6 +18,7 @@
 // scalastyle:off println
 package org.apache.spark.examples.mllib
 
+import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.mllib.classification.LogisticRegressionModel
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
@@ -25,8 +26,6 @@ import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.optimization.{LBFGS, LogisticGradient, SquaredL2Updater}
 import org.apache.spark.mllib.util.MLUtils
 // $example off$
-
-import org.apache.spark.{SparkConf, SparkContext}
 
 object LBFGSExample {
 

@@ -102,16 +102,6 @@ abstract class UnsafeProjection extends Projection {
 
 object UnsafeProjection {
 
-  /*
-   * Returns whether UnsafeProjection can support given StructType, Array[DataType] or
-   * Seq[Expression].
-   */
-  def canSupport(schema: StructType): Boolean = canSupport(schema.fields.map(_.dataType))
-  def canSupport(exprs: Seq[Expression]): Boolean = canSupport(exprs.map(_.dataType).toArray)
-  private def canSupport(types: Array[DataType]): Boolean = {
-    types.forall(GenerateUnsafeProjection.canSupport)
-  }
-
   /**
    * Returns an UnsafeProjection for given StructType.
    */
@@ -146,9 +136,9 @@ object UnsafeProjection {
   }
 
   /**
-    * Same as other create()'s but allowing enabling/disabling subexpression elimination.
-    * TODO: refactor the plumbing and clean this up.
-    */
+   * Same as other create()'s but allowing enabling/disabling subexpression elimination.
+   * TODO: refactor the plumbing and clean this up.
+   */
   def create(
       exprs: Seq[Expression],
       inputSchema: Seq[Attribute],
@@ -178,9 +168,7 @@ object FromUnsafeProjection {
    * Returns an UnsafeProjection for given Array of DataTypes.
    */
   def apply(fields: Seq[DataType]): Projection = {
-    create(fields.zipWithIndex.map(x => {
-      new BoundReference(x._2, x._1, true)
-    }))
+    create(fields.zipWithIndex.map(x => new BoundReference(x._2, x._1, true)))
   }
 
   /**

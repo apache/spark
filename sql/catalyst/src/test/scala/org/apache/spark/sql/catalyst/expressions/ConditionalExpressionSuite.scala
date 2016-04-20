@@ -17,13 +17,12 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.sql.{Timestamp, Date}
+import java.sql.{Date, Timestamp}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.types._
-
 
 class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -81,38 +80,39 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
     val c5 = 'a.string.at(4)
     val c6 = 'a.string.at(5)
 
-    checkEvaluation(CaseWhen(Seq(c1, c4, c6)), "c", row)
-    checkEvaluation(CaseWhen(Seq(c2, c4, c6)), "c", row)
-    checkEvaluation(CaseWhen(Seq(c3, c4, c6)), "a", row)
-    checkEvaluation(CaseWhen(Seq(Literal.create(null, BooleanType), c4, c6)), "c", row)
-    checkEvaluation(CaseWhen(Seq(Literal.create(false, BooleanType), c4, c6)), "c", row)
-    checkEvaluation(CaseWhen(Seq(Literal.create(true, BooleanType), c4, c6)), "a", row)
+    checkEvaluation(CaseWhen(Seq((c1, c4)), c6), "c", row)
+    checkEvaluation(CaseWhen(Seq((c2, c4)), c6), "c", row)
+    checkEvaluation(CaseWhen(Seq((c3, c4)), c6), "a", row)
+    checkEvaluation(CaseWhen(Seq((Literal.create(null, BooleanType), c4)), c6), "c", row)
+    checkEvaluation(CaseWhen(Seq((Literal.create(false, BooleanType), c4)), c6), "c", row)
+    checkEvaluation(CaseWhen(Seq((Literal.create(true, BooleanType), c4)), c6), "a", row)
 
-    checkEvaluation(CaseWhen(Seq(c3, c4, c2, c5, c6)), "a", row)
-    checkEvaluation(CaseWhen(Seq(c2, c4, c3, c5, c6)), "b", row)
-    checkEvaluation(CaseWhen(Seq(c1, c4, c2, c5, c6)), "c", row)
-    checkEvaluation(CaseWhen(Seq(c1, c4, c2, c5)), null, row)
+    checkEvaluation(CaseWhen(Seq((c3, c4), (c2, c5)), c6), "a", row)
+    checkEvaluation(CaseWhen(Seq((c2, c4), (c3, c5)), c6), "b", row)
+    checkEvaluation(CaseWhen(Seq((c1, c4), (c2, c5)), c6), "c", row)
+    checkEvaluation(CaseWhen(Seq((c1, c4), (c2, c5))), null, row)
 
-    assert(CaseWhen(Seq(c2, c4, c6)).nullable === true)
-    assert(CaseWhen(Seq(c2, c4, c3, c5, c6)).nullable === true)
-    assert(CaseWhen(Seq(c2, c4, c3, c5)).nullable === true)
+    assert(CaseWhen(Seq((c2, c4)), c6).nullable === true)
+    assert(CaseWhen(Seq((c2, c4), (c3, c5)), c6).nullable === true)
+    assert(CaseWhen(Seq((c2, c4), (c3, c5))).nullable === true)
 
     val c4_notNull = 'a.boolean.notNull.at(3)
     val c5_notNull = 'a.boolean.notNull.at(4)
     val c6_notNull = 'a.boolean.notNull.at(5)
 
-    assert(CaseWhen(Seq(c2, c4_notNull, c6_notNull)).nullable === false)
-    assert(CaseWhen(Seq(c2, c4, c6_notNull)).nullable === true)
-    assert(CaseWhen(Seq(c2, c4_notNull, c6)).nullable === true)
+    assert(CaseWhen(Seq((c2, c4_notNull)), c6_notNull).nullable === false)
+    assert(CaseWhen(Seq((c2, c4)), c6_notNull).nullable === true)
+    assert(CaseWhen(Seq((c2, c4_notNull))).nullable === true)
+    assert(CaseWhen(Seq((c2, c4_notNull)), c6).nullable === true)
 
-    assert(CaseWhen(Seq(c2, c4_notNull, c3, c5_notNull, c6_notNull)).nullable === false)
-    assert(CaseWhen(Seq(c2, c4, c3, c5_notNull, c6_notNull)).nullable === true)
-    assert(CaseWhen(Seq(c2, c4_notNull, c3, c5, c6_notNull)).nullable === true)
-    assert(CaseWhen(Seq(c2, c4_notNull, c3, c5_notNull, c6)).nullable === true)
+    assert(CaseWhen(Seq((c2, c4_notNull), (c3, c5_notNull)), c6_notNull).nullable === false)
+    assert(CaseWhen(Seq((c2, c4), (c3, c5_notNull)), c6_notNull).nullable === true)
+    assert(CaseWhen(Seq((c2, c4_notNull), (c3, c5)), c6_notNull).nullable === true)
+    assert(CaseWhen(Seq((c2, c4_notNull), (c3, c5_notNull)), c6).nullable === true)
 
-    assert(CaseWhen(Seq(c2, c4_notNull, c3, c5_notNull)).nullable === true)
-    assert(CaseWhen(Seq(c2, c4, c3, c5_notNull)).nullable === true)
-    assert(CaseWhen(Seq(c2, c4_notNull, c3, c5)).nullable === true)
+    assert(CaseWhen(Seq((c2, c4_notNull), (c3, c5_notNull))).nullable === true)
+    assert(CaseWhen(Seq((c2, c4), (c3, c5_notNull))).nullable === true)
+    assert(CaseWhen(Seq((c2, c4_notNull), (c3, c5))).nullable === true)
   }
 
   test("case key when") {
@@ -230,19 +230,5 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
     DataTypeTestUtils.ordered.foreach { dt =>
       checkConsistencyBetweenInterpretedAndCodegen(Greatest, dt, 2)
     }
-  }
-
-  test("function dropAnyNull") {
-    val drop = DropAnyNull(CreateStruct(Seq('a.string.at(0), 'b.string.at(1))))
-    val a = create_row("a", "q")
-    val nullStr: String = null
-    checkEvaluation(drop, a, a)
-    checkEvaluation(drop, null, create_row("b", nullStr))
-    checkEvaluation(drop, null, create_row(nullStr, nullStr))
-
-    val row = 'r.struct(
-      StructField("a", StringType, false),
-      StructField("b", StringType, true)).at(0)
-    checkEvaluation(DropAnyNull(row), null, create_row(null))
   }
 }

@@ -17,19 +17,33 @@
 
 package org.apache.spark.util
 
-import com.google.common.collect.MapMaker
-
 import java.lang.management.ManagementFactory
 import java.lang.reflect.{Field, Modifier}
 import java.util.{IdentityHashMap, Random}
-import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.mutable.ArrayBuffer
 import scala.runtime.ScalaRunTime
 
-import org.apache.spark.Logging
+import com.google.common.collect.MapMaker
+
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.collection.OpenHashSet
+
+/**
+ * A trait that allows a class to give [[SizeEstimator]] more accurate size estimation.
+ * When a class extends it, [[SizeEstimator]] will query the `estimatedSize` first.
+ * If `estimatedSize` does not return [[None]], [[SizeEstimator]] will use the returned size
+ * as the size of the object. Otherwise, [[SizeEstimator]] will do the estimation work.
+ * The difference between a [[KnownSizeEstimation]] and
+ * [[org.apache.spark.util.collection.SizeTracker]] is that, a
+ * [[org.apache.spark.util.collection.SizeTracker]] still uses [[SizeEstimator]] to
+ * estimate the size. However, a [[KnownSizeEstimation]] can provide a better estimation without
+ * using [[SizeEstimator]].
+ */
+private[spark] trait KnownSizeEstimation {
+  def estimatedSize: Long
+}
 
 /**
  * :: DeveloperApi ::
@@ -137,13 +151,12 @@ object SizeEstimator extends Logging {
       // TODO: We could use reflection on the VMOption returned ?
       getVMMethod.invoke(bean, "UseCompressedOops").toString.contains("true")
     } catch {
-      case e: Exception => {
+      case e: Exception =>
         // Guess whether they've enabled UseCompressedOops based on whether maxMemory < 32 GB
         val guess = Runtime.getRuntime.maxMemory < (32L*1024*1024*1024)
         val guessInWords = if (guess) "yes" else "not"
         logWarning("Failed to check whether UseCompressedOops is set; assuming " + guessInWords)
         return guess
-      }
     }
   }
 
@@ -199,10 +212,15 @@ object SizeEstimator extends Logging {
       // the size estimator since it references the whole REPL. Do nothing in this case. In
       // general all ClassLoaders and Classes will be shared between objects anyway.
     } else {
-      val classInfo = getClassInfo(cls)
-      state.size += alignSize(classInfo.shellSize)
-      for (field <- classInfo.pointerFields) {
-        state.enqueue(field.get(obj))
+      obj match {
+        case s: KnownSizeEstimation =>
+          state.size += s.estimatedSize
+        case _ =>
+          val classInfo = getClassInfo(cls)
+          state.size += alignSize(classInfo.shellSize)
+          for (field <- classInfo.pointerFields) {
+            state.enqueue(field.get(obj))
+          }
       }
     }
   }
@@ -234,7 +252,7 @@ object SizeEstimator extends Logging {
       } else {
         // Estimate the size of a large array by sampling elements without replacement.
         // To exclude the shared objects that the array elements may link, sample twice
-        // and use the min one to caculate array size.
+        // and use the min one to calculate array size.
         val rand = new Random(42)
         val drawn = new OpenHashSet[Int](2 * ARRAY_SAMPLE_SIZE)
         val s1 = sampleArray(array, state, rand, drawn, length)

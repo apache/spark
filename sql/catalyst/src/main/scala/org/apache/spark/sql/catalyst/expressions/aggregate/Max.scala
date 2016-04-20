@@ -22,6 +22,8 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Returns the maximum value of expr.")
 case class Max(child: Expression) extends DeclarativeAggregate {
 
   override def children: Seq[Expression] = child :: Nil
@@ -46,13 +48,12 @@ case class Max(child: Expression) extends DeclarativeAggregate {
   )
 
   override lazy val updateExpressions: Seq[Expression] = Seq(
-    /* max = */ If(IsNull(child), max, If(IsNull(max), child, Greatest(Seq(max, child))))
+    /* max = */ Greatest(Seq(max, child))
   )
 
   override lazy val mergeExpressions: Seq[Expression] = {
-    val greatest = Greatest(Seq(max.left, max.right))
     Seq(
-      /* max = */ If(IsNull(max.right), max.left, If(IsNull(max.left), max.right, greatest))
+      /* max = */ Greatest(Seq(max.left, max.right))
     )
   }
 
