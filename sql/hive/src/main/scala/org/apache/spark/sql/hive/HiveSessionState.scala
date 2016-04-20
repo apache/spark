@@ -71,11 +71,13 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
    *    SQLConf.  Additionally, any properties set by set() or a SET command inside sql() will be
    *    set in the SQLConf *as well as* in the HiveConf.
    */
-  lazy val hiveconf: HiveConf = executionHive.conf
+  lazy val hiveconf: HiveConf = {
+    val c = executionHive.conf
+    conf.setConf(c.getAllProperties)
+    c
+  }
 
-  // Set some default confs
   setDefaultOverrideConfs()
-  setConf(hiveconf.getAllProperties)
 
   /**
    * Internal catalog for managing table and database states.
