@@ -592,7 +592,7 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures, Java
         """
         Sets the value of :py:attr:`hashAlgorithm`.
         """
-        self._paramMap[self.hashAlgorithm] = value
+        self._set(hashAlgorithm=value)
         return self
 
     @since("2.0.0")
