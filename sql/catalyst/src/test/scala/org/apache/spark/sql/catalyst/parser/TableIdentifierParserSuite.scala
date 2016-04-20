@@ -42,7 +42,7 @@ class TableIdentifierParserSuite extends SparkFunSuite {
     "tblproperties", "temporary", "terminated", "tinyint", "touch", "transactions", "unarchive",
     "undo", "uniontype", "unlock", "unset", "unsigned", "uri", "use", "utc", "utctimestamp",
     "view", "while", "year", "work", "transaction", "write", "isolation", "level",
-    "snapshot","autocommit", "all", "alter", "array", "as", "authorization", "between", "bigint",
+    "snapshot", "autocommit", "all", "alter", "array", "as", "authorization", "between", "bigint",
     "binary", "boolean", "both", "by", "create", "cube", "current_date", "current_timestamp",
     "cursor", "date", "decimal", "delete", "describe", "double", "drop", "exists", "external",
     "false", "fetch", "float", "for", "grant", "group", "grouping", "import", "in",
