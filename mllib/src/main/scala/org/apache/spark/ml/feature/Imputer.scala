@@ -110,6 +110,7 @@ class Imputer @Since("2.0.0")(override val uid: String)
   setDefault(strategy -> "mean", missingValue -> Double.NaN)
 
   override def fit(dataset: Dataset[_]): ImputerModel = {
+    transformSchema(dataset.schema, logging = true)
     val ic = col($(inputCol))
     val filtered = dataset.select(ic.cast(DoubleType))
       .filter(ic.isNotNull && ic =!= $(missingValue))
@@ -163,6 +164,7 @@ class ImputerModel private[ml](
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   override def transform(dataset: Dataset[_]): DataFrame = {
+    transformSchema(dataset.schema, logging = true)
     val inputType = dataset.select($(inputCol)).schema.fields(0).dataType
     inputType match {
       case _: NumericType =>
