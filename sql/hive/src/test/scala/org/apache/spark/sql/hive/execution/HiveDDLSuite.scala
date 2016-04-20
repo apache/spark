@@ -370,7 +370,7 @@ class HiveDDLSuite
       val dbName = "db1"
       val tabName = "tab1"
       val path = catalog.createDatabasePath(dbName, Option(tmpDir.toString))
-      val fs = new Path(path).getFileSystem(hiveContext.hiveconf)
+      val fs = new Path(path).getFileSystem(hiveContext.sessionState.hiveconf)
       withTable(tabName) {
         assert(tmpDir.listFiles.isEmpty)
         sql(s"CREATE DATABASE $dbName Location '$tmpDir'")
@@ -400,9 +400,9 @@ class HiveDDLSuite
     val dbName = "db1"
     val path = catalog.createDatabasePath(dbName, None)
     val dbPath = new Path(path)
-    val fs = dbPath.getFileSystem(hiveContext.hiveconf)
+    val fs = dbPath.getFileSystem(hiveContext.sessionState.hiveconf)
     // the database directory does not exist
-    assert (!fs.exists(dbPath))
+    assert(!fs.exists(dbPath))
 
     sql(s"CREATE DATABASE $dbName")
     val db1 = catalog.getDatabaseMetadata(dbName)
@@ -432,9 +432,9 @@ class HiveDDLSuite
     val dbName = "db1"
     val path = catalog.createDatabasePath(dbName, None)
     val dbPath = new Path(path)
-    val fs = dbPath.getFileSystem(hiveContext.hiveconf)
+    val fs = dbPath.getFileSystem(hiveContext.sessionState.hiveconf)
     // the database directory does not exist
-    assert (!fs.exists(dbPath))
+    assert(!fs.exists(dbPath))
 
     sql(s"CREATE DATABASE $dbName")
     assert(fs.exists(dbPath) && fs.isDirectory(dbPath))
