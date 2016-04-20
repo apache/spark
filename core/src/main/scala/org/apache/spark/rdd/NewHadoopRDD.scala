@@ -130,7 +130,7 @@ class NewHadoopRDD[K, V](
       logInfo("Input split: " + split.serializableHadoopSplit)
       val conf = getConf
 
-      val inputMetrics = context.taskMetrics().registerInputMetrics(DataReadMethod.Hadoop)
+      val inputMetrics = context.taskMetrics().inputMetrics
       val existingBytesRead = inputMetrics.bytesRead
 
       // Find a function that will return the FileSystem bytes read by this thread. Do this before

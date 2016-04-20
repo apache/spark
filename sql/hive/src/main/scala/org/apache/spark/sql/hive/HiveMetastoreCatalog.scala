@@ -41,12 +41,11 @@ import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.execution.FileRelation
-import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.execution.datasources.{Partition => _, _}
 import org.apache.spark.sql.execution.datasources.parquet.{DefaultSource => ParquetDefaultSource, ParquetRelation}
 import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.hive.execution.HiveNativeCommand
 import org.apache.spark.sql.hive.orc.{DefaultSource => OrcDefaultSource}
-import org.apache.spark.sql.sources.{FileFormat, HadoopFsRelation, HDFSFileCatalog}
 import org.apache.spark.sql.types._
 
 private[hive] case class HiveSerDe(
@@ -299,7 +298,7 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
       CatalogTableType.MANAGED_TABLE
     }
 
-    val maybeSerDe = HiveSerDe.sourceToSerDe(provider, hive.hiveconf)
+    val maybeSerDe = HiveSerDe.sourceToSerDe(provider, hive.sessionState.hiveconf)
     val dataSource =
       DataSource(
         hive,
@@ -504,11 +503,12 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
     }
   }
 
-  private def convertToLogicalRelation(metastoreRelation: MetastoreRelation,
-                                       options: Map[String, String],
-                                       defaultSource: FileFormat,
-                                       fileFormatClass: Class[_ <: FileFormat],
-                                       fileType: String): LogicalRelation = {
+  private def convertToLogicalRelation(
+      metastoreRelation: MetastoreRelation,
+      options: Map[String, String],
+      defaultSource: FileFormat,
+      fileFormatClass: Class[_ <: FileFormat],
+      fileType: String): LogicalRelation = {
     val metastoreSchema = StructType.fromAttributes(metastoreRelation.output)
     val tableIdentifier =
       QualifiedTableName(metastoreRelation.databaseName, metastoreRelation.tableName)

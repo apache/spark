@@ -22,7 +22,6 @@ import java.util.Random
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.shuffle.hash.HashShuffleManager
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
@@ -179,9 +178,6 @@ object ShuffleExchange {
         // copy.
         true
       }
-    } else if (shuffleManager.isInstanceOf[HashShuffleManager]) {
-      // We're using hash-based shuffle, so we don't need to copy.
-      false
     } else {
       // Catch-all case to safely handle any future ShuffleManager implementations.
       true
