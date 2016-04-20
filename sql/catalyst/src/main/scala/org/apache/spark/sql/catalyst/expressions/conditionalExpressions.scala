@@ -104,7 +104,7 @@ abstract class CaseWhenBase(
 
   override def dataType: DataType = branches.head._2.dataType
 
-  override def prettyDataType: DataType = thenList.head.prettyDataType
+  override def prettyDataType: DataType = branches.head._2.prettyDataType
 
   override def nullable: Boolean = {
     // Result is nullable if any of the branch is nullable, or if the else value is nullable
