@@ -313,6 +313,7 @@ case class DescribeTableCommand(
             s"specified for DESCRIBE command")
       }
     }
+    
     val results =
       sparkSession.sessionState.catalog.describeTable(table, partSpec, colPath, isExtended, output)
     val rows = results.map { case (name, dataType, comment) =>
