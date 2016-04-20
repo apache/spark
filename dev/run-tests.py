@@ -62,17 +62,6 @@ def determine_modules_for_files(filenames):
 
 
 def identify_changed_files_from_git_commits(patch_sha, target_branch=None, target_ref=None):
-    """
-    Given a git commit and target ref, use the set of files changed in the diff in order to
-    determine which modules' tests should be run.
-
-    >>> [x.name for x in determine_modules_for_files( \
-            identify_changed_files_from_git_commits("fc0a1475ef", target_ref="5da21f07"))]
-    ['graphx']
-    >>> 'root' in [x.name for x in determine_modules_for_files( \
-         identify_changed_files_from_git_commits("50a0496a43", target_ref="6765ef9"))]
-    True
-    """
     if target_branch is None and target_ref is None:
         raise AttributeError("must specify either target_branch or target_ref")
     elif target_branch is not None and target_ref is not None:
