@@ -306,19 +306,36 @@ class HiveShowDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     }
   }
 
-  test("Save datasource to table -- dataframe with user-specified schema and partitioned") {
-    // TODO partitioning information will be lost in the DDL, because datasource DDL syntax
-    // does not have a place to keep the partitioning columns.
+  test("Save datasource to table -- dataframe with user-specified schema") {
     withTable("ttt3") {
       val df = (1 to 3).map(i => (i, s"val_$i", i * 2)).toDF("a", "b", "c")
       df.write
-        .partitionBy("a")
         .format("parquet")
         .mode(SaveMode.Overwrite)
         .saveAsTable("ttt3")
       assert(compareCatalog(
         TableIdentifier("ttt3"),
         sql("show create table ttt3").collect()(0).toSeq(0).toString))
+    }
+  }
+
+  test("Save datasource to table -- partitioned, bucket and sort") {
+    // does not have a place to keep the partitioning columns.
+    val df = (1 to 3).map(i => (i, s"val_$i", i * 2)).toDF("a", "b", "c")
+    withTable("ttt3", "ttt5") {
+      df.write
+        .partitionBy("a", "b")
+        .bucketBy(5, "c")
+        .sortBy("c")
+        .format("parquet")
+        .mode(SaveMode.Overwrite)
+        .saveAsTable("ttt3")
+      val generatedDDL =
+        sql("show create table ttt3").collect()(0).toSeq(0).toString.replace("<DataFrame>", "df")
+      assert(generatedDDL.contains("partitionBy(\"a\", \"b\")"))
+      assert(generatedDDL.contains("bucketBy(5, \"c\")"))
+      assert(generatedDDL.contains("sortBy(\"c\")"))
+      assert(generatedDDL.contains("format(\"parquet\")"))
     }
   }
 

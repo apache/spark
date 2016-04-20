@@ -692,25 +692,79 @@ private[hive] class HiveClientImpl(
     }
   }
 
+  /**
+   * Currently, when users use dataFrame to create a table, such as df.write.partitionBy("a")
+   * .saveAsTable("t1"), HiveMetaStoreCatalog will put the partitioning, buckecting and soring
+   * information in TBLPROPERTIES when creating corresponding hive table. So when the table
+   * is known to be created with "spark.sql.sources.provider" value, and the following properties
+   * are the indicator of whether the table is created from dataframe.
+   * @param tblProperties
+   * @return
+   */
+  private def createdByDataframe(tblProperties: Map[String, String]): Boolean = {
+    tblProperties.get("spark.sql.sources.schema.numPartCols").isDefined ||
+      tblProperties.get("spark.sql.sources.schema.numBucketCols").isDefined ||
+      tblProperties.get("spark.sql.sources.schema.numSortCols").isDefined
+  }
+
   private def generateDataSourceDDL(hiveTable: HiveTable): String = {
-    val processedProperties = scala.collection.mutable.ArrayBuffer.empty[String]
-    val sb = new StringBuilder(generateCreateTableHeader(hiveTable, processedProperties))
-    // It is possible that the column list returned from hive metastore is just a dummy
-    // one, such as "col array<String>", because the metastore was created as spark sql
-    // specific metastore (refer to HiveMetaStoreCatalog.createDataSourceTable.
-    // newSparkSQLSpecificMetastoreTable). In such case, the column schema information
-    // is located in tblproperties in json format.
-    sb.append(generateColsDataSource(hiveTable, processedProperties) + "\n")
-    sb.append("USING " + hiveTable.getProperty("spark.sql.sources.provider") + "\n")
-    val options = scala.collection.mutable.ArrayBuffer.empty[String]
-    hiveTable.getSd.getSerdeInfo.getParameters.asScala.foreach { e =>
-      options += "" + escapeHiveCommand(e._1) + " '" + escapeHiveCommand(e._2) + "'"
+    val tblProperties = hiveTable.getParameters.asScala.toMap
+    if (createdByDataframe(tblProperties)) {
+      def getColumnNames(colType: String): Seq[String] = {
+        tblProperties.get(s"spark.sql.sources.schema.num${colType.capitalize}Cols").map {
+          numCols => (0 until numCols.toInt).map { index =>
+            tblProperties.getOrElse(s"spark.sql.sources.schema.${colType}Col.$index",
+              throw new AnalysisException(
+                s"Could not read $colType columns from the metastore because it is corrupted " +
+                  s"(missing part $index of it, $numCols parts are expected)."))
+          }
+        }.getOrElse(Nil)
+      }
+
+      // geneerate the syntax for creating table from Dataframe
+      val sb = new StringBuilder("<DataFrame>.write")
+      val partitionCols = getColumnNames("part")
+      val bucketCols = getColumnNames("bucket")
+      if(partitionCols.size > 0) {
+        sb.append(".partitionBy" + partitionCols.map("\"" + _ + "\"").mkString("(", ", ", ")"))
+      }
+      if(bucketCols.size > 0) {
+        tblProperties.get("spark.sql.sources.schema.numBuckets").map { n =>
+          sb.append(s".bucketBy($n, " + bucketCols.map("\"" + _ + "\"").mkString(", ") + ")")
+        }
+        val sortCols = getColumnNames("sort")
+        if(sortCols.size > 0) {
+          sb.append(".sortBy" + sortCols.map("\"" + _ + "\"").mkString("(", ", ", ")"))
+        }
+      }
+
+      // file format
+      tblProperties.get("spark.sql.sources.provider").map { provider =>
+        sb.append(".format(\"" + provider + "\")")
+      }
+
+      sb.append(".saveAsTable(\"" + hiveTable.getDbName + "." + hiveTable.getTableName + "\")")
+      sb.toString
+    } else {
+      val processedProperties = scala.collection.mutable.ArrayBuffer.empty[String]
+      val sb = new StringBuilder(generateCreateTableHeader(hiveTable, processedProperties))
+      // It is possible that the column list returned from hive metastore is just a dummy
+      // one, such as "col array<String>", because the metastore was created as spark sql
+      // specific metastore (refer to HiveMetaStoreCatalog.createDataSourceTable.
+      // newSparkSQLSpecificMetastoreTable). In such case, the column schema information
+      // is located in tblproperties in json format.
+      sb.append(generateColsDataSource(hiveTable, processedProperties) + "\n")
+      sb.append("USING " + hiveTable.getProperty("spark.sql.sources.provider") + "\n")
+      val options = scala.collection.mutable.ArrayBuffer.empty[String]
+      hiveTable.getSd.getSerdeInfo.getParameters.asScala.foreach { e =>
+        options += "" + escapeHiveCommand(e._1) + " '" + escapeHiveCommand(e._2) + "'"
+      }
+      if (options.size > 0) {
+        sb.append("OPTIONS " + options.mkString("( ", ", \n", " )"))
+      }
+      // create table using syntax does not support EXTERNAL keyword
+      sb.toString.replace("EXTERNAL TABLE", "TABLE")
     }
-    if (options.size > 0) {
-      sb.append("OPTIONS " + options.mkString("( ", ", \n", " )"))
-    }
-    // create table using syntax does not support EXTERNAL keyword
-    sb.toString.replace("EXTERNAL TABLE", "TABLE")
   }
 
   private def generateHiveDDL(hiveTable: HiveTable): String = {
