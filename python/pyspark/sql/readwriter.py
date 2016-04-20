@@ -33,7 +33,8 @@ __all__ = ["DataFrameReader", "DataFrameWriter"]
 
 def to_str(value):
     """
-    A wrapper over str(), but convert bool values to lower case string, and keep None
+    A wrapper over str(), but converts bool values to lower case strings.
+    If None is given, just returns None, instead of converting it to string "None".
     """
     if isinstance(value, bool):
         return str(value).lower()
