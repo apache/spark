@@ -33,8 +33,9 @@ export _SPARK_CMD_USAGE="Usage: ./bin/pyspark [options]"
 # PYSPARK_DRIVER_PYTHON_OPTS to pass options when starting the Python driver
 # (e.g. PYSPARK_DRIVER_PYTHON_OPTS='notebook').  This supports full customization of the IPython
 # and executor Python executables.
-#
-# For backwards-compatibility, we retain the old IPYTHON and IPYTHON_OPTS variables.
+# 
+# In Spark 2.0, IPYTHON and IPYTHON_OPTS are removed and pyspark fails to launch
+# if either option is set in the user's environment.
 
 # Determine the Python executable to use if PYSPARK_PYTHON or PYSPARK_DRIVER_PYTHON isn't set:
 if hash python2.7 2>/dev/null; then
