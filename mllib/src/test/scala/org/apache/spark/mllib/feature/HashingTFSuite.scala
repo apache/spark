@@ -28,12 +28,11 @@ class HashingTFSuite extends SparkFunSuite with MLlibTestSparkContext {
     val hashingTF = new HashingTF(1000)
     val doc = "a a b b c d".split(" ")
     val n = hashingTF.numFeatures
-    def featureIdx: Any => Int = hashingTF.indexOfTerm(HashingTF.Murmur3)
     val termFreqs = Seq(
-      (featureIdx("a"), 2.0),
-      (featureIdx("b"), 2.0),
-      (featureIdx("c"), 1.0),
-      (featureIdx("d"), 1.0))
+      (hashingTF.indexOf("a"), 2.0),
+      (hashingTF.indexOf("b"), 2.0),
+      (hashingTF.indexOf("c"), 1.0),
+      (hashingTF.indexOf("d"), 1.0))
     assert(termFreqs.map(_._1).forall(i => i >= 0 && i < n),
       "index must be in range [0, #features)")
     assert(termFreqs.map(_._1).toSet.size === 4, "expecting perfect hashing")
@@ -55,11 +54,10 @@ class HashingTFSuite extends SparkFunSuite with MLlibTestSparkContext {
     val hashingTF = new HashingTF(100).setBinary(true)
     val doc = "a a b c c c".split(" ")
     val n = hashingTF.numFeatures
-    def featureIdx: Any => Int = hashingTF.indexOfTerm(HashingTF.Murmur3)
     val expected = Vectors.sparse(n, Seq(
-      (featureIdx("a"), 1.0),
-      (featureIdx("b"), 1.0),
-      (featureIdx("c"), 1.0)))
+      (hashingTF.indexOf("a"), 1.0),
+      (hashingTF.indexOf("b"), 1.0),
+      (hashingTF.indexOf("c"), 1.0)))
     assert(hashingTF.transform(doc) ~== expected absTol 1e-14)
   }
 }
