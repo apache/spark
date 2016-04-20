@@ -521,3 +521,147 @@ private[streaming] class ConstantRateController(id: Int, estimator: RateEstimato
   override def publish(rate: Long): Unit = ()
   override def getLatestRate(): Long = rate
 }
+
+/**
+  * Temporarily added some samples for the CEP API's here.
+  * TODO: add test cases in streaming/src/test/scala/CepSuite.scala
+  */
+
+import org.apache.spark.streaming.dstream.WindowState
+
+object PatternMatchByKey {
+
+  import org.apache.spark.streaming._
+  import org.apache.spark.Partitioner
+
+  def main(args: Array[String]) {
+    val brokers = args(0)
+    val topics = args(1)
+    val checkpointDir = args(2)
+
+
+    // Create context with 2 second batch interval
+    val sparkConf = new SparkConf().setMaster("local[*]").setAppName("PatternMatchByKey")
+    val ssc = new StreamingContext(sparkConf, Seconds(6))
+    ssc.checkpoint(checkpointDir)
+
+    // Create direct kafka stream with brokers and topics
+    val topicsSet = topics.split(",").toSet
+    val kafkaParams = Map[String, String]("metadata.broker.list" -> brokers,
+      "auto.offset.reset" -> "smallest")
+
+    case class Tick(symbol: String, price: Int, ts: Long)
+
+    // Read a stream of message from kafka
+    val messages = KafkaUtils.createDirectStream[String, String, StringDecoder, StringDecoder](
+      ssc, kafkaParams, topicsSet)
+
+    // Get each message and put into a Tick object
+    val ticks = messages.map(_._2)
+      .map(_.split("[,:]")).map(p => {
+      Tick(p(1), p(3).trim.toInt, p(5).trim.toLong)
+    })
+
+    // put into a KV by compName and Timetamp
+    val kvTicks = ticks.map(t => (t.symbol, t))
+    kvTicks.cache()
+
+
+    // define rise, drop & deep predicates
+    def rise(in: Tick, ew: WindowState): Boolean = {
+      in.price > ew.first.asInstanceOf[Tick].price  &&
+        in.price >= ew.prev.asInstanceOf[Tick].price
+    }
+    def drop(in: Tick, ew: WindowState): Boolean = {
+      in.price >= ew.first.asInstanceOf[Tick].price  &&
+        in.price < ew.prev.asInstanceOf[Tick].price
+    }
+    def deep(in: Tick, ew: WindowState): Boolean = {
+      in.price < ew.first.asInstanceOf[Tick].price &&
+        in.price < ew.prev.asInstanceOf[Tick].price
+    }
+
+    // map the predicates to their state names
+    val predicateMapping: Map[String, (Tick, WindowState) => Boolean] =
+      Map("rise" -> rise, "drop" -> drop, "deep" -> deep)
+
+    val matches = kvTicks.patternMatchByKeyAndWindow("rise drop [rise ]+ deep".r,
+      predicateMapping, (in: Tick) => in.ts, Seconds(12), Seconds(6))
+
+    matches.print()
+
+    ssc.start()
+    ssc.awaitTermination()
+
+
+    // Start the computation
+
+  }
+}
+
+object PatternMatch {
+
+  import org.apache.spark.streaming._
+  import org.apache.spark.Partitioner
+
+  def main(args: Array[String]) {
+    val brokers = args(0)
+    val topics = args(1)
+    val checkpointDir = args(2)
+
+
+    // Create context with 2 second batch interval
+    val sparkConf = new SparkConf().setMaster("local[*]").setAppName("PatternMatch")
+    val ssc = new StreamingContext(sparkConf, Seconds(6))
+    ssc.checkpoint(checkpointDir)
+
+    // Create direct kafka stream with brokers and topics
+    val topicsSet = topics.split(",").toSet
+    val kafkaParams = Map[String, String]("metadata.broker.list" -> brokers,
+      "auto.offset.reset" -> "smallest")
+
+    case class Tick(symbol: String, price: Int, ts: Long)
+
+    // Read a stream of message from kafka
+    val messages = KafkaUtils.createDirectStream[String, String, StringDecoder, StringDecoder](
+      ssc, kafkaParams, topicsSet)
+
+    // Get each message and put into a Tick object
+    val ticks = messages.map(_._2)
+      .map(_.split("[,:]")).map(p => {
+      Tick(p(1), p(3).trim.toInt, p(5).trim.toLong)
+    })
+
+    // put into a KV by compName and Timetamp
+    val kvTicks = ticks.map(t => (t.ts, t))
+
+    // define rise, drop & deep predicates
+    def rise(in: Tick, ew: WindowState): Boolean = {
+      in.price > ew.first.asInstanceOf[Tick].price  &&
+        in.price >= ew.prev.asInstanceOf[Tick].price
+    }
+    def drop(in: Tick, ew: WindowState): Boolean = {
+      in.price >= ew.first.asInstanceOf[Tick].price  &&
+        in.price < ew.prev.asInstanceOf[Tick].price
+    }
+    def deep(in: Tick, ew: WindowState): Boolean = {
+      in.price < ew.first.asInstanceOf[Tick].price &&
+        in.price < ew.prev.asInstanceOf[Tick].price
+    }
+
+    // map the predicates to their state names
+    val predicateMapping: Map[String, (Tick, WindowState) => Boolean] =
+      Map("rise" -> rise, "drop" -> drop, "deep" -> deep)
+
+    val matches = kvTicks.patternMatchByWindow("rise drop [rise ]+ deep".r,
+      predicateMapping, Seconds(12), Seconds(6))
+
+    matches.print()
+
+    ssc.start()
+    ssc.awaitTermination()
+
+    // Start the computation
+
+  }
+}

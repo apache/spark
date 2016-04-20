@@ -857,19 +857,6 @@ abstract class DStream[T: ClassTag] (
     )
   }
 
-
-  def matchPatternByWindow(
-                            pattern: scala.util.matching.Regex,
-                            predicates: Map[String, (T, WindowMetric) => Boolean],
-                            windowDuration: Duration,
-                            slideDuration: Duration
-                            ): DStream[List[T]] = ssc.withScope {
-    new PatternMatchedDStream[T](
-      this, pattern, predicates,
-      windowDuration, slideDuration, new HashPartitioner(1)
-    )
-  }
-
   /**
    * Return a new DStream by unifying data of another DStream with this DStream.
    * @param that Another DStream having the same slideDuration as this DStream.
