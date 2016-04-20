@@ -126,7 +126,7 @@ object HashingTF {
 
   private[spark] val Murmur3: String = "murmur3"
 
-  private[spark] val supportedHashAlgorithms = Set(Native, Murmur3)
+  private[spark] val supportedHashAlgorithms: Array[String] = Array(Native, Murmur3)
 
   private val seed = 42
 
@@ -153,7 +153,7 @@ object HashingTF {
         val utf8 = UTF8String.fromString(s)
         hashUnsafeBytes(utf8.getBaseObject, utf8.getBaseOffset, utf8.numBytes(), seed)
       case _ => throw new SparkException("HashingTF with murmur3 algorithm does not " +
-        "support the type of input data.")
+        s"support type ${term.getClass.getTypeName} of input data.")
     }
   }
 }

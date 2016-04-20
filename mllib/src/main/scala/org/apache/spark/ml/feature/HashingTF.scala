@@ -31,6 +31,12 @@ import org.apache.spark.sql.types.{ArrayType, StructType}
 /**
  * :: Experimental ::
  * Maps a sequence of terms to their term frequencies using the hashing trick.
+ * Current we support two hash algorithms: "murmur3"(default) and "native".
+ * "murmur3" calculates a hash code value for the term object using
+ * Austin Appleby's MurmurHash 3 algorithm (MurmurHash3_x86_32);
+ * "native" calculates the hash code value using the native Scala implementation.
+ * In Spark 1.6 and earlier, "native" is the default hash algorithm;
+ * after Spark 2.0, we use "murmur3" as the default one.
  */
 @Experimental
 class HashingTF(override val uid: String)
@@ -65,13 +71,15 @@ class HashingTF(override val uid: String)
 
   /**
    * The hash algorithm used when mapping term to integer.
-   * Supported options: "murmur3" and "native".
+   * Supported options: "murmur3" and "native". We use "native" as default hash algorithm
+   * in Spark 1.6 and earlier. After Spark 2.0, we use "murmur3" as default one.
    * (Default = "murmur3")
-   * @group param
+   * @group expertParam
    */
   val hashAlgorithm = new Param[String](this, "hashAlgorithm", "The hash algorithm used when " +
-    "mapping term to integer. Supported options: murmur3(default) and native.",
-    ParamValidators.inArray[String](feature.HashingTF.supportedHashAlgorithms.toArray))
+    "mapping term to integer. Supported options: " +
+    s"${feature.HashingTF.supportedHashAlgorithms.mkString(",")}.",
+    ParamValidators.inArray[String](feature.HashingTF.supportedHashAlgorithms))
 
   setDefault(numFeatures -> (1 << 18), binary -> false,
     hashAlgorithm -> feature.HashingTF.Murmur3)
