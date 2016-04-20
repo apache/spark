@@ -156,9 +156,22 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
   }
 
   /**
-   * Returns the mean reciprocal rank (MRR) of all the queries.
-   * If a query has an empty ground truth set, the reciprocal rank will be zero and a log
-   * warning is generated.
+   * Compute the mean reciprocal rank (MRR) of all the queries.
+   *
+   * MRR is the inverse position of the first relevant document, and is therefore well-suited
+   * to applications in which only the first result matters.The reciprocal rank is the
+   * multiplicative inverse of the rank of the first correct answer for a query response and
+   * the mean  reciprocal rank is the average of the reciprocal ranks of results for a sample
+   * of queries. MRR is well-suited to applications in which only the first result matters.
+   *
+   * If a query has an empty ground truth set, zero will be used as precision together with
+   * a log warning.
+   *
+   * See the following paper for detail:
+   *
+   * Brian McFee, Gert R. G. Lanckriet Metric Learning to Rank. ICML 2010: 775-782
+   *
+   * @return the mean reciprocal rank of all the queries.
    */
   lazy val meanReciprocalRank: Double = {
     predictionAndLabels.map { case (pred, lab) =>

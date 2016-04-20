@@ -21,6 +21,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.internal.Logging
 import org.apache.spark.ml.param.{IntParam, Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasLabelCol, HasPredictionCol}
 import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable}
@@ -34,7 +35,7 @@ import org.apache.spark.sql.functions._
 @Since("2.0.0")
 @Experimental
 final class RankingEvaluator[T: ClassTag] @Since("2.0.0") (@Since("2.0.0") override val uid: String)
-  extends Evaluator with HasPredictionCol with HasLabelCol with DefaultParamsWritable {
+  extends Evaluator with HasPredictionCol with HasLabelCol with DefaultParamsWritable with Logging {
 
   @Since("2.0.0")
   def this() = this(Identifiable.randomUID("rankingEval"))
@@ -133,6 +134,7 @@ final class RankingEvaluator[T: ClassTag] @Since("2.0.0") (@Since("2.0.0") overr
         }
         precSum / labSet.size
       } else {
+        logWarning("Empty ground truth set, check input data")
         0.0
       }
     }.reduce{ (a, b) => a + b } / dataset.count
@@ -151,9 +153,6 @@ final class RankingEvaluator[T: ClassTag] @Since("2.0.0") (@Since("2.0.0") overr
    * See the following paper for detail:
    *
    * IR evaluation methods for retrieving highly relevant documents. K. Jarvelin and J. Kekalainen
-   *
-   * @param k the position to compute the truncated ndcg, must be positive
-   * @return the average ndcg at the first k ranking positions
    */
   private def normalizedDiscountedCumulativeGain(dataset: Dataset[_]): Double = {
     val sc = SparkContext.getOrCreate()
@@ -181,6 +180,7 @@ final class RankingEvaluator[T: ClassTag] @Since("2.0.0") (@Since("2.0.0") overr
         }
         dcg / maxDcg
       } else {
+        logWarning("Empty ground truth set, check input data")
         0.0
       }
     }.reduce{ (a, b) => a + b } / dataset.count
@@ -199,9 +199,6 @@ final class RankingEvaluator[T: ClassTag] @Since("2.0.0") (@Since("2.0.0") overr
    * See the following paper for detail:
    *
    * IR evaluation methods for retrieving highly relevant documents. K. Jarvelin and J. Kekalainen
-   *
-   * @param k the position to compute the truncated precision, must be positive
-   * @return the average precision at the first k ranking positions
    */
   private def meanAveragePrecisionAtK(dataset: Dataset[_]): Double = {
     val sc = SparkContext.getOrCreate()
@@ -223,11 +220,28 @@ final class RankingEvaluator[T: ClassTag] @Since("2.0.0") (@Since("2.0.0") overr
         }
         cnt.toDouble / $(k)
       } else {
+        logWarning("Empty ground truth set, check input data")
         0.0
       }
     }.reduce{ (a, b) => a + b } / dataset.count
   }
 
+  /**
+   * Compute the mean reciprocal rank (MRR) of all the queries.
+   *
+   * MRR is the inverse position of the first relevant document, and is therefore well-suited
+   * to applications in which only the first result matters.The reciprocal rank is the
+   * multiplicative inverse of the rank of the first correct answer for a query response and
+   * the mean  reciprocal rank is the average of the reciprocal ranks of results for a sample
+   * of queries. MRR is well-suited to applications in which only the first result matters.
+   *
+   * If a query has an empty ground truth set, zero will be used as precision together with
+   * a log warning.
+   *
+   * See the following paper for detail:
+   *
+   * Brian McFee, Gert R. G. Lanckriet Metric Learning to Rank. ICML 2010: 775-782
+   */
   private def meanReciprocalRank(dataset: Dataset[_]): Double = {
     val sc = SparkContext.getOrCreate()
     val sqlContext = SQLContext.getOrCreate(sc)
@@ -247,6 +261,7 @@ final class RankingEvaluator[T: ClassTag] @Since("2.0.0") (@Since("2.0.0") overr
         }
         reciprocalRank
       } else {
+        logWarning("Empty ground truth set, check input data")
         0.0
       }
     }.reduce{ (a, b) => a + b } / dataset.count
