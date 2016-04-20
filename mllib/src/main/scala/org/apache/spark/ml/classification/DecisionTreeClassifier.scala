@@ -32,7 +32,7 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeModel}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.Dataset
 
 
 /**
@@ -94,17 +94,33 @@ final class DecisionTreeClassifier @Since("1.4.0") (
     }
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
     val strategy = getOldStrategy(categoricalFeatures, numClasses)
+
+    val instr = Instrumentation.create(this, oldDataset)
+    instr.logParams(params: _*)
+
     val trees = RandomForest.run(oldDataset, strategy, numTrees = 1, featureSubsetStrategy = "all",
-      seed = $(seed), parentUID = Some(uid))
-    trees.head.asInstanceOf[DecisionTreeClassificationModel]
+      instr, seed = $(seed), parentUID = Some(uid))
+
+    instr.logNumFeatures(oldDataset.first().features.size)
+    instr.logNumClasses(numClasses)
+
+    val m = trees.head.asInstanceOf[DecisionTreeClassificationModel]
+    instr.logSuccess(m)
+    m
   }
 
   /** (private[ml]) Train a decision tree on an RDD */
   private[ml] def train(data: RDD[LabeledPoint],
       oldStrategy: OldStrategy): DecisionTreeClassificationModel = {
+    val instr = Instrumentation.create(this, data)
+    instr.logParams(params: _*)
+
     val trees = RandomForest.run(data, oldStrategy, numTrees = 1, featureSubsetStrategy = "all",
-      seed = 0L, parentUID = Some(uid))
-    trees.head.asInstanceOf[DecisionTreeClassificationModel]
+      instr, seed = 0L, parentUID = Some(uid))
+
+    val m = trees.head.asInstanceOf[DecisionTreeClassificationModel]
+    instr.logSuccess(m)
+    m
   }
 
   /** (private[ml]) Create a Strategy instance to use with the old API. */
