@@ -692,21 +692,6 @@ private[hive] class HiveClientImpl(
     }
   }
 
-  /**
-   * Currently, when users use dataFrame to create a table, such as df.write.partitionBy("a")
-   * .saveAsTable("t1"), HiveMetaStoreCatalog will put the partitioning, buckecting and soring
-   * information in TBLPROPERTIES when creating corresponding hive table. So when the table
-   * is known to be created with "spark.sql.sources.provider" value, and the following properties
-   * are the indicator of whether the table is created from dataframe.
-   * @param tblProperties
-   * @return
-   */
-  private def createdByDataframe(tblProperties: Map[String, String]): Boolean = {
-    tblProperties.get("spark.sql.sources.schema.numPartCols").isDefined ||
-      tblProperties.get("spark.sql.sources.schema.numBucketCols").isDefined ||
-      tblProperties.get("spark.sql.sources.schema.numSortCols").isDefined
-  }
-
   private def generateDataSourceDDL(hiveTable: HiveTable): String = {
     val tblProperties = hiveTable.getParameters.asScala.toMap
     if (createdByDataframe(tblProperties)) {
@@ -721,19 +706,19 @@ private[hive] class HiveClientImpl(
         }.getOrElse(Nil)
       }
 
-      // geneerate the syntax for creating table from Dataframe
+      // generate the syntax for creating table from Dataframe
       val sb = new StringBuilder("<DataFrame>.write")
       val partitionCols = getColumnNames("part")
       val bucketCols = getColumnNames("bucket")
-      if(partitionCols.size > 0) {
+      if (partitionCols.size > 0) {
         sb.append(".partitionBy" + partitionCols.map("\"" + _ + "\"").mkString("(", ", ", ")"))
       }
-      if(bucketCols.size > 0) {
+      if (bucketCols.size > 0) {
         tblProperties.get("spark.sql.sources.schema.numBuckets").map { n =>
           sb.append(s".bucketBy($n, " + bucketCols.map("\"" + _ + "\"").mkString(", ") + ")")
         }
         val sortCols = getColumnNames("sort")
-        if(sortCols.size > 0) {
+        if (sortCols.size > 0) {
           sb.append(".sortBy" + sortCols.map("\"" + _ + "\"").mkString("(", ", ", ")"))
         }
       }
@@ -764,6 +749,21 @@ private[hive] class HiveClientImpl(
       }
       // create table using syntax does not support EXTERNAL keyword
       sb.toString.replace("EXTERNAL TABLE", "TABLE")
+    }
+
+    /**
+     * Currently, when users use dataFrame to create a table, such as df.write.partitionBy("a")
+     * .saveAsTable("t1"), HiveMetaStoreCatalog will put the partitioning, buckecting and soring
+     * information in TBLPROPERTIES when creating corresponding hive table. So when the table
+     * is known to be created with "spark.sql.sources.provider" value, and the following properties
+     * are the indicator of whether the table is created from dataframe.
+     * @param tblProperties
+     * @return
+     */
+    def createdByDataframe(tblProperties: Map[String, String]): Boolean = {
+      tblProperties.get("spark.sql.sources.schema.numPartCols").isDefined ||
+        tblProperties.get("spark.sql.sources.schema.numBucketCols").isDefined ||
+        tblProperties.get("spark.sql.sources.schema.numSortCols").isDefined
     }
   }
 
