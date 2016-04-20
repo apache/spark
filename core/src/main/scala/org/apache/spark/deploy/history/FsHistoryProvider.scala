@@ -79,6 +79,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   private val NOT_STARTED = "<Not Started>"
 
+  private val SPARK_HISTORY_FS_NUM_PROCESSING_THREADS = "spark.history.fs.num.processing.threads"
+
   // Interval between safemode checks.
   private val SAFEMODE_CHECK_INTERVAL_S = conf.getTimeAsSeconds(
     "spark.history.fs.safemodeCheck.interval", "5s")
@@ -88,6 +90,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   // Interval between each cleaner checks for event logs to delete
   private val CLEAN_INTERVAL_S = conf.getTimeAsSeconds("spark.history.fs.cleaner.interval", "1d")
+
+  // Number of threads used to replay event logs.
+  private val NUM_PROCESSING_THREADS = conf.getInt(SPARK_HISTORY_FS_NUM_PROCESSING_THREADS,
+    Math.ceil(Runtime.getRuntime.availableProcessors() / 4f).toInt)
 
   private val logDir = conf.getOption("spark.history.fs.logDirectory")
     .map { d => Utils.resolveURI(d).toString }
@@ -129,12 +135,11 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   }
 
   /**
-   * An Executor to fetch and parse log files.
+   * Fixed size thread pool to fetch and parse log files.
    */
   private val replayExecutor: ExecutorService = {
     if (!conf.contains("spark.testing")) {
-      val numProcessors = Runtime.getRuntime.availableProcessors()
-      ThreadUtils.newDaemonFixedThreadPool(numProcessors, "log-replay-executor")
+      ThreadUtils.newDaemonFixedThreadPool(NUM_PROCESSING_THREADS, "log-replay-executor")
     } else {
       MoreExecutors.sameThreadExecutor()
     }
@@ -298,9 +303,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       if (logInfos.nonEmpty) {
         logDebug(s"New/updated attempts found: ${logInfos.size} ${logInfos.map(_.getPath)}")
       }
-      logInfos.map { batch =>
+      logInfos.map { file =>
           replayExecutor.submit(new Runnable {
-            override def run(): Unit = mergeApplicationListing(batch)
+            override def run(): Unit = mergeApplicationListing(file)
           })
         }
         .foreach { task =>
