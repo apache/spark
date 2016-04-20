@@ -20,13 +20,12 @@ package org.apache.spark.sql.sources
 import java.io.File
 
 import com.google.common.io.Files
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs._
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-
 
 class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
   import testImplicits._
