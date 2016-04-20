@@ -1137,6 +1137,7 @@ setMethod("summarize",
 #' @rdname dapply
 #' @name dapply
 #' @export
+#' @examples
 #' \dontrun{
 #'   df <- createDataFrame (sqlContext, mtcars)
 #'   df1 <- dapply(df, function(x) { x }, schema(df))
