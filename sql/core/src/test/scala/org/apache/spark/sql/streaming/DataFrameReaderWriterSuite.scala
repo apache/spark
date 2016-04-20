@@ -368,4 +368,79 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
       "org.apache.spark.sql.streaming.test",
       Map.empty)
   }
+
+  test("check continuous query methods should not be called on non-continuous queries") {
+    val textInput = Utils.createTempDir(namePrefix = "text").getCanonicalPath
+    val df = sqlContext.read
+      .text(textInput)
+
+    val w = df.write
+      .option("checkpointLocation", newMetadataDir)
+
+    // AnalysisException: "trigger() can only be called on continuous queries"
+    intercept[AnalysisException](w.trigger(ProcessingTime("10 seconds")))
+
+    // AnalysisException: "queryName() can only be called on continuous queries"
+    intercept[AnalysisException](w.queryName("queryName"))
+
+    // AnalysisException: "startStream() can only be called on continuous queries"
+    intercept[AnalysisException](w.startStream())
+
+    // AnalysisException: "startStream() can only be called on continuous queries"
+    intercept[AnalysisException](w.startStream("non_exist_path"))
+  }
+
+  test("check non-continuous query methods should not be called on continuous queries") {
+    val df = sqlContext.read
+      .format("org.apache.spark.sql.streaming.test")
+      .stream()
+
+    var w = df.write
+
+    // AnalysisException: "mode() can only be called on non-continuous queries"
+    intercept[AnalysisException](w.mode(SaveMode.Append))
+
+    // AnalysisException: "mode() can only be called on non-continuous queries"
+    intercept[AnalysisException](w.mode("append"))
+
+    // IllegalArgumentException: "Currently we don't support writing bucketed data to this data
+    //                            source."
+    intercept[IllegalArgumentException](w.bucketBy(1, "text").startStream())
+
+    // IllegalArgumentException: "Currently we don't support writing bucketed data to this data
+    //                            source."
+    intercept[IllegalArgumentException](w.sortBy("text").startStream())
+
+    w = df.write
+
+    // AnalysisException: "save() can only be called on non-continuous queries"
+    intercept[AnalysisException](w.save("non_exist_path"))
+
+    // AnalysisException: "save() can only be called on non-continuous queries"
+    intercept[AnalysisException](w.save())
+
+    // AnalysisException: "insertInto() can only be called on non-continuous queries"
+    intercept[AnalysisException](w.insertInto("non_exsit_table"))
+
+    // AnalysisException: "saveAsTable() can only be called on non-continuous queries"
+    intercept[AnalysisException](w.saveAsTable("non_exsit_table"))
+
+    // AnalysisException: "jdbc() can only be called on non-continuous queries"
+    intercept[AnalysisException](w.jdbc(null, null, null))
+
+    // AnalysisException: "json() can only be called on non-continuous queries"
+    intercept[AnalysisException](w.json("non_exist_path"))
+
+    // AnalysisException: "parquet() can only be called on non-continuous queries"
+    intercept[AnalysisException](w.parquet("non_exist_path"))
+
+    // AnalysisException: "orc() can only be called on non-continuous queries"
+    intercept[AnalysisException](w.orc("non_exist_path"))
+
+    // AnalysisException: "text() can only be called on non-continuous queries"
+    intercept[AnalysisException](w.text("non_exist_path"))
+
+    // AnalysisException: "csv() can only be called on non-continuous queries"
+    intercept[AnalysisException](w.csv("non_exist_path"))
+  }
 }
