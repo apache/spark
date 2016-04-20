@@ -40,7 +40,7 @@ import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg.CholeskyDecomposition
 import org.apache.spark.mllib.optimization.NNLS
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
@@ -115,6 +115,18 @@ private[recommendation] trait ALSModelParams extends Params with HasPredictionCo
 
   /** @group getParam */
   def getRecommendFor: String = $(recommendFor)
+
+  /**
+   * Param for whether to return predicted scores with recommendations.
+   * @group expertParam
+   */
+  val withScores = new BooleanParam(this, "withScores", "whether to return predicted scores" +
+    " with recommendations.")
+
+  /** @group expertGetParam */
+  def getWithScores: Boolean = $(withScores)
+
+  setDefault(withScores -> false)
 }
 
 /**
@@ -242,6 +254,13 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
     SchemaUtils.checkNumericType(schema, $(itemCol))
     // rating will be cast to Float
     SchemaUtils.checkNumericType(schema, $(ratingCol))
+    SchemaUtils.checkColumnType(schema, $(userCol), IntegerType)
+    SchemaUtils.checkColumnType(schema, $(itemCol), IntegerType)
+    val ratingType = schema($(ratingCol)).dataType
+    require(ratingType == FloatType || ratingType == DoubleType)
+    if (isSet(recommendFor) && !isSet(k)) {
+      throw new IllegalArgumentException("Parameter 'k' must be set when 'recommendFor' is set.")
+    }
     SchemaUtils.appendColumn(schema, $(predictionCol), FloatType)
   }
 }
@@ -281,9 +300,31 @@ class ALSModel private[ml] (
   @Since("2.0.0")
   def setRecommendFor(value: String): this.type = set(recommendFor, value)
 
+  /** @group expertSetParam */
+  @Since("2.0.0")
+  def setWithScores(value: Boolean): this.type = set(withScores, value)
+
   @Since("1.3.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema)
+    transformSchema(dataset.schema)
+    if (isRecommendingTopK) {
+      $(recommendFor) match {
+        case "user" => recommendItems(dataset, $(k))
+        case "item" => recommendUsers(dataset, $(k))
+      }
+    } else {
+      predictForUserAndItem(dataset)
+    }
+  }
+
+  /**
+   * Generate a predicted score for each (user, item) combination in the input dataset.
+   *
+   * @param dataset input dataset containing a user id and item id column.
+   * @return [[DataFrame]] with predicted score column appended.
+   */
+  private def predictForUserAndItem(dataset: Dataset[_]): DataFrame = {
     // Register a UDF for DataFrame, and then
     // create a new column named map(predictionCol) by running the predict UDF.
     val predict = udf { (userFeatures: Seq[Float], itemFeatures: Seq[Float]) =>
@@ -313,20 +354,60 @@ class ALSModel private[ml] (
    * @return [[DataFrame]] containing `dataset` with a column `predictions` appended
    */
   private def recommendUsersOrItems(
-    dataset: DataFrame,
+    dataset: Dataset[_],
     srcFactors: DataFrame,
     dstFactors: DataFrame,
     srcCol: String,
+    dstCol: String,
     num: Int): DataFrame = {
+
     import dataset.sqlContext.implicits._
+    val schema = dataset.schema
+
     val factors = dataset
-      .join(srcFactors, dataset(srcCol) === srcFactors("id"), "left")
+      .select(srcCol)
+      .distinct
+      .join(srcFactors, dataset(srcCol) === srcFactors("id"), "inner")
       .select(srcFactors("id"), srcFactors("features"))
-    val topK = ALSModel.recommendForAll(rank, factors, dstFactors, num)
-      .toDF("id", "predictions")
-    dataset
-      .join(topK, dataset(srcCol) === topK("id"))
-      .select(dataset("*"), topK("predictions"))
+
+    val topKRaw = ALSModel.recommendForAll(rank, factors, dstFactors, num)
+    val topK = if ($(withScores)) {
+      topKRaw.toDF("id", "predictions")
+    } else {
+      topKRaw
+        .map { case (id, predsWithScores) => (id, predsWithScores.map(_._1)) }
+        .toDF("id", "predictions")
+    }
+
+    val result = if (schema.fieldNames.contains(dstCol)) {
+      // if dstCol exists, we group by that column to generate the 'ground truth' set of
+      // user (or item) ids.
+      // Note, this changes the structure of the input DataFrame, returning a row of
+      // (id, predictions, actual) per unique id in 'srcCol', discarding all other columns.
+      // In practice this is expected only during model selection with
+      // CrossValidator or TrainValidationSplit.
+      val actual = dataset
+        .select(srcCol, dstCol)
+        .as[(Int, Int)]
+        .groupByKey(_._1)
+        .mapGroups { case (src, ids) => (src, ids.map(_._2).toArray) }
+        .toDF("id", "actual")
+
+      dataset
+        .select(srcCol)
+        .distinct
+        .join(topK, dataset(srcCol) === topK("id"))
+        .join(actual, dataset(srcCol) === actual("id"))
+        .select(dataset(srcCol), topK("predictions"), actual("actual"))
+    } else {
+      // if dstCol doesn't exist, we assume we are passed a DataFrame of unique user (or item) ids
+      // for which to make recommendations, and so we don't use distinct here. This preserves the
+      // row structure of the input data frame.
+      dataset
+        .join(topK, dataset(srcCol) === topK("id"))
+        .select(dataset("*"), topK("predictions"))
+    }
+    result
   }
 
   /**
@@ -335,9 +416,8 @@ class ALSModel private[ml] (
    * @param num number of items to recommend for each user.
    * @return input [[DataFrame]], with a column `predictions` appended.
    */
-  @Since("2.0.0")
-  def recommendItems(dataset: DataFrame, num: Int): DataFrame = {
-    recommendUsersOrItems(dataset, userFactors, itemFactors, $(userCol), num)
+  private def recommendItems(dataset: Dataset[_], num: Int): DataFrame = {
+    recommendUsersOrItems(dataset, userFactors, itemFactors, $(userCol), $(itemCol), num)
   }
 
   /**
@@ -346,10 +426,11 @@ class ALSModel private[ml] (
    * @param num number of users to recommend for each item.
    * @return input [[DataFrame]], with a column `predictions` appended.
    */
-  @Since("2.0.0")
-  def recommendUsers(dataset: DataFrame, num: Int): DataFrame = {
-    recommendUsersOrItems(dataset, itemFactors, userFactors, $(itemCol), num)
+  private def recommendUsers(dataset: Dataset[_], num: Int): DataFrame = {
+    recommendUsersOrItems(dataset, itemFactors, userFactors, $(itemCol), $(userCol), num)
   }
+
+  private def isRecommendingTopK: Boolean = isSet(recommendFor) && isSet(k)
 
   @Since("1.3.0")
   override def transformSchema(schema: StructType): StructType = {
@@ -357,6 +438,25 @@ class ALSModel private[ml] (
     SchemaUtils.checkNumericType(schema, $(userCol))
     SchemaUtils.checkNumericType(schema, $(itemCol))
     SchemaUtils.appendColumn(schema, $(predictionCol), FloatType)
+    if (isRecommendingTopK) {
+      $(recommendFor) match {
+        case "user" =>
+          SchemaUtils.checkColumnType(schema, $(userCol), IntegerType)
+          if (schema.contains($(itemCol))) {
+            SchemaUtils.checkColumnType(schema, $(itemCol), IntegerType)
+          }
+        case "item" =>
+          SchemaUtils.checkColumnType(schema, $(itemCol), IntegerType)
+          if (schema.contains($(userCol))) {
+            SchemaUtils.checkColumnType(schema, $(userCol), IntegerType)
+          }
+      }
+      SchemaUtils.appendColumn(schema, $(predictionCol), ArrayType(IntegerType, false))
+    } else {
+      SchemaUtils.checkColumnType(schema, $(userCol), IntegerType)
+      SchemaUtils.checkColumnType(schema, $(itemCol), IntegerType)
+      SchemaUtils.appendColumn(schema, $(predictionCol), FloatType)
+    }
   }
 
   @Since("1.5.0")
@@ -422,10 +522,10 @@ object ALSModel extends MLReadable[ALSModel] {
    *         of (dstId, score) pairs.
    */
   private def recommendForAll(
-    rank: Int,
-    srcFactors: DataFrame,
-    dstFactors: DataFrame,
-    num: Int): RDD[(Int, Array[(Int, Float)])] = {
+      rank: Int,
+      srcFactors: DataFrame,
+      dstFactors: DataFrame,
+      num: Int): RDD[(Int, Array[(Int, Float)])] = {
     import srcFactors.sqlContext.implicits._
     import org.apache.spark.mllib.recommendation.MatrixFactorizationModel
 
@@ -548,6 +648,10 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
   /** @group setParam */
   @Since("2.0.0")
   def setRecommendFor(value: String): this.type = set(recommendFor, value)
+
+  /** @group expertSetParam */
+  @Since("2.0.0")
+  def setWithScores(value: Boolean): this.type = set(withScores, value)
 
   /**
    * Sets both numUserBlocks and numItemBlocks to the specific value.

@@ -541,7 +541,18 @@ class ALSSuite
   }
 
   /**
-   * Validate expected vs actual predictions.
+   * Validate expected vs actual ids.
+   * @param data
+   */
+  private def validateRecommendedIds(data: Seq[(Seq[Int], Seq[Int])]) = {
+    data.foreach { case (expected, actual) =>
+      assert(expected === actual)
+
+    }
+  }
+
+  /**
+   * Validate expected vs actual ids and scores
    * @param data
    */
   private def validateRecommendations(data: Seq[(Seq[(Int, Float)], Seq[(Int, Float)])]) = {
@@ -553,43 +564,137 @@ class ALSSuite
     }
   }
 
-  test("recommend top k") {
+  private def getALSModel = {
     val sqlContext = this.sqlContext
     import sqlContext.implicits._
+    val userFactors = Seq(
+      (0, Array(6.0f, 4.0f)),
+      (1, Array(3.0f, 4.0f)),
+      (2, Array(3.0f, 6.0f))
+    ).toDF("id", "features")
+    val itemFactors = Seq(
+      (3, Array(5.0f, 6.0f)),
+      (4, Array(6.0f, 2.0f)),
+      (5, Array(3.0f, 6.0f))
+    ).toDF("id", "features")
     val als = new ALS().setRank(2)
-    val k = 2
+    new ALSModel(als.uid, als.getRank, userFactors, itemFactors)
+  }
+
+  test("recommend top k with no 'ground truth' column") {
+    val sqlContext = this.sqlContext
+    import sqlContext.implicits._
+
     val users = Seq(
-      (0, Array(6.0f, 4.0f), Array((3, 54.0f), (4, 44.0f))),
-      (1, Array(3.0f, 4.0f), Array((3, 39.0f), (5, 33.0f))),
-      (2, Array(3.0f, 6.0f), Array((3, 51.0f), (5, 45.0f)))
-    ).toDF("user", "features", "expected")
+      (0, Array((3, 54.0f), (4, 44.0f)), Array(3, 4)),
+      (1, Array((3, 39.0f), (5, 33.0f)), Array(3, 5)),
+      (2, Array((3, 51.0f), (5, 45.0f)), Array(3, 5))
+    ).toDF("user", "expected_with_scores", "expected")
     val items = Seq(
-      (3, Array(5.0f, 6.0f), Array((0, 54.0f), (2, 51.0f))),
-      (4, Array(6.0f, 2.0f), Array((0, 44.0f), (2, 30.0f))),
-      (5, Array(3.0f, 6.0f), Array((2, 45.0f), (0, 42.0f)))
-    ).toDF("item", "features", "expected")
-    val userFactors = users.select("user", "features").withColumnRenamed("user", "id")
-    val itemFactors = items.select("item", "features").withColumnRenamed("item", "id")
+      (3, Array((0, 54.0f), (2, 51.0f)), Array(0, 2)),
+      (4, Array((0, 44.0f), (2, 30.0f)), Array(0, 2)),
+      (5, Array((2, 45.0f), (0, 42.0f)), Array(2, 0))
+    ).toDF("item", "expected_with_scores", "expected")
+
     // construct model
-    val model = new ALSModel(als.uid, als.getRank, userFactors, itemFactors)
+    val model = getALSModel
       .setUserCol("user")
       .setItemCol("item")
-    // validate user recommendations
-    val topKItems = model.recommendItems(users, k)
-      .select("expected", "predictions")
+      .setK(2)
+
+    // validate recommendations for users, with scores
+    val topKItemWithScores = model.setWithScores(true).setRecommendFor("user").transform(users)
+      .select("expected_with_scores", "predictions")
       .as[(Seq[(Int, Float)], Seq[(Int, Float)])].rdd.collect()
-    validateRecommendations(topKItems)
-    // validate item recommendations
-    val topKUsers = model.recommendUsers(items, k)
+    validateRecommendations(topKItemWithScores)
+    // without scores
+    val topKItems = model.setWithScores(false).setRecommendFor("user").transform(users)
       .select("expected", "predictions")
+      .as[(Seq[Int], Seq[Int])].rdd.collect()
+    validateRecommendedIds(topKItems)
+
+    // validate item recommendations, with scores
+    val topKUsersWithScores = model.setWithScores(true).setRecommendFor("item").transform(items)
+      .select("expected_with_scores", "predictions")
       .as[(Seq[(Int, Float)], Seq[(Int, Float)])].rdd.collect()
-    validateRecommendations(topKUsers)
+    validateRecommendations(topKUsersWithScores)
+    // without scores
+    val topKUsers = model.setWithScores(false).setRecommendFor("item").transform(items)
+      .select("expected", "predictions")
+      .as[(Seq[Int], Seq[Int])].rdd.collect()
+    validateRecommendedIds(topKUsers)
+
     // check that using a subset of input only generates recommendations for that subset
-    assert(model.recommendItems(users.filter(users("user") > 0), k).count == 2)
-    assert(model.recommendUsers(items.filter(items("item") < 4), k).count == 1)
+    assert(model.setRecommendFor("user").transform(users.filter(users("user") > 0)).count == 2)
+    assert(model.setRecommendFor("item").transform(items.filter(items("item") < 4)).count == 1)
+  }
+
+  test("recommend top k with 'ground truth' column") {
+    val sqlContext = this.sqlContext
+    import sqlContext.implicits._
+
+    // raw input in the same format as for ALS.fit()
+    val ratings = Seq(
+      (0, 3, 54f),
+      (0, 4, 44f),
+      (0, 5, 42f),
+      (1, 3, 39f),
+      (1, 5, 33f),
+      (1, 4, 26f),
+      (2, 3, 51f),
+      (2, 5, 45f),
+      (2, 4, 30f)
+    ).toDF("user", "item", "rating")
+    val expected = Map(
+      0 -> Seq(3, 4, 5),
+      1 -> Seq(3, 5, 4),
+      2 -> Seq(3, 5, 4)
+    )
+
+    // construct model
+    val model = getALSModel
+      .setUserCol("user")
+      .setItemCol("item")
+      .setK(2)
+
+    model.setRecommendFor("user").transform(ratings)
+      .as[(Int, Seq[Int], Seq[Int])]
+      .rdd
+      .collect
+      .foreach { case (id, pred, actual) =>
+        assert(expected(id) === actual)
+        assert(expected(id).take(2) === pred)
+      }
+  }
+
+  test("ALS fit -> recommend top k") {
+    val sqlContext = this.sqlContext
+    import sqlContext.implicits._
+    val (ratings: RDD[Rating[Int]], _) = genExplicitTestData(numUsers = 5, numItems = 4, rank = 1)
+    val dataset = ratings.toDF
+    val als = new ALS()
+      .setK(2)
+      .setRecommendFor("user")
+
+    val userId = ratings.first().user
+    val numItems = ratings.filter(_.user == userId).map(_.item).distinct().count()
+    val model = als.fit(dataset)
+    val result = model.transform(dataset)
+    assert(result.count == 5)
+    val userRow = result.select("predictions", "actual").where(result("user") === userId).first()
+    assert(userRow.getSeq[Int](0).length == 2)
+    assert(userRow.getSeq[Int](1).length == numItems)
+
   }
 
   test("invalid recommend params") {
+    // TODO
+    // val sqlContext = this.sqlContext
+    // import sqlContext.implicits._
+    // intercept[IllegalArgumentException] {
+    // val (ratings, _) = genExplicitTestData(numUsers = 2, numItems = 2, rank = 1)
+    //   val als = new ALS().setRecommendFor("user").fit(ratings.toDF)
+    // }
     intercept[IllegalArgumentException] {
       val als = new ALS().setK(0)
     }
@@ -777,7 +882,8 @@ object ALSSuite extends Logging {
     "finalStorageLevel" -> "MEMORY_AND_DISK_SER"
     "checkpointInterval" -> 20,
     "k" -> 10,
-    "recommendFor" -> "user"
+    "recommendFor" -> "user",
+    "withScores" -> true
   )
 
   // Helper functions to generate test data we share between ALS test suites
