@@ -1,1 +1,0 @@
-SELECT max(*) FROM src;
