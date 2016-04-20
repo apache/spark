@@ -296,9 +296,12 @@ class Analyzer(
 
         val nonNullBitmask = x.bitmasks.reduce(_ & _)
 
-        val groupByAttributes = groupByAliases.zipWithIndex.map { case (a, idx) =>
+        val expandedAttributes = groupByAliases.zipWithIndex.map { case (a, idx) =>
           a.toAttribute.withNullability((nonNullBitmask & 1 << idx) == 0)
         }
+
+        val expand = Expand(x.bitmasks, groupByAliases, expandedAttributes, gid, x.child)
+        val groupingAttrs = expand.output.drop(x.child.output.length)
 
         val aggregations: Seq[NamedExpression] = x.aggregations.map { case expr =>
           // collect all the found AggregateExpression, so we can check an expression is part of
@@ -321,15 +324,12 @@ class Analyzer(
               if (index == -1) {
                 e
               } else {
-                groupByAttributes(index)
+                groupingAttrs(index)
               }
           }.asInstanceOf[NamedExpression]
         }
 
-        Aggregate(
-          groupByAttributes :+ gid,
-          aggregations,
-          Expand(x.bitmasks, groupByAliases, groupByAttributes, gid, x.child))
+        Aggregate(groupingAttrs, aggregations, expand)
 
       case f @ Filter(cond, child) if hasGroupingFunction(cond) =>
         val groupingExprs = findGroupingExprs(child)
@@ -855,25 +855,35 @@ class Analyzer(
   }
 
   /**
-   * This rule resolve subqueries inside expressions.
+   * This rule resolves sub-queries inside expressions.
    *
-   * Note: CTE are handled in CTESubstitution.
+   * Note: CTEs are handled in CTESubstitution.
    */
   object ResolveSubquery extends Rule[LogicalPlan] with PredicateHelper {
 
-    private def hasSubquery(e: Expression): Boolean = {
-      e.find(_.isInstanceOf[SubqueryExpression]).isDefined
-    }
-
-    private def hasSubquery(q: LogicalPlan): Boolean = {
-      q.expressions.exists(hasSubquery)
+    /**
+     * Resolve the correlated predicates in the [[Filter]] clauses (e.g. WHERE or HAVING) of a
+     * sub-query by using the plan the predicates should be correlated to.
+     */
+    private def resolveCorrelatedPredicates(q: LogicalPlan, p: LogicalPlan): LogicalPlan = {
+      q transformUp {
+        case f @ Filter(cond, child) if child.resolved && !f.resolved =>
+          val newCond = resolveExpression(cond, p, throws = false)
+          if (!cond.fastEquals(newCond)) {
+            Filter(newCond, child)
+          } else {
+            f
+          }
+      }
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case q: LogicalPlan if q.childrenResolved && hasSubquery(q) =>
+      case q: LogicalPlan if q.childrenResolved =>
         q transformExpressions {
           case e: SubqueryExpression if !e.query.resolved =>
-            e.withNewPlan(execute(e.query))
+            // First resolve as much of the sub-query as possible. After that we use the children of
+            // this plan to resolve the remaining correlated predicates.
+            e.withNewPlan(q.children.foldLeft(execute(e.query))(resolveCorrelatedPredicates))
         }
     }
   }
@@ -1672,9 +1682,9 @@ object CleanupAliases extends Rule[LogicalPlan] {
 
     // Operators that operate on objects should only have expressions from encoders, which should
     // never have extra aliases.
-    case o: ObjectOperator => o
-    case d: DeserializeToObject => d
-    case s: SerializeFromObject => s
+    case o: ObjectConsumer => o
+    case o: ObjectProducer => o
+    case a: AppendColumns => a
 
     case other =>
       var stop = false

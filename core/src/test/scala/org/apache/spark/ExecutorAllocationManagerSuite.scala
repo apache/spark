@@ -929,7 +929,7 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
       taskLocalityPreferences: Seq[Seq[TaskLocation]] = Seq.empty
     ): StageInfo = {
     new StageInfo(stageId, 0, "name", numTasks, Seq.empty, Seq.empty, "no details",
-      Seq.empty, taskLocalityPreferences)
+      taskLocalityPreferences = taskLocalityPreferences)
   }
 
   private def createTaskInfo(taskId: Int, taskIndex: Int, executorId: String): TaskInfo = {

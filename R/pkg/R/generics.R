@@ -397,7 +397,10 @@ setGeneric("arrange", function(x, col, ...) { standardGeneric("arrange") })
 
 #' @rdname as.data.frame
 #' @export
-setGeneric("as.data.frame")
+setGeneric("as.data.frame",
+           function(x, row.names = NULL, optional = FALSE, ...) {
+             standardGeneric("as.data.frame")
+           })
 
 #' @rdname attach
 #' @export
@@ -575,6 +578,12 @@ setGeneric("write.df", function(df, path, source = NULL, mode = "error", ...) {
 #' @export
 setGeneric("saveDF", function(df, path, source = NULL, mode = "error", ...) {
   standardGeneric("saveDF")
+})
+
+#' @rdname write.jdbc
+#' @export
+setGeneric("write.jdbc", function(x, url, tableName, mode = "error", ...) {
+  standardGeneric("write.jdbc")
 })
 
 #' @rdname write.json

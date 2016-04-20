@@ -2251,16 +2251,16 @@ class Dataset[T] private[sql](
   def unpersist(): this.type = unpersist(blocking = false)
 
   /**
-   * Represents the content of the [[Dataset]] as an [[RDD]] of [[Row]]s. Note that the RDD is
-   * memoized. Once called, it won't change even if you change any query planning related Spark SQL
-   * configurations (e.g. `spark.sql.shuffle.partitions`).
+   * Represents the content of the [[Dataset]] as an [[RDD]] of [[T]].
    *
    * @group rdd
    * @since 1.6.0
    */
   lazy val rdd: RDD[T] = {
-    queryExecution.toRdd.mapPartitions { rows =>
-      rows.map(boundTEncoder.fromRow)
+    val objectType = unresolvedTEncoder.deserializer.dataType
+    val deserialized = CatalystSerde.deserialize[T](logicalPlan)
+    sqlContext.executePlan(deserialized).toRdd.mapPartitions { rows =>
+      rows.map(_.get(0, objectType).asInstanceOf[T])
     }
   }
 

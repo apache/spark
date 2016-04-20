@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.command.RunnableCommand
-import org.apache.spark.sql.execution.datasources.{BucketSpec, DataSource, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{BucketSpec, DataSource, HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.hive.{HiveContext, MetastoreRelation}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -300,7 +300,7 @@ case class CreateMetastoreDataSourceAsSelect(
     val data = Dataset.ofRows(hiveContext, query)
     val df = existingSchema match {
       // If we are inserting into an existing table, just use the existing schema.
-      case Some(s) => sqlContext.internalCreateDataFrame(data.queryExecution.toRdd, s)
+      case Some(s) => data.selectExpr(s.fieldNames: _*)
       case None => data
     }
 
