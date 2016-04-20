@@ -362,7 +362,7 @@ class SQLTests(ReusedPySparkTestCase):
         # cache and checkpoint
         self.assertFalse(df.is_cached)
         df.persist()
-        df.unpersist()
+        df.unpersist(True)
         df.cache()
         self.assertTrue(df.is_cached)
         self.assertEqual(2, df.count())
