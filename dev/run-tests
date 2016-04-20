@@ -20,6 +20,7 @@
 FWDIR="$(cd "`dirname $0`"/..; pwd)"
 cd "$FWDIR"
 
+set -e
 for i in `seq 1 1000`
 do
 	build/sbt "sql/test-only *ContinuousQueryListenerSuite"
