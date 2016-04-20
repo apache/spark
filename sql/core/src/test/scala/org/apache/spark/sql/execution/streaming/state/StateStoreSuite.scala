@@ -37,7 +37,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
-class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMethodTester {
+class StateStoreASuite extends SparkFunSuite with BeforeAndAfter with PrivateMethodTester {
   type MapType = mutable.HashMap[UnsafeRow, UnsafeRow]
 
   import StateStoreCoordinatorSuite._
