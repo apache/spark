@@ -965,9 +965,9 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
     // 3. deterministic
     case filter@Filter(condition, w: Window)
       if w.partitionSpec.forall(_.isInstanceOf[AttributeReference]) =>
+      val partitionAttrs = AttributeSet(w.partitionSpec.flatMap(_.references))
       val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { cond =>
-        cond.references.size == 1 &&
-          cond.references.subsetOf(AttributeSet(w.partitionSpec.flatMap(_.references))) &&
+        cond.references.size == 1 && partitionAttrs.contains(cond.references.head) &&
           cond.deterministic
       }
       if (pushDown.nonEmpty) {
