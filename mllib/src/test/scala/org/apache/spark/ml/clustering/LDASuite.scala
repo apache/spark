@@ -273,8 +273,9 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
 
     // There should be 1 checkpoint remaining.
     assert(model.getCheckpointFiles.length === 1)
-    val fs = FileSystem.get(sqlContext.sparkContext.hadoopConfiguration)
-    assert(fs.exists(new Path(model.getCheckpointFiles.head)))
+    val checkpointFile = new Path(model.getCheckpointFiles.head)
+    val fs = checkpointFile.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
+    assert(fs.exists(checkpointFile))
     model.deleteCheckpointFiles()
     assert(model.getCheckpointFiles.isEmpty)
   }

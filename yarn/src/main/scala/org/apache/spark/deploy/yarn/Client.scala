@@ -117,6 +117,11 @@ private[spark] class Client(
 
   private var appId: ApplicationId = null
 
+  // The app staging dir based on the STAGING_DIR configuration if configured
+  // otherwise based on the users home directory.
+  private val appStagingBaseDir = sparkConf.get(STAGING_DIR).map { new Path(_) }
+    .getOrElse(FileSystem.get(hadoopConf).getHomeDirectory())
+
   def reportLauncherState(state: SparkAppHandle.State): Unit = {
     launcherBackend.setState(state)
   }
@@ -179,18 +184,17 @@ private[spark] class Client(
    * Cleanup application staging directory.
    */
   private def cleanupStagingDir(appId: ApplicationId): Unit = {
-    val appStagingDir = getAppStagingDir(appId)
+    val stagingDirPath = new Path(appStagingBaseDir, getAppStagingDir(appId))
     try {
       val preserveFiles = sparkConf.get(PRESERVE_STAGING_FILES)
-      val fs = FileSystem.get(hadoopConf)
-      val stagingDirPath = getAppStagingDirPath(sparkConf, fs, appStagingDir)
+      val fs = stagingDirPath.getFileSystem(hadoopConf)
       if (!preserveFiles && fs.exists(stagingDirPath)) {
         logInfo("Deleting staging directory " + stagingDirPath)
         fs.delete(stagingDirPath, true)
       }
     } catch {
       case ioe: IOException =>
-        logWarning("Failed to cleanup staging dir " + appStagingDir, ioe)
+        logWarning("Failed to cleanup staging dir " + stagingDirPath, ioe)
     }
   }
 
@@ -351,36 +355,44 @@ private[spark] class Client(
    * Exposed for testing.
    */
   def prepareLocalResources(
-      appStagingDir: String,
+      destDir: Path,
       pySparkArchives: Seq[String]): HashMap[String, LocalResource] = {
     logInfo("Preparing resources for our AM container")
     // Upload Spark and the application JAR to the remote file system if necessary,
     // and add them as local resources to the application master.
-    val fs = FileSystem.get(hadoopConf)
-    val dst = getAppStagingDirPath(sparkConf, fs, appStagingDir)
-    val nns = YarnSparkHadoopUtil.get.getNameNodesToAccess(sparkConf) + dst
+    val fs = destDir.getFileSystem(hadoopConf)
+    val nns = YarnSparkHadoopUtil.get.getNameNodesToAccess(sparkConf) + destDir
     YarnSparkHadoopUtil.get.obtainTokensForNamenodes(nns, hadoopConf, credentials)
     // Used to keep track of URIs added to the distributed cache. If the same URI is added
     // multiple times, YARN will fail to launch containers for the app with an internal
     // error.
     val distributedUris = new HashSet[String]
+    // Used to keep track of URIs(files) added to the distribute cache have the same name. If
+    // same name but different path files are added multiple time, YARN will fail to launch
+    // containers for the app with an internal error.
+    val distributedNames = new HashSet[String]
     YarnSparkHadoopUtil.get.obtainTokenForHiveMetastore(sparkConf, hadoopConf, credentials)
     YarnSparkHadoopUtil.get.obtainTokenForHBase(sparkConf, hadoopConf, credentials)
 
     val replication = sparkConf.get(STAGING_FILE_REPLICATION).map(_.toShort)
-      .getOrElse(fs.getDefaultReplication(dst))
+      .getOrElse(fs.getDefaultReplication(destDir))
     val localResources = HashMap[String, LocalResource]()
-    FileSystem.mkdirs(fs, dst, new FsPermission(STAGING_DIR_PERMISSION))
+    FileSystem.mkdirs(fs, destDir, new FsPermission(STAGING_DIR_PERMISSION))
 
     val statCache: Map[URI, FileStatus] = HashMap[URI, FileStatus]()
 
     def addDistributedUri(uri: URI): Boolean = {
       val uriStr = uri.toString()
+      val fileName = new File(uri.getPath).getName
       if (distributedUris.contains(uriStr)) {
-        logWarning(s"Resource $uri added multiple times to distributed cache.")
+        logWarning(s"Same path resource $uri added multiple times to distributed cache.")
+        false
+      } else if (distributedNames.contains(fileName)) {
+        logWarning(s"Same name resource $uri added multiple times to distributed cache")
         false
       } else {
         distributedUris += uriStr
+        distributedNames += fileName
         true
       }
     }
@@ -413,7 +425,7 @@ private[spark] class Client(
           val localPath = getQualifiedLocalPath(localURI, hadoopConf)
           val linkname = targetDir.map(_ + "/").getOrElse("") +
             destName.orElse(Option(localURI.getFragment())).getOrElse(localPath.getName())
-          val destPath = copyFileToRemote(dst, localPath, replication)
+          val destPath = copyFileToRemote(destDir, localPath, replication)
           val destFs = FileSystem.get(destPath.toUri(), hadoopConf)
           distCacheMgr.addResource(
             destFs, hadoopConf, destPath, localResources, resType, linkname, statCache,
@@ -519,8 +531,7 @@ private[spark] class Client(
     ).foreach { case (flist, resType, addToClasspath) =>
       flist.foreach { file =>
         val (_, localizedPath) = distribute(file, resType = resType)
-        require(localizedPath != null)
-        if (addToClasspath) {
+        if (addToClasspath && localizedPath != null) {
           cachedSecondaryJarLinks += localizedPath
         }
       }
@@ -658,17 +669,15 @@ private[spark] class Client(
    * Set up the environment for launching our ApplicationMaster container.
    */
   private def setupLaunchEnv(
-      stagingDir: String,
+      stagingDirPath: Path,
       pySparkArchives: Seq[String]): HashMap[String, String] = {
     logInfo("Setting up the launch environment for our AM container")
     val env = new HashMap[String, String]()
     populateClasspath(args, yarnConf, sparkConf, env, sparkConf.get(DRIVER_CLASS_PATH))
     env("SPARK_YARN_MODE") = "true"
-    env("SPARK_YARN_STAGING_DIR") = stagingDir
+    env("SPARK_YARN_STAGING_DIR") = stagingDirPath.toString
     env("SPARK_USER") = UserGroupInformation.getCurrentUser().getShortUserName()
     if (loginFromKeytab) {
-      val remoteFs = FileSystem.get(hadoopConf)
-      val stagingDirPath = getAppStagingDirPath(sparkConf, remoteFs, stagingDir)
       val credentialsFile = "credentials-" + UUID.randomUUID().toString
       sparkConf.set(CREDENTIALS_FILE_PATH, new Path(stagingDirPath, credentialsFile).toString)
       logInfo(s"Credentials file set to: $credentialsFile")
@@ -768,15 +777,15 @@ private[spark] class Client(
     : ContainerLaunchContext = {
     logInfo("Setting up container launch context for our AM")
     val appId = newAppResponse.getApplicationId
-    val appStagingDir = getAppStagingDir(appId)
+    val appStagingDirPath = new Path(appStagingBaseDir, getAppStagingDir(appId))
     val pySparkArchives =
       if (sparkConf.get(IS_PYTHON_APP)) {
         findPySparkArchives()
       } else {
         Nil
       }
-    val launchEnv = setupLaunchEnv(appStagingDir, pySparkArchives)
-    val localResources = prepareLocalResources(appStagingDir, pySparkArchives)
+    val launchEnv = setupLaunchEnv(appStagingDirPath, pySparkArchives)
+    val localResources = prepareLocalResources(appStagingDirPath, pySparkArchives)
 
     // Set the environment variables to be passed on to the executors.
     distCacheMgr.setDistFilesEnv(launchEnv)
@@ -1436,18 +1445,6 @@ private object Client extends Logging {
   /** Returns whether the URI is a "local:" URI. */
   def isLocalUri(uri: String): Boolean = {
     uri.startsWith(s"$LOCAL_SCHEME:")
-  }
-
-  /**
-   *  Returns the app staging dir based on the STAGING_DIR configuration if configured
-   *  otherwise based on the users home directory.
-   */
-  private def getAppStagingDirPath(
-      conf: SparkConf,
-      fs: FileSystem,
-      appStagingDir: String): Path = {
-    val baseDir = conf.get(STAGING_DIR).map { new Path(_) }.getOrElse(fs.getHomeDirectory())
-    new Path(baseDir, appStagingDir)
   }
 
 }

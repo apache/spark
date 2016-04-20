@@ -743,4 +743,19 @@ class FilterPushdownSuite extends PlanTest {
 
     comparePlans(optimized, correctAnswer)
   }
+
+  test("expand") {
+    val agg = testRelation
+      .groupBy(Cube(Seq('a, 'b)))('a, 'b, sum('c))
+      .analyze
+      .asInstanceOf[Aggregate]
+
+    val a = agg.output(0)
+    val b = agg.output(1)
+
+    val query = agg.where(a > 1 && b > 2)
+    val optimized = Optimize.execute(query)
+    val correctedAnswer = agg.copy(child = agg.child.where(a > 1 && b > 2)).analyze
+    comparePlans(optimized, correctedAnswer)
+  }
 }

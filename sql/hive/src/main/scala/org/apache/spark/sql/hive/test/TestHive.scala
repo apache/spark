@@ -72,49 +72,12 @@ object TestHive
  * test cases that rely on TestHive must be serialized.
  */
 class TestHiveContext private[hive](
-    sc: SparkContext,
-    cacheManager: CacheManager,
-    listener: SQLListener,
-    executionHive: HiveClientImpl,
-    metadataHive: HiveClient,
-    isRootContext: Boolean,
-    hiveCatalog: HiveExternalCatalog,
+    testHiveSharedState: TestHiveSharedState,
     val warehousePath: File,
     val scratchDirPath: File,
-    metastoreTemporaryConf: Map[String, String])
-  extends HiveContext(
-    sc,
-    cacheManager,
-    listener,
-    executionHive,
-    metadataHive,
-    isRootContext,
-    hiveCatalog) { self =>
-
-  // Unfortunately, due to the complex interactions between the construction parameters
-  // and the limitations in scala constructors, we need many of these constructors to
-  // provide a shorthand to create a new TestHiveContext with only a SparkContext.
-  // This is not a great design pattern but it's necessary here.
-
-  private def this(
-      sc: SparkContext,
-      executionHive: HiveClientImpl,
-      metadataHive: HiveClient,
-      warehousePath: File,
-      scratchDirPath: File,
-      metastoreTemporaryConf: Map[String, String]) {
-    this(
-      sc,
-      new CacheManager,
-      SQLContext.createListenerAndUI(sc),
-      executionHive,
-      metadataHive,
-      true,
-      new HiveExternalCatalog(metadataHive),
-      warehousePath,
-      scratchDirPath,
-      metastoreTemporaryConf)
-  }
+    metastoreTemporaryConf: Map[String, String],
+    isRootContext: Boolean)
+  extends HiveContext(testHiveSharedState, isRootContext) { self =>
 
   private def this(
       sc: SparkContext,
@@ -122,13 +85,11 @@ class TestHiveContext private[hive](
       scratchDirPath: File,
       metastoreTemporaryConf: Map[String, String]) {
     this(
-      sc,
-      HiveContext.newClientForExecution(sc.conf, sc.hadoopConfiguration),
-      TestHiveContext.newClientForMetadata(
-        sc.conf, sc.hadoopConfiguration, warehousePath, scratchDirPath, metastoreTemporaryConf),
+      new TestHiveSharedState(sc, warehousePath, scratchDirPath, metastoreTemporaryConf),
       warehousePath,
       scratchDirPath,
-      metastoreTemporaryConf)
+      metastoreTemporaryConf,
+      true)
   }
 
   def this(sc: SparkContext) {
@@ -141,24 +102,19 @@ class TestHiveContext private[hive](
 
   override def newSession(): HiveContext = {
     new TestHiveContext(
-      sc = sc,
-      cacheManager = cacheManager,
-      listener = listener,
-      executionHive = executionHive.newSession(),
-      metadataHive = metadataHive.newSession(),
-      isRootContext = false,
-      hiveCatalog = hiveCatalog,
-      warehousePath = warehousePath,
-      scratchDirPath = scratchDirPath,
-      metastoreTemporaryConf = metastoreTemporaryConf)
+      testHiveSharedState,
+      warehousePath,
+      scratchDirPath,
+      metastoreTemporaryConf,
+      isRootContext = false)
   }
 
   // By clearing the port we force Spark to pick a new one.  This allows us to rerun tests
   // without restarting the JVM.
   System.clearProperty("spark.hostPort")
-  CommandProcessorFactory.clean(hiveconf)
+  CommandProcessorFactory.clean(sessionState.hiveconf)
 
-  hiveconf.set("hive.plan.serialization.format", "javaXML")
+  sessionState.hiveconf.set("hive.plan.serialization.format", "javaXML")
 
   // A snapshot of the entries in the starting SQLConf
   // We save this because tests can mutate this singleton object if they want
@@ -180,7 +136,7 @@ class TestHiveContext private[hive](
 
   // Override so we can intercept relative paths and rewrite them to point at hive.
   override def runSqlHive(sql: String): Seq[String] =
-    super.runSqlHive(rewritePaths(substitutor.substitute(this.hiveconf, sql)))
+    super.runSqlHive(rewritePaths(substitutor.substitute(sessionState.hiveconf, sql)))
 
   override def executePlan(plan: LogicalPlan): this.QueryExecution =
     new this.QueryExecution(plan)
@@ -505,7 +461,7 @@ class TestHiveContext private[hive](
         foreach { udfName => FunctionRegistry.unregisterTemporaryUDF(udfName) }
 
       // Some tests corrupt this value on purpose, which breaks the RESET call below.
-      hiveconf.set("fs.default.name", new File(".").toURI.toString)
+      sessionState.hiveconf.set("fs.default.name", new File(".").toURI.toString)
       // It is important that we RESET first as broken hooks that might have been set could break
       // other sql exec here.
       executionHive.runSqlHive("RESET")
@@ -520,7 +476,7 @@ class TestHiveContext private[hive](
 
       // In case a test changed any of these values, restore all the original ones here.
       TestHiveContext.hiveClientConfigurations(
-        hiveconf, warehousePath, scratchDirPath, metastoreTemporaryConf)
+        sessionState.hiveconf, warehousePath, scratchDirPath, metastoreTemporaryConf)
           .foreach { case (k, v) => metadataHive.runSqlHive(s"SET $k=$v") }
       defaultOverrides()
 
@@ -549,6 +505,22 @@ private[hive] class TestHiveFunctionRegistry extends SimpleFunctionRegistry {
   }
 }
 
+
+private[hive] class TestHiveSharedState(
+    sc: SparkContext,
+    warehousePath: File,
+    scratchDirPath: File,
+    metastoreTemporaryConf: Map[String, String])
+  extends HiveSharedState(sc) {
+
+  override lazy val metadataHive: HiveClient = {
+    TestHiveContext.newClientForMetadata(
+      sc.conf, sc.hadoopConfiguration, warehousePath, scratchDirPath, metastoreTemporaryConf)
+  }
+
+}
+
+
 private[hive] object TestHiveContext {
 
   /**
@@ -563,7 +535,7 @@ private[hive] object TestHiveContext {
   /**
    * Create a [[HiveClient]] used to retrieve metadata from the Hive MetaStore.
    */
-  private def newClientForMetadata(
+  def newClientForMetadata(
       conf: SparkConf,
       hadoopConf: Configuration,
       warehousePath: File,

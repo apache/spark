@@ -17,7 +17,14 @@
 
 package org.apache.spark.ml
 
-// This is a private class testing if the new build works. To be removed soon.
-private[ml] object DummyTesting {
-  private[ml] def add10(input: Double): Double = input + 10
+// scalastyle:off
+import org.scalatest.{BeforeAndAfterAll, FunSuite}
+
+/**
+ * Base abstract class for all unit tests in Spark for handling common functionality.
+ */
+private[spark] abstract class SparkMLFunSuite
+  extends FunSuite
+  with BeforeAndAfterAll {
+  // scalastyle:on
 }
