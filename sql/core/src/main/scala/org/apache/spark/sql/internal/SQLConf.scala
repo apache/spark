@@ -18,6 +18,7 @@
 package org.apache.spark.sql.internal
 
 import java.util.{NoSuchElementException, Properties}
+import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
 import scala.collection.immutable
@@ -462,6 +463,27 @@ object SQLConf {
     .doc("When true, aggregate with keys use an in-memory columnar map to speed up execution.")
     .booleanConf
     .createWithDefault(false)
+
+  val FILE_SINK_LOG_DELETION = SQLConfigBuilder("spark.sql.streaming.fileSink.log.deletion")
+    .internal()
+    .doc("Whether to delete the expired log files in file stream sink.")
+    .booleanConf
+    .createWithDefault(true)
+
+  val FILE_SINK_LOG_COMPACT_INTERVAL =
+    SQLConfigBuilder("spark.sql.streaming.fileSink.log.compactInterval")
+      .internal()
+      .doc("Number of log files after which all the previous files " +
+        "are compacted into the next log file.")
+      .intConf
+      .createWithDefault(10)
+
+  val FILE_SINK_LOG_CLEANUP_DELAY =
+    SQLConfigBuilder("spark.sql.streaming.fileSink.log.cleanupDelay")
+      .internal()
+      .doc("How long in milliseconds a file is guaranteed to be visible for all readers.")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefault(60 * 1000L) // 10 minutes
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
