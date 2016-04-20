@@ -27,12 +27,8 @@ import org.apache.spark.sql.internal.{SessionState, SQLConf}
 private[sql] class TestSQLContext(sc: SparkContext) extends SQLContext(sc) { self =>
 
   def this(sparkConf: SparkConf) {
-    this(new SparkContext(
-      "local[2]",
-      "test-sql-context",
-      sparkConf
-        .set("spark.sql.testkey", "true")
-        .set("spark.sql.catalogImplementation", "in-memory")))
+    this(new SparkContext("local[2]", "test-sql-context",
+      sparkConf.set("spark.sql.testkey", "true")))
   }
 
   def this() {

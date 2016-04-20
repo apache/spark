@@ -27,8 +27,7 @@ trait SharedSparkContext extends BeforeAndAfterAll { self: Suite =>
 
   def sc: SparkContext = _sc
 
-  // TODO: why can't we just load defaults here?
-  var conf = new SparkConf(false).set("spark.sql.catalogImplementation", "in-memory")
+  var conf = new SparkConf(false)
 
   override def beforeAll() {
     super.beforeAll()
