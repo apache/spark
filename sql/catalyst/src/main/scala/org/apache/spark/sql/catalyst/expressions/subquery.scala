@@ -127,7 +127,7 @@ case class InSubQuery(
   override def checkInputDataTypes(): TypeCheckResult = {
     // Check the number of arguments.
     if (expressions.length != query.output.length) {
-      TypeCheckResult.TypeCheckFailure(
+      return TypeCheckResult.TypeCheckFailure(
         s"The number of fields in the value (${expressions.length}) does not match with " +
           s"the number of columns in the subquery (${query.output.length})")
     }
@@ -135,8 +135,8 @@ case class InSubQuery(
     // Check the argument types.
     expressions.zip(query.output).zipWithIndex.foreach {
       case ((e, a), i) if e.dataType != a.dataType =>
-        TypeCheckResult.TypeCheckFailure(
-          s"The data type of value[$i](${e.dataType}) does not match " +
+        return TypeCheckResult.TypeCheckFailure(
+          s"The data type of value[$i] (${e.dataType}) does not match " +
             s"subquery column '${a.name}' (${a.dataType}).")
       case _ =>
     }

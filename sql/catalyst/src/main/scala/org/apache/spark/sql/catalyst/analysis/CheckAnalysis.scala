@@ -122,7 +122,6 @@ trait CheckAnalysis extends PredicateHelper {
                 p.transformExpressions {
                   case e: AttributeReference
                     if !inputs.contains(e) && outerAttributes.contains(e) =>
-                    println(s"inputs: $inputs $outerAttributes")
                     failAnalysis(s"Accessing outer query column is not allowed in $message: $e")
                 }
             }

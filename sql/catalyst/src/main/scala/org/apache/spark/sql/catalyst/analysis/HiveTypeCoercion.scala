@@ -376,6 +376,31 @@ object HiveTypeCoercion {
           case Some(finalDataType) => i.withNewChildren(i.children.map(Cast(_, finalDataType)))
           case None => i
         }
+
+      case InSubQuery(struct: CreateStruct, subquery, exprId)
+        if struct.children.zip(subquery.output).exists(x => x._1.dataType != x._2.dataType) =>
+        val widerTypes: Seq[Option[DataType]] = struct.children.zip(subquery.output).map {
+          case (l, r) => findWiderTypeForTwo(l.dataType, r.dataType)
+        }
+        val newStruct = struct.withNewChildren(struct.children.zip(widerTypes).map {
+          case (e, Some(t)) => Cast(e, t)
+          case (e, _) => e
+        })
+        val newSubquery = Project(subquery.output.zip(widerTypes).map {
+          case (a, Some(t)) => Alias(Cast(a, t), a.toString)()
+          case (a, _) => a
+        }, subquery)
+        InSubQuery(newStruct, newSubquery, exprId)
+
+      case sub @ InSubQuery(expr, subquery, exprId)
+        if expr.dataType != subquery.output.head.dataType =>
+        findWiderTypeForTwo(expr.dataType, subquery.output.head.dataType) match {
+          case Some(t) =>
+            val attr = subquery.output.head
+            val proj = Seq(Alias(Cast(attr, t), attr.toString)())
+            InSubQuery(Cast(expr, t), Project(proj, subquery), exprId)
+          case _ => sub
+        }
     }
   }
 

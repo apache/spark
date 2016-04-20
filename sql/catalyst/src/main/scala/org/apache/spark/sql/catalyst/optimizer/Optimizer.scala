@@ -1519,7 +1519,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
       in: InSubQuery,
       query: LogicalPlan): (LogicalPlan, LogicalPlan, Seq[Expression]) = {
     val (resolved, joinCondition) = pullOutCorrelatedPredicates(in.query, query)
-    // in.expressions may have the same
+    // Check whether there is some attributes have same exprId but come from different side
     val outerAttributes = AttributeSet(in.expressions.flatMap(_.references))
     if (outerAttributes.intersect(resolved.outputSet).nonEmpty) {
       val aliases = mutable.Map[Attribute, Alias]()
@@ -1533,10 +1533,13 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
         }
       }
       val newP = Project(query.output ++ aliases.values, query)
-      val newResolved = Project(resolved.output.map(a => Alias(a, a.toString)()),
-        resolved)
-      val conditions = joinCondition ++ exprs.zip(newResolved.output).map(EqualTo.tupled)
-      (newP, newResolved, conditions)
+      val projection = resolved.output.map {
+        case a if outerAttributes.contains(a) => Alias(a, a.toString)()
+        case a => a
+      }
+      val subquery = Project(projection, resolved)
+      val conditions = joinCondition ++ exprs.zip(subquery.output).map(EqualTo.tupled)
+      (newP, subquery, conditions)
     } else {
       val conditions =
         joinCondition ++ in.expressions.zip(resolved.output).map(EqualTo.tupled)
