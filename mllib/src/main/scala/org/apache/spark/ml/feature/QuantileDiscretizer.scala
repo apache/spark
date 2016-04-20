@@ -106,6 +106,7 @@ final class QuantileDiscretizer(override val uid: String)
 
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): Bucketizer = {
+    transformSchema(dataset.schema, logging = true)
     val splits = dataset.stat.approxQuantile($(inputCol),
       (0.0 to 1.0 by 1.0/$(numBuckets)).toArray, $(relativeError))
     splits(0) = Double.NegativeInfinity

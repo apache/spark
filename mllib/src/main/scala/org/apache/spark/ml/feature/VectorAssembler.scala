@@ -49,6 +49,7 @@ class VectorAssembler(override val uid: String)
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
+    transformSchema(dataset.schema, logging = true)
     // Schema transformation.
     val schema = dataset.schema
     lazy val first = dataset.toDF.first()
