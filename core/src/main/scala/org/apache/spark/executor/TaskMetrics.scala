@@ -195,9 +195,8 @@ class TaskMetrics private[spark] () extends Serializable {
    |        OTHER THINGS        |
    * ========================== */
 
-  private[spark] def registerAccums(sc: SparkContext): Unit = {
+  private[spark] def registerForCleanup(sc: SparkContext): Unit = {
     internalAccums.foreach { accum =>
-      Accumulators.register(accum)
       sc.cleaner.foreach(_.registerAccumulatorForCleanup(accum))
     }
   }
@@ -244,7 +243,12 @@ private[spark] class ListenerTaskMetrics(accumUpdates: Seq[AccumulableInfo]) ext
 
 private[spark] object TaskMetrics extends Logging {
 
-  def empty: TaskMetrics = new TaskMetrics
+  def empty: TaskMetrics = {
+    val tm = new TaskMetrics
+    // We don't register this task metrics for cleanup, so un-register it immediately.
+    tm.internalAccums.foreach(acc => Accumulators.remove(acc.id))
+    tm
+  }
 
   /**
    * Create a new accumulator representing an internal task metric.
@@ -253,7 +257,7 @@ private[spark] object TaskMetrics extends Logging {
       initialValue: T,
       name: String,
       param: AccumulatorParam[T]): Accumulator[T] = {
-    new Accumulator[T](initialValue, param, Some(name), internal = true, countFailedValues = true)
+    new Accumulator[T](initialValue, param, Some(name), countFailedValues = true)
   }
 
   def createLongAccum(name: String): Accumulator[Long] = {
@@ -281,6 +285,9 @@ private[spark] object TaskMetrics extends Logging {
   def fromAccumulatorUpdates(accumUpdates: Seq[AccumulableInfo]): TaskMetrics = {
     val definedAccumUpdates = accumUpdates.filter(_.update.isDefined)
     val metrics = new ListenerTaskMetrics(definedAccumUpdates)
+    // We don't register this [[ListenerTaskMetrics]] for cleanup, and this is only used to post
+    // event, we should un-register all accumulators immediately.
+    metrics.internalAccums.foreach(acc => Accumulators.remove(acc.id))
     definedAccumUpdates.filter(_.internal).foreach { accum =>
       metrics.internalAccums.find(_.name == accum.name).foreach(_.setValueAny(accum.update.get))
     }

@@ -198,8 +198,7 @@ class TaskMetricsSuite extends SparkFunSuite {
     val acc1 = new Accumulator(0, IntAccumulatorParam, Some("a"))
     val acc2 = new Accumulator(0, IntAccumulatorParam, Some("b"))
     val acc3 = new Accumulator(0, IntAccumulatorParam, Some("c"))
-    val acc4 = new Accumulator(0, IntAccumulatorParam, Some("d"),
-      internal = true, countFailedValues = true)
+    val acc4 = new Accumulator(0, IntAccumulatorParam, Some("d"), countFailedValues = true)
     tm.registerAccumulator(acc1)
     tm.registerAccumulator(acc2)
     tm.registerAccumulator(acc3)
@@ -219,9 +218,7 @@ class TaskMetricsSuite extends SparkFunSuite {
     assert(newUpdates(acc2.id).update === Some(2))
     assert(newUpdates(acc3.id).update === Some(0))
     assert(newUpdates(acc4.id).update === Some(0))
-    assert(!newUpdates(acc3.id).internal)
     assert(!newUpdates(acc3.id).countFailedValues)
-    assert(newUpdates(acc4.id).internal)
     assert(newUpdates(acc4.id).countFailedValues)
     assert(newUpdates.values.map(_.update).forall(_.isDefined))
     assert(newUpdates.values.map(_.value).forall(_.isEmpty))
@@ -230,7 +227,7 @@ class TaskMetricsSuite extends SparkFunSuite {
 
   test("from accumulator updates") {
     val accumUpdates1 = TaskMetrics.empty.internalAccums.map { a =>
-      AccumulableInfo(a.id, a.name, Some(3L), None, a.isInternal, a.countFailedValues)
+      AccumulableInfo(a.id, a.name, Some(3L), None, true, a.countFailedValues)
     }
     val metrics1 = TaskMetrics.fromAccumulatorUpdates(accumUpdates1)
     assertUpdatesEquals(metrics1.accumulatorUpdates(), accumUpdates1)
@@ -239,16 +236,15 @@ class TaskMetricsSuite extends SparkFunSuite {
     // on the driver, internal or not, should be registered with `Accumulators` at some point.
     val param = IntAccumulatorParam
     val registeredAccums = Seq(
-      new Accumulator(0, param, Some("a"), internal = true, countFailedValues = true),
-      new Accumulator(0, param, Some("b"), internal = true, countFailedValues = false),
-      new Accumulator(0, param, Some("c"), internal = false, countFailedValues = true),
-      new Accumulator(0, param, Some("d"), internal = false, countFailedValues = false))
+      new Accumulator(0, param, Some("a"), countFailedValues = true),
+      new Accumulator(0, param, Some("b"), countFailedValues = false))
     val unregisteredAccums = Seq(
-      new Accumulator(0, param, Some("e"), internal = true, countFailedValues = true),
-      new Accumulator(0, param, Some("f"), internal = true, countFailedValues = false))
+      new Accumulator(0, param, Some("c"), countFailedValues = true),
+      new Accumulator(0, param, Some("d"), countFailedValues = false))
     registeredAccums.foreach(Accumulators.register)
-    registeredAccums.foreach { a => assert(Accumulators.originals.contains(a.id)) }
-    unregisteredAccums.foreach { a => assert(!Accumulators.originals.contains(a.id)) }
+    registeredAccums.foreach(a => assert(Accumulators.originals.contains(a.id)))
+    unregisteredAccums.foreach(a => Accumulators.remove(a.id))
+    unregisteredAccums.foreach(a => assert(!Accumulators.originals.contains(a.id)))
     // set some values in these accums
     registeredAccums.zipWithIndex.foreach { case (a, i) => a.setValue(i) }
     unregisteredAccums.zipWithIndex.foreach { case (a, i) => a.setValue(i) }
@@ -276,7 +272,6 @@ private[spark] object TaskMetricsSuite extends Assertions {
       assert(info1.name === info2.name)
       assert(info1.update === info2.update)
       assert(info1.value === info2.value)
-      assert(info1.internal === info2.internal)
       assert(info1.countFailedValues === info2.countFailedValues)
     }
   }

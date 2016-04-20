@@ -53,7 +53,7 @@ private[spark] abstract class Task[T](
     val stageId: Int,
     val stageAttemptId: Int,
     val partitionId: Int,
-    val metrics: TaskMetrics = new TaskMetrics,
+    val metrics: TaskMetrics = TaskMetrics.empty,
     @transient var localProperties: Properties = new Properties) extends Serializable {
 
   /**
