@@ -246,7 +246,8 @@ class KMeans private (
   /**
    * Implementation of K-Means algorithm.
    */
-  private def runAlgorithm(data: RDD[VectorWithNorm],
+  private def runAlgorithm(
+    data: RDD[VectorWithNorm],
     instr: Option[Instrumentation[NewKMeans]]): KMeansModel = {
 
     val sc = data.sparkContext
