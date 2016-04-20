@@ -48,7 +48,7 @@ fi
 # Fail noisily if removed options are set
 if [[ -n "$IPYTHON" || -n "$IPYTHON_OPTS" ]]; then
   echo "Error in pyspark startup:" 
-  echo "IPYTHON and IPYTHON_OPTS are removed in Spark 2.0+. Set PYSPARK_DRIVER_PYTHON and PYSPARK_DRIVER_PYTHON_OPTS instead."
+  echo "IPYTHON and IPYTHON_OPTS are removed in Spark 2.0+. Remove these from the environment and set PYSPARK_DRIVER_PYTHON and PYSPARK_DRIVER_PYTHON_OPTS instead."
   exit 1
 fi
 
