@@ -57,8 +57,7 @@ object TestHive
         .set("spark.sql.hive.metastore.barrierPrefixes",
           "org.apache.spark.sql.hive.execution.PairSerDe")
         // SPARK-8910
-        .set("spark.ui.enabled", "false")
-        .set("spark.sql.catalogImplementation", "hive")))
+        .set("spark.ui.enabled", "false")))
 
 
 /**
@@ -76,7 +75,7 @@ class TestHiveContext(@transient val sparkSession: TestHiveSparkSession, isRootC
   extends HiveContext(sparkSession, isRootContext) {
 
   def this(sc: SparkContext) {
-    this(new TestHiveSparkSession(sc), true)
+    this(new TestHiveSparkSession(HiveContext.withHiveExternalCatalog(sc)), true)
   }
 
   override def newSession(): TestHiveContext = {
@@ -125,6 +124,9 @@ private[hive] class TestHiveSparkSession(
 
   assume(sc.conf.get(CATALOG_IMPLEMENTATION) == "hive")
 
+  // TODO: Let's remove TestHiveSharedState and TestHiveSessionState. Otherwise,
+  // we are not really testing the reflection logic based on the setting of
+  // CATALOG_IMPLEMENTATION.
   @transient
   override lazy val sharedState: TestHiveSharedState = {
     existingSharedState.getOrElse(

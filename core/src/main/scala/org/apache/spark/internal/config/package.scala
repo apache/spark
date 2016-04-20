@@ -95,5 +95,5 @@ package object config {
     .internal()
     .stringConf
     .checkValues(Set("hive", "in-memory"))
-    .createWithDefault("hive")
+    .createWithDefault("in-memory")
 }

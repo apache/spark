@@ -37,6 +37,7 @@ import org.apache.hadoop.util.VersionInfo
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.api.java.JavaSparkContext
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql._
 import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.internal.SQLConf
@@ -58,7 +59,7 @@ class HiveContext private[hive](
   self =>
 
   def this(sc: SparkContext) = {
-    this(new SparkSession(sc), true)
+    this(new SparkSession(HiveContext.withHiveExternalCatalog(sc)), true)
   }
 
   def this(sc: JavaSparkContext) = this(sc.sc)
@@ -84,6 +85,12 @@ class HiveContext private[hive](
 
 
 private[hive] object HiveContext extends Logging {
+
+  def withHiveExternalCatalog(sc: SparkContext): SparkContext = {
+    sc.conf.set(CATALOG_IMPLEMENTATION.key, "hive")
+    sc
+  }
+
   /** The version of hive used internally by Spark SQL. */
   val hiveExecutionVersion: String = "1.2.1"
 
