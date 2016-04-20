@@ -626,9 +626,6 @@ object MimaExcludes {
         // [SPARK-13048][ML][MLLIB] keepLastCheckpoint option for LDA EM optimizer
         ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.clustering.DistributedLDAModel.this")
       ) ++ Seq(
-        // [SPARK-14569][ML] Log instrumentation in KMeans
-        ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.clustering.KMeans.run")
-      ) ++ Seq(
         // [SPARK-14475] Propagate user-defined context from driver to executors
         ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.getLocalProperty"),
         // [SPARK-14617] Remove deprecated APIs in TaskMetrics

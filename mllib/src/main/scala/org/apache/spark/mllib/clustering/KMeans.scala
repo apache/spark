@@ -21,7 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.clustering
+import org.apache.spark.ml.clustering.{KMeans => NewKMeans}
 import org.apache.spark.ml.util.Instrumentation
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS.{axpy, scal}
@@ -208,13 +208,18 @@ class KMeans private (
     this
   }
 
+  def run(data: RDD[Vector]): KMeansModel = {
+    run(data, None)
+  }
+
   /**
    * Train a K-means model on the given set of points; `data` should be cached for high
    * performance, because this is an iterative algorithm.
-   * `instr` is used to log instrumentation parameters.
    */
   @Since("0.8.0")
-  def run(data: RDD[Vector], instr: Instrumentation[clustering.KMeans] = null): KMeansModel = {
+  private[spark] def run(
+      data: RDD[Vector],
+      instr: Option[Instrumentation[NewKMeans]]): KMeansModel = {
 
     if (data.getStorageLevel == StorageLevel.NONE) {
       logWarning("The input data is not directly cached, which may hurt performance if its"
@@ -242,7 +247,7 @@ class KMeans private (
    * Implementation of K-Means algorithm.
    */
   private def runAlgorithm(data: RDD[VectorWithNorm],
-    instr: Instrumentation[clustering.KMeans] = null): KMeansModel = {
+    instr: Option[Instrumentation[NewKMeans]]): KMeansModel = {
 
     val sc = data.sparkContext
 
@@ -278,6 +283,10 @@ class KMeans private (
 
     val iterationStartTime = System.nanoTime()
 
+    if (!instr.isEmpty) {
+      instr.get.logNumFeatures(centers(0)(0).vector.size)
+    }
+
     // Execute iterations of Lloyd's algorithm until all runs have converged
     while (iteration < maxIterations && !activeRuns.isEmpty) {
       type WeightedPoint = (Vector, Long)
@@ -290,10 +299,6 @@ class KMeans private (
       val costAccums = activeRuns.map(_ => sc.accumulator(0.0))
 
       val bcActiveCenters = sc.broadcast(activeCenters)
-
-      if (instr != null) {
-        instr.logNumFeatures(bcActiveCenters.value(0)(0).vector.size)
-      }
 
       // Find the sum and count of points mapping to each center
       val totalContribs = data.mapPartitions { points =>
