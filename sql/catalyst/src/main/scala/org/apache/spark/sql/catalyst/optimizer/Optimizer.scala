@@ -960,15 +960,14 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
 
     // Push [[Filter]] operators through [[Window]] operators. Parts of the predicate that can be
     // pushed beneath must satisfy three conditions:
-    // 1. involving one and only one column that is part of window partitioning key.
+    // 1. All the columns are part of window partitioning key.
     // 2. Window partitioning key should be just a sequence of [[AttributeReference]].
-    // 3. deterministic
+    // 3. Deterministic
     case filter @ Filter(condition, w: Window)
         if w.partitionSpec.forall(_.isInstanceOf[AttributeReference]) =>
       val partitionAttrs = AttributeSet(w.partitionSpec.flatMap(_.references))
       val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { cond =>
-        cond.references.size == 1 && partitionAttrs.contains(cond.references.head) &&
-          cond.deterministic
+        cond.references.subsetOf(partitionAttrs) && cond.deterministic
       }
       if (pushDown.nonEmpty) {
         val pushDownPredicate = pushDown.reduce(And)

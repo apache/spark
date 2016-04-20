@@ -858,6 +858,19 @@ class FilterPushdownSuite extends PlanTest {
     }
   }
 
+  test("Window: predicate push down -- predicates with multiple partitioning columns") {
+    val winExpr =
+      windowExpr(count('b), windowSpec('a.attr :: 'b.attr :: Nil, 'b.asc :: Nil, UnspecifiedFrame))
+
+    val originalQuery = testRelation.select('a, 'b, 'c, winExpr.as('window)).where('a + 'b > 1)
+    val correctAnswer = testRelation
+      .where('a + 'b > 1).select('a, 'b, 'c)
+      .window(winExpr.as('window) :: Nil, 'a.attr :: 'b.attr :: Nil, 'b.asc :: Nil)
+      .select('a, 'b, 'c, 'window).analyze
+
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer)
+  }
+
   test("Window: no predicate push down -- predicates are not from partitioning keys") {
     val winExpr =
       windowExpr(count('b), windowSpec('a.attr :: 'b.attr :: Nil, 'b.asc :: Nil, UnspecifiedFrame))
@@ -866,18 +879,6 @@ class FilterPushdownSuite extends PlanTest {
     val correctAnswer = testRelation.select('a, 'b, 'c)
       .window(winExpr.as('window) :: Nil, 'a.attr :: 'b.attr :: Nil, 'b.asc :: Nil)
       .where('c > 1).select('a, 'b, 'c, 'window).analyze
-
-    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer)
-  }
-
-  test("Window: no predicate push down -- predicates with multiple partitioning columns") {
-    val winExpr =
-      windowExpr(count('b), windowSpec('a.attr :: 'b.attr :: Nil, 'b.asc :: Nil, UnspecifiedFrame))
-
-    val originalQuery = testRelation.select('a, 'b, 'c, winExpr.as('window)).where('a + 'b > 1)
-    val correctAnswer = testRelation.select('a, 'b, 'c)
-      .window(winExpr.as('window) :: Nil, 'a.attr :: 'b.attr :: Nil, 'b.asc :: Nil)
-      .where('a + 'b > 1).select('a, 'b, 'c, 'window).analyze
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer)
   }
