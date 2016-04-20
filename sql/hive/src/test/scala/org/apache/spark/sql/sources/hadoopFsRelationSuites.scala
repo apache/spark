@@ -113,7 +113,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
     new StructType()
       .add("f1", FloatType, nullable = true)
       .add("f2", ArrayType(BooleanType, containsNull = true), nullable = true),
-    new MyDenseVectorUDT()
+    new UDT.MyDenseVectorUDT()
   ).filter(supportsDataType)
 
   try {
