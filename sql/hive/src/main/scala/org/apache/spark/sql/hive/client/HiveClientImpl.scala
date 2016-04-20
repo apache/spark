@@ -151,6 +151,8 @@ private[hive] class HiveClientImpl(
   }
 
   /** Returns the configuration for the current session. */
+  // TODO: We should not use it because HiveSessionState has a hiveconf
+  // for the current Session.
   def conf: HiveConf = SessionState.get().getConf
 
   override def getConf(key: String, defaultValue: String): String = {

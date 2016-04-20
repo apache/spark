@@ -85,7 +85,7 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
   override lazy val catalog = {
     new HiveSessionCatalog(
       sharedState.externalCatalog,
-      sharedState.metadataHive,
+      metadataHive,
       ctx,
       ctx.functionResourceLoader,
       functionRegistry,

@@ -72,7 +72,7 @@ object TestHive
  * hive metastore seems to lead to weird non-deterministic failures.  Therefore, the execution of
  * test cases that rely on TestHive must be serialized.
  */
-class TestHiveContext(val sparkSession: TestHiveSparkSession, isRootContext: Boolean)
+class TestHiveContext(@transient val sparkSession: TestHiveSparkSession, isRootContext: Boolean)
   extends HiveContext(sparkSession, isRootContext) {
 
   def this(sc: SparkContext) {
@@ -154,7 +154,8 @@ private[hive] class TestHiveSparkSession(
 
   // A snapshot of the entries in the starting SQLConf
   // We save this because tests can mutate this singleton object if they want
-  lazy val initialSQLConf: SQLConf = {
+  // This snapshot is saved when we create this TestHiveSparkSession.
+  val initialSQLConf: SQLConf = {
     val snapshot = new SQLConf
     sessionState.conf.getAllConfs.foreach { case (k, v) => snapshot.setConfString(k, v) }
     snapshot
@@ -218,9 +219,7 @@ private[hive] class TestHiveSparkSession(
 
   protected[hive] implicit class SqlCmd(sql: String) {
     def cmd: () => Unit = {
-      // TODO: There's something wrong with CREATE TABLE followed by LOAD DATA INTO that table.
-      // See if we can replace this with `new TestHiveQueryExecution(self, sql).stringResult()`
-      () => sessionState.runNativeSql(sql)
+      () => new TestHiveQueryExecution(sql).stringResult(): Unit
     }
   }
 
@@ -436,6 +435,7 @@ private[hive] class TestHiveSparkSession(
       loadedTables.clear()
       sessionState.catalog.clearTempTables()
       sessionState.catalog.invalidateCache()
+
       sessionState.metadataHive.reset()
 
       FunctionRegistry.getFunctionNames.asScala.filterNot(originalUDFs.contains(_)).
