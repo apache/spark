@@ -40,14 +40,14 @@ abstract class HiveQueryFileTest extends HiveComparisonTest {
 
   def testCases: Seq[(String, File)]
 
-  val runAll =
+  val runAll: Boolean =
     !(System.getProperty("spark.hive.alltests") == null) ||
     runOnlyDirectories.nonEmpty ||
     skipDirectories.nonEmpty
 
-  val whiteListProperty = "spark.hive.whitelist"
+  val whiteListProperty: String = "spark.hive.whitelist"
   // Allow the whiteList to be overridden by a system property
-  val realWhiteList =
+  val realWhiteList: Seq[String] =
     Option(System.getProperty(whiteListProperty)).map(_.split(",").toSeq).getOrElse(whiteList)
 
   // Go through all the test cases and add them to scala test.
@@ -58,7 +58,7 @@ abstract class HiveQueryFileTest extends HiveComparisonTest {
       } else if (realWhiteList.map(_.r.pattern.matcher(testCaseName).matches()).reduceLeft(_||_) ||
         runAll) {
         // Build a test case and submit it to scala test framework...
-        val queriesString = fileToString(testCaseFile)
+        val queriesString = fileToString(testCaseFile).replace("../../data", testDataPath)
         createQueryTest(testCaseName, queriesString, reset = true, tryWithoutResettingFirst = true)
       } else {
         // Only output warnings for the built in whitelist as this clutters the output when the user
@@ -67,5 +67,10 @@ abstract class HiveQueryFileTest extends HiveComparisonTest {
           ignore(testCaseName) {}
         }
       }
+  }
+
+  private val testDataPath: String = {
+    this.getClass.getResource("hive-test-path-helper.txt").getPath
+      .replace("/hive-test-path-helper.txt", "/data")
   }
 }
