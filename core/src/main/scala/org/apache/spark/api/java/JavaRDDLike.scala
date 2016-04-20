@@ -24,8 +24,8 @@ import java.util.{Comparator, Iterator => JIterator, List => JList}
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
-import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.io.compress.CompressionCodec
+import org.apache.hadoop.mapred.JobConf
 
 import org.apache.spark._
 import org.apache.spark.annotation.Since

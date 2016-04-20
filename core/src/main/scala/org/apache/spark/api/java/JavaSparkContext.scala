@@ -404,13 +404,14 @@ class JavaSparkContext(val sc: SparkContext)
     new JavaPairRDD(sc.sequenceFile(path, keyClass, valueClass, minPartitions, conf))
   }
 
-  /** Get an RDD for a Hadoop SequenceFile with given key and value types.
-    *
-    * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
-    * record, directly caching the returned RDD will create many references to the same object.
-    * If you plan to directly cache Hadoop writable objects, you should first copy them using
-    * a `map` function.
-    * */
+  /**
+   * Get an RDD for a Hadoop SequenceFile with given key and value types.
+   *
+   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * record, directly caching the returned RDD will create many references to the same object.
+   * If you plan to directly cache Hadoop writable objects, you should first copy them using
+   * a `map` function.
+   */
   def sequenceFile[K, V](path: String,
     keyClass: Class[K],
     valueClass: Class[V],
@@ -555,13 +556,14 @@ class JavaSparkContext(val sc: SparkContext)
     new JavaHadoopRDD(rdd.asInstanceOf[HadoopRDD[K, V]])
   }
 
-  /** Get an RDD for a Hadoop file with an arbitrary InputFormat.
-    *
-    * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
-    * record, directly caching the returned RDD will create many references to the same object.
-    * If you plan to directly cache Hadoop writable objects, you should first copy them using
-    * a `map` function.
-    */
+  /**
+   * Get an RDD for a Hadoop file with an arbitrary InputFormat.
+   *
+   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * record, directly caching the returned RDD will create many references to the same object.
+   * If you plan to directly cache Hadoop writable objects, you should first copy them using
+   * a `map` function.
+   */
   def hadoopFile[K, V, F <: InputFormat[K, V]](
     path: String,
     inputFormatClass: Class[F],
