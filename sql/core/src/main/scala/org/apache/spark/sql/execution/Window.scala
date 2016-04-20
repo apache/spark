@@ -120,14 +120,14 @@ case class Window(
         val (exprs, current, bound) = if (offset == 0) {
           // Use the entire order expression when the offset is 0.
           val exprs = orderSpec.map(_.child)
-          val projection = newMutableProjection(exprs, child.output)
-          (orderSpec, projection(), projection())
+          val buildProjection = () => newMutableProjection(exprs, child.output)
+          (orderSpec, buildProjection(), buildProjection())
         } else if (orderSpec.size == 1) {
           // Use only the first order expression when the offset is non-null.
           val sortExpr = orderSpec.head
           val expr = sortExpr.child
           // Create the projection which returns the current 'value'.
-          val current = newMutableProjection(expr :: Nil, child.output)()
+          val current = newMutableProjection(expr :: Nil, child.output)
           // Flip the sign of the offset when processing the order is descending
           val boundOffset = sortExpr.direction match {
             case Descending => -offset
@@ -135,7 +135,7 @@ case class Window(
           }
           // Create the projection which returns the current 'value' modified by adding the offset.
           val boundExpr = Add(expr, Cast(Literal.create(boundOffset, IntegerType), expr.dataType))
-          val bound = newMutableProjection(boundExpr :: Nil, child.output)()
+          val bound = newMutableProjection(boundExpr :: Nil, child.output)
           (sortExpr :: Nil, current, bound)
         } else {
           sys.error("Non-Zero range offsets are not supported for windows " +
@@ -564,7 +564,7 @@ private[execution] final class OffsetWindowFunctionFrame(
     ordinal: Int,
     expressions: Array[Expression],
     inputSchema: Seq[Attribute],
-    newMutableProjection: (Seq[Expression], Seq[Attribute]) => () => MutableProjection,
+    newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection,
     offset: Int) extends WindowFunctionFrame {
 
   /** Rows of the partition currently being processed. */
@@ -604,7 +604,7 @@ private[execution] final class OffsetWindowFunctionFrame(
     }
 
     // Create the projection.
-    newMutableProjection(boundExpressions, Nil)().target(target)
+    newMutableProjection(boundExpressions, Nil).target(target)
   }
 
   override def prepare(rows: RowBuffer): Unit = {
@@ -886,7 +886,7 @@ private[execution] object AggregateProcessor {
       functions: Array[Expression],
       ordinal: Int,
       inputAttributes: Seq[Attribute],
-      newMutableProjection: (Seq[Expression], Seq[Attribute]) => () => MutableProjection):
+      newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection):
       AggregateProcessor = {
     val aggBufferAttributes = mutable.Buffer.empty[AttributeReference]
     val initialValues = mutable.Buffer.empty[Expression]
@@ -938,13 +938,13 @@ private[execution] object AggregateProcessor {
     // Create the projections.
     val initialProjection = newMutableProjection(
       initialValues,
-      partitionSize.toSeq)()
+      partitionSize.toSeq)
     val updateProjection = newMutableProjection(
       updateExpressions,
-      aggBufferAttributes ++ inputAttributes)()
+      aggBufferAttributes ++ inputAttributes)
     val evaluateProjection = newMutableProjection(
       evaluateExpressions,
-      aggBufferAttributes)()
+      aggBufferAttributes)
 
     // Create the processor
     new AggregateProcessor(
