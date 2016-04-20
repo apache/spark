@@ -636,9 +636,7 @@ object MimaExcludes {
         ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.executor.OutputMetrics.writeMethod")
       ) ++ Seq(
         // [SPARK-4452][Core]Shuffle data structures can starve others on the same thread for memory
-        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.collection.ExternalAppendOnlyMap"),
-        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.collection.ExternalSorter"),
-        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.collection.Spillable")
+        ProblemFilters.exclude[IncompatibleTemplateDefProblem]("org.apache.spark.util.collection.Spillable")
       )
     case v if v.startsWith("1.6") =>
       Seq(
