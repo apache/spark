@@ -47,7 +47,7 @@ private[mllib] object PMMLTreeModelUtils {
     // adding predicted classes for classification and target field for regression for completeness
     dtModel.algo match {
 
-      case Algo.Classification => {
+      case Algo.Classification =>
         miningFields = miningFields :+ new MiningField()
           .withName(FieldName.create("class"))
           .withUsageType(FieldUsageType.PREDICTED)
@@ -59,8 +59,8 @@ private[mllib] object PMMLTreeModelUtils {
           .withDataType(DataType.DOUBLE)
 
         dataFields = dataFields :+ dataField
-      }
-      case Algo.Regression => {
+
+      case Algo.Regression =>
         val targetField = FieldName.create("target")
         val dataField = new DataField(targetField, OpType.CONTINUOUS, DataType.DOUBLE)
         dataFields = dataFields :+ dataField
@@ -68,7 +68,7 @@ private[mllib] object PMMLTreeModelUtils {
         miningFields = miningFields :+ new MiningField()
           .withName(targetField)
           .withUsageType(FieldUsageType.TARGET)
-      }
+
     }
 
     val miningSchema = new MiningSchema().withMiningFields(miningFields.asJava)
@@ -245,12 +245,11 @@ private[mllib] object PMMLTreeModelUtils {
 
       split.featureType match {
         case FeatureType.Continuous => dataField.withOpType(OpType.CONTINUOUS)
-        case FeatureType.Categorical => {
+        case FeatureType.Categorical =>
           dataField.withOpType(OpType.CATEGORICAL)
           val categories = split.categories
             .map(category => new PMMLValue(category.toString)).asJava
           dataField.withValues(categories)
-        }
       }
 
       Some(dataField)
