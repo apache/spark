@@ -17,17 +17,21 @@
 
 package org.apache.spark.streaming.receiver
 
+import java.util.concurrent.ConcurrentLinkedQueue
+
+import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.language.reflectiveCalls
 
 import org.scalatest.BeforeAndAfter
 import org.scalatest.Matchers._
-import org.scalatest.concurrent.Timeouts._
 import org.scalatest.concurrent.Eventually._
+import org.scalatest.concurrent.Timeouts._
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.util.ManualClock
-import org.apache.spark.{SparkException, SparkConf, SparkFunSuite}
 
 class BlockGeneratorSuite extends SparkFunSuite with BeforeAndAfter {
 
@@ -83,7 +87,7 @@ class BlockGeneratorSuite extends SparkFunSuite with BeforeAndAfter {
         assert(listener.onPushBlockCalled === true)
       }
     }
-    listener.pushedData should contain theSameElementsInOrderAs (data1)
+    listener.pushedData.asScala.toSeq should contain theSameElementsInOrderAs (data1)
     assert(listener.onAddDataCalled === false) // should be called only with addDataWithCallback()
 
     // Verify addDataWithCallback() add data+metadata and and callbacks are called correctly
@@ -91,21 +95,24 @@ class BlockGeneratorSuite extends SparkFunSuite with BeforeAndAfter {
     val metadata2 = data2.map { _.toString }
     data2.zip(metadata2).foreach { case (d, m) => blockGenerator.addDataWithCallback(d, m) }
     assert(listener.onAddDataCalled === true)
-    listener.addedData should contain theSameElementsInOrderAs (data2)
-    listener.addedMetadata should contain theSameElementsInOrderAs (metadata2)
+    listener.addedData.asScala.toSeq should contain theSameElementsInOrderAs (data2)
+    listener.addedMetadata.asScala.toSeq should contain theSameElementsInOrderAs (metadata2)
     clock.advance(blockIntervalMs)  // advance clock to generate blocks
     eventually(timeout(1 second)) {
-      listener.pushedData should contain theSameElementsInOrderAs (data1 ++ data2)
+      val combined = data1 ++ data2
+      listener.pushedData.asScala.toSeq should contain theSameElementsInOrderAs combined
     }
 
     // Verify addMultipleDataWithCallback() add data+metadata and and callbacks are called correctly
     val data3 = 21 to 30
     val metadata3 = "metadata"
     blockGenerator.addMultipleDataWithCallback(data3.iterator, metadata3)
-    listener.addedMetadata should contain theSameElementsInOrderAs (metadata2 :+ metadata3)
+    val combinedMetadata = metadata2 :+ metadata3
+    listener.addedMetadata.asScala.toSeq should contain theSameElementsInOrderAs (combinedMetadata)
     clock.advance(blockIntervalMs)  // advance clock to generate blocks
     eventually(timeout(1 second)) {
-      listener.pushedData should contain theSameElementsInOrderAs (data1 ++ data2 ++ data3)
+      val combinedData = data1 ++ data2 ++ data3
+      listener.pushedData.asScala.toSeq should contain theSameElementsInOrderAs (combinedData)
     }
 
     // Stop the block generator by starting the stop on a different thread and
@@ -190,7 +197,7 @@ class BlockGeneratorSuite extends SparkFunSuite with BeforeAndAfter {
       assert(thread.isAlive === false)
     }
     assert(blockGenerator.isStopped() === true) // generator has finally been completely stopped
-    assert(listener.pushedData === data, "All data not pushed by stop()")
+    assert(listener.pushedData.asScala.toSeq === data, "All data not pushed by stop()")
   }
 
   test("block push errors are reported") {
@@ -230,15 +237,15 @@ class BlockGeneratorSuite extends SparkFunSuite with BeforeAndAfter {
 
   /** A listener for BlockGenerator that records the data in the callbacks */
   private class TestBlockGeneratorListener extends BlockGeneratorListener {
-    val pushedData = new mutable.ArrayBuffer[Any] with mutable.SynchronizedBuffer[Any]
-    val addedData = new mutable.ArrayBuffer[Any] with mutable.SynchronizedBuffer[Any]
-    val addedMetadata = new mutable.ArrayBuffer[Any] with mutable.SynchronizedBuffer[Any]
+    val pushedData = new ConcurrentLinkedQueue[Any]
+    val addedData = new ConcurrentLinkedQueue[Any]
+    val addedMetadata = new ConcurrentLinkedQueue[Any]
     @volatile var onGenerateBlockCalled = false
     @volatile var onAddDataCalled = false
     @volatile var onPushBlockCalled = false
 
     override def onPushBlock(blockId: StreamBlockId, arrayBuffer: mutable.ArrayBuffer[_]): Unit = {
-      pushedData ++= arrayBuffer
+      pushedData.addAll(arrayBuffer.asJava)
       onPushBlockCalled = true
     }
     override def onError(message: String, throwable: Throwable): Unit = {}
@@ -246,8 +253,8 @@ class BlockGeneratorSuite extends SparkFunSuite with BeforeAndAfter {
       onGenerateBlockCalled = true
     }
     override def onAddData(data: Any, metadata: Any): Unit = {
-      addedData += data
-      addedMetadata += metadata
+      addedData.add(data)
+      addedMetadata.add(metadata)
       onAddDataCalled = true
     }
   }

@@ -22,9 +22,10 @@ import java.net.URL
 import scala.collection.mutable
 import scala.io.Source
 
+import org.apache.spark.{LocalSparkContext, SparkContext, SparkFunSuite}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerExecutorAdded}
 import org.apache.spark.scheduler.cluster.ExecutorInfo
-import org.apache.spark.scheduler.{SparkListenerExecutorAdded, SparkListener}
-import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.util.SparkConfWithEnv
 
 class LogUrlsStandaloneSuite extends SparkFunSuite with LocalSparkContext {
 
@@ -53,17 +54,7 @@ class LogUrlsStandaloneSuite extends SparkFunSuite with LocalSparkContext {
 
   test("verify that log urls reflect SPARK_PUBLIC_DNS (SPARK-6175)") {
     val SPARK_PUBLIC_DNS = "public_dns"
-    class MySparkConf extends SparkConf(false) {
-      override def getenv(name: String): String = {
-        if (name == "SPARK_PUBLIC_DNS") SPARK_PUBLIC_DNS
-        else super.getenv(name)
-      }
-
-      override def clone: SparkConf = {
-        new MySparkConf().setAll(getAll)
-      }
-    }
-    val conf = new MySparkConf().set(
+    val conf = new SparkConfWithEnv(Map("SPARK_PUBLIC_DNS" -> SPARK_PUBLIC_DNS)).set(
       "spark.extraListeners", classOf[SaveExecutorInfo].getName)
     sc = new SparkContext("local-cluster[2,1,1024]", "test", conf)
 

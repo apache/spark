@@ -209,8 +209,12 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     Literal("f5") ::
     Nil
 
+  private def checkJsonTuple(jt: JsonTuple, expected: InternalRow): Unit = {
+    assert(jt.eval(null).toSeq.head === expected)
+  }
+
   test("json_tuple - hive key 1") {
-    checkEvaluation(
+    checkJsonTuple(
       JsonTuple(
         Literal("""{"f1": "value1", "f2": "value2", "f3": 3, "f5": 5.23}""") ::
           jsonTupleQuery),
@@ -218,7 +222,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("json_tuple - hive key 2") {
-    checkEvaluation(
+    checkJsonTuple(
       JsonTuple(
         Literal("""{"f1": "value12", "f3": "value3", "f2": 2, "f4": 4.01}""") ::
           jsonTupleQuery),
@@ -226,7 +230,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("json_tuple - hive key 2 (mix of foldable fields)") {
-    checkEvaluation(
+    checkJsonTuple(
       JsonTuple(Literal("""{"f1": "value12", "f3": "value3", "f2": 2, "f4": 4.01}""") ::
         Literal("f1") ::
         NonFoldableLiteral("f2") ::
@@ -238,7 +242,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("json_tuple - hive key 3") {
-    checkEvaluation(
+    checkJsonTuple(
       JsonTuple(
         Literal("""{"f1": "value13", "f4": "value44", "f3": "value33", "f2": 2, "f5": 5.01}""") ::
           jsonTupleQuery),
@@ -247,7 +251,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("json_tuple - hive key 3 (nonfoldable json)") {
-    checkEvaluation(
+    checkJsonTuple(
       JsonTuple(
         NonFoldableLiteral(
           """{"f1": "value13", "f4": "value44",
@@ -258,7 +262,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("json_tuple - hive key 3 (nonfoldable fields)") {
-    checkEvaluation(
+    checkJsonTuple(
       JsonTuple(Literal(
         """{"f1": "value13", "f4": "value44",
           | "f3": "value33", "f2": 2, "f5": 5.01}""".stripMargin) ::
@@ -273,43 +277,43 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("json_tuple - hive key 4 - null json") {
-    checkEvaluation(
+    checkJsonTuple(
       JsonTuple(Literal(null) :: jsonTupleQuery),
       InternalRow.fromSeq(Seq(null, null, null, null, null)))
   }
 
   test("json_tuple - hive key 5 - null and empty fields") {
-    checkEvaluation(
+    checkJsonTuple(
       JsonTuple(Literal("""{"f1": "", "f5": null}""") :: jsonTupleQuery),
       InternalRow.fromSeq(Seq(UTF8String.fromString(""), null, null, null, null)))
   }
 
   test("json_tuple - hive key 6 - invalid json (array)") {
-    checkEvaluation(
+    checkJsonTuple(
       JsonTuple(Literal("[invalid JSON string]") :: jsonTupleQuery),
       InternalRow.fromSeq(Seq(null, null, null, null, null)))
   }
 
   test("json_tuple - invalid json (object start only)") {
-    checkEvaluation(
+    checkJsonTuple(
       JsonTuple(Literal("{") :: jsonTupleQuery),
       InternalRow.fromSeq(Seq(null, null, null, null, null)))
   }
 
   test("json_tuple - invalid json (no object end)") {
-    checkEvaluation(
+    checkJsonTuple(
       JsonTuple(Literal("""{"foo": "bar"""") :: jsonTupleQuery),
       InternalRow.fromSeq(Seq(null, null, null, null, null)))
   }
 
   test("json_tuple - invalid json (invalid json)") {
-    checkEvaluation(
+    checkJsonTuple(
       JsonTuple(Literal("\\") :: jsonTupleQuery),
       InternalRow.fromSeq(Seq(null, null, null, null, null)))
   }
 
   test("json_tuple - preserve newlines") {
-    checkEvaluation(
+    checkJsonTuple(
       JsonTuple(Literal("{\"a\":\"b\nc\"}") :: Literal("a") :: Nil),
       InternalRow.fromSeq(Seq(UTF8String.fromString("b\nc"))))
   }

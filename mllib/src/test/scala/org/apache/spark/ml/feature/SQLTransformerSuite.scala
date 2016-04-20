@@ -19,9 +19,12 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamsSuite
+import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.sql.types.{LongType, StructField, StructType}
 
-class SQLTransformerSuite extends SparkFunSuite with MLlibTestSparkContext {
+class SQLTransformerSuite
+  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   test("params") {
     ParamsSuite.checkParams(new SQLTransformer())
@@ -40,5 +43,20 @@ class SQLTransformerSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(result.schema.toString == resultSchema.toString)
     assert(resultSchema == expected.schema)
     assert(result.collect().toSeq == expected.collect().toSeq)
+  }
+
+  test("read/write") {
+    val t = new SQLTransformer()
+      .setStatement("select * from __THIS__")
+    testDefaultReadWrite(t)
+  }
+
+  test("transformSchema") {
+    val df = sqlContext.range(10)
+    val outputSchema = new SQLTransformer()
+      .setStatement("SELECT id + 1 AS id1 FROM __THIS__")
+      .transformSchema(df.schema)
+    val expected = StructType(Seq(StructField("id1", LongType, nullable = false)))
+    assert(outputSchema === expected)
   }
 }

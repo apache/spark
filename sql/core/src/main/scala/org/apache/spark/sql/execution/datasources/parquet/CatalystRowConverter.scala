@@ -25,14 +25,15 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.parquet.column.Dictionary
 import org.apache.parquet.io.api.{Binary, Converter, GroupConverter, PrimitiveConverter}
-import org.apache.parquet.schema.OriginalType.{INT_32, LIST, UTF8}
-import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.{DOUBLE, INT32, INT64, BINARY, FIXED_LEN_BYTE_ARRAY}
 import org.apache.parquet.schema.{GroupType, MessageType, PrimitiveType, Type}
+import org.apache.parquet.schema.OriginalType.{INT_32, LIST, UTF8}
+import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.{BINARY, DOUBLE, FIXED_LEN_BYTE_ARRAY, INT32, INT64}
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.{GenericArrayData, ArrayBasedMapData, DateTimeUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.SQLTimestamp
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -163,10 +164,14 @@ private[parquet] class CatalystRowConverter(
     override def setFloat(value: Float): Unit = row.setFloat(ordinal, value)
   }
 
+  private val currentRow = new SpecificMutableRow(catalystType.map(_.dataType))
+
+  private val unsafeProjection = UnsafeProjection.create(catalystType)
+
   /**
-   * Represents the converted row object once an entire Parquet record is converted.
+   * The [[UnsafeRow]] converted from an entire Parquet record.
    */
-  val currentRow = new SpecificMutableRow(catalystType.map(_.dataType))
+  def currentRecord: UnsafeRow = unsafeProjection(currentRow)
 
   // Converters for each field.
   private val fieldConverters: Array[Converter with HasParentContainerUpdater] = {
@@ -323,8 +328,8 @@ private[parquet] class CatalystRowConverter(
       // are using `Binary.toByteBuffer.array()` to steal the underlying byte array without copying
       // it.
       val buffer = value.toByteBuffer
-      val offset = buffer.position()
-      val numBytes = buffer.limit() - buffer.position()
+      val offset = buffer.arrayOffset() + buffer.position()
+      val numBytes = buffer.remaining()
       updater.set(UTF8String.fromBytes(buffer.array(), offset, numBytes))
     }
   }
@@ -364,36 +369,14 @@ private[parquet] class CatalystRowConverter(
     }
 
     protected def decimalFromBinary(value: Binary): Decimal = {
-      if (precision <= CatalystSchemaConverter.MAX_PRECISION_FOR_INT64) {
+      if (precision <= Decimal.MAX_LONG_DIGITS) {
         // Constructs a `Decimal` with an unscaled `Long` value if possible.
-        val unscaled = binaryToUnscaledLong(value)
+        val unscaled = CatalystRowConverter.binaryToUnscaledLong(value)
         Decimal(unscaled, precision, scale)
       } else {
         // Otherwise, resorts to an unscaled `BigInteger` instead.
         Decimal(new BigDecimal(new BigInteger(value.getBytes), scale), precision, scale)
       }
-    }
-
-    private def binaryToUnscaledLong(binary: Binary): Long = {
-      // The underlying `ByteBuffer` implementation is guaranteed to be `HeapByteBuffer`, so here
-      // we are using `Binary.toByteBuffer.array()` to steal the underlying byte array without
-      // copying it.
-      val buffer = binary.toByteBuffer
-      val bytes = buffer.array()
-      val start = buffer.position()
-      val end = buffer.limit()
-
-      var unscaled = 0L
-      var i = start
-
-      while (i < end) {
-        unscaled = (unscaled << 8) | (bytes(i) & 0xff)
-        i += 1
-      }
-
-      val bits = 8 * (end - start)
-      unscaled = (unscaled << (64 - bits)) >> (64 - bits)
-      unscaled
     }
   }
 
@@ -652,5 +635,38 @@ private[parquet] class CatalystRowConverter(
     override def getConverter(field: Int): Converter = elementConverter.getConverter(field)
     override def end(): Unit = elementConverter.end()
     override def start(): Unit = elementConverter.start()
+  }
+}
+
+private[parquet] object CatalystRowConverter {
+  def binaryToUnscaledLong(binary: Binary): Long = {
+    // The underlying `ByteBuffer` implementation is guaranteed to be `HeapByteBuffer`, so here
+    // we are using `Binary.toByteBuffer.array()` to steal the underlying byte array without
+    // copying it.
+    val buffer = binary.toByteBuffer
+    val bytes = buffer.array()
+    val start = buffer.arrayOffset() + buffer.position()
+    val end = buffer.arrayOffset() + buffer.limit()
+
+    var unscaled = 0L
+    var i = start
+
+    while (i < end) {
+      unscaled = (unscaled << 8) | (bytes(i) & 0xff)
+      i += 1
+    }
+
+    val bits = 8 * (end - start)
+    unscaled = (unscaled << (64 - bits)) >> (64 - bits)
+    unscaled
+  }
+
+  def binaryToSQLTimestamp(binary: Binary): SQLTimestamp = {
+    assert(binary.length() == 12, s"Timestamps (with nanoseconds) are expected to be stored in" +
+      s" 12-byte long binaries. Found a ${binary.length()}-byte binary instead.")
+    val buffer = binary.toByteBuffer.order(ByteOrder.LITTLE_ENDIAN)
+    val timeOfDayNanos = buffer.getLong
+    val julianDay = buffer.getInt
+    DateTimeUtils.fromJulianDay(julianDay, timeOfDayNanos)
   }
 }

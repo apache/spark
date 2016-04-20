@@ -19,16 +19,18 @@ package org.apache.spark.ml.feature
 
 import scala.beans.{BeanInfo, BeanProperty}
 
-import org.apache.spark.{Logging, SparkException, SparkFunSuite}
+import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.internal.Logging
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.MLTestingUtils
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.linalg.{SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 
-class VectorIndexerSuite extends SparkFunSuite with MLlibTestSparkContext with Logging {
+class VectorIndexerSuite extends SparkFunSuite with MLlibTestSparkContext
+  with DefaultReadWriteTest with Logging {
 
   import VectorIndexerSuite.FeatureData
 
@@ -158,7 +160,7 @@ class VectorIndexerSuite extends SparkFunSuite with MLlibTestSparkContext with L
         // Chose correct categorical features
         assert(categoryMaps.keys.toSet === categoricalFeatures)
         val transformed = model.transform(data).select("indexed")
-        val indexedRDD: RDD[Vector] = transformed.map(_.getAs[Vector](0))
+        val indexedRDD: RDD[Vector] = transformed.rdd.map(_.getAs[Vector](0))
         val featureAttrs = AttributeGroup.fromStructField(transformed.schema("indexed"))
         assert(featureAttrs.name === "indexed")
         assert(featureAttrs.attributes.get.length === model.numFeatures)
@@ -215,7 +217,8 @@ class VectorIndexerSuite extends SparkFunSuite with MLlibTestSparkContext with L
       val points = data.collect().map(_.getAs[Vector](0))
       val vectorIndexer = getIndexer.setMaxCategories(maxCategories)
       val model = vectorIndexer.fit(data)
-      val indexedPoints = model.transform(data).select("indexed").map(_.getAs[Vector](0)).collect()
+      val indexedPoints =
+        model.transform(data).select("indexed").rdd.map(_.getAs[Vector](0)).collect()
       points.zip(indexedPoints).foreach {
         case (orig: SparseVector, indexed: SparseVector) =>
           assert(orig.indices.length == indexed.indices.length)
@@ -250,6 +253,23 @@ class VectorIndexerSuite extends SparkFunSuite with MLlibTestSparkContext with L
           // TODO: Once input features marked as categorical are handled correctly, check that here.
       }
     }
+  }
+
+  test("VectorIndexer read/write") {
+    val t = new VectorIndexer()
+      .setInputCol("myInputCol")
+      .setOutputCol("myOutputCol")
+      .setMaxCategories(30)
+    testDefaultReadWrite(t)
+  }
+
+  test("VectorIndexerModel read/write") {
+    val categoryMaps = Map(0 -> Map(0.0 -> 0, 1.0 -> 1), 1 -> Map(0.0 -> 0, 1.0 -> 1,
+      2.0 -> 2, 3.0 -> 3), 2 -> Map(0.0 -> 0, -1.0 -> 1, 2.0 -> 2))
+    val instance = new VectorIndexerModel("myVectorIndexerModel", 3, categoryMaps)
+    val newInstance = testDefaultReadWrite(instance)
+    assert(newInstance.numFeatures === instance.numFeatures)
+    assert(newInstance.categoryMaps === instance.categoryMaps)
   }
 }
 

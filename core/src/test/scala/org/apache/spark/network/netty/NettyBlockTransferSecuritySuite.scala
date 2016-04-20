@@ -19,22 +19,23 @@ package org.apache.spark.network.netty
 
 import java.io.InputStreamReader
 import java.nio._
-import java.nio.charset.Charset
+import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 
-import scala.concurrent.duration._
 import scala.concurrent.{Await, Promise}
+import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
 import com.google.common.io.CharStreams
-import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
-import org.apache.spark.network.shuffle.BlockFetchingListener
-import org.apache.spark.network.{BlockDataManager, BlockTransferService}
-import org.apache.spark.storage.{BlockId, ShuffleBlockId}
-import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.mockito.Mockito._
 import org.scalatest.mock.MockitoSugar
 import org.scalatest.ShouldMatchers
+
+import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
+import org.apache.spark.network.{BlockDataManager, BlockTransferService}
+import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
+import org.apache.spark.network.shuffle.BlockFetchingListener
+import org.apache.spark.storage.{BlockId, ShuffleBlockId}
 
 class NettyBlockTransferSecuritySuite extends SparkFunSuite with MockitoSugar with ShouldMatchers {
   test("security default off") {
@@ -102,24 +103,25 @@ class NettyBlockTransferSecuritySuite extends SparkFunSuite with MockitoSugar wi
     val blockManager = mock[BlockDataManager]
     val blockId = ShuffleBlockId(0, 1, 2)
     val blockString = "Hello, world!"
-    val blockBuffer = new NioManagedBuffer(ByteBuffer.wrap(blockString.getBytes))
+    val blockBuffer = new NioManagedBuffer(ByteBuffer.wrap(
+      blockString.getBytes(StandardCharsets.UTF_8)))
     when(blockManager.getBlockData(blockId)).thenReturn(blockBuffer)
 
     val securityManager0 = new SecurityManager(conf0)
-    val exec0 = new NettyBlockTransferService(conf0, securityManager0, numCores = 1)
+    val exec0 = new NettyBlockTransferService(conf0, securityManager0, "localhost", numCores = 1)
     exec0.init(blockManager)
 
     val securityManager1 = new SecurityManager(conf1)
-    val exec1 = new NettyBlockTransferService(conf1, securityManager1, numCores = 1)
+    val exec1 = new NettyBlockTransferService(conf1, securityManager1, "localhost", numCores = 1)
     exec1.init(blockManager)
 
     val result = fetchBlock(exec0, exec1, "1", blockId) match {
       case Success(buf) =>
         val actualString = CharStreams.toString(
-          new InputStreamReader(buf.createInputStream(), Charset.forName("UTF-8")))
+          new InputStreamReader(buf.createInputStream(), StandardCharsets.UTF_8))
         actualString should equal(blockString)
         buf.release()
-        Success()
+        Success(())
       case Failure(t) =>
         Failure(t)
     }
@@ -148,7 +150,7 @@ class NettyBlockTransferSecuritySuite extends SparkFunSuite with MockitoSugar wi
         }
       })
 
-    Await.ready(promise.future, FiniteDuration(1000, TimeUnit.MILLISECONDS))
+    Await.ready(promise.future, FiniteDuration(10, TimeUnit.SECONDS))
     promise.future.value.get
   }
 }

@@ -10,13 +10,10 @@ package org.apache.spark.repl
 
 import java.net.URL
 
-import org.apache.spark.annotation.DeveloperApi
-
 import scala.reflect.io.AbstractFile
 import scala.tools.nsc._
 import scala.tools.nsc.backend.JavaPlatform
 import scala.tools.nsc.interpreter._
-
 import scala.tools.nsc.interpreter.{Results => IR}
 import Predef.{println => _, _}
 import java.io.{BufferedReader, FileReader}
@@ -42,9 +39,10 @@ import scala.tools.reflect.StdRuntimeTags._
 import java.lang.{Class => jClass}
 import scala.reflect.api.{Mirror, TypeCreator, Universe => ApiUniverse}
 
-import org.apache.spark.Logging
 import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext
+import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.util.Utils
 
@@ -169,7 +167,7 @@ class SparkILoop(
   }
 
 
-  private def sparkCleanUp(){
+  private def sparkCleanUp() {
     echo("Stopping spark context.")
     intp.beQuietDuring {
       command("sc.stop()")
@@ -253,7 +251,7 @@ class SparkILoop(
       case xs       => xs find (_.name == cmd)
     }
   }
-  private var fallbackMode = false 
+  private var fallbackMode = false
 
   private def toggleFallbackMode() {
     val old = fallbackMode
@@ -261,9 +259,9 @@ class SparkILoop(
     System.setProperty("spark.repl.fallback", fallbackMode.toString)
     echo(s"""
       |Switched ${if (old) "off" else "on"} fallback mode without restarting.
-      |       If you have defined classes in the repl, it would 
+      |       If you have defined classes in the repl, it would
       |be good to redefine them incase you plan to use them. If you still run
-      |into issues it would be good to restart the repl and turn on `:fallback` 
+      |into issues it would be good to restart the repl and turn on `:fallback`
       |mode as first command.
       """.stripMargin)
   }
@@ -350,7 +348,7 @@ class SparkILoop(
     shCommand,
     nullary("silent", "disable/enable automatic printing of results", verbosity),
     nullary("fallback", """
-                           |disable/enable advanced repl changes, these fix some issues but may introduce others. 
+                           |disable/enable advanced repl changes, these fix some issues but may introduce others.
                            |This mode will be removed once these fixes stablize""".stripMargin, toggleFallbackMode),
     cmd("type", "[-v] <expr>", "display the type of an expression without evaluating it", typeCommand),
     nullary("warnings", "show the suppressed warnings from the most recent line which had any", warningsCommand)
@@ -799,9 +797,11 @@ class SparkILoop(
     // echo("Switched " + (if (old) "off" else "on") + " result printing.")
   }
 
-  /** Run one command submitted by the user.  Two values are returned:
-    * (1) whether to keep running, (2) the line to record for replay,
-    * if any. */
+  /**
+   * Run one command submitted by the user.  Two values are returned:
+   * (1) whether to keep running, (2) the line to record for replay,
+   * if any.
+   */
   private[repl] def command(line: String): Result = {
     if (line startsWith ":") {
       val cmd = line.tail takeWhile (x => !x.isWhitespace)
@@ -843,12 +843,13 @@ class SparkILoop(
   }
   import paste.{ ContinueString, PromptString }
 
-  /** Interpret expressions starting with the first line.
-    * Read lines until a complete compilation unit is available
-    * or until a syntax error has been seen.  If a full unit is
-    * read, go ahead and interpret it.  Return the full string
-    * to be recorded for replay, if any.
-    */
+  /**
+   * Interpret expressions starting with the first line.
+   * Read lines until a complete compilation unit is available
+   * or until a syntax error has been seen.  If a full unit is
+   * read, go ahead and interpret it.  Return the full string
+   * to be recorded for replay, if any.
+   */
   private def interpretStartingWith(code: String): Option[String] = {
     // signal completion non-completion input has been received
     in.completion.resetVerbosity()
@@ -1009,8 +1010,13 @@ class SparkILoop(
     val conf = new SparkConf()
       .setMaster(getMaster())
       .setJars(jars)
-      .set("spark.repl.class.uri", intp.classServerUri)
       .setIfMissing("spark.app.name", "Spark shell")
+      // SparkContext will detect this configuration and register it with the RpcEnv's
+      // file server, setting spark.repl.class.uri to the actual URI for executors to
+      // use. This is sort of ugly but since executors are started as part of SparkContext
+      // initialization in certain cases, there's an initialization order issue that prevents
+      // this from being set after SparkContext is instantiated.
+      .set("spark.repl.class.outputDir", intp.outputDir.getAbsolutePath())
     if (execUri != null) {
       conf.set("spark.executor.uri", execUri)
     }
@@ -1025,7 +1031,7 @@ class SparkILoop(
     val loader = Utils.getContextOrSparkClassLoader
     try {
       sqlContext = loader.loadClass(name).getConstructor(classOf[SparkContext])
-        .newInstance(sparkContext).asInstanceOf[SQLContext] 
+        .newInstance(sparkContext).asInstanceOf[SQLContext]
       logInfo("Created sql context (with Hive support)..")
     }
     catch {

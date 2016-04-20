@@ -16,21 +16,19 @@
  */
 
  // scalastyle:off println
- // scalastyle:off jobcontext
 package org.apache.spark.examples
 
 import java.nio.ByteBuffer
 import java.util.Collections
 
 import org.apache.cassandra.hadoop.ConfigHelper
-import org.apache.cassandra.hadoop.cql3.CqlPagingInputFormat
 import org.apache.cassandra.hadoop.cql3.CqlConfigHelper
 import org.apache.cassandra.hadoop.cql3.CqlOutputFormat
+import org.apache.cassandra.hadoop.cql3.CqlPagingInputFormat
 import org.apache.cassandra.utils.ByteBufferUtil
 import org.apache.hadoop.mapreduce.Job
 
 import org.apache.spark.{SparkConf, SparkContext}
-
 
 /*
   Need to create following keyspace and column family in cassandra before running this example
@@ -80,7 +78,7 @@ object CassandraCQLTest {
     val InputColumnFamily = "ordercf"
     val OutputColumnFamily = "salecount"
 
-    val job = new Job()
+    val job = Job.getInstance()
     job.setInputFormatClass(classOf[CqlPagingInputFormat])
     val configuration = job.getConfiguration
     ConfigHelper.setInputInitialAddress(job.getConfiguration(), cHost)
@@ -108,9 +106,8 @@ object CassandraCQLTest {
 
     println("Count: " + casRdd.count)
     val productSaleRDD = casRdd.map {
-      case (key, value) => {
+      case (key, value) =>
         (ByteBufferUtil.string(value.get("prod_id")), ByteBufferUtil.toInt(value.get("quantity")))
-      }
     }
     val aggregatedRDD = productSaleRDD.reduceByKey(_ + _)
     aggregatedRDD.collect().foreach {
@@ -118,11 +115,10 @@ object CassandraCQLTest {
     }
 
     val casoutputCF = aggregatedRDD.map {
-      case (productId, saleCount) => {
+      case (productId, saleCount) =>
         val outKey = Collections.singletonMap("prod_id", ByteBufferUtil.bytes(productId))
         val outVal = Collections.singletonList(ByteBufferUtil.bytes(saleCount))
         (outKey, outVal)
-      }
     }
 
     casoutputCF.saveAsNewAPIHadoopFile(
@@ -137,4 +133,3 @@ object CassandraCQLTest {
   }
 }
 // scalastyle:on println
-// scalastyle:on jobcontext

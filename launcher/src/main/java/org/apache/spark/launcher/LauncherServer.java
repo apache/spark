@@ -129,7 +129,7 @@ class LauncherServer implements Closeable {
       server.setReuseAddress(true);
       server.bind(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0));
 
-      this.clients = new ArrayList<ServerConnection>();
+      this.clients = new ArrayList<>();
       this.threadIds = new AtomicLong();
       this.factory = new NamedThreadFactory(THREAD_NAME_FMT);
       this.pending = new ConcurrentHashMap<>();
@@ -293,9 +293,7 @@ class LauncherServer implements Closeable {
     protected void handle(Message msg) throws IOException {
       try {
         if (msg instanceof Hello) {
-          synchronized (timeout) {
-            timeout.cancel();
-          }
+          timeout.cancel();
           timeout = null;
           Hello hello = (Hello) msg;
           ChildProcAppHandle handle = pending.remove(hello.secret);

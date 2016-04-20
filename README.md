@@ -27,6 +27,8 @@ To build Spark and its example programs, run:
 (You do not need to do this if you downloaded a pre-built package.)
 More detailed documentation is available from the project site, at
 ["Building Spark"](http://spark.apache.org/docs/latest/building-spark.html).
+For developing Spark using an IDE, see [Eclipse](https://cwiki.apache.org/confluence/display/SPARK/Useful+Developer+Tools#UsefulDeveloperTools-Eclipse)
+and [IntelliJ](https://cwiki.apache.org/confluence/display/SPARK/Useful+Developer+Tools#UsefulDeveloperTools-IntelliJ).
 
 ## Interactive Scala Shell
 
@@ -87,10 +89,7 @@ Hadoop, you must build Spark against the same version that your cluster runs.
 Please refer to the build documentation at
 ["Specifying the Hadoop Version"](http://spark.apache.org/docs/latest/building-spark.html#specifying-the-hadoop-version)
 for detailed guidance on building for a particular distribution of Hadoop, including
-building for particular Hive and Hive Thriftserver distributions. See also
-["Third Party Hadoop Distributions"](http://spark.apache.org/docs/latest/hadoop-third-party-distributions.html)
-for guidance on building a Spark application that works with a particular
-distribution.
+building for particular Hive and Hive Thriftserver distributions.
 
 ## Configuration
 

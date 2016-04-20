@@ -20,8 +20,6 @@ package org.apache.spark.sql.catalyst.expressions
 import java.sql.{Date, Timestamp}
 
 import org.scalacheck.{Arbitrary, Gen}
-import org.scalatest.Matchers
-import org.scalatest.prop.GeneratorDrivenPropertyChecks
 
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval

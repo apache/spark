@@ -20,9 +20,9 @@ package org.apache.spark.mllib.stat
 import scala.annotation.varargs
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.api.java.{JavaRDD, JavaDoubleRDD}
-import org.apache.spark.mllib.linalg.distributed.RowMatrix
+import org.apache.spark.api.java.{JavaDoubleRDD, JavaRDD}
 import org.apache.spark.mllib.linalg.{Matrix, Vector}
+import org.apache.spark.mllib.linalg.distributed.RowMatrix
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.stat.correlation.Correlations
 import org.apache.spark.mllib.stat.test.{ChiSqTest, ChiSqTestResult, KolmogorovSmirnovTest,

@@ -29,6 +29,7 @@ from collections import namedtuple
 
 from sparktestsupport import SPARK_HOME, USER_HOME, ERROR_CODES
 from sparktestsupport.shellutils import exit_from_command_with_retcode, run_cmd, rm_r, which
+from sparktestsupport.toposort import toposort_flatten, toposort
 import sparktestsupport.modules as modules
 
 
@@ -43,7 +44,7 @@ def determine_modules_for_files(filenames):
     If a file is not associated with a more specific submodule, then this method will consider that
     file to belong to the 'root' module.
 
-    >>> sorted(x.name for x in determine_modules_for_files(["python/pyspark/a.py", "sql/test/foo"]))
+    >>> sorted(x.name for x in determine_modules_for_files(["python/pyspark/a.py", "sql/core/foo"]))
     ['pyspark-core', 'sql']
     >>> [x.name for x in determine_modules_for_files(["file_not_matched_by_any_subproject"])]
     ['root']
@@ -99,24 +100,28 @@ def determine_modules_to_test(changed_modules):
     Given a set of modules that have changed, compute the transitive closure of those modules'
     dependent modules in order to determine the set of modules that should be tested.
 
-    >>> sorted(x.name for x in determine_modules_to_test([modules.root]))
+    Returns a topologically-sorted list of modules (ties are broken by sorting on module names).
+
+    >>> [x.name for x in determine_modules_to_test([modules.root])]
     ['root']
-    >>> sorted(x.name for x in determine_modules_to_test([modules.graphx]))
-    ['examples', 'graphx']
-    >>> x = sorted(x.name for x in determine_modules_to_test([modules.sql]))
+    >>> [x.name for x in determine_modules_to_test([modules.build])]
+    ['root']
+    >>> [x.name for x in determine_modules_to_test([modules.graphx])]
+    ['graphx', 'examples']
+    >>> x = [x.name for x in determine_modules_to_test([modules.sql])]
     >>> x # doctest: +NORMALIZE_WHITESPACE
-    ['examples', 'hive-thriftserver', 'mllib', 'pyspark-ml', \
-     'pyspark-mllib', 'pyspark-sql', 'sparkr', 'sql']
+    ['sql', 'hive', 'mllib', 'examples', 'hive-thriftserver', 'pyspark-sql', 'sparkr',
+     'pyspark-mllib', 'pyspark-ml']
     """
-    # If we're going to have to run all of the tests, then we can just short-circuit
-    # and return 'root'. No module depends on root, so if it appears then it will be
-    # in changed_modules.
-    if modules.root in changed_modules:
-        return [modules.root]
     modules_to_test = set()
     for module in changed_modules:
         modules_to_test = modules_to_test.union(determine_modules_to_test(module.dependent_modules))
-    return modules_to_test.union(set(changed_modules))
+    modules_to_test = modules_to_test.union(set(changed_modules))
+    # If we need to run all of the tests, then we should short-circuit and return 'root'
+    if modules.root in modules_to_test:
+        return [modules.root]
+    return toposort_flatten(
+        {m: set(m.dependencies).intersection(modules_to_test) for m in modules_to_test}, sort=True)
 
 
 def determine_tags_to_exclude(changed_modules):
@@ -148,7 +153,7 @@ def determine_java_executable():
     return java_exe if java_exe else which("java")
 
 
-JavaVersion = namedtuple('JavaVersion', ['major', 'minor', 'patch', 'update'])
+JavaVersion = namedtuple('JavaVersion', ['major', 'minor', 'patch'])
 
 
 def determine_java_version(java_exe):
@@ -164,14 +169,13 @@ def determine_java_version(java_exe):
     # find raw version string, eg 'java version "1.8.0_25"'
     raw_version_str = next(x for x in raw_output_lines if " version " in x)
 
-    match = re.search('(\d+)\.(\d+)\.(\d+)_(\d+)', raw_version_str)
+    match = re.search('(\d+)\.(\d+)\.(\d+)', raw_version_str)
 
     major = int(match.group(1))
     minor = int(match.group(2))
     patch = int(match.group(3))
-    update = int(match.group(4))
 
-    return JavaVersion(major, minor, patch, update)
+    return JavaVersion(major, minor, patch)
 
 # -------------------------------------------------------------------------------------------------
 # Functions for running the other build and test scripts
@@ -196,6 +200,11 @@ def run_apache_rat_checks():
 def run_scala_style_checks():
     set_title_and_block("Running Scala style checks", "BLOCK_SCALA_STYLE")
     run_cmd([os.path.join(SPARK_HOME, "dev", "lint-scala")])
+
+
+def run_java_style_checks():
+    set_title_and_block("Running Java style checks", "BLOCK_JAVA_STYLE")
+    run_cmd([os.path.join(SPARK_HOME, "dev", "lint-java")])
 
 
 def run_python_style_checks():
@@ -291,16 +300,16 @@ def exec_sbt(sbt_args=()):
 
 def get_hadoop_profiles(hadoop_version):
     """
-    For the given Hadoop version tag, return a list of SBT profile flags for
+    For the given Hadoop version tag, return a list of Maven/SBT profile flags for
     building and testing against that Hadoop version.
     """
 
     sbt_maven_hadoop_profiles = {
-        "hadoop1.0": ["-Phadoop-1", "-Dhadoop.version=1.2.1"],
-        "hadoop2.0": ["-Phadoop-1", "-Dhadoop.version=2.0.0-mr1-cdh4.1.1"],
         "hadoop2.2": ["-Pyarn", "-Phadoop-2.2"],
-        "hadoop2.3": ["-Pyarn", "-Phadoop-2.3", "-Dhadoop.version=2.3.0"],
+        "hadoop2.3": ["-Pyarn", "-Phadoop-2.3"],
+        "hadoop2.4": ["-Pyarn", "-Phadoop-2.4"],
         "hadoop2.6": ["-Pyarn", "-Phadoop-2.6"],
+        "hadoop2.7": ["-Pyarn", "-Phadoop-2.7"],
     }
 
     if hadoop_version in sbt_maven_hadoop_profiles:
@@ -327,17 +336,24 @@ def build_spark_sbt(hadoop_version):
     # Enable all of the profiles for the build:
     build_profiles = get_hadoop_profiles(hadoop_version) + modules.root.build_profile_flags
     sbt_goals = ["package",
-                 "assembly/assembly",
                  "streaming-kafka-assembly/assembly",
                  "streaming-flume-assembly/assembly",
-                 "streaming-mqtt-assembly/assembly",
-                 "streaming-mqtt/test:assembly",
                  "streaming-kinesis-asl-assembly/assembly"]
     profiles_and_goals = build_profiles + sbt_goals
 
     print("[info] Building Spark (w/Hive 1.2.1) using SBT with these arguments: ",
           " ".join(profiles_and_goals))
 
+    exec_sbt(profiles_and_goals)
+
+
+def build_spark_assembly_sbt(hadoop_version):
+    # Enable all of the profiles for the build:
+    build_profiles = get_hadoop_profiles(hadoop_version) + modules.root.build_profile_flags
+    sbt_goals = ["assembly/package"]
+    profiles_and_goals = build_profiles + sbt_goals
+    print("[info] Building Spark assembly (w/Hive 1.2.1) using SBT with these arguments: ",
+          " ".join(profiles_and_goals))
     exec_sbt(profiles_and_goals)
 
 
@@ -355,9 +371,10 @@ def build_apache_spark(build_tool, hadoop_version):
         build_spark_sbt(hadoop_version)
 
 
-def detect_binary_inop_with_mima():
+def detect_binary_inop_with_mima(hadoop_version):
+    build_profiles = get_hadoop_profiles(hadoop_version) + modules.root.build_profile_flags
     set_title_and_block("Detecting binary incompatibilities with MiMa", "BLOCK_MIMA")
-    run_cmd([os.path.join(SPARK_HOME, "dev", "mima")])
+    run_cmd([os.path.join(SPARK_HOME, "dev", "mima")] + build_profiles)
 
 
 def run_scala_tests_maven(test_profiles):
@@ -373,12 +390,12 @@ def run_scala_tests_maven(test_profiles):
 
 def run_scala_tests_sbt(test_modules, test_profiles):
 
-    sbt_test_goals = set(itertools.chain.from_iterable(m.sbt_test_goals for m in test_modules))
+    sbt_test_goals = list(itertools.chain.from_iterable(m.sbt_test_goals for m in test_modules))
 
     if not sbt_test_goals:
         return
 
-    profiles_and_goals = test_profiles + list(sbt_test_goals)
+    profiles_and_goals = test_profiles + sbt_test_goals
 
     print("[info] Running Spark tests using SBT with these arguments: ",
           " ".join(profiles_and_goals))
@@ -413,6 +430,12 @@ def run_python_tests(test_modules, parallelism):
         command.append("--modules=%s" % ','.join(m.name for m in test_modules))
     command.append("--parallelism=%i" % parallelism)
     run_cmd(command)
+
+
+def run_build_tests():
+    set_title_and_block("Running build tests", "BLOCK_BUILD_TESTS")
+    run_cmd([os.path.join(SPARK_HOME, "dev", "test-dependencies.sh")])
+    pass
 
 
 def run_sparkr_tests():
@@ -473,7 +496,7 @@ def main():
     if which("R"):
         run_cmd([os.path.join(SPARK_HOME, "R", "install-dev.sh")])
     else:
-        print("Can't install SparkR as R is was not found in PATH")
+        print("Cannot install SparkR as R was not found in PATH")
 
     if os.environ.get("AMPLAB_JENKINS"):
         # if we're on the Amplab Jenkins build servers setup variables
@@ -486,7 +509,7 @@ def main():
     else:
         # else we're running locally and can use local settings
         build_tool = "sbt"
-        hadoop_version = "hadoop2.3"
+        hadoop_version = os.environ.get("HADOOP_PROFILE", "hadoop2.3")
         test_env = "local"
 
     print("[info] Using build tool", build_tool, "with Hadoop profile", hadoop_version,
@@ -520,8 +543,16 @@ def main():
     run_apache_rat_checks()
 
     # style checks
-    if not changed_files or any(f.endswith(".scala") for f in changed_files):
+    if not changed_files or any(f.endswith(".scala")
+                                or f.endswith("scalastyle-config.xml")
+                                for f in changed_files):
         run_scala_style_checks()
+    if not changed_files or any(f.endswith(".java")
+                                or f.endswith("checkstyle.xml")
+                                or f.endswith("checkstyle-suppressions.xml")
+                                for f in changed_files):
+        # run_java_style_checks()
+        pass
     if not changed_files or any(f.endswith(".py") for f in changed_files):
         run_python_style_checks()
     if not changed_files or any(f.endswith(".R") for f in changed_files):
@@ -532,13 +563,19 @@ def main():
     # if "DOCS" in changed_modules and test_env == "amplab_jenkins":
     #    build_spark_documentation()
 
+    if any(m.should_run_build_tests for m in test_modules):
+        run_build_tests()
+
     # spark build
     build_apache_spark(build_tool, hadoop_version)
 
     # backwards compatibility checks
     if build_tool == "sbt":
-        # Note: compatiblity tests only supported in sbt for now
-        detect_binary_inop_with_mima()
+        # Note: compatibility tests only supported in sbt for now
+        detect_binary_inop_with_mima(hadoop_version)
+        # Since we did not build assembly/package before running dev/mima, we need to
+        # do it here because the tests still rely on it; see SPARK-13294 for details.
+        build_spark_assembly_sbt(hadoop_version)
 
     # run the test suites
     run_scala_tests(build_tool, hadoop_version, test_modules, excluded_tags)

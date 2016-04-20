@@ -20,10 +20,11 @@ package org.apache.spark.ml.feature
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.param.ParamsSuite
+import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
-class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext {
+class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
   test("params") {
     ParamsSuite.checkParams(new RFormula())
   }
@@ -107,6 +108,25 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(result.collect() === expected.collect())
   }
 
+  test("index string label") {
+    val formula = new RFormula().setFormula("id ~ a + b")
+    val original = sqlContext.createDataFrame(
+      Seq(("male", "foo", 4), ("female", "bar", 4), ("female", "bar", 5), ("male", "baz", 5))
+    ).toDF("id", "a", "b")
+    val model = formula.fit(original)
+    val result = model.transform(original)
+    val resultSchema = model.transformSchema(original.schema)
+    val expected = sqlContext.createDataFrame(
+      Seq(
+        ("male", "foo", 4, Vectors.dense(0.0, 1.0, 4.0), 1.0),
+        ("female", "bar", 4, Vectors.dense(1.0, 0.0, 4.0), 0.0),
+        ("female", "bar", 5, Vectors.dense(1.0, 0.0, 5.0), 0.0),
+        ("male", "baz", 5, Vectors.dense(0.0, 0.0, 5.0), 1.0))
+    ).toDF("id", "a", "b", "features", "label")
+    // assert(result.schema.toString == resultSchema.toString)
+    assert(result.collect() === expected.collect())
+  }
+
   test("attribute generation") {
     val formula = new RFormula().setFormula("id ~ a + b")
     val original = sqlContext.createDataFrame(
@@ -121,6 +141,44 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext {
         new BinaryAttribute(Some("a_bar"), Some(1)),
         new BinaryAttribute(Some("a_foo"), Some(2)),
         new NumericAttribute(Some("b"), Some(3))))
+    assert(attrs === expectedAttrs)
+  }
+
+  test("vector attribute generation") {
+    val formula = new RFormula().setFormula("id ~ vec")
+    val original = sqlContext.createDataFrame(
+      Seq((1, Vectors.dense(0.0, 1.0)), (2, Vectors.dense(1.0, 2.0)))
+    ).toDF("id", "vec")
+    val model = formula.fit(original)
+    val result = model.transform(original)
+    val attrs = AttributeGroup.fromStructField(result.schema("features"))
+    val expectedAttrs = new AttributeGroup(
+      "features",
+      Array[Attribute](
+        new NumericAttribute(Some("vec_0"), Some(1)),
+        new NumericAttribute(Some("vec_1"), Some(2))))
+    assert(attrs === expectedAttrs)
+  }
+
+  test("vector attribute generation with unnamed input attrs") {
+    val formula = new RFormula().setFormula("id ~ vec2")
+    val base = sqlContext.createDataFrame(
+      Seq((1, Vectors.dense(0.0, 1.0)), (2, Vectors.dense(1.0, 2.0)))
+    ).toDF("id", "vec")
+    val metadata = new AttributeGroup(
+      "vec2",
+      Array[Attribute](
+        NumericAttribute.defaultAttr,
+        NumericAttribute.defaultAttr)).toMetadata
+    val original = base.select(base.col("id"), base.col("vec").as("vec2", metadata))
+    val model = formula.fit(original)
+    val result = model.transform(original)
+    val attrs = AttributeGroup.fromStructField(result.schema("features"))
+    val expectedAttrs = new AttributeGroup(
+      "features",
+      Array[Attribute](
+        new NumericAttribute(Some("vec2_0"), Some(1)),
+        new NumericAttribute(Some("vec2_1"), Some(2))))
     assert(attrs === expectedAttrs)
   }
 
@@ -194,5 +252,42 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext {
         new NumericAttribute(Some("a_foo:b_zq"), Some(3)),
         new NumericAttribute(Some("a_foo:b_zz"), Some(4))))
     assert(attrs === expectedAttrs)
+  }
+
+  test("read/write: RFormula") {
+    val rFormula = new RFormula()
+      .setFormula("id ~ a:b")
+      .setFeaturesCol("myFeatures")
+      .setLabelCol("myLabels")
+
+    testDefaultReadWrite(rFormula)
+  }
+
+  test("read/write: RFormulaModel") {
+    def checkModelData(model: RFormulaModel, model2: RFormulaModel): Unit = {
+      assert(model.uid === model2.uid)
+
+      assert(model.resolvedFormula.label === model2.resolvedFormula.label)
+      assert(model.resolvedFormula.terms === model2.resolvedFormula.terms)
+      assert(model.resolvedFormula.hasIntercept === model2.resolvedFormula.hasIntercept)
+
+      assert(model.pipelineModel.uid === model2.pipelineModel.uid)
+
+      model.pipelineModel.stages.zip(model2.pipelineModel.stages).foreach {
+        case (transformer1, transformer2) =>
+          assert(transformer1.uid === transformer2.uid)
+          assert(transformer1.params === transformer2.params)
+      }
+    }
+
+    val dataset = sqlContext.createDataFrame(
+      Seq((1, "foo", "zq"), (2, "bar", "zq"), (3, "bar", "zz"))
+    ).toDF("id", "a", "b")
+
+    val rFormula = new RFormula().setFormula("id ~ a:b")
+
+    val model = rFormula.fit(dataset)
+    val newModel = testDefaultReadWrite(model)
+    checkModelData(model, newModel)
   }
 }

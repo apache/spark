@@ -23,9 +23,10 @@ import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.{Logging, SparkContext}
+import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.pmml.PMMLExportable
 import org.apache.spark.mllib.tree.configuration.{Algo, FeatureType}
@@ -156,7 +157,7 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
         feature: Int,
         threshold: Double,
         featureType: Int,
-        categories: Seq[Double]) { // TODO: Change to List once SPARK-3365 is fixed
+        categories: Seq[Double]) {
       def toSplit: Split = {
         new Split(feature, threshold, FeatureType(featureType), categories.toList)
       }
@@ -202,7 +203,7 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
     }
 
     def save(sc: SparkContext, path: String, model: DecisionTreeModel): Unit = {
-      val sqlContext = new SQLContext(sc)
+      val sqlContext = SQLContext.getOrCreate(sc)
       import sqlContext.implicits._
 
       // SPARK-6120: We do a hacky check here so users understand why save() is failing
@@ -243,15 +244,15 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
 
     def load(sc: SparkContext, path: String, algo: String, numNodes: Int): DecisionTreeModel = {
       val datapath = Loader.dataPath(path)
-      val sqlContext = new SQLContext(sc)
+      val sqlContext = SQLContext.getOrCreate(sc)
       // Load Parquet data.
       val dataRDD = sqlContext.read.parquet(datapath)
       // Check schema explicitly since erasure makes it hard to use match-case for checking.
       Loader.checkSchema[NodeData](dataRDD.schema)
-      val nodes = dataRDD.map(NodeData.apply)
+      val nodes = dataRDD.rdd.map(NodeData.apply)
       // Build node data into a tree.
       val trees = constructTrees(nodes)
-      assert(trees.size == 1,
+      assert(trees.length == 1,
         "Decision tree should contain exactly one tree but got ${trees.size} trees.")
       val model = new DecisionTreeModel(trees(0), Algo.fromString(algo))
       assert(model.numNodes == numNodes, s"Unable to load DecisionTreeModel data from: $datapath." +
@@ -267,7 +268,7 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
         .map { case (treeId, data) =>
           (treeId, constructTree(data))
         }.sortBy(_._1)
-      val numTrees = trees.size
+      val numTrees = trees.length
       val treeIndices = trees.map(_._1).toSeq
       assert(treeIndices == (0 until numTrees),
         s"Tree indices must start from 0 and increment by 1, but we found $treeIndices.")

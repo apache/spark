@@ -30,7 +30,7 @@ if sys.version >= '3':
 
 from py4j.protocol import Py4JJavaError
 
-from pyspark import SparkContext, since
+from pyspark import since
 from pyspark.rdd import RDD, ignore_unicode_prefix
 from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
 from pyspark.mllib.linalg import (
@@ -100,8 +100,6 @@ class Normalizer(VectorTransformer):
         :return: normalized vector. If the norm of the input is zero, it
                  will return the input vector.
         """
-        sc = SparkContext._active_spark_context
-        assert sc is not None, "SparkContext should be initialized first"
         if isinstance(vector, RDD):
             vector = vector.map(_convert_to_vector)
         else:
@@ -174,6 +172,38 @@ class StandardScalerModel(JavaVectorTransformer):
         self.call("setWithStd", withStd)
         return self
 
+    @property
+    @since('2.0.0')
+    def withStd(self):
+        """
+        Returns if the model scales the data to unit standard deviation.
+        """
+        return self.call("withStd")
+
+    @property
+    @since('2.0.0')
+    def withMean(self):
+        """
+        Returns if the model centers the data before scaling.
+        """
+        return self.call("withMean")
+
+    @property
+    @since('2.0.0')
+    def std(self):
+        """
+        Return the column standard deviation values.
+        """
+        return self.call("std")
+
+    @property
+    @since('2.0.0')
+    def mean(self):
+        """
+        Return the column mean values.
+        """
+        return self.call("mean")
+
 
 class StandardScaler(object):
     """
@@ -198,6 +228,14 @@ class StandardScaler(object):
     >>> for r in result.collect(): r
     DenseVector([-0.7071, 0.7071, -0.7071])
     DenseVector([0.7071, -0.7071, 0.7071])
+    >>> int(model.std[0])
+    4
+    >>> int(model.mean[0]*10)
+    9
+    >>> model.withStd
+    True
+    >>> model.withMean
+    True
 
     .. versionadded:: 1.2.0
     """
@@ -341,6 +379,17 @@ class HashingTF(object):
     """
     def __init__(self, numFeatures=1 << 20):
         self.numFeatures = numFeatures
+        self.binary = False
+
+    @since("2.0.0")
+    def setBinary(self, value):
+        """
+        If True, term frequency vector will be binary such that non-zero
+        term counts will be set to 1
+        (default: False)
+        """
+        self.binary = value
+        return self
 
     @since('1.2.0')
     def indexOf(self, term):
@@ -360,7 +409,7 @@ class HashingTF(object):
         freq = {}
         for term in document:
             i = self.indexOf(term)
-            freq[i] = freq.get(i, 0) + 1.0
+            freq[i] = 1.0 if self.binary else freq.get(i, 0) + 1.0
         return Vectors.sparse(self.numFeatures, freq.items())
 
 
@@ -504,7 +553,8 @@ class Word2VecModel(JavaVectorTransformer, JavaSaveable, JavaLoader):
         """
         jmodel = sc._jvm.org.apache.spark.mllib.feature \
             .Word2VecModel.load(sc._jsc.sc(), path)
-        return Word2VecModel(jmodel)
+        model = sc._jvm.Word2VecModelWrapper(jmodel)
+        return Word2VecModel(model)
 
 
 @ignore_unicode_prefix
@@ -546,6 +596,9 @@ class Word2Vec(object):
     >>> sameModel = Word2VecModel.load(sc, path)
     >>> model.transform("a") == sameModel.transform("a")
     True
+    >>> syms = sameModel.findSynonyms("a", 2)
+    >>> [s[0] for s in syms]
+    [u'b', u'c']
     >>> from shutil import rmtree
     >>> try:
     ...     rmtree(path)
@@ -564,6 +617,7 @@ class Word2Vec(object):
         self.numIterations = 1
         self.seed = random.randint(0, sys.maxsize)
         self.minCount = 5
+        self.windowSize = 5
 
     @since('1.2.0')
     def setVectorSize(self, vectorSize):
@@ -616,6 +670,14 @@ class Word2Vec(object):
         self.minCount = minCount
         return self
 
+    @since('2.0.0')
+    def setWindowSize(self, windowSize):
+        """
+        Sets window size (default: 5).
+        """
+        self.windowSize = windowSize
+        return self
+
     @since('1.2.0')
     def fit(self, data):
         """
@@ -629,7 +691,7 @@ class Word2Vec(object):
         jmodel = callMLlibFunc("trainWord2VecModel", data, int(self.vectorSize),
                                float(self.learningRate), int(self.numPartitions),
                                int(self.numIterations), int(self.seed),
-                               int(self.minCount))
+                               int(self.minCount), int(self.windowSize))
         return Word2VecModel(jmodel)
 
 

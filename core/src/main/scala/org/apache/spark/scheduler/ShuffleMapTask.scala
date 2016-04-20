@@ -18,25 +18,32 @@
 package org.apache.spark.scheduler
 
 import java.nio.ByteBuffer
+import java.util.Properties
 
 import scala.language.existentials
 
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.shuffle.ShuffleWriter
 
 /**
-* A ShuffleMapTask divides the elements of an RDD into multiple buckets (based on a partitioner
-* specified in the ShuffleDependency).
-*
-* See [[org.apache.spark.scheduler.Task]] for more information.
-*
+ * A ShuffleMapTask divides the elements of an RDD into multiple buckets (based on a partitioner
+ * specified in the ShuffleDependency).
+ *
+ * See [[org.apache.spark.scheduler.Task]] for more information.
+ *
  * @param stageId id of the stage this task belongs to
+ * @param stageAttemptId attempt id of the stage this task belongs to
  * @param taskBinary broadcast version of the RDD and the ShuffleDependency. Once deserialized,
  *                   the type should be (RDD[_], ShuffleDependency[_, _, _]).
  * @param partition partition of the RDD this task is associated with
  * @param locs preferred task execution locations for locality scheduling
+ * @param _initialAccums initial set of accumulators to be used in this task for tracking
+ *                       internal metrics. Other accumulators will be registered later when
+ *                       they are deserialized on the executors.
+ * @param localProperties copy of thread-local properties set by the user on the driver side.
  */
 private[spark] class ShuffleMapTask(
     stageId: Int,
@@ -44,13 +51,14 @@ private[spark] class ShuffleMapTask(
     taskBinary: Broadcast[Array[Byte]],
     partition: Partition,
     @transient private var locs: Seq[TaskLocation],
-    internalAccumulators: Seq[Accumulator[Long]])
-  extends Task[MapStatus](stageId, stageAttemptId, partition.index, internalAccumulators)
+    _initialAccums: Seq[Accumulator[_]],
+    localProperties: Properties)
+  extends Task[MapStatus](stageId, stageAttemptId, partition.index, _initialAccums, localProperties)
   with Logging {
 
   /** A constructor used only in test suites. This does not require passing in an RDD. */
   def this(partitionId: Int) {
-    this(0, 0, null, new Partition { override def index: Int = 0 }, null, null)
+    this(0, 0, null, new Partition { override def index: Int = 0 }, null, null, new Properties)
   }
 
   @transient private val preferredLocs: Seq[TaskLocation] = {

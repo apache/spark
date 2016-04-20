@@ -23,8 +23,10 @@ if sys.version >= '3':
 from py4j.java_gateway import JavaClass
 
 from pyspark import RDD, since
+from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql.column import _to_seq
 from pyspark.sql.types import *
+from pyspark.sql import utils
 
 __all__ = ["DataFrameReader", "DataFrameWriter"]
 
@@ -107,7 +109,7 @@ class DataFrameReader(object):
     def load(self, path=None, format=None, schema=None, **options):
         """Loads data from a data source and returns it as a :class`DataFrame`.
 
-        :param path: optional string for file-system backed data sources.
+        :param path: optional string or a list of string for file-system backed data sources.
         :param format: optional string for format of the data source. Default to 'parquet'.
         :param schema: optional :class:`StructType` for the input schema.
         :param options: all other string options
@@ -116,6 +118,7 @@ class DataFrameReader(object):
         ...     opt2=1, opt3='str')
         >>> df.dtypes
         [('name', 'string'), ('year', 'int'), ('month', 'int'), ('day', 'int')]
+
         >>> df = sqlContext.read.format('json').load(['python/test_support/sql/people.json',
         ...     'python/test_support/sql/people1.json'])
         >>> df.dtypes
@@ -127,15 +130,9 @@ class DataFrameReader(object):
             self.schema(schema)
         self.options(**options)
         if path is not None:
-            if type(path) == list:
-                paths = path
-                gateway = self._sqlContext._sc._gateway
-                jpaths = gateway.new_array(gateway.jvm.java.lang.String, len(paths))
-                for i in range(0, len(paths)):
-                    jpaths[i] = paths[i]
-                return self._df(self._jreader.load(jpaths))
-            else:
-                return self._df(self._jreader.load(path))
+            if type(path) != list:
+                path = [path]
+            return self._df(self._jreader.load(self._sqlContext._sc._jvm.PythonUtils.toSeq(path)))
         else:
             return self._df(self._jreader.load())
 
@@ -152,6 +149,31 @@ class DataFrameReader(object):
                      or RDD of Strings storing JSON objects.
         :param schema: an optional :class:`StructType` for the input schema.
 
+        You can set the following JSON-specific options to deal with non-standard JSON files:
+            * ``primitivesAsString`` (default ``false``): infers all primitive values as a string \
+                type
+            * `prefersDecimal` (default `false`): infers all floating-point values as a decimal \
+                type. If the values do not fit in decimal, then it infers them as doubles.
+            * ``allowComments`` (default ``false``): ignores Java/C++ style comment in JSON records
+            * ``allowUnquotedFieldNames`` (default ``false``): allows unquoted JSON field names
+            * ``allowSingleQuotes`` (default ``true``): allows single quotes in addition to double \
+                quotes
+            * ``allowNumericLeadingZeros`` (default ``false``): allows leading zeros in numbers \
+                (e.g. 00012)
+            * ``allowBackslashEscapingAnyCharacter`` (default ``false``): allows accepting quoting \
+                of all character using backslash quoting mechanism
+            *  ``mode`` (default ``PERMISSIVE``): allows a mode for dealing with corrupt records \
+                during parsing.
+                *  ``PERMISSIVE`` : sets other fields to ``null`` when it meets a corrupted \
+                  record and puts the malformed string into a new field configured by \
+                 ``columnNameOfCorruptRecord``. When a schema is set by user, it sets \
+                 ``null`` for extra fields.
+                *  ``DROPMALFORMED`` : ignores the whole corrupted records.
+                *  ``FAILFAST`` : throws an exception when it meets corrupted records.
+            *  ``columnNameOfCorruptRecord`` (default ``_corrupt_record``): allows renaming the \
+                 new field having malformed string created by ``PERMISSIVE`` mode. \
+                 This overrides ``spark.sql.columnNameOfCorruptRecord``.
+
         >>> df1 = sqlContext.read.json('python/test_support/sql/people.json')
         >>> df1.dtypes
         [('age', 'bigint'), ('name', 'string')]
@@ -165,8 +187,20 @@ class DataFrameReader(object):
             self.schema(schema)
         if isinstance(path, basestring):
             return self._df(self._jreader.json(path))
+        elif type(path) == list:
+            return self._df(self._jreader.json(self._sqlContext._sc._jvm.PythonUtils.toSeq(path)))
         elif isinstance(path, RDD):
-            return self._df(self._jreader.json(path._jrdd))
+            def func(iterator):
+                for x in iterator:
+                    if not isinstance(x, basestring):
+                        x = unicode(x)
+                    if isinstance(x, unicode):
+                        x = x.encode("utf-8")
+                    yield x
+            keyed = path.mapPartitions(func)
+            keyed._bypass_serializer = True
+            jrdd = keyed._jrdd.map(self._sqlContext._jvm.BytesToString())
+            return self._df(self._jreader.json(jrdd))
         else:
             raise TypeError("path can be only string or RDD")
 
@@ -193,10 +227,43 @@ class DataFrameReader(object):
         """
         return self._df(self._jreader.parquet(_to_seq(self._sqlContext._sc, paths)))
 
+    @ignore_unicode_prefix
+    @since(1.6)
+    def text(self, paths):
+        """Loads a text file and returns a [[DataFrame]] with a single string column named "value".
+
+        Each line in the text file is a new row in the resulting DataFrame.
+
+        :param paths: string, or list of strings, for input path(s).
+
+        >>> df = sqlContext.read.text('python/test_support/sql/text-test.txt')
+        >>> df.collect()
+        [Row(value=u'hello'), Row(value=u'this')]
+        """
+        if isinstance(paths, basestring):
+            paths = [paths]
+        return self._df(self._jreader.text(self._sqlContext._sc._jvm.PythonUtils.toSeq(paths)))
+
+    @since(2.0)
+    def csv(self, paths):
+        """Loads a CSV file and returns the result as a [[DataFrame]].
+
+        This function goes through the input once to determine the input schema. To avoid going
+        through the entire data once, specify the schema explicitly using [[schema]].
+
+        :param paths: string, or list of strings, for input path(s).
+
+        >>> df = sqlContext.read.csv('python/test_support/sql/ages.csv')
+        >>> df.dtypes
+        [('C0', 'string'), ('C1', 'string')]
+        """
+        if isinstance(paths, basestring):
+            paths = [paths]
+        return self._df(self._jreader.csv(self._sqlContext._sc._jvm.PythonUtils.toSeq(paths)))
+
     @since(1.5)
     def orc(self, path):
-        """
-        Loads an ORC file, returning the result as a :class:`DataFrame`.
+        """Loads an ORC file, returning the result as a :class:`DataFrame`.
 
         ::Note: Currently ORC support is only available together with
         :class:`HiveContext`.
@@ -246,8 +313,9 @@ class DataFrameReader(object):
             return self._df(self._jreader.jdbc(url, table, column, int(lowerBound), int(upperBound),
                                                int(numPartitions), jprop))
         if predicates is not None:
-            arr = self._sqlContext._sc._jvm.PythonUtils.toArray(predicates)
-            return self._df(self._jreader.jdbc(url, table, arr, jprop))
+            gateway = self._sqlContext._sc._gateway
+            jpredicates = utils.toJArray(gateway, gateway.jvm.java.lang.String, predicates)
+            return self._df(self._jreader.jdbc(url, table, jpredicates, jprop))
         return self._df(self._jreader.jdbc(url, table, jprop))
 
 
@@ -397,7 +465,7 @@ class DataFrameWriter(object):
         self._jwrite.saveAsTable(name)
 
     @since(1.4)
-    def json(self, path, mode=None):
+    def json(self, path, mode=None, compression=None):
         """Saves the content of the :class:`DataFrame` in JSON format at the specified path.
 
         :param path: the path in any Hadoop supported file system
@@ -407,13 +475,19 @@ class DataFrameWriter(object):
             * ``overwrite``: Overwrite existing data.
             * ``ignore``: Silently ignore this operation if data already exists.
             * ``error`` (default case): Throw an exception if data already exists.
+        :param compression: compression codec to use when saving to file. This can be one of the
+                            known case-insensitive shorten names (none, bzip2, gzip, lz4,
+                            snappy and deflate).
 
         >>> df.write.json(os.path.join(tempfile.mkdtemp(), 'data'))
         """
-        self.mode(mode)._jwrite.json(path)
+        self.mode(mode)
+        if compression is not None:
+            self.option("compression", compression)
+        self._jwrite.json(path)
 
     @since(1.4)
-    def parquet(self, path, mode=None, partitionBy=None):
+    def parquet(self, path, mode=None, partitionBy=None, compression=None):
         """Saves the content of the :class:`DataFrame` in Parquet format at the specified path.
 
         :param path: the path in any Hadoop supported file system
@@ -424,15 +498,60 @@ class DataFrameWriter(object):
             * ``ignore``: Silently ignore this operation if data already exists.
             * ``error`` (default case): Throw an exception if data already exists.
         :param partitionBy: names of partitioning columns
+        :param compression: compression codec to use when saving to file. This can be one of the
+                            known case-insensitive shorten names (none, snappy, gzip, and lzo).
+                            This will overwrite ``spark.sql.parquet.compression.codec``.
 
         >>> df.write.parquet(os.path.join(tempfile.mkdtemp(), 'data'))
         """
         self.mode(mode)
         if partitionBy is not None:
             self.partitionBy(partitionBy)
+        if compression is not None:
+            self.option("compression", compression)
         self._jwrite.parquet(path)
 
-    def orc(self, path, mode=None, partitionBy=None):
+    @since(1.6)
+    def text(self, path, compression=None):
+        """Saves the content of the DataFrame in a text file at the specified path.
+
+        :param path: the path in any Hadoop supported file system
+        :param compression: compression codec to use when saving to file. This can be one of the
+                            known case-insensitive shorten names (none, bzip2, gzip, lz4,
+                            snappy and deflate).
+
+        The DataFrame must have only one column that is of string type.
+        Each row becomes a new line in the output file.
+        """
+        if compression is not None:
+            self.option("compression", compression)
+        self._jwrite.text(path)
+
+    @since(2.0)
+    def csv(self, path, mode=None, compression=None):
+        """Saves the content of the [[DataFrame]] in CSV format at the specified path.
+
+        :param path: the path in any Hadoop supported file system
+        :param mode: specifies the behavior of the save operation when data already exists.
+
+            * ``append``: Append contents of this :class:`DataFrame` to existing data.
+            * ``overwrite``: Overwrite existing data.
+            * ``ignore``: Silently ignore this operation if data already exists.
+            * ``error`` (default case): Throw an exception if data already exists.
+
+        :param compression: compression codec to use when saving to file. This can be one of the
+                            known case-insensitive shorten names (none, bzip2, gzip, lz4,
+                            snappy and deflate).
+
+        >>> df.write.csv(os.path.join(tempfile.mkdtemp(), 'data'))
+        """
+        self.mode(mode)
+        if compression is not None:
+            self.option("compression", compression)
+        self._jwrite.csv(path)
+
+    @since(1.5)
+    def orc(self, path, mode=None, partitionBy=None, compression=None):
         """Saves the content of the :class:`DataFrame` in ORC format at the specified path.
 
         ::Note: Currently ORC support is only available together with
@@ -446,6 +565,9 @@ class DataFrameWriter(object):
             * ``ignore``: Silently ignore this operation if data already exists.
             * ``error`` (default case): Throw an exception if data already exists.
         :param partitionBy: names of partitioning columns
+        :param compression: compression codec to use when saving to file. This can be one of the
+                            known case-insensitive shorten names (none, snappy, zlib, and lzo).
+                            This will overwrite ``orc.compress``.
 
         >>> orc_df = hiveContext.read.orc('python/test_support/sql/orc_partitioned')
         >>> orc_df.write.orc(os.path.join(tempfile.mkdtemp(), 'data'))
@@ -453,6 +575,8 @@ class DataFrameWriter(object):
         self.mode(mode)
         if partitionBy is not None:
             self.partitionBy(partitionBy)
+        if compression is not None:
+            self.option("compression", compression)
         self._jwrite.orc(path)
 
     @since(1.4)
