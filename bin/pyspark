@@ -44,17 +44,15 @@ else
   DEFAULT_PYTHON="python"
 fi
 
-# Determine the Python executable to use for the driver:
-if [[ -n "$IPYTHON_OPTS" || "$IPYTHON" == "1" ]]; then
-  # If IPython options are specified, assume user wants to run IPython
-  # (for backwards-compatibility)
-  PYSPARK_DRIVER_PYTHON_OPTS="$PYSPARK_DRIVER_PYTHON_OPTS $IPYTHON_OPTS"
-  if [ -x "$(command -v jupyter)" ]; then
-    PYSPARK_DRIVER_PYTHON="jupyter"
-  else
-    PYSPARK_DRIVER_PYTHON="ipython"
-  fi
-elif [[ -z "$PYSPARK_DRIVER_PYTHON" ]]; then
+# Fail noisily if removed options are set
+if [[ -n "$IPYTHON" || -n "$IPYTHON_OPTS" ]]; then
+  echo "Error in pyspark startup:" 
+  echo "IPYTHON and IPYTHON_OPTS are removed in Spark 2.0+. Set PYSPARK_DRIVER_PYTHON and PYSPARK_DRIVER_PYTHON_OPTS instead."
+  exit 1
+fi
+
+# Default to standard python interpreter unless told otherwise
+if [[ -z "$PYSPARK_DRIVER_PYTHON" ]]; then
   PYSPARK_DRIVER_PYTHON="${PYSPARK_PYTHON:-"$DEFAULT_PYTHON"}"
 fi
 
