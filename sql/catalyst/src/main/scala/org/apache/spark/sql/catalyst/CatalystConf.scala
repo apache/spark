@@ -29,6 +29,7 @@ trait CatalystConf {
   def groupByOrdinal: Boolean
 
   def optimizerMaxIterations: Int
+  def maxCaseBranchesForCodegen: Int
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two
@@ -45,6 +46,7 @@ case class SimpleCatalystConf(
     caseSensitiveAnalysis: Boolean,
     orderByOrdinal: Boolean = true,
     groupByOrdinal: Boolean = true,
-    optimizerMaxIterations: Int = 100)
+    optimizerMaxIterations: Int = 100,
+    maxCaseBranchesForCodegen: Int = 20)
   extends CatalystConf {
 }
