@@ -1383,9 +1383,7 @@ class DataFrame(object):
         if not isinstance(col, (str, list, tuple)):
             raise ValueError("col should be a string, list or tuple.")
 
-        isStr = False
-        if isinstance(col, str):
-            isStr = True
+        isStr = isinstance(col, str)
 
         if isinstance(col, tuple):
             col = list(col)
