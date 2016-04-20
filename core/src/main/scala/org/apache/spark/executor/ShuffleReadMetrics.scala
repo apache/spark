@@ -101,9 +101,9 @@ class ShuffleReadMetrics private[spark] () extends Serializable {
 
   /**
    * Resets the value of the current metrics (`this`) and and merges all the independent
-   * [[ShuffleReadMetrics]] into `this`.
+   * [[TempShuffleReadMetrics]] into `this`.
    */
-  private[spark] def setMergeValues(metrics: Seq[ShuffleReadMetrics]): Unit = {
+  private[spark] def setMergeValues(metrics: Seq[TempShuffleReadMetrics]): Unit = {
     _remoteBlocksFetched.setValue(_remoteBlocksFetched.zero)
     _localBlocksFetched.setValue(_localBlocksFetched.zero)
     _remoteBytesRead.setValue(_remoteBytesRead.zero)
@@ -119,5 +119,25 @@ class ShuffleReadMetrics private[spark] () extends Serializable {
       _recordsRead.add(metric.recordsRead)
     }
   }
+}
 
+/**
+ * A temporary shuffle read metrics holder that is used to collect shuffle read metrics for each
+ * shuffle dependency, and all temporary metrics will be merged into the [[ShuffleReadMetrics]] at
+ * last.
+ */
+private[spark] class TempShuffleReadMetrics {
+  var remoteBlocksFetched = 0
+  var localBlocksFetched = 0
+  var remoteBytesRead = 0L
+  var localBytesRead = 0L
+  var fetchWaitTime = 0L
+  var recordsRead = 0L
+
+  def incRemoteBlocksFetched(v: Int): Unit = remoteBlocksFetched += v
+  def incLocalBlocksFetched(v: Int): Unit = localBlocksFetched += v
+  def incRemoteBytesRead(v: Long): Unit = remoteBytesRead += v
+  def incLocalBytesRead(v: Long): Unit = localBytesRead += v
+  def incFetchWaitTime(v: Long): Unit = fetchWaitTime += v
+  def incRecordsRead(v: Long): Unit = recordsRead += v
 }

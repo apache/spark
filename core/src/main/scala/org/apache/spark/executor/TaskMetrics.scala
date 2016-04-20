@@ -143,23 +143,23 @@ class TaskMetrics private[spark] () extends Serializable {
   val shuffleWriteMetrics: ShuffleWriteMetrics = new ShuffleWriteMetrics()
 
   /**
-   * Temporary list of [[ShuffleReadMetrics]], one per shuffle dependency.
+   * A list of [[TempShuffleReadMetrics]], one per shuffle dependency.
    *
    * A task may have multiple shuffle readers for multiple dependencies. To avoid synchronization
-   * issues from readers in different threads, in-progress tasks use a [[ShuffleReadMetrics]] for
-   * each dependency and merge these metrics before reporting them to the driver.
+   * issues from readers in different threads, in-progress tasks use a [[TempShuffleReadMetrics]]
+   * for each dependency and merge these metrics before reporting them to the driver.
    */
-  @transient private lazy val tempShuffleReadMetrics = new ArrayBuffer[ShuffleReadMetrics]
+  @transient private lazy val tempShuffleReadMetrics = new ArrayBuffer[TempShuffleReadMetrics]
 
   /**
-   * Create a temporary [[ShuffleReadMetrics]] for a particular shuffle dependency.
+   * Create a [[TempShuffleReadMetrics]] for a particular shuffle dependency.
    *
    * All usages are expected to be followed by a call to [[mergeShuffleReadMetrics]], which
    * merges the temporary values synchronously. Otherwise, all temporary data collected will
    * be lost.
    */
-  private[spark] def createTempShuffleReadMetrics(): ShuffleReadMetrics = synchronized {
-    val readMetrics = new ShuffleReadMetrics
+  private[spark] def createTempShuffleReadMetrics(): TempShuffleReadMetrics = synchronized {
+    val readMetrics = new TempShuffleReadMetrics
     tempShuffleReadMetrics += readMetrics
     readMetrics
   }
