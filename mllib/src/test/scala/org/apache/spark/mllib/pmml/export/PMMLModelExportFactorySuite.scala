@@ -95,7 +95,7 @@ class PMMLModelExportFactorySuite extends SparkFunSuite {
   }
 
   test("PMMLModelExportFactory should create DecisionTreePMMLModelExport " +
-    "when passing in DecisionTreeModel"){
+    "when passing in DecisionTreeModel") {
     // instantiate a MLLib DecisionTreeModel with Regression and with 3 nodes with continuous
     // feature type
     val mlLeftNode = new Node(2, new Predict(0.5, 0.5), 0.2, true, None, None, None, None)
