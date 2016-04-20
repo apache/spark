@@ -244,7 +244,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         }
       }
     } catch {
-      case e: FileNotFoundException => None
+      case e: FileNotFoundException =>
+        logInfo(Utils.exceptionString(e))
+        None
     }
   }
 

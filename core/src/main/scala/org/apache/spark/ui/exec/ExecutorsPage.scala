@@ -163,17 +163,34 @@ private[ui] class ExecutorsPage(
       </td>
       {
         if (logsExist) {
-          <td>
-            {
-              info.executorLogs.map { case (logName, logUrl) =>
+          if (threadDumpEnabled) {
+            <td>
+              {
+                info.executorLogs.map { case (logName, logUrl) =>
                 <div>
                   <a href={logUrl}>
                     {logName}
                   </a>
                 </div>
+                }
               }
-            }
-          </td>
+            </td>
+          } else {
+            <td>
+              {
+                if (info.executorLogs.nonEmpty) {
+                  val (_, logUrl) = info.executorLogs.head
+                  val Array(hostPort, _, _, containerId, user, _) = logUrl.substring(
+                    "http://".length).split("/").map(URLEncoder.encode(_, "UTF-8"))
+                  val encodedId = URLEncoder.encode(info.id, "UTF-8")
+                  <div>
+                    <a href={s"executorLogs/?executorId=$encodedId&hostPort" +
+                      s"=$hostPort&containerId=$containerId&user=$user"}>logs</a>
+                  </div>
+                }
+              }
+            </td>
+          }
         }
       }
       {
