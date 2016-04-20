@@ -104,8 +104,9 @@ final class RandomForestRegressor @Since("1.4.0") (@Since("1.4.0") override val 
     instr.logParams(params: _*)
 
     val trees =
-      RandomForest.run(oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy, instr, getSeed)
+      RandomForest.run(oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed)
         .map(_.asInstanceOf[DecisionTreeRegressionModel])
+
     val numFeatures = oldDataset.first().features.size
     instr.logNumFeatures(numFeatures)
 

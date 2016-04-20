@@ -26,7 +26,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.ml.classification.DecisionTreeClassificationModel
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
 import org.apache.spark.ml.tree._
-import org.apache.spark.ml.util.Instrumentation
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.impurity.ImpurityCalculator
@@ -90,7 +89,6 @@ private[spark] object RandomForest extends Logging {
       strategy: OldStrategy,
       numTrees: Int,
       featureSubsetStrategy: String,
-      instr: Instrumentation[_],
       seed: Long,
       parentUID: Option[String] = None): Array[DecisionTreeModel] = {
 
@@ -185,8 +183,8 @@ private[spark] object RandomForest extends Logging {
 
     timer.stop("total")
 
-    instr.log("Internal timing for DecisionTree:")
-    instr.log(s"$timer")
+    logInfo("Internal timing for DecisionTree:")
+    logInfo(s"$timer")
 
     // Delete any remaining checkpoints used for node Id cache.
     if (nodeIdCache.nonEmpty) {
