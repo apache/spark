@@ -56,7 +56,7 @@ private[sql] case class MapPartitionsRWrapper(
     if (serializer == SerializationFormats.ROW) {
       outputIter.map { bytes => bytesToRow(bytes, schema) }
     } else {
-      outputIter.map { bytes => Row.fromSeq(bytes :: Nil) }
+      outputIter.map { bytes => Row.fromSeq(Seq(bytes)) }
     }
   }
 }

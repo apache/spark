@@ -134,7 +134,7 @@ private[sql] object SQLUtils {
 
   // Schema for DataFrame of serialized R data
   // TODO: introduce a user defined type for serialized R data.
-  val SERIALIZED_R_DATA_SCHEMA = StructType(StructField("R", BinaryType) :: Nil)
+  val SERIALIZED_R_DATA_SCHEMA = StructType(Seq(StructField("R", BinaryType)))
 
   /**
    * The helper function for dapply() on R side.

@@ -108,6 +108,9 @@ if (isEmpty != 0) {
       if (deserializer == "row") {
         # Transform the list of rows into a data.frame
         data <- do.call(rbind.data.frame, c(data, stringsAsFactors = FALSE))
+      } else {
+        # Check to see if data is a valid data.frame
+        stopifnot(class(data) == "data.frame")
       }
       output <- computeFunc(data)
       if (serializer == "row") {

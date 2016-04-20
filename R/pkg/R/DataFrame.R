@@ -1137,11 +1137,21 @@ setMethod("summarize",
 #' @rdname dapply
 #' @name dapply
 #' @export
+#' \dontrun{
+#'   df <- createDataFrame (sqlContext, mtcars)
+#'   df1 <- dapply(df, function(x) { x }, schema(df))
+#'   collect(df1)
+#'
+#'   df1 <- dapply(df, function(x) { x })
+#'   df2 <- dapply(df1, function(x) { x + 1 }, schema(df))
+#'   collect(df2)
+#' }
 setMethod("dapply",
           signature(x = "DataFrame", func = "function"),
           function(x, func, schema = NULL) {
             if (!is.null(schema)) {
               stopifnot(class(schema) == "structType")
+              schema <- schema$jobj
             }
 
             packageNamesArr <- serialize(.sparkREnv[[".packages"]],
@@ -1157,7 +1167,7 @@ setMethod("dapply",
                      serialize(cleanClosure(func), connection = NULL),
                      packageNamesArr,
                      broadcastArr,
-                     schema$jobj)
+                     schema)
             dataFrame(sdf)
           })
 
