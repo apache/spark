@@ -82,6 +82,7 @@ def identify_changed_files_from_git_commits(patch_sha, target_branch=None, targe
         run_cmd(['git', 'fetch', 'origin', str(target_branch+':'+target_branch)])
     else:
         diff_target = target_ref
+    run_cmd(['git', 'rebase', diff_target])
     raw_output = subprocess.check_output(['git', 'diff', '--name-only', patch_sha, diff_target],
                                          universal_newlines=True)
     # Remove any empty strings
