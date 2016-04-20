@@ -96,10 +96,10 @@ class HashingTF(override val uid: String)
   /** @group setParam */
   def setBinary(value: Boolean): this.type = set(binary, value)
 
-  /** @group getParam */
+  /** @group expertGetParam */
   def getHashAlgorithm: String = $(hashAlgorithm)
 
-  /** @group setParam */
+  /** @group expertSetParam */
   def setHashAlgorithm(value: String): this.type = set(hashAlgorithm, value)
 
   @Since("2.0.0")
