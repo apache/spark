@@ -263,7 +263,7 @@ private[hive] class IsolatedClientLoader(
           throw new ClassNotFoundException(
             s"$cnf when creating Hive client using classpath: ${execJars.mkString(", ")}\n" +
             "Please make sure that jars for your version of hive and hadoop are included in the " +
-            s"paths passed to ${HiveContext.HIVE_METASTORE_JARS}.")
+            s"paths passed to ${HiveContext.HIVE_METASTORE_JARS}.", e)
         } else {
           throw e
         }
