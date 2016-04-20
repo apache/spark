@@ -61,7 +61,11 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         |PARTITION(year = 2016, month = 4, hour = 10, minute = 10, sec = 10, extra = 1) SELECT 3, 3
       """.stripMargin)
     sql("CREATE VIEW parquet_view1 as select * from parquet_tab4")
-    sql("create table tab_complex (col1 map <int, string>, col2 struct <f1: int, f2: String>)")
+    sql(
+       """
+         |create table tab_complex (col1 map <int, string>,
+         |col2 struct <f1: int, f2: String>, col3 map<int, struct<f3: int, f4: string>>)
+       """.stripMargin)
   }
 
   override protected def afterAll(): Unit = {
@@ -190,8 +194,10 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     checkAnswer(
       sql("describe tab_complex col2"),
       Row("f1", "int", "from deserializer") ::
-        Row("f2", "string", "from deserializer") :: Nil
-    )
+        Row("f2", "string", "from deserializer") :: Nil)
+     checkAnswer(
+      sql("describe tab_complex col3.$value$.f3"),
+      Row("f3", "int", "from deserializer") :: Nil)
   }
 
   test("LOAD DATA") {
