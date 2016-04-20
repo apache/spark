@@ -21,8 +21,7 @@ import scala.collection.JavaConverters._
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hadoop.hive.ql.parse.EximUtil
-import org.apache.hadoop.hive.ql.session.SessionState
+import org.apache.hadoop.hive.ql.parse.{EximUtil, VariableSubstitution}
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 
@@ -39,11 +38,19 @@ import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 /**
  * Concrete parser for HiveQl statements.
  */
-class HiveSqlParser(hiveConf: HiveConf) extends AbstractSqlParser {
-  val astBuilder = new HiveSqlAstBuilder(hiveConf)
+class HiveSqlParser(
+    substitutor: VariableSubstitution,
+    hiveconf: HiveConf)
+  extends AbstractSqlParser {
 
-  override protected def nativeCommand(sqlText: String): LogicalPlan = {
-    HiveNativeCommand(sqlText)
+  val astBuilder = new HiveSqlAstBuilder(hiveconf)
+
+  protected override def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
+    super.parse(substitutor.substitute(hiveconf, command))(toResult)
+  }
+
+  protected override def nativeCommand(sqlText: String): LogicalPlan = {
+    HiveNativeCommand(substitutor.substitute(hiveconf, sqlText))
   }
 }
 

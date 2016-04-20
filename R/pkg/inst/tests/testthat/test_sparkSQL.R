@@ -1087,6 +1087,11 @@ test_that("column functions", {
   expect_equal(collect(select(df, last(df$age, TRUE)))[[1]], 19)
   expect_equal(collect(select(df, last("age")))[[1]], 19)
   expect_equal(collect(select(df, last("age", TRUE)))[[1]], 19)
+
+  # Test bround()
+  df <- createDataFrame(sqlContext, data.frame(x = c(2.5, 3.5)))
+  expect_equal(collect(select(df, bround(df$x, 0)))[[1]][1], 2)
+  expect_equal(collect(select(df, bround(df$x, 0)))[[1]][2], 4)
 })
 
 test_that("column binary mathfunctions", {

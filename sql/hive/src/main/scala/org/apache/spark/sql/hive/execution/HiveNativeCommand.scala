@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive.execution
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.execution.command.RunnableCommand
-import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.sql.hive.HiveSessionState
 import org.apache.spark.sql.types.StringType
 
 private[hive]
@@ -29,6 +29,8 @@ case class HiveNativeCommand(sql: String) extends RunnableCommand {
   override def output: Seq[AttributeReference] =
     Seq(AttributeReference("result", StringType, nullable = false)())
 
-  override def run(sqlContext: SQLContext): Seq[Row] =
-    sqlContext.asInstanceOf[HiveContext].runSqlHive(sql).map(Row(_))
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    sqlContext.sessionState.asInstanceOf[HiveSessionState].runNativeSql(sql).map(Row(_))
+  }
+
 }

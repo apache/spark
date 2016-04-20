@@ -17,14 +17,21 @@
 
 package org.apache.spark.sql.internal
 
+import java.util.Properties
+
+import scala.collection.JavaConverters._
+
+import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.sql.{ContinuousQueryManager, ExperimentalMethods, SQLContext, UDFRegistration}
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources.{DataSourceAnalysis, PreInsertCastAndRename, ResolveDataSource}
 import org.apache.spark.sql.util.ExecutionListenerManager
+
 
 /**
  * A class that holds all session-specific state in a given [[SQLContext]].
@@ -37,7 +44,10 @@ private[sql] class SessionState(ctx: SQLContext) {
   /**
    * SQL-specific key-value configurations.
    */
-  lazy val conf = new SQLConf
+  lazy val conf: SQLConf = new SQLConf
+
+  // Automatically extract `spark.sql.*` entries and put it in our SQLConf
+  setConf(SQLContext.getSQLProperties(ctx.sparkContext.getConf))
 
   lazy val experimentalMethods = new ExperimentalMethods
 
@@ -101,5 +111,45 @@ private[sql] class SessionState(ctx: SQLContext) {
    * Interface to start and stop [[org.apache.spark.sql.ContinuousQuery]]s.
    */
   lazy val continuousQueryManager: ContinuousQueryManager = new ContinuousQueryManager(ctx)
-}
 
+
+  // ------------------------------------------------------
+  //  Helper methods, partially leftover from pre-2.0 days
+  // ------------------------------------------------------
+
+  def executePlan(plan: LogicalPlan): QueryExecution = new QueryExecution(ctx, plan)
+
+  def refreshTable(tableName: String): Unit = {
+    catalog.refreshTable(sqlParser.parseTableIdentifier(tableName))
+  }
+
+  def invalidateTable(tableName: String): Unit = {
+    catalog.invalidateTable(sqlParser.parseTableIdentifier(tableName))
+  }
+
+  final def setConf(properties: Properties): Unit = {
+    properties.asScala.foreach { case (k, v) => setConf(k, v) }
+  }
+
+  final def setConf[T](entry: ConfigEntry[T], value: T): Unit = {
+    conf.setConf(entry, value)
+    setConf(entry.key, entry.stringConverter(value))
+  }
+
+  def setConf(key: String, value: String): Unit = {
+    conf.setConfString(key, value)
+  }
+
+  def addJar(path: String): Unit = {
+    ctx.sparkContext.addJar(path)
+  }
+
+  def analyze(tableName: String): Unit = {
+    throw new UnsupportedOperationException
+  }
+
+  def runNativeSql(sql: String): Seq[String] = {
+    throw new UnsupportedOperationException
+  }
+
+}

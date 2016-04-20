@@ -28,9 +28,12 @@ class HiveContextSuite extends SparkFunSuite {
     val sc = TestHive.sparkContext
     require(sc.conf.get("spark.sql.hive.metastore.barrierPrefixes") ==
       "org.apache.spark.sql.hive.execution.PairSerDe")
-    assert(TestHive.initialSQLConf.getConfString("spark.sql.hive.metastore.barrierPrefixes") ==
+    assert(TestHive.sparkSession.initialSQLConf.getConfString(
+      "spark.sql.hive.metastore.barrierPrefixes") ==
       "org.apache.spark.sql.hive.execution.PairSerDe")
-    assert(TestHive.metadataHive.getConf("spark.sql.hive.metastore.barrierPrefixes", "") ==
+    // This setting should be also set in the hiveconf of the current session.
+    assert(TestHive.sessionState.hiveconf.get(
+      "spark.sql.hive.metastore.barrierPrefixes", "") ==
       "org.apache.spark.sql.hive.execution.PairSerDe")
   }
 

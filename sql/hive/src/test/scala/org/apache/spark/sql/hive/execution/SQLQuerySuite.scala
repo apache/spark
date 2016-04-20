@@ -349,7 +349,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       }
     }
 
-    val originalConf = convertCTAS
+    val originalConf = sessionState.convertCTAS
 
     setConf(HiveContext.CONVERT_CTAS, true)
 
@@ -731,7 +731,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     // generates an invalid query plan.
     val rdd = sparkContext.makeRDD((1 to 5).map(i => s"""{"a":[$i, ${i + 1}]}"""))
     read.json(rdd).registerTempTable("data")
-    val originalConf = convertCTAS
+    val originalConf = sessionState.convertCTAS
     setConf(HiveContext.CONVERT_CTAS, false)
 
     try {
