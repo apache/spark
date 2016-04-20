@@ -1057,7 +1057,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       sql("SET hive.exec.dynamic.partition.mode=nonstrict")
 
       sql("CREATE TABLE IF NOT EXISTS withparts LIKE srcpart")
-      sql("INSERT INTO TABLE withparts PARTITION(ds, hr) SELECT key, value FROM src")
+      sql("INSERT INTO TABLE withparts PARTITION(ds, hr) SELECT key, value, ds, hr FROM srcpart")
         .queryExecution.analyzed
     }
 
@@ -1065,6 +1065,26 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       analyzedPlan.collect {
         case _: Project => ()
       }.size
+    }
+  }
+
+  test("SPARK-14543: AnalysisException for missing partition columns") {
+    loadTestTable("srcpart")
+    sql("DROP TABLE IF EXISTS withparts")
+    sql("CREATE TABLE withparts LIKE srcpart")
+    sql("SET hive.exec.dynamic.partition.mode=nonstrict")
+    sql("CREATE TABLE IF NOT EXISTS withparts LIKE srcpart")
+
+    intercept[AnalysisException] {
+      // src doesn't have ds and hr partition columns
+      sql("INSERT INTO TABLE withparts PARTITION(ds, hr) SELECT key, value FROM src")
+          .queryExecution.analyzed
+    }
+
+    intercept[AnalysisException] {
+      // ds and hr partition columns aren't selected
+      sql("INSERT INTO TABLE withparts PARTITION(ds, hr) SELECT key, value FROM srcpart")
+          .queryExecution.analyzed
     }
   }
 
