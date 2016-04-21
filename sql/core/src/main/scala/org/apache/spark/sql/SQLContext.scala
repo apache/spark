@@ -996,8 +996,10 @@ object SQLContext {
    * bean info & schema. This is not related to the singleton, but is a static
    * method for internal use.
    */
-  private def beansToRows(data: Iterator[_], beanInfo: BeanInfo, attrs: Seq[AttributeReference]):
-      Iterator[InternalRow] = {
+  private[sql] def beansToRows(
+        data: Iterator[_],
+        beanInfo: BeanInfo,
+        attrs: Seq[AttributeReference]): Iterator[InternalRow] = {
     val extractors =
       beanInfo.getPropertyDescriptors.filterNot(_.getName == "class").map(_.getReadMethod)
     val methodsToConverts = extractors.zip(attrs).map { case (e, attr) =>
