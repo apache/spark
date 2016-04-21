@@ -82,7 +82,8 @@ private[ml] object TreeTests extends SparkFunSuite {
    * @param featuresColName  Name of the features column
    * @return DataFrame with metadata
    */
-  def setMetadata(data: DataFrame,
+  def setMetadata(
+      data: DataFrame,
       numClasses: Int,
       labelColName: String,
       featuresColName: String): DataFrame = {

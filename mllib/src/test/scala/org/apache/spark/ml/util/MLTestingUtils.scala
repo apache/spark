@@ -88,9 +88,10 @@ object MLTestingUtils extends SparkFunSuite {
 
     val types =
       Seq(ShortType, LongType, IntegerType, FloatType, ByteType, DoubleType, DecimalType(10, 0))
-    types.map(t => t -> df.select(col(labelColName).cast(t), col(featuresColName)))
-      .map { case (t, d) => t -> TreeTests.setMetadata(d, 2, labelColName, featuresColName) }
-      .toMap
+    types.map { t =>
+        val castDF = df.select(col(labelColName).cast(t), col(featuresColName))
+        t -> TreeTests.setMetadata(castDF, 2, labelColName, featuresColName)
+      }.toMap
   }
 
   def genRegressionDFWithNumericLabelCol(
@@ -108,13 +109,11 @@ object MLTestingUtils extends SparkFunSuite {
 
     val types =
       Seq(ShortType, LongType, IntegerType, FloatType, ByteType, DoubleType, DecimalType(10, 0))
-    types
-      .map(t => t -> df.select(col(labelColName).cast(t), col(featuresColName)))
-      .map { case (t, d) =>
-        t -> TreeTests.setMetadata(d, 0, labelColName, featuresColName)
+    types.map { t =>
+        val castDF = df.select(col(labelColName).cast(t), col(featuresColName))
+        t -> TreeTests.setMetadata(castDF, 0, labelColName, featuresColName)
           .withColumn(censorColName, lit(0.0))
-      }
-      .toMap
+      }.toMap
   }
 
   def genEvaluatorDFWithNumericLabelCol(
