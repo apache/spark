@@ -51,7 +51,7 @@ import org.apache.spark.util.random.XORShiftRandom
 /**
  * Common params for ALS and ALSModel.
  */
-private[recommendation] trait ALSModelParams extends Params with HasPredictionCol {
+private[recommendation] trait ALSModelParams extends Params with HasPredictionCol with HasLabelCol {
   /**
    * Param for the column name for user ids. Ids must be integers. Other
    * numeric types are supported for this column, but will be cast to integers as long as they
@@ -258,8 +258,8 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
     SchemaUtils.checkColumnType(schema, $(itemCol), IntegerType)
     val ratingType = schema($(ratingCol)).dataType
     require(ratingType == FloatType || ratingType == DoubleType)
-    if (isSet(recommendFor) && !isSet(k)) {
-      throw new IllegalArgumentException("Parameter 'k' must be set when 'recommendFor' is set.")
+    if (isSet(recommendFor)) {
+      require(isSet(k), "Parameter 'k' must be set when 'recommendFor' is set.")
     }
     SchemaUtils.appendColumn(schema, $(predictionCol), FloatType)
   }
@@ -291,6 +291,10 @@ class ALSModel private[ml] (
   /** @group setParam */
   @Since("1.3.0")
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
+
+  /** @group setParam */
+  @Since("2.0.0")
+  def setLabelCol(value: String): this.type = set(labelCol, value)
 
   /** @group setParam */
   @Since("2.0.0")
@@ -346,20 +350,26 @@ class ALSModel private[ml] (
   /**
    * Generate top `num` recommended items for each user (or recommended users for each item) in the
    * input [[DataFrame]].
+   * If `dstCol` exists in the input schema, then the result will contain the recommendations and
+   * the actual "ground truth" ids (taken from those ids present in `dstCol`). If `dstCol` doesn't
+   * exist, then the result will only contain recommendations.
    * @param dataset [[DataFrame]] containing a column of user or item ids for which to recommend.
    * @param srcFactors user / item factors for which to generate top-k recommendations.
    * @param dstFactors candidate user / item factors from which to generate top-k recommendations.
-   * @param srcCol name of column containing id for which to recommend.
+   * @param srcCol name of column containing ids for which to recommend.
+   * @param dstCol name of column containing ids used to generate the "ground truth" set (if the
+   *               column exists).
    * @param num how many recommended items (or users) to compute for each user (or item)
-   * @return [[DataFrame]] containing `dataset` with a column `predictions` appended
+   * @return [[DataFrame]] containing recommendations (and "ground truth" set if `dstCol` exists)
+   *        for each id in `srcCol`.
    */
   private def recommendUsersOrItems(
-    dataset: Dataset[_],
-    srcFactors: DataFrame,
-    dstFactors: DataFrame,
-    srcCol: String,
-    dstCol: String,
-    num: Int): DataFrame = {
+      dataset: Dataset[_],
+      srcFactors: DataFrame,
+      dstFactors: DataFrame,
+      srcCol: String,
+      dstCol: String,
+      num: Int): DataFrame = {
 
     import dataset.sqlContext.implicits._
     val schema = dataset.schema
@@ -367,25 +377,27 @@ class ALSModel private[ml] (
     val factors = dataset
       .select(srcCol)
       .distinct
-      .join(srcFactors, dataset(srcCol) === srcFactors("id"), "inner")
+      .join(srcFactors, dataset(srcCol) === srcFactors("id"), "left")
       .select(srcFactors("id"), srcFactors("features"))
 
     val topKRaw = ALSModel.recommendForAll(rank, factors, dstFactors, num)
     val topK = if ($(withScores)) {
-      topKRaw.toDF("id", "predictions")
+      // with scores, 'predictions' is an Array((id1, score1), (id2, score2), ...)
+      topKRaw.toDF("id", "recommendations")
     } else {
+      // without scores, 'predictions' is an Array(id1, id2, ...)
       topKRaw
         .map { case (id, predsWithScores) => (id, predsWithScores.map(_._1)) }
-        .toDF("id", "predictions")
+        .toDF("id", "recommendations")
     }
 
     val result = if (schema.fieldNames.contains(dstCol)) {
-      // if dstCol exists, we group by that column to generate the 'ground truth' set of
+      // if 'dstCol' exists, we group by that column to generate the 'ground truth' set of
       // user (or item) ids.
       // Note, this changes the structure of the input DataFrame, returning a row of
       // (id, predictions, actual) per unique id in 'srcCol', discarding all other columns.
       // In practice this is expected only during model selection with
-      // CrossValidator or TrainValidationSplit.
+      // CrossValidator/TrainValidationSplit using RankingEvaluator.
       val actual = dataset
         .select(srcCol, dstCol)
         .as[(Int, Int)]
@@ -398,14 +410,19 @@ class ALSModel private[ml] (
         .distinct
         .join(topK, dataset(srcCol) === topK("id"))
         .join(actual, dataset(srcCol) === actual("id"))
-        .select(dataset(srcCol), topK("predictions"), actual("actual"))
+        .select(
+          dataset(srcCol),
+          topK("recommendations").as($(predictionCol)),
+          actual("actual").as($(labelCol))
+        )
     } else {
-      // if dstCol doesn't exist, we assume we are passed a DataFrame of unique user (or item) ids
+      // if 'dstCol' doesn't exist, we assume we are passed a DataFrame of unique user (or item) ids
       // for which to make recommendations, and so we don't use distinct here. This preserves the
-      // row structure of the input data frame.
+      // schema and structure of the input DataFrame (but doesn't handle duplicate input ids so will
+      // generate recommendations multiple times in this case).
       dataset
-        .join(topK, dataset(srcCol) === topK("id"))
-        .select(dataset("*"), topK("predictions"))
+        .join(topK, dataset(srcCol) === topK("id"), "left")
+        .select(dataset("*"), topK("recommendations").as($(predictionCol)))
     }
     result
   }
@@ -414,7 +431,7 @@ class ALSModel private[ml] (
    * Generate top `num` recommended items for each user id in the input [[DataFrame]].
    * @param dataset input [[DataFrame]]. The user id column is set by [[userCol]].
    * @param num number of items to recommend for each user.
-   * @return input [[DataFrame]], with a column `predictions` appended.
+   * @return [[DataFrame]] containing recommendations.
    */
   private def recommendItems(dataset: Dataset[_], num: Int): DataFrame = {
     recommendUsersOrItems(dataset, userFactors, itemFactors, $(userCol), $(itemCol), num)
@@ -424,7 +441,7 @@ class ALSModel private[ml] (
    * Generate top `num` recommended users for each item in the input [[DataFrame]].
    * @param dataset input [[DataFrame]]. The item id column is set by [[itemCol]].
    * @param num number of users to recommend for each item.
-   * @return input [[DataFrame]], with a column `predictions` appended.
+   * @return [[DataFrame]] containing recommendations.
    */
   private def recommendUsers(dataset: Dataset[_], num: Int): DataFrame = {
     recommendUsersOrItems(dataset, itemFactors, userFactors, $(itemCol), $(userCol), num)
@@ -439,19 +456,25 @@ class ALSModel private[ml] (
     SchemaUtils.checkNumericType(schema, $(itemCol))
     SchemaUtils.appendColumn(schema, $(predictionCol), FloatType)
     if (isRecommendingTopK) {
-      $(recommendFor) match {
+      val labelSchema = $(recommendFor) match {
         case "user" =>
           SchemaUtils.checkColumnType(schema, $(userCol), IntegerType)
           if (schema.contains($(itemCol))) {
             SchemaUtils.checkColumnType(schema, $(itemCol), IntegerType)
+            SchemaUtils.appendColumn(schema, $(labelCol), ArrayType(IntegerType, false))
+          } else {
+            schema
           }
         case "item" =>
           SchemaUtils.checkColumnType(schema, $(itemCol), IntegerType)
           if (schema.contains($(userCol))) {
             SchemaUtils.checkColumnType(schema, $(userCol), IntegerType)
+            SchemaUtils.appendColumn(schema, $(labelCol), ArrayType(IntegerType, false))
+          } else {
+            schema
           }
       }
-      SchemaUtils.appendColumn(schema, $(predictionCol), ArrayType(IntegerType, false))
+      SchemaUtils.appendColumn(labelSchema, $(predictionCol), ArrayType(IntegerType, false))
     } else {
       SchemaUtils.checkColumnType(schema, $(userCol), IntegerType)
       SchemaUtils.checkColumnType(schema, $(itemCol), IntegerType)
@@ -640,6 +663,10 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
   /** @group expertSetParam */
   @Since("2.0.0")
   def setFinalStorageLevel(value: String): this.type = set(finalStorageLevel, value)
+
+  /** @group setParam */
+  @Since("2.0.0")
+  def setLabelCol(value: String): this.type = set(labelCol, value)
 
   /** @group setParam */
   @Since("2.0.0")

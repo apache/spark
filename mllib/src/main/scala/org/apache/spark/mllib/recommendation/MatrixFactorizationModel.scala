@@ -333,7 +333,7 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
   private def blockify[T: ClassTag](
       rank: Int,
       features: RDD[(Int, Array[T])],
-      blockSize: Int = 4096): RDD[(Array[Int], Array[T])] = {
+      /* TODO make blockSize a param */blockSize: Int = 4096): RDD[(Array[Int], Array[T])] = {
     val blockStorage = rank * blockSize
     features.mapPartitions { iter =>
       iter.grouped(blockSize).map { grouped =>

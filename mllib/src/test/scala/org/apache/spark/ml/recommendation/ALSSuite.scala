@@ -542,6 +542,7 @@ class ALSSuite
 
   /**
    * Validate expected vs actual ids.
+   *
    * @param data
    */
   private def validateRecommendedIds(data: Seq[(Seq[Int], Seq[Int])]) = {
@@ -552,6 +553,7 @@ class ALSSuite
 
   /**
    * Validate expected vs actual ids and scores
+   *
    * @param data
    */
   private def validateRecommendations(data: Seq[(Seq[(Int, Float)], Seq[(Int, Float)])]) = {
@@ -603,23 +605,23 @@ class ALSSuite
 
     // validate recommendations for users, with scores
     val topKItemWithScores = model.setWithScores(true).setRecommendFor("user").transform(users)
-      .select("expected_with_scores", "predictions")
+      .select("expected_with_scores", "prediction")
       .as[(Seq[(Int, Float)], Seq[(Int, Float)])].rdd.collect()
     validateRecommendations(topKItemWithScores)
     // without scores
     val topKItems = model.setWithScores(false).setRecommendFor("user").transform(users)
-      .select("expected", "predictions")
+      .select("expected", "prediction")
       .as[(Seq[Int], Seq[Int])].rdd.collect()
     validateRecommendedIds(topKItems)
 
     // validate item recommendations, with scores
     val topKUsersWithScores = model.setWithScores(true).setRecommendFor("item").transform(items)
-      .select("expected_with_scores", "predictions")
+      .select("expected_with_scores", "prediction")
       .as[(Seq[(Int, Float)], Seq[(Int, Float)])].rdd.collect()
     validateRecommendations(topKUsersWithScores)
     // without scores
     val topKUsers = model.setWithScores(false).setRecommendFor("item").transform(items)
-      .select("expected", "predictions")
+      .select("expected", "prediction")
       .as[(Seq[Int], Seq[Int])].rdd.collect()
     validateRecommendedIds(topKUsers)
 
@@ -680,7 +682,7 @@ class ALSSuite
     val model = als.fit(dataset)
     val result = model.transform(dataset)
     assert(result.count == 5)
-    val userRow = result.select("predictions", "actual").where(result("user") === userId).first()
+    val userRow = result.select("prediction", "label").where(result("user") === userId).first()
     assert(userRow.getSeq[Int](0).length == 2)
     assert(userRow.getSeq[Int](1).length == numItems)
 
@@ -688,12 +690,14 @@ class ALSSuite
 
   test("invalid recommend params") {
     // TODO
-    // val sqlContext = this.sqlContext
-    // import sqlContext.implicits._
-    // intercept[IllegalArgumentException] {
-    // val (ratings, _) = genExplicitTestData(numUsers = 2, numItems = 2, rank = 1)
-    //   val als = new ALS().setRecommendFor("user").fit(ratings.toDF)
-    // }
+    /*
+    val sqlContext = this.sqlContext
+    import sqlContext.implicits._
+    intercept[IllegalArgumentException] {
+      val (ratings, _) = genExplicitTestData(numUsers = 2, numItems = 2, rank = 1)
+      val als = new ALS().setRecommendFor("user").fit(ratings.toDF)
+    }
+    */
     intercept[IllegalArgumentException] {
       val als = new ALS().setK(0)
     }
