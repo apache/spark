@@ -17,108 +17,18 @@
 
 package org.apache.spark.sql.hive.execution
 
-import scala.util.control.NonFatal
-
-import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.hadoop.hive.common.StatsSetupConst
-import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.MetaStoreUtils
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
-import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.command.RunnableCommand
 import org.apache.spark.sql.execution.datasources.{BucketSpec, DataSource, HadoopFsRelation, LogicalRelation}
-import org.apache.spark.sql.hive.{HiveSessionState, MetastoreRelation}
+import org.apache.spark.sql.hive.HiveSessionState
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 
-
-/**
- * Analyzes the given table in the current database to generate statistics, which will be
- * used in query optimizations.
- *
- * Right now, it only supports Hive tables and it only updates the size of a Hive table
- * in the Hive metastore.
- */
-private[hive]
-case class AnalyzeTable(tableName: String) extends RunnableCommand {
-
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    val sessionState = sqlContext.sessionState.asInstanceOf[HiveSessionState]
-    val tableIdent = sessionState.sqlParser.parseTableIdentifier(tableName)
-    val relation = EliminateSubqueryAliases(sessionState.catalog.lookupRelation(tableIdent))
-
-    relation match {
-      case relation: MetastoreRelation =>
-        val catalogTable: CatalogTable = relation.table
-        // This method is mainly based on
-        // org.apache.hadoop.hive.ql.stats.StatsUtils.getFileSizeForTable(HiveConf, Table)
-        // in Hive 0.13 (except that we do not use fs.getContentSummary).
-        // TODO: Generalize statistics collection.
-        // TODO: Why fs.getContentSummary returns wrong size on Jenkins?
-        // Can we use fs.getContentSummary in future?
-        // Seems fs.getContentSummary returns wrong table size on Jenkins. So we use
-        // countFileSize to count the table size.
-        val stagingDir = sessionState.metadataHive.getConf(
-          HiveConf.ConfVars.STAGINGDIR.varname,
-          HiveConf.ConfVars.STAGINGDIR.defaultStrVal)
-
-        def calculateTableSize(fs: FileSystem, path: Path): Long = {
-          val fileStatus = fs.getFileStatus(path)
-          val size = if (fileStatus.isDirectory) {
-            fs.listStatus(path)
-              .map { status =>
-              if (!status.getPath().getName().startsWith(stagingDir)) {
-                calculateTableSize(fs, status.getPath)
-              } else {
-                0L
-              }
-            }
-              .sum
-          } else {
-            fileStatus.getLen
-          }
-
-          size
-        }
-
-        val tableParameters = catalogTable.properties
-        val oldTotalSize = tableParameters.get("totalSize").map(_.toLong).getOrElse(0L)
-        val newTotalSize =
-          catalogTable.storage.locationUri.map { p =>
-            val path = new Path(p)
-            try {
-              val fs = path.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
-              calculateTableSize(fs, path)
-            } catch {
-              case NonFatal(e) =>
-                logWarning(
-                  s"Failed to get the size of table ${catalogTable.identifier.table} in the " +
-                    s"database ${catalogTable.identifier.database} because of ${e.toString}", e)
-                0L
-            }
-          }.getOrElse(0L)
-
-        // Update the Hive metastore if the total size of the table is different than the size
-        // recorded in the Hive metastore.
-        // This logic is based on org.apache.hadoop.hive.ql.exec.StatsTask.aggregateStats().
-        if (newTotalSize > 0 && newTotalSize != oldTotalSize) {
-          sessionState.catalog.alterTable(
-            catalogTable.copy(
-              properties = relation.table.properties +
-                (StatsSetupConst.TOTAL_SIZE -> newTotalSize.toString)))
-        }
-
-      case otherRelation =>
-        throw new UnsupportedOperationException(
-          s"Analyze only works for Hive tables, but $tableName is a ${otherRelation.nodeName}")
-    }
-    Seq.empty[Row]
-  }
-}
 
 private[hive]
 case class CreateMetastoreDataSource(

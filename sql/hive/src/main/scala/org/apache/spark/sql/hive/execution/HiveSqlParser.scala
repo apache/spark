@@ -63,25 +63,6 @@ class HiveSqlAstBuilder(conf: SQLConf) extends SparkSqlAstBuilder(conf) {
   }
 
   /**
-   * Create an [[AnalyzeTable]] command. This currently only implements the NOSCAN option (other
-   * options are passed on to Hive) e.g.:
-   * {{{
-   *   ANALYZE TABLE table COMPUTE STATISTICS NOSCAN;
-   * }}}
-   */
-  override def visitAnalyze(ctx: AnalyzeContext): LogicalPlan = withOrigin(ctx) {
-    if (ctx.partitionSpec == null &&
-      ctx.identifier != null &&
-      ctx.identifier.getText.toLowerCase == "noscan") {
-      AnalyzeTable(visitTableIdentifier(ctx.tableIdentifier).toString)
-    } else {
-      // Always just run the no scan analyze. We should fix this and implement full analyze
-      // command in the future.
-      AnalyzeTable(visitTableIdentifier(ctx.tableIdentifier).toString)
-    }
-  }
-
-  /**
    * Create a [[HiveScriptIOSchema]].
    */
   override protected def withScriptIOSchema(
