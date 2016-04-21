@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.BroadcastHint
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.expressions.UserDefinedFunction
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -1175,7 +1176,10 @@ object functions {
    * @group normal_funcs
    */
   def expr(expr: String): Column = {
-    Column(SparkSqlParser.parseExpression(expr))
+    val parser = SQLContext.getActive().map(_.sessionState.sqlParser).getOrElse {
+      new SparkSqlParser(new SQLConf)
+    }
+    Column(parser.parseExpression(expr))
   }
 
   //////////////////////////////////////////////////////////////////////////////////////////////

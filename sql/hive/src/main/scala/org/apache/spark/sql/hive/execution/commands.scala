@@ -124,32 +124,6 @@ case class AnalyzeTable(tableName: String) extends RunnableCommand {
 }
 
 private[hive]
-case class AddJar(path: String) extends RunnableCommand {
-
-  override val output: Seq[Attribute] = {
-    val schema = StructType(
-      StructField("result", IntegerType, false) :: Nil)
-    schema.toAttributes
-  }
-
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.addJar(path)
-
-    Seq(Row(0))
-  }
-}
-
-private[hive]
-case class AddFile(path: String) extends RunnableCommand {
-
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.sessionState.runNativeSql(s"ADD FILE $path")
-    sqlContext.sparkContext.addFile(path)
-    Seq.empty[Row]
-  }
-}
-
-private[hive]
 case class CreateMetastoreDataSource(
     tableIdent: TableIdentifier,
     userSpecifiedSchema: Option[StructType],
