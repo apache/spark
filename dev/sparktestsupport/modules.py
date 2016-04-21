@@ -151,6 +151,18 @@ hive_thriftserver = Module(
 )
 
 
+hive_1_x_compatibility = Module(
+    name="hive-1-x-compatibility",
+    dependencies=[hive],
+    source_file_regexes=[
+        "sql/hive-1-x-compatibility/",
+    ],
+    sbt_test_goals=[
+        "hive-1-x-compatibility/test"
+    ]
+)
+
+
 sketch = Module(
     name="sketch",
     dependencies=[],
