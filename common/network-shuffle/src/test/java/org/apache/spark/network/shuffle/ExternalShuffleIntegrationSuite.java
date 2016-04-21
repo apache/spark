@@ -186,7 +186,12 @@ public class ExternalShuffleIntegrationSuite {
 
   @Test
   public void testFetchInvalidShuffle() throws Exception {
-    registerExecutor("exec-1", dataContext0.createExecutorInfo("unknown sort manager"));
+    try {
+      registerExecutor("exec-1", dataContext0.createExecutorInfo("unknown sort manager"));
+      fail("unknown sort manager ");
+    } catch (UnsupportedOperationException e) {
+      // pass
+    }
     FetchResult execFetch = fetchBlocks("exec-1", new String[] { "shuffle_1_0_0" });
     assertTrue(execFetch.successBlocks.isEmpty());
     assertEquals(Sets.newHashSet("shuffle_1_0_0"), execFetch.failedBlocks);

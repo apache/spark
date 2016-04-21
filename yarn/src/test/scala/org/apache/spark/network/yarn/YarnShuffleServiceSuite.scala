@@ -87,8 +87,10 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
 
     val execStateFile = s1.registeredExecutorFile
     execStateFile should not be (null)
-    val shuffleInfo1 = new ExecutorShuffleInfo(Array("/foo", "/bar"), 3, "sort")
-    val shuffleInfo2 = new ExecutorShuffleInfo(Array("/bippy"), 5, "hash")
+    val shuffleInfo1 = new ExecutorShuffleInfo(Array("/foo", "/bar"), 3,
+      "org.apache.spark.shuffle.sort.SortShuffleManager")
+    val shuffleInfo2 = new ExecutorShuffleInfo(Array("/bippy"), 5,
+      "org.apache.spark.shuffle.sort.SortShuffleManager")
 
     val blockHandler = s1.blockHandler
     val blockResolver = ShuffleTestAccessor.getBlockResolver(blockHandler)
@@ -158,8 +160,10 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
 
     val execStateFile = s1.registeredExecutorFile
     execStateFile should not be (null)
-    val shuffleInfo1 = new ExecutorShuffleInfo(Array("/foo", "/bar"), 3, "sort")
-    val shuffleInfo2 = new ExecutorShuffleInfo(Array("/bippy"), 5, "hash")
+    val shuffleInfo1 = new ExecutorShuffleInfo(Array("/foo", "/bar"), 3,
+      "org.apache.spark.shuffle.sort.SortShuffleManager")
+    val shuffleInfo2 = new ExecutorShuffleInfo(Array("/bippy"), 5,
+      "org.apache.spark.shuffle.sort.SortShuffleManager")
 
     val blockHandler = s1.blockHandler
     val blockResolver = ShuffleTestAccessor.getBlockResolver(blockHandler)
@@ -186,7 +190,8 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     s1.initializeApplication(app1Data)
 
     val execStateFile = s1.registeredExecutorFile
-    val shuffleInfo1 = new ExecutorShuffleInfo(Array("/foo", "/bar"), 3, "sort")
+    val shuffleInfo1 = new ExecutorShuffleInfo(Array("/foo", "/bar"), 3,
+      "org.apache.spark.shuffle.sort.SortShuffleManager")
 
     val blockHandler = s1.blockHandler
     val blockResolver = ShuffleTestAccessor.getBlockResolver(blockHandler)
@@ -218,7 +223,8 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     val app2Data: ApplicationInitializationContext =
       new ApplicationInitializationContext("user", app2Id, null)
     s2.initializeApplication(app2Data)
-    val shuffleInfo2 = new ExecutorShuffleInfo(Array("/bippy"), 5, "hash")
+    val shuffleInfo2 = new ExecutorShuffleInfo(Array("/bippy"), 5,
+      "org.apache.spark.shuffle.sort.SortShuffleManager")
     resolver2.registerExecutor(app2Id.toString, "exec-2", shuffleInfo2)
     ShuffleTestAccessor.getExecutorInfo(app2Id, "exec-2", resolver2) should be (Some(shuffleInfo2))
     s2.stop()

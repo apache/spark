@@ -71,8 +71,8 @@ public class ExternalShuffleBlockResolverSuite {
     }
 
     // Invalid shuffle manager
-    resolver.registerExecutor("app0", "exec2", dataContext.createExecutorInfo("foobar"));
     try {
+      resolver.registerExecutor("app0", "exec2", dataContext.createExecutorInfo("foobar"));
       resolver.getBlockData("app0", "exec2", "shuffle_1_1_0");
       fail("Should have failed");
     } catch (UnsupportedOperationException e) {
@@ -132,7 +132,8 @@ public class ExternalShuffleBlockResolverSuite {
     String legacyAppIdJson = "{\"appId\":\"foo\", \"execId\":\"bar\"}";
     assertEquals(appId, mapper.readValue(legacyAppIdJson, AppExecId.class));
     String legacyShuffleJson = "{\"localDirs\": [\"/bippy\", \"/flippy\"], " +
-      "\"subDirsPerLocalDir\": 7, \"shuffleManager\": \"sort\"}";
+      "\"subDirsPerLocalDir\": 7, \"shuffleManager\": " +
+        "\"org.apache.spark.shuffle.sort.SortShuffleManager\"}";
     assertEquals(shuffleInfo, mapper.readValue(legacyShuffleJson, ExecutorShuffleInfo.class));
   }
 }
