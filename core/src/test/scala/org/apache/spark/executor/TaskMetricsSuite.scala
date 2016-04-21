@@ -226,7 +226,7 @@ class TaskMetricsSuite extends SparkFunSuite {
   }
 
   test("from accumulator updates") {
-    val accumUpdates1 = (new TaskMetrics).internalAccums.map { a =>
+    val accumUpdates1 = TaskMetrics.empty.internalAccums.map { a =>
       AccumulableInfo(a.id, a.name, Some(3L), None, true, a.countFailedValues)
     }
     val metrics1 = TaskMetrics.fromAccumulatorUpdates(accumUpdates1)

@@ -750,7 +750,7 @@ private[spark] object JsonProtocol {
   }
 
   def taskMetricsFromJson(json: JValue): TaskMetrics = {
-    val metrics = new TaskMetrics
+    val metrics = TaskMetrics.empty
     if (json == JNothing) {
       return metrics
     }

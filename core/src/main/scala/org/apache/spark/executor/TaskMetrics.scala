@@ -244,6 +244,15 @@ private[spark] class ListenerTaskMetrics(accumUpdates: Seq[AccumulableInfo]) ext
 private[spark] object TaskMetrics extends Logging {
 
   /**
+   * Create an empty task metrics that doesn't register its accumulators.
+   */
+  def empty: TaskMetrics = {
+    val metrics = new TaskMetrics
+    metrics.internalAccums.foreach(acc => Accumulators.remove(acc.id))
+    metrics
+  }
+
+  /**
    * Create a new accumulator representing an internal task metric.
    */
   private def newMetric[T](
