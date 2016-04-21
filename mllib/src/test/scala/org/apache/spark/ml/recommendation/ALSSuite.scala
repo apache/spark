@@ -37,7 +37,7 @@ import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 import org.apache.spark.storage._
 import org.apache.spark.util.Utils
 
@@ -257,37 +257,7 @@ class ALSSuite
       rank: Int,
       noiseStd: Double = 0.0,
       seed: Long = 11L): (RDD[Rating[Int]], RDD[Rating[Int]]) = {
-    // The assumption of the implicit feedback model is that unobserved ratings are more likely to
-    // be negatives.
-    val positiveFraction = 0.8
-    val negativeFraction = 1.0 - positiveFraction
-    val trainingFraction = 0.6
-    val testFraction = 0.3
-    val totalFraction = trainingFraction + testFraction
-    val random = new Random(seed)
-    val userFactors = genFactors(numUsers, rank, random)
-    val itemFactors = genFactors(numItems, rank, random)
-    val training = ArrayBuffer.empty[Rating[Int]]
-    val test = ArrayBuffer.empty[Rating[Int]]
-    for ((userId, userFactor) <- userFactors; (itemId, itemFactor) <- itemFactors) {
-      val rating = blas.sdot(rank, userFactor, 1, itemFactor, 1)
-      val threshold = if (rating > 0) positiveFraction else negativeFraction
-      val observed = random.nextDouble() < threshold
-      if (observed) {
-        val x = random.nextDouble()
-        if (x < totalFraction) {
-          if (x < trainingFraction) {
-            val noise = noiseStd * random.nextGaussian()
-            training += Rating(userId, itemId, rating + noise.toFloat)
-          } else {
-            test += Rating(userId, itemId, rating)
-          }
-        }
-      }
-    }
-    logInfo(s"Generated an implicit feedback dataset with ${training.size} ratings for training " +
-      s"and ${test.size} for test.")
-    (sc.parallelize(training, 2), sc.parallelize(test, 2))
+    ALSSuite.genImplicitTestData(sc, numUsers, numItems, rank, noiseStd, seed)
   }
 
   /**
@@ -305,14 +275,7 @@ class ALSSuite
       random: Random,
       a: Float = -1.0f,
       b: Float = 1.0f): Seq[(Int, Array[Float])] = {
-    require(size > 0 && size < Int.MaxValue / 3)
-    require(b > a)
-    val ids = mutable.Set.empty[Int]
-    while (ids.size < size) {
-      ids += random.nextInt()
-    }
-    val width = b - a
-    ids.toSeq.sorted.map(id => (id, Array.fill(rank)(a + random.nextFloat() * width)))
+    ALSSuite.genFactors(size, rank, random, a, b)
   }
 
   /**
@@ -552,9 +515,49 @@ class ALSCleanerSuite extends SparkFunSuite {
       Utils.deleteRecursively(tempDir)
     }
   }
+
+  test("ALS shuffle cleanup") {
+    val conf = new SparkConf()
+    val localDir = Utils.createTempDir()
+    val tempDir = Utils.createTempDir()
+    def getAllFiles: Set[File] =
+      FileUtils.listFiles(localDir, TrueFileFilter.INSTANCE, TrueFileFilter.INSTANCE).asScala.toSet
+    try {
+      conf.set("spark.local.dir", localDir.getAbsolutePath)
+      conf.set("spark.shuffle.manager", "sort")
+      val sc = new SparkContext("local[2]", "test", conf)
+      try {
+        sc.setCheckpointDir(tempDir.getAbsolutePath)
+        // Generate test data
+        val (training, _) = ALSSuite.genImplicitTestData(sc, 100, 10, 1, 0.2, 0)
+        // Test checkpoint and clean parents
+        val filesBefore = getAllFiles
+        val sqlContext = new SQLContext(sc)
+        import sqlContext.implicits._
+        val als = new ALS()
+          .setRank(1)
+          .setRegParam(1e-5)
+          .setSeed(0)
+          .setCheckpointInterval(1)
+        val alpha = als.getAlpha
+        val model = als.fit(training.toDF())
+        val resultingFiles = getAllFiles -- filesBefore
+        // We expect the last shuffles file to be around, but no more
+        val pattern = "shuffle_(\\d+)_.+\\.data".r
+        val rddIds = resultingFiles.flatMap(f =>
+          pattern.findAllIn(f.getName()).matchData.map{_.group(1)})
+        assert(rddIds.toSet.size === 1)
+      } finally {
+        sc.stop()
+      }
+    } finally {
+      Utils.deleteRecursively(localDir)
+      Utils.deleteRecursively(tempDir)
+    }
+  }
 }
 
-object ALSSuite {
+object ALSSuite extends Logging {
 
   /**
    * Mapping from all Params to valid settings which differ from the defaults.
@@ -581,4 +584,82 @@ object ALSSuite {
     "nonnegative" -> true,
     "checkpointInterval" -> 20
   )
+
+  // Helper functions to generate test data we share between ALS test suites
+
+  /**
+   * Generates random user/item factors, with i.i.d. values drawn from U(a, b).
+   * @param size number of users/items
+   * @param rank number of features
+   * @param random random number generator
+   * @param a min value of the support (default: -1)
+   * @param b max value of the support (default: 1)
+   * @return a sequence of (ID, factors) pairs
+   */
+  private def genFactors(
+      size: Int,
+      rank: Int,
+      random: Random,
+      a: Float = -1.0f,
+      b: Float = 1.0f): Seq[(Int, Array[Float])] = {
+    require(size > 0 && size < Int.MaxValue / 3)
+    require(b > a)
+    val ids = mutable.Set.empty[Int]
+    while (ids.size < size) {
+      ids += random.nextInt()
+    }
+    val width = b - a
+    ids.toSeq.sorted.map(id => (id, Array.fill(rank)(a + random.nextFloat() * width)))
+  }
+
+  /**
+   * Generates an implicit feedback dataset for testing ALS.
+   *
+   * @param sc SparkContext
+   * @param numUsers number of users
+   * @param numItems number of items
+   * @param rank rank
+   * @param noiseStd the standard deviation of additive Gaussian noise on training data
+   * @param seed random seed
+   * @return (training, test)
+   */
+  def genImplicitTestData(
+      sc: SparkContext,
+      numUsers: Int,
+      numItems: Int,
+      rank: Int,
+      noiseStd: Double = 0.0,
+      seed: Long = 11L): (RDD[Rating[Int]], RDD[Rating[Int]]) = {
+      // The assumption of the implicit feedback model is that unobserved ratings are more likely to
+    // be negatives.
+    val positiveFraction = 0.8
+    val negativeFraction = 1.0 - positiveFraction
+    val trainingFraction = 0.6
+    val testFraction = 0.3
+    val totalFraction = trainingFraction + testFraction
+    val random = new Random(seed)
+    val userFactors = genFactors(numUsers, rank, random)
+    val itemFactors = genFactors(numItems, rank, random)
+    val training = ArrayBuffer.empty[Rating[Int]]
+    val test = ArrayBuffer.empty[Rating[Int]]
+    for ((userId, userFactor) <- userFactors; (itemId, itemFactor) <- itemFactors) {
+      val rating = blas.sdot(rank, userFactor, 1, itemFactor, 1)
+      val threshold = if (rating > 0) positiveFraction else negativeFraction
+      val observed = random.nextDouble() < threshold
+      if (observed) {
+        val x = random.nextDouble()
+        if (x < totalFraction) {
+          if (x < trainingFraction) {
+            val noise = noiseStd * random.nextGaussian()
+            training += Rating(userId, itemId, rating + noise.toFloat)
+          } else {
+            test += Rating(userId, itemId, rating)
+          }
+        }
+      }
+    }
+    logInfo(s"Generated an implicit feedback dataset with ${training.size} ratings for training " +
+      s"and ${test.size} for test.")
+    (sc.parallelize(training, 2), sc.parallelize(test, 2))
+  }
 }
