@@ -68,7 +68,8 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
   }
 
   override def isCheckpointed: Boolean = {
-    vertices.isCheckpointed && replicatedVertexView.edges.isCheckpointed
+    vertices.partitionsRDD.isCheckpointed &&
+      replicatedVertexView.edges.partitionsRDD.isCheckpointed
   }
 
   override def getCheckpointFiles: Seq[String] = {
