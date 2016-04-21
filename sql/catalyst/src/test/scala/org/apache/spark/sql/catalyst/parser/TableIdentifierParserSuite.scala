@@ -62,8 +62,9 @@ class TableIdentifierParserSuite extends SparkFunSuite {
     assert(TableIdentifier("q", Option("d")) === parseTableIdentifier("d.q"))
 
     // Illegal names.
-    intercept[ParseException](parseTableIdentifier(""))
-    intercept[ParseException](parseTableIdentifier("d.q.g"))
+    Seq("", "d.q.g", "t:", "${some.var.x}", "tab:1").foreach { identifier =>
+      intercept[ParseException](parseTableIdentifier(identifier))
+    }
   }
 
   test("table identifier - keywords") {
