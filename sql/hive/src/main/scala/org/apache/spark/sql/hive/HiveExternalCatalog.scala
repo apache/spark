@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive
 
+import java.util
+
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.hive.ql.metadata.HiveException
@@ -195,6 +197,46 @@ private[spark] class HiveExternalCatalog(client: HiveClient) extends ExternalCat
   override def listTables(db: String, pattern: String): Seq[String] = withClient {
     requireDbExists(db)
     client.listTables(db, pattern)
+  }
+
+  override def loadTable(
+      db: String,
+      table: String,
+      loadPath: String,
+      isOverwrite: Boolean,
+      holdDDLTime: Boolean): Unit = withClient {
+    requireTableExists(db, table)
+    client.loadTable(
+      loadPath,
+      s"$db.$table",
+      isOverwrite,
+      holdDDLTime)
+  }
+
+  override def loadPartition(
+      db: String,
+      table: String,
+      loadPath: String,
+      partition: TablePartitionSpec,
+      isOverwrite: Boolean,
+      holdDDLTime: Boolean,
+      inheritTableSpecs: Boolean,
+      isSkewedStoreAsSubdir: Boolean): Unit = withClient {
+    requireTableExists(db, table)
+
+    val orderedPartitionSpec = new util.LinkedHashMap[String, String]()
+    getTable(db, table).partitionColumnNames.foreach { colName =>
+      orderedPartitionSpec.put(colName, partition(colName))
+    }
+
+    client.loadPartition(
+      loadPath,
+      s"$db.$table",
+      orderedPartitionSpec,
+      isOverwrite,
+      holdDDLTime,
+      inheritTableSpecs,
+      isSkewedStoreAsSubdir)
   }
 
   // --------------------------------------------------------------------------

@@ -240,25 +240,6 @@ class HiveSqlAstBuilder(hiveConf: HiveConf) extends SparkSqlAstBuilder {
   }
 
   /**
-   * Create a [[LoadData]] command.
-   *
-   * For example:
-   * {{{
-   *   LOAD DATA [LOCAL] INPATH 'filepath' [OVERWRITE] INTO TABLE tablename
-   *   [PARTITION (partcol1=val1, partcol2=val2 ...)]
-   * }}}
-   */
-  override def visitLoadData(ctx: LoadDataContext): LogicalPlan = withOrigin(ctx) {
-    LoadData(
-      table = visitTableIdentifier(ctx.tableIdentifier),
-      path = string(ctx.path),
-      isLocal = ctx.LOCAL != null,
-      isOverwrite = ctx.OVERWRITE != null,
-      partition = Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec)
-    )
-  }
-
-  /**
    * Create or replace a view. This creates a [[CreateViewAsSelect]] command.
    *
    * For example:
