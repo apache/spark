@@ -588,6 +588,26 @@ class TrainValidationSplitParams(ValidatorParams):
         """
         return self.getOrDefault(self.trainRatio)
 
+    def _transfer_param_map_to_java_impl(self, pyParamMap, java_obj):
+        paramMap = super(TrainValidationSplitParams, self)\
+            ._transfer_param_map_to_java_impl(pyParamMap, java_obj)
+
+        if self.trainRatio in pyParamMap:
+            java_num_folds_param = java_obj.getParam(self.trainRatio.name)
+            paramMap.put([java_num_folds_param.w(self.getTrainRatio())])
+
+        return paramMap
+
+    def _transfer_param_map_from_java_impl(self, javaParamMap, java_obj):
+        paramMap =super(TrainValidationSplitParams, self)\
+            ._transfer_param_map_from_java_impl(javaParamMap, java_obj)
+
+        java_num_folds_param = java_obj.getParam(self.trainRatio.name)
+        if javaParamMap.contains(java_num_folds_param):
+            paramMap[self.trainRatio] = java_obj.getNumFolds()
+
+        return paramMap
+
 
 class TrainValidationSplit(Estimator, TrainValidationSplitParams, MLReadable, MLWritable):
     """
@@ -734,10 +754,25 @@ class TrainValidationSplit(Estimator, TrainValidationSplitParams, MLReadable, ML
         return _java_obj
 
     def _transfer_param_map_to_java(self, pyParamMap):
-        raise NotImplementedError()
+        # Half-baked java object for getting its parameters.
+        _java_obj = JavaParams\
+            ._new_java_obj("org.apache.spark.ml.tuning.TrainValidationSplit", self.uid)
+
+        paramMap =super(TrainValidationSplit, self)\
+            ._transfer_param_map_to_java_impl(pyParamMap, _java_obj)
+
+        return paramMap
 
     def _transfer_param_map_from_java(self, javaParamMap):
-        raise NotImplementedError()
+        # Half-baked java object for getting its parameters.
+        _java_obj = JavaParams\
+            ._new_java_obj("org.apache.spark.ml.tuning.TrainValidationSplit", self.uid)\
+            .copy(javaParamMap)
+
+        paramMap = super(TrainValidationSplit, self)\
+            ._transfer_param_map_from_java_impl(javaParamMap, _java_obj)
+
+        return paramMap
 
 
 class TrainValidationSplitModel(Model, TrainValidationSplitParams, MLReadable, MLWritable):
@@ -832,10 +867,25 @@ class TrainValidationSplitModel(Model, TrainValidationSplitParams, MLReadable, M
         return _java_obj
 
     def _transfer_param_map_to_java(self, pyParamMap):
-        raise NotImplementedError()
+        # Half-baked java object for getting its parameters.
+        _java_obj = JavaParams\
+            ._new_java_obj("org.apache.spark.ml.tuning.TrainValidationSplitModel", self.uid)
+
+        paramMap = super(TrainValidationSplitModel, self)\
+            ._transfer_param_map_to_java_impl(pyParamMap, _java_obj)
+
+        return paramMap
 
     def _transfer_param_map_from_java(self, javaParamMap):
-        raise NotImplementedError()
+        # Half-baked java object for getting its parameters.
+        _java_obj = JavaParams\
+            ._new_java_obj("org.apache.spark.ml.tuning.TrainValidationSplitModel", self.uid)\
+            .copy(javaParamMap)
+
+        paramMap = super(TrainValidationSplitModel, self)\
+            ._transfer_param_map_from_java_impl(javaParamMap, _java_obj)
+
+        return paramMap
 
 
 if __name__ == "__main__":
