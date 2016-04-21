@@ -23,7 +23,25 @@ import java.net.URI
 import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType, ExternalCatalog}
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, UnaryNode}
 import org.apache.spark.util.Utils
+
+case class CreateTableAsSelectLogicalPlan(
+  tableDesc: CatalogTable,
+  child: LogicalPlan,
+  allowExisting: Boolean) extends UnaryNode with Command {
+
+  override def output: Seq[Attribute] = Seq.empty[Attribute]
+
+  override lazy val resolved: Boolean =
+    tableDesc.identifier.database.isDefined &&
+      tableDesc.schema.nonEmpty &&
+      tableDesc.storage.serde.isDefined &&
+      tableDesc.storage.inputFormat.isDefined &&
+      tableDesc.storage.outputFormat.isDefined &&
+      childrenResolved
+}
 
 /**
  * A command to create a table with the same definition of the given existing table.

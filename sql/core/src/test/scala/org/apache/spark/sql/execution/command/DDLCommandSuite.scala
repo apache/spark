@@ -23,11 +23,12 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.execution.SparkSqlParser
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 // TODO: merge this with DDLSuite (SPARK-14441)
 class DDLCommandSuite extends PlanTest {
-  private val parser = SparkSqlParser
+  private val parser = new SparkSqlParser(new SQLConf)
 
   private def assertUnsupported(sql: String): Unit = {
     val e = intercept[AnalysisException] {
