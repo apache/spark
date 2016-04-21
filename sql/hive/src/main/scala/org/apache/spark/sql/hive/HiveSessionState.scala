@@ -21,7 +21,6 @@ import java.util.regex.Pattern
 
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hadoop.hive.ql.parse.VariableSubstitution
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.Analyzer
@@ -53,11 +52,6 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
    */
   lazy val metadataHive: HiveClient = sharedState.metadataHive.newSession()
 
-  /**
-   * A Hive helper class for substituting variables in a SQL statement.
-   */
-  lazy val substitutor = new VariableSubstitution
-
   override lazy val conf: SQLConf = new SQLConf {
     override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
   }
@@ -87,7 +81,7 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
       sharedState.externalCatalog,
       metadataHive,
       ctx,
-      ctx.functionResourceLoader,
+      ctx.sessionState.functionResourceLoader,
       functionRegistry,
       conf,
       hiveconf)
@@ -114,7 +108,7 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
   /**
    * Parser for HiveQl query texts.
    */
-  override lazy val sqlParser: ParserInterface = new HiveSqlParser(substitutor, hiveconf)
+  override lazy val sqlParser: ParserInterface = new HiveSqlParser(conf)
 
   /**
    * Planner that takes into account Hive-specific strategies.
