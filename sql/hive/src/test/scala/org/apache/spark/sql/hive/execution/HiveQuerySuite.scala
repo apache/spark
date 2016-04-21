@@ -1145,12 +1145,15 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       }.toSet
     conf.clear()
 
-    val expectedConfs = conf.getAllDefinedConfs.toSet
+    val expectedConfs = conf.getAllDefinedConfs.toSet ++
+      sys.env.map { case (k, v) => (s"env:$k", v, "") }.toSet ++
+      sys.props.map { case (k, v) => (s"system:$k", v, "") }.toSet
     assertResult(expectedConfs)(collectResults(sql("SET -v")))
 
     // "SET" itself returns all config variables currently specified in SQLConf.
     // TODO: Should we be listing the default here always? probably...
-    assert(sql("SET").collect().size === TestHiveContext.overrideConfs.size)
+    val additionalSize = sys.env.size + sys.props.size
+    assert(sql("SET").collect().size === TestHiveContext.overrideConfs.size + additionalSize)
 
     val defaults = collectResults(sql("SET"))
     assertResult(Set(testKey -> testVal)) {

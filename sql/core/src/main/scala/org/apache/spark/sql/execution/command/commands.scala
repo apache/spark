@@ -232,11 +232,10 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
    * @return the sequence of the rows containing the key/value pair of system properties
    */
   private def getEnvList(withDoc: Boolean) = {
-    import scala.collection.JavaConverters._
-    System.getenv().asScala.toSeq.sortBy(_._1).map {
+    sys.env.toSeq.sortBy(_._1).map {
       case (k, v) => if (withDoc) Row(s"env:$k", v, "") else Row(s"env:$k", v)
     } ++
-    System.getProperties.asScala.toSeq.sortBy(_._1).map {
+    sys.props.toSeq.sortBy(_._1).map {
       case (k, v) => if (withDoc) Row(s"system:$k", v, "") else Row(s"system:$k", v)
     }
   }
