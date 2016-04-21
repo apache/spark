@@ -22,9 +22,9 @@ import java.util.Properties
 import scala.collection.JavaConverters._
 
 import org.apache.spark.internal.config.ConfigEntry
-import org.apache.spark.sql.{ContinuousQueryManager, ExperimentalMethods, SQLContext, UDFRegistration}
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry}
-import org.apache.spark.sql.catalyst.catalog.SessionCatalog
+import org.apache.spark.sql.catalyst.catalog.{ArchiveResource, _}
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -56,13 +56,29 @@ private[sql] class SessionState(ctx: SQLContext) {
    */
   lazy val functionRegistry: FunctionRegistry = FunctionRegistry.builtin.copy()
 
+  /** A [[FunctionResourceLoader]] that can be used in SessionCatalog. */
+  lazy val functionResourceLoader: FunctionResourceLoader = {
+    new FunctionResourceLoader {
+      override def loadResource(resource: FunctionResource): Unit = {
+        resource.resourceType match {
+          case JarResource => addJar(resource.uri)
+          case FileResource => ctx.sparkContext.addFile(resource.uri)
+          case ArchiveResource =>
+            throw new AnalysisException(
+              "Archive is not allowed to be loaded. If YARN mode is used, " +
+                "please use --archives options while calling spark-submit.")
+        }
+      }
+    }
+  }
+
   /**
    * Internal catalog for managing table and database states.
    */
   lazy val catalog =
     new SessionCatalog(
       ctx.externalCatalog,
-      ctx.functionResourceLoader,
+      functionResourceLoader,
       functionRegistry,
       conf)
 
@@ -93,7 +109,7 @@ private[sql] class SessionState(ctx: SQLContext) {
   /**
    * Parser that extracts expressions, plans, table identifiers etc. from SQL texts.
    */
-  lazy val sqlParser: ParserInterface = SparkSqlParser
+  lazy val sqlParser: ParserInterface = new SparkSqlParser(conf)
 
   /**
    * Planner that converts optimized logical plans to physical plans.

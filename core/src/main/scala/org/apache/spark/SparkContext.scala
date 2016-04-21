@@ -1233,8 +1233,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   def accumulator[T](initialValue: T, dataProperty: Boolean)(implicit param: AccumulatorParam[T])
       : Accumulator[T] =
   {
-    val acc = new Accumulator(initialValue, param, name = None, internal = false,
-      dataProperty = dataProperty)
+    val acc = new Accumulator(initialValue, param, name = None, dataProperty = dataProperty)
     cleaner.foreach(_.registerAccumulatorForCleanup(acc))
     acc
   }
@@ -1260,8 +1259,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   def accumulator[T](initialValue: T, name: String, dataProperty: Boolean)
     (implicit param: AccumulatorParam[T]) : Accumulator[T] = {
-    val acc = new Accumulator(initialValue, param, Some(name), internal = false,
-      dataProperty = dataProperty)
+    val acc = new Accumulator(initialValue, param, Some(name), dataProperty = dataProperty)
     cleaner.foreach(_.registerAccumulatorForCleanup(acc))
     acc
   }

@@ -58,7 +58,7 @@ public class JavaStreamingTestExample {
 
   private static int timeoutCounter = 0;
 
-  public static void main(String[] args) {
+  public static void main(String[] args) throws Exception {
     if (args.length != 3) {
       System.err.println("Usage: JavaStreamingTestExample " +
         "<dataDir> <batchDuration> <numBatchesTimeout>");

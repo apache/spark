@@ -29,7 +29,7 @@ import org.apache.spark.util.Utils
 
 
 /**
- * A data type that can be accumulated, ie has an commutative and associative "add" operation,
+ * A data type that can be accumulated, i.e. has an commutative and associative "add" operation,
  * but where the result type, `R`, may be different from the element type being added, `T`.
  *
  * You must define how to add data, and how to merge two of these together.  For some data types,
@@ -37,19 +37,12 @@ import org.apache.spark.util.Utils
  * [[org.apache.spark.Accumulator]]. They won't always be the same, though -- e.g., imagine you are
  * accumulating a set. You will add items to the set, and you will union two sets together.
  *
- * All accumulators created on the driver to be used on the executors must be registered with
- * [[Accumulators]]. This is already done automatically for accumulators created by the user.
- * Internal accumulators must be explicitly registered by the caller.
- *
  * Operations are not thread-safe.
  *
  * @param id ID of this accumulator; for internal use only.
  * @param initialValue initial value of accumulator
  * @param param helper object defining how to add elements of type `R` and `T`
  * @param name human-readable name for use in Spark's web UI
- * @param internal if this [[Accumulable]] is internal. Internal [[Accumulable]]s will be reported
- *                 to the driver via heartbeats. For internal [[Accumulable]]s, `R` must be
- *                 thread safe so that they can be reported correctly.
  * @param countFailedValues whether to accumulate values from failed tasks. This is set to true
  *                          for system and time metrics like serialization time or bytes spilled,
  *                          and false for things with absolute values like number of input rows.
@@ -69,7 +62,6 @@ class Accumulable[R, T] private[spark] (
     @transient private val initialValue: R,
     param: AccumulableParam[R, T],
     val name: Option[String],
-    internal: Boolean,
     private[spark] val countFailedValues: Boolean,
     private[spark] val dataProperty: Boolean)
   extends Serializable {
@@ -77,19 +69,17 @@ class Accumulable[R, T] private[spark] (
   private[spark] def this(
       initialValue: R,
       param: AccumulableParam[R, T],
-      internal: Boolean,
       countFailedValues: Boolean,
       dataProperty: Boolean) = {
-    this(Accumulators.newId(), initialValue, param, None, internal, countFailedValues, dataProperty)
+    this(Accumulators.newId(), initialValue, param, None, countFailedValues, dataProperty)
   }
 
   def this(
       initialValue: R,
       param: AccumulableParam[R, T],
       name: Option[String],
-      internal: Boolean,
       countFailedValues: Boolean) = {
-    this(Accumulators.newId(), initialValue, param, name, internal, countFailedValues,
+    this(Accumulators.newId(), initialValue, param, name, countFailedValues,
       false /* dataProperty */)
   }
 
@@ -97,29 +87,22 @@ class Accumulable[R, T] private[spark] (
       initialValue: R,
       param: AccumulableParam[R, T],
       name: Option[String],
-      internal: Boolean,
       countFailedValues: Boolean,
       dataProperty: Boolean) = {
-    this(Accumulators.newId(), initialValue, param, name, internal, countFailedValues, dataProperty)
+    this(Accumulators.newId(), initialValue, param, name, countFailedValues, dataProperty)
   }
 
-  def this(
-      initialValue: R,
-      param: AccumulableParam[R, T],
-      name: Option[String],
-      internal: Boolean) =
-    this(initialValue, param, name, internal, false /* countFailed */)
-
-  def this(
+  private[spark] def this(
       initialValue: R,
       param: AccumulableParam[R, T],
       name: Option[String]) =
-    this(initialValue, param, name, false /* internal */)
+    this(initialValue, param, name, false /* countFailed */)
 
   def this(
       initialValue: R,
-      param: AccumulableParam[R, T]) =
+      param: AccumulableParam[R, T]) = {
     this(initialValue, param, None)
+  }
 
   @volatile @transient private var value_ : R = initialValue // Current value on driver
 
@@ -146,19 +129,7 @@ class Accumulable[R, T] private[spark] (
   // for the given key which have been merged into the value. This is used on the driver.
   @transient private[spark] lazy val processed = new mutable.HashMap[(Int, Int), mutable.BitSet]()
 
-  // In many places we create internal accumulators without access to the active context cleaner,
-  // so if we register them here then we may never unregister these accumulators. To avoid memory
-  // leaks, we require the caller to explicitly register internal accumulators elsewhere.
-  if (!internal) {
-    Accumulators.register(this)
-  }
-
-  /**
-   * If this [[Accumulable]] is internal. Internal [[Accumulable]]s will be reported to the driver
-   * via heartbeats. For internal [[Accumulable]]s, `R` must be thread safe so that they can be
-   * reported correctly.
-   */
-  private[spark] def isInternal: Boolean = internal
+  Accumulators.register(this)
 
   /**
    * If this [[Accumulable]] is for a data property.
@@ -175,7 +146,7 @@ class Accumulable[R, T] private[spark] (
    * same mutable instance around.
    */
   private[spark] def copy(): Accumulable[R, T] = {
-    new Accumulable[R, T](id, initialValue, param, name, internal, countFailedValues, dataProperty)
+    new Accumulable[R, T](id, initialValue, param, name, countFailedValues, dataProperty)
   }
 
   /**
@@ -314,7 +285,8 @@ class Accumulable[R, T] private[spark] (
    * Create an [[AccumulableInfo]] representation of this [[Accumulable]] with the provided values.
    */
   private[spark] def toInfo(update: Option[Any], value: Option[Any]): AccumulableInfo = {
-    new AccumulableInfo(id, name, update, value, internal, countFailedValues, dataProperty)
+    val isInternal = name.exists(_.startsWith(InternalAccumulator.METRICS_PREFIX))
+    new AccumulableInfo(id, name, update, value, isInternal, countFailedValues, dataProperty)
   }
 
   // Called by Java when deserializing an object
