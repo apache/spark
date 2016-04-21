@@ -186,8 +186,8 @@ class VectorizedHashMapGenerator(
     s"""
        |private boolean equals(int idx, $groupingKeySignature) {
        |  return ${groupingKeys.zipWithIndex.map { case (key: Buffer, ordinal: Int) =>
-            s"""${ctx.genEqual(key.dataType,
-              ctx.getValue("batch", "buckets[idx]", key.dataType, ordinal), key.name)}"""
+            s"""(${ctx.genEqual(key.dataType,
+              ctx.getValue("batch", "buckets[idx]", key.dataType, ordinal), key.name)})"""
           }.mkString(" && ")};
        |}
      """.stripMargin
