@@ -174,7 +174,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
     (1 to 10).map(i => (i, s"str$i")).toDF("a", "b").registerTempTable("jt")
     (1 to 10).map(i => Tuple1(Seq(new Integer(i), null))).toDF("a").registerTempTable("jt_array")
 
-    setConf(HiveContext.CONVERT_METASTORE_PARQUET, true)
+    setConf(HiveUtils.CONVERT_METASTORE_PARQUET, true)
   }
 
   override def afterAll(): Unit = {
@@ -186,7 +186,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
       "jt",
       "jt_array",
        "test_parquet")
-    setConf(HiveContext.CONVERT_METASTORE_PARQUET, false)
+    setConf(HiveUtils.CONVERT_METASTORE_PARQUET, false)
   }
 
   test(s"conversion is working") {
@@ -619,7 +619,7 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
 
       withTable("array_of_struct") {
         val conf = Seq(
-          HiveContext.CONVERT_METASTORE_PARQUET.key -> "false",
+          HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false",
           SQLConf.PARQUET_BINARY_AS_STRING.key -> "true",
           SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key -> "false")
 
