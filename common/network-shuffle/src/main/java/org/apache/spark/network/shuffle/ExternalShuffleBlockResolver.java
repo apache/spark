@@ -149,22 +149,23 @@ public class ExternalShuffleBlockResolver {
       ExecutorShuffleInfo executorInfo) {
     AppExecId fullId = new AppExecId(appId, execId);
     logger.info("Registered executor {} with {}", fullId, executorInfo);
-    if (!("org.apache.spark.shuffle.sort.SortShuffleManager".equals(executorInfo.shuffleManager)
-      || "org.apache.spark.shuffle.unsafe.UnsafeShuffleManager".equals(executorInfo.shuffleManager))
+    if ("org.apache.spark.shuffle.sort.SortShuffleManager".equals(executorInfo.shuffleManager)
+      || "org.apache.spark.shuffle.unsafe.UnsafeShuffleManager".equals(executorInfo.shuffleManager)
         ) {
+      try {
+        if (db != null) {
+          byte[] key = dbAppExecKey(fullId);
+          byte[] value = mapper.writeValueAsString(executorInfo).getBytes(StandardCharsets.UTF_8);
+          db.put(key, value);
+        }
+      } catch (Exception e) {
+        logger.error("Error saving registered executors", e);
+      }
+      executors.put(fullId, executorInfo);
+    } else {
       throw new UnsupportedOperationException(
         "Unsupported shuffle manager of executor: " + executorInfo);
     }
-    try {
-      if (db != null) {
-        byte[] key = dbAppExecKey(fullId);
-        byte[] value = mapper.writeValueAsString(executorInfo).getBytes(StandardCharsets.UTF_8);
-        db.put(key, value);
-      }
-    } catch (Exception e) {
-      logger.error("Error saving registered executors", e);
-    }
-    executors.put(fullId, executorInfo);
   }
 
   /**
