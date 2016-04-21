@@ -46,14 +46,13 @@ import org.apache.spark.util.{ByteBufferInputStream, ByteBufferOutputStream, Uti
  * @param partitionId index of the number in the RDD
  * @param metrics a [[TaskMetrics]] that is created at driver side and sent to executor side.
  * @param localProperties copy of thread-local properties set by the user on the driver side.
- *
- * The default values for `metrics` and `localProperties` are used by tests only.
  */
 private[spark] abstract class Task[T](
     val stageId: Int,
     val stageAttemptId: Int,
     val partitionId: Int,
-    val metrics: TaskMetrics = new TaskMetrics,
+    // The default value is only used in tests.
+    val metrics: TaskMetrics = TaskMetrics.empty,
     @transient var localProperties: Properties = new Properties) extends Serializable {
 
   /**
