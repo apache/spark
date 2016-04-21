@@ -424,7 +424,7 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite with LocalSparkContext {
       .set("spark.shuffle.sort.bypassMergeThreshold", "0")
     sc = new SparkContext("local", "test", conf)
     val N = 2e5.toInt
-    sc.parallelize(1 to N, 10)
+    sc.parallelize(1 to N, 2)
       .map { i => (i, i) }
       .groupByKey()
       .reduceByKey(_ ++ _)

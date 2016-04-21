@@ -617,12 +617,12 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
       .set("spark.shuffle.sort.bypassMergeThreshold", "0")
     sc = new SparkContext("local", "test", conf)
     val N = 2e5.toInt
-    val p = new org.apache.spark.HashPartitioner(10)
-    val p2 = new org.apache.spark.HashPartitioner(5)
-    sc.parallelize(1 to N, 10)
-      .map { x => (x % 10000) -> x.toLong }
-      .repartitionAndSortWithinPartitions(p2)
+    val p = new org.apache.spark.HashPartitioner(2)
+    val p2 = new org.apache.spark.HashPartitioner(3)
+    sc.parallelize(1 to N, 3)
+      .map { x => (x % 100000) -> x.toLong }
       .repartitionAndSortWithinPartitions(p)
+      .repartitionAndSortWithinPartitions(p2)
       .count()
   }
 }
