@@ -20,6 +20,7 @@ package org.apache.spark.sql.internal
 import java.util.Properties
 
 import scala.collection.JavaConverters._
+
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry}
