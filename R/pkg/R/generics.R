@@ -1200,3 +1200,7 @@ setGeneric("naiveBayes", function(formula, data, ...) { standardGeneric("naiveBa
 #' @rdname survreg
 #' @export
 setGeneric("survreg", function(formula, data, ...) { standardGeneric("survreg") })
+
+#' @rdname ml.save
+#' @export
+setGeneric("ml.save", function(object, path, ...) { standardGeneric("ml.save") })
