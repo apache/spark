@@ -359,7 +359,7 @@ class HiveSqlAstBuilder(conf: SQLConf) extends SparkSqlAstBuilder {
     }
 
     val (inFormat, inSerdeClass, inSerdeProps, reader) =
-      format(inRowFormat, "hive.script.serde")
+      format(inRowFormat, "hive.script.recordreader")
 
     val (outFormat, outSerdeClass, outSerdeProps, writer) =
       format(outRowFormat, "hive.script.recordwriter")
