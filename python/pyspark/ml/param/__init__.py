@@ -485,10 +485,11 @@ class Params(Identifiable):
         Changes the uid of this instance. This updates both
         the stored uid and the parent uid of params and param maps.
         This is used by persistence (loading).
-        :param newUid: new uid to use
+        :param newUid: new uid to use, which is converted to unicode
         :return: same instance, but with the uid and Param.parent values
                  updated, including within param maps
         """
+        newUid = unicode(newUid)
         self.uid = newUid
         newDefaultParamMap = dict()
         newParamMap = dict()

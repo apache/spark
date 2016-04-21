@@ -17,7 +17,7 @@
 
 package org.apache.spark.executor
 
-import org.apache.spark.{Accumulator, InternalAccumulator}
+import org.apache.spark.InternalAccumulator
 import org.apache.spark.annotation.DeveloperApi
 
 
@@ -38,14 +38,11 @@ object DataWriteMethod extends Enumeration with Serializable {
  * A collection of accumulators that represents metrics about writing data to external systems.
  */
 @DeveloperApi
-class OutputMetrics private (_bytesWritten: Accumulator[Long], _recordsWritten: Accumulator[Long])
-  extends Serializable {
+class OutputMetrics private[spark] () extends Serializable {
+  import InternalAccumulator._
 
-  private[executor] def this(accumMap: Map[String, Accumulator[_]]) {
-    this(
-      TaskMetrics.getAccum[Long](accumMap, InternalAccumulator.output.BYTES_WRITTEN),
-      TaskMetrics.getAccum[Long](accumMap, InternalAccumulator.output.RECORDS_WRITTEN))
-  }
+  private[executor] val _bytesWritten = TaskMetrics.createLongAccum(output.BYTES_WRITTEN)
+  private[executor] val _recordsWritten = TaskMetrics.createLongAccum(output.RECORDS_WRITTEN)
 
   /**
    * Total number of bytes written.
@@ -56,11 +53,6 @@ class OutputMetrics private (_bytesWritten: Accumulator[Long], _recordsWritten: 
    * Total number of records written.
    */
   def recordsWritten: Long = _recordsWritten.localValue
-
-  /**
-   * Returns true if this metrics has been updated before.
-   */
-  def isUpdated: Boolean = (bytesWritten | recordsWritten) != 0
 
   private[spark] def setBytesWritten(v: Long): Unit = _bytesWritten.setValue(v)
   private[spark] def setRecordsWritten(v: Long): Unit = _recordsWritten.setValue(v)

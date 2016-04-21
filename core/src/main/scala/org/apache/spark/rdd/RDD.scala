@@ -433,7 +433,9 @@ abstract class RDD[T: ClassTag](
    * coalesce(1000, shuffle = true) will result in 1000 partitions with the
    * data distributed using a hash partitioner.
    */
-  def coalesce(numPartitions: Int, shuffle: Boolean = false)(implicit ord: Ordering[T] = null)
+  def coalesce(numPartitions: Int, shuffle: Boolean = false,
+               partitionCoalescer: Option[PartitionCoalescer] = Option.empty)
+              (implicit ord: Ordering[T] = null)
       : RDD[T] = withScope {
     if (shuffle) {
       /** Distributes elements evenly across output partitions, starting from a random partition. */
@@ -451,9 +453,10 @@ abstract class RDD[T: ClassTag](
       new CoalescedRDD(
         new ShuffledRDD[Int, T, T](mapPartitionsWithIndex(distributePartition),
         new HashPartitioner(numPartitions)),
-        numPartitions).values
+        numPartitions,
+        partitionCoalescer).values
     } else {
-      new CoalescedRDD(this, numPartitions)
+      new CoalescedRDD(this, numPartitions, partitionCoalescer)
     }
   }
 

@@ -66,6 +66,11 @@ private[feature] trait StandardScalerParams extends Params with HasInputCol with
  * :: Experimental ::
  * Standardizes features by removing the mean and scaling to unit variance using column summary
  * statistics on the samples in the training set.
+ *
+ * The "unit std" is computed using the
+ * [[https://en.wikipedia.org/wiki/Standard_deviation#Corrected_sample_standard_deviation
+ *   corrected sample standard deviation]],
+ * which is computed as the square root of the unbiased sample variance.
  */
 @Experimental
 class StandardScaler(override val uid: String) extends Estimator[StandardScalerModel]

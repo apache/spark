@@ -41,7 +41,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.ShowTablesCommand
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.ui.{SQLListener, SQLTab}
-import org.apache.spark.sql.internal.{SessionState, SQLConf}
+import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ExecutionListenerManager
@@ -63,17 +63,18 @@ import org.apache.spark.util.Utils
  * @since 1.0.0
  */
 class SQLContext private[sql](
-    @transient val sparkContext: SparkContext,
-    @transient protected[sql] val cacheManager: CacheManager,
-    @transient private[sql] val listener: SQLListener,
-    val isRootContext: Boolean,
-    @transient private[sql] val externalCatalog: ExternalCatalog)
+    @transient private val sparkSession: SparkSession,
+    val isRootContext: Boolean)
   extends Logging with Serializable {
 
   self =>
 
+  private[sql] def this(sparkSession: SparkSession) = {
+    this(sparkSession, true)
+  }
+
   def this(sc: SparkContext) = {
-    this(sc, new CacheManager, SQLContext.createListenerAndUI(sc), true, new InMemoryCatalog)
+    this(new SparkSession(sc))
   }
 
   def this(sparkContext: JavaSparkContext) = this(sparkContext.sc)
@@ -100,27 +101,25 @@ class SQLContext private[sql](
     }
   }
 
+  protected[sql] def sessionState: SessionState = sparkSession.sessionState
+  protected[sql] def sharedState: SharedState = sparkSession.sharedState
+  protected[sql] def conf: SQLConf = sessionState.conf
+  protected[sql] def cacheManager: CacheManager = sharedState.cacheManager
+  protected[sql] def listener: SQLListener = sharedState.listener
+  protected[sql] def externalCatalog: ExternalCatalog = sharedState.externalCatalog
+
+  def sparkContext: SparkContext = sharedState.sparkContext
+
   /**
-   * Returns a SQLContext as new session, with separated SQL configurations, temporary tables,
-   * registered functions, but sharing the same SparkContext, CacheManager, SQLListener and SQLTab.
+   * Returns a [[SQLContext]] as new session, with separated SQL configurations, temporary
+   * tables, registered functions, but sharing the same [[SparkContext]], cached data and
+   * other things.
    *
    * @since 1.6.0
    */
   def newSession(): SQLContext = {
-    new SQLContext(
-      sparkContext = sparkContext,
-      cacheManager = cacheManager,
-      listener = listener,
-      isRootContext = false,
-      externalCatalog = externalCatalog)
+    new SQLContext(sparkSession.newSession(), isRootContext = false)
   }
-
-  /**
-   * Per-session state, e.g. configuration, functions, temporary tables etc.
-   */
-  @transient
-  protected[sql] lazy val sessionState: SessionState = new SessionState(self)
-  protected[spark] def conf: SQLConf = sessionState.conf
 
   /**
    * An interface to register custom [[org.apache.spark.sql.util.QueryExecutionListener]]s
@@ -135,10 +134,14 @@ class SQLContext private[sql](
    * @group config
    * @since 1.0.0
    */
-  def setConf(props: Properties): Unit = conf.setConf(props)
+  def setConf(props: Properties): Unit = sessionState.setConf(props)
 
-  /** Set the given Spark SQL configuration property. */
-  private[sql] def setConf[T](entry: ConfigEntry[T], value: T): Unit = conf.setConf(entry, value)
+  /**
+   * Set the given Spark SQL configuration property.
+   */
+  private[sql] def setConf[T](entry: ConfigEntry[T], value: T): Unit = {
+    sessionState.setConf(entry, value)
+  }
 
   /**
    * Set the given Spark SQL configuration property.
@@ -146,7 +149,7 @@ class SQLContext private[sql](
    * @group config
    * @since 1.0.0
    */
-  def setConf(key: String, value: String): Unit = conf.setConfString(key, value)
+  def setConf(key: String, value: String): Unit = sessionState.setConf(key, value)
 
   /**
    * Return the value of Spark SQL configuration property for the given key.
@@ -189,23 +192,19 @@ class SQLContext private[sql](
    */
   def getAllConfs: immutable.Map[String, String] = conf.getAllConfs
 
-  // Extract `spark.sql.*` entries and put it in our SQLConf.
-  // Subclasses may additionally set these entries in other confs.
-  SQLContext.getSQLProperties(sparkContext.getConf).asScala.foreach { case (k, v) =>
-    setConf(k, v)
-  }
-
   protected[sql] def parseSql(sql: String): LogicalPlan = sessionState.sqlParser.parsePlan(sql)
 
   protected[sql] def executeSql(sql: String): QueryExecution = executePlan(parseSql(sql))
 
-  protected[sql] def executePlan(plan: LogicalPlan) = new QueryExecution(this, plan)
+  protected[sql] def executePlan(plan: LogicalPlan): QueryExecution = {
+    sessionState.executePlan(plan)
+  }
 
   /**
    * Add a jar to SQLContext
    */
   protected[sql] def addJar(path: String): Unit = {
-    sparkContext.addJar(path)
+    sessionState.addJar(path)
   }
 
   /** A [[FunctionResourceLoader]] that can be used in SessionCatalog. */
@@ -771,7 +770,7 @@ class SQLContext private[sql](
    * as Spark can parse all supported Hive DDLs itself.
    */
   private[sql] def runNativeSql(sqlText: String): Seq[Row] = {
-    throw new UnsupportedOperationException
+    sessionState.runNativeSql(sqlText).map { r => Row(r) }
   }
 
   /**

@@ -516,7 +516,10 @@ private[sql] object Expand {
       // groupingId is the last output, here we use the bit mask as the concrete value for it.
       } :+ Literal.create(bitmask, IntegerType)
     }
-    val output = child.output ++ groupByAttrs :+ gid
+
+    // the `groupByAttrs` has different meaning in `Expand.output`, it could be the original
+    // grouping expression or null, so here we create new instance of it.
+    val output = child.output ++ groupByAttrs.map(_.newInstance) :+ gid
     Expand(projections, output, Project(child.output ++ groupByAliases, child))
   }
 }

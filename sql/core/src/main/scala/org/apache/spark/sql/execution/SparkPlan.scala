@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration._
+import scala.util.control.NonFatal
 
 import org.apache.spark.{broadcast, SparkEnv}
 import org.apache.spark.internal.Logging
@@ -167,7 +168,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   protected def waitForSubqueries(): Unit = {
     // fill in the result of subqueries
     subqueryResults.foreach { case (e, futureResult) =>
-      val rows = Await.result(futureResult, Duration.Inf)
+      val rows = ThreadUtils.awaitResult(futureResult, Duration.Inf)
       if (rows.length > 1) {
         sys.error(s"more than one row returned by a subquery used as an expression:\n${e.plan}")
       }
@@ -351,12 +352,10 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     }
   }
 
-  private[this] def isTesting: Boolean = sys.props.contains("spark.testing")
-
   protected def newMutableProjection(
       expressions: Seq[Expression],
       inputSchema: Seq[Attribute],
-      useSubexprElimination: Boolean = false): () => MutableProjection = {
+      useSubexprElimination: Boolean = false): MutableProjection = {
     log.debug(s"Creating MutableProj: $expressions, inputSchema: $inputSchema")
     GenerateMutableProjection.generate(expressions, inputSchema, useSubexprElimination)
   }

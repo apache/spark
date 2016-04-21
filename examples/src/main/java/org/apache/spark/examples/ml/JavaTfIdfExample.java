@@ -63,6 +63,8 @@ public class JavaTfIdfExample {
       .setOutputCol("rawFeatures")
       .setNumFeatures(numFeatures);
     Dataset<Row> featurizedData = hashingTF.transform(wordsData);
+    // alternatively, CountVectorizer can also be used to get term frequency vectors
+
     IDF idf = new IDF().setInputCol("rawFeatures").setOutputCol("features");
     IDFModel idfModel = idf.fit(featurizedData);
     Dataset<Row> rescaledData = idfModel.transform(featurizedData);
