@@ -48,8 +48,8 @@ class VectorizedHashMapGenerator(
   case class Buffer(dataType: DataType, name: String)
   val groupingKeys = groupingKeySchema.map(k => Buffer(k.dataType, ctx.freshName("key")))
   val bufferValues = bufferSchema.map(k => Buffer(k.dataType, ctx.freshName("value")))
-  val groupingKeySignature = groupingKeys.map(key => (ctx.javaType(key.dataType), key.name))
-    .map(_.productIterator.toList.mkString(" ")).mkString(", ")
+  val groupingKeySignature =
+    groupingKeys.map(key => s"${ctx.javaType(key.dataType)} ${key.name}").mkString(", ")
   val buffVars: Seq[ExprCode] = {
     val functions = aggregateExpressions.map(_.aggregateFunction.asInstanceOf[DeclarativeAggregate])
     val initExpr = functions.flatMap(f => f.initialValues)
@@ -88,32 +88,28 @@ class VectorizedHashMapGenerator(
 
   private def initializeAggregateHashMap(): String = {
     val generatedSchema: String =
-      s"""
-         |new org.apache.spark.sql.types.StructType()
-         |${(groupingKeySchema ++ bufferSchema).map { key =>
-            key.dataType match {
-              case d: DecimalType =>
-                s""".add("${key.name}", org.apache.spark.sql.types.DataTypes.createDecimalType(
-                   |${d.precision}, ${d.scale}))""".stripMargin
-              case _ =>
-                s""".add("${key.name}", org.apache.spark.sql.types.DataTypes.${key.dataType})"""
-            }
-          }.mkString("\n")};
-      """.stripMargin
+      s"new org.apache.spark.sql.types.StructType()" +
+        (groupingKeySchema ++ bufferSchema).map { key =>
+          key.dataType match {
+            case d: DecimalType =>
+              s""".add("${key.name}", org.apache.spark.sql.types.DataTypes.createDecimalType(
+                  |${d.precision}, ${d.scale}))""".stripMargin
+            case _ =>
+              s""".add("${key.name}", org.apache.spark.sql.types.DataTypes.${key.dataType})"""
+          }
+        }.mkString("\n").concat(";")
 
     val generatedAggBufferSchema: String =
-      s"""
-         |new org.apache.spark.sql.types.StructType()
-         |${bufferSchema.map { key =>
-            key.dataType match {
-              case d: DecimalType =>
-                s""".add("${key.name}", org.apache.spark.sql.types.DataTypes.createDecimalType(
-                    |${d.precision}, ${d.scale}))""".stripMargin
-              case _ =>
-                s""".add("${key.name}", org.apache.spark.sql.types.DataTypes.${key.dataType})"""
-            }
-          }.mkString("\n")};
-      """.stripMargin
+      s"new org.apache.spark.sql.types.StructType()" +
+        bufferSchema.map { key =>
+          key.dataType match {
+            case d: DecimalType =>
+              s""".add("${key.name}", org.apache.spark.sql.types.DataTypes.createDecimalType(
+                  |${d.precision}, ${d.scale}))""".stripMargin
+            case _ =>
+              s""".add("${key.name}", org.apache.spark.sql.types.DataTypes.${key.dataType})"""
+          }
+        }.mkString("\n").concat(";")
 
     s"""
        |  private org.apache.spark.sql.execution.vectorized.ColumnarBatch batch;
@@ -162,7 +158,7 @@ class VectorizedHashMapGenerator(
        |  ${groupingKeys.map { key =>
             val result = ctx.freshName("result")
             s"""
-               |${computeHash(key.name, key.dataType, result, ctx)}
+               |${genComputeHash(ctx, key.name, key.dataType, result)}
                |$hash = ($hash ^ (0x9e3779b9)) + $result + ($hash << 6) + ($hash >>> 2);
              """.stripMargin }.mkString("\n")}
        |  return $hash;
@@ -282,11 +278,11 @@ class VectorizedHashMapGenerator(
      """.stripMargin
   }
 
-  private def computeHash(
+  private def genComputeHash(
+      ctx: CodegenContext,
       input: String,
       dataType: DataType,
-      result: String,
-      ctx: CodegenContext): String = {
+      result: String): String = {
     def hashInt(i: String): String = s"int $result = $i;"
     def hashLong(l: String): String = s"long $result = $l;"
     def hashBytes(b: String): String = {
@@ -294,7 +290,7 @@ class VectorizedHashMapGenerator(
       s"""
          |int $result = 0;
          |for (int i = 0; i < $b.length; i++) {
-         |  ${computeHash(s"$b[i]", ByteType, hash, ctx)}
+         |  ${genComputeHash(ctx, s"$b[i]", ByteType, hash)}
          |  $result = ($result ^ (0x9e3779b9)) + $hash + ($result << 6) + ($result >>> 2);
          |}
        """.stripMargin

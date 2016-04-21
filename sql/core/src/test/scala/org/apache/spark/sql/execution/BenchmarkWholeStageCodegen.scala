@@ -339,9 +339,9 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
     Aggregate w decimal key:             Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -------------------------------------------------------------------------------------------
-    codegen = F                              6876 / 7216          3.1         327.8       1.0X
-    codegen = T hashmap = F                  5297 / 5478          4.0         252.6       1.3X
-    codegen = T hashmap = T                  5395 / 5668          3.9         257.2       1.3X
+    codegen = F                              5885 / 6091          3.6         280.6       1.0X
+    codegen = T hashmap = F                  3625 / 4009          5.8         172.8       1.6X
+    codegen = T hashmap = T                  3204 / 3271          6.5         152.8       1.8X
     */
   }
 

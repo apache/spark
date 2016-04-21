@@ -298,24 +298,13 @@ class CodegenContext {
       ev: ExprCode,
       nullable: Boolean): String = {
     if (nullable) {
-      // Can't call setNullAt on DecimalType, because we need to keep the offset
-      if (dataType.isInstanceOf[DecimalType]) {
-        s"""
-           if (!${ev.isNull}) {
-             ${setValue(batch, row, dataType, ordinal, ev.value)}
-           } else {
-             ${setValue(batch, row, dataType, ordinal, "null")}
-           }
-         """
-      } else {
-        s"""
-           if (!${ev.isNull}) {
-             ${setValue(batch, row, dataType, ordinal, ev.value)}
-           } else {
-             $batch.column($ordinal).putNull($row);
-           }
-         """
-      }
+      s"""
+         if (!${ev.isNull}) {
+           ${setValue(batch, row, dataType, ordinal, ev.value)}
+         } else {
+           $batch.column($ordinal).putNull($row);
+         }
+       """
     } else {
       s"""${setValue(batch, row, dataType, ordinal, ev.value)};"""
     }
