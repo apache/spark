@@ -695,6 +695,22 @@ private[hive] class HiveClientImpl(
   }
 
   private def generateDataSourceDDL(hiveTable: HiveTable): String = {
+
+    /**
+     * Currently, when users use dataFrame to create a table, such as df.write.partitionBy("a")
+     * .saveAsTable("t1"), HiveMetaStoreCatalog will put the partitioning, buckecting and soring
+     * information in TBLPROPERTIES when creating corresponding hive table. So when the table
+     * is known to be created with "spark.sql.sources.provider" value, and the following properties
+     * are the indicator of whether the table is created from dataframe.
+     * @param tblProperties
+     * @return
+     */
+    def createdByDataframe(tblProperties: Map[String, String]): Boolean = {
+      tblProperties.get("spark.sql.sources.schema.numPartCols").isDefined ||
+        tblProperties.get("spark.sql.sources.schema.numBucketCols").isDefined ||
+        tblProperties.get("spark.sql.sources.schema.numSortCols").isDefined
+    }
+
     val tblProperties = hiveTable.getParameters.asScala.toMap
     if (createdByDataframe(tblProperties)) {
       def getColumnNames(colType: String): Seq[String] = {
@@ -751,21 +767,6 @@ private[hive] class HiveClientImpl(
       }
       // create table using syntax does not support EXTERNAL keyword
       sb.toString.replace("EXTERNAL TABLE", "TABLE")
-    }
-
-    /**
-     * Currently, when users use dataFrame to create a table, such as df.write.partitionBy("a")
-     * .saveAsTable("t1"), HiveMetaStoreCatalog will put the partitioning, buckecting and soring
-     * information in TBLPROPERTIES when creating corresponding hive table. So when the table
-     * is known to be created with "spark.sql.sources.provider" value, and the following properties
-     * are the indicator of whether the table is created from dataframe.
-     * @param tblProperties
-     * @return
-     */
-    def createdByDataframe(tblProperties: Map[String, String]): Boolean = {
-      tblProperties.get("spark.sql.sources.schema.numPartCols").isDefined ||
-        tblProperties.get("spark.sql.sources.schema.numBucketCols").isDefined ||
-        tblProperties.get("spark.sql.sources.schema.numSortCols").isDefined
     }
   }
 

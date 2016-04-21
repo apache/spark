@@ -108,8 +108,8 @@ class HiveShowDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
             |COMMENT 'some table'
             |PARTITIONED BY (c3 int COMMENT 'partition column', c4 string)
             |row format delimited fields terminated by ','
-            |COLLECTION ITEMS TERMINATED BY ','
-            |MAP KEYS TERMINATED BY ','
+            |COLLECTION ITEMS TERMINATED BY '@'
+            |MAP KEYS TERMINATED BY '#'
             |NULL DEFINED AS 'NaN'
             |stored as parquet
             |location '${tmpDir}'
