@@ -150,7 +150,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     }
 
     if (sessionState.database != null) {
-      SparkSQLEnv.sqlContext.sessionState.catalog.setCurrentDatabase(
+      SparkSQLEnv.hiveContext.sessionState.catalog.setCurrentDatabase(
         s"${sessionState.database}")
     }
 

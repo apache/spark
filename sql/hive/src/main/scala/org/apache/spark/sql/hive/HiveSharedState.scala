@@ -23,8 +23,7 @@ import org.apache.spark.sql.internal.SharedState
 
 
 /**
- * A class that holds all state shared across sessions in a given
- * [[org.apache.spark.sql.SparkSession]] backed by Hive.
+ * A class that holds all state shared across sessions in a given [[HiveContext]].
  */
 private[hive] class HiveSharedState(override val sparkContext: SparkContext)
   extends SharedState(sparkContext) {
