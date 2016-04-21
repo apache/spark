@@ -18,12 +18,14 @@
 package org.apache.spark.sql.hive
 
 import scala.collection.JavaConverters._
+
 import com.google.common.base.Objects
 import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.metastore.{TableType => HiveTableType}
 import org.apache.hadoop.hive.metastore.api.FieldSchema
 import org.apache.hadoop.hive.ql.metadata.{Partition, Table => HiveTable}
 import org.apache.hadoop.hive.ql.plan.TableDesc
+
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable, CatalogTablePartition, CatalogTableType}
