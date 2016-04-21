@@ -45,7 +45,7 @@ public abstract class MemoryConsumer {
   /**
    * Returns the size of used memory in bytes.
    */
-  long getUsed() {
+  public long getUsed() {
     return used;
   }
 

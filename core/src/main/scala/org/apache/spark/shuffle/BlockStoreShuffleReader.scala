@@ -103,6 +103,9 @@ private[spark] class BlockStoreShuffleReader[K, C](
         val sorter =
           new ExternalSorter[K, C, C](context, ordering = Some(keyOrd), serializer = dep.serializer)
         sorter.insertAll(aggregatedIter)
+        if (SparkEnv.get.conf.getBoolean("spark.shuffle.spillAfterRead", false)) {
+          sorter.spill()
+        }
         context.taskMetrics().incMemoryBytesSpilled(sorter.memoryBytesSpilled)
         context.taskMetrics().incDiskBytesSpilled(sorter.diskBytesSpilled)
         context.taskMetrics().incPeakExecutionMemory(sorter.peakMemoryUsedBytes)

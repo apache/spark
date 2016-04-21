@@ -416,4 +416,24 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
+  test("SPARK-14560 -- force spill an empty collection") {
+    // You should be able to force-spill a collection any time -- even if there is nothing
+    // to spill (eg., nothing has been added, or it just spilled)
+    val conf = createSparkConf(loadDefaults = true)
+    sc = new SparkContext("local", "test", conf)
+    val map = createExternalMap[Int]
+    map.spill()
+    assert(map.iterator.toIndexedSeq == IndexedSeq())
+
+    val map2 = createExternalMap[Int]
+    val elements = IndexedSeq((1, 1), (2, 2), (5, 5))
+    val expected = elements.map { case (k, v) => k -> ArrayBuffer(v)}
+    map2.insertAll(elements.iterator)
+    // say the first spill is natural due to the collection being full
+    map2.spill()
+    // and then we spill again, even though we haven't added anything else, because something
+    // external requests us to free memory
+    map2.spill()
+    assert(map2.iterator.toIndexedSeq == expected)
+  }
 }
