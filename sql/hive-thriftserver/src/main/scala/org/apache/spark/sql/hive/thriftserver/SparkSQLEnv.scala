@@ -24,7 +24,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.StatsReportListener
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.sql.hive.{HiveContext, HiveSessionState}
 import org.apache.spark.util.Utils
 
@@ -57,7 +57,7 @@ private[hive] object SparkSQLEnv extends Logging {
 
       sparkContext = new SparkContext(sparkConf)
       sparkContext.addSparkListener(new StatsReportListener())
-      sqlContext = new SQLContext(HiveContext.withHiveExternalCatalog(sparkContext))
+      sqlContext = SparkSession.withHiveSupport(sparkContext).wrapped
       val sessionState = sqlContext.sessionState.asInstanceOf[HiveSessionState]
 
       sessionState.metadataHive.setOut(new PrintStream(System.out, true, "UTF-8"))
