@@ -17,7 +17,7 @@
 
 import warnings
 
-from pyspark import since
+from pyspark import since, keyword_only
 from pyspark.ml.param.shared import *
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaWrapper
@@ -28,7 +28,7 @@ from pyspark.sql import DataFrame
 __all__ = ['AFTSurvivalRegression', 'AFTSurvivalRegressionModel',
            'DecisionTreeRegressor', 'DecisionTreeRegressionModel',
            'GBTRegressor', 'GBTRegressionModel',
-           'GeneralizedLinearRegression', 'GeneralizedLinearRegressionModel'
+           'GeneralizedLinearRegression', 'GeneralizedLinearRegressionModel',
            'IsotonicRegression', 'IsotonicRegressionModel',
            'LinearRegression', 'LinearRegressionModel',
            'LinearRegressionSummary', 'LinearRegressionTrainingSummary',
@@ -478,7 +478,7 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         """
         Sets the value of :py:attr:`isotonic`.
         """
-        self._paramMap[self.isotonic] = value
+        self._set(isotonic=value)
         return self
 
     def getIsotonic(self):
@@ -491,7 +491,7 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         """
         Sets the value of :py:attr:`featureIndex`.
         """
-        self._paramMap[self.featureIndex] = value
+        self._set(featureIndex=value)
         return self
 
     def getFeatureIndex(self):
@@ -541,7 +541,7 @@ class TreeEnsembleParams(DecisionTreeParams):
         """
         Sets the value of :py:attr:`subsamplingRate`.
         """
-        self._paramMap[self.subsamplingRate] = value
+        self._set(subsamplingRate=value)
         return self
 
     @since("1.4.0")
@@ -561,7 +561,7 @@ class TreeRegressorParams(Params):
     impurity = Param(Params._dummy(), "impurity",
                      "Criterion used for information gain calculation (case-insensitive). " +
                      "Supported options: " +
-                     ", ".join(supportedImpurities))
+                     ", ".join(supportedImpurities), typeConverter=TypeConverters.toString)
 
     def __init__(self):
         super(TreeRegressorParams, self).__init__()
@@ -571,7 +571,7 @@ class TreeRegressorParams(Params):
         """
         Sets the value of :py:attr:`impurity`.
         """
-        self._paramMap[self.impurity] = value
+        self._set(impurity=value)
         return self
 
     @since("1.4.0")
@@ -604,7 +604,7 @@ class RandomForestParams(TreeEnsembleParams):
         """
         Sets the value of :py:attr:`numTrees`.
         """
-        self._paramMap[self.numTrees] = value
+        self._set(numTrees=value)
         return self
 
     @since("1.4.0")
@@ -619,7 +619,7 @@ class RandomForestParams(TreeEnsembleParams):
         """
         Sets the value of :py:attr:`featureSubsetStrategy`.
         """
-        self._paramMap[self.featureSubsetStrategy] = value
+        self._set(featureSubsetStrategy=value)
         return self
 
     @since("1.4.0")
@@ -902,7 +902,8 @@ class RandomForestRegressionModel(TreeEnsembleModels, JavaMLWritable, JavaMLRead
 
 @inherit_doc
 class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
-                   GBTParams, HasCheckpointInterval, HasStepSize, HasSeed):
+                   GBTParams, HasCheckpointInterval, HasStepSize, HasSeed, JavaMLWritable,
+                   JavaMLReadable):
     """
     `http://en.wikipedia.org/wiki/Gradient_boosting Gradient-Boosted Trees (GBTs)`
     learning algorithm for regression.
@@ -925,6 +926,18 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
     >>> test1 = sqlContext.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
     >>> model.transform(test1).head().prediction
     1.0
+    >>> gbtr_path = temp_path + "gbtr"
+    >>> gbt.save(gbtr_path)
+    >>> gbt2 = GBTRegressor.load(gbtr_path)
+    >>> gbt2.getMaxDepth()
+    2
+    >>> model_path = temp_path + "gbtr_model"
+    >>> model.save(model_path)
+    >>> model2 = GBTRegressionModel.load(model_path)
+    >>> model.featureImportances == model2.featureImportances
+    True
+    >>> model.treeWeights == model2.treeWeights
+    True
 
     .. versionadded:: 1.4.0
     """
@@ -978,7 +991,7 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
         """
         Sets the value of :py:attr:`lossType`.
         """
-        self._paramMap[self.lossType] = value
+        self._set(lossType=value)
         return self
 
     @since("1.4.0")
@@ -989,7 +1002,7 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
         return self.getOrDefault(self.lossType)
 
 
-class GBTRegressionModel(TreeEnsembleModels):
+class GBTRegressionModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable):
     """
     Model fitted by GBTRegressor.
 
@@ -1113,7 +1126,7 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         """
         Sets the value of :py:attr:`censorCol`.
         """
-        self._paramMap[self.censorCol] = value
+        self._set(censorCol=value)
         return self
 
     @since("1.6.0")
@@ -1128,7 +1141,7 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         """
         Sets the value of :py:attr:`quantileProbabilities`.
         """
-        self._paramMap[self.quantileProbabilities] = value
+        self._set(quantileProbabilities=value)
         return self
 
     @since("1.6.0")
@@ -1143,7 +1156,7 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         """
         Sets the value of :py:attr:`quantilesCol`.
         """
-        self._paramMap[self.quantilesCol] = value
+        self._set(quantilesCol=value)
         return self
 
     @since("1.6.0")
@@ -1248,11 +1261,12 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
 
     family = Param(Params._dummy(), "family", "The name of family which is a description of " +
                    "the error distribution to be used in the model. Supported options: " +
-                   "gaussian(default), binomial, poisson and gamma.")
+                   "gaussian(default), binomial, poisson and gamma.",
+                   typeConverter=TypeConverters.toString)
     link = Param(Params._dummy(), "link", "The name of link function which provides the " +
                  "relationship between the linear predictor and the mean of the distribution " +
                  "function. Supported options: identity, log, inverse, logit, probit, cloglog " +
-                 "and sqrt.")
+                 "and sqrt.", typeConverter=TypeConverters.toString)
 
     @keyword_only
     def __init__(self, labelCol="label", featuresCol="features", predictionCol="prediction",
@@ -1292,7 +1306,7 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
         """
         Sets the value of :py:attr:`family`.
         """
-        self._paramMap[self.family] = value
+        self._set(family=value)
         return self
 
     @since("2.0.0")
@@ -1307,7 +1321,7 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
         """
         Sets the value of :py:attr:`link`.
         """
-        self._paramMap[self.link] = value
+        self._set(link=value)
         return self
 
     @since("2.0.0")

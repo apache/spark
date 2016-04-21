@@ -21,56 +21,44 @@ import scala.collection.JavaConverters._
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hadoop.hive.ql.parse.EximUtil
-import org.apache.hadoop.hive.ql.session.SessionState
+import org.apache.hadoop.hive.ql.parse.{EximUtil, VariableSubstitution}
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkSqlAstBuilder
-import org.apache.spark.sql.execution.command.CreateTable
-import org.apache.spark.sql.hive.{CreateTableAsSelect => CTAS, CreateViewAsSelect => CreateView}
+import org.apache.spark.sql.execution.command.{CreateTable, CreateTableLike}
+import org.apache.spark.sql.hive.{CreateTableAsSelect => CTAS, CreateViewAsSelect => CreateView, HiveSerDe}
 import org.apache.spark.sql.hive.{HiveGenericUDTF, HiveMetastoreTypes, HiveSerDe}
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 
 /**
  * Concrete parser for HiveQl statements.
  */
-object HiveSqlParser extends AbstractSqlParser {
-  val astBuilder = new HiveSqlAstBuilder
+class HiveSqlParser(
+    substitutor: VariableSubstitution,
+    hiveconf: HiveConf)
+  extends AbstractSqlParser {
 
-  override protected def nativeCommand(sqlText: String): LogicalPlan = {
-    HiveNativeCommand(sqlText)
+  val astBuilder = new HiveSqlAstBuilder(hiveconf)
+
+  protected override def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
+    super.parse(substitutor.substitute(hiveconf, command))(toResult)
+  }
+
+  protected override def nativeCommand(sqlText: String): LogicalPlan = {
+    HiveNativeCommand(substitutor.substitute(hiveconf, sqlText))
   }
 }
 
 /**
  * Builder that converts an ANTLR ParseTree into a LogicalPlan/Expression/TableIdentifier.
  */
-class HiveSqlAstBuilder extends SparkSqlAstBuilder {
+class HiveSqlAstBuilder(hiveConf: HiveConf) extends SparkSqlAstBuilder {
   import ParserUtils._
-
-  /**
-   * Get the current Hive Configuration.
-   */
-  private[this] def hiveConf: HiveConf = {
-    var ss = SessionState.get()
-    // SessionState is lazy initialization, it can be null here
-    if (ss == null) {
-      val original = Thread.currentThread().getContextClassLoader
-      val conf = new HiveConf(classOf[SessionState])
-      conf.setClassLoader(original)
-      ss = new SessionState(conf)
-      SessionState.start(ss)
-    }
-    ss.getConf
-  }
 
   /**
    * Pass a command to Hive using a [[HiveNativeCommand]].
@@ -237,6 +225,15 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
   }
 
   /**
+   * Create a [[CreateTableLike]] command.
+   */
+  override def visitCreateTableLike(ctx: CreateTableLikeContext): LogicalPlan = withOrigin(ctx) {
+    val targetTable = visitTableIdentifier(ctx.target)
+    val sourceTable = visitTableIdentifier(ctx.source)
+    CreateTableLike(targetTable, sourceTable, ctx.EXISTS != null)
+  }
+
+  /**
    * Create or replace a view. This creates a [[CreateViewAsSelect]] command.
    *
    * For example:
@@ -252,9 +249,6 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
     if (ctx.identifierList != null) {
       throw new ParseException(s"Operation not allowed: partitioned views", ctx)
     } else {
-      if (ctx.STRING != null) {
-        throw new ParseException("Unsupported operation: COMMENT clause", ctx)
-      }
       val identifiers = Option(ctx.identifierCommentList).toSeq.flatMap(_.identifierComment.asScala)
       val schema = identifiers.map { ic =>
         CatalogColumn(ic.identifier.getText, null, nullable = true, Option(ic.STRING).map(string))
@@ -262,6 +256,7 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
       createView(
         ctx,
         ctx.tableIdentifier,
+        comment = Option(ctx.STRING).map(string),
         schema,
         ctx.query,
         Option(ctx.tablePropertyList).map(visitTablePropertyList).getOrElse(Map.empty),
@@ -278,6 +273,7 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
     createView(
       ctx,
       ctx.tableIdentifier,
+      comment = None,
       Seq.empty,
       ctx.query,
       Map.empty,
@@ -291,6 +287,7 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
   private def createView(
       ctx: ParserRuleContext,
       name: TableIdentifierContext,
+      comment: Option[String],
       schema: Seq[CatalogColumn],
       query: QueryContext,
       properties: Map[String, String],
@@ -304,7 +301,8 @@ class HiveSqlAstBuilder extends SparkSqlAstBuilder {
       storage = EmptyStorageFormat,
       properties = properties,
       viewOriginalText = sql,
-      viewText = sql)
+      viewText = sql,
+      comment = comment)
     CreateView(tableDesc, plan(query), allowExist, replace, command(ctx))
   }
 

@@ -49,7 +49,7 @@ import org.apache.spark.network.util.TransportConf;
  * Manages converting shuffle BlockIds into physical segments of local files, from a process outside
  * of Executors. Each Executor must register its own configuration about where it stores its files
  * (local dirs) and how (shuffle manager). The logic for retrieval of individual files is replicated
- * from Spark's FileShuffleBlockResolver and IndexShuffleBlockResolver.
+ * from Spark's IndexShuffleBlockResolver.
  */
 public class ExternalShuffleBlockResolver {
   private static final Logger logger = LoggerFactory.getLogger(ExternalShuffleBlockResolver.class);
@@ -185,8 +185,6 @@ public class ExternalShuffleBlockResolver {
 
     if ("sort".equals(executor.shuffleManager) || "tungsten-sort".equals(executor.shuffleManager)) {
       return getSortBasedShuffleBlockData(executor, shuffleId, mapId, reduceId);
-    } else if ("hash".equals(executor.shuffleManager)) {
-      return getHashBasedShuffleBlockData(executor, blockId);
     } else {
       throw new UnsupportedOperationException(
         "Unsupported shuffle manager: " + executor.shuffleManager);
@@ -248,15 +246,6 @@ public class ExternalShuffleBlockResolver {
         logger.error("Failed to delete directory: " + localDir, e);
       }
     }
-  }
-
-  /**
-   * Hash-based shuffle data is simply stored as one file per block.
-   * This logic is from FileShuffleBlockResolver.
-   */
-  private ManagedBuffer getHashBasedShuffleBlockData(ExecutorShuffleInfo executor, String blockId) {
-    File shuffleFile = getFile(executor.localDirs, executor.subDirsPerLocalDir, blockId);
-    return new FileSegmentManagedBuffer(conf, shuffleFile, 0, shuffleFile.length());
   }
 
   /**
