@@ -21,6 +21,8 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
+import org.apache.spark.ml.clustering.{KMeans => NewKMeans}
+import org.apache.spark.ml.util.Instrumentation
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS.{axpy, scal}
 import org.apache.spark.mllib.util.MLUtils
@@ -212,6 +214,12 @@ class KMeans private (
    */
   @Since("0.8.0")
   def run(data: RDD[Vector]): KMeansModel = {
+    run(data, None)
+  }
+
+  private[spark] def run(
+      data: RDD[Vector],
+      instr: Option[Instrumentation[NewKMeans]]): KMeansModel = {
 
     if (data.getStorageLevel == StorageLevel.NONE) {
       logWarning("The input data is not directly cached, which may hurt performance if its"
@@ -224,7 +232,7 @@ class KMeans private (
     val zippedData = data.zip(norms).map { case (v, norm) =>
       new VectorWithNorm(v, norm)
     }
-    val model = runAlgorithm(zippedData)
+    val model = runAlgorithm(zippedData, instr)
     norms.unpersist()
 
     // Warn at the end of the run as well, for increased visibility.
@@ -238,7 +246,9 @@ class KMeans private (
   /**
    * Implementation of K-Means algorithm.
    */
-  private def runAlgorithm(data: RDD[VectorWithNorm]): KMeansModel = {
+  private def runAlgorithm(
+      data: RDD[VectorWithNorm],
+      instr: Option[Instrumentation[NewKMeans]]): KMeansModel = {
 
     val sc = data.sparkContext
 
@@ -273,6 +283,8 @@ class KMeans private (
     var iteration = 0
 
     val iterationStartTime = System.nanoTime()
+
+    instr.map(_.logNumFeatures(centers(0)(0).vector.size))
 
     // Execute iterations of Lloyd's algorithm until all runs have converged
     while (iteration < maxIterations && !activeRuns.isEmpty) {
