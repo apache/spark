@@ -33,7 +33,7 @@ import org.apache.spark.ui.{UIUtils, WebUIPage}
 import scala.collection.mutable.ArrayBuffer
 import scala.xml.Node
 
-class ExecutorLogsPage(parent: ExecutorsTab) extends WebUIPage("executorLogs") with Logging {
+class YarnExecutorLogsPage(parent: ExecutorsTab) extends WebUIPage("executorLogs") with Logging {
   private val conf = parent.conf
   private val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
   hadoopConf.addResource("yarn-site.xml")
@@ -48,9 +48,12 @@ class ExecutorLogsPage(parent: ExecutorsTab) extends WebUIPage("executorLogs") w
     val appOwner = verifyAndGetAppOwner(request, warnContent)
     val logLimits = verifyAndGetLogLimits(request, warnContent)
 
+    val executorId = getParameter(request, "executorId").getOrElse("")
+    val title = s"Logs for Executor $executorId"
+
     if (containerId.isEmpty ||
       nodeId.isEmpty || appOwner.isEmpty || logLimits.isEmpty) {
-      return UIUtils.basicSparkPage(warnContent, "")
+      return UIUtils.basicSparkPage(warnContent, title)
     }
 
     val applicationId = containerId.get.getApplicationAttemptId.getApplicationId
@@ -61,7 +64,7 @@ class ExecutorLogsPage(parent: ExecutorsTab) extends WebUIPage("executorLogs") w
       YarnConfiguration.DEFAULT_LOG_AGGREGATION_ENABLED)) {
       val warnContent =
         <div><h2>{s"Aggregation is not enabled. Try the nodemanager at $nodeId"}</h2></div>
-      return UIUtils.basicSparkPage(warnContent, "")
+      return UIUtils.basicSparkPage(warnContent, title)
     }
 
     val remoteRootLogDir: Path = new Path(hadoopConf.get(
@@ -84,14 +87,14 @@ class ExecutorLogsPage(parent: ExecutorsTab) extends WebUIPage("executorLogs") w
         warnContent += <div><h2>{ s"Logs not available for  ${logEntity.get} " +
           s". Aggregation may not be complete, " +
           s"Check back later or try the nodemanager at ${nodeId.get};" }</h2></div>
-        return UIUtils.basicSparkPage(warnContent, "")
+        return UIUtils.basicSparkPage(warnContent, title)
       case e: Exception =>
         warnContent += <div><h2>{s"Error getting logs at ${nodeId.get}"}</h2></div>
-        return UIUtils.basicSparkPage(warnContent, "")
+        return UIUtils.basicSparkPage(warnContent, title)
     }
 
 
-    val desiredLogType: Option[String] = getParameter(request, "logtype")
+    val desiredLogType: Option[String] = getParameter(request, "logType")
     try {
       while (nodeFiles.hasNext) {
         val thisNodeFile = nodeFiles.next()
@@ -121,7 +124,7 @@ class ExecutorLogsPage(parent: ExecutorsTab) extends WebUIPage("executorLogs") w
               if (logReader != null) {
                 val content = readContainerLogs(request, logReader, logLimits.get,
                   desiredLogType, logUploadedTime)
-                return UIUtils.basicSparkPage(content, "")
+                return UIUtils.basicSparkPage(content, title)
               }
             }
           } catch {
@@ -155,7 +158,7 @@ class ExecutorLogsPage(parent: ExecutorsTab) extends WebUIPage("executorLogs") w
         logError(s"Error getting logs for $logEntity", e)
     }
 
-    UIUtils.basicSparkPage(warnContent, "")
+    UIUtils.basicSparkPage(warnContent, title)
   }
 
   private def execRow(
@@ -217,10 +220,15 @@ class ExecutorLogsPage(parent: ExecutorsTab) extends WebUIPage("executorLogs") w
     Iterator.continually{
       logReader.nextLog()
     }.takeWhile { case logType =>
-    logType != null && (desiredLogType.isEmpty || (desiredLogType.get == logType)) }.map {
+      logType != null
+    }.map {
       case logType =>
-      execRow(request, logType, logReader, logLimits, logUpLoadTime)
-    }.reduce(_ ++ _)
+        if (desiredLogType.isEmpty || desiredLogType.get.equals(logType)) {
+          execRow(request, logType, logReader, logLimits, logUpLoadTime)
+        } else {
+          Seq.empty[Node]
+        }
+    }.reduceOption(_ ++ _).getOrElse(Seq.empty[Node])
   }
 
   private def verifyAndGetContainerId(

@@ -33,11 +33,16 @@ private[ui] class ExecutorsTab(parent: SparkUI) extends SparkUITab(parent, "exec
   val threadDumpEnabled =
     sc.isDefined && parent.conf.getBoolean("spark.ui.threadDumpsEnabled", true)
 
-  attachPage(new ExecutorsPage(this, threadDumpEnabled))
+  val clusterMode = parent.conf.get("spark.ui.cluster.mode")
+
+  attachPage(new ExecutorsPage(this, threadDumpEnabled, clusterMode))
   if (threadDumpEnabled) {
     attachPage(new ExecutorThreadDumpPage(this))
   }
-  attachPage(new ExecutorLogsPage(this))
+
+  if (clusterMode.equals("yarn")) {
+    attachPage(new YarnExecutorLogsPage(this))
+  }
 }
 
 /**

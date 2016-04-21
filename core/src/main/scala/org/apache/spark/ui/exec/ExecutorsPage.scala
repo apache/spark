@@ -47,7 +47,8 @@ private[ui] case class ExecutorSummaryInfo(
 
 private[ui] class ExecutorsPage(
     parent: ExecutorsTab,
-    threadDumpEnabled: Boolean)
+    threadDumpEnabled: Boolean,
+    clusterMode: String)
   extends WebUIPage("") {
   private val listener = parent.listener
   // When GCTimePercent is edited change ToolTips.TASK_TIME to match
@@ -163,19 +164,7 @@ private[ui] class ExecutorsPage(
       </td>
       {
         if (logsExist) {
-          if (threadDumpEnabled) {
-            <td>
-              {
-                info.executorLogs.map { case (logName, logUrl) =>
-                <div>
-                  <a href={logUrl}>
-                    {logName}
-                  </a>
-                </div>
-                }
-              }
-            </td>
-          } else {
+          if ("yarn".equals(clusterMode)) {
             <td>
               {
                 if (info.executorLogs.nonEmpty) {
@@ -186,6 +175,16 @@ private[ui] class ExecutorsPage(
                   <div>
                     <a href={s"executorLogs/?executorId=$encodedId&hostPort" +
                       s"=$hostPort&containerId=$containerId&user=$user"}>logs</a>
+                  </div>
+                }
+              }
+            </td>
+          } else {
+            <td>
+              {
+                info.executorLogs.map { case (logName, logUrl) =>
+                  <div>
+                    <a href={logUrl}>{logName}</a>
                   </div>
                 }
               }
