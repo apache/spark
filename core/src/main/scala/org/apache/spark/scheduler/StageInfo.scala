@@ -36,7 +36,7 @@ class StageInfo(
     val rddInfos: Seq[RDDInfo],
     val parentIds: Seq[Int],
     val details: String,
-    val taskMetrics: TaskMetrics = new TaskMetrics,
+    val taskMetrics: TaskMetrics = null,
     private[spark] val taskLocalityPreferences: Seq[Seq[TaskLocation]] = Seq.empty) {
   /** When this stage was submitted from the DAGScheduler to a TaskScheduler. */
   var submissionTime: Option[Long] = None
@@ -81,7 +81,7 @@ private[spark] object StageInfo {
       stage: Stage,
       attemptId: Int,
       numTasks: Option[Int] = None,
-      taskMetrics: TaskMetrics = new TaskMetrics,
+      taskMetrics: TaskMetrics = null,
       taskLocalityPreferences: Seq[Seq[TaskLocation]] = Seq.empty
     ): StageInfo = {
     val ancestorRddInfos = stage.rdd.getNarrowAncestors.map(RDDInfo.fromRdd)

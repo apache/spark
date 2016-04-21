@@ -23,11 +23,12 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.execution.SparkSqlParser
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 // TODO: merge this with DDLSuite (SPARK-14441)
 class DDLCommandSuite extends PlanTest {
-  private val parser = SparkSqlParser
+  private val parser = new SparkSqlParser(new SQLConf)
 
   private def assertUnsupported(sql: String): Unit = {
     val e = intercept[AnalysisException] {
@@ -616,19 +617,6 @@ class DDLCommandSuite extends PlanTest {
     }
     intercept[ParseException] {
       parser.parsePlan("DROP TABLE tab FOR REPLICATION('eventid')")
-    }
-    intercept[ParseException] {
-      parser.parsePlan("CREATE VIEW testView AS SELECT id FROM tab")
-    }
-    intercept[ParseException] {
-      parser.parsePlan("ALTER VIEW testView AS SELECT id FROM tab")
-    }
-    intercept[ParseException] {
-      parser.parsePlan(
-        """
-          |CREATE EXTERNAL TABLE parquet_tab2(c1 INT, c2 STRING)
-          |TBLPROPERTIES('prop1Key '= "prop1Val", ' `prop2Key` '= "prop2Val")
-        """.stripMargin)
     }
     intercept[ParseException] {
       parser.parsePlan(

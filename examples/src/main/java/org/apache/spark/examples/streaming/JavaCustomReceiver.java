@@ -58,7 +58,7 @@ import java.util.regex.Pattern;
 public class JavaCustomReceiver extends Receiver<String> {
   private static final Pattern SPACE = Pattern.compile(" ");
 
-  public static void main(String[] args) {
+  public static void main(String[] args) throws Exception {
     if (args.length < 2) {
       System.err.println("Usage: JavaCustomReceiver <hostname> <port>");
       System.exit(1);
