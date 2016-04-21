@@ -250,7 +250,45 @@ class ValidatorParams(HasSeed):
         return java_estimator, java_epms, java_evaluator, java_seed
 
 
-class CrossValidator(Estimator, ValidatorParams, MLReadable, MLWritable):
+class CrossValidatorParams(ValidatorParams):
+    numFolds = Param(Params._dummy(), "numFolds", "number of folds for cross validation",
+                     typeConverter=TypeConverters.toInt)
+
+    def setNumFolds(self, value):
+        """
+        Sets the value of :py:attr:`numFolds`.
+        """
+        self._set(numFolds=value)
+        return self
+
+    def getNumFolds(self):
+        """
+        Gets the value of numFolds or its default value.
+        """
+        return self.getOrDefault(self.numFolds)
+
+    def _transfer_param_map_to_java_impl(self, pyParamMap, java_obj):
+        paramMap = super(CrossValidatorParams, self)\
+            ._transfer_param_map_to_java_impl(pyParamMap, java_obj)
+
+        if self.numFolds in pyParamMap:
+            java_num_folds_param = java_obj.getParam(self.numFolds.name)
+            paramMap.put([java_num_folds_param.w(self.getNumFolds())])
+
+        return paramMap
+
+    def _transfer_param_map_from_java_impl(self, javaParamMap, java_obj):
+        paramMap =super(CrossValidatorParams, self)\
+            ._transfer_param_map_from_java_impl(javaParamMap, java_obj)
+
+        java_num_folds_param = java_obj.getParam(self.numFolds.name)
+        if javaParamMap.contains(java_num_folds_param):
+            paramMap[self.numFolds] = java_obj.getNumFolds()
+
+        return paramMap
+
+
+class CrossValidator(Estimator, CrossValidatorParams, MLReadable, MLWritable):
     """
     K-fold cross validation.
 
@@ -275,9 +313,6 @@ class CrossValidator(Estimator, ValidatorParams, MLReadable, MLWritable):
     .. versionadded:: 1.4.0
     """
 
-    numFolds = Param(Params._dummy(), "numFolds", "number of folds for cross validation",
-                     typeConverter=TypeConverters.toInt)
-
     @keyword_only
     def __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,
                  seed=None):
@@ -301,21 +336,6 @@ class CrossValidator(Estimator, ValidatorParams, MLReadable, MLWritable):
         """
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
-
-    @since("1.4.0")
-    def setNumFolds(self, value):
-        """
-        Sets the value of :py:attr:`numFolds`.
-        """
-        self._set(numFolds=value)
-        return self
-
-    @since("1.4.0")
-    def getNumFolds(self):
-        """
-        Gets the value of numFolds or its default value.
-        """
-        return self.getOrDefault(self.numFolds)
 
     def _fit(self, dataset):
         est = self.getOrDefault(self.estimator)
@@ -423,10 +443,6 @@ class CrossValidator(Estimator, ValidatorParams, MLReadable, MLWritable):
         paramMap =\
             super(CrossValidator, self)._transfer_param_map_to_java_impl(pyParamMap, _java_obj)
 
-        if self.numFolds in pyParamMap:
-            java_num_folds_param = _java_obj.getParam(self.numFolds.name)
-            paramMap.put([java_num_folds_param.w(self.getNumFolds())])
-
         return paramMap
 
     def _transfer_param_map_from_java(self, javaParamMap):
@@ -438,14 +454,10 @@ class CrossValidator(Estimator, ValidatorParams, MLReadable, MLWritable):
         paramMap =\
             super(CrossValidator, self)._transfer_param_map_from_java_impl(javaParamMap, _java_obj)
 
-        java_num_folds_param = _java_obj.getParam(self.numFolds.name)
-        if javaParamMap.contains(java_num_folds_param):
-            paramMap[self.numFolds] = _java_obj.getNumFolds()
-
         return paramMap
 
 
-class CrossValidatorModel(Model, ValidatorParams, MLReadable, MLWritable):
+class CrossValidatorModel(Model, CrossValidatorParams, MLReadable, MLWritable):
     """
     Model from k-fold cross validation.
 
@@ -502,12 +514,14 @@ class CrossValidatorModel(Model, ValidatorParams, MLReadable, MLWritable):
         bestModel = JavaParams._from_java(java_stage.bestModel())
         estimator, epms, evaluator, seed =\
             super(CrossValidatorModel, cls)._from_java_impl(java_stage)
+        numFolds = java_stage.getNumFolds()
         # Create a new instance of this stage.
         py_stage = cls(bestModel=bestModel)\
             .setEstimator(estimator)\
             .setEstimatorParamMaps(epms)\
             .setEvaluator(evaluator)\
-            .setSeed(seed)
+            .setSeed(seed)\
+            .setNumFolds(numFolds)
         py_stage._resetUid(java_stage.uid())
         return py_stage
 
@@ -530,6 +544,7 @@ class CrossValidatorModel(Model, ValidatorParams, MLReadable, MLWritable):
         _java_obj.set("estimator", estimator)
         _java_obj.set("estimatorParamMaps", epms)
         _java_obj.set("seed", seed)
+        _java_obj.set("numFolds", self.getNumFolds())
         return _java_obj
 
     def _transfer_param_map_to_java(self, pyParamMap):
@@ -537,8 +552,8 @@ class CrossValidatorModel(Model, ValidatorParams, MLReadable, MLWritable):
         _java_obj = JavaParams\
             ._new_java_obj("org.apache.spark.ml.tuning.CrossValidatorModel", self.uid)
 
-        paramMap =\
-            super(CrossValidatorModel, self)._transfer_param_map_to_java_impl(pyParamMap, _java_obj)
+        paramMap = super(CrossValidatorModel, self)\
+            ._transfer_param_map_to_java_impl(pyParamMap, _java_obj)
 
         return paramMap
 
@@ -554,7 +569,27 @@ class CrossValidatorModel(Model, ValidatorParams, MLReadable, MLWritable):
         return paramMap
 
 
-class TrainValidationSplit(Estimator, ValidatorParams, MLReadable, MLWritable):
+class TrainValidationSplitParams(ValidatorParams):
+    trainRatio = Param(
+        Params._dummy(),
+        "trainRatio",
+        "Param for ratio between train and validation data. Must be between 0 and 1.")
+
+    def setTrainRatio(self, value):
+        """
+        Sets the value of :py:attr:`trainRatio`.
+        """
+        self._set(trainRatio=value)
+        return self
+
+    def getTrainRatio(self):
+        """
+        Gets the value of trainRatio or its default value.
+        """
+        return self.getOrDefault(self.trainRatio)
+
+
+class TrainValidationSplit(Estimator, TrainValidationSplitParams, MLReadable, MLWritable):
     """
     Train-Validation-Split.
 
@@ -579,9 +614,6 @@ class TrainValidationSplit(Estimator, ValidatorParams, MLReadable, MLWritable):
     .. versionadded:: 2.0.0
     """
 
-    trainRatio = Param(Params._dummy(), "trainRatio", "Param for ratio between train and\
-     validation data. Must be between 0 and 1.")
-
     @keyword_only
     def __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, trainRatio=0.75,
                  seed=None):
@@ -605,21 +637,6 @@ class TrainValidationSplit(Estimator, ValidatorParams, MLReadable, MLWritable):
         """
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
-
-    @since("2.0.0")
-    def setTrainRatio(self, value):
-        """
-        Sets the value of :py:attr:`trainRatio`.
-        """
-        self._set(trainRatio=value)
-        return self
-
-    @since("2.0.0")
-    def getTrainRatio(self):
-        """
-        Gets the value of trainRatio or its default value.
-        """
-        return self.getOrDefault(self.trainRatio)
 
     def _fit(self, dataset):
         est = self.getOrDefault(self.estimator)
@@ -723,7 +740,7 @@ class TrainValidationSplit(Estimator, ValidatorParams, MLReadable, MLWritable):
         raise NotImplementedError()
 
 
-class TrainValidationSplitModel(Model, ValidatorParams, MLReadable, MLWritable):
+class TrainValidationSplitModel(Model, TrainValidationSplitParams, MLReadable, MLWritable):
     """
     Model from train validation split.
 
@@ -780,12 +797,14 @@ class TrainValidationSplitModel(Model, ValidatorParams, MLReadable, MLWritable):
         bestModel = JavaParams._from_java(java_stage.bestModel())
         estimator, epms, evaluator, seed = \
             super(TrainValidationSplitModel, cls)._from_java_impl(java_stage)
+        trainRatio = java_stage.getTrainRatio()
         # Create a new instance of this stage.
         py_stage = cls(bestModel=bestModel)\
             .setEstimator(estimator)\
             .setEstimatorParamMaps(epms)\
             .setEvaluator(evaluator)\
-            .setSeed(seed)
+            .setSeed(seed)\
+            .setTrainRatio(trainRatio)
         py_stage._resetUid(java_stage.uid())
         return py_stage
 
@@ -809,6 +828,7 @@ class TrainValidationSplitModel(Model, ValidatorParams, MLReadable, MLWritable):
         _java_obj.set("estimator", estimator)
         _java_obj.set("estimatorParamMaps", epms)
         _java_obj.set("seed", seed)
+        _java_obj.set("trainRatio", self.getTrainRatio())
         return _java_obj
 
     def _transfer_param_map_to_java(self, pyParamMap):
