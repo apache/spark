@@ -90,7 +90,7 @@ test_that("job group functions can be called", {
   clearJobGroup(sc)
 })
 
-test_that("utility functions can be called", {
+test_that("utility function can be called", {
   sc <- sparkR.init()
   setLogLevel(sc, "ERROR")
 })
