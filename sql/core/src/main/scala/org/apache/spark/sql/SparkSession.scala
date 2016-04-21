@@ -31,7 +31,6 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.config.{CATALOG_IMPLEMENTATION, ConfigEntry}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders._
@@ -86,27 +85,6 @@ class SparkSession private(
       SparkSession.sessionStateClassName(sparkContext.conf),
       new SQLContext(self, isRootContext = false))
   }
-
-  /**
-   * A [[FunctionResourceLoader]] that can be used in [[SessionCatalog]].
-   */
-  // TODO: just move this into SessionState
-  @transient
-  protected[sql] lazy val functionResourceLoader: FunctionResourceLoader = {
-    new FunctionResourceLoader {
-      override def loadResource(resource: FunctionResource): Unit = {
-        resource.resourceType match {
-          case JarResource => sessionState.addJar(resource.uri)
-          case FileResource => sparkContext.addFile(resource.uri)
-          case ArchiveResource =>
-            throw new AnalysisException(
-              "Archive is not allowed to be loaded. If YARN mode is used, " +
-                "please use --archives options while calling spark-submit.")
-        }
-      }
-    }
-  }
-
   /**
    * A wrapped version of this session in the form of a [[SQLContext]].
    */

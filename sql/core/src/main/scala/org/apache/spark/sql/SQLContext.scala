@@ -107,8 +107,6 @@ class SQLContext private[sql](
   protected[sql] def cacheManager: CacheManager = sparkSession.cacheManager
   protected[sql] def listener: SQLListener = sparkSession.listener
   protected[sql] def externalCatalog: ExternalCatalog = sparkSession.externalCatalog
-  protected[sql] def functionResourceLoader: FunctionResourceLoader =
-    sparkSession.functionResourceLoader
 
   def sparkContext: SparkContext = sparkSession.sparkContext
 
