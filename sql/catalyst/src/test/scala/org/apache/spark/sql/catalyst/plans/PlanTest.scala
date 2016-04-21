@@ -35,6 +35,10 @@ abstract class PlanTest extends SparkFunSuite with PredicateHelper {
     plan transformAllExpressions {
       case s: ScalarSubquery =>
         ScalarSubquery(s.query, ExprId(0))
+      case s: InSubQuery =>
+        InSubQuery(s.value, s.query, ExprId(0))
+      case e: Exists =>
+        Exists(e.query, ExprId(0))
       case a: AttributeReference =>
         AttributeReference(a.name, a.dataType, a.nullable)(exprId = ExprId(0))
       case a: Alias =>
