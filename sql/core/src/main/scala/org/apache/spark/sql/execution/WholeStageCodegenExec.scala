@@ -267,12 +267,15 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupp
       ctx.addMutableState(s"$columnarBatchClz", batch, s"$batch = null;", s"$batch = null;")
       ctx.addMutableState("scala.collection.Iterator", itr, s"$itr = null;", s"$itr = null;")
       ctx.addMutableState("int", idx, s"$idx = 0;")
+      val colItr = ctx.freshName("columnarItr")
       val rowidx = ctx.freshName("rowIdx")
       val numrows = ctx.freshName("numRows")
       val colVars = output.indices.map(i => ctx.freshName("col" + i))
       val columnAssigns = colVars.zipWithIndex.map { case (name, i) =>
         ctx.addMutableState(columnVectorClz, name, s"$name = null;", s"$name = null;")
-        s"$name = $batch.column((($columnarItrClz)$input).getColumnIndexes()[$i]);" }
+        s"""
+          $name = $batch.column($colItr.getColumnIndexes()[$i], $colItr.getColumnTypes()[$i]);
+        """ }
 
       val columns = (output zip colVars).map { case (attr, colVar) =>
         new ColumnVectorReference(colVar, rowidx, attr.dataType, attr.nullable).genCode(ctx) }
@@ -280,8 +283,8 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupp
         sqlContext.getConf("spark.sql.inMemoryTableScanStatistics.enable", "false").toBoolean
       val incrementReadPartitionAccumulator = if (enableAccumulators) {
         s"""
-         (($columnarItrClz)$input).incrementReadPartitionAccumulator();
-       """.trim
+          (($columnarItrClz)$input).incrementReadPartitionAccumulator();
+        """.trim
       } else ""
     s"""
        | while (true) {
@@ -292,6 +295,7 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupp
        |     }
        |     $incrementReadPartitionAccumulator
        |     $batch = ($columnarBatchClz)($itr.next());
+       |     $columnarItrClz $colItr = ($columnarItrClz)$input;
        |     ${columnAssigns.mkString("", "\n", "")}
        |   }
        |

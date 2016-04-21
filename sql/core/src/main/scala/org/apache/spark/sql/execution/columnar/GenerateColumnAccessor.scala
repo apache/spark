@@ -31,6 +31,7 @@ abstract class ColumnarIterator extends Iterator[InternalRow] {
     columnIndexes: Array[Int], inMemoryColumnarTableScan: InMemoryColumnarTableScan): Unit
   def getInput: Iterator[CachedBatch]
   def getColumnIndexes: Array[Int]
+  def getColumnTypes: Array[DataType]
   def isSupportColumnarCodeGen: Boolean
   def incrementReadPartitionAccumulator: Unit
 }
@@ -238,6 +239,8 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
         public scala.collection.Iterator getInput() { return input; }
 
         public int[] getColumnIndexes() { return columnIndexes; }
+
+        public DataType[] getColumnTypes() { return columnTypes; }
 
         public boolean isSupportColumnarCodeGen() {
           return ${_isSupportColumnarCodeGen};
