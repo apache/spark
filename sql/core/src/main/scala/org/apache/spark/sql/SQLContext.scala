@@ -120,7 +120,9 @@ class SQLContext private[sql](
    */
 
   /** Pre-Load built-in User Defined Types */
-  BuiltInUDT.preloadBuiltInUDT
+  if (isRootContext) {
+    BuiltInUDT.preloadBuiltInUDT
+  }
 
   def newSession(): SQLContext = {
     new SQLContext(sparkSession.newSession(), isRootContext = false)
