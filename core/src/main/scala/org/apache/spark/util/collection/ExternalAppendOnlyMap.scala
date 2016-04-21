@@ -570,13 +570,15 @@ class ExternalAppendOnlyMap[K, V, C](
   private[this] class SpillableIterator(var upstream: Iterator[(K, C)])
     extends Iterator[(K, C)] {
 
+    private val SPILL_LOCK = new Object()
+
     private var nextUpstream: Iterator[(K, C)] = null
 
     private var cur: (K, C) = readNext()
 
     private var hasSpilled: Boolean = false
 
-    def spill(): Boolean = synchronized {
+    def spill(): Boolean = SPILL_LOCK.synchronized {
       if (hasSpilled) {
         false
       } else {
@@ -588,7 +590,7 @@ class ExternalAppendOnlyMap[K, V, C](
       }
     }
 
-    def readNext(): (K, C) = synchronized {
+    def readNext(): (K, C) = SPILL_LOCK.synchronized {
       if (nextUpstream != null) {
         upstream = nextUpstream
         nextUpstream = null
