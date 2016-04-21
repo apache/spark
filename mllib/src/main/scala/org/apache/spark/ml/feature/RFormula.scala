@@ -157,7 +157,7 @@ class RFormula(override val uid: String)
       .setInputCols(encodedTerms.toArray)
       .setOutputCol($(featuresCol))
     encoderStages += new VectorAttributeRewriter($(featuresCol), prefixesToRewrite.toMap)
-    encoderStages += new ColumnPruner(tempColumns.toSet)
+    encoderStages += new ColumnPruner(uid).setInputCols(tempColumns.distinct.toArray)
 
     if (dataset.schema.fieldNames.contains(resolvedFormula.label) &&
       dataset.schema(resolvedFormula.label).dataType == StringType) {
@@ -237,7 +237,7 @@ class RFormulaModel private[feature](
   private def transformLabel(dataset: Dataset[_]): DataFrame = {
     val labelName = resolvedFormula.label
     if (hasLabelCol(dataset.schema)) {
-      dataset.toDF
+      dataset.toDF()
     } else if (dataset.schema.exists(_.name == labelName)) {
       dataset.schema(labelName).dataType match {
         case _: NumericType | BooleanType =>
@@ -248,7 +248,7 @@ class RFormulaModel private[feature](
     } else {
       // Ignore the label field. This is a hack so that this transformer can also work on test
       // datasets in a Pipeline.
-      dataset.toDF
+      dataset.toDF()
     }
   }
 
@@ -315,69 +315,6 @@ object RFormulaModel extends MLReadable[RFormulaModel] {
   }
 }
 
-/**
- * Utility transformer for removing temporary columns from a DataFrame.
- * TODO(ekl) make this a public transformer
- */
-private class ColumnPruner(override val uid: String, val columnsToPrune: Set[String])
-  extends Transformer with MLWritable {
-
-  def this(columnsToPrune: Set[String]) =
-    this(Identifiable.randomUID("columnPruner"), columnsToPrune)
-
-  override def transform(dataset: Dataset[_]): DataFrame = {
-    val columnsToKeep = dataset.columns.filter(!columnsToPrune.contains(_))
-    dataset.select(columnsToKeep.map(dataset.col): _*)
-  }
-
-  override def transformSchema(schema: StructType): StructType = {
-    StructType(schema.fields.filter(col => !columnsToPrune.contains(col.name)))
-  }
-
-  override def copy(extra: ParamMap): ColumnPruner = defaultCopy(extra)
-
-  override def write: MLWriter = new ColumnPruner.ColumnPrunerWriter(this)
-}
-
-private object ColumnPruner extends MLReadable[ColumnPruner] {
-
-  override def read: MLReader[ColumnPruner] = new ColumnPrunerReader
-
-  override def load(path: String): ColumnPruner = super.load(path)
-
-  /** [[MLWriter]] instance for [[ColumnPruner]] */
-  private[ColumnPruner] class ColumnPrunerWriter(instance: ColumnPruner) extends MLWriter {
-
-    private case class Data(columnsToPrune: Seq[String])
-
-    override protected def saveImpl(path: String): Unit = {
-      // Save metadata and Params
-      DefaultParamsWriter.saveMetadata(instance, path, sc)
-      // Save model data: columnsToPrune
-      val data = Data(instance.columnsToPrune.toSeq)
-      val dataPath = new Path(path, "data").toString
-      sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
-    }
-  }
-
-  private class ColumnPrunerReader extends MLReader[ColumnPruner] {
-
-    /** Checked against metadata when loading model */
-    private val className = classOf[ColumnPruner].getName
-
-    override def load(path: String): ColumnPruner = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
-
-      val dataPath = new Path(path, "data").toString
-      val data = sqlContext.read.parquet(dataPath).select("columnsToPrune").head()
-      val columnsToPrune = data.getAs[Seq[String]](0).toSet
-      val pruner = new ColumnPruner(metadata.uid, columnsToPrune)
-
-      DefaultParamsReader.getAndSetParams(pruner, metadata)
-      pruner
-    }
-  }
-}
 
 /**
  * Utility transformer that rewrites Vector attribute names via prefix replacement. For example,
