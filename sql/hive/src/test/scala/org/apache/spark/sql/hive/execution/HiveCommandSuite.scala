@@ -127,13 +127,17 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     withTable("non_part_table", "part_table") {
       sql(
         """
-          |CREATE TABLE non_part_table (time TIMESTAMP, id INT)
+          |CREATE TABLE non_part_table (employeeID INT, employeeName STRING)
           |ROW FORMAT DELIMITED
-          |FIELDS TERMINATED BY ','
+          |FIELDS TERMINATED BY '|'
           |LINES TERMINATED BY '\n'
         """.stripMargin)
 
-      val testData = hiveContext.getHiveFile("data/files/issue-4077-data.txt").getCanonicalPath
+      // employee.dat has two columns separated by '|', the first is an int, the second is a string.
+      // Its content looks like:
+      // 16|john
+      // 17|robert
+      val testData = hiveContext.getHiveFile("data/files/employee.dat").getCanonicalPath
 
       // LOAD DATA INTO non-partitioned table can't specify partition
       intercept[AnalysisException] {
@@ -142,15 +146,15 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
 
       sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE non_part_table""")
       checkAnswer(
-        sql("SELECT time FROM non_part_table"),
-        Row(java.sql.Timestamp.valueOf("2014-12-11 00:00:00")) :: Row(null) :: Nil)
+        sql("SELECT * FROM non_part_table WHERE employeeID = 16"),
+        Row(16, "john") :: Nil)
 
       sql(
         """
-          |CREATE TABLE part_table (time TIMESTAMP, id INT)
+          |CREATE TABLE part_table (employeeID INT, employeeName STRING)
           |PARTITIONED BY (c STRING, d STRING)
           |ROW FORMAT DELIMITED
-          |FIELDS TERMINATED BY ','
+          |FIELDS TERMINATED BY '|'
           |LINES TERMINATED BY '\n'
         """.stripMargin)
 
@@ -171,13 +175,13 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
 
       sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE part_table PARTITION(c="1", d="2")""")
       checkAnswer(
-        sql("SELECT time, id FROM part_table WHERE c = '1' AND d = '2'"),
+        sql("SELECT employeeID, employeeName FROM part_table WHERE c = '1' AND d = '2'"),
         sql("SELECT * FROM non_part_table").collect())
 
       // Different order of partition columns.
       sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE part_table PARTITION(d="1", c="2")""")
       checkAnswer(
-        sql("SELECT time, id FROM part_table WHERE c = '2' AND d = '1'"),
+        sql("SELECT employeeID, employeeName FROM part_table WHERE c = '2' AND d = '1'"),
         sql("SELECT * FROM non_part_table").collect())
     }
   }
@@ -186,9 +190,9 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     withTable("non_part_table") {
       sql(
         """
-          |CREATE TABLE non_part_table (time TIMESTAMP, id INT)
+          |CREATE TABLE non_part_table (employeeID INT, employeeName STRING)
           |ROW FORMAT DELIMITED
-          |FIELDS TERMINATED BY ','
+          |FIELDS TERMINATED BY '|'
           |LINES TERMINATED BY '\n'
         """.stripMargin)
 
@@ -197,13 +201,13 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         sql("""LOAD DATA LOCAL INPATH "/non-existing/data.txt" INTO TABLE non_part_table""")
       }
 
-      val testData = hiveContext.getHiveFile("data/files/issue-4077-data.txt").getCanonicalPath
+      val testData = hiveContext.getHiveFile("data/files/employee.dat").getCanonicalPath
 
       // Non-local inpath: without URI Scheme and Authority
       sql(s"""LOAD DATA INPATH "$testData" INTO TABLE non_part_table""")
       checkAnswer(
-        sql("SELECT time FROM non_part_table"),
-        Row(java.sql.Timestamp.valueOf("2014-12-11 00:00:00")) :: Row(null) :: Nil)
+        sql("SELECT * FROM non_part_table WHERE employeeID = 16"),
+        Row(16, "john") :: Nil)
 
       // Use URI as LOCAL inpath:
       // file:/path/to/data/files/issue-4077-data.txt
@@ -211,19 +215,15 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       sql(s"""LOAD DATA LOCAL INPATH "$uri" INTO TABLE non_part_table""")
 
       checkAnswer(
-        sql("SELECT time FROM non_part_table"),
-        Row(java.sql.Timestamp.valueOf("2014-12-11 00:00:00")) ::
-          Row(java.sql.Timestamp.valueOf("2014-12-11 00:00:00")) :: Row(null) :: Row(null) :: Nil)
+        sql("SELECT * FROM non_part_table WHERE employeeID = 16"),
+        Row(16, "john") :: Row(16, "john") :: Nil)
 
       // Use URI as non-LOCAL inpath
       sql(s"""LOAD DATA INPATH "$uri" INTO TABLE non_part_table""")
 
       checkAnswer(
-        sql("SELECT time FROM non_part_table"),
-        Row(java.sql.Timestamp.valueOf("2014-12-11 00:00:00")) ::
-          Row(java.sql.Timestamp.valueOf("2014-12-11 00:00:00")) ::
-          Row(java.sql.Timestamp.valueOf("2014-12-11 00:00:00")) ::
-          Row(null) :: Row(null) :: Row(null) :: Nil)
+        sql("SELECT * FROM non_part_table WHERE employeeID = 16"),
+        Row(16, "john") :: Row(16, "john") :: Row(16, "john") :: Nil)
 
       // Incorrect URI:
       // file://path/to/data/files/issue-4077-data.txt
