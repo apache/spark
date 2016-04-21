@@ -547,7 +547,6 @@ class ALSSuite
   private def validateRecommendedIds(data: Seq[(Seq[Int], Seq[Int])]) = {
     data.foreach { case (expected, actual) =>
       assert(expected === actual)
-
     }
   }
 
