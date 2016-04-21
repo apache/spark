@@ -41,6 +41,7 @@ import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.execution.FileRelation
+import org.apache.spark.sql.execution.command.CreateViewAsSelectLogicalCommand
 import org.apache.spark.sql.execution.datasources.{Partition => _, _}
 import org.apache.spark.sql.execution.datasources.parquet.{DefaultSource => ParquetDefaultSource, ParquetRelation}
 import org.apache.spark.sql.hive.client._
@@ -698,7 +699,8 @@ private[hive] class HiveMetastoreCatalog(hive: SQLContext) extends Logging {
       case p: LogicalPlan if !p.childrenResolved => p
       case p: LogicalPlan if p.resolved => p
 
-      case CreateViewAsSelect(table, child, allowExisting, replace, sql) if conf.nativeView =>
+      case CreateViewAsSelectLogicalCommand(table, child, allowExisting, replace, sql)
+          if conf.nativeView =>
         if (allowExisting && replace) {
           throw new AnalysisException(
             "It is not allowed to define a view with both IF NOT EXISTS and OR REPLACE.")
@@ -712,7 +714,7 @@ private[hive] class HiveMetastoreCatalog(hive: SQLContext) extends Logging {
           allowExisting,
           replace)
 
-      case CreateViewAsSelect(table, child, allowExisting, replace, sql) =>
+      case CreateViewAsSelectLogicalCommand(table, child, allowExisting, replace, sql) =>
         HiveNativeCommand(sql)
 
       case p @ CreateTableAsSelect(table, child, allowExisting) =>
@@ -1094,14 +1096,4 @@ private[hive] case class CreateTableAsSelect(
       tableDesc.storage.inputFormat.isDefined &&
       tableDesc.storage.outputFormat.isDefined &&
       childrenResolved
-}
-
-private[hive] case class CreateViewAsSelect(
-    tableDesc: CatalogTable,
-    child: LogicalPlan,
-    allowExisting: Boolean,
-    replace: Boolean,
-    sql: String) extends UnaryNode with Command {
-  override def output: Seq[Attribute] = Seq.empty[Attribute]
-  override lazy val resolved: Boolean = false
 }

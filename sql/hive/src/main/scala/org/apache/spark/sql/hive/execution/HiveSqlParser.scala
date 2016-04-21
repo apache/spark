@@ -30,8 +30,8 @@ import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkSqlAstBuilder
-import org.apache.spark.sql.execution.command.{CreateTable, CreateTableLike}
-import org.apache.spark.sql.hive.{CreateTableAsSelect => CTAS, CreateViewAsSelect => CreateView, HiveSerDe}
+import org.apache.spark.sql.execution.command.{CreateTable, CreateViewAsSelectLogicalCommand}
+import org.apache.spark.sql.hive.{CreateTableAsSelect => CTAS, HiveSerDe}
 import org.apache.spark.sql.hive.{HiveGenericUDTF, HiveMetastoreTypes, HiveSerDe}
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 
@@ -69,31 +69,6 @@ class HiveSqlAstBuilder(hiveConf: HiveConf) extends SparkSqlAstBuilder {
   }
 
   /**
-   * Fail an unsupported Hive native command.
-   */
-  override def visitFailNativeCommand(
-      ctx: FailNativeCommandContext): LogicalPlan = withOrigin(ctx) {
-    val keywords = if (ctx.kws != null) {
-      Seq(ctx.kws.kw1, ctx.kws.kw2, ctx.kws.kw3).filter(_ != null).map(_.getText).mkString(" ")
-    } else {
-      // SET ROLE is the exception to the rule, because we handle this before other SET commands.
-      "SET ROLE"
-    }
-    throw new ParseException(s"Unsupported operation: $keywords", ctx)
-  }
-
-  /**
-   * Create an [[AddJar]] or [[AddFile]] command depending on the requested resource.
-   */
-  override def visitAddResource(ctx: AddResourceContext): LogicalPlan = withOrigin(ctx) {
-    ctx.identifier.getText.toLowerCase match {
-      case "file" => AddFile(remainder(ctx.identifier).trim)
-      case "jar" => AddJar(remainder(ctx.identifier).trim)
-      case other => throw new ParseException(s"Unsupported resource type '$other'.", ctx)
-    }
-  }
-
-  /**
    * Create an [[AnalyzeTable]] command. This currently only implements the NOSCAN option (other
    * options are passed on to Hive) e.g.:
    * {{{
@@ -107,25 +82,6 @@ class HiveSqlAstBuilder(hiveConf: HiveConf) extends SparkSqlAstBuilder {
       AnalyzeTable(visitTableIdentifier(ctx.tableIdentifier).toString)
     } else {
       HiveNativeCommand(command(ctx))
-    }
-  }
-
-  /**
-   * Create a [[CatalogStorageFormat]] for creating tables.
-   */
-  override def visitCreateFileFormat(
-      ctx: CreateFileFormatContext): CatalogStorageFormat = withOrigin(ctx) {
-    (ctx.fileFormat, ctx.storageHandler) match {
-      // Expected format: INPUTFORMAT input_format OUTPUTFORMAT output_format
-      case (c: TableFileFormatContext, null) =>
-          visitTableFileFormat(c)
-      // Expected format: SEQUENCEFILE | TEXTFILE | RCFILE | ORC | PARQUET | AVRO
-      case (c: GenericFileFormatContext, null) =>
-        visitGenericFileFormat(c)
-      case (null, storageHandler) =>
-        throw new ParseException("Operation not allowed: ... STORED BY storage_handler ...", ctx)
-      case _ =>
-        throw new ParseException("expected either STORED AS or STORED BY, not both", ctx)
     }
   }
 
@@ -225,15 +181,6 @@ class HiveSqlAstBuilder(hiveConf: HiveConf) extends SparkSqlAstBuilder {
   }
 
   /**
-   * Create a [[CreateTableLike]] command.
-   */
-  override def visitCreateTableLike(ctx: CreateTableLikeContext): LogicalPlan = withOrigin(ctx) {
-    val targetTable = visitTableIdentifier(ctx.target)
-    val sourceTable = visitTableIdentifier(ctx.source)
-    CreateTableLike(targetTable, sourceTable, ctx.EXISTS != null)
-  }
-
-  /**
    * Create or replace a view. This creates a [[CreateViewAsSelect]] command.
    *
    * For example:
@@ -303,7 +250,7 @@ class HiveSqlAstBuilder(hiveConf: HiveConf) extends SparkSqlAstBuilder {
       viewOriginalText = sql,
       viewText = sql,
       comment = comment)
-    CreateView(tableDesc, plan(query), allowExist, replace, command(ctx))
+    CreateViewAsSelectLogicalCommand(tableDesc, plan(query), allowExist, replace, command(ctx))
   }
 
   /**
@@ -383,18 +330,6 @@ class HiveSqlAstBuilder(hiveConf: HiveConf) extends SparkSqlAstBuilder {
 
   /** Empty storage format for default values and copies. */
   private val EmptyStorageFormat = CatalogStorageFormat(None, None, None, None, Map.empty)
-
-  /**
-   * Create a [[CatalogStorageFormat]].
-   */
-  override def visitTableFileFormat(
-      ctx: TableFileFormatContext): CatalogStorageFormat = withOrigin(ctx) {
-    EmptyStorageFormat.copy(
-      inputFormat = Option(string(ctx.inFmt)),
-      outputFormat = Option(string(ctx.outFmt)),
-      serde = Option(ctx.serdeCls).map(string)
-    )
-  }
 
   /**
    * Resolve a [[HiveSerDe]] based on the name given and return it as a [[CatalogStorageFormat]].
