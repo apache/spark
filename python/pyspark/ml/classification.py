@@ -25,7 +25,7 @@ from pyspark.ml.regression import (
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams
 from pyspark.ml.wrapper import JavaWrapper
-from pyspark.mllib.common import inherit_doc
+from pyspark.mllib.common import inherit_doc, _java2py, _py2java
 from pyspark.sql import DataFrame
 from pyspark.sql.functions import udf, when
 from pyspark.sql.types import ArrayType, DoubleType
@@ -1184,6 +1184,34 @@ class OneVsRestParams(HasFeaturesCol, HasLabelCol, HasPredictionCol):
         """
         return self.getOrDefault(self.classifier)
 
+    def _transfer_param_map_to_java_impl(self, pyParamMap, java_obj):
+        """
+        Transforms a Python ParamMap into a Java ParamMap.
+        """
+        paramMap = JavaWrapper._new_java_obj("org.apache.spark.ml.param.ParamMap")
+        for param in self.params:
+            if param in pyParamMap:
+                java_param = java_obj.getParam(param.name)
+                if param.name == self.classifier.name:
+                    paramMap.put(java_param.w(pyParamMap[param].to_java()))
+                else:
+                    paramMap.put([java_param.w(_py2java(sc, pyParamMap[param]))])
+        return paramMap
+
+    def _transfer_param_map_from_java_impl(self, javaParamMap, java_obj):
+        """
+        Transforms a Java ParamMap into a Python ParamMap.
+        """
+        sc = SparkContext._active_spark_context
+        paramMap = dict()
+        for pair in javaParamMap.toList():
+            param = str(pair.param().name())
+            if self.hasParam(param) and param == self.classifier.name:
+                paramMap[self.getParam(param)] = JavaParams._from_java(java_obj.getClassifier())
+            else:
+                paramMap[self.getParam(param)] = _java2py(sc, pair.value())
+        return paramMap
+
 
 @inherit_doc
 class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
@@ -1341,6 +1369,20 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
         _java_obj.setPredictionCol(self.getPredictionCol())
         return _java_obj
 
+    def _transfer_param_map_from_java(self, javaParamMap):
+        _java_obj = JavaParams\
+            ._new_java_obj("org.apache.spark.ml.classification.OneVsRest", self.uid)\
+            .copy(javaParamMap)
+        paramMap = super(OneVsRest, self)\
+            ._transfer_param_map_from_java_impl(javaParamMap, _java_obj)
+        return paramMap
+
+    def _transfer_param_map_to_java(self, pyParamMap):
+        _java_obj = JavaParams\
+            ._new_java_obj("org.apache.spark.ml.classification.OneVsRest", self.uid)
+        paramMap = super(OneVsRest, self)._transfer_param_map_to_java_impl(pyParamMap, _java_obj)
+        return paramMap
+
 
 class OneVsRestModel(Model, OneVsRestParams, MLReadable, MLWritable):
     """
@@ -1466,6 +1508,25 @@ class OneVsRestModel(Model, OneVsRestParams, MLReadable, MLWritable):
         _java_obj.set("labelCol", self.getLabelCol())
         _java_obj.set("predictionCol", self.getPredictionCol())
         return _java_obj
+
+    def _transfer_param_map_from_java(self, javaParamMap):
+        java_models = [model._to_java() for model in self.models]
+        _java_obj = JavaParams\
+            ._new_java_obj("org.apache.spark.ml.classification.OneVsRestModel",
+                           self.uid, java_models)\
+            .copy(javaParamMap)
+        paramMap = super(OneVsRestModel, self)\
+            ._transfer_param_map_from_java_impl(javaParamMap, _java_obj)
+        return paramMap
+
+    def _transfer_param_map_to_java(self, pyParamMap):
+        java_models = [model._to_java() for model in self.models]
+        _java_obj = JavaParams\
+            ._new_java_obj("org.apache.spark.ml.classification.OneVsRestModel",
+                           self.uid, java_models)
+        paramMap = super(OneVsRestModel, self)\
+            ._transfer_param_map_to_java_impl(pyParamMap, _java_obj)
+        return paramMap
 
 
 if __name__ == "__main__":

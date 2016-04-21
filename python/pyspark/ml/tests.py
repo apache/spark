@@ -811,26 +811,26 @@ class PersistenceTest(PySparkTestCase):
 
             ovr = OneVsRest(classifier=lr)
 
-            tvs_grid = ParamGridBuilder().addGrid(lr.maxIter, [1, 5]).build()
-            tvs_evaluator = MulticlassClassificationEvaluator()
-            tvs = TrainValidationSplit(estimator=ovr, estimatorParamMaps=tvs_grid,
-                                       evaluator=tvs_evaluator, trainRatio=1)
+            #tvs_grid = ParamGridBuilder().addGrid(lr.maxIter, [1, 5]).build()
+            #tvs_evaluator = MulticlassClassificationEvaluator()
+            #tvs = TrainValidationSplit(estimator=ovr, estimatorParamMaps=tvs_grid,
+            #                           evaluator=tvs_evaluator, trainRatio=1)
 
-            cv_grid = ParamGridBuilder().addGrid(lr.regParam, [0.1, 0.01]).build()
-            cv_evaluator = MulticlassClassificationEvaluator()
-            cv = CrossValidator(estimator=tvs, estimatorParamMaps=cv_grid, evaluator=cv_evaluator,
-                                numFolds=2)
+            #cv_grid = ParamGridBuilder().addGrid(lr.regParam, [0.1, 0.01]).build()
+            #cv_evaluator = MulticlassClassificationEvaluator()
+            #cv = CrossValidator(estimator=tvs, estimatorParamMaps=cv_grid, evaluator=cv_evaluator,
+            #                    numFolds=2)
 
-            model = cv.fit(df)
+            model = ovr.fit(df)
 
             path = temp_path + "/nested-meta-algorithm"
-            cv.save(path)
-            loaded = CrossValidator.load(path)
-            self._compare_pipelines(cv, loaded)
+            ovr.save(path)
+            loaded = OneVsRest.load(path)
+            self._compare_pipelines(ovr, loaded)
 
             model_path = temp_path + "/nested-meta-model"
             model.save(model_path)
-            loaded_model = CrossValidator.load(model_path)
+            loaded_model = OneVsRestModel.load(model_path)
             self._compare_pipelines(model, loaded_model)
         finally:
             try:
