@@ -19,11 +19,11 @@ package org.apache.spark.sql.streaming
 
 import java.io.File
 
-import org.apache.spark.sql.{AnalysisException, StreamTest}
+import org.apache.spark.sql.{DataFrame, AnalysisException, StreamTest}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{StringType, StructType}
+import org.apache.spark.sql.types.{StructField, StringType, StructType}
 import org.apache.spark.util.Utils
 
 class FileStreamSourceTest extends StreamTest with SharedSQLContext {
@@ -303,6 +303,35 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
       AddTextFileData(textSource, "{'c': 'drop4'}\n{'c': 'keep5'}\n{'c': 'keep6'}", src, tmp),
       CheckAnswer("keep2", "keep3", "keep5", "keep6")
     )
+  }
+
+  test("reading from json files with changing schema") {
+    val src = {
+      val base = Utils.createTempDir(namePrefix = "streaming.src")
+      new File(base, "type=X")
+    }
+    val tmp = Utils.createTempDir(namePrefix = "streaming.tmp")
+    src.mkdirs()
+
+
+    // Add a file so that we can infer its schema
+    stringToFile(new File(src, "existing"), "{'c': 'value1'}\n{'c': 'value2'}")
+
+    val textSource = createFileStreamSource("json", src.getCanonicalPath)
+
+    // FileStreamSource should infer the column "c"
+    val text = textSource.toDF()
+    require(text.schema === StructType(Seq(StructField("c", StringType))))
+
+    testStream(text)(
+
+      // Should ignore data in new columns
+      AddTextFileData(textSource, "'c': 'value3', 'd': 'new'}", src, tmp),
+      CheckAnswer("value1", "value2", "value3"),
+
+      // Should ignore rows that do not have the necessary columns
+      AddTextFileData(textSource, "{'d': 'value4'}", src, tmp),
+      CheckAnswer("value1", "value2", "value3"))
   }
 
   test("read from parquet files") {
