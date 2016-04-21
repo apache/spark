@@ -530,7 +530,7 @@ class ALSCleanerSuite extends SparkFunSuite {
         sc.setCheckpointDir(tempDir.getAbsolutePath)
         // Generate test data
         val (training, _) = ALSSuite.genImplicitTestData(sc, 100, 10, 1, 0.2, 0)
-        // Test checkpoint and clean parents
+        // Implicitly test the cleaning of parents during ALS training
         val filesBefore = getAllFiles
         val sqlContext = new SQLContext(sc)
         import sqlContext.implicits._
