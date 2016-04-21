@@ -205,6 +205,11 @@ class InMemoryCatalog extends ExternalCatalog {
     StringUtils.filterPattern(listTables(db), pattern)
   }
 
+  override def showCreateTable(db: String, table: String): String = {
+    throw new AnalysisException(
+      "SHOW CREATE TABLE command is not supported for temporary tables created in SQLContext.")
+  }
+
   // --------------------------------------------------------------------------
   // Partitions
   // --------------------------------------------------------------------------
