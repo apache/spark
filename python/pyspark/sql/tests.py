@@ -802,11 +802,26 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertNotEqual(struct1, struct2)
 
         # Catch exception raised during improper construction
-        try:
+        with self.assertRaises(ValueError):
             struct1 = StructType().add("name")
-            self.assertEqual(1, 0)
-        except ValueError:
-            self.assertEqual(1, 1)
+
+        struct1 = StructType().add("f1", StringType(), True).add("f2", StringType(), True, None)
+        for field in struct1:
+            self.assertIsInstance(field, StructField)
+
+        struct1 = StructType().add("f1", StringType(), True).add("f2", StringType(), True, None)
+        self.assertEqual(len(struct1), 2)
+
+        struct1 = StructType().add("f1", StringType(), True).add("f2", StringType(), True, None)
+        self.assertIs(struct1["f1"], struct1.fields[0])
+        self.assertIs(struct1[0], struct1.fields[0])
+        self.assertEqual(struct1[0:1], StructType(struct1.fields[0:1]))
+        with self.assertRaises(KeyError):
+            not_a_field = struct1["f9"]
+        with self.assertRaises(IndexError):
+            not_a_field = struct1[9]
+        with self.assertRaises(TypeError):
+            not_a_field = struct1[9.9]
 
     def test_metadata_null(self):
         from pyspark.sql.types import StructType, StringType, StructField

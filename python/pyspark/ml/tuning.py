@@ -448,7 +448,7 @@ class TrainValidationSplit(Estimator, ValidatorParams, MLReadable, MLWritable):
     """
 
     trainRatio = Param(Params._dummy(), "trainRatio", "Param for ratio between train and\
-     validation data. Must be between 0 and 1.")
+     validation data. Must be between 0 and 1.", typeConverter=TypeConverters.toFloat)
 
     @keyword_only
     def __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, trainRatio=0.75,
