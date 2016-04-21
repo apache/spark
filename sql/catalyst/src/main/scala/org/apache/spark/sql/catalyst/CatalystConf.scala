@@ -29,6 +29,7 @@ trait CatalystConf {
   def groupByOrdinal: Boolean
 
   def optimizerMaxIterations: Int
+  def optimizerMinSetSize: Int
   def maxCaseBranchesForCodegen: Int
 
   /**
@@ -47,6 +48,7 @@ case class SimpleCatalystConf(
     orderByOrdinal: Boolean = true,
     groupByOrdinal: Boolean = true,
     optimizerMaxIterations: Int = 100,
+    optimizerMinSetSize: Int = 10,
     maxCaseBranchesForCodegen: Int = 20)
   extends CatalystConf {
 }

@@ -54,9 +54,15 @@ object SQLConf {
 
   val OPTIMIZER_MAX_ITERATIONS = SQLConfigBuilder("spark.sql.optimizer.maxIterations")
     .internal()
-    .doc("The max number of iterations the optimizer and analyzer runs")
+    .doc("The max number of iterations the optimizer and analyzer runs.")
     .intConf
     .createWithDefault(100)
+
+  val OPTIMIZER_MIN_SET_SIZE = SQLConfigBuilder("spark.sql.optimizer.minSetSize")
+    .internal()
+    .doc("The minimum threshold of set size to be optimized.")
+    .intConf
+    .createWithDefault(10)
 
   val ALLOW_MULTIPLE_CONTEXTS = SQLConfigBuilder("spark.sql.allowMultipleContexts")
     .doc("When set to true, creating multiple SQLContexts/HiveContexts is allowed. " +
@@ -528,6 +534,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   /** ************************ Spark SQL Params/Hints ******************* */
 
   def optimizerMaxIterations: Int = getConf(OPTIMIZER_MAX_ITERATIONS)
+
+  def optimizerMinSetSize: Int = getConf(OPTIMIZER_MIN_SET_SIZE)
 
   def checkpointLocation: String = getConf(CHECKPOINT_LOCATION)
 
