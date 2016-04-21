@@ -71,9 +71,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * @since 1.4.0
    */
   def option(key: String, value: String): DataFrameReader = {
-    if (value != null) {
-      this.extraOptions += (key -> value)
-    }
+    this.extraOptions += (key -> value)
     this
   }
 
