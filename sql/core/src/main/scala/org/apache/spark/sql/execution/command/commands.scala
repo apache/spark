@@ -32,6 +32,8 @@ import org.apache.spark.sql.execution.debug._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
+import scala.collection.immutable.ListMap
+
 /**
  * A logical command that is executed for its side-effects.  `RunnableCommand`s are
  * wrapped in `ExecutedCommand` during execution.
@@ -181,7 +183,8 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
     // Queries all key-value pairs that are set in the SQLConf of the sqlContext.
     case None =>
       val runFunc = (sqlContext: SQLContext) => {
-        sqlContext.getAllConfs.map { case (k, v) => Row(k, v) }.toSeq
+        sqlContext.getAllConfs.toSeq.sortBy(_._1).map { case (k, v) => Row(k, v) } ++
+          getEnvList(withDoc = false)
       }
       (keyValueOutput, runFunc)
 
@@ -189,9 +192,9 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
     // SQLConf of the sqlContext.
     case Some(("-v", None)) =>
       val runFunc = (sqlContext: SQLContext) => {
-        sqlContext.conf.getAllDefinedConfs.map { case (key, defaultValue, doc) =>
+        sqlContext.conf.getAllDefinedConfs.sortBy(_._1).map { case (key, defaultValue, doc) =>
           Row(key, defaultValue, doc)
-        }
+        } ++ getEnvList(withDoc = true)
       }
       val schema = StructType(
         StructField("key", StringType, false) ::
@@ -225,6 +228,20 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
 
   override def run(sqlContext: SQLContext): Seq[Row] = runFunc(sqlContext)
 
+  /**
+   * get the system environment properties as a sequence
+   * @param withDoc whether the result has a doc column or not
+   * @return the sequence of the rows containing the key/value pair of system properties
+   */
+  private def getEnvList(withDoc: Boolean) = {
+    import scala.collection.JavaConverters._
+    System.getenv().asScala.toSeq.sortBy(_._1).map {
+      case (k, v) => if (withDoc) Row(s"env:$k", v, "") else Row(s"env:$k", v)
+    } ++
+    System.getProperties.asScala.toSeq.sortBy(_._1).map {
+      case (k, v) => if (withDoc) Row(s"system:$k", v, "") else Row(s"system:$k", v)
+    }
+  }
 }
 
 /**

@@ -716,4 +716,8 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
+  test("set / set -v") {
+    checkExistence(sql("set"), true, "env:", "system:")
+    checkExistence(sql("set -v"), true, "env:", "system:")
+  }
 }
