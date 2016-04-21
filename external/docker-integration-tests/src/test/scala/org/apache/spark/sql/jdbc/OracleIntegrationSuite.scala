@@ -20,8 +20,6 @@ package org.apache.spark.sql.jdbc
 import java.sql.Connection
 import java.util.Properties
 
-import org.scalatest.Ignore
-
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.tags.DockerTest
 
@@ -46,7 +44,6 @@ import org.apache.spark.tags.DockerTest
  * repository.
  */
 @DockerTest
-@Ignore
 class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLContext {
   import testImplicits._
 
