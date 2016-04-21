@@ -750,10 +750,10 @@ private[spark] object JsonProtocol {
   }
 
   def taskMetricsFromJson(json: JValue): TaskMetrics = {
+    val metrics = TaskMetrics.empty
     if (json == JNothing) {
-      return TaskMetrics.empty
+      return metrics
     }
-    val metrics = new TaskMetrics
     metrics.setExecutorDeserializeTime((json \ "Executor Deserialize Time").extract[Long])
     metrics.setExecutorRunTime((json \ "Executor Run Time").extract[Long])
     metrics.setResultSize((json \ "Result Size").extract[Long])

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive
 
+import org.apache.hadoop.hive.conf.HiveConf
+
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
@@ -31,12 +33,13 @@ private[hive] trait HiveStrategies {
   // Possibly being too clever with types here... or not clever enough.
   self: SparkPlanner =>
 
-  val hiveContext: HiveContext
+  val context: SQLContext
+  val hiveconf: HiveConf
 
   object Scripts extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.ScriptTransformation(input, script, output, child, schema: HiveScriptIOSchema) =>
-        ScriptTransformation(input, script, output, planLater(child), schema)(hiveContext) :: Nil
+        ScriptTransformation(input, script, output, planLater(child), schema)(hiveconf) :: Nil
       case _ => Nil
     }
   }
@@ -74,7 +77,7 @@ private[hive] trait HiveStrategies {
           projectList,
           otherPredicates,
           identity[Seq[Expression]],
-          HiveTableScan(_, relation, pruningPredicates)(hiveContext)) :: Nil
+          HiveTableScan(_, relation, pruningPredicates)(context, hiveconf)) :: Nil
       case _ =>
         Nil
     }
@@ -103,7 +106,7 @@ private[hive] trait HiveStrategies {
     }
   }
 
-  case class HiveCommandStrategy(context: HiveContext) extends Strategy {
+  case object HiveCommandStrategy extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case describe: DescribeCommand =>
         ExecutedCommand(

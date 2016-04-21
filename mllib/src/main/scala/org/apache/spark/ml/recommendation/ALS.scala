@@ -640,7 +640,8 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
     val deletePreviousCheckpointFile: () => Unit = () =>
       previousCheckpointFile.foreach { file =>
         try {
-          FileSystem.get(sc.hadoopConfiguration).delete(new Path(file), true)
+          val checkpointFile = new Path(file)
+          checkpointFile.getFileSystem(sc.hadoopConfiguration).delete(checkpointFile, true)
         } catch {
           case e: IOException =>
             logWarning(s"Cannot delete checkpoint file $file:", e)

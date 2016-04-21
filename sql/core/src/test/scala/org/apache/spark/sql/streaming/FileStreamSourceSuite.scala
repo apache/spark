@@ -281,6 +281,30 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
     Utils.deleteRecursively(tmp)
   }
 
+
+  test("reading from json files inside partitioned directory") {
+    val src = {
+      val base = Utils.createTempDir(namePrefix = "streaming.src")
+      new File(base, "type=X")
+    }
+    val tmp = Utils.createTempDir(namePrefix = "streaming.tmp")
+    src.mkdirs()
+
+
+    // Add a file so that we can infer its schema
+    stringToFile(new File(src, "existing"), "{'c': 'drop1'}\n{'c': 'keep2'}\n{'c': 'keep3'}")
+
+    val textSource = createFileStreamSource("json", src.getCanonicalPath)
+
+    // FileStreamSource should infer the column "c"
+    val filtered = textSource.toDF().filter($"c" contains "keep")
+
+    testStream(filtered)(
+      AddTextFileData(textSource, "{'c': 'drop4'}\n{'c': 'keep5'}\n{'c': 'keep6'}", src, tmp),
+      CheckAnswer("keep2", "keep3", "keep5", "keep6")
+    )
+  }
+
   test("read from parquet files") {
     val src = Utils.createTempDir(namePrefix = "streaming.src")
     val tmp = Utils.createTempDir(namePrefix = "streaming.tmp")
