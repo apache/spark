@@ -225,6 +225,12 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         sql("SELECT * FROM non_part_table WHERE employeeID = 16"),
         Row(16, "john") :: Row(16, "john") :: Row(16, "john") :: Nil)
 
+      sql(s"""LOAD DATA INPATH "$uri" OVERWRITE INTO TABLE non_part_table""")
+
+      checkAnswer(
+        sql("SELECT * FROM non_part_table WHERE employeeID = 16"),
+        Row(16, "john") :: Nil)
+
       // Incorrect URI:
       // file://path/to/data/files/employee.dat
       val incorrectUri = "file:/" + testData
