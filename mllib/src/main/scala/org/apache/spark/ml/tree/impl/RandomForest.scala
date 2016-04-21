@@ -161,15 +161,23 @@ private[spark] object RandomForest extends Logging {
       None
     }
 
-    // FIFO queue of nodes to train: (treeIndex, node)
-    val nodeQueue = new mutable.Queue[(Int, LearningNode)]()
+    /*
+      FILO queue of nodes to train: (treeIndex, node)
+      We make this FILO by always inserting nodes by appending (+=) and removing with dropRight.
+      The reason this is FILO is that we train many trees at once, but we want to focus on
+      completing trees, rather than training all simultaneously.  If we are splitting nodes from
+      1 tree, then the new nodes to split will be put at the end of this list, so we will continue
+      training the same tree in the next iteration.  This focus allows us to send fewer trees to
+      workers on each iteration; see topNodesForGroup below.
+     */
+    val nodeQueue = new NodeQueue
 
     val rng = new Random()
     rng.setSeed(seed)
 
     // Allocate and queue root nodes.
     val topNodes = Array.fill[LearningNode](numTrees)(LearningNode.emptyNode(nodeIndex = 1))
-    Range(0, numTrees).foreach(treeIndex => nodeQueue.enqueue((treeIndex, topNodes(treeIndex))))
+    Range(0, numTrees).foreach(treeIndex => nodeQueue.put(treeIndex, topNodes(treeIndex)))
 
     timer.stop("init")
 
@@ -182,9 +190,13 @@ private[spark] object RandomForest extends Logging {
       assert(nodesForGroup.nonEmpty,
         s"RandomForest selected empty nodesForGroup.  Error for unknown reason.")
 
+      // Avoid passing trees
+      val topNodesForGroup: Map[Int, LearningNode] =
+        nodesForGroup.keys.map(treeIdx => treeIdx -> topNodes(treeIdx)).toMap
+
       // Choose node splits, and enqueue new nodes as needed.
       timer.start("findBestSplits")
-      RandomForest.findBestSplits(baggedInput, metadata, topNodes, nodesForGroup,
+      RandomForest.findBestSplits(baggedInput, metadata, topNodesForGroup, nodesForGroup,
         treeToNodeToIndexInfo, splits, nodeQueue, timer, nodeIdCache)
       timer.stop("findBestSplits")
     }
@@ -334,7 +346,8 @@ private[spark] object RandomForest extends Logging {
    *
    * @param input Training data: RDD of [[org.apache.spark.ml.tree.impl.TreePoint]]
    * @param metadata Learning and dataset metadata
-   * @param topNodes Root node for each tree.  Used for matching instances with nodes.
+   * @param topNodesForGroup For each tree in group, tree index -> root node.
+   *                         Used for matching instances with nodes.
    * @param nodesForGroup Mapping: treeIndex --> nodes to be split in tree
    * @param treeToNodeToIndexInfo Mapping: treeIndex --> nodeIndex --> nodeIndexInfo,
    *                              where nodeIndexInfo stores the index in the group and the
@@ -351,11 +364,11 @@ private[spark] object RandomForest extends Logging {
   private[tree] def findBestSplits(
       input: RDD[BaggedPoint[TreePoint]],
       metadata: DecisionTreeMetadata,
-      topNodes: Array[LearningNode],
+      topNodesForGroup: Map[Int, LearningNode],
       nodesForGroup: Map[Int, Array[LearningNode]],
       treeToNodeToIndexInfo: Map[Int, Map[Int, NodeIndexInfo]],
       splits: Array[Array[Split]],
-      nodeQueue: mutable.Queue[(Int, LearningNode)],
+      nodeQueue: NodeQueue,
       timer: TimeTracker = new TimeTracker,
       nodeIdCache: Option[NodeIdCache] = None): Unit = {
 
@@ -437,7 +450,8 @@ private[spark] object RandomForest extends Logging {
         agg: Array[DTStatsAggregator],
         baggedPoint: BaggedPoint[TreePoint]): Array[DTStatsAggregator] = {
       treeToNodeToIndexInfo.foreach { case (treeIndex, nodeIndexToInfo) =>
-        val nodeIndex = topNodes(treeIndex).predictImpl(baggedPoint.datum.binnedFeatures, splits)
+        val nodeIndex =
+          topNodesForGroup(treeIndex).predictImpl(baggedPoint.datum.binnedFeatures, splits)
         nodeBinSeqOp(treeIndex, nodeIndexToInfo.getOrElse(nodeIndex, null), agg, baggedPoint)
       }
       agg
@@ -593,10 +607,10 @@ private[spark] object RandomForest extends Logging {
 
           // enqueue left child and right child if they are not leaves
           if (!leftChildIsLeaf) {
-            nodeQueue.enqueue((treeIndex, node.leftChild.get))
+            nodeQueue.put(treeIndex, node.leftChild.get)
           }
           if (!rightChildIsLeaf) {
-            nodeQueue.enqueue((treeIndex, node.rightChild.get))
+            nodeQueue.put(treeIndex, node.rightChild.get)
           }
 
           logDebug("leftChildIndex = " + node.leftChild.get.id +
@@ -1041,7 +1055,7 @@ private[spark] object RandomForest extends Logging {
    *          The feature indices are None if not subsampling features.
    */
   private[tree] def selectNodesToSplit(
-      nodeQueue: mutable.Queue[(Int, LearningNode)],
+      nodeQueue: NodeQueue,
       maxMemoryUsage: Long,
       metadata: DecisionTreeMetadata,
       rng: Random): (Map[Int, Array[LearningNode]], Map[Int, Map[Int, NodeIndexInfo]]) = {
@@ -1055,7 +1069,7 @@ private[spark] object RandomForest extends Logging {
     // If maxMemoryInMB is set very small, we want to still try to split 1 node,
     // so we allow one iteration if memUsage == 0.
     while (nodeQueue.nonEmpty && (memUsage < maxMemoryUsage || memUsage == 0)) {
-      val (treeIndex, node) = nodeQueue.head
+      val (treeIndex, node) = nodeQueue.peek()
       // Choose subset of features for node (if subsampling).
       val featureSubset: Option[Array[Int]] = if (metadata.subsamplingFeatures) {
         Some(SamplingUtils.reservoirSampleAndCount(Range(0,
@@ -1066,7 +1080,7 @@ private[spark] object RandomForest extends Logging {
       // Check if enough memory remains to add this node to the group.
       val nodeMemUsage = RandomForest.aggregateSizeForNode(metadata, featureSubset) * 8L
       if (memUsage + nodeMemUsage <= maxMemoryUsage || memUsage == 0) {
-        nodeQueue.dequeue()
+        nodeQueue.pop()
         mutableNodesForGroup.getOrElseUpdate(treeIndex, new mutable.ArrayBuffer[LearningNode]()) +=
           node
         mutableTreeToNodeToIndexInfo
@@ -1108,6 +1122,35 @@ private[spark] object RandomForest extends Logging {
     } else {
       3 * totalBins
     }
+  }
+
+  private[impl] class NodeQueue {
+    private var q: mutable.MutableList[(Int, LearningNode)] =
+      mutable.MutableList.empty[(Int, LearningNode)]
+
+    def put(treeIndex: Int, node: LearningNode): Unit = {
+      q += ((treeIndex, node))
+    }
+
+    def pop(): (Int, LearningNode) = {
+      val (treeIndex: Int, node: LearningNode) = peek()
+      q = q.dropRight(1)
+      (treeIndex, node)
+    }
+
+    def peek(): (Int, LearningNode) = {
+      if (q.isEmpty) {
+        throw new NoSuchElementException(
+          s"Attempted to get node from tree node queue, but queue is empty.")
+      }
+      q.last
+    }
+
+    def size: Int = q.size
+
+    def nonEmpty: Boolean = q.nonEmpty
+
+    def isEmpty: Boolean = q.isEmpty
   }
 
 }

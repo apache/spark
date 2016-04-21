@@ -17,16 +17,16 @@
 
 package org.apache.spark.ml.tree.impl
 
-import scala.collection.mutable
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.classification.DecisionTreeClassificationModel
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.tree._
+import org.apache.spark.ml.tree.impl.RandomForest.NodeQueue
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.tree.{DecisionTreeSuite => OldDTSuite, EnsembleTestHelper}
-import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, QuantileStrategy, Strategy => OldStrategy}
+import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, QuantileStrategy,
+  Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, GiniCalculator}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.util.collection.OpenHashMap
@@ -239,8 +239,8 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     val treeToNodeToIndexInfo = Map((0, Map(
       (topNode.id, new RandomForest.NodeIndexInfo(0, None))
     )))
-    val nodeQueue = new mutable.Queue[(Int, LearningNode)]()
-    RandomForest.findBestSplits(baggedInput, metadata, Array(topNode),
+    val nodeQueue = new NodeQueue
+    RandomForest.findBestSplits(baggedInput, metadata, Map(0 -> topNode),
       nodesForGroup, treeToNodeToIndexInfo, splits, nodeQueue)
 
     // don't enqueue leaf nodes into node queue
@@ -281,8 +281,8 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     val treeToNodeToIndexInfo = Map((0, Map(
       (topNode.id, new RandomForest.NodeIndexInfo(0, None))
     )))
-    val nodeQueue = new mutable.Queue[(Int, LearningNode)]()
-    RandomForest.findBestSplits(baggedInput, metadata, Array(topNode),
+    val nodeQueue = new NodeQueue
+    RandomForest.findBestSplits(baggedInput, metadata, Map(0 -> topNode),
       nodesForGroup, treeToNodeToIndexInfo, splits, nodeQueue)
 
     // don't enqueue a node into node queue if its impurity is 0.0
@@ -393,11 +393,11 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
         val failString = s"Failed on test with:" +
           s"numTrees=$numTrees, featureSubsetStrategy=$featureSubsetStrategy," +
           s" numFeaturesPerNode=$numFeaturesPerNode, seed=$seed"
-        val nodeQueue = new mutable.Queue[(Int, LearningNode)]()
+        val nodeQueue = new NodeQueue
         val topNodes: Array[LearningNode] = new Array[LearningNode](numTrees)
         Range(0, numTrees).foreach { treeIndex =>
           topNodes(treeIndex) = LearningNode.emptyNode(nodeIndex = 1)
-          nodeQueue.enqueue((treeIndex, topNodes(treeIndex)))
+          nodeQueue.put(treeIndex, topNodes(treeIndex))
         }
         val rng = new scala.util.Random(seed = seed)
         val (nodesForGroup: Map[Int, Array[LearningNode]],
@@ -547,6 +547,9 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(mapToVec(map.toMap) ~== mapToVec(expected) relTol 0.01)
   }
 
+  test("NodeQueue should be FILO") {
+    // TODO
+  }
 }
 
 private object RandomForestSuite {
