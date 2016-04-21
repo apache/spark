@@ -512,13 +512,13 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       sql("SELECT key FROM ${hiveconf:tbl} ORDER BY key, value limit 1"),
       sql("SELECT key FROM src ORDER BY key, value limit 1").collect().toSeq)
 
-    sql("set hive.variable.substitute=false") // disable the substitution
+    sql("set spark.sql.variable.substitute=false") // disable the substitution
     sql("set tbl2=src")
     intercept[Exception] {
       sql("SELECT key FROM ${hiveconf:tbl2} ORDER BY key, value limit 1").collect()
     }
 
-    sql("set hive.variable.substitute=true") // enable the substitution
+    sql("set spark.sql.variable.substitute=true") // enable the substitution
     checkAnswer(
       sql("SELECT key FROM ${hiveconf:tbl2} ORDER BY key, value limit 1"),
       sql("SELECT key FROM src ORDER BY key, value limit 1").collect().toSeq)
