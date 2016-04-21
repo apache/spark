@@ -157,7 +157,8 @@ object SamplePushDown extends Rule[LogicalPlan] {
 object EliminateSerialization extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case d @ DeserializeToObject(_, _, s: SerializeFromObject)
-        if d.outputObjectType == s.inputObjectType =>
+        if ((d.outputObjectType == s.inputObjectType) &&
+            !d.outputObjectType.isInstanceOf[ObjectType]) =>
       // Adds an extra Project here, to preserve the output expr id of `DeserializeToObject`.
       val objAttr = Alias(s.child.output.head, "obj")(exprId = d.output.head.exprId)
       Project(objAttr :: Nil, s.child)
