@@ -1974,134 +1974,57 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-    * Attempt to start a service on the given port, or fail after a number of attempts.
-    * Each subsequent attempt uses 1 + the port used in the previous attempt (unless the port is 0).
-    * It takes into consideration port restrictions through the env var AVAILABLE_PORTS
-    *
-    * @param startPort The initial port to start the service on.
-    * @param startService Function to start service on a given port.
-    *                     This is expected to throw java.net.BindException on port collision.
-    * @param conf A SparkConf used to get the maximum number of retries when binding to a port.
-    * @param serviceName Name of the service.
-    * @return (service: T, port: Int)
-    */
-  def startServiceOnPort[T](startPort: Int,
+   * Attempt to start a service on the given port, or fail after a number of attempts.
+   * Each subsequent attempt uses 1 + the port used in the previous attempt (unless the port is 0).
+   *
+   * @param startPort The initial port to start the service on.
+   * @param startService Function to start service on a given port.
+   *                     This is expected to throw java.net.BindException on port collision.
+   * @param conf A SparkConf used to get the maximum number of retries when binding to a port.
+   * @param serviceName Name of the service.
+   * @return (service: T, port: Int)
+   */
+  def startServiceOnPort[T](
+      startPort: Int,
       startService: Int => (T, Int),
       conf: SparkConf,
       serviceName: String = ""): (T, Int) = {
 
-    val serviceString = if (serviceName.isEmpty) "" else s" '$serviceName'"
-
-    // define some helpers, they all share common data, maybe a service abstract class
-    // for all services could be a good fit here.
-
-    def portRangeToList(ranges: String): List[(Long, Long)] = {
-      if (ranges == "") {
-        return List()
-      }
-      ranges.split(" ").map { r => val ret = r.substring(1, r.length - 1).split(",")
-        (ret(0).toLong, ret(1).toLong)
-      }.toList
-    }
-
-    def startOnce(tryPort: Int): (Option[T], Int) = {
-      val serviceString = if (serviceName.isEmpty) "" else s" '$serviceName'"
-      try {
-        val (service, port) = startService(tryPort)
-        logInfo(s"Successfully started service$serviceString on port $port.")
-        (Some(service), port)
-      } catch {
-        case e: Exception if isBindCollision(e) => logWarning(s"Service$serviceString " +
-          s"could not bind on port $tryPort. ")
-          (None, -1)
-      }
-    }
-
-    def retryPort(next: Int => Int, maxRetries: Int): (T, Int) = {
-
-      for (offset <- 0 until maxRetries) {
-        val tryPort = next(offset)
-        try {
-          val (service, port) = startService(tryPort)
-          logInfo(s"Successfully started service$serviceString on port $port.")
-          return (service, port)
-        } catch {
-          case e: Exception if isBindCollision(e) =>
-            if (offset >= maxRetries) {
-              val exceptionMessage =
-                s"${e.getMessage}: Service$serviceString failed after $maxRetries retries!"
-              val exception = new BindException(exceptionMessage)
-              // restore original stack trace
-              exception.setStackTrace(e.getStackTrace)
-              throw exception
-            }
-            logWarning(s"Service$serviceString could not bind on port $tryPort.")
-        }
-      }
-      // Should never happen
-      throw new SparkException(s"Failed to start service$serviceString on port $startPort")
-    }
-
-    def startFromAvailable(rand: Boolean = false): (T, Int) = {
-      val ports = portRangeToList(sys.env.get("AVAILABLE_RAND_PORTS").get)
-
-      if (ports.isEmpty) {
-        // should not happen
-        throw new SparkException(s"Failed to start service$serviceString on port $startPort" +
-          s", no available port resources.")
-      }
-
-      val filteredPorts = ports.map(r => (r._1 to r._2).toList).reduce(_ ++ _).
-        distinct.filterNot(_ == startPort)
-      val maxRetries = Math.min(portMaxRetries(conf), filteredPorts.size)
-
-      val availPorts = {
-        if (rand) {
-          scala.util.Random.shuffle(filteredPorts.take(maxRetries)).toArray
-        } else {
-          filteredPorts.sorted.toArray
-        }
-      }
-      val tryPort = (x: Int) => availPorts(x).toInt
-
-      retryPort(tryPort, maxRetries)
-    }
-
-    // main port selection logic
     require(startPort == 0 || (1024 <= startPort && startPort < 65536),
       "startPort should be between 1024 and 65535 (inclusive), or 0 for a random free port.")
 
-    // check if there are deployment restrictions
-    if (sys.env.get("AVAILABLE_RAND_PORTS").isDefined) {
-
-      if (startPort != 0) {
-
-        val (service, port) = startOnce(startPort) // try once the provided specific port
-
-        if (port != -1) {
-          (service.get, port)  // success
-        } else {
-          // try next available port one by one
-          startFromAvailable()
-        }
-      } else {
-        // try a random port from the available ones
-        startFromAvailable(true)
-      }
-
-    } else { // no restrictions, handled as usual, exactly the same path as in previous versions
-
-      val maxRetries = portMaxRetries(conf)
-
+    val serviceString = if (serviceName.isEmpty) "" else s" '$serviceName'"
+    val maxRetries = portMaxRetries(conf)
+    for (offset <- 0 to maxRetries) {
       // Do not increment port if startPort is 0, which is treated as a special port
-      val tryPort = (x: Int) => if (startPort == 0) {
+      val tryPort = if (startPort == 0) {
         startPort
       } else {
         // If the new port wraps around, do not try a privilege port
-        ((startPort + x - 1024) % (65536 - 1024)) + 1024
+        ((startPort + offset - 1024) % (65536 - 1024)) + 1024
       }
-      retryPort(tryPort, maxRetries)
+      try {
+        val (service, port) = startService(tryPort)
+        logInfo(s"Successfully started service$serviceString on port $port.")
+        return (service, port)
+      } catch {
+        case e: Exception if isBindCollision(e) =>
+          if (offset >= maxRetries) {
+            val exceptionMessage = s"${e.getMessage}: Service$serviceString failed after " +
+              s"$maxRetries retries! Consider explicitly setting the appropriate port for the " +
+              s"service$serviceString (for example spark.ui.port for SparkUI) to an available " +
+              "port or increasing spark.port.maxRetries."
+            val exception = new BindException(exceptionMessage)
+            // restore original stack trace
+            exception.setStackTrace(e.getStackTrace)
+            throw exception
+          }
+          logWarning(s"Service$serviceString could not bind on port $tryPort. " +
+            s"Attempting port ${tryPort + 1}.")
+      }
     }
+    // Should never happen
+    throw new SparkException(s"Failed to start service$serviceString on port $startPort")
   }
 
   /**

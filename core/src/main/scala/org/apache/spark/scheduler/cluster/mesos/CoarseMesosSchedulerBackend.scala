@@ -23,7 +23,6 @@ import java.util.concurrent.locks.ReentrantLock
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.collection.mutable.{Buffer, HashMap, HashSet}
 
 import org.apache.mesos.{Scheduler => MScheduler, SchedulerDriver}
 import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, _}
@@ -31,7 +30,7 @@ import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, _}
 import org.apache.spark.{SecurityManager, SparkContext, SparkException, TaskState}
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.mesos.MesosExternalShuffleClient
-import org.apache.spark.rpc.{RpcEndpointAddress}
+import org.apache.spark.rpc.RpcEndpointAddress
 import org.apache.spark.scheduler.{SlaveLost, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.util.Utils
@@ -72,20 +71,13 @@ private[spark] class CoarseMesosSchedulerBackend(
   private val shuffleServiceEnabled = conf.getBoolean("spark.shuffle.service.enabled", false)
 
   // Cores we have acquired with each Mesos task ID
-  val coresByTaskId = new HashMap[String, Int]
+  val coresByTaskId = new mutable.HashMap[String, Int]
   var totalCoresAcquired = 0
-
-  // Ports acquired so far
-  // SlaveID ->  ports
-  val takenPortsPerSlave = new mutable.HashMap[String, List[Long]]
-
-  // TaskId -> ports
-  val takenPortsByTaskId = new HashMap[String, List[Long]]
 
   // SlaveID -> Slave
   // This map accumulates entries for the duration of the job.  Slaves are never deleted, because
   // we need to maintain e.g. failure state and connection state.
-  private val slaves = new HashMap[String, Slave]
+  private val slaves = new mutable.HashMap[String, Slave]
 
   /**
    * The total number of executors we aim to have. Undefined when not using dynamic allocation.
@@ -161,8 +153,12 @@ private[spark] class CoarseMesosSchedulerBackend(
     startScheduler(driver)
   }
 
-  def createCommand(offer: Offer, numCores: Int, taskId: String, randPorts: List[Long] = List())
-  : CommandInfo = {
+  def createCommand(
+      offer: Offer,
+      numCores: Int,
+      taskId: String,
+      ports: List[Long] = List())
+    : CommandInfo = {
     val executorSparkHome = conf.getOption("spark.mesos.executor.home")
       .orElse(sc.getSparkHome())
       .getOrElse {
@@ -195,13 +191,10 @@ private[spark] class CoarseMesosSchedulerBackend(
         .build())
     }
 
-    // Pick random ports only because at the executor side we only
-    // care about random ports from which we are going to assign ports in case we have
-    // zero port values. User specific ports are already checked and we have assigned
-    // resources to them.
+    // Set the ports to be pickedup by the executor
     environment.addVariables(Environment.Variable.newBuilder()
-      .setName("AVAILABLE_RAND_PORTS")
-      .setValue(randPorts.map(port => (port, port)).mkString(" ")))
+      .setName("SPARK_MESOS_PREASSIGNED_PORTS")
+      .setValue(getAssignedPortString(conf, ports)))
 
     val command = CommandInfo.newBuilder()
       .setEnvironment(environment)
@@ -234,7 +227,7 @@ private[spark] class CoarseMesosSchedulerBackend(
       command.addUris(CommandInfo.URI.newBuilder().setValue(uri.get))
     }
 
-    conf.getOption("spark.mesos.uris").map { uris =>
+    conf.getOption("spark.mesos.uris").foreach { uris =>
       setupUris(uris, command)
     }
 
@@ -295,7 +288,7 @@ private[spark] class CoarseMesosSchedulerBackend(
     }
   }
 
-  private def declineUnmatchedOffers(d: SchedulerDriver, offers: Buffer[Offer]): Unit = {
+  private def declineUnmatchedOffers(d: SchedulerDriver, offers: mutable.Buffer[Offer]): Unit = {
     for (offer <- offers) {
       val id = offer.getId.getValue
       val offerAttributes = toAttributeMap(offer.getAttributesList)
@@ -318,7 +311,7 @@ private[spark] class CoarseMesosSchedulerBackend(
    * @param d SchedulerDriver
    * @param offers Mesos offers that match attribute constraints
    */
-  private def handleMatchedOffers(d: SchedulerDriver, offers: Buffer[Offer]): Unit = {
+  private def handleMatchedOffers(d: SchedulerDriver, offers: mutable.Buffer[Offer]): Unit = {
     val tasks = buildMesosTasks(offers)
     for (offer <- offers) {
       val offerAttributes = toAttributeMap(offer.getAttributesList)
@@ -359,9 +352,9 @@ private[spark] class CoarseMesosSchedulerBackend(
    * @param offers Mesos offers that match attribute constraints
    * @return A map from OfferID to a list of Mesos tasks to launch on that offer
    */
-  private def buildMesosTasks(offers: Buffer[Offer]): Map[OfferID, List[MesosTaskInfo]] = {
+  private def buildMesosTasks(offers: mutable.Buffer[Offer]): Map[OfferID, List[MesosTaskInfo]] = {
     // offerID -> tasks
-    val tasks = new HashMap[OfferID, List[MesosTaskInfo]].withDefaultValue(Nil)
+    val tasks = new mutable.HashMap[OfferID, List[MesosTaskInfo]].withDefaultValue(Nil)
 
     // offerID -> resources
     val remainingResources = mutable.Map(offers.map(offer =>
@@ -400,11 +393,10 @@ private[spark] class CoarseMesosSchedulerBackend(
           val (portResourcesLeft, portResourcesToUse, portsToUse) =
             partitionPorts(conf, portResources)
 
-          val randPorts = portsToUse.filter(port => isRandPortRange(conf, (port, port)))
           val taskBuilder = MesosTaskInfo.newBuilder()
             .setTaskId(TaskID.newBuilder().setValue(taskId.toString).build())
             .setSlaveId(offer.getSlaveId)
-            .setCommand(createCommand(offer, taskCPUs + extraCoresPerExecutor, taskId, randPorts))
+            .setCommand(createCommand(offer, taskCPUs + extraCoresPerExecutor, taskId, portsToUse))
             .setName("Task " + taskId)
             .addAllResources(cpuResourcesToUse.asJava)
             .addAllResources(memResourcesToUse.asJava)
@@ -419,8 +411,6 @@ private[spark] class CoarseMesosSchedulerBackend(
           remainingResources(offerId) = (resourcesLeft ++ portResourcesLeft).asJava
           totalCoresAcquired += taskCPUs
           coresByTaskId(taskId) = taskCPUs
-          takenPortsPerSlave(slaveId) = takenPortsPerSlave.getOrElse(slaveId, List()) ++ portsToUse
-          takenPortsByTaskId(taskId) = portsToUse
         }
       }
     }
@@ -433,8 +423,7 @@ private[spark] class CoarseMesosSchedulerBackend(
     val cpus = executorCores(offerCPUs)
     val mem = executorMemory(sc)
     val ports = getRangeResource(resources, "ports")
-    val meetsPortRequirements = checkPorts(sc,
-      ports, takenPortsPerSlave.getOrElse(slaveId, List()))
+    val meetsPortRequirements = checkPorts(sc, ports)
 
     cpus > 0 &&
       cpus <= offerCPUs &&
@@ -491,13 +480,6 @@ private[spark] class CoarseMesosSchedulerBackend(
         for (cores <- coresByTaskId.get(taskId)) {
           totalCoresAcquired -= cores
           coresByTaskId -= taskId
-        }
-        // Remove tasks ports remembered on that slave if any
-        for (taskPorts <- takenPortsByTaskId.get(taskId)) {
-          for (slavePorts <- takenPortsPerSlave.get(slaveId)) {
-            takenPortsPerSlave(slaveId) = slavePorts.filterNot(port => taskPorts.contains(port))
-          }
-          takenPortsByTaskId -= taskId
         }
         // If it was a failure, mark the slave as failed for blacklisting purposes
         if (TaskState.isFailed(state)) {
@@ -616,7 +598,7 @@ private[spark] class CoarseMesosSchedulerBackend(
 }
 
 private class Slave(val hostname: String) {
-  val taskIDs = new HashSet[String]()
+  val taskIDs = new mutable.HashSet[String]()
   var taskFailures = 0
   var shuffleRegistered = false
 }

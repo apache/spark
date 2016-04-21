@@ -168,6 +168,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
 
       // Bootstrap to fetch the driver's Spark properties.
       val executorConf = new SparkConf
+      preassignPortsIfAny(executorConf)
       val port = executorConf.getInt("spark.executor.port", 0)
       val fetcher = RpcEnv.create(
         "driverPropsFetcher",
@@ -183,6 +184,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
 
       // Create SparkEnv using properties we fetched from the driver.
       val driverConf = new SparkConf()
+      preassignPortsIfAny(driverConf)
       for ((key, value) <- props) {
         // this is required for SSL in standalone mode
         if (SparkConf.isExecutorStartupConf(key)) {
@@ -220,7 +222,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
     val userClassPath = new mutable.ListBuffer[URL]()
 
     var argv = args.toList
-    while (!argv.isEmpty) {
+    while (argv.nonEmpty) {
       argv match {
         case ("--driver-url") :: value :: tail =>
           driverUrl = value
@@ -281,4 +283,15 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
     System.exit(1)
   }
 
+  private def preassignPortsIfAny(conf: SparkConf): Unit = {
+    sys.env.get("SPARK_MESOS_PREASSIGNED_PORTS").map(_.split(",")).foreach {
+      portPairArray =>
+        portPairArray.foreach{ portPair =>
+          val splittedPair = portPair.split(":")
+          if (splittedPair.length == 2) {
+            conf.set(splittedPair(0), splittedPair(1))
+          }
+        }
+    }
+  }
 }
