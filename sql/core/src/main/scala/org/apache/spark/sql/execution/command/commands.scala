@@ -21,7 +21,7 @@ import java.util.NoSuchElementException
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{AnalysisException, Dataset, Row, SQLContext}
+import org.apache.spark.sql.{Dataset, Row, SQLContext}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
@@ -31,8 +31,6 @@ import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.debug._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-
-import scala.collection.immutable.ListMap
 
 /**
  * A logical command that is executed for its side-effects.  `RunnableCommand`s are
