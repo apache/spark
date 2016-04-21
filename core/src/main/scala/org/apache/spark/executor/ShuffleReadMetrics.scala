@@ -17,7 +17,7 @@
 
 package org.apache.spark.executor
 
-import org.apache.spark.{Accumulator, InternalAccumulator}
+import org.apache.spark.InternalAccumulator
 import org.apache.spark.annotation.DeveloperApi
 
 
@@ -27,38 +27,21 @@ import org.apache.spark.annotation.DeveloperApi
  * Operations are not thread-safe.
  */
 @DeveloperApi
-class ShuffleReadMetrics private (
-    _remoteBlocksFetched: Accumulator[Int],
-    _localBlocksFetched: Accumulator[Int],
-    _remoteBytesRead: Accumulator[Long],
-    _localBytesRead: Accumulator[Long],
-    _fetchWaitTime: Accumulator[Long],
-    _recordsRead: Accumulator[Long])
-  extends Serializable {
+class ShuffleReadMetrics private[spark] () extends Serializable {
+  import InternalAccumulator._
 
-  private[executor] def this(accumMap: Map[String, Accumulator[_]]) {
-    this(
-      TaskMetrics.getAccum[Int](accumMap, InternalAccumulator.shuffleRead.REMOTE_BLOCKS_FETCHED),
-      TaskMetrics.getAccum[Int](accumMap, InternalAccumulator.shuffleRead.LOCAL_BLOCKS_FETCHED),
-      TaskMetrics.getAccum[Long](accumMap, InternalAccumulator.shuffleRead.REMOTE_BYTES_READ),
-      TaskMetrics.getAccum[Long](accumMap, InternalAccumulator.shuffleRead.LOCAL_BYTES_READ),
-      TaskMetrics.getAccum[Long](accumMap, InternalAccumulator.shuffleRead.FETCH_WAIT_TIME),
-      TaskMetrics.getAccum[Long](accumMap, InternalAccumulator.shuffleRead.RECORDS_READ))
-  }
-
-  /**
-   * Create a new [[ShuffleReadMetrics]] that is not associated with any particular task.
-   *
-   * This mainly exists for legacy reasons, because we use dummy [[ShuffleReadMetrics]] in
-   * many places only to merge their values together later. In the future, we should revisit
-   * whether this is needed.
-   *
-   * A better alternative is [[TaskMetrics.createTempShuffleReadMetrics]] followed by
-   * [[TaskMetrics.mergeShuffleReadMetrics]].
-   */
-  private[spark] def this() {
-    this(InternalAccumulator.createShuffleReadAccums().map { a => (a.name.get, a) }.toMap)
-  }
+  private[executor] val _remoteBlocksFetched =
+    TaskMetrics.createIntAccum(shuffleRead.REMOTE_BLOCKS_FETCHED)
+  private[executor] val _localBlocksFetched =
+    TaskMetrics.createIntAccum(shuffleRead.LOCAL_BLOCKS_FETCHED)
+  private[executor] val _remoteBytesRead =
+    TaskMetrics.createLongAccum(shuffleRead.REMOTE_BYTES_READ)
+  private[executor] val _localBytesRead =
+    TaskMetrics.createLongAccum(shuffleRead.LOCAL_BYTES_READ)
+  private[executor] val _fetchWaitTime =
+    TaskMetrics.createLongAccum(shuffleRead.FETCH_WAIT_TIME)
+  private[executor] val _recordsRead =
+    TaskMetrics.createLongAccum(shuffleRead.RECORDS_READ)
 
   /**
    * Number of remote blocks fetched in this shuffle by this task.

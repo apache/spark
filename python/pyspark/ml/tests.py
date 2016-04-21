@@ -42,6 +42,7 @@ from shutil import rmtree
 import tempfile
 import numpy as np
 
+from pyspark import keyword_only
 from pyspark.ml import Estimator, Model, Pipeline, PipelineModel, Transformer
 from pyspark.ml.classification import (
     LogisticRegression, DecisionTreeClassifier, OneVsRest, OneVsRestModel)
@@ -52,7 +53,6 @@ from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.param.shared import HasMaxIter, HasInputCol, HasSeed
 from pyspark.ml.regression import LinearRegression, DecisionTreeRegressor
 from pyspark.ml.tuning import *
-from pyspark.ml.util import keyword_only
 from pyspark.ml.util import MLWritable, MLWriter
 from pyspark.ml.wrapper import JavaParams
 from pyspark.mllib.linalg import Vectors, DenseVector, SparseVector

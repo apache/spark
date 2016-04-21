@@ -335,7 +335,7 @@ case class TungstenAggregate(
       val mergeProjection = newMutableProjection(
         mergeExpr,
         aggregateBufferAttributes ++ declFunctions.flatMap(_.inputAggBufferAttributes),
-        subexpressionEliminationEnabled)()
+        subexpressionEliminationEnabled)
       val joinedRow = new JoinedRow()
 
       var currentKey: UnsafeRow = null

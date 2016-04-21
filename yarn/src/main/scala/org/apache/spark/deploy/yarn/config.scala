@@ -261,4 +261,54 @@ package object config {
     .stringConf
     .toSequence
     .createOptional
+
+  /* Configuration and cached file propagation. */
+
+  private[spark] val CACHED_FILES = ConfigBuilder("spark.yarn.cache.filenames")
+    .internal()
+    .stringConf
+    .toSequence
+    .createWithDefault(Nil)
+
+  private[spark] val CACHED_FILES_SIZES = ConfigBuilder("spark.yarn.cache.sizes")
+    .internal()
+    .longConf
+    .toSequence
+    .createWithDefault(Nil)
+
+  private[spark] val CACHED_FILES_TIMESTAMPS = ConfigBuilder("spark.yarn.cache.timestamps")
+    .internal()
+    .longConf
+    .toSequence
+    .createWithDefault(Nil)
+
+  private[spark] val CACHED_FILES_VISIBILITIES = ConfigBuilder("spark.yarn.cache.visibilities")
+    .internal()
+    .stringConf
+    .toSequence
+    .createWithDefault(Nil)
+
+  // Either "file" or "archive", for each file.
+  private[spark] val CACHED_FILES_TYPES = ConfigBuilder("spark.yarn.cache.types")
+    .internal()
+    .stringConf
+    .toSequence
+    .createWithDefault(Nil)
+
+  // The location of the conf archive in HDFS.
+  private[spark] val CACHED_CONF_ARCHIVE = ConfigBuilder("spark.yarn.cache.confArchive")
+    .internal()
+    .stringConf
+    .createOptional
+
+  // The list of cache-related config entries. This is used by Client and the AM to clean
+  // up the environment so that these settings do not appear on the web UI.
+  private[yarn] val CACHE_CONFIGS = Seq(
+    CACHED_FILES,
+    CACHED_FILES_SIZES,
+    CACHED_FILES_TIMESTAMPS,
+    CACHED_FILES_VISIBILITIES,
+    CACHED_FILES_TYPES,
+    CACHED_CONF_ARCHIVE)
+
 }
