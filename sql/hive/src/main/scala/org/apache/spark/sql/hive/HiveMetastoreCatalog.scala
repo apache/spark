@@ -24,7 +24,6 @@ import com.google.common.base.Objects
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hive.common.StatsSetupConst
-import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.{TableType => HiveTableType}
 import org.apache.hadoop.hive.metastore.api.FieldSchema
 import org.apache.hadoop.hive.ql.metadata.{Table => HiveTable, _}
@@ -46,6 +45,7 @@ import org.apache.spark.sql.execution.datasources.parquet.{DefaultSource => Parq
 import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.hive.execution.HiveNativeCommand
 import org.apache.spark.sql.hive.orc.{DefaultSource => OrcDefaultSource}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 private[hive] case class HiveSerDe(
@@ -59,10 +59,10 @@ private[hive] object HiveSerDe {
    *
    * @param source Currently the source abbreviation can be one of the following:
    *               SequenceFile, RCFile, ORC, PARQUET, and case insensitive.
-   * @param hiveConf Hive Conf
+   * @param conf SQLConf
    * @return HiveSerDe associated with the specified source
    */
-  def sourceToSerDe(source: String, hiveConf: HiveConf): Option[HiveSerDe] = {
+  def sourceToSerDe(source: String, conf: SQLConf): Option[HiveSerDe] = {
     val serdeMap = Map(
       "sequencefile" ->
         HiveSerDe(
@@ -73,7 +73,8 @@ private[hive] object HiveSerDe {
         HiveSerDe(
           inputFormat = Option("org.apache.hadoop.hive.ql.io.RCFileInputFormat"),
           outputFormat = Option("org.apache.hadoop.hive.ql.io.RCFileOutputFormat"),
-          serde = Option(hiveConf.getVar(HiveConf.ConfVars.HIVEDEFAULTRCFILESERDE))),
+          serde = Option(conf.getConfString("hive.default.rcfile.serde",
+            "org.apache.hadoop.hive.serde2.columnar.LazyBinaryColumnarSerDe"))),
 
       "orc" ->
         HiveSerDe(
@@ -297,7 +298,7 @@ private[hive] class HiveMetastoreCatalog(hive: SQLContext) extends Logging {
       CatalogTableType.MANAGED_TABLE
     }
 
-    val maybeSerDe = HiveSerDe.sourceToSerDe(provider, hiveconf)
+    val maybeSerDe = HiveSerDe.sourceToSerDe(provider, conf)
     val dataSource =
       DataSource(
         hive,
