@@ -73,8 +73,21 @@ class HashingTF(val numFeatures: Int) extends Serializable {
    * Returns the index of the input term.
    */
   @Since("1.1.0")
-  @deprecated("This method will be removed in 2.1.0.", "2.0.0")
-  def indexOf(term: Any): Int = Utils.nonNegativeMod(term.##, numFeatures)
+  def indexOf(term: Any): Int = {
+    Utils.nonNegativeMod(getHashFunction(term), numFeatures)
+  }
+
+  /**
+   * Get the hash function corresponding to the current [[hashAlgorithm]] setting.
+   */
+  private def getHashFunction: Any => Int = hashAlgorithm match {
+    case Murmur3 => murmur3Hash
+    case Native => nativeHash
+    case _ =>
+      // This should never happen.
+      throw new IllegalArgumentException(
+        s"HashingTF does not recognize hash algorithm $hashAlgorithm")
+  }
 
   /**
    * Transforms the input document into a sparse term frequency vector.
@@ -83,7 +96,7 @@ class HashingTF(val numFeatures: Int) extends Serializable {
   def transform(document: Iterable[_]): Vector = {
     val termFrequencies = mutable.HashMap.empty[Int, Double]
     val setTF = if (binary) (i: Int) => 1.0 else (i: Int) => termFrequencies.getOrElse(i, 0.0) + 1.0
-    val hashFunc: Any => Int = if (hashAlgorithm == Murmur3) murmur3Hash else nativeHash
+    val hashFunc: Any => Int = getHashFunction
     document.foreach { term =>
       val i = Utils.nonNegativeMod(hashFunc(term), numFeatures)
       termFrequencies.put(i, setTF(i))
@@ -149,7 +162,7 @@ object HashingTF {
         val utf8 = UTF8String.fromString(s)
         hashUnsafeBytes(utf8.getBaseObject, utf8.getBaseOffset, utf8.numBytes(), seed)
       case _ => throw new SparkException("HashingTF with murmur3 algorithm does not " +
-        s"support type ${term.getClass.getTypeName} of input data.")
+        s"support type ${term.getClass.getCanonicalName} of input data.")
     }
   }
 }
