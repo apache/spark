@@ -124,8 +124,8 @@ private[spark] class ExternalSorter[K, V, C](
   // Data structures to store in-memory objects before we spill. Depending on whether we have an
   // Aggregator set, we either put objects into an AppendOnlyMap where we combine them, or we
   // store them in an array buffer.
-  private var map = new PartitionedAppendOnlyMap[K, C]
-  private var buffer = new PartitionedPairBuffer[K, C]
+  @volatile private var map = new PartitionedAppendOnlyMap[K, C]
+  @volatile private var buffer = new PartitionedPairBuffer[K, C]
 
   // Total spilling statistics
   private var _diskBytesSpilled = 0L
@@ -135,9 +135,9 @@ private[spark] class ExternalSorter[K, V, C](
   private var _peakMemoryUsedBytes: Long = 0L
   def peakMemoryUsedBytes: Long = _peakMemoryUsedBytes
 
-  private var isShuffleSort: Boolean = true
+  @volatile private var isShuffleSort: Boolean = true
   private val forceSpillFiles = new ArrayBuffer[SpilledFile]
-  private var readingIterator: SpillableIterator = null
+  @volatile private var readingIterator: SpillableIterator = null
 
   // A comparator for keys K that orders them within a partition to allow aggregation or sorting.
   // Can be a partial ordering by hash code if a total ordering is not provided through by the

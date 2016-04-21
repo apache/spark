@@ -81,7 +81,7 @@ class ExternalAppendOnlyMap[K, V, C](
     this(createCombiner, mergeValue, mergeCombiners, serializer, blockManager, TaskContext.get())
   }
 
-  private var currentMap = new SizeTrackingAppendOnlyMap[K, C]
+  @volatile private var currentMap = new SizeTrackingAppendOnlyMap[K, C]
   private val spilledMaps = new ArrayBuffer[DiskMapIterator]
   private val sparkConf = SparkEnv.get.conf
   private val diskBlockManager = blockManager.diskBlockManager
@@ -115,7 +115,7 @@ class ExternalAppendOnlyMap[K, V, C](
   private val keyComparator = new HashComparator[K]
   private val ser = serializer.newInstance()
 
-  private var readingIterator: SpillableIterator = null
+  @volatile private var readingIterator: SpillableIterator = null
 
   /**
    * Number of files this map has spilled so far.
