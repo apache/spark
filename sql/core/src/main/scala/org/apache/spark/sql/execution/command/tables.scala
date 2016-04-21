@@ -20,12 +20,10 @@ package org.apache.spark.sql.execution.command
 import java.io.File
 import java.net.URI
 
-import org.apache.spark.sql.catalyst.catalog.ExternalCatalog.TablePartitionSpec
-
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType, ExternalCatalog}
+import org.apache.spark.sql.catalyst.catalog.ExternalCatalog.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
@@ -313,7 +311,7 @@ case class DescribeTableCommand(
             s"specified for DESCRIBE command")
       }
     }
-    
+
     val results =
       sparkSession.sessionState.catalog.describeTable(table, partSpec, colPath, isExtended, output)
     val rows = results.map { case (name, dataType, comment) =>

@@ -760,19 +760,19 @@ class DDLCommandSuite extends PlanTest {
 
   test("describe table") {
     val parsed1 = parser.parsePlan("DESCRIBE tab1")
-    val expected1 = DescribeCommand(TableIdentifier("tab1", None), None, None, false)
+    val expected1 = DescribeTableCommand(TableIdentifier("tab1", None), None, None, false)
     val parsed2 = parser.parsePlan("DESCRIBE db1.tab1")
-    val expected2 = DescribeCommand(TableIdentifier("tab1", Some("db1")), None, None, false)
+    val expected2 = DescribeTableCommand(TableIdentifier("tab1", Some("db1")), None, None, false)
     val parsed3 = parser.parsePlan("DESCRIBE tab1 col1")
-    val expected3 = DescribeCommand(TableIdentifier("tab1", None), None, Some("col1"), false)
+    val expected3 = DescribeTableCommand(TableIdentifier("tab1", None), None, Some("col1"), false)
     val parsed4 = parser.parsePlan("DESCRIBE tab1 PARTITION (c1 = 'val1')")
-    val expected4 = DescribeCommand(TableIdentifier("tab1", None),
+    val expected4 = DescribeTableCommand(TableIdentifier("tab1", None),
       Some(Map("c1" -> "val1")), None, false)
     val parsed5 = parser.parsePlan("DESCRIBE EXTENDED tab1 PARTITION (c1 = 'val1')")
-    val expected5 = DescribeCommand(TableIdentifier("tab1", None),
+    val expected5 = DescribeTableCommand(TableIdentifier("tab1", None),
       Some(Map("c1" -> "val1")), None, true)
     val parsed6 = parser.parsePlan("DESCRIBE EXTENDED tab1 tab1.col1.field1.$elem$")
-    val expected6 = DescribeCommand(TableIdentifier("tab1", None),
+    val expected6 = DescribeTableCommand(TableIdentifier("tab1", None),
       None, Some("tab1.col1.field1.$elem$"), true)
     comparePlans(parsed1, expected1)
     comparePlans(parsed2, expected2)

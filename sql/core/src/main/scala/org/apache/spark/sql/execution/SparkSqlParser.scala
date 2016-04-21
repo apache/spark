@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation, ScriptInputOutputSchema}
 import org.apache.spark.sql.execution.command._
+import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf, VariableSubstitution}
 
 
@@ -237,7 +238,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     } else {
       val partitionKeys = Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec)
       val columnPath = Option(ctx.describeColName).map(visitDescribeColName)
-      DescribeCommand(
+      DescribeTableCommand(
         visitTableIdentifier(ctx.tableIdentifier),
         partitionKeys,
         columnPath,
