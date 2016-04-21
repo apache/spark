@@ -69,6 +69,10 @@ case class DataSource(
 
   lazy val providingClass: Class[_] = lookupDataSource(className)
 
+  lazy private val _schemaAndName = sourceSchema()
+  lazy val schema = _schemaAndName._2
+  lazy val sourceName = _schemaAndName._1
+
   /** A map to maintain backward compatibility in case we move data sources around. */
   private val backwardCompatibilityMap = Map(
     "org.apache.spark.sql.jdbc" -> classOf[jdbc.DefaultSource].getCanonicalName,
@@ -145,7 +149,7 @@ case class DataSource(
   }
 
   /** Returns the name and schema of the source that can be used to continually read data. */
-  def sourceSchema(): (String, StructType) = {
+  private def sourceSchema(): (String, StructType) = {
     providingClass.newInstance() match {
       case s: StreamSourceProvider =>
         s.sourceSchema(sqlContext, userSpecifiedSchema, className, options)
@@ -174,24 +178,20 @@ case class DataSource(
           throw new IllegalArgumentException("'path' is not specified")
         })
 
-        val dataSchema = inferFileFormatSchema(format)
-
         def dataFrameBuilder(files: Array[String]): DataFrame = {
-          Dataset.ofRows(
-            sqlContext,
-            LogicalRelation(
-              DataSource(
-                sqlContext,
-                paths = files,
-                userSpecifiedSchema = Some(dataSchema),
-                className = className,
-                options =
-                  new CaseInsensitiveMap(
-                    options.filterKeys(_ != "path") + ("basePath" -> path))).resolveRelation()))
+          val newOptions = options.filterKeys(_ != "path") + ("basePath" -> path)
+          val newDataSource =
+            DataSource(
+              sqlContext,
+              paths = files,
+              userSpecifiedSchema = Some(schema),
+              className = className,
+              options = new CaseInsensitiveMap(newOptions))
+          Dataset.ofRows(sqlContext, LogicalRelation(newDataSource.resolveRelation()))
         }
 
         new FileStreamSource(
-          sqlContext, metadataPath, path, Some(dataSchema), className, dataFrameBuilder)
+          sqlContext, metadataPath, path, schema, dataFrameBuilder)
       case _ =>
         throw new UnsupportedOperationException(
           s"Data source $className does not support streamed reading")
