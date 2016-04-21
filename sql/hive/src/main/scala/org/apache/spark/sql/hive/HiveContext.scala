@@ -84,7 +84,7 @@ class HiveContext private[hive](
 }
 
 
-private[hive] object HiveContext extends Logging {
+private[spark] object HiveContext extends Logging {
 
   def withHiveExternalCatalog(sc: SparkContext): SparkContext = {
     sc.conf.set(CATALOG_IMPLEMENTATION.key, "hive")

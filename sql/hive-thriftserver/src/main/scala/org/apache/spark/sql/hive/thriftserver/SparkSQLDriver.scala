@@ -27,11 +27,11 @@ import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.processors.CommandProcessorResponse
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.hive.{HiveContext, HiveMetastoreTypes, HiveQueryExecution}
+import org.apache.spark.sql.{AnalysisException, SQLContext}
+import org.apache.spark.sql.hive.{HiveMetastoreTypes, HiveQueryExecution}
 
 private[hive] class SparkSQLDriver(
-    val context: HiveContext = SparkSQLEnv.hiveContext)
+    val context: SQLContext = SparkSQLEnv.sqlContext)
   extends Driver
   with Logging {
 

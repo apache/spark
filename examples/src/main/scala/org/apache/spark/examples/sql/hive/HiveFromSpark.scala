@@ -43,9 +43,10 @@ object HiveFromSpark {
     // using HiveQL. Users who do not have an existing Hive deployment can still create a
     // HiveContext. When not configured by the hive-site.xml, the context automatically
     // creates metastore_db and warehouse in the current directory.
-    val hiveContext = new HiveContext(sc)
-    import hiveContext.implicits._
-    import hiveContext.sql
+    // TODO: use SparkSession once that's ready (SPARK-13643)
+    val sqlContext = new SQLContext(HiveContext.withHiveExternalCatalog(sc))
+    import sqlContext.implicits._
+    import sqlContext.sql
 
     sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
     sql(s"LOAD DATA LOCAL INPATH '${kv1File.getAbsolutePath}' INTO TABLE src")

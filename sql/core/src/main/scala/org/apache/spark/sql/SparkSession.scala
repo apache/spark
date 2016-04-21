@@ -64,7 +64,7 @@ class SparkSession private(
 }
 
 
-private object SparkSession {
+object SparkSession {
 
   private def sharedStateClassName(conf: SparkConf): String = {
     conf.get(CATALOG_IMPLEMENTATION) match {
@@ -95,6 +95,12 @@ private object SparkSession {
       case NonFatal(e) =>
         throw new IllegalArgumentException(s"Error while instantiating '$className':", e)
     }
+  }
+
+  // TODO: do we want to expose this?
+  def withHiveSupport(sc: SparkContext): SparkSession = {
+    sc.conf.set(CATALOG_IMPLEMENTATION.key, "hive")
+    new SparkSession(sc)
   }
 
 }
