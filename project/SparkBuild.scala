@@ -18,6 +18,7 @@
 import java.io._
 import java.nio.file.Files
 
+import scala.io.Source
 import scala.util.Properties
 import scala.collection.JavaConverters._
 import scala.collection.mutable.Stack
@@ -158,6 +159,26 @@ object SparkBuild extends PomBuild {
 
   lazy val scalaStyleOnTest = taskKey[Unit]("scalaStyleOnTest")
 
+  // We special case the 'println' lint rule to only be a warning on compile, because adding
+  // printlns for debugging is a common use case and is easy to remember to remove.
+  val scalaStyleOnCompileConfig: String = {
+    val in = "scalastyle-config.xml"
+    val out = "scalastyle-on-compile.generated.xml"
+    val replacements = Map(
+      """customId="println" level="error"""" -> """customId="println" level="warn""""
+    )
+    var contents = Source.fromFile(in).getLines.mkString("\n")
+    for ((k, v) <- replacements) {
+      require(contents.contains(k), s"Could not rewrite '$k' in original scalastyle config.")
+      contents = contents.replace(k, v)
+    }
+    new PrintWriter(out) {
+      write(contents)
+      close()
+    }
+    out
+  }
+
   // Return a cached scalastyle task for a given configuration (usually Compile or Test)
   private def cachedScalaStyle(config: Configuration) = Def.task {
     val logger = streams.value.log
@@ -167,7 +188,7 @@ object SparkBuild extends PomBuild {
       (inFiles: Set[File]) => {
         val args: Seq[String] = Seq.empty
         val scalaSourceV = Seq(file(scalaSource.in(config).value.getAbsolutePath))
-        val configV = (baseDirectory in ThisBuild).value / "scalastyle-config.xml"
+        val configV = (baseDirectory in ThisBuild).value / scalaStyleOnCompileConfig
         val configUrlV = scalastyleConfigUrl.in(config).value
         val streamsV = streams.in(config).value
         val failOnErrorV = true
@@ -208,7 +229,7 @@ object SparkBuild extends PomBuild {
   )
 
   lazy val sharedSettings = sparkGenjavadocSettings ++
-      (if (sys.env.get("NOLINT_ON_COMPILE") == null) enableScalaStyle else Nil) ++ Seq(
+      (if (sys.env.contains("NOLINT_ON_COMPILE")) Nil else enableScalaStyle) ++ Seq(
     exportJars in Compile := true,
     exportJars in Test := false,
     javaHome := sys.env.get("JAVA_HOME")
