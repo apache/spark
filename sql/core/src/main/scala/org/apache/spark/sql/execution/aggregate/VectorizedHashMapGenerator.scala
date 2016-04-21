@@ -152,15 +152,21 @@ class VectorizedHashMapGenerator(
    */
   private def generateHashFunction(): String = {
     val hash = ctx.freshName("hash")
+
+    def genHashForKeys(groupingKeys: Seq[Buffer]): String = {
+      groupingKeys.map { key =>
+        val result = ctx.freshName("result")
+        s"""
+           |${genComputeHash(ctx, key.name, key.dataType, result)}
+           |$hash = ($hash ^ (0x9e3779b9)) + $result + ($hash << 6) + ($hash >>> 2);
+          """.stripMargin
+      }.mkString("\n")
+    }
+
     s"""
        |private long hash($groupingKeySignature) {
        |  long $hash = 0;
-       |  ${groupingKeys.map { key =>
-            val result = ctx.freshName("result")
-            s"""
-               |${genComputeHash(ctx, key.name, key.dataType, result)}
-               |$hash = ($hash ^ (0x9e3779b9)) + $result + ($hash << 6) + ($hash >>> 2);
-             """.stripMargin }.mkString("\n")}
+       |  ${genHashForKeys(groupingKeys)}
        |  return $hash;
        |}
      """.stripMargin
@@ -179,12 +185,17 @@ class VectorizedHashMapGenerator(
    * }}}
    */
   private def generateEquals(): String = {
+
+    def genEqualsForKeys(groupingKeys: Seq[Buffer]): String = {
+      groupingKeys.zipWithIndex.map { case (key: Buffer, ordinal: Int) =>
+        s"""(${ctx.genEqual(key.dataType, ctx.getValue("batch", "buckets[idx]",
+          key.dataType, ordinal), key.name)})"""
+      }.mkString(" && ")
+    }
+
     s"""
        |private boolean equals(int idx, $groupingKeySignature) {
-       |  return ${groupingKeys.zipWithIndex.map { case (key: Buffer, ordinal: Int) =>
-            s"""(${ctx.genEqual(key.dataType,
-              ctx.getValue("batch", "buckets[idx]", key.dataType, ordinal), key.name)})"""
-          }.mkString(" && ")};
+       |  return ${genEqualsForKeys(groupingKeys)};
        |}
      """.stripMargin
   }
@@ -223,6 +234,20 @@ class VectorizedHashMapGenerator(
    * }}}
    */
   private def generateFindOrInsert(): String = {
+
+    def genCodeToSetKeys(groupingKeys: Seq[Buffer]): Seq[String] = {
+      groupingKeys.zipWithIndex.map { case (key: Buffer, ordinal: Int) =>
+        ctx.setValue("batch", "numRows", key.dataType, ordinal, key.name)
+      }
+    }
+
+    def genCodeToSetAggBuffers(bufferValues: Seq[Buffer]): Seq[String] = {
+      bufferValues.zipWithIndex.map { case (key: Buffer, ordinal: Int) =>
+        ctx.updateColumn("batch", "numRows", key.dataType, groupingKeys.length + ordinal,
+          buffVars(ordinal), nullable = true)
+      }
+    }
+
     s"""
        |public org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row findOrInsert(${
             groupingKeySignature}) {
@@ -233,14 +258,15 @@ class VectorizedHashMapGenerator(
        |    // Return bucket index if it's either an empty slot or already contains the key
        |    if (buckets[idx] == -1) {
        |      if (numRows < capacity) {
-       |        ${groupingKeys.zipWithIndex.map { case (key: Buffer, ordinal: Int) =>
-                  ctx.setValue("batch", "numRows", key.dataType, ordinal, key.name)
-                }.mkString("\n")}
+       |
+       |        // Initialize aggregate keys
+       |        ${genCodeToSetKeys(groupingKeys).mkString("\n")}
+       |
        |        ${buffVars.map(_.code).mkString("\n")}
-       |        ${bufferValues.zipWithIndex.map { case (key: Buffer, ordinal: Int) =>
-                  ctx.updateColumn("batch", "numRows", key.dataType, groupingKeys.length + ordinal,
-                    buffVars(ordinal), nullable = true)
-                }.mkString("\n")}
+       |
+       |        // Initialize aggregate values
+       |        ${genCodeToSetAggBuffers(bufferValues).mkString("\n")}
+       |
        |        buckets[idx] = numRows++;
        |        batch.setNumRows(numRows);
        |        aggregateBufferBatch.setNumRows(numRows);
