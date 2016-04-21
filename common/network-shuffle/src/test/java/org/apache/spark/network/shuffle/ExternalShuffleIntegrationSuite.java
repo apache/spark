@@ -189,7 +189,7 @@ public class ExternalShuffleIntegrationSuite {
     try {
       registerExecutor("exec-1", dataContext0.createExecutorInfo("unknown sort manager"));
       fail("unknown sort manager ");
-    } catch (UnsupportedOperationException e) {
+    } catch (RuntimeException e) {
       // pass
     }
     FetchResult execFetch = fetchBlocks("exec-1", new String[] { "shuffle_1_0_0" });
