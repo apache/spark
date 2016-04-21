@@ -226,7 +226,7 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         Row(16, "john") :: Row(16, "john") :: Row(16, "john") :: Nil)
 
       // Incorrect URI:
-      // file://path/to/data/files/issue-4077-data.txt
+      // file://path/to/data/files/employee.dat
       val incorrectUri = "file:/" + testData
       intercept[AnalysisException] {
         sql(s"""LOAD DATA LOCAL INPATH "$incorrectUri" INTO TABLE non_part_table""")
