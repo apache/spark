@@ -56,7 +56,9 @@ private[sql] class SessionState(ctx: SQLContext) {
    */
   lazy val functionRegistry: FunctionRegistry = FunctionRegistry.builtin.copy()
 
-  /** A [[FunctionResourceLoader]] that can be used in SessionCatalog. */
+  /**
+   * A class for loading resources specified by a function.
+   */
   lazy val functionResourceLoader: FunctionResourceLoader = {
     new FunctionResourceLoader {
       override def loadResource(resource: FunctionResource): Unit = {
