@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution
 
 import scala.collection.JavaConverters._
+import scala.util.Try
 
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 
@@ -26,16 +27,27 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation, ScriptInputOutputSchema}
 import org.apache.spark.sql.execution.command.{CreateTableAsSelectLogicalPlan, CreateViewAsSelectLogicalCommand, DescribeCommand => _, _}
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
+import org.apache.spark.sql.internal.{HiveSerDe, SQLConf, VariableSubstitution}
+
 
 /**
  * Concrete parser for Spark SQL statements.
  */
-class SparkSqlParser(conf: SQLConf) extends AbstractSqlParser{
+class SparkSqlParser(conf: SQLConf) extends AbstractSqlParser {
   val astBuilder = new SparkSqlAstBuilder(conf)
+
+  private val substitutor = new VariableSubstitution(conf)
+
+  protected override def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
+    super.parse(substitutor.substitute(command))(toResult)
+  }
+
+  protected override def nativeCommand(sqlText: String): LogicalPlan = {
+    HiveNativeCommand(substitutor.substitute(sqlText))
+  }
 }
 
 /**
@@ -43,6 +55,14 @@ class SparkSqlParser(conf: SQLConf) extends AbstractSqlParser{
  */
 class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   import org.apache.spark.sql.catalyst.parser.ParserUtils._
+
+  /**
+   * Pass a command to Hive using a [[HiveNativeCommand]].
+   */
+  override def visitExecuteNativeCommand(
+      ctx: ExecuteNativeCommandContext): LogicalPlan = withOrigin(ctx) {
+    HiveNativeCommand(command(ctx))
+  }
 
   /**
    * Create a [[SetCommand]] logical plan.
@@ -1126,5 +1146,74 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
         nullable = true,
         Option(col.STRING).map(string))
     }
+  }
+
+  /**
+   * Create a [[ScriptInputOutputSchema]].
+   */
+  override protected def withScriptIOSchema(
+      ctx: QuerySpecificationContext,
+      inRowFormat: RowFormatContext,
+      recordWriter: Token,
+      outRowFormat: RowFormatContext,
+      recordReader: Token,
+      schemaLess: Boolean): ScriptInputOutputSchema = {
+    if (recordWriter != null || recordReader != null) {
+      throw new ParseException(
+        "Unsupported operation: Used defined record reader/writer classes.", ctx)
+    }
+
+    // Decode and input/output format.
+    type Format = (Seq[(String, String)], Option[String], Seq[(String, String)], Option[String])
+    def format(fmt: RowFormatContext, configKey: String): Format = fmt match {
+      case c: RowFormatDelimitedContext =>
+        // TODO we should use the visitRowFormatDelimited function here. However HiveScriptIOSchema
+        // expects a seq of pairs in which the old parsers' token names are used as keys.
+        // Transforming the result of visitRowFormatDelimited would be quite a bit messier than
+        // retrieving the key value pairs ourselves.
+        def entry(key: String, value: Token): Seq[(String, String)] = {
+          Option(value).map(t => key -> t.getText).toSeq
+        }
+        val entries = entry("TOK_TABLEROWFORMATFIELD", c.fieldsTerminatedBy) ++
+          entry("TOK_TABLEROWFORMATCOLLITEMS", c.collectionItemsTerminatedBy) ++
+          entry("TOK_TABLEROWFORMATMAPKEYS", c.keysTerminatedBy) ++
+          entry("TOK_TABLEROWFORMATLINES", c.linesSeparatedBy) ++
+          entry("TOK_TABLEROWFORMATNULL", c.nullDefinedAs)
+
+        (entries, None, Seq.empty, None)
+
+      case c: RowFormatSerdeContext =>
+        // Use a serde format.
+        val CatalogStorageFormat(None, None, None, Some(name), props) = visitRowFormatSerde(c)
+
+        // SPARK-10310: Special cases LazySimpleSerDe
+        val recordHandler = if (name == "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe") {
+          Try(conf.getConfString(configKey)).toOption
+        } else {
+          None
+        }
+        (Seq.empty, Option(name), props.toSeq, recordHandler)
+
+      case null =>
+        // Use default (serde) format.
+        val name = conf.getConfString("hive.script.serde",
+          "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")
+        val props = Seq("field.delim" -> "\t")
+        val recordHandler = Try(conf.getConfString(configKey)).toOption
+        (Nil, Option(name), props, recordHandler)
+    }
+
+    val (inFormat, inSerdeClass, inSerdeProps, reader) =
+      format(inRowFormat, "hive.script.recordreader")
+
+    val (outFormat, outSerdeClass, outSerdeProps, writer) =
+      format(outRowFormat, "hive.script.recordwriter")
+
+    ScriptInputOutputSchema(
+      inFormat, outFormat,
+      inSerdeClass, outSerdeClass,
+      inSerdeProps, outSerdeProps,
+      reader, writer,
+      schemaLess)
   }
 }

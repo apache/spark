@@ -167,7 +167,7 @@ private[sql] class SessionState(ctx: SQLContext) {
   }
 
   def runNativeSql(sql: String): Seq[String] = {
-    throw new UnsupportedOperationException
+    throw new AnalysisException("Unsupported query: " + sql)
   }
 
 }
