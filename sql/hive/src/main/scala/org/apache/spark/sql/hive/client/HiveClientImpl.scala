@@ -110,7 +110,7 @@ private[hive] class HiveClientImpl(
     }
 
     def isCliSessionState(state: SessionState): Boolean = {
-      var temp: Class[_] = state.getClass
+      var temp: Class[_] = if (state != null) state.getClass else null
       var found = false
       while (temp != null && !found) {
         found = temp.getName == "org.apache.hadoop.hive.cli.CliSessionState"
