@@ -89,7 +89,7 @@ class SparkSession private(
    * A wrapped version of this session in the form of a [[SQLContext]].
    */
   @transient
-  protected[sql] val wrapped: SQLContext = new SQLContext(self, existingSharedState.isDefined)
+  protected[sql] val wrapped: SQLContext = new SQLContext(self, isRootContext = false)
 
   protected[sql] def conf: SQLConf = sessionState.conf
   protected[sql] def cacheManager: CacheManager = sharedState.cacheManager
