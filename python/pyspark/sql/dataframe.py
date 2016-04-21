@@ -197,6 +197,18 @@ class DataFrame(object):
         """
         return self._jdf.isLocal()
 
+    @property
+    @since(2.0)
+    def isStreaming(self):
+        """Returns true if this :class:`Dataset` contains one or more sources that continuously
+        return data as it arrives. A :class:`Dataset` that reads data from a streaming source
+        must be executed as a :class:`ContinuousQuery` using the :func:`startStream` method in
+        :class:`DataFrameWriter`.  Methods that return a single answer, (e.g., :func:`count` or
+        :func:`collect`) will throw an :class:`AnalysisException` when there is a streaming
+        source present.
+        """
+        return self._jdf.isStreaming()
+
     @since(1.3)
     def show(self, n=20, truncate=True):
         """Prints the first ``n`` rows to the console.
@@ -326,9 +338,11 @@ class DataFrame(object):
         return self
 
     @since(1.3)
-    def unpersist(self, blocking=True):
+    def unpersist(self, blocking=False):
         """Marks the :class:`DataFrame` as non-persistent, and remove all blocks for it from
         memory and disk.
+
+        .. note:: `blocking` default has changed to False to match Scala in 2.0.
         """
         self.is_cached = False
         self._jdf.unpersist(blocking)

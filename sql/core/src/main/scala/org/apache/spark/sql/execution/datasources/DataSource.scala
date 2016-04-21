@@ -186,7 +186,8 @@ case class DataSource(
                 userSpecifiedSchema = Some(dataSchema),
                 className = className,
                 options =
-                  new CaseInsensitiveMap(options.filterKeys(_ != "path"))).resolveRelation()))
+                  new CaseInsensitiveMap(
+                    options.filterKeys(_ != "path") + ("basePath" -> path))).resolveRelation()))
         }
 
         new FileStreamSource(
@@ -310,7 +311,17 @@ case class DataSource(
 
         val fileCatalog: FileCatalog =
           new HDFSFileCatalog(sqlContext, options, globbedPaths, partitionSchema)
-        val dataSchema = userSpecifiedSchema.orElse {
+
+        val dataSchema = userSpecifiedSchema.map { schema =>
+          val equality =
+            if (sqlContext.conf.caseSensitiveAnalysis) {
+              org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
+            } else {
+              org.apache.spark.sql.catalyst.analysis.caseInsensitiveResolution
+            }
+
+          StructType(schema.filterNot(f => partitionColumns.exists(equality(_, f.name))))
+        }.orElse {
           format.inferSchema(
             sqlContext,
             caseInsensitiveOptions,
@@ -318,7 +329,7 @@ case class DataSource(
         }.getOrElse {
           throw new AnalysisException(
             s"Unable to infer schema for $format at ${allPaths.take(2).mkString(",")}. " +
-            "It must be specified manually")
+              "It must be specified manually")
         }
 
         val enrichedOptions =

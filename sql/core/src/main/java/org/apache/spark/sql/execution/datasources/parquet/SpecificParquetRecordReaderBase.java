@@ -178,7 +178,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     config.set("spark.sql.parquet.writeLegacyFormat", "false");
 
     this.file = new Path(path);
-    long length = FileSystem.get(config).getFileStatus(this.file).getLen();
+    long length = this.file.getFileSystem(config).getFileStatus(this.file).getLen();
     ParquetMetadata footer = readFooter(config, file, range(0, length));
 
     List<BlockMetaData> blocks = footer.getBlocks();

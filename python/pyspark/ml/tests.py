@@ -42,8 +42,10 @@ from shutil import rmtree
 import tempfile
 import numpy as np
 
+from pyspark import keyword_only
 from pyspark.ml import Estimator, Model, Pipeline, PipelineModel, Transformer
-from pyspark.ml.classification import LogisticRegression, DecisionTreeClassifier, OneVsRest
+from pyspark.ml.classification import (
+    LogisticRegression, DecisionTreeClassifier, OneVsRest, OneVsRestModel)
 from pyspark.ml.clustering import KMeans
 from pyspark.ml.evaluation import BinaryClassificationEvaluator, RegressionEvaluator
 from pyspark.ml.feature import *
@@ -51,7 +53,6 @@ from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.param.shared import HasMaxIter, HasInputCol, HasSeed
 from pyspark.ml.regression import LinearRegression, DecisionTreeRegressor
 from pyspark.ml.tuning import *
-from pyspark.ml.util import keyword_only
 from pyspark.ml.util import MLWritable, MLWriter
 from pyspark.ml.wrapper import JavaParams
 from pyspark.mllib.linalg import Vectors, DenseVector, SparseVector
@@ -339,6 +340,11 @@ class ParamTests(PySparkTestCase):
         self.assertRaises(RuntimeError, lambda: param_store.test_property)
         params = param_store.params  # should not invoke the property 'test_property'
         self.assertEqual(len(params), 1)
+
+    def test_word2vec_param(self):
+        model = Word2Vec().setWindowSize(6)
+        # Check windowSize is set properly
+        self.assertEqual(model.getWindowSize(), 6)
 
 
 class FeatureTests(PySparkTestCase):
@@ -880,6 +886,28 @@ class OneVsRestTests(PySparkTestCase):
         model = ovr.fit(df)
         output = model.transform(df)
         self.assertEqual(output.columns, ["label", "features", "prediction"])
+
+    def test_save_load(self):
+        temp_path = tempfile.mkdtemp()
+        sqlContext = SQLContext(self.sc)
+        df = sqlContext.createDataFrame([(0.0, Vectors.dense(1.0, 0.8)),
+                                         (1.0, Vectors.sparse(2, [], [])),
+                                         (2.0, Vectors.dense(0.5, 0.5))],
+                                        ["label", "features"])
+        lr = LogisticRegression(maxIter=5, regParam=0.01)
+        ovr = OneVsRest(classifier=lr)
+        model = ovr.fit(df)
+        ovrPath = temp_path + "/ovr"
+        ovr.save(ovrPath)
+        loadedOvr = OneVsRest.load(ovrPath)
+        self.assertEqual(loadedOvr.getFeaturesCol(), ovr.getFeaturesCol())
+        self.assertEqual(loadedOvr.getLabelCol(), ovr.getLabelCol())
+        self.assertEqual(loadedOvr.getClassifier().uid, ovr.getClassifier().uid)
+        modelPath = temp_path + "/ovrModel"
+        model.save(modelPath)
+        loadedModel = OneVsRestModel.load(modelPath)
+        for m, n in zip(model.models, loadedModel.models):
+            self.assertEqual(m.uid, n.uid)
 
 
 class HashingTFTest(PySparkTestCase):

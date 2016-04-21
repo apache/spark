@@ -47,7 +47,7 @@ private[thriftserver] class SparkSQLOperationManager()
       confOverlay: JMap[String, String],
       async: Boolean): ExecuteStatementOperation = synchronized {
     val hiveContext = sessionToContexts(parentSession.getSessionHandle)
-    val runInBackground = async && hiveContext.hiveThriftServerAsync
+    val runInBackground = async && hiveContext.sessionState.hiveThriftServerAsync
     val operation = new SparkExecuteStatementOperation(parentSession, statement, confOverlay,
       runInBackground)(hiveContext, sessionToActivePool)
     handleToOperation.put(operation.getHandle, operation)

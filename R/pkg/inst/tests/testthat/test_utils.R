@@ -140,3 +140,27 @@ test_that("cleanClosure on R functions", {
   expect_equal(ls(env), "aBroadcast")
   expect_equal(get("aBroadcast", envir = env, inherits = FALSE), aBroadcast)
 })
+
+test_that("varargsToJProperties", {
+  jprops <- newJObject("java.util.Properties")
+  expect_true(class(jprops) == "jobj")
+
+  jprops <- varargsToJProperties(abc = "123")
+  expect_true(class(jprops) == "jobj")
+  expect_equal(callJMethod(jprops, "getProperty", "abc"), "123")
+
+  jprops <- varargsToJProperties(abc = "abc", b = 1)
+  expect_equal(callJMethod(jprops, "getProperty", "abc"), "abc")
+  expect_equal(callJMethod(jprops, "getProperty", "b"), "1")
+
+  jprops <- varargsToJProperties()
+  expect_equal(callJMethod(jprops, "size"), 0L)
+})
+
+test_that("convertToJSaveMode", {
+  s <- convertToJSaveMode("error")
+  expect_true(class(s) == "jobj")
+  expect_match(capture.output(print.jobj(s)), "Java ref type org.apache.spark.sql.SaveMode id ")
+  expect_error(convertToJSaveMode("foo"),
+    'mode should be one of "append", "overwrite", "error", "ignore"') #nolint
+})

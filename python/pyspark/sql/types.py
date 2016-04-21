@@ -442,6 +442,15 @@ class StructType(DataType):
     """Struct type, consisting of a list of :class:`StructField`.
 
     This is the data type representing a :class:`Row`.
+
+    Iterating a :class:`StructType` will iterate its :class:`StructField`s.
+    A contained :class:`StructField` can be accessed by name or position.
+
+    >>> struct1 = StructType([StructField("f1", StringType(), True)])
+    >>> struct1["f1"]
+    StructField(f1,StringType,true)
+    >>> struct1[0]
+    StructField(f1,StringType,true)
     """
     def __init__(self, fields=None):
         """
@@ -463,7 +472,7 @@ class StructType(DataType):
             self.names = [f.name for f in fields]
             assert all(isinstance(f, StructField) for f in fields),\
                 "fields should be a list of StructField"
-        self._needSerializeAnyField = any(f.needConversion() for f in self.fields)
+        self._needSerializeAnyField = any(f.needConversion() for f in self)
 
     def add(self, field, data_type=None, nullable=True, metadata=None):
         """
@@ -508,19 +517,44 @@ class StructType(DataType):
                 data_type_f = data_type
             self.fields.append(StructField(field, data_type_f, nullable, metadata))
             self.names.append(field)
-        self._needSerializeAnyField = any(f.needConversion() for f in self.fields)
+        self._needSerializeAnyField = any(f.needConversion() for f in self)
         return self
 
+    def __iter__(self):
+        """Iterate the fields"""
+        return iter(self.fields)
+
+    def __len__(self):
+        """Return the number of fields."""
+        return len(self.fields)
+
+    def __getitem__(self, key):
+        """Access fields by name or slice."""
+        if isinstance(key, str):
+            for field in self:
+                if field.name == key:
+                    return field
+            raise KeyError('No StructField named {0}'.format(key))
+        elif isinstance(key, int):
+            try:
+                return self.fields[key]
+            except IndexError:
+                raise IndexError('StructType index out of range')
+        elif isinstance(key, slice):
+            return StructType(self.fields[key])
+        else:
+            raise TypeError('StructType keys should be strings, integers or slices')
+
     def simpleString(self):
-        return 'struct<%s>' % (','.join(f.simpleString() for f in self.fields))
+        return 'struct<%s>' % (','.join(f.simpleString() for f in self))
 
     def __repr__(self):
         return ("StructType(List(%s))" %
-                ",".join(str(field) for field in self.fields))
+                ",".join(str(field) for field in self))
 
     def jsonValue(self):
         return {"type": self.typeName(),
-                "fields": [f.jsonValue() for f in self.fields]}
+                "fields": [f.jsonValue() for f in self]}
 
     @classmethod
     def fromJson(cls, json):

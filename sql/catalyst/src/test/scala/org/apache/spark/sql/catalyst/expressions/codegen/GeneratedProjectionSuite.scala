@@ -76,7 +76,7 @@ class GeneratedProjectionSuite extends SparkFunSuite {
     val exprs = nestedSchema.fields.zipWithIndex.map { case (f, i) =>
       BoundReference(i, f.dataType, true)
     }
-    val mutableProj = GenerateMutableProjection.generate(exprs)()
+    val mutableProj = GenerateMutableProjection.generate(exprs)
     val row1 = mutableProj(result)
     assert(result === row1)
     val row2 = mutableProj(result)

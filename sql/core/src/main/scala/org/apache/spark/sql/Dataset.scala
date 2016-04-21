@@ -461,9 +461,7 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   @Experimental
-  def isStreaming: Boolean = logicalPlan.find { n =>
-      n.isInstanceOf[StreamingRelation] || n.isInstanceOf[StreamingExecutionRelation]
-    }.isDefined
+  def isStreaming: Boolean = logicalPlan.isStreaming
 
   /**
    * Displays the [[Dataset]] in a tabular form. Strings more than 20 characters will be truncated,
@@ -2253,16 +2251,16 @@ class Dataset[T] private[sql](
   def unpersist(): this.type = unpersist(blocking = false)
 
   /**
-   * Represents the content of the [[Dataset]] as an [[RDD]] of [[Row]]s. Note that the RDD is
-   * memoized. Once called, it won't change even if you change any query planning related Spark SQL
-   * configurations (e.g. `spark.sql.shuffle.partitions`).
+   * Represents the content of the [[Dataset]] as an [[RDD]] of [[T]].
    *
    * @group rdd
    * @since 1.6.0
    */
   lazy val rdd: RDD[T] = {
-    queryExecution.toRdd.mapPartitions { rows =>
-      rows.map(boundTEncoder.fromRow)
+    val objectType = unresolvedTEncoder.deserializer.dataType
+    val deserialized = CatalystSerde.deserialize[T](logicalPlan)
+    sqlContext.executePlan(deserialized).toRdd.mapPartitions { rows =>
+      rows.map(_.get(0, objectType).asInstanceOf[T])
     }
   }
 

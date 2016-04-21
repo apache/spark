@@ -225,6 +225,10 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     this
   }
 
+  private[spark] def remove(entry: ConfigEntry[_]): SparkConf = {
+    remove(entry.key)
+  }
+
   /** Get a parameter; throws a NoSuchElementException if it's not set */
   def get(key: String): String = {
     getOption(key).getOrElse(throw new NoSuchElementException(key))
