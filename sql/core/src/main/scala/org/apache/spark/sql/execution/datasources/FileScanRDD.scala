@@ -141,7 +141,7 @@ class FileScanRDD(
     // Computes total number of bytes can be retrieved from each host.
     val hostToNumBytes = mutable.HashMap.empty[String, Long]
     files.foreach { file =>
-      file.locations foreach { host =>
+      file.locations.filter(_ != "localhost").foreach { host =>
         hostToNumBytes(host) = hostToNumBytes.getOrElse(host, 0L) + file.length
       }
     }
