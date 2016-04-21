@@ -24,7 +24,6 @@ import scala.language.reflectiveCalls
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.hive.cli.CliSessionState
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.{PartitionDropOptions, TableType => HiveTableType}
 import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, FieldSchema, Function => HiveFunction, FunctionType, PrincipalType, ResourceType, ResourceUri}
@@ -110,10 +109,20 @@ private[hive] class HiveClientImpl(
       }
     }
 
+    def isCliSessionState(state: SessionState): Boolean = {
+      var temp: Class[_] = if (state != null) state.getClass else null
+      var found = false
+      while (temp != null && !found) {
+        found = temp.getName == "org.apache.hadoop.hive.cli.CliSessionState"
+        temp = temp.getSuperclass
+      }
+      found
+    }
+
     val ret = try {
       // originState will be created if not exists, will never be null
       val originalState = SessionState.get()
-      if (originalState.isInstanceOf[CliSessionState]) {
+      if (isCliSessionState(originalState)) {
         // In `SparkSQLCLIDriver`, we have already started a `CliSessionState`,
         // which contains information like configurations from command line. Later
         // we call `SparkSQLEnv.init()` there, which would run into this part again.

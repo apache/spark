@@ -17,13 +17,12 @@
 package org.apache.spark.sql.hive.execution
 
 import scala.collection.JavaConverters._
+import scala.util.Try
 
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hadoop.hive.ql.parse.{EximUtil, VariableSubstitution}
+import org.apache.hadoop.hive.ql.parse.VariableSubstitution
 import org.apache.hadoop.hive.serde.serdeConstants
-import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.parser._
@@ -32,18 +31,16 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkSqlAstBuilder
 import org.apache.spark.sql.execution.command.{CreateTable, CreateTableLike}
 import org.apache.spark.sql.hive.{CreateTableAsSelect => CTAS, CreateViewAsSelect => CreateView, HiveSerDe}
-import org.apache.spark.sql.hive.{HiveGenericUDTF, HiveMetastoreTypes, HiveSerDe}
-import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Concrete parser for HiveQl statements.
  */
-class HiveSqlParser(
-    substitutor: VariableSubstitution,
-    hiveconf: HiveConf)
-  extends AbstractSqlParser {
+class HiveSqlParser(conf: SQLConf, hiveconf: HiveConf) extends AbstractSqlParser {
 
-  val astBuilder = new HiveSqlAstBuilder(hiveconf)
+  val astBuilder = new HiveSqlAstBuilder(conf)
+
+  lazy val substitutor = new VariableSubstitution
 
   protected override def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
     super.parse(substitutor.substitute(hiveconf, command))(toResult)
@@ -57,7 +54,7 @@ class HiveSqlParser(
 /**
  * Builder that converts an ANTLR ParseTree into a LogicalPlan/Expression/TableIdentifier.
  */
-class HiveSqlAstBuilder(hiveConf: HiveConf) extends SparkSqlAstBuilder {
+class HiveSqlAstBuilder(conf: SQLConf) extends SparkSqlAstBuilder {
   import ParserUtils._
 
   /**
@@ -184,8 +181,8 @@ class HiveSqlAstBuilder(hiveConf: HiveConf) extends SparkSqlAstBuilder {
 
     // Storage format
     val defaultStorage: CatalogStorageFormat = {
-      val defaultStorageType = hiveConf.getVar(HiveConf.ConfVars.HIVEDEFAULTFILEFORMAT)
-      val defaultHiveSerde = HiveSerDe.sourceToSerDe(defaultStorageType, hiveConf)
+      val defaultStorageType = conf.getConfString("hive.default.fileformat", "textfile")
+      val defaultHiveSerde = HiveSerDe.sourceToSerDe(defaultStorageType, conf)
       CatalogStorageFormat(
         locationUri = None,
         inputFormat = defaultHiveSerde.flatMap(_.inputFormat)
@@ -323,7 +320,7 @@ class HiveSqlAstBuilder(hiveConf: HiveConf) extends SparkSqlAstBuilder {
 
     // Decode and input/output format.
     type Format = (Seq[(String, String)], Option[String], Seq[(String, String)], Option[String])
-    def format(fmt: RowFormatContext, confVar: ConfVars): Format = fmt match {
+    def format(fmt: RowFormatContext, configKey: String): Format = fmt match {
       case c: RowFormatDelimitedContext =>
         // TODO we should use the visitRowFormatDelimited function here. However HiveScriptIOSchema
         // expects a seq of pairs in which the old parsers' token names are used as keys.
@@ -345,8 +342,8 @@ class HiveSqlAstBuilder(hiveConf: HiveConf) extends SparkSqlAstBuilder {
         val CatalogStorageFormat(None, None, None, Some(name), props) = visitRowFormatSerde(c)
 
         // SPARK-10310: Special cases LazySimpleSerDe
-        val recordHandler = if (name == classOf[LazySimpleSerDe].getCanonicalName) {
-          Option(hiveConf.getVar(confVar))
+        val recordHandler = if (name == "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe") {
+          Try(conf.getConfString(configKey)).toOption
         } else {
           None
         }
@@ -354,17 +351,18 @@ class HiveSqlAstBuilder(hiveConf: HiveConf) extends SparkSqlAstBuilder {
 
       case null =>
         // Use default (serde) format.
-        val name = hiveConf.getVar(ConfVars.HIVESCRIPTSERDE)
+        val name = conf.getConfString("hive.script.serde",
+          "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")
         val props = Seq(serdeConstants.FIELD_DELIM -> "\t")
-        val recordHandler = Option(hiveConf.getVar(confVar))
+        val recordHandler = Try(conf.getConfString(configKey)).toOption
         (Nil, Option(name), props, recordHandler)
     }
 
     val (inFormat, inSerdeClass, inSerdeProps, reader) =
-      format(inRowFormat, ConfVars.HIVESCRIPTRECORDREADER)
+      format(inRowFormat, "hive.script.recordreader")
 
     val (outFormat, outSerdeClass, outSerdeProps, writer) =
-      format(inRowFormat, ConfVars.HIVESCRIPTRECORDWRITER)
+      format(outRowFormat, "hive.script.recordwriter")
 
     HiveScriptIOSchema(
       inFormat, outFormat,
@@ -372,13 +370,6 @@ class HiveSqlAstBuilder(hiveConf: HiveConf) extends SparkSqlAstBuilder {
       inSerdeProps, outSerdeProps,
       reader, writer,
       schemaLess)
-  }
-
-  /**
-   * Create location string.
-   */
-  override def visitLocationSpec(ctx: LocationSpecContext): String = {
-    EximUtil.relativeToAbsolutePath(hiveConf, super.visitLocationSpec(ctx))
   }
 
   /** Empty storage format for default values and copies. */
@@ -402,7 +393,7 @@ class HiveSqlAstBuilder(hiveConf: HiveConf) extends SparkSqlAstBuilder {
   override def visitGenericFileFormat(
       ctx: GenericFileFormatContext): CatalogStorageFormat = withOrigin(ctx) {
     val source = ctx.identifier.getText
-    HiveSerDe.sourceToSerDe(source, hiveConf) match {
+    HiveSerDe.sourceToSerDe(source, conf) match {
       case Some(s) =>
         EmptyStorageFormat.copy(
           inputFormat = s.inputFormat,

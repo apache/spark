@@ -289,7 +289,7 @@ object SQLConf {
   val DEFAULT_DATA_SOURCE_NAME = SQLConfigBuilder("spark.sql.sources.default")
     .doc("The default data source to use in input/output.")
     .stringConf
-    .createWithDefault("org.apache.spark.sql.parquet")
+    .createWithDefault("parquet")
 
   // This is used to control the when we will split a schema's JSON string to multiple pieces
   // in order to fit the JSON string in metastore's table property (by default, the value has
@@ -457,6 +457,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val VARIABLE_SUBSTITUTE_ENABLED =
+    SQLConfigBuilder("spark.sql.variable.substitute")
+      .doc("This enables substitution using syntax like ${var} ${system:var} and ${env:var}.")
+      .booleanConf
+      .createWithDefault(true)
+
+  val VARIABLE_SUBSTITUTE_DEPTH =
+    SQLConfigBuilder("spark.sql.variable.substitute.depth")
+      .doc("The maximum replacements the substitution engine will do.")
+      .intConf
+      .createWithDefault(40)
+
   // TODO: This is still WIP and shouldn't be turned on without extensive test coverage
   val COLUMNAR_AGGREGATE_MAP_ENABLED = SQLConfigBuilder("spark.sql.codegen.aggregate.map.enabled")
     .internal()
@@ -614,6 +626,10 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def runSQLOnFile: Boolean = getConf(RUN_SQL_ON_FILES)
 
   def columnarAggregateMapEnabled: Boolean = getConf(COLUMNAR_AGGREGATE_MAP_ENABLED)
+
+  def variableSubstituteEnabled: Boolean = getConf(VARIABLE_SUBSTITUTE_ENABLED)
+
+  def variableSubstituteDepth: Int = getConf(VARIABLE_SUBSTITUTE_DEPTH)
 
   override def orderByOrdinal: Boolean = getConf(ORDER_BY_ORDINAL)
 
