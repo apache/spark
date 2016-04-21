@@ -29,7 +29,8 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 
 import com.google.common.io.Files
-import org.mockito.Mockito.{mock, when}
+import org.mockito.Matchers.any
+import org.mockito.Mockito.{mock, never, verify, when}
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually._
 
@@ -844,6 +845,31 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     }
   }
 
+  test("SPARK-14699: RpcEnv.shutdown should not fire onDisconnected events") {
+    env.setupEndpoint("SPARK-14699", new RpcEndpoint {
+      override val rpcEnv: RpcEnv = env
+
+      override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+        case m => context.reply(m)
+      }
+    })
+
+    val anotherEnv = createRpcEnv(new SparkConf(), "remote", 0)
+    val endpoint = mock(classOf[RpcEndpoint])
+    anotherEnv.setupEndpoint("SPARK-14699", endpoint)
+
+    val ref = anotherEnv.setupEndpointRef(env.address, "SPARK-14699")
+    // Make sure the connect is set up
+    assert(ref.askWithRetry[String]("hello") === "hello")
+    anotherEnv.shutdown()
+    anotherEnv.awaitTermination()
+
+    env.stop(ref)
+
+    verify(endpoint).onStop()
+    verify(endpoint, never()).onDisconnected(any())
+    verify(endpoint, never()).onNetworkError(any(), any())
+  }
 }
 
 class UnserializableClass
