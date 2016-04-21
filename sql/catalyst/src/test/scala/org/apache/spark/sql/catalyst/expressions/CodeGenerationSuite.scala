@@ -22,8 +22,8 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData,GenericArrayData}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ThreadUtils
 
