@@ -128,10 +128,6 @@
       <artifactId>xbean-asm5-shaded</artifactId>
       <scope>test</scope>
     </dependency>
-    <dependency>
-      <groupId>org.spark-project.hive</groupId>
-      <artifactId>hive-exec</artifactId>
-    </dependency>
   </dependencies>
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>

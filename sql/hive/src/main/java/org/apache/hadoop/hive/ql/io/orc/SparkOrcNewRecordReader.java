@@ -21,26 +21,26 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapreduce.InputSplit;
-import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 
 import java.io.IOException;
 import java.util.List;
 
 /**
- * This is based on
+ * This is based on hive-exec-1.2.1
  * {@link org.apache.hadoop.hive.ql.io.orc.OrcNewInputFormat.OrcRecordReader}.
  * This class exposes getObjectInspector which can be used for reducing
  * NameNode calls in OrcRelation.
  */
-public class OrcRecordReader extends RecordReader<NullWritable, OrcStruct> {
+public class SparkOrcNewRecordReader extends
+    org.apache.hadoop.mapreduce.RecordReader<NullWritable, OrcStruct> {
   private final org.apache.hadoop.hive.ql.io.orc.RecordReader reader;
   private final int numColumns;
   OrcStruct value;
   private float progress = 0.0f;
   private ObjectInspector objectInspector;
 
-  public OrcRecordReader(Reader file, Configuration conf,
+  public SparkOrcNewRecordReader(Reader file, Configuration conf,
       long offset, long length) throws IOException {
     List<OrcProto.Type> types = file.getTypes();
     numColumns = (types.size() == 0) ? 0 : types.get(0).getSubtypesCount();
