@@ -229,8 +229,11 @@ setCheckpointDir <- function(sc, dirName) {
 #' Set new log level
 #'
 #' Set new log level: "ALL", "DEBUG", "ERROR", "FATAL", "INFO", "OFF", "TRACE", "WARN"
+#'
+#' @rdname setLogLevel
 #' @param sc Spark Context to use
 #' @param level New log level
+#' @export
 #' @examples
 #'\dontrun{
 #' setLogLevel(sc, "ERROR")
