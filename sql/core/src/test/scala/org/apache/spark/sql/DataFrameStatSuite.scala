@@ -297,6 +297,41 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
     assert(filter4.bitSize() == 64 * 5)
     assert(0.until(1000).forall(i => filter4.mightContain(i * 3)))
   }
+
+  test("Cumulative Sum") {
+    val n = 1000
+    val rng = new Random()
+    val data = Seq.tabulate(n)(i => (rng.nextInt(), rng.nextDouble()))
+    val df = data.toDF("a", "b")
+
+    val cum = df.stat.cumulate("a").select("a", "cumulated_a")
+      .map(r => (r.getInt(0), r.getDouble(1))).collect()
+    assert(cum.length === n)
+    var s = 0.0
+    cum.zipWithIndex.foreach {
+      case ((a, cum_a), i) =>
+        assert(a === data(i)._1)
+        s += a
+        assert(s === cum_a +- 1e-9)
+    }
+
+    val cum2 = df.stat.cumulate(Seq("a", "b"), "prefix_")
+      .select("a", "prefix_a", "b", "prefix_b")
+      .map(r => (r.getInt(0), r.getDouble(1), r.getDouble(2), r.getDouble(3))).collect()
+    assert(cum2.length === n)
+    var sa = 0.0
+    var sb = 0.0
+    cum2.zipWithIndex.foreach {
+      case ((a, cum_a, b, cum_b), i) =>
+        assert(a === data(i)._1)
+        sa += a
+        assert(sa === cum_a +- 1e-9)
+        assert(b === data(i)._2)
+        sb += b
+        assert(sb === cum_b +- 1e-9)
+    }
+  }
+
 }
 
 

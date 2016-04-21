@@ -456,4 +456,93 @@ private[sql] object StatFunctions extends Logging {
 
     Dataset.ofRows(df.sqlContext, LocalRelation(schema.toAttributes, table)).na.fill(0.0)
   }
+
+  /**
+   * Calculate the cumulative sum of numerical columns of a DataFrame.
+   * @param df The DataFrame
+   * @param cols the input column names
+   * @param outCols the output column names
+   * @return the DataFrame with the cumulated columns.
+   */
+  private[sql] def cumulate(df: DataFrame,
+                            cols: Seq[String],
+                            outCols: Seq[String]) : DataFrame = {
+    require(cols.nonEmpty, "Input columns must not be empty")
+    require(cols.size == outCols.size,
+      "Number of input columns must be equal to number of output columns")
+
+    val numCols = cols.size
+
+    val columns: Seq[Column] = cols.map { colName =>
+      val field = df.schema(colName)
+      require(field.dataType.isInstanceOf[NumericType],
+        s"Cumulative sum for column $colName with data type ${field.dataType}" +
+          " is not supported.")
+      Column(Cast(Column(colName).expr, DoubleType))
+    }
+
+    val numPartitions = df.rdd.partitions.length
+    val castedRows = df.select(columns: _*).rdd
+
+    // Calculate sum per partition except the last partition
+    val sums = castedRows.mapPartitionsWithIndex {
+      (pid, iter) =>
+        if (pid != numPartitions - 1) {
+          val sumPerPartition = Array.fill[Double](numCols)(0.0)
+          iter.foreach {
+            row =>
+              var i = 0
+              while (i < numCols) {
+                sumPerPartition(i) += row.getDouble(i)
+                i += 1
+              }
+          }
+          Iterator.single((pid, sumPerPartition))
+        } else {
+          // The last partition do not need to be calculated
+          Iterator.empty
+        }
+    }.collect().sortBy(_._1).map(_._2)
+
+    // Calculate cumulative sum per partition except the last partition
+    var p = 0
+    while (p < numPartitions - 2) {
+      var i = 0
+      while (i < numCols) {
+        sums(p + 1)(i) += sums(p)(i)
+        i += 1
+      }
+      p += 1
+    }
+
+    val cumulatedRows = castedRows.mapPartitionsWithIndex {
+      (pid, iter) =>
+        val cum = if (pid != 0) {
+          sums(pid - 1)
+        } else {
+          Array.fill[Double](numCols)(0.0)
+        }
+        iter.map {
+          row =>
+            var i = 0
+            while (i < numCols) {
+              cum(i) += row.getDouble(i)
+              i += 1
+            }
+            Row(cum.clone(): _*)
+        }
+    }
+
+    val zippedRows = (df.rdd zip cumulatedRows).map {
+      case (oldRow, newRow) =>
+        val zipped = oldRow.toSeq ++ newRow.toSeq
+        Row(zipped: _*)
+    }
+
+    val zippedSchema = StructType(df.schema.fields ++
+      outCols.map(StructField(_, DoubleType)))
+
+    df.sqlContext.createDataFrame(zippedRows, zippedSchema)
+  }
+
 }

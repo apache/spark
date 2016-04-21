@@ -519,4 +519,61 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
       (filter1, filter2) => filter1.mergeInPlace(filter2)
     )
   }
+
+  /**
+   * Calculate the cumulative sum of numerical columns of a DataFrame.
+   * @param cols the input column names
+   * @param outCols the output column names
+   * @return the DataFrame with the cumulated columns.
+   * @since 2.0.0
+   */
+  def cumulate(cols: Seq[String], outCols: Seq[String]) : DataFrame = {
+    StatFunctions.cumulate(df, cols, outCols)
+  }
+
+  /**
+   * Calculate the cumulative sum of numerical columns of a DataFrame.
+   * @param cols the input column names
+   * @param prefix the prefix to generate output column names
+   * @return the DataFrame with the cumulated columns.
+   * @since 2.0.0
+   */
+  private[sql] def cumulate(cols: Seq[String], prefix: String) : DataFrame = {
+    require(prefix.nonEmpty, "Prefix of output columns must not be empty")
+    val outCols = cols.map(prefix + _)
+    cumulate(cols, outCols)
+  }
+
+  /**
+   * Calculate the cumulative sum of numerical columns of a DataFrame.
+   * @param cols the input column names
+   * @return the DataFrame with the cumulated columns.
+   * @since 2.0.0
+   */
+  private[sql] def cumulate(cols: Seq[String]) : DataFrame = {
+    val prefix = "cumulated_"
+    cumulate(cols, prefix)
+  }
+
+  /**
+   * Calculate the cumulative sum of a numerical column of a DataFrame.
+   * @param col the input column name
+   * @param outCol the output column name
+   * @return the DataFrame with the cumulated column.
+   * @since 2.0.0
+   */
+  def cumulate(col: String, outCol: String) : DataFrame = {
+    cumulate(Seq(col), Seq(outCol))
+  }
+
+  /**
+   * Calculate the cumulative sum of a numerical column of a DataFrame.
+   * @param col the input column name
+   * @return the DataFrame with the cumulated column.
+   * @since 2.0.0
+   */
+  def cumulate(col: String) : DataFrame = {
+    cumulate(Seq(col))
+  }
+
 }
