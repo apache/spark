@@ -26,7 +26,7 @@ if sys.version >= '3':
 
 from py4j.java_gateway import JavaObject
 
-from pyspark import RDD
+from pyspark import RDD, since
 from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
 from pyspark.mllib.linalg import _convert_to_vector, Matrix, QRDecomposition
 from pyspark.mllib.stat import MultivariateStatisticalSummary
@@ -153,6 +153,7 @@ class RowMatrix(DistributedMatrix):
         """
         return self._java_matrix_wrapper.call("numCols")
 
+    @since('2.0.0')
     def computeColumnSummaryStatistics(self):
         """
         Computes column-wise summary statistics.
@@ -170,6 +171,7 @@ class RowMatrix(DistributedMatrix):
         java_col_stats = self._java_matrix_wrapper.call("computeColumnSummaryStatistics")
         return MultivariateStatisticalSummary(java_col_stats)
 
+    @since('2.0.0')
     def computeCovariance(self):
         """
         Computes the covariance matrix, treating each row as an
@@ -184,6 +186,7 @@ class RowMatrix(DistributedMatrix):
         """
         return self._java_matrix_wrapper.call("computeCovariance")
 
+    @since('2.0.0')
     def computeGramianMatrix(self):
         """
         Computes the Gramian matrix `A^T A`. Note that this cannot be
@@ -197,6 +200,7 @@ class RowMatrix(DistributedMatrix):
         """
         return self._java_matrix_wrapper.call("computeGramianMatrix")
 
+    @since('2.0.0')
     def columnSimilarities(self, threshold=0.0):
         """
         Compute similarities between columns of this matrix.
@@ -258,6 +262,7 @@ class RowMatrix(DistributedMatrix):
         java_sims_mat = self._java_matrix_wrapper.call("columnSimilarities", float(threshold))
         return CoordinateMatrix(java_sims_mat)
 
+    @since('2.0.0')
     def tallSkinnyQR(self, computeQ=False):
         """
         Compute the QR decomposition of this RowMatrix.
@@ -458,6 +463,7 @@ class IndexedRowMatrix(DistributedMatrix):
         java_coordinate_matrix = self._java_matrix_wrapper.call("columnSimilarities")
         return CoordinateMatrix(java_coordinate_matrix)
 
+    @since('2.0.0')
     def computeGramianMatrix(self):
         """
         Computes the Gramian matrix `A^T A`. Note that this cannot be
@@ -675,6 +681,7 @@ class CoordinateMatrix(DistributedMatrix):
         """
         return self._java_matrix_wrapper.call("numCols")
 
+    @since('2.0.0')
     def transpose(self):
         """
         Transpose this CoordinateMatrix.
@@ -969,6 +976,7 @@ class BlockMatrix(DistributedMatrix):
         """
         return self._java_matrix_wrapper.call("numCols")
 
+    @since('2.0.0')
     def cache(self):
         """
         Caches the underlying RDD.
@@ -976,6 +984,7 @@ class BlockMatrix(DistributedMatrix):
         self._java_matrix_wrapper.call("cache")
         return self
 
+    @since('2.0.0')
     def persist(self, storageLevel):
         """
         Persists the underlying RDD with the specified storage level.
@@ -986,6 +995,7 @@ class BlockMatrix(DistributedMatrix):
         self._java_matrix_wrapper.call("persist", javaStorageLevel)
         return self
 
+    @since('2.0.0')
     def validate(self):
         """
         Validates the block matrix info against the matrix data (`blocks`)
@@ -1061,6 +1071,7 @@ class BlockMatrix(DistributedMatrix):
         java_block_matrix = self._java_matrix_wrapper.call("multiply", other_java_block_matrix)
         return BlockMatrix(java_block_matrix, self.rowsPerBlock, self.colsPerBlock)
 
+    @since('2.0.0')
     def transpose(self):
         """
         Transpose this BlockMatrix. Returns a new BlockMatrix

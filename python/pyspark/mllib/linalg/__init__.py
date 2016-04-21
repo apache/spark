@@ -38,6 +38,7 @@ else:
 
 import numpy as np
 
+from pyspark import since
 from pyspark.sql.types import UserDefinedType, StructField, StructType, ArrayType, DoubleType, \
     IntegerType, ByteType, BooleanType
 
@@ -1247,6 +1248,7 @@ class QRDecomposition(object):
         self._R = R
 
     @property
+    @since('2.0.0')
     def Q(self):
         """
         An orthogonal matrix Q in a QR decomposition.
@@ -1255,6 +1257,7 @@ class QRDecomposition(object):
         return self._Q
 
     @property
+    @since('2.0.0')
     def R(self):
         """
         An upper triangular matrix R in a QR decomposition.
