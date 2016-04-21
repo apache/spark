@@ -107,7 +107,7 @@ case class AnalyzeTable(tableName: String) extends RunnableCommand {
         // This logic is based on org.apache.hadoop.hive.ql.exec.StatsTask.aggregateStats().
         if (newTotalSize > 0 && newTotalSize != oldTotalSize) {
           sessionState.catalog.alterTable(
-            relation.table.copy(
+            catalogTable.copy(
               properties = relation.table.properties +
                 (StatsSetupConst.TOTAL_SIZE -> newTotalSize.toString)))
         }
