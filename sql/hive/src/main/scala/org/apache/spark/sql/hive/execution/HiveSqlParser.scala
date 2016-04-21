@@ -77,7 +77,9 @@ class HiveSqlAstBuilder(conf: SQLConf) extends SparkSqlAstBuilder(conf) {
       ctx.identifier.getText.toLowerCase == "noscan") {
       AnalyzeTable(visitTableIdentifier(ctx.tableIdentifier).toString)
     } else {
-      HiveNativeCommand(command(ctx))
+      // Always just run the no scan analyze. We should fix this and implement full analyze
+      // command in the future.
+      AnalyzeTable(visitTableIdentifier(ctx.tableIdentifier).toString)
     }
   }
 
