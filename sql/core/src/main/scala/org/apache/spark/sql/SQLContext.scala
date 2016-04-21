@@ -781,6 +781,7 @@ class SQLContext private[sql](
     }
   })
 
+  sparkSession.setWrappedContext(self)
   SQLContext.setInstantiatedContext(self)
 }
 
