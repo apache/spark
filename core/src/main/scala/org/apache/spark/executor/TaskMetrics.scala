@@ -243,6 +243,7 @@ private[spark] class ListenerTaskMetrics(accumUpdates: Seq[AccumulableInfo]) ext
 
 private[spark] object TaskMetrics extends Logging {
 
+  // This is only used for tests.
   def empty: TaskMetrics = {
     val tm = new TaskMetrics
     // We don't register this task metrics for cleanup, so un-register it immediately.

@@ -28,17 +28,13 @@ import org.apache.spark.util.Utils
 
 
 /**
- * A data type that can be accumulated, ie has an commutative and associative "add" operation,
+ * A data type that can be accumulated, i.e. has an commutative and associative "add" operation,
  * but where the result type, `R`, may be different from the element type being added, `T`.
  *
  * You must define how to add data, and how to merge two of these together.  For some data types,
  * such as a counter, these might be the same operation. In that case, you can use the simpler
  * [[org.apache.spark.Accumulator]]. They won't always be the same, though -- e.g., imagine you are
  * accumulating a set. You will add items to the set, and you will union two sets together.
- *
- * All accumulators created on the driver to be used on the executors must be registered with
- * [[Accumulators]]. This is already done automatically for accumulators created by the user.
- * Internal accumulators must be explicitly registered by the caller.
  *
  * Operations are not thread-safe.
  *
@@ -80,10 +76,7 @@ class Accumulable[R, T] private (
   val zero = param.zero(initialValue) // Zero value to be passed to executors
   private var deserialized = false
 
-  // Only register [[Accumulable]]s at driver side.
-  if (!deserialized) {
-    Accumulators.register(this)
-  }
+  Accumulators.register(this)
 
   /**
    * Return a copy of this [[Accumulable]].

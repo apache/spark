@@ -127,17 +127,24 @@ class ShuffleReadMetrics private[spark] () extends Serializable {
  * last.
  */
 private[spark] class TempShuffleReadMetrics {
-  var remoteBlocksFetched = 0
-  var localBlocksFetched = 0
-  var remoteBytesRead = 0L
-  var localBytesRead = 0L
-  var fetchWaitTime = 0L
-  var recordsRead = 0L
+  private[this] var _remoteBlocksFetched = 0
+  private[this] var _localBlocksFetched = 0
+  private[this] var _remoteBytesRead = 0L
+  private[this] var _localBytesRead = 0L
+  private[this] var _fetchWaitTime = 0L
+  private[this] var _recordsRead = 0L
 
-  def incRemoteBlocksFetched(v: Int): Unit = remoteBlocksFetched += v
-  def incLocalBlocksFetched(v: Int): Unit = localBlocksFetched += v
-  def incRemoteBytesRead(v: Long): Unit = remoteBytesRead += v
-  def incLocalBytesRead(v: Long): Unit = localBytesRead += v
-  def incFetchWaitTime(v: Long): Unit = fetchWaitTime += v
-  def incRecordsRead(v: Long): Unit = recordsRead += v
+  def incRemoteBlocksFetched(v: Int): Unit = _remoteBlocksFetched += v
+  def incLocalBlocksFetched(v: Int): Unit = _localBlocksFetched += v
+  def incRemoteBytesRead(v: Long): Unit = _remoteBytesRead += v
+  def incLocalBytesRead(v: Long): Unit = _localBytesRead += v
+  def incFetchWaitTime(v: Long): Unit = _fetchWaitTime += v
+  def incRecordsRead(v: Long): Unit = _recordsRead += v
+
+  def remoteBlocksFetched: Int = _remoteBlocksFetched
+  def localBlocksFetched: Int = _localBlocksFetched
+  def remoteBytesRead: Long = _remoteBytesRead
+  def localBytesRead: Long = _localBytesRead
+  def fetchWaitTime: Long = _fetchWaitTime
+  def recordsRead: Long = _recordsRead
 }
