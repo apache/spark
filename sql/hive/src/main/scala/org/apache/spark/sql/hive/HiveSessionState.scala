@@ -21,7 +21,6 @@ import java.util.regex.Pattern
 
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hadoop.hive.ql.parse.VariableSubstitution
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.Analyzer
@@ -109,7 +108,7 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
   /**
    * Parser for HiveQl query texts.
    */
-  override lazy val sqlParser: ParserInterface = new HiveSqlParser(conf, hiveconf)
+  override lazy val sqlParser: ParserInterface = new HiveSqlParser(conf)
 
   /**
    * Planner that takes into account Hive-specific strategies.

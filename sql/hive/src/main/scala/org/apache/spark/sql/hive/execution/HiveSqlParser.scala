@@ -20,8 +20,6 @@ package org.apache.spark.sql.hive.execution
 import scala.util.Try
 
 import org.antlr.v4.runtime.Token
-import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.ql.parse.VariableSubstitution
 import org.apache.hadoop.hive.serde.serdeConstants
 
 import org.apache.spark.sql.catalyst.catalog._
@@ -29,23 +27,23 @@ import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkSqlAstBuilder
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SQLConf, VariableSubstitution}
 
 /**
  * Concrete parser for HiveQl statements.
  */
-class HiveSqlParser(conf: SQLConf, hiveconf: HiveConf) extends AbstractSqlParser {
+class HiveSqlParser(conf: SQLConf) extends AbstractSqlParser {
 
   val astBuilder = new HiveSqlAstBuilder(conf)
 
-  lazy val substitutor = new VariableSubstitution
+  private val substitutor = new VariableSubstitution(conf)
 
   protected override def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
-    super.parse(substitutor.substitute(hiveconf, command))(toResult)
+    super.parse(substitutor.substitute(command))(toResult)
   }
 
   protected override def nativeCommand(sqlText: String): LogicalPlan = {
-    HiveNativeCommand(substitutor.substitute(hiveconf, sqlText))
+    HiveNativeCommand(substitutor.substitute(sqlText))
   }
 }
 
