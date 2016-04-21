@@ -24,12 +24,10 @@ import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.Analyzer
-import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlanner
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.client.{HiveClient, HiveClientImpl}
-import org.apache.spark.sql.hive.execution.HiveSqlParser
 import org.apache.spark.sql.internal.{SessionState, SQLConf}
 
 
@@ -104,11 +102,6 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
       override val extendedCheckRules = Seq(PreWriteCheck(conf, catalog))
     }
   }
-
-  /**
-   * Parser for HiveQl query texts.
-   */
-  override lazy val sqlParser: ParserInterface = new HiveSqlParser(conf)
 
   /**
    * Planner that takes into account Hive-specific strategies.
