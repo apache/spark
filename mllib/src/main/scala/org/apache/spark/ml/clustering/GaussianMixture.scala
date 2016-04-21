@@ -100,10 +100,10 @@ class GaussianMixtureModel private[ml] (
   }
 
   @Since("2.0.0")
-  def gaussians: Array[MultivariateGaussian] = parentModel.gaussians
+  def weights: Array[Double] = parentModel.weights
 
   @Since("2.0.0")
-  def weights: Array[Double] = parentModel.weights
+  def gaussians: Array[MultivariateGaussian] = parentModel.gaussians
 
   /**
    * Helper method used in Python
