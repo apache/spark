@@ -18,11 +18,11 @@
 // scalastyle:off println
 package org.apache.spark.examples.ml
 
+import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.ml.feature.MinMaxScaler
 // $example off$
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.{SparkConf, SparkContext}
 
 object MinMaxScalerExample {
   def main(args: Array[String]): Unit = {
@@ -42,6 +42,7 @@ object MinMaxScalerExample {
 
     // rescale each feature to range [min, max].
     val scaledData = scalerModel.transform(dataFrame)
+    scaledData.show()
     // $example off$
     sc.stop()
   }

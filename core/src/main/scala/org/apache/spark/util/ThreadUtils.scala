@@ -19,10 +19,14 @@ package org.apache.spark.util
 
 import java.util.concurrent._
 
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutor}
+import scala.concurrent.{Await, Awaitable, ExecutionContext, ExecutionContextExecutor}
+import scala.concurrent.duration.Duration
+import scala.concurrent.forkjoin.{ForkJoinPool => SForkJoinPool, ForkJoinWorkerThread => SForkJoinWorkerThread}
 import scala.util.control.NonFatal
 
 import com.google.common.util.concurrent.{MoreExecutors, ThreadFactoryBuilder}
+
+import org.apache.spark.SparkException
 
 private[spark] object ThreadUtils {
 
@@ -154,6 +158,40 @@ private[spark] object ThreadUtils {
         throw realException
       case None =>
         result
+    }
+  }
+
+  /**
+   * Construct a new Scala ForkJoinPool with a specified max parallelism and name prefix.
+   */
+  def newForkJoinPool(prefix: String, maxThreadNumber: Int): SForkJoinPool = {
+    // Custom factory to set thread names
+    val factory = new SForkJoinPool.ForkJoinWorkerThreadFactory {
+      override def newThread(pool: SForkJoinPool) =
+        new SForkJoinWorkerThread(pool) {
+          setName(prefix + "-" + super.getName)
+        }
+    }
+    new SForkJoinPool(maxThreadNumber, factory,
+      null, // handler
+      false // asyncMode
+    )
+  }
+
+  // scalastyle:off awaitresult
+  /**
+   * Preferred alternative to [[Await.result()]]. This method wraps and re-throws any exceptions
+   * thrown by the underlying [[Await]] call, ensuring that this thread's stack trace appears in
+   * logs.
+   */
+  @throws(classOf[SparkException])
+  def awaitResult[T](awaitable: Awaitable[T], atMost: Duration): T = {
+    try {
+      Await.result(awaitable, atMost)
+      // scalastyle:on awaitresult
+    } catch {
+      case NonFatal(t) =>
+        throw new SparkException("Exception thrown in awaitResult: ", t)
     }
   }
 }

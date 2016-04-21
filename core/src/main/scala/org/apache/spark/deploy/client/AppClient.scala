@@ -18,17 +18,18 @@
 package org.apache.spark.deploy.client
 
 import java.util.concurrent._
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 import java.util.concurrent.{Future => JFuture, ScheduledFuture => JScheduledFuture}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.SparkConf
 import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.Master
+import org.apache.spark.internal.Logging
 import org.apache.spark.rpc._
-import org.apache.spark.util.{RpcUtils, ThreadUtils, Utils}
+import org.apache.spark.util.{RpcUtils, ThreadUtils}
 
 /**
  * Interface allowing applications to speak with a Spark deploy cluster. Takes a master URL,
@@ -104,8 +105,7 @@ private[spark] class AppClient(
               return
             }
             logInfo("Connecting to master " + masterAddress.toSparkURL + "...")
-            val masterRef =
-              rpcEnv.setupEndpointRef(Master.SYSTEM_NAME, masterAddress, Master.ENDPOINT_NAME)
+            val masterRef = rpcEnv.setupEndpointRef(masterAddress, Master.ENDPOINT_NAME)
             masterRef.send(RegisterApplication(appDescription, self))
           } catch {
             case ie: InterruptedException => // Cancelled
@@ -124,21 +124,19 @@ private[spark] class AppClient(
      */
     private def registerWithMaster(nthRetry: Int) {
       registerMasterFutures.set(tryRegisterAllMasters())
-      registrationRetryTimer.set(registrationRetryThread.scheduleAtFixedRate(new Runnable {
+      registrationRetryTimer.set(registrationRetryThread.schedule(new Runnable {
         override def run(): Unit = {
-          Utils.tryOrExit {
-            if (registered.get) {
-              registerMasterFutures.get.foreach(_.cancel(true))
-              registerMasterThreadPool.shutdownNow()
-            } else if (nthRetry >= REGISTRATION_RETRIES) {
-              markDead("All masters are unresponsive! Giving up.")
-            } else {
-              registerMasterFutures.get.foreach(_.cancel(true))
-              registerWithMaster(nthRetry + 1)
-            }
+          if (registered.get) {
+            registerMasterFutures.get.foreach(_.cancel(true))
+            registerMasterThreadPool.shutdownNow()
+          } else if (nthRetry >= REGISTRATION_RETRIES) {
+            markDead("All masters are unresponsive! Giving up.")
+          } else {
+            registerMasterFutures.get.foreach(_.cancel(true))
+            registerWithMaster(nthRetry + 1)
           }
         }
-      }, REGISTRATION_TIMEOUT_SECONDS, REGISTRATION_TIMEOUT_SECONDS, TimeUnit.SECONDS))
+      }, REGISTRATION_TIMEOUT_SECONDS, TimeUnit.SECONDS))
     }
 
     /**

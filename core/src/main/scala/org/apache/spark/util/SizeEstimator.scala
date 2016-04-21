@@ -17,18 +17,17 @@
 
 package org.apache.spark.util
 
-import com.google.common.collect.MapMaker
-
 import java.lang.management.ManagementFactory
 import java.lang.reflect.{Field, Modifier}
 import java.util.{IdentityHashMap, Random}
-import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.mutable.ArrayBuffer
 import scala.runtime.ScalaRunTime
 
-import org.apache.spark.Logging
+import com.google.common.collect.MapMaker
+
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.collection.OpenHashSet
 
 /**
@@ -152,13 +151,12 @@ object SizeEstimator extends Logging {
       // TODO: We could use reflection on the VMOption returned ?
       getVMMethod.invoke(bean, "UseCompressedOops").toString.contains("true")
     } catch {
-      case e: Exception => {
+      case e: Exception =>
         // Guess whether they've enabled UseCompressedOops based on whether maxMemory < 32 GB
         val guess = Runtime.getRuntime.maxMemory < (32L*1024*1024*1024)
         val guessInWords = if (guess) "yes" else "not"
         logWarning("Failed to check whether UseCompressedOops is set; assuming " + guessInWords)
         return guess
-      }
     }
   }
 
@@ -254,7 +252,7 @@ object SizeEstimator extends Logging {
       } else {
         // Estimate the size of a large array by sampling elements without replacement.
         // To exclude the shared objects that the array elements may link, sample twice
-        // and use the min one to caculate array size.
+        // and use the min one to calculate array size.
         val rand = new Random(42)
         val drawn = new OpenHashSet[Int](2 * ARRAY_SAMPLE_SIZE)
         val s1 = sampleArray(array, state, rand, drawn, length)

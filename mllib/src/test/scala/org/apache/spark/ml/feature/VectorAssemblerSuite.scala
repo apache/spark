@@ -17,10 +17,10 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.attribute.{AttributeGroup, NominalAttribute, NumericAttribute}
 import org.apache.spark.ml.param.ParamsSuite
+import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Row
@@ -111,8 +111,8 @@ class VectorAssemblerSuite
     assert(userGenderOut === user.getAttr("gender").withName("user_gender").withIndex(3))
     val userSalaryOut = features.getAttr(4)
     assert(userSalaryOut === user.getAttr("salary").withName("user_salary").withIndex(4))
-    assert(features.getAttr(5) === NumericAttribute.defaultAttr.withIndex(5))
-    assert(features.getAttr(6) === NumericAttribute.defaultAttr.withIndex(6))
+    assert(features.getAttr(5) === NumericAttribute.defaultAttr.withIndex(5).withName("ad_0"))
+    assert(features.getAttr(6) === NumericAttribute.defaultAttr.withIndex(6).withName("ad_1"))
   }
 
   test("read/write") {

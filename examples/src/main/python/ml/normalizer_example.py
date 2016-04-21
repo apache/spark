@@ -33,9 +33,11 @@ if __name__ == "__main__":
     # Normalize each Vector using $L^1$ norm.
     normalizer = Normalizer(inputCol="features", outputCol="normFeatures", p=1.0)
     l1NormData = normalizer.transform(dataFrame)
+    l1NormData.show()
 
     # Normalize each Vector using $L^\infty$ norm.
     lInfNormData = normalizer.transform(dataFrame, {normalizer.p: float("inf")})
+    lInfNormData.show()
     # $example off$
 
     sc.stop()

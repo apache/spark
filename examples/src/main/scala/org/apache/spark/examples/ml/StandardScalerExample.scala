@@ -18,11 +18,11 @@
 // scalastyle:off println
 package org.apache.spark.examples.ml
 
+import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.ml.feature.StandardScaler
 // $example off$
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.{SparkConf, SparkContext}
 
 object StandardScalerExample {
   def main(args: Array[String]): Unit = {
@@ -44,6 +44,7 @@ object StandardScalerExample {
 
     // Normalize each feature to have unit standard deviation.
     val scaledData = scalerModel.transform(dataFrame)
+    scaledData.show()
     // $example off$
     sc.stop()
   }

@@ -22,7 +22,7 @@ import scala.util.Random
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, GenericMutableRow}
-import org.apache.spark.sql.catalyst.util.{GenericArrayData, ArrayBasedMapData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.types.{AtomicType, Decimal}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -60,6 +60,7 @@ object ColumnarTestUtils {
       case MAP(_) =>
         ArrayBasedMapData(
           Map(Random.nextInt() -> UTF8String.fromString(Random.nextString(Random.nextInt(32)))))
+      case _ => throw new IllegalArgumentException(s"Unknown column type $columnType")
     }).asInstanceOf[JvmType]
   }
 

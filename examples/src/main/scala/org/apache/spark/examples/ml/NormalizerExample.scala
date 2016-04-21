@@ -18,11 +18,11 @@
 // scalastyle:off println
 package org.apache.spark.examples.ml
 
+import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.ml.feature.Normalizer
 // $example off$
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.{SparkConf, SparkContext}
 
 object NormalizerExample {
   def main(args: Array[String]): Unit = {
@@ -40,9 +40,11 @@ object NormalizerExample {
       .setP(1.0)
 
     val l1NormData = normalizer.transform(dataFrame)
+    l1NormData.show()
 
     // Normalize each Vector using $L^\infty$ norm.
     val lInfNormData = normalizer.transform(dataFrame, normalizer.p -> Double.PositiveInfinity)
+    lInfNormData.show()
     // $example off$
     sc.stop()
   }

@@ -18,11 +18,11 @@
 // scalastyle:off println
 package org.apache.spark.examples.ml
 
+import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.ml.feature.Bucketizer
 // $example off$
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.{SparkConf, SparkContext}
 
 object BucketizerExample {
   def main(args: Array[String]): Unit = {
@@ -43,6 +43,7 @@ object BucketizerExample {
 
     // Transform original data into its bucket index.
     val bucketedData = bucketizer.transform(dataFrame)
+    bucketedData.show()
     // $example off$
     sc.stop()
   }

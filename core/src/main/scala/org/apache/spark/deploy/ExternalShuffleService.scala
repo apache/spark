@@ -21,14 +21,15 @@ import java.util.concurrent.CountDownLatch
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.{Logging, SparkConf, SecurityManager}
+import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.internal.Logging
 import org.apache.spark.network.TransportContext
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.sasl.SaslServerBootstrap
-import org.apache.spark.network.server.{TransportServerBootstrap, TransportServer}
+import org.apache.spark.network.server.{TransportServer, TransportServerBootstrap}
 import org.apache.spark.network.shuffle.ExternalShuffleBlockHandler
 import org.apache.spark.network.util.TransportConf
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ShutdownHookManager, Utils}
 
 /**
  * Provides a server from which Executors can read shuffle files (rather than reading directly from
@@ -108,6 +109,7 @@ object ExternalShuffleService extends Logging {
   private[spark] def main(
       args: Array[String],
       newShuffleService: (SparkConf, SecurityManager) => ExternalShuffleService): Unit = {
+    Utils.initDaemon(log)
     val sparkConf = new SparkConf
     Utils.loadDefaultSparkProperties(sparkConf)
     val securityManager = new SecurityManager(sparkConf)
@@ -118,19 +120,13 @@ object ExternalShuffleService extends Logging {
     server = newShuffleService(sparkConf, securityManager)
     server.start()
 
-    installShutdownHook()
+    ShutdownHookManager.addShutdownHook { () =>
+      logInfo("Shutting down shuffle service.")
+      server.stop()
+      barrier.countDown()
+    }
 
     // keep running until the process is terminated
     barrier.await()
-  }
-
-  private def installShutdownHook(): Unit = {
-    Runtime.getRuntime.addShutdownHook(new Thread("External Shuffle Service shutdown thread") {
-      override def run() {
-        logInfo("Shutting down shuffle service.")
-        server.stop()
-        barrier.countDown()
-      }
-    })
   }
 }

@@ -184,12 +184,12 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
     val conf = new SparkConf()
     val listener = new JobProgressListener(conf)
     val taskMetrics = new TaskMetrics()
-    val shuffleReadMetrics = new ShuffleReadMetrics()
+    val shuffleReadMetrics = taskMetrics.createTempShuffleReadMetrics()
     assert(listener.stageIdToData.size === 0)
 
     // finish this task, should get updated shuffleRead
     shuffleReadMetrics.incRemoteBytesRead(1000)
-    taskMetrics.setShuffleReadMetrics(Some(shuffleReadMetrics))
+    taskMetrics.mergeShuffleReadMetrics()
     var taskInfo = new TaskInfo(1234L, 0, 1, 0L, "exe-1", "host1", TaskLocality.NODE_LOCAL, false)
     taskInfo.finishTime = 1
     var task = new ShuffleMapTask(0)
@@ -240,7 +240,7 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
     val taskFailedReasons = Seq(
       Resubmitted,
       new FetchFailed(null, 0, 0, 0, "ignored"),
-      ExceptionFailure("Exception", "description", null, null, None, None),
+      ExceptionFailure("Exception", "description", null, null, None),
       TaskResultLost,
       TaskKilled,
       ExecutorLostFailure("0", true, Some("Induced failure")),
@@ -269,23 +269,20 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
     val execId = "exe-1"
 
     def makeTaskMetrics(base: Int): TaskMetrics = {
-      val taskMetrics = new TaskMetrics()
-      val shuffleReadMetrics = new ShuffleReadMetrics()
-      val shuffleWriteMetrics = new ShuffleWriteMetrics()
-      taskMetrics.setShuffleReadMetrics(Some(shuffleReadMetrics))
-      taskMetrics.shuffleWriteMetrics = Some(shuffleWriteMetrics)
+      val taskMetrics = new TaskMetrics
+      val shuffleReadMetrics = taskMetrics.createTempShuffleReadMetrics()
+      val shuffleWriteMetrics = taskMetrics.shuffleWriteMetrics
+      val inputMetrics = taskMetrics.inputMetrics
+      val outputMetrics = taskMetrics.outputMetrics
       shuffleReadMetrics.incRemoteBytesRead(base + 1)
       shuffleReadMetrics.incLocalBytesRead(base + 9)
       shuffleReadMetrics.incRemoteBlocksFetched(base + 2)
-      shuffleWriteMetrics.incShuffleBytesWritten(base + 3)
+      taskMetrics.mergeShuffleReadMetrics()
+      shuffleWriteMetrics.incBytesWritten(base + 3)
       taskMetrics.setExecutorRunTime(base + 4)
       taskMetrics.incDiskBytesSpilled(base + 5)
       taskMetrics.incMemoryBytesSpilled(base + 6)
-      val inputMetrics = new InputMetrics(DataReadMethod.Hadoop)
-      taskMetrics.setInputMetrics(Some(inputMetrics))
-      inputMetrics.incBytesRead(base + 7)
-      val outputMetrics = new OutputMetrics(DataWriteMethod.Hadoop)
-      taskMetrics.outputMetrics = Some(outputMetrics)
+      inputMetrics.setBytesRead(base + 7)
       outputMetrics.setBytesWritten(base + 8)
       taskMetrics
     }
@@ -303,9 +300,9 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
     listener.onTaskStart(SparkListenerTaskStart(1, 0, makeTaskInfo(1237L)))
 
     listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate(execId, Array(
-      (1234L, 0, 0, makeTaskMetrics(0)),
-      (1235L, 0, 0, makeTaskMetrics(100)),
-      (1236L, 1, 0, makeTaskMetrics(200)))))
+      (1234L, 0, 0, makeTaskMetrics(0).accumulatorUpdates()),
+      (1235L, 0, 0, makeTaskMetrics(100).accumulatorUpdates()),
+      (1236L, 1, 0, makeTaskMetrics(200).accumulatorUpdates()))))
 
     var stage0Data = listener.stageIdToData.get((0, 0)).get
     var stage1Data = listener.stageIdToData.get((1, 0)).get
@@ -323,12 +320,13 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
     assert(stage1Data.inputBytes == 207)
     assert(stage0Data.outputBytes == 116)
     assert(stage1Data.outputBytes == 208)
-    assert(stage0Data.taskData.get(1234L).get.taskMetrics.get.shuffleReadMetrics.get
-      .totalBlocksFetched == 2)
-    assert(stage0Data.taskData.get(1235L).get.taskMetrics.get.shuffleReadMetrics.get
-      .totalBlocksFetched == 102)
-    assert(stage1Data.taskData.get(1236L).get.taskMetrics.get.shuffleReadMetrics.get
-      .totalBlocksFetched == 202)
+
+    assert(
+      stage0Data.taskData.get(1234L).get.metrics.get.shuffleReadMetrics.totalBlocksFetched == 2)
+    assert(
+      stage0Data.taskData.get(1235L).get.metrics.get.shuffleReadMetrics.totalBlocksFetched == 102)
+    assert(
+      stage1Data.taskData.get(1236L).get.metrics.get.shuffleReadMetrics.totalBlocksFetched == 202)
 
     // task that was included in a heartbeat
     listener.onTaskEnd(SparkListenerTaskEnd(0, 0, taskType, Success, makeTaskInfo(1234L, 1),
@@ -356,9 +354,9 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
     assert(stage1Data.inputBytes == 614)
     assert(stage0Data.outputBytes == 416)
     assert(stage1Data.outputBytes == 616)
-    assert(stage0Data.taskData.get(1234L).get.taskMetrics.get.shuffleReadMetrics.get
-      .totalBlocksFetched == 302)
-    assert(stage1Data.taskData.get(1237L).get.taskMetrics.get.shuffleReadMetrics.get
-      .totalBlocksFetched == 402)
+    assert(
+      stage0Data.taskData.get(1234L).get.metrics.get.shuffleReadMetrics.totalBlocksFetched == 302)
+    assert(
+      stage1Data.taskData.get(1237L).get.metrics.get.shuffleReadMetrics.totalBlocksFetched == 402)
   }
 }

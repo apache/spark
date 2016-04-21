@@ -23,14 +23,14 @@ import org.apache.spark.annotation.Experimental
 
 /**
  * :: Experimental ::
- * Abstract class for getting and updating the tracked state in the `trackStateByKey` operation of
- * a [[org.apache.spark.streaming.dstream.PairDStreamFunctions pair DStream]] (Scala) or a
- * [[org.apache.spark.streaming.api.java.JavaPairDStream JavaPairDStream]] (Java).
+ * Abstract class for getting and updating the state in mapping function used in the `mapWithState`
+ * operation of a [[org.apache.spark.streaming.dstream.PairDStreamFunctions pair DStream]] (Scala)
+ * or a [[org.apache.spark.streaming.api.java.JavaPairDStream JavaPairDStream]] (Java).
  *
  * Scala example of using `State`:
  * {{{
- *    // A tracking function that maintains an integer state and return a String
- *    def trackStateFunc(data: Option[Int], state: State[Int]): Option[String] = {
+ *    // A mapping function that maintains an integer state and returns a String
+ *    def mappingFunction(key: String, value: Option[Int], state: State[Int]): Option[String] = {
  *      // Check if state exists
  *      if (state.exists) {
  *        val existingState = state.get  // Get the existing state
@@ -52,12 +52,12 @@ import org.apache.spark.annotation.Experimental
  *
  * Java example of using `State`:
  * {{{
- *    // A tracking function that maintains an integer state and return a String
- *   Function2<Optional<Integer>, State<Integer>, Optional<String>> trackStateFunc =
- *       new Function2<Optional<Integer>, State<Integer>, Optional<String>>() {
+ *    // A mapping function that maintains an integer state and returns a String
+ *    Function3<String, Optional<Integer>, State<Integer>, String> mappingFunction =
+ *       new Function3<String, Optional<Integer>, State<Integer>, String>() {
  *
  *         @Override
- *         public Optional<String> call(Optional<Integer> one, State<Integer> state) {
+ *         public String call(String key, Optional<Integer> value, State<Integer> state) {
  *           if (state.exists()) {
  *             int existingState = state.get(); // Get the existing state
  *             boolean shouldRemove = ...; // Decide whether to remove the state
@@ -75,6 +75,8 @@ import org.apache.spark.annotation.Experimental
  *         }
  *       };
  * }}}
+ *
+ * @tparam S Class of the state
  */
 @Experimental
 sealed abstract class State[S] {
@@ -204,7 +206,7 @@ private[streaming] class StateImpl[S] extends State[S] {
    * Update the internal data and flags in `this` to the given state that is going to be timed out.
    * This method allows `this` object to be reused across many state records.
    */
-  def wrapTiminoutState(newState: S): Unit = {
+  def wrapTimingOutState(newState: S): Unit = {
     this.state = newState
     defined = true
     timingOut = true

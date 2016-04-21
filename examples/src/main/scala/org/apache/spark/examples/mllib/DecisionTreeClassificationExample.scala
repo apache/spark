@@ -18,12 +18,12 @@
 // scalastyle:off println
 package org.apache.spark.examples.mllib
 
+import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.mllib.tree.DecisionTree
 import org.apache.spark.mllib.tree.model.DecisionTreeModel
 import org.apache.spark.mllib.util.MLUtils
 // $example off$
-import org.apache.spark.{SparkConf, SparkContext}
 
 object DecisionTreeClassificationExample {
 

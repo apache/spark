@@ -21,9 +21,10 @@ import java.io.PrintStream
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.StatsReportListener
 import org.apache.spark.sql.hive.HiveContext
-import org.apache.spark.{Logging, SparkConf, SparkContext}
 import org.apache.spark.util.Utils
 
 /** A singleton object for the master program. The slaves should not access this. */
@@ -57,16 +58,15 @@ private[hive] object SparkSQLEnv extends Logging {
       sparkContext.addSparkListener(new StatsReportListener())
       hiveContext = new HiveContext(sparkContext)
 
-      hiveContext.metadataHive.setOut(new PrintStream(System.out, true, "UTF-8"))
-      hiveContext.metadataHive.setInfo(new PrintStream(System.err, true, "UTF-8"))
-      hiveContext.metadataHive.setError(new PrintStream(System.err, true, "UTF-8"))
+      hiveContext.sessionState.metadataHive.setOut(new PrintStream(System.out, true, "UTF-8"))
+      hiveContext.sessionState.metadataHive.setInfo(new PrintStream(System.err, true, "UTF-8"))
+      hiveContext.sessionState.metadataHive.setError(new PrintStream(System.err, true, "UTF-8"))
 
       hiveContext.setConf("spark.sql.hive.version", HiveContext.hiveExecutionVersion)
 
       if (log.isDebugEnabled) {
-        hiveContext.hiveconf.getAllProperties.asScala.toSeq.sorted.foreach { case (k, v) =>
-          logDebug(s"HiveConf var: $k=$v")
-        }
+        hiveContext.sessionState.hiveconf.getAllProperties.asScala.toSeq.sorted
+          .foreach { case (k, v) => logDebug(s"HiveConf var: $k=$v") }
       }
     }
   }

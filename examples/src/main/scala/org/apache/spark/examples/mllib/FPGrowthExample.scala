@@ -20,8 +20,8 @@ package org.apache.spark.examples.mllib
 
 import scopt.OptionParser
 
-import org.apache.spark.mllib.fpm.FPGrowth
 import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.mllib.fpm.FPGrowth
 
 /**
  * Example for mining frequent itemsets using FP-growth.

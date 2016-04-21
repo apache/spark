@@ -21,10 +21,9 @@ package org.apache.spark.examples.streaming
 import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
-import org.apache.spark.streaming.{Time, Seconds, StreamingContext}
-import org.apache.spark.util.IntParam
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.streaming.{Seconds, StreamingContext, Time}
 
 /**
  * Use DataFrames and SQL to count words in UTF8 encoded, '\n' delimited text received from the
@@ -60,7 +59,7 @@ object SqlNetworkWordCount {
     val words = lines.flatMap(_.split(" "))
 
     // Convert RDDs of the words DStream to DataFrame and run SQL query
-    words.foreachRDD((rdd: RDD[String], time: Time) => {
+    words.foreachRDD { (rdd: RDD[String], time: Time) =>
       // Get the singleton instance of SQLContext
       val sqlContext = SQLContextSingleton.getInstance(rdd.sparkContext)
       import sqlContext.implicits._
@@ -76,7 +75,7 @@ object SqlNetworkWordCount {
         sqlContext.sql("select word, count(*) as total from words group by word")
       println(s"========= $time =========")
       wordCountsDataFrame.show()
-    })
+    }
 
     ssc.start()
     ssc.awaitTermination()

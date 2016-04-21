@@ -36,12 +36,13 @@ if __name__ == "__main__":
         (4, "a"),
         (5, "c")
     ], ["id", "category"])
-    
+
     stringIndexer = StringIndexer(inputCol="category", outputCol="categoryIndex")
     model = stringIndexer.fit(df)
     indexed = model.transform(df)
     encoder = OneHotEncoder(dropLast=False, inputCol="categoryIndex", outputCol="categoryVec")
     encoded = encoder.transform(indexed)
+    encoded.select("id", "categoryVec").show()
     # $example off$
 
     sc.stop()

@@ -22,6 +22,7 @@ import java.lang.reflect.{InvocationTargetException, Modifier, UndeclaredThrowab
 import java.net.URL
 import java.security.PrivilegedExceptionAction
 
+import scala.annotation.tailrec
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 
 import org.apache.commons.lang3.StringUtils
@@ -37,9 +38,9 @@ import org.apache.ivy.core.retrieve.RetrieveOptions
 import org.apache.ivy.core.settings.IvySettings
 import org.apache.ivy.plugins.matcher.GlobPatternMatcher
 import org.apache.ivy.plugins.repository.file.FileRepository
-import org.apache.ivy.plugins.resolver.{FileSystemResolver, ChainResolver, IBiblioResolver}
+import org.apache.ivy.plugins.resolver.{ChainResolver, FileSystemResolver, IBiblioResolver}
 
-import org.apache.spark.{SparkException, SparkUserAppException, SPARK_VERSION}
+import org.apache.spark.{SPARK_VERSION, SparkException, SparkUserAppException}
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.rest._
 import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, Utils}
@@ -47,7 +48,7 @@ import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, U
 
 /**
  * Whether to submit, kill, or request the status of an application.
- * The latter two operations are currently supported only for standalone cluster mode.
+ * The latter two operations are currently supported only for standalone and Mesos cluster modes.
  */
 private[deploy] object SparkSubmitAction extends Enumeration {
   type SparkSubmitAction = Value
@@ -150,6 +151,7 @@ object SparkSubmit {
    * Second, we use this launch environment to invoke the main method of the child
    * main class.
    */
+  @tailrec
   private def submit(args: SparkSubmitArguments): Unit = {
     val (childArgs, childClasspath, sysProps, childMainClass) = prepareSubmitEnvironment(args)
 
@@ -183,7 +185,7 @@ object SparkSubmit {
     }
 
      // In standalone cluster mode, there are two submission gateways:
-     //   (1) The traditional Akka gateway using o.a.s.deploy.Client as a wrapper
+     //   (1) The traditional RPC gateway using o.a.s.deploy.Client as a wrapper
      //   (2) The new REST-based gateway introduced in Spark 1.3
      // The latter is the default behavior as of Spark 1.3, but Spark submit will fail over
      // to use the legacy gateway if the master endpoint turns out to be not a REST server.
@@ -226,11 +228,17 @@ object SparkSubmit {
 
     // Set the cluster manager
     val clusterManager: Int = args.master match {
-      case m if m.startsWith("yarn") => YARN
+      case "yarn" => YARN
+      case "yarn-client" | "yarn-cluster" =>
+        printWarning(s"Master ${args.master} is deprecated since 2.0." +
+          " Please use master \"yarn\" with specified deploy mode instead.")
+        YARN
       case m if m.startsWith("spark") => STANDALONE
       case m if m.startsWith("mesos") => MESOS
       case m if m.startsWith("local") => LOCAL
-      case _ => printErrorAndExit("Master must start with yarn, spark, mesos, or local"); -1
+      case _ =>
+        printErrorAndExit("Master must either be yarn or start with spark, mesos, local")
+        -1
     }
 
     // Set the deploy mode; default is client mode
@@ -240,23 +248,20 @@ object SparkSubmit {
       case _ => printErrorAndExit("Deploy mode must be either client or cluster"); -1
     }
 
-    // Because "yarn-cluster" and "yarn-client" encapsulate both the master
-    // and deploy mode, we have some logic to infer the master and deploy mode
+    // Because the deprecated way of specifying "yarn-cluster" and "yarn-client" encapsulate both
+    // the master and deploy mode, we have some logic to infer the master and deploy mode
     // from each other if only one is specified, or exit early if they are at odds.
     if (clusterManager == YARN) {
-      if (args.master == "yarn-standalone") {
-        printWarning("\"yarn-standalone\" is deprecated. Use \"yarn-cluster\" instead.")
-        args.master = "yarn-cluster"
-      }
       (args.master, args.deployMode) match {
         case ("yarn-cluster", null) =>
           deployMode = CLUSTER
+          args.master = "yarn"
         case ("yarn-cluster", "client") =>
           printErrorAndExit("Client deploy mode is not compatible with master \"yarn-cluster\"")
         case ("yarn-client", "cluster") =>
           printErrorAndExit("Cluster deploy mode is not compatible with master \"yarn-client\"")
         case (_, mode) =>
-          args.master = "yarn-" + Option(mode).getOrElse("client")
+          args.master = "yarn"
       }
 
       // Make sure YARN is included in our build if we're trying to use it
@@ -436,7 +441,6 @@ object SparkSubmit {
       OptionAssigner(args.deployMode, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
         sysProp = "spark.submit.deployMode"),
       OptionAssigner(args.name, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, sysProp = "spark.app.name"),
-      OptionAssigner(args.jars, ALL_CLUSTER_MGRS, CLIENT, sysProp = "spark.jars"),
       OptionAssigner(args.ivyRepoPath, ALL_CLUSTER_MGRS, CLIENT, sysProp = "spark.jars.ivy"),
       OptionAssigner(args.driverMemory, ALL_CLUSTER_MGRS, CLIENT,
         sysProp = "spark.driver.memory"),
@@ -447,27 +451,15 @@ object SparkSubmit {
       OptionAssigner(args.driverExtraLibraryPath, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
         sysProp = "spark.driver.extraLibraryPath"),
 
-      // Yarn client only
-      OptionAssigner(args.queue, YARN, CLIENT, sysProp = "spark.yarn.queue"),
+      // Yarn only
+      OptionAssigner(args.queue, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.queue"),
       OptionAssigner(args.numExecutors, YARN, ALL_DEPLOY_MODES,
         sysProp = "spark.executor.instances"),
-      OptionAssigner(args.files, YARN, CLIENT, sysProp = "spark.yarn.dist.files"),
-      OptionAssigner(args.archives, YARN, CLIENT, sysProp = "spark.yarn.dist.archives"),
-      OptionAssigner(args.principal, YARN, CLIENT, sysProp = "spark.yarn.principal"),
-      OptionAssigner(args.keytab, YARN, CLIENT, sysProp = "spark.yarn.keytab"),
-
-      // Yarn cluster only
-      OptionAssigner(args.name, YARN, CLUSTER, clOption = "--name"),
-      OptionAssigner(args.driverMemory, YARN, CLUSTER, clOption = "--driver-memory"),
-      OptionAssigner(args.driverCores, YARN, CLUSTER, clOption = "--driver-cores"),
-      OptionAssigner(args.queue, YARN, CLUSTER, clOption = "--queue"),
-      OptionAssigner(args.executorMemory, YARN, CLUSTER, clOption = "--executor-memory"),
-      OptionAssigner(args.executorCores, YARN, CLUSTER, clOption = "--executor-cores"),
-      OptionAssigner(args.files, YARN, CLUSTER, clOption = "--files"),
-      OptionAssigner(args.archives, YARN, CLUSTER, clOption = "--archives"),
-      OptionAssigner(args.jars, YARN, CLUSTER, clOption = "--addJars"),
-      OptionAssigner(args.principal, YARN, CLUSTER, clOption = "--principal"),
-      OptionAssigner(args.keytab, YARN, CLUSTER, clOption = "--keytab"),
+      OptionAssigner(args.jars, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.dist.jars"),
+      OptionAssigner(args.files, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.dist.files"),
+      OptionAssigner(args.archives, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.dist.archives"),
+      OptionAssigner(args.principal, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.principal"),
+      OptionAssigner(args.keytab, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.keytab"),
 
       // Other options
       OptionAssigner(args.executorCores, STANDALONE | YARN, ALL_DEPLOY_MODES,
@@ -478,10 +470,11 @@ object SparkSubmit {
         sysProp = "spark.cores.max"),
       OptionAssigner(args.files, LOCAL | STANDALONE | MESOS, ALL_DEPLOY_MODES,
         sysProp = "spark.files"),
-      OptionAssigner(args.jars, STANDALONE | MESOS, CLUSTER, sysProp = "spark.jars"),
-      OptionAssigner(args.driverMemory, STANDALONE | MESOS, CLUSTER,
+      OptionAssigner(args.jars, LOCAL, CLIENT, sysProp = "spark.jars"),
+      OptionAssigner(args.jars, STANDALONE | MESOS, ALL_DEPLOY_MODES, sysProp = "spark.jars"),
+      OptionAssigner(args.driverMemory, STANDALONE | MESOS | YARN, CLUSTER,
         sysProp = "spark.driver.memory"),
-      OptionAssigner(args.driverCores, STANDALONE | MESOS, CLUSTER,
+      OptionAssigner(args.driverCores, STANDALONE | MESOS | YARN, CLUSTER,
         sysProp = "spark.driver.cores"),
       OptionAssigner(args.supervise.toString, STANDALONE | MESOS, CLUSTER,
         sysProp = "spark.driver.supervise"),
@@ -545,6 +538,10 @@ object SparkSubmit {
       if (args.isPython) {
         sysProps.put("spark.yarn.isPython", "true")
       }
+
+      if (args.pyFiles != null) {
+        sysProps("spark.submit.pyFiles") = args.pyFiles
+      }
     }
 
     // assure a keytab is available from any place in a JVM
@@ -571,9 +568,6 @@ object SparkSubmit {
       childMainClass = "org.apache.spark.deploy.yarn.Client"
       if (args.isPython) {
         childArgs += ("--primary-py-file", args.primaryResource)
-        if (args.pyFiles != null) {
-          childArgs += ("--py-files", args.pyFiles)
-        }
         childArgs += ("--class", "org.apache.spark.deploy.PythonRunner")
       } else if (args.isR) {
         val mainFile = new Path(args.primaryResource).getName
@@ -621,9 +615,9 @@ object SparkSubmit {
     val pathConfigs = Seq(
       "spark.jars",
       "spark.files",
-      "spark.yarn.jar",
       "spark.yarn.dist.files",
-      "spark.yarn.dist.archives")
+      "spark.yarn.dist.archives",
+      "spark.yarn.dist.jars")
     pathConfigs.foreach { config =>
       // Replace old URIs with resolved URIs, if they exist
       sysProps.get(config).foreach { oldValue =>
@@ -718,6 +712,7 @@ object SparkSubmit {
       throw new IllegalStateException("The main method in the given main class must be static")
     }
 
+    @tailrec
     def findCause(t: Throwable): Throwable = t match {
       case e: UndeclaredThrowableException =>
         if (e.getCause() != null) findCause(e.getCause()) else e
@@ -965,7 +960,7 @@ private[spark] object SparkSubmitUtils {
     // We need to specify each component explicitly, otherwise we miss spark-streaming-kafka and
     // other spark-streaming utility components. Underscore is there to differentiate between
     // spark-streaming_2.1x and spark-streaming-kafka-assembly_2.1x
-    val components = Seq("bagel_", "catalyst_", "core_", "graphx_", "hive_", "mllib_", "repl_",
+    val components = Seq("catalyst_", "core_", "graphx_", "hive_", "mllib_", "repl_",
       "sql_", "streaming_", "yarn_", "network-common_", "network-shuffle_", "network-yarn_")
 
     components.foreach { comp =>

@@ -16,7 +16,6 @@
  */
 
 // scalastyle:off println
-// scalastyle:off jobcontext
 package org.apache.spark.examples
 
 import java.nio.ByteBuffer
@@ -24,9 +23,9 @@ import java.util.Arrays
 import java.util.SortedMap
 
 import org.apache.cassandra.db.IColumn
+import org.apache.cassandra.hadoop.ColumnFamilyInputFormat
 import org.apache.cassandra.hadoop.ColumnFamilyOutputFormat
 import org.apache.cassandra.hadoop.ConfigHelper
-import org.apache.cassandra.hadoop.ColumnFamilyInputFormat
 import org.apache.cassandra.thrift._
 import org.apache.cassandra.utils.ByteBufferUtil
 import org.apache.hadoop.mapreduce.Job
@@ -59,7 +58,7 @@ object CassandraTest {
     val sc = new SparkContext(sparkConf)
 
     // Build the job configuration with ConfigHelper provided by Cassandra
-    val job = new Job()
+    val job = Job.getInstance()
     job.setInputFormatClass(classOf[ColumnFamilyInputFormat])
 
     val host: String = args(1)
@@ -91,9 +90,8 @@ object CassandraTest {
 
     // Let us first get all the paragraphs from the retrieved rows
     val paraRdd = casRdd.map {
-      case (key, value) => {
+      case (key, value) =>
         ByteBufferUtil.string(value.get(ByteBufferUtil.bytes("para")).value())
-      }
     }
 
     // Lets get the word count in paras
@@ -104,7 +102,7 @@ object CassandraTest {
     }
 
     counts.map {
-      case (word, count) => {
+      case (word, count) =>
         val colWord = new org.apache.cassandra.thrift.Column()
         colWord.setName(ByteBufferUtil.bytes("word"))
         colWord.setValue(ByteBufferUtil.bytes(word))
@@ -123,7 +121,6 @@ object CassandraTest {
         mutations.get(1).setColumn_or_supercolumn(new ColumnOrSuperColumn())
         mutations.get(1).column_or_supercolumn.setColumn(colCount)
         (outputkey, mutations)
-      }
     }.saveAsNewAPIHadoopFile("casDemo", classOf[ByteBuffer], classOf[List[Mutation]],
       classOf[ColumnFamilyOutputFormat], job.getConfiguration)
 
@@ -131,7 +128,6 @@ object CassandraTest {
   }
 }
 // scalastyle:on println
-// scalastyle:on jobcontext
 
 /*
 create keyspace casDemo;

@@ -34,6 +34,7 @@ if __name__ == "__main__":
 
     # Create new column "indexed" with categorical values transformed to indices
     indexedData = indexerModel.transform(data)
+    indexedData.show()
     # $example off$
 
     sc.stop()

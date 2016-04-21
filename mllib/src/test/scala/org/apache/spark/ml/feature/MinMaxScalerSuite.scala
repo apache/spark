@@ -21,13 +21,11 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.Row
 
 class MinMaxScalerSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   test("MinMaxScaler fit basic case") {
-    val sqlContext = new SQLContext(sc)
-
     val data = Array(
       Vectors.dense(1, 0, Long.MinValue),
       Vectors.dense(2, 0, 0),
@@ -59,13 +57,15 @@ class MinMaxScalerSuite extends SparkFunSuite with MLlibTestSparkContext with De
 
   test("MinMaxScaler arguments max must be larger than min") {
     withClue("arguments max must be larger than min") {
+      val dummyDF = sqlContext.createDataFrame(Seq(
+        (1, Vectors.dense(1.0, 2.0)))).toDF("id", "feature")
       intercept[IllegalArgumentException] {
-        val scaler = new MinMaxScaler().setMin(10).setMax(0)
-        scaler.validateParams()
+        val scaler = new MinMaxScaler().setMin(10).setMax(0).setInputCol("feature")
+        scaler.transformSchema(dummyDF.schema)
       }
       intercept[IllegalArgumentException] {
-        val scaler = new MinMaxScaler().setMin(0).setMax(0)
-        scaler.validateParams()
+        val scaler = new MinMaxScaler().setMin(0).setMax(0).setInputCol("feature")
+        scaler.transformSchema(dummyDF.schema)
       }
     }
   }

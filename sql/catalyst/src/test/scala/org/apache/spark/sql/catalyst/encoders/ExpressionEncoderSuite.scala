@@ -17,20 +17,20 @@
 
 package org.apache.spark.sql.catalyst.encoders
 
-import java.sql.{Timestamp, Date}
+import java.sql.{Date, Timestamp}
 import java.util.Arrays
-import java.util.concurrent.ConcurrentMap
+
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.runtime.universe.TypeTag
 
-import com.google.common.collect.MapMaker
-
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Encoders
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.catalyst.{OptionalData, PrimitiveData}
-import org.apache.spark.sql.types.{StructType, ArrayType}
+import org.apache.spark.sql.catalyst.analysis.AnalysisTest
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference}
+import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
+import org.apache.spark.sql.catalyst.util.ArrayData
+import org.apache.spark.sql.types.{ArrayType, Decimal, ObjectType, StructType}
 
 case class RepeatedStruct(s: Seq[PrimitiveData])
 
@@ -76,7 +76,9 @@ class JavaSerializable(val value: Int) extends Serializable {
   }
 }
 
-class ExpressionEncoderSuite extends SparkFunSuite {
+class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
+  OuterScopes.addOuterScope(this)
+
   implicit def encoder[T : TypeTag]: ExpressionEncoder[T] = ExpressionEncoder()
 
   // test flat encoders
@@ -98,6 +100,8 @@ class ExpressionEncoderSuite extends SparkFunSuite {
 
   encodeDecodeTest(BigDecimal("32131413.211321313"), "scala decimal")
   // encodeDecodeTest(new java.math.BigDecimal("231341.23123"), "java decimal")
+
+  encodeDecodeTest(Decimal("32131413.211321313"), "catalyst decimal")
 
   encodeDecodeTest("hello", "string")
   encodeDecodeTest(Date.valueOf("2012-12-23"), "date")
@@ -128,6 +132,9 @@ class ExpressionEncoderSuite extends SparkFunSuite {
   encodeDecodeTest(Map(1 -> "a", 2 -> null), "map with null")
   encodeDecodeTest(Map(1 -> Map("a" -> 1), 2 -> Map("b" -> 2)), "map of map")
 
+  encodeDecodeTest(Tuple1[Seq[Int]](null), "null seq in tuple")
+  encodeDecodeTest(Tuple1[Map[String, String]](null), "null map in tuple")
+
   // Kryo encoders
   encodeDecodeTest("hello", "kryo string")(encoderFor(Encoders.kryo[String]))
   encodeDecodeTest(new KryoSerializable(15), "kryo object")(
@@ -145,6 +152,9 @@ class ExpressionEncoderSuite extends SparkFunSuite {
 
   case class InnerClass(i: Int)
   productTest(InnerClass(1))
+  encodeDecodeTest(Array(InnerClass(1)), "array of inner class")
+
+  encodeDecodeTest(Array(Option(InnerClass(1))), "array of optional inner class")
 
   productTest(PrimitiveData(1, 1, 1, 1, 1, 1, true))
 
@@ -153,6 +163,9 @@ class ExpressionEncoderSuite extends SparkFunSuite {
       Some(PrimitiveData(1, 1, 1, 1, 1, 1, true))))
 
   productTest(OptionalData(None, None, None, None, None, None, None, None))
+
+  encodeDecodeTest(Seq(Some(1), None), "Option in array")
+  encodeDecodeTest(Map(1 -> Some(10L), 2 -> Some(20L), 3 -> None), "Option in map")
 
   productTest(BoxedData(1, 1L, 1.0, 1.0f, 1.toShort, 1.toByte, true))
 
@@ -238,6 +251,8 @@ class ExpressionEncoderSuite extends SparkFunSuite {
     ExpressionEncoder.tuple(intEnc, ExpressionEncoder.tuple(intEnc, longEnc))
   }
 
+  productTest(("UDT", new ExamplePoint(0.1, 0.2)))
+
   test("nullable of encoder schema") {
     def checkNullable[T: ExpressionEncoder](nullable: Boolean*): Unit = {
       assert(implicitly[ExpressionEncoder[T]].schema.map(_.nullable) === nullable.toSeq)
@@ -274,8 +289,6 @@ class ExpressionEncoderSuite extends SparkFunSuite {
     }
   }
 
-  private val outers: ConcurrentMap[String, AnyRef] = new MapMaker().weakValues().makeMap()
-  outers.put(getClass.getName, this)
   private def encodeDecodeTest[T : ExpressionEncoder](
       input: T,
       testName: String): Unit = {
@@ -283,7 +296,7 @@ class ExpressionEncoderSuite extends SparkFunSuite {
       val encoder = implicitly[ExpressionEncoder[T]]
       val row = encoder.toRow(input)
       val schema = encoder.schema.toAttributes
-      val boundEncoder = encoder.resolve(schema, outers).bind(schema)
+      val boundEncoder = encoder.defaultBinding
       val convertedBack = try boundEncoder.fromRow(row) catch {
         case e: Exception =>
           fail(
@@ -297,6 +310,15 @@ class ExpressionEncoderSuite extends SparkFunSuite {
               |
             """.stripMargin, e)
       }
+
+      // Test the correct resolution of serialization / deserialization.
+      val attr = AttributeReference("obj", ObjectType(encoder.clsTag.runtimeClass))()
+      val inputPlan = LocalRelation(attr)
+      val plan =
+        Project(Alias(encoder.deserializer, "obj")() :: Nil,
+          Project(encoder.namedExpressions,
+            inputPlan))
+      assertAnalysisSuccess(plan)
 
       val isCorrect = (input, convertedBack) match {
         case (b1: Array[Byte], b2: Array[Byte]) => Arrays.equals(b1, b2)
@@ -338,7 +360,7 @@ class ExpressionEncoderSuite extends SparkFunSuite {
              |${encoder.schema.treeString}
              |
              |fromRow Expressions:
-             |${boundEncoder.fromRowExpression.treeString}
+             |${boundEncoder.deserializer.treeString}
          """.stripMargin)
       }
     }

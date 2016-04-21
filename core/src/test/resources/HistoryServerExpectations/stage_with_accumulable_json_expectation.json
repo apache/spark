@@ -6,6 +6,9 @@
   "numCompleteTasks" : 8,
   "numFailedTasks" : 0,
   "executorRunTime" : 120,
+  "submissionTime" : "2015-03-16T19:25:36.103GMT",
+  "firstTaskLaunchedTime" : "2015-03-16T19:25:36.515GMT",
+  "completionTime" : "2015-03-16T19:25:36.579GMT",
   "inputBytes" : 0,
   "inputRecords" : 0,
   "outputBytes" : 0,
@@ -47,7 +50,28 @@
         "jvmGcTime" : 0,
         "resultSerializationTime" : 2,
         "memoryBytesSpilled" : 0,
-        "diskBytesSpilled" : 0
+        "diskBytesSpilled" : 0,
+        "inputMetrics" : {
+          "bytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "outputMetrics" : {
+          "bytesWritten" : 0,
+          "recordsWritten" : 0
+        },
+        "shuffleReadMetrics" : {
+          "remoteBlocksFetched" : 0,
+          "localBlocksFetched" : 0,
+          "fetchWaitTime" : 0,
+          "remoteBytesRead" : 0,
+          "localBytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "shuffleWriteMetrics" : {
+          "bytesWritten" : 0,
+          "writeTime" : 0,
+          "recordsWritten" : 0
+        }
       }
     },
     "5" : {
@@ -72,7 +96,28 @@
         "jvmGcTime" : 0,
         "resultSerializationTime" : 2,
         "memoryBytesSpilled" : 0,
-        "diskBytesSpilled" : 0
+        "diskBytesSpilled" : 0,
+        "inputMetrics" : {
+          "bytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "outputMetrics" : {
+          "bytesWritten" : 0,
+          "recordsWritten" : 0
+        },
+        "shuffleReadMetrics" : {
+          "remoteBlocksFetched" : 0,
+          "localBlocksFetched" : 0,
+          "fetchWaitTime" : 0,
+          "remoteBytesRead" : 0,
+          "localBytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "shuffleWriteMetrics" : {
+          "bytesWritten" : 0,
+          "writeTime" : 0,
+          "recordsWritten" : 0
+        }
       }
     },
     "4" : {
@@ -97,7 +142,28 @@
         "jvmGcTime" : 0,
         "resultSerializationTime" : 1,
         "memoryBytesSpilled" : 0,
-        "diskBytesSpilled" : 0
+        "diskBytesSpilled" : 0,
+        "inputMetrics" : {
+          "bytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "outputMetrics" : {
+          "bytesWritten" : 0,
+          "recordsWritten" : 0
+        },
+        "shuffleReadMetrics" : {
+          "remoteBlocksFetched" : 0,
+          "localBlocksFetched" : 0,
+          "fetchWaitTime" : 0,
+          "remoteBytesRead" : 0,
+          "localBytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "shuffleWriteMetrics" : {
+          "bytesWritten" : 0,
+          "writeTime" : 0,
+          "recordsWritten" : 0
+        }
       }
     },
     "7" : {
@@ -122,7 +188,28 @@
         "jvmGcTime" : 0,
         "resultSerializationTime" : 2,
         "memoryBytesSpilled" : 0,
-        "diskBytesSpilled" : 0
+        "diskBytesSpilled" : 0,
+        "inputMetrics" : {
+          "bytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "outputMetrics" : {
+          "bytesWritten" : 0,
+          "recordsWritten" : 0
+        },
+        "shuffleReadMetrics" : {
+          "remoteBlocksFetched" : 0,
+          "localBlocksFetched" : 0,
+          "fetchWaitTime" : 0,
+          "remoteBytesRead" : 0,
+          "localBytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "shuffleWriteMetrics" : {
+          "bytesWritten" : 0,
+          "writeTime" : 0,
+          "recordsWritten" : 0
+        }
       }
     },
     "1" : {
@@ -147,7 +234,28 @@
         "jvmGcTime" : 0,
         "resultSerializationTime" : 2,
         "memoryBytesSpilled" : 0,
-        "diskBytesSpilled" : 0
+        "diskBytesSpilled" : 0,
+        "inputMetrics" : {
+          "bytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "outputMetrics" : {
+          "bytesWritten" : 0,
+          "recordsWritten" : 0
+        },
+        "shuffleReadMetrics" : {
+          "remoteBlocksFetched" : 0,
+          "localBlocksFetched" : 0,
+          "fetchWaitTime" : 0,
+          "remoteBytesRead" : 0,
+          "localBytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "shuffleWriteMetrics" : {
+          "bytesWritten" : 0,
+          "writeTime" : 0,
+          "recordsWritten" : 0
+        }
       }
     },
     "3" : {
@@ -172,7 +280,28 @@
         "jvmGcTime" : 0,
         "resultSerializationTime" : 2,
         "memoryBytesSpilled" : 0,
-        "diskBytesSpilled" : 0
+        "diskBytesSpilled" : 0,
+        "inputMetrics" : {
+          "bytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "outputMetrics" : {
+          "bytesWritten" : 0,
+          "recordsWritten" : 0
+        },
+        "shuffleReadMetrics" : {
+          "remoteBlocksFetched" : 0,
+          "localBlocksFetched" : 0,
+          "fetchWaitTime" : 0,
+          "remoteBytesRead" : 0,
+          "localBytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "shuffleWriteMetrics" : {
+          "bytesWritten" : 0,
+          "writeTime" : 0,
+          "recordsWritten" : 0
+        }
       }
     },
     "6" : {
@@ -197,7 +326,28 @@
         "jvmGcTime" : 0,
         "resultSerializationTime" : 2,
         "memoryBytesSpilled" : 0,
-        "diskBytesSpilled" : 0
+        "diskBytesSpilled" : 0,
+        "inputMetrics" : {
+          "bytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "outputMetrics" : {
+          "bytesWritten" : 0,
+          "recordsWritten" : 0
+        },
+        "shuffleReadMetrics" : {
+          "remoteBlocksFetched" : 0,
+          "localBlocksFetched" : 0,
+          "fetchWaitTime" : 0,
+          "remoteBytesRead" : 0,
+          "localBytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "shuffleWriteMetrics" : {
+          "bytesWritten" : 0,
+          "writeTime" : 0,
+          "recordsWritten" : 0
+        }
       }
     },
     "0" : {
@@ -222,7 +372,28 @@
         "jvmGcTime" : 0,
         "resultSerializationTime" : 2,
         "memoryBytesSpilled" : 0,
-        "diskBytesSpilled" : 0
+        "diskBytesSpilled" : 0,
+        "inputMetrics" : {
+          "bytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "outputMetrics" : {
+          "bytesWritten" : 0,
+          "recordsWritten" : 0
+        },
+        "shuffleReadMetrics" : {
+          "remoteBlocksFetched" : 0,
+          "localBlocksFetched" : 0,
+          "fetchWaitTime" : 0,
+          "remoteBytesRead" : 0,
+          "localBytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "shuffleWriteMetrics" : {
+          "bytesWritten" : 0,
+          "writeTime" : 0,
+          "recordsWritten" : 0
+        }
       }
     }
   },

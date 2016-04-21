@@ -19,6 +19,7 @@ package org.apache.spark.deploy.yarn
 
 import java.io.{File, IOException}
 import java.lang.reflect.InvocationTargetException
+import java.nio.charset.StandardCharsets
 
 import com.google.common.io.{ByteStreams, Files}
 import org.apache.hadoop.conf.Configuration
@@ -27,18 +28,17 @@ import org.apache.hadoop.hive.ql.metadata.HiveException
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.yarn.api.ApplicationConstants
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
-import org.apache.hadoop.security.{Credentials, UserGroupInformation}
+import org.apache.hadoop.yarn.api.records.ApplicationAccessType
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.scalatest.Matchers
 
-import org.apache.hadoop.yarn.api.records.ApplicationAccessType
-
-import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException, SparkFunSuite}
+import org.apache.spark.{SecurityManager, SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.util.Utils
+import org.apache.spark.internal.Logging
+import org.apache.spark.util.{ResetSystemProperties, Utils}
 
-
-class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging {
+class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging
+  with ResetSystemProperties {
 
   val hasBash =
     try {
@@ -61,7 +61,7 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging 
     val args = Array("arg1", "${arg.2}", "\"arg3\"", "'arg4'", "$arg5", "\\arg6")
     try {
       val argLine = args.map(a => YarnSparkHadoopUtil.escapeForShell(a)).mkString(" ")
-      Files.write(("bash -c \"echo " + argLine + "\"").getBytes(), scriptFile)
+      Files.write(("bash -c \"echo " + argLine + "\"").getBytes(StandardCharsets.UTF_8), scriptFile)
       scriptFile.setExecutable(true)
 
       val proc = Runtime.getRuntime().exec(Array(scriptFile.getAbsolutePath()))
@@ -101,22 +101,18 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging 
     val modifyAcls = acls.get(ApplicationAccessType.MODIFY_APP)
 
     viewAcls match {
-      case Some(vacls) => {
+      case Some(vacls) =>
         val aclSet = vacls.split(',').map(_.trim).toSet
         assert(aclSet.contains(System.getProperty("user.name", "invalid")))
-      }
-      case None => {
+      case None =>
         fail()
-      }
     }
     modifyAcls match {
-      case Some(macls) => {
+      case Some(macls) =>
         val aclSet = macls.split(',').map(_.trim).toSet
         assert(aclSet.contains(System.getProperty("user.name", "invalid")))
-      }
-      case None => {
+      case None =>
         fail()
-      }
     }
   }
 
@@ -135,26 +131,22 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging 
     val modifyAcls = acls.get(ApplicationAccessType.MODIFY_APP)
 
     viewAcls match {
-      case Some(vacls) => {
+      case Some(vacls) =>
         val aclSet = vacls.split(',').map(_.trim).toSet
         assert(aclSet.contains("user1"))
         assert(aclSet.contains("user2"))
         assert(aclSet.contains(System.getProperty("user.name", "invalid")))
-      }
-      case None => {
+      case None =>
         fail()
-      }
     }
     modifyAcls match {
-      case Some(macls) => {
+      case Some(macls) =>
         val aclSet = macls.split(',').map(_.trim).toSet
         assert(aclSet.contains("user3"))
         assert(aclSet.contains("user4"))
         assert(aclSet.contains(System.getProperty("user.name", "invalid")))
-      }
-      case None => {
+      case None =>
         fail()
-      }
     }
 
   }
@@ -257,9 +249,8 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging 
     hadoopConf.set("hive.metastore.uris", "http://localhost:0")
     val util = new YarnSparkHadoopUtil
     assertNestedHiveException(intercept[InvocationTargetException] {
-      util.obtainTokenForHiveMetastoreInner(hadoopConf, "alice")
+      util.obtainTokenForHiveMetastoreInner(hadoopConf)
     })
-    // expect exception trapping code to unwind this hive-side exception
     assertNestedHiveException(intercept[InvocationTargetException] {
       util.obtainTokenForHiveMetastore(hadoopConf)
     })
@@ -274,6 +265,16 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging 
       fail("Not a hive exception", inner)
     }
     inner
+  }
+
+  test("Obtain tokens For HBase") {
+    val hadoopConf = new Configuration()
+    hadoopConf.set("hbase.security.authentication", "kerberos")
+    val util = new YarnSparkHadoopUtil
+    intercept[ClassNotFoundException] {
+      util.obtainTokenForHBaseInner(hadoopConf)
+    }
+    util.obtainTokenForHBase(hadoopConf) should be (None)
   }
 
   // This test needs to live here because it depends on isYarnMode returning true, which can only

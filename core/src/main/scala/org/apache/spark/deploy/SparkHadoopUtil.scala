@@ -29,18 +29,16 @@ import scala.util.control.NonFatal
 
 import com.google.common.primitives.Longs
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.FileSystem.Statistics
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
+import org.apache.hadoop.fs.FileSystem.Statistics
 import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier
 import org.apache.hadoop.mapred.JobConf
-import org.apache.hadoop.mapreduce.JobContext
-import org.apache.hadoop.mapreduce.{TaskAttemptContext => MapReduceTaskAttemptContext}
-import org.apache.hadoop.mapreduce.{TaskAttemptID => MapReduceTaskAttemptID}
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
-import org.apache.spark.{Logging, SparkConf, SparkException}
 
 /**
  * :: DeveloperApi ::
@@ -48,7 +46,7 @@ import org.apache.spark.{Logging, SparkConf, SparkException}
  */
 @DeveloperApi
 class SparkHadoopUtil extends Logging {
-  private val sparkConf = new SparkConf()
+  private val sparkConf = new SparkConf(false).loadFromSystemProperties(true)
   val conf: Configuration = newConfiguration(sparkConf)
   UserGroupInformation.setConfiguration(conf)
 
@@ -76,16 +74,12 @@ class SparkHadoopUtil extends Logging {
     }
   }
 
-  @deprecated("use newConfiguration with SparkConf argument", "1.2.0")
-  def newConfiguration(): Configuration = newConfiguration(null)
 
   /**
-   * Return an appropriate (subclass) of Configuration. Creating config can initializes some Hadoop
-   * subsystems.
+   * Appends S3-specific, spark.hadoop.*, and spark.buffer.size configurations to a Hadoop
+   * configuration.
    */
-  def newConfiguration(conf: SparkConf): Configuration = {
-    val hadoopConf = new Configuration()
-
+  def appendS3AndSparkHadoopConfigurations(conf: SparkConf, hadoopConf: Configuration): Unit = {
     // Note: this null check is around more than just access to the "conf" object to maintain
     // the behavior of the old implementation of this code, for backwards compatibility.
     if (conf != null) {
@@ -111,7 +105,15 @@ class SparkHadoopUtil extends Logging {
       val bufferSize = conf.get("spark.buffer.size", "65536")
       hadoopConf.set("io.file.buffer.size", bufferSize)
     }
+  }
 
+  /**
+   * Return an appropriate (subclass) of Configuration. Creating config can initializes some Hadoop
+   * subsystems.
+   */
+  def newConfiguration(conf: SparkConf): Configuration = {
+    val hadoopConf = new Configuration()
+    appendS3AndSparkHadoopConfigurations(conf, hadoopConf)
     hadoopConf
   }
 
@@ -150,10 +152,9 @@ class SparkHadoopUtil extends Logging {
       val baselineBytesRead = f()
       Some(() => f() - baselineBytesRead)
     } catch {
-      case e @ (_: NoSuchMethodException | _: ClassNotFoundException) => {
+      case e @ (_: NoSuchMethodException | _: ClassNotFoundException) =>
         logDebug("Couldn't find method for retrieving thread-level FileSystem input data", e)
         None
-      }
     }
   }
 
@@ -172,10 +173,9 @@ class SparkHadoopUtil extends Logging {
       val baselineBytesWritten = f()
       Some(() => f() - baselineBytesWritten)
     } catch {
-      case e @ (_: NoSuchMethodException | _: ClassNotFoundException) => {
+      case e @ (_: NoSuchMethodException | _: ClassNotFoundException) =>
         logDebug("Couldn't find method for retrieving thread-level FileSystem output data", e)
         None
-      }
     }
   }
 
@@ -188,33 +188,6 @@ class SparkHadoopUtil extends Logging {
     val statisticsDataClass =
       Utils.classForName("org.apache.hadoop.fs.FileSystem$Statistics$StatisticsData")
     statisticsDataClass.getDeclaredMethod(methodName)
-  }
-
-  /**
-   * Using reflection to get the Configuration from JobContext/TaskAttemptContext. If we directly
-   * call `JobContext/TaskAttemptContext.getConfiguration`, it will generate different byte codes
-   * for Hadoop 1.+ and Hadoop 2.+ because JobContext/TaskAttemptContext is class in Hadoop 1.+
-   * while it's interface in Hadoop 2.+.
-   */
-  def getConfigurationFromJobContext(context: JobContext): Configuration = {
-    // scalastyle:off jobconfig
-    val method = context.getClass.getMethod("getConfiguration")
-    // scalastyle:on jobconfig
-    method.invoke(context).asInstanceOf[Configuration]
-  }
-
-  /**
-   * Using reflection to call `getTaskAttemptID` from TaskAttemptContext. If we directly
-   * call `TaskAttemptContext.getTaskAttemptID`, it will generate different byte codes
-   * for Hadoop 1.+ and Hadoop 2.+ because TaskAttemptContext is class in Hadoop 1.+
-   * while it's interface in Hadoop 2.+.
-   */
-  def getTaskAttemptIDFromTaskAttemptContext(
-      context: MapReduceTaskAttemptContext): MapReduceTaskAttemptID = {
-    // scalastyle:off jobconfig
-    val method = context.getClass.getMethod("getTaskAttemptID")
-    // scalastyle:on jobconfig
-    method.invoke(context).asInstanceOf[MapReduceTaskAttemptID]
   }
 
   /**
@@ -233,11 +206,11 @@ class SparkHadoopUtil extends Logging {
    */
   def listLeafStatuses(fs: FileSystem, baseStatus: FileStatus): Seq[FileStatus] = {
     def recurse(status: FileStatus): Seq[FileStatus] = {
-      val (directories, leaves) = fs.listStatus(status.getPath).partition(_.isDir)
+      val (directories, leaves) = fs.listStatus(status.getPath).partition(_.isDirectory)
       leaves ++ directories.flatMap(f => listLeafStatuses(fs, f))
     }
 
-    if (baseStatus.isDir) recurse(baseStatus) else Seq(baseStatus)
+    if (baseStatus.isDirectory) recurse(baseStatus) else Seq(baseStatus)
   }
 
   def listLeafDirStatuses(fs: FileSystem, basePath: Path): Seq[FileStatus] = {
@@ -246,12 +219,12 @@ class SparkHadoopUtil extends Logging {
 
   def listLeafDirStatuses(fs: FileSystem, baseStatus: FileStatus): Seq[FileStatus] = {
     def recurse(status: FileStatus): Seq[FileStatus] = {
-      val (directories, files) = fs.listStatus(status.getPath).partition(_.isDir)
+      val (directories, files) = fs.listStatus(status.getPath).partition(_.isDirectory)
       val leaves = if (directories.isEmpty) Seq(status) else Seq.empty[FileStatus]
       leaves ++ directories.flatMap(dir => listLeafDirStatuses(fs, dir))
     }
 
-    assert(baseStatus.isDir)
+    assert(baseStatus.isDirectory)
     recurse(baseStatus)
   }
 
@@ -340,7 +313,7 @@ class SparkHadoopUtil extends Logging {
    */
   def substituteHadoopVariables(text: String, hadoopConf: Configuration): String = {
     text match {
-      case HADOOP_CONF_PATTERN(matched) => {
+      case HADOOP_CONF_PATTERN(matched) =>
         logDebug(text + " matched " + HADOOP_CONF_PATTERN)
         val key = matched.substring(13, matched.length() - 1) // remove ${hadoopconf- .. }
         val eval = Option[String](hadoopConf.get(key))
@@ -355,11 +328,9 @@ class SparkHadoopUtil extends Logging {
           // Continue to substitute more variables.
           substituteHadoopVariables(eval.get, hadoopConf)
         }
-      }
-      case _ => {
+      case _ =>
         logDebug(text + " didn't match " + HADOOP_CONF_PATTERN)
         text
-      }
     }
   }
 
@@ -402,6 +373,14 @@ object SparkHadoopUtil {
   val SPARK_YARN_CREDS_TEMP_EXTENSION = ".tmp"
 
   val SPARK_YARN_CREDS_COUNTER_DELIM = "-"
+
+  /**
+   * Number of records to update input metrics when reading from HadoopRDDs.
+   *
+   * Each update is potentially expensive because we need to use reflection to access the
+   * Hadoop FileSystem API of interest (only available in 2.5), so we should do this sparingly.
+   */
+  private[spark] val UPDATE_INPUT_METRICS_INTERVAL_RECORDS = 1000
 
   def get: SparkHadoopUtil = {
     // Check each time to support changing to/from YARN

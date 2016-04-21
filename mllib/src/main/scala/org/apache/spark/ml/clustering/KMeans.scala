@@ -19,16 +19,17 @@ package org.apache.spark.ml.clustering
 
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
-import org.apache.spark.ml.param.shared._
-import org.apache.spark.ml.param.{IntParam, Param, ParamMap, Params}
-import org.apache.spark.ml.util._
 import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.param.{IntParam, Param, ParamMap, Params}
+import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.util._
 import org.apache.spark.mllib.clustering.{KMeans => MLlibKMeans, KMeansModel => MLlibKMeansModel}
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{IntegerType, StructType}
-import org.apache.spark.sql.{DataFrame, Row}
 
 /**
  * Common params for KMeans and KMeansModel
@@ -104,8 +105,8 @@ class KMeansModel private[ml] (
     copyValues(copied, extra)
   }
 
-  @Since("1.5.0")
-  override def transform(dataset: DataFrame): DataFrame = {
+  @Since("2.0.0")
+  override def transform(dataset: Dataset[_]): DataFrame = {
     val predictUDF = udf((vector: Vector) => predict(vector))
     dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
   }
@@ -125,15 +126,38 @@ class KMeansModel private[ml] (
    * model on the given data.
    */
   // TODO: Replace the temp fix when we have proper evaluators defined for clustering.
-  @Since("1.6.0")
-  def computeCost(dataset: DataFrame): Double = {
+  @Since("2.0.0")
+  def computeCost(dataset: Dataset[_]): Double = {
     SchemaUtils.checkColumnType(dataset.schema, $(featuresCol), new VectorUDT)
-    val data = dataset.select(col($(featuresCol))).map { case Row(point: Vector) => point }
+    val data = dataset.select(col($(featuresCol))).rdd.map { case Row(point: Vector) => point }
     parentModel.computeCost(data)
   }
 
   @Since("1.6.0")
   override def write: MLWriter = new KMeansModel.KMeansModelWriter(this)
+
+  private var trainingSummary: Option[KMeansSummary] = None
+
+  private[clustering] def setSummary(summary: KMeansSummary): this.type = {
+    this.trainingSummary = Some(summary)
+    this
+  }
+
+  /**
+   * Return true if there exists summary of model.
+   */
+  @Since("2.0.0")
+  def hasSummary: Boolean = trainingSummary.nonEmpty
+
+  /**
+   * Gets summary of model on training set. An exception is
+   * thrown if `trainingSummary == None`.
+   */
+  @Since("2.0.0")
+  def summary: KMeansSummary = trainingSummary.getOrElse {
+    throw new SparkException(
+      s"No training summary available for the ${this.getClass.getSimpleName}")
+  }
 }
 
 @Since("1.6.0")
@@ -236,9 +260,9 @@ class KMeans @Since("1.5.0") (
   @Since("1.5.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
-  @Since("1.5.0")
-  override def fit(dataset: DataFrame): KMeansModel = {
-    val rdd = dataset.select(col($(featuresCol))).map { case Row(point: Vector) => point }
+  @Since("2.0.0")
+  override def fit(dataset: Dataset[_]): KMeansModel = {
+    val rdd = dataset.select(col($(featuresCol))).rdd.map { case Row(point: Vector) => point }
 
     val algo = new MLlibKMeans()
       .setK($(k))
@@ -248,8 +272,10 @@ class KMeans @Since("1.5.0") (
       .setSeed($(seed))
       .setEpsilon($(tol))
     val parentModel = algo.run(rdd)
-    val model = new KMeansModel(uid, parentModel)
-    copyValues(model)
+    val model = copyValues(new KMeansModel(uid, parentModel).setParent(this))
+    val summary = new KMeansSummary(
+      model.transform(dataset), $(predictionCol), $(featuresCol), $(k))
+    model.setSummary(summary)
   }
 
   @Since("1.5.0")
@@ -265,3 +291,39 @@ object KMeans extends DefaultParamsReadable[KMeans] {
   override def load(path: String): KMeans = super.load(path)
 }
 
+/**
+ * :: Experimental ::
+ * Summary of KMeans.
+ *
+ * @param predictions  [[DataFrame]] produced by [[KMeansModel.transform()]]
+ * @param predictionCol  Name for column of predicted clusters in `predictions`
+ * @param featuresCol  Name for column of features in `predictions`
+ * @param k  Number of clusters
+ */
+@Since("2.0.0")
+@Experimental
+class KMeansSummary private[clustering] (
+    @Since("2.0.0") @transient val predictions: DataFrame,
+    @Since("2.0.0") val predictionCol: String,
+    @Since("2.0.0") val featuresCol: String,
+    @Since("2.0.0") val k: Int) extends Serializable {
+
+  /**
+   * Cluster centers of the transformed data.
+   */
+  @Since("2.0.0")
+  @transient lazy val cluster: DataFrame = predictions.select(predictionCol)
+
+  /**
+   * Size of (number of data points in) each cluster.
+   */
+  @Since("2.0.0")
+  lazy val clusterSizes: Array[Long] = {
+    val sizes = Array.fill[Long](k)(0)
+    cluster.groupBy(predictionCol).count().select(predictionCol, "count").collect().foreach {
+      case Row(cluster: Int, count: Long) => sizes(cluster) = count
+    }
+    sizes
+  }
+
+}
