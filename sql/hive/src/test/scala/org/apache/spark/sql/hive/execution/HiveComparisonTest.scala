@@ -48,6 +48,17 @@ abstract class HiveComparisonTest
   extends SparkFunSuite with BeforeAndAfterAll with GivenWhenThen {
 
   /**
+   * Path to the test datasets. We find this by looking up "hive-test-path-helper.txt" file.
+   *
+   * Before we run the query in Spark, we replace "../../data" with this path.
+   */
+  private val testDataPath: String = {
+    Thread.currentThread.getContextClassLoader
+      .getResource("hive-test-path-helper.txt")
+      .getPath.replace("/hive-test-path-helper.txt", "/data")
+  }
+
+  /**
    * When set, any cache files that result in test failures will be deleted.  Used when the test
    * harness or hive have been updated thus requiring new golden answers to be computed for some
    * tests. Also prevents the classpath being used when looking for golden answers as these are
@@ -386,7 +397,8 @@ abstract class HiveComparisonTest
           var query: TestHiveQueryExecution = null
           try {
             query = {
-              val originalQuery = new TestHiveQueryExecution(queryString)
+              val originalQuery = new TestHiveQueryExecution(
+                queryString.replace("../../data", testDataPath))
               val containsCommands = originalQuery.analyzed.collectFirst {
                 case _: Command => ()
                 case _: LogicalInsertIntoHiveTable => ()
