@@ -289,7 +289,7 @@ object SQLConf {
   val DEFAULT_DATA_SOURCE_NAME = SQLConfigBuilder("spark.sql.sources.default")
     .doc("The default data source to use in input/output.")
     .stringConf
-    .createWithDefault("org.apache.spark.sql.parquet")
+    .createWithDefault("parquet")
 
   // This is used to control the when we will split a schema's JSON string to multiple pieces
   // in order to fit the JSON string in metastore's table property (by default, the value has

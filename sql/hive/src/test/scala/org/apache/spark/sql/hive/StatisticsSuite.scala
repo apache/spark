@@ -49,19 +49,19 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton {
 
     assertAnalyzeCommand(
       "ANALYZE TABLE Table1 COMPUTE STATISTICS",
-      classOf[HiveNativeCommand])
+      classOf[AnalyzeTable])
     assertAnalyzeCommand(
       "ANALYZE TABLE Table1 PARTITION(ds='2008-04-09', hr=11) COMPUTE STATISTICS",
-      classOf[HiveNativeCommand])
+      classOf[AnalyzeTable])
     assertAnalyzeCommand(
       "ANALYZE TABLE Table1 PARTITION(ds='2008-04-09', hr=11) COMPUTE STATISTICS noscan",
-      classOf[HiveNativeCommand])
+      classOf[AnalyzeTable])
     assertAnalyzeCommand(
       "ANALYZE TABLE Table1 PARTITION(ds, hr) COMPUTE STATISTICS",
-      classOf[HiveNativeCommand])
+      classOf[AnalyzeTable])
     assertAnalyzeCommand(
       "ANALYZE TABLE Table1 PARTITION(ds, hr) COMPUTE STATISTICS noscan",
-      classOf[HiveNativeCommand])
+      classOf[AnalyzeTable])
 
     assertAnalyzeCommand(
       "ANALYZE TABLE Table1 COMPUTE STATISTICS nOscAn",
