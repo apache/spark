@@ -206,10 +206,11 @@ test_that("naiveBayes", {
                                "Yes", "Yes", "Yes", "Yes", "Yes", "Yes", "Yes", "Yes", "No", "No",
                                "Yes", "Yes", "No", "No"))
 
+  # Test model save/load
   modelPath <- tempfile(pattern = "naiveBayes", fileext = ".tmp")
   ml.save(m, modelPath)
-  m2 = ml.load(modelPath)
-  s2 = summary(m2)
+  m2 <- ml.load(modelPath)
+  s2 <- summary(m2)
   expect_equal(s$apriori, s2$apriori)
   expect_equal(s$tables, s2$tables)
 
