@@ -326,7 +326,11 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
   override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = synchronized {
     val taskInfo = taskStart.taskInfo
     if (taskInfo != null) {
-      val metrics = TaskMetrics.empty
+      val metrics = new TaskMetrics
+      // We use this task metrics as a data holder here, so we should un-register all accumulators.
+      // TODO: we should have a different class for this purpose, which doesn't contains
+      // accumulators inside.
+      metrics.internalAccums.foreach(acc => Accumulators.remove(acc.id))
       val stageData = stageIdToData.getOrElseUpdate((taskStart.stageId, taskStart.stageAttemptId), {
         logWarning("Task start for unknown stage " + taskStart.stageId)
         new StageUIData
