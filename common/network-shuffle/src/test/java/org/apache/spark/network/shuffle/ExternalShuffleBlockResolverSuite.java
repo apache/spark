@@ -121,7 +121,7 @@ public class ExternalShuffleBlockResolverSuite {
 
     ExecutorShuffleInfo shuffleInfo =
       new ExecutorShuffleInfo(new String[]{"/bippy", "/flippy"}, 7,
-          "org.apache.spark.shuffle.sort.SortShuffleManager");
+        "org.apache.spark.shuffle.sort.SortShuffleManager");
     String shuffleJson = mapper.writeValueAsString(shuffleInfo);
     ExecutorShuffleInfo parsedShuffleInfo =
       mapper.readValue(shuffleJson, ExecutorShuffleInfo.class);

@@ -153,7 +153,7 @@ public class ExternalShuffleBlockResolver {
       || "org.apache.spark.shuffle.unsafe.UnsafeShuffleManager".equals(executorInfo.shuffleManager))
         ) {
       throw new UnsupportedOperationException(
-          "Unsupported shuffle manager of executor: " + executorInfo);
+        "Unsupported shuffle manager of executor: " + executorInfo);
     }
     try {
       if (db != null) {
