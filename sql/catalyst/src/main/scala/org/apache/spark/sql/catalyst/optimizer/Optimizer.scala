@@ -98,7 +98,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       EliminateSorts,
       SimplifyCasts,
       SimplifyCaseConversionExpressions,
-      EliminateSerialization) ::
+      EliminateSerialization,
+      RemoveUnnecessarySortOrderEvaluation) ::
     Batch("Decimal Optimizations", fixedPoint,
       DecimalAggregates) ::
     Batch("Typed Filter Optimization", fixedPoint,
@@ -1555,5 +1556,52 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           // if performance matters to you.
           Join(p, resolved, LeftAnti, Option(Or(anyNull, condition)))
       }
+  }
+}
+
+/**
+ * Remove the unnecessary evaluation from SortOrder, if they are already in child's output.
+ *
+ * As an example, "SELECT a + 1 AS add, b FROM t ORDER BY a + 1" will be analyzed into:
+ * {{{
+ *   Project('add#2, 'b#1,
+ *     Sort('a#0 + 1,
+ *       Project(('a#0 + 1).as("add")#2, 'b#1, 'a#0),
+ *         Relation)
+ * }}}
+ * Then this rule can optimize it into:
+ * {{{
+ *   Project('add#2, b#1,
+ *     Sort('add#2,
+ *       Project(('a#0 + 1).as("add")#2, 'b#1, 'a#0),
+ *         Relation)
+ * }}}
+ * Finally other optimize rules(column pruning, project collapse) can turn it into:
+ * {{{
+ *   Sort('add#2,
+ *     Project(('a#0 + 1).as("add")#2, b#1),
+ *       Relation)
+ * }}}
+ */
+object RemoveUnnecessarySortOrderEvaluation extends Rule[LogicalPlan] {
+
+  private def optimizeSortOrders(orders: Seq[SortOrder], childColumns: Seq[NamedExpression]) = {
+    orders.map { order =>
+      val newChild = order.child transformDown {
+        case expr => childColumns.find {
+          case Alias(child, _) => child semanticEquals expr
+          case other => other semanticEquals expr
+        }.map(_.toAttribute).getOrElse(expr)
+      }
+      order.copy(child = newChild)
+    }
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case sort @ Sort(sortOrders, _, Project(projectList, _)) =>
+      sort.copy(order = optimizeSortOrders(sortOrders, projectList))
+
+    case sort @ Sort(sortOrders, _, Aggregate(_, aggExprs, _)) =>
+      sort.copy(order = optimizeSortOrders(sortOrders, aggExprs))
   }
 }

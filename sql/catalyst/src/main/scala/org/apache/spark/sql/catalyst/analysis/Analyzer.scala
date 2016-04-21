@@ -962,34 +962,42 @@ class Analyzer(
             unresolvedSortOrders.map(o => Alias(o.child, "aggOrder")(isGenerated = true))
           val aggregatedOrdering = aggregate.copy(aggregateExpressions = aliasedOrdering)
           val resolvedAggregate: Aggregate = execute(aggregatedOrdering).asInstanceOf[Aggregate]
-          val resolvedAliasedOrdering: Seq[Alias] =
-            resolvedAggregate.aggregateExpressions.asInstanceOf[Seq[Alias]]
 
           // If we pass the analysis check, then the ordering expressions should only reference to
           // aggregate expressions or grouping expressions, and it's safe to push them down to
           // Aggregate.
           checkAnalysis(resolvedAggregate)
 
-          val originalAggExprs = aggregate.aggregateExpressions.map(
-            CleanupAliases.trimNonTopLevelAliases(_).asInstanceOf[NamedExpression])
+          val resolvedOrdering =
+            resolvedAggregate.aggregateExpressions.asInstanceOf[Seq[Alias]].map(_.child)
 
-          // If the ordering expression is same with original aggregate expression, we don't need
-          // to push down this ordering expression and can reference the original aggregate
-          // expression instead.
+          // Collects aggregate expressions and grouping expressions that are un-evaluable as
+          // ordering expressions and need to push down and add them into the aggregate list, we
+          // will project them away finally.
           val needsPushDown = ArrayBuffer.empty[NamedExpression]
-          val evaluatedOrderings = resolvedAliasedOrdering.zip(sortOrder).map {
-            case (evaluated, order) =>
-              val index = originalAggExprs.indexWhere {
-                case Alias(child, _) => child semanticEquals evaluated.child
-                case other => other semanticEquals evaluated.child
-              }
+          val groupingExpressions = resolvedAggregate.groupingExpressions
+          val evaluatedOrderings = resolvedOrdering.zip(sortOrder).map {
+            case (resolved, order) =>
+              val evaluated = resolved.transformDown {
+                case e if e.isInstanceOf[AggregateExpression] ||
+                  groupingExpressions.exists(e.semanticEquals) =>
+                  val alreadyPushed = needsPushDown.find {
+                    case Alias(child, _) => e semanticEquals child
+                    case other => e semanticEquals other
+                  }
 
-              if (index == -1) {
-                needsPushDown += evaluated
-                order.copy(child = evaluated.toAttribute)
-              } else {
-                order.copy(child = originalAggExprs(index).toAttribute)
+                  if (alreadyPushed.isDefined) {
+                    alreadyPushed.get.toAttribute
+                  } else {
+                    val named = e match {
+                      case n: NamedExpression => n
+                      case _ => Alias(e, "aggOrder")()
+                    }
+                    needsPushDown += named
+                    named.toAttribute
+                  }
               }
+              order.copy(child = evaluated)
           }
 
           val sortOrdersMap = unresolvedSortOrders
@@ -1003,9 +1011,10 @@ class Analyzer(
           if (sortOrder == finalSortOrders) {
             sort
           } else {
+            val newAggExprs: Seq[NamedExpression] = aggregate.aggregateExpressions ++ needsPushDown
             Project(aggregate.output,
               Sort(finalSortOrders, global,
-                aggregate.copy(aggregateExpressions = originalAggExprs ++ needsPushDown)))
+                aggregate.copy(aggregateExpressions = newAggExprs)))
           }
         } catch {
           // Attempting to resolve in the aggregate can result in ambiguity.  When this happens,
