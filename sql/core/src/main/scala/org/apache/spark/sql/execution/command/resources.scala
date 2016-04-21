@@ -32,7 +32,7 @@ case class AddJar(path: String) extends RunnableCommand {
   }
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.addJar(path)
+    sqlContext.sessionState.addJar(path)
     Seq(Row(0))
   }
 }
