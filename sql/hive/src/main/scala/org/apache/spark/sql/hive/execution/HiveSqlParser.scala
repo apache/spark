@@ -212,8 +212,10 @@ class HiveSqlAstBuilder(hiveConf: HiveConf) extends SparkSqlAstBuilder {
       comment = comment)
 
     selectQuery match {
-      case Some(q) => CTAS(tableDesc, q, ifNotExists)
-      case None => CreateTable(tableDesc, ifNotExists)
+      case Some(q) =>
+        CTAS(tableDesc, q, ifNotExists)
+      case None =>
+        CreateTable(tableDesc, ifNotExists)
     }
   }
 

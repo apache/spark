@@ -759,7 +759,8 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def sql(sqlText: String): DataFrame = {
-    Dataset.ofRows(this, parseSql(sqlText))
+    val m = parseSql(sqlText)
+    Dataset.ofRows(this, m)
   }
 
   /**
