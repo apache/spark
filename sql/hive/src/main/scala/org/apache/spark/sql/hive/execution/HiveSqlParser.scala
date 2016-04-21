@@ -14,6 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.spark.sql.hive.execution
 
 import scala.util.Try
@@ -52,6 +53,7 @@ class HiveSqlParser(conf: SQLConf, hiveconf: HiveConf) extends AbstractSqlParser
  * Builder that converts an ANTLR ParseTree into a LogicalPlan/Expression/TableIdentifier.
  */
 class HiveSqlAstBuilder(conf: SQLConf) extends SparkSqlAstBuilder(conf) {
+
   import ParserUtils._
 
   /**
@@ -147,5 +149,4 @@ class HiveSqlAstBuilder(conf: SQLConf) extends SparkSqlAstBuilder(conf) {
       reader, writer,
       schemaLess)
   }
-
 }

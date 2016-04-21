@@ -49,6 +49,7 @@ import org.apache.spark.sql.hive.orc.{DefaultSource => OrcDefaultSource}
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.types._
 
+
 /**
  * Legacy catalog for interacting with the Hive metastore.
  *
