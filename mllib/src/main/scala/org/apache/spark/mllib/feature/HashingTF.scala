@@ -70,16 +70,11 @@ class HashingTF(val numFeatures: Int) extends Serializable {
   }
 
   /**
-   * Returns the index of the input term by different hash algorithms.
+   * Returns the index of the input term.
    */
   @Since("1.1.0")
-  def indexOf(term: Any): Int = {
-    if (hashAlgorithm == Murmur3) {
-      Utils.nonNegativeMod(murmur3Hash(term), numFeatures)
-    } else {
-      Utils.nonNegativeMod(nativeHash(term), numFeatures)
-    }
-  }
+  @deprecated("This method will be removed in 2.1.0.", "2.0.0")
+  def indexOf(term: Any): Int = Utils.nonNegativeMod(term.##, numFeatures)
 
   /**
    * Transforms the input document into a sparse term frequency vector.
@@ -88,8 +83,9 @@ class HashingTF(val numFeatures: Int) extends Serializable {
   def transform(document: Iterable[_]): Vector = {
     val termFrequencies = mutable.HashMap.empty[Int, Double]
     val setTF = if (binary) (i: Int) => 1.0 else (i: Int) => termFrequencies.getOrElse(i, 0.0) + 1.0
+    val hashFunc: Any => Int = if (hashAlgorithm == Murmur3) murmur3Hash else nativeHash
     document.foreach { term =>
-      val i = indexOf(term)
+      val i = Utils.nonNegativeMod(hashFunc(term), numFeatures)
       termFrequencies.put(i, setTF(i))
     }
     Vectors.sparse(numFeatures, termFrequencies.toSeq)
