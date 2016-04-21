@@ -109,8 +109,8 @@ class HiveShowDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
             |PARTITIONED BY (c3 int COMMENT 'partition column', c4 string)
             |CLUSTERED BY (c1, c2) INTO 5 BUCKETS
             |row format delimited fields terminated by ','
-            |COLLECTION ITEMS TERMINATED BY ','
-            |MAP KEYS TERMINATED BY ','
+            |COLLECTION ITEMS TERMINATED BY '@'
+            |MAP KEYS TERMINATED BY '#'
             |NULL DEFINED AS 'NaN'
             |stored as parquet
             |location '${tmpDir}'
