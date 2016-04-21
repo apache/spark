@@ -81,7 +81,7 @@ public class ExternalShuffleBlockResolverSuite {
 
     // Nonexistent shuffle block
     resolver.registerExecutor("app0", "exec3",
-      dataContext.createExecutorInfo("sort"));
+      dataContext.createExecutorInfo("org.apache.spark.shuffle.sort.SortShuffleManager"));
     try {
       resolver.getBlockData("app0", "exec3", "shuffle_1_1_0");
       fail("Should have failed");
@@ -94,7 +94,7 @@ public class ExternalShuffleBlockResolverSuite {
   public void testSortShuffleBlocks() throws IOException {
     ExternalShuffleBlockResolver resolver = new ExternalShuffleBlockResolver(conf, null);
     resolver.registerExecutor("app0", "exec0",
-      dataContext.createExecutorInfo("sort"));
+      dataContext.createExecutorInfo("org.apache.spark.shuffle.sort.SortShuffleManager"));
 
     InputStream block0Stream =
       resolver.getBlockData("app0", "exec0", "shuffle_0_0_0").createInputStream();
@@ -120,7 +120,8 @@ public class ExternalShuffleBlockResolverSuite {
     assertEquals(parsedAppId, appId);
 
     ExecutorShuffleInfo shuffleInfo =
-      new ExecutorShuffleInfo(new String[]{"/bippy", "/flippy"}, 7, "sort");
+      new ExecutorShuffleInfo(new String[]{"/bippy", "/flippy"}, 7,
+          "org.apache.spark.shuffle.sort.SortShuffleManager");
     String shuffleJson = mapper.writeValueAsString(shuffleInfo);
     ExecutorShuffleInfo parsedShuffleInfo =
       mapper.readValue(shuffleJson, ExecutorShuffleInfo.class);

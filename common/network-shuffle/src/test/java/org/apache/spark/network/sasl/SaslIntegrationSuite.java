@@ -220,7 +220,8 @@ public class SaslIntegrationSuite {
 
       // Register an executor so that the next steps work.
       ExecutorShuffleInfo executorInfo = new ExecutorShuffleInfo(
-        new String[] { System.getProperty("java.io.tmpdir") }, 1, "sort");
+        new String[] { System.getProperty("java.io.tmpdir") }, 1,
+          "org.apache.spark.shuffle.sort.SortShuffleManager");
       RegisterExecutor regmsg = new RegisterExecutor("app-1", "0", executorInfo);
       client1.sendRpcSync(regmsg.toByteBuffer(), TIMEOUT_MS);
 
