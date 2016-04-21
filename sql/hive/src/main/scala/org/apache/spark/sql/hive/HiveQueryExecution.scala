@@ -20,8 +20,7 @@ package org.apache.spark.sql.hive
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.execution.command.{ExecutedCommand, HiveNativeCommand, SetCommand}
-import org.apache.spark.sql.hive.execution.DescribeHiveTableCommand
+import org.apache.spark.sql.execution.command.{DescribeTableCommand, ExecutedCommand}
 
 
 /**
@@ -34,8 +33,8 @@ protected[hive] class HiveQueryExecution(ctx: SQLContext, logicalPlan: LogicalPl
    * Returns the result as a hive compatible sequence of strings.  For native commands, the
    * execution is simply passed back to Hive.
    */
-  def stringResult(): Seq[String] = executedPlan match {
-    case ExecutedCommand(desc: DescribeHiveTableCommand) =>
+  def hiveResultString(): Seq[String] = executedPlan match {
+    case ExecutedCommand(desc: DescribeTableCommand) =>
       // If it is a describe command for a Hive table, we want to have the output format
       // be similar with Hive.
       desc.run(ctx).map {
@@ -55,12 +54,4 @@ protected[hive] class HiveQueryExecution(ctx: SQLContext, logicalPlan: LogicalPl
       // Reformat to match hive tab delimited output.
       result.map(_.zip(types).map(HiveContext.toHiveString)).map(_.mkString("\t")).toSeq
   }
-
-  override def simpleString: String =
-    logical match {
-      case _: HiveNativeCommand => "<Native command: executed by Hive>"
-      case _: SetCommand => "<SET command: executed by Hive, and noted by SQLContext>"
-      case _ => super.simpleString
-    }
-
 }

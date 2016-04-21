@@ -18,11 +18,12 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{AnalysisException, SQLContext}
+import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.execution.command.{DescribeTableCommand, ExecutedCommand, HiveNativeCommand}
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReuseExchange}
 import org.apache.spark.sql.internal.SQLConf
 
@@ -95,10 +96,39 @@ class QueryExecution(val sqlContext: SQLContext, val logical: LogicalPlan) {
   protected def stringOrError[A](f: => A): String =
     try f.toString catch { case e: Throwable => e.toString }
 
-  def simpleString: String = {
-    s"""== Physical Plan ==
-       |${stringOrError(executedPlan)}
-      """.stripMargin.trim
+
+  /**
+   * Returns the result as a hive compatible sequence of strings.  For native commands, the
+   * execution is simply passed back to Hive.
+   */
+  def hiveResultString(): Seq[String] = executedPlan match {
+    case ExecutedCommand(desc: DescribeTableCommand) =>
+      // If it is a describe command for a Hive table, we want to have the output format
+      // be similar with Hive.
+      desc.run(sqlContext).map {
+        case Row(name: String, dataType: String, comment) =>
+          Seq(name, dataType,
+            Option(comment.asInstanceOf[String]).getOrElse(""))
+            .map(s => String.format(s"%-20s", s))
+            .mkString("\t")
+      }
+    case command: ExecutedCommand =>
+      command.executeCollect().map(_.getString(0))
+
+    case other =>
+      val result: Seq[Seq[Any]] = other.executeCollectPublic().map(_.toSeq).toSeq
+      // We need the types so we can output struct field names
+      val types = analyzed.output.map(_.dataType)
+      // Reformat to match hive tab delimited output.
+      result.map(_.zip(types).map(HiveContext.toHiveString)).map(_.mkString("\t")).toSeq
+  }
+
+  def simpleString: String = logical match {
+    case _: HiveNativeCommand => "<Native command: executed by Hive>"
+    case _ =>
+      s"""== Physical Plan ==
+         |${stringOrError(executedPlan)}
+        """.stripMargin.trim
   }
 
   override def toString: String = {

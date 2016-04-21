@@ -207,7 +207,7 @@ private[hive] class TestHiveSparkSession(
 
   protected[hive] implicit class SqlCmd(sql: String) {
     def cmd: () => Unit = {
-      () => new TestHiveQueryExecution(sql).stringResult(): Unit
+      () => new TestHiveQueryExecution(sql).hiveResultString(): Unit
     }
   }
 

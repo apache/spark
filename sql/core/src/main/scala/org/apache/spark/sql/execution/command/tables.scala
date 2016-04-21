@@ -20,8 +20,9 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, UnaryNode}
+import org.apache.spark.sql.types.{MetadataBuilder, StringType}
 
 
 case class CreateTableAsSelectLogicalPlan(
@@ -134,4 +135,34 @@ case class AlterTableRename(
     Seq.empty[Row]
   }
 
+}
+
+
+/**
+ * Command that looks like
+ * {{{
+ *   DESCRIBE (EXTENDED) table_name;
+ * }}}
+ */
+case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean)
+  extends RunnableCommand {
+
+  override val output: Seq[Attribute] = Seq(
+    // Column names are based on Hive.
+    AttributeReference("col_name", StringType, nullable = false,
+      new MetadataBuilder().putString("comment", "name of the column").build())(),
+    AttributeReference("data_type", StringType, nullable = false,
+      new MetadataBuilder().putString("comment", "data type of the column").build())(),
+    AttributeReference("comment", StringType, nullable = true,
+      new MetadataBuilder().putString("comment", "comment of the column").build())()
+  )
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    val relation = sqlContext.sessionState.catalog.lookupRelation(table)
+    relation.schema.fields.map { field =>
+      val cmtKey = "comment"
+      val comment = if (field.metadata.contains(cmtKey)) field.metadata.getString(cmtKey) else ""
+      Row(field.name, field.dataType.simpleString, comment)
+    }
+  }
 }

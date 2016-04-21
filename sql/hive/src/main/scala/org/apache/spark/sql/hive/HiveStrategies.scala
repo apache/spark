@@ -25,8 +25,8 @@ import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.command.{DescribeCommand => _, _}
-import org.apache.spark.sql.execution.datasources.{CreateTableUsing, CreateTableUsingAsSelect, CreateTempTableUsingAsSelect, DescribeCommand}
+import org.apache.spark.sql.execution.command._
+import org.apache.spark.sql.execution.datasources.{CreateTableUsing, CreateTableUsingAsSelect, CreateTempTableUsingAsSelect}
 import org.apache.spark.sql.hive.execution._
 
 private[hive] trait HiveStrategies {
@@ -103,15 +103,6 @@ private[hive] trait HiveStrategies {
           c.bucketSpec, c.mode, c.options, c.child)
         ExecutedCommand(cmd) :: Nil
 
-      case _ => Nil
-    }
-  }
-
-  case object HiveCommandStrategy extends Strategy {
-    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case describe: DescribeCommand =>
-        ExecutedCommand(
-          DescribeHiveTableCommand(describe.table, describe.output, describe.isExtended)) :: Nil
       case _ => Nil
     }
   }
