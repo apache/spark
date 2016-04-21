@@ -50,6 +50,7 @@ import org.slf4j.Logger
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.internal.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
@@ -2285,6 +2286,14 @@ private[spark] object Utils extends Logging {
   def initDaemon(log: Logger): Unit = {
     log.info(s"Started daemon with process name: ${Utils.getProcessName()}")
     SignalLogger.register(log)
+  }
+
+  /**
+   * Returns the GC limit options as a Seq.
+   */
+  def getGCLimitOpts(sparkConf: SparkConf): Seq[String] = {
+    Seq("-XX:GCTimeLimit=" + sparkConf.get(EXECUTOR_GC_TIME_LIMIT),
+      "-XX:GCHeapFreeLimit=" + sparkConf.get(EXECUTOR_GC_HEAP_FREE_LIMIT))
   }
 }
 

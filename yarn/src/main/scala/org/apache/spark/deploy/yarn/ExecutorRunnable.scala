@@ -156,6 +156,7 @@ private[yarn] class ExecutorRunnable(
     sparkConf.get(EXECUTOR_LIBRARY_PATH).foreach { p =>
       prefixEnv = Some(Client.getClusterPath(sparkConf, Utils.libraryPathEnvPrefix(Seq(p))))
     }
+    javaOpts ++= Utils.getGCLimitOpts(sparkConf)
 
     javaOpts += "-Djava.io.tmpdir=" +
       new Path(

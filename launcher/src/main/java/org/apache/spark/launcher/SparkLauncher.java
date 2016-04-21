@@ -62,6 +62,10 @@ public class SparkLauncher {
   public static final String EXECUTOR_EXTRA_LIBRARY_PATH = "spark.executor.extraLibraryPath";
   /** Configuration key for the number of executor CPU cores. */
   public static final String EXECUTOR_CORES = "spark.executor.cores";
+  /** Configuration key for the gc time limit. */
+  public static final String EXECUTOR_GC_TIME_LIMIT = "spark.executor.gcTimeLimit";
+  /** Configuration key for the gc heap free limit. */
+  public static final String EXECUTOR_GC_HEAP_FREE_LIMIT = "spark.executor.gcHeapFreeLimit";
 
   /** Logger name to use when launching a child process. */
   public static final String CHILD_PROCESS_LOGGER_NAME = "spark.launcher.childProcLoggerName";

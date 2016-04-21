@@ -96,4 +96,10 @@ package object config {
     .stringConf
     .checkValues(Set("hive", "in-memory"))
     .createWithDefault("in-memory")
+
+  private[spark] val EXECUTOR_GC_TIME_LIMIT =
+    ConfigBuilder(SparkLauncher.EXECUTOR_GC_TIME_LIMIT).intConf.createWithDefault(90)
+
+  private[spark] val EXECUTOR_GC_HEAP_FREE_LIMIT =
+    ConfigBuilder(SparkLauncher.EXECUTOR_GC_HEAP_FREE_LIMIT).intConf.createWithDefault(5)
 }

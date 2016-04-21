@@ -440,6 +440,8 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     val driverClassPathKey = "spark.driver.extraClassPath"
     val driverLibraryPathKey = "spark.driver.extraLibraryPath"
     val sparkExecutorInstances = "spark.executor.instances"
+    val sparkExecutorGCTimeLimit = "spark.executor.gcTimeLimit"
+    val sparkExecutorGCHeapFreeLimit = "spark.executor.gcHeapFreeLimit"
 
     // Used by Yarn in 1.1 and before
     sys.props.get("spark.driver.libraryPath").foreach { value =>
@@ -463,6 +465,16 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
       if (javaOpts.contains("-Xmx")) {
         val msg = s"$executorOptsKey is not allowed to specify max heap memory settings " +
           s"(was '$javaOpts'). Use spark.executor.memory instead."
+        throw new Exception(msg)
+      }
+      if (javaOpts.contains("-XX:GCTimeLimit")) {
+        val msg = s"$executorOptsKey is not allowed to specify gc time limit option " +
+          s"(was '$javaOpts'). Use spark.executor.gcTimeLimit instead."
+        throw new Exception(msg)
+      }
+      if (javaOpts.contains("-XX:GCHeapFreeLimit")) {
+        val msg = s"$executorOptsKey is not allowed to specify gc heap free limit option " +
+          s"(was '$javaOpts'). Use spark.executor.gcHeapFreeLimit instead."
         throw new Exception(msg)
       }
     }

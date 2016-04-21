@@ -72,6 +72,7 @@ private[spark] class SparkDeploySchedulerBackend(
       .map(_.split(java.io.File.pathSeparator).toSeq).getOrElse(Nil)
     val libraryPathEntries = sc.conf.getOption("spark.executor.extraLibraryPath")
       .map(_.split(java.io.File.pathSeparator).toSeq).getOrElse(Nil)
+    val gcLimitOpts = Utils.getGCLimitOpts(sc.conf)
 
     // When testing, expose the parent class path to the child. This is processed by
     // compute-classpath.{cmd,sh} and makes all needed jars available to child processes
@@ -85,7 +86,7 @@ private[spark] class SparkDeploySchedulerBackend(
 
     // Start executors with a few necessary configs for registering with the scheduler
     val sparkJavaOpts = Utils.sparkJavaOpts(conf, SparkConf.isExecutorStartupConf)
-    val javaOpts = sparkJavaOpts ++ extraJavaOpts
+    val javaOpts = sparkJavaOpts ++ extraJavaOpts ++ gcLimitOpts
     val command = Command("org.apache.spark.executor.CoarseGrainedExecutorBackend",
       args, sc.executorEnvs, classPathEntries ++ testingClassPath, libraryPathEntries, javaOpts)
     val appUIAddress = sc.ui.map(_.appUIAddress).getOrElse("")
