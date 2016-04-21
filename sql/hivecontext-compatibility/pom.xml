@@ -27,12 +27,12 @@
     </parent>
 
     <groupId>org.apache.spark</groupId>
-    <artifactId>spark-hive-1-x-compatibility_2.11</artifactId>
+    <artifactId>spark-hivecontext-compatibility_2.11</artifactId>
     <packaging>jar</packaging>
-    <name>Spark Project Hive 1.x Compatibility</name>
+    <name>Spark Project HiveContext Compatibility</name>
     <url>http://spark.apache.org/</url>
     <properties>
-        <sbt.project.name>hive-1-x-compatibility</sbt.project.name>
+        <sbt.project.name>hivecontext-compatibility</sbt.project.name>
     </properties>
 
     <dependencies>
@@ -46,29 +46,5 @@
     <build>
         <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
         <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
-        <pluginManagement>
-            <plugins>
-                <plugin>
-                    <groupId>net.alchim31.maven</groupId>
-                    <artifactId>scala-maven-plugin</artifactId>
-                    <configuration>
-                        <javacArgs combine.children="append">
-                            <!-- This option is needed to suppress warnings from sun.misc.Unsafe usage -->
-                            <javacArg>-XDignore.symbol.file</javacArg>
-                        </javacArgs>
-                    </configuration>
-                </plugin>
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-compiler-plugin</artifactId>
-                    <configuration>
-                        <compilerArgs combine.children="append">
-                            <!-- This option is needed to suppress warnings from sun.misc.Unsafe usage -->
-                            <arg>-XDignore.symbol.file</arg>
-                        </compilerArgs>
-                    </configuration>
-                </plugin>
-            </plugins>
-        </pluginManagement>
     </build>
 </project>

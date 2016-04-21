@@ -100,7 +100,7 @@
     <module>sql/catalyst</module>
     <module>sql/core</module>
     <module>sql/hive</module>
-    <module>sql/hive-1-x-compatibility</module>
+    <module>sql/hivecontext-compatibility</module>
     <module>external/docker-integration-tests</module>
     <module>assembly</module>
     <module>external/flume</module>

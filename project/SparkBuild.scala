@@ -37,7 +37,7 @@ object BuildCommons {
   private val buildLocation = file(".").getAbsoluteFile.getParentFile
 
   val sqlProjects@Seq(catalyst, sql, hive, hiveThriftServer, hiveCompatibility) = Seq(
-    "catalyst", "sql", "hive", "hive-thriftserver", "hive-1-x-compatibility"
+    "catalyst", "sql", "hive", "hive-thriftserver", "hivecontext-compatibility"
   ).map(ProjectRef(buildLocation, _))
 
   val streamingProjects@Seq(
