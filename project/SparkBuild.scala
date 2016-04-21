@@ -207,7 +207,8 @@ object SparkBuild extends PomBuild {
     }
   )
 
-  lazy val sharedSettings = sparkGenjavadocSettings ++ enableScalaStyle ++ Seq(
+  lazy val sharedSettings = sparkGenjavadocSettings ++
+      (if (sys.env.get("NOLINT_ON_COMPILE") == null) enableScalaStyle else Nil) ++ Seq(
     exportJars in Compile := true,
     exportJars in Test := false,
     javaHome := sys.env.get("JAVA_HOME")
