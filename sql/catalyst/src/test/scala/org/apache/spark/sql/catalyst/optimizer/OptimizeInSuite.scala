@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import scala.collection.immutable.HashSet
-
 import org.apache.spark.sql.catalyst.SimpleCatalystConf
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -39,7 +37,7 @@ class OptimizeInSuite extends PlanTest {
         NullPropagation,
         ConstantFolding,
         BooleanSimplification,
-        OptimizeIn(SimpleCatalystConf(true))) :: Nil
+        OptimizeIn(SimpleCatalystConf(caseSensitiveAnalysis = true))) :: Nil
   }
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
@@ -131,16 +129,18 @@ class OptimizeInSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("OptimizedIn test: Use configuration.") {
+  test("OptimizedIn test: Setting the threshold for turning Set into InSet.") {
     val plan =
       testRelation
         .where(In(UnresolvedAttribute("a"), Seq(Literal(1), Literal(2), Literal(3))))
         .analyze
 
-    val notOptimizedPlan = OptimizeIn(SimpleCatalystConf(true))(plan)
+    val notOptimizedPlan = OptimizeIn(SimpleCatalystConf(caseSensitiveAnalysis = true))(plan)
     comparePlans(notOptimizedPlan, plan)
 
-    val optimizedPlan = OptimizeIn(SimpleCatalystConf(true, optimizerMinSetSize = 2))(plan)
+    // Reduce the threshold to turning into InSet.
+    val optimizedPlan = OptimizeIn(SimpleCatalystConf(caseSensitiveAnalysis = true,
+        optimizerInSetConversionThreshold = 2))(plan)
     optimizedPlan match {
       case Filter(cond, _)
         if cond.isInstanceOf[InSet] && cond.asInstanceOf[InSet].getHSet().size == 3 =>

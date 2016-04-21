@@ -58,11 +58,12 @@ object SQLConf {
     .intConf
     .createWithDefault(100)
 
-  val OPTIMIZER_MIN_SET_SIZE = SQLConfigBuilder("spark.sql.optimizer.minSetSize")
-    .internal()
-    .doc("The minimum threshold of set size to be optimized.")
-    .intConf
-    .createWithDefault(10)
+  val OPTIMIZER_INSET_CONVERSION_THRESHOLD =
+    SQLConfigBuilder("spark.sql.optimizer.inSetConversionThreshold")
+      .internal()
+      .doc("The threshold of set size for InSet conversion.")
+      .intConf
+      .createWithDefault(10)
 
   val ALLOW_MULTIPLE_CONTEXTS = SQLConfigBuilder("spark.sql.allowMultipleContexts")
     .doc("When set to true, creating multiple SQLContexts/HiveContexts is allowed. " +
@@ -535,7 +536,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def optimizerMaxIterations: Int = getConf(OPTIMIZER_MAX_ITERATIONS)
 
-  def optimizerMinSetSize: Int = getConf(OPTIMIZER_MIN_SET_SIZE)
+  def optimizerInSetConversionThreshold: Int = getConf(OPTIMIZER_INSET_CONVERSION_THRESHOLD)
 
   def checkpointLocation: String = getConf(CHECKPOINT_LOCATION)
 
