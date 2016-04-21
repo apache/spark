@@ -32,9 +32,9 @@ import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.ExecuteStatementOperation
 import org.apache.hive.service.cli.session.HiveSession
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Row => SparkRow}
-import org.apache.spark.sql.execution.SetCommand
+import org.apache.spark.sql.execution.command.SetCommand
 import org.apache.spark.sql.hive.{HiveContext, HiveMetastoreTypes}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -195,7 +195,7 @@ private[hive] class SparkExecuteStatementOperation(
     setState(OperationState.RUNNING)
     // Always use the latest class loader provided by executionHive's state.
     val executionHiveClassLoader =
-      hiveContext.executionHive.state.getConf.getClassLoader
+      hiveContext.sessionState.executionHive.state.getConf.getClassLoader
     Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
 
     HiveThriftServer2.listener.onStatementStart(
@@ -222,7 +222,7 @@ private[hive] class SparkExecuteStatementOperation(
         val useIncrementalCollect =
           hiveContext.getConf("spark.sql.thriftServer.incrementalCollect", "false").toBoolean
         if (useIncrementalCollect) {
-          result.rdd.toLocalIterator
+          result.toLocalIterator.asScala
         } else {
           result.collect().iterator
         }

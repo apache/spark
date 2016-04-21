@@ -36,12 +36,10 @@ class JoinOptimizationSuite extends PlanTest {
         EliminateSubqueryAliases) ::
       Batch("Filter Pushdown", FixedPoint(100),
         CombineFilters,
-        PushPredicateThroughProject,
+        PushDownPredicate,
         BooleanSimplification,
         ReorderJoin,
         PushPredicateThroughJoin,
-        PushPredicateThroughGenerate,
-        PushPredicateThroughAggregate,
         ColumnPruning,
         CollapseProject) :: Nil
 
@@ -105,11 +103,10 @@ class JoinOptimizationSuite extends PlanTest {
     val optimized = Optimize.execute(query)
 
     val expected =
-      Project(Seq($"x.key", $"y.key"),
-        Join(
-          Project(Seq($"x.key"), SubqueryAlias("x", input)),
-          BroadcastHint(Project(Seq($"y.key"), SubqueryAlias("y", input))),
-          Inner, None)).analyze
+      Join(
+        Project(Seq($"x.key"), SubqueryAlias("x", input)),
+        BroadcastHint(Project(Seq($"y.key"), SubqueryAlias("y", input))),
+        Inner, None).analyze
 
     comparePlans(optimized, expected)
 

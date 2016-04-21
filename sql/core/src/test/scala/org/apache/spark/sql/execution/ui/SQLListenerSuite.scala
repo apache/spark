@@ -25,6 +25,7 @@ import org.apache.spark.{SparkConf, SparkContext, SparkException, SparkFunSuite}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
 import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.{SparkPlanInfo, SQLExecution}
 import org.apache.spark.sql.execution.metric.{LongSQLMetricValue, SQLMetrics}
 import org.apache.spark.sql.test.SharedSQLContext
@@ -80,7 +81,16 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
 
   test("basic") {
     def checkAnswer(actual: Map[Long, String], expected: Map[Long, Long]): Unit = {
-      assert(actual === expected.mapValues(_.toString))
+      assert(actual.size == expected.size)
+      expected.foreach { e =>
+        // The values in actual can be SQL metrics meaning that they contain additional formatting
+        // when converted to string. Verify that they start with the expected value.
+        // TODO: this is brittle. There is no requirement that the actual string needs to start
+        // with the accumulator value.
+        assert(actual.contains(e._1))
+        val v = actual.get(e._1).get.trim
+        assert(v.startsWith(e._2.toString))
+      }
     }
 
     val listener = new SQLListener(sqlContext.sparkContext.conf)
@@ -376,9 +386,7 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
 class SQLListenerMemoryLeakSuite extends SparkFunSuite {
 
   test("no memory leak") {
-    val oldLogLevel = org.apache.log4j.Logger.getRootLogger().getLevel()
-    try {
-      org.apache.log4j.Logger.getRootLogger().setLevel(org.apache.log4j.Level.FATAL)
+    quietly {
       val conf = new SparkConf()
         .setMaster("local")
         .setAppName("test")
@@ -413,8 +421,6 @@ class SQLListenerMemoryLeakSuite extends SparkFunSuite {
       } finally {
         sc.stop()
       }
-    } finally {
-      org.apache.log4j.Logger.getRootLogger().setLevel(oldLogLevel)
     }
   }
 }

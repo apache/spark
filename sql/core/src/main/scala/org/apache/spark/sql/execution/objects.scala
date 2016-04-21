@@ -17,54 +17,195 @@
 
 package org.apache.spark.sql.execution
 
+import scala.language.existentials
+
+import org.apache.spark.api.java.function.MapFunction
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateSafeProjection, GenerateUnsafeProjection, GenerateUnsafeRowJoiner}
+import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.types.ObjectType
+import org.apache.spark.sql.types.{DataType, ObjectType}
 
 /**
- * Helper functions for physical operators that work with user defined objects.
+ * Takes the input row from child and turns it into object using the given deserializer expression.
+ * The output of this operator is a single-field safe row containing the deserialized object.
  */
-trait ObjectOperator extends SparkPlan {
-  def generateToObject(objExpr: Expression, inputSchema: Seq[Attribute]): InternalRow => Any = {
-    val objectProjection = GenerateSafeProjection.generate(objExpr :: Nil, inputSchema)
-    (i: InternalRow) => objectProjection(i).get(0, objExpr.dataType)
+case class DeserializeToObject(
+    deserializer: Expression,
+    outputObjAttr: Attribute,
+    child: SparkPlan) extends UnaryNode with CodegenSupport {
+
+  override def output: Seq[Attribute] = outputObjAttr :: Nil
+  override def producedAttributes: AttributeSet = AttributeSet(outputObjAttr)
+
+  override def inputRDDs(): Seq[RDD[InternalRow]] = {
+    child.asInstanceOf[CodegenSupport].inputRDDs()
   }
 
-  def generateToRow(serializer: Seq[Expression]): Any => InternalRow = {
-    val outputProjection = if (serializer.head.dataType.isInstanceOf[ObjectType]) {
-      GenerateSafeProjection.generate(serializer)
-    } else {
-      GenerateUnsafeProjection.generate(serializer)
-    }
-    val inputType = serializer.head.collect { case b: BoundReference => b.dataType }.head
-    val outputRow = new SpecificMutableRow(inputType :: Nil)
-    (o: Any) => {
-      outputRow(0) = o
-      outputProjection(outputRow)
+  protected override def doProduce(ctx: CodegenContext): String = {
+    child.asInstanceOf[CodegenSupport].produce(ctx, this)
+  }
+
+  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
+    val bound = ExpressionCanonicalizer.execute(
+      BindReferences.bindReference(deserializer, child.output))
+    ctx.currentVars = input
+    val resultVars = bound.genCode(ctx) :: Nil
+    consume(ctx, resultVars)
+  }
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    child.execute().mapPartitionsInternal { iter =>
+      val projection = GenerateSafeProjection.generate(deserializer :: Nil, child.output)
+      iter.map(projection)
     }
   }
 }
 
 /**
- * Applies the given function to each input row and encodes the result.
+ * Takes the input object from child and turns in into unsafe row using the given serializer
+ * expression.  The output of its child must be a single-field row containing the input object.
  */
-case class MapPartitions(
-    func: Iterator[Any] => Iterator[Any],
-    deserializer: Expression,
+case class SerializeFromObject(
     serializer: Seq[NamedExpression],
-    child: SparkPlan) extends UnaryNode with ObjectOperator {
+    child: SparkPlan) extends UnaryNode with CodegenSupport {
+
   override def output: Seq[Attribute] = serializer.map(_.toAttribute)
+
+  override def inputRDDs(): Seq[RDD[InternalRow]] = {
+    child.asInstanceOf[CodegenSupport].inputRDDs()
+  }
+
+  protected override def doProduce(ctx: CodegenContext): String = {
+    child.asInstanceOf[CodegenSupport].produce(ctx, this)
+  }
+
+  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
+    val bound = serializer.map { expr =>
+      ExpressionCanonicalizer.execute(BindReferences.bindReference(expr, child.output))
+    }
+    ctx.currentVars = input
+    val resultVars = bound.map(_.genCode(ctx))
+    consume(ctx, resultVars)
+  }
 
   override protected def doExecute(): RDD[InternalRow] = {
     child.execute().mapPartitionsInternal { iter =>
-      val getObject = generateToObject(deserializer, child.output)
-      val outputObject = generateToRow(serializer)
+      val projection = UnsafeProjection.create(serializer)
+      iter.map(projection)
+    }
+  }
+}
+
+/**
+ * Helper functions for physical operators that work with user defined objects.
+ */
+trait ObjectOperator extends SparkPlan {
+  def deserializeRowToObject(
+      deserializer: Expression,
+      inputSchema: Seq[Attribute]): InternalRow => Any = {
+    val proj = GenerateSafeProjection.generate(deserializer :: Nil, inputSchema)
+    (i: InternalRow) => proj(i).get(0, deserializer.dataType)
+  }
+
+  def serializeObjectToRow(serializer: Seq[Expression]): Any => UnsafeRow = {
+    val proj = GenerateUnsafeProjection.generate(serializer)
+    val objType = serializer.head.collect { case b: BoundReference => b.dataType }.head
+    val objRow = new SpecificMutableRow(objType :: Nil)
+    (o: Any) => {
+      objRow(0) = o
+      proj(objRow)
+    }
+  }
+
+  def wrapObjectToRow(objType: DataType): Any => InternalRow = {
+    val outputRow = new SpecificMutableRow(objType :: Nil)
+    (o: Any) => {
+      outputRow(0) = o
+      outputRow
+    }
+  }
+
+  def unwrapObjectFromRow(objType: DataType): InternalRow => Any = {
+    (i: InternalRow) => i.get(0, objType)
+  }
+}
+
+/**
+ * Applies the given function to input object iterator.
+ * The output of its child must be a single-field row containing the input object.
+ */
+case class MapPartitions(
+    func: Iterator[Any] => Iterator[Any],
+    outputObjAttr: Attribute,
+    child: SparkPlan) extends UnaryNode with ObjectOperator {
+
+  override def output: Seq[Attribute] = outputObjAttr :: Nil
+  override def producedAttributes: AttributeSet = AttributeSet(outputObjAttr)
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    child.execute().mapPartitionsInternal { iter =>
+      val getObject = unwrapObjectFromRow(child.output.head.dataType)
+      val outputObject = wrapObjectToRow(outputObjAttr.dataType)
       func(iter.map(getObject)).map(outputObject)
     }
   }
+}
+
+/**
+ * Applies the given function to each input object.
+ * The output of its child must be a single-field row containing the input object.
+ *
+ * This operator is kind of a safe version of [[Project]], as it's output is custom object, we need
+ * to use safe row to contain it.
+ */
+case class MapElements(
+    func: AnyRef,
+    outputObjAttr: Attribute,
+    child: SparkPlan) extends UnaryNode with ObjectOperator with CodegenSupport {
+
+  override def output: Seq[Attribute] = outputObjAttr :: Nil
+  override def producedAttributes: AttributeSet = AttributeSet(outputObjAttr)
+
+  override def inputRDDs(): Seq[RDD[InternalRow]] = {
+    child.asInstanceOf[CodegenSupport].inputRDDs()
+  }
+
+  protected override def doProduce(ctx: CodegenContext): String = {
+    child.asInstanceOf[CodegenSupport].produce(ctx, this)
+  }
+
+  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
+    val (funcClass, methodName) = func match {
+      case m: MapFunction[_, _] => classOf[MapFunction[_, _]] -> "call"
+      case _ => classOf[Any => Any] -> "apply"
+    }
+    val funcObj = Literal.create(func, ObjectType(funcClass))
+    val callFunc = Invoke(funcObj, methodName, outputObjAttr.dataType, child.output)
+
+    val bound = ExpressionCanonicalizer.execute(
+      BindReferences.bindReference(callFunc, child.output))
+    ctx.currentVars = input
+    val resultVars = bound.genCode(ctx) :: Nil
+
+    consume(ctx, resultVars)
+  }
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    val callFunc: Any => Any = func match {
+      case m: MapFunction[_, _] => i => m.asInstanceOf[MapFunction[Any, Any]].call(i)
+      case _ => func.asInstanceOf[Any => Any]
+    }
+
+    child.execute().mapPartitionsInternal { iter =>
+      val getObject = unwrapObjectFromRow(child.output.head.dataType)
+      val outputObject = wrapObjectToRow(outputObjAttr.dataType)
+      iter.map(row => outputObject(callFunc(getObject(row))))
+    }
+  }
+
+  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 }
 
 /**
@@ -82,15 +223,43 @@ case class AppendColumns(
 
   override protected def doExecute(): RDD[InternalRow] = {
     child.execute().mapPartitionsInternal { iter =>
-      val getObject = generateToObject(deserializer, child.output)
+      val getObject = deserializeRowToObject(deserializer, child.output)
       val combiner = GenerateUnsafeRowJoiner.create(child.schema, newColumnSchema)
-      val outputObject = generateToRow(serializer)
+      val outputObject = serializeObjectToRow(serializer)
 
       iter.map { row =>
         val newColumns = outputObject(func(getObject(row)))
+        combiner.join(row.asInstanceOf[UnsafeRow], newColumns): InternalRow
+      }
+    }
+  }
+}
 
-        // This operates on the assumption that we always serialize the result...
-        combiner.join(row.asInstanceOf[UnsafeRow], newColumns.asInstanceOf[UnsafeRow]): InternalRow
+/**
+ * An optimized version of [[AppendColumns]], that can be executed on deserialized object directly.
+ */
+case class AppendColumnsWithObject(
+    func: Any => Any,
+    inputSerializer: Seq[NamedExpression],
+    newColumnsSerializer: Seq[NamedExpression],
+    child: SparkPlan) extends UnaryNode with ObjectOperator {
+
+  override def output: Seq[Attribute] = (inputSerializer ++ newColumnsSerializer).map(_.toAttribute)
+
+  private def inputSchema = inputSerializer.map(_.toAttribute).toStructType
+  private def newColumnSchema = newColumnsSerializer.map(_.toAttribute).toStructType
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    child.execute().mapPartitionsInternal { iter =>
+      val getChildObject = unwrapObjectFromRow(child.output.head.dataType)
+      val outputChildObject = serializeObjectToRow(inputSerializer)
+      val outputNewColumnOjb = serializeObjectToRow(newColumnsSerializer)
+      val combiner = GenerateUnsafeRowJoiner.create(inputSchema, newColumnSchema)
+
+      iter.map { row =>
+        val childObj = getChildObject(row)
+        val newColumns = outputNewColumnOjb(func(childObj))
+        combiner.join(outputChildObject(childObj), newColumns): InternalRow
       }
     }
   }
@@ -98,19 +267,19 @@ case class AppendColumns(
 
 /**
  * Groups the input rows together and calls the function with each group and an iterator containing
- * all elements in the group.  The result of this function is encoded and flattened before
- * being output.
+ * all elements in the group.  The result of this function is flattened before being output.
  */
 case class MapGroups(
     func: (Any, Iterator[Any]) => TraversableOnce[Any],
     keyDeserializer: Expression,
     valueDeserializer: Expression,
-    serializer: Seq[NamedExpression],
     groupingAttributes: Seq[Attribute],
     dataAttributes: Seq[Attribute],
+    outputObjAttr: Attribute,
     child: SparkPlan) extends UnaryNode with ObjectOperator {
 
-  override def output: Seq[Attribute] = serializer.map(_.toAttribute)
+  override def output: Seq[Attribute] = outputObjAttr :: Nil
+  override def producedAttributes: AttributeSet = AttributeSet(outputObjAttr)
 
   override def requiredChildDistribution: Seq[Distribution] =
     ClusteredDistribution(groupingAttributes) :: Nil
@@ -122,9 +291,9 @@ case class MapGroups(
     child.execute().mapPartitionsInternal { iter =>
       val grouped = GroupedIterator(iter, groupingAttributes, child.output)
 
-      val getKey = generateToObject(keyDeserializer, groupingAttributes)
-      val getValue = generateToObject(valueDeserializer, dataAttributes)
-      val outputObject = generateToRow(serializer)
+      val getKey = deserializeRowToObject(keyDeserializer, groupingAttributes)
+      val getValue = deserializeRowToObject(valueDeserializer, dataAttributes)
+      val outputObject = wrapObjectToRow(outputObjAttr.dataType)
 
       grouped.flatMap { case (key, rowIter) =>
         val result = func(
@@ -139,22 +308,23 @@ case class MapGroups(
 /**
  * Co-groups the data from left and right children, and calls the function with each group and 2
  * iterators containing all elements in the group from left and right side.
- * The result of this function is encoded and flattened before being output.
+ * The result of this function is flattened before being output.
  */
 case class CoGroup(
     func: (Any, Iterator[Any], Iterator[Any]) => TraversableOnce[Any],
     keyDeserializer: Expression,
     leftDeserializer: Expression,
     rightDeserializer: Expression,
-    serializer: Seq[NamedExpression],
     leftGroup: Seq[Attribute],
     rightGroup: Seq[Attribute],
     leftAttr: Seq[Attribute],
     rightAttr: Seq[Attribute],
+    outputObjAttr: Attribute,
     left: SparkPlan,
     right: SparkPlan) extends BinaryNode with ObjectOperator {
 
-  override def output: Seq[Attribute] = serializer.map(_.toAttribute)
+  override def output: Seq[Attribute] = outputObjAttr :: Nil
+  override def producedAttributes: AttributeSet = AttributeSet(outputObjAttr)
 
   override def requiredChildDistribution: Seq[Distribution] =
     ClusteredDistribution(leftGroup) :: ClusteredDistribution(rightGroup) :: Nil
@@ -167,10 +337,10 @@ case class CoGroup(
       val leftGrouped = GroupedIterator(leftData, leftGroup, left.output)
       val rightGrouped = GroupedIterator(rightData, rightGroup, right.output)
 
-      val getKey = generateToObject(keyDeserializer, leftGroup)
-      val getLeft = generateToObject(leftDeserializer, leftAttr)
-      val getRight = generateToObject(rightDeserializer, rightAttr)
-      val outputObject = generateToRow(serializer)
+      val getKey = deserializeRowToObject(keyDeserializer, leftGroup)
+      val getLeft = deserializeRowToObject(leftDeserializer, leftAttr)
+      val getRight = deserializeRowToObject(rightDeserializer, rightAttr)
+      val outputObject = wrapObjectToRow(outputObjAttr.dataType)
 
       new CoGroupedIterator(leftGrouped, rightGrouped, leftGroup).flatMap {
         case (key, leftResult, rightResult) =>

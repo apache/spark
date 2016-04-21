@@ -18,11 +18,11 @@
 package org.apache.spark.mllib.util
 
 import java.io.File
+import java.nio.charset.StandardCharsets
 
 import scala.io.Source
 
 import breeze.linalg.{squaredDistance => breezeSquaredDistance}
-import com.google.common.base.Charsets
 import com.google.common.io.Files
 
 import org.apache.spark.SparkException
@@ -84,7 +84,7 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
       """.stripMargin
     val tempDir = Utils.createTempDir()
     val file = new File(tempDir.getPath, "part-00000")
-    Files.write(lines, file, Charsets.US_ASCII)
+    Files.write(lines, file, StandardCharsets.UTF_8)
     val path = tempDir.toURI.toString
 
     val pointsWithNumFeatures = loadLibSVMFile(sc, path, 6).collect()
@@ -117,7 +117,7 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
       """.stripMargin
     val tempDir = Utils.createTempDir()
     val file = new File(tempDir.getPath, "part-00000")
-    Files.write(lines, file, Charsets.US_ASCII)
+    Files.write(lines, file, StandardCharsets.UTF_8)
     val path = tempDir.toURI.toString
 
     intercept[SparkException] {
@@ -134,7 +134,7 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
       """.stripMargin
     val tempDir = Utils.createTempDir()
     val file = new File(tempDir.getPath, "part-00000")
-    Files.write(lines, file, Charsets.US_ASCII)
+    Files.write(lines, file, StandardCharsets.UTF_8)
     val path = tempDir.toURI.toString
 
     intercept[SparkException] {
@@ -182,8 +182,8 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
     for (folds <- 2 to 10) {
       for (seed <- 1 to 5) {
         val foldedRdds = kFold(data, folds, seed)
-        assert(foldedRdds.size === folds)
-        foldedRdds.map { case (training, validation) =>
+        assert(foldedRdds.length === folds)
+        foldedRdds.foreach { case (training, validation) =>
           val result = validation.union(training).collect().sorted
           val validationSize = validation.collect().size.toFloat
           assert(validationSize > 0, "empty validation data")

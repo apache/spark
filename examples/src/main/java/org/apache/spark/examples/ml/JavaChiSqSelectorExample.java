@@ -20,6 +20,7 @@ package org.apache.spark.examples.ml;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.SQLContext;
 
 // $example on$
@@ -28,7 +29,6 @@ import java.util.Arrays;
 import org.apache.spark.ml.feature.ChiSqSelector;
 import org.apache.spark.mllib.linalg.VectorUDT;
 import org.apache.spark.mllib.linalg.Vectors;
-import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.types.DataTypes;
@@ -55,7 +55,7 @@ public class JavaChiSqSelectorExample {
       new StructField("clicked", DataTypes.DoubleType, false, Metadata.empty())
     });
 
-    DataFrame df = sqlContext.createDataFrame(jrdd, schema);
+    Dataset<Row> df = sqlContext.createDataFrame(jrdd, schema);
 
     ChiSqSelector selector = new ChiSqSelector()
       .setNumTopFeatures(1)
@@ -63,7 +63,7 @@ public class JavaChiSqSelectorExample {
       .setLabelCol("clicked")
       .setOutputCol("selectedFeatures");
 
-    DataFrame result = selector.fit(df).transform(df);
+    Dataset<Row> result = selector.fit(df).transform(df);
     result.show();
     // $example off$
     jsc.stop();

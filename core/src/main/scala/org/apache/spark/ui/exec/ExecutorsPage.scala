@@ -86,7 +86,7 @@ private[ui] class ExecutorsPage(
           <th>Failed Tasks</th>
           <th>Complete Tasks</th>
           <th>Total Tasks</th>
-          <th data-toggle="tooltip" title={ToolTips.TASK_TIME}>Task Time (GC Time)</th>
+          <th><span data-toggle="tooltip" title={ToolTips.TASK_TIME}>Task Time (GC Time)</span></th>
           <th><span data-toggle="tooltip" title={ToolTips.INPUT}>Input</span></th>
           <th><span data-toggle="tooltip" title={ToolTips.SHUFFLE_READ}>Shuffle Read</span></th>
           <th>
@@ -109,13 +109,8 @@ private[ui] class ExecutorsPage(
     val content =
       <div class="row">
         <div class="span12">
-          <h4>Dead Executors({deadExecutorInfo.size})</h4>
-        </div>
-      </div>
-      <div class="row">
-        <div class="span12">
-          <h4>Active Executors({activeExecutorInfo.size})</h4>
-          {execSummary(activeExecutorInfo)}
+          <h4>Summary</h4>
+          {execSummary(activeExecutorInfo, deadExecutorInfo)}
         </div>
       </div>
       <div class = "row">
@@ -198,7 +193,7 @@ private[ui] class ExecutorsPage(
     </tr>
   }
 
-  private def execSummary(execInfo: Seq[ExecutorSummary]): Seq[Node] = {
+  private def execSummaryRow(execInfo: Seq[ExecutorSummary], rowName: String): Seq[Node] = {
     val maximumMemory = execInfo.map(_.maxMemory).sum
     val memoryUsed = execInfo.map(_.memoryUsed).sum
     val diskUsed = execInfo.map(_.diskUsed).sum
@@ -207,37 +202,46 @@ private[ui] class ExecutorsPage(
     val totalShuffleRead = execInfo.map(_.totalShuffleRead).sum
     val totalShuffleWrite = execInfo.map(_.totalShuffleWrite).sum
 
-    val sumContent =
-      <tr>
-        <td>{execInfo.map(_.rddBlocks).sum}</td>
-        <td sorttable_customkey={memoryUsed.toString}>
-          {Utils.bytesToString(memoryUsed)} /
-          {Utils.bytesToString(maximumMemory)}
-        </td>
-        <td sorttable_customkey={diskUsed.toString}>
-          {Utils.bytesToString(diskUsed)}
-        </td>
-        <td>{totalCores}</td>
-        {taskData(execInfo.map(_.maxTasks).sum,
-        execInfo.map(_.activeTasks).sum,
-        execInfo.map(_.failedTasks).sum,
-        execInfo.map(_.completedTasks).sum,
-        execInfo.map(_.totalTasks).sum,
-        execInfo.map(_.totalDuration).sum,
-        execInfo.map(_.totalGCTime).sum)}
-        <td sorttable_customkey={totalInputBytes.toString}>
-          {Utils.bytesToString(totalInputBytes)}
-        </td>
-        <td sorttable_customkey={totalShuffleRead.toString}>
-          {Utils.bytesToString(totalShuffleRead)}
-        </td>
-        <td sorttable_customkey={totalShuffleWrite.toString}>
-          {Utils.bytesToString(totalShuffleWrite)}
-        </td>
-      </tr>;
+    <tr>
+      <td><b>{rowName}({execInfo.size})</b></td>
+      <td>{execInfo.map(_.rddBlocks).sum}</td>
+      <td sorttable_customkey={memoryUsed.toString}>
+        {Utils.bytesToString(memoryUsed)} /
+        {Utils.bytesToString(maximumMemory)}
+      </td>
+      <td sorttable_customkey={diskUsed.toString}>
+        {Utils.bytesToString(diskUsed)}
+      </td>
+      <td>{totalCores}</td>
+      {taskData(execInfo.map(_.maxTasks).sum,
+      execInfo.map(_.activeTasks).sum,
+      execInfo.map(_.failedTasks).sum,
+      execInfo.map(_.completedTasks).sum,
+      execInfo.map(_.totalTasks).sum,
+      execInfo.map(_.totalDuration).sum,
+      execInfo.map(_.totalGCTime).sum)}
+      <td sorttable_customkey={totalInputBytes.toString}>
+        {Utils.bytesToString(totalInputBytes)}
+      </td>
+      <td sorttable_customkey={totalShuffleRead.toString}>
+        {Utils.bytesToString(totalShuffleRead)}
+      </td>
+      <td sorttable_customkey={totalShuffleWrite.toString}>
+        {Utils.bytesToString(totalShuffleWrite)}
+      </td>
+    </tr>
+  }
+
+  private def execSummary(activeExecInfo: Seq[ExecutorSummary], deadExecInfo: Seq[ExecutorSummary]):
+    Seq[Node] = {
+    val totalExecInfo = activeExecInfo ++ deadExecInfo
+    val activeRow = execSummaryRow(activeExecInfo, "Active");
+    val deadRow = execSummaryRow(deadExecInfo, "Dead");
+    val totalRow = execSummaryRow(totalExecInfo, "Total");
 
     <table class={UIUtils.TABLE_CLASS_STRIPED}>
       <thead>
+        <th></th>
         <th>RDD Blocks</th>
         <th><span data-toggle="tooltip" title={ToolTips.STORAGE_MEMORY}>Storage Memory</span></th>
         <th>Disk Used</th>
@@ -246,7 +250,7 @@ private[ui] class ExecutorsPage(
         <th>Failed Tasks</th>
         <th>Complete Tasks</th>
         <th>Total Tasks</th>
-        <th data-toggle="tooltip" title={ToolTips.TASK_TIME}>Task Time (GC Time)</th>
+        <th><span data-toggle="tooltip" title={ToolTips.TASK_TIME}>Task Time (GC Time)</span></th>
         <th><span data-toggle="tooltip" title={ToolTips.INPUT}>Input</span></th>
         <th><span data-toggle="tooltip" title={ToolTips.SHUFFLE_READ}>Shuffle Read</span></th>
         <th>
@@ -256,7 +260,9 @@ private[ui] class ExecutorsPage(
         </th>
       </thead>
       <tbody>
-        {sumContent}
+        {activeRow}
+        {deadRow}
+        {totalRow}
       </tbody>
     </table>
   }

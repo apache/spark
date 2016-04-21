@@ -122,13 +122,6 @@ Spark build. If these dependencies are not a problem for your application then u
 is recommended for the 1.3 release of Spark. Future releases will focus on bringing `SQLContext` up
 to feature parity with a `HiveContext`.
 
-The specific variant of SQL that is used to parse queries can also be selected using the
-`spark.sql.dialect` option. This parameter can be changed using either the `setConf` method on
-a `SQLContext` or by using a `SET key=value` command in SQL. For a `SQLContext`, the only dialect
-available is "sql" which uses a simple SQL parser provided by Spark SQL. In a `HiveContext`, the
-default is "hiveql", though "sql" is also available. Since the HiveQL parser is much more complete,
-this is recommended for most use cases.
-
 
 ## Creating DataFrames
 
@@ -760,7 +753,7 @@ JavaRDD<String> people = sc.textFile("examples/src/main/resources/people.txt");
 String schemaString = "name age";
 
 // Generate the schema based on the string of schema
-List<StructField> fields = new ArrayList<StructField>();
+List<StructField> fields = new ArrayList<>();
 for (String fieldName: schemaString.split(" ")) {
   fields.add(DataTypes.createStructField(fieldName, DataTypes.StringType, true));
 }
@@ -1474,37 +1467,6 @@ Configuration of Parquet can be done using the `setConf` method on `SQLContext` 
   </td>
 </tr>
 <tr>
-  <td><code>spark.sql.parquet.output.committer.class</code></td>
-  <td><code>org.apache.parquet.hadoop.<br />ParquetOutputCommitter</code></td>
-  <td>
-    <p>
-      The output committer class used by Parquet. The specified class needs to be a subclass of
-      <code>org.apache.hadoop.<br />mapreduce.OutputCommitter</code>. Typically, it's also a
-      subclass of <code>org.apache.parquet.hadoop.ParquetOutputCommitter</code>.
-    </p>
-    <p>
-      <b>Note:</b>
-      <ul>
-        <li>
-          This option is automatically ignored if <code>spark.speculation</code> is turned on.
-        </li>
-        <li>
-          This option must be set via Hadoop <code>Configuration</code> rather than Spark
-          <code>SQLConf</code>.
-        </li>
-        <li>
-          This option overrides <code>spark.sql.sources.<br />outputCommitterClass</code>.
-        </li>
-      </ul>
-    </p>
-    <p>
-      Spark SQL comes with a builtin
-      <code>org.apache.spark.sql.<br />parquet.DirectParquetOutputCommitter</code>, which can be more
-      efficient then the default Parquet output committer when writing data to S3.
-    </p>
-  </td>
-</tr>
-<tr>
   <td><code>spark.sql.parquet.mergeSchema</code></td>
   <td><code>false</code></td>
   <td>
@@ -1540,7 +1502,7 @@ val people = sqlContext.read.json(path)
 // The inferred schema can be visualized using the printSchema() method.
 people.printSchema()
 // root
-//  |-- age: integer (nullable = true)
+//  |-- age: long (nullable = true)
 //  |-- name: string (nullable = true)
 
 // Register this DataFrame as a table.
@@ -1578,7 +1540,7 @@ DataFrame people = sqlContext.read().json("examples/src/main/resources/people.js
 // The inferred schema can be visualized using the printSchema() method.
 people.printSchema();
 // root
-//  |-- age: integer (nullable = true)
+//  |-- age: long (nullable = true)
 //  |-- name: string (nullable = true)
 
 // Register this DataFrame as a table.
@@ -1616,7 +1578,7 @@ people = sqlContext.read.json("examples/src/main/resources/people.json")
 # The inferred schema can be visualized using the printSchema() method.
 people.printSchema()
 # root
-#  |-- age: integer (nullable = true)
+#  |-- age: long (nullable = true)
 #  |-- name: string (nullable = true)
 
 # Register this DataFrame as a table.
@@ -1655,7 +1617,7 @@ people <- jsonFile(sqlContext, path)
 # The inferred schema can be visualized using the printSchema() method.
 printSchema(people)
 # root
-#  |-- age: integer (nullable = true)
+#  |-- age: long (nullable = true)
 #  |-- name: string (nullable = true)
 
 # Register this DataFrame as a table.
@@ -1689,17 +1651,12 @@ SELECT * FROM jsonTable
 Spark SQL also supports reading and writing data stored in [Apache Hive](http://hive.apache.org/).
 However, since Hive has a large number of dependencies, it is not included in the default Spark assembly.
 Hive support is enabled by adding the `-Phive` and `-Phive-thriftserver` flags to Spark's build.
-This command builds a new assembly jar that includes Hive. Note that this Hive assembly jar must also be present
+This command builds a new assembly directory that includes Hive. Note that this Hive assembly directory must also be present
 on all of the worker nodes, as they will need access to the Hive serialization and deserialization libraries
 (SerDes) in order to access data stored in Hive.
 
 Configuration of Hive is done by placing your `hive-site.xml`, `core-site.xml` (for security configuration),
- `hdfs-site.xml` (for HDFS configuration) file in `conf/`. Please note when running
-the query on a YARN cluster (`cluster` mode), the `datanucleus` jars under the `lib` directory
-and `hive-site.xml` under `conf/` directory need to be available on the driver and all executors launched by the
-YARN cluster. The convenient way to do this is adding them through the `--jars` option and `--file` option of the
-`spark-submit` command.
-
+`hdfs-site.xml` (for HDFS configuration) file in `conf/`.
 
 <div class="codetabs">
 
@@ -1813,7 +1770,7 @@ The following options can be used to configure the version of Hive that is used 
       property can be one of three options:
       <ol>
         <li><code>builtin</code></li>
-        Use Hive 1.2.1, which is bundled with the Spark assembly jar when <code>-Phive</code> is
+        Use Hive 1.2.1, which is bundled with the Spark assembly when <code>-Phive</code> is
         enabled. When this option is chosen, <code>spark.sql.hive.metastore.version</code> must be
         either <code>1.2.1</code> or not defined.
         <li><code>maven</code></li>
@@ -1935,7 +1892,7 @@ val jdbcDF = sqlContext.read.format("jdbc").options(
 
 {% highlight java %}
 
-Map<String, String> options = new HashMap<String, String>();
+Map<String, String> options = new HashMap<>();
 options.put("url", "jdbc:postgresql:dbserver");
 options.put("dbtable", "schema.tablename");
 
@@ -2177,8 +2134,6 @@ options.
  - In the `sql` dialect, floating point numbers are now parsed as decimal. HiveQL parsing remains
    unchanged.
  - The canonical name of SQL/DataFrame functions are now lower case (e.g. sum vs SUM).
- - It has been determined that using the DirectOutputCommitter when speculation is enabled is unsafe
-   and thus this output committer will not be used when speculation is on, independent of configuration.
  - JSON data source will not automatically load new files that are created by other applications
    (i.e. files that are not inserted to the dataset through Spark SQL).
    For a JSON persistent table (i.e. the metadata of the table is stored in Hive Metastore),
@@ -2355,51 +2310,6 @@ Python UDF registration is unchanged.
 
 When using DataTypes in Python you will need to construct them (i.e. `StringType()`) instead of
 referencing a singleton.
-
-## Migration Guide for Shark Users
-
-### Scheduling
-To set a [Fair Scheduler](job-scheduling.html#fair-scheduler-pools) pool for a JDBC client session,
-users can set the `spark.sql.thriftserver.scheduler.pool` variable:
-
-    SET spark.sql.thriftserver.scheduler.pool=accounting;
-
-### Reducer number
-
-In Shark, default reducer number is 1 and is controlled by the property `mapred.reduce.tasks`. Spark
-SQL deprecates this property in favor of `spark.sql.shuffle.partitions`, whose default value
-is 200. Users may customize this property via `SET`:
-
-    SET spark.sql.shuffle.partitions=10;
-    SELECT page, count(*) c
-    FROM logs_last_month_cached
-    GROUP BY page ORDER BY c DESC LIMIT 10;
-
-You may also put this property in `hive-site.xml` to override the default value.
-
-For now, the `mapred.reduce.tasks` property is still recognized, and is converted to
-`spark.sql.shuffle.partitions` automatically.
-
-### Caching
-
-The `shark.cache` table property no longer exists, and tables whose name end with `_cached` are no
-longer automatically cached. Instead, we provide `CACHE TABLE` and `UNCACHE TABLE` statements to
-let user control table caching explicitly:
-
-    CACHE TABLE logs_last_month;
-    UNCACHE TABLE logs_last_month;
-
-**NOTE:** `CACHE TABLE tbl` is now __eager__ by default not __lazy__. Don't need to trigger cache materialization manually anymore.
-
-Spark SQL newly introduced a statement to let user control table caching whether or not lazy since Spark 1.2.0:
-
-	CACHE [LAZY] TABLE [AS SELECT] ...
-
-Several caching related features are not supported yet:
-
-* User defined partition level cache eviction policy
-* RDD reloading
-* In-memory cache write through policy
 
 ## Compatibility with Apache Hive
 

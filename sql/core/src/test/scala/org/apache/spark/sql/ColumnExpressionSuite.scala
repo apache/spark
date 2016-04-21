@@ -105,10 +105,11 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
       Row("a") :: Nil)
   }
 
-  test("alias") {
+  test("alias and name") {
     val df = Seq((1, Seq(1, 2, 3))).toDF("a", "intList")
     assert(df.select(df("a").as("b")).columns.head === "b")
     assert(df.select(df("a").alias("b")).columns.head === "b")
+    assert(df.select(df("a").name("b")).columns.head === "b")
   }
 
   test("as propagates metadata") {
@@ -349,7 +350,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
       testData2.collect().toSeq.filter(r => r.getInt(0) == r.getInt(1)))
   }
 
-  test("!==") {
+  test("=!=") {
     val nullData = sqlContext.createDataFrame(sparkContext.parallelize(
       Row(1, 1) ::
       Row(1, 2) ::

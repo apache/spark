@@ -10,13 +10,10 @@ package org.apache.spark.repl
 
 import java.net.URL
 
-import org.apache.spark.annotation.DeveloperApi
-
 import scala.reflect.io.AbstractFile
 import scala.tools.nsc._
 import scala.tools.nsc.backend.JavaPlatform
 import scala.tools.nsc.interpreter._
-
 import scala.tools.nsc.interpreter.{Results => IR}
 import Predef.{println => _, _}
 import java.io.{BufferedReader, FileReader}
@@ -42,9 +39,10 @@ import scala.tools.reflect.StdRuntimeTags._
 import java.lang.{Class => jClass}
 import scala.reflect.api.{Mirror, TypeCreator, Universe => ApiUniverse}
 
-import org.apache.spark.Logging
 import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext
+import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.util.Utils
 
@@ -169,7 +167,7 @@ class SparkILoop(
   }
 
 
-  private def sparkCleanUp(){
+  private def sparkCleanUp() {
     echo("Stopping spark context.")
     intp.beQuietDuring {
       command("sc.stop()")
@@ -799,9 +797,11 @@ class SparkILoop(
     // echo("Switched " + (if (old) "off" else "on") + " result printing.")
   }
 
-  /** Run one command submitted by the user.  Two values are returned:
-    * (1) whether to keep running, (2) the line to record for replay,
-    * if any. */
+  /**
+   * Run one command submitted by the user.  Two values are returned:
+   * (1) whether to keep running, (2) the line to record for replay,
+   * if any.
+   */
   private[repl] def command(line: String): Result = {
     if (line startsWith ":") {
       val cmd = line.tail takeWhile (x => !x.isWhitespace)
@@ -843,12 +843,13 @@ class SparkILoop(
   }
   import paste.{ ContinueString, PromptString }
 
-  /** Interpret expressions starting with the first line.
-    * Read lines until a complete compilation unit is available
-    * or until a syntax error has been seen.  If a full unit is
-    * read, go ahead and interpret it.  Return the full string
-    * to be recorded for replay, if any.
-    */
+  /**
+   * Interpret expressions starting with the first line.
+   * Read lines until a complete compilation unit is available
+   * or until a syntax error has been seen.  If a full unit is
+   * read, go ahead and interpret it.  Return the full string
+   * to be recorded for replay, if any.
+   */
   private def interpretStartingWith(code: String): Option[String] = {
     // signal completion non-completion input has been received
     in.completion.resetVerbosity()

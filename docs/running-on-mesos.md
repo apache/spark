@@ -98,17 +98,17 @@ To host on HDFS, use the Hadoop fs put command: `hadoop fs -put spark-{{site.SPA
 
 
 Or if you are using a custom-compiled version of Spark, you will need to create a package using
-the `make-distribution.sh` script included in a Spark source tarball/checkout.
+the `dev/make-distribution.sh` script included in a Spark source tarball/checkout.
 
 1. Download and build Spark using the instructions [here](index.html)
-2. Create a binary package using `make-distribution.sh --tgz`.
+2. Create a binary package using `./dev/make-distribution.sh --tgz`.
 3. Upload archive to http/s3/hdfs
 
 
 ## Using a Mesos Master URL
 
 The Master URLs for Mesos are in the form `mesos://host:5050` for a single-master Mesos
-cluster, or `mesos://zk://host:2181` for a multi-master Mesos cluster using ZooKeeper.
+cluster, or `mesos://zk://host1:2181,host2:2181,host3:2181/mesos` for a multi-master Mesos cluster using ZooKeeper.
 
 ## Client Mode
 
@@ -167,8 +167,8 @@ For example:
 ./bin/spark-submit \
   --class org.apache.spark.examples.SparkPi \
   --master mesos://207.184.161.138:7077 \
-  --deploy-mode cluster
-  --supervise
+  --deploy-mode cluster \
+  --supervise \
   --executor-memory 20G \
   --total-executor-cores 100 \
   http://path/to/examples.jar \
@@ -215,10 +215,10 @@ conf.set("spark.mesos.coarse", "false")
 You may also make use of `spark.mesos.constraints` to set attribute based constraints on mesos resource offers. By default, all resource offers will be accepted.
 
 {% highlight scala %}
-conf.set("spark.mesos.constraints", "tachyon:true;us-east-1:false")
+conf.set("spark.mesos.constraints", "os:centos7;us-east-1:false")
 {% endhighlight %}
 
-For example, Let's say `spark.mesos.constraints` is set to `tachyon:true;us-east-1:false`, then the resource offers will be checked to see if they meet both these constraints and only then will be accepted to start new executors.
+For example, Let's say `spark.mesos.constraints` is set to `os:centos7;us-east-1:false`, then the resource offers will be checked to see if they meet both these constraints and only then will be accepted to start new executors.
 
 # Mesos Docker Support
 
@@ -388,6 +388,22 @@ See the [configuration page](configuration.html) for information on Spark config
       <li>Text constraints are matched with "equality" semantics i.e. value in the constraint must be exactly equal to the resource offer's value.</li>
       <li>In case there is no value present as a part of the constraint any offer with the corresponding attribute will be accepted (without value check).</li>
     </ul>
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.driver.webui.url</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    Set the Spark Mesos driver webui_url for interacting with the framework.
+    If unset it will point to Spark's internal web UI.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.dispatcher.webui.url</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    Set the Spark Mesos dispatcher webui_url for interacting with the framework.
+    If unset it will point to Spark's internal web UI.
   </td>
 </tr>
 </table>

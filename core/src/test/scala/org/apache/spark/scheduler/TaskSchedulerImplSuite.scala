@@ -18,6 +18,7 @@
 package org.apache.spark.scheduler
 
 import org.apache.spark._
+import org.apache.spark.internal.Logging
 
 class FakeSchedulerBackend extends SchedulerBackend {
   def start() {}

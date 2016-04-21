@@ -142,6 +142,7 @@ class BisectingKMeans(object):
     .. versionadded:: 2.0.0
     """
 
+    @classmethod
     @since('2.0.0')
     def train(self, rdd, k=4, maxIterations=20, minDivisibleClusterSize=1.0, seed=-1888008604):
         """

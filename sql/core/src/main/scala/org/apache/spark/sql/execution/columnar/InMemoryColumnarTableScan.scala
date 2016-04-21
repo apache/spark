@@ -147,7 +147,7 @@ private[sql] case class InMemoryRelation(
             // may result malformed rows, causing ArrayIndexOutOfBoundsException, which is somewhat
             // hard to decipher.
             assert(
-              row.numFields == columnBuilders.size,
+              row.numFields == columnBuilders.length,
               s"Row column number mismatch, expected ${output.size} columns, " +
                 s"but got ${row.numFields}." +
                 s"\nRow content: $row")

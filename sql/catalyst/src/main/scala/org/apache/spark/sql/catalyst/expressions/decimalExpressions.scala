@@ -34,7 +34,7 @@ case class UnscaledValue(child: Expression) extends UnaryExpression {
   protected override def nullSafeEval(input: Any): Any =
     input.asInstanceOf[Decimal].toUnscaledLong
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c => s"$c.toUnscaledLong()")
   }
 }
@@ -53,7 +53,7 @@ case class MakeDecimal(child: Expression, precision: Int, scale: Int) extends Un
   protected override def nullSafeEval(input: Any): Any =
     Decimal(input.asInstanceOf[Long], precision, scale)
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, eval => {
       s"""
         ${ev.value} = (new Decimal()).setOrNull($eval, $precision, $scale);
@@ -70,8 +70,8 @@ case class MakeDecimal(child: Expression, precision: Int, scale: Int) extends Un
 case class PromotePrecision(child: Expression) extends UnaryExpression {
   override def dataType: DataType = child.dataType
   override def eval(input: InternalRow): Any = child.eval(input)
-  override def gen(ctx: CodegenContext): ExprCode = child.gen(ctx)
-  override protected def genCode(ctx: CodegenContext, ev: ExprCode): String = ""
+  override def genCode(ctx: CodegenContext): ExprCode = child.genCode(ctx)
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = ev.copy("")
   override def prettyName: String = "promote_precision"
   override def sql: String = child.sql
 }
@@ -93,7 +93,7 @@ case class CheckOverflow(child: Expression, dataType: DecimalType) extends Unary
     }
   }
 
-  override protected def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, eval => {
       val tmp = ctx.freshName("tmp")
       s"""

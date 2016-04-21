@@ -256,7 +256,7 @@ class IndexedRowMatrix(DistributedMatrix):
         # on the Scala/Java side. Then we map each Row in the
         # DataFrame back to an IndexedRow on this side.
         rows_df = callMLlibFunc("getIndexedRows", self._java_matrix_wrapper._java_model)
-        rows = rows_df.map(lambda row: IndexedRow(row[0], row[1]))
+        rows = rows_df.rdd.map(lambda row: IndexedRow(row[0], row[1]))
         return rows
 
     def numRows(self):
@@ -475,7 +475,7 @@ class CoordinateMatrix(DistributedMatrix):
         # DataFrame on the Scala/Java side. Then we map each Row in
         # the DataFrame back to a MatrixEntry on this side.
         entries_df = callMLlibFunc("getMatrixEntries", self._java_matrix_wrapper._java_model)
-        entries = entries_df.map(lambda row: MatrixEntry(row[0], row[1], row[2]))
+        entries = entries_df.rdd.map(lambda row: MatrixEntry(row[0], row[1], row[2]))
         return entries
 
     def numRows(self):
@@ -700,7 +700,7 @@ class BlockMatrix(DistributedMatrix):
         # DataFrame on the Scala/Java side. Then we map each Row in
         # the DataFrame back to a sub-matrix block on this side.
         blocks_df = callMLlibFunc("getMatrixBlocks", self._java_matrix_wrapper._java_model)
-        blocks = blocks_df.map(lambda row: ((row[0][0], row[0][1]), row[1]))
+        blocks = blocks_df.rdd.map(lambda row: ((row[0][0], row[0][1]), row[1]))
         return blocks
 
     @property

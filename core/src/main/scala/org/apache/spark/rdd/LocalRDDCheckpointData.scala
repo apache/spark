@@ -19,7 +19,8 @@ package org.apache.spark.rdd
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.{Logging, SparkEnv, TaskContext}
+import org.apache.spark.{SparkEnv, TaskContext}
+import org.apache.spark.internal.Logging
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 import org.apache.spark.util.Utils
 

@@ -127,7 +127,7 @@ class PrefixSpanModel(JavaModelWrapper):
 
     @since("1.6.0")
     def freqSequences(self):
-        """Gets frequence sequences"""
+        """Gets frequent sequences"""
         return self.call("getFreqSequences").map(lambda x: PrefixSpan.FreqSequence(x[0], x[1]))
 
 

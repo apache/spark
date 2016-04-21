@@ -68,9 +68,9 @@ class PartitionerAwareUnionRDD[T: ClassTag](
 
   override def getPartitions: Array[Partition] = {
     val numPartitions = partitioner.get.numPartitions
-    (0 until numPartitions).map(index => {
+    (0 until numPartitions).map { index =>
       new PartitionerAwareUnionRDDPartition(rdds, index)
-    }).toArray
+    }.toArray
   }
 
   // Get the location where most of the partitions of parent RDDs are located
@@ -78,11 +78,10 @@ class PartitionerAwareUnionRDD[T: ClassTag](
     logDebug("Finding preferred location for " + this + ", partition " + s.index)
     val parentPartitions = s.asInstanceOf[PartitionerAwareUnionRDDPartition].parents
     val locations = rdds.zip(parentPartitions).flatMap {
-      case (rdd, part) => {
+      case (rdd, part) =>
         val parentLocations = currPrefLocs(rdd, part)
         logDebug("Location of " + rdd + " partition " + part.index + " = " + parentLocations)
         parentLocations
-      }
     }
     val location = if (locations.isEmpty) {
       None

@@ -22,7 +22,6 @@ import java.util.Random
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.shuffle.hash.HashShuffleManager
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
@@ -38,7 +37,7 @@ import org.apache.spark.util.MutablePair
 case class ShuffleExchange(
     var newPartitioning: Partitioning,
     child: SparkPlan,
-    @transient coordinator: Option[ExchangeCoordinator]) extends UnaryNode {
+    @transient coordinator: Option[ExchangeCoordinator]) extends Exchange {
 
   override def nodeName: String = {
     val extraInfo = coordinator match {
@@ -54,8 +53,6 @@ case class ShuffleExchange(
   }
 
   override def outputPartitioning: Partitioning = newPartitioning
-
-  override def output: Seq[Attribute] = child.output
 
   private val serializer: Serializer = new UnsafeRowSerializer(child.output.size)
 
@@ -103,16 +100,25 @@ case class ShuffleExchange(
     new ShuffledRowRDD(shuffleDependency, specifiedPartitionStartIndices)
   }
 
+  /**
+   * Caches the created ShuffleRowRDD so we can reuse that.
+   */
+  private var cachedShuffleRDD: ShuffledRowRDD = null
+
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
-    coordinator match {
-      case Some(exchangeCoordinator) =>
-        val shuffleRDD = exchangeCoordinator.postShuffleRDD(this)
-        assert(shuffleRDD.partitions.length == newPartitioning.numPartitions)
-        shuffleRDD
-      case None =>
-        val shuffleDependency = prepareShuffleDependency()
-        preparePostShuffleRDD(shuffleDependency)
+    // Returns the same ShuffleRowRDD if this plan is used by multiple plans.
+    if (cachedShuffleRDD == null) {
+      cachedShuffleRDD = coordinator match {
+        case Some(exchangeCoordinator) =>
+          val shuffleRDD = exchangeCoordinator.postShuffleRDD(this)
+          assert(shuffleRDD.partitions.length == newPartitioning.numPartitions)
+          shuffleRDD
+        case None =>
+          val shuffleDependency = prepareShuffleDependency()
+          preparePostShuffleRDD(shuffleDependency)
+      }
     }
+    cachedShuffleRDD
   }
 }
 
@@ -172,9 +178,6 @@ object ShuffleExchange {
         // copy.
         true
       }
-    } else if (shuffleManager.isInstanceOf[HashShuffleManager]) {
-      // We're using hash-based shuffle, so we don't need to copy.
-      false
     } else {
       // Catch-all case to safely handle any future ShuffleManager implementations.
       true
@@ -254,7 +257,7 @@ object ShuffleExchange {
       new ShuffleDependency[Int, InternalRow, InternalRow](
         rddWithPartitionIds,
         new PartitionIdPassthrough(part.numPartitions),
-        Some(serializer))
+        serializer)
 
     dependency
   }

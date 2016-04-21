@@ -26,7 +26,3 @@ fi
 . "${SPARK_HOME}/sbin/spark-config.sh"
 
 "${SPARK_HOME}/sbin"/spark-daemon.sh stop org.apache.spark.deploy.master.Master 1
-
-if [ -e "${SPARK_HOME}/sbin"/../tachyon/bin/tachyon ]; then
-  "${SPARK_HOME}/sbin"/../tachyon/bin/tachyon killAll tachyon.master.Master
-fi

@@ -20,8 +20,8 @@ package org.apache.spark.sql.execution.datasources.csv
 import org.apache.spark.SparkFunSuite
 
 /**
-  * test cases for StringIteratorReader
-  */
+ * test cases for StringIteratorReader
+ */
 class CSVParserSuite extends SparkFunSuite {
 
   private def readAll(iter: Iterator[String]) = {
@@ -46,7 +46,7 @@ class CSVParserSuite extends SparkFunSuite {
     var numRead = 0
       var n = 0
       do { // try to fill cbuf
-      var off = 0
+        var off = 0
         var len = cbuf.length
         n = reader.read(cbuf, off, len)
 
@@ -81,7 +81,7 @@ class CSVParserSuite extends SparkFunSuite {
   test("Regular case") {
     val input = List("This is a string", "This is another string", "Small", "", "\"quoted\"")
     val read = readAll(input.toIterator)
-    assert(read === input.mkString("\n") ++ ("\n"))
+    assert(read === input.mkString("\n") ++ "\n")
   }
 
   test("Empty iter") {
@@ -93,12 +93,12 @@ class CSVParserSuite extends SparkFunSuite {
   test("Embedded new line") {
     val input = List("This is a string", "This is another string", "Small\n", "", "\"quoted\"")
     val read = readAll(input.toIterator)
-    assert(read === input.mkString("\n") ++ ("\n"))
+    assert(read === input.mkString("\n") ++ "\n")
   }
 
   test("Buffer Regular case") {
     val input = List("This is a string", "This is another string", "Small", "", "\"quoted\"")
-    val output = input.mkString("\n") ++ ("\n")
+    val output = input.mkString("\n") ++ "\n"
     for(i <- 1 to output.length + 5) {
       val read = readBufAll(input.toIterator, i)
       assert(read === output)
@@ -116,7 +116,7 @@ class CSVParserSuite extends SparkFunSuite {
 
   test("Buffer Embedded new line") {
     val input = List("This is a string", "This is another string", "Small\n", "", "\"quoted\"")
-    val output = input.mkString("\n") ++ ("\n")
+    val output = input.mkString("\n") ++ "\n"
     for(i <- 1 to output.length + 5) {
       val read = readBufAll(input.toIterator, 1)
       assert(read === output)

@@ -66,8 +66,8 @@ public class JavaStreamingKMeansSuite implements Serializable {
     JavaDStream<Vector> training =
       attachTestInputStream(ssc, Arrays.asList(trainingBatch, trainingBatch), 2);
     List<Tuple2<Integer, Vector>> testBatch = Arrays.asList(
-      new Tuple2<Integer, Vector>(10, Vectors.dense(1.0)),
-      new Tuple2<Integer, Vector>(11, Vectors.dense(0.0)));
+      new Tuple2<>(10, Vectors.dense(1.0)),
+      new Tuple2<>(11, Vectors.dense(0.0)));
     JavaPairDStream<Integer, Vector> test = JavaPairDStream.fromJavaDStream(
       attachTestInputStream(ssc, Arrays.asList(testBatch, testBatch), 2));
     StreamingKMeans skmeans = new StreamingKMeans()

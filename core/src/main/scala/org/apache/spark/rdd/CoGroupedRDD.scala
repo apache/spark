@@ -29,10 +29,12 @@ import org.apache.spark.serializer.Serializer
 import org.apache.spark.util.collection.{CompactBuffer, ExternalAppendOnlyMap}
 import org.apache.spark.util.Utils
 
-/** The references to rdd and splitIndex are transient because redundant information is stored
-  * in the CoGroupedRDD object.  Because CoGroupedRDD is serialized separately from
-  * CoGroupPartition, if rdd and splitIndex aren't transient, they'll be included twice in the
-  * task closure. */
+/**
+ * The references to rdd and splitIndex are transient because redundant information is stored
+ * in the CoGroupedRDD object.  Because CoGroupedRDD is serialized separately from
+ * CoGroupPartition, if rdd and splitIndex aren't transient, they'll be included twice in the
+ * task closure.
+ */
 private[spark] case class NarrowCoGroupSplitDep(
     @transient rdd: RDD[_],
     @transient splitIndex: Int,
@@ -86,11 +88,11 @@ class CoGroupedRDD[K: ClassTag](
   private type CoGroupValue = (Any, Int)  // Int is dependency number
   private type CoGroupCombiner = Array[CoGroup]
 
-  private var serializer: Option[Serializer] = None
+  private var serializer: Serializer = SparkEnv.get.serializer
 
   /** Set a serializer for this RDD's shuffle, or null to use the default (spark.serializer) */
   def setSerializer(serializer: Serializer): CoGroupedRDD[K] = {
-    this.serializer = Option(serializer)
+    this.serializer = serializer
     this
   }
 

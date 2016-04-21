@@ -51,7 +51,7 @@ from pyspark.sql.types import UserDefinedType, _infer_type
 from pyspark.tests import ReusedPySparkTestCase
 from pyspark.sql.functions import UserDefinedFunction, sha2
 from pyspark.sql.window import Window
-from pyspark.sql.utils import AnalysisException, IllegalArgumentException
+from pyspark.sql.utils import AnalysisException, ParseException, IllegalArgumentException
 
 
 class UTCOffsetTimezone(datetime.tzinfo):
@@ -305,6 +305,25 @@ class SQLTests(ReusedPySparkTestCase):
         [res] = self.sqlCtx.sql("SELECT strlen(a) FROM test WHERE strlen(a) > 1").collect()
         self.assertEqual(4, res[0])
 
+    def test_chained_udf(self):
+        self.sqlCtx.registerFunction("double", lambda x: x + x, IntegerType())
+        [row] = self.sqlCtx.sql("SELECT double(1)").collect()
+        self.assertEqual(row[0], 2)
+        [row] = self.sqlCtx.sql("SELECT double(double(1))").collect()
+        self.assertEqual(row[0], 4)
+        [row] = self.sqlCtx.sql("SELECT double(double(1) + 1)").collect()
+        self.assertEqual(row[0], 6)
+
+    def test_multiple_udfs(self):
+        self.sqlCtx.registerFunction("double", lambda x: x * 2, IntegerType())
+        [row] = self.sqlCtx.sql("SELECT double(1), double(2)").collect()
+        self.assertEqual(tuple(row), (2, 4))
+        [row] = self.sqlCtx.sql("SELECT double(double(1)), double(double(2) + 2)").collect()
+        self.assertEqual(tuple(row), (4, 12))
+        self.sqlCtx.registerFunction("add", lambda x, y: x + y, IntegerType())
+        [row] = self.sqlCtx.sql("SELECT double(add(1, 2)), add(double(2), 1)").collect()
+        self.assertEqual(tuple(row), (6, 5))
+
     def test_udf_with_array_type(self):
         d = [Row(l=list(range(3)), d={"key": list(range(5))})]
         rdd = self.sc.parallelize(d)
@@ -324,6 +343,15 @@ class SQLTests(ReusedPySparkTestCase):
         [res] = self.sqlCtx.sql("SELECT MYUDF('')").collect()
         self.assertEqual("", res[0])
 
+    def test_udf_with_aggregate_function(self):
+        df = self.sqlCtx.createDataFrame([(1, "1"), (2, "2"), (1, "2"), (1, "2")], ["key", "value"])
+        from pyspark.sql.functions import udf, col
+        from pyspark.sql.types import BooleanType
+
+        my_filter = udf(lambda a: a == 1, BooleanType())
+        sel = df.select(col("key")).distinct().filter(my_filter(col("key")))
+        self.assertEqual(sel.collect(), [Row(key=1)])
+
     def test_basic_functions(self):
         rdd = self.sc.parallelize(['{"foo":"bar"}', '{"foo":"baz"}'])
         df = self.sqlCtx.read.json(rdd)
@@ -334,7 +362,7 @@ class SQLTests(ReusedPySparkTestCase):
         # cache and checkpoint
         self.assertFalse(df.is_cached)
         df.persist()
-        df.unpersist()
+        df.unpersist(True)
         df.cache()
         self.assertTrue(df.is_cached)
         self.assertEqual(2, df.count())
@@ -346,7 +374,7 @@ class SQLTests(ReusedPySparkTestCase):
 
     def test_apply_schema_to_row(self):
         df = self.sqlCtx.read.json(self.sc.parallelize(["""{"a":2}"""]))
-        df2 = self.sqlCtx.createDataFrame(df.map(lambda x: x), df.schema)
+        df2 = self.sqlCtx.createDataFrame(df.rdd.map(lambda x: x), df.schema)
         self.assertEqual(df.collect(), df2.collect())
 
         rdd = self.sc.parallelize(range(10)).map(lambda x: Row(a=x))
@@ -369,9 +397,7 @@ class SQLTests(ReusedPySparkTestCase):
         rdd = self.sc.parallelize(range(3)).map(lambda i: Row(a=i))
         schema = StructType([StructField("a", IntegerType()), StructField("b", StringType())])
         df = self.sqlCtx.createDataFrame(rdd, schema)
-        message = ".*Input row doesn't have expected number of values required by the schema.*"
-        with self.assertRaisesRegexp(Exception, message):
-            df.show()
+        self.assertRaises(Exception, lambda: df.show())
 
     def test_serialize_nested_array_and_map(self):
         d = [Row(l=[Row(a=1, b='s')], d={"key": Row(c=1.0, d="2")})]
@@ -382,15 +408,15 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(1, row.l[0].a)
         self.assertEqual("2", row.d["key"].d)
 
-        l = df.map(lambda x: x.l).first()
+        l = df.rdd.map(lambda x: x.l).first()
         self.assertEqual(1, len(l))
         self.assertEqual('s', l[0].b)
 
-        d = df.map(lambda x: x.d).first()
+        d = df.rdd.map(lambda x: x.d).first()
         self.assertEqual(1, len(d))
         self.assertEqual(1.0, d["key"].c)
 
-        row = df.map(lambda x: x.d["key"]).first()
+        row = df.rdd.map(lambda x: x.d["key"]).first()
         self.assertEqual(1.0, row.c)
         self.assertEqual("2", row.d)
 
@@ -399,16 +425,16 @@ class SQLTests(ReusedPySparkTestCase):
              Row(l=[Row(a=1, b='s')], d={"key": Row(c=1.0, d="2")}, s="")]
         rdd = self.sc.parallelize(d)
         df = self.sqlCtx.createDataFrame(rdd)
-        self.assertEqual([], df.map(lambda r: r.l).first())
-        self.assertEqual([None, ""], df.map(lambda r: r.s).collect())
+        self.assertEqual([], df.rdd.map(lambda r: r.l).first())
+        self.assertEqual([None, ""], df.rdd.map(lambda r: r.s).collect())
         df.registerTempTable("test")
         result = self.sqlCtx.sql("SELECT l[0].a from test where d['key'].d = '2'")
         self.assertEqual(1, result.head()[0])
 
         df2 = self.sqlCtx.createDataFrame(rdd, samplingRatio=1.0)
         self.assertEqual(df.schema, df2.schema)
-        self.assertEqual({}, df2.map(lambda r: r.d).first())
-        self.assertEqual([None, ""], df2.map(lambda r: r.s).collect())
+        self.assertEqual({}, df2.rdd.map(lambda r: r.d).first())
+        self.assertEqual([None, ""], df2.rdd.map(lambda r: r.s).collect())
         df2.registerTempTable("test2")
         result = self.sqlCtx.sql("SELECT l[0].a from test2 where d['key'].d = '2'")
         self.assertEqual(1, result.head()[0])
@@ -462,8 +488,8 @@ class SQLTests(ReusedPySparkTestCase):
             StructField("list1", ArrayType(ByteType(), False), False),
             StructField("null1", DoubleType(), True)])
         df = self.sqlCtx.createDataFrame(rdd, schema)
-        results = df.map(lambda x: (x.byte1, x.byte2, x.short1, x.short2, x.int1, x.float1, x.date1,
-                                    x.time1, x.map1["a"], x.struct1.b, x.list1, x.null1))
+        results = df.rdd.map(lambda x: (x.byte1, x.byte2, x.short1, x.short2, x.int1, x.float1,
+                             x.date1, x.time1, x.map1["a"], x.struct1.b, x.list1, x.null1))
         r = (127, -128, -32768, 32767, 2147483647, 1.0, date(2010, 1, 1),
              datetime(2010, 1, 1, 1, 1, 1), 1, 2, [1, 2, 3], None)
         self.assertEqual(r, results.first())
@@ -570,7 +596,7 @@ class SQLTests(ReusedPySparkTestCase):
         from pyspark.sql.tests import ExamplePoint, ExamplePointUDT
         row = Row(label=1.0, point=ExamplePoint(1.0, 2.0))
         df = self.sqlCtx.createDataFrame([row])
-        self.assertEqual(1.0, df.map(lambda r: r.point.x).first())
+        self.assertEqual(1.0, df.rdd.map(lambda r: r.point.x).first())
         udf = UserDefinedFunction(lambda p: p.y, DoubleType())
         self.assertEqual(2.0, df.select(udf(df.point)).first()[0])
         udf2 = UserDefinedFunction(lambda p: ExamplePoint(p.x + 1, p.y + 1), ExamplePointUDT())
@@ -578,7 +604,7 @@ class SQLTests(ReusedPySparkTestCase):
 
         row = Row(label=1.0, point=PythonOnlyPoint(1.0, 2.0))
         df = self.sqlCtx.createDataFrame([row])
-        self.assertEqual(1.0, df.map(lambda r: r.point.x).first())
+        self.assertEqual(1.0, df.rdd.map(lambda r: r.point.x).first())
         udf = UserDefinedFunction(lambda p: p.y, DoubleType())
         self.assertEqual(2.0, df.select(udf(df.point)).first()[0])
         udf2 = UserDefinedFunction(lambda p: PythonOnlyPoint(p.x + 1, p.y + 1), PythonOnlyUDT())
@@ -601,7 +627,7 @@ class SQLTests(ReusedPySparkTestCase):
         point = df1.head().point
         self.assertEqual(point, PythonOnlyPoint(1.0, 2.0))
 
-    def test_unionAll_with_udt(self):
+    def test_union_with_udt(self):
         from pyspark.sql.tests import ExamplePoint, ExamplePointUDT
         row1 = (1.0, ExamplePoint(1.0, 2.0))
         row2 = (2.0, ExamplePoint(3.0, 4.0))
@@ -610,7 +636,7 @@ class SQLTests(ReusedPySparkTestCase):
         df1 = self.sqlCtx.createDataFrame([row1], schema)
         df2 = self.sqlCtx.createDataFrame([row2], schema)
 
-        result = df1.unionAll(df2).orderBy("label").collect()
+        result = df1.union(df2).orderBy("label").collect()
         self.assertEqual(
             result,
             [
@@ -776,11 +802,26 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertNotEqual(struct1, struct2)
 
         # Catch exception raised during improper construction
-        try:
+        with self.assertRaises(ValueError):
             struct1 = StructType().add("name")
-            self.assertEqual(1, 0)
-        except ValueError:
-            self.assertEqual(1, 1)
+
+        struct1 = StructType().add("f1", StringType(), True).add("f2", StringType(), True, None)
+        for field in struct1:
+            self.assertIsInstance(field, StructField)
+
+        struct1 = StructType().add("f1", StringType(), True).add("f2", StringType(), True, None)
+        self.assertEqual(len(struct1), 2)
+
+        struct1 = StructType().add("f1", StringType(), True).add("f2", StringType(), True, None)
+        self.assertIs(struct1["f1"], struct1.fields[0])
+        self.assertIs(struct1[0], struct1.fields[0])
+        self.assertEqual(struct1[0:1], StructType(struct1.fields[0:1]))
+        with self.assertRaises(KeyError):
+            not_a_field = struct1["f9"]
+        with self.assertRaises(IndexError):
+            not_a_field = struct1[9]
+        with self.assertRaises(TypeError):
+            not_a_field = struct1[9.9]
 
     def test_metadata_null(self):
         from pyspark.sql.types import StructType, StringType, StructField
@@ -851,6 +892,99 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
         self.sqlCtx.sql("SET spark.sql.sources.default=" + defaultDataSourceName)
 
+        shutil.rmtree(tmpPath)
+
+    def test_stream_trigger_takes_keyword_args(self):
+        df = self.sqlCtx.read.format('text').stream('python/test_support/sql/streaming')
+        try:
+            df.write.trigger('5 seconds')
+            self.fail("Should have thrown an exception")
+        except TypeError:
+            # should throw error
+            pass
+
+    def test_stream_read_options(self):
+        schema = StructType([StructField("data", StringType(), False)])
+        df = self.sqlCtx.read.format('text').option('path', 'python/test_support/sql/streaming')\
+            .schema(schema).stream()
+        self.assertTrue(df.isStreaming)
+        self.assertEqual(df.schema.simpleString(), "struct<data:string>")
+
+    def test_stream_read_options_overwrite(self):
+        bad_schema = StructType([StructField("test", IntegerType(), False)])
+        schema = StructType([StructField("data", StringType(), False)])
+        df = self.sqlCtx.read.format('csv').option('path', 'python/test_support/sql/fake') \
+            .schema(bad_schema).stream(path='python/test_support/sql/streaming',
+                                       schema=schema, format='text')
+        self.assertTrue(df.isStreaming)
+        self.assertEqual(df.schema.simpleString(), "struct<data:string>")
+
+    def test_stream_save_options(self):
+        df = self.sqlCtx.read.format('text').stream('python/test_support/sql/streaming')
+        tmpPath = tempfile.mkdtemp()
+        shutil.rmtree(tmpPath)
+        self.assertTrue(df.isStreaming)
+        out = os.path.join(tmpPath, 'out')
+        chk = os.path.join(tmpPath, 'chk')
+        cq = df.write.option('checkpointLocation', chk).queryName('this_query')\
+            .format('parquet').option('path', out).startStream()
+        self.assertEqual(cq.name, 'this_query')
+        self.assertTrue(cq.isActive)
+        cq.processAllAvailable()
+        output_files = []
+        for _, _, files in os.walk(out):
+            output_files.extend([f for f in files if 'parquet' in f and not f.startswith('.')])
+        self.assertTrue(len(output_files) > 0)
+        self.assertTrue(len(os.listdir(chk)) > 0)
+        cq.stop()
+        shutil.rmtree(tmpPath)
+
+    def test_stream_save_options_overwrite(self):
+        df = self.sqlCtx.read.format('text').stream('python/test_support/sql/streaming')
+        tmpPath = tempfile.mkdtemp()
+        shutil.rmtree(tmpPath)
+        self.assertTrue(df.isStreaming)
+        out = os.path.join(tmpPath, 'out')
+        chk = os.path.join(tmpPath, 'chk')
+        fake1 = os.path.join(tmpPath, 'fake1')
+        fake2 = os.path.join(tmpPath, 'fake2')
+        cq = df.write.option('checkpointLocation', fake1).format('memory').option('path', fake2) \
+            .queryName('fake_query').startStream(path=out, format='parquet', queryName='this_query',
+                                                 checkpointLocation=chk)
+        self.assertEqual(cq.name, 'this_query')
+        self.assertTrue(cq.isActive)
+        cq.processAllAvailable()
+        output_files = []
+        for _, _, files in os.walk(out):
+            output_files.extend([f for f in files if 'parquet' in f and not f.startswith('.')])
+        self.assertTrue(len(output_files) > 0)
+        self.assertTrue(len(os.listdir(chk)) > 0)
+        self.assertFalse(os.path.isdir(fake1))  # should not have been created
+        self.assertFalse(os.path.isdir(fake2))  # should not have been created
+        cq.stop()
+        shutil.rmtree(tmpPath)
+
+    def test_stream_await_termination(self):
+        df = self.sqlCtx.read.format('text').stream('python/test_support/sql/streaming')
+        tmpPath = tempfile.mkdtemp()
+        shutil.rmtree(tmpPath)
+        self.assertTrue(df.isStreaming)
+        out = os.path.join(tmpPath, 'out')
+        chk = os.path.join(tmpPath, 'chk')
+        cq = df.write.startStream(path=out, format='parquet', queryName='this_query',
+                                  checkpointLocation=chk)
+        self.assertTrue(cq.isActive)
+        try:
+            cq.awaitTermination("hello")
+            self.fail("Expected a value exception")
+        except ValueError:
+            pass
+        now = time.time()
+        res = cq.awaitTermination(2600)  # test should take at least 2 seconds
+        duration = time.time() - now
+        self.assertTrue(duration >= 2)
+        self.assertFalse(res)
+        cq.stop()
         shutil.rmtree(tmpPath)
 
     def test_help_command(self):
@@ -1132,7 +1266,9 @@ class SQLTests(ReusedPySparkTestCase):
     def test_capture_analysis_exception(self):
         self.assertRaises(AnalysisException, lambda: self.sqlCtx.sql("select abc"))
         self.assertRaises(AnalysisException, lambda: self.df.selectExpr("a + b"))
-        self.assertRaises(AnalysisException, lambda: self.sqlCtx.sql("abc"))
+
+    def test_capture_parse_exception(self):
+        self.assertRaises(ParseException, lambda: self.sqlCtx.sql("abc"))
 
     def test_capture_illegalargument_exception(self):
         self.assertRaisesRegexp(IllegalArgumentException, "Setting negative mapred.reduce.tasks",
@@ -1177,6 +1313,42 @@ class SQLTests(ReusedPySparkTestCase):
 
         # planner should not crash without a join
         broadcast(df1)._jdf.queryExecution().executedPlan()
+
+    def test_toDF_with_schema_string(self):
+        data = [Row(key=i, value=str(i)) for i in range(100)]
+        rdd = self.sc.parallelize(data, 5)
+
+        df = rdd.toDF("key: int, value: string")
+        self.assertEqual(df.schema.simpleString(), "struct<key:int,value:string>")
+        self.assertEqual(df.collect(), data)
+
+        # different but compatible field types can be used.
+        df = rdd.toDF("key: string, value: string")
+        self.assertEqual(df.schema.simpleString(), "struct<key:string,value:string>")
+        self.assertEqual(df.collect(), [Row(key=str(i), value=str(i)) for i in range(100)])
+
+        # field names can differ.
+        df = rdd.toDF(" a: int, b: string ")
+        self.assertEqual(df.schema.simpleString(), "struct<a:int,b:string>")
+        self.assertEqual(df.collect(), data)
+
+        # number of fields must match.
+        self.assertRaisesRegexp(Exception, "Length of object",
+                                lambda: rdd.toDF("key: int").collect())
+
+        # field types mismatch will cause exception at runtime.
+        self.assertRaisesRegexp(Exception, "FloatType can not accept",
+                                lambda: rdd.toDF("key: float, value: string").collect())
+
+        # flat schema values will be wrapped into row.
+        df = rdd.map(lambda row: row.key).toDF("int")
+        self.assertEqual(df.schema.simpleString(), "struct<value:int>")
+        self.assertEqual(df.collect(), [Row(key=i) for i in range(100)])
+
+        # users can use DataType directly instead of data type string.
+        df = rdd.map(lambda row: row.key).toDF(IntegerType())
+        self.assertEqual(df.schema.simpleString(), "struct<value:int>")
+        self.assertEqual(df.collect(), [Row(key=i) for i in range(100)])
 
 
 class HiveContextSQLTests(ReusedPySparkTestCase):

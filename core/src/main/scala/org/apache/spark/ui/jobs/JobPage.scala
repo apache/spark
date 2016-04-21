@@ -122,7 +122,7 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
                |    'Removed at ${UIUtils.formatDate(new Date(event.finishTime.get))}' +
                |    '${
                         if (event.finishReason.isDefined) {
-                          s"""<br>Reason: ${event.finishReason.get}"""
+                          s"""<br>Reason: ${event.finishReason.get.replace("\n", " ")}"""
                         } else {
                           ""
                         }

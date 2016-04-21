@@ -70,9 +70,15 @@ class ExpressionSetSuite extends SparkFunSuite {
   // Not commutative
   setTest(2, aUpper - bUpper, bUpper - aUpper)
 
-  // Reversable
+  // Reversible
   setTest(1, aUpper > bUpper, bUpper < aUpper)
   setTest(1, aUpper >= bUpper, bUpper <= aUpper)
+
+  // `Not` canonicalization
+  setTest(1, Not(aUpper > 1), aUpper <= 1, Not(Literal(1) < aUpper), Literal(1) >= aUpper)
+  setTest(1, Not(aUpper < 1), aUpper >= 1, Not(Literal(1) > aUpper), Literal(1) <= aUpper)
+  setTest(1, Not(aUpper >= 1), aUpper < 1, Not(Literal(1) <= aUpper), Literal(1) > aUpper)
+  setTest(1, Not(aUpper <= 1), aUpper > 1, Not(Literal(1) >= aUpper), Literal(1) < aUpper)
 
   test("add to / remove from set") {
     val initialSet = ExpressionSet(aUpper + 1 :: Nil)

@@ -85,15 +85,15 @@ case class Expand(
     }
   }
 
-  override def upstreams(): Seq[RDD[InternalRow]] = {
-    child.asInstanceOf[CodegenSupport].upstreams()
+  override def inputRDDs(): Seq[RDD[InternalRow]] = {
+    child.asInstanceOf[CodegenSupport].inputRDDs()
   }
 
   protected override def doProduce(ctx: CodegenContext): String = {
     child.asInstanceOf[CodegenSupport].produce(ctx, this)
   }
 
-  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode]): String = {
+  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     /*
      * When the projections list looks like:
      *   expr1A, exprB, expr1C
@@ -149,7 +149,7 @@ case class Expand(
       val firstExpr = projections.head(col)
       if (sameOutput(col)) {
         // This column is the same across all output rows. Just generate code for it here.
-        BindReferences.bindReference(firstExpr, child.output).gen(ctx)
+        BindReferences.bindReference(firstExpr, child.output).genCode(ctx)
       } else {
         val isNull = ctx.freshName("isNull")
         val value = ctx.freshName("value")
@@ -166,7 +166,7 @@ case class Expand(
       var updateCode = ""
       for (col <- exprs.indices) {
         if (!sameOutput(col)) {
-          val ev = BindReferences.bindReference(exprs(col), child.output).gen(ctx)
+          val ev = BindReferences.bindReference(exprs(col), child.output).genCode(ctx)
           updateCode +=
             s"""
                |${ev.code}
@@ -185,8 +185,11 @@ case class Expand(
 
     val numOutput = metricTerm(ctx, "numOutputRows")
     val i = ctx.freshName("i")
+    // these column have to declared before the loop.
+    val evaluate = evaluateVariables(outputColumns)
+    ctx.copyResult = true
     s"""
-       |${outputColumns.map(_.code).mkString("\n").trim}
+       |$evaluate
        |for (int $i = 0; $i < ${projections.length}; $i ++) {
        |  switch ($i) {
        |    ${cases.mkString("\n").trim}

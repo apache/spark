@@ -63,7 +63,7 @@ object HiveFromSpark {
     val rddFromSql = sql("SELECT key, value FROM src WHERE key < 10 ORDER BY key")
 
     println("Result of RDD.map:")
-    val rddAsStrings = rddFromSql.map {
+    val rddAsStrings = rddFromSql.rdd.map {
       case Row(key: Int, value: String) => s"Key: $key, Value: $value"
     }
 

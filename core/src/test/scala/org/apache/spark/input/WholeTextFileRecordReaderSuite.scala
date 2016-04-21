@@ -24,10 +24,11 @@ import java.io.FileOutputStream
 import scala.collection.immutable.IndexedSeq
 
 import org.apache.hadoop.io.Text
-import org.apache.hadoop.io.compress.{CompressionCodecFactory, DefaultCodec, GzipCodec}
+import org.apache.hadoop.io.compress.{CompressionCodecFactory, GzipCodec}
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.{Logging, SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
 /**

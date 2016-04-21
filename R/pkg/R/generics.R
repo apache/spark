@@ -67,6 +67,13 @@ setGeneric("crosstab", function(x, col1, col2) { standardGeneric("crosstab") })
 # @export
 setGeneric("freqItems", function(x, cols, support = 0.01) { standardGeneric("freqItems") })
 
+# @rdname statfunctions
+# @export
+setGeneric("approxQuantile",
+           function(x, col, probabilities, relativeError) {
+             standardGeneric("approxQuantile")
+           })
+
 # @rdname distinct
 # @export
 setGeneric("distinct", function(x, numPartitions = 1) { standardGeneric("distinct") })
@@ -77,7 +84,7 @@ setGeneric("filterRDD", function(x, f) { standardGeneric("filterRDD") })
 
 # @rdname first
 # @export
-setGeneric("first", function(x) { standardGeneric("first") })
+setGeneric("first", function(x, ...) { standardGeneric("first") })
 
 # @rdname flatMap
 # @export
@@ -394,7 +401,10 @@ setGeneric("arrange", function(x, col, ...) { standardGeneric("arrange") })
 
 #' @rdname as.data.frame
 #' @export
-setGeneric("as.data.frame")
+setGeneric("as.data.frame",
+           function(x, row.names = NULL, optional = FALSE, ...) {
+             standardGeneric("as.data.frame")
+           })
 
 #' @rdname attach
 #' @export
@@ -574,6 +584,12 @@ setGeneric("saveDF", function(df, path, source = NULL, mode = "error", ...) {
   standardGeneric("saveDF")
 })
 
+#' @rdname write.jdbc
+#' @export
+setGeneric("write.jdbc", function(x, url, tableName, mode = "error", ...) {
+  standardGeneric("write.jdbc")
+})
+
 #' @rdname write.json
 #' @export
 setGeneric("write.json", function(x, path) { standardGeneric("write.json") })
@@ -604,7 +620,7 @@ setGeneric("selectExpr", function(x, expr, ...) { standardGeneric("selectExpr") 
 
 #' @rdname showDF
 #' @export
-setGeneric("showDF", function(x,...) { standardGeneric("showDF") })
+setGeneric("showDF", function(x, ...) { standardGeneric("showDF") })
 
 # @rdname subset
 # @export
@@ -612,7 +628,7 @@ setGeneric("subset", function(x, ...) { standardGeneric("subset") })
 
 #' @rdname agg
 #' @export
-setGeneric("summarize", function(x,...) { standardGeneric("summarize") })
+setGeneric("summarize", function(x, ...) { standardGeneric("summarize") })
 
 #' @rdname summary
 #' @export
@@ -747,6 +763,10 @@ setGeneric("bin", function(x) { standardGeneric("bin") })
 #' @rdname bitwiseNOT
 #' @export
 setGeneric("bitwiseNOT", function(x) { standardGeneric("bitwiseNOT") })
+
+#' @rdname bround
+#' @export
+setGeneric("bround", function(x, ...) { standardGeneric("bround") })
 
 #' @rdname cbrt
 #' @export
@@ -886,7 +906,7 @@ setGeneric("lag", function(x, ...) { standardGeneric("lag") })
 
 #' @rdname last
 #' @export
-setGeneric("last", function(x) { standardGeneric("last") })
+setGeneric("last", function(x, ...) { standardGeneric("last") })
 
 #' @rdname last_day
 #' @export
@@ -1149,6 +1169,10 @@ setGeneric("var_samp", function(x) { standardGeneric("var_samp") })
 #' @export
 setGeneric("weekofyear", function(x) { standardGeneric("weekofyear") })
 
+#' @rdname window
+#' @export
+setGeneric("window", function(x, ...) { standardGeneric("window") })
+
 #' @rdname year
 #' @export
 setGeneric("year", function(x) { standardGeneric("year") })
@@ -1172,3 +1196,11 @@ setGeneric("kmeans")
 #' @rdname fitted
 #' @export
 setGeneric("fitted")
+
+#' @rdname naiveBayes
+#' @export
+setGeneric("naiveBayes", function(formula, data, ...) { standardGeneric("naiveBayes") })
+
+#' @rdname survreg
+#' @export
+setGeneric("survreg", function(formula, data, ...) { standardGeneric("survreg") })

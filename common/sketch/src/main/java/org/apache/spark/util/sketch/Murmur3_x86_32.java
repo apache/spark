@@ -28,7 +28,7 @@ final class Murmur3_x86_32 {
 
   private final int seed;
 
-  public Murmur3_x86_32(int seed) {
+  Murmur3_x86_32(int seed) {
     this.seed = seed;
   }
 

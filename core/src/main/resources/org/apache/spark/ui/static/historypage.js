@@ -110,7 +110,7 @@ $(document).ready(function() {
     requestedIncomplete = getParameterByName("showIncomplete", searchString);
     requestedIncomplete = (requestedIncomplete == "true" ? true : false);
 
-    $.getJSON("/api/v1/applications", function(response,status,jqXHR) {
+    $.getJSON("api/v1/applications", function(response,status,jqXHR) {
       var array = [];
       var hasMultipleAttempts = false;
       for (i in response) {
@@ -135,7 +135,7 @@ $(document).ready(function() {
       }
 
       var data = {"applications": array}
-      $.get("/static/historypage-template.html", function(template) {
+      $.get("static/historypage-template.html", function(template) {
         historySummary.append(Mustache.render($(template).filter("#history-summary-template").html(),data));
         var selector = "#history-summary-table";
         var conf = {
@@ -149,7 +149,8 @@ $(document).ready(function() {
                         {name: 'seventh'},
                         {name: 'eighth'},
                     ],
-                    "autoWidth": false
+                    "autoWidth": false,
+                    "order": [[ 4, "desc" ]]
         };
 
         var rowGroupConf = {

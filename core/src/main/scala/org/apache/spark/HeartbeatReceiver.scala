@@ -22,7 +22,7 @@ import java.util.concurrent.{ScheduledFuture, TimeUnit}
 import scala.collection.mutable
 import scala.concurrent.Future
 
-import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.{RpcCallContext, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.BlockManagerId
@@ -56,7 +56,7 @@ private[spark] case class HeartbeatResponse(reregisterBlockManager: Boolean)
  * Lives in the driver to receive heartbeats from executors..
  */
 private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
-  extends ThreadSafeRpcEndpoint with SparkListener with Logging {
+  extends SparkListener with ThreadSafeRpcEndpoint with Logging {
 
   def this(sc: SparkContext) {
     this(sc, new SystemClock)
@@ -220,6 +220,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
   }
 }
 
-object HeartbeatReceiver {
+
+private[spark] object HeartbeatReceiver {
   val ENDPOINT_NAME = "HeartbeatReceiver"
 }

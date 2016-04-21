@@ -36,7 +36,7 @@ import org.apache.spark.util.collection.unsafe.sort.RecordComparator;
 import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter;
 import org.apache.spark.util.collection.unsafe.sort.UnsafeSorterIterator;
 
-final class UnsafeExternalRowSorter {
+public final class UnsafeExternalRowSorter {
 
   /**
    * If positive, forces records to be spilled to disk at the given frequency (measured in numbers
@@ -67,6 +67,7 @@ final class UnsafeExternalRowSorter {
     sorter = UnsafeExternalSorter.create(
       taskContext.taskMemoryManager(),
       sparkEnv.blockManager(),
+      sparkEnv.serializerManager(),
       taskContext,
       new RowComparator(ordering, schema.length()),
       prefixComparator,
@@ -84,8 +85,7 @@ final class UnsafeExternalRowSorter {
     testSpillFrequency = frequency;
   }
 
-  @VisibleForTesting
-  void insertRow(UnsafeRow row) throws IOException {
+  public void insertRow(UnsafeRow row) throws IOException {
     final long prefix = prefixComputer.computePrefix(row);
     sorter.insertRecord(
       row.getBaseObject(),
@@ -110,8 +110,7 @@ final class UnsafeExternalRowSorter {
     sorter.cleanupResources();
   }
 
-  @VisibleForTesting
-  Iterator<UnsafeRow> sort() throws IOException {
+  public Iterator<UnsafeRow> sort() throws IOException {
     try {
       final UnsafeSorterIterator sortedIterator = sorter.getSortedIterator();
       if (!sortedIterator.hasNext()) {
@@ -152,14 +151,13 @@ final class UnsafeExternalRowSorter {
             Platform.throwException(e);
           }
           throw new RuntimeException("Exception should have been re-thrown in next()");
-        };
+        }
       };
     } catch (IOException e) {
       cleanupResources();
       throw e;
     }
   }
-
 
   public Iterator<UnsafeRow> sort(Iterator<UnsafeRow> inputIterator) throws IOException {
     while (inputIterator.hasNext()) {
@@ -174,7 +172,7 @@ final class UnsafeExternalRowSorter {
     private final UnsafeRow row1;
     private final UnsafeRow row2;
 
-    public RowComparator(Ordering<InternalRow> ordering, int numFields) {
+    RowComparator(Ordering<InternalRow> ordering, int numFields) {
       this.numFields = numFields;
       this.row1 = new UnsafeRow(numFields);
       this.row2 = new UnsafeRow(numFields);

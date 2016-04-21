@@ -18,11 +18,9 @@ package org.apache.spark.sql.execution.datasources.parquet;
 
 import java.io.IOException;
 
-import org.apache.spark.sql.Column;
 import org.apache.spark.sql.execution.vectorized.ColumnVector;
 import org.apache.spark.unsafe.Platform;
 
-import org.apache.commons.lang.NotImplementedException;
 import org.apache.parquet.column.values.ValuesReader;
 import org.apache.parquet.io.api.Binary;
 
@@ -85,7 +83,7 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
     for (int i = 0; i < total; i++) {
       // Bytes are stored as a 4-byte little endian int. Just read the first byte.
       // TODO: consider pushing this in ColumnVector by adding a readBytes with a stride.
-      c.putInt(rowId + i, buffer[offset]);
+      c.putByte(rowId + i, Platform.getByte(buffer, offset));
       offset += 4;
     }
   }

@@ -17,7 +17,7 @@
 
 package org.apache.spark.executor
 
-import org.apache.spark.{Accumulator, InternalAccumulator}
+import org.apache.spark.InternalAccumulator
 import org.apache.spark.annotation.DeveloperApi
 
 
@@ -27,38 +27,21 @@ import org.apache.spark.annotation.DeveloperApi
  * Operations are not thread-safe.
  */
 @DeveloperApi
-class ShuffleReadMetrics private (
-    _remoteBlocksFetched: Accumulator[Int],
-    _localBlocksFetched: Accumulator[Int],
-    _remoteBytesRead: Accumulator[Long],
-    _localBytesRead: Accumulator[Long],
-    _fetchWaitTime: Accumulator[Long],
-    _recordsRead: Accumulator[Long])
-  extends Serializable {
+class ShuffleReadMetrics private[spark] () extends Serializable {
+  import InternalAccumulator._
 
-  private[executor] def this(accumMap: Map[String, Accumulator[_]]) {
-    this(
-      TaskMetrics.getAccum[Int](accumMap, InternalAccumulator.shuffleRead.REMOTE_BLOCKS_FETCHED),
-      TaskMetrics.getAccum[Int](accumMap, InternalAccumulator.shuffleRead.LOCAL_BLOCKS_FETCHED),
-      TaskMetrics.getAccum[Long](accumMap, InternalAccumulator.shuffleRead.REMOTE_BYTES_READ),
-      TaskMetrics.getAccum[Long](accumMap, InternalAccumulator.shuffleRead.LOCAL_BYTES_READ),
-      TaskMetrics.getAccum[Long](accumMap, InternalAccumulator.shuffleRead.FETCH_WAIT_TIME),
-      TaskMetrics.getAccum[Long](accumMap, InternalAccumulator.shuffleRead.RECORDS_READ))
-  }
-
-  /**
-   * Create a new [[ShuffleReadMetrics]] that is not associated with any particular task.
-   *
-   * This mainly exists for legacy reasons, because we use dummy [[ShuffleReadMetrics]] in
-   * many places only to merge their values together later. In the future, we should revisit
-   * whether this is needed.
-   *
-   * A better alternative is [[TaskMetrics.registerTempShuffleReadMetrics]] followed by
-   * [[TaskMetrics.mergeShuffleReadMetrics]].
-   */
-  private[spark] def this() {
-    this(InternalAccumulator.createShuffleReadAccums().map { a => (a.name.get, a) }.toMap)
-  }
+  private[executor] val _remoteBlocksFetched =
+    TaskMetrics.createIntAccum(shuffleRead.REMOTE_BLOCKS_FETCHED)
+  private[executor] val _localBlocksFetched =
+    TaskMetrics.createIntAccum(shuffleRead.LOCAL_BLOCKS_FETCHED)
+  private[executor] val _remoteBytesRead =
+    TaskMetrics.createLongAccum(shuffleRead.REMOTE_BYTES_READ)
+  private[executor] val _localBytesRead =
+    TaskMetrics.createLongAccum(shuffleRead.LOCAL_BYTES_READ)
+  private[executor] val _fetchWaitTime =
+    TaskMetrics.createLongAccum(shuffleRead.FETCH_WAIT_TIME)
+  private[executor] val _recordsRead =
+    TaskMetrics.createLongAccum(shuffleRead.RECORDS_READ)
 
   /**
    * Number of remote blocks fetched in this shuffle by this task.
@@ -116,4 +99,52 @@ class ShuffleReadMetrics private (
   private[spark] def setFetchWaitTime(v: Long): Unit = _fetchWaitTime.setValue(v)
   private[spark] def setRecordsRead(v: Long): Unit = _recordsRead.setValue(v)
 
+  /**
+   * Resets the value of the current metrics (`this`) and and merges all the independent
+   * [[TempShuffleReadMetrics]] into `this`.
+   */
+  private[spark] def setMergeValues(metrics: Seq[TempShuffleReadMetrics]): Unit = {
+    _remoteBlocksFetched.setValue(_remoteBlocksFetched.zero)
+    _localBlocksFetched.setValue(_localBlocksFetched.zero)
+    _remoteBytesRead.setValue(_remoteBytesRead.zero)
+    _localBytesRead.setValue(_localBytesRead.zero)
+    _fetchWaitTime.setValue(_fetchWaitTime.zero)
+    _recordsRead.setValue(_recordsRead.zero)
+    metrics.foreach { metric =>
+      _remoteBlocksFetched.add(metric.remoteBlocksFetched)
+      _localBlocksFetched.add(metric.localBlocksFetched)
+      _remoteBytesRead.add(metric.remoteBytesRead)
+      _localBytesRead.add(metric.localBytesRead)
+      _fetchWaitTime.add(metric.fetchWaitTime)
+      _recordsRead.add(metric.recordsRead)
+    }
+  }
+}
+
+/**
+ * A temporary shuffle read metrics holder that is used to collect shuffle read metrics for each
+ * shuffle dependency, and all temporary metrics will be merged into the [[ShuffleReadMetrics]] at
+ * last.
+ */
+private[spark] class TempShuffleReadMetrics {
+  private[this] var _remoteBlocksFetched = 0
+  private[this] var _localBlocksFetched = 0
+  private[this] var _remoteBytesRead = 0L
+  private[this] var _localBytesRead = 0L
+  private[this] var _fetchWaitTime = 0L
+  private[this] var _recordsRead = 0L
+
+  def incRemoteBlocksFetched(v: Int): Unit = _remoteBlocksFetched += v
+  def incLocalBlocksFetched(v: Int): Unit = _localBlocksFetched += v
+  def incRemoteBytesRead(v: Long): Unit = _remoteBytesRead += v
+  def incLocalBytesRead(v: Long): Unit = _localBytesRead += v
+  def incFetchWaitTime(v: Long): Unit = _fetchWaitTime += v
+  def incRecordsRead(v: Long): Unit = _recordsRead += v
+
+  def remoteBlocksFetched: Int = _remoteBlocksFetched
+  def localBlocksFetched: Int = _localBlocksFetched
+  def remoteBytesRead: Long = _remoteBytesRead
+  def localBytesRead: Long = _localBytesRead
+  def fetchWaitTime: Long = _fetchWaitTime
+  def recordsRead: Long = _recordsRead
 }
