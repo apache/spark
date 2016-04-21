@@ -22,9 +22,11 @@ import java.util.Properties
 import scala.collection.JavaConverters._
 
 import org.apache.spark.internal.config.ConfigEntry
-import org.apache.spark.sql.{ContinuousQueryManager, ExperimentalMethods, SQLContext, UDFRegistration}
+import org.apache.spark.sql.{AnalysisException, ContinuousQueryManager, ExperimentalMethods}
+import org.apache.spark.sql.{SQLContext, UDFRegistration}
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry}
-import org.apache.spark.sql.catalyst.catalog.SessionCatalog
+import org.apache.spark.sql.catalyst.catalog.{ArchiveResource, FileResource, FunctionResource}
+import org.apache.spark.sql.catalyst.catalog.{FunctionResourceLoader, JarResource, SessionCatalog}
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -57,12 +59,30 @@ private[sql] class SessionState(ctx: SQLContext) {
   lazy val functionRegistry: FunctionRegistry = FunctionRegistry.builtin.copy()
 
   /**
+   * A class for loading resources specified by a function.
+   */
+  lazy val functionResourceLoader: FunctionResourceLoader = {
+    new FunctionResourceLoader {
+      override def loadResource(resource: FunctionResource): Unit = {
+        resource.resourceType match {
+          case JarResource => addJar(resource.uri)
+          case FileResource => ctx.sparkContext.addFile(resource.uri)
+          case ArchiveResource =>
+            throw new AnalysisException(
+              "Archive is not allowed to be loaded. If YARN mode is used, " +
+                "please use --archives options while calling spark-submit.")
+        }
+      }
+    }
+  }
+
+  /**
    * Internal catalog for managing table and database states.
    */
   lazy val catalog =
     new SessionCatalog(
       ctx.externalCatalog,
-      ctx.functionResourceLoader,
+      functionResourceLoader,
       functionRegistry,
       conf)
 

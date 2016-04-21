@@ -201,29 +201,6 @@ class SQLContext private[sql](
   }
 
   /**
-   * Add a jar to SQLContext
-   */
-  protected[sql] def addJar(path: String): Unit = {
-    sessionState.addJar(path)
-  }
-
-  /** A [[FunctionResourceLoader]] that can be used in SessionCatalog. */
-  @transient protected[sql] lazy val functionResourceLoader: FunctionResourceLoader = {
-    new FunctionResourceLoader {
-      override def loadResource(resource: FunctionResource): Unit = {
-        resource.resourceType match {
-          case JarResource => addJar(resource.uri)
-          case FileResource => sparkContext.addFile(resource.uri)
-          case ArchiveResource =>
-            throw new AnalysisException(
-              "Archive is not allowed to be loaded. If YARN mode is used, " +
-                "please use --archives options while calling spark-submit.")
-        }
-      }
-    }
-  }
-
-  /**
    * :: Experimental ::
    * A collection of methods that are considered experimental, but can be used to hook into
    * the query planner for advanced functionality.
