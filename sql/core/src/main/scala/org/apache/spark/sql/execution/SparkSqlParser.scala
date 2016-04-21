@@ -14,29 +14,34 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.spark.sql.execution
 
 import scala.collection.JavaConverters._
+
+import org.antlr.v4.runtime.{ParserRuleContext, Token}
+
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.CatalogStorageFormat
+import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
-import org.apache.spark.sql.execution.command.{DescribeCommand => _, _}
+import org.apache.spark.sql.execution.command.{CreateViewAsSelectLogicalCommand, DescribeCommand => _, _}
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 
 /**
  * Concrete parser for Spark SQL statements.
  */
-object SparkSqlParser extends AbstractSqlParser{
-  val astBuilder = new SparkSqlAstBuilder
+class SparkSqlParser(conf: SQLConf) extends AbstractSqlParser{
+  val astBuilder = new SparkSqlAstBuilder(conf)
 }
 
 /**
  * Builder that converts an ANTLR ParseTree into a LogicalPlan/Expression/TableIdentifier.
  */
-class SparkSqlAstBuilder extends AstBuilder {
+class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   import org.apache.spark.sql.catalyst.parser.ParserUtils._
 
   /**
@@ -520,7 +525,7 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   /**
-   * Create an [[AlterTableExchangePartition]] command.
+   * Create an (Hive's) AlterTableExchangePartition command.
    *
    * For example:
    * {{{
@@ -576,7 +581,7 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   /**
-   * Create an [[AlterTableArchivePartition]] command
+   * Create an (Hive's) AlterTableArchivePartition command
    *
    * For example:
    * {{{
@@ -590,7 +595,7 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   /**
-   * Create an [[AlterTableUnarchivePartition]] command
+   * Create an (Hive's) AlterTableUnarchivePartition command
    *
    * For example:
    * {{{
@@ -648,7 +653,7 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   /**
-   * Create an [[AlterTableTouch]] command
+   * Create an (Hive's) AlterTableTouch command
    *
    * For example:
    * {{{
@@ -660,7 +665,7 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   /**
-   * Create an [[AlterTableCompact]] command
+   * Create an (Hive's) AlterTableCompact command
    *
    * For example:
    * {{{
@@ -672,7 +677,7 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   /**
-   * Create an [[AlterTableMerge]] command
+   * Create an (Hive's) AlterTableMerge command
    *
    * For example:
    * {{{
@@ -858,5 +863,173 @@ class SparkSqlAstBuilder extends AstBuilder {
     )
   }
 
+  /**
+   * Resolve a [[HiveSerDe]] based on the name given and return it as a [[CatalogStorageFormat]].
+   */
+  override def visitGenericFileFormat(
+      ctx: GenericFileFormatContext): CatalogStorageFormat = withOrigin(ctx) {
+    val source = ctx.identifier.getText
+    HiveSerDe.sourceToSerDe(source, conf) match {
+      case Some(s) =>
+        EmptyStorageFormat.copy(
+          inputFormat = s.inputFormat,
+          outputFormat = s.outputFormat,
+          serde = s.serde)
+      case None =>
+        throw new ParseException(s"Unrecognized file format in STORED AS clause: $source", ctx)
+    }
+  }
 
+  /**
+   * Create a [[CatalogStorageFormat]] used for creating tables.
+   *
+   * Example format:
+   * {{{
+   *   SERDE serde_name [WITH SERDEPROPERTIES (k1=v1, k2=v2, ...)]
+   * }}}
+   *
+   * OR
+   *
+   * {{{
+   *   DELIMITED [FIELDS TERMINATED BY char [ESCAPED BY char]]
+   *   [COLLECTION ITEMS TERMINATED BY char]
+   *   [MAP KEYS TERMINATED BY char]
+   *   [LINES TERMINATED BY char]
+   *   [NULL DEFINED AS char]
+   * }}}
+   */
+  private def visitRowFormat(ctx: RowFormatContext): CatalogStorageFormat = withOrigin(ctx) {
+    ctx match {
+      case serde: RowFormatSerdeContext => visitRowFormatSerde(serde)
+      case delimited: RowFormatDelimitedContext => visitRowFormatDelimited(delimited)
+    }
+  }
+
+  /**
+   * Create SERDE row format name and properties pair.
+   */
+  override def visitRowFormatSerde(
+      ctx: RowFormatSerdeContext): CatalogStorageFormat = withOrigin(ctx) {
+    import ctx._
+    EmptyStorageFormat.copy(
+      serde = Option(string(name)),
+      serdeProperties = Option(tablePropertyList).map(visitTablePropertyList).getOrElse(Map.empty))
+  }
+
+  /**
+   * Create a delimited row format properties object.
+   */
+  override def visitRowFormatDelimited(
+      ctx: RowFormatDelimitedContext): CatalogStorageFormat = withOrigin(ctx) {
+    // Collect the entries if any.
+    def entry(key: String, value: Token): Seq[(String, String)] = {
+      Option(value).toSeq.map(x => key -> string(x))
+    }
+    // TODO we need proper support for the NULL format.
+    val entries =
+      entry("field.delim", ctx.fieldsTerminatedBy) ++
+        entry("serialization.format", ctx.fieldsTerminatedBy) ++
+        entry("escape.delim", ctx.escapedBy) ++
+        entry("colelction.delim", ctx.collectionItemsTerminatedBy) ++
+        entry("mapkey.delim", ctx.keysTerminatedBy) ++
+        Option(ctx.linesSeparatedBy).toSeq.map { token =>
+          val value = string(token)
+          assert(
+            value == "\n",
+            s"LINES TERMINATED BY only supports newline '\\n' right now: $value",
+            ctx)
+          "line.delim" -> value
+        }
+    EmptyStorageFormat.copy(serdeProperties = entries.toMap)
+  }
+
+  /**
+   * Create or replace a view. This creates a [[CreateViewAsSelectLogicalCommand]] command.
+   *
+   * For example:
+   * {{{
+   *   CREATE VIEW [IF NOT EXISTS] [db_name.]view_name
+   *   [(column_name [COMMENT column_comment], ...) ]
+   *   [COMMENT view_comment]
+   *   [TBLPROPERTIES (property_name = property_value, ...)]
+   *   AS SELECT ...;
+   * }}}
+   */
+  override def visitCreateView(ctx: CreateViewContext): LogicalPlan = withOrigin(ctx) {
+    if (ctx.identifierList != null) {
+      throw new ParseException(s"Operation not allowed: partitioned views", ctx)
+    } else {
+      val identifiers = Option(ctx.identifierCommentList).toSeq.flatMap(_.identifierComment.asScala)
+      val schema = identifiers.map { ic =>
+        CatalogColumn(ic.identifier.getText, null, nullable = true, Option(ic.STRING).map(string))
+      }
+      createView(
+        ctx,
+        ctx.tableIdentifier,
+        comment = Option(ctx.STRING).map(string),
+        schema,
+        ctx.query,
+        Option(ctx.tablePropertyList).map(visitTablePropertyList).getOrElse(Map.empty),
+        ctx.EXISTS != null,
+        ctx.REPLACE != null
+      )
+    }
+  }
+
+  /**
+   * Alter the query of a view. This creates a [[CreateViewAsSelectLogicalCommand]] command.
+   */
+  override def visitAlterViewQuery(ctx: AlterViewQueryContext): LogicalPlan = withOrigin(ctx) {
+    createView(
+      ctx,
+      ctx.tableIdentifier,
+      comment = None,
+      Seq.empty,
+      ctx.query,
+      Map.empty,
+      allowExist = false,
+      replace = true)
+  }
+
+  /**
+   * Create a [[CreateViewAsSelectLogicalCommand]] command.
+   */
+  private def createView(
+      ctx: ParserRuleContext,
+      name: TableIdentifierContext,
+      comment: Option[String],
+      schema: Seq[CatalogColumn],
+      query: QueryContext,
+      properties: Map[String, String],
+      allowExist: Boolean,
+      replace: Boolean): LogicalPlan = {
+    val sql = Option(source(query))
+    val tableDesc = CatalogTable(
+      identifier = visitTableIdentifier(name),
+      tableType = CatalogTableType.VIRTUAL_VIEW,
+      schema = schema,
+      storage = EmptyStorageFormat,
+      properties = properties,
+      viewOriginalText = sql,
+      viewText = sql,
+      comment = comment)
+    CreateViewAsSelectLogicalCommand(tableDesc, plan(query), allowExist, replace, command(ctx))
+  }
+
+  /**
+   * Create a sequence of [[CatalogColumn]]s from a column list
+   */
+  private def visitCatalogColumns(ctx: ColTypeListContext): Seq[CatalogColumn] = withOrigin(ctx) {
+    ctx.colType.asScala.map { col =>
+      CatalogColumn(
+        col.identifier.getText.toLowerCase,
+        // Note: for types like "STRUCT<myFirstName: STRING, myLastName: STRING>" we can't
+        // just convert the whole type string to lower case, otherwise the struct field names
+        // will no longer be case sensitive. Instead, we rely on our parser to get the proper
+        // case before passing it to Hive.
+        CatalystSqlParser.parseDataType(col.dataType.getText).simpleString,
+        nullable = true,
+        Option(col.STRING).map(string))
+    }
+  }
 }
