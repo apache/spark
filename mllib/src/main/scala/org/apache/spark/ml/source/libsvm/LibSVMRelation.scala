@@ -26,21 +26,18 @@ import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.mllib.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, DataFrameReader, Row, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, JoinedRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
-import org.apache.spark.sql.execution.datasources.{CaseInsensitiveMap, HadoopFileLinesReader, PartitionedFile}
+import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
-import org.apache.spark.util.collection.BitSet
 
 private[libsvm] class LibSVMOutputWriter(
     path: String,
@@ -178,39 +175,6 @@ class DefaultSource extends FileFormat with DataSourceRegister {
     }
   }
 
-  override def buildInternalScan(
-      sqlContext: SQLContext,
-      dataSchema: StructType,
-      requiredColumns: Array[String],
-      filters: Array[Filter],
-      bucketSet: Option[BitSet],
-      inputFiles: Seq[FileStatus],
-      broadcastedConf: Broadcast[SerializableConfiguration],
-      options: Map[String, String]): RDD[InternalRow] = {
-    // TODO: This does not handle cases where column pruning has been performed.
-
-    verifySchema(dataSchema)
-    val dataFiles = inputFiles.filterNot(_.getPath.getName startsWith "_")
-
-    val path = if (dataFiles.length == 1) dataFiles.head.getPath.toUri.toString
-    else if (dataFiles.isEmpty) throw new IOException("No input path specified for libsvm data")
-    else throw new IOException("Multiple input paths are not supported for libsvm data.")
-
-    val numFeatures = options.getOrElse("numFeatures", "-1").toInt
-    val vectorType = options.getOrElse("vectorType", "sparse")
-
-    val sc = sqlContext.sparkContext
-    val baseRdd = MLUtils.loadLibSVMFile(sc, path, numFeatures)
-    val sparse = vectorType == "sparse"
-    baseRdd.map { pt =>
-      val features = if (sparse) pt.features.toSparse else pt.features.toDense
-      Row(pt.label, features)
-    }.mapPartitions { externalRows =>
-      val converter = RowEncoder(dataSchema)
-      externalRows.map(converter.toRow)
-    }
-  }
-
   override def buildReader(
       sqlContext: SQLContext,
       dataSchema: StructType,
@@ -218,6 +182,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       requiredSchema: StructType,
       filters: Seq[Filter],
       options: Map[String, String]): (PartitionedFile) => Iterator[InternalRow] = {
+    verifySchema(dataSchema)
     val numFeatures = options("numFeatures").toInt
     assert(numFeatures > 0)
 

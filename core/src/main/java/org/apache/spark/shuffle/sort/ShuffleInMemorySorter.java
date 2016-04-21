@@ -51,9 +51,12 @@ final class ShuffleInMemorySorter {
    */
   private int pos = 0;
 
+  private int initialSize;
+
   ShuffleInMemorySorter(MemoryConsumer consumer, int initialSize) {
     this.consumer = consumer;
     assert (initialSize > 0);
+    this.initialSize = initialSize;
     this.array = consumer.allocateArray(initialSize);
     this.sorter = new Sorter<>(ShuffleSortDataFormat.INSTANCE);
   }
@@ -70,6 +73,10 @@ final class ShuffleInMemorySorter {
   }
 
   public void reset() {
+    if (consumer != null) {
+      consumer.freeArray(array);
+      this.array = consumer.allocateArray(initialSize);
+    }
     pos = 0;
   }
 

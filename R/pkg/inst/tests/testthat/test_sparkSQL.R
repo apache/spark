@@ -1087,6 +1087,11 @@ test_that("column functions", {
   expect_equal(collect(select(df, last(df$age, TRUE)))[[1]], 19)
   expect_equal(collect(select(df, last("age")))[[1]], 19)
   expect_equal(collect(select(df, last("age", TRUE)))[[1]], 19)
+
+  # Test bround()
+  df <- createDataFrame(sqlContext, data.frame(x = c(2.5, 3.5)))
+  expect_equal(collect(select(df, bround(df$x, 0)))[[1]][1], 2)
+  expect_equal(collect(select(df, bround(df$x, 0)))[[1]][2], 4)
 })
 
 test_that("column binary mathfunctions", {
@@ -1853,7 +1858,7 @@ test_that("approxQuantile() on a DataFrame", {
 
 test_that("SQL error message is returned from JVM", {
   retError <- tryCatch(sql(sqlContext, "select * from blah"), error = function(e) e)
-  expect_equal(grepl("Table not found", retError), TRUE)
+  expect_equal(grepl("Table or View not found", retError), TRUE)
   expect_equal(grepl("blah", retError), TRUE)
 })
 
@@ -1863,6 +1868,9 @@ test_that("Method as.data.frame as a synonym for collect()", {
   expect_equal(as.data.frame(irisDF), collect(irisDF))
   irisDF2 <- irisDF[irisDF$Species == "setosa", ]
   expect_equal(as.data.frame(irisDF2), collect(irisDF2))
+
+  # Make sure as.data.frame in the R base package is not covered
+  expect_that(as.data.frame(c(1, 2)), not(throws_error()))
 })
 
 test_that("attach() on a DataFrame", {

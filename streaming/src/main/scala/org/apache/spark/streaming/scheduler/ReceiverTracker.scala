@@ -240,9 +240,15 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
    * Get the executors allocated to each receiver.
    * @return a map containing receiver ids to optional executor ids.
    */
-  def allocatedExecutors(): Map[Int, Option[String]] = {
-    endpoint.askWithRetry[Map[Int, ReceiverTrackingInfo]](GetAllReceiverInfo).mapValues {
-      _.runningExecutor.map { _.executorId }
+  def allocatedExecutors(): Map[Int, Option[String]] = synchronized {
+    if (isTrackerStarted) {
+      endpoint.askWithRetry[Map[Int, ReceiverTrackingInfo]](GetAllReceiverInfo).mapValues {
+        _.runningExecutor.map {
+          _.executorId
+        }
+      }
+    } else {
+      Map.empty
     }
   }
 
@@ -428,11 +434,11 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
    * worker nodes as a parallel collection, and runs them.
    */
   private def launchReceivers(): Unit = {
-    val receivers = receiverInputStreams.map(nis => {
+    val receivers = receiverInputStreams.map { nis =>
       val rcvr = nis.getReceiver()
       rcvr.setReceiverId(nis.id)
       rcvr
-    })
+    }
 
     runDummySparkJob()
 

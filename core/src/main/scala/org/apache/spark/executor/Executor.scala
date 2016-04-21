@@ -21,6 +21,7 @@ import java.io.{File, NotSerializableException}
 import java.lang.management.ManagementFactory
 import java.net.URL
 import java.nio.ByteBuffer
+import java.util.Properties
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 
 import scala.collection.JavaConverters._
@@ -152,6 +153,21 @@ private[spark] class Executor(
     }
   }
 
+  /**
+   * Function to kill the running tasks in an executor.
+   * This can be called by executor back-ends to kill the
+   * tasks instead of taking the JVM down.
+   * @param interruptThread whether to interrupt the task thread
+   */
+  def killAllTasks(interruptThread: Boolean) : Unit = {
+    // kill all the running tasks
+    for (taskRunner <- runningTasks.values().asScala) {
+      if (taskRunner != null) {
+        taskRunner.kill(interruptThread)
+      }
+    }
+  }
+
   def stop(): Unit = {
     env.metricsSystem.report()
     heartbeater.shutdown()
@@ -206,9 +222,16 @@ private[spark] class Executor(
       startGCTime = computeTotalGcTime()
 
       try {
-        val (taskFiles, taskJars, taskBytes) = Task.deserializeWithDependencies(serializedTask)
+        val (taskFiles, taskJars, taskProps, taskBytes) =
+          Task.deserializeWithDependencies(serializedTask)
+
+        // Must be set before updateDependencies() is called, in case fetching dependencies
+        // requires access to properties contained within (e.g. for access control).
+        Executor.taskDeserializationProps.set(taskProps)
+
         updateDependencies(taskFiles, taskJars)
         task = ser.deserialize[Task[Any]](taskBytes, Thread.currentThread.getContextClassLoader)
+        task.localProperties = taskProps
         task.setTaskMemoryManager(taskMemoryManager)
 
         // If this task has been killed before we deserialized it, let's quit now. Otherwise,
@@ -270,16 +293,14 @@ private[spark] class Executor(
         val valueBytes = resultSer.serialize(value)
         val afterSerialization = System.currentTimeMillis()
 
-        for (m <- task.metrics) {
-          // Deserialization happens in two parts: first, we deserialize a Task object, which
-          // includes the Partition. Second, Task.run() deserializes the RDD and function to be run.
-          m.setExecutorDeserializeTime(
-            (taskStart - deserializeStartTime) + task.executorDeserializeTime)
-          // We need to subtract Task.run()'s deserialization time to avoid double-counting
-          m.setExecutorRunTime((taskFinish - taskStart) - task.executorDeserializeTime)
-          m.setJvmGCTime(computeTotalGcTime() - startGCTime)
-          m.setResultSerializationTime(afterSerialization - beforeSerialization)
-        }
+        // Deserialization happens in two parts: first, we deserialize a Task object, which
+        // includes the Partition. Second, Task.run() deserializes the RDD and function to be run.
+        task.metrics.setExecutorDeserializeTime(
+          (taskStart - deserializeStartTime) + task.executorDeserializeTime)
+        // We need to subtract Task.run()'s deserialization time to avoid double-counting
+        task.metrics.setExecutorRunTime((taskFinish - taskStart) - task.executorDeserializeTime)
+        task.metrics.setJvmGCTime(computeTotalGcTime() - startGCTime)
+        task.metrics.setResultSerializationTime(afterSerialization - beforeSerialization)
 
         // Note: accumulator updates must be collected after TaskMetrics is updated
         val accumUpdates = task.collectAccumulatorUpdates()
@@ -321,7 +342,7 @@ private[spark] class Executor(
           logInfo(s"Executor killed $taskName (TID $taskId)")
           execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(TaskKilled))
 
-        case cDE: CommitDeniedException =>
+        case CausedBy(cDE: CommitDeniedException) =>
           val reason = cDE.toTaskEndReason
           execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
 
@@ -334,10 +355,8 @@ private[spark] class Executor(
           // Collect latest accumulator values to report back to the driver
           val accumulatorUpdates: Seq[AccumulableInfo] =
             if (task != null) {
-              task.metrics.foreach { m =>
-                m.setExecutorRunTime(System.currentTimeMillis() - taskStart)
-                m.setJvmGCTime(computeTotalGcTime() - startGCTime)
-              }
+              task.metrics.setExecutorRunTime(System.currentTimeMillis() - taskStart)
+              task.metrics.setJvmGCTime(computeTotalGcTime() - startGCTime)
               task.collectAccumulatorUpdates(taskFailed = true)
             } else {
               Seq.empty[AccumulableInfo]
@@ -462,11 +481,9 @@ private[spark] class Executor(
 
     for (taskRunner <- runningTasks.values().asScala) {
       if (taskRunner.task != null) {
-        taskRunner.task.metrics.foreach { metrics =>
-          metrics.mergeShuffleReadMetrics()
-          metrics.setJvmGCTime(curGCTime - taskRunner.startGCTime)
-          accumUpdates += ((taskRunner.taskId, metrics.accumulatorUpdates()))
-        }
+        taskRunner.task.metrics.mergeShuffleReadMetrics()
+        taskRunner.task.metrics.setJvmGCTime(curGCTime - taskRunner.startGCTime)
+        accumUpdates += ((taskRunner.taskId, taskRunner.task.metrics.accumulatorUpdates()))
       }
     }
 
@@ -505,4 +522,11 @@ private[spark] class Executor(
     }
     heartbeater.scheduleAtFixedRate(heartbeatTask, initialDelay, intervalMs, TimeUnit.MILLISECONDS)
   }
+}
+
+private[spark] object Executor {
+  // This is reserved for internal use by components that need to read task properties before a
+  // task is fully deserialized. When possible, the TaskContext.getLocalProperty call should be
+  // used instead.
+  val taskDeserializationProps: ThreadLocal[Properties] = new ThreadLocal[Properties]
 }

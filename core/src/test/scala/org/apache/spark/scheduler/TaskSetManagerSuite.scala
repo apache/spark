@@ -19,7 +19,6 @@ package org.apache.spark.scheduler
 
 import java.util.Random
 
-import scala.collection.Map
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
@@ -138,7 +137,8 @@ class FakeTaskScheduler(sc: SparkContext, liveExecutors: (String, String)* /* ex
 /**
  * A Task implementation that results in a large serialized task.
  */
-class LargeTask(stageId: Int) extends Task[Array[Byte]](stageId, 0, 0, Seq.empty) {
+class LargeTask(stageId: Int) extends Task[Array[Byte]](stageId, 0, 0) {
+
   val randomBuffer = new Array[Byte](TaskSetManager.TASK_SIZE_TO_WARN_KB * 1024)
   val random = new Random(0)
   random.nextBytes(randomBuffer)
@@ -166,7 +166,8 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val taskSet = FakeTask.createTaskSet(1)
     val clock = new ManualClock
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock)
-    val accumUpdates = taskSet.tasks.head.initialAccumulators.map { a => a.toInfo(Some(0L), None) }
+    val accumUpdates =
+      taskSet.tasks.head.metrics.internalAccums.map { a => a.toInfo(Some(0L), None) }
 
     // Offer a host with NO_PREF as the constraint,
     // we should get a nopref task immediately since that's what we only have
@@ -185,7 +186,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val taskSet = FakeTask.createTaskSet(3)
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
     val accumUpdatesByTask: Array[Seq[AccumulableInfo]] = taskSet.tasks.map { task =>
-      task.initialAccumulators.map { a => a.toInfo(Some(0L), None) }
+      task.metrics.internalAccums.map { a => a.toInfo(Some(0L), None) }
     }
 
     // First three offers should all find tasks

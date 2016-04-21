@@ -21,7 +21,7 @@ import org.apache.spark.ml.{Pipeline, PipelineModel}
 import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NominalAttribute}
 import org.apache.spark.ml.classification.{NaiveBayes, NaiveBayesModel}
 import org.apache.spark.ml.feature.{IndexToString, RFormula}
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Dataset}
 
 private[r] class NaiveBayesWrapper private (
     pipeline: PipelineModel,
@@ -36,8 +36,10 @@ private[r] class NaiveBayesWrapper private (
 
   lazy val tables: Array[Double] = naiveBayesModel.theta.toArray.map(math.exp)
 
-  def transform(dataset: DataFrame): DataFrame = {
-    pipeline.transform(dataset).drop(PREDICTED_LABEL_INDEX_COL)
+  def transform(dataset: Dataset[_]): DataFrame = {
+    pipeline.transform(dataset)
+      .drop(PREDICTED_LABEL_INDEX_COL)
+      .drop(naiveBayesModel.getFeaturesCol)
   }
 }
 

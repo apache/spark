@@ -19,23 +19,18 @@ package org.apache.spark.sql.execution.datasources.text
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
-import org.apache.hadoop.io.{LongWritable, NullWritable, Text}
-import org.apache.hadoop.mapred.{JobConf, TextInputFormat}
+import org.apache.hadoop.io.{NullWritable, Text}
 import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
-import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
 
-import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{BufferHolder, UnsafeRowWriter}
-import org.apache.spark.sql.execution.datasources.{CompressionCodecs, HadoopFileLinesReader, PartitionedFile}
+import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.SerializableConfiguration
-import org.apache.spark.util.collection.BitSet
 
 /**
  * A data source for reading text files.
@@ -86,45 +81,6 @@ class DefaultSource extends FileFormat with DataSourceRegister {
         new TextOutputWriter(path, dataSchema, context)
       }
     }
-  }
-
-  override def buildInternalScan(
-      sqlContext: SQLContext,
-      dataSchema: StructType,
-      requiredColumns: Array[String],
-      filters: Array[Filter],
-      bucketSet: Option[BitSet],
-      inputFiles: Seq[FileStatus],
-      broadcastedConf: Broadcast[SerializableConfiguration],
-      options: Map[String, String]): RDD[InternalRow] = {
-    verifySchema(dataSchema)
-
-    val job = Job.getInstance(sqlContext.sparkContext.hadoopConfiguration)
-    val conf = job.getConfiguration
-    val paths = inputFiles
-        .filterNot(_.getPath.getName startsWith "_")
-        .map(_.getPath)
-        .sortBy(_.toUri)
-
-    if (paths.nonEmpty) {
-      FileInputFormat.setInputPaths(job, paths: _*)
-    }
-
-    sqlContext.sparkContext.hadoopRDD(
-      conf.asInstanceOf[JobConf], classOf[TextInputFormat], classOf[LongWritable], classOf[Text])
-        .mapPartitions { iter =>
-          val unsafeRow = new UnsafeRow(1)
-          val bufferHolder = new BufferHolder(unsafeRow)
-          val unsafeRowWriter = new UnsafeRowWriter(bufferHolder, 1)
-
-          iter.map { case (_, line) =>
-            // Writes to an UnsafeRow directly
-            bufferHolder.reset()
-            unsafeRowWriter.write(0, line.getBytes, 0, line.getLength)
-            unsafeRow.setTotalSize(bufferHolder.totalSize())
-            unsafeRow
-          }
-        }
   }
 
   override def buildReader(

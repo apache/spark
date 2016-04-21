@@ -152,10 +152,9 @@ class SparkHadoopUtil extends Logging {
       val baselineBytesRead = f()
       Some(() => f() - baselineBytesRead)
     } catch {
-      case e @ (_: NoSuchMethodException | _: ClassNotFoundException) => {
+      case e @ (_: NoSuchMethodException | _: ClassNotFoundException) =>
         logDebug("Couldn't find method for retrieving thread-level FileSystem input data", e)
         None
-      }
     }
   }
 
@@ -174,10 +173,9 @@ class SparkHadoopUtil extends Logging {
       val baselineBytesWritten = f()
       Some(() => f() - baselineBytesWritten)
     } catch {
-      case e @ (_: NoSuchMethodException | _: ClassNotFoundException) => {
+      case e @ (_: NoSuchMethodException | _: ClassNotFoundException) =>
         logDebug("Couldn't find method for retrieving thread-level FileSystem output data", e)
         None
-      }
     }
   }
 
@@ -315,7 +313,7 @@ class SparkHadoopUtil extends Logging {
    */
   def substituteHadoopVariables(text: String, hadoopConf: Configuration): String = {
     text match {
-      case HADOOP_CONF_PATTERN(matched) => {
+      case HADOOP_CONF_PATTERN(matched) =>
         logDebug(text + " matched " + HADOOP_CONF_PATTERN)
         val key = matched.substring(13, matched.length() - 1) // remove ${hadoopconf- .. }
         val eval = Option[String](hadoopConf.get(key))
@@ -330,11 +328,9 @@ class SparkHadoopUtil extends Logging {
           // Continue to substitute more variables.
           substituteHadoopVariables(eval.get, hadoopConf)
         }
-      }
-      case _ => {
+      case _ =>
         logDebug(text + " didn't match " + HADOOP_CONF_PATTERN)
         text
-      }
     }
   }
 

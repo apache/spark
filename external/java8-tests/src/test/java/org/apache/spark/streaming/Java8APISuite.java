@@ -377,7 +377,9 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
     });
 
     // This is a test to make sure foreachRDD(VoidFunction2) can be called from Java
-    stream.foreachRDD((rdd, time) -> { return; });
+    stream.foreachRDD((rdd, time) -> {
+      return;
+    });
 
     JavaTestUtils.runStreams(ssc, 2, 2);
 
@@ -873,7 +875,7 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
 
     JavaMapWithStateDStream<String, Integer, Boolean, Double> stateDstream =
         wordsDstream.mapWithState(
-            StateSpec.<String, Integer, Boolean, Double> function((time, key, value, state) -> {
+            StateSpec.<String, Integer, Boolean, Double>function((time, key, value, state) -> {
               // Use all State's methods here
               state.exists();
               state.get();

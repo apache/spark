@@ -63,7 +63,8 @@ private[yarn] class YarnAllocator(
     sparkConf: SparkConf,
     amClient: AMRMClient[ContainerRequest],
     appAttemptId: ApplicationAttemptId,
-    securityMgr: SecurityManager)
+    securityMgr: SecurityManager,
+    localResources: Map[String, LocalResource])
   extends Logging {
 
   import YarnAllocator._
@@ -148,11 +149,10 @@ private[yarn] class YarnAllocator(
         classOf[Array[String]], classOf[Array[String]], classOf[Priority], classOf[Boolean],
         classOf[String]))
     } catch {
-      case e: NoSuchMethodException => {
+      case e: NoSuchMethodException =>
         logWarning(s"Node label expression $expr will be ignored because YARN version on" +
           " classpath does not support it.")
         None
-      }
     }
   }
 
@@ -478,7 +478,8 @@ private[yarn] class YarnAllocator(
         executorMemory,
         executorCores,
         appAttemptId.getApplicationId.toString,
-        securityMgr)
+        securityMgr,
+        localResources)
       if (launchContainers) {
         logInfo("Launching ExecutorRunnable. driverUrl: %s,  executorHostname: %s".format(
           driverUrl, executorHostname))

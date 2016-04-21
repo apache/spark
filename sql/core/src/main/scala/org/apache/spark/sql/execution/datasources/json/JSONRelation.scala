@@ -28,18 +28,16 @@ import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
 
-import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{JoinedRow, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.JoinedRow
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
-import org.apache.spark.util.collection.BitSet
 
 class DefaultSource extends FileFormat with DataSourceRegister {
 
@@ -90,35 +88,6 @@ class DefaultSource extends FileFormat with DataSourceRegister {
           context: TaskAttemptContext): OutputWriter = {
         new JsonOutputWriter(path, bucketId, dataSchema, context)
       }
-    }
-  }
-
-  override def buildInternalScan(
-      sqlContext: SQLContext,
-      dataSchema: StructType,
-      requiredColumns: Array[String],
-      filters: Array[Filter],
-      bucketSet: Option[BitSet],
-      inputFiles: Seq[FileStatus],
-      broadcastedConf: Broadcast[SerializableConfiguration],
-      options: Map[String, String]): RDD[InternalRow] = {
-    // TODO: Filter files for all formats before calling buildInternalScan.
-    val jsonFiles = inputFiles.filterNot(_.getPath.getName startsWith "_")
-
-    val parsedOptions: JSONOptions = new JSONOptions(options)
-    val requiredDataSchema = StructType(requiredColumns.map(dataSchema(_)))
-    val columnNameOfCorruptRecord =
-      parsedOptions.columnNameOfCorruptRecord
-        .getOrElse(sqlContext.conf.columnNameOfCorruptRecord)
-    val rows = JacksonParser.parse(
-      createBaseRdd(sqlContext, jsonFiles),
-      requiredDataSchema,
-      columnNameOfCorruptRecord,
-      parsedOptions)
-
-    rows.mapPartitions { iterator =>
-      val unsafeProjection = UnsafeProjection.create(requiredDataSchema)
-      iterator.map(unsafeProjection)
     }
   }
 

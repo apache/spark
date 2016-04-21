@@ -192,6 +192,17 @@ This file is divided into 3 sections:
     ]]></customMessage>
   </check>
 
+  <check customId="awaitresult" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">Await\.result</parameter></parameters>
+    <customMessage><![CDATA[
+      Are you sure that you want to use Await.result? In most cases, you should use ThreadUtils.awaitResult instead.
+      If you must use Await.result, wrap the code block with
+      // scalastyle:off awaitresult
+      Await.result(...)
+      // scalastyle:on awaitresult
+    ]]></customMessage>
+  </check>
+
   <!-- As of SPARK-9613 JavaConversions should be replaced with JavaConverters -->
   <check customId="javaconversions" level="error" class="org.scalastyle.scalariform.TokenChecker" enabled="true">
     <parameters><parameter name="regex">JavaConversions</parameter></parameters>
@@ -226,6 +237,11 @@ This file is divided into 3 sections:
   <check customId="NoScalaDoc" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">(?m)^(\s*)/[*][*].*$(\r|)\n^\1  [*]</parameter></parameters>
     <customMessage>Use Javadoc style indentation for multiline comments</customMessage>
+  </check>
+
+  <check customId="OmitBracesInCase" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">case[^\n>]*=>\s*\{</parameter></parameters>
+    <customMessage>Omit braces in case clauses.</customMessage>
   </check>
 
   <!-- ================================================================================ -->

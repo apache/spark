@@ -21,6 +21,7 @@ import java.sql.{Date, Timestamp}
 
 import scala.language.implicitConversions
 
+import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -166,6 +167,14 @@ package object dsl {
       case target => UnresolvedStar(Option(target))
     }
 
+    def callFunction[T, U](
+        func: T => U,
+        returnType: DataType,
+        argument: Expression): Expression = {
+      val function = Literal.create(func, ObjectType(classOf[T => U]))
+      Invoke(function, "apply", returnType, argument :: Nil)
+    }
+
     implicit class DslSymbol(sym: Symbol) extends ImplicitAttribute { def s: String = sym.name }
     // TODO more implicit class for literal?
     implicit class DslString(val s: String) extends ImplicitOperators {
@@ -236,6 +245,10 @@ package object dsl {
       def struct(attrs: AttributeReference*): AttributeReference =
         struct(StructType.fromAttributes(attrs))
 
+      /** Creates a new AttributeReference of object type */
+      def obj(cls: Class[_]): AttributeReference =
+        AttributeReference(s, ObjectType(cls), nullable = true)()
+
       /** Create a function. */
       def function(exprs: Expression*): UnresolvedFunction =
         UnresolvedFunction(s, exprs, isDistinct = false)
@@ -270,6 +283,16 @@ package object dsl {
 
       def where(condition: Expression): LogicalPlan = Filter(condition, logicalPlan)
 
+      def filter[T : Encoder](func: T => Boolean): LogicalPlan = {
+        val deserialized = logicalPlan.deserialize[T]
+        val condition = expressions.callFunction(func, BooleanType, deserialized.output.head)
+        Filter(condition, deserialized).serialize[T]
+      }
+
+      def serialize[T : Encoder]: LogicalPlan = CatalystSerde.serialize[T](logicalPlan)
+
+      def deserialize[T : Encoder]: LogicalPlan = CatalystSerde.deserialize[T](logicalPlan)
+
       def limit(limitExpr: Expression): LogicalPlan = Limit(limitExpr, logicalPlan)
 
       def join(
@@ -277,6 +300,24 @@ package object dsl {
         joinType: JoinType = Inner,
         condition: Option[Expression] = None): LogicalPlan =
         Join(logicalPlan, otherPlan, joinType, condition)
+
+      def cogroup[Key: Encoder, Left: Encoder, Right: Encoder, Result: Encoder](
+          otherPlan: LogicalPlan,
+          func: (Key, Iterator[Left], Iterator[Right]) => TraversableOnce[Result],
+          leftGroup: Seq[Attribute],
+          rightGroup: Seq[Attribute],
+          leftAttr: Seq[Attribute],
+          rightAttr: Seq[Attribute]
+        ): LogicalPlan = {
+        CoGroup.apply[Key, Left, Right, Result](
+          func,
+          leftGroup,
+          rightGroup,
+          leftAttr,
+          rightAttr,
+          logicalPlan,
+          otherPlan)
+      }
 
       def orderBy(sortExprs: SortOrder*): LogicalPlan = Sort(sortExprs, true, logicalPlan)
 

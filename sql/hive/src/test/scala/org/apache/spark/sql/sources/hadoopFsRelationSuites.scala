@@ -28,7 +28,7 @@ import org.apache.parquet.hadoop.ParquetOutputCommitter
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql._
-import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
@@ -113,7 +113,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
     new StructType()
       .add("f1", FloatType, nullable = true)
       .add("f2", ArrayType(BooleanType, containsNull = true), nullable = true),
-    new MyDenseVectorUDT()
+    new UDT.MyDenseVectorUDT()
   ).filter(supportsDataType)
 
   try {

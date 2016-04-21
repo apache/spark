@@ -109,10 +109,9 @@ class DStreamCheckpointData[T: ClassTag](dstream: DStream[T])
   def restore() {
     // Create RDDs from the checkpoint data
     currentCheckpointFiles.foreach {
-      case(time, file) => {
+      case(time, file) =>
         logInfo("Restoring checkpointed RDD for time " + time + " from file '" + file + "'")
         dstream.generatedRDDs += ((time, dstream.context.sparkContext.checkpointFile[T](file)))
-      }
     }
   }
 

@@ -950,13 +950,6 @@ class DAGScheduler(
     // First figure out the indexes of partition ids to compute.
     val partitionsToCompute: Seq[Int] = stage.findMissingPartitions()
 
-    // Create internal accumulators if the stage has no accumulators initialized.
-    // Reset internal accumulators only if this stage is not partially submitted
-    // Otherwise, we may override existing accumulator values from some tasks
-    if (stage.internalAccumulators.isEmpty || stage.numPartitions == partitionsToCompute.size) {
-      stage.resetInternalAccumulators()
-    }
-
     // Use the scheduling pool, job group, description, etc. from an ActiveJob associated
     // with this Stage
     val properties = jobIdToActiveJob(jobId).properties
@@ -1036,7 +1029,7 @@ class DAGScheduler(
             val locs = taskIdToLocations(id)
             val part = stage.rdd.partitions(id)
             new ShuffleMapTask(stage.id, stage.latestInfo.attemptId,
-              taskBinary, part, locs, stage.internalAccumulators)
+              taskBinary, part, locs, stage.latestInfo.taskMetrics, properties)
           }
 
         case stage: ResultStage =>
@@ -1046,7 +1039,7 @@ class DAGScheduler(
             val part = stage.rdd.partitions(p)
             val locs = taskIdToLocations(id)
             new ResultTask(stage.id, stage.latestInfo.attemptId,
-              taskBinary, part, locs, id, stage.internalAccumulators)
+              taskBinary, part, locs, id, properties, stage.latestInfo.taskMetrics)
           }
       }
     } catch {

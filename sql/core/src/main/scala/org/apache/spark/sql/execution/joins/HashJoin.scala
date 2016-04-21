@@ -17,16 +17,12 @@
 
 package org.apache.spark.sql.execution.joins
 
-import java.util.NoSuchElementException
-
-import org.apache.spark.TaskContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.execution.{RowIterator, SparkPlan}
 import org.apache.spark.sql.execution.metric.LongSQLMetric
-import org.apache.spark.sql.types.{IntegerType, IntegralType, LongType}
-import org.apache.spark.util.collection.CompactBuffer
+import org.apache.spark.sql.types.{IntegralType, LongType}
 
 trait HashJoin {
   self: SparkPlan =>
@@ -59,9 +55,15 @@ trait HashJoin {
     case BuildRight => (right, left)
   }
 
-  protected lazy val (buildKeys, streamedKeys) = buildSide match {
-    case BuildLeft => (leftKeys, rightKeys)
-    case BuildRight => (rightKeys, leftKeys)
+  protected lazy val (buildKeys, streamedKeys) = {
+    require(leftKeys.map(_.dataType) == rightKeys.map(_.dataType),
+      "Join keys from two sides should have same types")
+    val lkeys = rewriteKeyExpr(leftKeys).map(BindReferences.bindReference(_, left.output))
+    val rkeys = rewriteKeyExpr(rightKeys).map(BindReferences.bindReference(_, right.output))
+    buildSide match {
+      case BuildLeft => (lkeys, rkeys)
+      case BuildRight => (rkeys, lkeys)
+    }
   }
 
   /**
@@ -69,7 +71,7 @@ trait HashJoin {
    *
    * If not, returns the original expressions.
    */
-  def rewriteKeyExpr(keys: Seq[Expression]): Seq[Expression] = {
+  private def rewriteKeyExpr(keys: Seq[Expression]): Seq[Expression] = {
     var keyExpr: Expression = null
     var width = 0
     keys.foreach { e =>
@@ -84,17 +86,8 @@ trait HashJoin {
             width = dt.defaultSize
           } else {
             val bits = dt.defaultSize * 8
-            // hashCode of Long is (l >> 32) ^ l.toInt, it means the hash code of an long with same
-            // value in high 32 bit and low 32 bit will be 0. To avoid the worst case that keys
-            // with two same ints have hash code 0, we rotate the bits of second one.
-            val rotated = if (e.dataType == IntegerType) {
-              // (e >>> 15) | (e << 17)
-              BitwiseOr(ShiftRightUnsigned(e, Literal(15)), ShiftLeft(e, Literal(17)))
-            } else {
-              e
-            }
             keyExpr = BitwiseOr(ShiftLeft(keyExpr, Literal(bits)),
-              BitwiseAnd(Cast(rotated, LongType), Literal((1L << bits) - 1)))
+              BitwiseAnd(Cast(e, LongType), Literal((1L << bits) - 1)))
             width -= bits
           }
         // TODO: support BooleanType, DateType and TimestampType
@@ -105,17 +98,11 @@ trait HashJoin {
     keyExpr :: Nil
   }
 
-  protected lazy val canJoinKeyFitWithinLong: Boolean = {
-    val sameTypes = buildKeys.map(_.dataType) == streamedKeys.map(_.dataType)
-    val key = rewriteKeyExpr(buildKeys)
-    sameTypes && key.length == 1 && key.head.dataType.isInstanceOf[LongType]
-  }
-
   protected def buildSideKeyGenerator(): Projection =
-    UnsafeProjection.create(rewriteKeyExpr(buildKeys), buildPlan.output)
+    UnsafeProjection.create(buildKeys)
 
   protected def streamSideKeyGenerator(): UnsafeProjection =
-    UnsafeProjection.create(rewriteKeyExpr(streamedKeys), streamedPlan.output)
+    UnsafeProjection.create(streamedKeys)
 
   @transient private[this] lazy val boundCondition = if (condition.isDefined) {
     newPredicate(condition.get, streamedPlan.output ++ buildPlan.output)

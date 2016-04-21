@@ -20,14 +20,14 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.plans.UsingJoin
+import org.apache.spark.sql.catalyst.plans.{Inner, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
 
 /**
  * Throws user facing errors when passed invalid queries that fail to analyze.
  */
-trait CheckAnalysis {
+trait CheckAnalysis extends PredicateHelper {
 
   /**
    * Override to provide additional checks for correct analysis.
@@ -52,7 +52,7 @@ trait CheckAnalysis {
       case p if p.analyzed => // Skip already analyzed sub-plans
 
       case u: UnresolvedRelation =>
-        u.failAnalysis(s"Table not found: ${u.tableIdentifier}")
+        u.failAnalysis(s"Table or View not found: ${u.tableIdentifier}")
 
       case operator: LogicalPlan =>
         operator transformExpressionsUp {
@@ -109,6 +109,39 @@ trait CheckAnalysis {
             failAnalysis(
               s"filter expression '${f.condition.sql}' " +
                 s"of type ${f.condition.dataType.simpleString} is not a boolean.")
+
+          case f @ Filter(condition, child) =>
+            // Make sure that no correlated reference is below Aggregates, Outer Joins and on the
+            // right hand side of Unions.
+            lazy val attributes = child.outputSet
+            def failOnCorrelatedReference(
+                p: LogicalPlan,
+                message: String): Unit = p.transformAllExpressions {
+              case e: NamedExpression if attributes.contains(e) =>
+                failAnalysis(s"Accessing outer query column is not allowed in $message: $e")
+            }
+            def checkForCorrelatedReferences(p: PredicateSubquery): Unit = p.query.foreach {
+              case a @ Aggregate(_, _, source) =>
+                failOnCorrelatedReference(source, "an AGGREATE")
+              case j @ Join(left, _, RightOuter, _) =>
+                failOnCorrelatedReference(left, "a RIGHT OUTER JOIN")
+              case j @ Join(_, right, jt, _) if jt != Inner =>
+                failOnCorrelatedReference(right, "a LEFT (OUTER) JOIN")
+              case Union(_ :: xs) =>
+                xs.foreach(failOnCorrelatedReference(_, "a UNION"))
+              case s: SetOperation =>
+                failOnCorrelatedReference(s.right, "an INTERSECT/EXCEPT")
+              case _ =>
+            }
+            splitConjunctivePredicates(condition).foreach {
+              case p: PredicateSubquery =>
+                checkForCorrelatedReferences(p)
+              case Not(p: PredicateSubquery) =>
+                checkForCorrelatedReferences(p)
+              case e if PredicateSubquery.hasPredicateSubquery(e) =>
+                failAnalysis(s"Predicate sub-queries cannot be used in nested conditions: $e")
+              case e =>
+            }
 
           case j @ Join(_, _, UsingJoin(_, cols), _) =>
             val from = operator.inputSet.map(_.name).mkString(", ")
@@ -208,6 +241,9 @@ trait CheckAnalysis {
                 |Unions can only be performed on tables with the same number of columns,
                 | but one table has '${firstError.output.length}' columns and another table has
                 | '${s.children.head.output.length}' columns""".stripMargin)
+
+          case p if p.expressions.exists(PredicateSubquery.hasPredicateSubquery) =>
+            failAnalysis(s"Predicate sub-queries can only be used in a Filter: $p")
 
           case _ => // Fallbacks to the following checks
         }

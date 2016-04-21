@@ -26,10 +26,9 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
-import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.HadoopFsRelation
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -254,13 +253,13 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           sql("SELECT `c_!@(3)` FROM expectedJsonTable").collect().toSeq)
 
         // Discard the cached relation.
-        invalidateTable("jsonTable")
+        sessionState.invalidateTable("jsonTable")
 
         checkAnswer(
           sql("SELECT * FROM jsonTable"),
           sql("SELECT `c_!@(3)` FROM expectedJsonTable").collect().toSeq)
 
-        invalidateTable("jsonTable")
+        sessionState.invalidateTable("jsonTable")
         val expectedSchema = StructType(StructField("c_!@(3)", IntegerType, true) :: Nil)
 
         assert(expectedSchema === table("jsonTable").schema)
@@ -348,7 +347,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
            """.stripMargin)
 
         // Discard the cached relation.
-        invalidateTable("ctasJsonTable")
+        sessionState.invalidateTable("ctasJsonTable")
 
         // Schema should not be changed.
         assert(table("ctasJsonTable").schema === table("jsonTable").schema)
@@ -423,7 +422,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         sql("SELECT * FROM savedJsonTable tmp where tmp.a > 5"),
         (6 to 10).map(i => Row(i, s"str$i")))
 
-      invalidateTable("savedJsonTable")
+      sessionState.invalidateTable("savedJsonTable")
 
       checkAnswer(
         sql("SELECT * FROM savedJsonTable where savedJsonTable.a < 5"),
@@ -621,7 +620,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         .mode(SaveMode.Append)
         .saveAsTable("arrayInParquet")
 
-      refreshTable("arrayInParquet")
+      sessionState.refreshTable("arrayInParquet")
 
       checkAnswer(
         sql("SELECT a FROM arrayInParquet"),
@@ -680,7 +679,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         .mode(SaveMode.Append)
         .saveAsTable("mapInParquet")
 
-      refreshTable("mapInParquet")
+      sessionState.refreshTable("mapInParquet")
 
       checkAnswer(
         sql("SELECT a FROM mapInParquet"),
@@ -708,7 +707,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
             options = Map("path" -> tempDir.getCanonicalPath),
             isExternal = false)
 
-          invalidateTable("wide_schema")
+          sessionState.invalidateTable("wide_schema")
 
           val actualSchema = table("wide_schema").schema
           assert(schema === actualSchema)
@@ -738,9 +737,9 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           "spark.sql.sources.schema" -> schema.json,
           "EXTERNAL" -> "FALSE"))
 
-      hiveCatalog.createTable("default", hiveTable, ignoreIfExists = false)
+      sharedState.externalCatalog.createTable("default", hiveTable, ignoreIfExists = false)
 
-      invalidateTable(tableName)
+      sessionState.invalidateTable(tableName)
       val actualSchema = table(tableName).schema
       assert(schema === actualSchema)
     }
@@ -752,8 +751,8 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
 
     withTable(tableName) {
       df.write.format("parquet").partitionBy("d", "b").saveAsTable(tableName)
-      invalidateTable(tableName)
-      val metastoreTable = hiveCatalog.getTable("default", tableName)
+      sessionState.invalidateTable(tableName)
+      val metastoreTable = sharedState.externalCatalog.getTable("default", tableName)
       val expectedPartitionColumns = StructType(df.schema("d") :: df.schema("b") :: Nil)
 
       val numPartCols = metastoreTable.properties("spark.sql.sources.schema.numPartCols").toInt
@@ -787,8 +786,8 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         .bucketBy(8, "d", "b")
         .sortBy("c")
         .saveAsTable(tableName)
-      invalidateTable(tableName)
-      val metastoreTable = hiveCatalog.getTable("default", tableName)
+      sessionState.invalidateTable(tableName)
+      val metastoreTable = sharedState.externalCatalog.getTable("default", tableName)
       val expectedBucketByColumns = StructType(df.schema("d") :: df.schema("b") :: Nil)
       val expectedSortByColumns = StructType(df.schema("c") :: Nil)
 
@@ -918,7 +917,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
 
       // As a proxy for verifying that the table was stored in Hive compatible format,
       // we verify that each column of the table is of native type StringType.
-      assert(hiveCatalog.getTable("default", "not_skip_hive_metadata").schema
+      assert(sharedState.externalCatalog.getTable("default", "not_skip_hive_metadata").schema
         .forall(column => HiveMetastoreTypes.toDataType(column.dataType) == StringType))
 
       sessionState.catalog.createDataSourceTable(
@@ -932,9 +931,8 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
 
       // As a proxy for verifying that the table was stored in SparkSQL format,
       // we verify that the table has a column type as array of StringType.
-      assert(hiveCatalog.getTable("default", "skip_hive_metadata").schema.forall { c =>
-        HiveMetastoreTypes.toDataType(c.dataType) == ArrayType(StringType)
-      })
+      assert(sharedState.externalCatalog.getTable("default", "skip_hive_metadata")
+        .schema.forall { c => HiveMetastoreTypes.toDataType(c.dataType) == ArrayType(StringType) })
     }
   }
 }

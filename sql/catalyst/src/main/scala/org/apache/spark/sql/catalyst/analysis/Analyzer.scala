@@ -39,13 +39,12 @@ import org.apache.spark.sql.types._
  * Used for testing when all relations are already filled in and the analyzer needs only
  * to resolve attribute references.
  */
-object SimpleAnalyzer
-  extends SimpleAnalyzer(
-    EmptyFunctionRegistry,
+object SimpleAnalyzer extends Analyzer(
+    new SessionCatalog(
+      new InMemoryCatalog,
+      EmptyFunctionRegistry,
+      new SimpleCatalystConf(caseSensitiveAnalysis = true)),
     new SimpleCatalystConf(caseSensitiveAnalysis = true))
-
-class SimpleAnalyzer(functionRegistry: FunctionRegistry, conf: CatalystConf)
-  extends Analyzer(new SessionCatalog(new InMemoryCatalog, functionRegistry, conf), conf)
 
 /**
  * Provides a logical query plan analyzer, which translates [[UnresolvedAttribute]]s and
@@ -55,8 +54,12 @@ class SimpleAnalyzer(functionRegistry: FunctionRegistry, conf: CatalystConf)
 class Analyzer(
     catalog: SessionCatalog,
     conf: CatalystConf,
-    maxIterations: Int = 100)
+    maxIterations: Int)
   extends RuleExecutor[LogicalPlan] with CheckAnalysis {
+
+  def this(catalog: SessionCatalog, conf: CatalystConf) = {
+    this(catalog, conf, conf.optimizerMaxIterations)
+  }
 
   def resolver: Resolver = {
     if (conf.caseSensitiveAnalysis) {
@@ -66,7 +69,7 @@ class Analyzer(
     }
   }
 
-  val fixedPoint = FixedPoint(maxIterations)
+  protected val fixedPoint = FixedPoint(maxIterations)
 
   /**
    * Override to provide additional rules for the "Resolution" batch.
@@ -87,7 +90,7 @@ class Analyzer(
       ResolveGroupingAnalytics ::
       ResolvePivot ::
       ResolveOrdinalInOrderByAndGroupBy ::
-      ResolveSortReferences ::
+      ResolveMissingReferences ::
       ResolveGenerate ::
       ResolveFunctions ::
       ResolveAliases ::
@@ -169,8 +172,8 @@ class Analyzer(
     private def assignAliases(exprs: Seq[NamedExpression]) = {
       exprs.zipWithIndex.map {
         case (expr, i) =>
-          expr transformUp {
-            case u @ UnresolvedAlias(child, optionalAliasName) => child match {
+          expr.transformUp { case u @ UnresolvedAlias(child, optionalAliasName) =>
+            child match {
               case ne: NamedExpression => ne
               case e if !e.resolved => u
               case g: Generator => MultiAlias(g, Nil)
@@ -212,7 +215,7 @@ class Analyzer(
      *  represented as the bit masks.
      */
     def bitmasks(r: Rollup): Seq[Int] = {
-      Seq.tabulate(r.groupByExprs.length + 1)(idx => {(1 << idx) - 1})
+      Seq.tabulate(r.groupByExprs.length + 1)(idx => (1 << idx) - 1)
     }
 
     /*
@@ -228,21 +231,56 @@ class Analyzer(
       Seq.tabulate(1 << c.groupByExprs.length)(i => i)
     }
 
-    private def hasGroupingId(expr: Seq[Expression]): Boolean = {
-      expr.exists(_.collectFirst {
-        case u: UnresolvedAttribute if resolver(u.name, VirtualColumn.groupingIdName) => u
-      }.isDefined)
+    private def hasGroupingAttribute(expr: Expression): Boolean = {
+      expr.collectFirst {
+        case u: UnresolvedAttribute if resolver(u.name, VirtualColumn.hiveGroupingIdName) => u
+      }.isDefined
     }
 
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+    private def hasGroupingFunction(e: Expression): Boolean = {
+      e.collectFirst {
+        case g: Grouping => g
+        case g: GroupingID => g
+      }.isDefined
+    }
+
+    private def replaceGroupingFunc(
+        expr: Expression,
+        groupByExprs: Seq[Expression],
+        gid: Expression): Expression = {
+      expr transform {
+        case e: GroupingID =>
+          if (e.groupByExprs.isEmpty || e.groupByExprs == groupByExprs) {
+            gid
+          } else {
+            throw new AnalysisException(
+              s"Columns of grouping_id (${e.groupByExprs.mkString(",")}) does not match " +
+                s"grouping columns (${groupByExprs.mkString(",")})")
+          }
+        case Grouping(col: Expression) =>
+          val idx = groupByExprs.indexOf(col)
+          if (idx >= 0) {
+            Cast(BitwiseAnd(ShiftRight(gid, Literal(groupByExprs.length - 1 - idx)),
+              Literal(1)), ByteType)
+          } else {
+            throw new AnalysisException(s"Column of grouping ($col) can't be found " +
+              s"in grouping columns ${groupByExprs.mkString(",")}")
+          }
+      }
+    }
+
+    // This require transformUp to replace grouping()/grouping_id() in resolved Filter/Sort
+    def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
       case a if !a.childrenResolved => a // be sure all of the children are resolved.
+      case p if p.expressions.exists(hasGroupingAttribute) =>
+        failAnalysis(
+          s"${VirtualColumn.hiveGroupingIdName} is deprecated; use grouping_id() instead")
+
       case Aggregate(Seq(c @ Cube(groupByExprs)), aggregateExpressions, child) =>
         GroupingSets(bitmasks(c), groupByExprs, child, aggregateExpressions)
       case Aggregate(Seq(r @ Rollup(groupByExprs)), aggregateExpressions, child) =>
         GroupingSets(bitmasks(r), groupByExprs, child, aggregateExpressions)
-      case g: GroupingSets if g.expressions.exists(!_.resolved) && hasGroupingId(g.expressions) =>
-        failAnalysis(
-          s"${VirtualColumn.groupingIdName} is deprecated; use grouping_id() instead")
+
       // Ensure all the expressions have been resolved.
       case x: GroupingSets if x.expressions.forall(_.resolved) =>
         val gid = AttributeReference(VirtualColumn.groupingIdName, IntegerType, false)()
@@ -258,9 +296,12 @@ class Analyzer(
 
         val nonNullBitmask = x.bitmasks.reduce(_ & _)
 
-        val groupByAttributes = groupByAliases.zipWithIndex.map { case (a, idx) =>
+        val expandedAttributes = groupByAliases.zipWithIndex.map { case (a, idx) =>
           a.toAttribute.withNullability((nonNullBitmask & 1 << idx) == 0)
         }
+
+        val expand = Expand(x.bitmasks, groupByAliases, expandedAttributes, gid, x.child)
+        val groupingAttrs = expand.output.drop(x.child.output.length)
 
         val aggregations: Seq[NamedExpression] = x.aggregations.map { case expr =>
           // collect all the found AggregateExpression, so we can check an expression is part of
@@ -270,7 +311,7 @@ class Analyzer(
           def isPartOfAggregation(e: Expression): Boolean = {
             aggsBuffer.exists(a => a.find(_ eq e).isDefined)
           }
-          expr.transformDown {
+          replaceGroupingFunc(expr, x.groupByExprs, gid).transformDown {
             // AggregateExpression should be computed on the unmodified value of its argument
             // expressions, so we should not replace any references to grouping expression
             // inside it.
@@ -278,37 +319,45 @@ class Analyzer(
               aggsBuffer += e
               e
             case e if isPartOfAggregation(e) => e
-            case e: GroupingID =>
-              if (e.groupByExprs.isEmpty || e.groupByExprs == x.groupByExprs) {
-                gid
-              } else {
-                throw new AnalysisException(
-                  s"Columns of grouping_id (${e.groupByExprs.mkString(",")}) does not match " +
-                    s"grouping columns (${x.groupByExprs.mkString(",")})")
-              }
-            case Grouping(col: Expression) =>
-              val idx = x.groupByExprs.indexOf(col)
-              if (idx >= 0) {
-                Cast(BitwiseAnd(ShiftRight(gid, Literal(x.groupByExprs.length - 1 - idx)),
-                  Literal(1)), ByteType)
-              } else {
-                throw new AnalysisException(s"Column of grouping ($col) can't be found " +
-                  s"in grouping columns ${x.groupByExprs.mkString(",")}")
-              }
             case e =>
               val index = groupByAliases.indexWhere(_.child.semanticEquals(e))
               if (index == -1) {
                 e
               } else {
-                groupByAttributes(index)
+                groupingAttrs(index)
               }
           }.asInstanceOf[NamedExpression]
         }
 
-        Aggregate(
-          groupByAttributes :+ VirtualColumn.groupingIdAttribute,
-          aggregations,
-          Expand(x.bitmasks, groupByAliases, groupByAttributes, gid, x.child))
+        Aggregate(groupingAttrs, aggregations, expand)
+
+      case f @ Filter(cond, child) if hasGroupingFunction(cond) =>
+        val groupingExprs = findGroupingExprs(child)
+        // The unresolved grouping id will be resolved by ResolveMissingReferences
+        val newCond = replaceGroupingFunc(cond, groupingExprs, VirtualColumn.groupingIdAttribute)
+        f.copy(condition = newCond)
+
+      case s @ Sort(order, _, child) if order.exists(hasGroupingFunction) =>
+        val groupingExprs = findGroupingExprs(child)
+        val gid = VirtualColumn.groupingIdAttribute
+        // The unresolved grouping id will be resolved by ResolveMissingReferences
+        val newOrder = order.map(replaceGroupingFunc(_, groupingExprs, gid).asInstanceOf[SortOrder])
+        s.copy(order = newOrder)
+    }
+
+    private def findGroupingExprs(plan: LogicalPlan): Seq[Expression] = {
+      plan.collectFirst {
+        case a: Aggregate =>
+          // this Aggregate should have grouping id as the last grouping key.
+          val gid = a.groupingExpressions.last
+          if (!gid.isInstanceOf[AttributeReference]
+            || gid.asInstanceOf[AttributeReference].name != VirtualColumn.groupingIdName) {
+            failAnalysis(s"grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
+          }
+          a.groupingExpressions.take(a.groupingExpressions.length - 1)
+      }.getOrElse {
+        failAnalysis(s"grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
+      }
     }
   }
 
@@ -363,7 +412,7 @@ class Analyzer(
         catalog.lookupRelation(u.tableIdentifier, u.alias)
       } catch {
         case _: NoSuchTableException =>
-          u.failAnalysis(s"Table not found: ${u.tableName}")
+          u.failAnalysis(s"Table or View not found: ${u.tableName}")
       }
     }
 
@@ -663,13 +712,15 @@ class Analyzer(
    * clause.  This rule detects such queries and adds the required attributes to the original
    * projection, so that they will be available during sorting. Another projection is added to
    * remove these attributes after sorting.
+   *
+   * The HAVING clause could also used a grouping columns that is not presented in the SELECT.
    */
-  object ResolveSortReferences extends Rule[LogicalPlan] {
+  object ResolveMissingReferences extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       // Skip sort with aggregate. This will be handled in ResolveAggregateFunctions
       case sa @ Sort(_, _, child: Aggregate) => sa
 
-      case s @ Sort(order, _, child) if !s.resolved && child.resolved =>
+      case s @ Sort(order, _, child) if child.resolved =>
         try {
           val newOrder = order.map(resolveExpressionRecursively(_, child).asInstanceOf[SortOrder])
           val requiredAttrs = AttributeSet(newOrder).filter(_.resolved)
@@ -688,6 +739,26 @@ class Analyzer(
           // Users will see an AnalysisException for resolution failure of missing attributes
           // in Sort
           case ae: AnalysisException => s
+        }
+
+      case f @ Filter(cond, child) if child.resolved =>
+        try {
+          val newCond = resolveExpressionRecursively(cond, child)
+          val requiredAttrs = newCond.references.filter(_.resolved)
+          val missingAttrs = requiredAttrs -- child.outputSet
+          if (missingAttrs.nonEmpty) {
+            // Add missing attributes and then project them away.
+            Project(child.output,
+              Filter(newCond, addMissingAttr(child, missingAttrs)))
+          } else if (newCond != cond) {
+            f.copy(condition = newCond)
+          } else {
+            f
+          }
+        } catch {
+          // Attempting to resolve it might fail. When this happens, return the original plan.
+          // Users will see an AnalysisException for resolution failure of missing attributes
+          case ae: AnalysisException => f
         }
     }
 
@@ -784,25 +855,35 @@ class Analyzer(
   }
 
   /**
-   * This rule resolve subqueries inside expressions.
+   * This rule resolves sub-queries inside expressions.
    *
-   * Note: CTE are handled in CTESubstitution.
+   * Note: CTEs are handled in CTESubstitution.
    */
   object ResolveSubquery extends Rule[LogicalPlan] with PredicateHelper {
 
-    private def hasSubquery(e: Expression): Boolean = {
-      e.find(_.isInstanceOf[SubqueryExpression]).isDefined
-    }
-
-    private def hasSubquery(q: LogicalPlan): Boolean = {
-      q.expressions.exists(hasSubquery)
+    /**
+     * Resolve the correlated predicates in the [[Filter]] clauses (e.g. WHERE or HAVING) of a
+     * sub-query by using the plan the predicates should be correlated to.
+     */
+    private def resolveCorrelatedPredicates(q: LogicalPlan, p: LogicalPlan): LogicalPlan = {
+      q transformUp {
+        case f @ Filter(cond, child) if child.resolved && !f.resolved =>
+          val newCond = resolveExpression(cond, p, throws = false)
+          if (!cond.fastEquals(newCond)) {
+            Filter(newCond, child)
+          } else {
+            f
+          }
+      }
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case q: LogicalPlan if q.childrenResolved && hasSubquery(q) =>
+      case q: LogicalPlan if q.childrenResolved =>
         q transformExpressions {
           case e: SubqueryExpression if !e.query.resolved =>
-            e.withNewPlan(execute(e.query))
+            // First resolve as much of the sub-query as possible. After that we use the children of
+            // this plan to resolve the remaining correlated predicates.
+            e.withNewPlan(q.children.foldLeft(execute(e.query))(resolveCorrelatedPredicates))
         }
     }
   }
@@ -843,27 +924,33 @@ class Analyzer(
           if aggregate.resolved =>
 
         // Try resolving the condition of the filter as though it is in the aggregate clause
-        val aggregatedCondition =
-          Aggregate(
-            grouping,
-            Alias(havingCondition, "havingCondition")(isGenerated = true) :: Nil,
-            child)
-        val resolvedOperator = execute(aggregatedCondition)
-        def resolvedAggregateFilter =
-          resolvedOperator
-            .asInstanceOf[Aggregate]
-            .aggregateExpressions.head
+        try {
+          val aggregatedCondition =
+            Aggregate(
+              grouping,
+              Alias(havingCondition, "havingCondition")(isGenerated = true) :: Nil,
+              child)
+          val resolvedOperator = execute(aggregatedCondition)
+          def resolvedAggregateFilter =
+            resolvedOperator
+              .asInstanceOf[Aggregate]
+              .aggregateExpressions.head
 
-        // If resolution was successful and we see the filter has an aggregate in it, add it to
-        // the original aggregate operator.
-        if (resolvedOperator.resolved && containsAggregate(resolvedAggregateFilter)) {
-          val aggExprsWithHaving = resolvedAggregateFilter +: originalAggExprs
+          // If resolution was successful and we see the filter has an aggregate in it, add it to
+          // the original aggregate operator.
+          if (resolvedOperator.resolved && containsAggregate(resolvedAggregateFilter)) {
+            val aggExprsWithHaving = resolvedAggregateFilter +: originalAggExprs
 
-          Project(aggregate.output,
-            Filter(resolvedAggregateFilter.toAttribute,
-              aggregate.copy(aggregateExpressions = aggExprsWithHaving)))
-        } else {
-          filter
+            Project(aggregate.output,
+              Filter(resolvedAggregateFilter.toAttribute,
+                aggregate.copy(aggregateExpressions = aggExprsWithHaving)))
+          } else {
+            filter
+          }
+        } catch {
+          // Attempting to resolve in the aggregate can result in ambiguity.  When this happens,
+          // just return the original plan.
+          case ae: AnalysisException => filter
         }
 
       case sort @ Sort(sortOrder, global, aggregate: Aggregate) if aggregate.resolved =>
@@ -927,11 +1014,8 @@ class Analyzer(
         }
     }
 
-    private def isAggregateExpression(e: Expression): Boolean = {
-      e.isInstanceOf[AggregateExpression] || e.isInstanceOf[Grouping] || e.isInstanceOf[GroupingID]
-    }
     def containsAggregate(condition: Expression): Boolean = {
-      condition.find(isAggregateExpression).isDefined
+      condition.find(_.isInstanceOf[AggregateExpression]).isDefined
     }
   }
 
@@ -1598,7 +1682,9 @@ object CleanupAliases extends Rule[LogicalPlan] {
 
     // Operators that operate on objects should only have expressions from encoders, which should
     // never have extra aliases.
-    case o: ObjectOperator => o
+    case o: ObjectConsumer => o
+    case o: ObjectProducer => o
+    case a: AppendColumns => a
 
     case other =>
       var stop = false

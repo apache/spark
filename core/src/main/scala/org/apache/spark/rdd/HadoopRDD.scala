@@ -213,15 +213,13 @@ class HadoopRDD[K, V](
       logInfo("Input split: " + split.inputSplit)
       val jobConf = getJobConf()
 
-      // TODO: there is a lot of duplicate code between this and NewHadoopRDD and SqlNewHadoopRDD
-
-      val inputMetrics = context.taskMetrics().registerInputMetrics(DataReadMethod.Hadoop)
+      val inputMetrics = context.taskMetrics().inputMetrics
       val existingBytesRead = inputMetrics.bytesRead
 
       // Sets the thread local variable for the file's name
       split.inputSplit.value match {
-        case fs: FileSplit => SqlNewHadoopRDDState.setInputFileName(fs.getPath.toString)
-        case _ => SqlNewHadoopRDDState.unsetInputFileName()
+        case fs: FileSplit => InputFileNameHolder.setInputFileName(fs.getPath.toString)
+        case _ => InputFileNameHolder.unsetInputFileName()
       }
 
       // Find a function that will return the FileSystem bytes read by this thread. Do this before
@@ -261,7 +259,7 @@ class HadoopRDD[K, V](
             finished = true
         }
         if (!finished) {
-          inputMetrics.incRecordsReadInternal(1)
+          inputMetrics.incRecordsRead(1)
         }
         if (inputMetrics.recordsRead % SparkHadoopUtil.UPDATE_INPUT_METRICS_INTERVAL_RECORDS == 0) {
           updateBytesRead()
@@ -271,7 +269,7 @@ class HadoopRDD[K, V](
 
       override def close() {
         if (reader != null) {
-          SqlNewHadoopRDDState.unsetInputFileName()
+          InputFileNameHolder.unsetInputFileName()
           // Close the reader and release it. Note: it's very important that we don't close the
           // reader more than once, since that exposes us to MAPREDUCE-5918 when running against
           // Hadoop 1.x and older Hadoop 2.x releases. That bug can lead to non-deterministic
@@ -293,7 +291,7 @@ class HadoopRDD[K, V](
             // If we can't get the bytes read from the FS stats, fall back to the split size,
             // which may be inaccurate.
             try {
-              inputMetrics.incBytesReadInternal(split.inputSplit.value.getLength)
+              inputMetrics.incBytesRead(split.inputSplit.value.getLength)
             } catch {
               case e: java.io.IOException =>
                 logWarning("Unable to get input size to set InputMetrics for task", e)
@@ -424,7 +422,7 @@ private[spark] object HadoopRDD extends Logging {
 
   private[spark] def convertSplitLocationInfo(infos: Array[AnyRef]): Seq[String] = {
     val out = ListBuffer[String]()
-    infos.foreach { loc => {
+    infos.foreach { loc =>
       val locationStr = HadoopRDD.SPLIT_INFO_REFLECTIONS.get.
         getLocation.invoke(loc).asInstanceOf[String]
       if (locationStr != "localhost") {
@@ -436,7 +434,7 @@ private[spark] object HadoopRDD extends Logging {
           out += new HostTaskLocation(locationStr).toString
         }
       }
-    }}
+    }
     out.seq
   }
 }

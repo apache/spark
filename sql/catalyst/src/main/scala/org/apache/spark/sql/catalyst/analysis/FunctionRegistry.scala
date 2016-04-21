@@ -171,6 +171,7 @@ object FunctionRegistry {
     expression[Rand]("rand"),
     expression[Randn]("randn"),
     expression[CreateStruct]("struct"),
+    expression[CaseWhen]("when"),
 
     // math functions
     expression[Acos]("acos"),
@@ -178,6 +179,7 @@ object FunctionRegistry {
     expression[Atan]("atan"),
     expression[Atan2]("atan2"),
     expression[Bin]("bin"),
+    expression[BRound]("bround"),
     expression[Cbrt]("cbrt"),
     expression[Ceil]("ceil"),
     expression[Ceil]("ceiling"),
@@ -216,6 +218,12 @@ object FunctionRegistry {
     expression[Sqrt]("sqrt"),
     expression[Tan]("tan"),
     expression[Tanh]("tanh"),
+
+    expression[Add]("+"),
+    expression[Subtract]("-"),
+    expression[Multiply]("*"),
+    expression[Divide]("/"),
+    expression[Remainder]("%"),
 
     // aggregate functions
     expression[HyperLogLogPlusPlus]("approx_count_distinct"),
@@ -257,6 +265,7 @@ object FunctionRegistry {
     expression[Lower]("lcase"),
     expression[Length]("length"),
     expression[Levenshtein]("levenshtein"),
+    expression[Like]("like"),
     expression[Lower]("lower"),
     expression[StringLocate]("locate"),
     expression[StringLPad]("lpad"),
@@ -267,6 +276,7 @@ object FunctionRegistry {
     expression[RegExpReplace]("regexp_replace"),
     expression[StringRepeat]("repeat"),
     expression[StringReverse]("reverse"),
+    expression[RLike]("rlike"),
     expression[StringRPad]("rpad"),
     expression[StringTrimRight]("rtrim"),
     expression[SoundEx]("soundex"),
@@ -319,6 +329,7 @@ object FunctionRegistry {
     expression[SortArray]("sort_array"),
 
     // misc functions
+    expression[AssertTrue]("assert_true"),
     expression[Crc32]("crc32"),
     expression[Md5]("md5"),
     expression[Murmur3Hash]("hash"),
@@ -328,6 +339,7 @@ object FunctionRegistry {
     expression[SparkPartitionID]("spark_partition_id"),
     expression[InputFileName]("input_file_name"),
     expression[MonotonicallyIncreasingID]("monotonically_increasing_id"),
+    expression[CurrentDatabase]("current_database"),
 
     // grouping sets
     expression[Cube]("cube"),
@@ -343,7 +355,29 @@ object FunctionRegistry {
     expression[NTile]("ntile"),
     expression[Rank]("rank"),
     expression[DenseRank]("dense_rank"),
-    expression[PercentRank]("percent_rank")
+    expression[PercentRank]("percent_rank"),
+
+    // predicates
+    expression[And]("and"),
+    expression[In]("in"),
+    expression[Not]("not"),
+    expression[Or]("or"),
+
+    expression[EqualNullSafe]("<=>"),
+    expression[EqualTo]("="),
+    expression[EqualTo]("=="),
+    expression[GreaterThan](">"),
+    expression[GreaterThanOrEqual](">="),
+    expression[LessThan]("<"),
+    expression[LessThanOrEqual]("<="),
+    expression[Not]("!"),
+
+    // bitwise
+    expression[BitwiseAnd]("&"),
+    expression[BitwiseNot]("~"),
+    expression[BitwiseOr]("|"),
+    expression[BitwiseXor]("^")
+
   )
 
   val builtin: SimpleFunctionRegistry = {

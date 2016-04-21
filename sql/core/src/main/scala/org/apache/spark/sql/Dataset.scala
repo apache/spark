@@ -20,7 +20,6 @@ package org.apache.spark.sql
 import java.io.CharArrayWriter
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.ArrayBuffer
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
@@ -462,9 +461,7 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   @Experimental
-  def isStreaming: Boolean = logicalPlan.find { n =>
-      n.isInstanceOf[StreamingRelation] || n.isInstanceOf[StreamingExecutionRelation]
-    }.isDefined
+  def isStreaming: Boolean = logicalPlan.isStreaming
 
   /**
    * Displays the [[Dataset]] in a tabular form. Strings more than 20 characters will be truncated,
@@ -993,7 +990,7 @@ class Dataset[T] private[sql](
       sqlContext,
       Project(
         c1.withInputType(
-          boundTEncoder,
+          unresolvedTEncoder.deserializer,
           logicalPlan.output).named :: Nil,
         logicalPlan),
       implicitly[Encoder[U1]])
@@ -1007,7 +1004,7 @@ class Dataset[T] private[sql](
   protected def selectUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
     val encoders = columns.map(_.encoder)
     val namedColumns =
-      columns.map(_.withInputType(resolvedTEncoder, logicalPlan.output).named)
+      columns.map(_.withInputType(unresolvedTEncoder.deserializer, logicalPlan.output).named)
     val execution = new QueryExecution(sqlContext, Project(namedColumns, logicalPlan))
 
     new Dataset(sqlContext, execution, ExpressionEncoder.tuple(encoders))
@@ -1493,6 +1490,8 @@ class Dataset[T] private[sql](
    * @param weights weights for splits, will be normalized if they don't sum to 1.
    * @param seed Seed for sampling.
    *
+   * For Java API, use [[randomSplitAsList]].
+   *
    * @group typedrel
    * @since 2.0.0
    */
@@ -1501,13 +1500,29 @@ class Dataset[T] private[sql](
     // constituent partitions each time a split is materialized which could result in
     // overlapping splits. To prevent this, we explicitly sort each input partition to make the
     // ordering deterministic.
-    val sorted = Sort(logicalPlan.output.map(SortOrder(_, Ascending)), global = false, logicalPlan)
+    // MapType cannot be sorted.
+    val sorted = Sort(logicalPlan.output.filterNot(_.dataType.isInstanceOf[MapType])
+      .map(SortOrder(_, Ascending)), global = false, logicalPlan)
     val sum = weights.sum
     val normalizedCumWeights = weights.map(_ / sum).scanLeft(0.0d)(_ + _)
     normalizedCumWeights.sliding(2).map { x =>
       new Dataset[T](
         sqlContext, Sample(x(0), x(1), withReplacement = false, seed, sorted)(), encoder)
     }.toArray
+  }
+
+  /**
+   * Returns a Java list that contains randomly split [[Dataset]] with the provided weights.
+   *
+   * @param weights weights for splits, will be normalized if they don't sum to 1.
+   * @param seed Seed for sampling.
+   *
+   * @group typedrel
+   * @since 2.0.0
+   */
+  def randomSplitAsList(weights: Array[Double], seed: Long): java.util.List[Dataset[T]] = {
+    val values = randomSplit(weights, seed)
+    java.util.Arrays.asList(values : _*)
   }
 
   /**
@@ -1879,7 +1894,13 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   @Experimental
-  def filter(func: T => Boolean): Dataset[T] = mapPartitions(_.filter(func))
+  def filter(func: T => Boolean): Dataset[T] = {
+    val deserialized = CatalystSerde.deserialize[T](logicalPlan)
+    val function = Literal.create(func, ObjectType(classOf[T => Boolean]))
+    val condition = Invoke(function, "apply", BooleanType, deserialized.output)
+    val filter = Filter(condition, deserialized)
+    withTypedPlan(CatalystSerde.serialize[T](filter))
+  }
 
   /**
    * :: Experimental ::
@@ -1890,7 +1911,13 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   @Experimental
-  def filter(func: FilterFunction[T]): Dataset[T] = filter(t => func.call(t))
+  def filter(func: FilterFunction[T]): Dataset[T] = {
+    val deserialized = CatalystSerde.deserialize[T](logicalPlan)
+    val function = Literal.create(func, ObjectType(classOf[FilterFunction[T]]))
+    val condition = Invoke(function, "call", BooleanType, deserialized.output)
+    val filter = Filter(condition, deserialized)
+    withTypedPlan(CatalystSerde.serialize[T](filter))
+  }
 
   /**
    * :: Experimental ::
@@ -2224,16 +2251,16 @@ class Dataset[T] private[sql](
   def unpersist(): this.type = unpersist(blocking = false)
 
   /**
-   * Represents the content of the [[Dataset]] as an [[RDD]] of [[Row]]s. Note that the RDD is
-   * memoized. Once called, it won't change even if you change any query planning related Spark SQL
-   * configurations (e.g. `spark.sql.shuffle.partitions`).
+   * Represents the content of the [[Dataset]] as an [[RDD]] of [[T]].
    *
    * @group rdd
    * @since 1.6.0
    */
   lazy val rdd: RDD[T] = {
-    queryExecution.toRdd.mapPartitions { rows =>
-      rows.map(boundTEncoder.fromRow)
+    val objectType = unresolvedTEncoder.deserializer.dataType
+    val deserialized = CatalystSerde.deserialize[T](logicalPlan)
+    sqlContext.executePlan(deserialized).toRdd.mapPartitions { rows =>
+      rows.map(_.get(0, objectType).asInstanceOf[T])
     }
   }
 

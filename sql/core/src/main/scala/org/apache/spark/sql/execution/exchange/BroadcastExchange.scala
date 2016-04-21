@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.exchange
 
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 
 import org.apache.spark.broadcast
@@ -81,8 +81,7 @@ case class BroadcastExchange(
   }
 
   override protected[sql] def doExecuteBroadcast[T](): broadcast.Broadcast[T] = {
-    val result = Await.result(relationFuture, timeout)
-    result.asInstanceOf[broadcast.Broadcast[T]]
+    ThreadUtils.awaitResult(relationFuture, timeout).asInstanceOf[broadcast.Broadcast[T]]
   }
 }
 

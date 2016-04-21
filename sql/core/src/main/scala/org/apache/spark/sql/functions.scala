@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.BroadcastHint
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.expressions.UserDefinedFunction
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -154,6 +155,8 @@ object functions {
   /**
    * Aggregate function: returns the approximate number of distinct items in a group.
    *
+   * @param rsd maximum estimation error allowed (default = 0.05)
+   *
    * @group agg_funcs
    * @since 1.3.0
    */
@@ -163,6 +166,8 @@ object functions {
 
   /**
    * Aggregate function: returns the approximate number of distinct items in a group.
+   *
+   * @param rsd maximum estimation error allowed (default = 0.05)
    *
    * @group agg_funcs
    * @since 1.3.0
@@ -1171,7 +1176,10 @@ object functions {
    * @group normal_funcs
    */
   def expr(expr: String): Column = {
-    Column(SparkSqlParser.parseExpression(expr))
+    val parser = SQLContext.getActive().map(_.sessionState.sqlParser).getOrElse {
+      new SparkSqlParser(new SQLConf)
+    }
+    Column(parser.parseExpression(expr))
   }
 
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -1771,6 +1779,23 @@ object functions {
    * @since 1.5.0
    */
   def round(e: Column, scale: Int): Column = withExpr { Round(e.expr, Literal(scale)) }
+
+  /**
+   * Returns the value of the column `e` rounded to 0 decimal places with HALF_EVEN round mode.
+   *
+   * @group math_funcs
+   * @since 2.0.0
+   */
+  def bround(e: Column): Column = bround(e, 0)
+
+  /**
+   * Round the value of `e` to `scale` decimal places with HALF_EVEN round mode
+   * if `scale` >= 0 or at integral part when `scale` < 0.
+   *
+   * @group math_funcs
+   * @since 2.0.0
+   */
+  def bround(e: Column, scale: Int): Column = withExpr { BRound(e.expr, Literal(scale)) }
 
   /**
    * Shift the given value numBits left. If the given value is a long value, this function

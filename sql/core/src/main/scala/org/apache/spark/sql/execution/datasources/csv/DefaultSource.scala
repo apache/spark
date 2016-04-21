@@ -25,17 +25,15 @@ import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce._
 
-import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{JoinedRow, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.JoinedRow
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
-import org.apache.spark.sql.execution.datasources.{CompressionCodecs, HadoopFileLinesReader, PartitionedFile}
+import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.util.SerializableConfiguration
-import org.apache.spark.util.collection.BitSet
 
 /**
  * Provides access to CSV data from pure SQL statements.
@@ -130,37 +128,6 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       unsafeRowIterator.map { dataRow =>
         appendPartitionColumns(joinedRow(dataRow, file.partitionValues))
       }
-    }
-  }
-
-  /**
-   * This supports to eliminate unneeded columns before producing an RDD
-   * containing all of its tuples as Row objects. This reads all the tokens of each line
-   * and then drop unneeded tokens without casting and type-checking by mapping
-   * both the indices produced by `requiredColumns` and the ones of tokens.
-   */
-  override def buildInternalScan(
-      sqlContext: SQLContext,
-      dataSchema: StructType,
-      requiredColumns: Array[String],
-      filters: Array[Filter],
-      bucketSet: Option[BitSet],
-      inputFiles: Seq[FileStatus],
-      broadcastedConf: Broadcast[SerializableConfiguration],
-      options: Map[String, String]): RDD[InternalRow] = {
-    // TODO: Filter before calling buildInternalScan.
-    val csvFiles = inputFiles.filterNot(_.getPath.getName startsWith "_")
-
-    val csvOptions = new CSVOptions(options)
-    val pathsString = csvFiles.map(_.getPath.toUri.toString)
-    val header = dataSchema.fields.map(_.name)
-    val tokenizedRdd = tokenRdd(sqlContext, csvOptions, header, pathsString)
-    val rows = CSVRelation.parseCsv(tokenizedRdd, dataSchema, requiredColumns, csvOptions)
-
-    val requiredDataSchema = StructType(requiredColumns.map(c => dataSchema.find(_.name == c).get))
-    rows.mapPartitions { iterator =>
-      val unsafeProjection = UnsafeProjection.create(requiredDataSchema)
-      iterator.map(unsafeProjection)
     }
   }
 

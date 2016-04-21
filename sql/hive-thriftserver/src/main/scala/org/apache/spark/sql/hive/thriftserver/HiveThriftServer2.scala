@@ -55,7 +55,7 @@ object HiveThriftServer2 extends Logging {
   @DeveloperApi
   def startWithContext(sqlContext: HiveContext): Unit = {
     val server = new HiveThriftServer2(sqlContext)
-    server.init(sqlContext.hiveconf)
+    server.init(sqlContext.sessionState.hiveconf)
     server.start()
     listener = new HiveThriftServer2Listener(server, sqlContext.conf)
     sqlContext.sparkContext.addSparkListener(listener)
@@ -83,7 +83,7 @@ object HiveThriftServer2 extends Logging {
 
     try {
       val server = new HiveThriftServer2(SparkSQLEnv.hiveContext)
-      server.init(SparkSQLEnv.hiveContext.hiveconf)
+      server.init(SparkSQLEnv.hiveContext.sessionState.hiveconf)
       server.start()
       logInfo("HiveThriftServer2 started")
       listener = new HiveThriftServer2Listener(server, SparkSQLEnv.hiveContext.conf)

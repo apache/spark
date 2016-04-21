@@ -83,12 +83,12 @@ class DataSourceWithHiveMetastoreCatalogSuite
             .saveAsTable("t")
         }
 
-        val hiveTable = sessionState.catalog.getTable(TableIdentifier("t", Some("default")))
+        val hiveTable = sessionState.catalog.getTableMetadata(TableIdentifier("t", Some("default")))
         assert(hiveTable.storage.inputFormat === Some(inputFormat))
         assert(hiveTable.storage.outputFormat === Some(outputFormat))
         assert(hiveTable.storage.serde === Some(serde))
 
-        assert(hiveTable.partitionColumns.isEmpty)
+        assert(hiveTable.partitionColumnNames.isEmpty)
         assert(hiveTable.tableType === CatalogTableType.MANAGED_TABLE)
 
         val columns = hiveTable.schema
@@ -96,7 +96,7 @@ class DataSourceWithHiveMetastoreCatalogSuite
         assert(columns.map(_.dataType) === Seq("decimal(10,3)", "string"))
 
         checkAnswer(table("t"), testDF)
-        assert(runSqlHive("SELECT * FROM t") === Seq("1.1\t1", "2.1\t2"))
+        assert(sessionState.runNativeSql("SELECT * FROM t") === Seq("1.1\t1", "2.1\t2"))
       }
     }
 
@@ -114,7 +114,8 @@ class DataSourceWithHiveMetastoreCatalogSuite
               .saveAsTable("t")
           }
 
-          val hiveTable = sessionState.catalog.getTable(TableIdentifier("t", Some("default")))
+          val hiveTable =
+            sessionState.catalog.getTableMetadata(TableIdentifier("t", Some("default")))
           assert(hiveTable.storage.inputFormat === Some(inputFormat))
           assert(hiveTable.storage.outputFormat === Some(outputFormat))
           assert(hiveTable.storage.serde === Some(serde))
@@ -128,7 +129,7 @@ class DataSourceWithHiveMetastoreCatalogSuite
           assert(columns.map(_.dataType) === Seq("decimal(10,3)", "string"))
 
           checkAnswer(table("t"), testDF)
-          assert(runSqlHive("SELECT * FROM t") === Seq("1.1\t1", "2.1\t2"))
+          assert(sessionState.runNativeSql("SELECT * FROM t") === Seq("1.1\t1", "2.1\t2"))
         }
       }
     }
@@ -144,12 +145,13 @@ class DataSourceWithHiveMetastoreCatalogSuite
                |AS SELECT 1 AS d1, "val_1" AS d2
              """.stripMargin)
 
-          val hiveTable = sessionState.catalog.getTable(TableIdentifier("t", Some("default")))
+          val hiveTable =
+            sessionState.catalog.getTableMetadata(TableIdentifier("t", Some("default")))
           assert(hiveTable.storage.inputFormat === Some(inputFormat))
           assert(hiveTable.storage.outputFormat === Some(outputFormat))
           assert(hiveTable.storage.serde === Some(serde))
 
-          assert(hiveTable.partitionColumns.isEmpty)
+          assert(hiveTable.partitionColumnNames.isEmpty)
           assert(hiveTable.tableType === CatalogTableType.EXTERNAL_TABLE)
 
           val columns = hiveTable.schema
@@ -157,7 +159,7 @@ class DataSourceWithHiveMetastoreCatalogSuite
           assert(columns.map(_.dataType) === Seq("int", "string"))
 
           checkAnswer(table("t"), Row(1, "val_1"))
-          assert(runSqlHive("SELECT * FROM t") === Seq("1\tval_1"))
+          assert(sessionState.runNativeSql("SELECT * FROM t") === Seq("1\tval_1"))
         }
       }
     }
