@@ -17,8 +17,6 @@
 
 package org.apache.spark.ml.clustering
 
-import scala.collection.JavaConverters
-
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.{Experimental, Since}
@@ -26,7 +24,6 @@ import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param.{IntParam, ParamMap, Params}
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.api.python.SerDe
 import org.apache.spark.mllib.clustering.{GaussianMixture => MLlibGM, GaussianMixtureModel => MLlibGMModel}
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.stat.distribution.MultivariateGaussian
@@ -103,10 +100,15 @@ class GaussianMixtureModel private[ml] (
   }
 
   @Since("2.0.0")
-  def weights: Array[Double] = parentModel.weights
+  def gaussians: Array[MultivariateGaussian] = parentModel.gaussians
 
   @Since("2.0.0")
-  def gaussians: DataFrame = {
+  def weights: Array[Double] = parentModel.weights
+
+  /**
+   * Helper method used in Python
+   */
+  def gaussiansDF: DataFrame = {
     val tmp_gaussians = parentModel.gaussians
     val modelGaussians = tmp_gaussians.map { gaussian =>
       (gaussian.mu, gaussian.sigma)
@@ -162,8 +164,8 @@ object GaussianMixtureModel extends MLReadable[GaussianMixtureModel] {
       // Save model data: weights and gaussians
       val weights = instance.weights
       val gaussians = instance.gaussians
-      val mus = gaussians.select(col("mu")).collect().map{_.getAs[Vector]("mu")}
-      val sigmas = gaussians.select(col("sigma")).collect().map{_.getAs[Matrix]("sigma")}
+      val mus = gaussians.map(_.mu)
+      val sigmas = gaussians.map(_.sigma)
       val data = Data(weights, mus, sigmas)
       val dataPath = new Path(path, "data").toString
       sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)

@@ -25,7 +25,6 @@ import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 
 
-
 class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
   with DefaultReadWriteTest {
 
@@ -81,7 +80,7 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
     val model = gm.fit(dataset)
     assert(model.hasParent)
     assert(model.weights.length === k)
-    assert(model.gaussians.collect.size === k)
+    assert(model.gaussians.length === k)
 
     val transformed = model.transform(dataset)
     val expectedColumns = Array("features", predictionColName, probabilityColName)
@@ -112,13 +111,8 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
     def checkModelData(model: GaussianMixtureModel, model2: GaussianMixtureModel): Unit = {
       assert(model.weights === model2.weights)
       val gaussians = model.gaussians
-      val mus = gaussians.select(col("mu")).collect().map{_.getAs[Vector]("mu")}
-      val sigmas = gaussians.select(col("sigma")).collect().map{_.getAs[Matrix]("sigma")}
-      val gaussians2 = model2.gaussians
-      val mus2 = gaussians2.select(col("mu")).collect().map{_.getAs[Vector]("mu")}
-      val sigmas2 = gaussians2.select(col("sigma")).collect().map{_.getAs[Matrix]("sigma")}
-      assert(mus === mus2)
-      assert(sigmas === sigmas2)
+      assert(model.gaussians.map(_.mu) === model2.gaussians.map(_.mu))
+      assert(model.gaussians.map(_.sigma) === model2.gaussians.map(_.sigma))
     }
     val gm = new GaussianMixture()
     testEstimatorAndModelReadWrite(gm, dataset,

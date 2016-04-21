@@ -52,7 +52,7 @@ class GaussianMixtureModel(JavaModel, JavaMLWritable, JavaMLReadable):
         Array of MultivariateGaussian where gaussians[i] represents
         the Multivariate Gaussian (Normal) Distribution for Gaussian i.
         """
-        return self._call_java("gaussians")
+        return self._call_java("gaussiansDF")
 
 
 @inherit_doc
