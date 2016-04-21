@@ -225,11 +225,14 @@ Apart from these, the following properties are also available, and may be useful
   <td>(none)</td>
   <td>
     A string of extra JVM options to pass to the driver. For instance, GC settings or other logging.
+    Note that it is illegal to set maximum heap size (-Xmx) settings with this option. Maximum heap
+    size settings can be set with <code>spark.driver.memory</code> in the cluster mode and through
+    the <code>--driver-memory</code> command line option in the client mode.
 
     <br /><em>Note:</em> In client mode, this config must not be set through the <code>SparkConf</code>
     directly in your application, because the driver JVM has already started at that point.
     Instead, please set this through the <code>--driver-java-options</code> command line option or in
-    your default properties file.</td>
+    your default properties file.
   </td>
 </tr>
 <tr>
@@ -269,9 +272,9 @@ Apart from these, the following properties are also available, and may be useful
   <td>(none)</td>
   <td>
     A string of extra JVM options to pass to executors. For instance, GC settings or other logging.
-    Note that it is illegal to set Spark properties or heap size settings with this option. Spark
-    properties should be set using a SparkConf object or the spark-defaults.conf file used with the
-    spark-submit script. Heap size settings can be set with spark.executor.memory.
+    Note that it is illegal to set Spark properties or maximum heap size (-Xmx) settings with this
+    option. Spark properties should be set using a SparkConf object or the spark-defaults.conf file
+    used with the spark-submit script. Maximum heap size settings can be set with spark.executor.memory.
   </td>
 </tr>
 <tr>
@@ -450,15 +453,6 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     (Netty only) How long to wait between retries of fetches. The maximum delay caused by retrying
     is 15 seconds by default, calculated as <code>maxRetries * retryWait</code>.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.shuffle.manager</code></td>
-  <td>sort</td>
-  <td>
-    Implementation to use for shuffling data. There are two implementations available:
-    <code>sort</code> and <code>hash</code>.
-    Sort-based shuffle is more memory-efficient and is the default option starting in 1.2.
   </td>
 </tr>
 <tr>

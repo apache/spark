@@ -11,6 +11,19 @@
     "bytesRead" : [ 60488.0, 70564.0, 70564.0, 70564.0, 70564.0 ],
     "recordsRead" : [ 10000.0, 10000.0, 10000.0, 10000.0, 10000.0 ]
   },
+  "outputMetrics" : {
+    "bytesWritten" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+    "recordsWritten" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ]
+  },
+  "shuffleReadMetrics" : {
+    "readBytes" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+    "readRecords" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+    "remoteBlocksFetched" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+    "localBlocksFetched" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+    "fetchWaitTime" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+    "remoteBytesRead" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+    "totalBlocksFetched" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ]
+  },
   "shuffleWriteMetrics" : {
     "writeBytes" : [ 1710.0, 1710.0, 1710.0, 1710.0, 1710.0 ],
     "writeRecords" : [ 10.0, 10.0, 10.0, 10.0, 10.0 ],

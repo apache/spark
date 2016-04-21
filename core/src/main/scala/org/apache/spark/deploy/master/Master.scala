@@ -24,7 +24,7 @@ import java.util.Date
 import java.util.concurrent.{ConcurrentHashMap, ScheduledFuture, TimeUnit}
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 import scala.language.postfixOps
 import scala.util.Random
@@ -217,7 +217,7 @@ private[deploy] class Master(
   }
 
   override def receive: PartialFunction[Any, Unit] = {
-    case ElectedLeader => {
+    case ElectedLeader =>
       val (storedApps, storedDrivers, storedWorkers) = persistenceEngine.readPersistedData(rpcEnv)
       state = if (storedApps.isEmpty && storedDrivers.isEmpty && storedWorkers.isEmpty) {
         RecoveryState.ALIVE
@@ -233,16 +233,14 @@ private[deploy] class Master(
           }
         }, WORKER_TIMEOUT_MS, TimeUnit.MILLISECONDS)
       }
-    }
 
     case CompleteRecovery => completeRecovery()
 
-    case RevokedLeadership => {
+    case RevokedLeadership =>
       logError("Leadership has been revoked -- master shutting down.")
       System.exit(0)
-    }
 
-    case RegisterApplication(description, driver) => {
+    case RegisterApplication(description, driver) =>
       // TODO Prevent repeated registrations from some driver
       if (state == RecoveryState.STANDBY) {
         // ignore, don't send response
@@ -255,12 +253,11 @@ private[deploy] class Master(
         driver.send(RegisteredApplication(app.id, self))
         schedule()
       }
-    }
 
-    case ExecutorStateChanged(appId, execId, state, message, exitStatus) => {
+    case ExecutorStateChanged(appId, execId, state, message, exitStatus) =>
       val execOption = idToApp.get(appId).flatMap(app => app.executors.get(execId))
       execOption match {
-        case Some(exec) => {
+        case Some(exec) =>
           val appInfo = idToApp(appId)
           val oldState = exec.state
           exec.state = state
@@ -298,22 +295,19 @@ private[deploy] class Master(
               }
             }
           }
-        }
         case None =>
           logWarning(s"Got status update for unknown executor $appId/$execId")
       }
-    }
 
-    case DriverStateChanged(driverId, state, exception) => {
+    case DriverStateChanged(driverId, state, exception) =>
       state match {
         case DriverState.ERROR | DriverState.FINISHED | DriverState.KILLED | DriverState.FAILED =>
           removeDriver(driverId, state, exception)
         case _ =>
           throw new Exception(s"Received unexpected state update for driver $driverId: $state")
       }
-    }
 
-    case Heartbeat(workerId, worker) => {
+    case Heartbeat(workerId, worker) =>
       idToWorker.get(workerId) match {
         case Some(workerInfo) =>
           workerInfo.lastHeartbeat = System.currentTimeMillis()
@@ -327,9 +321,8 @@ private[deploy] class Master(
               " This worker was never registered, so ignoring the heartbeat.")
           }
       }
-    }
 
-    case MasterChangeAcknowledged(appId) => {
+    case MasterChangeAcknowledged(appId) =>
       idToApp.get(appId) match {
         case Some(app) =>
           logInfo("Application has been re-registered: " + appId)
@@ -339,9 +332,8 @@ private[deploy] class Master(
       }
 
       if (canCompleteRecovery) { completeRecovery() }
-    }
 
-    case WorkerSchedulerStateResponse(workerId, executors, driverIds) => {
+    case WorkerSchedulerStateResponse(workerId, executors, driverIds) =>
       idToWorker.get(workerId) match {
         case Some(worker) =>
           logInfo("Worker has been re-registered: " + workerId)
@@ -367,7 +359,6 @@ private[deploy] class Master(
       }
 
       if (canCompleteRecovery) { completeRecovery() }
-    }
 
     case WorkerLatestState(workerId, executors, driverIds) =>
       idToWorker.get(workerId) match {
@@ -397,9 +388,8 @@ private[deploy] class Master(
       logInfo(s"Received unregister request from application $applicationId")
       idToApp.get(applicationId).foreach(finishApplication)
 
-    case CheckForWorkerTimeOut => {
+    case CheckForWorkerTimeOut =>
       timeOutDeadWorkers()
-    }
 
     case AttachCompletedRebuildUI(appId) =>
       // An asyncRebuildSparkUI has completed, so need to attach to master webUi
@@ -408,7 +398,7 @@ private[deploy] class Master(
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case RegisterWorker(
-        id, workerHost, workerPort, workerRef, cores, memory, workerWebUiUrl) => {
+        id, workerHost, workerPort, workerRef, cores, memory, workerWebUiUrl) =>
       logInfo("Registering worker %s:%d with %d cores, %s RAM".format(
         workerHost, workerPort, cores, Utils.megabytesToString(memory)))
       if (state == RecoveryState.STANDBY) {
@@ -430,9 +420,8 @@ private[deploy] class Master(
             + workerAddress))
         }
       }
-    }
 
-    case RequestSubmitDriver(description) => {
+    case RequestSubmitDriver(description) =>
       if (state != RecoveryState.ALIVE) {
         val msg = s"${Utils.BACKUP_STANDALONE_MASTER_PREFIX}: $state. " +
           "Can only accept driver submissions in ALIVE state."
@@ -451,9 +440,8 @@ private[deploy] class Master(
         context.reply(SubmitDriverResponse(self, true, Some(driver.id),
           s"Driver successfully submitted as ${driver.id}"))
       }
-    }
 
-    case RequestKillDriver(driverId) => {
+    case RequestKillDriver(driverId) =>
       if (state != RecoveryState.ALIVE) {
         val msg = s"${Utils.BACKUP_STANDALONE_MASTER_PREFIX}: $state. " +
           s"Can only kill drivers in ALIVE state."
@@ -484,9 +472,8 @@ private[deploy] class Master(
             context.reply(KillDriverResponse(self, driverId, success = false, msg))
         }
       }
-    }
 
-    case RequestDriverStatus(driverId) => {
+    case RequestDriverStatus(driverId) =>
       if (state != RecoveryState.ALIVE) {
         val msg = s"${Utils.BACKUP_STANDALONE_MASTER_PREFIX}: $state. " +
           "Can only request driver status in ALIVE state."
@@ -501,18 +488,15 @@ private[deploy] class Master(
             context.reply(DriverStatusResponse(found = false, None, None, None, None))
         }
       }
-    }
 
-    case RequestMasterState => {
+    case RequestMasterState =>
       context.reply(MasterStateResponse(
         address.host, address.port, restServerBoundPort,
         workers.toArray, apps.toArray, completedApps.toArray,
         drivers.toArray, completedDrivers.toArray, state))
-    }
 
-    case BoundPortsRequest => {
+    case BoundPortsRequest =>
       context.reply(BoundPortsResponse(address.port, webUi.boundPort, restServerBoundPort))
-    }
 
     case RequestExecutors(appId, requestedTotal) =>
       context.reply(handleRequestExecutors(appId, requestedTotal))
@@ -859,10 +843,10 @@ private[deploy] class Master(
       addressToApp -= app.driver.address
       if (completedApps.size >= RETAINED_APPLICATIONS) {
         val toRemove = math.max(RETAINED_APPLICATIONS / 10, 1)
-        completedApps.take(toRemove).foreach( a => {
+        completedApps.take(toRemove).foreach { a =>
           Option(appIdToUI.remove(a.id)).foreach { ui => webUi.detachSparkUI(ui) }
           applicationMetricsSystem.removeSource(a.appSource)
-        })
+        }
         completedApps.trimStart(toRemove)
       }
       completedApps += app // Remember it in our history
@@ -975,7 +959,7 @@ private[deploy] class Master(
    */
   private[master] def rebuildSparkUI(app: ApplicationInfo): Option[SparkUI] = {
     val futureUI = asyncRebuildSparkUI(app)
-    Await.result(futureUI, Duration.Inf)
+    ThreadUtils.awaitResult(futureUI, Duration.Inf)
   }
 
   /** Rebuild a new SparkUI asynchronously to not block RPC event loop */

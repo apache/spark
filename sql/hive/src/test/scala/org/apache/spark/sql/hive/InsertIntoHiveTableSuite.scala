@@ -81,7 +81,7 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
   test("Double create fails when allowExisting = false") {
     sql("CREATE TABLE doubleCreateAndInsertTest (key int, value string)")
 
-    intercept[QueryExecutionException] {
+    intercept[AnalysisException] {
       sql("CREATE TABLE doubleCreateAndInsertTest (key int, value string)")
     }
   }

@@ -303,7 +303,7 @@ class LocalLDAModel private[spark] (
       documents.filter(_._2.numNonzeros > 0).map { case (id: Long, termCounts: Vector) =>
         val localElogbeta = ElogbetaBc.value
         var docBound = 0.0D
-        val (gammad: BDV[Double], _) = OnlineLDAOptimizer.variationalTopicInference(
+        val (gammad: BDV[Double], _, _) = OnlineLDAOptimizer.variationalTopicInference(
           termCounts, exp(localElogbeta), brzAlpha, gammaShape, k)
         val Elogthetad: BDV[Double] = LDAUtils.dirichletExpectation(gammad)
 
@@ -354,7 +354,7 @@ class LocalLDAModel private[spark] (
       if (termCounts.numNonzeros == 0) {
         (id, Vectors.zeros(k))
       } else {
-        val (gamma, _) = OnlineLDAOptimizer.variationalTopicInference(
+        val (gamma, _, _) = OnlineLDAOptimizer.variationalTopicInference(
           termCounts,
           expElogbetaBc.value,
           docConcentrationBrz,
@@ -377,7 +377,7 @@ class LocalLDAModel private[spark] (
       if (termCounts.numNonzeros == 0) {
         Vectors.zeros(k)
       } else {
-        val (gamma, _) = OnlineLDAOptimizer.variationalTopicInference(
+        val (gamma, _, _) = OnlineLDAOptimizer.variationalTopicInference(
           termCounts,
           expElogbetaBc.value,
           docConcentrationBrz,
@@ -403,7 +403,7 @@ class LocalLDAModel private[spark] (
     if (document.numNonzeros == 0) {
       Vectors.zeros(this.k)
     } else {
-      val (gamma, _) = OnlineLDAOptimizer.variationalTopicInference(
+      val (gamma, _, _) = OnlineLDAOptimizer.variationalTopicInference(
         document,
         expElogbeta,
         this.docConcentration.toBreeze,

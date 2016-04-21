@@ -17,7 +17,7 @@
 
 package org.apache.spark.streaming.receiver
 
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.language.{existentials, postfixOps}
 
@@ -48,7 +48,7 @@ private[streaming] trait ReceivedBlockHandler {
   def storeBlock(blockId: StreamBlockId, receivedBlock: ReceivedBlock): ReceivedBlockStoreResult
 
   /** Cleanup old blocks older than the given threshold time */
-  def cleanupOldBlocks(threshTime: Long)
+  def cleanupOldBlocks(threshTime: Long): Unit
 }
 
 
@@ -207,7 +207,7 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
 
     // Combine the futures, wait for both to complete, and return the write ahead log record handle
     val combinedFuture = storeInBlockManagerFuture.zip(storeInWriteAheadLogFuture).map(_._2)
-    val walRecordHandle = Await.result(combinedFuture, blockStoreTimeout)
+    val walRecordHandle = ThreadUtils.awaitResult(combinedFuture, blockStoreTimeout)
     WriteAheadLogBasedStoreResult(blockId, numRecords, walRecordHandle)
   }
 

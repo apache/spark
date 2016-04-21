@@ -348,15 +348,22 @@ class HiveTypeCoercionSuite extends PlanTest {
 
   test("type coercion for If") {
     val rule = HiveTypeCoercion.IfCoercion
+
     ruleTest(rule,
       If(Literal(true), Literal(1), Literal(1L)),
-      If(Literal(true), Cast(Literal(1), LongType), Literal(1L))
-    )
+      If(Literal(true), Cast(Literal(1), LongType), Literal(1L)))
 
     ruleTest(rule,
       If(Literal.create(null, NullType), Literal(1), Literal(1)),
-      If(Literal.create(null, BooleanType), Literal(1), Literal(1))
-    )
+      If(Literal.create(null, BooleanType), Literal(1), Literal(1)))
+
+    ruleTest(rule,
+      If(AssertTrue(Literal.create(true, BooleanType)), Literal(1), Literal(2)),
+      If(Cast(AssertTrue(Literal.create(true, BooleanType)), BooleanType), Literal(1), Literal(2)))
+
+    ruleTest(rule,
+      If(AssertTrue(Literal.create(false, BooleanType)), Literal(1), Literal(2)),
+      If(Cast(AssertTrue(Literal.create(false, BooleanType)), BooleanType), Literal(1), Literal(2)))
   }
 
   test("type coercion for CaseKeyWhen") {
