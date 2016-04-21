@@ -182,19 +182,6 @@ private[hive] class TestHiveSparkSession(
     Option(System.getenv(envVar)).map(new File(_))
   }
 
-  /**
-   * Replaces relative paths to the parent directory "../" with hiveDevHome since this is how the
-   * hive test cases assume the system is set up.
-   */
-  private[hive] def rewritePaths(cmd: String): String =
-    if (cmd.toUpperCase contains "LOAD DATA") {
-      val testDataLocation =
-        hiveDevHome.map(_.getCanonicalPath).getOrElse(inRepoTests.getCanonicalPath)
-      cmd.replaceAll("\\.\\./\\.\\./", testDataLocation + "/")
-    } else {
-      cmd
-    }
-
   val hiveFilesTemp = File.createTempFile("catalystHiveFiles", "")
   hiveFilesTemp.delete()
   hiveFilesTemp.mkdir()
@@ -565,11 +552,6 @@ private[hive] class TestHiveSessionState(sparkSession: TestHiveSparkSession)
 
   override def executePlan(plan: LogicalPlan): TestHiveQueryExecution = {
     new TestHiveQueryExecution(sparkSession, plan)
-  }
-
-  // Override so we can intercept relative paths and rewrite them to point at hive.
-  override def runNativeSql(sql: String): Seq[String] = {
-    super.runNativeSql(sparkSession.rewritePaths(substitutor.substitute(hiveconf, sql)))
   }
 }
 
