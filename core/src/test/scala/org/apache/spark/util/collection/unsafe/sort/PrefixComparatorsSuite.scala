@@ -120,4 +120,20 @@ class PrefixComparatorsSuite extends SparkFunSuite with PropertyChecks {
     val doubleMaxPrefix = PrefixComparators.DoublePrefixComparator.computePrefix(Double.MaxValue)
     assert(PrefixComparators.DOUBLE.compare(prefix, doubleMaxPrefix) === 1)
   }
+
+  test("double prefix comparator handles other special values properly") {
+    val nullValue = 0L
+    val nan = PrefixComparators.DoublePrefixComparator.computePrefix(Double.NaN)
+    val posInf = PrefixComparators.DoublePrefixComparator.computePrefix(Double.PositiveInfinity)
+    val negInf = PrefixComparators.DoublePrefixComparator.computePrefix(Double.NegativeInfinity)
+    val minValue = PrefixComparators.DoublePrefixComparator.computePrefix(Double.MinValue)
+    val maxValue = PrefixComparators.DoublePrefixComparator.computePrefix(Double.MaxValue)
+    val zero = PrefixComparators.DoublePrefixComparator.computePrefix(0.0)
+    assert(PrefixComparators.DOUBLE.compare(nan, posInf) === 1)
+    assert(PrefixComparators.DOUBLE.compare(posInf, maxValue) === 1)
+    assert(PrefixComparators.DOUBLE.compare(maxValue, zero) === 1)
+    assert(PrefixComparators.DOUBLE.compare(zero, minValue) === 1)
+    assert(PrefixComparators.DOUBLE.compare(minValue, negInf) === 1)
+    assert(PrefixComparators.DOUBLE.compare(negInf, nullValue) === 1)
+  }
 }

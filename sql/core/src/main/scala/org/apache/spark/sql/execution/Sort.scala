@@ -153,8 +153,8 @@ case class Sort(
     s"""
        | if ($needToSort) {
        |   $addToSorter();
-       |   Long $spillSizeBefore = $metrics.memoryBytesSpilled();
-       |   Long $startTime = System.nanoTime();
+       |   long $spillSizeBefore = $metrics.memoryBytesSpilled();
+       |   long $startTime = System.nanoTime();
        |   $sortedIterator = $sorterVariable.sort();
        |   $sortTime.add(System.nanoTime() - $startTime);
        |   $dataSize.add($sorterVariable.getPeakMemoryUsage());
