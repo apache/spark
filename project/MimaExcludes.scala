@@ -661,12 +661,16 @@ object MimaExcludes {
         ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.executor.InputMetrics.this"),
         ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.executor.OutputMetrics.this")
       ) ++ Seq(
+        // [SPARK-4452][Core]Shuffle data structures can starve others on the same thread for memory
+        ProblemFilters.exclude[IncompatibleTemplateDefProblem]("org.apache.spark.util.collection.Spillable")
+      ) ++ Seq(
         // [SPARK-14483][WEBUI] Display user name foreach job and query
         ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.SparkListenerJobStart.copy"),
         ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.SparkListenerJobStart.this"),
         ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.scheduler.SparkListenerJobStart$"),
         ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.SparkListenerJobStart.apply")
       )
+
     case v if v.startsWith("1.6") =>
       Seq(
         MimaBuild.excludeSparkPackage("deploy"),

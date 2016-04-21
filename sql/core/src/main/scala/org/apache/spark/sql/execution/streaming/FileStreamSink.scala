@@ -44,28 +44,33 @@ class FileStreamSink(
 
   private val basePath = new Path(path)
   private val logPath = new Path(basePath, FileStreamSink.metadataDir)
-  private val fileLog = new HDFSMetadataLog[Seq[String]](sqlContext, logPath.toUri.toString)
+  private val fileLog = new FileStreamSinkLog(sqlContext, logPath.toUri.toString)
+  private val fs = basePath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
 
   override def addBatch(batchId: Long, data: DataFrame): Unit = {
-    if (fileLog.get(batchId).isDefined) {
+    if (batchId <= fileLog.getLatest().map(_._1).getOrElse(-1L)) {
       logInfo(s"Skipping already committed batch $batchId")
     } else {
-      val files = writeFiles(data)
+      val files = fs.listStatus(writeFiles(data)).map { f =>
+        SinkFileStatus(
+          path = f.getPath.toUri.toString,
+          size = f.getLen,
+          isDir = f.isDirectory,
+          modificationTime = f.getModificationTime,
+          blockReplication = f.getReplication,
+          blockSize = f.getBlockSize,
+          action = FileStreamSinkLog.ADD_ACTION)
+      }
       if (fileLog.add(batchId, files)) {
         logInfo(s"Committed batch $batchId")
       } else {
-        logWarning(s"Race while writing batch $batchId")
+        throw new IllegalStateException(s"Race while writing batch $batchId")
       }
     }
   }
 
   /** Writes the [[DataFrame]] to a UUID-named dir, returning the list of files paths. */
-  private def writeFiles(data: DataFrame): Seq[String] = {
-    val ctx = sqlContext
-    val outputDir = path
-    val format = fileFormat
-    val schema = data.schema
-
+  private def writeFiles(data: DataFrame): Array[Path] = {
     val file = new Path(basePath, UUID.randomUUID().toString).toUri.toString
     data.write.parquet(file)
     sqlContext.read
@@ -74,7 +79,6 @@ class FileStreamSink(
         .inputFiles
         .map(new Path(_))
         .filterNot(_.getName.startsWith("_"))
-        .map(_.toUri.toString)
   }
 
   override def toString: String = s"FileSink[$path]"

@@ -24,7 +24,6 @@ import com.google.common.base.Objects
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hive.common.StatsSetupConst
-import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.{TableType => HiveTableType}
 import org.apache.hadoop.hive.metastore.api.FieldSchema
 import org.apache.hadoop.hive.ql.metadata.{Table => HiveTable, _}
@@ -41,72 +40,14 @@ import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.execution.FileRelation
+import org.apache.spark.sql.execution.command.{CreateTableAsSelectLogicalPlan, CreateViewAsSelectLogicalCommand}
 import org.apache.spark.sql.execution.datasources.{Partition => _, _}
 import org.apache.spark.sql.execution.datasources.parquet.{DefaultSource => ParquetDefaultSource, ParquetRelation}
 import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.hive.execution.HiveNativeCommand
 import org.apache.spark.sql.hive.orc.{DefaultSource => OrcDefaultSource}
+import org.apache.spark.sql.internal.HiveSerDe
 import org.apache.spark.sql.types._
-
-private[hive] case class HiveSerDe(
-    inputFormat: Option[String] = None,
-    outputFormat: Option[String] = None,
-    serde: Option[String] = None)
-
-private[hive] object HiveSerDe {
-  /**
-   * Get the Hive SerDe information from the data source abbreviation string or classname.
-   *
-   * @param source Currently the source abbreviation can be one of the following:
-   *               SequenceFile, RCFile, ORC, PARQUET, and case insensitive.
-   * @param hiveConf Hive Conf
-   * @return HiveSerDe associated with the specified source
-   */
-  def sourceToSerDe(source: String, hiveConf: HiveConf): Option[HiveSerDe] = {
-    val serdeMap = Map(
-      "sequencefile" ->
-        HiveSerDe(
-          inputFormat = Option("org.apache.hadoop.mapred.SequenceFileInputFormat"),
-          outputFormat = Option("org.apache.hadoop.mapred.SequenceFileOutputFormat")),
-
-      "rcfile" ->
-        HiveSerDe(
-          inputFormat = Option("org.apache.hadoop.hive.ql.io.RCFileInputFormat"),
-          outputFormat = Option("org.apache.hadoop.hive.ql.io.RCFileOutputFormat"),
-          serde = Option(hiveConf.getVar(HiveConf.ConfVars.HIVEDEFAULTRCFILESERDE))),
-
-      "orc" ->
-        HiveSerDe(
-          inputFormat = Option("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat"),
-          outputFormat = Option("org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat"),
-          serde = Option("org.apache.hadoop.hive.ql.io.orc.OrcSerde")),
-
-      "parquet" ->
-        HiveSerDe(
-          inputFormat = Option("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"),
-          outputFormat = Option("org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat"),
-          serde = Option("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe")),
-
-      "textfile" ->
-        HiveSerDe(
-          inputFormat = Option("org.apache.hadoop.mapred.TextInputFormat"),
-          outputFormat = Option("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat")),
-
-      "avro" ->
-        HiveSerDe(
-          inputFormat = Option("org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat"),
-          outputFormat = Option("org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat"),
-          serde = Option("org.apache.hadoop.hive.serde2.avro.AvroSerDe")))
-
-    val key = source.toLowerCase match {
-      case s if s.startsWith("org.apache.spark.sql.parquet") => "parquet"
-      case s if s.startsWith("org.apache.spark.sql.orc") => "orc"
-      case s => s
-    }
-
-    serdeMap.get(key)
-  }
-}
 
 
 /**
@@ -115,17 +56,16 @@ private[hive] object HiveSerDe {
  * This is still used for things like creating data source tables, but in the future will be
  * cleaned up to integrate more nicely with [[HiveExternalCatalog]].
  */
-private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveContext)
-  extends Logging {
-
-  val conf = hive.conf
+private[hive] class HiveMetastoreCatalog(hive: SQLContext) extends Logging {
+  private val conf = hive.conf
+  private val sessionState = hive.sessionState.asInstanceOf[HiveSessionState]
+  private val client = hive.sharedState.asInstanceOf[HiveSharedState].metadataHive
+  private val hiveconf = sessionState.hiveconf
 
   /** A fully qualified identifier for a table (i.e., database.tableName) */
   case class QualifiedTableName(database: String, name: String)
 
-  private def getCurrentDatabase: String = {
-    hive.sessionState.catalog.getCurrentDatabase
-  }
+  private def getCurrentDatabase: String = hive.sessionState.catalog.getCurrentDatabase
 
   def getQualifiedTableName(tableIdent: TableIdentifier): QualifiedTableName = {
     QualifiedTableName(
@@ -298,7 +238,7 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
       CatalogTableType.MANAGED_TABLE
     }
 
-    val maybeSerDe = HiveSerDe.sourceToSerDe(provider, hive.sessionState.hiveconf)
+    val maybeSerDe = HiveSerDe.sourceToSerDe(provider, conf)
     val dataSource =
       DataSource(
         hive,
@@ -600,14 +540,14 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
   object ParquetConversions extends Rule[LogicalPlan] {
     private def shouldConvertMetastoreParquet(relation: MetastoreRelation): Boolean = {
       relation.tableDesc.getSerdeClassName.toLowerCase.contains("parquet") &&
-        hive.convertMetastoreParquet
+        sessionState.convertMetastoreParquet
     }
 
     private def convertToParquetRelation(relation: MetastoreRelation): LogicalRelation = {
       val defaultSource = new ParquetDefaultSource()
       val fileFormatClass = classOf[ParquetDefaultSource]
 
-      val mergeSchema = hive.convertMetastoreParquetWithSchemaMerging
+      val mergeSchema = sessionState.convertMetastoreParquetWithSchemaMerging
       val options = Map(
         ParquetRelation.MERGE_SCHEMA -> mergeSchema.toString,
         ParquetRelation.METASTORE_TABLE_NAME -> TableIdentifier(
@@ -652,7 +592,7 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
   object OrcConversions extends Rule[LogicalPlan] {
     private def shouldConvertMetastoreOrc(relation: MetastoreRelation): Boolean = {
       relation.tableDesc.getSerdeClassName.toLowerCase.contains("orc") &&
-        hive.convertMetastoreOrc
+        sessionState.convertMetastoreOrc
     }
 
     private def convertToOrcRelation(relation: MetastoreRelation): LogicalRelation = {
@@ -699,7 +639,8 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
       case p: LogicalPlan if !p.childrenResolved => p
       case p: LogicalPlan if p.resolved => p
 
-      case CreateViewAsSelect(table, child, allowExisting, replace, sql) if conf.nativeView =>
+      case CreateViewAsSelectLogicalCommand(table, child, allowExisting, replace, sql)
+          if conf.nativeView =>
         if (allowExisting && replace) {
           throw new AnalysisException(
             "It is not allowed to define a view with both IF NOT EXISTS and OR REPLACE.")
@@ -713,10 +654,10 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
           allowExisting,
           replace)
 
-      case CreateViewAsSelect(table, child, allowExisting, replace, sql) =>
+      case CreateViewAsSelectLogicalCommand(table, child, allowExisting, replace, sql) =>
         HiveNativeCommand(sql)
 
-      case p @ CreateTableAsSelect(table, child, allowExisting) =>
+      case p @ CreateTableAsSelectLogicalPlan(table, child, allowExisting) =>
         val schema = if (table.schema.nonEmpty) {
           table.schema
         } else {
@@ -727,7 +668,7 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
 
         val desc = table.copy(schema = schema)
 
-        if (hive.convertCTAS && table.storage.serde.isEmpty) {
+        if (sessionState.convertCTAS && table.storage.serde.isEmpty) {
           // Do the conversion when spark.sql.hive.convertCTAS is true and the query
           // does not specify any storage format (file format and storage handler).
           if (table.identifier.database.isDefined) {
@@ -815,14 +756,13 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
  * the information from the metastore.
  */
 class MetaStoreFileCatalog(
-    hive: HiveContext,
+    ctx: SQLContext,
     paths: Seq[Path],
     partitionSpecFromHive: PartitionSpec)
-  extends HDFSFileCatalog(hive, Map.empty, paths, Some(partitionSpecFromHive.partitionColumns)) {
-
+  extends HDFSFileCatalog(ctx, Map.empty, paths, Some(partitionSpecFromHive.partitionColumns)) {
 
   override def getStatus(path: Path): Array[FileStatus] = {
-    val fs = path.getFileSystem(hive.sparkContext.hadoopConfiguration)
+    val fs = path.getFileSystem(ctx.sparkContext.hadoopConfiguration)
     fs.listStatus(path)
   }
 
@@ -1081,29 +1021,4 @@ private[hive] object HiveMetastoreTypes {
     case NullType => "void"
     case udt: UserDefinedType[_] => toMetastoreType(udt.sqlType)
   }
-}
-
-private[hive] case class CreateTableAsSelect(
-    tableDesc: CatalogTable,
-    child: LogicalPlan,
-    allowExisting: Boolean) extends UnaryNode with Command {
-
-  override def output: Seq[Attribute] = Seq.empty[Attribute]
-  override lazy val resolved: Boolean =
-    tableDesc.identifier.database.isDefined &&
-      tableDesc.schema.nonEmpty &&
-      tableDesc.storage.serde.isDefined &&
-      tableDesc.storage.inputFormat.isDefined &&
-      tableDesc.storage.outputFormat.isDefined &&
-      childrenResolved
-}
-
-private[hive] case class CreateViewAsSelect(
-    tableDesc: CatalogTable,
-    child: LogicalPlan,
-    allowExisting: Boolean,
-    replace: Boolean,
-    sql: String) extends UnaryNode with Command {
-  override def output: Seq[Attribute] = Seq.empty[Attribute]
-  override lazy val resolved: Boolean = false
 }
