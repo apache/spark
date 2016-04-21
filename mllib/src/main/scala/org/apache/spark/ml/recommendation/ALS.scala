@@ -395,21 +395,17 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
       .map { row =>
         Rating(row.getInt(0), row.getInt(1), row.getFloat(2))
       }
-    val instr = Instrumentation.create(this, ratings)
-    instr.logParams(rank, numUserBlocks, numItemBlocks, implicitPrefs, alpha,
+    val instrLog = Instrumentation.create(this, ratings)
+    instrLog.logParams(rank, numUserBlocks, numItemBlocks, implicitPrefs, alpha,
                     userCol, itemCol, ratingCol, predictionCol, maxIter,
                     regParam, nonnegative, checkpointInterval, seed)
     val (userFactors, itemFactors) = ALS.train(ratings, rank = $(rank),
       numUserBlocks = $(numUserBlocks), numItemBlocks = $(numItemBlocks),
       maxIter = $(maxIter), regParam = $(regParam), implicitPrefs = $(implicitPrefs),
       alpha = $(alpha), nonnegative = $(nonnegative),
-      checkpointInterval = $(checkpointInterval), seed = $(seed))
+      checkpointInterval = $(checkpointInterval), seed = $(seed), instr = Option(instrLog))
     val userDF = userFactors.toDF("id", "features")
     val itemDF = itemFactors.toDF("id", "features")
-    val numUserFeatures = userDF.collect.size
-    val numItemFeatures = itemDF.collect.size
-    instr.logNumFeatures(numUserFeatures)
-    instr.logNumFeatures(numItemFeatures)
     val model = new ALSModel(uid, $(rank), userDF, itemDF).setParent(this)
     copyValues(model)
   }
@@ -615,7 +611,8 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
       intermediateRDDStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK,
       finalRDDStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK,
       checkpointInterval: Int = 10,
-      seed: Long = 0L)(
+      seed: Long = 0L,
+                           instr: Option[Instrumentation[ALS]] = None)(
       implicit ord: Ordering[ID]): (RDD[(ID, Array[Float])], RDD[(ID, Array[Float])]) = {
     require(intermediateRDDStorageLevel != StorageLevel.NONE,
       "ALS is not designed to run without persisting intermediate RDDs.")
@@ -713,14 +710,20 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
       .setName("itemFactors")
       .persist(finalRDDStorageLevel)
     if (finalRDDStorageLevel != StorageLevel.NONE) {
-      userIdAndFactors.count()
+      val numUserFeatures = userIdAndFactors.count()
       itemFactors.unpersist()
-      itemIdAndFactors.count()
+      val numItemFeatures = itemIdAndFactors.count()
       userInBlocks.unpersist()
       userOutBlocks.unpersist()
       itemInBlocks.unpersist()
       itemOutBlocks.unpersist()
       blockRatings.unpersist()
+      instr match {
+        case Some(i) =>
+          i.logNamedValue("numUserFeatures", numUserFeatures)
+          i.logNamedValue("numItemFeatures", numItemFeatures)
+        case None => // No Instrumentation, do nothing
+      }
     }
     (userIdAndFactors, itemIdAndFactors)
   }
