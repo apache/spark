@@ -30,7 +30,6 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.hive.execution.HiveScriptIOSchema
 import org.apache.spark.sql.types.{ByteType, DataType, IntegerType, NullType}
 
 /**
@@ -210,13 +209,12 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
   }
 
   private def scriptTransformationToSQL(plan: ScriptTransformation): String = {
-    val ioSchema = plan.ioschema.asInstanceOf[HiveScriptIOSchema]
-    val inputRowFormatSQL = ioSchema.inputRowFormatSQL.getOrElse(
+    val inputRowFormatSQL = plan.ioschema.inputRowFormatSQL.getOrElse(
       throw new UnsupportedOperationException(
-        s"unsupported row format ${ioSchema.inputRowFormat}"))
-    val outputRowFormatSQL = ioSchema.outputRowFormatSQL.getOrElse(
+        s"unsupported row format ${plan.ioschema.inputRowFormat}"))
+    val outputRowFormatSQL = plan.ioschema.outputRowFormatSQL.getOrElse(
       throw new UnsupportedOperationException(
-        s"unsupported row format ${ioSchema.outputRowFormat}"))
+        s"unsupported row format ${plan.ioschema.outputRowFormat}"))
 
     val outputSchema = plan.output.map { attr =>
       s"${attr.sql} ${attr.dataType.simpleString}"
