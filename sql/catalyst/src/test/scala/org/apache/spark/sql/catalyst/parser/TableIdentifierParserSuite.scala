@@ -36,7 +36,7 @@ class TableIdentifierParserSuite extends SparkFunSuite {
     "offline", "option", "outputdriver", "outputformat", "overwrite", "owner", "partitioned",
     "partitions", "plus", "pretty", "principals", "protection", "purge", "read", "readonly",
     "rebuild", "recordreader", "recordwriter", "reload", "rename", "repair", "replace",
-    "replication", "restrict", "rewrite", "role", "roles", "schema", "schemas", "second",
+    "replication", "restrict", "rewrite", "role", "roles", "schemas", "second",
     "serde", "serdeproperties", "server", "sets", "shared", "show", "show_database", "skewed",
     "sort", "sorted", "ssl", "statistics", "stored", "streamtable", "string", "struct", "tables",
     "tblproperties", "temporary", "terminated", "tinyint", "touch", "transactions", "unarchive",
