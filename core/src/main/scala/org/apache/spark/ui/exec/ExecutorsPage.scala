@@ -48,7 +48,7 @@ private[ui] case class ExecutorSummaryInfo(
 private[ui] class ExecutorsPage(
     parent: ExecutorsTab,
     threadDumpEnabled: Boolean,
-    clusterMode: String)
+    clusterMode: Option[String])
   extends WebUIPage("") {
   private val listener = parent.listener
   // When GCTimePercent is edited change ToolTips.TASK_TIME to match
@@ -164,7 +164,7 @@ private[ui] class ExecutorsPage(
       </td>
       {
         if (logsExist) {
-          if ("yarn".equals(clusterMode)) {
+          if (clusterMode.isDefined && "yarn".equals(clusterMode.get)) {
             <td>
               {
                 if (info.executorLogs.nonEmpty) {
