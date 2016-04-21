@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.JsonTuple
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, ScriptTransformation}
-import org.apache.spark.sql.execution.command.{CreateTable, CreateTableLike, CreateViewAsSelectLogicalCommand}
+import org.apache.spark.sql.execution.command.{CreateTable, CreateTableLike, CreateTableAsSelectLogicalPlan, CreateViewAsSelectLogicalCommand}
 import org.apache.spark.sql.hive.execution.HiveNativeCommand
 import org.apache.spark.sql.hive.test.TestHive
 
@@ -39,7 +39,7 @@ class HiveDDLCommandSuite extends PlanTest {
   private def extractTableDesc(sql: String): (CatalogTable, Boolean) = {
     parser.parsePlan(sql).collect {
       case CreateTable(desc, allowExisting) => (desc, allowExisting)
-      case CreateTableAsSelect(desc, _, allowExisting) => (desc, allowExisting)
+      case CreateTableAsSelectLogicalPlan(desc, _, allowExisting) => (desc, allowExisting)
       case CreateViewAsSelectLogicalCommand(desc, _, allowExisting, _, _) => (desc, allowExisting)
     }.head
   }

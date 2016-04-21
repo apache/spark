@@ -40,13 +40,13 @@ import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.execution.FileRelation
-import org.apache.spark.sql.execution.command.CreateViewAsSelectLogicalCommand
+import org.apache.spark.sql.execution.command.{CreateTableAsSelectLogicalPlan, CreateViewAsSelectLogicalCommand}
 import org.apache.spark.sql.execution.datasources.{Partition => _, _}
 import org.apache.spark.sql.execution.datasources.parquet.{DefaultSource => ParquetDefaultSource, ParquetRelation}
 import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.hive.execution.HiveNativeCommand
 import org.apache.spark.sql.hive.orc.{DefaultSource => OrcDefaultSource}
-import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
+import org.apache.spark.sql.internal.HiveSerDe
 import org.apache.spark.sql.types._
 
 
@@ -657,7 +657,7 @@ private[hive] class HiveMetastoreCatalog(hive: SQLContext) extends Logging {
       case CreateViewAsSelectLogicalCommand(table, child, allowExisting, replace, sql) =>
         HiveNativeCommand(sql)
 
-      case p @ CreateTableAsSelect(table, child, allowExisting) =>
+      case p @ CreateTableAsSelectLogicalPlan(table, child, allowExisting) =>
         val schema = if (table.schema.nonEmpty) {
           table.schema
         } else {
@@ -1021,19 +1021,4 @@ private[hive] object HiveMetastoreTypes {
     case NullType => "void"
     case udt: UserDefinedType[_] => toMetastoreType(udt.sqlType)
   }
-}
-
-private[hive] case class CreateTableAsSelect(
-    tableDesc: CatalogTable,
-    child: LogicalPlan,
-    allowExisting: Boolean) extends UnaryNode with Command {
-
-  override def output: Seq[Attribute] = Seq.empty[Attribute]
-  override lazy val resolved: Boolean =
-    tableDesc.identifier.database.isDefined &&
-      tableDesc.schema.nonEmpty &&
-      tableDesc.storage.serde.isDefined &&
-      tableDesc.storage.inputFormat.isDefined &&
-      tableDesc.storage.outputFormat.isDefined &&
-      childrenResolved
 }

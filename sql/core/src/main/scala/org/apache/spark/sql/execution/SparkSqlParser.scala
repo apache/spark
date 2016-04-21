@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogStorageForma
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
-import org.apache.spark.sql.execution.command.{CreateViewAsSelectLogicalCommand, DescribeCommand => _, _}
+import org.apache.spark.sql.execution.command.{CreateTableAsSelectLogicalPlan, CreateViewAsSelectLogicalCommand, DescribeCommand => _, _}
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 
@@ -817,6 +817,101 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       case "file" => AddFile(remainder(ctx.identifier).trim)
       case "jar" => AddJar(remainder(ctx.identifier).trim)
       case other => throw new ParseException(s"Unsupported resource type '$other'.", ctx)
+    }
+  }
+
+  /**
+   * Create a table, returning either a [[CreateTable]] or a [[CreateTableAsSelectLogicalPlan]].
+   *
+   * This is not used to create datasource tables, which is handled through
+   * "CREATE TABLE ... USING ...".
+   *
+   * Note: several features are currently not supported - temporary tables, bucketing,
+   * skewed columns and storage handlers (STORED BY).
+   *
+   * Expected format:
+   * {{{
+   *   CREATE [TEMPORARY] [EXTERNAL] TABLE [IF NOT EXISTS] [db_name.]table_name
+   *   [(col1 data_type [COMMENT col_comment], ...)]
+   *   [COMMENT table_comment]
+   *   [PARTITIONED BY (col3 data_type [COMMENT col_comment], ...)]
+   *   [CLUSTERED BY (col1, ...) [SORTED BY (col1 [ASC|DESC], ...)] INTO num_buckets BUCKETS]
+   *   [SKEWED BY (col1, col2, ...) ON ((col_value, col_value, ...), ...) [STORED AS DIRECTORIES]]
+   *   [ROW FORMAT row_format]
+   *   [STORED AS file_format | STORED BY storage_handler_class [WITH SERDEPROPERTIES (...)]]
+   *   [LOCATION path]
+   *   [TBLPROPERTIES (property_name=property_value, ...)]
+   *   [AS select_statement];
+   * }}}
+   */
+  override def visitCreateTable(ctx: CreateTableContext): LogicalPlan = withOrigin(ctx) {
+    val (name, temp, ifNotExists, external) = visitCreateTableHeader(ctx.createTableHeader)
+    // TODO: implement temporary tables
+    if (temp) {
+      throw new ParseException(
+        "CREATE TEMPORARY TABLE is not supported yet. " +
+          "Please use registerTempTable as an alternative.", ctx)
+    }
+    if (ctx.skewSpec != null) {
+      throw new ParseException("Operation not allowed: CREATE TABLE ... SKEWED BY ...", ctx)
+    }
+    if (ctx.bucketSpec != null) {
+      throw new ParseException("Operation not allowed: CREATE TABLE ... CLUSTERED BY ...", ctx)
+    }
+    val tableType = if (external) {
+      CatalogTableType.EXTERNAL_TABLE
+    } else {
+      CatalogTableType.MANAGED_TABLE
+    }
+    val comment = Option(ctx.STRING).map(string)
+    val partitionCols = Option(ctx.partitionColumns).toSeq.flatMap(visitCatalogColumns)
+    val cols = Option(ctx.columns).toSeq.flatMap(visitCatalogColumns)
+    val properties = Option(ctx.tablePropertyList).map(visitTablePropertyList).getOrElse(Map.empty)
+    val selectQuery = Option(ctx.query).map(plan)
+
+    // Note: Hive requires partition columns to be distinct from the schema, so we need
+    // to include the partition columns here explicitly
+    val schema = cols ++ partitionCols
+
+    // Storage format
+    val defaultStorage: CatalogStorageFormat = {
+      val defaultStorageType = conf.getConfString("hive.default.fileformat", "textfile")
+      val defaultHiveSerde = HiveSerDe.sourceToSerDe(defaultStorageType, conf)
+      CatalogStorageFormat(
+        locationUri = None,
+        inputFormat = defaultHiveSerde.flatMap(_.inputFormat)
+          .orElse(Some("org.apache.hadoop.mapred.TextInputFormat")),
+        outputFormat = defaultHiveSerde.flatMap(_.outputFormat)
+          .orElse(Some("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat")),
+        // Note: Keep this unspecified because we use the presence of the serde to decide
+        // whether to convert a table created by CTAS to a datasource table.
+        serde = None,
+        serdeProperties = Map())
+    }
+    val fileStorage = Option(ctx.createFileFormat).map(visitCreateFileFormat)
+      .getOrElse(EmptyStorageFormat)
+    val rowStorage = Option(ctx.rowFormat).map(visitRowFormat).getOrElse(EmptyStorageFormat)
+    val location = Option(ctx.locationSpec).map(visitLocationSpec)
+    val storage = CatalogStorageFormat(
+      locationUri = location,
+      inputFormat = fileStorage.inputFormat.orElse(defaultStorage.inputFormat),
+      outputFormat = fileStorage.outputFormat.orElse(defaultStorage.outputFormat),
+      serde = rowStorage.serde.orElse(fileStorage.serde).orElse(defaultStorage.serde),
+      serdeProperties = rowStorage.serdeProperties ++ fileStorage.serdeProperties)
+
+    // TODO support the sql text - have a proper location for this!
+    val tableDesc = CatalogTable(
+      identifier = name,
+      tableType = tableType,
+      storage = storage,
+      schema = schema,
+      partitionColumnNames = partitionCols.map(_.name),
+      properties = properties,
+      comment = comment)
+
+    selectQuery match {
+      case Some(q) => CreateTableAsSelectLogicalPlan(tableDesc, q, ifNotExists)
+      case None => CreateTable(tableDesc, ifNotExists)
     }
   }
 
