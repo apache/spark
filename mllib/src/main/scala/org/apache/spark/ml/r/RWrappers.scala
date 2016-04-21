@@ -33,7 +33,7 @@ private[r] object RWrappers extends MLReader[Object] {
     val rMetadata = parse(rMetadataStr)
     val className = (rMetadata \ "class").extract[String]
     className match {
-      case NaiveBayesWrapper.getClass.getName => NaiveBayesWrapper.load(path)
+      case "org.apache.spark.ml.r.NaiveBayesWrapper" => NaiveBayesWrapper.load(path)
       case _ =>
         throw new SparkException(s"SparkR ml.load does not support load $className")
     }
