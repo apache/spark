@@ -1351,7 +1351,7 @@ The code below shows an accumulator being used to add up the elements of an arra
 
 {% highlight scala %}
 scala> val accum = sc.accumulator(0, "My Accumulator")
-accum: spark.Accumulator[Int] = 0
+accum: org.apache.spark.Accumulator[Int] = 0
 
 scala> sc.parallelize(Array(1, 2, 3, 4)).foreach(x => accum += x)
 ...
