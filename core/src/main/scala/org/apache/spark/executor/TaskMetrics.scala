@@ -143,23 +143,23 @@ class TaskMetrics private[spark] () extends Serializable {
   val shuffleWriteMetrics: ShuffleWriteMetrics = new ShuffleWriteMetrics()
 
   /**
-   * Temporary list of [[ShuffleReadMetrics]], one per shuffle dependency.
+   * A list of [[TempShuffleReadMetrics]], one per shuffle dependency.
    *
    * A task may have multiple shuffle readers for multiple dependencies. To avoid synchronization
-   * issues from readers in different threads, in-progress tasks use a [[ShuffleReadMetrics]] for
-   * each dependency and merge these metrics before reporting them to the driver.
+   * issues from readers in different threads, in-progress tasks use a [[TempShuffleReadMetrics]]
+   * for each dependency and merge these metrics before reporting them to the driver.
    */
-  @transient private lazy val tempShuffleReadMetrics = new ArrayBuffer[ShuffleReadMetrics]
+  @transient private lazy val tempShuffleReadMetrics = new ArrayBuffer[TempShuffleReadMetrics]
 
   /**
-   * Create a temporary [[ShuffleReadMetrics]] for a particular shuffle dependency.
+   * Create a [[TempShuffleReadMetrics]] for a particular shuffle dependency.
    *
    * All usages are expected to be followed by a call to [[mergeShuffleReadMetrics]], which
    * merges the temporary values synchronously. Otherwise, all temporary data collected will
    * be lost.
    */
-  private[spark] def createTempShuffleReadMetrics(): ShuffleReadMetrics = synchronized {
-    val readMetrics = new ShuffleReadMetrics
+  private[spark] def createTempShuffleReadMetrics(): TempShuffleReadMetrics = synchronized {
+    val readMetrics = new TempShuffleReadMetrics
     tempShuffleReadMetrics += readMetrics
     readMetrics
   }
@@ -195,9 +195,8 @@ class TaskMetrics private[spark] () extends Serializable {
    |        OTHER THINGS        |
    * ========================== */
 
-  private[spark] def registerAccums(sc: SparkContext): Unit = {
+  private[spark] def registerForCleanup(sc: SparkContext): Unit = {
     internalAccums.foreach { accum =>
-      Accumulators.register(accum)
       sc.cleaner.foreach(_.registerAccumulatorForCleanup(accum))
     }
   }
@@ -244,7 +243,14 @@ private[spark] class ListenerTaskMetrics(accumUpdates: Seq[AccumulableInfo]) ext
 
 private[spark] object TaskMetrics extends Logging {
 
-  def empty: TaskMetrics = new TaskMetrics
+  /**
+   * Create an empty task metrics that doesn't register its accumulators.
+   */
+  def empty: TaskMetrics = {
+    val metrics = new TaskMetrics
+    metrics.internalAccums.foreach(acc => Accumulators.remove(acc.id))
+    metrics
+  }
 
   /**
    * Create a new accumulator representing an internal task metric.
@@ -253,7 +259,7 @@ private[spark] object TaskMetrics extends Logging {
       initialValue: T,
       name: String,
       param: AccumulatorParam[T]): Accumulator[T] = {
-    new Accumulator[T](initialValue, param, Some(name), internal = true, countFailedValues = true)
+    new Accumulator[T](initialValue, param, Some(name), countFailedValues = true)
   }
 
   def createLongAccum(name: String): Accumulator[Long] = {
@@ -281,6 +287,9 @@ private[spark] object TaskMetrics extends Logging {
   def fromAccumulatorUpdates(accumUpdates: Seq[AccumulableInfo]): TaskMetrics = {
     val definedAccumUpdates = accumUpdates.filter(_.update.isDefined)
     val metrics = new ListenerTaskMetrics(definedAccumUpdates)
+    // We don't register this [[ListenerTaskMetrics]] for cleanup, and this is only used to post
+    // event, we should un-register all accumulators immediately.
+    metrics.internalAccums.foreach(acc => Accumulators.remove(acc.id))
     definedAccumUpdates.filter(_.internal).foreach { accum =>
       metrics.internalAccums.find(_.name == accum.name).foreach(_.setValueAny(accum.update.get))
     }
