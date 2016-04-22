@@ -676,8 +676,11 @@ class PersistenceTest(PySparkTestCase):
         if isinstance(m1, JavaParams):
             self.assertEqual(len(m1.params), len(m2.params))
             for p in m1.params:
-                self.assertEqual(m1.getOrDefault(p), m2.getOrDefault(p))
-                self.assertEqual(p.parent, m2.getParam(p.name).parent)
+                # Prevent key not found error in case of some param neither in paramMap and
+                # defaultParamMap.
+                if p in m1._paramMap or p in m1._defaultParamMap:
+                    self.assertEqual(m1.getOrDefault(p), m2.getOrDefault(p))
+                    self.assertEqual(p.parent, m2.getParam(p.name).parent)
         elif isinstance(m1, Pipeline):
             self.assertEqual(len(m1.getStages()), len(m2.getStages()))
             for s1, s2 in zip(m1.getStages(), m2.getStages()):
@@ -713,8 +716,10 @@ class PersistenceTest(PySparkTestCase):
 
             # Check the equality of estimator parameter maps (value and parent).
             self.assertEqual(len(m1.getEstimatorParamMaps()), len(m2.getEstimatorParamMaps()))
-            for map1, map2 in zip(m1.getEstimatorParamMaps(), m2.getEstimatorParamMaps()):
-                self.assertDictEqual(map1, map2)
+            for epm1, epm2 in zip(m1.getEstimatorParamMaps(), m2.getEstimatorParamMaps()):
+                self.assertEqual(len(epm1), len(epm2))
+                for pair in epm1:
+                    self.assertIn(pair, epm2)
             self.assertEqual(m1.estimatorParamMaps.parent, m2.estimatorParamMaps.parent)
 
             # Check extra attributes/params.
@@ -792,6 +797,7 @@ class PersistenceTest(PySparkTestCase):
             except OSError:
                 pass
 
+    # TODO: Add OneVsRest as part of nested meta-algorithms.
     def test_nested_meta_algorithms_persistence(self):
         sqlContext = SQLContext(self.sc)
         temp_path = tempfile.mkdtemp()
@@ -802,35 +808,50 @@ class PersistenceTest(PySparkTestCase):
                 Row(label=0.0, features=Vectors.dense(1.0, 1.2)),
                 Row(label=1.0, features=Vectors.sparse(2, [], [])),
                 Row(label=1.0, features=Vectors.sparse(2, [0], [0.1])),
-                Row(label=1.0, features=Vectors.sparse(2, [1], [0.1])),
-                Row(label=2.0, features=Vectors.dense(0.5, 0.5)),
-                Row(label=2.0, features=Vectors.dense(0.3, 0.5)),
-                Row(label=2.0, features=Vectors.dense(0.5, 0.6))])
+                Row(label=1.0, features=Vectors.sparse(2, [1], [0.1]))])
 
             lr = LogisticRegression()
 
-            ovr = OneVsRest(classifier=lr)
+            tvs_grid = ParamGridBuilder().addGrid(lr.maxIter, [5, 10]).build()
+            tvs_evaluator = BinaryClassificationEvaluator()
+            tvs = TrainValidationSplit(estimator=lr, estimatorParamMaps=tvs_grid,
+                                       evaluator=tvs_evaluator)
 
-            #tvs_grid = ParamGridBuilder().addGrid(lr.maxIter, [1, 5]).build()
-            #tvs_evaluator = MulticlassClassificationEvaluator()
-            #tvs = TrainValidationSplit(estimator=ovr, estimatorParamMaps=tvs_grid,
-            #                           evaluator=tvs_evaluator, trainRatio=1)
+            cv_grid = ParamGridBuilder().addGrid(tvs.trainRatio, [0.5, 0.7]).build()
+            cv_evaluator = BinaryClassificationEvaluator()
+            cv = CrossValidator(estimator=tvs, estimatorParamMaps=cv_grid, evaluator=cv_evaluator,
+                                numFolds=2)
 
-            #cv_grid = ParamGridBuilder().addGrid(lr.regParam, [0.1, 0.01]).build()
-            #cv_evaluator = MulticlassClassificationEvaluator()
-            #cv = CrossValidator(estimator=tvs, estimatorParamMaps=cv_grid, evaluator=cv_evaluator,
-            #                    numFolds=2)
+            model = cv.fit(df)
 
-            model = ovr.fit(df)
+            path = temp_path + "/nested-meta-algorithm-cv-tvs"
+            cv.save(path)
+            loaded = CrossValidator.load(path)
+            self._compare_pipelines(cv, loaded)
 
-            path = temp_path + "/nested-meta-algorithm"
-            ovr.save(path)
-            loaded = OneVsRest.load(path)
-            self._compare_pipelines(ovr, loaded)
-
-            model_path = temp_path + "/nested-meta-model"
+            model_path = temp_path + "/nested-meta-model-cv-tvs"
             model.save(model_path)
-            loaded_model = OneVsRestModel.load(model_path)
+            loaded_model = CrossValidatorModel.load(model_path)
+            self._compare_pipelines(model, loaded_model)
+
+            cv_grid = ParamGridBuilder().addGrid(lr.maxIter, [5, 10]).build()
+            cv_evaluator = BinaryClassificationEvaluator()
+            cv = CrossValidator(estimator=lr, estimatorParamMaps=cv_grid, evaluator=cv_evaluator)
+
+            tvs_grid = ParamGridBuilder().addGrid(cv.numFolds, [2, 3]).build()
+            tvs_evaluator = BinaryClassificationEvaluator()
+            tvs = TrainValidationSplit(
+                estimator=cv, estimatorParamMaps=tvs_grid, evaluator=tvs_evaluator)
+
+            model = tvs.fit(df)
+            path = temp_path + "/nested-meta-algorithm-tvs-cv"
+            tvs.save(path)
+            loaded = TrainValidationSplit.load(path)
+            self._compare_pipelines(tvs, loaded)
+
+            model_path = temp_path + "/nested-meta-model-tvs-cv"
+            model.save(model_path)
+            loaded_model = TrainValidationSplitModel.load(model_path)
             self._compare_pipelines(model, loaded_model)
         finally:
             try:

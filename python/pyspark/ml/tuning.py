@@ -437,22 +437,18 @@ class CrossValidator(Estimator, CrossValidatorParams, MLReadable, MLWritable):
         return _java_obj
 
     def _transfer_param_map_to_java(self, pyParamMap):
-        # Half-baked java object for getting its parameters.
-        _java_obj = JavaParams._new_java_obj("org.apache.spark.ml.tuning.CrossValidator", self.uid)
+        _java_obj = self.copy(pyParamMap)._to_java()
 
-        paramMap =\
-            super(CrossValidator, self)._transfer_param_map_to_java_impl(pyParamMap, _java_obj)
+        paramMap = super(CrossValidator, self)\
+            ._transfer_param_map_to_java_impl(pyParamMap, _java_obj)
 
         return paramMap
 
     def _transfer_param_map_from_java(self, javaParamMap):
-        # Half-baked java object for getting its parameters.
-        _java_obj = JavaParams\
-            ._new_java_obj("org.apache.spark.ml.tuning.CrossValidator", self.uid)\
-            .copy(javaParamMap)
+        _java_obj = self._to_java().copy(javaParamMap)
 
-        paramMap =\
-            super(CrossValidator, self)._transfer_param_map_from_java_impl(javaParamMap, _java_obj)
+        paramMap = super(CrossValidator, self)\
+            ._transfer_param_map_from_java_impl(javaParamMap, _java_obj)
 
         return paramMap
 
@@ -549,12 +545,7 @@ class CrossValidatorModel(Model, CrossValidatorParams, MLReadable, MLWritable):
 
     def _transfer_param_map_to_java(self, pyParamMap):
 
-        sc = SparkContext._active_spark_context
-
-        # Half-baked java object for getting its parameters.
-        _java_obj = JavaParams\
-            ._new_java_obj("org.apache.spark.ml.tuning.CrossValidatorModel",
-                           self.uid, self.bestModel._to_java(), _py2java(sc, []))
+        _java_obj = self.copy(pyParamMap)._to_java()
 
         paramMap = super(CrossValidatorModel, self)\
             ._transfer_param_map_to_java_impl(pyParamMap, _java_obj)
@@ -563,13 +554,7 @@ class CrossValidatorModel(Model, CrossValidatorParams, MLReadable, MLWritable):
 
     def _transfer_param_map_from_java(self, javaParamMap):
 
-        sc = SparkContext._active_spark_context
-
-        # Half-baked java object for getting its parameters.
-        _java_obj = JavaParams\
-            ._new_java_obj("org.apache.spark.ml.tuning.CrossValidatorModel",
-                           self.uid, self.bestModel._to_java(), _py2java(sc, []))\
-            .copy(javaParamMap)
+        _java_obj = self._to_java().copy(javaParamMap)
 
         paramMap = super(CrossValidatorModel, self)\
             ._transfer_param_map_from_java_impl(javaParamMap, _java_obj)
@@ -581,7 +566,8 @@ class TrainValidationSplitParams(ValidatorParams):
     trainRatio = Param(
         Params._dummy(),
         "trainRatio",
-        "Param for ratio between train and validation data. Must be between 0 and 1.")
+        "Param for ratio between train and validation data. Must be between 0 and 1.",
+        typeConverter=TypeConverters.toFloat)
 
     def setTrainRatio(self, value):
         """
@@ -602,7 +588,7 @@ class TrainValidationSplitParams(ValidatorParams):
 
         if self.trainRatio in pyParamMap:
             java_num_folds_param = java_obj.getParam(self.trainRatio.name)
-            paramMap.put([java_num_folds_param.w(self.getTrainRatio())])
+            paramMap.put([java_num_folds_param.w(java_obj.getTrainRatio())])
 
         return paramMap
 
@@ -612,7 +598,7 @@ class TrainValidationSplitParams(ValidatorParams):
 
         java_num_folds_param = java_obj.getParam(self.trainRatio.name)
         if javaParamMap.contains(java_num_folds_param):
-            paramMap[self.trainRatio] = java_obj.getNumFolds()
+            paramMap[self.trainRatio] = java_obj.getTrainRatio()
 
         return paramMap
 
@@ -762,9 +748,7 @@ class TrainValidationSplit(Estimator, TrainValidationSplitParams, MLReadable, ML
         return _java_obj
 
     def _transfer_param_map_to_java(self, pyParamMap):
-        # Half-baked java object for getting its parameters.
-        _java_obj = JavaParams\
-            ._new_java_obj("org.apache.spark.ml.tuning.TrainValidationSplit", self.uid)
+        _java_obj = self.copy(pyParamMap)._to_java()
 
         paramMap =super(TrainValidationSplit, self)\
             ._transfer_param_map_to_java_impl(pyParamMap, _java_obj)
@@ -772,10 +756,7 @@ class TrainValidationSplit(Estimator, TrainValidationSplitParams, MLReadable, ML
         return paramMap
 
     def _transfer_param_map_from_java(self, javaParamMap):
-        # Half-baked java object for getting its parameters.
-        _java_obj = JavaParams\
-            ._new_java_obj("org.apache.spark.ml.tuning.TrainValidationSplit", self.uid)\
-            .copy(javaParamMap)
+        _java_obj = self._to_java().copy(javaParamMap)
 
         paramMap = super(TrainValidationSplit, self)\
             ._transfer_param_map_from_java_impl(javaParamMap, _java_obj)
@@ -875,13 +856,7 @@ class TrainValidationSplitModel(Model, TrainValidationSplitParams, MLReadable, M
         return _java_obj
 
     def _transfer_param_map_to_java(self, pyParamMap):
-
-        sc = SparkContext._active_spark_context
-
-        # Half-baked java object for getting its parameters.
-        _java_obj = JavaParams\
-            ._new_java_obj("org.apache.spark.ml.tuning.TrainValidationSplitModel",
-                           self.uid, self.bestModel._to_java(), _py2java(sc, []))
+        _java_obj = self.copy(pyParamMap)._to_java()
 
         paramMap = super(TrainValidationSplitModel, self)\
             ._transfer_param_map_to_java_impl(pyParamMap, _java_obj)
@@ -889,14 +864,7 @@ class TrainValidationSplitModel(Model, TrainValidationSplitParams, MLReadable, M
         return paramMap
 
     def _transfer_param_map_from_java(self, javaParamMap):
-
-        sc = SparkContext._active_spark_context
-
-        # Half-baked java object for getting its parameters.
-        _java_obj = JavaParams\
-            ._new_java_obj("org.apache.spark.ml.tuning.TrainValidationSplitModel",
-                           self.uid, self.bestModel._to_java(), _py2java(sc, []))\
-            .copy(javaParamMap)
+        _java_obj = self._to_java().copy(javaParamMap)
 
         paramMap = super(TrainValidationSplitModel, self)\
             ._transfer_param_map_from_java_impl(javaParamMap, _java_obj)
