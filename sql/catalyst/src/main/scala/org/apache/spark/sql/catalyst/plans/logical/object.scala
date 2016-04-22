@@ -87,7 +87,7 @@ case class SerializeFromObject(
   // We can't estimate the size of ObjectType. We implement statistics here to avoid
   // directly estimate any child plan which produces domain objects as output.
   override def statistics: Statistics = {
-    if (child.output.find(_.dataType.isInstanceOf[ObjectType]).isDefined) {
+    if (child.output.head.dataType.isInstanceOf[ObjectType]) {
       Statistics(sizeInBytes = Long.MaxValue)
     } else {
       super.statistics
