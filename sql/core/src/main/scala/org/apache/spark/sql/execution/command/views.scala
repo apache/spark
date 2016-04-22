@@ -25,12 +25,20 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable, Catal
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 
+
 /**
  * Create Hive view on non-hive-compatible tables by specifying schema ourselves instead of
  * depending on Hive meta-store.
+ *
+ * @param tableDesc the catalog table
+ * @param child the logical plan that represents the view; this is used to generate a canonicalized
+ *              version of the SQL that can be saved in the catalog.
+ * @param allowExisting if true, and if the view already exists, noop; if false, and if the view
+ *                already exists, throws analysis exception.
+ * @param replace if true, and if the view already exists, updates it; if false, and if the view
+ *                already exists, throws analysis exception.
+ * @param sql the original sql
  */
-// TODO: Note that this class can NOT canonicalize the view SQL string entirely, which is different
-// from Hive and may not work for some cases like create view on self join.
 case class CreateViewCommand(
     tableDesc: CatalogTable,
     child: LogicalPlan,
@@ -38,6 +46,9 @@ case class CreateViewCommand(
     replace: Boolean,
     sql: String)
   extends RunnableCommand {
+
+  // TODO: Note that this class can NOT canonicalize the view SQL string entirely, which is
+  // different from Hive and may not work for some cases like create view on self join.
 
   override def output: Seq[Attribute] = Seq.empty[Attribute]
 
