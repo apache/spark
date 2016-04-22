@@ -37,7 +37,7 @@ setMethod("initialize", "GroupedData", function(.Object, sgd) {
   .Object
 })
 
-#' @rdname groupedData
+#' @rdname GroupedData
 groupedData <- function(sgd) {
   new("GroupedData", sgd)
 }
