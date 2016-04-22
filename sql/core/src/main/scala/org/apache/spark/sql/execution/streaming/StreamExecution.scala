@@ -369,6 +369,7 @@ class StreamExecution(
   def awaitOffset(source: Source, newOffset: Offset): Unit = {
     def notDone = {
       val localCommittedOffsets = committedOffsets
+      logInfo(s"Current offset for $source = " + localCommittedOffsets.get(source))
       !localCommittedOffsets.contains(source) || localCommittedOffsets(source) < newOffset
     }
 
