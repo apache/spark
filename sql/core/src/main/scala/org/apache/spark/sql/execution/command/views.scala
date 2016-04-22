@@ -41,11 +41,10 @@ case class CreateViewCommand(
 
   override def output: Seq[Attribute] = Seq.empty[Attribute]
 
-  override lazy val resolved: Boolean = false
+  override def children: Seq[LogicalPlan] = child :: Nil
 
-  private val childSchema = child.output
+  private lazy val childSchema = child.output
 
-  require(tableDesc.schema == Nil || tableDesc.schema.length == childSchema.length)
   require(tableDesc.tableType == CatalogTableType.VIRTUAL_VIEW)
   require(tableDesc.viewText.isDefined)
 
@@ -57,6 +56,7 @@ case class CreateViewCommand(
   }
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
+    require(tableDesc.schema == Nil || tableDesc.schema.length == childSchema.length)
     val sessionState = sqlContext.sessionState
 
     if (sessionState.catalog.tableExists(tableIdentifier)) {
