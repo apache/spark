@@ -277,7 +277,7 @@ class LinearRegressionWithSGD(object):
           A condition which decides iteration termination.
           (default: 0.001)
         """
-        warnings.warn("Deprecated. Use ml.regression.LinearRegression.")
+        warnings.warn("Deprecated in  2.0.0. Use ml.regression.LinearRegression.")
 
         def train(rdd, i):
             return callMLlibFunc("trainLinearRegressionModelWithSGD", rdd, int(iterations),
