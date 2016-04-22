@@ -41,7 +41,7 @@ case class Sort(
     global: Boolean,
     child: SparkPlan,
     testSpillFrequency: Int = 0)
-  extends UnaryNode with CodegenSupport {
+  extends UnaryExecNode with CodegenSupport {
 
   override def output: Seq[Attribute] = child.output
 

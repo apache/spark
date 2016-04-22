@@ -59,7 +59,7 @@ case class ScriptTransformation(
     output: Seq[Attribute],
     child: SparkPlan,
     ioschema: HiveScriptIOSchema)(@transient private val hiveconf: HiveConf)
-  extends UnaryNode {
+  extends UnaryExecNode {
 
   override protected def otherCopyArgs: Seq[HiveConf] = hiveconf :: Nil
 

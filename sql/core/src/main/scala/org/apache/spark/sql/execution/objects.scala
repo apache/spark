@@ -34,7 +34,7 @@ import org.apache.spark.sql.types.{DataType, ObjectType}
 case class DeserializeToObject(
     deserializer: Expression,
     outputObjAttr: Attribute,
-    child: SparkPlan) extends UnaryNode with CodegenSupport {
+    child: SparkPlan) extends UnaryExecNode with CodegenSupport {
 
   override def output: Seq[Attribute] = outputObjAttr :: Nil
   override def producedAttributes: AttributeSet = AttributeSet(outputObjAttr)
@@ -69,7 +69,7 @@ case class DeserializeToObject(
  */
 case class SerializeFromObject(
     serializer: Seq[NamedExpression],
-    child: SparkPlan) extends UnaryNode with CodegenSupport {
+    child: SparkPlan) extends UnaryExecNode with CodegenSupport {
 
   override def output: Seq[Attribute] = serializer.map(_.toAttribute)
 
@@ -139,7 +139,7 @@ trait ObjectOperator extends SparkPlan {
 case class MapPartitions(
     func: Iterator[Any] => Iterator[Any],
     outputObjAttr: Attribute,
-    child: SparkPlan) extends UnaryNode with ObjectOperator {
+    child: SparkPlan) extends UnaryExecNode with ObjectOperator {
 
   override def output: Seq[Attribute] = outputObjAttr :: Nil
   override def producedAttributes: AttributeSet = AttributeSet(outputObjAttr)
@@ -163,7 +163,7 @@ case class MapPartitions(
 case class MapElements(
     func: AnyRef,
     outputObjAttr: Attribute,
-    child: SparkPlan) extends UnaryNode with ObjectOperator with CodegenSupport {
+    child: SparkPlan) extends UnaryExecNode with ObjectOperator with CodegenSupport {
 
   override def output: Seq[Attribute] = outputObjAttr :: Nil
   override def producedAttributes: AttributeSet = AttributeSet(outputObjAttr)
@@ -215,7 +215,7 @@ case class AppendColumns(
     func: Any => Any,
     deserializer: Expression,
     serializer: Seq[NamedExpression],
-    child: SparkPlan) extends UnaryNode with ObjectOperator {
+    child: SparkPlan) extends UnaryExecNode with ObjectOperator {
 
   override def output: Seq[Attribute] = child.output ++ serializer.map(_.toAttribute)
 
@@ -242,7 +242,7 @@ case class AppendColumnsWithObject(
     func: Any => Any,
     inputSerializer: Seq[NamedExpression],
     newColumnsSerializer: Seq[NamedExpression],
-    child: SparkPlan) extends UnaryNode with ObjectOperator {
+    child: SparkPlan) extends UnaryExecNode with ObjectOperator {
 
   override def output: Seq[Attribute] = (inputSerializer ++ newColumnsSerializer).map(_.toAttribute)
 
@@ -276,7 +276,7 @@ case class MapGroups(
     groupingAttributes: Seq[Attribute],
     dataAttributes: Seq[Attribute],
     outputObjAttr: Attribute,
-    child: SparkPlan) extends UnaryNode with ObjectOperator {
+    child: SparkPlan) extends UnaryExecNode with ObjectOperator {
 
   override def output: Seq[Attribute] = outputObjAttr :: Nil
   override def producedAttributes: AttributeSet = AttributeSet(outputObjAttr)
@@ -321,7 +321,7 @@ case class CoGroup(
     rightAttr: Seq[Attribute],
     outputObjAttr: Attribute,
     left: SparkPlan,
-    right: SparkPlan) extends BinaryNode with ObjectOperator {
+    right: SparkPlan) extends BinaryExecNode with ObjectOperator {
 
   override def output: Seq[Attribute] = outputObjAttr :: Nil
   override def producedAttributes: AttributeSet = AttributeSet(outputObjAttr)

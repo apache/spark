@@ -85,7 +85,7 @@ case class Window(
     partitionSpec: Seq[Expression],
     orderSpec: Seq[SortOrder],
     child: SparkPlan)
-  extends UnaryNode {
+  extends UnaryExecNode {
 
   override def output: Seq[Attribute] =
     child.output ++ windowExpression.map(_.toAttribute)

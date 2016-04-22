@@ -32,7 +32,7 @@ import org.apache.spark.sql.execution.exchange.ShuffleExchange
  * This operator will be used when a logical `Limit` operation is the final operator in an
  * logical plan, which happens when the user is collecting results back to the driver.
  */
-case class CollectLimit(limit: Int, child: SparkPlan) extends UnaryNode {
+case class CollectLimit(limit: Int, child: SparkPlan) extends UnaryExecNode {
   override def output: Seq[Attribute] = child.output
   override def outputPartitioning: Partitioning = SinglePartition
   override def executeCollect(): Array[InternalRow] = child.executeTake(limit)
@@ -48,7 +48,7 @@ case class CollectLimit(limit: Int, child: SparkPlan) extends UnaryNode {
 /**
  * Helper trait which defines methods that are shared by both [[LocalLimit]] and [[GlobalLimit]].
  */
-trait BaseLimit extends UnaryNode with CodegenSupport {
+trait BaseLimit extends UnaryExecNode with CodegenSupport {
   val limit: Int
   override def output: Seq[Attribute] = child.output
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
@@ -113,7 +113,7 @@ case class TakeOrderedAndProject(
     limit: Int,
     sortOrder: Seq[SortOrder],
     projectList: Option[Seq[NamedExpression]],
-    child: SparkPlan) extends UnaryNode {
+    child: SparkPlan) extends UnaryExecNode {
 
   override def output: Seq[Attribute] = {
     projectList.map(_.map(_.toAttribute)).getOrElse(child.output)

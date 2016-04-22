@@ -103,7 +103,7 @@ private[sql] case class LogicalRDD(
 private[sql] case class PhysicalRDD(
     output: Seq[Attribute],
     rdd: RDD[InternalRow],
-    override val nodeName: String) extends LeafNode {
+    override val nodeName: String) extends LeafExecNode {
 
   private[sql] override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
@@ -124,7 +124,7 @@ private[sql] case class PhysicalRDD(
   }
 }
 
-private[sql] trait DataSourceScan extends LeafNode {
+private[sql] trait DataSourceScan extends LeafExecNode {
   val rdd: RDD[InternalRow]
   val relation: BaseRelation
 

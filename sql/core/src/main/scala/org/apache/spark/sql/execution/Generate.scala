@@ -53,7 +53,7 @@ case class Generate(
     outer: Boolean,
     output: Seq[Attribute],
     child: SparkPlan)
-  extends UnaryNode {
+  extends UnaryExecNode {
 
   private[sql] override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))

@@ -50,7 +50,7 @@ case class HiveTableScan(
     partitionPruningPred: Seq[Expression])(
     @transient val context: SQLContext,
     @transient val hiveconf: HiveConf)
-  extends LeafNode {
+  extends LeafExecNode {
 
   require(partitionPruningPred.isEmpty || relation.hiveQlTable.isPartitioned,
     "Partition pruning predicates only supported for partitioned tables.")

@@ -86,11 +86,11 @@ package object debug {
       val debugPlan = plan transform {
         case s: SparkPlan if !visited.contains(new TreeNodeRef(s)) =>
           visited += new TreeNodeRef(s)
-          DebugNode(s)
+          DebugExecNode(s)
       }
       debugPrint(s"Results returned: ${debugPlan.execute().count()}")
       debugPlan.foreach {
-        case d: DebugNode => d.dumpStats()
+        case d: DebugExecNode => d.dumpStats()
         case _ =>
       }
     }
@@ -104,7 +104,7 @@ package object debug {
     }
   }
 
-  private[sql] case class DebugNode(child: SparkPlan) extends UnaryNode with CodegenSupport {
+  private[sql] case class DebugExecNode(child: SparkPlan) extends UnaryExecNode with CodegenSupport {
     def output: Seq[Attribute] = child.output
 
     implicit object SetAccumulatorParam extends AccumulatorParam[HashSet[String]] {

@@ -220,7 +220,7 @@ trait CodegenSupport extends SparkPlan {
  * This is the leaf node of a tree with WholeStageCodegen, is used to generate code that consumes
  * an RDD iterator of InternalRow.
  */
-case class InputAdapter(child: SparkPlan) extends UnaryNode with CodegenSupport {
+case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupport {
 
   override def output: Seq[Attribute] = child.output
   override def outputPartitioning: Partitioning = child.outputPartitioning
@@ -289,7 +289,7 @@ object WholeStageCodegen {
  * doCodeGen() will create a CodeGenContext, which will hold a list of variables for input,
  * used to generated code for BoundReference.
  */
-case class WholeStageCodegen(child: SparkPlan) extends UnaryNode with CodegenSupport {
+case class WholeStageCodegen(child: SparkPlan) extends UnaryExecNode with CodegenSupport {
 
   override def output: Seq[Attribute] = child.output
   override def outputPartitioning: Partitioning = child.outputPartitioning

@@ -53,7 +53,7 @@ trait StatefulOperator extends SparkPlan {
 case class StateStoreRestore(
     keyExpressions: Seq[Attribute],
     stateId: Option[OperatorStateId],
-    child: SparkPlan) extends execution.UnaryNode with StatefulOperator {
+    child: SparkPlan) extends execution.UnaryExecNode with StatefulOperator {
 
   override protected def doExecute(): RDD[InternalRow] = {
     child.execute().mapPartitionsWithStateStore(
@@ -81,7 +81,7 @@ case class StateStoreRestore(
 case class StateStoreSave(
     keyExpressions: Seq[Attribute],
     stateId: Option[OperatorStateId],
-    child: SparkPlan) extends execution.UnaryNode with StatefulOperator {
+    child: SparkPlan) extends execution.UnaryExecNode with StatefulOperator {
 
   override protected def doExecute(): RDD[InternalRow] = {
     child.execute().mapPartitionsWithStateStore(

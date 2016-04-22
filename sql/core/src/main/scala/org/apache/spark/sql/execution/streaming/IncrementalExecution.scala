@@ -18,11 +18,10 @@
 package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.catalyst.analysis.{OutputMode, UnsupportedOperationChecker}
+import org.apache.spark.sql.catalyst.analysis.OutputMode
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SparkPlanner, UnaryNode}
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SparkPlanner, UnaryExecNode}
 
 /**
  * A variant of [[QueryExecution]] that allows the execution of the given [[LogicalPlan]]
@@ -55,7 +54,7 @@ class IncrementalExecution(
   val state = new Rule[SparkPlan] {
     override def apply(plan: SparkPlan): SparkPlan = plan transform {
       case StateStoreSave(keys, None,
-             UnaryNode(agg,
+             UnaryExecNode(agg,
                StateStoreRestore(keys2, None, child))) =>
         val stateId = OperatorStateId(checkpointLocation, operatorId, currentBatchId - 1)
         operatorId += 1

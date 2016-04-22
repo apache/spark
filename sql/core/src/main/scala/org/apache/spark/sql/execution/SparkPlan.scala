@@ -386,19 +386,19 @@ object SparkPlan {
     ThreadUtils.newDaemonCachedThreadPool("subquery", 16))
 }
 
-private[sql] trait LeafNode extends SparkPlan {
+private[sql] trait LeafExecNode extends SparkPlan {
   override def children: Seq[SparkPlan] = Nil
   override def producedAttributes: AttributeSet = outputSet
 }
 
-object UnaryNode {
+object UnaryExecNode {
   def unapply(a: Any): Option[(SparkPlan, SparkPlan)] = a match {
     case s: SparkPlan if s.children.size == 1 => Some((s, s.children.head))
     case _ => None
   }
 }
 
-private[sql] trait UnaryNode extends SparkPlan {
+private[sql] trait UnaryExecNode extends SparkPlan {
   def child: SparkPlan
 
   override def children: Seq[SparkPlan] = child :: Nil
@@ -406,7 +406,7 @@ private[sql] trait UnaryNode extends SparkPlan {
   override def outputPartitioning: Partitioning = child.outputPartitioning
 }
 
-private[sql] trait BinaryNode extends SparkPlan {
+private[sql] trait BinaryExecNode extends SparkPlan {
   def left: SparkPlan
   def right: SparkPlan
 

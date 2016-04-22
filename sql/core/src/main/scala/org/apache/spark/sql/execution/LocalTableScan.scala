@@ -28,7 +28,7 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
  */
 private[sql] case class LocalTableScan(
     output: Seq[Attribute],
-    rows: Seq[InternalRow]) extends LeafNode {
+    rows: Seq[InternalRow]) extends LeafExecNode {
 
   private[sql] override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
