@@ -456,8 +456,8 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     implicit val kryoEncoder = Encoders.javaSerialization[JavaData]
     val ds = Seq(JavaData(1), JavaData(2)).toDS()
 
-    assert(ds.groupByKey(p => p).count().collect().toSeq ==
-      Seq((JavaData(1), 1L), (JavaData(2), 1L)))
+    assert(ds.groupByKey(p => p).count().collect().toSet ==
+      Set((JavaData(1), 1L), (JavaData(2), 1L)))
   }
 
   test("Java encoder self join") {
@@ -469,6 +469,10 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
         (JavaData(1), JavaData(2)),
         (JavaData(2), JavaData(1)),
         (JavaData(2), JavaData(2))))
+  }
+
+  test("SPARK-14696: implicit encoders for boxed types") {
+    assert(sqlContext.range(1).map { i => i : java.lang.Long }.head == 0L)
   }
 
   test("SPARK-11894: Incorrect results are returned when using null") {

@@ -27,11 +27,10 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, Project}
-import org.apache.spark.sql.execution.datasources.{BucketSpec, CreateTableUsingAsSelect, DataSource}
+import org.apache.spark.sql.execution.datasources.{BucketSpec, CreateTableUsingAsSelect, DataSource, HadoopFsRelation}
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
 import org.apache.spark.sql.execution.streaming.{MemoryPlan, MemorySink, StreamExecution}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.HadoopFsRelation
 import org.apache.spark.util.Utils
 
 /**
@@ -86,18 +85,18 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    *
    * Scala Example:
    * {{{
-   *   def.writer.trigger(ProcessingTime("10 seconds"))
+   *   df.write.trigger(ProcessingTime("10 seconds"))
    *
    *   import scala.concurrent.duration._
-   *   def.writer.trigger(ProcessingTime(10.seconds))
+   *   df.write.trigger(ProcessingTime(10.seconds))
    * }}}
    *
    * Java Example:
    * {{{
-   *   def.writer.trigger(ProcessingTime.create("10 seconds"))
+   *   df.write.trigger(ProcessingTime.create("10 seconds"))
    *
    *   import java.util.concurrent.TimeUnit
-   *   def.writer.trigger(ProcessingTime.create(10, TimeUnit.SECONDS))
+   *   df.write.trigger(ProcessingTime.create(10, TimeUnit.SECONDS))
    * }}}
    *
    * @since 2.0.0

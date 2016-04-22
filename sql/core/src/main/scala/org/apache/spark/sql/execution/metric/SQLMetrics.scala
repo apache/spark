@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.metric
 
+import java.text.NumberFormat
+
 import org.apache.spark.{Accumulable, AccumulableParam, Accumulators, SparkContext}
 import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.util.Utils
@@ -29,12 +31,11 @@ import org.apache.spark.util.Utils
  */
 private[sql] abstract class SQLMetric[R <: SQLMetricValue[T], T](
     name: String,
-    val param: SQLMetricParam[R, T])
-  extends Accumulable[R, T](param.zero, param, Some(name), internal = true) {
+    val param: SQLMetricParam[R, T]) extends Accumulable[R, T](param.zero, param, Some(name)) {
 
   // Provide special identifier as metadata so we can tell that this is a `SQLMetric` later
   override def toInfo(update: Option[Any], value: Option[Any]): AccumulableInfo = {
-    new AccumulableInfo(id, Some(name), update, value, isInternal, countFailedValues,
+    new AccumulableInfo(id, Some(name), update, value, true, countFailedValues,
       Some(SQLMetrics.ACCUM_IDENTIFIER))
   }
 
@@ -83,12 +84,12 @@ private[sql] class LongSQLMetricValue(private var _value : Long) extends SQLMetr
   override def value: Long = _value
 
   // Needed for SQLListenerSuite
-  override def equals(other: Any): Boolean = {
-    other match {
-      case o: LongSQLMetricValue => value == o.value
-      case _ => false
-    }
+  override def equals(other: Any): Boolean = other match {
+    case o: LongSQLMetricValue => value == o.value
+    case _ => false
   }
+
+  override def hashCode(): Int = _value.hashCode()
 }
 
 /**
@@ -120,7 +121,8 @@ private class LongSQLMetricParam(val stringValue: Seq[Long] => String, initialVa
   override def zero: LongSQLMetricValue = new LongSQLMetricValue(initialValue)
 }
 
-private object LongSQLMetricParam extends LongSQLMetricParam(_.sum.toString, 0L)
+private object LongSQLMetricParam
+  extends LongSQLMetricParam(x => NumberFormat.getInstance().format(x.sum), 0L)
 
 private object StatisticsBytesSQLMetricParam extends LongSQLMetricParam(
   (values: Seq[Long]) => {

@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from pyspark import since
+from pyspark import since, keyword_only
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel
 from pyspark.ml.param.shared import *
@@ -107,16 +107,18 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
     numItemBlocks = Param(Params._dummy(), "numItemBlocks", "number of item blocks",
                           typeConverter=TypeConverters.toInt)
     implicitPrefs = Param(Params._dummy(), "implicitPrefs", "whether to use implicit preference",
-                          TypeConverters.toBoolean)
+                          typeConverter=TypeConverters.toBoolean)
     alpha = Param(Params._dummy(), "alpha", "alpha for implicit preference",
                   typeConverter=TypeConverters.toFloat)
-    userCol = Param(Params._dummy(), "userCol", "column name for user ids", TypeConverters.toString)
-    itemCol = Param(Params._dummy(), "itemCol", "column name for item ids", TypeConverters.toString)
+    userCol = Param(Params._dummy(), "userCol", "column name for user ids",
+                    typeConverter=TypeConverters.toString)
+    itemCol = Param(Params._dummy(), "itemCol", "column name for item ids",
+                    typeConverter=TypeConverters.toString)
     ratingCol = Param(Params._dummy(), "ratingCol", "column name for ratings",
-                      TypeConverters.toString)
+                      typeConverter=TypeConverters.toString)
     nonnegative = Param(Params._dummy(), "nonnegative",
                         "whether to use nonnegative constraint for least squares",
-                        TypeConverters.toBoolean)
+                        typeConverter=TypeConverters.toBoolean)
 
     @keyword_only
     def __init__(self, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10,

@@ -27,8 +27,8 @@ import org.apache.spark.sql.catalyst.plans.logical.{BroadcastHint, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution
 import org.apache.spark.sql.execution.columnar.{InMemoryColumnarTableScan, InMemoryRelation}
-import org.apache.spark.sql.execution.command.{DescribeCommand => RunnableDescribeCommand, _}
-import org.apache.spark.sql.execution.datasources.{DescribeCommand => LogicalDescribeCommand, _}
+import org.apache.spark.sql.execution.command._
+import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.exchange.ShuffleExchange
 import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight}
 import org.apache.spark.sql.execution.streaming.MemoryPlan
@@ -346,21 +346,23 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         throw new IllegalStateException(
           "logical intersect operator should have been replaced by semi-join in the optimizer")
 
-      case logical.DeserializeToObject(deserializer, child) =>
-        execution.DeserializeToObject(deserializer, planLater(child)) :: Nil
+      case logical.DeserializeToObject(deserializer, objAttr, child) =>
+        execution.DeserializeToObject(deserializer, objAttr, planLater(child)) :: Nil
       case logical.SerializeFromObject(serializer, child) =>
         execution.SerializeFromObject(serializer, planLater(child)) :: Nil
-      case logical.MapPartitions(f, in, out, child) =>
-        execution.MapPartitions(f, in, out, planLater(child)) :: Nil
-      case logical.MapElements(f, in, out, child) =>
-        execution.MapElements(f, in, out, planLater(child)) :: Nil
+      case logical.MapPartitions(f, objAttr, child) =>
+        execution.MapPartitions(f, objAttr, planLater(child)) :: Nil
+      case logical.MapElements(f, objAttr, child) =>
+        execution.MapElements(f, objAttr, planLater(child)) :: Nil
       case logical.AppendColumns(f, in, out, child) =>
         execution.AppendColumns(f, in, out, planLater(child)) :: Nil
-      case logical.MapGroups(f, key, in, out, grouping, data, child) =>
-        execution.MapGroups(f, key, in, out, grouping, data, planLater(child)) :: Nil
-      case logical.CoGroup(f, keyObj, lObj, rObj, out, lGroup, rGroup, lAttr, rAttr, left, right) =>
+      case logical.AppendColumnsWithObject(f, childSer, newSer, child) =>
+        execution.AppendColumnsWithObject(f, childSer, newSer, planLater(child)) :: Nil
+      case logical.MapGroups(f, key, value, grouping, data, objAttr, child) =>
+        execution.MapGroups(f, key, value, grouping, data, objAttr, planLater(child)) :: Nil
+      case logical.CoGroup(f, key, lObj, rObj, lGroup, rGroup, lAttr, rAttr, oAttr, left, right) =>
         execution.CoGroup(
-          f, keyObj, lObj, rObj, out, lGroup, rGroup, lAttr, rAttr,
+          f, key, lObj, rObj, lGroup, rGroup, lAttr, rAttr, oAttr,
           planLater(left), planLater(right)) :: Nil
 
       case logical.Repartition(numPartitions, shuffle, child) =>
@@ -431,9 +433,6 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         ExecutedCommand(cmd) :: Nil
       case c: CreateTableUsingAsSelect if !c.temporary =>
         sys.error("Tables created with SQLContext must be TEMPORARY. Use a HiveContext instead.")
-
-      case describe @ LogicalDescribeCommand(table, isExtended) =>
-        ExecutedCommand(RunnableDescribeCommand(table, describe.output, isExtended)) :: Nil
 
       case logical.ShowFunctions(db, pattern) =>
         ExecutedCommand(ShowFunctions(db, pattern)) :: Nil

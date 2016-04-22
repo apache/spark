@@ -164,8 +164,8 @@ package object debug {
       }
     }
 
-    override def upstreams(): Seq[RDD[InternalRow]] = {
-      child.asInstanceOf[CodegenSupport].upstreams()
+    override def inputRDDs(): Seq[RDD[InternalRow]] = {
+      child.asInstanceOf[CodegenSupport].inputRDDs()
     }
 
     override def doProduce(ctx: CodegenContext): String = {

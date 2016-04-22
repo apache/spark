@@ -329,6 +329,9 @@ class KMeans @Since("1.5.0") (
   override def fit(dataset: Dataset[_]): KMeansModel = {
     val rdd = dataset.select(col($(featuresCol))).rdd.map { case Row(point: Vector) => point }
 
+    val instr = Instrumentation.create(this, rdd)
+    instr.logParams(featuresCol, predictionCol, k, initMode, initSteps, maxIter, seed, tol)
+
     val algo = new MLlibKMeans()
       .setK($(k))
       .setInitializationMode($(initMode))
@@ -342,11 +345,13 @@ class KMeans @Since("1.5.0") (
       algo.setInitialModel($(initialModel).parentModel)
     }
 
-    val parentModel = algo.run(rdd)
+    val parentModel = algo.run(rdd, Option(instr))
     val model = copyValues(new KMeansModel(uid, parentModel).setParent(this))
     val summary = new KMeansSummary(
       model.transform(dataset), $(predictionCol), $(featuresCol), $(k))
-    model.setSummary(summary)
+    val m = model.setSummary(summary)
+    instr.logSuccess(m)
+    m
   }
 
   @Since("1.5.0")

@@ -456,15 +456,6 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.shuffle.manager</code></td>
-  <td>sort</td>
-  <td>
-    Implementation to use for shuffling data. There are two implementations available:
-    <code>sort</code> and <code>hash</code>.
-    Sort-based shuffle is more memory-efficient and is the default option starting in 1.2.
-  </td>
-</tr>
-<tr>
   <td><code>spark.shuffle.service.enabled</code></td>
   <td>false</td>
   <td>
