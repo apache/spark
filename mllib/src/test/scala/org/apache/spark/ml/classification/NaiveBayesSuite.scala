@@ -20,6 +20,8 @@ package org.apache.spark.ml.classification
 import breeze.linalg.{Vector => BV}
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
+import org.apache.spark.ml.feature.StringIndexer
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.classification.NaiveBayes.{Bernoulli, Multinomial}
@@ -192,6 +194,30 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
         assert(expected.pi === actual.pi)
         assert(expected.theta === actual.theta)
       }
+  }
+
+  test("copy label column metadata to prediction column") {
+    val data = sc.parallelize(Seq((Vectors.dense(0.0), "a"), (Vectors.dense(1.0), "b"),
+      (Vectors.dense(2.0), "c"), (Vectors.dense(3.0), "a"), (Vectors.dense(4.0), "a")), 2)
+    var df = sqlContext.createDataFrame(data).toDF("features", "label")
+
+    val indexer = new StringIndexer()
+      .setInputCol("label")
+      .setOutputCol("labelIndex")
+      .fit(df)
+    df = indexer.transform(df)
+
+    val naiveBayes = new NaiveBayes().setLabelCol("labelIndex")
+    val naiveBayesModel = naiveBayes.fit(df)
+    df = naiveBayesModel.transform(df)
+
+    val schema = df.schema
+    val labelAttr = Attribute.fromStructField(schema(naiveBayesModel.getLabelCol))
+      .asInstanceOf[NominalAttribute]
+    val predictionAttr = Attribute.fromStructField(schema(naiveBayesModel.getPredictionCol))
+      .asInstanceOf[NominalAttribute]
+    assert(labelAttr.attrType === predictionAttr.attrType)
+    assert(labelAttr.values.get === predictionAttr.values.get)
   }
 }
 
