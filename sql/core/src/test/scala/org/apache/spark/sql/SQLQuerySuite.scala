@@ -1038,16 +1038,20 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     val nonexistentKey = "nonexistent"
 
     // "set" itself returns all config variables currently specified in SQLConf.
-    assert(sql("SET").collect().size === TestSQLContext.overrideConfs.size)
+    val additionalSize = sys.env.size + sys.props.size
+    assert(sql("SET").collect().size === TestSQLContext.overrideConfs.size + additionalSize)
+    val expectedMap = TestSQLContext.overrideConfs ++
+      sys.env.map { case (k, v) => (s"env:$k", v) } ++
+      sys.props.map { case (k, v) => (s"system:$k", v) }
     sql("SET").collect().foreach { row =>
       val key = row.getString(0)
       val value = row.getString(1)
       assert(
-        TestSQLContext.overrideConfs.contains(key),
+        expectedMap.contains(key),
         s"$key should exist in SQLConf.")
       assert(
-        TestSQLContext.overrideConfs(key) === value,
-        s"The value of $key should be ${TestSQLContext.overrideConfs(key)} instead of $value.")
+        expectedMap(key) === value,
+        s"The value of $key should be ${expectedMap(key)} instead of $value.")
     }
     val overrideConfs = sql("SET").collect()
 
