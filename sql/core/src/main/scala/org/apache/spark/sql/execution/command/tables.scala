@@ -160,26 +160,28 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean)
   )
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
-    val relation = sqlContext.sessionState.catalog.lookupRelation(table)
-    val result = new ArrayBuffer[Row](relation.schema.fields.length)
-
-    relation.schema.fields.foreach { field =>
-      val cmtKey = "comment"
-      val comment = if (field.metadata.contains(cmtKey)) field.metadata.getString(cmtKey) else ""
-      result += Row(field.name, field.dataType.simpleString, comment)
-    }
-
-    relation match {
+    val result = new ArrayBuffer[Row]
+    sqlContext.sessionState.catalog.lookupRelation(table) match {
       case catalogRelation: CatalogRelation =>
+        catalogRelation.catalogTable.schema.foreach { column =>
+          result += Row(column.name, column.dataType, column.comment.orNull)
+        }
+
         if (catalogRelation.catalogTable.partitionColumns.nonEmpty) {
           result += Row("# Partition Information", "", "")
           result += Row(s"# ${output(0).name}", output(1).name, output(2).name)
 
           catalogRelation.catalogTable.partitionColumns.foreach { col =>
-            result += Row(col.name, col.dataType, col.comment.getOrElse(""))
+            result += Row(col.name, col.dataType, col.comment.orNull)
           }
         }
-      case _ =>  // do nothing
+
+      case relation =>
+        relation.schema.fields.foreach { field =>
+          val comment =
+            if (field.metadata.contains("comment")) field.metadata.getString("comment") else ""
+          result += Row(field.name, field.dataType.simpleString, comment)
+        }
     }
 
     result
