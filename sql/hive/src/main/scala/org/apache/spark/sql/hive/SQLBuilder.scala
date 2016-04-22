@@ -22,8 +22,9 @@ import java.util.concurrent.atomic.AtomicLong
 import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.{Dataset, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.CatalogRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.{CollapseProject, CombineUnions}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -41,7 +42,7 @@ import org.apache.spark.sql.types.{ByteType, DataType, IntegerType, NullType}
 class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Logging {
   require(logicalPlan.resolved, "SQLBuilder only supports resolved logical query plans")
 
-  def this(df: DataFrame) = this(df.queryExecution.analyzed, df.sqlContext)
+  def this(df: Dataset[_]) = this(df.queryExecution.analyzed, df.sqlContext)
 
   private val nextSubqueryId = new AtomicLong(0)
   private def newSubqueryName(): String = s"gen_subquery_${nextSubqueryId.getAndIncrement()}"
@@ -517,8 +518,9 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
       case l @ LogicalRelation(_, _, Some(TableIdentifier(table, Some(database)))) =>
         Some(SQLTable(database, table, l.output.map(_.withQualifier(None))))
 
-      case m: MetastoreRelation =>
-        Some(SQLTable(m.databaseName, m.tableName, m.output.map(_.withQualifier(None))))
+      case relation: CatalogRelation =>
+        val m = relation.catalogTable
+        Some(SQLTable(m.database, m.identifier.table, relation.output.map(_.withQualifier(None))))
 
       case _ => None
     }

@@ -15,22 +15,28 @@
  * limitations under the License.
  */
 
-package org.apache.spark.util
+package org.apache.spark.repl
 
-import org.slf4j.Logger
+import org.apache.spark.SparkContext
+import org.apache.spark.internal.Logging
+import org.apache.spark.util.{Signaling => USignaling}
 
-/**
- * Used to log signals received. This can be very useful in debugging crashes or kills.
- */
-private[spark] object SignalLogger {
+private[repl] object Signaling extends Logging {
 
-  private var registered = false
-
-  /** Register a signal handler to log signals on UNIX-like systems. */
-  def register(log: Logger): Unit = Seq("TERM", "HUP", "INT").foreach{ sig =>
-    Signaling.register(sig) {
-      log.error("RECEIVED SIGNAL " + sig)
+  /**
+   * Register a SIGINT handler, that terminates all active spark jobs or terminates
+   * when no jobs are currently running.
+   * This makes it possible to interrupt a running shell job by pressing Ctrl+C.
+   */
+  def cancelOnInterrupt(ctx: SparkContext): Unit = USignaling.register("INT") {
+    if (!ctx.statusTracker.getActiveJobIds().isEmpty) {
+      logWarning("Cancelling all active jobs, this can take a while. " +
+        "Press Ctrl+C again to exit now.")
+      ctx.cancelAllJobs()
+      true
+    } else {
       false
     }
   }
+
 }
