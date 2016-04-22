@@ -994,7 +994,7 @@ setMethod("rint",
 
 #' round
 #'
-#' Returns the value of the column `e` rounded to 0 decimal places.
+#' Returns the value of the column `e` rounded to 0 decimal places using HALF_UP rounding mode.
 #'
 #' @rdname round
 #' @name round
@@ -1007,6 +1007,26 @@ setMethod("round",
             jc <- callJStatic("org.apache.spark.sql.functions", "round", x@jc)
             column(jc)
           })
+
+#' bround
+#'
+#' Returns the value of the column `e` rounded to `scale` decimal places using HALF_EVEN rounding
+#' mode if `scale` >= 0 or at integral part when `scale` < 0.
+#' Also known as Gaussian rounding or bankers' rounding that rounds to the nearest even number.
+#' bround(2.5, 0) = 2, bround(3.5, 0) = 4.
+#'
+#' @rdname bround
+#' @name bround
+#' @family math_funcs
+#' @export
+#' @examples \dontrun{bround(df$c, 0)}
+setMethod("bround",
+          signature(x = "Column"),
+          function(x, scale = 0) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "bround", x@jc, as.integer(scale))
+            column(jc)
+          })
+
 
 #' rtrim
 #'

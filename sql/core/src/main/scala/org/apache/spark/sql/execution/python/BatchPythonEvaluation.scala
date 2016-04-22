@@ -86,7 +86,7 @@ case class BatchPythonEvaluation(udfs: Seq[PythonUDF], output: Seq[Attribute], c
           }
         }.toArray
       }.toArray
-      val projection = newMutableProjection(allInputs, child.output)()
+      val projection = newMutableProjection(allInputs, child.output)
       val schema = StructType(dataTypes.map(dt => StructField("", dt)))
       val needConversion = dataTypes.exists(EvaluatePython.needConversionInPython)
 

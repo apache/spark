@@ -1022,6 +1022,7 @@ class SparkILoop(
     }
     sparkContext = new SparkContext(conf)
     logInfo("Created spark context..")
+    Signaling.cancelOnInterrupt(sparkContext)
     sparkContext
   }
 
