@@ -64,7 +64,8 @@ class JoinSuite extends QueryTest with SharedSQLContext {
 
     withSQLConf("spark.sql.autoBroadcastJoinThreshold" -> "0") {
       Seq(
-        ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a", classOf[ShuffledHashJoinExec]),
+        ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a",
+          classOf[ShuffledHashJoinExec]),
         ("SELECT * FROM testData LEFT SEMI JOIN testData2", classOf[BroadcastNestedLoopJoinExec]),
         ("SELECT * FROM testData JOIN testData2", classOf[CartesianProductExec]),
         ("SELECT * FROM testData JOIN testData2 WHERE key = 2", classOf[CartesianProductExec]),
@@ -73,15 +74,18 @@ class JoinSuite extends QueryTest with SharedSQLContext {
         ("SELECT * FROM testData FULL OUTER JOIN testData2", classOf[BroadcastNestedLoopJoinExec]),
         ("SELECT * FROM testData LEFT JOIN testData2 WHERE key = 2",
           classOf[BroadcastNestedLoopJoinExec]),
-        ("SELECT * FROM testData RIGHT JOIN testData2 WHERE key = 2", classOf[CartesianProductExec]),
+        ("SELECT * FROM testData RIGHT JOIN testData2 WHERE key = 2",
+          classOf[CartesianProductExec]),
         ("SELECT * FROM testData FULL OUTER JOIN testData2 WHERE key = 2",
           classOf[BroadcastNestedLoopJoinExec]),
         ("SELECT * FROM testData JOIN testData2 WHERE key > a", classOf[CartesianProductExec]),
         ("SELECT * FROM testData FULL OUTER JOIN testData2 WHERE key > a",
           classOf[CartesianProductExec]),
         ("SELECT * FROM testData JOIN testData2 ON key = a", classOf[SortMergeJoinExec]),
-        ("SELECT * FROM testData JOIN testData2 ON key = a and key = 2", classOf[SortMergeJoinExec]),
-        ("SELECT * FROM testData JOIN testData2 ON key = a where key = 2", classOf[SortMergeJoinExec]),
+        ("SELECT * FROM testData JOIN testData2 ON key = a and key = 2",
+          classOf[SortMergeJoinExec]),
+        ("SELECT * FROM testData JOIN testData2 ON key = a where key = 2",
+          classOf[SortMergeJoinExec]),
         ("SELECT * FROM testData LEFT JOIN testData2 ON key = a", classOf[SortMergeJoinExec]),
         ("SELECT * FROM testData RIGHT JOIN testData2 ON key = a where key = 2",
           classOf[SortMergeJoinExec]),
@@ -428,15 +432,18 @@ class JoinSuite extends QueryTest with SharedSQLContext {
 
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1000000000") {
       Seq(
-        ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a", classOf[BroadcastHashJoinExec]),
+        ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a",
+          classOf[BroadcastHashJoinExec]),
         ("SELECT * FROM testData ANT JOIN testData2 ON key = a", classOf[BroadcastHashJoinExec])
       ).foreach(assertJoin)
     }
 
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       Seq(
-        ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a", classOf[ShuffledHashJoinExec]),
-        ("SELECT * FROM testData LEFT ANTI JOIN testData2 ON key = a", classOf[ShuffledHashJoinExec])
+        ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a",
+          classOf[ShuffledHashJoinExec]),
+        ("SELECT * FROM testData LEFT ANTI JOIN testData2 ON key = a",
+          classOf[ShuffledHashJoinExec])
       ).foreach(assertJoin)
     }
 

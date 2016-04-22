@@ -1355,14 +1355,16 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       checkAnswer(join, df)
       assert(
         join.queryExecution.executedPlan.collect { case e: ShuffleExchange => true }.size === 1)
-      assert(join.queryExecution.executedPlan.collect { case e: ReusedExchangeExec => true }.size === 1)
+      assert(
+        join.queryExecution.executedPlan.collect { case e: ReusedExchangeExec => true }.size === 1)
       val broadcasted = broadcast(join)
       val join2 = join.join(broadcasted, "id").join(broadcasted, "id")
       checkAnswer(join2, df)
       assert(
         join2.queryExecution.executedPlan.collect { case e: ShuffleExchange => true }.size === 1)
       assert(
-        join2.queryExecution.executedPlan.collect { case e: BroadcastExchangeExec => true }.size === 1)
+        join2.queryExecution.executedPlan
+          .collect { case e: BroadcastExchangeExec => true }.size === 1)
       assert(
         join2.queryExecution.executedPlan.collect { case e: ReusedExchangeExec => true }.size === 4)
     }
