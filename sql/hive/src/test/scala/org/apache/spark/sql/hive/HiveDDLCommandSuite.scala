@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.JsonTuple
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, ScriptTransformation}
-import org.apache.spark.sql.execution.command.{CreateTable, CreateTableAsSelectLogicalPlan, CreateTableLike, CreateViewAsSelectLogicalCommand, HiveNativeCommand}
+import org.apache.spark.sql.execution.command.{CreateTable, CreateTableAsSelectLogicalPlan, CreateTableLike, CreateViewAsSelectLogicalCommand, HiveNativeCommand, LoadData}
 import org.apache.spark.sql.hive.test.TestHive
 
 class HiveDDLCommandSuite extends PlanTest {
@@ -577,6 +577,31 @@ class HiveDDLCommandSuite extends PlanTest {
     assert(target2.table == "table1")
     assert(source2.database.isEmpty)
     assert(source2.table == "table2")
+  }
+
+  test("load data")  {
+    val v1 = "LOAD DATA INPATH 'path' INTO TABLE table1"
+    val (table, path, isLocal, isOverwrite, partition) = parser.parsePlan(v1).collect {
+      case LoadData(t, path, l, o, partition) => (t, path, l, o, partition)
+    }.head
+    assert(table.database.isEmpty)
+    assert(table.table == "table1")
+    assert(path == "path")
+    assert(!isLocal)
+    assert(!isOverwrite)
+    assert(partition.isEmpty)
+
+    val v2 = "LOAD DATA LOCAL INPATH 'path' OVERWRITE INTO TABLE table1 PARTITION(c='1', d='2')"
+    val (table2, path2, isLocal2, isOverwrite2, partition2) = parser.parsePlan(v2).collect {
+      case LoadData(t, path, l, o, partition) => (t, path, l, o, partition)
+    }.head
+    assert(table2.database.isEmpty)
+    assert(table2.table == "table1")
+    assert(path2 == "path")
+    assert(isLocal2)
+    assert(isOverwrite2)
+    assert(partition2.nonEmpty)
+    assert(partition2.get.apply("c") == "1" && partition2.get.apply("d") == "2")
   }
 
 }
