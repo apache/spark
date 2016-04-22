@@ -324,8 +324,10 @@ private[joins] object UnsafeHashedRelation {
  *
  * see http://java-performance.info/implementing-world-fastest-java-int-to-int-hash-map/
  */
-private[execution] final class LongToUnsafeRowMap(@transient val mm: TaskMemoryManager,
-    capacity: Int) extends MemoryConsumer(mm) with Externalizable {
+private[execution] final class LongToUnsafeRowMap(
+    @transient val mm: TaskMemoryManager,
+    capacity: Int)
+  extends MemoryConsumer(mm) with Externalizable {
 
   // Whether the keys are stored in dense mode or not.
   private var isDense = false

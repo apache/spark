@@ -21,6 +21,7 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, 
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.memory.{StaticMemoryManager, TaskMemoryManager}
+import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.test.SharedSQLContext
@@ -142,6 +143,19 @@ class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
     assert(!relation.keyIsUnique)
     (0 until 100).foreach { i =>
       val rows = relation.get(i).toArray
+      assert(rows.length === 2)
+      assert(rows(0).getInt(0) === i)
+      assert(rows(0).getInt(1) === i + 1)
+      assert(rows(1).getInt(0) === i)
+      assert(rows(1).getInt(1) === i + 1)
+    }
+
+    // Spark-14521
+    val ser = new KryoSerializer(
+      (new SparkConf).set("spark.kryo.referenceTracking", "false")).newInstance()
+    val longRelation3 = ser.deserialize[LongHashedRelation](ser.serialize(longRelation2))
+    (0 until 100).foreach { i =>
+      val rows = longRelation3.get(i).toArray
       assert(rows.length === 2)
       assert(rows(0).getInt(0) === i)
       assert(rows(0).getInt(1) === i + 1)
