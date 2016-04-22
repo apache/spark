@@ -131,7 +131,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * Execute a query after preparing the query and adding query plan information to created RDDs
    * for visualization.
    */
-  private final def executeQuery[T](query: => T): T = {
+  protected final def executeQuery[T](query: => T): T = {
     RDDOperationScope.withScope(sparkContext, nodeName, false, true) {
       prepare()
       waitForSubqueries()
@@ -187,11 +187,11 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   /**
    * Prepare a SparkPlan for execution. It's idempotent.
    */
-  final def prepare(): Unit = {
+  final def prepare(): Unit = synchronized {
     if (prepareCalled.compareAndSet(false, true)) {
-      doPrepare()
-      prepareSubqueries()
       children.foreach(_.prepare())
+      prepareSubqueries()
+      doPrepare()
     }
   }
 
