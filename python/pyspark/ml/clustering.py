@@ -80,8 +80,7 @@ class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     >>> weights = model.weights
     >>> len(weights)
     3
-    >>> gaussians = model.gaussiansDF
-    >>> gaussians.show()
+    >>> model.gaussiansDF.show()
     +--------------------+--------------------+
     |                mean|                 cov|
     +--------------------+--------------------+
