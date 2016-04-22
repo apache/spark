@@ -715,4 +715,5 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       assert(catalog.listPartitions(tableIdent).map(_.spec) == Seq(part1))
     }
   }
+  
 }
