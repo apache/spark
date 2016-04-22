@@ -456,85 +456,133 @@ class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
 
 class LDAModel(JavaModel):
     """
-    A clustering model derived from the LDA method.
+    Latent Dirichlet Allocation (LDA) model.
+    This abstraction permits for different underlying representations,
+    including local and distributed data structures.
 
     .. versionadded:: 2.0.0
     """
 
     @since("2.0.0")
     def isDistributed(self):
-        """Indicates whether this instance is of type DistributedLDAModel"""
+        """
+        Indicates whether this instance is of type DistributedLDAModel
+        """
         return self._call_java("isDistributed")
 
     @since("2.0.0")
     def vocabSize(self):
-        """Vocabulary size (number of terms or terms in the vocabulary)"""
+        """Vocabulary size (number of terms or words in the vocabulary)"""
         return self._call_java("vocabSize")
 
     @since("2.0.0")
     def topicsMatrix(self):
-        """ Inferred topics, where each topic is represented by a distribution over terms.
+        """
+        Inferred topics, where each topic is represented by a distribution over terms.
         This is a matrix of size vocabSize x k, where each column is a topic.
         No guarantees are given about the ordering of the topics.
 
-        WARNING: If this model is actually a [[DistributedLDAModel]] instance produced by
-        the Expectation-Maximization ("em") [[optimizer]], then this method could involve
+        WARNING: If this model is actually a :py:attr:`DistributedLDAModel` instance produced by
+        the Expectation-Maximization ("em") `optimizer`, then this method could involve
         collecting a large amount of data to the driver (on the order of vocabSize x k).
         """
         return self._call_java("topicsMatrix")
 
     @since("2.0.0")
     def logLikelihood(self, dataset):
-        """Calculates a lower bound on the log likelihood of the entire corpus.
+        """
+        Calculates a lower bound on the log likelihood of the entire corpus.
         See Equation (16) in the Online LDA paper (Hoffman et al., 2010).
 
-        WARNING: If this model is an instance of [[DistributedLDAModel]] (produced when
-        [[optimizer]] is set to "em"), this involves collecting a large [[topicsMatrix]] to the
+        WARNING: If this model is an instance of :py:attr:`DistributedLDAModel` (produced when
+        :py:attr:`optimizer` is set to "em"), this involves collecting a large :py:attr:`topicsMatrix` to the
         driver. This implementation may be changed in the future.
         """
         return self._call_java("logLikelihood", dataset)
 
     @since("2.0.0")
     def logPerplexity(self, dataset):
-        """Calculate an upper bound bound on perplexity.  (Lower is better.)
+        """
+        Calculate an upper bound bound on perplexity.  (Lower is better.)
         See Equation (16) in the Online LDA paper (Hoffman et al., 2010).
 
-        WARNING: If this model is an instance of [[DistributedLDAModel]] (produced when
-        [[optimizer]] is set to "em"), this involves collecting a large [[topicsMatrix]] to the
+        WARNING: If this model is an instance of :py:attr:`DistributedLDAModel` (produced when
+        :py:attr:`optimizer` is set to "em"), this involves collecting a large :py:attr:`topicsMatrix` to the
         driver. This implementation may be changed in the future.
         """
         return self._call_java("logPerplexity", dataset)
 
     @since("2.0.0")
     def describeTopics(self, maxTermsPerTopic=10):
-        """Return the topics described by their top-weighted terms.
-
-        WARNING: If vocabSize and k are large, this can return a large object!
+        """
+        Return the topics described by their top-weighted terms.
         """
         return self._call_java("describeTopics", maxTermsPerTopic)
 
     @since("2.0.0")
     def estimatedDocConcentration(self):
-        """Value for [[docConcentration]] estimated from data.
-        If Online LDA was used and [[optimizeDocConcentration]] was set to false,
-        then this returns the fixed (given) value for the [[docConcentration]] parameter.
+        """
+        Value for :py:attr:`LDA.docConcentration` estimated from data.
+        If Online LDA was used and :py:attr::`LDA.optimizeDocConcentration` was set to false,
+        then this returns the fixed (given) value for the :py:attr:`LDA.docConcentration` parameter.
         """
         return self._call_java("estimatedDocConcentration")
+
+    @since("2.0.0")
+    def trainingLogLikelihood(self):
+        """
+        Log likelihood of the observed tokens in the training set,
+        given the current parameter estimates:
+        log P(docs | topics, topic distributions for docs, Dirichlet hyperparameters)
+
+        Notes:
+          - This excludes the prior; for that, use :py:attr::`logPrior`.
+          - Even with :py:attr::`logPrior`, this is NOT the same as the data log likelihood given
+          the hyperparameters.
+          - This is computed from the topic distributions computed during training. If you call
+            :py:attr::`logLikelihood` on the same training dataset, the topic distributions
+            will be computed again, possibly giving different results.
+        """
+        return self._call_java("trainingLogLikelihood")
 
 
 class DistributedLDAModel(LDAModel):
     """
-    Model fitted by LDA.
+    Distributed model fitted by :py:attr:`LDA`.
+    This type of model is currently only produced by Expectation-Maximization (EM).
+    This model stores the inferred topics, the full training dataset, and the topic distribution
+    for each training document.
 
     .. versionadded:: 2.0.0
     """
     def toLocal(self):
-        return self._call_java("toLocal")
+        return LocalLDAModel(self._call_java("toLocal"))
+
+    @since("2.0.0")
+    def logPrior(self):
+        """
+        Log probability of the current parameter estimate:
+        log P(topics, topic distributions for docs | alpha, eta)
+        """
+        return self._call_java("logPrior")
+
+    @since("2.0.0")
+    def getCheckpointFiles(self):
+        """
+        If using checkpointing and :py:attr:`LDA.keepLastCheckpoint` is set to true, then there may be
+        saved checkpoint files.  This method is provided so that users can manage those files.
+
+        Note that removing the checkpoints can cause failures if a partition is lost and is needed
+        by certain :py:attr:`DistributedLDAModel` methods.  Reference counting will clean up the
+        checkpoints when this model and derivative data go out of scope.
+        """
+        return self._call_java("getCheckpointFiles")
 
 
 class LocalLDAModel(LDAModel):
     """
-    Model fitted by LDA.
+    Local (non-distributed) model fitted by :py:attr:`LDA`.
+    This model stores the inferred topics only; it does not store info about the training dataset.
 
     .. versionadded:: 2.0.0
     """
@@ -544,18 +592,27 @@ class LocalLDAModel(LDAModel):
 class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInterval):
     """
     Latent Dirichlet Allocation (LDA), a topic model designed for text documents.
-    Terminology
-    - "word" = "term": an element of the vocabulary
+    Terminology:
+
+    - "term" = "word": an el
     - "token": instance of a term appearing in a document
-    - "topic": multinomial distribution over words representing some concept
+    - "topic": multinomial distribution over terms representing some concept
+    - "document": one piece of text, corresponding to one row in the input data
     References:
     - Original LDA paper (journal version):
-    Blei, Ng, and Jordan.  "Latent Dirichlet Allocation."  JMLR, 2003.
+      Blei, Ng, and Jordan.  "Latent Dirichlet Allocation."  JMLR, 2003.
+
+    Input data (featuresCol):
+    LDA is given a collection of documents as input data, via the featuresCol parameter.
+    Each document is specified as a :py:attr:`Vector` of length vocabSize, where each entry is the
+    count for the corresponding term (word) in the document.  Feature transformers such as
+    :py:attr:`Tokenizer` and :py:attr:`CountVectorizer`
+    can be useful for converting text to word count vectors.
 
     >>> from pyspark.mllib.linalg import Vectors, SparseVector
     >>> from pyspark.ml.clustering import LDA
-    >>> df = sqlContext.createDataFrame([[1, Vectors.dense([0.0, 1.0])], \
-        [2, SparseVector(2, {0: 1.0})],], ["id", "features"])
+    >>> df = sqlContext.createDataFrame([[1, Vectors.dense([0.0, 1.0])],
+    ...      [2, SparseVector(2, {0: 1.0})],], ["id", "features"])
     >>> lda = LDA(k=2, seed=1, optimizer="em")
     >>> model = lda.fit(df)
     >>> model.isDistributed()
@@ -648,8 +705,8 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
         setParams(self, featuresCol="features", k=10, \
                   optimizer="online", learningOffset=1024.0, learningDecay=0.51, \
                   subsamplingRate=0.05, optimizeDocConcentration=True, \
-                  checkpointInterval=10, maxIter=20, docConcentration=None,
-                  topicConcentration=None,
+                  checkpointInterval=10, maxIter=20, docConcentration=None, \
+                  topicConcentration=None, \
                   topicDistributionCol="topicDistribution", seed=None):
 
         Sets params for LDA.
@@ -672,7 +729,7 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
     @since("2.0.0")
     def getK(self):
         """
-        Gets the value of `k` or its default value.
+        Gets the value of :py:attr:`k` or its default value.
         """
         return self.getOrDefault(self.k)
 
@@ -681,6 +738,7 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
         """
         Sets the value of :py:attr:`optimizer`.
         Currenlty only support 'em' and 'online'.
+
         >>> algo = LDA().setOptimizer("em")
         >>> algo.getOptimizer()
         'em'
@@ -691,7 +749,7 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
     @since("2.0.0")
     def getOptimizer(self):
         """
-        Gets the value of `optimizer` or its default value.
+        Gets the value of :py:attr:`optimizer` or its default value.
         """
         return self.getOrDefault(self.optimizer)
 
@@ -699,6 +757,7 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
     def setLearningOffset(self, value):
         """
         Sets the value of :py:attr:`learningOffset`.
+
         >>> algo = LDA().setLearningOffset(100)
         >>> algo.getLearningOffset()
         100
@@ -709,7 +768,7 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
     @since("2.0.0")
     def getLearningOffset(self):
         """
-        Gets the value of `learningOffset` or its default value.
+        Gets the value of :py:attr:`learningOffset` or its default value.
         """
         return self.getOrDefault(self.learningOffset)
 
@@ -717,6 +776,7 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
     def setLearningDecay(self, value):
         """
         Sets the value of :py:attr:`learningDecay`.
+
         >>> algo = LDA().setLearningDecay(0.1)
         >>> algo.getLearningDecay()
         0.1...
@@ -727,7 +787,7 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
     @since("2.0.0")
     def getLearningDecay(self):
         """
-        Gets the value of `learningDecay` or its default value.
+        Gets the value of :py:attr:`learningDecay` or its default value.
         """
         return self.getOrDefault(self.learningDecay)
 
@@ -735,6 +795,7 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
     def setSubsamplingRate(self, value):
         """
         Sets the value of :py:attr:`subsamplingRate`.
+
         >>> algo = LDA().setSubsamplingRate(0.1)
         >>> algo.getSubsamplingRate()
         0.1...
@@ -745,7 +806,7 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
     @since("2.0.0")
     def getSubsamplingRate(self):
         """
-        Gets the value of `subsamplingRate` or its default value.
+        Gets the value of :py:attr:`subsamplingRate` or its default value.
         """
         return self.getOrDefault(self.subsamplingRate)
 
@@ -753,6 +814,7 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
     def setOptimizeDocConcentration(self, value):
         """
         Sets the value of :py:attr:`optimizeDocConcentration`.
+
         >>> algo = LDA().setOptimizeDocConcentration(True)
         >>> algo.getOptimizeDocConcentration()
         True
@@ -763,7 +825,7 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
     @since("2.0.0")
     def getOptimizeDocConcentration(self):
         """
-        Gets the value of `optimizeDocConcentration` or its default value.
+        Gets the value of :py:attr:`optimizeDocConcentration` or its default value.
         """
         return self.getOrDefault(self.optimizeDocConcentration)
 
@@ -771,6 +833,7 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
     def setDocConcentration(self, value):
         """
         Sets the value of :py:attr:`docConcentration`.
+
         >>> algo = LDA().setDocConcentration([0.1, 0.2])
         >>> algo.getDocConcentration()
         [0.1..., 0.2...]
@@ -781,7 +844,7 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
     @since("2.0.0")
     def getDocConcentration(self):
         """
-        Gets the value of `docConcentration` or its default value.
+        Gets the value of :py:attr:`docConcentration` or its default value.
         """
         return self.getOrDefault(self.docConcentration)
 
@@ -789,6 +852,7 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
     def setTopicConcentration(self, value):
         """
         Sets the value of :py:attr:`topicConcentration`.
+
         >>> algo = LDA().setTopicConcentration(0.5)
         >>> algo.getTopicConcentration()
         0.5...
@@ -799,7 +863,7 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
     @since("2.0.0")
     def getTopicConcentration(self):
         """
-        Gets the value of `topicConcentration` or its default value.
+        Gets the value of :py:attr:`topicConcentration` or its default value.
         """
         return self.getOrDefault(self.topicConcentration)
 
@@ -807,6 +871,7 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
     def setTopicDistributionCol(self, value):
         """
         Sets the value of :py:attr:`topicDistributionCol`.
+
         >>> algo = LDA().setTopicDistributionCol("topicDistributionCol")
         >>> algo.getTopicDistributionCol()
         'topicDistributionCol'
@@ -817,7 +882,7 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
     @since("2.0.0")
     def getTopicDistributionCol(self):
         """
-        Gets the value of `topicDistributionCol` or its default value.
+        Gets the value of :py:attr:`topicDistributionCol` or its default value.
         """
         return self.getOrDefault(self.topicDistributionCol)
 
