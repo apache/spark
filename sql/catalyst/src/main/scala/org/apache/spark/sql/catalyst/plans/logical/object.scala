@@ -88,7 +88,20 @@ case class SerializeFromObject(
   // directly estimate any child plan which produces domain objects as output.
   override def statistics: Statistics = {
     if (child.output.head.dataType.isInstanceOf[ObjectType]) {
-      Statistics(sizeInBytes = Long.MaxValue)
+      // Try to find the first underlying child of it which doesn't output object
+      val underlyingPlan = child.find { p =>
+        // This means the child plan that produces domain object but its children do not produce
+        // domain object
+        p.isInstanceOf[ObjectProducer] && !p.isInstanceOf[ObjectConsumer]
+      }
+      if (underlyingPlan.isDefined) {
+        underlyingPlan.get match {
+          case u: UnaryNode => u.child.statistics
+          case o => Statistics(sizeInBytes = o.children.map(_.statistics.sizeInBytes).product)
+        }
+      } else {
+        Statistics(sizeInBytes = Long.MaxValue)
+      }
     } else {
       super.statistics
     }
