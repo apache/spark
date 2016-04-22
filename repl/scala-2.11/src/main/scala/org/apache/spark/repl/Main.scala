@@ -88,6 +88,7 @@ object Main extends Logging {
     }
     sparkContext = new SparkContext(conf)
     logInfo("Created spark context..")
+    Signaling.cancelOnInterrupt(sparkContext)
     sparkContext
   }
 
