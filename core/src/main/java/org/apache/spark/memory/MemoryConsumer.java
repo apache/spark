@@ -29,7 +29,7 @@ import org.apache.spark.unsafe.memory.MemoryBlock;
  */
 public abstract class MemoryConsumer {
 
-  protected final TaskMemoryManager taskMemoryManager;
+  protected transient final TaskMemoryManager taskMemoryManager;
   private final long pageSize;
   protected long used;
 
