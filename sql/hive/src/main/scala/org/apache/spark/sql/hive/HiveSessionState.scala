@@ -75,7 +75,7 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
     new HiveSessionCatalog(
       sharedState.externalCatalog,
       metadataHive,
-      sparkSession.wrapped,
+      sparkSession,
       functionResourceLoader,
       functionRegistry,
       conf,
