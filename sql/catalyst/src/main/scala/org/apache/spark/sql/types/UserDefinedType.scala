@@ -92,7 +92,7 @@ abstract class UserDefinedType[UserType >: Null] extends DataType with Serializa
     case _ => false
   }
 
-  override def simpleString: String = sqlType.simpleString
+  override def catalogString: String = sqlType.simpleString
 }
 
 /**
