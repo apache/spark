@@ -39,15 +39,19 @@ class ColumnPruner (override val uid: String)
   def setInputCols(values: Array[String]): this.type = set(inputCols, values)
 
   override def transform(dataset: Dataset[_]): DataFrame = {
+    checkCanTransform(dataset.schema)
     val columnsToKeep = dataset.columns.filter(!$(inputCols).contains(_))
     dataset.select(columnsToKeep.map(dataset.col): _*)
   }
 
   override def transformSchema(schema: StructType): StructType = {
-    require(get(inputCols).isDefined, "Input cols must be defined first.")
-    require($(inputCols).length > 0, "Input cols must have non-zero length.")
-    require($(inputCols).distinct.length == $(inputCols).length, "Input cols must be distinct.")
+    checkCanTransform(schema)
     StructType(schema.fields.filter(col => !$(inputCols).contains(col.name)))
+  }
+
+  private def checkCanTransform(schema: StructType): Unit = {
+    require(get(inputCols).isDefined, "Input cols must be defined first.")
+    require($(inputCols).distinct.length == $(inputCols).length, "Input cols must be distinct.")
   }
 
   override def copy(extra: ParamMap): ColumnPruner = defaultCopy(extra)
