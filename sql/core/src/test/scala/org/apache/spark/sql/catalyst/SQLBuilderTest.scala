@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.sql.{DataFrame, Dataset, QueryTest}
+import org.apache.spark.sql.{Dataset, QueryTest}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.test.SharedSQLContext
@@ -67,7 +67,7 @@ abstract class SQLBuilderTest extends QueryTest with SharedSQLContext {
     checkAnswer(sqlContext.sql(generatedSQL), Dataset.ofRows(sqlContext, plan))
   }
 
-  protected def checkSQL(df: DataFrame, expectedSQL: String): Unit = {
+  protected def checkSQL(df: Dataset[_], expectedSQL: String): Unit = {
     checkSQL(df.queryExecution.analyzed, expectedSQL)
   }
 }
