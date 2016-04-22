@@ -80,23 +80,23 @@ class SQLBuilder(logicalPlan: LogicalPlan) extends Logging {
       val generatedSQL = toSQL(replaced)
       logDebug(
         s"""Built SQL query string successfully from given logical plan:
-            |
+           |
            |# Original logical plan:
-            |${logicalPlan.treeString}
-            |# Canonicalized logical plan:
-            |${replaced.treeString}
-            |# Generated SQL:
-            |$generatedSQL
+           |${logicalPlan.treeString}
+           |# Canonicalized logical plan:
+           |${replaced.treeString}
+           |# Generated SQL:
+           |$generatedSQL
          """.stripMargin)
       generatedSQL
     } catch { case NonFatal(e) =>
       logDebug(
         s"""Failed to build SQL query string from given logical plan:
-            |
+           |
            |# Original logical plan:
-            |${logicalPlan.treeString}
-            |# Canonicalized logical plan:
-            |${canonicalizedPlan.treeString}
+           |${logicalPlan.treeString}
+           |# Canonicalized logical plan:
+           |${canonicalizedPlan.treeString}
          """.stripMargin)
       throw e
     }
@@ -163,7 +163,7 @@ class SQLBuilder(logicalPlan: LogicalPlan) extends Logging {
       }.getOrElse(qualifiedName)
 
     case Sort(orders, _, RepartitionByExpression(partitionExprs, child, _))
-      if orders.map(_.child) == partitionExprs =>
+        if orders.map(_.child) == partitionExprs =>
       build(toSQL(child), "CLUSTER BY", partitionExprs.map(_.sql).mkString(", "))
 
     case p: Sort =>
@@ -291,10 +291,7 @@ class SQLBuilder(logicalPlan: LogicalPlan) extends Logging {
       a.groupingExpressions.map(_.asInstanceOf[Attribute]))
   }
 
-  private def groupingSetToSQL(
-    agg: Aggregate,
-    expand: Expand,
-    project: Project): String = {
+  private def groupingSetToSQL(agg: Aggregate, expand: Expand, project: Project): String = {
     assert(agg.groupingExpressions.length > 1)
 
     // The last column of Expand is always grouping ID
@@ -504,10 +501,10 @@ class SQLBuilder(logicalPlan: LogicalPlan) extends Logging {
   }
 
   case class SQLTable(
-    database: String,
-    table: String,
-    output: Seq[Attribute],
-    sample: Option[(Double, Double)] = None) extends LeafNode {
+      database: String,
+      table: String,
+      output: Seq[Attribute],
+      sample: Option[(Double, Double)] = None) extends LeafNode {
     def withSample(lowerBound: Double, upperBound: Double): SQLTable =
       this.copy(sample = Some(lowerBound -> upperBound))
   }

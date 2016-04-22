@@ -34,9 +34,9 @@ abstract class SQLBuilderTest extends QueryTest with SharedSQLContext {
       case cause: Throwable =>
         fail(
           s"""Wrong SQL generated for the following expression:
-              |
+             |
              |${e.prettyName}
-              |
+             |
              |$cause
            """.stripMargin)
     }
@@ -46,7 +46,7 @@ abstract class SQLBuilderTest extends QueryTest with SharedSQLContext {
     val generatedSQL = try new SQLBuilder(plan).toSQL catch { case NonFatal(e) =>
       fail(
         s"""Cannot convert the following logical query plan to SQL:
-            |
+           |
            |${plan.treeString}
          """.stripMargin)
     }
@@ -57,9 +57,9 @@ abstract class SQLBuilderTest extends QueryTest with SharedSQLContext {
       case cause: Throwable =>
         fail(
           s"""Wrong SQL generated for the following logical query plan:
-              |
+             |
              |${plan.treeString}
-              |
+             |
              |$cause
            """.stripMargin)
     }
