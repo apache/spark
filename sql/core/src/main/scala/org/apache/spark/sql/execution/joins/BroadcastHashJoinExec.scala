@@ -35,7 +35,7 @@ import org.apache.spark.sql.types.LongType
  * broadcast relation.  This data is then placed in a Spark broadcast variable.  The streamed
  * relation is not shuffled.
  */
-case class BroadcastHashJoin(
+case class BroadcastHashJoinExec(
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
     joinType: JoinType,

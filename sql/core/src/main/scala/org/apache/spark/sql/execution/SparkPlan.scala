@@ -41,6 +41,8 @@ import org.apache.spark.util.ThreadUtils
 
 /**
  * The base class for physical operators.
+ *
+ * The naming convention is that physical operators end with "Exec" suffix, e.g. [[ProjectExec]].
  */
 abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializable {
 

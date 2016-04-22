@@ -53,17 +53,17 @@ class IncrementalExecution(
   /** Locates save/restore pairs surrounding aggregation. */
   val state = new Rule[SparkPlan] {
     override def apply(plan: SparkPlan): SparkPlan = plan transform {
-      case StateStoreSave(keys, None,
+      case StateStoreSaveExec(keys, None,
              UnaryExecNode(agg,
-               StateStoreRestore(keys2, None, child))) =>
+               StateStoreRestoreExec(keys2, None, child))) =>
         val stateId = OperatorStateId(checkpointLocation, operatorId, currentBatchId - 1)
         operatorId += 1
 
-        StateStoreSave(
+        StateStoreSaveExec(
           keys,
           Some(stateId),
           agg.withNewChildren(
-            StateStoreRestore(
+            StateStoreRestoreExec(
               keys,
               Some(stateId),
               child) :: Nil))

@@ -29,7 +29,7 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 /**
  * Performs a hash join of two child relations by first shuffling the data using the join keys.
  */
-case class ShuffledHashJoin(
+case class ShuffledHashJoinExec(
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
     joinType: JoinType,

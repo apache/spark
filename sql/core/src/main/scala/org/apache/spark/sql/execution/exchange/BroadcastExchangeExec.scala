@@ -28,17 +28,17 @@ import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
 import org.apache.spark.util.ThreadUtils
 
 /**
- * A [[BroadcastExchange]] collects, transforms and finally broadcasts the result of a transformed
- * SparkPlan.
+ * A [[BroadcastExchangeExec]] collects, transforms and finally broadcasts the result of
+ * a transformed SparkPlan.
  */
-case class BroadcastExchange(
+case class BroadcastExchangeExec(
     mode: BroadcastMode,
     child: SparkPlan) extends Exchange {
 
   override def outputPartitioning: Partitioning = BroadcastPartitioning(mode)
 
   override def sameResult(plan: SparkPlan): Boolean = plan match {
-    case p: BroadcastExchange =>
+    case p: BroadcastExchangeExec =>
       mode.compatibleWith(p.mode) && child.sameResult(p.child)
     case _ => false
   }
@@ -67,7 +67,7 @@ case class BroadcastExchange(
         // Construct and broadcast the relation.
         sparkContext.broadcast(mode.transform(input))
       }
-    }(BroadcastExchange.executionContext)
+    }(BroadcastExchangeExec.executionContext)
   }
 
   override protected def doPrepare(): Unit = {
@@ -85,7 +85,7 @@ case class BroadcastExchange(
   }
 }
 
-object BroadcastExchange {
+object BroadcastExchangeExec {
   private[execution] val executionContext = ExecutionContext.fromExecutorService(
     ThreadUtils.newDaemonCachedThreadPool("broadcast-exchange", 128))
 }

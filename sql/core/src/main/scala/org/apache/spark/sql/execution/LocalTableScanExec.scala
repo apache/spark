@@ -26,7 +26,7 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 /**
  * Physical plan node for scanning data from a local collection.
  */
-private[sql] case class LocalTableScan(
+private[sql] case class LocalTableScanExec(
     output: Seq[Attribute],
     rows: Seq[InternalRow]) extends LeafExecNode {
 

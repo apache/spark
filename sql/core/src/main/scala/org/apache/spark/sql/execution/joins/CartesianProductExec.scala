@@ -79,7 +79,7 @@ class UnsafeCartesianRDD(left : RDD[UnsafeRow], right : RDD[UnsafeRow], numField
 }
 
 
-case class CartesianProduct(left: SparkPlan, right: SparkPlan) extends BinaryExecNode {
+case class CartesianProductExec(left: SparkPlan, right: SparkPlan) extends BinaryExecNode {
   override def output: Seq[Attribute] = left.output ++ right.output
 
   override private[sql] lazy val metrics = Map(

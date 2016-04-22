@@ -32,7 +32,7 @@ import org.apache.spark.util.collection.BitSet
 /**
  * Performs an sort merge join of two child relations.
  */
-case class SortMergeJoin(
+case class SortMergeJoinExec(
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
     joinType: JoinType,
@@ -466,7 +466,7 @@ case class SortMergeJoin(
 }
 
 /**
- * Helper class that is used to implement [[SortMergeJoin]].
+ * Helper class that is used to implement [[SortMergeJoinExec]].
  *
  * To perform an inner (outer) join, users of this class call [[findNextInnerJoinRows()]]
  * ([[findNextOuterJoinRows()]]), which returns `true` if a result has been produced and `false`

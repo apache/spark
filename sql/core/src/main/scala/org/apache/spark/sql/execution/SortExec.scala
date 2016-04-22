@@ -36,7 +36,7 @@ import org.apache.spark.util.collection.unsafe.sort.RadixSort;
  * @param testSpillFrequency Method for configuring periodic spilling in unit tests. If set, will
  *                           spill every `frequency` records.
  */
-case class Sort(
+case class SortExec(
     sortOrder: Seq[SortOrder],
     global: Boolean,
     child: SparkPlan,

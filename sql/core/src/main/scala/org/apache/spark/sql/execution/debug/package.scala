@@ -49,9 +49,9 @@ package object debug {
   }
 
   def codegenString(plan: SparkPlan): String = {
-    val codegenSubtrees = new collection.mutable.HashSet[WholeStageCodegen]()
+    val codegenSubtrees = new collection.mutable.HashSet[WholeStageCodegenExec]()
     plan transform {
-      case s: WholeStageCodegen =>
+      case s: WholeStageCodegenExec =>
         codegenSubtrees += s
         s
       case s => s

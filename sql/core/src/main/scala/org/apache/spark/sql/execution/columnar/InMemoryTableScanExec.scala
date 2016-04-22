@@ -210,7 +210,7 @@ private[sql] case class InMemoryRelation(
   }
 }
 
-private[sql] case class InMemoryColumnarTableScan(
+private[sql] case class InMemoryTableScanExec(
     attributes: Seq[Attribute],
     predicates: Seq[Expression],
     @transient relation: InMemoryRelation)

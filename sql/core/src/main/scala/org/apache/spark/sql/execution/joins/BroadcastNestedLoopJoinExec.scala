@@ -27,7 +27,7 @@ import org.apache.spark.sql.execution.{BinaryExecNode, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.util.collection.{BitSet, CompactBuffer}
 
-case class BroadcastNestedLoopJoin(
+case class BroadcastNestedLoopJoinExec(
     left: SparkPlan,
     right: SparkPlan,
     buildSide: BuildSide,

@@ -44,7 +44,7 @@ import org.apache.spark.util.Utils
  * @param partitionPruningPred An optional partition pruning predicate for partitioned table.
  */
 private[hive]
-case class HiveTableScan(
+case class HiveTableScanExec(
     requestedAttributes: Seq[Attribute],
     relation: MetastoreRelation,
     partitionPruningPred: Seq[Expression])(
