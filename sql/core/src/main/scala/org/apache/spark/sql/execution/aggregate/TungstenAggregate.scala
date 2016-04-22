@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.execution.metric.{LongSQLMetricValue, SQLMetrics}
 import org.apache.spark.sql.types.{DecimalType, StringType, StructType}
 import org.apache.spark.unsafe.KVIterator
 
@@ -52,8 +52,9 @@ case class TungstenAggregate(
 
   override private[sql] lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"),
-    "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
-    "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"))
+    "peakMemory" -> SQLMetrics.createSizeMetric(sparkContext, "peak memory"),
+    "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"),
+    "aggTime" -> SQLMetrics.createTimingMetric(sparkContext, "aggregate time"))
 
   override def output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
 
@@ -83,7 +84,7 @@ case class TungstenAggregate(
 
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
     val numOutputRows = longMetric("numOutputRows")
-    val dataSize = longMetric("dataSize")
+    val peakMemory = longMetric("peakMemory")
     val spillSize = longMetric("spillSize")
 
     child.execute().mapPartitions { iter =>
@@ -107,7 +108,7 @@ case class TungstenAggregate(
             iter,
             testFallbackStartsAt,
             numOutputRows,
-            dataSize,
+            peakMemory,
             spillSize)
         if (!hasInput && groupingExpressions.isEmpty) {
           numOutputRows += 1
@@ -212,10 +213,14 @@ case class TungstenAggregate(
        """.stripMargin)
 
     val numOutput = metricTerm(ctx, "numOutputRows")
+    val aggTime = metricTerm(ctx, "aggTime")
+    val beforeAgg = ctx.freshName("beforeAgg")
     s"""
        | while (!$initAgg) {
        |   $initAgg = true;
+       |   long $beforeAgg = System.nanoTime();
        |   $doAgg();
+       |   $aggTime.add((System.nanoTime() - $beforeAgg) / 1000000);
        |
        |   // output the result
        |   ${genResult.trim}
@@ -303,15 +308,17 @@ case class TungstenAggregate(
    */
   def finishAggregate(
       hashMap: UnsafeFixedWidthAggregationMap,
-      sorter: UnsafeKVExternalSorter): KVIterator[UnsafeRow, UnsafeRow] = {
+      sorter: UnsafeKVExternalSorter,
+      peakMemory: LongSQLMetricValue,
+      spillSize: LongSQLMetricValue): KVIterator[UnsafeRow, UnsafeRow] = {
 
     // update peak execution memory
     val mapMemory = hashMap.getPeakMemoryUsedBytes
     val sorterMemory = Option(sorter).map(_.getPeakMemoryUsedBytes).getOrElse(0L)
-    val peakMemory = Math.max(mapMemory, sorterMemory)
+    val maxMemory = Math.max(mapMemory, sorterMemory)
     val metrics = TaskContext.get().taskMetrics()
-    metrics.incPeakExecutionMemory(peakMemory)
-    // TODO: update data size and spill size
+    peakMemory.add(maxMemory)
+    metrics.incPeakExecutionMemory(maxMemory)
 
     if (sorter == null) {
       // not spilled
@@ -365,6 +372,7 @@ case class TungstenAggregate(
 
           true
         } else {
+          spillSize.add(sorter.getSpillSize)
           false
         }
       }
@@ -476,6 +484,8 @@ case class TungstenAggregate(
     ctx.addMutableState(classOf[KVIterator[UnsafeRow, UnsafeRow]].getName, iterTerm, "")
 
     val doAgg = ctx.freshName("doAggregateWithKeys")
+    val peakMemory = metricTerm(ctx, "peakMemory")
+    val spillSize = metricTerm(ctx, "spillSize")
     ctx.addNewFunction(doAgg,
       s"""
         ${if (isVectorizedHashMapEnabled) vectorizedHashMapGenerator.generate() else ""}
@@ -486,7 +496,7 @@ case class TungstenAggregate(
           ${if (isVectorizedHashMapEnabled) {
               s"$iterTermForVectorizedHashMap = $vectorizedHashMapTerm.rowIterator();"} else ""}
 
-          $iterTerm = $thisPlan.finishAggregate($hashMapTerm, $sorterTerm);
+          $iterTerm = $thisPlan.finishAggregate($hashMapTerm, $sorterTerm, $peakMemory, $spillSize);
         }
        """)
 
@@ -528,10 +538,14 @@ case class TungstenAggregate(
       } else None
     }
 
+    val aggTime = metricTerm(ctx, "aggTime")
+    val beforeAgg = ctx.freshName("beforeAgg")
     s"""
      if (!$initAgg) {
        $initAgg = true;
+       long $beforeAgg = System.nanoTime();
        $doAgg();
+       $aggTime.add((System.nanoTime() - $beforeAgg) / 1000000);
      }
 
      // output the result
