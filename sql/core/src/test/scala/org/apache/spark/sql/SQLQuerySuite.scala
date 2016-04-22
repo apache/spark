@@ -1085,6 +1085,21 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       sql("SET zzz"),
       Row("zzz", "5")
     )
+    // use alias
+    sql("SET x=5")
+    sql("SET hive.variable.substitute=false")
+    sql("SET y=${x}")
+    checkAnswer(
+      sql("SET y"),
+      Row("y", "${x}")
+    )
+    sql("SET hive.variable.substitute=true")
+    sql("SET z=${x}")
+    checkAnswer(
+      sql("SET z"),
+      Row("z", "5")
+    )
+
     sqlContext.conf.clear()
   }
 

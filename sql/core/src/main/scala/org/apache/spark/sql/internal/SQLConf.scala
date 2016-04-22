@@ -471,8 +471,20 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val HIVE_VARIABLE_SUBSTITUTE_ENABLED =
+    SQLConfigBuilder("hive.variable.substitute")
+      .doc("This enables substitution using syntax like ${var} ${system:var} and ${env:var}.")
+      .booleanConf
+      .createWithDefault(true)
+
   val VARIABLE_SUBSTITUTE_DEPTH =
     SQLConfigBuilder("spark.sql.variable.substitute.depth")
+      .doc("The maximum replacements the substitution engine will do.")
+      .intConf
+      .createWithDefault(40)
+
+  val HIVE_VARIABLE_SUBSTITUTE_DEPTH =
+    SQLConfigBuilder("hive.variable.substitute.depth")
       .doc("The maximum replacements the substitution engine will do.")
       .intConf
       .createWithDefault(40)
@@ -746,7 +758,15 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
     if (key.startsWith("spark.") && !key.startsWith("spark.sql.")) {
       logWarning(s"Attempt to set non-Spark SQL config in SQLConf: key = $key, value = $value")
     }
-    settings.put(key, value)
+
+    // alias the hive.variable.substitute and hive.variable.substitute.depth setting
+    val substitutedKey = key match {
+      case HIVE_VARIABLE_SUBSTITUTE_ENABLED.key => VARIABLE_SUBSTITUTE_ENABLED.key
+      case HIVE_VARIABLE_SUBSTITUTE_DEPTH.key => VARIABLE_SUBSTITUTE_DEPTH.key
+      case _ => key
+    }
+
+    settings.put(substitutedKey, value)
   }
 
   def unsetConf(key: String): Unit = {
