@@ -626,7 +626,7 @@ convertNamedListToEnv <- function(namedList) {
 
 # Assign a new environment for attach() and with() methods
 assignNewEnv <- function(data) {
-  stopifnot(class(data) == "DataFrame")
+  stopifnot(class(data) == "SparkDataFrame")
   cols <- columns(data)
   stopifnot(length(cols) > 0)
 
