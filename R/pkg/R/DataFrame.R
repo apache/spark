@@ -2296,12 +2296,8 @@ setMethod("fillna",
 #' }
 setMethod("as.data.frame",
           signature(x = "DataFrame"),
-          function(x, ...) {
-            # Check if additional parameters have been passed
-            if (length(list(...)) > 0) {
-              stop(paste("Unused argument(s): ", paste(list(...), collapse = ", ")))
-            }
-            collect(x)
+          function(x, row.names = NULL, optional = FALSE, ...) {
+            as.data.frame(collect(x), row.names, optional, ...)
           })
 
 #' The specified DataFrame is attached to the R search path. This means that
@@ -2363,7 +2359,7 @@ setMethod("with",
 #' @examples \dontrun{
 #' # Create a DataFrame from the Iris dataset
 #' irisDF <- createDataFrame(sqlContext, iris)
-#' 
+#'
 #' # Show the structure of the DataFrame
 #' str(irisDF)
 #' }
@@ -2467,4 +2463,41 @@ setMethod("drop",
           signature(x = "ANY"),
           function(x) {
             base::drop(x)
+          })
+
+#' Saves the content of the DataFrame to an external database table via JDBC
+#'
+#' Additional JDBC database connection properties can be set (...)
+#'
+#' Also, mode is used to specify the behavior of the save operation when
+#' data already exists in the data source. There are four modes: \cr
+#'  append: Contents of this DataFrame are expected to be appended to existing data. \cr
+#'  overwrite: Existing data is expected to be overwritten by the contents of this DataFrame. \cr
+#'  error: An exception is expected to be thrown. \cr
+#'  ignore: The save operation is expected to not save the contents of the DataFrame
+#'     and to not change the existing data. \cr
+#'
+#' @param x A SparkSQL DataFrame
+#' @param url JDBC database url of the form `jdbc:subprotocol:subname`
+#' @param tableName The name of the table in the external database
+#' @param mode One of 'append', 'overwrite', 'error', 'ignore' save mode (it is 'error' by default)
+#' @family DataFrame functions
+#' @rdname write.jdbc
+#' @name write.jdbc
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlContext <- sparkRSQL.init(sc)
+#' jdbcUrl <- "jdbc:mysql://localhost:3306/databasename"
+#' write.jdbc(df, jdbcUrl, "table", user = "username", password = "password")
+#' }
+setMethod("write.jdbc",
+          signature(x = "DataFrame", url = "character", tableName = "character"),
+          function(x, url, tableName, mode = "error", ...){
+            jmode <- convertToJSaveMode(mode)
+            jprops <- varargsToJProperties(...)
+            write <- callJMethod(x@sdf, "write")
+            write <- callJMethod(write, "mode", jmode)
+            invisible(callJMethod(write, "jdbc", url, tableName, jprops))
           })

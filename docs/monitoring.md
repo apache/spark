@@ -189,6 +189,13 @@ The history server can be configured as follows:
       Job history files older than this will be deleted when the filesystem history cleaner runs.
     </td>
   </tr>
+  <tr>
+    <td>spark.history.fs.numReplayThreads</td>
+    <td>25% of available cores</td>
+    <td>
+      Number of threads that will be used by history server to process event logs.
+    </td>
+  </tr>
 </table>
 
 Note that in all of these UIs, the tables are sortable by clicking their headers,

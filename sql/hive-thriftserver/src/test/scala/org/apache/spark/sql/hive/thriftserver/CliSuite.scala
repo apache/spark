@@ -23,7 +23,7 @@ import java.sql.Timestamp
 import java.util.Date
 
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.{Await, Promise}
+import scala.concurrent.Promise
 import scala.concurrent.duration._
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
@@ -32,7 +32,7 @@ import org.scalatest.BeforeAndAfterAll
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
  * A test suite for the `spark-sql` CLI tool.  Note that all test cases share the same temporary
@@ -132,7 +132,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     new ProcessOutputCapturer(process.getErrorStream, captureOutput("stderr")).start()
 
     try {
-      Await.result(foundAllExpectedAnswers.future, timeout)
+      ThreadUtils.awaitResult(foundAllExpectedAnswers.future, timeout)
     } catch { case cause: Throwable =>
       val message =
         s"""

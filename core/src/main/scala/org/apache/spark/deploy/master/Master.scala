@@ -24,7 +24,7 @@ import java.util.Date
 import java.util.concurrent.{ConcurrentHashMap, ScheduledFuture, TimeUnit}
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 import scala.language.postfixOps
 import scala.util.Random
@@ -959,7 +959,7 @@ private[deploy] class Master(
    */
   private[master] def rebuildSparkUI(app: ApplicationInfo): Option[SparkUI] = {
     val futureUI = asyncRebuildSparkUI(app)
-    Await.result(futureUI, Duration.Inf)
+    ThreadUtils.awaitResult(futureUI, Duration.Inf)
   }
 
   /** Rebuild a new SparkUI asynchronously to not block RPC event loop */

@@ -20,11 +20,11 @@ import numpy as np
 from abc import ABCMeta, abstractmethod
 
 from pyspark import SparkContext
-from pyspark import since
+from pyspark import since, keyword_only
 from pyspark.ml import Estimator, Model
 from pyspark.ml.param import Params, Param, TypeConverters
 from pyspark.ml.param.shared import HasSeed
-from pyspark.ml.util import keyword_only, JavaMLWriter, JavaMLReader, MLReadable, MLWritable
+from pyspark.ml.util import JavaMLWriter, JavaMLReader, MLReadable, MLWritable
 from pyspark.ml.wrapper import JavaParams
 from pyspark.sql.functions import rand
 from pyspark.mllib.common import inherit_doc, _py2java, _java2py

@@ -64,15 +64,14 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
     result
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val first = children(0)
     val rest = children.drop(1)
     val firstEval = first.genCode(ctx)
-    s"""
+    ev.copy(code = s"""
       ${firstEval.code}
       boolean ${ev.isNull} = ${firstEval.isNull};
-      ${ctx.javaType(dataType)} ${ev.value} = ${firstEval.value};
-    """ +
+      ${ctx.javaType(dataType)} ${ev.value} = ${firstEval.value};""" +
       rest.map { e =>
       val eval = e.genCode(ctx)
       s"""
@@ -84,7 +83,7 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
           }
         }
       """
-    }.mkString("\n")
+    }.mkString("\n"))
   }
 }
 
@@ -113,16 +112,15 @@ case class IsNaN(child: Expression) extends UnaryExpression
     }
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval = child.genCode(ctx)
     child.dataType match {
       case DoubleType | FloatType =>
-        s"""
+        ev.copy(code = s"""
           ${eval.code}
           boolean ${ev.isNull} = false;
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-          ${ev.value} = !${eval.isNull} && Double.isNaN(${eval.value});
-        """
+          ${ev.value} = !${eval.isNull} && Double.isNaN(${eval.value});""")
     }
   }
 }
@@ -155,12 +153,12 @@ case class NaNvl(left: Expression, right: Expression)
     }
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val leftGen = left.genCode(ctx)
     val rightGen = right.genCode(ctx)
     left.dataType match {
       case DoubleType | FloatType =>
-        s"""
+        ev.copy(code = s"""
           ${leftGen.code}
           boolean ${ev.isNull} = false;
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
@@ -177,8 +175,7 @@ case class NaNvl(left: Expression, right: Expression)
                 ${ev.value} = ${rightGen.value};
               }
             }
-          }
-        """
+          }""")
     }
   }
 }
@@ -196,11 +193,9 @@ case class IsNull(child: Expression) extends UnaryExpression with Predicate {
     child.eval(input) == null
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval = child.genCode(ctx)
-    ev.isNull = "false"
-    ev.value = eval.isNull
-    eval.code
+    ExprCode(code = eval.code, isNull = "false", value = eval.isNull)
   }
 
   override def sql: String = s"(${child.sql} IS NULL)"
@@ -219,11 +214,9 @@ case class IsNotNull(child: Expression) extends UnaryExpression with Predicate {
     child.eval(input) != null
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval = child.genCode(ctx)
-    ev.isNull = "false"
-    ev.value = s"(!(${eval.isNull}))"
-    eval.code
+    ExprCode(code = eval.code, isNull = "false", value = s"(!(${eval.isNull}))")
   }
 
   override def sql: String = s"(${child.sql} IS NOT NULL)"
@@ -259,7 +252,7 @@ case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate
     numNonNulls >= n
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val nonnull = ctx.freshName("nonnull")
     val code = children.map { e =>
       val eval = e.genCode(ctx)
@@ -284,11 +277,10 @@ case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate
           """
       }
     }.mkString("\n")
-    s"""
+    ev.copy(code = s"""
       int $nonnull = 0;
       $code
       boolean ${ev.isNull} = false;
-      boolean ${ev.value} = $nonnull >= $n;
-     """
+      boolean ${ev.value} = $nonnull >= $n;""")
   }
 }

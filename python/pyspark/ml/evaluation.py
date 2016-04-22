@@ -17,11 +17,10 @@
 
 from abc import abstractmethod, ABCMeta
 
-from pyspark import since
+from pyspark import since, keyword_only
 from pyspark.ml.wrapper import JavaParams
 from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.param.shared import HasLabelCol, HasPredictionCol, HasRawPredictionCol
-from pyspark.ml.util import keyword_only
 from pyspark.mllib.common import inherit_doc
 
 __all__ = ['Evaluator', 'BinaryClassificationEvaluator', 'RegressionEvaluator',
