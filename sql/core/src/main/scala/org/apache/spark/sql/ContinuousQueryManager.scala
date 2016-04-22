@@ -191,7 +191,7 @@ class ContinuousQueryManager(sqlContext: SQLContext) {
       var nextSourceId = 0L
 
       val logicalPlan = analyzedPlan.transform {
-        case s @ StreamingRelation(dataSource, _, output) =>
+        case StreamingRelation(dataSource, _, output) =>
           // Materialize source to avoid creating it in every batch
           val metadataPath = s"$checkpointLocation/sources/$nextSourceId"
           val source = dataSource.createSource(metadataPath)

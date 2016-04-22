@@ -23,7 +23,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{StructField, StringType, StructType}
+import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.util.Utils
 
 class FileStreamSourceTest extends StreamTest with SharedSQLContext {
@@ -67,7 +67,7 @@ class FileStreamSourceTest extends StreamTest with SharedSQLContext {
       df.write.parquet(file.getCanonicalPath)
       file.renameTo(new File(src, file.getName))
     }
-}
+  }
 
   /** Use `format` and `path` to create FileStreamSource via DataFrameReader */
   def createFileStreamSource(
