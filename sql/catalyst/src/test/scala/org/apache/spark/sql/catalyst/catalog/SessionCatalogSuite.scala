@@ -50,13 +50,14 @@ class SessionCatalogSuite extends SparkFunSuite {
     catalog.createDatabase(newDb("default"), ignoreIfExists = true)
     assert(catalog.databaseExists("default"))
     assert(!catalog.databaseExists("testing"))
-    assert(!catalog.databaseExists("testing2"))
+    assert(!catalog.databaseExists("_testing2"))
     catalog.createDatabase(newDb("testing"), ignoreIfExists = false)
     assert(catalog.databaseExists("testing"))
     assert(catalog.listDatabases().toSet == Set("default", "testing"))
-    catalog.createDatabase(newDb("testing2"), ignoreIfExists = false)
-    assert(catalog.listDatabases().toSet == Set("default", "testing", "testing2"))
-    assert(catalog.databaseExists("testing2"))
+    // Different from Hive, we also support the name starting with underscore.
+    catalog.createDatabase(newDb("_testing2"), ignoreIfExists = false)
+    assert(catalog.listDatabases().toSet == Set("default", "testing", "_testing2"))
+    assert(catalog.databaseExists("_testing2"))
     assert(!catalog.databaseExists("does_not_exist"))
   }
 
@@ -173,8 +174,9 @@ class SessionCatalogSuite extends SparkFunSuite {
     assert(externalCatalog.listTables("db2").toSet == Set("tbl1", "tbl2", "tbl3"))
     // Create table without explicitly specifying database
     sessionCatalog.setCurrentDatabase("db1")
-    sessionCatalog.createTable(newTable("tbl4"), ignoreIfExists = false)
-    assert(externalCatalog.listTables("db1").toSet == Set("tbl3", "tbl4"))
+    // Different from Hive, we also support the name starting with underscore.
+    sessionCatalog.createTable(newTable("_tbl4"), ignoreIfExists = false)
+    assert(externalCatalog.listTables("db1").toSet == Set("tbl3", "_tbl4"))
     assert(externalCatalog.listTables("db2").toSet == Set("tbl1", "tbl2", "tbl3"))
   }
 
@@ -676,8 +678,9 @@ class SessionCatalogSuite extends SparkFunSuite {
     assert(externalCatalog.listFunctions("mydb", "*").toSet == Set("myfunc"))
     // Create function without explicitly specifying database
     sessionCatalog.setCurrentDatabase("mydb")
-    sessionCatalog.createFunction(newFunc("myfunc2"), ignoreIfExists = false)
-    assert(externalCatalog.listFunctions("mydb", "*").toSet == Set("myfunc", "myfunc2"))
+    // Different from Hive, we also support the name starting with underscore.
+    sessionCatalog.createFunction(newFunc("_myfunc2"), ignoreIfExists = false)
+    assert(externalCatalog.listFunctions("mydb", "*").toSet == Set("myfunc", "_myfunc2"))
   }
 
   test("create function when database does not exist") {

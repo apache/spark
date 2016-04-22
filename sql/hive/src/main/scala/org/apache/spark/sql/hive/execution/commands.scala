@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.hadoop.hive.metastore.MetaStoreUtils
-
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
@@ -40,20 +38,6 @@ case class CreateMetastoreDataSource(
     managedIfNoPath: Boolean) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
-    // Since we are saving metadata to metastore, we need to check if metastore supports
-    // the table name and database name we have for this query. MetaStoreUtils.validateName
-    // is the method used by Hive to check if a table name or a database name is valid for
-    // the metastore.
-    if (!MetaStoreUtils.validateName(tableIdent.table)) {
-      throw new AnalysisException(s"Table name ${tableIdent.table} is not a valid name for " +
-        s"metastore. Metastore only accepts table name containing characters, numbers and _.")
-    }
-    if (tableIdent.database.isDefined && !MetaStoreUtils.validateName(tableIdent.database.get)) {
-      throw new AnalysisException(s"Database name ${tableIdent.database.get} is not a valid name " +
-        s"for metastore. Metastore only accepts database name containing " +
-        s"characters, numbers and _.")
-    }
-
     val tableName = tableIdent.unquotedString
     val sessionState = sqlContext.sessionState.asInstanceOf[HiveSessionState]
 
@@ -106,20 +90,6 @@ case class CreateMetastoreDataSourceAsSelect(
     query: LogicalPlan) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
-    // Since we are saving metadata to metastore, we need to check if metastore supports
-    // the table name and database name we have for this query. MetaStoreUtils.validateName
-    // is the method used by Hive to check if a table name or a database name is valid for
-    // the metastore.
-    if (!MetaStoreUtils.validateName(tableIdent.table)) {
-      throw new AnalysisException(s"Table name ${tableIdent.table} is not a valid name for " +
-        s"metastore. Metastore only accepts table name containing characters, numbers and _.")
-    }
-    if (tableIdent.database.isDefined && !MetaStoreUtils.validateName(tableIdent.database.get)) {
-      throw new AnalysisException(s"Database name ${tableIdent.database.get} is not a valid name " +
-        s"for metastore. Metastore only accepts database name containing " +
-        s"characters, numbers and _.")
-    }
-
     val tableName = tableIdent.unquotedString
     val sessionState = sqlContext.sessionState.asInstanceOf[HiveSessionState]
     var createMetastoreTable = false
