@@ -278,6 +278,7 @@ class LinearRegressionWithSGD(object):
           (default: 0.001)
         """
         warnings.warn("Deprecated. Use ml.regression.LinearRegression.")
+
         def train(rdd, i):
             return callMLlibFunc("trainLinearRegressionModelWithSGD", rdd, int(iterations),
                                  float(step), float(miniBatchFraction), i, float(regParam),

@@ -315,6 +315,7 @@ class LogisticRegressionWithSGD(object):
         """
         warnings.warn("Deprecated. Use ml.classification.LogisticRegression or "
             "LogisticRegressionWithLBFGS.")
+
         def train(rdd, i):
             return callMLlibFunc("trainLogisticRegressionModelWithSGD", rdd, int(iterations),
                                  float(step), float(miniBatchFraction), i, float(regParam), regType,
