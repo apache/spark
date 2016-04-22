@@ -27,7 +27,7 @@ import org.apache.hive.service.cli.session.SessionManager
 import org.apache.hive.service.cli.thrift.TProtocolVersion
 import org.apache.hive.service.server.HiveServer2
 
-import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.sql.hive.{HiveContext, HiveUtils}
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 import org.apache.spark.sql.hive.thriftserver.server.SparkSQLOperationManager
 
@@ -76,7 +76,7 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, hiveContext:
     } else {
       hiveContext.newSession()
     }
-    ctx.setConf("spark.sql.hive.version", HiveContext.hiveExecutionVersion)
+    ctx.setConf("spark.sql.hive.version", HiveUtils.hiveExecutionVersion)
     sparkSqlOperationManager.sessionToContexts += sessionHandle -> ctx
     sessionHandle
   }

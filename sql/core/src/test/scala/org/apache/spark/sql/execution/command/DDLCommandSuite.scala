@@ -611,39 +611,6 @@ class DDLCommandSuite extends PlanTest {
     comparePlans(parsed2, expected2)
   }
 
-  test("unsupported operations") {
-    intercept[ParseException] {
-      parser.parsePlan("DROP TABLE tab PURGE")
-    }
-    intercept[ParseException] {
-      parser.parsePlan("DROP TABLE tab FOR REPLICATION('eventid')")
-    }
-    intercept[ParseException] {
-      parser.parsePlan("CREATE VIEW testView AS SELECT id FROM tab")
-    }
-    intercept[ParseException] {
-      parser.parsePlan("ALTER VIEW testView AS SELECT id FROM tab")
-    }
-    intercept[ParseException] {
-      parser.parsePlan(
-        """
-          |CREATE EXTERNAL TABLE parquet_tab2(c1 INT, c2 STRING)
-          |TBLPROPERTIES('prop1Key '= "prop1Val", ' `prop2Key` '= "prop2Val")
-        """.stripMargin)
-    }
-    intercept[ParseException] {
-      parser.parsePlan(
-        """
-          |CREATE EXTERNAL TABLE oneToTenDef
-          |USING org.apache.spark.sql.sources
-          |OPTIONS (from '1', to '10')
-        """.stripMargin)
-    }
-    intercept[ParseException] {
-      parser.parsePlan("SELECT TRANSFORM (key, value) USING 'cat' AS (tKey, tValue) FROM testData")
-    }
-  }
-
   test("SPARK-14383: DISTRIBUTE and UNSET as non-keywords") {
     val sql = "SELECT distribute, unset FROM x"
     val parsed = parser.parsePlan(sql)

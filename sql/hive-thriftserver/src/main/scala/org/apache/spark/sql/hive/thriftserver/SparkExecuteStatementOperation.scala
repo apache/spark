@@ -35,7 +35,7 @@ import org.apache.hive.service.cli.session.HiveSession
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Row => SparkRow}
 import org.apache.spark.sql.execution.command.SetCommand
-import org.apache.spark.sql.hive.{HiveContext, HiveMetastoreTypes}
+import org.apache.spark.sql.hive.{HiveContext, HiveMetastoreTypes, HiveUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{Utils => SparkUtils}
@@ -98,7 +98,7 @@ private[hive] class SparkExecuteStatementOperation(
       case TimestampType =>
         to +=  from.getAs[Timestamp](ordinal)
       case BinaryType | _: ArrayType | _: StructType | _: MapType =>
-        val hiveString = HiveContext.toHiveString((from.get(ordinal), dataTypes(ordinal)))
+        val hiveString = HiveUtils.toHiveString((from.get(ordinal), dataTypes(ordinal)))
         to += hiveString
     }
   }

@@ -50,7 +50,7 @@ import org.apache.spark.streaming.api.java.*;
 public class JavaStatefulNetworkWordCount {
   private static final Pattern SPACE = Pattern.compile(" ");
 
-  public static void main(String[] args) {
+  public static void main(String[] args) throws Exception {
     if (args.length < 2) {
       System.err.println("Usage: JavaStatefulNetworkWordCount <hostname> <port>");
       System.exit(1);

@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.types.{LongType, StructType}
+import org.apache.spark.sql.types.{DecimalType, StringType, StructType}
 import org.apache.spark.unsafe.KVIterator
 
 case class TungstenAggregate(
@@ -265,11 +265,7 @@ case class TungstenAggregate(
 
   // The name for Vectorized HashMap
   private var vectorizedHashMapTerm: String = _
-
-  // We currently only enable vectorized hashmap for long key/value types and partial aggregates
-  private val isVectorizedHashMapEnabled: Boolean = sqlContext.conf.columnarAggregateMapEnabled &&
-    (groupingKeySchema ++ bufferSchema).forall(_.dataType == LongType) &&
-    modes.forall(mode => mode == Partial || mode == PartialMerge)
+  private var isVectorizedHashMapEnabled: Boolean = _
 
   // The name for UnsafeRow HashMap
   private var hashMapTerm: String = _
@@ -447,10 +443,16 @@ case class TungstenAggregate(
     val initAgg = ctx.freshName("initAgg")
     ctx.addMutableState("boolean", initAgg, s"$initAgg = false;")
 
+    // Enable vectorized hash map for all primitive data types during partial aggregation
+    isVectorizedHashMapEnabled = sqlContext.conf.columnarAggregateMapEnabled &&
+      (groupingKeySchema ++ bufferSchema).forall(f => ctx.isPrimitiveType(f.dataType) ||
+        f.dataType.isInstanceOf[DecimalType] || f.dataType.isInstanceOf[StringType]) &&
+      bufferSchema.forall(!_.dataType.isInstanceOf[StringType]) && bufferSchema.nonEmpty &&
+      modes.forall(mode => mode == Partial || mode == PartialMerge)
     vectorizedHashMapTerm = ctx.freshName("vectorizedHashMap")
     val vectorizedHashMapClassName = ctx.freshName("VectorizedHashMap")
-    val vectorizedHashMapGenerator = new VectorizedHashMapGenerator(ctx, vectorizedHashMapClassName,
-      groupingKeySchema, bufferSchema)
+    val vectorizedHashMapGenerator = new VectorizedHashMapGenerator(ctx, aggregateExpressions,
+      vectorizedHashMapClassName, groupingKeySchema, bufferSchema)
     // Create a name for iterator from vectorized HashMap
     val iterTermForVectorizedHashMap = ctx.freshName("vectorizedHashMapIter")
     if (isVectorizedHashMapEnabled) {
