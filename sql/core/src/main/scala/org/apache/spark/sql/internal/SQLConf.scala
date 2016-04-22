@@ -478,20 +478,8 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val HIVE_VARIABLE_SUBSTITUTE_ENABLED =
-    SQLConfigBuilder("hive.variable.substitute")
-      .doc("This enables substitution using syntax like ${var} ${system:var} and ${env:var}.")
-      .booleanConf
-      .createWithDefault(true)
-
   val VARIABLE_SUBSTITUTE_DEPTH =
     SQLConfigBuilder("spark.sql.variable.substitute.depth")
-      .doc("The maximum replacements the substitution engine will do.")
-      .intConf
-      .createWithDefault(40)
-
-  val HIVE_VARIABLE_SUBSTITUTE_DEPTH =
-    SQLConfigBuilder("hive.variable.substitute.depth")
       .doc("The maximum replacements the substitution engine will do.")
       .intConf
       .createWithDefault(40)
@@ -669,14 +657,15 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   /** Set Spark SQL configuration properties. */
   def setConf(props: Properties): Unit = settings.synchronized {
-    props.asScala.foreach { case (k, v) => setConfString(k, v) }
+    props.asScala.foreach { case (k, v) => setConfString(getAliasKey(k), v) }
   }
 
   /** Set the given Spark SQL configuration property using a `string` value. */
   def setConfString(key: String, value: String): Unit = {
-    require(key != null, "key cannot be null")
+    val aliasKey = getAliasKey(key)
+    require(aliasKey != null, "key cannot be null")
     require(value != null, s"value cannot be null for key: $key")
-    val entry = sqlConfEntries.get(key)
+    val entry = sqlConfEntries.get(aliasKey)
     if (entry != null) {
       // Only verify configs in the SQLConf object
       entry.valueConverter(value)
@@ -687,20 +676,22 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   /** Set the given Spark SQL configuration property. */
   def setConf[T](entry: ConfigEntry[T], value: T): Unit = {
     require(entry != null, "entry cannot be null")
+    val aliasKey = getAliasKey(entry.key)
     require(value != null, s"value cannot be null for key: ${entry.key}")
-    require(sqlConfEntries.get(entry.key) == entry, s"$entry is not registered")
+    require(sqlConfEntries.get(aliasKey) == entry, s"$entry is not registered")
     setConfWithCheck(entry.key, entry.stringConverter(value))
   }
 
   /** Return the value of Spark SQL configuration property for the given key. */
   @throws[NoSuchElementException]("if key is not set")
   def getConfString(key: String): String = {
-    Option(settings.get(key)).
+    val aliasKey = getAliasKey(key)
+    Option(settings.get(aliasKey)).
       orElse {
         // Try to use the default value
-        Option(sqlConfEntries.get(key)).map(_.defaultValueString)
+        Option(sqlConfEntries.get(aliasKey)).map(_.defaultValueString)
       }.
-      getOrElse(throw new NoSuchElementException(key))
+      getOrElse(throw new NoSuchElementException(aliasKey))
   }
 
   /**
@@ -709,8 +700,9 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
    * desired one.
    */
   def getConf[T](entry: ConfigEntry[T], defaultValue: T): T = {
-    require(sqlConfEntries.get(entry.key) == entry, s"$entry is not registered")
-    Option(settings.get(entry.key)).map(entry.valueConverter).getOrElse(defaultValue)
+    val aliasKey = getAliasKey(entry.key)
+    require(sqlConfEntries.get(aliasKey) == entry, s"$entry is not registered")
+    Option(settings.get(aliasKey)).map(entry.valueConverter).getOrElse(defaultValue)
   }
 
   /**
@@ -718,9 +710,10 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
    * yet, return `defaultValue` in [[ConfigEntry]].
    */
   def getConf[T](entry: ConfigEntry[T]): T = {
-    require(sqlConfEntries.get(entry.key) == entry, s"$entry is not registered")
-    Option(settings.get(entry.key)).map(entry.valueConverter).orElse(entry.defaultValue).
-      getOrElse(throw new NoSuchElementException(entry.key))
+    val aliasKey = getAliasKey(entry.key)
+    require(sqlConfEntries.get(aliasKey) == entry, s"$entry is not registered")
+    Option(settings.get(aliasKey)).map(entry.valueConverter).orElse(entry.defaultValue).
+      getOrElse(throw new NoSuchElementException(aliasKey))
   }
 
   /**
@@ -728,8 +721,9 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
    * is not set yet, throw an exception.
    */
   def getConf[T](entry: OptionalConfigEntry[T]): T = {
-    require(sqlConfEntries.get(entry.key) == entry, s"$entry is not registered")
-    Option(settings.get(entry.key)).map(entry.rawValueConverter).
+    val aliasKey = getAliasKey(entry.key)
+    require(sqlConfEntries.get(aliasKey) == entry, s"$entry is not registered")
+    Option(settings.get(aliasKey)).map(entry.rawValueConverter).
       getOrElse(throw new NoSuchElementException(entry.key))
   }
 
@@ -738,12 +732,13 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
    * not set yet, return `defaultValue`.
    */
   def getConfString(key: String, defaultValue: String): String = {
-    val entry = sqlConfEntries.get(key)
+    val aliasKey = getAliasKey(key)
+    val entry = sqlConfEntries.get(aliasKey)
     if (entry != null && defaultValue != "<undefined>") {
       // Only verify configs in the SQLConf object
       entry.valueConverter(defaultValue)
     }
-    Option(settings.get(key)).getOrElse(defaultValue)
+    Option(settings.get(aliasKey)).getOrElse(defaultValue)
   }
 
   /**
@@ -763,19 +758,21 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
     }.toSeq
   }
 
+  private def getAliasKey(key: String): String = {
+    key match {
+      case "hive.variable.substitute" => VARIABLE_SUBSTITUTE_ENABLED.key
+      case "hive.variable.substitute.depth" => VARIABLE_SUBSTITUTE_DEPTH.key
+      case _ => key
+    }
+  }
+
   private def setConfWithCheck(key: String, value: String): Unit = {
     if (key.startsWith("spark.") && !key.startsWith("spark.sql.")) {
       logWarning(s"Attempt to set non-Spark SQL config in SQLConf: key = $key, value = $value")
     }
 
-    // alias the hive.variable.substitute and hive.variable.substitute.depth setting
-    val substitutedKey = key match {
-      case HIVE_VARIABLE_SUBSTITUTE_ENABLED.key => VARIABLE_SUBSTITUTE_ENABLED.key
-      case HIVE_VARIABLE_SUBSTITUTE_DEPTH.key => VARIABLE_SUBSTITUTE_DEPTH.key
-      case _ => key
-    }
-
-    settings.put(substitutedKey, value)
+    val aliasKey = getAliasKey(key)
+    settings.put(aliasKey, value)
   }
 
   def unsetConf(key: String): Unit = {

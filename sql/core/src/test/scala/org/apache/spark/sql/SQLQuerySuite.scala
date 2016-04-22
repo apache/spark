@@ -1075,30 +1075,24 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     sql("SET xxx=5")
     sql("SET spark.sql.variable.substitute=false")
     sql("SET yyy=${xxx}")
-    checkAnswer(
-      sql("SET yyy"),
-      Row("yyy", "${xxx}")
-    )
+    checkAnswer(sql("SET yyy"), Row("yyy", "${xxx}"))
     sql("SET spark.sql.variable.substitute=true")
     sql("SET zzz=${xxx}")
-    checkAnswer(
-      sql("SET zzz"),
-      Row("zzz", "5")
-    )
+    checkAnswer(sql("SET zzz"), Row("zzz", "5"))
     // use alias
     sql("SET x=5")
     sql("SET hive.variable.substitute=false")
+    checkAnswer(sql("SET hive.variable.substitute"), Row("hive.variable.substitute", "false"))
+    checkAnswer(sql("SET spark.sql.variable.substitute"),
+      Row("spark.sql.variable.substitute", "false"))
     sql("SET y=${x}")
-    checkAnswer(
-      sql("SET y"),
-      Row("y", "${x}")
-    )
+    checkAnswer(sql("SET y"), Row("y", "${x}"))
     sql("SET hive.variable.substitute=true")
+    checkAnswer(sql("SET hive.variable.substitute"), Row("hive.variable.substitute", "true"))
+    checkAnswer(sql("SET spark.sql.variable.substitute"),
+      Row("spark.sql.variable.substitute", "true"))
     sql("SET z=${x}")
-    checkAnswer(
-      sql("SET z"),
-      Row("z", "5")
-    )
+    checkAnswer(sql("SET z"), Row("z", "5"))
 
     sqlContext.conf.clear()
   }
