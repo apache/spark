@@ -29,7 +29,8 @@ class SortOptimizationSuite extends PlanTest {
     val batches =
       Batch("Operator Optimizations", FixedPoint(100),
         ColumnPruning,
-        CollapseProject) :: Nil
+        CollapseProject,
+        RemoveUnnecessarySortOrderEvaluation) :: Nil
   }
 
   private val testRelation = LocalRelation('a.int, 'b.int)
@@ -59,7 +60,7 @@ class SortOptimizationSuite extends PlanTest {
 
     val correctAnswer =
       testRelation
-        .groupBy('a * 2)(('a * 2).as("aggOrder"), sum('b).as("sum"))
+        .groupBy('a * 2)(sum('b).as("sum"), ('a * 2).as("aggOrder"))
         .orderBy('aggOrder.asc, ('aggOrder + 3).asc)
         .select('sum)
         .analyze
