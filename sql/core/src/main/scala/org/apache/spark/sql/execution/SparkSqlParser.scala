@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogStorageForma
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation, ScriptInputOutputSchema}
-import org.apache.spark.sql.execution.command.{CreateTableAsSelectLogicalPlan, CreateViewAsSelectLogicalCommand, DescribeCommand => _, _}
+import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf, VariableSubstitution}
 
@@ -204,12 +204,12 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    * Determine if a plan should be explained at all.
    */
   protected def isExplainableStatement(plan: LogicalPlan): Boolean = plan match {
-    case _: datasources.DescribeCommand => false
+    case _: DescribeTableCommand => false
     case _ => true
   }
 
   /**
-   * Create a [[DescribeCommand]] logical plan.
+   * Create a [[DescribeTableCommand]] logical plan.
    */
   override def visitDescribeTable(ctx: DescribeTableContext): LogicalPlan = withOrigin(ctx) {
     // FORMATTED and columns are not supported. Return null and let the parser decide what to do
@@ -217,9 +217,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     if (ctx.describeColName != null || ctx.FORMATTED != null || ctx.partitionSpec != null) {
       null
     } else {
-      datasources.DescribeCommand(
-        visitTableIdentifier(ctx.tableIdentifier),
-        ctx.EXTENDED != null)
+      DescribeTableCommand(visitTableIdentifier(ctx.tableIdentifier), ctx.EXTENDED != null)
     }
   }
 
