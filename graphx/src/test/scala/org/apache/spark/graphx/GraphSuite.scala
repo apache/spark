@@ -350,6 +350,8 @@ class GraphSuite extends SparkFunSuite with LocalSparkContext {
       assert(verticesDependencies.forall(_.rdd.isInstanceOf[CheckpointRDD[_]]))
       assert(graph.isCheckpointed)
       assert(graph.getCheckpointFiles.size === 2)
+      assert(!graph.edges.isCheckpointed)
+      assert(!graph.vertices.isCheckpointed)
     }
   }
 
