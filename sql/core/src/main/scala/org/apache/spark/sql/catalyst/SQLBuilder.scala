@@ -332,8 +332,8 @@ class SQLBuilder(logicalPlan: LogicalPlan) extends Logging {
         case ar: AttributeReference if ar == gid => GroupingID(Nil)
         case ar: AttributeReference if groupByAttrMap.contains(ar) => groupByAttrMap(ar)
         case a @ Cast(BitwiseAnd(
-        ShiftRight(ar: AttributeReference, Literal(value: Any, IntegerType)),
-        Literal(1, IntegerType)), ByteType) if ar == gid =>
+            ShiftRight(ar: AttributeReference, Literal(value: Any, IntegerType)),
+            Literal(1, IntegerType)), ByteType) if ar == gid =>
           // for converting an expression to its original SQL format grouping(col)
           val idx = groupByExprs.length - 1 - value.asInstanceOf[Int]
           groupByExprs.lift(idx).map(Grouping).getOrElse(a)
