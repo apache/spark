@@ -107,7 +107,9 @@ class GaussianMixtureModel private[ml] (
 
   /**
    * Helper method used in Python.
-   * Retrieve gaussians as a DataFrame.
+   * Retrieve Gaussian distributions as a DataFrame.
+   * Each row represents a Gaussian Distribution.
+   * Two columns are defined: mean and cov.
    * Schema:
    * root
    * |-- mean: vector (nullable = true)

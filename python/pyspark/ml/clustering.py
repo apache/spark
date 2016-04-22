@@ -48,7 +48,9 @@ class GaussianMixtureModel(JavaModel, JavaMLWritable, JavaMLReadable):
     @since("2.0.0")
     def gaussiansDF(self):
         """
-        Retrieve gaussians as a DataFrame.
+        Retrieve Gaussian distributions as a DataFrame.
+        Each row represents a Gaussian Distribution.
+        Two columns are defined: mean and cov.
         Schema:
         root
         -- mean: vector (nullable = true)
