@@ -715,9 +715,4 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       assert(catalog.listPartitions(tableIdent).map(_.spec) == Seq(part1))
     }
   }
-
-  test("set / set -v") {
-    checkExistence(sql("set"), true, "env:", "system:")
-    checkExistence(sql("set -v"), true, "env:", "system:")
-  }
 }
