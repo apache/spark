@@ -48,15 +48,21 @@ case class ScalarSubquery(
   override def toString: String = s"subquery#${exprId.id}"
 
   // the first column in first row from `query`.
-  private var result: Any = null
+  @volatile private var result: Any = null
+  @volatile private var updated: Boolean = false
 
   def updateResult(v: Any): Unit = {
     result = v
+    updated = true
   }
 
-  override def eval(input: InternalRow): Any = result
+  override def eval(input: InternalRow): Any = {
+    require(updated, s"$this has not finished")
+    result
+  }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    require(updated, s"$this has not finished")
     Literal.create(result, dataType).doGenCode(ctx, ev)
   }
 }
