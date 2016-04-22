@@ -28,7 +28,8 @@ class AggregateOptimizeSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches = Batch("Aggregate", FixedPoint(100),
-      RemoveLiteralFromGroupExpressions) :: Nil
+      RemoveLiteralFromGroupExpressions,
+      RemoveRepetitionFromGroupExpressions) :: Nil
   }
 
   test("remove literals in grouping expression") {
@@ -36,6 +37,17 @@ class AggregateOptimizeSuite extends PlanTest {
 
     val query =
       input.groupBy('a, Literal(1), Literal(1) + Literal(2))(sum('b))
+    val optimized = Optimize.execute(query)
+
+    val correctAnswer = input.groupBy('a)(sum('b))
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("remove repetition in grouping expression") {
+    val input = LocalRelation('a.int, 'b.int)
+
+    val query = input.groupBy('a, 'a)(sum('b))
     val optimized = Optimize.execute(query)
 
     val correctAnswer = input.groupBy('a)(sum('b))
