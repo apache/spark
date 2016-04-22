@@ -117,7 +117,7 @@ private[sql] case class InsertIntoHadoopFsRelation(
             sparkSession,
             dataColumns.toStructType,
             qualifiedOutputPath.toString,
-            fileFormat.prepareWrite(sparkSession.wrapped, _, options, dataColumns.toStructType),
+            fileFormat.prepareWrite(sparkSession, _, options, dataColumns.toStructType),
             bucketSpec)
 
         val writerContainer = if (partitionColumns.isEmpty && bucketSpec.isEmpty) {

@@ -329,7 +329,7 @@ private[sql] object DataSourceScan {
     val outputPartitioning = {
       val bucketSpec = relation match {
         // TODO: this should be closer to bucket planning.
-        case r: HadoopFsRelation if r.sqlContext.conf.bucketingEnabled => r.bucketSpec
+        case r: HadoopFsRelation if r.sparkSession.conf.bucketingEnabled => r.bucketSpec
         case _ => None
       }
 
@@ -348,7 +348,7 @@ private[sql] object DataSourceScan {
     }
 
     relation match {
-      case r: HadoopFsRelation if r.fileFormat.supportBatch(r.sqlContext, relation.schema) =>
+      case r: HadoopFsRelation if r.fileFormat.supportBatch(r.sparkSession, relation.schema) =>
         BatchedDataSourceScan(output, rdd, relation, outputPartitioning, metadata)
       case _ =>
         RowDataSourceScan(output, rdd, relation, outputPartitioning, metadata)

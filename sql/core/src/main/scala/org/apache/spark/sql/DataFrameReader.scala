@@ -271,7 +271,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     }
     // connectionProperties should override settings in extraOptions
     props.putAll(connectionProperties)
-    val relation = JDBCRelation(url, table, parts, props)(sparkSession.wrapped)
+    val relation = JDBCRelation(url, table, parts, props)(sparkSession)
     sparkSession.baseRelationToDataFrame(relation)
   }
 

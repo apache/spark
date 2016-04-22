@@ -277,7 +277,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
     ))
 
     val fakeRDD = new FileScanRDD(
-      sqlContext,
+      sqlContext.sparkSession,
       (file: PartitionedFile) => Iterator.empty,
       Seq(partition)
     )
@@ -446,7 +446,7 @@ class TestFileFormat extends FileFormat {
    * Spark will require that user specify the schema manually.
    */
   override def inferSchema(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] =
     Some(
@@ -460,7 +460,7 @@ class TestFileFormat extends FileFormat {
    * by setting the output committer class in the conf of spark.sql.sources.outputCommitterClass.
    */
   override def prepareWrite(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
@@ -468,7 +468,7 @@ class TestFileFormat extends FileFormat {
   }
 
   override def buildReader(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       dataSchema: StructType,
       partitionSchema: StructType,
       requiredSchema: StructType,

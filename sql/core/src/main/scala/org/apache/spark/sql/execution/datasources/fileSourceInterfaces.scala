@@ -119,13 +119,15 @@ abstract class OutputWriter {
  * @param options Configuration used when reading / writing data.
  */
 case class HadoopFsRelation(
-    sqlContext: SQLContext,
+    sparkSession: SparkSession,
     location: FileCatalog,
     partitionSchema: StructType,
     dataSchema: StructType,
     bucketSpec: Option[BucketSpec],
     fileFormat: FileFormat,
     options: Map[String, String]) extends BaseRelation with FileRelation {
+
+  override def sqlContext: SQLContext = sparkSession.wrapped
 
   val schema: StructType = {
     val dataSchemaColumnNames = dataSchema.map(_.name.toLowerCase).toSet
@@ -160,7 +162,7 @@ trait FileFormat {
    * Spark will require that user specify the schema manually.
    */
   def inferSchema(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType]
 
@@ -169,7 +171,7 @@ trait FileFormat {
    * can be useful for collecting necessary global information for scanning input data.
    */
   def prepareRead(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Map[String, String] = options
 
@@ -179,7 +181,7 @@ trait FileFormat {
    * by setting the output committer class in the conf of spark.sql.sources.outputCommitterClass.
    */
   def prepareWrite(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory
@@ -189,7 +191,7 @@ trait FileFormat {
    *
    * TODO: we should just have different traits for the different formats.
    */
-  def supportBatch(sqlContext: SQLContext, dataSchema: StructType): Boolean = {
+  def supportBatch(sparkSession: SparkSession, dataSchema: StructType): Boolean = {
     false
   }
 
@@ -210,7 +212,7 @@ trait FileFormat {
    * @return
    */
   def buildReader(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       dataSchema: StructType,
       partitionSchema: StructType,
       requiredSchema: StructType,

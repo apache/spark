@@ -136,7 +136,7 @@ case class DataSource(
     val fileCatalog: FileCatalog = new HDFSFileCatalog(sparkSession, options, globbedPaths, None)
     userSpecifiedSchema.orElse {
       format.inferSchema(
-        sparkSession.wrapped,
+        sparkSession,
         caseInsensitiveOptions,
         fileCatalog.allFiles())
     }.getOrElse {
@@ -259,7 +259,7 @@ case class DataSource(
         val fileCatalog = new StreamFileCatalog(sparkSession, basePath)
         val dataSchema = userSpecifiedSchema.orElse {
           format.inferSchema(
-            sparkSession.wrapped,
+            sparkSession,
             caseInsensitiveOptions,
             fileCatalog.allFiles())
         }.getOrElse {
@@ -269,7 +269,7 @@ case class DataSource(
         }
 
         HadoopFsRelation(
-          sparkSession.wrapped,
+          sparkSession,
           fileCatalog,
           partitionSchema = fileCatalog.partitionSpec().partitionColumns,
           dataSchema = dataSchema,
@@ -322,7 +322,7 @@ case class DataSource(
           StructType(schema.filterNot(f => partitionColumns.exists(equality(_, f.name))))
         }.orElse {
           format.inferSchema(
-            sparkSession.wrapped,
+            sparkSession,
             caseInsensitiveOptions,
             fileCatalog.allFiles())
         }.getOrElse {
@@ -332,10 +332,10 @@ case class DataSource(
         }
 
         val enrichedOptions =
-          format.prepareRead(sparkSession.wrapped, caseInsensitiveOptions, fileCatalog.allFiles())
+          format.prepareRead(sparkSession, caseInsensitiveOptions, fileCatalog.allFiles())
 
         HadoopFsRelation(
-          sparkSession.wrapped,
+          sparkSession,
           fileCatalog,
           partitionSchema = fileCatalog.partitionSpec().partitionColumns,
           dataSchema = dataSchema.asNullable,
