@@ -128,29 +128,29 @@ object MapPartitionsInR {
       schema: StructType,
       encoder: ExpressionEncoder[Row],
       child: LogicalPlan): LogicalPlan = {
-    // If the content of current DataFrame is serialized R data?
-    val isSerializedRData =
-      if (encoder.schema == StructType(Seq(StructField("R", BinaryType)))) true else false
-
     val deserialized = CatalystSerde.deserialize(child, encoder)
     val mapped = MapPartitionsInR(
       func,
       packageNames,
       broadcastVars,
+      encoder.schema,
       schema,
-      isSerializedRData,
       CatalystSerde.generateObjAttrForRow(RowEncoder(schema)),
       deserialized)
     CatalystSerde.serialize(mapped, RowEncoder(schema))
   }
 }
 
+/**
+ * A relation produced by applying a serialized R function `func` to each partition of the `child`.
+ *
+ */
 case class MapPartitionsInR(
     func: Array[Byte],
     packageNames: Array[Byte],
     broadcastVars: Array[Broadcast[Object]],
+    inputSchema: StructType,
     outputSchema: StructType,
-    isSerializedRData: Boolean,
     outputObjAttr: Attribute,
     child: LogicalPlan) extends UnaryNode with ObjectConsumer with ObjectProducer {
   override lazy val schema = outputSchema

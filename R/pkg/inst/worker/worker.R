@@ -88,6 +88,11 @@ numPartitions <- SparkR:::readInt(inputCon)
 # If false, working for DataFrame
 isDataFrame <- as.logical(SparkR:::readInt(inputCon))
 
+# If isDataFrame, then read column names
+if (isDataFrame) {
+  colNames <- SparkR:::readObject(inputCon)
+}
+
 isEmpty <- SparkR:::readInt(inputCon)
 
 if (isEmpty != 0) {
@@ -108,6 +113,7 @@ if (isEmpty != 0) {
       if (deserializer == "row") {
         # Transform the list of rows into a data.frame
         data <- do.call(rbind.data.frame, c(data, stringsAsFactors = FALSE))
+        names(data) <- colNames
       } else {
         # Check to see if data is a valid data.frame
         stopifnot(class(data) == "data.frame")

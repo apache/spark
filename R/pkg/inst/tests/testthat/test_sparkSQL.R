@@ -2035,8 +2035,8 @@ test_that("dapply() on a DataFrame", {
   df1 <- dapply(
            df,
            function(x) {
-             y <- x[x[1] > 1, ]
-             y <- cbind(y, y[1] + 1L)
+             y <- x[x$a > 1, ]
+             y <- cbind(y, y$a + 1L)
            },
            schema)
   result <- collect(df1)
@@ -2049,11 +2049,11 @@ test_that("dapply() on a DataFrame", {
   df2 <- dapply(
            df1,
            function(x) {
-             x[, c(1, 2, 3)]
+             x[, c("a", "b", "c")]
            },
            schema(df))
   result <- collect(df2)
-  expected <- expected[, c(1, 2, 3)]
+  expected <- expected[, c("a", "b", "c")]
   expect_identical(expected, result)
 })
 
