@@ -63,11 +63,6 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     false
   }
 
-  /**
-   * Whether the "prepare" method is called.
-   */
-  private val prepareCalled = new AtomicBoolean(false)
-
   /** Overridden make copy also propagates sqlContext to copied plan. */
   override def makeCopy(newArgs: Array[AnyRef]): SparkPlan = {
     SQLContext.setActive(sqlContext)
@@ -185,14 +180,21 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   }
 
   /**
+   * Whether the "prepare" method is called.
+   */
+  private var prepared = false
+
+  /**
    * Prepare a SparkPlan for execution. It's idempotent.
    */
   final def prepare(): Unit = {
+    // doPrepare() may depend on it's children, we should call prepare() on all the children first.
     children.foreach(_.prepare())
     synchronized {
-      if (prepareCalled.compareAndSet(false, true)) {
+      if (!prepared) {
         prepareSubqueries()
         doPrepare()
+        prepared = true
       }
     }
   }
@@ -204,6 +206,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    *
    * Note: the prepare method has already walked down the tree, so the implementation doesn't need
    * to call children's prepare methods.
+   *
+   * This will only be called once, protected by `this`.
    */
   protected def doPrepare(): Unit = {}
 
