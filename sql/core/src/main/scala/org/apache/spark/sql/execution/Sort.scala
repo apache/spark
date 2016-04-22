@@ -53,8 +53,8 @@ case class Sort(
   private val enableRadixSort = sqlContext.conf.enableRadixSort
 
   override private[sql] lazy val metrics = Map(
-    "sortTime" -> SQLMetrics.createLongMetric(sparkContext, "sort time"),
-    "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
+    "sortTime" -> SQLMetrics.createTimingMetric(sparkContext, "sort time"),
+    "peakMemory" -> SQLMetrics.createSizeMetric(sparkContext, "peak memory"),
     "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"))
 
   def createSorter(): UnsafeExternalRowSorter = {
@@ -86,8 +86,9 @@ case class Sort(
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    val dataSize = longMetric("dataSize")
+    val peakMemory = longMetric("peakMemory")
     val spillSize = longMetric("spillSize")
+    val sortTime = longMetric("sortTime")
 
     child.execute().mapPartitionsInternal { iter =>
       val sorter = createSorter()
@@ -96,10 +97,12 @@ case class Sort(
       // Remember spill data size of this task before execute this operator so that we can
       // figure out how many bytes we spilled for this operator.
       val spillSizeBefore = metrics.memoryBytesSpilled
+      val beforeSort = System.nanoTime()
 
       val sortedIterator = sorter.sort(iter.asInstanceOf[Iterator[UnsafeRow]])
 
-      dataSize += sorter.getPeakMemoryUsage
+      sortTime += (System.nanoTime() - beforeSort) / 1000000
+      peakMemory += sorter.getPeakMemoryUsage
       spillSize += metrics.memoryBytesSpilled - spillSizeBefore
       metrics.incPeakExecutionMemory(sorter.getPeakMemoryUsage)
 
@@ -145,19 +148,19 @@ case class Sort(
     ctx.copyResult = false
 
     val outputRow = ctx.freshName("outputRow")
-    val dataSize = metricTerm(ctx, "dataSize")
+    val peakMemory = metricTerm(ctx, "peakMemory")
     val spillSize = metricTerm(ctx, "spillSize")
     val spillSizeBefore = ctx.freshName("spillSizeBefore")
     val startTime = ctx.freshName("startTime")
     val sortTime = metricTerm(ctx, "sortTime")
     s"""
        | if ($needToSort) {
-       |   $addToSorter();
        |   long $spillSizeBefore = $metrics.memoryBytesSpilled();
        |   long $startTime = System.nanoTime();
+       |   $addToSorter();
        |   $sortedIterator = $sorterVariable.sort();
-       |   $sortTime.add(System.nanoTime() - $startTime);
-       |   $dataSize.add($sorterVariable.getPeakMemoryUsage());
+       |   $sortTime.add((System.nanoTime() - $startTime) / 1000000);
+       |   $peakMemory.add($sorterVariable.getPeakMemoryUsage());
        |   $spillSize.add($metrics.memoryBytesSpilled() - $spillSizeBefore);
        |   $metrics.incPeakExecutionMemory($sorterVariable.getPeakMemoryUsage());
        |   $needToSort = false;

@@ -15,15 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive
+package org.apache.spark.sql.catalyst
 
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Dataset, SQLContext}
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.catalyst.catalog.CatalogRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.{CollapseProject, CombineUnions}
@@ -39,10 +38,10 @@ import org.apache.spark.sql.types.{ByteType, DataType, IntegerType, NullType}
  * representations (e.g. logical plans that operate on local Scala collections), or are simply not
  * supported by this builder (yet).
  */
-class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Logging {
+class SQLBuilder(logicalPlan: LogicalPlan) extends Logging {
   require(logicalPlan.resolved, "SQLBuilder only supports resolved logical query plans")
 
-  def this(df: Dataset[_]) = this(df.queryExecution.analyzed, df.sqlContext)
+  def this(df: Dataset[_]) = this(df.queryExecution.analyzed)
 
   private val nextSubqueryId = new AtomicLong(0)
   private def newSubqueryName(): String = s"gen_subquery_${nextSubqueryId.getAndIncrement()}"
@@ -70,7 +69,7 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
     try {
       val replaced = finalPlan.transformAllExpressions {
         case e: SubqueryExpression =>
-          SubqueryHolder(new SQLBuilder(e.query, sqlContext).toSQL)
+          SubqueryHolder(new SQLBuilder(e.query).toSQL)
         case e: NonSQLExpression =>
           throw new UnsupportedOperationException(
             s"Expression $e doesn't have a SQL representation"
@@ -292,10 +291,7 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
       a.groupingExpressions.map(_.asInstanceOf[Attribute]))
   }
 
-  private def groupingSetToSQL(
-      agg: Aggregate,
-      expand: Expand,
-      project: Project): String = {
+  private def groupingSetToSQL(agg: Aggregate, expand: Expand, project: Project): String = {
     assert(agg.groupingExpressions.length > 1)
 
     // The last column of Expand is always grouping ID

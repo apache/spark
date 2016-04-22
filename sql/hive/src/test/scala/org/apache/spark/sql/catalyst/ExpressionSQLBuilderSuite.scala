@@ -15,12 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive
+package org.apache.spark.sql.catalyst
 
 import java.sql.Timestamp
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{If, Literal}
+
 
 class ExpressionSQLBuilderSuite extends SQLBuilderTest {
   test("literal") {

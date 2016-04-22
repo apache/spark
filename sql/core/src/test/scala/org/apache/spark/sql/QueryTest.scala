@@ -212,6 +212,7 @@ abstract class QueryTest extends PlanTest {
       case _: ObjectProducer => return
       case _: AppendColumns => return
       case _: LogicalRelation => return
+      case p if p.getClass.getSimpleName == "MetastoreRelation" => return
       case _: MemoryPlan => return
     }.transformAllExpressions {
       case a: ImperativeAggregate => return

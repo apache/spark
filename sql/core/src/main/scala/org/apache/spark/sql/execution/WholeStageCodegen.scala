@@ -79,10 +79,9 @@ trait CodegenSupport extends SparkPlan {
   /**
    * Returns Java source code to process the rows from input RDD.
    */
-  final def produce(ctx: CodegenContext, parent: CodegenSupport): String = {
+  final def produce(ctx: CodegenContext, parent: CodegenSupport): String = executeQuery {
     this.parent = parent
     ctx.freshNamePrefix = variablePrefix
-    waitForSubqueries()
     s"""
        |/*** PRODUCE: ${toCommentSafeString(this.simpleString)} */
        |${doProduce(ctx)}
