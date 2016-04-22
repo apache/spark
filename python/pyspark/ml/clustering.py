@@ -51,8 +51,8 @@ class GaussianMixtureModel(JavaModel, JavaMLWritable, JavaMLReadable):
         Retrieve gaussians as a DataFrame.
         Schema:
         root
-        |-- mean: vector (nullable = true)
-        |-- cov: matrix (nullable = true)
+         -- mean: vector (nullable = true)
+         -- cov: matrix (nullable = true)
         """
         return self._call_java("gaussiansDF")
 
