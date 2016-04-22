@@ -17,7 +17,6 @@
 
 package org.apache.spark.util.collection.unsafe.sort;
 
-import java.lang.Long;
 import java.util.Comparator;
 
 import org.apache.avro.reflect.Nullable;
@@ -27,7 +26,6 @@ import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.LongArray;
 import org.apache.spark.util.collection.Sorter;
-import org.apache.spark.util.collection.unsafe.sort.RadixSort;
 
 /**
  * Sorts records using an AlphaSort-style key-prefix sort. This sort stores pointers to records
@@ -163,7 +161,7 @@ public final class UnsafeInMemorySorter {
   }
 
   public long getMemoryUsage() {
-    return array.size() * Long.BYTES;
+    return array.size() * 8;
   }
 
   public boolean hasSpaceForAnotherRecord() {
@@ -179,7 +177,7 @@ public final class UnsafeInMemorySorter {
       array.getBaseOffset(),
       newArray.getBaseObject(),
       newArray.getBaseOffset(),
-      array.size() * (Long.BYTES / memoryAllocationFactor));
+      array.size() * (8 / memoryAllocationFactor));
     consumer.freeArray(array);
     array = newArray;
   }
