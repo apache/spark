@@ -85,12 +85,12 @@ private[libsvm] class LibSVMOutputWriter(
  * optionally specify options, for example:
  * {{{
  *   // Scala
- *   val df = sparkSession.read.format("libsvm")
+ *   val df = spark.read.format("libsvm")
  *     .option("numFeatures", "780")
  *     .load("data/mllib/sample_libsvm_data.txt")
  *
  *   // Java
- *   DataFrame df = sparkSession.read().format("libsvm")
+ *   DataFrame df = spark.read().format("libsvm")
  *     .option("numFeatures, "780")
  *     .load("data/mllib/sample_libsvm_data.txt");
  * }}}

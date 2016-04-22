@@ -89,8 +89,8 @@ private[sql] object Dataset {
  * There are typically two ways to create a Dataset. The most common way is by pointing Spark
  * to some files on storage systems, using the `read` function available on a `SparkSession`.
  * {{{
- *   val people = session.read.parquet("...").as[Person]  // Scala
- *   Dataset<Person> people = session.read().parquet("...").as(Encoders.bean(Person.class)  // Java
+ *   val people = spark.read.parquet("...").as[Person]  // Scala
+ *   Dataset<Person> people = spark.read().parquet("...").as(Encoders.bean(Person.class)  // Java
  * }}}
  *
  * Datasets can also be created through transformations available on existing Datasets. For example,
@@ -120,8 +120,8 @@ private[sql] object Dataset {
  * A more concrete example in Scala:
  * {{{
  *   // To create Dataset[Row] using SQLContext
- *   val people = session.read.parquet("...")
- *   val department = session.read.parquet("...")
+ *   val people = spark.read.parquet("...")
+ *   val department = spark.read.parquet("...")
  *
  *   people.filter("age > 30")
  *     .join(department, people("deptId") === department("id"))
@@ -132,8 +132,8 @@ private[sql] object Dataset {
  * and in Java:
  * {{{
  *   // To create Dataset<Row> using SQLContext
- *   Dataset<Row> people = session.read().parquet("...");
- *   Dataset<Row> department = session.read().parquet("...");
+ *   Dataset<Row> people = spark.read().parquet("...");
+ *   Dataset<Row> department = spark.read().parquet("...");
  *
  *   people.filter("age".gt(30))
  *     .join(department, people.col("deptId").equalTo(department("id")))
@@ -151,7 +151,7 @@ private[sql] object Dataset {
  *
  * @since 1.6.0
  */
-class Dataset[T] private[sql](
+class Dataset[T] protected[sql](
     @transient val sparkSession: SparkSession,
     @DeveloperApi @transient val queryExecution: QueryExecution,
     encoder: Encoder[T])
@@ -162,12 +162,12 @@ class Dataset[T] private[sql](
   // Note for Spark contributors: if adding or updating any action in `Dataset`, please make sure
   // you wrap it with `withNewExecutionId` if this actions doesn't call other action.
 
-  def this(session: SparkSession, logicalPlan: LogicalPlan, encoder: Encoder[T]) = {
-    this(session, session.executePlan(logicalPlan), encoder)
+  def this(sparkSession: SparkSession, logicalPlan: LogicalPlan, encoder: Encoder[T]) = {
+    this(sparkSession, sparkSession.executePlan(logicalPlan), encoder)
   }
 
-  def this(session: SQLContext, logicalPlan: LogicalPlan, encoder: Encoder[T]) = {
-    this(session.sparkSession, logicalPlan, encoder)
+  def this(sqlContext: SQLContext, logicalPlan: LogicalPlan, encoder: Encoder[T]) = {
+    this(sqlContext.sparkSession, logicalPlan, encoder)
   }
 
   @transient protected[sql] val logicalPlan: LogicalPlan = {

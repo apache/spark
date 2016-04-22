@@ -360,7 +360,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
  */
 @Since("1.6.0")
 @Experimental
-sealed abstract class LDAModel private[ml] (
+sealed abstract class LDAModel protected[ml] (
     @Since("1.6.0") override val uid: String,
     @Since("1.6.0") val vocabSize: Int,
     @Since("1.6.0") @transient protected[ml] val sparkSession: SparkSession)
@@ -512,7 +512,7 @@ sealed abstract class LDAModel private[ml] (
  */
 @Since("1.6.0")
 @Experimental
-class LocalLDAModel private[ml] (
+class LocalLDAModel protected[ml] (
     uid: String,
     vocabSize: Int,
     @Since("1.6.0") override protected val oldLocalModel: OldLocalLDAModel,
@@ -604,7 +604,7 @@ object LocalLDAModel extends MLReadable[LocalLDAModel] {
  */
 @Since("1.6.0")
 @Experimental
-class DistributedLDAModel private[ml] (
+class DistributedLDAModel protected[ml] (
     uid: String,
     vocabSize: Int,
     private val oldDistributedModel: OldDistributedLDAModel,

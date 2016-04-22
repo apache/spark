@@ -267,10 +267,10 @@ trait FileCatalog {
  *                        discovered partitions
  */
 class HDFSFileCatalog(
-    val sparkSession: SparkSession,
-    val parameters: Map[String, String],
-    val paths: Seq[Path],
-    val partitionSchema: Option[StructType])
+    sparkSession: SparkSession,
+    parameters: Map[String, String],
+    override val paths: Seq[Path],
+    partitionSchema: Option[StructType])
   extends FileCatalog with Logging {
 
   private val hadoopConf = new Configuration(sparkSession.sparkContext.hadoopConfiguration)
