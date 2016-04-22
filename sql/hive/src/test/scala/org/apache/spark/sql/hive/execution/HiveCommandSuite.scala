@@ -210,7 +210,7 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         Row(16, "john") :: Nil)
 
       // Use URI as LOCAL inpath:
-      // file:/path/to/data/files/issue-4077-data.txt
+      // file:/path/to/data/files/employee.dat
       val uri = "file:" + testData
       sql(s"""LOAD DATA LOCAL INPATH "$uri" INTO TABLE non_part_table""")
 
