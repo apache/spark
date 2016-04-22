@@ -24,7 +24,7 @@ import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 import org.apache.hadoop.fs.{FileStatus, Path}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, SaveMode, SQLContext}
+import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
@@ -46,6 +46,7 @@ import org.apache.spark.sql.types._
  * This is still used for things like creating data source tables, but in the future will be
  * cleaned up to integrate more nicely with [[HiveExternalCatalog]].
  */
+// TODO(andrew)
 private[hive] class HiveMetastoreCatalog(hive: SQLContext) extends Logging {
   private val conf = hive.conf
   private val sessionState = hive.sessionState.asInstanceOf[HiveSessionState]
@@ -125,7 +126,7 @@ private[hive] class HiveMetastoreCatalog(hive: SQLContext) extends Logging {
         val options = table.storage.serdeProperties
         val dataSource =
           DataSource(
-            hive,
+            hive.sparkSession,
             userSpecifiedSchema = userSpecifiedSchema,
             partitionColumns = partitionColumns,
             bucketSpec = bucketSpec,
@@ -231,7 +232,7 @@ private[hive] class HiveMetastoreCatalog(hive: SQLContext) extends Logging {
     val maybeSerDe = HiveSerDe.sourceToSerDe(provider, conf)
     val dataSource =
       DataSource(
-        hive,
+        hive.sparkSession,
         userSpecifiedSchema = userSpecifiedSchema,
         partitionColumns = partitionColumns,
         bucketSpec = bucketSpec,
@@ -468,7 +469,7 @@ private[hive] class HiveMetastoreCatalog(hive: SQLContext) extends Logging {
 
       val hadoopFsRelation = cached.getOrElse {
         val paths = new Path(metastoreRelation.catalogTable.storage.locationUri.get) :: Nil
-        val fileCatalog = new MetaStoreFileCatalog(hive, paths, partitionSpec)
+        val fileCatalog = new MetaStoreFileCatalog(hive.sparkSession, paths, partitionSpec)
 
         val inferredSchema = if (fileType.equals("parquet")) {
           val inferredSchema = defaultSource.inferSchema(hive, options, fileCatalog.allFiles())
@@ -507,7 +508,7 @@ private[hive] class HiveMetastoreCatalog(hive: SQLContext) extends Logging {
         val created =
           LogicalRelation(
             DataSource(
-              sqlContext = hive,
+              sparkSession = hive.sparkSession,
               paths = paths,
               userSpecifiedSchema = Some(metastoreRelation.schema),
               bucketSpec = bucketSpec,
@@ -746,13 +747,17 @@ private[hive] class HiveMetastoreCatalog(hive: SQLContext) extends Logging {
  * the information from the metastore.
  */
 private[hive] class MetaStoreFileCatalog(
-    ctx: SQLContext,
+    sparkSession: SparkSession,
     paths: Seq[Path],
     partitionSpecFromHive: PartitionSpec)
-  extends HDFSFileCatalog(ctx, Map.empty, paths, Some(partitionSpecFromHive.partitionColumns)) {
+  extends HDFSFileCatalog(
+    sparkSession,
+    Map.empty,
+    paths,
+    Some(partitionSpecFromHive.partitionColumns)) {
 
   override def getStatus(path: Path): Array[FileStatus] = {
-    val fs = path.getFileSystem(ctx.sparkContext.hadoopConfiguration)
+    val fs = path.getFileSystem(sparkSession.sparkContext.hadoopConfiguration)
     fs.listStatus(path)
   }
 

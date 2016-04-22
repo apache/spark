@@ -114,7 +114,7 @@ private[sql] case class InsertIntoHadoopFsRelation(
       SQLExecution.withNewExecutionId(sparkSession.wrapped, queryExecution) {
         val relation =
           WriteRelation(
-            sparkSession.wrapped,
+            sparkSession,
             dataColumns.toStructType,
             qualifiedOutputPath.toString,
             fileFormat.prepareWrite(sparkSession.wrapped, _, options, dataColumns.toStructType),

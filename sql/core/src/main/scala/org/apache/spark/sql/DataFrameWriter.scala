@@ -237,7 +237,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   def save(): Unit = {
     assertNotBucketed()
     val dataSource = DataSource(
-      df.sqlContext,
+      df.sparkSession,
       className = source,
       partitionColumns = partitioningColumns.getOrElse(Nil),
       bucketSpec = getBucketSpec,
@@ -318,7 +318,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
     } else {
       val dataSource =
         DataSource(
-          df.sqlContext,
+          df.sparkSession,
           className = source,
           options = extraOptions.toMap,
           partitionColumns = normalizedParCols.getOrElse(Nil))

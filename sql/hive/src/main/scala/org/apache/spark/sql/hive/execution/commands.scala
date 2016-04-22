@@ -76,7 +76,7 @@ case class CreateMetastoreDataSource(
 
     // Create the relation to validate the arguments before writing the metadata to the metastore.
     DataSource(
-      sqlContext = sparkSession.wrapped,
+      sparkSession = sparkSession,
       userSpecifiedSchema = userSpecifiedSchema,
       className = provider,
       bucketSpec = None,
@@ -148,7 +148,7 @@ case class CreateMetastoreDataSourceAsSelect(
         case SaveMode.Append =>
           // Check if the specified data source match the data source of the existing table.
           val dataSource = DataSource(
-            sqlContext = sparkSession.wrapped,
+            sparkSession = sparkSession,
             userSpecifiedSchema = Some(query.schema.asNullable),
             partitionColumns = partitionColumns,
             bucketSpec = bucketSpec,
@@ -183,7 +183,7 @@ case class CreateMetastoreDataSourceAsSelect(
 
     // Create the relation based on the data of df.
     val dataSource = DataSource(
-      sqlContext = sparkSession.wrapped,
+      sparkSession = sparkSession,
       className = provider,
       partitionColumns = partitionColumns,
       bucketSpec = bucketSpec,

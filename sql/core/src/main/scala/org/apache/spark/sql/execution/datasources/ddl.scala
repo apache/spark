@@ -76,7 +76,7 @@ case class CreateTempTableUsing(
 
   def run(sparkSession: SparkSession): Seq[Row] = {
     val dataSource = DataSource(
-      sparkSession.wrapped,
+      sparkSession,
       userSpecifiedSchema = userSpecifiedSchema,
       className = provider,
       options = options)
@@ -105,7 +105,7 @@ case class CreateTempTableUsingAsSelect(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val df = Dataset.ofRows(sparkSession, query)
     val dataSource = DataSource(
-      sparkSession.wrapped,
+      sparkSession,
       className = provider,
       partitionColumns = partitionColumns,
       bucketSpec = None,

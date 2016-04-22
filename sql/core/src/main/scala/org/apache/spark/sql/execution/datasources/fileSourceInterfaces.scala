@@ -178,7 +178,6 @@ trait FileFormat {
    * be put here.  For example, user defined output committer can be configured here
    * by setting the output committer class in the conf of spark.sql.sources.outputCommitterClass.
    */
-  // TODO(andrew)
   def prepareWrite(
       sqlContext: SQLContext,
       job: Job,
@@ -266,13 +265,13 @@ trait FileCatalog {
  *                        discovered partitions
  */
 class HDFSFileCatalog(
-    val sqlContext: SQLContext,
+    val sparkSession: SparkSession,
     val parameters: Map[String, String],
     val paths: Seq[Path],
     val partitionSchema: Option[StructType])
   extends FileCatalog with Logging {
 
-  private val hadoopConf = new Configuration(sqlContext.sparkContext.hadoopConfiguration)
+  private val hadoopConf = new Configuration(sparkSession.sparkContext.hadoopConfiguration)
 
   var leafFiles = mutable.LinkedHashMap.empty[Path, FileStatus]
   var leafDirToChildrenFiles = mutable.Map.empty[Path, Array[FileStatus]]
@@ -340,8 +339,8 @@ class HDFSFileCatalog(
   def getStatus(path: Path): Array[FileStatus] = leafDirToChildrenFiles(path)
 
   private def listLeafFiles(paths: Seq[Path]): mutable.LinkedHashSet[FileStatus] = {
-    if (paths.length >= sqlContext.conf.parallelPartitionDiscoveryThreshold) {
-      HadoopFsRelation.listLeafFilesInParallel(paths, hadoopConf, sqlContext.sparkContext)
+    if (paths.length >= sparkSession.conf.parallelPartitionDiscoveryThreshold) {
+      HadoopFsRelation.listLeafFilesInParallel(paths, hadoopConf, sparkSession.sparkContext)
     } else {
       val statuses: Seq[FileStatus] = paths.flatMap { path =>
         val fs = path.getFileSystem(hadoopConf)
@@ -413,7 +412,7 @@ class HDFSFileCatalog(
         PartitioningUtils.parsePartitions(
           leafDirs,
           PartitioningUtils.DEFAULT_PARTITION_NAME,
-          typeInference = sqlContext.conf.partitionColumnTypeInferenceEnabled(),
+          typeInference = sparkSession.conf.partitionColumnTypeInferenceEnabled(),
           basePaths = basePaths)
     }
   }

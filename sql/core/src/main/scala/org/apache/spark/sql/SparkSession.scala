@@ -818,7 +818,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   @Experimental
-  def read: DataFrameReader = new DataFrameReader(wrapped)
+  def read: DataFrameReader = new DataFrameReader(self)
 
 
   // scalastyle:off
