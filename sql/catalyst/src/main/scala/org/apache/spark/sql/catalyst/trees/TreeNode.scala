@@ -426,8 +426,11 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     case other => other :: Nil
   }.mkString(", ")
 
-  /** String representation of this node without any children */
-  def simpleString: String = s"$nodeName $argString".trim
+  /**
+   * String representation of this node without any children.
+   * Note that we remove the "Exec" suffix for physical operators here.
+   */
+  def simpleString: String = s"${nodeName.replaceAll("Exec$", "")} $argString".trim
 
   override def toString: String = treeString
 
