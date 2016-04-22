@@ -19,7 +19,7 @@ package org.apache.spark.repl
 
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
-import org.apache.spark.util.{Signaling => USignaling}
+import org.apache.spark.util.{SignalUtils => USignaling}
 
 private[repl] object Signaling extends Logging {
 

@@ -17,12 +17,12 @@
 
 package org.apache.spark.util
 
-import java.util.{Collections, LinkedList}
+import java.util.Collections
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.HashMap
 
 import org.apache.commons.lang3.SystemUtils
+import org.slf4j.Logger
 import sun.misc.{Signal, SignalHandler}
 
 import org.apache.spark.internal.Logging
@@ -31,14 +31,52 @@ import org.apache.spark.internal.Logging
 /**
  * Contains utilities for working with posix signals.
  */
-private[spark] object Signaling extends Logging {
+private[spark] object SignalUtils extends Logging {
+
+  private var registered = false
+
+  /** Register a signal handler to log signals on UNIX-like systems. */
+  def registerLogger(log: Logger): Unit = synchronized {
+    if (!registered) {
+      Seq("TERM", "HUP", "INT").foreach { sig =>
+        SignalUtils.register(sig) {
+          log.error("RECEIVED SIGNAL " + sig)
+          false
+        }
+      }
+      registered = true
+    }
+  }
+
+  /**
+   * Adds an action to be run when a given signal is received by this process.
+   *
+   * Note that signals are only supported on unix-like operating systems and work on a best-effort
+   * basis: if a signal is not available or cannot be intercepted, only a warning is emitted.
+   *
+   * All actions for a given signal are run in a separate thread.
+   */
+  def register(signal: String)(action: => Boolean): Unit = synchronized {
+    if (SystemUtils.IS_OS_UNIX) {
+      try {
+        val handler = handlers.getOrElseUpdate(signal, {
+          val h = new ActionHandler(new Signal(signal))
+          logInfo("Registered signal handler for " + signal)
+          h
+        })
+        handler.register(action)
+      } catch {
+        case ex: Exception => logWarning(s"Failed to register signal handler for " + signal, ex)
+      }
+    }
+  }
 
   /**
    * A handler for the given signal that runs a collection of actions.
    */
   private class ActionHandler(signal: Signal) extends SignalHandler {
 
-    private val actions = Collections.synchronizedList(new LinkedList[() => Boolean])
+    private val actions = Collections.synchronizedList(new java.util.LinkedList[() => Boolean])
 
     // original signal handler, before this handler was attached
     private val prevHandler: SignalHandler = Signal.handle(signal, this)
@@ -51,11 +89,8 @@ private[spark] object Signaling extends Logging {
       // register old handler, will receive incoming signals while this handler is running
       Signal.handle(signal, prevHandler)
 
-      val escalate = actions.asScala forall { action =>
-        !action()
-      }
-
-      if(escalate) {
+      val escalate = actions.asScala.forall { action => !action() }
+      if (escalate) {
         prevHandler.handle(sig)
       }
 
@@ -69,31 +104,8 @@ private[spark] object Signaling extends Logging {
      * should be stopped with this handler, false if it should be escalated.
      */
     def register(action: => Boolean): Unit = actions.add(() => action)
-
   }
 
   // contains association of signals to their respective handlers
-  private val handlers = new HashMap[String, ActionHandler]
-
-  /**
-   * Adds an action to be run when a given signal is received by this process.
-   *
-   * Note that signals are only supported on unix-like operating systems and work on a best-effort
-   * basis: if a signal is not available or cannot be intercepted, only a warning is emitted.
-   *
-   * All actions for a given signal are run in a separate thread.
-   */
-  def register(signal: String)(action: => Boolean): Unit = synchronized {
-    if (SystemUtils.IS_OS_UNIX) try {
-      val handler = handlers.getOrElseUpdate(signal, {
-        val h = new ActionHandler(new Signal(signal))
-        logInfo("Registered signal handler for " + signal)
-        h
-      })
-      handler.register(action)
-    } catch {
-      case ex: Exception => logWarning(s"Failed to register signal handler for " + signal, ex)
-    }
-  }
-
+  private val handlers = new scala.collection.mutable.HashMap[String, ActionHandler]
 }
