@@ -125,21 +125,21 @@ private[repl] trait SparkILoopInit {
       command("""
         @transient val sc = {
           val _sc = org.apache.spark.repl.Main.interp.createSparkContext()
-          println("Spark context available as sc " +
+          println("Spark context available as 'sc' " +
             s"(master = ${_sc.master}, app id = ${_sc.applicationId}).")
           _sc
         }
         """)
       command("""
-        @transient val sparkSession = {
-          val _sparkSession = org.apache.spark.repl.Main.interp.createSparkSession()
-          println("Spark session available as sparkSession.")
-          _sparkSession
+        @transient val spark = {
+          val _session = org.apache.spark.repl.Main.interp.createSparkSession()
+          println("Spark session available as 'spark'.")
+          _session
         }
         """)
       command("import org.apache.spark.SparkContext._")
-      command("import sparkSession.implicits._")
-      command("import sparkSession.sql")
+      command("import spark.implicits._")
+      command("import spark.sql")
       command("import org.apache.spark.sql.functions._")
     }
   }
