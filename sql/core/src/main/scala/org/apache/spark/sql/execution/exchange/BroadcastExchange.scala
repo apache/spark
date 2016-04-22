@@ -23,8 +23,10 @@ import scala.concurrent.duration._
 import org.apache.spark.broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.plans.physical.{BroadcastMode, BroadcastPartitioning, Partitioning}
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
+import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -34,6 +36,12 @@ import org.apache.spark.util.ThreadUtils
 case class BroadcastExchange(
     mode: BroadcastMode,
     child: SparkPlan) extends Exchange {
+
+  override private[sql] lazy val metrics = Map(
+    "dataSize" -> SQLMetrics.createLongMetric(sparkContext, "data size (bytes)"),
+    "collectTime" -> SQLMetrics.createLongMetric(sparkContext, "time to collect (ms)"),
+    "buildTime" -> SQLMetrics.createLongMetric(sparkContext, "time to build (ms)"),
+    "broadcastTime" -> SQLMetrics.createLongMetric(sparkContext, "time to broadcast (ms)"))
 
   override def outputPartitioning: Partitioning = BroadcastPartitioning(mode)
 
@@ -61,11 +69,21 @@ case class BroadcastExchange(
       // This will run in another thread. Set the execution id so that we can connect these jobs
       // with the correct execution.
       SQLExecution.withExecutionId(sparkContext, executionId) {
+        val beforeCollect = System.nanoTime()
         // Note that we use .executeCollect() because we don't want to convert data to Scala types
         val input: Array[InternalRow] = child.executeCollect()
+        val beforeBuild = System.nanoTime()
+        longMetric("collectTime") += (beforeBuild - beforeCollect) / 1000000
+        longMetric("dataSize") += input.map(_.asInstanceOf[UnsafeRow].getSizeInBytes.toLong).sum
 
         // Construct and broadcast the relation.
-        sparkContext.broadcast(mode.transform(input))
+        val relation = mode.transform(input)
+        val beforeBroadcast = System.nanoTime()
+        longMetric("buildTime") += (beforeBroadcast - beforeBuild) / 1000000
+
+        val broadcasted = sparkContext.broadcast(relation)
+        longMetric("broadcastTime") += (System.nanoTime() - beforeBroadcast) / 1000000
+        broadcasted
       }
     }(BroadcastExchange.executionContext)
   }
