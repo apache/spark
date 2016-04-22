@@ -29,6 +29,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Union}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.aggregate.TungstenAggregate
+import org.apache.spark.sql.execution.columnar.InMemoryColumnarTableScan
 import org.apache.spark.sql.execution.exchange.{BroadcastExchange, ReusedExchange, ShuffleExchange}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -367,6 +368,26 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       arrayData.toDF().orderBy('data.getItem(1).desc),
       arrayData.toDF().collect().sortBy(_.getAs[Seq[Int]](0)(1)).reverse.toSeq)
+  }
+
+  test("skip unnecessary sorting") {
+     def checkSkipSort(df: DataFrame): DataFrame = {
+      val parentPlan = df.queryExecution.executedPlan
+      // Check if SparkPlan Sort is removed in a physical plan and the plan only has
+      // InMemoryColumnarTableScan to read already-sorted cached data.
+      assert(parentPlan.isInstanceOf[InMemoryColumnarTableScan])
+      df
+    }
+    val cachedDf1 = testData2.orderBy('a.asc, 'b.asc).cache
+    val expected1 = Seq(Row(1, 1), Row(1, 2), Row(2, 1), Row(2, 2), Row(3, 1), Row(3, 2))
+    checkAnswer(cachedDf1.orderBy('a.asc, 'b.asc), expected1)
+    checkAnswer(checkSkipSort(cachedDf1.orderBy('a.asc, 'b.asc)), expected1)
+    cachedDf1.unpersist(blocking = true)
+    val cachedDf2 = testData2.orderBy('a.desc, 'b.asc).cache
+    val expected2 = Seq(Row(3, 1), Row(3, 2), Row(2, 1), Row(2, 2), Row(1, 1), Row(1, 2))
+    checkAnswer(cachedDf2.orderBy('a.desc, 'b.asc), expected2)
+    checkAnswer(checkSkipSort(cachedDf2.orderBy('a.desc, 'b.asc)), expected2)
+    cachedDf2.unpersist(blocking = true)
   }
 
   test("limit") {
