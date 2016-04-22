@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.parser.DataTypeParser
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.execution.command.{CreateTableAsSelectLogicalPlan, CreateViewAsSelectLogicalCommand, HiveNativeCommand}
+import org.apache.spark.sql.execution.command.{CreateTableAsSelectLogicalPlan, CreateViewCommand, HiveNativeCommand}
 import org.apache.spark.sql.execution.datasources.{Partition => _, _}
 import org.apache.spark.sql.execution.datasources.parquet.{DefaultSource => ParquetDefaultSource, ParquetRelation}
 import org.apache.spark.sql.hive.orc.{DefaultSource => OrcDefaultSource}
@@ -629,22 +629,7 @@ private[hive] class HiveMetastoreCatalog(hive: SQLContext) extends Logging {
       case p: LogicalPlan if !p.childrenResolved => p
       case p: LogicalPlan if p.resolved => p
 
-      case CreateViewAsSelectLogicalCommand(table, child, allowExisting, replace, sql)
-          if conf.nativeView =>
-        if (allowExisting && replace) {
-          throw new AnalysisException(
-            "It is not allowed to define a view with both IF NOT EXISTS and OR REPLACE.")
-        }
-
-        val QualifiedTableName(dbName, tblName) = getQualifiedTableName(table)
-
-        execution.CreateViewAsSelect(
-          table.copy(identifier = TableIdentifier(tblName, Some(dbName))),
-          child,
-          allowExisting,
-          replace)
-
-      case CreateViewAsSelectLogicalCommand(table, child, allowExisting, replace, sql) =>
+      case CreateViewCommand(table, child, allowExisting, replace, sql) if !conf.nativeView =>
         HiveNativeCommand(sql)
 
       case p @ CreateTableAsSelectLogicalPlan(table, child, allowExisting) =>

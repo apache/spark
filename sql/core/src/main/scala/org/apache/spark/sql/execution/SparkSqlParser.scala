@@ -1101,7 +1101,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   }
 
   /**
-   * Create or replace a view. This creates a [[CreateViewAsSelectLogicalCommand]] command.
+   * Create or replace a view. This creates a [[CreateViewCommand]] command.
    *
    * For example:
    * {{{
@@ -1134,7 +1134,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   }
 
   /**
-   * Alter the query of a view. This creates a [[CreateViewAsSelectLogicalCommand]] command.
+   * Alter the query of a view. This creates a [[CreateViewCommand]] command.
    */
   override def visitAlterViewQuery(ctx: AlterViewQueryContext): LogicalPlan = withOrigin(ctx) {
     createView(
@@ -1149,7 +1149,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   }
 
   /**
-   * Create a [[CreateViewAsSelectLogicalCommand]] command.
+   * Create a [[CreateViewCommand]] command.
    */
   private def createView(
       ctx: ParserRuleContext,
@@ -1170,7 +1170,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       viewOriginalText = sql,
       viewText = sql,
       comment = comment)
-    CreateViewAsSelectLogicalCommand(tableDesc, plan(query), allowExist, replace, command(ctx))
+    CreateViewCommand(tableDesc, plan(query), allowExist, replace, command(ctx))
   }
 
   /**
