@@ -82,7 +82,7 @@ class SessionCatalog(
    * Validate names
    */
   protected[this] def validateName(name: String): Boolean = {
-    val validName = "([_A-Za-z0-9_]*)".r
+    val validName = "([_A-Za-z0-9]*)".r
     validName.pattern.matcher(name).matches()
   }
 
