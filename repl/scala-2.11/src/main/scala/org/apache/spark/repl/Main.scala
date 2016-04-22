@@ -92,14 +92,10 @@ object Main extends Logging {
   }
 
   def createSparkSession(): SparkSession = {
-    try {
+    if (SparkSession.hiveClassesArePresent) {
       sparkSession = SparkSession.withHiveSupport(sparkContext)
       logInfo("Created Spark session with Hive support")
-    } catch {
-      case CausedBy(ex: ClassNotFoundException) =>
-      case CausedBy(err: NoClassDefFoundError) =>
-    }
-    if (sparkSession == null) {
+    } else {
       sparkSession = new SparkSession(sparkContext)
       logInfo("Created Spark session")
     }
