@@ -247,20 +247,24 @@ class GeneralizedLinearRegressionSuite
       ("inverse", datasetGaussianInverse))) {
       for (fitIntercept <- Seq(false, true)) {
         val trainer = new GeneralizedLinearRegression().setFamily("gaussian").setLink(link)
-          .setFitIntercept(fitIntercept)
+          .setFitIntercept(fitIntercept).setLinkPredictionCol("linkPrediction")
         val model = trainer.fit(dataset)
         val actual = Vectors.dense(model.intercept, model.coefficients(0), model.coefficients(1))
         assert(actual ~= expected(idx) absTol 1e-4, "Model mismatch: GLM with gaussian family, " +
           s"$link link and fitIntercept = $fitIntercept.")
 
         val familyLink = new FamilyAndLink(Gaussian, Link.fromName(link))
-        model.transform(dataset).select("features", "prediction").collect().foreach {
-          case Row(features: DenseVector, prediction1: Double) =>
-            val eta = BLAS.dot(features, model.coefficients) + model.intercept
-            val prediction2 = familyLink.fitted(eta)
-            assert(prediction1 ~= prediction2 relTol 1E-5, "Prediction mismatch: GLM with " +
-              s"gaussian family, $link link and fitIntercept = $fitIntercept.")
-        }
+        model.transform(dataset).select("features", "prediction", "linkPrediction").collect()
+          .foreach {
+            case Row(features: DenseVector, prediction1: Double, linkPrediction1: Double) =>
+              val eta = BLAS.dot(features, model.coefficients) + model.intercept
+              val prediction2 = familyLink.fitted(eta)
+              val linkPrediction2 = eta
+              assert(prediction1 ~= prediction2 relTol 1E-5, "Prediction mismatch: GLM with " +
+                s"gaussian family, $link link and fitIntercept = $fitIntercept.")
+              assert(linkPrediction1 ~= linkPrediction2 relTol 1E-5, "Link Prediction mismatch: " +
+                s"GLM with gaussian family, $link link and fitIntercept = $fitIntercept.")
+          }
 
         idx += 1
       }
@@ -358,7 +362,7 @@ class GeneralizedLinearRegressionSuite
       ("cloglog", datasetBinomial))) {
       for (fitIntercept <- Seq(false, true)) {
         val trainer = new GeneralizedLinearRegression().setFamily("binomial").setLink(link)
-          .setFitIntercept(fitIntercept)
+          .setFitIntercept(fitIntercept).setLinkPredictionCol("linkPrediction")
         val model = trainer.fit(dataset)
         val actual = Vectors.dense(model.intercept, model.coefficients(0), model.coefficients(1),
           model.coefficients(2), model.coefficients(3))
@@ -366,13 +370,17 @@ class GeneralizedLinearRegressionSuite
           s"$link link and fitIntercept = $fitIntercept.")
 
         val familyLink = new FamilyAndLink(Binomial, Link.fromName(link))
-        model.transform(dataset).select("features", "prediction").collect().foreach {
-          case Row(features: DenseVector, prediction1: Double) =>
-            val eta = BLAS.dot(features, model.coefficients) + model.intercept
-            val prediction2 = familyLink.fitted(eta)
-            assert(prediction1 ~= prediction2 relTol 1E-5, "Prediction mismatch: GLM with " +
-              s"binomial family, $link link and fitIntercept = $fitIntercept.")
-        }
+        model.transform(dataset).select("features", "prediction", "linkPrediction").collect()
+          .foreach {
+            case Row(features: DenseVector, prediction1: Double, linkPrediction1: Double) =>
+              val eta = BLAS.dot(features, model.coefficients) + model.intercept
+              val prediction2 = familyLink.fitted(eta)
+              val linkPrediction2 = eta
+              assert(prediction1 ~= prediction2 relTol 1E-5, "Prediction mismatch: GLM with " +
+                s"binomial family, $link link and fitIntercept = $fitIntercept.")
+              assert(linkPrediction1 ~= linkPrediction2 relTol 1E-5, "Link Prediction mismatch: " +
+                s"GLM with binomial family, $link link and fitIntercept = $fitIntercept.")
+          }
 
         idx += 1
       }
@@ -427,20 +435,24 @@ class GeneralizedLinearRegressionSuite
       ("sqrt", datasetPoissonSqrt))) {
       for (fitIntercept <- Seq(false, true)) {
         val trainer = new GeneralizedLinearRegression().setFamily("poisson").setLink(link)
-          .setFitIntercept(fitIntercept)
+          .setFitIntercept(fitIntercept).setLinkPredictionCol("linkPrediction")
         val model = trainer.fit(dataset)
         val actual = Vectors.dense(model.intercept, model.coefficients(0), model.coefficients(1))
         assert(actual ~= expected(idx) absTol 1e-4, "Model mismatch: GLM with poisson family, " +
           s"$link link and fitIntercept = $fitIntercept.")
 
         val familyLink = new FamilyAndLink(Poisson, Link.fromName(link))
-        model.transform(dataset).select("features", "prediction").collect().foreach {
-          case Row(features: DenseVector, prediction1: Double) =>
-            val eta = BLAS.dot(features, model.coefficients) + model.intercept
-            val prediction2 = familyLink.fitted(eta)
-            assert(prediction1 ~= prediction2 relTol 1E-5, "Prediction mismatch: GLM with " +
-              s"poisson family, $link link and fitIntercept = $fitIntercept.")
-        }
+        model.transform(dataset).select("features", "prediction", "linkPrediction").collect()
+          .foreach {
+            case Row(features: DenseVector, prediction1: Double, linkPrediction1: Double) =>
+              val eta = BLAS.dot(features, model.coefficients) + model.intercept
+              val prediction2 = familyLink.fitted(eta)
+              val linkPrediction2 = eta
+              assert(prediction1 ~= prediction2 relTol 1E-5, "Prediction mismatch: GLM with " +
+                s"poisson family, $link link and fitIntercept = $fitIntercept.")
+              assert(linkPrediction1 ~= linkPrediction2 relTol 1E-5, "Link Prediction mismatch: " +
+                s"GLM with poisson family, $link link and fitIntercept = $fitIntercept.")
+          }
 
         idx += 1
       }
@@ -495,20 +507,24 @@ class GeneralizedLinearRegressionSuite
       ("identity", datasetGammaIdentity), ("log", datasetGammaLog))) {
       for (fitIntercept <- Seq(false, true)) {
         val trainer = new GeneralizedLinearRegression().setFamily("gamma").setLink(link)
-          .setFitIntercept(fitIntercept)
+          .setFitIntercept(fitIntercept).setLinkPredictionCol("linkPrediction")
         val model = trainer.fit(dataset)
         val actual = Vectors.dense(model.intercept, model.coefficients(0), model.coefficients(1))
         assert(actual ~= expected(idx) absTol 1e-4, "Model mismatch: GLM with gamma family, " +
           s"$link link and fitIntercept = $fitIntercept.")
 
         val familyLink = new FamilyAndLink(Gamma, Link.fromName(link))
-        model.transform(dataset).select("features", "prediction").collect().foreach {
-          case Row(features: DenseVector, prediction1: Double) =>
-            val eta = BLAS.dot(features, model.coefficients) + model.intercept
-            val prediction2 = familyLink.fitted(eta)
-            assert(prediction1 ~= prediction2 relTol 1E-5, "Prediction mismatch: GLM with " +
-              s"gamma family, $link link and fitIntercept = $fitIntercept.")
-        }
+        model.transform(dataset).select("features", "prediction", "linkPrediction").collect()
+          .foreach {
+            case Row(features: DenseVector, prediction1: Double, linkPrediction1: Double) =>
+              val eta = BLAS.dot(features, model.coefficients) + model.intercept
+              val prediction2 = familyLink.fitted(eta)
+              val linkPrediction2 = eta
+              assert(prediction1 ~= prediction2 relTol 1E-5, "Prediction mismatch: GLM with " +
+                s"gamma family, $link link and fitIntercept = $fitIntercept.")
+              assert(linkPrediction1 ~= linkPrediction2 relTol 1E-5, "Link Prediction mismatch: " +
+                s"GLM with gamma family, $link link and fitIntercept = $fitIntercept.")
+          }
 
         idx += 1
       }

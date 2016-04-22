@@ -187,9 +187,9 @@ class SparkSession private(
   }
 
 
-  /* ------------------------------------------------- *
-   |  Methods for accessing or mutating configurations |
-   * ------------------------------------------------- */
+  /* -------------------------------------------------- *
+   |  Methods for accessing or mutating configurations  |
+   * -------------------------------------------------- */
 
   /**
    * Set Spark SQL configuration properties.
@@ -309,6 +309,7 @@ class SparkSession private(
   protected[sql] def isCached(qName: Dataset[_]): Boolean = {
     cacheManager.lookupCachedData(qName).nonEmpty
   }
+
 
   /* --------------------------------- *
    |  Methods for creating DataFrames  |
@@ -586,9 +587,9 @@ class SparkSession private(
   }
 
 
-  /* -------------------------- *
-   |  Methods related to tables |
-   * -------------------------- */
+  /* --------------------------- *
+   |  Methods related to tables  |
+   * --------------------------- */
 
   /**
    * :: Experimental ::
@@ -790,9 +791,9 @@ class SparkSession private(
   }
 
 
-  /* ---------------- *
-   |  Everything else |
-   * ---------------- */
+  /* ----------------- *
+   |  Everything else  |
+   * ----------------- */
 
   /**
    * Executes a SQL query using Spark, returning the result as a [[DataFrame]].
