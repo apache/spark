@@ -27,24 +27,24 @@ import sun.misc.{Signal, SignalHandler}
 
 import org.apache.spark.internal.Logging
 
-
 /**
  * Contains utilities for working with posix signals.
  */
 private[spark] object SignalUtils extends Logging {
 
-  private var registered = false
+  /** A flag to make sure we only register the logger once. */
+  private var loggerRegistered = false
 
   /** Register a signal handler to log signals on UNIX-like systems. */
   def registerLogger(log: Logger): Unit = synchronized {
-    if (!registered) {
+    if (!loggerRegistered) {
       Seq("TERM", "HUP", "INT").foreach { sig =>
         SignalUtils.register(sig) {
           log.error("RECEIVED SIGNAL " + sig)
           false
         }
       }
-      registered = true
+      loggerRegistered = true
     }
   }
 
@@ -75,6 +75,10 @@ private[spark] object SignalUtils extends Logging {
    */
   private class ActionHandler(signal: Signal) extends SignalHandler {
 
+    /**
+     * List of actions upon the signal; the callbacks should return true if the signal is "handled",
+     * i.e. should not escalate to the next callback.
+     */
     private val actions = Collections.synchronizedList(new java.util.LinkedList[() => Boolean])
 
     // original signal handler, before this handler was attached
@@ -88,6 +92,8 @@ private[spark] object SignalUtils extends Logging {
       // register old handler, will receive incoming signals while this handler is running
       Signal.handle(signal, prevHandler)
 
+      // run all actions, escalate to parent handler if no action catches the signal
+      // (i.e. all actions return false)
       val escalate = actions.asScala.forall { action => !action() }
       if (escalate) {
         prevHandler.handle(sig)
@@ -98,13 +104,13 @@ private[spark] object SignalUtils extends Logging {
     }
 
     /**
-     * Add an action to be run by this handler.
+     * Adds an action to be run by this handler.
      * @param action An action to be run when a signal is received. Return true if the signal
-     * should be stopped with this handler, false if it should be escalated.
+     *               should be stopped with this handler, false if it should be escalated.
      */
     def register(action: => Boolean): Unit = actions.add(() => action)
   }
 
-  // contains association of signals to their respective handlers
+  /** Mapping from signal to their respective handlers. */
   private val handlers = new scala.collection.mutable.HashMap[String, ActionHandler]
 }
