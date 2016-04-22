@@ -323,9 +323,7 @@ class KMeans(object):
           Maximum number of iterations allowed.
           (default: 100)
         :param runs:
-          Number of runs to execute in parallel. The best model according
-          to the cost function will be returned (deprecated in 1.6.0).
-          (default: 1)
+          This param has no effect since Spark 2.0.0.
         :param initializationMode:
           The initialization algorithm. This can be either "random" or
           "k-means||".
@@ -349,9 +347,6 @@ class KMeans(object):
           rather than using the random or k-means|| initializationModel.
           (default: None)
         """
-        if runs != 1:
-            warnings.warn(
-                "Support for runs is deprecated in 1.6.0. This param will have no effect in 2.0.0.")
         clusterInitialModel = []
         if initialModel is not None:
             if not isinstance(initialModel, KMeansModel):
