@@ -319,9 +319,6 @@ case class TungstenAggregate(
     val metrics = TaskContext.get().taskMetrics()
     peakMemory.add(maxMemory)
     metrics.incPeakExecutionMemory(maxMemory)
-    if (sorter != null) {
-      spillSize.add(sorter.getSpillSize())
-    }
 
     if (sorter == null) {
       // not spilled
