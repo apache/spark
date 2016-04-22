@@ -1193,7 +1193,7 @@ class OneVsRestParams(HasFeaturesCol, HasLabelCol, HasPredictionCol):
             if param in pyParamMap:
                 java_param = java_obj.getParam(param.name)
                 if param.name == self.classifier.name:
-                    paramMap.put(java_param.w(pyParamMap[param].to_java()))
+                    paramMap.put([java_param.w(pyParamMap[param]._to_java())])
                 else:
                     paramMap.put([java_param.w(_py2java(sc, pyParamMap[param]))])
         return paramMap
@@ -1278,7 +1278,6 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
             "Classifier %s doesn't extend from HasRawPredictionCol." % type(classifier)
 
         maxLabel = dataset.agg({labelCol: "max"}).collect()
-        assert(len(maxLabel) != 0, "No data found in the given dataset.")
         numClasses = int(maxLabel[0]["max("+labelCol+")"]) + 1
 
         multiclassLabeled = dataset.select(labelCol, featuresCol)
@@ -1370,16 +1369,13 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
         return _java_obj
 
     def _transfer_param_map_from_java(self, javaParamMap):
-        _java_obj = JavaParams\
-            ._new_java_obj("org.apache.spark.ml.classification.OneVsRest", self.uid)\
-            .copy(javaParamMap)
+        _java_obj = self._to_java().copy(javaParamMap)
         paramMap = super(OneVsRest, self)\
             ._transfer_param_map_from_java_impl(javaParamMap, _java_obj)
         return paramMap
 
     def _transfer_param_map_to_java(self, pyParamMap):
-        _java_obj = JavaParams\
-            ._new_java_obj("org.apache.spark.ml.classification.OneVsRest", self.uid)
+        _java_obj = self.copy(pyParamMap)._to_java()
         paramMap = super(OneVsRest, self)._transfer_param_map_to_java_impl(pyParamMap, _java_obj)
         return paramMap
 
@@ -1510,20 +1506,13 @@ class OneVsRestModel(Model, OneVsRestParams, MLReadable, MLWritable):
         return _java_obj
 
     def _transfer_param_map_from_java(self, javaParamMap):
-        java_models = [model._to_java() for model in self.models]
-        _java_obj = JavaParams\
-            ._new_java_obj("org.apache.spark.ml.classification.OneVsRestModel",
-                           self.uid, java_models)\
-            .copy(javaParamMap)
+        _java_obj = self._to_java().copy(javaParamMap)
         paramMap = super(OneVsRestModel, self)\
             ._transfer_param_map_from_java_impl(javaParamMap, _java_obj)
         return paramMap
 
     def _transfer_param_map_to_java(self, pyParamMap):
-        java_models = [model._to_java() for model in self.models]
-        _java_obj = JavaParams\
-            ._new_java_obj("org.apache.spark.ml.classification.OneVsRestModel",
-                           self.uid, java_models)
+        _java_obj = self.copy(pyParamMap)._to_java()
         paramMap = super(OneVsRestModel, self)\
             ._transfer_param_map_to_java_impl(pyParamMap, _java_obj)
         return paramMap
