@@ -68,7 +68,8 @@ class PCA (override val uid: String) extends Estimator[PCAModel] with PCAParams
   /**
    * Computes a [[PCAModel]] that contains the principal components of the input vectors.
    */
-  override def fit(dataset: DataFrame): PCAModel = {
+  @Since("2.0.0")
+  override def fit(dataset: Dataset[_]): PCAModel = {
     transformSchema(dataset.schema, logging = true)
     val input = dataset.select($(inputCol)).rdd.map { case Row(v: Vector) => v}
     val pca = new feature.PCA(k = $(k))
@@ -77,7 +78,6 @@ class PCA (override val uid: String) extends Estimator[PCAModel] with PCAParams
   }
 
   override def transformSchema(schema: StructType): StructType = {
-    validateParams()
     val inputType = schema($(inputCol)).dataType
     require(inputType.isInstanceOf[VectorUDT],
       s"Input column ${$(inputCol)} must be a vector column")
@@ -125,7 +125,8 @@ class PCAModel private[ml] (
    * NOTE: Vectors to be transformed must be the same length
    * as the source vectors given to [[PCA.fit()]].
    */
-  override def transform(dataset: DataFrame): DataFrame = {
+  @Since("2.0.0")
+  override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     val pcaModel = new feature.PCAModel($(k), pc, explainedVariance)
     val pcaOp = udf { pcaModel.transform _ }
@@ -133,7 +134,6 @@ class PCAModel private[ml] (
   }
 
   override def transformSchema(schema: StructType): StructType = {
-    validateParams()
     val inputType = schema($(inputCol)).dataType
     require(inputType.isInstanceOf[VectorUDT],
       s"Input column ${$(inputCol)} must be a vector column")

@@ -316,4 +316,8 @@ The `ParamMap` which produces the best evaluation metric is selected as the best
 {% include_example java/org/apache/spark/examples/ml/JavaModelSelectionViaTrainValidationSplitExample.java %}
 </div>
 
+<div data-lang="python">
+{% include_example python/ml/train_validation_split.py %}
+</div>
+
 </div>

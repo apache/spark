@@ -297,7 +297,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
 
   /**
    * Restricts the graph to only the vertices and edges satisfying the predicates. The resulting
-   * subgraph satisifies
+   * subgraph satisfies
    *
    * {{{
    * V' = {v : for all v in V where vpred(v)}

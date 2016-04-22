@@ -36,7 +36,7 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSQLContex
         List.fill(n)(ROW).toDF.repartition(1).write.parquet(dir.getCanonicalPath)
         val file = SpecificParquetRecordReaderBase.listDirectory(dir).toArray.head
 
-        val reader = new UnsafeRowParquetRecordReader
+        val reader = new VectorizedParquetRecordReader
         reader.initialize(file.asInstanceOf[String], null)
         val batch = reader.resultBatch()
         assert(reader.nextBatch())
@@ -61,17 +61,17 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSQLContex
         data.repartition(1).write.parquet(dir.getCanonicalPath)
         val file = SpecificParquetRecordReaderBase.listDirectory(dir).toArray.head
 
-        val reader = new UnsafeRowParquetRecordReader
+        val reader = new VectorizedParquetRecordReader
         reader.initialize(file.asInstanceOf[String], null)
         val batch = reader.resultBatch()
         assert(reader.nextBatch())
         assert(batch.numRows() == n)
         var i = 0
         while (i < n) {
-          assert(batch.column(0).getIsNull(i))
-          assert(batch.column(1).getIsNull(i))
-          assert(batch.column(2).getIsNull(i))
-          assert(batch.column(3).getIsNull(i))
+          assert(batch.column(0).isNullAt(i))
+          assert(batch.column(1).isNullAt(i))
+          assert(batch.column(2).isNullAt(i))
+          assert(batch.column(3).isNullAt(i))
           i += 1
         }
         reader.close()

@@ -20,7 +20,8 @@ package org.apache.spark.util.collection
 import java.lang.{Float => JFloat, Integer => JInteger}
 import java.util.{Arrays, Comparator}
 
-import org.apache.spark.{Logging, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.random.XORShiftRandom
 
 class SorterSuite extends SparkFunSuite with Logging {

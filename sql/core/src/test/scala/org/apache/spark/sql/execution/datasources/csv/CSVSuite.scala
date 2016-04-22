@@ -43,7 +43,9 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   private val emptyFile = "empty.csv"
   private val commentsFile = "comments.csv"
   private val disableCommentsFile = "disable_comments.csv"
+  private val boolFile = "bool.csv"
   private val simpleSparseFile = "simple_sparse.csv"
+  private val unescapedQuotesFile = "unescaped-quotes.csv"
 
   private def testFile(fileName: String): String = {
     Thread.currentThread().getContextClassLoader.getResource(fileName).toString
@@ -118,6 +120,18 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     verifyCars(cars, withHeader = true, checkTypes = true)
   }
 
+  test("test inferring booleans") {
+    val result = sqlContext.read
+      .format("csv")
+      .option("header", "true")
+      .option("inferSchema", "true")
+      .load(testFile(boolFile))
+
+    val expectedSchema = StructType(List(
+      StructField("bool", BooleanType, nullable = true)))
+    assert(result.schema === expectedSchema)
+  }
+
   test("test with alternative delimiter and quote") {
     val cars = sqlContext.read
       .format("csv")
@@ -125,6 +139,17 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       .load(testFile(carsAltFile))
 
     verifyCars(cars, withHeader = true)
+  }
+
+  test("parse unescaped quotes with maxCharsPerColumn") {
+    val rows = sqlContext.read
+      .format("csv")
+      .option("maxCharsPerColumn", "4")
+      .load(testFile(unescapedQuotesFile))
+
+    val expectedRows = Seq(Row("\"a\"b", "ccc", "ddd"), Row("ab", "cc\"c", "ddd\""))
+
+    checkAnswer(rows, expectedRows)
   }
 
   test("bad encoding name") {
@@ -147,12 +172,13 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
          |OPTIONS (path "${testFile(carsFile8859)}", header "true",
          |charset "iso-8859-1", delimiter "þ")
       """.stripMargin.replaceAll("\n", " "))
-    //scalstyle:on
+    // scalastyle:on
 
     verifyCars(sqlContext.table("carsTable"), withHeader = true)
   }
 
   test("test aliases sep and encoding for delimiter and charset") {
+    // scalastyle:off
     val cars = sqlContext
       .read
       .format("csv")
@@ -160,6 +186,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       .option("encoding", "iso-8859-1")
       .option("sep", "þ")
       .load(testFile(carsFile8859))
+    // scalastyle:on
 
     verifyCars(cars, withHeader = true)
   }
@@ -391,7 +418,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .save(csvDir)
 
       val compressedFiles = new File(csvDir).listFiles()
-      assert(compressedFiles.exists(_.getName.endsWith(".gz")))
+      assert(compressedFiles.exists(_.getName.endsWith(".csv.gz")))
 
       val carsCopy = sqlContext.read
         .format("csv")
@@ -426,7 +453,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
           .save(csvDir)
 
         val compressedFiles = new File(csvDir).listFiles()
-        assert(compressedFiles.exists(!_.getName.endsWith(".gz")))
+        assert(compressedFiles.exists(!_.getName.endsWith(".csv.gz")))
 
         val carsCopy = sqlContext.read
           .format("csv")
@@ -452,5 +479,15 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     assert(
       df.schema.fields.map(field => field.dataType).deep ==
       Array(IntegerType, IntegerType, IntegerType, IntegerType).deep)
+  }
+
+  test("old csv data source name works") {
+    val cars = sqlContext
+      .read
+      .format("com.databricks.spark.csv")
+      .option("header", "false")
+      .load(testFile(carsFile))
+
+    verifyCars(cars, withHeader = false, checkTypes = false)
   }
 }

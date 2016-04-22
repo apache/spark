@@ -70,7 +70,7 @@ public class JavaLinearRegressionWithSGDExample {
       new Function<LabeledPoint, Tuple2<Double, Double>>() {
         public Tuple2<Double, Double> call(LabeledPoint point) {
           double prediction = model.predict(point.features());
-          return new Tuple2<Double, Double>(prediction, point.label());
+          return new Tuple2<>(prediction, point.label());
         }
       }
     );

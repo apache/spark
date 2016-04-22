@@ -267,6 +267,20 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     conf.set("spark.akka.lookupTimeout", "4")
     assert(RpcUtils.lookupRpcTimeout(conf).duration === (4 seconds))
   }
+
+  test("SPARK-13727") {
+    val conf = new SparkConf()
+    // set the conf in the deprecated way
+    conf.set("spark.io.compression.lz4.block.size", "12345")
+    // get the conf in the recommended way
+    assert(conf.get("spark.io.compression.lz4.blockSize") === "12345")
+    // we can still get the conf in the deprecated way
+    assert(conf.get("spark.io.compression.lz4.block.size") === "12345")
+    // the contains() also works as expected
+    assert(conf.contains("spark.io.compression.lz4.block.size"))
+    assert(conf.contains("spark.io.compression.lz4.blockSize"))
+    assert(conf.contains("spark.io.unknown") === false)
+  }
 }
 
 class Class1 {}

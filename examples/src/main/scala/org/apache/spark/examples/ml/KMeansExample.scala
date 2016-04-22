@@ -23,8 +23,8 @@ import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.ml.clustering.KMeans
 import org.apache.spark.mllib.linalg.Vectors
-// $example off$
 import org.apache.spark.sql.{DataFrame, SQLContext}
+// $example off$
 
 /**
  * An example demonstrating a k-means clustering.

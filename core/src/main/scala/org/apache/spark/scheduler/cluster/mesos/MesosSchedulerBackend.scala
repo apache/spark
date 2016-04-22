@@ -78,7 +78,8 @@ private[spark] class MesosSchedulerBackend(
       sc.sparkUser,
       sc.appName,
       sc.conf,
-      sc.ui.map(_.appUIAddress))
+      sc.conf.getOption("spark.mesos.driver.webui.url").orElse(sc.ui.map(_.appUIAddress))
+    )
     startScheduler(driver)
   }
 

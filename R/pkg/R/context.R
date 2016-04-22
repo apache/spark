@@ -103,7 +103,10 @@ parallelize <- function(sc, coll, numSlices = 1) {
   # TODO: bound/safeguard numSlices
   # TODO: unit tests for if the split works for all primitives
   # TODO: support matrix, data frame, etc
+  # nolint start
+  # suppress lintr warning: Place a space before left parenthesis, except in a function call.
   if ((!is.list(coll) && !is.vector(coll)) || is.data.frame(coll)) {
+  # nolint end
     if (is.data.frame(coll)) {
       message(paste("context.R: A data frame is parallelized by columns."))
     } else {
@@ -221,4 +224,21 @@ broadcast <- function(sc, object) {
 #'}
 setCheckpointDir <- function(sc, dirName) {
   invisible(callJMethod(sc, "setCheckpointDir", suppressWarnings(normalizePath(dirName))))
+}
+
+#' Set new log level
+#'
+#' Set new log level: "ALL", "DEBUG", "ERROR", "FATAL", "INFO", "OFF", "TRACE", "WARN"
+#'
+#' @rdname setLogLevel
+#' @param sc Spark Context to use
+#' @param level New log level
+#' @export
+#' @examples
+#'\dontrun{
+#' setLogLevel(sc, "ERROR")
+#'}
+
+setLogLevel <- function(sc, level) {
+  callJMethod(sc, "setLogLevel", level)
 }

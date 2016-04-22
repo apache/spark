@@ -25,6 +25,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
 import scala.reflect.ClassTag
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.shuffle.MetadataFetchFailedException
@@ -376,8 +377,6 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
    * @param numReducers total number of reducers in the shuffle
    * @param fractionThreshold fraction of total map output size that a location must have
    *                          for it to be considered large.
-   *
-   * This method is not thread-safe.
    */
   def getLocationsWithLargestOutputs(
       shuffleId: Int,
@@ -386,28 +385,36 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
       fractionThreshold: Double)
     : Option[Array[BlockManagerId]] = {
 
-    if (mapStatuses.contains(shuffleId)) {
-      val statuses = mapStatuses(shuffleId)
-      if (statuses.nonEmpty) {
-        // HashMap to add up sizes of all blocks at the same location
-        val locs = new HashMap[BlockManagerId, Long]
-        var totalOutputSize = 0L
-        var mapIdx = 0
-        while (mapIdx < statuses.length) {
-          val status = statuses(mapIdx)
-          val blockSize = status.getSizeForBlock(reducerId)
-          if (blockSize > 0) {
-            locs(status.location) = locs.getOrElse(status.location, 0L) + blockSize
-            totalOutputSize += blockSize
+    val statuses = mapStatuses.get(shuffleId).orNull
+    if (statuses != null) {
+      statuses.synchronized {
+        if (statuses.nonEmpty) {
+          // HashMap to add up sizes of all blocks at the same location
+          val locs = new HashMap[BlockManagerId, Long]
+          var totalOutputSize = 0L
+          var mapIdx = 0
+          while (mapIdx < statuses.length) {
+            val status = statuses(mapIdx)
+            // status may be null here if we are called between registerShuffle, which creates an
+            // array with null entries for each output, and registerMapOutputs, which populates it
+            // with valid status entries. This is possible if one thread schedules a job which
+            // depends on an RDD which is currently being computed by another thread.
+            if (status != null) {
+              val blockSize = status.getSizeForBlock(reducerId)
+              if (blockSize > 0) {
+                locs(status.location) = locs.getOrElse(status.location, 0L) + blockSize
+                totalOutputSize += blockSize
+              }
+            }
+            mapIdx = mapIdx + 1
           }
-          mapIdx = mapIdx + 1
-        }
-        val topLocs = locs.filter { case (loc, size) =>
-          size.toDouble / totalOutputSize >= fractionThreshold
-        }
-        // Return if we have any locations which satisfy the required threshold
-        if (topLocs.nonEmpty) {
-          return Some(topLocs.map(_._1).toArray)
+          val topLocs = locs.filter { case (loc, size) =>
+            size.toDouble / totalOutputSize >= fractionThreshold
+          }
+          // Return if we have any locations which satisfy the required threshold
+          if (topLocs.nonEmpty) {
+            return Some(topLocs.keys.toArray)
+          }
         }
       }
     }

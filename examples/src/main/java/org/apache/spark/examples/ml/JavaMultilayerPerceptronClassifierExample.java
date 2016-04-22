@@ -20,11 +20,12 @@ package org.apache.spark.examples.ml;
 // $example on$
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
 import org.apache.spark.ml.classification.MultilayerPerceptronClassificationModel;
 import org.apache.spark.ml.classification.MultilayerPerceptronClassifier;
 import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator;
-import org.apache.spark.sql.DataFrame;
 // $example off$
 
 /**
@@ -40,11 +41,11 @@ public class JavaMultilayerPerceptronClassifierExample {
     // $example on$
     // Load training data
     String path = "data/mllib/sample_multiclass_classification_data.txt";
-    DataFrame dataFrame = jsql.read().format("libsvm").load(path);
+    Dataset<Row> dataFrame = jsql.read().format("libsvm").load(path);
     // Split the data into train and test
-    DataFrame[] splits = dataFrame.randomSplit(new double[]{0.6, 0.4}, 1234L);
-    DataFrame train = splits[0];
-    DataFrame test = splits[1];
+    Dataset<Row>[] splits = dataFrame.randomSplit(new double[]{0.6, 0.4}, 1234L);
+    Dataset<Row> train = splits[0];
+    Dataset<Row> test = splits[1];
     // specify layers for the neural network:
     // input layer of size 4 (features), two intermediate of size 5 and 4
     // and output of size 3 (classes)
@@ -58,8 +59,8 @@ public class JavaMultilayerPerceptronClassifierExample {
     // train the model
     MultilayerPerceptronClassificationModel model = trainer.fit(train);
     // compute precision on the test set
-    DataFrame result = model.transform(test);
-    DataFrame predictionAndLabels = result.select("prediction", "label");
+    Dataset<Row> result = model.transform(test);
+    Dataset<Row> predictionAndLabels = result.select("prediction", "label");
     MulticlassClassificationEvaluator evaluator = new MulticlassClassificationEvaluator()
       .setMetricName("precision");
     System.out.println("Precision = " + evaluator.evaluate(predictionAndLabels));

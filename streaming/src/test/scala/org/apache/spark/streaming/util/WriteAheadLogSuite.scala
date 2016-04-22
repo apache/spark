@@ -38,7 +38,7 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.mock.MockitoSugar
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.streaming.scheduler._
 import org.apache.spark.util.{CompletionIterator, ManualClock, ThreadUtils, Utils}
 
@@ -228,7 +228,9 @@ class FileBasedWriteAheadLogSuite
      the list of files.
      */
     val numThreads = 8
-    val tpool = ThreadUtils.newDaemonFixedThreadPool(numThreads, "wal-test-thread-pool")
+    val fpool = ThreadUtils.newForkJoinPool("wal-test-thread-pool", numThreads)
+    val executionContext = ExecutionContext.fromExecutorService(fpool)
+
     class GetMaxCounter {
       private val value = new AtomicInteger()
       @volatile private var max: Int = 0
@@ -258,7 +260,8 @@ class FileBasedWriteAheadLogSuite
       val t = new Thread() {
         override def run() {
           // run the calculation on a separate thread so that we can release the latch
-          val iterator = FileBasedWriteAheadLog.seqToParIterator[Int, Int](tpool, testSeq, handle)
+          val iterator = FileBasedWriteAheadLog.seqToParIterator[Int, Int](executionContext,
+            testSeq, handle)
           collected = iterator.toSeq
         }
       }
@@ -273,7 +276,7 @@ class FileBasedWriteAheadLogSuite
       // make sure we didn't open too many Iterators
       assert(counter.getMax() <= numThreads)
     } finally {
-      tpool.shutdownNow()
+      fpool.shutdownNow()
     }
   }
 
@@ -468,10 +471,11 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
     // the BatchedWriteAheadLog should bubble up any exceptions that may have happened during writes
     val batchedWal = new BatchedWriteAheadLog(wal, sparkConf)
 
-    intercept[RuntimeException] {
+    val e = intercept[SparkException] {
       val buffer = mock[ByteBuffer]
       batchedWal.write(buffer, 2L)
     }
+    assert(e.getCause.getMessage === "Hello!")
   }
 
   // we make the write requests in separate threads so that we don't block the test thread

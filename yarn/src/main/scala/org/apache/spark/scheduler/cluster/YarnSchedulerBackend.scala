@@ -22,7 +22,8 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.yarn.api.records.{ApplicationAttemptId, ApplicationId}
 
-import org.apache.spark.{Logging, SparkContext}
+import org.apache.spark.SparkContext
+import org.apache.spark.internal.Logging
 import org.apache.spark.rpc._
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
@@ -38,9 +39,12 @@ private[spark] abstract class YarnSchedulerBackend(
     sc: SparkContext)
   extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv) {
 
-  if (conf.getOption("spark.scheduler.minRegisteredResourcesRatio").isEmpty) {
-    minRegisteredRatio = 0.8
-  }
+  override val minRegisteredRatio =
+    if (conf.getOption("spark.scheduler.minRegisteredResourcesRatio").isEmpty) {
+      0.8
+    } else {
+      super.minRegisteredRatio
+    }
 
   protected var totalExpectedExecutors = 0
 
@@ -95,11 +99,12 @@ private[spark] abstract class YarnSchedulerBackend(
   /**
    * Get the attempt ID for this run, if the cluster manager supports multiple
    * attempts. Applications run in client mode will not have attempt IDs.
+   * This attempt ID only includes attempt counter, like "1", "2".
    *
    * @return The application attempt id, if available.
    */
   override def applicationAttemptId(): Option[String] = {
-    attemptId.map(_.toString)
+    attemptId.map(_.getAttemptId.toString)
   }
 
   /**
@@ -218,17 +223,15 @@ private[spark] abstract class YarnSchedulerBackend(
           val lossReasonRequest = GetExecutorLossReason(executorId)
           val future = am.ask[ExecutorLossReason](lossReasonRequest, askTimeout)
           future onSuccess {
-            case reason: ExecutorLossReason => {
+            case reason: ExecutorLossReason =>
               driverEndpoint.askWithRetry[Boolean](RemoveExecutor(executorId, reason))
-            }
           }
           future onFailure {
-            case NonFatal(e) => {
+            case NonFatal(e) =>
               logWarning(s"Attempted to get executor loss reason" +
                 s" for executor id ${executorId} at RPC address ${executorRpcAddress}," +
                 s" but got no response. Marking as slave lost.", e)
               driverEndpoint.askWithRetry[Boolean](RemoveExecutor(executorId, SlaveLost()))
-            }
             case t => throw t
           }
         case None =>
@@ -290,6 +293,9 @@ private[spark] abstract class YarnSchedulerBackend(
             logWarning("Attempted to kill executors before the AM has registered!")
             context.reply(false)
         }
+
+      case RetrieveLastAllocatedExecutorId =>
+        context.reply(currentExecutorIdCounter)
     }
 
     override def onDisconnected(remoteAddress: RpcAddress): Unit = {

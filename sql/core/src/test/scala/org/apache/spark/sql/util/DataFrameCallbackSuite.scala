@@ -93,7 +93,7 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
 
       override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
         val metric = qe.executedPlan match {
-          case w: WholeStageCodegen => w.plan.longMetric("numOutputRows")
+          case w: WholeStageCodegen => w.child.longMetric("numOutputRows")
           case other => other.longMetric("numOutputRows")
         }
         metrics += metric.value.value

@@ -22,86 +22,13 @@ import org.apache.hadoop.hive.metastore.MetaStoreUtils
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
-import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.execution.RunnableCommand
-import org.apache.spark.sql.execution.datasources.{BucketSpec, LogicalRelation, ResolvedDataSource}
-import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.sql.execution.command.RunnableCommand
+import org.apache.spark.sql.execution.datasources.{BucketSpec, DataSource, HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.hive.HiveSessionState
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 
-/**
- * Analyzes the given table in the current database to generate statistics, which will be
- * used in query optimizations.
- *
- * Right now, it only supports Hive tables and it only updates the size of a Hive table
- * in the Hive metastore.
- */
-private[hive]
-case class AnalyzeTable(tableName: String) extends RunnableCommand {
-
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.asInstanceOf[HiveContext].analyze(tableName)
-    Seq.empty[Row]
-  }
-}
-
-/**
- * Drops a table from the metastore and removes it if it is cached.
- */
-private[hive]
-case class DropTable(
-    tableName: String,
-    ifExists: Boolean) extends RunnableCommand {
-
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    val hiveContext = sqlContext.asInstanceOf[HiveContext]
-    val ifExistsClause = if (ifExists) "IF EXISTS " else ""
-    try {
-      hiveContext.cacheManager.tryUncacheQuery(hiveContext.table(tableName))
-    } catch {
-      // This table's metadata is not in Hive metastore (e.g. the table does not exist).
-      case _: org.apache.hadoop.hive.ql.metadata.InvalidTableException =>
-      case _: org.apache.spark.sql.catalyst.analysis.NoSuchTableException =>
-      // Other Throwables can be caused by users providing wrong parameters in OPTIONS
-      // (e.g. invalid paths). We catch it and log a warning message.
-      // Users should be able to drop such kinds of tables regardless if there is an error.
-      case e: Throwable => log.warn(s"${e.getMessage}", e)
-    }
-    hiveContext.invalidateTable(tableName)
-    hiveContext.runSqlHive(s"DROP TABLE $ifExistsClause$tableName")
-    hiveContext.catalog.unregisterTable(TableIdentifier(tableName))
-    Seq.empty[Row]
-  }
-}
-
-private[hive]
-case class AddJar(path: String) extends RunnableCommand {
-
-  override val output: Seq[Attribute] = {
-    val schema = StructType(
-      StructField("result", IntegerType, false) :: Nil)
-    schema.toAttributes
-  }
-
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.addJar(path)
-
-    Seq(Row(0))
-  }
-}
-
-private[hive]
-case class AddFile(path: String) extends RunnableCommand {
-
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    val hiveContext = sqlContext.asInstanceOf[HiveContext]
-    hiveContext.runSqlHive(s"ADD FILE $path")
-    hiveContext.sparkContext.addFile(path)
-    Seq.empty[Row]
-  }
-}
 
 private[hive]
 case class CreateMetastoreDataSource(
@@ -128,9 +55,9 @@ case class CreateMetastoreDataSource(
     }
 
     val tableName = tableIdent.unquotedString
-    val hiveContext = sqlContext.asInstanceOf[HiveContext]
+    val sessionState = sqlContext.sessionState.asInstanceOf[HiveSessionState]
 
-    if (hiveContext.catalog.tableExists(tableIdent)) {
+    if (sessionState.catalog.tableExists(tableIdent)) {
       if (allowExisting) {
         return Seq.empty[Row]
       } else {
@@ -142,12 +69,20 @@ case class CreateMetastoreDataSource(
     val optionsWithPath =
       if (!options.contains("path") && managedIfNoPath) {
         isExternal = false
-        options + ("path" -> hiveContext.catalog.hiveDefaultTableFilePath(tableIdent))
+        options + ("path" -> sessionState.catalog.hiveDefaultTableFilePath(tableIdent))
       } else {
         options
       }
 
-    hiveContext.catalog.createDataSourceTable(
+    // Create the relation to validate the arguments before writing the metadata to the metastore.
+    DataSource(
+      sqlContext = sqlContext,
+      userSpecifiedSchema = userSpecifiedSchema,
+      className = provider,
+      bucketSpec = None,
+      options = optionsWithPath).resolveRelation()
+
+    sessionState.catalog.createDataSourceTable(
       tableIdent,
       userSpecifiedSchema,
       Array.empty[String],
@@ -186,19 +121,19 @@ case class CreateMetastoreDataSourceAsSelect(
     }
 
     val tableName = tableIdent.unquotedString
-    val hiveContext = sqlContext.asInstanceOf[HiveContext]
+    val sessionState = sqlContext.sessionState.asInstanceOf[HiveSessionState]
     var createMetastoreTable = false
     var isExternal = true
     val optionsWithPath =
       if (!options.contains("path")) {
         isExternal = false
-        options + ("path" -> hiveContext.catalog.hiveDefaultTableFilePath(tableIdent))
+        options + ("path" -> sessionState.catalog.hiveDefaultTableFilePath(tableIdent))
       } else {
         options
       }
 
     var existingSchema = None: Option[StructType]
-    if (sqlContext.catalog.tableExists(tableIdent)) {
+    if (sqlContext.sessionState.catalog.tableExists(tableIdent)) {
       // Check if we need to throw an exception or just return.
       mode match {
         case SaveMode.ErrorIfExists =>
@@ -212,39 +147,25 @@ case class CreateMetastoreDataSourceAsSelect(
           return Seq.empty[Row]
         case SaveMode.Append =>
           // Check if the specified data source match the data source of the existing table.
-          val resolved = ResolvedDataSource(
-            sqlContext,
-            Some(query.schema.asNullable),
-            partitionColumns,
-            bucketSpec,
-            provider,
-            optionsWithPath)
-          val createdRelation = LogicalRelation(resolved.relation)
-          EliminateSubqueryAliases(sqlContext.catalog.lookupRelation(tableIdent)) match {
+          val dataSource = DataSource(
+            sqlContext = sqlContext,
+            userSpecifiedSchema = Some(query.schema.asNullable),
+            partitionColumns = partitionColumns,
+            bucketSpec = bucketSpec,
+            className = provider,
+            options = optionsWithPath)
+          // TODO: Check that options from the resolved relation match the relation that we are
+          // inserting into (i.e. using the same compression).
+
+          EliminateSubqueryAliases(
+            sessionState.catalog.lookupRelation(tableIdent)) match {
             case l @ LogicalRelation(_: InsertableRelation | _: HadoopFsRelation, _, _) =>
-              if (l.relation != createdRelation.relation) {
-                val errorDescription =
-                  s"Cannot append to table $tableName because the resolved relation does not " +
-                  s"match the existing relation of $tableName. " +
-                  s"You can use insertInto($tableName, false) to append this DataFrame to the " +
-                  s"table $tableName and using its data source and options."
-                val errorMessage =
-                  s"""
-                     |$errorDescription
-                     |== Relations ==
-                     |${sideBySide(
-                        s"== Expected Relation ==" :: l.toString :: Nil,
-                        s"== Actual Relation ==" :: createdRelation.toString :: Nil
-                      ).mkString("\n")}
-                   """.stripMargin
-                throw new AnalysisException(errorMessage)
-              }
               existingSchema = Some(l.schema)
             case o =>
               throw new AnalysisException(s"Saving data in ${o.toString} is not supported.")
           }
         case SaveMode.Overwrite =>
-          hiveContext.sql(s"DROP TABLE IF EXISTS $tableName")
+          sqlContext.sql(s"DROP TABLE IF EXISTS $tableName")
           // Need to create the table again.
           createMetastoreTable = true
       }
@@ -253,30 +174,30 @@ case class CreateMetastoreDataSourceAsSelect(
       createMetastoreTable = true
     }
 
-    val data = DataFrame(hiveContext, query)
+    val data = Dataset.ofRows(sqlContext, query)
     val df = existingSchema match {
       // If we are inserting into an existing table, just use the existing schema.
-      case Some(schema) => sqlContext.internalCreateDataFrame(data.queryExecution.toRdd, schema)
+      case Some(s) => data.selectExpr(s.fieldNames: _*)
       case None => data
     }
 
     // Create the relation based on the data of df.
-    val resolved = ResolvedDataSource(
+    val dataSource = DataSource(
       sqlContext,
-      provider,
-      partitionColumns,
-      bucketSpec,
-      mode,
-      optionsWithPath,
-      df)
+      className = provider,
+      partitionColumns = partitionColumns,
+      bucketSpec = bucketSpec,
+      options = optionsWithPath)
+
+    val result = dataSource.write(mode, df)
 
     if (createMetastoreTable) {
       // We will use the schema of resolved.relation as the schema of the table (instead of
       // the schema of df). It is important since the nullability may be changed by the relation
       // provider (for example, see org.apache.spark.sql.parquet.DefaultSource).
-      hiveContext.catalog.createDataSourceTable(
+      sessionState.catalog.createDataSourceTable(
         tableIdent,
-        Some(resolved.relation.schema),
+        Some(result.schema),
         partitionColumns,
         bucketSpec,
         provider,
@@ -285,7 +206,7 @@ case class CreateMetastoreDataSourceAsSelect(
     }
 
     // Refresh the cache of the table in the catalog.
-    hiveContext.catalog.refreshTable(tableIdent)
+    sessionState.catalog.refreshTable(tableIdent)
     Seq.empty[Row]
   }
 }

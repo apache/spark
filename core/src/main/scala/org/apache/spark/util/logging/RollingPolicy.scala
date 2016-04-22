@@ -20,7 +20,7 @@ package org.apache.spark.util.logging
 import java.text.SimpleDateFormat
 import java.util.Calendar
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 
 /**
  * Defines the policy based on which [[org.apache.spark.util.logging.RollingFileAppender]] will
@@ -32,10 +32,10 @@ private[spark] trait RollingPolicy {
   def shouldRollover(bytesToBeWritten: Long): Boolean
 
   /** Notify that rollover has occurred */
-  def rolledOver()
+  def rolledOver(): Unit
 
   /** Notify that bytes have been written */
-  def bytesWritten(bytes: Long)
+  def bytesWritten(bytes: Long): Unit
 
   /** Get the desired name of the rollover file */
   def generateRolledOverFileSuffix(): String

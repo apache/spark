@@ -40,7 +40,7 @@ import org.apache.spark.unsafe.types.UTF8String
  * so we do not have helper methods for them.
  *
  *
- * WARNNING: This only works with HeapByteBuffer
+ * WARNING: This only works with HeapByteBuffer
  */
 private[columnar] object ByteBufferHelper {
   def getInt(buffer: ByteBuffer): Int = {

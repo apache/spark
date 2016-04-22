@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst
 
 import java.io._
+import java.nio.charset.StandardCharsets
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.{NumericType, StringType}
@@ -118,7 +119,7 @@ package object util {
     val writer = new PrintWriter(out)
     t.printStackTrace(writer)
     writer.flush()
-    new String(out.toByteArray)
+    new String(out.toByteArray, StandardCharsets.UTF_8)
   }
 
   def stringOrNull(a: AnyRef): String = if (a == null) null else a.toString
@@ -154,10 +155,13 @@ package object util {
 
   /**
    * Returns the string representation of this expression that is safe to be put in
-   * code comments of generated code.
+   * code comments of generated code. The length is capped at 128 characters.
    */
-  def toCommentSafeString(str: String): String =
-    str.replace("*/", "\\*\\/").replace("\\u", "\\\\u")
+  def toCommentSafeString(str: String): String = {
+    val len = math.min(str.length, 128)
+    val suffix = if (str.length > len) "..." else ""
+    str.substring(0, len).replace("*/", "\\*\\/").replace("\\u", "\\\\u") + suffix
+  }
 
   /* FIX ME
   implicit class debugLogging(a: Any) {
