@@ -263,7 +263,7 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSQLContext {
 
   private def withFileStreamSinkLog(f: FileStreamSinkLog => Unit): Unit = {
     withTempDir { file =>
-      val sinkLog = new FileStreamSinkLog(sqlContext, file.getCanonicalPath)
+      val sinkLog = new FileStreamSinkLog(sqlContext.sparkSession, file.getCanonicalPath)
       f(sinkLog)
     }
   }

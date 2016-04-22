@@ -192,7 +192,7 @@ case class DataSource(
         }
 
         new FileStreamSource(
-          sqlContext, metadataPath, path, Some(dataSchema), className, dataFrameBuilder)
+          sqlContext.sparkSession, metadataPath, path, Some(dataSchema), className, dataFrameBuilder)
       case _ =>
         throw new UnsupportedOperationException(
           s"Data source $className does not support streamed reading")
@@ -209,7 +209,7 @@ case class DataSource(
           throw new IllegalArgumentException("'path' is not specified")
         })
 
-        new FileStreamSink(sqlContext, path, format)
+        new FileStreamSink(sqlContext.sparkSession, path, format)
       case _ =>
         throw new UnsupportedOperationException(
           s"Data source $className does not support streamed writing")
@@ -258,7 +258,7 @@ case class DataSource(
           if hasMetadata(caseInsensitiveOptions.get("path").toSeq ++ paths) =>
         val basePath = new Path((caseInsensitiveOptions.get("path").toSeq ++ paths).head)
         val fileCatalog =
-          new StreamFileCatalog(sqlContext, basePath)
+          new StreamFileCatalog(sqlContext.sparkSession, basePath)
         val dataSchema = userSpecifiedSchema.orElse {
           format.inferSchema(
             sqlContext,

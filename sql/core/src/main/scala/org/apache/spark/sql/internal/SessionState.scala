@@ -129,7 +129,7 @@ private[sql] class SessionState(ctx: SQLContext) {
   /**
    * Interface to start and stop [[org.apache.spark.sql.ContinuousQuery]]s.
    */
-  lazy val continuousQueryManager: ContinuousQueryManager = new ContinuousQueryManager(ctx)
+  lazy val continuousQueryManager: ContinuousQueryManager = new ContinuousQueryManager(ctx.sparkSession)
 
 
   // ------------------------------------------------------

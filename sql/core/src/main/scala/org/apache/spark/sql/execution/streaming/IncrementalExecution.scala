@@ -17,23 +17,23 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.catalyst.analysis.{OutputMode, UnsupportedOperationChecker}
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.analysis.OutputMode
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SparkPlanner, UnaryNode}
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * A variant of [[QueryExecution]] that allows the execution of the given [[LogicalPlan]]
  * plan incrementally. Possibly preserving state in between each execution.
  */
 class IncrementalExecution(
-    ctx: SQLContext,
+    sparkSession: SparkSession,
     logicalPlan: LogicalPlan,
     outputMode: OutputMode,
     checkpointLocation: String,
-    currentBatchId: Long) extends QueryExecution(ctx, logicalPlan) {
+    currentBatchId: Long)
+  extends QueryExecution(sparkSession.wrapped, logicalPlan) {
 
   // TODO: make this always part of planning.
   val stateStrategy = sqlContext.sessionState.planner.StatefulAggregationStrategy :: Nil
