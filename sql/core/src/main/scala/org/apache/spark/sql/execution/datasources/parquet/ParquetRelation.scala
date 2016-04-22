@@ -286,7 +286,7 @@ private[sql] class DefaultSource
 
     // Whole stage codegen (PhysicalRDD) is able to deal with batches directly
     val returningBatch =
-      supportBatch(sqlContext, StructType(partitionSchema.fields ++ requiredSchema.fields))
+      supportBatch(sqlContext, StructType(partitionSchema.fields ++ dataSchema.fields))
 
     // Try to push down filters when filter push-down is enabled.
     val pushed = if (sqlContext.getConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key).toBoolean) {
