@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-import java.util.Timer
 import java.util.concurrent.{ScheduledFuture, TimeUnit}
 
 import scala.collection.mutable
@@ -51,7 +50,7 @@ trait StateStore {
   def get(key: UnsafeRow): Option[UnsafeRow]
 
   /** Put a new value for a key. */
-  def put(key: UnsafeRow, value: UnsafeRow)
+  def put(key: UnsafeRow, value: UnsafeRow): Unit
 
   /**
    * Remove keys that match the following condition.
@@ -63,7 +62,7 @@ trait StateStore {
    */
   def commit(): Long
 
-  /** Cancel all the updates that have been made to the store. */
+  /** Abort all the updates that have been made to the store. */
   def abort(): Unit
 
   /**
@@ -109,8 +108,8 @@ case class KeyRemoved(key: UnsafeRow) extends StoreUpdate
 /**
  * Companion object to [[StateStore]] that provides helper methods to create and retrieve stores
  * by their unique ids. In addition, when a SparkContext is active (i.e. SparkEnv.get is not null),
- * it also runs a periodic background tasks to do maintenance on the loaded stores. For each
- * store, tt uses the [[StateStoreCoordinator]] to ensure whether the current loaded instance of
+ * it also runs a periodic background task to do maintenance on the loaded stores. For each
+ * store, it uses the [[StateStoreCoordinator]] to ensure whether the current loaded instance of
  * the store is the active instance. Accordingly, it either keeps it loaded and performs
  * maintenance, or unloads the store.
  */

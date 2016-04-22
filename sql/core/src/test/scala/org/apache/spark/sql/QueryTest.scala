@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.util.{Locale, TimeZone}
+import java.util.{ArrayDeque, Locale, TimeZone}
 
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
@@ -29,10 +29,13 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.LogicalRDD
+import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.streaming.MemoryPlan
 import org.apache.spark.sql.types.ObjectType
+
+
 
 abstract class QueryTest extends PlanTest {
 
@@ -46,6 +49,7 @@ abstract class QueryTest extends PlanTest {
   /**
    * Runs the plan and makes sure the answer contains all of the keywords, or the
    * none of keywords are listed in the answer
+   *
    * @param df the [[DataFrame]] to be executed
    * @param exists true for make sure the keywords are listed in the output, otherwise
    *               to make sure none of the keyword are not listed in the output
@@ -118,6 +122,7 @@ abstract class QueryTest extends PlanTest {
 
   /**
    * Runs the plan and makes sure the answer matches the expected result.
+   *
    * @param df the [[DataFrame]] to be executed
    * @param expectedAnswer the expected result in a [[Seq]] of [[Row]]s.
    */
@@ -157,6 +162,7 @@ abstract class QueryTest extends PlanTest {
 
   /**
    * Runs the plan and makes sure the answer is within absTol of the expected result.
+   *
    * @param dataFrame the [[DataFrame]] to be executed
    * @param expectedAnswer the expected result in a [[Seq]] of [[Row]]s.
    * @param absTol the absolute tolerance between actual and expected answers.
@@ -197,14 +203,20 @@ abstract class QueryTest extends PlanTest {
   }
 
   private def checkJsonFormat(df: DataFrame): Unit = {
+    // Get the analyzed plan and rewrite the PredicateSubqueries in order to make sure that
+    // RDD and Data resolution does not break.
     val logicalPlan = df.queryExecution.analyzed
+
     // bypass some cases that we can't handle currently.
     logicalPlan.transform {
-      case _: ObjectOperator => return
+      case _: ObjectConsumer => return
+      case _: ObjectProducer => return
+      case _: AppendColumns => return
       case _: LogicalRelation => return
       case _: MemoryPlan => return
     }.transformAllExpressions {
       case a: ImperativeAggregate => return
+      case _: TypedAggregateExpression => return
       case Literal(_, _: ObjectType) => return
     }
 
@@ -232,9 +244,27 @@ abstract class QueryTest extends PlanTest {
     // RDDs/data are not serializable to JSON, so we need to collect LogicalPlans that contains
     // these non-serializable stuff, and use these original ones to replace the null-placeholders
     // in the logical plans parsed from JSON.
-    var logicalRDDs = logicalPlan.collect { case l: LogicalRDD => l }
-    var localRelations = logicalPlan.collect { case l: LocalRelation => l }
-    var inMemoryRelations = logicalPlan.collect { case i: InMemoryRelation => i }
+    val logicalRDDs = new ArrayDeque[LogicalRDD]()
+    val localRelations = new ArrayDeque[LocalRelation]()
+    val inMemoryRelations = new ArrayDeque[InMemoryRelation]()
+    def collectData: (LogicalPlan => Unit) = {
+      case l: LogicalRDD =>
+        logicalRDDs.offer(l)
+      case l: LocalRelation =>
+        localRelations.offer(l)
+      case i: InMemoryRelation =>
+        inMemoryRelations.offer(i)
+      case p =>
+        p.expressions.foreach {
+          _.foreach {
+            case s: SubqueryExpression =>
+              s.query.foreach(collectData)
+            case _ =>
+          }
+        }
+    }
+    logicalPlan.foreach(collectData)
+
 
     val jsonBackPlan = try {
       TreeNode.fromJSON[LogicalPlan](jsonString, sqlContext.sparkContext)
@@ -249,18 +279,15 @@ abstract class QueryTest extends PlanTest {
            """.stripMargin, e)
     }
 
-    val normalized2 = jsonBackPlan transformDown {
+    def renormalize: PartialFunction[LogicalPlan, LogicalPlan] = {
       case l: LogicalRDD =>
-        val origin = logicalRDDs.head
-        logicalRDDs = logicalRDDs.drop(1)
+        val origin = logicalRDDs.pop()
         LogicalRDD(l.output, origin.rdd)(sqlContext)
       case l: LocalRelation =>
-        val origin = localRelations.head
-        localRelations = localRelations.drop(1)
+        val origin = localRelations.pop()
         l.copy(data = origin.data)
       case l: InMemoryRelation =>
-        val origin = inMemoryRelations.head
-        inMemoryRelations = inMemoryRelations.drop(1)
+        val origin = inMemoryRelations.pop()
         InMemoryRelation(
           l.output,
           l.useCompression,
@@ -271,7 +298,13 @@ abstract class QueryTest extends PlanTest {
           origin.cachedColumnBuffers,
           l._statistics,
           origin._batchStats)
+      case p =>
+        p.transformExpressions {
+          case s: SubqueryExpression =>
+            s.withNewPlan(s.query.transformDown(renormalize))
+        }
     }
+    val normalized2 = jsonBackPlan.transformDown(renormalize)
 
     assert(logicalRDDs.isEmpty)
     assert(localRelations.isEmpty)
@@ -305,6 +338,7 @@ object QueryTest {
    * If there was exception during the execution or the contents of the DataFrame does not
    * match the expected result, an error message will be returned. Otherwise, a [[None]] will
    * be returned.
+   *
    * @param df the [[DataFrame]] to be executed
    * @param expectedAnswer the expected result in a [[Seq]] of [[Row]]s.
    */
@@ -379,6 +413,7 @@ object QueryTest {
 
   /**
    * Runs the plan and makes sure the answer is within absTol of the expected result.
+   *
    * @param actualAnswer the actual result in a [[Row]].
    * @param expectedAnswer the expected result in a[[Row]].
    * @param absTol the absolute tolerance between actual and expected answers.

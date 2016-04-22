@@ -58,6 +58,7 @@ from pyspark.mllib.recommendation import Rating
 from pyspark.mllib.regression import LabeledPoint, StreamingLinearRegressionWithSGD
 from pyspark.mllib.random import RandomRDDs
 from pyspark.mllib.stat import Statistics
+from pyspark.mllib.feature import HashingTF
 from pyspark.mllib.feature import Word2Vec
 from pyspark.mllib.feature import IDF
 from pyspark.mllib.feature import StandardScaler, ElementwiseProduct
@@ -392,14 +393,20 @@ class VectorTests(MLlibTestCase):
         self.assertTrue(array_equal(sm.values, [1, 3, 4, 6, 9]))
 
     def test_parse_vector(self):
+        a = DenseVector([])
+        self.assertEqual(str(a), '[]')
+        self.assertEqual(Vectors.parse(str(a)), a)
         a = DenseVector([3, 4, 6, 7])
-        self.assertTrue(str(a), '[3.0,4.0,6.0,7.0]')
-        self.assertTrue(Vectors.parse(str(a)), a)
+        self.assertEqual(str(a), '[3.0,4.0,6.0,7.0]')
+        self.assertEqual(Vectors.parse(str(a)), a)
+        a = SparseVector(4, [], [])
+        self.assertEqual(str(a), '(4,[],[])')
+        self.assertEqual(SparseVector.parse(str(a)), a)
         a = SparseVector(4, [0, 2], [3, 4])
-        self.assertTrue(str(a), '(4,[0,2],[3.0,4.0])')
-        self.assertTrue(Vectors.parse(str(a)), a)
+        self.assertEqual(str(a), '(4,[0,2],[3.0,4.0])')
+        self.assertEqual(Vectors.parse(str(a)), a)
         a = SparseVector(10, [0, 1], [4, 5])
-        self.assertTrue(SparseVector.parse(' (10, [0,1 ],[ 4.0,5.0] )'), a)
+        self.assertEqual(SparseVector.parse(' (10, [0,1 ],[ 4.0,5.0] )'), a)
 
     def test_norms(self):
         a = DenseVector([0, 2, 3, -1])
@@ -1026,13 +1033,15 @@ class Word2VecTests(MLlibTestCase):
             .setNumPartitions(2) \
             .setNumIterations(10) \
             .setSeed(1024) \
-            .setMinCount(3)
+            .setMinCount(3) \
+            .setWindowSize(6)
         self.assertEqual(model.vectorSize, 2)
         self.assertTrue(model.learningRate < 0.02)
         self.assertEqual(model.numPartitions, 2)
         self.assertEqual(model.numIterations, 10)
         self.assertEqual(model.seed, 1024)
         self.assertEqual(model.minCount, 3)
+        self.assertEqual(model.windowSize, 6)
 
     def test_word2vec_get_vectors(self):
         data = [
@@ -1581,6 +1590,21 @@ class ALSTests(MLlibTestCase):
         r = Rating(1205640308657491975, 50233468418, 1.0)
         # rating user id exceeds max int value, should fail when pickled
         self.assertRaises(Py4JJavaError, self.sc._jvm.SerDe.loads, bytearray(ser.dumps(r)))
+
+
+class HashingTFTest(MLlibTestCase):
+
+    def test_binary_term_freqs(self):
+        hashingTF = HashingTF(100).setBinary(True)
+        doc = "a a b c c c".split(" ")
+        n = hashingTF.numFeatures
+        output = hashingTF.transform(doc).toArray()
+        expected = Vectors.sparse(n, {hashingTF.indexOf("a"): 1.0,
+                                      hashingTF.indexOf("b"): 1.0,
+                                      hashingTF.indexOf("c"): 1.0}).toArray()
+        for i in range(0, n):
+            self.assertAlmostEqual(output[i], expected[i], 14, "Error at " + str(i) +
+                                   ": expected " + str(expected[i]) + ", got " + str(output[i]))
 
 
 if __name__ == "__main__":

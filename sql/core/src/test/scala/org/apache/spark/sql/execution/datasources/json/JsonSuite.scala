@@ -1421,7 +1421,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         FloatType, DoubleType, DecimalType(25, 5), DecimalType(6, 5),
         DateType, TimestampType,
         ArrayType(IntegerType), MapType(StringType, LongType), struct,
-        new MyDenseVectorUDT())
+        new UDT.MyDenseVectorUDT())
     val fields = dataTypes.zipWithIndex.map { case (dataType, index) =>
       StructField(s"col$index", dataType, nullable = true)
     }
@@ -1445,7 +1445,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         Seq(2, 3, 4),
         Map("a string" -> 2000L),
         Row(4.75.toFloat, Seq(false, true)),
-        new MyDenseVector(Array(0.25, 2.25, 4.25)))
+        new UDT.MyDenseVector(Array(0.25, 2.25, 4.25)))
     val data =
       Row.fromSeq(Seq("Spark " + sqlContext.sparkContext.version) ++ constantValues) :: Nil
 
@@ -1663,5 +1663,20 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         Row(java.sql.Timestamp.valueOf("2016-01-02 03:04:05"))
       )
     }
+  }
+
+  test("wide nested json table") {
+    val nested = (1 to 100).map { i =>
+      s"""
+         |"c$i": $i
+       """.stripMargin
+    }.mkString(", ")
+    val json = s"""
+       |{"a": [{$nested}], "b": [{$nested}]}
+     """.stripMargin
+    val rdd = sqlContext.sparkContext.makeRDD(Seq(json))
+    val df = sqlContext.read.json(rdd)
+    assert(df.schema.size === 2)
+    df.collect()
   }
 }

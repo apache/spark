@@ -236,10 +236,24 @@ case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
     })
   }
 
+  private def merge(a: Set[Expression], b: Set[Expression]): Set[Expression] = {
+    val common = a.intersect(b)
+    // The constraint with only one reference could be easily inferred as predicate
+    // Grouping the constraints by it's references so we can combine the constraints with same
+    // reference together
+    val othera = a.diff(common).filter(_.references.size == 1).groupBy(_.references.head)
+    val otherb = b.diff(common).filter(_.references.size == 1).groupBy(_.references.head)
+    // loose the constraints by: A1 && B1 || A2 && B2  ->  (A1 || A2) && (B1 || B2)
+    val others = (othera.keySet intersect otherb.keySet).map { attr =>
+      Or(othera(attr).reduceLeft(And), otherb(attr).reduceLeft(And))
+    }
+    common ++ others
+  }
+
   override protected def validConstraints: Set[Expression] = {
     children
       .map(child => rewriteConstraints(children.head.output, child.output, child.constraints))
-      .reduce(_ intersect _)
+      .reduce(merge(_, _))
   }
 }
 
@@ -502,7 +516,10 @@ private[sql] object Expand {
       // groupingId is the last output, here we use the bit mask as the concrete value for it.
       } :+ Literal.create(bitmask, IntegerType)
     }
-    val output = child.output ++ groupByAttrs :+ gid
+
+    // the `groupByAttrs` has different meaning in `Expand.output`, it could be the original
+    // grouping expression or null, so here we create new instance of it.
+    val output = child.output ++ groupByAttrs.map(_.newInstance) :+ gid
     Expand(projections, output, Project(child.output ++ groupByAliases, child))
   }
 }

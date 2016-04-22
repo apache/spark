@@ -115,7 +115,8 @@ final class ShuffleExternalSorter extends MemoryConsumer {
     this.numElementsForSpillThreshold =
       conf.getLong("spark.shuffle.spill.numElementsForceSpillThreshold", Long.MAX_VALUE);
     this.writeMetrics = writeMetrics;
-    this.inMemSorter = new ShuffleInMemorySorter(this, initialSize);
+    this.inMemSorter = new ShuffleInMemorySorter(
+      this, initialSize, conf.getBoolean("spark.shuffle.sort.useRadixSort", true));
     this.peakMemoryUsedBytes = getMemoryUsage();
   }
 
@@ -215,8 +216,6 @@ final class ShuffleExternalSorter extends MemoryConsumer {
       }
     }
 
-    inMemSorter.reset();
-
     if (!isLastFile) {  // i.e. this is a spill file
       // The current semantics of `shuffleRecordsWritten` seem to be that it's updated when records
       // are written to disk, not when they enter the shuffle sorting code. DiskBlockObjectWriter
@@ -255,6 +254,10 @@ final class ShuffleExternalSorter extends MemoryConsumer {
 
     writeSortedFile(false);
     final long spillSize = freeMemory();
+    inMemSorter.reset();
+    // Reset the in-memory sorter's pointer array only after freeing up the memory pages holding the
+    // records. Otherwise, if the task is over allocated memory, then without freeing the memory pages,
+    // we might not be able to get memory for the pointer array.
     taskContext.taskMetrics().incMemoryBytesSpilled(spillSize);
     return spillSize;
   }

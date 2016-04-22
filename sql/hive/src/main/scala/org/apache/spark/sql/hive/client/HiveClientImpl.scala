@@ -24,7 +24,6 @@ import scala.language.reflectiveCalls
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.hive.cli.CliSessionState
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.{PartitionDropOptions, TableType => HiveTableType}
 import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, FieldSchema, Function => HiveFunction, FunctionType, PrincipalType, ResourceType, ResourceUri}
@@ -110,10 +109,20 @@ private[hive] class HiveClientImpl(
       }
     }
 
+    def isCliSessionState(state: SessionState): Boolean = {
+      var temp: Class[_] = if (state != null) state.getClass else null
+      var found = false
+      while (temp != null && !found) {
+        found = temp.getName == "org.apache.hadoop.hive.cli.CliSessionState"
+        temp = temp.getSuperclass
+      }
+      found
+    }
+
     val ret = try {
       // originState will be created if not exists, will never be null
       val originalState = SessionState.get()
-      if (originalState.isInstanceOf[CliSessionState]) {
+      if (isCliSessionState(originalState)) {
         // In `SparkSQLCLIDriver`, we have already started a `CliSessionState`,
         // which contains information like configurations from command line. Later
         // we call `SparkSQLEnv.init()` there, which would run into this part again.
@@ -151,6 +160,8 @@ private[hive] class HiveClientImpl(
   }
 
   /** Returns the configuration for the current session. */
+  // TODO: We should not use it because HiveSessionState has a hiveconf
+  // for the current Session.
   def conf: HiveConf = SessionState.get().getConf
 
   override def getConf(key: String, defaultValue: String): String = {
@@ -299,6 +310,10 @@ private[hive] class HiveClientImpl(
       tableName: String): Option[CatalogTable] = withHiveState {
     logDebug(s"Looking up $dbName.$tableName")
     Option(client.getTable(dbName, tableName, false)).map { h =>
+      // Note: Hive separates partition columns and the schema, but for us the
+      // partition columns are part of the schema
+      val partCols = h.getPartCols.asScala.map(fromHiveColumn)
+      val schema = h.getCols.asScala.map(fromHiveColumn) ++ partCols
       CatalogTable(
         identifier = TableIdentifier(h.getTableName, Option(h.getDbName)),
         tableType = h.getTableType match {
@@ -307,9 +322,10 @@ private[hive] class HiveClientImpl(
           case HiveTableType.INDEX_TABLE => CatalogTableType.INDEX_TABLE
           case HiveTableType.VIRTUAL_VIEW => CatalogTableType.VIRTUAL_VIEW
         },
-        schema = h.getCols.asScala.map(fromHiveColumn),
-        partitionColumns = h.getPartCols.asScala.map(fromHiveColumn),
-        sortColumns = Seq(),
+        schema = schema,
+        partitionColumnNames = partCols.map(_.name),
+        sortColumnNames = Seq(), // TODO: populate this
+        bucketColumnNames = h.getBucketCols.asScala,
         numBuckets = h.getNumBuckets,
         createTime = h.getTTable.getCreateTime.toLong * 1000,
         lastAccessTime = h.getLastAccessTime.toLong * 1000,
@@ -675,24 +691,37 @@ private[hive] class HiveClientImpl(
 
   private def toHiveTable(table: CatalogTable): HiveTable = {
     val hiveTable = new HiveTable(table.database, table.identifier.table)
-    // For EXTERNAL_TABLE/MANAGED_TABLE, we also need to set EXTERNAL field in
-    // the table properties accodringly. Otherwise, if EXTERNAL_TABLE is the table type
-    // but EXTERNAL field is not set, Hive metastore will change the type to
-    // MANAGED_TABLE (see
-    // metastore/src/java/org/apache/hadoop/hive/metastore/ObjectStore.java#L1095-L1105)
+    // For EXTERNAL_TABLE, we also need to set EXTERNAL field in the table properties.
+    // Otherwise, Hive metastore will change the table to a MANAGED_TABLE.
+    // (metastore/src/java/org/apache/hadoop/hive/metastore/ObjectStore.java#L1095-L1105)
     hiveTable.setTableType(table.tableType match {
       case CatalogTableType.EXTERNAL_TABLE =>
         hiveTable.setProperty("EXTERNAL", "TRUE")
         HiveTableType.EXTERNAL_TABLE
       case CatalogTableType.MANAGED_TABLE =>
-        hiveTable.setProperty("EXTERNAL", "FALSE")
         HiveTableType.MANAGED_TABLE
       case CatalogTableType.INDEX_TABLE => HiveTableType.INDEX_TABLE
       case CatalogTableType.VIRTUAL_VIEW => HiveTableType.VIRTUAL_VIEW
     })
-    hiveTable.setFields(table.schema.map(toHiveColumn).asJava)
-    hiveTable.setPartCols(table.partitionColumns.map(toHiveColumn).asJava)
+    // Note: In Hive the schema and partition columns must be disjoint sets
+    val (partCols, schema) = table.schema.map(toHiveColumn).partition { c =>
+      table.partitionColumnNames.contains(c.getName)
+    }
+    if (table.schema.isEmpty) {
+      // This is a hack to preserve existing behavior. Before Spark 2.0, we do not
+      // set a default serde here (this was done in Hive), and so if the user provides
+      // an empty schema Hive would automatically populate the schema with a single
+      // field "col". However, after SPARK-14388, we set the default serde to
+      // LazySimpleSerde so this implicit behavior no longer happens. Therefore,
+      // we need to do it in Spark ourselves.
+      hiveTable.setFields(
+        Seq(new FieldSchema("col", "array<string>", "from deserializer")).asJava)
+    } else {
+      hiveTable.setFields(schema.asJava)
+    }
+    hiveTable.setPartCols(partCols.asJava)
     // TODO: set sort columns here too
+    hiveTable.setBucketCols(table.bucketColumnNames.asJava)
     hiveTable.setOwner(conf.getUser)
     hiveTable.setNumBuckets(table.numBuckets)
     hiveTable.setCreateTime((table.createTime / 1000).toInt)
@@ -700,9 +729,11 @@ private[hive] class HiveClientImpl(
     table.storage.locationUri.foreach { loc => shim.setDataLocation(hiveTable, loc) }
     table.storage.inputFormat.map(toInputFormat).foreach(hiveTable.setInputFormatClass)
     table.storage.outputFormat.map(toOutputFormat).foreach(hiveTable.setOutputFormatClass)
-    table.storage.serde.foreach(hiveTable.setSerializationLib)
+    hiveTable.setSerializationLib(
+      table.storage.serde.getOrElse("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
     table.storage.serdeProperties.foreach { case (k, v) => hiveTable.setSerdeParam(k, v) }
     table.properties.foreach { case (k, v) => hiveTable.setProperty(k, v) }
+    table.comment.foreach { c => hiveTable.setProperty("comment", c) }
     table.viewOriginalText.foreach { t => hiveTable.setViewOriginalText(t) }
     table.viewText.foreach { t => hiveTable.setViewExpandedText(t) }
     hiveTable

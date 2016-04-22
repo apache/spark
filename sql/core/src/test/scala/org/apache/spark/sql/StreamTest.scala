@@ -33,6 +33,7 @@ import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.Span
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.sql.catalyst.analysis.{Append, OutputMode}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
@@ -74,6 +75,8 @@ trait StreamTest extends QueryTest with Timeouts {
 
   /** How long to wait for an active stream to catch up when checking a result. */
   val streamingTimeout = 10.seconds
+
+  val outputMode: OutputMode = Append
 
   /** A trait for actions that can be performed while testing a streaming DataFrame. */
   trait StreamAction
@@ -228,12 +231,14 @@ trait StreamTest extends QueryTest with Timeouts {
          |$testActions
          |
          |== Stream ==
+         |Output Mode: $outputMode
          |Stream state: $currentOffsets
          |Thread state: $threadState
          |${if (streamDeathCause != null) stackTraceToString(streamDeathCause) else ""}
          |
          |== Sink ==
          |${sink.toDebugString}
+         |
          |
          |== Plan ==
          |${if (currentStream != null) currentStream.lastExecution else ""}
@@ -293,7 +298,8 @@ trait StreamTest extends QueryTest with Timeouts {
                   StreamExecution.nextName,
                   metadataRoot,
                   stream,
-                  sink)
+                  sink,
+                  outputMode = outputMode)
                 .asInstanceOf[StreamExecution]
             currentStream.microBatchThread.setUncaughtExceptionHandler(
               new UncaughtExceptionHandler {

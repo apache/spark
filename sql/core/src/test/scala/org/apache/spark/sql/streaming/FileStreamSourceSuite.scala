@@ -63,6 +63,7 @@ class FileStreamSourceTest extends StreamTest with SharedSQLContext {
       format: String,
       path: String,
       schema: Option[StructType] = None): FileStreamSource = {
+    val checkpointLocation = Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
     val reader =
       if (schema.isDefined) {
         sqlContext.read.format(format).schema(schema.get)
@@ -72,7 +73,8 @@ class FileStreamSourceTest extends StreamTest with SharedSQLContext {
     reader.stream(path)
       .queryExecution.analyzed
       .collect { case StreamingRelation(dataSource, _, _) =>
-        dataSource.createSource().asInstanceOf[FileStreamSource]
+        // There is only one source in our tests so just set sourceId to 0
+        dataSource.createSource(s"$checkpointLocation/sources/0").asInstanceOf[FileStreamSource]
       }.head
   }
 
@@ -98,9 +100,8 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
       }
     df.queryExecution.analyzed
       .collect { case StreamingRelation(dataSource, _, _) =>
-        dataSource.createSource().asInstanceOf[FileStreamSource]
-      }.head
-      .schema
+        dataSource.sourceSchema()
+      }.head._2
   }
 
   test("FileStreamSource schema: no path") {
@@ -280,6 +281,30 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
     Utils.deleteRecursively(tmp)
   }
 
+
+  test("reading from json files inside partitioned directory") {
+    val src = {
+      val base = Utils.createTempDir(namePrefix = "streaming.src")
+      new File(base, "type=X")
+    }
+    val tmp = Utils.createTempDir(namePrefix = "streaming.tmp")
+    src.mkdirs()
+
+
+    // Add a file so that we can infer its schema
+    stringToFile(new File(src, "existing"), "{'c': 'drop1'}\n{'c': 'keep2'}\n{'c': 'keep3'}")
+
+    val textSource = createFileStreamSource("json", src.getCanonicalPath)
+
+    // FileStreamSource should infer the column "c"
+    val filtered = textSource.toDF().filter($"c" contains "keep")
+
+    testStream(filtered)(
+      AddTextFileData(textSource, "{'c': 'drop4'}\n{'c': 'keep5'}\n{'c': 'keep6'}", src, tmp),
+      CheckAnswer("keep2", "keep3", "keep5", "keep6")
+    )
+  }
+
   test("read from parquet files") {
     val src = Utils.createTempDir(namePrefix = "streaming.src")
     val tmp = Utils.createTempDir(namePrefix = "streaming.tmp")
@@ -340,7 +365,6 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
     Utils.deleteRecursively(src)
     Utils.deleteRecursively(tmp)
   }
-
 }
 
 class FileStreamSourceStressTestSuite extends FileStreamSourceTest with SharedSQLContext {

@@ -53,7 +53,7 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHi
         val rows = row :: Row(Seq.fill(row.length)(null): _*) :: Nil
 
         // Don't convert Hive metastore Parquet tables to let Hive write those Parquet files.
-        withSQLConf(HiveContext.CONVERT_METASTORE_PARQUET.key -> "false") {
+        withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false") {
           withTempTable("data") {
             val fields = hiveTypes.zipWithIndex.map { case (typ, index) => s"  col_$index $typ" }
 
