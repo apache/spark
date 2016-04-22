@@ -106,7 +106,7 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
   override def planner: SparkPlanner = {
     new SparkPlanner(sparkSession.sparkContext, conf, experimentalMethods.extraStrategies)
       with HiveStrategies {
-      override val context: SQLContext = sparkSession.wrapped
+      override val sparkSession: SparkSession = self.sparkSession
       override val hiveconf: HiveConf = self.hiveconf
 
       override def strategies: Seq[Strategy] = {

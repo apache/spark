@@ -18,12 +18,10 @@
 package org.apache.spark.sql.execution
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
-import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
-import scala.util.control.NonFatal
 
 import org.apache.spark.{broadcast, SparkEnv}
 import org.apache.spark.internal.Logging
@@ -51,8 +49,6 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    */
   @transient
   protected[spark] final val sqlContext = SQLContext.getActive().orNull
-  @transient
-  protected[spark] final val sparkSession = Option(sqlContext).map(_.sparkSession).orNull
 
   protected def sparkContext = sqlContext.sparkContext
 

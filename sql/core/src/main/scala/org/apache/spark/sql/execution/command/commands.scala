@@ -54,7 +54,7 @@ private[sql] case class ExecutedCommand(cmd: RunnableCommand) extends SparkPlan 
    */
   protected[sql] lazy val sideEffectResult: Seq[InternalRow] = {
     val converter = CatalystTypeConverters.createToCatalystConverter(schema)
-    cmd.run(sparkSession).map(converter(_).asInstanceOf[InternalRow])
+    cmd.run(sqlContext.sparkSession).map(converter(_).asInstanceOf[InternalRow])
   }
 
   override def output: Seq[Attribute] = cmd.output
@@ -66,7 +66,7 @@ private[sql] case class ExecutedCommand(cmd: RunnableCommand) extends SparkPlan 
   override def executeTake(limit: Int): Array[InternalRow] = sideEffectResult.take(limit).toArray
 
   protected override def doExecute(): RDD[InternalRow] = {
-    sparkSession.sparkContext.parallelize(sideEffectResult, 1)
+    sqlContext.sparkContext.parallelize(sideEffectResult, 1)
   }
 
   override def argString: String = cmd.toString
