@@ -60,6 +60,8 @@ private[sql] class DefaultSource
 
   override def toString: String = "ParquetFormat"
 
+  override def hashCode(): Int = getClass.hashCode()
+
   override def equals(other: Any): Boolean = other.isInstanceOf[DefaultSource]
 
   override def prepareWrite(

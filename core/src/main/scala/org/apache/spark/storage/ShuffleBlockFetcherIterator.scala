@@ -108,7 +108,7 @@ final class ShuffleBlockFetcherIterator(
   /** Current number of requests in flight */
   private[this] var reqsInFlight = 0
 
-  private[this] val shuffleMetrics = context.taskMetrics().registerTempShuffleReadMetrics()
+  private[this] val shuffleMetrics = context.taskMetrics().createTempShuffleReadMetrics()
 
   /**
    * Whether the iterator is still active. If isZombie is true, the callback interface will no

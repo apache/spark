@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration._
+import scala.util.control.NonFatal
 
 import org.apache.spark.{broadcast, SparkEnv}
 import org.apache.spark.internal.Logging
@@ -61,11 +62,6 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   } else {
     false
   }
-
-  /**
-   * Whether the "prepare" method is called.
-   */
-  private val prepareCalled = new AtomicBoolean(false)
 
   /** Overridden make copy also propagates sqlContext to copied plan. */
   override def makeCopy(newArgs: Array[AnyRef]): SparkPlan = {
@@ -130,7 +126,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * Execute a query after preparing the query and adding query plan information to created RDDs
    * for visualization.
    */
-  private final def executeQuery[T](query: => T): T = {
+  protected final def executeQuery[T](query: => T): T = {
     RDDOperationScope.withScope(sparkContext, nodeName, false, true) {
       prepare()
       waitForSubqueries()
@@ -164,10 +160,10 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   /**
    * Blocks the thread until all subqueries finish evaluation and update the results.
    */
-  protected def waitForSubqueries(): Unit = {
+  protected def waitForSubqueries(): Unit = synchronized {
     // fill in the result of subqueries
     subqueryResults.foreach { case (e, futureResult) =>
-      val rows = Await.result(futureResult, Duration.Inf)
+      val rows = ThreadUtils.awaitResult(futureResult, Duration.Inf)
       if (rows.length > 1) {
         sys.error(s"more than one row returned by a subquery used as an expression:\n${e.plan}")
       }
@@ -184,13 +180,22 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   }
 
   /**
+   * Whether the "prepare" method is called.
+   */
+  private var prepared = false
+
+  /**
    * Prepare a SparkPlan for execution. It's idempotent.
    */
   final def prepare(): Unit = {
-    if (prepareCalled.compareAndSet(false, true)) {
-      doPrepare()
-      prepareSubqueries()
-      children.foreach(_.prepare())
+    // doPrepare() may depend on it's children, we should call prepare() on all the children first.
+    children.foreach(_.prepare())
+    synchronized {
+      if (!prepared) {
+        prepareSubqueries()
+        doPrepare()
+        prepared = true
+      }
     }
   }
 
@@ -201,6 +206,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    *
    * Note: the prepare method has already walked down the tree, so the implementation doesn't need
    * to call children's prepare methods.
+   *
+   * This will only be called once, protected by `this`.
    */
   protected def doPrepare(): Unit = {}
 
@@ -351,12 +358,10 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     }
   }
 
-  private[this] def isTesting: Boolean = sys.props.contains("spark.testing")
-
   protected def newMutableProjection(
       expressions: Seq[Expression],
       inputSchema: Seq[Attribute],
-      useSubexprElimination: Boolean = false): () => MutableProjection = {
+      useSubexprElimination: Boolean = false): MutableProjection = {
     log.debug(s"Creating MutableProj: $expressions, inputSchema: $inputSchema")
     GenerateMutableProjection.generate(expressions, inputSchema, useSubexprElimination)
   }

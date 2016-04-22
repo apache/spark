@@ -21,7 +21,8 @@ import javax.annotation.Nullable
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.parser.DataTypeParser
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
 
 
@@ -98,6 +99,23 @@ abstract class ExternalCatalog {
   def listTables(db: String): Seq[String]
 
   def listTables(db: String, pattern: String): Seq[String]
+
+  def loadTable(
+      db: String,
+      table: String,
+      loadPath: String,
+      isOverwrite: Boolean,
+      holdDDLTime: Boolean): Unit
+
+  def loadPartition(
+      db: String,
+      table: String,
+      loadPath: String,
+      partition: TablePartitionSpec,
+      isOverwrite: Boolean,
+      holdDDLTime: Boolean,
+      inheritTableSpecs: Boolean,
+      isSkewedStoreAsSubdir: Boolean): Unit
 
   // --------------------------------------------------------------------------
   // Partitions
@@ -295,17 +313,42 @@ object ExternalCatalog {
 
 
 /**
- * A [[LogicalPlan]] that wraps [[CatalogTable]].
+ * An interface that is implemented by logical plans to return the underlying catalog table.
+ * If we can in the future consolidate SimpleCatalogRelation and MetastoreRelation, we should
+ * probably remove this interface.
  */
-case class CatalogRelation(
-    db: String,
+trait CatalogRelation {
+  def catalogTable: CatalogTable
+  def output: Seq[Attribute]
+}
+
+
+/**
+ * A [[LogicalPlan]] that wraps [[CatalogTable]].
+ *
+ * Note that in the future we should consolidate this and HiveCatalogRelation.
+ */
+case class SimpleCatalogRelation(
+    databaseName: String,
     metadata: CatalogTable,
     alias: Option[String] = None)
-  extends LeafNode {
+  extends LeafNode with CatalogRelation {
 
-  // TODO: implement this
-  override def output: Seq[Attribute] = Seq.empty
+  override def catalogTable: CatalogTable = metadata
 
-  require(metadata.identifier.database == Some(db),
+  override val output: Seq[Attribute] = {
+    val cols = catalogTable.schema
+      .filter { c => !catalogTable.partitionColumnNames.contains(c.name) }
+    (cols ++ catalogTable.partitionColumns).map { f =>
+      AttributeReference(
+        f.name,
+        DataTypeParser.parse(f.dataType),
+        // Since data can be dumped in randomly with no validation, everything is nullable.
+        nullable = true
+      )(qualifier = Some(alias.getOrElse(metadata.identifier.table)))
+    }
+  }
+
+  require(metadata.identifier.database == Some(databaseName),
     "provided database does not match the one specified in the table definition")
 }

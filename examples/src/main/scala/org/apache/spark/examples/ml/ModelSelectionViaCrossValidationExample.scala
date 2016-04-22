@@ -30,6 +30,15 @@ import org.apache.spark.sql.Row
 // $example off$
 import org.apache.spark.sql.SQLContext
 
+/**
+ * A simple example demonstrating model selection using CrossValidator.
+ * This example also demonstrates how Pipelines are Estimators.
+ *
+ * Run with
+ * {{{
+ * bin/run-example ml.ModelSelectionViaCrossValidationExample
+ * }}}
+ */
 object ModelSelectionViaCrossValidationExample {
 
   def main(args: Array[String]): Unit = {

@@ -297,6 +297,13 @@
           <skip>true</skip>
         </configuration>
       </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <configuration>
+          <outputDirectory>${jars.target.dir}</outputDirectory>
+        </configuration>
+      </plugin>
     </plugins>
   </build>
   <profiles>
