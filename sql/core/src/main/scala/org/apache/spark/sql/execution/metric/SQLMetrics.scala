@@ -82,12 +82,12 @@ private[sql] class LongSQLMetricValue(private var _value : Long) extends SQLMetr
   override def value: Long = _value
 
   // Needed for SQLListenerSuite
-  override def equals(other: Any): Boolean = {
-    other match {
-      case o: LongSQLMetricValue => value == o.value
-      case _ => false
-    }
+  override def equals(other: Any): Boolean = other match {
+    case o: LongSQLMetricValue => value == o.value
+    case _ => false
   }
+
+  override def hashCode(): Int = _value.hashCode()
 }
 
 /**

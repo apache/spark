@@ -508,7 +508,7 @@ case class AlterTableReplaceCol(
   extends NativeDDLCommand(sql) with Logging
 
 
-private object DDLUtils {
+private[sql] object DDLUtils {
 
   def isDatasourceTable(props: Map[String, String]): Boolean = {
     props.contains("spark.sql.sources.provider")
