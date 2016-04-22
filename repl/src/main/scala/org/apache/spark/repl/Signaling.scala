@@ -15,19 +15,28 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.repl
 
-/**
- * An identifier for a partition in an RDD.
- */
-trait Partition extends Serializable {
+import org.apache.spark.SparkContext
+import org.apache.spark.internal.Logging
+import org.apache.spark.util.SignalUtils
+
+private[repl] object Signaling extends Logging {
+
   /**
-   * Get the partition's index within its parent RDD
+   * Register a SIGINT handler, that terminates all active spark jobs or terminates
+   * when no jobs are currently running.
+   * This makes it possible to interrupt a running shell job by pressing Ctrl+C.
    */
-  def index: Int
+  def cancelOnInterrupt(ctx: SparkContext): Unit = SignalUtils.register("INT") {
+    if (!ctx.statusTracker.getActiveJobIds().isEmpty) {
+      logWarning("Cancelling all active jobs, this can take a while. " +
+        "Press Ctrl+C again to exit now.")
+      ctx.cancelAllJobs()
+      true
+    } else {
+      false
+    }
+  }
 
-  // A better default implementation of HashCode
-  override def hashCode(): Int = index
-
-  override def equals(other: Any): Boolean = super.equals(other)
 }

@@ -21,7 +21,8 @@ import javax.annotation.Nullable
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.parser.DataTypeParser
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
 
 
@@ -98,6 +99,23 @@ abstract class ExternalCatalog {
   def listTables(db: String): Seq[String]
 
   def listTables(db: String, pattern: String): Seq[String]
+
+  def loadTable(
+      db: String,
+      table: String,
+      loadPath: String,
+      isOverwrite: Boolean,
+      holdDDLTime: Boolean): Unit
+
+  def loadPartition(
+      db: String,
+      table: String,
+      loadPath: String,
+      partition: TablePartitionSpec,
+      isOverwrite: Boolean,
+      holdDDLTime: Boolean,
+      inheritTableSpecs: Boolean,
+      isSkewedStoreAsSubdir: Boolean): Unit
 
   // --------------------------------------------------------------------------
   // Partitions
@@ -301,6 +319,7 @@ object ExternalCatalog {
  */
 trait CatalogRelation {
   def catalogTable: CatalogTable
+  def output: Seq[Attribute]
 }
 
 
@@ -315,10 +334,20 @@ case class SimpleCatalogRelation(
     alias: Option[String] = None)
   extends LeafNode with CatalogRelation {
 
-  // TODO: implement this
-  override def output: Seq[Attribute] = Seq.empty
-
   override def catalogTable: CatalogTable = metadata
+
+  override val output: Seq[Attribute] = {
+    val cols = catalogTable.schema
+      .filter { c => !catalogTable.partitionColumnNames.contains(c.name) }
+    (cols ++ catalogTable.partitionColumns).map { f =>
+      AttributeReference(
+        f.name,
+        DataTypeParser.parse(f.dataType),
+        // Since data can be dumped in randomly with no validation, everything is nullable.
+        nullable = true
+      )(qualifier = Some(alias.getOrElse(metadata.identifier.table)))
+    }
+  }
 
   require(metadata.identifier.database == Some(databaseName),
     "provided database does not match the one specified in the table definition")
