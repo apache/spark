@@ -426,13 +426,14 @@ class Analyzer(
             if (parts.keys.nonEmpty) {
               // the query's partitioning must match the table's partitioning
               // this is set for queries like: insert into ... partition (one = "a", two = <expr>)
+              // TODO: add better checking to pre-inserts to avoid needing this here
               if (tablePartitionNames.size != parts.keySet.size) {
                 throw new AnalysisException(
                   s"""Requested partitioning does not match the ${u.tableIdentifier} table:
                      |Requested partitions: ${parts.keys.mkString(",")}
                      |Table partitions: ${tablePartitionNames.mkString(",")}""".stripMargin)
               }
-              // assumes partition columns are correctly placed at the end of the child's output
+              // Assume partition columns are correctly placed at the end of the child's output
               i.copy(table = EliminateSubqueryAliases(table))
             } else {
               // Set up the table's partition scheme with all dynamic partitions by moving partition
