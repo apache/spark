@@ -23,9 +23,9 @@ import java.nio.charset.StandardCharsets
 import com.google.common.io.Files
 
 import org.apache.spark.{SparkException, SparkFunSuite}
-import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vectors}
+import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.SaveMode
+import org.apache.spark.sql.{Row, SaveMode}
 import org.apache.spark.util.Utils
 
 
@@ -103,5 +103,10 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
     intercept[SparkException] {
       df.write.format("libsvm").save(path + "_2")
     }
+  }
+
+  test("select features from libsvm relation") {
+    val df = sqlContext.read.format("libsvm").load(path)
+    df.select("features").rdd.map { case Row(d: Vector) => d }.first
   }
 }
