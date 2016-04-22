@@ -36,6 +36,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
+// TODO(andrew)
 /** A container for all the details required when writing to a table. */
 case class WriteRelation(
     sqlContext: SQLContext,

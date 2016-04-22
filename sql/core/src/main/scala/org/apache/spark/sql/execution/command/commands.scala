@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Dataset, Row, SQLContext}
+import org.apache.spark.sql.{Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
@@ -35,8 +35,7 @@ import org.apache.spark.sql.types._
 private[sql] trait RunnableCommand extends LogicalPlan with logical.Command {
   override def output: Seq[Attribute] = Seq.empty
   override def children: Seq[LogicalPlan] = Seq.empty
-  // TODO(andrew)
-  def run(sqlContext: SQLContext): Seq[Row]
+  def run(sparkSession: SparkSession): Seq[Row]
 }
 
 /**
@@ -55,7 +54,7 @@ private[sql] case class ExecutedCommand(cmd: RunnableCommand) extends SparkPlan 
    */
   protected[sql] lazy val sideEffectResult: Seq[InternalRow] = {
     val converter = CatalystTypeConverters.createToCatalystConverter(schema)
-    cmd.run(sqlContext).map(converter(_).asInstanceOf[InternalRow])
+    cmd.run(sparkSession).map(converter(_).asInstanceOf[InternalRow])
   }
 
   override def output: Seq[Attribute] = cmd.output
@@ -67,7 +66,7 @@ private[sql] case class ExecutedCommand(cmd: RunnableCommand) extends SparkPlan 
   override def executeTake(limit: Int): Array[InternalRow] = sideEffectResult.take(limit).toArray
 
   protected override def doExecute(): RDD[InternalRow] = {
-    sqlContext.sparkContext.parallelize(sideEffectResult, 1)
+    sparkSession.sparkContext.parallelize(sideEffectResult, 1)
   }
 
   override def argString: String = cmd.toString
@@ -89,9 +88,9 @@ case class ExplainCommand(
   extends RunnableCommand {
 
   // Run through the optimizer to generate the physical plan.
-  override def run(sqlContext: SQLContext): Seq[Row] = try {
+  override def run(sparkSession: SparkSession): Seq[Row] = try {
     // TODO in Hive, the "extended" ExplainCommand prints the AST as well, and detailed properties.
-    val queryExecution = sqlContext.executePlan(logicalPlan)
+    val queryExecution = sparkSession.executePlan(logicalPlan)
     val outputString =
       if (codegen) {
         codegenString(queryExecution.executedPlan)
@@ -113,15 +112,15 @@ case class CacheTableCommand(
     isLazy: Boolean)
   extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
+  override def run(sparkSession: SparkSession): Seq[Row] = {
     plan.foreach { logicalPlan =>
-      sqlContext.registerDataFrameAsTable(Dataset.ofRows(sqlContext.sparkSession, logicalPlan), tableName)
+      sparkSession.registerDataFrameAsTable(Dataset.ofRows(sparkSession, logicalPlan), tableName)
     }
-    sqlContext.cacheTable(tableName)
+    sparkSession.cacheTable(tableName)
 
     if (!isLazy) {
       // Performs eager caching
-      sqlContext.table(tableName).count()
+      sparkSession.table(tableName).count()
     }
 
     Seq.empty[Row]
@@ -133,8 +132,8 @@ case class CacheTableCommand(
 
 case class UncacheTableCommand(tableName: String) extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.table(tableName).unpersist(blocking = false)
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    sparkSession.table(tableName).unpersist(blocking = false)
     Seq.empty[Row]
   }
 
@@ -146,8 +145,8 @@ case class UncacheTableCommand(tableName: String) extends RunnableCommand {
  */
 case object ClearCacheCommand extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.clearCache()
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    sparkSession.clearCache()
     Seq.empty[Row]
   }
 
@@ -173,10 +172,10 @@ case class ShowTablesCommand(
       AttributeReference("isTemporary", BooleanType, nullable = false)() :: Nil
   }
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
+  override def run(sparkSession: SparkSession): Seq[Row] = {
     // Since we need to return a Seq of rows, we will call getTables directly
-    // instead of calling tables in sqlContext.
-    val catalog = sqlContext.sessionState.catalog
+    // instead of calling tables in sparkSession.
+    val catalog = sparkSession.sessionState.catalog
     val db = databaseName.getOrElse(catalog.getCurrentDatabase)
     val tables =
       tableIdentifierPattern.map(catalog.listTables(db, _)).getOrElse(catalog.listTables(db))
@@ -203,8 +202,8 @@ case class ShowDatabasesCommand(databasePattern: Option[String]) extends Runnabl
     AttributeReference("result", StringType, nullable = false)() :: Nil
   }
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    val catalog = sqlContext.sessionState.catalog
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
     val databases =
       databasePattern.map(catalog.listDatabases(_)).getOrElse(catalog.listDatabases())
     databases.map { d => Row(d) }
@@ -232,13 +231,13 @@ case class ShowTablePropertiesCommand(
     }
   }
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    val catalog = sqlContext.sessionState.catalog
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
 
     if (catalog.isTemporaryTable(table)) {
       Seq.empty[Row]
     } else {
-      val catalogTable = sqlContext.sessionState.catalog.getTableMetadata(table)
+      val catalogTable = sparkSession.sessionState.catalog.getTableMetadata(table)
 
       propertyKey match {
         case Some(p) =>
@@ -273,12 +272,12 @@ case class ShowFunctions(db: Option[String], pattern: Option[String]) extends Ru
     schema.toAttributes
   }
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    val dbName = db.getOrElse(sqlContext.sessionState.catalog.getCurrentDatabase)
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val dbName = db.getOrElse(sparkSession.sessionState.catalog.getCurrentDatabase)
     // If pattern is not specified, we use '*', which is used to
     // match any sequence of characters (including no characters).
     val functionNames =
-      sqlContext.sessionState.catalog
+      sparkSession.sessionState.catalog
         .listFunctions(dbName, pattern.getOrElse("*"))
         .map(_.unquotedString)
     // The session catalog caches some persistent functions in the FunctionRegistry
@@ -313,7 +312,7 @@ case class DescribeFunction(
     }
   }
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
+  override def run(sparkSession: SparkSession): Seq[Row] = {
     // Hard code "<>", "!=", "between", and "case" for now as there is no corresponding functions.
     functionName.toLowerCase match {
       case "<>" =>
@@ -330,7 +329,7 @@ case class DescribeFunction(
         Row(s"Function: case") ::
         Row(s"Usage: CASE a WHEN b THEN c [WHEN d THEN e]* [ELSE f] END - " +
           s"When a = b, returns c; when a = d, return e; else return f") :: Nil
-      case _ => sqlContext.sessionState.functionRegistry.lookupFunction(functionName) match {
+      case _ => sparkSession.sessionState.functionRegistry.lookupFunction(functionName) match {
         case Some(info) =>
           val result =
             Row(s"Function: ${info.getName}") ::
@@ -352,8 +351,8 @@ case class DescribeFunction(
 
 case class SetDatabaseCommand(databaseName: String) extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.sessionState.catalog.setCurrentDatabase(databaseName)
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    sparkSession.sessionState.catalog.setCurrentDatabase(databaseName)
     Seq.empty[Row]
   }
 

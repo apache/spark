@@ -110,7 +110,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
     case ExecutedCommand(desc: DescribeTableCommand) =>
       // If it is a describe command for a Hive table, we want to have the output format
       // be similar with Hive.
-      desc.run(sparkSession.wrapped).map {
+      desc.run(sparkSession).map {
         case Row(name: String, dataType: String, comment) =>
           Seq(name, dataType,
             Option(comment.asInstanceOf[String]).getOrElse(""))

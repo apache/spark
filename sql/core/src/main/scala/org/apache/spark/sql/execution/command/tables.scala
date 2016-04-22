@@ -22,9 +22,9 @@ import java.net.URI
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
+import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogTable, CatalogTableType, ExternalCatalog, SimpleCatalogRelation}
+import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogTable, CatalogTableType, ExternalCatalog}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, UnaryNode}
 import org.apache.spark.sql.types.{MetadataBuilder, StringType}
@@ -60,8 +60,8 @@ case class CreateTableLike(
     sourceTable: TableIdentifier,
     ifNotExists: Boolean) extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    val catalog = sqlContext.sessionState.catalog
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
     if (!catalog.tableExists(sourceTable)) {
       throw new AnalysisException(
         s"Source table in CREATE TABLE LIKE does not exist: '$sourceTable'")
@@ -109,8 +109,8 @@ case class CreateTableLike(
  */
 case class CreateTable(table: CatalogTable, ifNotExists: Boolean) extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.sessionState.catalog.createTable(table, ifNotExists)
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    sparkSession.sessionState.catalog.createTable(table, ifNotExists)
     Seq.empty[Row]
   }
 
@@ -132,8 +132,8 @@ case class AlterTableRename(
     isView: Boolean)
   extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    val catalog = sqlContext.sessionState.catalog
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
     DDLUtils.verifyAlterTableType(catalog, oldName, isView)
     catalog.invalidateTable(oldName)
     catalog.renameTable(oldName, newName)
@@ -158,8 +158,8 @@ case class LoadData(
     isOverwrite: Boolean,
     partition: Option[ExternalCatalog.TablePartitionSpec]) extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    val catalog = sqlContext.sessionState.catalog
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
     if (!catalog.tableExists(table)) {
       throw new AnalysisException(
         s"Table in LOAD DATA does not exist: '$table'")
@@ -210,7 +210,7 @@ case class LoadData(
           // Follow Hive's behavior:
           // If no schema or authority is provided with non-local inpath,
           // we will use hadoop configuration "fs.default.name".
-          val defaultFSConf = sqlContext.sparkContext.hadoopConfiguration.get("fs.default.name")
+          val defaultFSConf = sparkSession.sparkContext.hadoopConfiguration.get("fs.default.name")
           val defaultFS = if (defaultFSConf == null) {
             new URI("")
           } else {
@@ -285,9 +285,9 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean)
       new MetadataBuilder().putString("comment", "comment of the column").build())()
   )
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
+  override def run(sparkSession: SparkSession): Seq[Row] = {
     val result = new ArrayBuffer[Row]
-    sqlContext.sessionState.catalog.lookupRelation(table) match {
+    sparkSession.sessionState.catalog.lookupRelation(table) match {
       case catalogRelation: CatalogRelation =>
         catalogRelation.catalogTable.schema.foreach { column =>
           result += Row(column.name, column.dataType, column.comment.orNull)

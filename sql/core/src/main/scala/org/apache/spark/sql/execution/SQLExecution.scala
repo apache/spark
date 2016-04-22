@@ -37,6 +37,7 @@ private[sql] object SQLExecution {
    * Wrap an action that will execute "queryExecution" to track all Spark jobs in the body so that
    * we can connect them with an execution.
    */
+  // TODO(andrew)
   def withNewExecutionId[T](
       sqlContext: SQLContext, queryExecution: QueryExecution)(body: => T): T = {
     val sc = sqlContext.sparkContext

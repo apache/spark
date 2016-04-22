@@ -171,7 +171,7 @@ private[sql] class SessionState(ctx: SQLContext) {
    * in the external catalog.
    */
   def analyze(tableName: String): Unit = {
-    AnalyzeTable(tableName).run(ctx)
+    AnalyzeTable(tableName).run(ctx.sparkSession)
   }
 
   def runNativeSql(sql: String): Seq[String] = {

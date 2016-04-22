@@ -178,6 +178,7 @@ trait FileFormat {
    * be put here.  For example, user defined output committer can be configured here
    * by setting the output committer class in the conf of spark.sql.sources.outputCommitterClass.
    */
+  // TODO(andrew)
   def prepareWrite(
       sqlContext: SQLContext,
       job: Job,

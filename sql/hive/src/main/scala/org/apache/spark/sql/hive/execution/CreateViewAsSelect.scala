@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive.execution
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
+import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.SQLBuilder
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions.Alias
@@ -46,8 +46,8 @@ private[hive] case class CreateViewAsSelect(
 
   private val tableIdentifier = tableDesc.identifier
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    val sessionState = sqlContext.sessionState.asInstanceOf[HiveSessionState]
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val sessionState = sparkSession.sessionState.asInstanceOf[HiveSessionState]
 
     sessionState.catalog.tableExists(tableIdentifier) match {
       case true if allowExisting =>
@@ -56,7 +56,7 @@ private[hive] case class CreateViewAsSelect(
 
       case true if orReplace =>
         // Handles `CREATE OR REPLACE VIEW v0 AS SELECT ...`
-        sessionState.metadataHive.alertView(prepareTable(sqlContext))
+        sessionState.metadataHive.alertView(prepareTable(sparkSession))
 
       case true =>
         // Handles `CREATE VIEW v0 AS SELECT ...`. Throws exception when the target view already
@@ -66,15 +66,15 @@ private[hive] case class CreateViewAsSelect(
           "CREATE OR REPLACE VIEW AS")
 
       case false =>
-        sessionState.metadataHive.createView(prepareTable(sqlContext))
+        sessionState.metadataHive.createView(prepareTable(sparkSession))
     }
 
     Seq.empty[Row]
   }
 
-  private def prepareTable(sqlContext: SQLContext): CatalogTable = {
-    val expandedText = if (sqlContext.conf.canonicalView) {
-      try rebuildViewQueryString(sqlContext) catch {
+  private def prepareTable(sparkSession: SparkSession): CatalogTable = {
+    val expandedText = if (sparkSession.conf.canonicalView) {
+      try rebuildViewQueryString(sparkSession) catch {
         case NonFatal(e) => wrapViewTextWithSelect
       }
     } else {
@@ -120,14 +120,14 @@ private[hive] case class CreateViewAsSelect(
     s"SELECT $viewOutput FROM ($viewText) $viewName"
   }
 
-  private def rebuildViewQueryString(sqlContext: SQLContext): String = {
+  private def rebuildViewQueryString(sparkSession: SparkSession): String = {
     val logicalPlan = if (tableDesc.schema.isEmpty) {
       child
     } else {
       val projectList = childSchema.zip(tableDesc.schema).map {
         case (attr, col) => Alias(attr, col.name)()
       }
-      sqlContext.executePlan(Project(projectList, child)).analyzed
+      sparkSession.executePlan(Project(projectList, child)).analyzed
     }
     new SQLBuilder(logicalPlan).toSQL
   }

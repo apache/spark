@@ -39,7 +39,7 @@ case class CreateMetastoreDataSource(
     allowExisting: Boolean,
     managedIfNoPath: Boolean) extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
+  override def run(sparkSession: SparkSession): Seq[Row] = {
     // Since we are saving metadata to metastore, we need to check if metastore supports
     // the table name and database name we have for this query. MetaStoreUtils.validateName
     // is the method used by Hive to check if a table name or a database name is valid for
@@ -55,7 +55,7 @@ case class CreateMetastoreDataSource(
     }
 
     val tableName = tableIdent.unquotedString
-    val sessionState = sqlContext.sessionState.asInstanceOf[HiveSessionState]
+    val sessionState = sparkSession.sessionState.asInstanceOf[HiveSessionState]
 
     if (sessionState.catalog.tableExists(tableIdent)) {
       if (allowExisting) {
@@ -76,7 +76,7 @@ case class CreateMetastoreDataSource(
 
     // Create the relation to validate the arguments before writing the metadata to the metastore.
     DataSource(
-      sqlContext = sqlContext,
+      sqlContext = sparkSession.wrapped,
       userSpecifiedSchema = userSpecifiedSchema,
       className = provider,
       bucketSpec = None,
@@ -105,7 +105,7 @@ case class CreateMetastoreDataSourceAsSelect(
     options: Map[String, String],
     query: LogicalPlan) extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
+  override def run(sparkSession: SparkSession): Seq[Row] = {
     // Since we are saving metadata to metastore, we need to check if metastore supports
     // the table name and database name we have for this query. MetaStoreUtils.validateName
     // is the method used by Hive to check if a table name or a database name is valid for
@@ -121,7 +121,7 @@ case class CreateMetastoreDataSourceAsSelect(
     }
 
     val tableName = tableIdent.unquotedString
-    val sessionState = sqlContext.sessionState.asInstanceOf[HiveSessionState]
+    val sessionState = sparkSession.sessionState.asInstanceOf[HiveSessionState]
     var createMetastoreTable = false
     var isExternal = true
     val optionsWithPath =
@@ -133,7 +133,7 @@ case class CreateMetastoreDataSourceAsSelect(
       }
 
     var existingSchema = None: Option[StructType]
-    if (sqlContext.sessionState.catalog.tableExists(tableIdent)) {
+    if (sessionState.catalog.tableExists(tableIdent)) {
       // Check if we need to throw an exception or just return.
       mode match {
         case SaveMode.ErrorIfExists =>
@@ -148,7 +148,7 @@ case class CreateMetastoreDataSourceAsSelect(
         case SaveMode.Append =>
           // Check if the specified data source match the data source of the existing table.
           val dataSource = DataSource(
-            sqlContext = sqlContext,
+            sqlContext = sparkSession.wrapped,
             userSpecifiedSchema = Some(query.schema.asNullable),
             partitionColumns = partitionColumns,
             bucketSpec = bucketSpec,
@@ -165,7 +165,7 @@ case class CreateMetastoreDataSourceAsSelect(
               throw new AnalysisException(s"Saving data in ${o.toString} is not supported.")
           }
         case SaveMode.Overwrite =>
-          sqlContext.sql(s"DROP TABLE IF EXISTS $tableName")
+          sparkSession.sql(s"DROP TABLE IF EXISTS $tableName")
           // Need to create the table again.
           createMetastoreTable = true
       }
@@ -174,7 +174,7 @@ case class CreateMetastoreDataSourceAsSelect(
       createMetastoreTable = true
     }
 
-    val data = Dataset.ofRows(sqlContext.sparkSession, query)
+    val data = Dataset.ofRows(sparkSession, query)
     val df = existingSchema match {
       // If we are inserting into an existing table, just use the existing schema.
       case Some(s) => data.selectExpr(s.fieldNames: _*)
@@ -183,7 +183,7 @@ case class CreateMetastoreDataSourceAsSelect(
 
     // Create the relation based on the data of df.
     val dataSource = DataSource(
-      sqlContext,
+      sqlContext = sparkSession.wrapped,
       className = provider,
       partitionColumns = partitionColumns,
       bucketSpec = bucketSpec,
