@@ -108,7 +108,6 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
   test("read/write") {
     def checkModelData(model: GaussianMixtureModel, model2: GaussianMixtureModel): Unit = {
       assert(model.weights === model2.weights)
-      val gaussians = model.gaussians
       assert(model.gaussians.map(_.mu) === model2.gaussians.map(_.mu))
       assert(model.gaussians.map(_.sigma) === model2.gaussians.map(_.sigma))
     }

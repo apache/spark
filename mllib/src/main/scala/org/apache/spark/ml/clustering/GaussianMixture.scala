@@ -19,6 +19,7 @@ package org.apache.spark.ml.clustering
 
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param.{IntParam, ParamMap, Params}
@@ -70,13 +71,12 @@ private[clustering] trait GaussianMixtureParams extends Params with HasMaxIter w
 @Experimental
 class GaussianMixtureModel private[ml] (
     @Since("2.0.0") override val uid: String,
-    private val parentModel: MLlibGMModel,
-    @Since("2.0.0") @transient protected val sqlContext: SQLContext)
+    private val parentModel: MLlibGMModel)
   extends Model[GaussianMixtureModel] with GaussianMixtureParams with MLWritable {
 
   @Since("2.0.0")
   override def copy(extra: ParamMap): GaussianMixtureModel = {
-    val copied = new GaussianMixtureModel(uid, parentModel, sqlContext)
+    val copied = new GaussianMixtureModel(uid, parentModel)
     copyValues(copied, extra).setParent(this.parent)
   }
 
@@ -106,14 +106,20 @@ class GaussianMixtureModel private[ml] (
   def gaussians: Array[MultivariateGaussian] = parentModel.gaussians
 
   /**
-   * Helper method used in Python
+   * Helper method used in Python.
+   * Retrieve gaussians as a DataFrame.
+   * Schema:
+   * root
+   * |-- mean: vector (nullable = true)
+   * |-- cov: matrix (nullable = true)
    */
   def gaussiansDF: DataFrame = {
-    val tmp_gaussians = parentModel.gaussians
-    val modelGaussians = tmp_gaussians.map { gaussian =>
+    val modelGaussians = gaussians.map { gaussian =>
       (gaussian.mu, gaussian.sigma)
     }
-    sqlContext.createDataFrame(modelGaussians).toDF("mu", "sigma")
+    val sc = SparkContext.getOrCreate()
+    val sqlContext = SQLContext.getOrCreate(sc)
+    sqlContext.createDataFrame(modelGaussians).toDF("mean", "cov")
   }
 
   @Since("2.0.0")
@@ -192,8 +198,7 @@ object GaussianMixtureModel extends MLReadable[GaussianMixtureModel] {
         case (mu, sigma) =>
           new MultivariateGaussian(mu, sigma)
       }
-      val model = new GaussianMixtureModel(metadata.uid, new MLlibGMModel(weights, gaussians),
-        sqlContext)
+      val model = new GaussianMixtureModel(metadata.uid, new MLlibGMModel(weights, gaussians))
 
       DefaultParamsReader.getAndSetParams(model, metadata)
       model
@@ -260,7 +265,7 @@ class GaussianMixture @Since("2.0.0") (
       .setSeed($(seed))
       .setConvergenceTol($(tol))
     val parentModel = algo.run(rdd)
-    val model = copyValues(new GaussianMixtureModel(uid, parentModel, dataset.sqlContext)
+    val model = copyValues(new GaussianMixtureModel(uid, parentModel)
       .setParent(this))
     val summary = new GaussianMixtureSummary(model.transform(dataset),
       $(predictionCol), $(probabilityCol), $(featuresCol), $(k))

@@ -20,7 +20,6 @@ from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel
 from pyspark.ml.param.shared import *
 from pyspark.mllib.common import inherit_doc
-from pyspark.mllib.stat.distribution import MultivariateGaussian
 
 __all__ = ['BisectingKMeans', 'BisectingKMeansModel',
            'KMeans', 'KMeansModel',
@@ -47,10 +46,13 @@ class GaussianMixtureModel(JavaModel, JavaMLWritable, JavaMLReadable):
 
     @property
     @since("2.0.0")
-    def gaussians(self):
+    def gaussiansDF(self):
         """
-        Array of MultivariateGaussian where gaussians[i] represents
-        the Multivariate Gaussian (Normal) Distribution for Gaussian i.
+        Retrieve gaussians as a DataFrame.
+        Schema:
+        root
+        |-- mean: vector (nullable = true)
+        |-- cov: matrix (nullable = true)
         """
         return self._call_java("gaussiansDF")
 
@@ -73,15 +75,15 @@ class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     ...         (Vectors.dense([-0.91, -0.76]),)]
     >>> df = sqlContext.createDataFrame(data, ["features"])
     >>> gm = GaussianMixture(k=3, tol=0.0001,
-    ...                                    maxIter=10, seed=10)
+    ...                      maxIter=10, seed=10)
     >>> model = gm.fit(df)
     >>> weights = model.weights
     >>> len(weights)
     3
-    >>> gaussians = model.gaussians
+    >>> gaussians = model.gaussiansDF
     >>> gaussians.show()
     +--------------------+--------------------+
-    |                  mu|               sigma|
+    |                mean|                 cov|
     +--------------------+--------------------+
     |[-0.0550000000000...|0.002025000000000...|
     |[0.82499999999999...|0.005625000000000...|
@@ -104,9 +106,9 @@ class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     >>> model2 = GaussianMixtureModel.load(model_path)
     >>> model2.weights == model.weights
     True
-    >>> model2.gaussians.show()
+    >>> model2.gaussiansDF.show()
     +--------------------+--------------------+
-    |                  mu|               sigma|
+    |                mean|                 cov|
     +--------------------+--------------------+
     |[-0.0550000000000...|0.002025000000000...|
     |[0.82499999999999...|0.005625000000000...|
