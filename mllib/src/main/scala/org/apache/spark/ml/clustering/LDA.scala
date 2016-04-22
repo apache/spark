@@ -355,7 +355,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
  * :: Experimental ::
  * Model fitted by [[LDA]].
  *
- * @param vocabSize  Vocabulary size (number of terms or terms in the vocabulary)
+ * @param vocabSize  Vocabulary size (number of terms or words in the vocabulary)
  * @param sqlContext  Used to construct local DataFrames for returning query results
  */
 @Since("1.6.0")
