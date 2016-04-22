@@ -149,6 +149,14 @@ class QueryExecution(val sqlContext: SQLContext, val logical: LogicalPlan) {
       return DateTimeUtils.threadLocalTimestampFormat.get().format(timestamp)
     }
 
+    def formatDecimal(d: java.math.BigDecimal): String = {
+      if (d.compareTo(java.math.BigDecimal.ZERO) == 0) {
+        java.math.BigDecimal.ZERO.toPlainString
+      } else {
+        d.stripTrailingZeros().toPlainString
+      }
+    }
+
     /** Hive outputs fields of structs slightly differently than top level attributes. */
     def toHiveStructString(a: (Any, DataType)): String = a match {
       case (struct: Row, StructType(fields)) =>
@@ -184,8 +192,8 @@ class QueryExecution(val sqlContext: SQLContext, val logical: LogicalPlan) {
       case (d: Int, DateType) => new java.util.Date(DateTimeUtils.daysToMillis(d)).toString
       case (t: Timestamp, TimestampType) => formatTimestamp(t)
       case (bin: Array[Byte], BinaryType) => new String(bin, StandardCharsets.UTF_8)
-      case (decimal: java.math.BigDecimal, DecimalType()) => decimal.toPlainString
-      case (other, tpe) if primitiveTypes contains tpe => other.toString
+      case (decimal: java.math.BigDecimal, DecimalType()) => formatDecimal(decimal)
+      case (other, tpe) if primitiveTypes.contains(tpe) => other.toString
     }
   }
 
