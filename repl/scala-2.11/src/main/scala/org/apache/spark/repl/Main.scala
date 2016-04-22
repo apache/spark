@@ -23,8 +23,8 @@ import scala.tools.nsc.GenericRunnerSettings
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
-import org.apache.spark.util.Utils
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.util.{CausedBy, Utils}
 
 object Main extends Logging {
 
@@ -35,7 +35,7 @@ object Main extends Logging {
   val outputDir = Utils.createTempDir(root = rootDir, namePrefix = "repl")
 
   var sparkContext: SparkContext = _
-  var sqlContext: SQLContext = _
+  var sparkSession: SparkSession = _
   // this is a public var because tests reset it.
   var interp: SparkILoop = _
 
@@ -91,19 +91,19 @@ object Main extends Logging {
     sparkContext
   }
 
-  def createSQLContext(): SQLContext = {
-    val name = "org.apache.spark.sql.hive.HiveContext"
-    val loader = Utils.getContextOrSparkClassLoader
+  def createSparkSession(): SparkSession = {
     try {
-      sqlContext = loader.loadClass(name).getConstructor(classOf[SparkContext])
-        .newInstance(sparkContext).asInstanceOf[SQLContext]
-      logInfo("Created sql context (with Hive support)..")
+      sparkSession = SparkSession.withHiveSupport(sparkContext)
+      logInfo("Created Spark session with Hive support")
     } catch {
-      case _: java.lang.ClassNotFoundException | _: java.lang.NoClassDefFoundError =>
-        sqlContext = new SQLContext(sparkContext)
-        logInfo("Created sql context..")
+      case CausedBy(ex: ClassNotFoundException) =>
+      case CausedBy(err: NoClassDefFoundError) =>
     }
-    sqlContext
+    if (sparkSession == null) {
+      sparkSession = new SparkSession(sparkContext)
+      logInfo("Created Spark session")
+    }
+    sparkSession
   }
 
 }

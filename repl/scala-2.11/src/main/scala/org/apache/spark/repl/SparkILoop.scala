@@ -44,15 +44,15 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
         }
         """)
       processLine("""
-        @transient val sqlContext = {
-          val _sqlContext = org.apache.spark.repl.Main.createSQLContext()
-          println("SQL context available as sqlContext.")
-          _sqlContext
+        @transient val sparkSession = {
+          val _sparkSession = org.apache.spark.repl.Main.createSparkSession()
+          println("Spark session available as sparkSession.")
+          _sparkSession
         }
         """)
       processLine("import org.apache.spark.SparkContext._")
-      processLine("import sqlContext.implicits._")
-      processLine("import sqlContext.sql")
+      processLine("import sparkSession.implicits._")
+      processLine("import sparkSession.sql")
       processLine("import org.apache.spark.sql.functions._")
     }
   }
