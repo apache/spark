@@ -19,11 +19,11 @@ package org.apache.spark.sql.streaming
 
 import java.io.File
 
-import org.apache.spark.sql.{DataFrame, AnalysisException, StreamTest}
+import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{StructField, StringType, StructType}
+import org.apache.spark.sql.{AnalysisException, DataFrame, StreamTest}
 import org.apache.spark.util.Utils
 
 class FileStreamSourceTest extends StreamTest with SharedSQLContext {

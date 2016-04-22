@@ -87,11 +87,12 @@ trait StreamTest extends QueryTest with Timeouts {
       AddDataMemory(source, data)
   }
 
-  /** A trait that can be extended when testing other sources. */
+  /** A trait that can be extended when testing a source. */
   trait AddData extends StreamAction {
     /**
-     * Called to trigger adding the data.  Should return the offset that will denote when this
-     * new data has been processed.
+     * Called to adding the data to a source. It should find the source to add data to from
+     * the active query, and then return the source object the data was added, as well as the
+     * offset of added data.
      */
     def addData(query: Option[StreamExecution]): (Source, Offset)
   }
