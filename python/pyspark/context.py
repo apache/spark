@@ -32,7 +32,7 @@ from pyspark.conf import SparkConf
 from pyspark.files import SparkFiles
 from pyspark.java_gateway import launch_gateway
 from pyspark.serializers import PickleSerializer, BatchedSerializer, UTF8Deserializer, \
-    PairDeserializer, AutoBatchedSerializer, NoOpSerializer
+    PairDeserializer, AutoBatchedSerializer, NoOpSerializer, CloudPickleSerializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.rdd import RDD, _load_from_socket, ignore_unicode_prefix
 from pyspark.traceback_utils import CallSite, first_spark_call
@@ -73,7 +73,8 @@ class SparkContext(object):
 
     def __init__(self, master=None, appName=None, sparkHome=None, pyFiles=None,
                  environment=None, batchSize=0, serializer=PickleSerializer(), conf=None,
-                 gateway=None, jsc=None, profiler_cls=BasicProfiler):
+                 gateway=None, jsc=None, profiler_cls=BasicProfiler,
+                 function_serializer=CloudPickleSerializer()):
         """
         Create a new SparkContext. At least the master and app name should be set,
         either through the named parameters here or through C{conf}.
@@ -98,6 +99,8 @@ class SparkContext(object):
         :param jsc: The JavaSparkContext instance (optional).
         :param profiler_cls: A class of custom Profiler used to do profiling
                (default is pyspark.profiler.BasicProfiler).
+        :param function_serializer: The serializer for functions used in RDD
+               transformations.
 
 
         >>> from pyspark.context import SparkContext
@@ -112,14 +115,14 @@ class SparkContext(object):
         SparkContext._ensure_initialized(self, gateway=gateway)
         try:
             self._do_init(master, appName, sparkHome, pyFiles, environment, batchSize, serializer,
-                          conf, jsc, profiler_cls)
+                          conf, jsc, profiler_cls, function_serializer)
         except:
             # If an error occurs, clean up in order to allow future SparkContext creation:
             self.stop()
             raise
 
     def _do_init(self, master, appName, sparkHome, pyFiles, environment, batchSize, serializer,
-                 conf, jsc, profiler_cls):
+                 conf, jsc, profiler_cls, function_serializer):
         self.environment = environment or {}
         self._conf = conf or SparkConf(_jvm=self._jvm)
         self._batchSize = batchSize  # -1 represents an unlimited batch size
@@ -129,6 +132,7 @@ class SparkContext(object):
         else:
             self.serializer = BatchedSerializer(self._unbatched_serializer,
                                                 batchSize)
+        self._function_serializer = function_serializer
 
         # Set any parameters passed directly to us on the conf
         if master:
