@@ -39,10 +39,9 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions.ExpressionInfo
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.command.CacheTableCommand
+import org.apache.spark.sql.execution.command.{CacheTableCommand, HiveNativeCommand}
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.client.HiveClient
-import org.apache.spark.sql.hive.execution.HiveNativeCommand
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 
@@ -75,7 +74,7 @@ class TestHiveContext(@transient val sparkSession: TestHiveSparkSession, isRootC
   extends HiveContext(sparkSession, isRootContext) {
 
   def this(sc: SparkContext) {
-    this(new TestHiveSparkSession(HiveContext.withHiveExternalCatalog(sc)), true)
+    this(new TestHiveSparkSession(HiveUtils.withHiveExternalCatalog(sc)), true)
   }
 
   override def newSession(): TestHiveContext = {
@@ -118,7 +117,7 @@ private[hive] class TestHiveSparkSession(
       sc,
       Utils.createTempDir(namePrefix = "warehouse"),
       TestHiveContext.makeScratchDir(),
-      HiveContext.newTemporaryConfiguration(useInMemoryDerby = false),
+      HiveUtils.newTemporaryConfiguration(useInMemoryDerby = false),
       None)
   }
 
@@ -181,19 +180,6 @@ private[hive] class TestHiveSparkSession(
   private def envVarToFile(envVar: String): Option[File] = {
     Option(System.getenv(envVar)).map(new File(_))
   }
-
-  /**
-   * Replaces relative paths to the parent directory "../" with hiveDevHome since this is how the
-   * hive test cases assume the system is set up.
-   */
-  private[hive] def rewritePaths(cmd: String): String =
-    if (cmd.toUpperCase contains "LOAD DATA") {
-      val testDataLocation =
-        hiveDevHome.map(_.getCanonicalPath).getOrElse(inRepoTests.getCanonicalPath)
-      cmd.replaceAll("\\.\\./\\.\\./", testDataLocation + "/")
-    } else {
-      cmd
-    }
 
   val hiveFilesTemp = File.createTempFile("catalystHiveFiles", "")
   hiveFilesTemp.delete()
@@ -566,11 +552,6 @@ private[hive] class TestHiveSessionState(sparkSession: TestHiveSparkSession)
   override def executePlan(plan: LogicalPlan): TestHiveQueryExecution = {
     new TestHiveQueryExecution(sparkSession, plan)
   }
-
-  // Override so we can intercept relative paths and rewrite them to point at hive.
-  override def runNativeSql(sql: String): Seq[String] = {
-    super.runNativeSql(sparkSession.rewritePaths(substitutor.substitute(hiveconf, sql)))
-  }
 }
 
 
@@ -595,7 +576,7 @@ private[hive] object TestHiveContext {
       scratchDirPath: File,
       metastoreTemporaryConf: Map[String, String]): HiveClient = {
     val hiveConf = new HiveConf(hadoopConf, classOf[HiveConf])
-    HiveContext.newClientForMetadata(
+    HiveUtils.newClientForMetadata(
       conf,
       hiveConf,
       hadoopConf,
@@ -610,7 +591,7 @@ private[hive] object TestHiveContext {
       warehousePath: File,
       scratchDirPath: File,
       metastoreTemporaryConf: Map[String, String]): Map[String, String] = {
-    HiveContext.hiveClientConfigurations(hiveconf) ++ metastoreTemporaryConf ++ Map(
+    HiveUtils.hiveClientConfigurations(hiveconf) ++ metastoreTemporaryConf ++ Map(
       ConfVars.METASTOREWAREHOUSE.varname -> warehousePath.toURI.toString,
       ConfVars.METASTORE_INTEGER_JDO_PUSHDOWN.varname -> "true",
       ConfVars.SCRATCHDIR.varname -> scratchDirPath.toURI.toString,

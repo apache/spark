@@ -31,7 +31,7 @@ class HiveExternalCatalogSuite extends CatalogTestCases {
   private val client: HiveClient = {
     // We create a metastore at a temp location to avoid any potential
     // conflict of having multiple connections to a single derby instance.
-    HiveContext.newClientForExecution(new SparkConf, new Configuration)
+    HiveUtils.newClientForExecution(new SparkConf, new Configuration)
   }
 
   protected override val utils: CatalogTestUtils = new CatalogTestUtils {

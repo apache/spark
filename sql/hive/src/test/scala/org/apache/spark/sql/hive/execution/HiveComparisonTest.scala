@@ -28,7 +28,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.execution.command.{ExplainCommand, SetCommand}
+import org.apache.spark.sql.execution.command.{ExplainCommand, HiveNativeCommand, SetCommand}
 import org.apache.spark.sql.execution.datasources.DescribeCommand
 import org.apache.spark.sql.hive.{InsertIntoHiveTable => LogicalInsertIntoHiveTable}
 import org.apache.spark.sql.hive.SQLBuilder
@@ -46,6 +46,17 @@ import org.apache.spark.sql.hive.test.{TestHive, TestHiveQueryExecution}
  */
 abstract class HiveComparisonTest
   extends SparkFunSuite with BeforeAndAfterAll with GivenWhenThen {
+
+  /**
+   * Path to the test datasets. We find this by looking up "hive-test-path-helper.txt" file.
+   *
+   * Before we run the query in Spark, we replace "../../data" with this path.
+   */
+  private val testDataPath: String = {
+    Thread.currentThread.getContextClassLoader
+      .getResource("hive-test-path-helper.txt")
+      .getPath.replace("/hive-test-path-helper.txt", "/data")
+  }
 
   /**
    * When set, any cache files that result in test failures will be deleted.  Used when the test
@@ -386,7 +397,8 @@ abstract class HiveComparisonTest
           var query: TestHiveQueryExecution = null
           try {
             query = {
-              val originalQuery = new TestHiveQueryExecution(queryString)
+              val originalQuery = new TestHiveQueryExecution(
+                queryString.replace("../../data", testDataPath))
               val containsCommands = originalQuery.analyzed.collectFirst {
                 case _: Command => ()
                 case _: LogicalInsertIntoHiveTable => ()

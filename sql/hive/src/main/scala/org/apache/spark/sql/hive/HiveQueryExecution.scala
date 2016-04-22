@@ -20,8 +20,8 @@ package org.apache.spark.sql.hive
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.execution.command.{ExecutedCommand, SetCommand}
-import org.apache.spark.sql.hive.execution.{DescribeHiveTableCommand, HiveNativeCommand}
+import org.apache.spark.sql.execution.command.{ExecutedCommand, HiveNativeCommand, SetCommand}
+import org.apache.spark.sql.hive.execution.DescribeHiveTableCommand
 
 
 /**
@@ -53,7 +53,7 @@ protected[hive] class HiveQueryExecution(ctx: SQLContext, logicalPlan: LogicalPl
       // We need the types so we can output struct field names
       val types = analyzed.output.map(_.dataType)
       // Reformat to match hive tab delimited output.
-      result.map(_.zip(types).map(HiveContext.toHiveString)).map(_.mkString("\t")).toSeq
+      result.map(_.zip(types).map(HiveUtils.toHiveString)).map(_.mkString("\t")).toSeq
   }
 
   override def simpleString: String =

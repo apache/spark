@@ -22,15 +22,15 @@ import java.util.concurrent.atomic.AtomicLong
 import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.{Dataset, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.CatalogRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.{CollapseProject, CombineUnions}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.hive.execution.HiveScriptIOSchema
 import org.apache.spark.sql.types.{ByteType, DataType, IntegerType, NullType}
 
 /**
@@ -42,7 +42,7 @@ import org.apache.spark.sql.types.{ByteType, DataType, IntegerType, NullType}
 class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Logging {
   require(logicalPlan.resolved, "SQLBuilder only supports resolved logical query plans")
 
-  def this(df: DataFrame) = this(df.queryExecution.analyzed, df.sqlContext)
+  def this(df: Dataset[_]) = this(df.queryExecution.analyzed, df.sqlContext)
 
   private val nextSubqueryId = new AtomicLong(0)
   private def newSubqueryName(): String = s"gen_subquery_${nextSubqueryId.getAndIncrement()}"
@@ -210,13 +210,12 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
   }
 
   private def scriptTransformationToSQL(plan: ScriptTransformation): String = {
-    val ioSchema = plan.ioschema.asInstanceOf[HiveScriptIOSchema]
-    val inputRowFormatSQL = ioSchema.inputRowFormatSQL.getOrElse(
+    val inputRowFormatSQL = plan.ioschema.inputRowFormatSQL.getOrElse(
       throw new UnsupportedOperationException(
-        s"unsupported row format ${ioSchema.inputRowFormat}"))
-    val outputRowFormatSQL = ioSchema.outputRowFormatSQL.getOrElse(
+        s"unsupported row format ${plan.ioschema.inputRowFormat}"))
+    val outputRowFormatSQL = plan.ioschema.outputRowFormatSQL.getOrElse(
       throw new UnsupportedOperationException(
-        s"unsupported row format ${ioSchema.outputRowFormat}"))
+        s"unsupported row format ${plan.ioschema.outputRowFormat}"))
 
     val outputSchema = plan.output.map { attr =>
       s"${attr.sql} ${attr.dataType.simpleString}"
@@ -519,8 +518,9 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
       case l @ LogicalRelation(_, _, Some(TableIdentifier(table, Some(database)))) =>
         Some(SQLTable(database, table, l.output.map(_.withQualifier(None))))
 
-      case m: MetastoreRelation =>
-        Some(SQLTable(m.databaseName, m.tableName, m.output.map(_.withQualifier(None))))
+      case relation: CatalogRelation =>
+        val m = relation.catalogTable
+        Some(SQLTable(m.database, m.identifier.table, relation.output.map(_.withQualifier(None))))
 
       case _ => None
     }

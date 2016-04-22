@@ -408,4 +408,11 @@ public class TaskMemoryManager {
   public long getMemoryConsumptionForThisTask() {
     return memoryManager.getExecutionMemoryUsageForTask(taskAttemptId);
   }
+
+  /**
+   * Returns Tungsten memory mode
+   */
+  public MemoryMode getTungstenMemoryMode(){
+    return tungstenMemoryMode;
+  }
 }

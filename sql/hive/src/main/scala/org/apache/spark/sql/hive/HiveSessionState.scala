@@ -21,16 +21,13 @@ import java.util.regex.Pattern
 
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hadoop.hive.ql.parse.VariableSubstitution
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.Analyzer
-import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlanner
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.client.{HiveClient, HiveClientImpl}
-import org.apache.spark.sql.hive.execution.{AnalyzeTable, HiveSqlParser}
 import org.apache.spark.sql.internal.{SessionState, SQLConf}
 
 
@@ -52,11 +49,6 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
    * A Hive client used for interacting with the metastore.
    */
   lazy val metadataHive: HiveClient = sharedState.metadataHive.newSession()
-
-  /**
-   * A Hive helper class for substituting variables in a SQL statement.
-   */
-  lazy val substitutor = new VariableSubstitution
 
   override lazy val conf: SQLConf = new SQLConf {
     override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
@@ -87,7 +79,7 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
       sharedState.externalCatalog,
       metadataHive,
       ctx,
-      ctx.functionResourceLoader,
+      ctx.sessionState.functionResourceLoader,
       functionRegistry,
       conf,
       hiveconf)
@@ -110,11 +102,6 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
       override val extendedCheckRules = Seq(PreWriteCheck(conf, catalog))
     }
   }
-
-  /**
-   * Parser for HiveQl query texts.
-   */
-  override lazy val sqlParser: ParserInterface = new HiveSqlParser(substitutor, hiveconf)
 
   /**
    * Planner that takes into account Hive-specific strategies.
@@ -181,17 +168,6 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
   }
 
   /**
-   * Analyzes the given table in the current database to generate statistics, which will be
-   * used in query optimizations.
-   *
-   * Right now, it only supports Hive tables and it only updates the size of a Hive table
-   * in the Hive metastore.
-   */
-  override def analyze(tableName: String): Unit = {
-    AnalyzeTable(tableName).run(ctx)
-  }
-
-  /**
    * Execute a SQL statement by passing the query text directly to Hive.
    */
   override def runNativeSql(sql: String): Seq[String] = {
@@ -214,7 +190,7 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
    * SerDe.
    */
   def convertMetastoreParquet: Boolean = {
-    conf.getConf(HiveContext.CONVERT_METASTORE_PARQUET)
+    conf.getConf(HiveUtils.CONVERT_METASTORE_PARQUET)
   }
 
   /**
@@ -224,7 +200,7 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
    * This configuration is only effective when "spark.sql.hive.convertMetastoreParquet" is true.
    */
   def convertMetastoreParquetWithSchemaMerging: Boolean = {
-    conf.getConf(HiveContext.CONVERT_METASTORE_PARQUET_WITH_SCHEMA_MERGING)
+    conf.getConf(HiveUtils.CONVERT_METASTORE_PARQUET_WITH_SCHEMA_MERGING)
   }
 
   /**
@@ -233,7 +209,7 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
    * SerDe.
    */
   def convertMetastoreOrc: Boolean = {
-    conf.getConf(HiveContext.CONVERT_METASTORE_ORC)
+    conf.getConf(HiveUtils.CONVERT_METASTORE_ORC)
   }
 
   /**
@@ -249,14 +225,14 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
    *     and no SerDe is specified (no ROW FORMAT SERDE clause).
    */
   def convertCTAS: Boolean = {
-    conf.getConf(HiveContext.CONVERT_CTAS)
+    conf.getConf(HiveUtils.CONVERT_CTAS)
   }
 
   /**
    * When true, Hive Thrift server will execute SQL queries asynchronously using a thread pool."
    */
   def hiveThriftServerAsync: Boolean = {
-    conf.getConf(HiveContext.HIVE_THRIFT_SERVER_ASYNC)
+    conf.getConf(HiveUtils.HIVE_THRIFT_SERVER_ASYNC)
   }
 
   def hiveThriftServerSingleSession: Boolean = {
