@@ -1087,6 +1087,11 @@ test_that("column functions", {
   expect_equal(collect(select(df, last(df$age, TRUE)))[[1]], 19)
   expect_equal(collect(select(df, last("age")))[[1]], 19)
   expect_equal(collect(select(df, last("age", TRUE)))[[1]], 19)
+
+  # Test bround()
+  df <- createDataFrame(sqlContext, data.frame(x = c(2.5, 3.5)))
+  expect_equal(collect(select(df, bround(df$x, 0)))[[1]][1], 2)
+  expect_equal(collect(select(df, bround(df$x, 0)))[[1]][2], 4)
 })
 
 test_that("column binary mathfunctions", {
@@ -1202,6 +1207,42 @@ test_that("greatest() and least() on a DataFrame", {
   df <- createDataFrame(sqlContext, l)
   expect_equal(collect(select(df, greatest(df$a, df$b)))[, 1], c(2, 4))
   expect_equal(collect(select(df, least(df$a, df$b)))[, 1], c(1, 3))
+})
+
+test_that("time windowing (window()) with all inputs", {
+  df <- createDataFrame(sqlContext, data.frame(t = c("2016-03-11 09:00:07"), v = c(1)))
+  df$window <- window(df$t, "5 seconds", "5 seconds", "0 seconds")
+  local <- collect(df)$v
+  # Not checking time windows because of possible time zone issues. Just checking that the function
+  # works
+  expect_equal(local, c(1))
+})
+
+test_that("time windowing (window()) with slide duration", {
+  df <- createDataFrame(sqlContext, data.frame(t = c("2016-03-11 09:00:07"), v = c(1)))
+  df$window <- window(df$t, "5 seconds", "2 seconds")
+  local <- collect(df)$v
+  # Not checking time windows because of possible time zone issues. Just checking that the function
+  # works
+  expect_equal(local, c(1, 1))
+})
+
+test_that("time windowing (window()) with start time", {
+  df <- createDataFrame(sqlContext, data.frame(t = c("2016-03-11 09:00:07"), v = c(1)))
+  df$window <- window(df$t, "5 seconds", startTime = "2 seconds")
+  local <- collect(df)$v
+  # Not checking time windows because of possible time zone issues. Just checking that the function
+  # works
+  expect_equal(local, c(1))
+})
+
+test_that("time windowing (window()) with just window duration", {
+  df <- createDataFrame(sqlContext, data.frame(t = c("2016-03-11 09:00:07"), v = c(1)))
+  df$window <- window(df$t, "5 seconds")
+  local <- collect(df)$v
+  # Not checking time windows because of possible time zone issues. Just checking that the function
+  # works
+  expect_equal(local, c(1))
 })
 
 test_that("when(), otherwise() and ifelse() on a DataFrame", {
@@ -1817,7 +1858,8 @@ test_that("approxQuantile() on a DataFrame", {
 
 test_that("SQL error message is returned from JVM", {
   retError <- tryCatch(sql(sqlContext, "select * from blah"), error = function(e) e)
-  expect_equal(grepl("Table not found: blah", retError), TRUE)
+  expect_equal(grepl("Table or View not found", retError), TRUE)
+  expect_equal(grepl("blah", retError), TRUE)
 })
 
 irisDF <- suppressWarnings(createDataFrame(sqlContext, iris))
@@ -1826,6 +1868,9 @@ test_that("Method as.data.frame as a synonym for collect()", {
   expect_equal(as.data.frame(irisDF), collect(irisDF))
   irisDF2 <- irisDF[irisDF$Species == "setosa", ]
   expect_equal(as.data.frame(irisDF2), collect(irisDF2))
+
+  # Make sure as.data.frame in the R base package is not covered
+  expect_that(as.data.frame(c(1, 2)), not(throws_error()))
 })
 
 test_that("attach() on a DataFrame", {

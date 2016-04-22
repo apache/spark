@@ -217,7 +217,7 @@ case class SortMergeJoin(
     joinType != FullOuter
   }
 
-  override def upstreams(): Seq[RDD[InternalRow]] = {
+  override def inputRDDs(): Seq[RDD[InternalRow]] = {
     left.execute() :: right.execute() :: Nil
   }
 
@@ -227,7 +227,7 @@ case class SortMergeJoin(
       keys: Seq[Expression],
       input: Seq[Attribute]): Seq[ExprCode] = {
     ctx.INPUT_ROW = row
-    keys.map(BindReferences.bindReference(_, input).gen(ctx))
+    keys.map(BindReferences.bindReference(_, input).genCode(ctx))
   }
 
   private def copyKeys(ctx: CodegenContext, vars: Seq[ExprCode]): Seq[ExprCode] = {
@@ -257,9 +257,9 @@ case class SortMergeJoin(
   }
 
   /**
-    * Generate a function to scan both left and right to find a match, returns the term for
-    * matched one row from left side and buffered rows from right side.
-    */
+   * Generate a function to scan both left and right to find a match, returns the term for
+   * matched one row from left side and buffered rows from right side.
+   */
   private def genScanner(ctx: CodegenContext): (String, String) = {
     // Create class member for next row from both sides.
     val leftRow = ctx.freshName("leftRow")
@@ -461,26 +461,26 @@ case class SortMergeJoin(
   }
 
   /**
-    * Creates the variables for right part of result row, using BoundReference, since the right
-    * part are accessed inside the loop.
-    */
+   * Creates the variables for right part of result row, using BoundReference, since the right
+   * part are accessed inside the loop.
+   */
   private def createVars(
       ctx: CodegenContext,
       attributes: Seq[Attribute],
       row: String): Seq[ExprCode] = {
     ctx.INPUT_ROW = row
     attributes.zipWithIndex.map { case (a, i) =>
-      BoundReference(i, a.dataType, a.nullable).gen(ctx)
+      BoundReference(i, a.dataType, a.nullable).genCode(ctx)
     }
   }
 
   /**
-    * Splits variables based on whether it's used by condition or not, returns the code to create
-    * these variables before the condition and after the condition.
-    *
-    * Only a few columns are used by condition, then we can skip the accessing of those columns
-    * that are not used by condition also filtered out by condition.
-    */
+   * Splits variables based on whether it's used by condition or not, returns the code to create
+   * these variables before the condition and after the condition.
+   *
+   * Only a few columns are used by condition, then we can skip the accessing of those columns
+   * that are not used by condition also filtered out by condition.
+   */
   private def splitVarsByCondition(
       attributes: Seq[Attribute],
       variables: Seq[ExprCode]): (String, String) = {
@@ -498,6 +498,7 @@ case class SortMergeJoin(
   }
 
   override def doProduce(ctx: CodegenContext): String = {
+    ctx.copyResult = true
     val leftInput = ctx.freshName("leftInput")
     ctx.addMutableState("scala.collection.Iterator", leftInput, s"$leftInput = inputs[0];")
     val rightInput = ctx.freshName("rightInput")
@@ -528,7 +529,7 @@ case class SortMergeJoin(
       val (rightBefore, rightAfter) = splitVarsByCondition(right.output, rightVars)
       // Generate code for condition
       ctx.currentVars = leftVars ++ rightVars
-      val cond = BindReferences.bindReference(condition.get, output).gen(ctx)
+      val cond = BindReferences.bindReference(condition.get, output).genCode(ctx)
       // evaluate the columns those used by condition before loop
       val before = s"""
            |boolean $loaded = false;
@@ -588,7 +589,8 @@ case class SortMergeJoin(
     val condCheck = if (condition.isDefined) {
       val evaluate = evaluateRequiredVariables(outerOutput, outerVars, condition.get.references)
       ctx.currentVars = streamVars ++ outerVars
-      val cond = BindReferences.bindReference(condition.get, stream.output ++ outerOutput).gen(ctx)
+      val cond =
+        BindReferences.bindReference(condition.get, stream.output ++ outerOutput).genCode(ctx)
       s"""
         |$evaluate
         |if ($i < $size) {
@@ -847,8 +849,7 @@ private class RightOuterIterator(
     boundCondition: InternalRow => Boolean,
     resultProj: InternalRow => InternalRow,
     numOutputRows: LongSQLMetric)
-  extends OneSideOuterIterator(
-    smjScanner, leftNullRow, boundCondition, resultProj, numOutputRows) {
+  extends OneSideOuterIterator(smjScanner, leftNullRow, boundCondition, resultProj, numOutputRows) {
 
   protected override def setStreamSideOutput(row: InternalRow): Unit = joinedRow.withRight(row)
   protected override def setBufferedSideOutput(row: InternalRow): Unit = joinedRow.withLeft(row)

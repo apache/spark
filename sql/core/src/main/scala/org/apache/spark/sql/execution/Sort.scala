@@ -25,6 +25,8 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, GenerateUnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.physical.{Distribution, OrderedDistribution, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.types._
+import org.apache.spark.util.collection.unsafe.sort.RadixSort;
 
 /**
  * Performs (external) sorting.
@@ -48,7 +50,10 @@ case class Sort(
   override def requiredChildDistribution: Seq[Distribution] =
     if (global) OrderedDistribution(sortOrder) :: Nil else UnspecifiedDistribution :: Nil
 
+  private val enableRadixSort = sqlContext.conf.enableRadixSort
+
   override private[sql] lazy val metrics = Map(
+    "sortTime" -> SQLMetrics.createLongMetric(sparkContext, "sort time"),
     "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
     "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"))
 
@@ -58,6 +63,9 @@ case class Sort(
     // The comparator for comparing prefix
     val boundSortExpression = BindReferences.bindReference(sortOrder.head, output)
     val prefixComparator = SortPrefixUtils.getPrefixComparator(boundSortExpression)
+
+    val canUseRadixSort = enableRadixSort && sortOrder.length == 1 &&
+      SortPrefixUtils.canSortFullyWithPrefix(boundSortExpression)
 
     // The generator for prefix
     val prefixProjection = UnsafeProjection.create(Seq(SortPrefix(boundSortExpression)))
@@ -69,7 +77,8 @@ case class Sort(
 
     val pageSize = SparkEnv.get.memoryManager.pageSizeBytes
     val sorter = new UnsafeExternalRowSorter(
-      schema, ordering, prefixComparator, prefixComputer, pageSize)
+      schema, ordering, prefixComparator, prefixComputer, pageSize, canUseRadixSort)
+
     if (testSpillFrequency > 0) {
       sorter.setTestSpillFrequency(testSpillFrequency)
     }
@@ -98,19 +107,18 @@ case class Sort(
     }
   }
 
-  override def upstreams(): Seq[RDD[InternalRow]] = {
-    child.asInstanceOf[CodegenSupport].upstreams()
+  override def usedInputs: AttributeSet = AttributeSet(Seq.empty)
+
+  override def inputRDDs(): Seq[RDD[InternalRow]] = {
+    child.asInstanceOf[CodegenSupport].inputRDDs()
   }
 
   // Name of sorter variable used in codegen.
   private var sorterVariable: String = _
 
-  override def preferUnsafeRow: Boolean = true
-
   override protected def doProduce(ctx: CodegenContext): String = {
     val needToSort = ctx.freshName("needToSort")
     ctx.addMutableState("boolean", needToSort, s"$needToSort = true;")
-
 
     // Initialize the class member variables. This includes the instance of the Sorter and
     // the iterator to return sorted rows.
@@ -132,15 +140,23 @@ case class Sort(
         | }
       """.stripMargin.trim)
 
+    // The child could change `copyResult` to true, but we had already consumed all the rows,
+    // so `copyResult` should be reset to `false`.
+    ctx.copyResult = false
+
     val outputRow = ctx.freshName("outputRow")
     val dataSize = metricTerm(ctx, "dataSize")
     val spillSize = metricTerm(ctx, "spillSize")
     val spillSizeBefore = ctx.freshName("spillSizeBefore")
+    val startTime = ctx.freshName("startTime")
+    val sortTime = metricTerm(ctx, "sortTime")
     s"""
        | if ($needToSort) {
        |   $addToSorter();
-       |   Long $spillSizeBefore = $metrics.memoryBytesSpilled();
+       |   long $spillSizeBefore = $metrics.memoryBytesSpilled();
+       |   long $startTime = System.nanoTime();
        |   $sortedIterator = $sorterVariable.sort();
+       |   $sortTime.add(System.nanoTime() - $startTime);
        |   $dataSize.add($sorterVariable.getPeakMemoryUsage());
        |   $spillSize.add($metrics.memoryBytesSpilled() - $spillSizeBefore);
        |   $metrics.incPeakExecutionMemory($sorterVariable.getPeakMemoryUsage());
@@ -155,22 +171,10 @@ case class Sort(
      """.stripMargin.trim
   }
 
-  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: String): String = {
-    if (row != null) {
-      s"$sorterVariable.insertRow((UnsafeRow)$row);"
-    } else {
-      val colExprs = child.output.zipWithIndex.map { case (attr, i) =>
-        BoundReference(i, attr.dataType, attr.nullable)
-      }
-
-      ctx.currentVars = input
-      val code = GenerateUnsafeProjection.createCode(ctx, colExprs)
-
-      s"""
-         | // Convert the input attributes to an UnsafeRow and add it to the sorter
-         | ${code.code}
-         | $sorterVariable.insertRow(${code.value});
-       """.stripMargin.trim
-    }
+  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
+    s"""
+       |${row.code}
+       |$sorterVariable.insertRow((UnsafeRow)${row.value});
+     """.stripMargin
   }
 }

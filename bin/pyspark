@@ -49,7 +49,11 @@ if [[ -n "$IPYTHON_OPTS" || "$IPYTHON" == "1" ]]; then
   # If IPython options are specified, assume user wants to run IPython
   # (for backwards-compatibility)
   PYSPARK_DRIVER_PYTHON_OPTS="$PYSPARK_DRIVER_PYTHON_OPTS $IPYTHON_OPTS"
-  PYSPARK_DRIVER_PYTHON="ipython"
+  if [ -x "$(command -v jupyter)" ]; then
+    PYSPARK_DRIVER_PYTHON="jupyter"
+  else
+    PYSPARK_DRIVER_PYTHON="ipython"
+  fi
 elif [[ -z "$PYSPARK_DRIVER_PYTHON" ]]; then
   PYSPARK_DRIVER_PYTHON="${PYSPARK_PYTHON:-"$DEFAULT_PYTHON"}"
 fi

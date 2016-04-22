@@ -82,10 +82,10 @@ public final class JavaLogQuery {
       String user = m.group(3);
       String query = m.group(5);
       if (!user.equalsIgnoreCase("-")) {
-        return new Tuple3<String, String, String>(ip, user, query);
+        return new Tuple3<>(ip, user, query);
       }
     }
-    return new Tuple3<String, String, String>(null, null, null);
+    return new Tuple3<>(null, null, null);
   }
 
   public static Stats extractStats(String line) {

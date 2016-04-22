@@ -30,7 +30,11 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
 /**
- * An interface for exchanges.
+ * Base class for operators that exchange data among multiple threads or processes.
+ *
+ * Exchanges are the key class of operators that enable parallelism. Although the implementation
+ * differs significantly, the concept is similar to the exchange operator described in
+ * "Volcano -- An Extensible and Parallel Query Evaluation System" by Goetz Graefe.
  */
 abstract class Exchange extends UnaryNode {
   override def output: Seq[Attribute] = child.output

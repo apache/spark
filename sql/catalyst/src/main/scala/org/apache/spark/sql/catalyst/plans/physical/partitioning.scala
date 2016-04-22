@@ -76,9 +76,9 @@ case class OrderedDistribution(ordering: Seq[SortOrder]) extends Distribution {
 }
 
 /**
-  * Represents data where tuples are broadcasted to every node. It is quite common that the
-  * entire set of tuples is transformed into different data structure.
-  */
+ * Represents data where tuples are broadcasted to every node. It is quite common that the
+ * entire set of tuples is transformed into different data structure.
+ */
 case class BroadcastDistribution(mode: BroadcastMode) extends Distribution
 
 /**

@@ -26,7 +26,8 @@ import scala.xml.Node
 import org.eclipse.jetty.servlet.ServletContextHandler
 import org.json4s.JsonAST.{JNothing, JValue}
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf, SSLOptions}
+import org.apache.spark.{SecurityManager, SparkConf, SSLOptions}
+import org.apache.spark.internal.Logging
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.util.Utils
 
@@ -128,7 +129,7 @@ private[spark] abstract class WebUI(
   }
 
   /** Initialize all components of the server. */
-  def initialize()
+  def initialize(): Unit
 
   /** Bind to the HTTP server behind this web interface. */
   def bind() {
@@ -152,7 +153,7 @@ private[spark] abstract class WebUI(
   def stop() {
     assert(serverInfo.isDefined,
       "Attempted to stop %s before binding to a server!".format(className))
-    serverInfo.get.server.stop()
+    serverInfo.get.stop()
   }
 }
 

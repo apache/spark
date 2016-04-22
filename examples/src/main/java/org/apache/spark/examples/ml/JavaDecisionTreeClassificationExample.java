@@ -39,7 +39,10 @@ public class JavaDecisionTreeClassificationExample {
 
     // $example on$
     // Load the data stored in LIBSVM format as a DataFrame.
-    Dataset<Row> data = sqlContext.read().format("libsvm").load("data/mllib/sample_libsvm_data.txt");
+    Dataset<Row> data = sqlContext
+      .read()
+      .format("libsvm")
+      .load("data/mllib/sample_libsvm_data.txt");
 
     // Index labels, adding metadata to the label column.
     // Fit on whole dataset to include all labels in index.

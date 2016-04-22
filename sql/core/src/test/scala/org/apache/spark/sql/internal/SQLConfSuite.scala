@@ -119,15 +119,10 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
     }
 
     intercept[IllegalArgumentException] {
-      // This value less than Int.MinValue
+      // This value less than Long.MinValue
       sqlContext.setConf(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key, "-90000000000g")
     }
 
-    // Test invalid input
-    intercept[IllegalArgumentException] {
-      // This value exceeds Long.MaxValue
-      sqlContext.setConf(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key, "-1g")
-    }
     sqlContext.conf.clear()
   }
 }

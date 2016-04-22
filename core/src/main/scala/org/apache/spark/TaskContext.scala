@@ -18,6 +18,7 @@
 package org.apache.spark
 
 import java.io.Serializable
+import java.util.Properties
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
@@ -61,12 +62,11 @@ object TaskContext {
   protected[spark] def unset(): Unit = taskContext.remove()
 
   /**
-   * An empty task context that does not represent an actual task.
+   * An empty task context that does not represent an actual task.  This is only used in tests.
    */
   private[spark] def empty(): TaskContextImpl = {
-    new TaskContextImpl(0, 0, 0, 0, null, null)
+    new TaskContextImpl(0, 0, 0, 0, null, new Properties, null)
   }
-
 }
 
 
@@ -161,6 +161,12 @@ abstract class TaskContext extends Serializable {
    * will share the same attempt ID).  This is roughly equivalent to Hadoop's TaskAttemptID.
    */
   def taskAttemptId(): Long
+
+  /**
+   * Get a local property set upstream in the driver, or null if it is missing. See also
+   * [[org.apache.spark.SparkContext.setLocalProperty]].
+   */
+  def getLocalProperty(key: String): String
 
   @DeveloperApi
   def taskMetrics(): TaskMetrics

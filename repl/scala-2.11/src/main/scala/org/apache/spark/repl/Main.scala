@@ -22,6 +22,7 @@ import java.io.File
 import scala.tools.nsc.GenericRunnerSettings
 
 import org.apache.spark._
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 import org.apache.spark.sql.SQLContext
 
@@ -87,6 +88,7 @@ object Main extends Logging {
     }
     sparkContext = new SparkContext(conf)
     logInfo("Created spark context..")
+    Signaling.cancelOnInterrupt(sparkContext)
     sparkContext
   }
 

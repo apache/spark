@@ -135,8 +135,8 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
   }
 
   /**
-    * Obtains token for the Hive metastore and adds them to the credentials.
-    */
+   * Obtains token for the Hive metastore and adds them to the credentials.
+   */
   def obtainTokenForHiveMetastore(
       sparkConf: SparkConf,
       conf: Configuration,
@@ -149,8 +149,8 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
   }
 
   /**
-    * Obtain a security token for HBase.
-    */
+   * Obtain a security token for HBase.
+   */
   def obtainTokenForHBase(
       sparkConf: SparkConf,
       conf: Configuration,
@@ -164,10 +164,10 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
   }
 
   /**
-    * Return whether delegation tokens should be retrieved for the given service when security is
-    * enabled. By default, tokens are retrieved, but that behavior can be changed by setting
-    * a service-specific configuration.
-    */
+   * Return whether delegation tokens should be retrieved for the given service when security is
+   * enabled. By default, tokens are retrieved, but that behavior can be changed by setting
+   * a service-specific configuration.
+   */
   private def shouldGetTokens(conf: SparkConf, service: String): Boolean = {
     conf.getBoolean(s"spark.yarn.security.tokens.${service}.enabled", true)
   }
@@ -512,7 +512,7 @@ object YarnSparkHadoopUtil {
       val initialNumExecutors = conf.get(DYN_ALLOCATION_INITIAL_EXECUTORS)
       val maxNumExecutors = conf.get(DYN_ALLOCATION_MAX_EXECUTORS)
       require(initialNumExecutors >= minNumExecutors && initialNumExecutors <= maxNumExecutors,
-        s"initial executor number $initialNumExecutors must between min executor number" +
+        s"initial executor number $initialNumExecutors must between min executor number " +
           s"$minNumExecutors and max executor number $maxNumExecutors")
 
       initialNumExecutors
