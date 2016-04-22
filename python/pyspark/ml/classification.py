@@ -17,6 +17,7 @@
 
 import operator
 import warnings
+from abc import ABCMeta, abstractmethod
 
 from pyspark import since, keyword_only
 from pyspark.ml import Estimator, Model
@@ -1166,6 +1167,8 @@ class OneVsRestParams(HasFeaturesCol, HasLabelCol, HasPredictionCol):
     Parameters for OneVsRest and OneVsRestModel.
     """
 
+    __metaclass__ = ABCMeta
+
     classifier = Param(Params._dummy(), "classifier", "base binary classifier")
 
     @since("2.0.0")
@@ -1184,6 +1187,14 @@ class OneVsRestParams(HasFeaturesCol, HasLabelCol, HasPredictionCol):
         Gets the value of classifier or its default value.
         """
         return self.getOrDefault(self.classifier)
+
+    @abstractmethod
+    def _transfer_param_map_to_java(self, pyParamMap):
+        raise NotImplementedError()
+
+    @abstractmethod
+    def _transfer_param_map_from_java(self, javaParamMap):
+        raise NotImplementedError()
 
     def _transfer_param_map_to_java_impl(self, pyParamMap, java_obj):
         """
@@ -1278,8 +1289,7 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
         assert isinstance(classifier, HasRawPredictionCol),\
             "Classifier %s doesn't extend from HasRawPredictionCol." % type(classifier)
 
-        maxLabel = dataset.agg({labelCol: "max"}).collect()
-        numClasses = int(maxLabel[0]["max("+labelCol+")"]) + 1
+        numClasses = int(dataset.agg({labelCol: "max"}).head()["max("+labelCol+")"]) + 1
 
         multiclassLabeled = dataset.select(labelCol, featuresCol)
 

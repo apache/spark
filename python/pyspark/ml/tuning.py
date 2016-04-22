@@ -278,7 +278,7 @@ class CrossValidatorParams(ValidatorParams):
         return paramMap
 
     def _transfer_param_map_from_java_impl(self, javaParamMap, java_obj):
-        paramMap =super(CrossValidatorParams, self)\
+        paramMap = super(CrossValidatorParams, self)\
             ._transfer_param_map_from_java_impl(javaParamMap, java_obj)
 
         java_num_folds_param = java_obj.getParam(self.numFolds.name)
@@ -593,7 +593,7 @@ class TrainValidationSplitParams(ValidatorParams):
         return paramMap
 
     def _transfer_param_map_from_java_impl(self, javaParamMap, java_obj):
-        paramMap =super(TrainValidationSplitParams, self)\
+        paramMap = super(TrainValidationSplitParams, self)\
             ._transfer_param_map_from_java_impl(javaParamMap, java_obj)
 
         java_num_folds_param = java_obj.getParam(self.trainRatio.name)
@@ -750,7 +750,7 @@ class TrainValidationSplit(Estimator, TrainValidationSplitParams, MLReadable, ML
     def _transfer_param_map_to_java(self, pyParamMap):
         _java_obj = self.copy(pyParamMap)._to_java()
 
-        paramMap =super(TrainValidationSplit, self)\
+        paramMap = super(TrainValidationSplit, self)\
             ._transfer_param_map_to_java_impl(pyParamMap, _java_obj)
 
         return paramMap

@@ -812,6 +812,7 @@ class PersistenceTest(PySparkTestCase):
 
             lr = LogisticRegression()
 
+            # Check the estimator of CrossValidator(TrainValidationSplit(LogisticRegression))
             tvs_grid = ParamGridBuilder().addGrid(lr.maxIter, [5, 10]).build()
             tvs_evaluator = BinaryClassificationEvaluator()
             tvs = TrainValidationSplit(estimator=lr, estimatorParamMaps=tvs_grid,
@@ -834,6 +835,7 @@ class PersistenceTest(PySparkTestCase):
             loaded_model = CrossValidatorModel.load(model_path)
             self._compare_pipelines(model, loaded_model)
 
+            # Check the estimator of TrainValidationSplit(CrossValidator(LogisticRegression))
             cv_grid = ParamGridBuilder().addGrid(lr.maxIter, [5, 10]).build()
             cv_evaluator = BinaryClassificationEvaluator()
             cv = CrossValidator(estimator=lr, estimatorParamMaps=cv_grid, evaluator=cv_evaluator)
