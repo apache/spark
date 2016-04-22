@@ -24,11 +24,10 @@ import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.Analyzer
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlanner
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.client.{HiveClient, HiveClientImpl}
-import org.apache.spark.sql.internal.{SessionState, SQLConf}
+import org.apache.spark.sql.internal.SessionState
 
 
 /**
@@ -49,11 +48,6 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
    * A Hive client used for interacting with the metastore.
    */
   lazy val metadataHive: HiveClient = sharedState.metadataHive.newSession()
-
-  override lazy val conf: SQLConf = new SQLConf {
-    override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
-  }
-
 
   /**
    * SQLConf and HiveConf contracts:
@@ -116,7 +110,6 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
         experimentalMethods.extraStrategies ++ Seq(
           FileSourceStrategy,
           DataSourceStrategy,
-          HiveCommandStrategy,
           HiveDDLStrategy,
           DDLStrategy,
           SpecialLimits,
@@ -141,16 +134,13 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
   //  Helper methods, partially leftover from pre-2.0 days
   // ------------------------------------------------------
 
-  override def executePlan(plan: LogicalPlan): HiveQueryExecution = {
-    new HiveQueryExecution(ctx, plan)
-  }
-
   /**
    * Overrides default Hive configurations to avoid breaking changes to Spark SQL users.
    *  - allow SQL11 keywords to be used as identifiers
    */
   def setDefaultOverrideConfs(): Unit = {
     setConf(ConfVars.HIVE_SUPPORT_SQL11_RESERVED_KEYWORDS.varname, "false")
+    conf.setConfString("spark.sql.caseSensitive", "false")
   }
 
   override def setConf(key: String, value: String): Unit = {

@@ -28,8 +28,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.execution.command.{ExplainCommand, HiveNativeCommand, SetCommand}
-import org.apache.spark.sql.execution.datasources.DescribeCommand
+import org.apache.spark.sql.execution.command.{DescribeTableCommand, ExplainCommand, HiveNativeCommand, SetCommand}
 import org.apache.spark.sql.hive.{InsertIntoHiveTable => LogicalInsertIntoHiveTable}
 import org.apache.spark.sql.hive.SQLBuilder
 import org.apache.spark.sql.hive.test.{TestHive, TestHiveQueryExecution}
@@ -176,7 +175,7 @@ abstract class HiveComparisonTest
           .filterNot(_ == "")
       case _: HiveNativeCommand => answer.filterNot(nonDeterministicLine).filterNot(_ == "")
       case _: ExplainCommand => answer
-      case _: DescribeCommand =>
+      case _: DescribeTableCommand =>
         // Filter out non-deterministic lines and lines which do not have actual results but
         // can introduce problems because of the way Hive formats these lines.
         // Then, remove empty lines. Do not sort the results.
@@ -443,7 +442,7 @@ abstract class HiveComparisonTest
               }
             }
 
-            (query, prepareAnswer(query, query.stringResult()))
+            (query, prepareAnswer(query, query.hiveResultString()))
           } catch {
             case e: Throwable =>
               val errorMessage =
@@ -575,7 +574,7 @@ abstract class HiveComparisonTest
             // okay by running a simple query. If this fails then we halt testing since
             // something must have gone seriously wrong.
             try {
-              new TestHiveQueryExecution("SELECT key FROM src").stringResult()
+              new TestHiveQueryExecution("SELECT key FROM src").hiveResultString()
               TestHive.sessionState.runNativeSql("SELECT key FROM src")
             } catch {
               case e: Exception =>
