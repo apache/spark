@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.execution.vectorized.ColumnVector
 import org.apache.spark.sql.types._
 
 

@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql.execution.columnar
 
+import scala.collection.Iterator
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeAndComment, CodeFormatter, CodeGenerator, UnsafeRowWriter}
+import org.apache.spark.sql.execution.vectorized.ColumnVector
 import org.apache.spark.sql.types._
 
 /**
@@ -29,11 +32,11 @@ import org.apache.spark.sql.types._
 abstract class ColumnarIterator extends Iterator[InternalRow] {
   def initialize(input: Iterator[CachedBatch], columnTypes: Array[DataType],
     columnIndexes: Array[Int], inMemoryColumnarTableScan: InMemoryColumnarTableScan): Unit
-  def getInput: Iterator[CachedBatch]
-  def getColumnIndexes: Array[Int]
-  def getColumnTypes: Array[DataType]
+  def getColumnIndexes(index: Int) : Int
+  def getColumnTypes(index: Int): DataType
   def isSupportColumnarCodeGen: Boolean
-  def incrementReadPartitionAccumulator: Unit
+  def initForColumnar: Int
+  def getColumn(index: Int): ColumnVector
 }
 
 /**
@@ -166,7 +169,9 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
       import org.apache.spark.sql.catalyst.expressions.codegen.BufferHolder;
       import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter;
       import org.apache.spark.sql.execution.columnar.InMemoryColumnarTableScan;
+      import org.apache.spark.sql.execution.columnar.CachedBatch;
       import org.apache.spark.sql.execution.columnar.MutableUnsafeRow;
+      import org.apache.spark.sql.execution.vectorized.ColumnVector;
 
       public SpecificColumnarIterator generate(Object[] references) {
         return new SpecificColumnarIterator();
@@ -182,6 +187,7 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
         private InMemoryColumnarTableScan inMemoryColumnarTableScan = null;
         private MutableUnsafeRow mutableRow = null;
         private boolean readPartitionIncremented = false;
+        private CachedBatch cachedBatch = null;
 
         private int currentRow = 0;
         private int numRowsInBatch = 0;
@@ -216,7 +222,7 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
             return false;
           }
 
-          ${classOf[CachedBatch].getName} batch = (${classOf[CachedBatch].getName}) input.next();
+          CachedBatch batch = (CachedBatch) input.next();
           currentRow = 0;
           numRowsInBatch = batch.numRows();
           for (int i = 0; i < columnIndexes.length; i ++) {
@@ -236,21 +242,28 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
           return unsafeRow;
         }
 
-        public scala.collection.Iterator getInput() { return input; }
+        public int getColumnIndexes(int index) { return columnIndexes[index]; }
 
-        public int[] getColumnIndexes() { return columnIndexes; }
-
-        public DataType[] getColumnTypes() { return columnTypes; }
+        public DataType getColumnTypes(int index) { return columnTypes[index]; }
 
         public boolean isSupportColumnarCodeGen() {
           return ${_isSupportColumnarCodeGen};
         }
 
-        public void incrementReadPartitionAccumulator() {
-          if (!readPartitionIncremented) {
+        public int initForColumnar() {
+          if (!input.hasNext()) {
+            return -1;
+          }
+          if ((inMemoryColumnarTableScan != null) && !readPartitionIncremented) {
             inMemoryColumnarTableScan.incrementReadPartitionAccumulator();
             readPartitionIncremented = true;
           }
+          cachedBatch = (CachedBatch) input.next();
+          return cachedBatch.numRows();
+        }
+
+        public ColumnVector getColumn(int i) {
+          return cachedBatch.column(this, i);
         }
       }"""
 
