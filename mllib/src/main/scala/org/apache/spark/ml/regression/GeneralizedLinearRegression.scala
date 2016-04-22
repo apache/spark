@@ -772,7 +772,8 @@ class GeneralizedLinearRegressionModel private[ml] (
   @Since("2.0.0")
   def hasSummary: Boolean = trainingSummary.nonEmpty
 
-  private[regression] def setSummary(summary: GeneralizedLinearRegressionTrainingSummary): this.type = {
+  private[regression]
+  def setSummary(summary: GeneralizedLinearRegressionTrainingSummary): this.type = {
     this.trainingSummary = Some(summary)
     this
   }
@@ -888,19 +889,19 @@ class GeneralizedLinearRegressionSummary private[regression] (
   private val weightCol: String = model.getWeightCol
   private val labelCol: String = model.getLabelCol
 
-  protected val familyName: String = model.getFamily
-  protected val family: Family = Family.fromName(familyName)
-  protected val link: Link = if (model.isDefined(model.link)) {
+  private[regression] val familyName: String = model.getFamily
+  private[regression] val family: Family = Family.fromName(familyName)
+  private[regression] val link: Link = if (model.isDefined(model.link)) {
     Link.fromName(model.getLink)
   } else {
     family.defaultLink
   }
-  protected val fitIntercept: Boolean = model.getFitIntercept
-  protected val intercept: Double = model.intercept
-  protected val coefficients: Vector = model.coefficients
+  private[regression] val fitIntercept: Boolean = model.getFitIntercept
+  private[regression] val intercept: Double = model.intercept
+  private[regression] val coefficients: Vector = model.coefficients
 
   /** Number of instances in DataFrame predictions */
-  protected lazy val numInstances: Long = predictions.count()
+  private[regression] lazy val numInstances: Long = predictions.count()
 
   /** The numeric rank of the fitted linear model */
   @Since("2.0.0")
@@ -928,7 +929,7 @@ class GeneralizedLinearRegressionSummary private[regression] (
     numInstances
   }
 
-  protected lazy val devianceResiduals: DataFrame = {
+  private[regression] lazy val devianceResiduals: DataFrame = {
     val drUDF = udf { (y: Double, mu: Double, weight: Double) =>
       val r = math.sqrt(math.max(family.deviance(y, mu, weight), 0.0))
       if (y > mu) r else -1.0 * r
@@ -938,19 +939,19 @@ class GeneralizedLinearRegressionSummary private[regression] (
       drUDF(col(labelCol), col(predictionCol), w).as("devianceResiduals"))
   }
 
-  protected lazy val pearsonResiduals: DataFrame = {
+  private[regression] lazy val pearsonResiduals: DataFrame = {
     val prUDF = udf { mu: Double => family.variance(mu) }
     val w = if (weightCol.isEmpty) lit(1.0) else col(weightCol)
     predictions.select(col(labelCol).minus(col(predictionCol))
       .multiply(sqrt(w)).divide(sqrt(prUDF(col(predictionCol)))).as("pearsonResiduals"))
   }
 
-  protected lazy val workingResiduals: DataFrame = {
+  private[regression] lazy val workingResiduals: DataFrame = {
     val wrUDF = udf { (y: Double, mu: Double) => (y - mu) * link.deriv(mu) }
     predictions.select(wrUDF(col(labelCol), col(predictionCol)).as("workingResiduals"))
   }
 
-  protected lazy val responseResiduals: DataFrame = {
+  private[regression] lazy val responseResiduals: DataFrame = {
     predictions.select(col(labelCol).minus(col(predictionCol)).as("responseResiduals"))
   }
 
