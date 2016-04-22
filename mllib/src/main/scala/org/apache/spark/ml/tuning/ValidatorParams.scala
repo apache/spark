@@ -67,6 +67,17 @@ private[ml] trait ValidatorParams extends HasSeed with Params {
   /** @group getParam */
   def getEvaluator: Evaluator = $(evaluator)
 
+  /**
+   * Param for stratified sampling column name
+   * Default: empty
+   * @group param
+   */
+  val stratifiedCol: Param[String] = new Param[String](this, "stratifiedCol",
+    "stratified column name")
+
+  /** @group getParam */
+  def getStratifiedCol: String = $(stratifiedCol)
+
   protected def transformSchemaImpl(schema: StructType): StructType = {
     require($(estimatorParamMaps).nonEmpty, s"Validator requires non-empty estimatorParamMaps")
     val firstEstimatorParamMap = $(estimatorParamMaps).head

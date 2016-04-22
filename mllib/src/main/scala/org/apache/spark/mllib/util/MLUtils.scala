@@ -235,7 +235,8 @@ object MLUtils extends Logging {
    * ratios in the original data are maintained in each stratum of the train and validation
    * data.
    */
-  def kFoldStratified[K: ClassTag, V: ClassTag](rdd: RDD[(K, V)],
+  def kFoldStratified[K: ClassTag, V: ClassTag](
+      rdd: RDD[(K, V)],
       numFolds: Int,
       seed: Int): Array[(RDD[(K, V)], RDD[(K, V)])] = {
     val keys = rdd.keys.distinct().collect()

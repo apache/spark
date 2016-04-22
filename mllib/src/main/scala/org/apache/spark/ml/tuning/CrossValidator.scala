@@ -48,23 +48,10 @@ private[ml] trait CrossValidatorParams extends ValidatorParams {
   val numFolds: IntParam = new IntParam(this, "numFolds",
     "number of folds for cross validation (>= 2)", ParamValidators.gtEq(2))
 
-  /**
-   * Param for stratified sampling column name
-   * Default: "None"
-   *
-   * @group param
-   */
-  val stratifiedCol: Param[String] = new Param[String](this, "stratifiedCol",
-    "stratified column name")
-
-  /** @group getParam */
-  def getStratifiedCol: String = $(stratifiedCol)
-
   /** @group getParam */
   def getNumFolds: Int = $(numFolds)
 
   setDefault(numFolds -> 3)
-  setDefault(stratifiedCol -> "None")
 
 }
 
@@ -104,6 +91,7 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
   /** @group setParam */
   @Since("2.0.0")
   def setStratifiedCol(value: String): this.type = set(stratifiedCol, value)
+  setDefault(stratifiedCol -> "")
 
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): CrossValidatorModel = {
@@ -116,16 +104,12 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
     val numModels = epm.length
     val metrics = new Array[Double](epm.length)
 
-    val splits = if (dataset.columns.contains($(stratifiedCol))) {
-      val stratifiedColIndex = dataset.columns.indexOf($(stratifiedCol))
+    val splits = if ($(stratifiedCol).nonEmpty) {
+      val stratifiedColIndex = schema.fieldNames.indexOf($(stratifiedCol))
       val pairData = dataset.toDF.rdd.map(row => (row(stratifiedColIndex), row))
       val splitsWithKeys = MLUtils.kFoldStratified(pairData, $(numFolds), 0)
       splitsWithKeys.map { case (training, validation) => (training.values, validation.values)}
     } else {
-      if (isSet(stratifiedCol)) {
-        logWarning(s"Stratified column does not exist. Performing regular k-fold subsampling.")
-      }
-      // regular kFold
       MLUtils.kFold(dataset.toDF.rdd, $(numFolds), $(seed))
     }
 

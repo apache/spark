@@ -327,36 +327,40 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
         "Inconsistent keys between splits.")
     }
 
-    // maps of sampling threshold boundaries at 0.0 and 1.0
-    val leftBoundary = weights(0).map(x => (x._1, 0.0))
-    val rightBoundary = weights(0).map(x => (x._1, 1.0))
+    val zeroBoundary = weights.head.map { case (k, v) => (k, 0.0)}
 
     // normalize and cumulative sum
-    val cumWeightsByKey = weights.scanLeft(leftBoundary) { case (accMap, iterMap) =>
-      accMap.map { case (k, v) => (k, v + iterMap(k)) }
-    }.drop(1)
+    val sumWeightsByKey = weights.foldLeft(zeroBoundary) { case (acc, splitWeights) =>
+      acc.map { case (k, v) => (k, v + splitWeights(k)) }
+    }
 
-    val weightSumsByKey = cumWeightsByKey.last
-    val normedCumWeightsByKey = cumWeightsByKey.dropRight(1).map(_.map { case (key, threshold) =>
-      val keyWeightSum = weightSumsByKey(key)
-      val norm = if (keyWeightSum > 0.0) keyWeightSum else 1.0
-      (key, threshold / norm)
-    })
+    val normedCumWeightsByKey = weights.scanLeft(zeroBoundary) { case (acc, splitWeights) =>
+      splitWeights.map { case (key, fraction) =>
+        val keySum = sumWeightsByKey(key)
+        val norm = if (keySum > 0.0) keySum else 1.0
+        key -> (acc(key) + (fraction / norm))
+      }
+    }
 
     // compute exact thresholds for each stratum if required
-    val splitPoints = if (exact) {
-      normedCumWeightsByKey.map { w =>
-        val finalResult = StratifiedSamplingUtils.getAcceptanceResults(self, false, w, None, seed)
-        StratifiedSamplingUtils.computeThresholdByKey(finalResult, w)
+    val splitThresholds = if (exact) {
+      val left = normedCumWeightsByKey.head
+      val right = normedCumWeightsByKey.last
+      val innerSplits = normedCumWeightsByKey.drop(1).dropRight(1)
+      val finalResults =
+        StratifiedSamplingUtils.getAcceptanceResults(self, withReplacement = false, innerSplits,
+          None, seed)
+      val exactInnerSplits = finalResults.zip(innerSplits).map { case (finalResult, fractions) =>
+        StratifiedSamplingUtils.computeThresholdByKey(finalResult, fractions)
       }
+      left +: exactInnerSplits :+ right
     } else {
       normedCumWeightsByKey
     }
 
-    val splitsPointsAndBounds = leftBoundary +: splitPoints :+ rightBoundary
-    splitsPointsAndBounds.sliding(2).map { x =>
-        (randomSampleByKeyWithRange(x(0), x(1), seed),
-          randomSampleByKeyWithRange(x(0), x(1), seed, complement = true))
+    splitThresholds.sliding(2).map { case Array(lb, ub) =>
+        (randomSampleByKeyWithRange(lb, ub, seed),
+          randomSampleByKeyWithRange(lb, ub, seed, complement = true))
     }.toArray
   }
 
@@ -370,11 +374,12 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * @param complement boolean specifying whether to return subsample or its complement
    * @return A random, stratified sub-sample of the RDD without replacement.
    */
-  private[spark] def randomSampleByKeyWithRange(lb: Map[K, Double],
+  private[spark] def randomSampleByKeyWithRange(
+      lb: Map[K, Double],
       ub: Map[K, Double],
       seed: Long,
       complement: Boolean = false): RDD[(K, V)] = {
-    val samplingFunc = StratifiedSamplingUtils.getBernoulliCellSamplingFunction(self,
+    val samplingFunc = StratifiedSamplingUtils.getBernoulliCellSamplingFunction[K, V](
       lb, ub, seed, complement)
     self.mapPartitionsWithIndex(samplingFunc, preservesPartitioning = true)
   }

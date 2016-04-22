@@ -28,6 +28,9 @@ import org.apache.spark.ml.param.{ParamMap, ParamPair}
 import org.apache.spark.ml.param.shared.HasInputCol
 import org.apache.spark.ml.regression.LinearRegression
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.mllib.classification.LogisticRegressionSuite.generateLogisticInput
+import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.{LinearDataGenerator, MLlibTestSparkContext}
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.types.StructType
@@ -65,6 +68,34 @@ class CrossValidatorSuite
     assert(parent.getRegParam === 0.001)
     assert(parent.getMaxIter === 10)
     assert(cvModel.avgMetrics.length === lrParamMaps.length)
+  }
+
+  test("strat") {
+    val numFolds = 10
+    // generate imbalanced data
+    val data = Seq.tabulate(100) { i =>
+      if (i >= numFolds) {
+        LabeledPoint(0.0, Vectors.dense(1.0))
+      } else {
+        LabeledPoint(1.0, Vectors.dense(1.0))
+      }
+    }
+    val df = sqlContext.createDataFrame(data)
+    val lr = new LogisticRegression
+    val lrParamMaps = new ParamGridBuilder()
+      .addGrid(lr.maxIter, Array(0, 10))
+      .build()
+    val eval = new BinaryClassificationEvaluator
+    val cv = new CrossValidator()
+      .setEstimator(lr)
+      .setEstimatorParamMaps(lrParamMaps)
+      .setEvaluator(eval)
+      .setNumFolds(numFolds)
+      .setStratifiedCol("label")
+    val cvModel = cv.fit(df)
+    // without stratified sampling, there is a 99.964% that one of the splits has
+    // no negative examples, so some of the metrics will be < 0.5, bringing down the avg metrics.
+    assert(cvModel.avgMetrics.forall(_ === 0.5))
   }
 
   test("cross validation with linear regression") {
