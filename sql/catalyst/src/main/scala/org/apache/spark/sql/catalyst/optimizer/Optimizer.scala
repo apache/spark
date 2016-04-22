@@ -19,11 +19,12 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.annotation.tailrec
 import scala.collection.immutable.HashSet
+import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.{CatalystConf, SimpleCatalystConf}
 import org.apache.spark.sql.catalyst.analysis.{CleanupAliases, DistinctAggregationRewriter, EliminateSubqueryAliases, EmptyFunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
-import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.{InSubQuery, _}
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.planning.{ExtractFiltersAndInnerJoins, Unions}
@@ -47,6 +48,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
     // However, because we also use the analyzer to canonicalized queries (for view definition),
     // we do not eliminate subqueries or compute current time in the analyzer.
     Batch("Finish Analysis", Once,
+      RewritePredicateSubquery,
       EliminateSubqueryAliases,
       ComputeCurrentTime,
       GetCurrentDatabase(sessionCatalog),
@@ -85,7 +87,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       CombineUnions,
       // Constant folding and strength reduction
       NullPropagation,
-      OptimizeIn,
+      OptimizeIn(conf),
       ConstantFolding,
       LikeSimplification,
       BooleanSimplification,
@@ -680,10 +682,11 @@ object ConstantFolding extends Rule[LogicalPlan] {
  * Replaces [[In (value, seq[Literal])]] with optimized version[[InSet (value, HashSet[Literal])]]
  * which is much faster
  */
-object OptimizeIn extends Rule[LogicalPlan] {
+case class OptimizeIn(conf: CatalystConf) extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsDown {
-      case In(v, list) if !list.exists(!_.isInstanceOf[Literal]) && list.size > 10 =>
+      case In(v, list) if !list.exists(!_.isInstanceOf[Literal]) &&
+          list.size > conf.optimizerInSetConversionThreshold =>
         val hSet = list.map(e => e.eval(EmptyRow))
         InSet(v, HashSet() ++ hSet)
     }
@@ -1018,8 +1021,6 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
     case filter @ Filter(_, f: Filter) => filter
     // should not push predicates through sample, or will generate different results.
     case filter @ Filter(_, s: Sample) => filter
-    // TODO: push predicates through expand
-    case filter @ Filter(_, e: Expand) => filter
 
     case filter @ Filter(condition, u: UnaryNode) if u.expressions.forall(_.deterministic) =>
       pushDownPredicate(filter, u.child) { predicate =>
@@ -1443,6 +1444,151 @@ object EmbedSerializerInFilter extends Rule[LogicalPlan] {
           case a: Attribute if a == d.output.head => d.deserializer
         }
         Filter(newCondition, d.child)
+      }
+  }
+}
+
+/**
+ * This rule rewrites predicate sub-queries into left semi/anti joins. The following predicates
+ * are supported:
+ * a. EXISTS/NOT EXISTS will be rewritten as semi/anti join, unresolved conditions in Filter
+ *    will be pulled out as the join conditions.
+ * b. IN/NOT IN will be rewritten as semi/anti join, unresolved conditions in the Filter will
+ *    be pulled out as join conditions, value = selected column will also be used as join
+ *    condition.
+ */
+object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
+  /**
+   * Pull out all correlated predicates from a given sub-query. This method removes the correlated
+   * predicates from sub-query [[Filter]]s and adds the references of these predicates to
+   * all intermediate [[Project]] clauses (if they are missing) in order to be able to evaluate the
+   * predicates in the join condition.
+   *
+   * This method returns the rewritten sub-query and the combined (AND) extracted predicate.
+   */
+  private def pullOutCorrelatedPredicates(
+      subquery: LogicalPlan,
+      query: LogicalPlan): (LogicalPlan, Seq[Expression]) = {
+    val references = query.outputSet
+    val predicateMap = mutable.Map.empty[LogicalPlan, Seq[Expression]]
+    val transformed = subquery transformUp {
+      case f @ Filter(cond, child) =>
+        // Find all correlated predicates.
+        val (correlated, local) = splitConjunctivePredicates(cond).partition { e =>
+          (e.references -- child.outputSet).intersect(references).nonEmpty
+        }
+        // Rewrite the filter without the correlated predicates if any.
+        correlated match {
+          case Nil => f
+          case xs if local.nonEmpty =>
+            val newFilter = Filter(local.reduce(And), child)
+            predicateMap += newFilter -> correlated
+            newFilter
+          case xs =>
+            predicateMap += child -> correlated
+            child
+        }
+      case p @ Project(expressions, child) =>
+        // Find all pulled out predicates defined in the Project's subtree.
+        val localPredicates = p.collect(predicateMap).flatten
+
+        // Determine which correlated predicate references are missing from this project.
+        val localPredicateReferences = localPredicates
+          .map(_.references)
+          .reduceOption(_ ++ _)
+          .getOrElse(AttributeSet.empty)
+        val missingReferences = localPredicateReferences -- p.references -- query.outputSet
+
+        // Create a new project if we need to add missing references.
+        if (missingReferences.nonEmpty) {
+          Project(expressions ++ missingReferences, child)
+        } else {
+          p
+        }
+    }
+    (transformed, predicateMap.values.flatten.toSeq)
+  }
+
+  /**
+   * Prepare an [[InSubQuery]] by rewriting it (in case of correlated predicates) and by
+   * constructing the required join condition. Both the rewritten subquery and the constructed
+   * join condition are returned.
+   */
+  private def pullOutCorrelatedPredicates(
+      in: InSubQuery,
+      query: LogicalPlan): (LogicalPlan, LogicalPlan, Seq[Expression]) = {
+    val (resolved, joinCondition) = pullOutCorrelatedPredicates(in.query, query)
+    // Check whether there is some attributes have same exprId but come from different side
+    val outerAttributes = AttributeSet(in.expressions.flatMap(_.references))
+    if (outerAttributes.intersect(resolved.outputSet).nonEmpty) {
+      val aliases = mutable.Map[Attribute, Alias]()
+      val exprs = in.expressions.map { expr =>
+        expr transformUp {
+          case a: AttributeReference if resolved.outputSet.contains(a) =>
+            val alias = Alias(a, a.toString)()
+            val attr = alias.toAttribute
+            aliases += attr -> alias
+            attr
+        }
+      }
+      val newP = Project(query.output ++ aliases.values, query)
+      val projection = resolved.output.map {
+        case a if outerAttributes.contains(a) => Alias(a, a.toString)()
+        case a => a
+      }
+      val subquery = Project(projection, resolved)
+      val conditions = joinCondition ++ exprs.zip(subquery.output).map(EqualTo.tupled)
+      (newP, subquery, conditions)
+    } else {
+      val conditions =
+        joinCondition ++ in.expressions.zip(resolved.output).map(EqualTo.tupled)
+      (query, resolved, conditions)
+    }
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case f @ Filter(condition, child) =>
+      val (withSubquery, withoutSubquery) =
+        splitConjunctivePredicates(condition).partition(PredicateSubquery.hasPredicateSubquery)
+
+      // Construct the pruned filter condition.
+      val newFilter: LogicalPlan = withoutSubquery match {
+        case Nil => child
+        case conditions => Filter(conditions.reduce(And), child)
+      }
+
+      // Filter the plan by applying left semi and left anti joins.
+      withSubquery.foldLeft(newFilter) {
+        case (p, Exists(sub, _)) =>
+          val (resolved, conditions) = pullOutCorrelatedPredicates(sub, p)
+          Join(p, resolved, LeftSemi, conditions.reduceOption(And))
+        case (p, Not(Exists(sub, _))) =>
+          val (resolved, conditions) = pullOutCorrelatedPredicates(sub, p)
+          Join(p, resolved, LeftAnti, conditions.reduceOption(And))
+        case (p, in: InSubQuery) =>
+          val (newP, resolved, conditions) = pullOutCorrelatedPredicates(in, p)
+          if (newP fastEquals p) {
+            Join(p, resolved, LeftSemi, conditions.reduceOption(And))
+          } else {
+            Project(p.output,
+              Join(newP, resolved, LeftSemi, conditions.reduceOption(And)))
+          }
+        case (p, Not(in: InSubQuery)) =>
+          val (newP, resolved, conditions) = pullOutCorrelatedPredicates(in, p)
+          // This is a NULL-aware (left) anti join (NAAJ).
+          // Construct the condition. A NULL in one of the conditions is regarded as a positive
+          // result; such a row will be filtered out by the Anti-Join operator.
+          val anyNull = conditions.map(IsNull).reduceLeft(Or)
+          val condition = conditions.reduceLeft(And)
+
+          // Note that will almost certainly be planned as a Broadcast Nested Loop join. Use EXISTS
+          // if performance matters to you.
+          if (newP fastEquals p) {
+            Join(p, resolved, LeftAnti, Option(Or(anyNull, condition)))
+          } else {
+            Project(p.output,
+              Join(newP, resolved, LeftAnti, Option(Or(anyNull, condition))))
+          }
       }
   }
 }

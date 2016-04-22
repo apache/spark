@@ -186,7 +186,8 @@ case class DataSource(
                 userSpecifiedSchema = Some(dataSchema),
                 className = className,
                 options =
-                  new CaseInsensitiveMap(options.filterKeys(_ != "path"))).resolveRelation()))
+                  new CaseInsensitiveMap(
+                    options.filterKeys(_ != "path") + ("basePath" -> path))).resolveRelation()))
         }
 
         new FileStreamSource(

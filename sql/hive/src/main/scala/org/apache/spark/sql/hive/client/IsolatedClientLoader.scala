@@ -32,7 +32,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkSubmitUtils
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.quietly
-import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.util.{MutableURLClassLoader, Utils}
 
 /** Factory for `IsolatedClientLoader` with specific versions of hive. */
@@ -103,7 +103,7 @@ private[hive] object IsolatedClientLoader extends Logging {
       hadoopVersion: String,
       ivyPath: Option[String]): Seq[URL] = {
     val hiveArtifacts = version.extraDeps ++
-      Seq("hive-metastore", "hive-exec", "hive-common", "hive-serde", "hive-cli")
+      Seq("hive-metastore", "hive-exec", "hive-common", "hive-serde")
         .map(a => s"org.apache.hive:$a:${version.fullVersion}") ++
       Seq("com.google.guava:guava:14.0.1",
         s"org.apache.hadoop:hadoop-client:$hadoopVersion")
@@ -263,7 +263,7 @@ private[hive] class IsolatedClientLoader(
           throw new ClassNotFoundException(
             s"$cnf when creating Hive client using classpath: ${execJars.mkString(", ")}\n" +
             "Please make sure that jars for your version of hive and hadoop are included in the " +
-            s"paths passed to ${HiveContext.HIVE_METASTORE_JARS}.")
+            s"paths passed to ${HiveUtils.HIVE_METASTORE_JARS}.", e)
         } else {
           throw e
         }

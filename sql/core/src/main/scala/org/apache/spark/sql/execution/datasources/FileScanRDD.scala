@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.{Partition, TaskContext}
+import scala.collection.mutable
+
+import org.apache.spark.{Partition => RDDPartition, TaskContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.{InputFileNameHolder, RDD}
 import org.apache.spark.sql.SQLContext
@@ -33,7 +35,8 @@ case class PartitionedFile(
     partitionValues: InternalRow,
     filePath: String,
     start: Long,
-    length: Long) {
+    length: Long,
+    locations: Array[String] = Array.empty) {
   override def toString: String = {
     s"path: $filePath, range: $start-${start + length}, partition values: $partitionValues"
   }
@@ -45,7 +48,7 @@ case class PartitionedFile(
  *
  * TODO: This currently does not take locality information about the files into account.
  */
-case class FilePartition(index: Int, files: Seq[PartitionedFile]) extends Partition
+case class FilePartition(index: Int, files: Seq[PartitionedFile]) extends RDDPartition
 
 class FileScanRDD(
     @transient val sqlContext: SQLContext,
@@ -53,7 +56,7 @@ class FileScanRDD(
     @transient val filePartitions: Seq[FilePartition])
   extends RDD[InternalRow](sqlContext.sparkContext, Nil) {
 
-  override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
+  override def compute(split: RDDPartition, context: TaskContext): Iterator[InternalRow] = {
     val iterator = new Iterator[Object] with AutoCloseable {
       private val inputMetrics = context.taskMetrics().inputMetrics
       private val existingBytesRead = inputMetrics.bytesRead
@@ -130,5 +133,24 @@ class FileScanRDD(
     iterator.asInstanceOf[Iterator[InternalRow]] // This is an erasure hack.
   }
 
-  override protected def getPartitions: Array[Partition] = filePartitions.toArray
+  override protected def getPartitions: Array[RDDPartition] = filePartitions.toArray
+
+  override protected def getPreferredLocations(split: RDDPartition): Seq[String] = {
+    val files = split.asInstanceOf[FilePartition].files
+
+    // Computes total number of bytes can be retrieved from each host.
+    val hostToNumBytes = mutable.HashMap.empty[String, Long]
+    files.foreach { file =>
+      file.locations.filter(_ != "localhost").foreach { host =>
+        hostToNumBytes(host) = hostToNumBytes.getOrElse(host, 0L) + file.length
+      }
+    }
+
+    // Takes the first 3 hosts with the most data to be retrieved
+    hostToNumBytes.toSeq.sortBy {
+      case (host, numBytes) => numBytes
+    }.reverse.take(3).map {
+      case (host, numBytes) => host
+    }
+  }
 }

@@ -34,7 +34,7 @@ private[hive] class HiveSharedState(override val sparkContext: SparkContext)
    * A Hive client used for execution.
    */
   val executionHive: HiveClientImpl = {
-    HiveContext.newClientForExecution(sparkContext.conf, sparkContext.hadoopConfiguration)
+    HiveUtils.newClientForExecution(sparkContext.conf, sparkContext.hadoopConfiguration)
   }
 
   /**
@@ -42,7 +42,7 @@ private[hive] class HiveSharedState(override val sparkContext: SparkContext)
    */
   // This needs to be a lazy val at here because TestHiveSharedState is overriding it.
   lazy val metadataHive: HiveClient = {
-    HiveContext.newClientForMetadata(sparkContext.conf, sparkContext.hadoopConfiguration)
+    HiveUtils.newClientForMetadata(sparkContext.conf, sparkContext.hadoopConfiguration)
   }
 
   /**
