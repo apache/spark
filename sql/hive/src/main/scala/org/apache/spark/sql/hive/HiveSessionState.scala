@@ -24,12 +24,10 @@ import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.Analyzer
-import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlanner
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.client.{HiveClient, HiveClientImpl}
-import org.apache.spark.sql.hive.execution.{AnalyzeTable, HiveSqlParser}
 import org.apache.spark.sql.internal.{SessionState, SQLConf}
 
 
@@ -106,11 +104,6 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
   }
 
   /**
-   * Parser for HiveQl query texts.
-   */
-  override lazy val sqlParser: ParserInterface = new HiveSqlParser(conf)
-
-  /**
    * Planner that takes into account Hive-specific strategies.
    */
   override def planner: SparkPlanner = {
@@ -172,17 +165,6 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
     executionHive.addJar(path)
     metadataHive.addJar(path)
     Thread.currentThread().setContextClassLoader(executionHive.clientLoader.classLoader)
-  }
-
-  /**
-   * Analyzes the given table in the current database to generate statistics, which will be
-   * used in query optimizations.
-   *
-   * Right now, it only supports Hive tables and it only updates the size of a Hive table
-   * in the Hive metastore.
-   */
-  override def analyze(tableName: String): Unit = {
-    AnalyzeTable(tableName).run(ctx)
   }
 
   /**

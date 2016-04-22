@@ -392,7 +392,7 @@ private[hive] class HiveMetastoreCatalog(hive: SQLContext) extends Logging {
     cachedDataSourceTables.getIfPresent(tableIdentifier) match {
       case null => None // Cache miss
       case logical @ LogicalRelation(relation: HadoopFsRelation, _, _) =>
-        val pathsInMetastore = metastoreRelation.table.storage.locationUri.toSeq
+        val pathsInMetastore = metastoreRelation.catalogTable.storage.locationUri.toSeq
         val cachedRelationFileFormatClass = relation.fileFormat.getClass
 
         expectedFileFormat match {
@@ -467,7 +467,7 @@ private[hive] class HiveMetastoreCatalog(hive: SQLContext) extends Logging {
         Some(partitionSpec))
 
       val hadoopFsRelation = cached.getOrElse {
-        val paths = new Path(metastoreRelation.table.storage.locationUri.get) :: Nil
+        val paths = new Path(metastoreRelation.catalogTable.storage.locationUri.get) :: Nil
         val fileCatalog = new MetaStoreFileCatalog(hive, paths, partitionSpec)
 
         val inferredSchema = if (fileType.equals("parquet")) {
