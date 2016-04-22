@@ -257,7 +257,7 @@ object KMeansModel extends MLReadable[KMeansModel] {
 @Experimental
 class KMeans @Since("1.5.0") (
     @Since("1.5.0") override val uid: String)
-  extends Estimator[KMeansModel] with KMeansParams with MLWritable {
+  extends Estimator[KMeansModel] with KMeansParams with DefaultParamsWritable {
 
   setDefault(
     k -> 2,
@@ -364,7 +364,7 @@ class KMeans @Since("1.5.0") (
 }
 
 @Since("1.6.0")
-object KMeans extends MLReadable[KMeans] {
+object KMeans extends DefaultParamsReadable[KMeans] {
 
   @Since("1.6.0")
   override def load(path: String): KMeans = super.load(path)
