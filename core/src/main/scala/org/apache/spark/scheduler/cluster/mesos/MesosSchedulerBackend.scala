@@ -102,8 +102,14 @@ private[spark] class MesosSchedulerBackend(
       environment.addVariables(
         Environment.Variable.newBuilder().setName("SPARK_CLASSPATH").setValue(cp).build())
     }
-    val extraJavaOpts = sc.conf.getOption("spark.executor.extraJavaOptions").getOrElse("")
-    val executorOpts = extraJavaOpts + Utils.getGCLimitOpts(sc.conf).mkString(" ")
+    var extraJavaOpts = sc.conf.getOption("spark.executor.extraJavaOptions").getOrElse("")
+    // Add GC Limit options if they are not present
+    if (!extraJavaOpts.contains("-XX:GCTimeLimit")) {
+      extraJavaOpts += " " + Utils.getGCTimeLimitOption
+    }
+    if (!extraJavaOpts.contains("-XX:GCHeapFreeLimit")) {
+      extraJavaOpts += " " + Utils.getGCHeapFreeLimitOption
+    }
 
     val prefixEnv = sc.conf.getOption("spark.executor.extraLibraryPath").map { p =>
       Utils.libraryPathEnvPrefix(Seq(p))
@@ -112,7 +118,7 @@ private[spark] class MesosSchedulerBackend(
     environment.addVariables(
       Environment.Variable.newBuilder()
         .setName("SPARK_EXECUTOR_OPTS")
-        .setValue(executorOpts)
+        .setValue(extraJavaOpts)
         .build())
     sc.executorEnvs.foreach { case (key, value) =>
       environment.addVariables(Environment.Variable.newBuilder()

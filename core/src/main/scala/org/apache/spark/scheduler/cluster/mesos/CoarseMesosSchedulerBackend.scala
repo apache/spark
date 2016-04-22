@@ -166,8 +166,14 @@ private[spark] class CoarseMesosSchedulerBackend(
       environment.addVariables(
         Environment.Variable.newBuilder().setName("SPARK_CLASSPATH").setValue(cp).build())
     }
-    val extraJavaOpts = conf.get("spark.executor.extraJavaOptions", "")
-    val executorOpts = extraJavaOpts + Utils.getGCLimitOpts(conf).mkString(" ")
+    var extraJavaOpts = conf.get("spark.executor.extraJavaOptions", "")
+    // Add GC Limit options if they are not present
+    if (!extraJavaOpts.contains("-XX:GCTimeLimit")) {
+      extraJavaOpts += " " + Utils.getGCTimeLimitOption
+    }
+    if (!extraJavaOpts.contains("-XX:GCHeapFreeLimit")) {
+      extraJavaOpts += " " + Utils.getGCHeapFreeLimitOption
+    }
 
     // Set the environment variable through a command prefix
     // to append to the existing value of the variable
@@ -178,7 +184,7 @@ private[spark] class CoarseMesosSchedulerBackend(
     environment.addVariables(
       Environment.Variable.newBuilder()
         .setName("SPARK_EXECUTOR_OPTS")
-        .setValue(executorOpts)
+        .setValue(extraJavaOpts)
         .build())
 
     sc.executorEnvs.foreach { case (key, value) =>

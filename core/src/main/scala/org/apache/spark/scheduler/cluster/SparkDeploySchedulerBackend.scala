@@ -66,13 +66,20 @@ private[spark] class SparkDeploySchedulerBackend(
       "--cores", "{{CORES}}",
       "--app-id", "{{APP_ID}}",
       "--worker-url", "{{WORKER_URL}}")
-    val extraJavaOpts = sc.conf.getOption("spark.executor.extraJavaOptions")
+    var extraJavaOpts = sc.conf.getOption("spark.executor.extraJavaOptions")
       .map(Utils.splitCommandString).getOrElse(Seq.empty)
     val classPathEntries = sc.conf.getOption("spark.executor.extraClassPath")
       .map(_.split(java.io.File.pathSeparator).toSeq).getOrElse(Nil)
     val libraryPathEntries = sc.conf.getOption("spark.executor.extraLibraryPath")
       .map(_.split(java.io.File.pathSeparator).toSeq).getOrElse(Nil)
-    val gcLimitOpts = Utils.getGCLimitOpts(sc.conf)
+    // Add GC Limit options if they are not present
+    val extraJavaOptsAsStr = extraJavaOpts.mkString(" ")
+    if (!extraJavaOptsAsStr.contains("-XX:GCTimeLimit")) {
+      extraJavaOpts :+= Utils.getGCTimeLimitOption
+    }
+    if (!extraJavaOptsAsStr.contains("-XX:GCHeapFreeLimit")) {
+      extraJavaOpts :+= Utils.getGCHeapFreeLimitOption
+    }
 
     // When testing, expose the parent class path to the child. This is processed by
     // compute-classpath.{cmd,sh} and makes all needed jars available to child processes
@@ -86,7 +93,7 @@ private[spark] class SparkDeploySchedulerBackend(
 
     // Start executors with a few necessary configs for registering with the scheduler
     val sparkJavaOpts = Utils.sparkJavaOpts(conf, SparkConf.isExecutorStartupConf)
-    val javaOpts = sparkJavaOpts ++ extraJavaOpts ++ gcLimitOpts
+    val javaOpts = sparkJavaOpts ++ extraJavaOpts
     val command = Command("org.apache.spark.executor.CoarseGrainedExecutorBackend",
       args, sc.executorEnvs, classPathEntries ++ testingClassPath, libraryPathEntries, javaOpts)
     val appUIAddress = sc.ui.map(_.appUIAddress).getOrElse("")

@@ -156,7 +156,15 @@ private[yarn] class ExecutorRunnable(
     sparkConf.get(EXECUTOR_LIBRARY_PATH).foreach { p =>
       prefixEnv = Some(Client.getClusterPath(sparkConf, Utils.libraryPathEnvPrefix(Seq(p))))
     }
-    javaOpts ++= Utils.getGCLimitOpts(sparkConf)
+
+    // Add GC Limit options if they are not present
+    val javaOptsAsStr = javaOpts.mkString(" ")
+    if (!javaOptsAsStr.contains("-XX:GCTimeLimit")) {
+      javaOpts += Utils.getGCTimeLimitOption
+    }
+    if (!javaOptsAsStr.contains("-XX:GCHeapFreeLimit")) {
+      javaOpts += Utils.getGCHeapFreeLimitOption
+    }
 
     javaOpts += "-Djava.io.tmpdir=" +
       new Path(
