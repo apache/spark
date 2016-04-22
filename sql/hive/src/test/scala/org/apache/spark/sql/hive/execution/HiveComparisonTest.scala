@@ -25,12 +25,12 @@ import scala.util.control.NonFatal
 import org.scalatest.{BeforeAndAfterAll, GivenWhenThen}
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.SQLBuilder
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.command.{DescribeTableCommand, ExplainCommand, HiveNativeCommand, SetCommand}
 import org.apache.spark.sql.hive.{InsertIntoHiveTable => LogicalInsertIntoHiveTable}
-import org.apache.spark.sql.hive.SQLBuilder
 import org.apache.spark.sql.hive.test.{TestHive, TestHiveQueryExecution}
 
 /**
@@ -407,7 +407,7 @@ abstract class HiveComparisonTest
                 originalQuery
               } else {
                 val convertedSQL = try {
-                  new SQLBuilder(originalQuery.analyzed, TestHive).toSQL
+                  new SQLBuilder(originalQuery.analyzed).toSQL
                 } catch {
                   case NonFatal(e) => fail(
                     s"""Cannot convert the following HiveQL query plan back to SQL query string:

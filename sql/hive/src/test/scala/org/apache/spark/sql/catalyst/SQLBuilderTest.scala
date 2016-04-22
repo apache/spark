@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive
+package org.apache.spark.sql.catalyst
 
 import scala.util.control.NonFatal
 
@@ -23,6 +23,7 @@ import org.apache.spark.sql.{DataFrame, Dataset, QueryTest}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+
 
 abstract class SQLBuilderTest extends QueryTest with TestHiveSingleton {
   protected def checkSQL(e: Expression, expectedSQL: String): Unit = {
@@ -42,7 +43,7 @@ abstract class SQLBuilderTest extends QueryTest with TestHiveSingleton {
   }
 
   protected def checkSQL(plan: LogicalPlan, expectedSQL: String): Unit = {
-    val generatedSQL = try new SQLBuilder(plan, hiveContext).toSQL catch { case NonFatal(e) =>
+    val generatedSQL = try new SQLBuilder(plan).toSQL catch { case NonFatal(e) =>
       fail(
         s"""Cannot convert the following logical query plan to SQL:
            |
