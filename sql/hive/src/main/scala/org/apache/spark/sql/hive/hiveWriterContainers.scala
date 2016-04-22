@@ -218,6 +218,7 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
     jobConf: JobConf,
     fileSinkConf: FileSinkDesc,
     dynamicPartColNames: Array[String],
+    isSorted: Boolean,
     inputSchema: Seq[Attribute],
     table: MetastoreRelation)
   extends SparkHiveWriterContainer(jobConf, fileSinkConf, inputSchema, table) {
@@ -277,6 +278,20 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
 
     // If anything below fails, we should abort the task.
     try {
+      if (isSorted) {
+        sortedWrite(iterator)
+      } else {
+        sortAndWrite(iterator)
+      }
+      commit()
+    } catch {
+      case cause: Throwable =>
+        logError("Aborting task.", cause)
+        abortTask()
+        throw new SparkException("Task failed while writing rows.", cause)
+    }
+
+    def sortAndWrite(iterator: Iterator[InternalRow]): Unit = {
       val sorter: UnsafeKVExternalSorter = new UnsafeKVExternalSorter(
         StructType.fromAttributes(partitionOutput),
         StructType.fromAttributes(dataOutput),
@@ -291,6 +306,7 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
       }
 
       logInfo(s"Sorting complete. Writing out partition files one at a time.")
+
       val sortedIterator = sorter.sortedIterator()
       var currentKey: InternalRow = null
       var currentWriter: FileSinkOperator.RecordWriter = null
@@ -305,29 +321,53 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
             currentWriter = newOutputWriter(currentKey)
           }
 
-          var i = 0
-          while (i < fieldOIs.length) {
-            outputData(i) = if (sortedIterator.getValue.isNullAt(i)) {
-              null
-            } else {
-              wrappers(i)(sortedIterator.getValue.get(i, dataTypes(i)))
-            }
-            i += 1
-          }
-          currentWriter.write(serializer.serialize(outputData, standardOI))
+          currentWriter.write(serialize(sortedIterator.getValue))
         }
       } finally {
         if (currentWriter != null) {
           currentWriter.close(false)
         }
       }
-      commit()
-    } catch {
-      case cause: Throwable =>
-        logError("Aborting task.", cause)
-        abortTask()
-        throw new SparkException("Task failed while writing rows.", cause)
     }
+
+    def sortedWrite(iterator: Iterator[InternalRow]): Unit = {
+      var currentKey: InternalRow = null
+      var currentWriter: FileSinkOperator.RecordWriter = null
+      try {
+        while (iterator.hasNext) {
+          val inputRow = iterator.next()
+          val rowKey = getPartitionKey(inputRow)
+          if (currentKey != rowKey) {
+            if (currentWriter != null) {
+              currentWriter.close(false)
+            }
+            currentKey = rowKey
+            logDebug(s"Writing partition: $currentKey")
+            currentWriter = newOutputWriter(currentKey)
+          }
+
+          currentWriter.write(serialize(getOutputRow(inputRow)))
+        }
+      } finally {
+        if (currentWriter != null) {
+          currentWriter.close(false)
+        }
+      }
+    }
+
+    def serialize(data: InternalRow) = {
+      var i = 0
+      while (i < fieldOIs.length) {
+        outputData(i) = if (data.isNullAt(i)) {
+          null
+        } else {
+          wrappers(i)(data.get(i, dataTypes(i)))
+        }
+        i += 1
+      }
+      serializer.serialize(outputData, standardOI)
+    }
+
     /** Open and returns a new OutputWriter given a partition key. */
     def newOutputWriter(key: InternalRow): FileSinkOperator.RecordWriter = {
       val partitionPath = getPartitionString(key).getString(0)

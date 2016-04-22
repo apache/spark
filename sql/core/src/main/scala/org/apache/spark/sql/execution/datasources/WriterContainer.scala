@@ -29,7 +29,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
+import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, HashPartitioning}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.UnsafeKVExternalSorter
 import org.apache.spark.sql.internal.SQLConf
@@ -300,6 +300,7 @@ private[sql] class DynamicPartitionWriterContainer(
     dataColumns: Seq[Attribute],
     inputSchema: Seq[Attribute],
     defaultPartitionName: String,
+    incomingOrder: Seq[SortOrder],
     maxOpenFiles: Int,
     isAppend: Boolean)
   extends BaseWriterContainer(relation, job, isAppend) {
@@ -371,13 +372,9 @@ private[sql] class DynamicPartitionWriterContainer(
       // We should first sort by partition columns, then bucket id, and finally sorting columns.
       val sortingExpressions: Seq[Expression] =
         partitionColumns ++ bucketIdExpression ++ sortColumns
-      val getSortingKey = UnsafeProjection.create(sortingExpressions, inputSchema)
 
-      val sortingKeySchema = StructType(sortingExpressions.map {
-        case a: Attribute => StructField(a.name, a.dataType, a.nullable)
-        // The sorting expressions are all `Attribute` except bucket id.
-        case _ => StructField("bucketId", IntegerType, nullable = false)
-      })
+      // If the data is already sorted correctly, avoid sorting it again
+      val isSorted = SortOrder.satisfies(incomingOrder, ClusteredDistribution(sortingExpressions))
 
       // Returns the data columns to be written given an input row
       val getOutputRow = UnsafeProjection.create(dataColumns, inputSchema)
@@ -386,53 +383,15 @@ private[sql] class DynamicPartitionWriterContainer(
       val getPartitionString =
         UnsafeProjection.create(Concat(partitionStringExpression) :: Nil, partitionColumns)
 
-      // Sorts the data before write, so that we only need one writer at the same time.
-      // TODO: inject a local sort operator in planning.
-      val sorter = new UnsafeKVExternalSorter(
-        sortingKeySchema,
-        StructType.fromAttributes(dataColumns),
-        SparkEnv.get.blockManager,
-        SparkEnv.get.serializerManager,
-        TaskContext.get().taskMemoryManager().pageSizeBytes)
-
-      while (iterator.hasNext) {
-        val currentRow = iterator.next()
-        sorter.insertKV(getSortingKey(currentRow), getOutputRow(currentRow))
-      }
-      logInfo(s"Sorting complete. Writing out partition files one at a time.")
-
-      val getBucketingKey: InternalRow => InternalRow = if (sortColumns.isEmpty) {
-        identity
-      } else {
-        UnsafeProjection.create(sortingExpressions.dropRight(sortColumns.length).zipWithIndex.map {
-          case (expr, ordinal) => BoundReference(ordinal, expr.dataType, expr.nullable)
-        })
-      }
-
-      val sortedIterator = sorter.sortedIterator()
-
       // If anything below fails, we should abort the task.
       var currentWriter: OutputWriter = null
       try {
         Utils.tryWithSafeFinallyAndFailureCallbacks {
-          var currentKey: UnsafeRow = null
-          while (sortedIterator.next()) {
-            val nextKey = getBucketingKey(sortedIterator.getKey).asInstanceOf[UnsafeRow]
-            if (currentKey != nextKey) {
-              if (currentWriter != null) {
-                currentWriter.close()
-                currentWriter = null
-              }
-              currentKey = nextKey.copy()
-              logDebug(s"Writing partition: $currentKey")
-
-              currentWriter = newOutputWriter(currentKey, getPartitionString)
-            }
-            currentWriter.writeInternal(sortedIterator.getValue)
-          }
-          if (currentWriter != null) {
-            currentWriter.close()
-            currentWriter = null
+          if (isSorted) {
+            sortedWrite(iterator)
+          } else {
+            // TODO: inject a local sort operator in planning.
+            sortAndWrite(iterator)
           }
 
           commitTask()
@@ -445,6 +404,86 @@ private[sql] class DynamicPartitionWriterContainer(
       } catch {
         case t: Throwable =>
           throw new SparkException("Task failed while writing rows", t)
+      }
+
+      def sortAndWrite(iterator: Iterator[InternalRow]): Unit = {
+        val getSortingKey = UnsafeProjection.create(sortingExpressions, inputSchema)
+
+        // Sorts the data before write, so that we only need one writer at the same time.
+        val getBucketingKey: InternalRow => InternalRow = if (sortColumns.isEmpty) {
+          identity
+        } else {
+          UnsafeProjection.create(
+            sortingExpressions.dropRight(sortColumns.length).zipWithIndex.map {
+              case (expr, ordinal) => BoundReference(ordinal, expr.dataType, expr.nullable)
+            })
+        }
+
+        val sortingKeySchema = StructType(sortingExpressions.map {
+          case a: Attribute => StructField(a.name, a.dataType, a.nullable)
+          // The sorting expressions are all `Attribute` except bucket id.
+          case _ => StructField("bucketId", IntegerType, nullable = false)
+        })
+
+        val sorter = new UnsafeKVExternalSorter(
+          sortingKeySchema,
+          StructType.fromAttributes(dataColumns),
+          SparkEnv.get.blockManager,
+          SparkEnv.get.serializerManager,
+          TaskContext.get().taskMemoryManager().pageSizeBytes)
+
+        while (iterator.hasNext) {
+          val currentRow = iterator.next()
+          sorter.insertKV(getSortingKey(currentRow), getOutputRow(currentRow))
+        }
+        logInfo(s"Sorting complete. Writing out partition files one at a time.")
+
+        val sortedIterator = sorter.sortedIterator()
+
+        var currentKey: UnsafeRow = null
+        while (sortedIterator.next()) {
+          val nextKey = getBucketingKey(sortedIterator.getKey).asInstanceOf[UnsafeRow]
+          if (currentKey != nextKey) {
+            if (currentWriter != null) {
+              currentWriter.close()
+              currentWriter = null
+            }
+            currentKey = nextKey.copy()
+            logDebug(s"Writing partition: $currentKey")
+
+            currentWriter = newOutputWriter(currentKey, getPartitionString)
+          }
+          currentWriter.writeInternal(sortedIterator.getValue)
+        }
+        if (currentWriter != null) {
+          currentWriter.close()
+          currentWriter = null
+        }
+      }
+
+      def sortedWrite(iterator: Iterator[InternalRow]): Unit = {
+        val getBucketingKey: InternalRow => InternalRow =
+          UnsafeProjection.create(sortingExpressions.dropRight(sortColumns.length), inputSchema)
+        var currentKey: UnsafeRow = null
+        while (iterator.hasNext) {
+          val currentRow = iterator.next()
+          val nextKey = getBucketingKey(currentRow).asInstanceOf[UnsafeRow]
+          if (currentKey != nextKey) {
+            if (currentWriter != null) {
+              currentWriter.close()
+              currentWriter = null
+            }
+            currentKey = nextKey.copy()
+            logDebug(s"Writing partition: $currentKey")
+
+            currentWriter = newOutputWriter(currentKey, getPartitionString)
+          }
+          currentWriter.writeInternal(getOutputRow(currentRow))
+        }
+        if (currentWriter != null) {
+          currentWriter.close()
+          currentWriter = null
+        }
       }
     }
   }
