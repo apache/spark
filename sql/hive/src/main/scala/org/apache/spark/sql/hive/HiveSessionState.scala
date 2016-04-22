@@ -24,7 +24,6 @@ import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.Analyzer
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlanner
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.client.{HiveClient, HiveClientImpl}
@@ -134,10 +133,6 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
   // ------------------------------------------------------
   //  Helper methods, partially leftover from pre-2.0 days
   // ------------------------------------------------------
-
-  override def executePlan(plan: LogicalPlan): HiveQueryExecution = {
-    new HiveQueryExecution(ctx, plan)
-  }
 
   /**
    * Overrides default Hive configurations to avoid breaking changes to Spark SQL users.

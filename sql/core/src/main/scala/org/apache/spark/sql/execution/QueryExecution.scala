@@ -17,15 +17,20 @@
 
 package org.apache.spark.sql.execution
 
+import java.nio.charset.StandardCharsets
+import java.sql.Timestamp
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.command.{DescribeTableCommand, ExecutedCommand, HiveNativeCommand}
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReuseExchange}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{BinaryType, DateType, DecimalType, TimestampType, _}
 
 /**
  * The primary workflow for executing relational queries using Spark.  Designed to allow easy
@@ -120,7 +125,68 @@ class QueryExecution(val sqlContext: SQLContext, val logical: LogicalPlan) {
       // We need the types so we can output struct field names
       val types = analyzed.output.map(_.dataType)
       // Reformat to match hive tab delimited output.
-      result.map(_.zip(types).map(HiveContext.toHiveString)).map(_.mkString("\t")).toSeq
+      result.map(_.zip(types).map(toHiveString)).map(_.mkString("\t")).toSeq
+  }
+
+  /** Formats a datum (based on the given data type) and returns the string representation. */
+  private def toHiveString(a: (Any, DataType)): String = {
+    val primitiveTypes = Seq(StringType, IntegerType, LongType, DoubleType, FloatType,
+      BooleanType, ByteType, ShortType, DateType, TimestampType, BinaryType)
+
+    /** Implementation following Hive's TimestampWritable.toString */
+    def formatTimestamp(timestamp: Timestamp): String = {
+      val timestampString = timestamp.toString
+      if (timestampString.length() > 19) {
+        if (timestampString.length() == 21) {
+          if (timestampString.substring(19).compareTo(".0") == 0) {
+            return DateTimeUtils.threadLocalTimestampFormat.get().format(timestamp)
+          }
+        }
+        return DateTimeUtils.threadLocalTimestampFormat.get().format(timestamp) +
+          timestampString.substring(19)
+      }
+
+      return DateTimeUtils.threadLocalTimestampFormat.get().format(timestamp)
+    }
+
+    /** Hive outputs fields of structs slightly differently than top level attributes. */
+    def toHiveStructString(a: (Any, DataType)): String = a match {
+      case (struct: Row, StructType(fields)) =>
+        struct.toSeq.zip(fields).map {
+          case (v, t) => s""""${t.name}":${toHiveStructString(v, t.dataType)}"""
+        }.mkString("{", ",", "}")
+      case (seq: Seq[_], ArrayType(typ, _)) =>
+        seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
+      case (map: Map[_, _], MapType(kType, vType, _)) =>
+        map.map {
+          case (key, value) =>
+            toHiveStructString((key, kType)) + ":" + toHiveStructString((value, vType))
+        }.toSeq.sorted.mkString("{", ",", "}")
+      case (null, _) => "null"
+      case (s: String, StringType) => "\"" + s + "\""
+      case (decimal, DecimalType()) => decimal.toString
+      case (other, tpe) if primitiveTypes contains tpe => other.toString
+    }
+
+    a match {
+      case (struct: Row, StructType(fields)) =>
+        struct.toSeq.zip(fields).map {
+          case (v, t) => s""""${t.name}":${toHiveStructString(v, t.dataType)}"""
+        }.mkString("{", ",", "}")
+      case (seq: Seq[_], ArrayType(typ, _)) =>
+        seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
+      case (map: Map[_, _], MapType(kType, vType, _)) =>
+        map.map {
+          case (key, value) =>
+            toHiveStructString((key, kType)) + ":" + toHiveStructString((value, vType))
+        }.toSeq.sorted.mkString("{", ",", "}")
+      case (null, _) => "NULL"
+      case (d: Int, DateType) => new java.util.Date(DateTimeUtils.daysToMillis(d)).toString
+      case (t: Timestamp, TimestampType) => formatTimestamp(t)
+      case (bin: Array[Byte], BinaryType) => new String(bin, StandardCharsets.UTF_8)
+      case (decimal: java.math.BigDecimal, DecimalType()) => decimal.toPlainString
+      case (other, tpe) if primitiveTypes contains tpe => other.toString
+    }
   }
 
   def simpleString: String = logical match {
