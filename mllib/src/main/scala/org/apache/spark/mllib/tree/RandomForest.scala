@@ -23,8 +23,11 @@ import scala.util.Try
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
+import org.apache.spark.ml.classification.RandomForestClassifier
+import org.apache.spark.ml.regression.RandomForestRegressor
 import org.apache.spark.ml.tree.{DecisionTreeModel => NewDTModel, RandomForestParams => NewRFParams}
 import org.apache.spark.ml.tree.impl.{RandomForest => NewRandomForest}
+import org.apache.spark.ml.util.Instrumentation
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
@@ -45,10 +48,10 @@ import org.apache.spark.util.Utils
  *  - sqrt: recommended by Breiman manual for random forests
  *  - The defaults of sqrt (classification) and onethird (regression) match the R randomForest
  *    package.
+ *
  * @see [[http://www.stat.berkeley.edu/~breiman/randomforest2001.pdf  Breiman (2001)]]
  * @see [[http://www.stat.berkeley.edu/~breiman/Using_random_forests_V3.1.pdf  Breiman manual for
  *     random forests]]
- *
  * @param strategy The configuration parameters for the random forest algorithm which specify
  *                 the type of random forest (classification or regression), feature type
  *                 (continuous, categorical), depth of the tree, quantile calculation strategy,
@@ -71,7 +74,8 @@ private class RandomForest (
     private val strategy: Strategy,
     private val numTrees: Int,
     featureSubsetStrategy: String,
-    private val seed: Int)
+    private val seed: Int,
+    private val instr: Instrumentation[_])
   extends Serializable with Logging {
 
   strategy.assertValid()
@@ -91,7 +95,7 @@ private class RandomForest (
    */
   def run(input: RDD[LabeledPoint]): RandomForestModel = {
     val trees: Array[NewDTModel] =
-      NewRandomForest.run(input, strategy, numTrees, featureSubsetStrategy, seed.toLong)
+      NewRandomForest.run(input, strategy, numTrees, featureSubsetStrategy, seed.toLong, instr)
     new RandomForestModel(strategy.algo, trees.map(_.toOld))
   }
 
@@ -124,7 +128,8 @@ object RandomForest extends Serializable with Logging {
       seed: Int): RandomForestModel = {
     require(strategy.algo == Classification,
       s"RandomForest.trainClassifier given Strategy with invalid algo: ${strategy.algo}")
-    val rf = new RandomForest(strategy, numTrees, featureSubsetStrategy, seed)
+    val instr = Instrumentation.create(new RandomForestClassifier, input)
+    val rf = new RandomForest(strategy, numTrees, featureSubsetStrategy, seed, instr)
     rf.run(input)
   }
 
@@ -213,7 +218,8 @@ object RandomForest extends Serializable with Logging {
       seed: Int): RandomForestModel = {
     require(strategy.algo == Regression,
       s"RandomForest.trainRegressor given Strategy with invalid algo: ${strategy.algo}")
-    val rf = new RandomForest(strategy, numTrees, featureSubsetStrategy, seed)
+    val instr = Instrumentation.create(new RandomForestRegressor, input)
+    val rf = new RandomForest(strategy, numTrees, featureSubsetStrategy, seed, instr)
     rf.run(input)
   }
 

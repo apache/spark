@@ -22,6 +22,8 @@ import scala.collection.JavaConverters._
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
+import org.apache.spark.ml.classification.DecisionTreeClassifier
+import org.apache.spark.ml.util.Instrumentation
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
@@ -62,8 +64,9 @@ class DecisionTree private[spark] (private val strategy: Strategy, private val s
    */
   @Since("1.2.0")
   def run(input: RDD[LabeledPoint]): DecisionTreeModel = {
-    val rf = new RandomForest(strategy, numTrees = 1, featureSubsetStrategy = "all",
-      seed = seed)
+    val instr = Instrumentation.create(new DecisionTreeClassifier, input)
+    val rf =
+      new RandomForest(strategy, numTrees = 1, featureSubsetStrategy = "all", seed = seed, instr)
     val rfModel = rf.run(input)
     rfModel.trees(0)
   }
@@ -88,7 +91,7 @@ object DecisionTree extends Serializable with Logging {
    *                 categorical), depth of the tree, quantile calculation strategy, etc.
    * @return DecisionTreeModel that can be used for prediction.
    */
- @Since("1.0.0")
+  @Since("1.0.0")
   def train(input: RDD[LabeledPoint], strategy: Strategy): DecisionTreeModel = {
     new DecisionTree(strategy).run(input)
   }

@@ -116,13 +116,10 @@ final class RandomForestClassifier @Since("1.4.0") (
     instr.logParams(params: _*)
 
     val trees =
-      RandomForest.run(oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed)
+      RandomForest.run(oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed, instr)
         .map(_.asInstanceOf[DecisionTreeClassificationModel])
 
     val numFeatures = oldDataset.first().features.size
-    instr.logNumFeatures(numFeatures)
-    instr.logNumClasses(numClasses)
-
     val m = new RandomForestClassificationModel(trees, numFeatures, numClasses)
     instr.logSuccess(m)
     m
