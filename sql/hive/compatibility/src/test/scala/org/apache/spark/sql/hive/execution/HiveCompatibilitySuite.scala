@@ -23,7 +23,7 @@ import java.util.{Locale, TimeZone}
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.internal.SQLConf
 
@@ -39,7 +39,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
   private val originalLocale = Locale.getDefault
   private val originalColumnBatchSize = TestHive.conf.columnBatchSize
   private val originalInMemoryPartitionPruning = TestHive.conf.inMemoryPartitionPruning
-  private val originalConvertMetastoreOrc = TestHive.convertMetastoreOrc
+  private val originalConvertMetastoreOrc = TestHive.sessionState.convertMetastoreOrc
 
   def testCases: Seq[(String, File)] = {
     hiveQueryDir.listFiles.map(f => f.getName.stripSuffix(".q") -> f)
@@ -47,7 +47,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
 
   override def beforeAll() {
     super.beforeAll()
-    TestHive.cacheTables = true
+    TestHive.setCacheTables(true)
     // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
     TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
     // Add Locale setting
@@ -60,18 +60,18 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     TestHive.sessionState.functionRegistry.unregisterFunction("hash")
     // Ensures that the plans generation use metastore relation and not OrcRelation
     // Was done because SqlBuilder does not work with plans having logical relation
-    TestHive.setConf(HiveContext.CONVERT_METASTORE_ORC, false)
+    TestHive.setConf(HiveUtils.CONVERT_METASTORE_ORC, false)
     RuleExecutor.resetTime()
   }
 
   override def afterAll() {
     try {
-      TestHive.cacheTables = false
+      TestHive.setCacheTables(false)
       TimeZone.setDefault(originalTimeZone)
       Locale.setDefault(originalLocale)
       TestHive.setConf(SQLConf.COLUMN_BATCH_SIZE, originalColumnBatchSize)
       TestHive.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, originalInMemoryPartitionPruning)
-      TestHive.setConf(HiveContext.CONVERT_METASTORE_ORC, originalConvertMetastoreOrc)
+      TestHive.setConf(HiveUtils.CONVERT_METASTORE_ORC, originalConvertMetastoreOrc)
       TestHive.sessionState.functionRegistry.restore()
 
       // For debugging dump some statistics about how much time was spent in various optimizer rules.

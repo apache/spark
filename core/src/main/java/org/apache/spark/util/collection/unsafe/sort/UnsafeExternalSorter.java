@@ -89,7 +89,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       UnsafeInMemorySorter inMemorySorter) throws IOException {
     UnsafeExternalSorter sorter = new UnsafeExternalSorter(taskMemoryManager, blockManager,
       serializerManager, taskContext, recordComparator, prefixComparator, initialSize,
-        pageSizeBytes, inMemorySorter);
+        pageSizeBytes, inMemorySorter, false /* ignored */);
     sorter.spill(Long.MAX_VALUE, sorter);
     // The external sorter will be used to insert records, in-memory sorter is not needed.
     sorter.inMemSorter = null;
@@ -104,9 +104,11 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       RecordComparator recordComparator,
       PrefixComparator prefixComparator,
       int initialSize,
-      long pageSizeBytes) {
+      long pageSizeBytes,
+      boolean canUseRadixSort) {
     return new UnsafeExternalSorter(taskMemoryManager, blockManager, serializerManager,
-      taskContext, recordComparator, prefixComparator, initialSize, pageSizeBytes, null);
+      taskContext, recordComparator, prefixComparator, initialSize, pageSizeBytes, null,
+      canUseRadixSort);
   }
 
   private UnsafeExternalSorter(
@@ -118,7 +120,8 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       PrefixComparator prefixComparator,
       int initialSize,
       long pageSizeBytes,
-      @Nullable UnsafeInMemorySorter existingInMemorySorter) {
+      @Nullable UnsafeInMemorySorter existingInMemorySorter,
+      boolean canUseRadixSort) {
     super(taskMemoryManager, pageSizeBytes);
     this.taskMemoryManager = taskMemoryManager;
     this.blockManager = blockManager;
@@ -129,11 +132,11 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     // Use getSizeAsKb (not bytes) to maintain backwards compatibility for units
     // this.fileBufferSizeBytes = (int) conf.getSizeAsKb("spark.shuffle.file.buffer", "32k") * 1024;
     this.fileBufferSizeBytes = 32 * 1024;
-    this.writeMetrics = taskContext.taskMetrics().registerShuffleWriteMetrics();
+    this.writeMetrics = taskContext.taskMetrics().shuffleWriteMetrics();
 
     if (existingInMemorySorter == null) {
       this.inMemSorter = new UnsafeInMemorySorter(
-        this, taskMemoryManager, recordComparator, prefixComparator, initialSize);
+        this, taskMemoryManager, recordComparator, prefixComparator, initialSize, canUseRadixSort);
     } else {
       this.inMemSorter = existingInMemorySorter;
     }

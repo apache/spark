@@ -20,7 +20,7 @@ package org.apache.spark
 import java.io._
 import java.lang.reflect.Constructor
 import java.net.URI
-import java.util.{Arrays, Properties, UUID}
+import java.util.{Arrays, Properties, ServiceLoader, UUID}
 import java.util.concurrent.ConcurrentMap
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
 
@@ -2453,9 +2453,32 @@ object SparkContext extends Logging {
           "in the form mesos://zk://host:port. Current Master URL will stop working in Spark 2.0.")
         createTaskScheduler(sc, "mesos://" + zkUrl, deployMode)
 
-      case _ =>
-        throw new SparkException("Could not parse Master URL: '" + master + "'")
+      case masterUrl =>
+        val cm = getClusterManager(masterUrl) match {
+          case Some(clusterMgr) => clusterMgr
+          case None => throw new SparkException("Could not parse Master URL: '" + master + "'")
+        }
+        try {
+          val scheduler = cm.createTaskScheduler(sc, masterUrl)
+          val backend = cm.createSchedulerBackend(sc, masterUrl, scheduler)
+          cm.initialize(scheduler, backend)
+          (backend, scheduler)
+        } catch {
+          case NonFatal(e) =>
+            throw new SparkException("External scheduler cannot be instantiated", e)
+        }
     }
+  }
+
+  private def getClusterManager(url: String): Option[ExternalClusterManager] = {
+    val loader = Utils.getContextOrSparkClassLoader
+    val serviceLoaders =
+    ServiceLoader.load(classOf[ExternalClusterManager], loader).asScala.filter(_.canCreate(url))
+    if (serviceLoaders.size > 1) {
+      throw new SparkException(s"Multiple Cluster Managers ($serviceLoaders) registered " +
+          s"for the url $url:")
+    }
+    serviceLoaders.headOption
   }
 }
 

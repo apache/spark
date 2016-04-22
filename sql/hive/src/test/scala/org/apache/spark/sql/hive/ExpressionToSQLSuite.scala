@@ -92,8 +92,7 @@ class ExpressionToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     checkSqlGeneration("SELECT abs(15), abs(-15)")
     checkSqlGeneration("SELECT array(1,2,3)")
     checkSqlGeneration("SELECT coalesce(null, 1, 2)")
-    // wait for resolution of JIRA SPARK-12719 SQL Generation for Generators
-    // checkSqlGeneration("SELECT explode(array(1,2,3))")
+    checkSqlGeneration("SELECT explode(array(1,2,3))")
     checkSqlGeneration("SELECT greatest(1,null,3)")
     checkSqlGeneration("SELECT if(1==2, 'yes', 'no')")
     checkSqlGeneration("SELECT isnan(15), isnan('invalid')")
@@ -200,8 +199,7 @@ class ExpressionToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     checkSqlGeneration("SELECT locate('is', 'This is a test', 3)")
     checkSqlGeneration("SELECT lpad('SparkSql', 16, 'Learning')")
     checkSqlGeneration("SELECT ltrim('  SparkSql ')")
-    // wait for resolution of JIRA SPARK-12719 SQL Generation for Generators
-    // checkSqlGeneration("SELECT json_tuple('{\"f1\": \"value1\", \"f2\": \"value2\"}','f1')")
+    checkSqlGeneration("SELECT json_tuple('{\"f1\": \"value1\", \"f2\": \"value2\"}','f1')")
     checkSqlGeneration("SELECT printf('aa%d%s', 123, 'cc')")
     checkSqlGeneration("SELECT regexp_extract('100-200', '(\\d+)-(\\d+)', 1)")
     checkSqlGeneration("SELECT regexp_replace('100-200', '(\\d+)', 'num')")

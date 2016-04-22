@@ -208,7 +208,11 @@ class RelationalGroupedDataset protected[sql](
    */
   @scala.annotation.varargs
   def agg(expr: Column, exprs: Column*): DataFrame = {
-    toDF((expr +: exprs).map(_.expr))
+    toDF((expr +: exprs).map {
+      case typed: TypedColumn[_, _] =>
+        typed.withInputType(df.unresolvedTEncoder.deserializer, df.logicalPlan.output).expr
+      case c => c.expr
+    })
   }
 
   /**

@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.tree
 
+import scala.util.Try
+
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -346,10 +348,12 @@ private[ml] trait HasFeatureSubsetStrategy extends Params {
    */
   final val featureSubsetStrategy: Param[String] = new Param[String](this, "featureSubsetStrategy",
     "The number of features to consider for splits at each tree node." +
-      s" Supported options: ${RandomForestParams.supportedFeatureSubsetStrategies.mkString(", ")}",
+      s" Supported options: ${RandomForestParams.supportedFeatureSubsetStrategies.mkString(", ")}" +
+      s", (0.0-1.0], [1-n].",
     (value: String) =>
       RandomForestParams.supportedFeatureSubsetStrategies.contains(value.toLowerCase)
-      || value.matches(RandomForestParams.supportedFeatureSubsetStrategiesRegex))
+      || Try(value.toInt).filter(_ > 0).isSuccess
+      || Try(value.toDouble).filter(_ > 0).filter(_ <= 1.0).isSuccess)
 
   setDefault(featureSubsetStrategy -> "auto")
 
@@ -396,9 +400,6 @@ private[spark] object RandomForestParams {
   // These options should be lowercase.
   final val supportedFeatureSubsetStrategies: Array[String] =
     Array("auto", "all", "onethird", "sqrt", "log2").map(_.toLowerCase)
-
-  // The regex to capture "(0.0-1.0]", and "n" for integer 0 < n <= (number of features)
-  final val supportedFeatureSubsetStrategiesRegex = "^(?:[1-9]\\d*|0?\\.\\d*[1-9]\\d*|1\\.0+)$"
 }
 
 private[ml] trait RandomForestClassifierParams

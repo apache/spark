@@ -35,7 +35,7 @@ import org.apache.spark.network.netty.NettyBlockTransferService
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.{KryoSerializer, SerializerManager}
-import org.apache.spark.shuffle.hash.HashShuffleManager
+import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.storage._
 import org.apache.spark.streaming.receiver._
 import org.apache.spark.streaming.util._
@@ -58,7 +58,7 @@ class ReceivedBlockHandlerSuite
   val streamId = 1
   val securityMgr = new SecurityManager(conf)
   val mapOutputTracker = new MapOutputTrackerMaster(conf)
-  val shuffleManager = new HashShuffleManager(conf)
+  val shuffleManager = new SortShuffleManager(conf)
   val serializer = new KryoSerializer(conf)
   var serializerManager = new SerializerManager(serializer, conf)
   val manualClock = new ManualClock

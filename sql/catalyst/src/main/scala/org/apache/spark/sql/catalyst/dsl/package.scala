@@ -245,6 +245,10 @@ package object dsl {
       def struct(attrs: AttributeReference*): AttributeReference =
         struct(StructType.fromAttributes(attrs))
 
+      /** Creates a new AttributeReference of object type */
+      def obj(cls: Class[_]): AttributeReference =
+        AttributeReference(s, ObjectType(cls), nullable = true)()
+
       /** Create a function. */
       def function(exprs: Expression*): UnresolvedFunction =
         UnresolvedFunction(s, exprs, isDistinct = false)
@@ -296,6 +300,24 @@ package object dsl {
         joinType: JoinType = Inner,
         condition: Option[Expression] = None): LogicalPlan =
         Join(logicalPlan, otherPlan, joinType, condition)
+
+      def cogroup[Key: Encoder, Left: Encoder, Right: Encoder, Result: Encoder](
+          otherPlan: LogicalPlan,
+          func: (Key, Iterator[Left], Iterator[Right]) => TraversableOnce[Result],
+          leftGroup: Seq[Attribute],
+          rightGroup: Seq[Attribute],
+          leftAttr: Seq[Attribute],
+          rightAttr: Seq[Attribute]
+        ): LogicalPlan = {
+        CoGroup.apply[Key, Left, Right, Result](
+          func,
+          leftGroup,
+          rightGroup,
+          leftAttr,
+          rightAttr,
+          logicalPlan,
+          otherPlan)
+      }
 
       def orderBy(sortExprs: SortOrder*): LogicalPlan = Sort(sortExprs, true, logicalPlan)
 
