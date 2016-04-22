@@ -81,7 +81,7 @@ private[spark] object RandomForest extends Logging {
 
   /**
    * Train a random forest.
- *
+   *
    * @param input Training data: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
    * @return an unweighted set of trees
    */
@@ -610,7 +610,7 @@ private[spark] object RandomForest extends Logging {
   /**
    * Calculate the impurity statistics for a given (feature, split) based upon left/right
    * aggregates.
- *
+   *
    * @param stats the recycle impurity statistics for this feature's all splits,
    *              only 'impurity' and 'impurityCalculator' are valid between each iteration
    * @param leftImpurityCalculator left node aggregates for this (feature, split)
@@ -668,7 +668,7 @@ private[spark] object RandomForest extends Logging {
 
   /**
    * Find the best split for a node.
- *
+   *
    * @param binAggregates Bin statistics.
    * @return tuple for best split: (Split, information gain, prediction at node)
    */
@@ -941,7 +941,7 @@ private[spark] object RandomForest extends Logging {
    * NOTE: Returned number of splits is set based on `featureSamples` and
    *       could be different from the specified `numSplits`.
    *       The `numSplits` attribute in the `DecisionTreeMetadata` class will be set accordingly.
- *
+   *
    * @param featureSamples feature values of each sample
    * @param metadata decision tree metadata
    *                 NOTE: `metadata.numbins` will be changed accordingly
@@ -1085,7 +1085,7 @@ private[spark] object RandomForest extends Logging {
 
   /**
    * Get the number of values to be stored for this node in the bin aggregates.
- *
+   *
    * @param featureSubset  Indices of features which may be split at this node.
    *                       If None, then use all features.
    */
