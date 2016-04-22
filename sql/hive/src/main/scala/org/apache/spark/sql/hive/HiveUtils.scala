@@ -45,7 +45,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 
-private[spark] object HiveContext extends Logging {
+private[spark] object HiveUtils extends Logging {
 
   def withHiveExternalCatalog(sc: SparkContext): SparkContext = {
     sc.conf.set(CATALOG_IMPLEMENTATION.key, "hive")
@@ -276,10 +276,10 @@ private[spark] object HiveContext extends Logging {
       configurations: Map[String, String]): HiveClient = {
     val sqlConf = new SQLConf
     sqlConf.setConf(SQLContext.getSQLProperties(conf))
-    val hiveMetastoreVersion = HiveContext.hiveMetastoreVersion(sqlConf)
-    val hiveMetastoreJars = HiveContext.hiveMetastoreJars(sqlConf)
-    val hiveMetastoreSharedPrefixes = HiveContext.hiveMetastoreSharedPrefixes(sqlConf)
-    val hiveMetastoreBarrierPrefixes = HiveContext.hiveMetastoreBarrierPrefixes(sqlConf)
+    val hiveMetastoreVersion = HiveUtils.hiveMetastoreVersion(sqlConf)
+    val hiveMetastoreJars = HiveUtils.hiveMetastoreJars(sqlConf)
+    val hiveMetastoreSharedPrefixes = HiveUtils.hiveMetastoreSharedPrefixes(sqlConf)
+    val hiveMetastoreBarrierPrefixes = HiveUtils.hiveMetastoreBarrierPrefixes(sqlConf)
     val metaVersion = IsolatedClientLoader.hiveVersion(hiveMetastoreVersion)
 
     val defaultWarehouseLocation = hiveConf.get("hive.metastore.warehouse.dir")
