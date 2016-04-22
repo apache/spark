@@ -359,6 +359,10 @@ case class InsertIntoTable(
     options.get("matchByName").map(_.toBoolean).getOrElse(false)
   }
 
+  private[spark] def writersPerPartition: Option[Int] = {
+    options.get("writersPerPartition").map(_.toInt)
+  }
+
   private[spark] lazy val expectedColumns = {
     if (table.output.isEmpty) {
       None

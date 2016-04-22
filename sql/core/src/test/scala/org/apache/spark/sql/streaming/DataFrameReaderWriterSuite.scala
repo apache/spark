@@ -432,7 +432,7 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
       .stream()
     val w = df.write
     val e = intercept[IllegalArgumentException](w.sortBy("text").startStream())
-    assert(e.getMessage == "Currently we don't support writing bucketed data to this data source.")
+    assert(e.getMessage == "Currently we don't support writing sorted data to this data source.")
   }
 
   test("check save(path) can only be called on non-continuous queries") {

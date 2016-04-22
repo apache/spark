@@ -23,13 +23,14 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.{CatalystConf, SimpleCatalystConf}
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.planning.{ExtractFiltersAndInnerJoins, Unions}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.types._
 
@@ -72,6 +73,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
     Batch("Aggregate", fixedPoint,
       RemoveLiteralFromGroupExpressions,
       RemoveRepetitionFromGroupExpressions) ::
+    Batch("Output Layout Optimizations", Once,
+      DistributeAndSortOutputData(conf)) ::
     Batch("Operator Optimizations", fixedPoint,
       // Operator push down
       SetOperationPushDown,
@@ -1735,5 +1738,84 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
       } else {
         f
       }
+  }
+}
+
+case class DistributeAndSortOutputData(conf: CatalystConf) extends Rule[LogicalPlan] {
+
+  override def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+    case insertInto @ InsertIntoTable(rel: CatalogRelation, partition, data, _, _, _)
+        if insertInto.resolved && insertInto.writersPerPartition.isDefined =>
+      insertInto.copy(child =
+          buildRepartitionAndSort(rel.catalogTable, data, insertInto.writersPerPartition))
+
+    case insertInto @ InsertIntoTable(rel: CatalogRelation, partition, data, _, _, _)
+        if insertInto.resolved && requiresSort(rel.catalogTable) =>
+      insertInto.copy(child = buildSort(rel.catalogTable, data))
+
+    case insertInto @ InsertIntoTable(rel: CatalogRelation, partition, data, _, _, _)
+      if insertInto.resolved && isColumnar(rel.catalogTable) && shouldRepartition(data) =>
+      insertInto.copy(child = buildRepartitionAndSort(rel.catalogTable, data, None))
+  }
+
+  private def isColumnar(table: CatalogTable): Boolean = {
+    table.storage.serde.map(_.toLowerCase)
+        .forall(serde => serde.contains("parquet") || serde.contains("orc"))
+  }
+
+  private def shouldRepartition(plan: LogicalPlan): Boolean = {
+    // automatically add repartitioning for columnar formats if enabled and doesn't conflict
+    conf.repartitionColumnarData && !hasSortOrRepartition(plan);
+  }
+
+  private def hasSortOrRepartition(plan: LogicalPlan): Boolean = {
+    plan.collectFirst {
+      case _: RepartitionByExpression => true
+      case _: Sort => true
+    }.getOrElse(false)
+  }
+
+  private def requiresSort(table: CatalogTable): Boolean = {
+    (table.bucketColumnNames.size + table.sortColumnNames.size) > 0
+  }
+
+  private def buildSort(table: CatalogTable, data: LogicalPlan): LogicalPlan = {
+    val partitionExprs = asExpr(table.partitionColumns, data)
+    val bucketExpr = asBucketExpr(table.bucketColumns, table.numBuckets, data)
+    val sortExprs = partitionExprs ++ bucketExpr ++ asExpr(table.sortColumns, data)
+    // add a sort without a repartition
+    Sort(sortExprs.map(expr => SortOrder(expr, Ascending)), global = false, data)
+  }
+
+  private def buildRepartitionAndSort(
+      table: CatalogTable,
+      data: LogicalPlan,
+      numWriters: Option[Int]): LogicalPlan = {
+    val partitionExprs = asExpr(table.partitionColumns, data) ++ asDistributeExpr(numWriters)
+    val bucketExpr = asBucketExpr(table.bucketColumns, table.numBuckets, data)
+    val sortExprs = partitionExprs ++ bucketExpr ++ asExpr(table.sortColumns, data)
+
+    // add a sort with an inner repartition
+    Sort(
+      sortExprs.map(expr => SortOrder(expr, Ascending)),
+      global = false,
+      RepartitionByExpression(partitionExprs, data, None))
+  }
+
+  private def asExpr(columns: Seq[CatalogColumn], data: LogicalPlan): Seq[Attribute] = {
+    columns.map(col => data.output.find(_.name == col.name).get)
+  }
+
+  private def asDistributeExpr(numWriters: Option[Int]): Option[Expression] = {
+    numWriters.map(n => Pmod(Cast(Multiply(Rand(0L), Literal(n)), IntegerType), Literal(n)))
+  }
+
+  private def asBucketExpr(columns: Seq[CatalogColumn], numBuckets: Int,
+                           data: LogicalPlan): Option[Expression] = {
+    if (columns.isEmpty) {
+      None
+    } else {
+      Some(HashPartitioning(asExpr(columns, data), numBuckets).partitionIdExpression)
+    }
   }
 }

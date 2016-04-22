@@ -521,6 +521,14 @@ object SQLConf {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(60 * 1000L) // 10 minutes
 
+  val REPARTITION_COLUMNAR_DATA =
+    SQLConfigBuilder("spark.sql.files.columnar.insertRepartition")
+        .internal()
+        .doc("Whether to automatically add a repartition step before writing columnar data " +
+            "formats, such as Parquet and Orc, to minimize output files and memory consumption.")
+        .booleanConf
+        .createWithDefault(false)
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }
@@ -651,6 +659,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def variableSubstituteEnabled: Boolean = getConf(VARIABLE_SUBSTITUTE_ENABLED)
 
   def variableSubstituteDepth: Int = getConf(VARIABLE_SUBSTITUTE_DEPTH)
+
+  override def repartitionColumnarData: Boolean = getConf(REPARTITION_COLUMNAR_DATA)
 
   def warehousePath: String = {
     getConf(WAREHOUSE_PATH).replace("${system:user.dir}", System.getProperty("user.dir"))
