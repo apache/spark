@@ -31,7 +31,7 @@ import org.apache.spark.sql.types.{ArrayType, StructType}
 /**
  * :: Experimental ::
  * Maps a sequence of terms to their term frequencies using the hashing trick.
- * Current we support two hash algorithms: "murmur3"(default) and "native".
+ * Currently we support two hash algorithms: "murmur3" (default) and "native".
  * "murmur3" calculates a hash code value for the term object using
  * Austin Appleby's MurmurHash 3 algorithm (MurmurHash3_x86_32);
  * "native" calculates the hash code value using the native Scala implementation.
