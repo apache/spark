@@ -1474,7 +1474,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
       case f @ Filter(cond, child) =>
         // Find all correlated predicates.
         val (correlated, local) = splitConjunctivePredicates(cond).partition { e =>
-          e.references.intersect(references).nonEmpty
+          (e.references -- child.outputSet).intersect(references).nonEmpty
         }
         // Rewrite the filter without the correlated predicates if any.
         correlated match {
@@ -1515,10 +1515,34 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
    */
   private def pullOutCorrelatedPredicates(
       in: InSubQuery,
-      query: LogicalPlan): (LogicalPlan, Seq[Expression]) = {
+      query: LogicalPlan): (LogicalPlan, LogicalPlan, Seq[Expression]) = {
     val (resolved, joinCondition) = pullOutCorrelatedPredicates(in.query, query)
-    val conditions = joinCondition ++ in.expressions.zip(resolved.output).map(EqualTo.tupled)
-    (resolved, conditions)
+    // Check whether there is some attributes have same exprId but come from different side
+    val outerAttributes = AttributeSet(in.expressions.flatMap(_.references))
+    if (outerAttributes.intersect(resolved.outputSet).nonEmpty) {
+      val aliases = mutable.Map[Attribute, Alias]()
+      val exprs = in.expressions.map { expr =>
+        expr transformUp {
+          case a: AttributeReference if resolved.outputSet.contains(a) =>
+            val alias = Alias(a, a.toString)()
+            val attr = alias.toAttribute
+            aliases += attr -> alias
+            attr
+        }
+      }
+      val newP = Project(query.output ++ aliases.values, query)
+      val projection = resolved.output.map {
+        case a if outerAttributes.contains(a) => Alias(a, a.toString)()
+        case a => a
+      }
+      val subquery = Project(projection, resolved)
+      val conditions = joinCondition ++ exprs.zip(subquery.output).map(EqualTo.tupled)
+      (newP, subquery, conditions)
+    } else {
+      val conditions =
+        joinCondition ++ in.expressions.zip(resolved.output).map(EqualTo.tupled)
+      (query, resolved, conditions)
+    }
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -1534,17 +1558,22 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
 
       // Filter the plan by applying left semi and left anti joins.
       withSubquery.foldLeft(newFilter) {
-        case (p, Exists(sub)) =>
+        case (p, Exists(sub, _)) =>
           val (resolved, conditions) = pullOutCorrelatedPredicates(sub, p)
           Join(p, resolved, LeftSemi, conditions.reduceOption(And))
-        case (p, Not(Exists(sub))) =>
+        case (p, Not(Exists(sub, _))) =>
           val (resolved, conditions) = pullOutCorrelatedPredicates(sub, p)
           Join(p, resolved, LeftAnti, conditions.reduceOption(And))
         case (p, in: InSubQuery) =>
-          val (resolved, conditions) = pullOutCorrelatedPredicates(in, p)
-          Join(p, resolved, LeftSemi, conditions.reduceOption(And))
+          val (newP, resolved, conditions) = pullOutCorrelatedPredicates(in, p)
+          if (newP fastEquals p) {
+            Join(p, resolved, LeftSemi, conditions.reduceOption(And))
+          } else {
+            Project(p.output,
+              Join(newP, resolved, LeftSemi, conditions.reduceOption(And)))
+          }
         case (p, Not(in: InSubQuery)) =>
-          val (resolved, conditions) = pullOutCorrelatedPredicates(in, p)
+          val (newP, resolved, conditions) = pullOutCorrelatedPredicates(in, p)
           // This is a NULL-aware (left) anti join (NAAJ).
           // Construct the condition. A NULL in one of the conditions is regarded as a positive
           // result; such a row will be filtered out by the Anti-Join operator.
@@ -1553,7 +1582,12 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
 
           // Note that will almost certainly be planned as a Broadcast Nested Loop join. Use EXISTS
           // if performance matters to you.
-          Join(p, resolved, LeftAnti, Option(Or(anyNull, condition)))
+          if (newP fastEquals p) {
+            Join(p, resolved, LeftAnti, Option(Or(anyNull, condition)))
+          } else {
+            Project(p.output,
+              Join(newP, resolved, LeftAnti, Option(Or(anyNull, condition))))
+          }
       }
   }
 }
