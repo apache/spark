@@ -2474,7 +2474,7 @@ setMethod("drop",
 #' @param colname the name of the column to build the histogram from.
 #' @return a data.frame with the histogram statistics, i.e., counts and centroids.
 #' @rdname histogram
-#' @family agg_funcs
+#' @family DataFrame functions
 #' @export
 #' @examples 
 #' \dontrun{
