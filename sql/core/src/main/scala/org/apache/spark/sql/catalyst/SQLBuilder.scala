@@ -15,15 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive
+package org.apache.spark.sql.catalyst
 
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Dataset, SQLContext}
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.catalyst.catalog.CatalogRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.{CollapseProject, CombineUnions}
@@ -39,10 +38,10 @@ import org.apache.spark.sql.types.{ByteType, DataType, IntegerType, NullType}
  * representations (e.g. logical plans that operate on local Scala collections), or are simply not
  * supported by this builder (yet).
  */
-class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Logging {
+class SQLBuilder(logicalPlan: LogicalPlan) extends Logging {
   require(logicalPlan.resolved, "SQLBuilder only supports resolved logical query plans")
 
-  def this(df: Dataset[_]) = this(df.queryExecution.analyzed, df.sqlContext)
+  def this(df: Dataset[_]) = this(df.queryExecution.analyzed)
 
   private val nextSubqueryId = new AtomicLong(0)
   private def newSubqueryName(): String = s"gen_subquery_${nextSubqueryId.getAndIncrement()}"
@@ -70,7 +69,7 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
     try {
       val replaced = finalPlan.transformAllExpressions {
         case e: SubqueryExpression =>
-          SubqueryHolder(new SQLBuilder(e.query, sqlContext).toSQL)
+          SubqueryHolder(new SQLBuilder(e.query).toSQL)
         case e: NonSQLExpression =>
           throw new UnsupportedOperationException(
             s"Expression $e doesn't have a SQL representation"
@@ -81,23 +80,23 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
       val generatedSQL = toSQL(replaced)
       logDebug(
         s"""Built SQL query string successfully from given logical plan:
-           |
+            |
            |# Original logical plan:
-           |${logicalPlan.treeString}
-           |# Canonicalized logical plan:
-           |${replaced.treeString}
-           |# Generated SQL:
-           |$generatedSQL
+            |${logicalPlan.treeString}
+            |# Canonicalized logical plan:
+            |${replaced.treeString}
+            |# Generated SQL:
+            |$generatedSQL
          """.stripMargin)
       generatedSQL
     } catch { case NonFatal(e) =>
       logDebug(
         s"""Failed to build SQL query string from given logical plan:
-           |
+            |
            |# Original logical plan:
-           |${logicalPlan.treeString}
-           |# Canonicalized logical plan:
-           |${canonicalizedPlan.treeString}
+            |${logicalPlan.treeString}
+            |# Canonicalized logical plan:
+            |${canonicalizedPlan.treeString}
          """.stripMargin)
       throw e
     }
@@ -164,7 +163,7 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
       }.getOrElse(qualifiedName)
 
     case Sort(orders, _, RepartitionByExpression(partitionExprs, child, _))
-        if orders.map(_.child) == partitionExprs =>
+      if orders.map(_.child) == partitionExprs =>
       build(toSQL(child), "CLUSTER BY", partitionExprs.map(_.sql).mkString(", "))
 
     case p: Sort =>
@@ -293,9 +292,9 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
   }
 
   private def groupingSetToSQL(
-      agg: Aggregate,
-      expand: Expand,
-      project: Project): String = {
+    agg: Aggregate,
+    expand: Expand,
+    project: Project): String = {
     assert(agg.groupingExpressions.length > 1)
 
     // The last column of Expand is always grouping ID
@@ -336,8 +335,8 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
         case ar: AttributeReference if ar == gid => GroupingID(Nil)
         case ar: AttributeReference if groupByAttrMap.contains(ar) => groupByAttrMap(ar)
         case a @ Cast(BitwiseAnd(
-            ShiftRight(ar: AttributeReference, Literal(value: Any, IntegerType)),
-            Literal(1, IntegerType)), ByteType) if ar == gid =>
+        ShiftRight(ar: AttributeReference, Literal(value: Any, IntegerType)),
+        Literal(1, IntegerType)), ByteType) if ar == gid =>
           // for converting an expression to its original SQL format grouping(col)
           val idx = groupByExprs.length - 1 - value.asInstanceOf[Int]
           groupByExprs.lift(idx).map(Grouping).getOrElse(a)
@@ -505,10 +504,10 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
   }
 
   case class SQLTable(
-      database: String,
-      table: String,
-      output: Seq[Attribute],
-      sample: Option[(Double, Double)] = None) extends LeafNode {
+    database: String,
+    table: String,
+    output: Seq[Attribute],
+    sample: Option[(Double, Double)] = None) extends LeafNode {
     def withSample(lowerBound: Double, upperBound: Double): SQLTable =
       this.copy(sample = Some(lowerBound -> upperBound))
   }
