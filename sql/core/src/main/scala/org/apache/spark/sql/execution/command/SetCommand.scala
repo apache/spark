@@ -129,14 +129,9 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
     // Configures a single property.
     case Some((key, Some(value))) =>
       val runFunc = (sqlContext: SQLContext) => {
-        val conf = sqlContext.conf
-        val adjustedValue = if (conf.variableSubstituteEnabled) {
-          new VariableSubstitution(conf).substitute(value)
-        } else {
-          value
-        }
-        sqlContext.setConf(key, adjustedValue)
-        Seq(Row(key, adjustedValue))
+        val substitutedValue = new VariableSubstitution(sqlContext.conf).substitute(value)
+        sqlContext.setConf(key, substitutedValue)
+        Seq(Row(key, substitutedValue))
       }
       (keyValueOutput, runFunc)
 
