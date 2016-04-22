@@ -27,7 +27,7 @@ export("setJobGroup",
 # Export Utility methods
 export("setLogLevel")
 
-exportClasses("DataFrame")
+exportClasses("SparkDataFrame")
 
 exportMethods("arrange",
               "as.data.frame",
