@@ -126,7 +126,8 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
       for (id <- 0 until 10) {
         new Thread() {
           override def run(): Unit = waiter {
-            val metadataLog = new HDFSMetadataLog[String](sqlContext.sparkSession, temp.getAbsolutePath)
+            val metadataLog =
+              new HDFSMetadataLog[String](sqlContext.sparkSession, temp.getAbsolutePath)
             try {
               var nextBatchId = metadataLog.getLatest().map(_._1).getOrElse(-1L)
               nextBatchId += 1

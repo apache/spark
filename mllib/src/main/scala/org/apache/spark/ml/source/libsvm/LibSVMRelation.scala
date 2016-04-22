@@ -189,8 +189,8 @@ class DefaultSource extends FileFormat with DataSourceRegister {
     val sparse = options.getOrElse("vectorType", "sparse") == "sparse"
 
     val broadcastedConf = sparkSession.sparkContext.broadcast(
-      new SerializableConfiguration(new Configuration(sparkSession.sparkContext.hadoopConfiguration))
-    )
+      new SerializableConfiguration(
+        new Configuration(sparkSession.sparkContext.hadoopConfiguration)))
 
     (file: PartitionedFile) => {
       val points =

@@ -44,11 +44,13 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
   // TODO: Move the planner an optimizer into here from SessionState.
   protected def planner = sparkSession.sessionState.planner
 
-  def assertAnalyzed(): Unit = try sparkSession.sessionState.analyzer.checkAnalysis(analyzed) catch {
-    case e: AnalysisException =>
-      val ae = new AnalysisException(e.message, e.line, e.startPosition, Some(analyzed))
-      ae.setStackTrace(e.getStackTrace)
-      throw ae
+  def assertAnalyzed(): Unit = {
+    try sparkSession.sessionState.analyzer.checkAnalysis(analyzed) catch {
+      case e: AnalysisException =>
+        val ae = new AnalysisException(e.message, e.line, e.startPosition, Some(analyzed))
+        ae.setStackTrace(e.getStackTrace)
+        throw ae
+    }
   }
 
   def assertSupported(): Unit = {

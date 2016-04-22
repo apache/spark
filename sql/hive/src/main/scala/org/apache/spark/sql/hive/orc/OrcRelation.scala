@@ -126,7 +126,8 @@ private[sql] class DefaultSource
       }
     }
 
-    val broadcastedConf = sparkSession.sparkContext.broadcast(new SerializableConfiguration(orcConf))
+    val broadcastedConf =
+      sparkSession.sparkContext.broadcast(new SerializableConfiguration(orcConf))
 
     (file: PartitionedFile) => {
       val conf = broadcastedConf.value.value

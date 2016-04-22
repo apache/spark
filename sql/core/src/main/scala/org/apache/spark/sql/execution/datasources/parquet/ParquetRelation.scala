@@ -649,7 +649,8 @@ private[sql] object ParquetRelation extends Logging {
     val assumeBinaryIsString = sparkSession.conf.isParquetBinaryAsString
     val assumeInt96IsTimestamp = sparkSession.conf.isParquetINT96AsTimestamp
     val writeLegacyParquetFormat = sparkSession.conf.writeLegacyParquetFormat
-    val serializedConf = new SerializableConfiguration(sparkSession.sparkContext.hadoopConfiguration)
+    val serializedConf =
+      new SerializableConfiguration(sparkSession.sparkContext.hadoopConfiguration)
 
     // !! HACK ALERT !!
     //

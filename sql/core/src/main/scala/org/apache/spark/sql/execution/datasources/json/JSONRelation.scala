@@ -125,7 +125,9 @@ class DefaultSource extends FileFormat with DataSourceRegister {
     }
   }
 
-  private def createBaseRdd(sparkSession: SparkSession, inputPaths: Seq[FileStatus]): RDD[String] = {
+  private def createBaseRdd(
+      sparkSession: SparkSession,
+      inputPaths: Seq[FileStatus]): RDD[String] = {
     val job = Job.getInstance(sparkSession.sparkContext.hadoopConfiguration)
     val conf = job.getConfiguration
 
