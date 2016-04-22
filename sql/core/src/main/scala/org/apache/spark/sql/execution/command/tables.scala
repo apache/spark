@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.execution.command
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogTable, CatalogTableType, SimpleCatalogRelation}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, UnaryNode}
 import org.apache.spark.sql.types.{MetadataBuilder, StringType}
@@ -159,10 +161,27 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean)
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val relation = sqlContext.sessionState.catalog.lookupRelation(table)
-    relation.schema.fields.map { field =>
+    val result = new ArrayBuffer[Row](relation.schema.fields.length)
+
+    relation.schema.fields.foreach { field =>
       val cmtKey = "comment"
       val comment = if (field.metadata.contains(cmtKey)) field.metadata.getString(cmtKey) else ""
-      Row(field.name, field.dataType.simpleString, comment)
+      result += Row(field.name, field.dataType.simpleString, comment)
     }
+
+    relation match {
+      case catalogRelation: CatalogRelation =>
+        if (catalogRelation.catalogTable.partitionColumns.nonEmpty) {
+          result += Row("# Partition Information", "", "")
+          result += Row(s"# ${output(0).name}", output(1).name, output(2).name)
+
+          catalogRelation.catalogTable.partitionColumns.foreach { col =>
+            result += Row(col.name, col.dataType, col.comment.getOrElse(""))
+          }
+        }
+      case _ =>  // do nothing
+    }
+
+    result
   }
 }
