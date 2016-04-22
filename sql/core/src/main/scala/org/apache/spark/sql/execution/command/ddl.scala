@@ -57,7 +57,7 @@ abstract class NativeDDLCommand(val sql: String) extends RunnableCommand {
  * {{{
  *   CREATE (DATABASE|SCHEMA) [IF NOT EXISTS] database_name
  *     [COMMENT database_comment]
- *     [LOCATION file_path]
+ *     [LOCATION database_directory]
  *     [WITH DBPROPERTIES (property_name=property_value, ...)];
  * }}}
  */
