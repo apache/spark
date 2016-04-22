@@ -17,11 +17,14 @@
 
 package org.apache.spark.sql.execution.command
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogTable, CatalogTableType, SimpleCatalogRelation}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, UnaryNode}
+import org.apache.spark.sql.types.{MetadataBuilder, StringType}
 
 
 case class CreateTableAsSelectLogicalPlan(
@@ -134,4 +137,53 @@ case class AlterTableRename(
     Seq.empty[Row]
   }
 
+}
+
+
+/**
+ * Command that looks like
+ * {{{
+ *   DESCRIBE (EXTENDED) table_name;
+ * }}}
+ */
+case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean)
+  extends RunnableCommand {
+
+  override val output: Seq[Attribute] = Seq(
+    // Column names are based on Hive.
+    AttributeReference("col_name", StringType, nullable = false,
+      new MetadataBuilder().putString("comment", "name of the column").build())(),
+    AttributeReference("data_type", StringType, nullable = false,
+      new MetadataBuilder().putString("comment", "data type of the column").build())(),
+    AttributeReference("comment", StringType, nullable = true,
+      new MetadataBuilder().putString("comment", "comment of the column").build())()
+  )
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    val result = new ArrayBuffer[Row]
+    sqlContext.sessionState.catalog.lookupRelation(table) match {
+      case catalogRelation: CatalogRelation =>
+        catalogRelation.catalogTable.schema.foreach { column =>
+          result += Row(column.name, column.dataType, column.comment.orNull)
+        }
+
+        if (catalogRelation.catalogTable.partitionColumns.nonEmpty) {
+          result += Row("# Partition Information", "", "")
+          result += Row(s"# ${output(0).name}", output(1).name, output(2).name)
+
+          catalogRelation.catalogTable.partitionColumns.foreach { col =>
+            result += Row(col.name, col.dataType, col.comment.orNull)
+          }
+        }
+
+      case relation =>
+        relation.schema.fields.foreach { field =>
+          val comment =
+            if (field.metadata.contains("comment")) field.metadata.getString("comment") else ""
+          result += Row(field.name, field.dataType.simpleString, comment)
+        }
+    }
+
+    result
+  }
 }

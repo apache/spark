@@ -15,22 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.util
+package org.apache.spark.shuffle.sort;
 
-import org.slf4j.Logger
-
-/**
- * Used to log signals received. This can be very useful in debugging crashes or kills.
- */
-private[spark] object SignalLogger {
-
-  private var registered = false
-
-  /** Register a signal handler to log signals on UNIX-like systems. */
-  def register(log: Logger): Unit = Seq("TERM", "HUP", "INT").foreach{ sig =>
-    Signaling.register(sig) {
-      log.error("RECEIVED SIGNAL " + sig)
-      false
-    }
-  }
+public class ShuffleInMemoryRadixSorterSuite extends ShuffleInMemorySorterSuite {
+  @Override
+  protected boolean shouldUseRadixSort() { return true; }
 }

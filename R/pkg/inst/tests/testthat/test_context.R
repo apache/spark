@@ -90,6 +90,11 @@ test_that("job group functions can be called", {
   clearJobGroup(sc)
 })
 
+test_that("utility function can be called", {
+  sc <- sparkR.init()
+  setLogLevel(sc, "ERROR")
+})
+
 test_that("getClientModeSparkSubmitOpts() returns spark-submit args from whitelist", {
   e <- new.env()
   e[["spark.driver.memory"]] <- "512m"

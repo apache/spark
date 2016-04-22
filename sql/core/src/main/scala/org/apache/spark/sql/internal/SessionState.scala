@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.command.AnalyzeTable
 import org.apache.spark.sql.execution.datasources.{DataSourceAnalysis, PreInsertCastAndRename, ResolveDataSource}
 import org.apache.spark.sql.util.ExecutionListenerManager
 
@@ -162,8 +163,15 @@ private[sql] class SessionState(ctx: SQLContext) {
     ctx.sparkContext.addJar(path)
   }
 
+  /**
+   * Analyzes the given table in the current database to generate statistics, which will be
+   * used in query optimizations.
+   *
+   * Right now, it only supports catalog tables and it only updates the size of a catalog table
+   * in the external catalog.
+   */
   def analyze(tableName: String): Unit = {
-    throw new UnsupportedOperationException
+    AnalyzeTable(tableName).run(ctx)
   }
 
   def runNativeSql(sql: String): Seq[String] = {
