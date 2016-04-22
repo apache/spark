@@ -53,7 +53,7 @@ protected[hive] class HiveQueryExecution(ctx: SQLContext, logicalPlan: LogicalPl
       // We need the types so we can output struct field names
       val types = analyzed.output.map(_.dataType)
       // Reformat to match hive tab delimited output.
-      result.map(_.zip(types).map(HiveContext.toHiveString)).map(_.mkString("\t")).toSeq
+      result.map(_.zip(types).map(HiveUtils.toHiveString)).map(_.mkString("\t")).toSeq
   }
 
   override def simpleString: String =

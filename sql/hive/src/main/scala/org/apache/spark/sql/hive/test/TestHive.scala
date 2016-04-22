@@ -74,7 +74,7 @@ class TestHiveContext(@transient val sparkSession: TestHiveSparkSession, isRootC
   extends HiveContext(sparkSession, isRootContext) {
 
   def this(sc: SparkContext) {
-    this(new TestHiveSparkSession(HiveContext.withHiveExternalCatalog(sc)), true)
+    this(new TestHiveSparkSession(HiveUtils.withHiveExternalCatalog(sc)), true)
   }
 
   override def newSession(): TestHiveContext = {
@@ -117,7 +117,7 @@ private[hive] class TestHiveSparkSession(
       sc,
       Utils.createTempDir(namePrefix = "warehouse"),
       TestHiveContext.makeScratchDir(),
-      HiveContext.newTemporaryConfiguration(useInMemoryDerby = false),
+      HiveUtils.newTemporaryConfiguration(useInMemoryDerby = false),
       None)
   }
 
@@ -576,7 +576,7 @@ private[hive] object TestHiveContext {
       scratchDirPath: File,
       metastoreTemporaryConf: Map[String, String]): HiveClient = {
     val hiveConf = new HiveConf(hadoopConf, classOf[HiveConf])
-    HiveContext.newClientForMetadata(
+    HiveUtils.newClientForMetadata(
       conf,
       hiveConf,
       hadoopConf,
@@ -591,7 +591,7 @@ private[hive] object TestHiveContext {
       warehousePath: File,
       scratchDirPath: File,
       metastoreTemporaryConf: Map[String, String]): Map[String, String] = {
-    HiveContext.hiveClientConfigurations(hiveconf) ++ metastoreTemporaryConf ++ Map(
+    HiveUtils.hiveClientConfigurations(hiveconf) ++ metastoreTemporaryConf ++ Map(
       ConfVars.METASTOREWAREHOUSE.varname -> warehousePath.toURI.toString,
       ConfVars.METASTORE_INTEGER_JDO_PUSHDOWN.varname -> "true",
       ConfVars.SCRATCHDIR.varname -> scratchDirPath.toURI.toString,

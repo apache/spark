@@ -42,7 +42,7 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -115,7 +115,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       val resultSet = statement.executeQuery("SET spark.sql.hive.version")
       resultSet.next()
       assert(resultSet.getString(1) === "spark.sql.hive.version")
-      assert(resultSet.getString(2) === HiveContext.hiveExecutionVersion)
+      assert(resultSet.getString(2) === HiveUtils.hiveExecutionVersion)
     }
   }
 
@@ -624,7 +624,7 @@ class HiveThriftHttpServerSuite extends HiveThriftJdbcTest {
       val resultSet = statement.executeQuery("SET spark.sql.hive.version")
       resultSet.next()
       assert(resultSet.getString(1) === "spark.sql.hive.version")
-      assert(resultSet.getString(2) === HiveContext.hiveExecutionVersion)
+      assert(resultSet.getString(2) === HiveUtils.hiveExecutionVersion)
     }
   }
 }

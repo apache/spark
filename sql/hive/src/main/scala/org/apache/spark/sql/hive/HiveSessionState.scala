@@ -190,7 +190,7 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
    * SerDe.
    */
   def convertMetastoreParquet: Boolean = {
-    conf.getConf(HiveContext.CONVERT_METASTORE_PARQUET)
+    conf.getConf(HiveUtils.CONVERT_METASTORE_PARQUET)
   }
 
   /**
@@ -200,7 +200,7 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
    * This configuration is only effective when "spark.sql.hive.convertMetastoreParquet" is true.
    */
   def convertMetastoreParquetWithSchemaMerging: Boolean = {
-    conf.getConf(HiveContext.CONVERT_METASTORE_PARQUET_WITH_SCHEMA_MERGING)
+    conf.getConf(HiveUtils.CONVERT_METASTORE_PARQUET_WITH_SCHEMA_MERGING)
   }
 
   /**
@@ -209,7 +209,7 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
    * SerDe.
    */
   def convertMetastoreOrc: Boolean = {
-    conf.getConf(HiveContext.CONVERT_METASTORE_ORC)
+    conf.getConf(HiveUtils.CONVERT_METASTORE_ORC)
   }
 
   /**
@@ -225,14 +225,14 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
    *     and no SerDe is specified (no ROW FORMAT SERDE clause).
    */
   def convertCTAS: Boolean = {
-    conf.getConf(HiveContext.CONVERT_CTAS)
+    conf.getConf(HiveUtils.CONVERT_CTAS)
   }
 
   /**
    * When true, Hive Thrift server will execute SQL queries asynchronously using a thread pool."
    */
   def hiveThriftServerAsync: Boolean = {
-    conf.getConf(HiveContext.HIVE_THRIFT_SERVER_ASYNC)
+    conf.getConf(HiveUtils.HIVE_THRIFT_SERVER_ASYNC)
   }
 
   def hiveThriftServerSingleSession: Boolean = {
