@@ -55,7 +55,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
     unresolvedVEncoder.resolve(dataAttributes, OuterScopes.outerScopes)
 
   private def logicalPlan = queryExecution.analyzed
-  private def sparkSession = queryExecution.sqlContext.sparkSession
+  private def sparkSession = queryExecution.sparkSession
 
   /**
    * Returns a new [[KeyValueGroupedDataset]] where the type of the key has been mapped to the
@@ -217,7 +217,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
       Alias(CreateStruct(groupingAttributes), "key")()
     }
     val aggregate = Aggregate(groupingAttributes, keyColumn +: namedColumns, logicalPlan)
-    val execution = new QueryExecution(sparkSession.wrapped, aggregate)
+    val execution = new QueryExecution(sparkSession, aggregate)
 
     new Dataset(
       sparkSession,

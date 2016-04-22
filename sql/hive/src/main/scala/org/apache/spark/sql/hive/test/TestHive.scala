@@ -465,7 +465,7 @@ private[hive] class TestHiveSparkSession(
 private[hive] class TestHiveQueryExecution(
     sparkSession: TestHiveSparkSession,
     logicalPlan: LogicalPlan)
-  extends QueryExecution(new SQLContext(sparkSession), logicalPlan) with Logging {
+  extends QueryExecution(sparkSession, logicalPlan) with Logging {
 
   def this(sparkSession: TestHiveSparkSession, sql: String) {
     this(sparkSession, sparkSession.sessionState.sqlParser.parsePlan(sql))

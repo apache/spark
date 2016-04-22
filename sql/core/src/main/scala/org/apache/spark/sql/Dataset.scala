@@ -1010,9 +1010,7 @@ class Dataset[T] private[sql](
     val encoders = columns.map(_.encoder)
     val namedColumns =
       columns.map(_.withInputType(unresolvedTEncoder.deserializer, logicalPlan.output).named)
-    // TODO(andrew)
-    val execution = new QueryExecution(sparkSession.wrapped, Project(namedColumns, logicalPlan))
-
+    val execution = new QueryExecution(sparkSession, Project(namedColumns, logicalPlan))
     new Dataset(sparkSession, execution, ExpressionEncoder.tuple(encoders))
   }
 

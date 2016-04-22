@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExprId, Literal, SubqueryExpression}
@@ -70,11 +70,11 @@ case class ScalarSubquery(
 /**
  * Plans scalar subqueries from that are present in the given [[SparkPlan]].
  */
-case class PlanSubqueries(sqlContext: SQLContext) extends Rule[SparkPlan] {
+case class PlanSubqueries(sparkSession: SparkSession) extends Rule[SparkPlan] {
   def apply(plan: SparkPlan): SparkPlan = {
     plan.transformAllExpressions {
       case subquery: expressions.ScalarSubquery =>
-        val executedPlan = new QueryExecution(sqlContext, subquery.plan).executedPlan
+        val executedPlan = new QueryExecution(sparkSession, subquery.plan).executedPlan
         ScalarSubquery(executedPlan, subquery.exprId)
     }
   }

@@ -136,7 +136,7 @@ private[sql] class SessionState(ctx: SQLContext) {
   //  Helper methods, partially leftover from pre-2.0 days
   // ------------------------------------------------------
 
-  def executePlan(plan: LogicalPlan): QueryExecution = new QueryExecution(ctx, plan)
+  def executePlan(plan: LogicalPlan): QueryExecution = new QueryExecution(ctx.sparkSession, plan)
 
   def refreshTable(tableName: String): Unit = {
     catalog.refreshTable(sqlParser.parseTableIdentifier(tableName))
