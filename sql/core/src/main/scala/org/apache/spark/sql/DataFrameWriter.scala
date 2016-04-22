@@ -244,7 +244,11 @@ final class DataFrameWriter private[sql](df: DataFrame) {
       bucketSpec = getBucketSpec,
       options = extraOptions.toMap)
 
-    dataSource.write(mode, df)
+    dataSource.providingClass.newInstance() match {
+      case jdbc: execution.datasources.jdbc.DefaultSource =>
+        jdbc.write(mode, df, extraOptions.toMap)
+      case _ => dataSource.write(mode, df)
+    }
   }
 
   /**
@@ -489,46 +493,12 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 1.4.0
    */
   def jdbc(url: String, table: String, connectionProperties: Properties): Unit = {
-    val props = new Properties()
-    extraOptions.foreach { case (key, value) =>
-      props.put(key, value)
-    }
+    import scala.collection.JavaConverters._
     // connectionProperties should override settings in extraOptions
-    props.putAll(connectionProperties)
-    val conn = JdbcUtils.createConnectionFactory(url, props)()
-
-    try {
-      var tableExists = JdbcUtils.tableExists(conn, url, table)
-
-      if (mode == SaveMode.Ignore && tableExists) {
-        return
-      }
-
-      if (mode == SaveMode.ErrorIfExists && tableExists) {
-        sys.error(s"Table $table already exists.")
-      }
-
-      if (mode == SaveMode.Overwrite && tableExists) {
-        JdbcUtils.dropTable(conn, table)
-        tableExists = false
-      }
-
-      // Create the table if the table didn't exist.
-      if (!tableExists) {
-        val schema = JdbcUtils.schemaString(df, url)
-        val sql = s"CREATE TABLE $table ($schema)"
-        val statement = conn.createStatement
-        try {
-          statement.executeUpdate(sql)
-        } finally {
-          statement.close()
-        }
-      }
-    } finally {
-      conn.close()
-    }
-
-    JdbcUtils.saveTable(df, url, table, props)
+    this.extraOptions = this.extraOptions ++ (connectionProperties.asScala)
+    // explicit url and dbtable should override all
+    this.extraOptions += ("url" -> url, "dbtable" -> table)
+    format("jdbc").save
   }
 
   /**

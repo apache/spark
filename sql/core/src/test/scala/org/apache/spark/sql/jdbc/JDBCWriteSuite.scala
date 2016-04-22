@@ -151,4 +151,16 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
     assert(2 === sqlContext.read.jdbc(url1, "TEST.PEOPLE1", properties).count)
     assert(2 === sqlContext.read.jdbc(url1, "TEST.PEOPLE1", properties).collect()(0).length)
   }
+
+  test("save works for format(\"jdbc\") if url and dbtable are set") {
+    val df = sqlContext.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
+
+    df.write.format("jdbc")
+    .options(Map("url" -> url, "dbtable" -> "TEST.BASICCREATETEST"))
+    .save
+
+    assert(2 === sqlContext.read.jdbc(url, "TEST.BASICCREATETEST", new Properties).count)
+    assert(
+      2 === sqlContext.read.jdbc(url, "TEST.BASICCREATETEST", new Properties).collect()(0).length)
+  }
 }
