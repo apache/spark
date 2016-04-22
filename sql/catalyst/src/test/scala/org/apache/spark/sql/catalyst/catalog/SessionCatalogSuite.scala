@@ -61,6 +61,14 @@ class SessionCatalogSuite extends SparkFunSuite {
     assert(!catalog.databaseExists("does_not_exist"))
   }
 
+  test("create database having an illegal name") {
+    val catalog = new SessionCatalog(newBasicCatalog())
+    val e = intercept[AnalysisException] {
+      catalog.createDatabase(newDb("db:1"), ignoreIfExists = true)
+    }
+    assert(e.getMessage.contains("Database name 'db:1' is not a valid name"))
+  }
+
   test("get database when a database exists") {
     val catalog = new SessionCatalog(newBasicCatalog())
     val db1 = catalog.getDatabaseMetadata("db1")
@@ -178,6 +186,14 @@ class SessionCatalogSuite extends SparkFunSuite {
     sessionCatalog.createTable(newTable("_tbl4"), ignoreIfExists = false)
     assert(externalCatalog.listTables("db1").toSet == Set("tbl3", "_tbl4"))
     assert(externalCatalog.listTables("db2").toSet == Set("tbl1", "tbl2", "tbl3"))
+  }
+
+  test("create table having an illegal name") {
+    val catalog = new SessionCatalog(newBasicCatalog())
+    val e = intercept[AnalysisException] {
+      catalog.createTable(newTable("tbl:3"), ignoreIfExists = false)
+    }
+    assert(e.getMessage.contains("Table name 'tbl:3' is not a valid name"))
   }
 
   test("create table when database does not exist") {

@@ -79,28 +79,35 @@ class SessionCatalog(
   }
 
   /**
-    * Validate names
-    */
+   * Validate names
+   */
   protected[this] def validateName(name: String): Boolean = {
-    true
+    val validName = "([_A-Za-z0-9_]*)".r
+    validName.pattern.matcher(name).matches()
   }
 
   /**
-    * Validate database names
-    */
+   * Validate database names
+   */
   protected[this] def validateDatabaseName(dbName: Option[String]): Unit = {
-    /* no-op */
+    if (dbName.isDefined) validateDatabaseName(dbName.get)
   }
 
   protected[this] def validateDatabaseName(dbName: String): Unit = {
-    /* no-op */
+    if (!validateName(dbName)) {
+      throw new AnalysisException(s"Database name '$dbName' is not a valid name. " +
+        s"Valid database names only contain characters, numbers and _.")
+    }
   }
 
   /**
-    * Validate database names
-    */
+   * Validate table names
+   */
   protected[this] def validateTableName(tableName: String): Unit = {
-    /* no-op */
+    if (!validateName(tableName)) {
+      throw new AnalysisException(s"Table name '$tableName' is not a valid name. " +
+        s"Valid table names only contain characters, numbers and _.")
+    }
   }
 
   // ----------------------------------------------------------------------------
@@ -271,6 +278,7 @@ class SessionCatalog(
       tableDefinition: LogicalPlan,
       overrideIfExists: Boolean): Unit = {
     val table = formatTableName(name)
+    validateTableName(table)
     if (tempTables.contains(table) && !overrideIfExists) {
       throw new AnalysisException(s"Temporary table '$name' already exists.")
     }
