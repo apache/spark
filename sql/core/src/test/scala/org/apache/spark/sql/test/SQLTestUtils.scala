@@ -92,6 +92,27 @@ private[sql] trait SQLTestUtils
   }
 
   /**
+   * Sets all Hadoop configurations specified in `pairs`, calls `f`, and then restore all Hadoop
+   * configurations.
+   */
+  protected def withHadoopConf(pairs: (String, String)*)(f: => Unit): Unit = {
+    val (keys, _) = pairs.unzip
+    val originalValues = keys.map(key => Option(hadoopConfiguration.get(key)))
+
+    try {
+      pairs.foreach { case (key, value) =>
+        hadoopConfiguration.set(key, value)
+      }
+      f
+    } finally {
+      keys.zip(originalValues).foreach {
+        case (key, Some(value)) => hadoopConfiguration.set(key, value)
+        case (key, None) => hadoopConfiguration.unset(key)
+      }
+    }
+  }
+
+  /**
    * Sets all SQL configurations specified in `pairs`, calls `f`, and then restore all SQL
    * configurations.
    *

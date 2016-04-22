@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.exchange
 
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 
 import org.apache.spark.broadcast
@@ -73,16 +73,16 @@ case class BroadcastExchange(
         // Note that we use .executeCollect() because we don't want to convert data to Scala types
         val input: Array[InternalRow] = child.executeCollect()
         val beforeBuild = System.nanoTime()
-        longMetric("collectTime") += (beforeBuild - beforeCollect) >> 20
+        longMetric("collectTime") += (beforeBuild - beforeCollect) / 1000000
         longMetric("dataSize") += input.map(_.asInstanceOf[UnsafeRow].getSizeInBytes.toLong).sum
 
         // Construct and broadcast the relation.
         val relation = mode.transform(input)
         val beforeBroadcast = System.nanoTime()
-        longMetric("buildTime") += (beforeBroadcast - beforeBuild) >> 20
+        longMetric("buildTime") += (beforeBroadcast - beforeBuild) / 1000000
 
         val broadcasted = sparkContext.broadcast(relation)
-        longMetric("broadcastTime") += (System.nanoTime() - beforeBroadcast) >> 20
+        longMetric("broadcastTime") += (System.nanoTime() - beforeBroadcast) / 1000000
         broadcasted
       }
     }(BroadcastExchange.executionContext)
@@ -99,8 +99,7 @@ case class BroadcastExchange(
   }
 
   override protected[sql] def doExecuteBroadcast[T](): broadcast.Broadcast[T] = {
-    val result = Await.result(relationFuture, timeout)
-    result.asInstanceOf[broadcast.Broadcast[T]]
+    ThreadUtils.awaitResult(relationFuture, timeout).asInstanceOf[broadcast.Broadcast[T]]
   }
 }
 

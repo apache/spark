@@ -23,7 +23,7 @@ import java.sql.{Date, Timestamp}
 import scala.reflect.runtime.universe.typeOf
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.BoundReference
+import org.apache.spark.sql.catalyst.expressions.{BoundReference, SpecificMutableRow}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -81,8 +81,43 @@ case class MultipleConstructorsData(a: Int, b: String, c: Double) {
   def this(b: String, a: Int) = this(a, b, c = 1.0)
 }
 
+object TestingUDT {
+  @SQLUserDefinedType(udt = classOf[NestedStructUDT])
+  class NestedStruct(val a: Integer, val b: Long, val c: Double)
+
+  class NestedStructUDT extends UserDefinedType[NestedStruct] {
+    override def sqlType: DataType = new StructType()
+      .add("a", IntegerType, nullable = true)
+      .add("b", LongType, nullable = false)
+      .add("c", DoubleType, nullable = false)
+
+    override def serialize(n: NestedStruct): Any = {
+      val row = new SpecificMutableRow(sqlType.asInstanceOf[StructType].map(_.dataType))
+      row.setInt(0, n.a)
+      row.setLong(1, n.b)
+      row.setDouble(2, n.c)
+    }
+
+    override def userClass: Class[NestedStruct] = classOf[NestedStruct]
+
+    override def deserialize(datum: Any): NestedStruct = datum match {
+      case row: InternalRow =>
+        new NestedStruct(row.getInt(0), row.getLong(1), row.getDouble(2))
+    }
+  }
+}
+
+
 class ScalaReflectionSuite extends SparkFunSuite {
   import org.apache.spark.sql.catalyst.ScalaReflection._
+
+  test("SQLUserDefinedType annotation on Scala structure") {
+    val schema = schemaFor[TestingUDT.NestedStruct]
+    assert(schema === Schema(
+      new TestingUDT.NestedStructUDT,
+      nullable = true
+    ))
+  }
 
   test("primitive data") {
     val schema = schemaFor[PrimitiveData]

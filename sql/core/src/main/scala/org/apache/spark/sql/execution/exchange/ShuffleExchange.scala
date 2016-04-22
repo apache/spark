@@ -22,7 +22,6 @@ import java.util.Random
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.shuffle.hash.HashShuffleManager
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
@@ -59,7 +58,8 @@ case class ShuffleExchange(
 
   override def outputPartitioning: Partitioning = newPartitioning
 
-  private val serializer: Serializer = new UnsafeRowSerializer(child.output.size)
+  private val serializer: Serializer =
+    new UnsafeRowSerializer(child.output.size, longMetric("dataSize"))
 
   override protected def doPrepare(): Unit = {
     // If an ExchangeCoordinator is needed, we register this Exchange operator
@@ -82,15 +82,8 @@ case class ShuffleExchange(
    * the returned ShuffleDependency will be the input of shuffle.
    */
   private[sql] def prepareShuffleDependency(): ShuffleDependency[Int, InternalRow, InternalRow] = {
-    val dataSize = longMetric("dataSize")
-    val rdd = child.execute().mapPartitionsInternal { iter =>
-      val localDataSize = dataSize.localValue
-      iter.map { row =>
-        localDataSize.add(row.asInstanceOf[UnsafeRow].getSizeInBytes)
-        row
-      }
-    }
-    ShuffleExchange.prepareShuffleDependency(rdd, child.output, newPartitioning, serializer)
+    ShuffleExchange.prepareShuffleDependency(
+      child.execute(), child.output, newPartitioning, serializer)
   }
 
   /**
@@ -190,9 +183,6 @@ object ShuffleExchange {
         // copy.
         true
       }
-    } else if (shuffleManager.isInstanceOf[HashShuffleManager]) {
-      // We're using hash-based shuffle, so we don't need to copy.
-      false
     } else {
       // Catch-all case to safely handle any future ShuffleManager implementations.
       true

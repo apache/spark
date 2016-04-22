@@ -68,7 +68,10 @@ private[deploy] class DriverRunner(
 
   private var clock: Clock = new SystemClock()
   private var sleeper = new Sleeper {
-    def sleep(seconds: Int): Unit = (0 until seconds).takeWhile(f => {Thread.sleep(1000); !killed})
+    def sleep(seconds: Int): Unit = (0 until seconds).takeWhile { _ =>
+      Thread.sleep(1000)
+      !killed
+    }
   }
 
   /** Starts a thread to run and manage the driver. */
@@ -116,7 +119,7 @@ private[deploy] class DriverRunner(
   /** Terminate this driver (or prevent it from ever starting if not yet started) */
   private[worker] def kill() {
     synchronized {
-      process.foreach(p => p.destroy())
+      process.foreach(_.destroy())
       killed = true
     }
   }

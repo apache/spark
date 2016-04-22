@@ -25,6 +25,8 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, GenerateUnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.physical.{Distribution, OrderedDistribution, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.types._
+import org.apache.spark.util.collection.unsafe.sort.RadixSort;
 
 /**
  * Performs (external) sorting.
@@ -48,10 +50,12 @@ case class Sort(
   override def requiredChildDistribution: Seq[Distribution] =
     if (global) OrderedDistribution(sortOrder) :: Nil else UnspecifiedDistribution :: Nil
 
+  private val enableRadixSort = sqlContext.conf.enableRadixSort
+
   override private[sql] lazy val metrics = Map(
+    "sortTime" -> SQLMetrics.createTimingMetric(sparkContext, "sort time"),
     "peakMemory" -> SQLMetrics.createSizeMetric(sparkContext, "peak memory"),
-    "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"),
-    "sortingTime" -> SQLMetrics.createTimingMetric(sparkContext, "sorting time"))
+    "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"))
 
   def createSorter(): UnsafeExternalRowSorter = {
     val ordering = newOrdering(sortOrder, output)
@@ -59,6 +63,9 @@ case class Sort(
     // The comparator for comparing prefix
     val boundSortExpression = BindReferences.bindReference(sortOrder.head, output)
     val prefixComparator = SortPrefixUtils.getPrefixComparator(boundSortExpression)
+
+    val canUseRadixSort = enableRadixSort && sortOrder.length == 1 &&
+      SortPrefixUtils.canSortFullyWithPrefix(boundSortExpression)
 
     // The generator for prefix
     val prefixProjection = UnsafeProjection.create(Seq(SortPrefix(boundSortExpression)))
@@ -70,7 +77,8 @@ case class Sort(
 
     val pageSize = SparkEnv.get.memoryManager.pageSizeBytes
     val sorter = new UnsafeExternalRowSorter(
-      schema, ordering, prefixComparator, prefixComputer, pageSize)
+      schema, ordering, prefixComparator, prefixComputer, pageSize, canUseRadixSort)
+
     if (testSpillFrequency > 0) {
       sorter.setTestSpillFrequency(testSpillFrequency)
     }
@@ -80,7 +88,7 @@ case class Sort(
   protected override def doExecute(): RDD[InternalRow] = {
     val peakMemory = longMetric("peakMemory")
     val spillSize = longMetric("spillSize")
-    val sortingTime = longMetric("sortingTime")
+    val sortTime = longMetric("sortTime")
 
     child.execute().mapPartitionsInternal { iter =>
       val sorter = createSorter()
@@ -93,7 +101,7 @@ case class Sort(
 
       val sortedIterator = sorter.sort(iter.asInstanceOf[Iterator[UnsafeRow]])
 
-      sortingTime += (System.nanoTime() - beforeSort) >> 20
+      sortTime += (System.nanoTime() - beforeSort) / 1000000
       peakMemory += sorter.getPeakMemoryUsage
       spillSize += metrics.memoryBytesSpilled - spillSizeBefore
       metrics.incPeakExecutionMemory(sorter.getPeakMemoryUsage)
@@ -104,8 +112,8 @@ case class Sort(
 
   override def usedInputs: AttributeSet = AttributeSet(Seq.empty)
 
-  override def upstreams(): Seq[RDD[InternalRow]] = {
-    child.asInstanceOf[CodegenSupport].upstreams()
+  override def inputRDDs(): Seq[RDD[InternalRow]] = {
+    child.asInstanceOf[CodegenSupport].inputRDDs()
   }
 
   // Name of sorter variable used in codegen.
@@ -142,18 +150,16 @@ case class Sort(
     val outputRow = ctx.freshName("outputRow")
     val peakMemory = metricTerm(ctx, "peakMemory")
     val spillSize = metricTerm(ctx, "spillSize")
-    val sortingTime = metricTerm(ctx, "sortingTime")
     val spillSizeBefore = ctx.freshName("spillSizeBefore")
-    val beforeSortMs = ctx.freshName("beforeSortMs")
+    val startTime = ctx.freshName("startTime")
+    val sortTime = metricTerm(ctx, "sortTime")
     s"""
        | if ($needToSort) {
-       |   long $beforeSortMs = System.nanoTime();
        |   long $spillSizeBefore = $metrics.memoryBytesSpilled();
-       |
+       |   long $startTime = System.nanoTime();
        |   $addToSorter();
        |   $sortedIterator = $sorterVariable.sort();
-       |
-       |   $sortingTime.add((System.nanoTime() - $beforeSortMs) >> 20);
+       |   $sortTime.add((System.nanoTime() - $startTime) / 1000000);
        |   $peakMemory.add($sorterVariable.getPeakMemoryUsage());
        |   $spillSize.add($metrics.memoryBytesSpilled() - $spillSizeBefore);
        |   $metrics.incPeakExecutionMemory($sorterVariable.getPeakMemoryUsage());

@@ -131,7 +131,7 @@ if __name__ == "__main__":
          "TypeConverters.toFloat"),
         ("handleInvalid", "how to handle invalid entries. Options are skip (which will filter " +
          "out rows with bad values), or error (which will throw an errror). More options may be " +
-         "added later.", None, "TypeConverters.toBoolean"),
+         "added later.", None, "TypeConverters.toString"),
         ("elasticNetParam", "the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, " +
          "the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.", "0.0",
          "TypeConverters.toFloat"),

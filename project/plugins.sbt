@@ -12,6 +12,8 @@ addSbtPlugin("com.alpinenow" % "junit_xml_listener" % "0.5.1")
 
 addSbtPlugin("com.eed3si9n" % "sbt-unidoc" % "0.3.3")
 
+addSbtPlugin("com.thoughtworks.sbt-api-mappings" % "sbt-api-mappings" % "0.2.2")
+
 addSbtPlugin("com.cavorite" % "sbt-avro" % "0.3.2")
 
 addSbtPlugin("io.spray" % "sbt-revolver" % "0.8.0")

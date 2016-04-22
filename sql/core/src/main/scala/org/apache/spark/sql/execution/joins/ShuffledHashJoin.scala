@@ -61,15 +61,13 @@ case class ShuffledHashJoin(
   private def buildHashedRelation(iter: Iterator[InternalRow]): HashedRelation = {
     val buildDataSize = longMetric("buildDataSize")
     val buildTime = longMetric("buildTime")
-    val start = System.currentTimeMillis()
+    val start = System.nanoTime()
     val context = TaskContext.get()
     val relation = HashedRelation(iter, buildKeys, taskMemoryManager = context.taskMemoryManager())
-    buildTime += System.currentTimeMillis() - start
+    buildTime += (System.nanoTime() - start) / 1000000
     buildDataSize += relation.estimatedSize
     // This relation is usually used until the end of task.
-    context.addTaskCompletionListener((t: TaskContext) =>
-      relation.close()
-    )
+    context.addTaskCompletionListener(_ => relation.close())
     relation
   }
 

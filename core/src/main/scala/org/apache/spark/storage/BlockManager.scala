@@ -260,7 +260,12 @@ private[spark] class BlockManager(
   def waitForAsyncReregister(): Unit = {
     val task = asyncReregisterTask
     if (task != null) {
-      Await.ready(task, Duration.Inf)
+      try {
+        Await.ready(task, Duration.Inf)
+      } catch {
+        case NonFatal(t) =>
+          throw new Exception("Error occurred while waiting for async. reregistration", t)
+      }
     }
   }
 
@@ -802,7 +807,12 @@ private[spark] class BlockManager(
       logDebug("Put block %s locally took %s".format(blockId, Utils.getUsedTimeMs(startTimeMs)))
       if (level.replication > 1) {
         // Wait for asynchronous replication to finish
-        Await.ready(replicationFuture, Duration.Inf)
+        try {
+          Await.ready(replicationFuture, Duration.Inf)
+        } catch {
+          case NonFatal(t) =>
+            throw new Exception("Error occurred while waiting for replication to finish", t)
+        }
       }
       if (blockWasSuccessfullyStored) {
         None

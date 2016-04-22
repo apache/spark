@@ -18,8 +18,9 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.catalyst.{expressions, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{ExprId, Literal, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{Expression, ExprId, Literal, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -42,6 +43,7 @@ case class ScalarSubquery(
   override def plan: SparkPlan = Subquery(simpleString, executedPlan)
 
   override def dataType: DataType = executedPlan.schema.fields.head.dataType
+  override def children: Seq[Expression] = Nil
   override def nullable: Boolean = true
   override def toString: String = s"subquery#${exprId.id}"
 
@@ -54,8 +56,8 @@ case class ScalarSubquery(
 
   override def eval(input: InternalRow): Any = result
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
-    Literal.create(result, dataType).genCode(ctx, ev)
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    Literal.create(result, dataType).doGenCode(ctx, ev)
   }
 }
 
