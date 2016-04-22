@@ -24,6 +24,10 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.SparkException
 import org.apache.spark.ml.util.MLReader
 
+/**
+ * This is the Scala stub of SparkR ml.load. It will dispatch the call to corresponding
+ * model wrapper loading function according the class name extracted from rMetadata of the path.
+ */
 private[r] object RWrappers extends MLReader[Object] {
 
   override def load(path: String): Object = {

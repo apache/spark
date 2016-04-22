@@ -95,8 +95,8 @@ private[r] object NaiveBayesWrapper extends MLReadable[NaiveBayesWrapper] {
       val pipelinePath = new Path(path, "pipeline").toString
 
       val rMetadata = ("class" -> instance.getClass.getName) ~
-        ("labels" -> parse(compact(render(instance.labels.toSeq)))) ~
-        ("features" -> parse(compact(render(instance.features.toSeq))))
+        ("labels" -> instance.labels.toSeq) ~
+        ("features" -> instance.features.toSeq)
       val rMetadataJson: String = compact(render(rMetadata))
       sc.parallelize(Seq(rMetadataJson), 1).saveAsTextFile(rMetadataPath)
 
@@ -113,8 +113,8 @@ private[r] object NaiveBayesWrapper extends MLReadable[NaiveBayesWrapper] {
 
       val rMetadataStr = sc.textFile(rMetadataPath, 1).first()
       val rMetadata = parse(rMetadataStr)
-      val labels = parse(compact(render(rMetadata \ "labels"))).extract[Seq[String]].toArray
-      val features = parse(compact(render(rMetadata \ "features"))).extract[Seq[String]].toArray
+      val labels = (rMetadata \ "labels").extract[Seq[String]].toArray
+      val features = (rMetadata \ "features").extract[Seq[String]].toArray
 
       val pipeline = PipelineModel.load(pipelinePath)
       new NaiveBayesWrapper(pipeline, labels, features)

@@ -342,7 +342,8 @@ setMethod("naiveBayes", signature(formula = "formula", data = "DataFrame"),
 #'
 #' @param object A fitted Bernoulli naive Bayes model
 #' @param path The directory where the model is saved
-#' @param overwrite Overwrites if the output path already exists
+#' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
+#'                  which means throw exception if the output path exists.
 #'
 #' @rdname ml.save
 #' @name ml.save
@@ -355,12 +356,12 @@ setMethod("naiveBayes", signature(formula = "formula", data = "DataFrame"),
 #' ml.save(model, path)
 #' }
 setMethod("ml.save", signature(object = "NaiveBayesModel", path = "character"),
-          function(object, path, overwrite = TRUE) {
-            write <- callJMethod(object@jobj, "write")
+          function(object, path, overwrite = FALSE) {
+            writer <- callJMethod(object@jobj, "write")
             if (overwrite) {
-              write <- callJMethod(write, "overwrite")
+              writer <- callJMethod(writer, "overwrite")
             }
-            invisible(callJMethod(write, "save", path))
+            invisible(callJMethod(writer, "save", path))
           })
 
 #' Load a fitted MLlib model from the input path.

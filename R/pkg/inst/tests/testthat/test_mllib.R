@@ -208,7 +208,7 @@ test_that("naiveBayes", {
 
   # Test model save/load
   modelPath <- tempfile(pattern = "naiveBayes", fileext = ".tmp")
-  ml.save(m, modelPath)
+  ml.save(m, modelPath, overwrite = TRUE)
   m2 <- ml.load(modelPath)
   s2 <- summary(m2)
   expect_equal(s$apriori, s2$apriori)
