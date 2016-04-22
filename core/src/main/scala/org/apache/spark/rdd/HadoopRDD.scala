@@ -110,10 +110,6 @@ class HadoopRDD[K, V](
     minPartitions: Int)
   extends RDD[(K, V)](sc, Nil) with Logging {
 
-  if (initLocalJobConfFuncOpt.isDefined) {
-    sparkContext.clean(initLocalJobConfFuncOpt.get)
-  }
-
   def this(
       sc: SparkContext,
       conf: JobConf,
