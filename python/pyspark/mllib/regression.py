@@ -17,6 +17,7 @@
 
 import numpy as np
 from numpy import array
+import warnings
 
 from pyspark import RDD, since
 from pyspark.streaming.dstream import DStream
@@ -276,6 +277,8 @@ class LinearRegressionWithSGD(object):
           A condition which decides iteration termination.
           (default: 0.001)
         """
+        warnings.warn("LinearRegressionWithSGD is deprecated. " +
+                      "Use ml.regression.LinearRegression.")
         def train(rdd, i):
             return callMLlibFunc("trainLinearRegressionModelWithSGD", rdd, int(iterations),
                                  float(step), float(miniBatchFraction), i, float(regParam),
