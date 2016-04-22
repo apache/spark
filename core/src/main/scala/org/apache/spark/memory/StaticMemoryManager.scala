@@ -104,7 +104,7 @@ private[spark] class StaticMemoryManager(
 
 private[spark] object StaticMemoryManager {
 
-  private val MIN_MEMORY_BYTES = 450 * 1024 * 1024
+  private val MIN_MEMORY_BYTES = 32 * 1024 * 1024
 
   /**
    * Return the total amount of memory available for the storage region, in bytes.
