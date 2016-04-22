@@ -23,8 +23,7 @@ import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.api.hive_metastoreConstants._
 import org.apache.hadoop.hive.ql.exec.Utilities
-import org.apache.hadoop.hive.ql.metadata.{HiveUtils, Partition => HivePartition,
-  Table => HiveTable}
+import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition, Table => HiveTable}
 import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.hadoop.hive.serde2.Deserializer
 import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspectorConverters,
@@ -300,7 +299,8 @@ private[hive] object HiveTableUtil {
   def configureJobPropertiesForStorageHandler(
       tableDesc: TableDesc, jobConf: JobConf, input: Boolean) {
     val property = tableDesc.getProperties.getProperty(META_TABLE_STORAGE)
-    val storageHandler = HiveUtils.getStorageHandler(jobConf, property)
+    val storageHandler =
+      org.apache.hadoop.hive.ql.metadata.HiveUtils.getStorageHandler(jobConf, property)
     if (storageHandler != null) {
       val jobProperties = new util.LinkedHashMap[String, String]
       if (input) {

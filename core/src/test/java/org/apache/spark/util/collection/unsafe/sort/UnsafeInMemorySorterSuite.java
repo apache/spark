@@ -17,7 +17,6 @@
 
 package org.apache.spark.util.collection.unsafe.sort;
 
-import java.lang.Long;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
@@ -114,7 +113,7 @@ public class UnsafeInMemorySorterSuite {
     for (int i = 0; i < dataToSort.length; i++) {
       if (!sorter.hasSpaceForAnotherRecord()) {
         sorter.expandPointerArray(
-          consumer.allocateArray(sorter.getMemoryUsage() / Long.BYTES * 2));
+          consumer.allocateArray(sorter.getMemoryUsage() / 8 * 2));
       }
       // position now points to the start of a record (which holds its length).
       final int recordLength = Platform.getInt(baseObject, position);

@@ -550,7 +550,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
   }
 
   test("scan a parquet table created through a CTAS statement") {
-    withSQLConf(HiveContext.CONVERT_METASTORE_PARQUET.key -> "true") {
+    withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "true") {
       withTempTable("jt") {
         (1 to 10).map(i => i -> s"str$i").toDF("a", "b").registerTempTable("jt")
 

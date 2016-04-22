@@ -17,7 +17,6 @@
 
 package org.apache.spark.shuffle.sort;
 
-import java.lang.Long;
 import java.util.Comparator;
 
 import org.apache.spark.memory.MemoryConsumer;
@@ -102,7 +101,7 @@ final class ShuffleInMemorySorter {
       array.getBaseOffset(),
       newArray.getBaseObject(),
       newArray.getBaseOffset(),
-      array.size() * (Long.BYTES / memoryAllocationFactor)
+      array.size() * (8 / memoryAllocationFactor)
     );
     consumer.freeArray(array);
     array = newArray;
@@ -113,7 +112,7 @@ final class ShuffleInMemorySorter {
   }
 
   public long getMemoryUsage() {
-    return array.size() * Long.BYTES;
+    return array.size() * 8;
   }
 
   /**
