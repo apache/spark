@@ -488,6 +488,22 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     sort merge join codegen=false            3626 / 3667          0.6        1728.9       1.0X
     sort merge join codegen=true             3405 / 3438          0.6        1623.8       1.1X
       */
+
+    runBenchmark("SMJ outer join", N) {
+      val df1 = sqlContext.range(N)
+        .selectExpr(s"cast((id * 15485863) % $N as int) as k1", "id as id1")
+      val df2 = sqlContext.range(N)
+        .selectExpr(s"cast((id * 15485867) % $N as int) as k2", "id as id2")
+      df1.join(df2, col("k1") === col("k2") && col("id1") < col("id2"), "left").count()
+    }
+
+    /**
+     * Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+    SMJ outer join:                     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    -------------------------------------------------------------------------------------------
+    SMJ outer join codegen=false             3233 / 3493          0.6        1541.8       1.0X
+    SMJ outer join codegen=true              3093 / 3319          0.7        1475.0       1.0X
+     */
   }
 
   ignore("shuffle hash join") {
