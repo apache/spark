@@ -35,6 +35,7 @@ import org.apache.spark.sql.types._
 private[sql] trait RunnableCommand extends LogicalPlan with logical.Command {
   override def output: Seq[Attribute] = Seq.empty
   override def children: Seq[LogicalPlan] = Seq.empty
+  // TODO(andrew)
   def run(sqlContext: SQLContext): Seq[Row]
 }
 
@@ -114,7 +115,7 @@ case class CacheTableCommand(
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     plan.foreach { logicalPlan =>
-      sqlContext.registerDataFrameAsTable(Dataset.ofRows(sqlContext, logicalPlan), tableName)
+      sqlContext.registerDataFrameAsTable(Dataset.ofRows(sqlContext.sparkSession, logicalPlan), tableName)
     }
     sqlContext.cacheTable(tableName)
 

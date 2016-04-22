@@ -129,7 +129,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
         userSpecifiedSchema = userSpecifiedSchema,
         className = source,
         options = extraOptions.toMap)
-    Dataset.ofRows(sqlContext, LogicalRelation(dataSource.resolveRelation()))
+    Dataset.ofRows(sqlContext.sparkSession, LogicalRelation(dataSource.resolveRelation()))
   }
 
   /**
@@ -176,7 +176,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
         userSpecifiedSchema = userSpecifiedSchema,
         className = source,
         options = extraOptions.toMap)
-    Dataset.ofRows(sqlContext, StreamingRelation(dataSource))
+    Dataset.ofRows(sqlContext.sparkSession, StreamingRelation(dataSource))
   }
 
   /**
@@ -377,14 +377,14 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
     }
 
     Dataset.ofRows(
-      sqlContext,
+      sqlContext.sparkSession,
       LogicalRDD(
         schema.toAttributes,
         JacksonParser.parse(
           jsonRDD,
           schema,
           columnNameOfCorruptRecord,
-          parsedOptions))(sqlContext))
+          parsedOptions))(sqlContext.sparkSession))
   }
 
   /**
@@ -424,7 +424,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * @since 1.4.0
    */
   def table(tableName: String): DataFrame = {
-    Dataset.ofRows(sqlContext,
+    Dataset.ofRows(sqlContext.sparkSession,
       sqlContext.sessionState.catalog.lookupRelation(
         sqlContext.sessionState.sqlParser.parseTableIdentifier(tableName)))
   }

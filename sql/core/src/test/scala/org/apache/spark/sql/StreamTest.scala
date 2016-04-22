@@ -68,9 +68,9 @@ import org.apache.spark.util.Utils
 trait StreamTest extends QueryTest with Timeouts {
 
   implicit class RichSource(s: Source) {
-    def toDF(): DataFrame = Dataset.ofRows(sqlContext, StreamingExecutionRelation(s))
+    def toDF(): DataFrame = Dataset.ofRows(sqlContext.sparkSession, StreamingExecutionRelation(s))
 
-    def toDS[A: Encoder](): Dataset[A] = Dataset(sqlContext, StreamingExecutionRelation(s))
+    def toDS[A: Encoder](): Dataset[A] = Dataset(sqlContext.sparkSession, StreamingExecutionRelation(s))
   }
 
   /** How long to wait for an active stream to catch up when checking a result. */

@@ -25,7 +25,7 @@ import org.apache.spark.sql.internal.{SessionState, SQLConf}
  * A special [[SQLContext]] prepared for testing.
  */
 private[sql] class TestSQLContext(
-    @transient private val sparkSession: SparkSession,
+    @transient override val sparkSession: SparkSession,
     isRootContext: Boolean)
   extends SQLContext(sparkSession, isRootContext) { self =>
 

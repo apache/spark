@@ -52,7 +52,7 @@ import org.apache.spark.util.Utils
  * @since 1.0.0
  */
 class HiveContext private[hive](
-    @transient private val sparkSession: SparkSession,
+    @transient override val sparkSession: SparkSession,
     isRootContext: Boolean)
   extends SQLContext(sparkSession, isRootContext) with Logging {
 

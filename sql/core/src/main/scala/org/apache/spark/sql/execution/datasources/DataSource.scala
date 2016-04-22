@@ -58,6 +58,7 @@ import org.apache.spark.util.Utils
  *                         list is empty, the relation is unpartitioned.
  * @param bucketSpec An optional specification for bucketing (hash-partitioning) of the data.
  */
+//TODO(andrew)
 case class DataSource(
     sqlContext: SQLContext,
     className: String,
@@ -178,7 +179,7 @@ case class DataSource(
 
         def dataFrameBuilder(files: Array[String]): DataFrame = {
           Dataset.ofRows(
-            sqlContext,
+            sqlContext.sparkSession,
             LogicalRelation(
               DataSource(
                 sqlContext,

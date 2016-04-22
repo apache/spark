@@ -68,7 +68,7 @@ class SQLTransformer @Since("1.6.0") (override val uid: String) extends Transfor
     val tableName = Identifiable.randomUID(uid)
     dataset.registerTempTable(tableName)
     val realStatement = $(statement).replace(tableIdentifier, tableName)
-    dataset.sqlContext.sql(realStatement)
+    dataset.sparkSession.sql(realStatement)
   }
 
   @Since("1.6.0")

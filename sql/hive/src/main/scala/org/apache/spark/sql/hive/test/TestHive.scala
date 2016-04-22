@@ -71,7 +71,9 @@ object TestHive
  * hive metastore seems to lead to weird non-deterministic failures.  Therefore, the execution of
  * test cases that rely on TestHive must be serialized.
  */
-class TestHiveContext(@transient val sparkSession: TestHiveSparkSession, isRootContext: Boolean)
+class TestHiveContext(
+    @transient override val sparkSession: TestHiveSparkSession,
+    isRootContext: Boolean)
   extends HiveContext(sparkSession, isRootContext) {
 
   def this(sc: SparkContext) {

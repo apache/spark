@@ -87,15 +87,15 @@ private[sql] class CacheManager extends Logging {
     if (lookupCachedData(planToCache).nonEmpty) {
       logWarning("Asked to cache already cached data.")
     } else {
-      val sqlContext = query.sqlContext
+      val sparkSession = query.sparkSession
       cachedData +=
         CachedData(
           planToCache,
           InMemoryRelation(
-            sqlContext.conf.useCompression,
-            sqlContext.conf.columnBatchSize,
+            sparkSession.conf.useCompression,
+            sparkSession.conf.columnBatchSize,
             storageLevel,
-            sqlContext.executePlan(planToCache).executedPlan,
+            sparkSession.executePlan(planToCache).executedPlan,
             tableName))
     }
   }

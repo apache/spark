@@ -328,7 +328,7 @@ class StreamExecution(
     logDebug(s"Optimized batch in ${optimizerTime}ms")
 
     val nextBatch =
-      new Dataset(sqlContext, lastExecution, RowEncoder(lastExecution.analyzed.schema))
+      new Dataset(sqlContext.sparkSession, lastExecution, RowEncoder(lastExecution.analyzed.schema))
     sink.addBatch(currentBatchId - 1, nextBatch)
 
     awaitBatchLock.synchronized {
