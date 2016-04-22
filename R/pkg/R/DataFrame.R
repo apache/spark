@@ -1131,30 +1131,44 @@ setMethod("summarize",
 #'
 #' @param x A DataFrame
 #' @param func A function to be applied to each partition of the DataFrame.
-#' @param schema Optional. The schema of the resulting DataFrame after the function is applied.
-#'               If NULL, the content of the resulting DataFrame is serialized R data.
+#'             func should have only one parameter, to which a data.frame corresponds
+#'             to each partition will be passed.
+#'             The output of func should be a data.frame.
+#' @param schema The schema of the resulting DataFrame after the function is applied.
+#'               It must match the output of func.
 #' @family DataFrame functions
 #' @rdname dapply
 #' @name dapply
 #' @export
 #' @examples
 #' \dontrun{
-#'   df <- createDataFrame (sqlContext, mtcars)
+#'   df <- createDataFrame (sqlContext, iris)
 #'   df1 <- dapply(df, function(x) { x }, schema(df))
 #'   collect(df1)
 #'
-#'   df1 <- dapply(df, function(x) { x })
-#'   df2 <- dapply(df1, function(x) { x + 1 }, schema(df))
-#'   collect(df2)
+#'   # filter and add a column
+#'   df <- createDataFrame (
+#'           sqlContext, 
+#'           list(list(1L, 1, "1"), list(2L, 2, "2"), list(3L, 3, "3")),
+#'           c("a", "b", "c"))
+#'   schema <- structType(structField("a", "integer"), structField("b", "double"),
+#'                      structField("c", "string"), structField("d", "integer"))
+#'   df1 <- dapply(
+#'            df,
+#'            function(x) {
+#'              y <- x[x[1] > 1, ]
+#'              y <- cbind(y, y[1] + 1L)
+#'            },
+#'            schema)
+#'   collect(df1)
+#'   # the result
+#'   #       a b c d
+#'   #     1 2 2 2 3
+#'   #     2 3 3 3 4
 #' }
 setMethod("dapply",
-          signature(x = "DataFrame", func = "function"),
-          function(x, func, schema = NULL) {
-            if (!is.null(schema)) {
-              stopifnot(class(schema) == "structType")
-              schema <- schema$jobj
-            }
-
+          signature(x = "DataFrame", func = "function", schema = "structType"),
+          function(x, func, schema) {
             packageNamesArr <- serialize(.sparkREnv[[".packages"]],
                                          connection = NULL)
 
@@ -1168,7 +1182,7 @@ setMethod("dapply",
                      serialize(cleanClosure(func), connection = NULL),
                      packageNamesArr,
                      broadcastArr,
-                     schema)
+                     schema$jobj)
             dataFrame(sdf)
           })
 

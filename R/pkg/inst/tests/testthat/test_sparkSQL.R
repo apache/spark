@@ -2019,34 +2019,41 @@ test_that("Histogram", {
 })
 
 test_that("dapply() on a DataFrame", {
-  df <- createDataFrame (sqlContext, mtcars)
+  df <- createDataFrame (
+          sqlContext,
+          list(list(1L, 1, "1"), list(2L, 2, "2"), list(3L, 3, "3")),
+          c("a", "b", "c"))
+  ldf <- collect(df)
   df1 <- dapply(df, function(x) { x }, schema(df))
   result <- collect(df1)
-  expected <- mtcars
-  rownames(expected) <- NULL
-  expect_identical(expected, result)
+  expect_identical(ldf, result)
 
-  df1 <- dapply(df, function(x) { x + 1 }, schema(df))
+
+  # Filter and add a column
+  schema <- structType(structField("a", "integer"), structField("b", "double"),
+                       structField("c", "string"), structField("d", "integer"))
+  df1 <- dapply(
+           df,
+           function(x) {
+             y <- x[x[1] > 1, ]
+             y <- cbind(y, y[1] + 1L)
+           },
+           schema)
   result <- collect(df1)
-  expected <- mtcars + 1
+  expected <- ldf[ldf$a > 1, ]
+  expected$d <- expected$a + 1L
   rownames(expected) <- NULL
   expect_identical(expected, result)
 
-  schema <- structType(structField("a", "double"), structField("b", "double"))
-  df1 <- dapply(df, function(x) { x[, 1:2, drop = F] }, schema)
-  result <- collect(df1)
-  expected <- mtcars[, 1:2, drop = F]
-  names(expected) <- c("a", "b")
-  rownames(expected) <- NULL
-  expect_identical(expected, result)
-
-  df1 <- dapply(df, function(x) { x + 1 })
-  schema <- structType(structField("a", "double"), structField("b", "double"))
-  df2 <- dapply(df1, function(x) { x[, 1:2, drop = F] }, schema)
+  # Remove the added column
+  df2 <- dapply(
+           df1,
+           function(x) {
+             x[, c(1, 2, 3)]
+           },
+           schema(df))
   result <- collect(df2)
-  expected <- (mtcars + 1)[, 1:2, drop = F]
-  names(expected) <- c("a", "b")
-  rownames(expected) <- NULL
+  expected <- expected[, c(1, 2, 3)]
   expect_identical(expected, result)
 })
 

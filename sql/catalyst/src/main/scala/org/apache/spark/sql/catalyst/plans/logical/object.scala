@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.SparkException
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.{Encoder, Row}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedDeserializer

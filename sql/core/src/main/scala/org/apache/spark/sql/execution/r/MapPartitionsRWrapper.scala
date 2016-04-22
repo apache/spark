@@ -28,11 +28,11 @@ import org.apache.spark.sql.Row
  * A function wrapper that applies the given R function to each partition.
  */
 private[sql] case class MapPartitionsRWrapper(
-   func: Array[Byte],
-   packageNames: Array[Byte],
-   broadcastVars: Array[Broadcast[Object]],
-   schema: StructType,
-   isSerializedRData: Boolean) extends (Iterator[Any] => Iterator[Any]) {
+    func: Array[Byte],
+    packageNames: Array[Byte],
+    broadcastVars: Array[Broadcast[Object]],
+    schema: StructType,
+    isSerializedRData: Boolean) extends (Iterator[Any] => Iterator[Any]) {
   def apply(iter: Iterator[Any]): Iterator[Any] = {
     val (newIter, deserializer) =
       if (!isSerializedRData) {
