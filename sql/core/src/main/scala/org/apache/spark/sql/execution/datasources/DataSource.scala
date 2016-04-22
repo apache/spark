@@ -67,11 +67,10 @@ case class DataSource(
     bucketSpec: Option[BucketSpec] = None,
     options: Map[String, String] = Map.empty) extends Logging {
 
-  lazy val providingClass: Class[_] = lookupDataSource(className)
+  case class SourceInfo(name: String, schema: StructType)
 
-  lazy private val _schemaAndName = sourceSchema()
-  lazy val schema = _schemaAndName._2
-  lazy val sourceName = _schemaAndName._1
+  lazy val providingClass: Class[_] = lookupDataSource(className)
+  lazy val sourceInfo = sourceSchema()
 
   /** A map to maintain backward compatibility in case we move data sources around. */
   private val backwardCompatibilityMap = Map(
@@ -149,17 +148,19 @@ case class DataSource(
   }
 
   /** Returns the name and schema of the source that can be used to continually read data. */
-  private def sourceSchema(): (String, StructType) = {
+  private def sourceSchema(): SourceInfo = {
     providingClass.newInstance() match {
       case s: StreamSourceProvider =>
-        s.sourceSchema(sqlContext, userSpecifiedSchema, className, options)
+        val (name, schema) = s.sourceSchema(sqlContext, userSpecifiedSchema, className, options)
+        SourceInfo(name, schema)
 
       case format: FileFormat =>
         val caseInsensitiveOptions = new CaseInsensitiveMap(options)
         val path = caseInsensitiveOptions.getOrElse("path", {
           throw new IllegalArgumentException("'path' is not specified")
         })
-        (s"FileSource[$path]", inferFileFormatSchema(format))
+        SourceInfo(s"FileSource[$path]", inferFileFormatSchema(format))
+
       case _ =>
         throw new UnsupportedOperationException(
           s"Data source $className does not support streamed reading")
@@ -184,14 +185,14 @@ case class DataSource(
             DataSource(
               sqlContext,
               paths = files,
-              userSpecifiedSchema = Some(schema),
+              userSpecifiedSchema = Some(sourceInfo.schema),
               className = className,
               options = new CaseInsensitiveMap(newOptions))
           Dataset.ofRows(sqlContext, LogicalRelation(newDataSource.resolveRelation()))
         }
 
         new FileStreamSource(
-          sqlContext, metadataPath, path, schema, dataFrameBuilder)
+          sqlContext, metadataPath, path, sourceInfo.schema, dataFrameBuilder)
       case _ =>
         throw new UnsupportedOperationException(
           s"Data source $className does not support streamed reading")
