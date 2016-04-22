@@ -21,7 +21,7 @@ import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.analysis.UnresolvedDeserializer
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types.{DataType, ObjectType, StructType}
 
 object CatalystSerde {
   def deserialize[T : Encoder](child: LogicalPlan): DeserializeToObject = {
@@ -83,6 +83,16 @@ case class SerializeFromObject(
     child: LogicalPlan) extends UnaryNode with ObjectConsumer {
 
   override def output: Seq[Attribute] = serializer.map(_.toAttribute)
+
+  // We can't estimate the size of ObjectType. We implement statistics here to avoid
+  // directly estimate any child plan which produces domain objects as output.
+  override def statistics: Statistics = {
+    if (child.output.find(_.dataType.isInstanceOf[ObjectType]).isDefined) {
+      Statistics(sizeInBytes = Long.MaxValue)
+    } else {
+      super.statistics
+    }
+  }
 }
 
 object MapPartitions {

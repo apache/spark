@@ -82,10 +82,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    */
   object CanBroadcast {
     def unapply(plan: LogicalPlan): Option[LogicalPlan] = {
-      // We can't estimate the size of ObjectType
-      if (plan.find(_.isInstanceOf[ObjectProducer]).isDefined) {
-        None
-      } else if (plan.statistics.sizeInBytes <= conf.autoBroadcastJoinThreshold) {
+      if (plan.statistics.sizeInBytes <= conf.autoBroadcastJoinThreshold) {
         Some(plan)
       } else {
         None
