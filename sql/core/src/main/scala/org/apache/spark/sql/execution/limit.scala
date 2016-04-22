@@ -46,9 +46,10 @@ case class CollectLimitExec(limit: Int, child: SparkPlan) extends UnaryExecNode 
 }
 
 /**
- * Helper trait which defines methods that are shared by both [[LocalLimitExec]] and [[GlobalLimitExec]].
+ * Helper trait which defines methods that are shared by both
+ * [[LocalLimitExec]] and [[GlobalLimitExec]].
  */
-trait BaseLimit extends UnaryExecNode with CodegenSupport {
+trait BaseLimitExec extends UnaryExecNode with CodegenSupport {
   val limit: Int
   override def output: Seq[Attribute] = child.output
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
@@ -91,14 +92,14 @@ trait BaseLimit extends UnaryExecNode with CodegenSupport {
 /**
  * Take the first `limit` elements of each child partition, but do not collect or shuffle them.
  */
-case class LocalLimitExec(limit: Int, child: SparkPlan) extends BaseLimit {
+case class LocalLimitExec(limit: Int, child: SparkPlan) extends BaseLimitExec {
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 }
 
 /**
  * Take the first `limit` elements of the child's single output partition.
  */
-case class GlobalLimitExec(limit: Int, child: SparkPlan) extends BaseLimit {
+case class GlobalLimitExec(limit: Int, child: SparkPlan) extends BaseLimitExec {
   override def requiredChildDistribution: List[Distribution] = AllTuples :: Nil
 }
 

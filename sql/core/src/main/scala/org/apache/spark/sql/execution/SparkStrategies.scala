@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{BroadcastHint, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution
-import org.apache.spark.sql.execution.columnar.{InMemoryTableScanExec, InMemoryRelation}
+import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.exchange.ShuffleExchange
@@ -48,7 +48,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         case logical.Limit(
             IntegerLiteral(limit),
             logical.Project(projectList, logical.Sort(order, true, child))) =>
-          execution.TakeOrderedAndProjectExec(limit, order, Some(projectList), planLater(child)) :: Nil
+          execution.TakeOrderedAndProjectExec(
+            limit, order, Some(projectList), planLater(child)) :: Nil
         case logical.Limit(IntegerLiteral(limit), child) =>
           execution.CollectLimitExec(limit, planLater(child)) :: Nil
         case other => planLater(other) :: Nil
@@ -57,7 +58,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.TakeOrderedAndProjectExec(limit, order, None, planLater(child)) :: Nil
       case logical.Limit(
           IntegerLiteral(limit), logical.Project(projectList, logical.Sort(order, true, child))) =>
-        execution.TakeOrderedAndProjectExec(limit, order, Some(projectList), planLater(child)) :: Nil
+        execution.TakeOrderedAndProjectExec(
+          limit, order, Some(projectList), planLater(child)) :: Nil
       case _ => Nil
     }
   }
