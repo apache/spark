@@ -527,7 +527,7 @@ private[hive] class TestHiveSharedState(
 
 
 private[hive] class TestHiveSessionState(sparkSession: TestHiveSparkSession)
-  extends HiveSessionState(new SQLContext(sparkSession)) {
+  extends HiveSessionState(sparkSession) {
 
   override lazy val conf: SQLConf = {
     new SQLConf {

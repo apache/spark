@@ -111,7 +111,7 @@ private[sql] case class InsertIntoHadoopFsRelation(
       val dataColumns = query.output.filterNot(partitionSet.contains)
 
       val queryExecution = Dataset.ofRows(sparkSession, query).queryExecution
-      SQLExecution.withNewExecutionId(sparkSession.wrapped, queryExecution) {
+      SQLExecution.withNewExecutionId(sparkSession, queryExecution) {
         val relation =
           WriteRelation(
             sparkSession,

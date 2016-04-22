@@ -31,13 +31,16 @@ import org.apache.spark.sql.internal.SessionState
 
 
 /**
- * A class that holds all session-specific state in a given [[HiveContext]].
+ * A class that holds all session-specific state in a given [[SparkSession]] backed by Hive.
  */
-private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) {
+private[hive] class HiveSessionState(sparkSession: SparkSession)
+  extends SessionState(sparkSession) {
 
   self =>
 
-  private lazy val sharedState: HiveSharedState = ctx.sharedState.asInstanceOf[HiveSharedState]
+  private lazy val sharedState: HiveSharedState = {
+    sparkSession.sharedState.asInstanceOf[HiveSharedState]
+  }
 
   /**
    * A Hive client used for execution.
@@ -72,8 +75,8 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
     new HiveSessionCatalog(
       sharedState.externalCatalog,
       metadataHive,
-      ctx,
-      ctx.sessionState.functionResourceLoader,
+      sparkSession.wrapped,
+      functionResourceLoader,
       functionRegistry,
       conf,
       hiveconf)
@@ -91,7 +94,7 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
         catalog.PreInsertionCasts ::
         PreInsertCastAndRename ::
         DataSourceAnalysis ::
-        (if (conf.runSQLOnFile) new ResolveDataSource(ctx.sparkSession) :: Nil else Nil)
+        (if (conf.runSQLOnFile) new ResolveDataSource(sparkSession) :: Nil else Nil)
 
       override val extendedCheckRules = Seq(PreWriteCheck(conf, catalog))
     }
@@ -101,9 +104,9 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
    * Planner that takes into account Hive-specific strategies.
    */
   override def planner: SparkPlanner = {
-    new SparkPlanner(ctx.sparkContext, conf, experimentalMethods.extraStrategies)
+    new SparkPlanner(sparkSession.sparkContext, conf, experimentalMethods.extraStrategies)
       with HiveStrategies {
-      override val context: SQLContext = ctx
+      override val context: SQLContext = sparkSession.wrapped
       override val hiveconf: HiveConf = self.hiveconf
 
       override def strategies: Seq[Strategy] = {
@@ -226,7 +229,7 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
   }
 
   def hiveThriftServerSingleSession: Boolean = {
-    ctx.sparkContext.conf.getBoolean(
+    sparkSession.sparkContext.conf.getBoolean(
       "spark.sql.hive.thriftServer.singleSession", defaultValue = false)
   }
 

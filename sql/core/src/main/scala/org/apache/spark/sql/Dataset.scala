@@ -2387,7 +2387,7 @@ class Dataset[T] private[sql](
    * an execution.
    */
   private[sql] def withNewExecutionId[U](body: => U): U = {
-    SQLExecution.withNewExecutionId(sparkSession.wrapped, queryExecution)(body)
+    SQLExecution.withNewExecutionId(sparkSession, queryExecution)(body)
   }
 
   /**

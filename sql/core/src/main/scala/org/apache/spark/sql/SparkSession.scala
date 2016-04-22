@@ -81,9 +81,9 @@ class SparkSession private(
    */
   @transient
   protected[sql] lazy val sessionState: SessionState = {
-    SparkSession.reflect[SessionState, SQLContext](
+    SparkSession.reflect[SessionState, SparkSession](
       SparkSession.sessionStateClassName(sparkContext.conf),
-      new SQLContext(self, isRootContext = false))
+      self)
   }
 
   /**
