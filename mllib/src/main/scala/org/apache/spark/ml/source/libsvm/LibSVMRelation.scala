@@ -151,7 +151,9 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       MLUtils.computeNumFeatures(parsed)
     }
 
-    val numFeatures = options.get("numFeatures").filter(_.toInt > 0).getOrElse {
+    val numFeatures = options.get("numFeatures").filter { v =>
+      v != null && v.toInt > 0
+    }.getOrElse {
       computeNumFeatures()
     }
 

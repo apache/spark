@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.execution.datasources
 
-private[datasources] object ParameterUtils {
+/**
+ * Utilities for parsing parameters in data sources.
+ */
+private[sql] object ParameterUtils {
   def getNullSafeChar(
       parameters: Map[String, String],
       paramName: String,

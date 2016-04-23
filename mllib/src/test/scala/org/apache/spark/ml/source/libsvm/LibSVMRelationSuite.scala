@@ -109,4 +109,13 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
     val df = sqlContext.read.format("libsvm").load(path)
     df.select("features").rdd.map { case Row(d: Vector) => d }.first
   }
+
+  test("No NullPointerException even if the values of options are null") {
+    val df = sqlContext
+      .read
+      .option("vectorType", null)
+      .option("numFeatures", null)
+      .format("libsvm").load(path)
+    df.select("features").rdd.map { case Row(d: Vector) => d }.first
+  }
 }

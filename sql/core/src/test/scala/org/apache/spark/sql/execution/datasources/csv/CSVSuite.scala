@@ -507,7 +507,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       .option("ignoreTrailingWhiteSpace", null)
       .option("mode", null)
       .option("nullValue", null)
-      .option("compress", null)
+      .option("compression", null)
       .option("maxColumns", null)
       .option("maxCharsPerColumn", null)
       .load(testFile(carsFile))

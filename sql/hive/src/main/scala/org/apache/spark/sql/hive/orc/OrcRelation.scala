@@ -67,26 +67,10 @@ private[sql] class DefaultSource
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
-    val compressionCodec: Option[String] = options
-        .get("compression")
-        .map { codecName =>
-          // Validate if given compression codec is supported or not.
-          val shortOrcCompressionCodecNames = OrcRelation.shortOrcCompressionCodecNames
-          if (!shortOrcCompressionCodecNames.contains(codecName.toLowerCase)) {
-            val availableCodecs = shortOrcCompressionCodecNames.keys.map(_.toLowerCase)
-            throw new IllegalArgumentException(s"Codec [$codecName] " +
-                s"is not available. Available codecs are ${availableCodecs.mkString(", ")}.")
-          }
-          codecName.toLowerCase
-        }
 
-    compressionCodec.foreach { codecName =>
-      job.getConfiguration.set(
-        OrcTableProperties.COMPRESSION.getPropName,
-        OrcRelation
-          .shortOrcCompressionCodecNames
-          .getOrElse(codecName, CompressionKind.NONE).name())
-    }
+    val orcOptions = new OrcOptions(options)
+    job.getConfiguration
+      .set(OrcTableProperties.COMPRESSION.getPropName, orcOptions.compressionCodec)
 
     job.getConfiguration match {
       case conf: JobConf =>
@@ -338,14 +322,6 @@ private[orc] object OrcTableScan {
 }
 
 private[orc] object OrcRelation extends HiveInspectors {
-  // The ORC compression short names
-  val shortOrcCompressionCodecNames = Map(
-    "none" -> CompressionKind.NONE,
-    "uncompressed" -> CompressionKind.NONE,
-    "snappy" -> CompressionKind.SNAPPY,
-    "zlib" -> CompressionKind.ZLIB,
-    "lzo" -> CompressionKind.LZO)
-
   // The extensions for ORC compression codecs
   val extensionsForCompressionCodecNames = Map(
     CompressionKind.NONE.name -> "",
