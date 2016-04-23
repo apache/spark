@@ -134,7 +134,7 @@ case class CreateViewCommand(
     // Validate the view SQL - make sure we can parse it and analyze it.
     // If we cannot analyze the generated query, there is probably a bug in SQL generation.
     try {
-      sqlContext.executePlan(child).analyzed
+      sqlContext.sql(viewSQL).queryExecution.assertAnalyzed()
     } catch {
       case NonFatal(e) =>
         throw new RuntimeException(
