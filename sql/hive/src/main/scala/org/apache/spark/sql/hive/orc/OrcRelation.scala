@@ -31,7 +31,6 @@ import org.apache.hadoop.io.{NullWritable, Writable}
 import org.apache.hadoop.mapred.{InputFormat => MapRedInputFormat, JobConf, OutputFormat => MapRedOutputFormat, RecordWriter, Reporter}
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat, FileSplit}
-import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{HadoopRDD, RDD}
@@ -145,20 +144,24 @@ private[sql] class DefaultSource
           val job = Job.getInstance(conf)
           FileInputFormat.setInputPaths(job, file.filePath)
 
-          val inputFormat = new OrcNewInputFormat
           val fileSplit = new FileSplit(
             new Path(new URI(file.filePath)), file.start, file.length, Array.empty
           )
-
-          val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
-          val hadoopAttemptContext = new TaskAttemptContextImpl(conf, attemptId)
-          inputFormat.createRecordReader(fileSplit, hadoopAttemptContext)
+          // Custom OrcRecordReader is used to get
+          // ObjectInspector during recordReader creation itself and can
+          // avoid NameNode call in unwrapOrcStructs per file.
+          // Specifically would be helpful for partitioned datasets.
+          val orcReader = OrcFile.createReader(
+            new Path(new URI(file.filePath)), OrcFile.readerOptions(conf))
+          new SparkOrcNewRecordReader(orcReader, conf, fileSplit.getStart(), fileSplit.getLength())
         }
 
         // Unwraps `OrcStruct`s to `UnsafeRow`s
         val unsafeRowIterator = OrcRelation.unwrapOrcStructs(
-          file.filePath, conf, requiredSchema, new RecordReaderIterator[OrcStruct](orcRecordReader)
-        )
+          conf,
+          requiredSchema,
+          Some(orcRecordReader.getObjectInspector.asInstanceOf[StructObjectInspector]),
+          new RecordReaderIterator[OrcStruct](orcRecordReader))
 
         // Appends partition values
         val fullOutput = requiredSchema.toAttributes ++ partitionSchema.toAttributes
@@ -322,10 +325,11 @@ private[orc] case class OrcTableScan(
 
     rdd.mapPartitionsWithInputSplit { case (split: OrcSplit, iterator) =>
       val writableIterator = iterator.map(_._2)
+      val maybeStructOI = OrcFileOperator.getObjectInspector(split.getPath.toString, Some(conf))
       OrcRelation.unwrapOrcStructs(
-        split.getPath.toString,
         wrappedConf.value,
         StructType.fromAttributes(attributes),
+        maybeStructOI,
         writableIterator
       )
     }
@@ -355,12 +359,11 @@ private[orc] object OrcRelation extends HiveInspectors {
   )
 
   def unwrapOrcStructs(
-      filePath: String,
       conf: Configuration,
       dataSchema: StructType,
+      maybeStructOI: Option[StructObjectInspector],
       iterator: Iterator[Writable]): Iterator[InternalRow] = {
     val deserializer = new OrcSerde
-    val maybeStructOI = OrcFileOperator.getObjectInspector(filePath, Some(conf))
     val mutableRow = new SpecificMutableRow(dataSchema.map(_.dataType))
     val unsafeProjection = UnsafeProjection.create(dataSchema)
 
