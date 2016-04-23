@@ -160,11 +160,17 @@ class SessionCatalogSuite extends SparkFunSuite {
   }
 
   test("database-related commands having an illegal database name") {
-    val illegalDBName = "db:1"
-    val expectedMsg = s"Database name '$illegalDBName' is not a valid name"
     val catalog = new SessionCatalog(newBasicCatalog())
 
     var e = intercept[AnalysisException] {
+      catalog.createDatabase(newDb(""), ignoreIfExists = true)
+    }
+    assert(e.getMessage.contains("Database name '' is not a valid name"))
+
+    val illegalDBName = "db:1"
+    val expectedMsg = s"Database name '$illegalDBName' is not a valid name"
+
+    e = intercept[AnalysisException] {
       catalog.createDatabase(newDb(illegalDBName), ignoreIfExists = true)
     }
     assert(e.getMessage.contains(expectedMsg))
