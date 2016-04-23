@@ -1067,7 +1067,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     checkAnswer(df, Row("text inside layer 2") :: Nil)
   }
 
-  ignore("SPARK-10310: " +
+  test("SPARK-10310: " +
     "script transformation using default input/output SerDe and record reader/writer") {
     sqlContext
       .range(5)
@@ -1086,7 +1086,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       (0 until 5).map(i => Row(i + "#")))
   }
 
-  ignore("SPARK-10310: script transformation using LazySimpleSerDe") {
+  test("SPARK-10310: script transformation using LazySimpleSerDe") {
     sqlContext
       .range(5)
       .selectExpr("id AS a", "id AS b")

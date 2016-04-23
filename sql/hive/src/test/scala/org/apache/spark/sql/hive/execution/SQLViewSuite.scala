@@ -28,26 +28,50 @@ import org.apache.spark.sql.test.SQLTestUtils
 class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import hiveContext.implicits._
 
+  override def beforeAll(): Unit = {
+    // Create a simple table with two columns: id and id1
+    sqlContext.range(1, 10).selectExpr("id", "id id1").write.format("json").saveAsTable("jt")
+  }
+
+  override def afterAll(): Unit = {
+    sqlContext.sql(s"DROP TABLE IF EXISTS jt")
+  }
+
+  test("nested views") {
+    withView("jtv1", "jtv2") {
+      sql("CREATE VIEW jtv1 AS SELECT * FROM jt WHERE id > 3").collect()
+      sql("CREATE VIEW jtv2 AS SELECT * FROM jtv1 WHERE id < 6").collect()
+      checkAnswer(sql("select count(*) FROM jtv2"), Row(2))
+    }
+  }
+
+  test("error handling: fail if the view sql itself is invalid") {
+    // A table that does not exist
+    intercept[AnalysisException] {
+      sql("CREATE OR REPLACE VIEW myabcdview AS SELECT * FROM table_not_exist1345").collect()
+    }
+
+    // A column that does not exist
+    intercept[AnalysisException] {
+      sql("CREATE OR REPLACE VIEW myabcdview AS SELECT random1234 FROM jt").collect()
+    }
+  }
+
   test("correctly parse CREATE VIEW statement") {
     withSQLConf(SQLConf.NATIVE_VIEW.key -> "true") {
-      withTable("jt") {
-        val df = (1 until 10).map(i => i -> i).toDF("i", "j")
-        df.write.format("json").saveAsTable("jt")
-        sql(
-          """CREATE VIEW IF NOT EXISTS
-            |default.testView (c1 COMMENT 'blabla', c2 COMMENT 'blabla')
-            |TBLPROPERTIES ('a' = 'b')
-            |AS SELECT * FROM jt""".stripMargin)
-        checkAnswer(sql("SELECT c1, c2 FROM testView ORDER BY c1"), (1 to 9).map(i => Row(i, i)))
-        sql("DROP VIEW testView")
-      }
+      sql(
+        """CREATE VIEW IF NOT EXISTS
+          |default.testView (c1 COMMENT 'blabla', c2 COMMENT 'blabla')
+          |TBLPROPERTIES ('a' = 'b')
+          |AS SELECT * FROM jt""".stripMargin)
+      checkAnswer(sql("SELECT c1, c2 FROM testView ORDER BY c1"), (1 to 9).map(i => Row(i, i)))
+      sql("DROP VIEW testView")
     }
   }
 
   test("correctly handle CREATE VIEW IF NOT EXISTS") {
     withSQLConf(SQLConf.NATIVE_VIEW.key -> "true") {
-      withTable("jt", "jt2") {
-        sqlContext.range(1, 10).write.format("json").saveAsTable("jt")
+      withTable("jt2") {
         sql("CREATE VIEW testView AS SELECT id FROM jt")
 
         val df = (1 until 10).map(i => i -> i).toDF("i", "j")
@@ -66,8 +90,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     test(s"$prefix correctly handle CREATE OR REPLACE VIEW") {
       withSQLConf(
         SQLConf.NATIVE_VIEW.key -> "true", SQLConf.CANONICAL_NATIVE_VIEW.key -> enabled.toString) {
-        withTable("jt", "jt2") {
-          sqlContext.range(1, 10).write.format("json").saveAsTable("jt")
+        withTable("jt2") {
           sql("CREATE OR REPLACE VIEW testView AS SELECT id FROM jt")
           checkAnswer(sql("SELECT * FROM testView ORDER BY id"), (1 to 9).map(i => Row(i)))
 
@@ -90,9 +113,8 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     test(s"$prefix correctly handle ALTER VIEW") {
       withSQLConf(
         SQLConf.NATIVE_VIEW.key -> "true", SQLConf.CANONICAL_NATIVE_VIEW.key -> enabled.toString) {
-        withTable("jt", "jt2") {
+        withTable("jt2") {
           withView("testView") {
-            sqlContext.range(1, 10).write.format("json").saveAsTable("jt")
             sql("CREATE VIEW testView AS SELECT id FROM jt")
 
             val df = (1 until 10).map(i => i -> i).toDF("i", "j")
@@ -109,12 +131,9 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       // json table is not hive-compatible, make sure the new flag fix it.
       withSQLConf(
         SQLConf.NATIVE_VIEW.key -> "true", SQLConf.CANONICAL_NATIVE_VIEW.key -> enabled.toString) {
-        withTable("jt") {
-          withView("testView") {
-            sqlContext.range(1, 10).write.format("json").saveAsTable("jt")
-            sql("CREATE VIEW testView AS SELECT id FROM jt")
-            checkAnswer(sql("SELECT * FROM testView ORDER BY id"), (1 to 9).map(i => Row(i)))
-          }
+        withView("testView") {
+          sql("CREATE VIEW testView AS SELECT id FROM jt")
+          checkAnswer(sql("SELECT * FROM testView ORDER BY id"), (1 to 9).map(i => Row(i)))
         }
       }
     }
