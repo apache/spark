@@ -69,10 +69,10 @@ install_app() {
 
 # Install maven under the build/ folder
 install_mvn() {
-  MVN_VERSION="3.3.9"
+  local MVN_VERSION="3.3.9"
   MVN_BIN="$(command -v mvn)"
   if [ "$MVN_BIN" ]; then
-    MVN_DETECTED_VERSION="$(mvn --version | head -n1 | awk '{print $3}')"
+    local MVN_DETECTED_VERSION="$(mvn --version | head -n1 | awk '{print $3}')"
   fi
   # See simple version normalization: http://stackoverflow.com/questions/16989598/bash-comparing-version-numbers
   function version { echo "$@" | awk -F. '{ printf("%03d%03d%03d\n", $1,$2,$3); }'; }
