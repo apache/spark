@@ -34,7 +34,7 @@ import org.apache.spark.ml.{linalg => newlinalg}
 import org.apache.spark.mllib.util.NumericParser
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
-import org.apache.spark.sql.catalyst.util.GenericArrayData
+import org.apache.spark.sql.catalyst.util.{DoubleArrayData, IntArrayData}
 import org.apache.spark.sql.types._
 
 /**
@@ -216,15 +216,15 @@ class VectorUDT extends UserDefinedType[Vector] {
         val row = new GenericMutableRow(4)
         row.setByte(0, 0)
         row.setInt(1, size)
-        row.update(2, new GenericArrayData(indices.map(_.asInstanceOf[Any])))
-        row.update(3, new GenericArrayData(values.map(_.asInstanceOf[Any])))
+        row.update(2, new IntArrayData(indices))
+        row.update(3, new DoubleArrayData(values))
         row
       case DenseVector(values) =>
         val row = new GenericMutableRow(4)
         row.setByte(0, 1)
         row.setNullAt(1)
         row.setNullAt(2)
-        row.update(3, new GenericArrayData(values.map(_.asInstanceOf[Any])))
+        row.update(3, new DoubleArrayData(values))
         row
     }
   }
