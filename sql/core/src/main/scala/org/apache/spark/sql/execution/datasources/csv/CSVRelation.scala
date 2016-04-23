@@ -48,6 +48,8 @@ class DefaultSource extends FileFormat with DataSourceRegister {
 
   override def toString: String = "CSV"
 
+  override def hashCode(): Int = getClass.hashCode()
+
   override def equals(other: Any): Boolean = other.isInstanceOf[DefaultSource]
 
   override def inferSchema(

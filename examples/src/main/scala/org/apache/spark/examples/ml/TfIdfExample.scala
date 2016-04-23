@@ -43,6 +43,8 @@ object TfIdfExample {
     val hashingTF = new HashingTF()
       .setInputCol("words").setOutputCol("rawFeatures").setNumFeatures(20)
     val featurizedData = hashingTF.transform(wordsData)
+    // alternatively, CountVectorizer can also be used to get term frequency vectors
+
     val idf = new IDF().setInputCol("rawFeatures").setOutputCol("features")
     val idfModel = idf.fit(featurizedData)
     val rescaledData = idfModel.transform(featurizedData)

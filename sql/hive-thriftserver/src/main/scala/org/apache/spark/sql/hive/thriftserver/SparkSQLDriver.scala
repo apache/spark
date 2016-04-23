@@ -28,6 +28,7 @@ import org.apache.hadoop.hive.ql.processors.CommandProcessorResponse
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.hive.{HiveContext, HiveMetastoreTypes}
 
 private[hive] class SparkSQLDriver(
@@ -41,7 +42,7 @@ private[hive] class SparkSQLDriver(
   override def init(): Unit = {
   }
 
-  private def getResultSetSchema(query: context.QueryExecution): Schema = {
+  private def getResultSetSchema(query: QueryExecution): Schema = {
     val analyzed = query.analyzed
     logDebug(s"Result Schema: ${analyzed.output}")
     if (analyzed.output.isEmpty) {
@@ -60,7 +61,7 @@ private[hive] class SparkSQLDriver(
     try {
       context.sparkContext.setJobDescription(command)
       val execution = context.executePlan(context.sql(command).logicalPlan)
-      hiveResponse = execution.stringResult()
+      hiveResponse = execution.hiveResultString()
       tableSchema = getResultSetSchema(execution)
       new CommandProcessorResponse(0)
     } catch {

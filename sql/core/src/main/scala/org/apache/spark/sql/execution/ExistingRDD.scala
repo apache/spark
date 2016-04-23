@@ -100,10 +100,10 @@ private[sql] case class LogicalRDD(
 }
 
 /** Physical plan node for scanning data from an RDD. */
-private[sql] case class PhysicalRDD(
+private[sql] case class RDDScanExec(
     output: Seq[Attribute],
     rdd: RDD[InternalRow],
-    override val nodeName: String) extends LeafNode {
+    override val nodeName: String) extends LeafExecNode {
 
   private[sql] override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
@@ -124,7 +124,7 @@ private[sql] case class PhysicalRDD(
   }
 }
 
-private[sql] trait DataSourceScan extends LeafNode {
+private[sql] trait DataSourceScanExec extends LeafExecNode {
   val rdd: RDD[InternalRow]
   val relation: BaseRelation
 
@@ -132,19 +132,19 @@ private[sql] trait DataSourceScan extends LeafNode {
 
   // Ignore rdd when checking results
   override def sameResult(plan: SparkPlan): Boolean = plan match {
-    case other: DataSourceScan => relation == other.relation && metadata == other.metadata
+    case other: DataSourceScanExec => relation == other.relation && metadata == other.metadata
     case _ => false
   }
 }
 
 /** Physical plan node for scanning data from a relation. */
-private[sql] case class RowDataSourceScan(
+private[sql] case class RowDataSourceScanExec(
     output: Seq[Attribute],
     rdd: RDD[InternalRow],
     @transient relation: BaseRelation,
     override val outputPartitioning: Partitioning,
     override val metadata: Map[String, String] = Map.empty)
-  extends DataSourceScan with CodegenSupport {
+  extends DataSourceScanExec with CodegenSupport {
 
   private[sql] override lazy val metrics =
     Map("numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
@@ -207,13 +207,13 @@ private[sql] case class RowDataSourceScan(
 }
 
 /** Physical plan node for scanning data from a batched relation. */
-private[sql] case class BatchedDataSourceScan(
+private[sql] case class BatchedDataSourceScanExec(
     output: Seq[Attribute],
     rdd: RDD[InternalRow],
     @transient relation: BaseRelation,
     override val outputPartitioning: Partitioning,
     override val metadata: Map[String, String] = Map.empty)
-  extends DataSourceScan with CodegenSupport {
+  extends DataSourceScanExec with CodegenSupport {
 
   private[sql] override lazy val metrics =
     Map("numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"),
@@ -316,7 +316,7 @@ private[sql] case class BatchedDataSourceScan(
   }
 }
 
-private[sql] object DataSourceScan {
+private[sql] object DataSourceScanExec {
   // Metadata keys
   val INPUT_PATHS = "InputPaths"
   val PUSHED_FILTERS = "PushedFilters"
@@ -325,7 +325,7 @@ private[sql] object DataSourceScan {
       output: Seq[Attribute],
       rdd: RDD[InternalRow],
       relation: BaseRelation,
-      metadata: Map[String, String] = Map.empty): DataSourceScan = {
+      metadata: Map[String, String] = Map.empty): DataSourceScanExec = {
     val outputPartitioning = {
       val bucketSpec = relation match {
         // TODO: this should be closer to bucket planning.
@@ -349,9 +349,9 @@ private[sql] object DataSourceScan {
 
     relation match {
       case r: HadoopFsRelation if r.fileFormat.supportBatch(r.sqlContext, relation.schema) =>
-        BatchedDataSourceScan(output, rdd, relation, outputPartitioning, metadata)
+        BatchedDataSourceScanExec(output, rdd, relation, outputPartitioning, metadata)
       case _ =>
-        RowDataSourceScan(output, rdd, relation, outputPartitioning, metadata)
+        RowDataSourceScanExec(output, rdd, relation, outputPartitioning, metadata)
     }
   }
 }

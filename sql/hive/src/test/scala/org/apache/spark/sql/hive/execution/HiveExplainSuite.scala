@@ -27,13 +27,13 @@ import org.apache.spark.sql.test.SQLTestUtils
 class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   test("explain extended command") {
-    checkExistence(sql(" explain   select * from src where key=123 "), true,
+    checkKeywordsExist(sql(" explain   select * from src where key=123 "),
                    "== Physical Plan ==")
-    checkExistence(sql(" explain   select * from src where key=123 "), false,
+    checkKeywordsNotExist(sql(" explain   select * from src where key=123 "),
                    "== Parsed Logical Plan ==",
                    "== Analyzed Logical Plan ==",
                    "== Optimized Logical Plan ==")
-    checkExistence(sql(" explain   extended select * from src where key=123 "), true,
+    checkKeywordsExist(sql(" explain   extended select * from src where key=123 "),
                    "== Parsed Logical Plan ==",
                    "== Analyzed Logical Plan ==",
                    "== Optimized Logical Plan ==",
@@ -41,13 +41,13 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
   }
 
   test("explain create table command") {
-    checkExistence(sql("explain create table temp__b as select * from src limit 2"), true,
+    checkKeywordsExist(sql("explain create table temp__b as select * from src limit 2"),
                    "== Physical Plan ==",
                    "InsertIntoHiveTable",
                    "Limit",
                    "src")
 
-    checkExistence(sql("explain extended create table temp__b as select * from src limit 2"), true,
+    checkKeywordsExist(sql("explain extended create table temp__b as select * from src limit 2"),
       "== Parsed Logical Plan ==",
       "== Analyzed Logical Plan ==",
       "== Optimized Logical Plan ==",
@@ -57,7 +57,7 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       "Limit",
       "src")
 
-    checkExistence(sql(
+    checkKeywordsExist(sql(
       """
         | EXPLAIN EXTENDED CREATE TABLE temp__b
         | ROW FORMAT SERDE "org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe"
@@ -65,7 +65,7 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         | STORED AS RCFile
         | TBLPROPERTIES("tbl_p1"="p11", "tbl_p2"="p22")
         | AS SELECT * FROM src LIMIT 2
-      """.stripMargin), true,
+      """.stripMargin),
       "== Parsed Logical Plan ==",
       "== Analyzed Logical Plan ==",
       "== Optimized Logical Plan ==",
@@ -103,7 +103,7 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
   }
 
   test("EXPLAIN CODEGEN command") {
-    checkExistence(sql("EXPLAIN CODEGEN SELECT 1"), true,
+    checkKeywordsExist(sql("EXPLAIN CODEGEN SELECT 1"),
       "WholeStageCodegen",
       "Generated code:",
       "/* 001 */ public Object generate(Object[] references) {",
@@ -111,11 +111,11 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       "/* 003 */ }"
     )
 
-    checkExistence(sql("EXPLAIN CODEGEN SELECT 1"), false,
+    checkKeywordsNotExist(sql("EXPLAIN CODEGEN SELECT 1"),
       "== Physical Plan =="
     )
 
-    checkExistence(sql("EXPLAIN EXTENDED CODEGEN SELECT 1"), true,
+    checkKeywordsExist(sql("EXPLAIN EXTENDED CODEGEN SELECT 1"),
       "WholeStageCodegen",
       "Generated code:",
       "/* 001 */ public Object generate(Object[] references) {",
@@ -123,7 +123,7 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       "/* 003 */ }"
     )
 
-    checkExistence(sql("EXPLAIN EXTENDED CODEGEN SELECT 1"), false,
+    checkKeywordsNotExist(sql("EXPLAIN EXTENDED CODEGEN SELECT 1"),
       "== Parsed Logical Plan ==",
       "== Analyzed Logical Plan ==",
       "== Optimized Logical Plan ==",

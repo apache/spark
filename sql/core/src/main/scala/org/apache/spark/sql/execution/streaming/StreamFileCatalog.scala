@@ -29,7 +29,7 @@ import org.apache.spark.sql.types.StructType
 class StreamFileCatalog(sqlContext: SQLContext, path: Path) extends FileCatalog with Logging {
   val metadataDirectory = new Path(path, FileStreamSink.metadataDir)
   logInfo(s"Reading streaming file log from $metadataDirectory")
-  val metadataLog = new HDFSMetadataLog[Seq[String]](sqlContext, metadataDirectory.toUri.toString)
+  val metadataLog = new FileStreamSinkLog(sqlContext, metadataDirectory.toUri.toString)
   val fs = path.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
 
   override def paths: Seq[Path] = path :: Nil
@@ -53,6 +53,6 @@ class StreamFileCatalog(sqlContext: SQLContext, path: Path) extends FileCatalog 
   override def refresh(): Unit = {}
 
   override def allFiles(): Seq[FileStatus] = {
-    fs.listStatus(metadataLog.get(None, None).flatMap(_._2).map(new Path(_)))
+    metadataLog.allFiles().map(_.toFileStatus)
   }
 }
