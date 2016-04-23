@@ -25,7 +25,7 @@ setOldClass("jobj")
 #' @title S4 class that represents a SparkDataFrame
 #' @description DataFrames can be created using functions like \link{createDataFrame},
 #'              \link{read.json}, \link{table} etc.
-#' @family SparkSparkDataFrame functions
+#' @family SparkDataFrame functions
 #' @rdname SparkDataFrame
 #' @docType class
 #'
@@ -68,7 +68,7 @@ dataFrame <- function(sdf, isCached = FALSE) {
 #'
 #' @param x A SparkDataFrame
 #'
-#' @family SparkSparkDataFrame functions
+#' @family SparkDataFrame functions
 #' @rdname printSchema
 #' @name printSchema
 #' @export
@@ -93,7 +93,7 @@ setMethod("printSchema",
 #'
 #' @param x A SparkDataFrame
 #'
-#' @family SparkSparkDataFrame functions
+#' @family SparkDataFrame functions
 #' @rdname schema
 #' @name schema
 #' @export
@@ -117,7 +117,7 @@ setMethod("schema",
 #'
 #' @param x A SparkDataFrame
 #' @param extended Logical. If extended is False, explain() only prints the physical plan.
-#' @family SparkSparkDataFrame functions
+#' @family SparkDataFrame functions
 #' @rdname explain
 #' @name explain
 #' @export
@@ -148,7 +148,7 @@ setMethod("explain",
 #'
 #' @param x A SparkDataFrame
 #'
-#' @family SparkSparkDataFrame functions
+#' @family SparkDataFrame functions
 #' @rdname isLocal
 #' @name isLocal
 #' @export
@@ -173,7 +173,7 @@ setMethod("isLocal",
 #' @param x A SparkDataFrame
 #' @param numRows The number of rows to print. Defaults to 20.
 #'
-#' @family SparkSparkDataFrame functions
+#' @family SparkDataFrame functions
 #' @rdname showDF
 #' @name showDF
 #' @export
@@ -198,7 +198,7 @@ setMethod("showDF",
 #'
 #' @param x A SparkDataFrame
 #'
-#' @family SparkSparkDataFrame functions
+#' @family SparkDataFrame functions
 #' @rdname show
 #' @name show
 #' @export
@@ -225,7 +225,7 @@ setMethod("show", "SparkDataFrame",
 #'
 #' @param x A SparkDataFrame
 #'
-#' @family SparkSparkDataFrame functions
+#' @family SparkDataFrame functions
 #' @rdname dtypes
 #' @name dtypes
 #' @export
