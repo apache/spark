@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogTable, CatalogTableType, ExternalCatalog}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, UnaryNode}
-import org.apache.spark.sql.types.{MetadataBuilder, StringType}
+import org.apache.spark.sql.types.{BooleanType, MetadataBuilder, StringType}
 import org.apache.spark.util.Utils
 
 case class CreateTableAsSelectLogicalPlan(
@@ -311,5 +311,80 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean)
     }
 
     result
+  }
+}
+
+
+/**
+ * A command for users to get tables in the given database.
+ * If a databaseName is not given, the current database will be used.
+ * The syntax of using this command in SQL is:
+ * {{{
+ *   SHOW TABLES [(IN|FROM) database_name] [[LIKE] 'identifier_with_wildcards'];
+ * }}}
+ */
+case class ShowTablesCommand(
+    databaseName: Option[String],
+    tableIdentifierPattern: Option[String]) extends RunnableCommand {
+
+  // The result of SHOW TABLES has two columns, tableName and isTemporary.
+  override val output: Seq[Attribute] = {
+    AttributeReference("tableName", StringType, nullable = false)() ::
+      AttributeReference("isTemporary", BooleanType, nullable = false)() :: Nil
+  }
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    // Since we need to return a Seq of rows, we will call getTables directly
+    // instead of calling tables in sqlContext.
+    val catalog = sqlContext.sessionState.catalog
+    val db = databaseName.getOrElse(catalog.getCurrentDatabase)
+    val tables =
+      tableIdentifierPattern.map(catalog.listTables(db, _)).getOrElse(catalog.listTables(db))
+    tables.map { t =>
+      val isTemp = t.database.isEmpty
+      Row(t.table, isTemp)
+    }
+  }
+}
+
+
+/**
+ * A command for users to list the properties for a table If propertyKey is specified, the value
+ * for the propertyKey is returned. If propertyKey is not specified, all the keys and their
+ * corresponding values are returned.
+ * The syntax of using this command in SQL is:
+ * {{{
+ *   SHOW TBLPROPERTIES table_name[('propertyKey')];
+ * }}}
+ */
+case class ShowTablePropertiesCommand(table: TableIdentifier, propertyKey: Option[String])
+  extends RunnableCommand {
+
+  override val output: Seq[Attribute] = {
+    val schema = AttributeReference("value", StringType, nullable = false)() :: Nil
+    propertyKey match {
+      case None => AttributeReference("key", StringType, nullable = false)() :: schema
+      case _ => schema
+    }
+  }
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    val catalog = sqlContext.sessionState.catalog
+
+    if (catalog.isTemporaryTable(table)) {
+      Seq.empty[Row]
+    } else {
+      val catalogTable = sqlContext.sessionState.catalog.getTableMetadata(table)
+
+      propertyKey match {
+        case Some(p) =>
+          val propValue = catalogTable
+            .properties
+            .getOrElse(p, s"Table ${catalogTable.qualifiedName} does not have property: $p")
+          Seq(Row(propValue))
+        case None =>
+          catalogTable.properties.map(p => Row(p._1, p._2)).toSeq
+      }
+    }
   }
 }
