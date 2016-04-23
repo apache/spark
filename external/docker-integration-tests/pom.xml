@@ -131,6 +131,7 @@
       <artifactId>spark-tags_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
       <scope>test</scope>
+      <classifier>tests</classifier>
     </dependency>
     <dependency>
       <groupId>mysql</groupId>

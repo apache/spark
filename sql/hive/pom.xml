@@ -61,6 +61,8 @@
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-tags_${scala.binary.version}</artifactId>
+      <classifier>tests</classifier>
+      <scope>test</scope>
     </dependency>
 <!--
     <dependency>
