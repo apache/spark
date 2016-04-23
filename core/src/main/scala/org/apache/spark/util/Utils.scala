@@ -2284,7 +2284,7 @@ private[spark] object Utils extends Logging {
    */
   def initDaemon(log: Logger): Unit = {
     log.info(s"Started daemon with process name: ${Utils.getProcessName()}")
-    SignalLogger.register(log)
+    SignalUtils.registerLogger(log)
   }
 }
 

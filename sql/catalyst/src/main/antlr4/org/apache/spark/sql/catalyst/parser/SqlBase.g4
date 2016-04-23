@@ -130,6 +130,8 @@ statement
     | CACHE LAZY? TABLE identifier (AS? query)?                        #cacheTable
     | UNCACHE TABLE identifier                                         #uncacheTable
     | CLEAR CACHE                                                      #clearCache
+    | LOAD DATA LOCAL? INPATH path=STRING OVERWRITE? INTO TABLE
+      tableIdentifier partitionSpec?                                   #loadData
     | ADD identifier .*?                                               #addResource
     | SET ROLE .*?                                                     #failNativeCommand
     | SET .*?                                                          #setConfiguration
@@ -147,7 +149,7 @@ hiveNativeCommands
     | ROLLBACK WORK?
     | SHOW PARTITIONS tableIdentifier partitionSpec?
     | DFS .*?
-    | (CREATE | ALTER | DROP | SHOW | DESC | DESCRIBE | LOAD) .*?
+    | (CREATE | ALTER | DROP | SHOW | DESC | DESCRIBE) .*?
     ;
 
 unsupportedHiveNativeCommands
@@ -648,11 +650,14 @@ nonReserved
     | SORT | CLUSTER | DISTRIBUTE | UNSET | TBLPROPERTIES | SKEWED | STORED | DIRECTORIES | LOCATION
     | EXCHANGE | ARCHIVE | UNARCHIVE | FILEFORMAT | TOUCH | COMPACT | CONCATENATE | CHANGE | FIRST
     | AFTER | CASCADE | RESTRICT | BUCKETS | CLUSTERED | SORTED | PURGE | INPUTFORMAT | OUTPUTFORMAT
-    | INPUTDRIVER | OUTPUTDRIVER | DBPROPERTIES | DFS | TRUNCATE | METADATA | REPLICATION | COMPUTE
+    | DBPROPERTIES | DFS | TRUNCATE | METADATA | REPLICATION | COMPUTE
     | STATISTICS | ANALYZE | PARTITIONED | EXTERNAL | DEFINED | RECORDWRITER
     | REVOKE | GRANT | LOCK | UNLOCK | MSCK | REPAIR | EXPORT | IMPORT | LOAD | VALUES | COMMENT | ROLE
-    | ROLES | COMPACTIONS | PRINCIPALS | TRANSACTIONS | INDEX | INDEXES | LOCKS | OPTION
+    | ROLES | COMPACTIONS | PRINCIPALS | TRANSACTIONS | INDEX | INDEXES | LOCKS | OPTION | LOCAL | INPATH
     | ASC | DESC | LIMIT | RENAME | SETS
+    | AT | NULLS | OVERWRITE | ALL | ALTER | AS | BETWEEN | BY | CREATE | DELETE
+    | DESCRIBE | DROP | EXISTS | FALSE | FOR | GROUP | IN | INSERT | INTO | IS |LIKE
+    | NULL | ORDER | OUTER | TABLE | TRUE | WITH | RLIKE
     ;
 
 SELECT: 'SELECT';
@@ -848,8 +853,6 @@ SORTED: 'SORTED';
 PURGE: 'PURGE';
 INPUTFORMAT: 'INPUTFORMAT';
 OUTPUTFORMAT: 'OUTPUTFORMAT';
-INPUTDRIVER: 'INPUTDRIVER';
-OUTPUTDRIVER: 'OUTPUTDRIVER';
 DATABASE: 'DATABASE' | 'SCHEMA';
 DATABASES: 'DATABASES' | 'SCHEMAS';
 DFS: 'DFS';
@@ -881,6 +884,8 @@ INDEXES: 'INDEXES';
 LOCKS: 'LOCKS';
 OPTION: 'OPTION';
 ANTI: 'ANTI';
+LOCAL: 'LOCAL';
+INPATH: 'INPATH';
 
 STRING
     : '\'' ( ~('\''|'\\') | ('\\' .) )* '\''

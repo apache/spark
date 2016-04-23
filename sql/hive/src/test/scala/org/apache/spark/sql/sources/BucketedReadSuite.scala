@@ -22,10 +22,10 @@ import java.io.File
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
-import org.apache.spark.sql.execution.DataSourceScan
+import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.datasources.{BucketSpec, DataSourceStrategy}
 import org.apache.spark.sql.execution.exchange.ShuffleExchange
-import org.apache.spark.sql.execution.joins.SortMergeJoin
+import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
@@ -93,7 +93,7 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
 
       // Filter could hide the bug in bucket pruning. Thus, skipping all the filters
       val plan = bucketedDataFrame.filter(filterCondition).queryExecution.executedPlan
-      val rdd = plan.find(_.isInstanceOf[DataSourceScan])
+      val rdd = plan.find(_.isInstanceOf[DataSourceScanExec])
       assert(rdd.isDefined, plan)
 
       val checkedResult = rdd.get.execute().mapPartitionsWithIndex { case (index, iter) =>
@@ -261,8 +261,8 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
           joined.sort("bucketed_table1.k", "bucketed_table2.k"),
           df1.join(df2, joinCondition(df1, df2, joinColumns)).sort("df1.k", "df2.k"))
 
-        assert(joined.queryExecution.executedPlan.isInstanceOf[SortMergeJoin])
-        val joinOperator = joined.queryExecution.executedPlan.asInstanceOf[SortMergeJoin]
+        assert(joined.queryExecution.executedPlan.isInstanceOf[SortMergeJoinExec])
+        val joinOperator = joined.queryExecution.executedPlan.asInstanceOf[SortMergeJoinExec]
 
         assert(
           joinOperator.left.find(_.isInstanceOf[ShuffleExchange]).isDefined == shuffleLeft,

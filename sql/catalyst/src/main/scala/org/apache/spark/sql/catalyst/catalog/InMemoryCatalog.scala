@@ -205,6 +205,27 @@ class InMemoryCatalog extends ExternalCatalog {
     StringUtils.filterPattern(listTables(db), pattern)
   }
 
+  override def loadTable(
+      db: String,
+      table: String,
+      loadPath: String,
+      isOverwrite: Boolean,
+      holdDDLTime: Boolean): Unit = {
+    throw new AnalysisException("loadTable is not implemented for InMemoryCatalog.")
+  }
+
+  override def loadPartition(
+      db: String,
+      table: String,
+      loadPath: String,
+      partition: TablePartitionSpec,
+      isOverwrite: Boolean,
+      holdDDLTime: Boolean,
+      inheritTableSpecs: Boolean,
+      isSkewedStoreAsSubdir: Boolean): Unit = {
+    throw new AnalysisException("loadPartition is not implemented for InMemoryCatalog.")
+  }
+
   // --------------------------------------------------------------------------
   // Partitions
   // --------------------------------------------------------------------------

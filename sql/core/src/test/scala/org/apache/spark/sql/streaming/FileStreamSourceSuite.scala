@@ -19,11 +19,11 @@ package org.apache.spark.sql.streaming
 
 import java.io.File
 
-import org.apache.spark.sql.types.{StringType, StructField, StructType}
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.{AnalysisException, DataFrame, StreamTest}
+import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.util.Utils
 
 class FileStreamSourceTest extends StreamTest with SharedSQLContext {
@@ -91,6 +91,7 @@ class FileStreamSourceTest extends StreamTest with SharedSQLContext {
     }
   }
 
+  /** Use `format` and `path` to create FileStreamSource via DataFrameReader */
   def createFileStream(
       format: String,
       path: String,
@@ -107,14 +108,12 @@ class FileStreamSourceTest extends StreamTest with SharedSQLContext {
 
   protected def getSourceFromFileStream(df: DataFrame): FileStreamSource = {
     val checkpointLocation = Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
-    Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
     df.queryExecution.analyzed
       .collect { case StreamingRelation(dataSource, _, _) =>
         // There is only one source in our tests so just set sourceId to 0
         dataSource.createSource(s"$checkpointLocation/sources/0").asInstanceOf[FileStreamSource]
       }.head
   }
-
 
   protected def withTempDirs(body: (File, File) => Unit) {
     val src = Utils.createTempDir(namePrefix = "streaming.src")
@@ -156,9 +155,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
         reader.stream()
       }
     df.queryExecution.analyzed
-      .collect { case StreamingRelation(dataSource, _, _) =>
-        dataSource.sourceSchema()
-      }.head._2
+      .collect { case s @ StreamingRelation(dataSource, _, _) => s.schema }.head
   }
 
   test("FileStreamSource schema: no path") {
@@ -313,7 +310,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
       stringToFile(new File(src, "existing"), "{'c': 'drop1'}\n{'c': 'keep2'}\n{'c': 'keep3'}")
 
       val fileStream = createFileStream("json", src.getCanonicalPath)
-      require(fileStream.schema === StructType(Seq(StructField("c", StringType))))
+      assert(fileStream.schema === StructType(Seq(StructField("c", StringType))))
 
       // FileStreamSource should infer the column "c"
       val filtered = fileStream.filter($"c" contains "keep")
@@ -346,6 +343,38 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
     }
   }
 
+
+  test("reading from json files with changing schema") {
+    withTempDirs { case (src, tmp) =>
+
+      // Add a file so that we can infer its schema
+      stringToFile(new File(src, "existing"), "{'k': 'value0'}")
+
+      val fileStream = createFileStream("json", src.getCanonicalPath)
+
+      // FileStreamSource should infer the column "k"
+      assert(fileStream.schema === StructType(Seq(StructField("k", StringType))))
+
+      // After creating DF and before starting stream, add data with different schema
+      // Should not affect the inferred schema any more
+      stringToFile(new File(src, "existing2"), "{'k': 'value1', 'v': 'new'}")
+
+      testStream(fileStream)(
+
+        // Should not pick up column v in the file added before start
+        AddTextFileData("{'k': 'value2'}", src, tmp),
+        CheckAnswer("value0", "value1", "value2"),
+
+        // Should read data in column k, and ignore v
+        AddTextFileData("{'k': 'value3', 'v': 'new'}", src, tmp),
+        CheckAnswer("value0", "value1", "value2", "value3"),
+
+        // Should ignore rows that do not have the necessary k column
+        AddTextFileData("{'v': 'value4'}", src, tmp),
+        CheckAnswer("value0", "value1", "value2", "value3", null))
+    }
+  }
+
   test("read from parquet files") {
     withTempDirs { case (src, tmp) =>
       val fileStream = createFileStream("parquet", src.getCanonicalPath, Some(valueSchema))
@@ -360,6 +389,37 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
         CheckAnswer("keep2", "keep3", "keep5", "keep6"),
         AddParquetFileData(Seq("drop7", "keep8", "keep9"), src, tmp),
         CheckAnswer("keep2", "keep3", "keep5", "keep6", "keep8", "keep9")
+      )
+    }
+  }
+
+  test("read from parquet files with changing schema") {
+
+    withTempDirs { case (src, tmp) =>
+      // Add a file so that we can infer its schema
+      AddParquetFileData.writeToFile(Seq("value0").toDF("k"), src, tmp)
+
+      val fileStream = createFileStream("parquet", src.getCanonicalPath)
+
+      // FileStreamSource should infer the column "k"
+      assert(fileStream.schema === StructType(Seq(StructField("k", StringType))))
+
+      // After creating DF and before starting stream, add data with different schema
+      // Should not affect the inferred schema any more
+      AddParquetFileData.writeToFile(Seq(("value1", 0)).toDF("k", "v"), src, tmp)
+
+      testStream(fileStream)(
+        // Should not pick up column v in the file added before start
+        AddParquetFileData(Seq("value2").toDF("k"), src, tmp),
+        CheckAnswer("value0", "value1", "value2"),
+
+        // Should read data in column k, and ignore v
+        AddParquetFileData(Seq(("value3", 1)).toDF("k", "v"), src, tmp),
+        CheckAnswer("value0", "value1", "value2", "value3"),
+
+        // Should ignore rows that do not have the necessary k column
+        AddParquetFileData(Seq("value5").toDF("v"), src, tmp),
+        CheckAnswer("value0", "value1", "value2", "value3", null)
       )
     }
   }

@@ -862,28 +862,68 @@ class Analyzer(
   object ResolveSubquery extends Rule[LogicalPlan] with PredicateHelper {
 
     /**
-     * Resolve the correlated predicates in the [[Filter]] clauses (e.g. WHERE or HAVING) of a
+     * Resolve the correlated predicates in the clauses (e.g. WHERE or HAVING) of a
      * sub-query by using the plan the predicates should be correlated to.
      */
-    private def resolveCorrelatedPredicates(q: LogicalPlan, p: LogicalPlan): LogicalPlan = {
-      q transformUp {
-        case f @ Filter(cond, child) if child.resolved && !f.resolved =>
-          val newCond = resolveExpression(cond, p, throws = false)
-          if (!cond.fastEquals(newCond)) {
-            Filter(newCond, child)
-          } else {
-            f
-          }
+    private def resolveCorrelatedSubquery(
+        sub: LogicalPlan, outer: LogicalPlan,
+        aliases: scala.collection.mutable.Map[Attribute, Alias]): LogicalPlan = {
+      // First resolve as much of the sub-query as possible
+      val analyzed = execute(sub)
+      if (analyzed.resolved) {
+        analyzed
+      } else {
+        // Only resolve the lowest plan that is not resolved by outer plan, otherwise it could be
+        // resolved by itself
+        val resolvedByOuter = analyzed transformDown {
+          case q: LogicalPlan if q.childrenResolved && !q.resolved =>
+            q transformExpressions {
+              case u @ UnresolvedAttribute(nameParts) =>
+                withPosition(u) {
+                  try {
+                    val outerAttrOpt = outer.resolve(nameParts, resolver)
+                    if (outerAttrOpt.isDefined) {
+                      val outerAttr = outerAttrOpt.get
+                      if (q.inputSet.contains(outerAttr)) {
+                        // Got a conflict, create an alias for the attribute come from outer table
+                        val alias = Alias(outerAttr, outerAttr.toString)()
+                        val attr = alias.toAttribute
+                        aliases += attr -> alias
+                        attr
+                      } else {
+                        outerAttr
+                      }
+                    } else {
+                      u
+                    }
+                  } catch {
+                    case a: AnalysisException => u
+                  }
+                }
+            }
+        }
+        if (resolvedByOuter fastEquals analyzed) {
+          analyzed
+        } else {
+          resolveCorrelatedSubquery(resolvedByOuter, outer, aliases)
+        }
       }
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case q: LogicalPlan if q.childrenResolved =>
-        q transformExpressions {
+      // Only a few unary node (Project/Filter/Aggregate/Having) could have subquery
+      case q: UnaryNode if q.childrenResolved =>
+        val aliases = scala.collection.mutable.Map[Attribute, Alias]()
+        val newPlan = q transformExpressions {
           case e: SubqueryExpression if !e.query.resolved =>
-            // First resolve as much of the sub-query as possible. After that we use the children of
-            // this plan to resolve the remaining correlated predicates.
-            e.withNewPlan(q.children.foldLeft(execute(e.query))(resolveCorrelatedPredicates))
+            e.withNewPlan(resolveCorrelatedSubquery(e.query, q.child, aliases))
+        }
+        if (aliases.nonEmpty) {
+          val projs = q.child.output ++ aliases.values
+          Project(q.child.output,
+            newPlan.withNewChildren(Seq(Project(projs, q.child))))
+        } else {
+          newPlan
         }
     }
   }

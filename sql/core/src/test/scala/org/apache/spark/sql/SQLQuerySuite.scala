@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.SortOrder
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.aggregate
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, CartesianProduct, SortMergeJoin}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, CartesianProductExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSQLContext, TestSQLContext}
@@ -69,7 +69,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("describe functions") {
-    checkExistence(sql("describe function extended upper"), true,
+    checkKeywordsExist(sql("describe function extended upper"),
       "Function: upper",
       "Class: org.apache.spark.sql.catalyst.expressions.Upper",
       "Usage: upper(str) - Returns str with all characters changed to uppercase",
@@ -77,22 +77,20 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       "> SELECT upper('SparkSql');",
       "'SPARKSQL'")
 
-    checkExistence(sql("describe functioN Upper"), true,
+    checkKeywordsExist(sql("describe functioN Upper"),
       "Function: upper",
       "Class: org.apache.spark.sql.catalyst.expressions.Upper",
       "Usage: upper(str) - Returns str with all characters changed to uppercase")
 
-    checkExistence(sql("describe functioN Upper"), false,
-      "Extended Usage")
+    checkKeywordsNotExist(sql("describe functioN Upper"), "Extended Usage")
 
-    checkExistence(sql("describe functioN abcadf"), true,
-      "Function: abcadf not found.")
+    checkKeywordsExist(sql("describe functioN abcadf"), "Function: abcadf not found.")
   }
 
   test("SPARK-14415: All functions should have own descriptions") {
     for (f <- sqlContext.sessionState.functionRegistry.listFunction()) {
       if (!Seq("cube", "grouping", "grouping_id", "rollup", "window").contains(f)) {
-        checkExistence(sql(s"describe function `$f`"), false, "To be added.")
+        checkKeywordsNotExist(sql(s"describe function `$f`"), "To be added.")
       }
     }
   }
@@ -868,12 +866,12 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   test("SPARK-11111 null-safe join should not use cartesian product") {
     val df = sql("select count(*) from testData a join testData b on (a.key <=> b.key)")
     val cp = df.queryExecution.sparkPlan.collect {
-      case cp: CartesianProduct => cp
+      case cp: CartesianProductExec => cp
     }
     assert(cp.isEmpty, "should not use CartesianProduct for null-safe join")
     val smj = df.queryExecution.sparkPlan.collect {
-      case smj: SortMergeJoin => smj
-      case j: BroadcastHashJoin => j
+      case smj: SortMergeJoinExec => smj
+      case j: BroadcastHashJoinExec => j
     }
     assert(smj.size > 0, "should use SortMergeJoin or BroadcastHashJoin")
     checkAnswer(df, Row(100) :: Nil)

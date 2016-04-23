@@ -25,13 +25,12 @@ import scala.util.control.NonFatal
 import org.scalatest.{BeforeAndAfterAll, GivenWhenThen}
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.SQLBuilder
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.execution.command.{ExplainCommand, SetCommand}
-import org.apache.spark.sql.execution.datasources.DescribeCommand
+import org.apache.spark.sql.execution.command.{DescribeTableCommand, ExplainCommand, HiveNativeCommand, SetCommand}
 import org.apache.spark.sql.hive.{InsertIntoHiveTable => LogicalInsertIntoHiveTable}
-import org.apache.spark.sql.hive.SQLBuilder
 import org.apache.spark.sql.hive.test.{TestHive, TestHiveQueryExecution}
 
 /**
@@ -46,6 +45,17 @@ import org.apache.spark.sql.hive.test.{TestHive, TestHiveQueryExecution}
  */
 abstract class HiveComparisonTest
   extends SparkFunSuite with BeforeAndAfterAll with GivenWhenThen {
+
+  /**
+   * Path to the test datasets. We find this by looking up "hive-test-path-helper.txt" file.
+   *
+   * Before we run the query in Spark, we replace "../../data" with this path.
+   */
+  private val testDataPath: String = {
+    Thread.currentThread.getContextClassLoader
+      .getResource("hive-test-path-helper.txt")
+      .getPath.replace("/hive-test-path-helper.txt", "/data")
+  }
 
   /**
    * When set, any cache files that result in test failures will be deleted.  Used when the test
@@ -165,7 +175,7 @@ abstract class HiveComparisonTest
           .filterNot(_ == "")
       case _: HiveNativeCommand => answer.filterNot(nonDeterministicLine).filterNot(_ == "")
       case _: ExplainCommand => answer
-      case _: DescribeCommand =>
+      case _: DescribeTableCommand =>
         // Filter out non-deterministic lines and lines which do not have actual results but
         // can introduce problems because of the way Hive formats these lines.
         // Then, remove empty lines. Do not sort the results.
@@ -386,7 +396,8 @@ abstract class HiveComparisonTest
           var query: TestHiveQueryExecution = null
           try {
             query = {
-              val originalQuery = new TestHiveQueryExecution(queryString)
+              val originalQuery = new TestHiveQueryExecution(
+                queryString.replace("../../data", testDataPath))
               val containsCommands = originalQuery.analyzed.collectFirst {
                 case _: Command => ()
                 case _: LogicalInsertIntoHiveTable => ()
@@ -396,7 +407,7 @@ abstract class HiveComparisonTest
                 originalQuery
               } else {
                 val convertedSQL = try {
-                  new SQLBuilder(originalQuery.analyzed, TestHive).toSQL
+                  new SQLBuilder(originalQuery.analyzed).toSQL
                 } catch {
                   case NonFatal(e) => fail(
                     s"""Cannot convert the following HiveQL query plan back to SQL query string:
@@ -431,7 +442,7 @@ abstract class HiveComparisonTest
               }
             }
 
-            (query, prepareAnswer(query, query.stringResult()))
+            (query, prepareAnswer(query, query.hiveResultString()))
           } catch {
             case e: Throwable =>
               val errorMessage =
@@ -474,7 +485,7 @@ abstract class HiveComparisonTest
               // also print out the query plans and results for those.
               val computedTablesMessages: String = try {
                 val tablesRead = new TestHiveQueryExecution(query).executedPlan.collect {
-                  case ts: HiveTableScan => ts.relation.tableName
+                  case ts: HiveTableScanExec => ts.relation.tableName
                 }.toSet
 
                 TestHive.reset()
@@ -563,7 +574,7 @@ abstract class HiveComparisonTest
             // okay by running a simple query. If this fails then we halt testing since
             // something must have gone seriously wrong.
             try {
-              new TestHiveQueryExecution("SELECT key FROM src").stringResult()
+              new TestHiveQueryExecution("SELECT key FROM src").hiveResultString()
               TestHive.sessionState.runNativeSql("SELECT key FROM src")
             } catch {
               case e: Exception =>
