@@ -407,7 +407,7 @@ class Analyzer(
    * Replaces [[UnresolvedRelation]]s with concrete relations from the catalog.
    */
   object ResolveRelations extends Rule[LogicalPlan] {
-    private def getTable(u: UnresolvedRelation): LogicalPlan = {
+    private def lookupTableFromCatalog(u: UnresolvedRelation): LogicalPlan = {
       try {
         catalog.lookupRelation(u.tableIdentifier, u.alias)
       } catch {
@@ -418,10 +418,10 @@ class Analyzer(
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case i @ InsertIntoTable(u: UnresolvedRelation, _, _, _, _) =>
-        i.copy(table = EliminateSubqueryAliases(getTable(u)))
+        i.copy(table = EliminateSubqueryAliases(lookupTableFromCatalog(u)))
       case u: UnresolvedRelation =>
         try {
-          getTable(u)
+          lookupTableFromCatalog(u)
         } catch {
           case _: AnalysisException if u.tableIdentifier.database.isDefined =>
             // delay the exception into CheckAnalysis, then it could be resolved as data source.
