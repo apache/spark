@@ -1825,12 +1825,12 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     val e1 = intercept[AnalysisException] {
       sql("select * from in_valid_table")
     }
-    assert(e1.message.contains("Table or View not found"))
+    assert(e1.message.contains("Table or view not found"))
 
     val e2 = intercept[AnalysisException] {
       sql("select * from no_db.no_table").show()
     }
-    assert(e2.message.contains("Table or View not found"))
+    assert(e2.message.contains("Table or view not found"))
 
     val e3 = intercept[AnalysisException] {
       sql("select * from json.invalid_file")

@@ -642,7 +642,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def dataFrameRetainGroupColumns: Boolean = getConf(DATAFRAME_RETAIN_GROUP_COLUMNS)
 
-  def runSQLOnFile: Boolean = getConf(RUN_SQL_ON_FILES)
+  override def runSQLonFile: Boolean = getConf(RUN_SQL_ON_FILES)
 
   def columnarAggregateMapEnabled: Boolean = getConf(COLUMNAR_AGGREGATE_MAP_ENABLED)
 

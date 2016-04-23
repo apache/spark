@@ -412,7 +412,7 @@ class Analyzer(
         catalog.lookupRelation(u.tableIdentifier, u.alias)
       } catch {
         case _: NoSuchTableException =>
-          u.failAnalysis(s"Table or View not found: ${u.tableName}")
+          u.failAnalysis(s"Table or view not found: ${u.tableName}")
       }
     }
 
@@ -420,12 +420,18 @@ class Analyzer(
       case i @ InsertIntoTable(u: UnresolvedRelation, _, _, _, _) =>
         i.copy(table = EliminateSubqueryAliases(lookupTableFromCatalog(u)))
       case u: UnresolvedRelation =>
-        try {
+        val table = u.tableIdentifier
+        if (table.database.isDefined && conf.runSQLonFile &&
+            (!catalog.databaseExists(table.database.get) || !catalog.tableExists(table))) {
+          // If the table does not exist, and the database part is specified, and we support
+          // running SQL directly on files, then let's just return the original UnresolvedRelation.
+          // It is possible we are matching a query like "select * from parquet.`/path/to/query`".
+          // The plan will get resolved later.
+          // Note that we are testing (!db_exists || !table_exists) because the catalog throws
+          // an exception from tableExists if the database does not exist.
+          u
+        } else {
           lookupTableFromCatalog(u)
-        } catch {
-          case _: AnalysisException if u.tableIdentifier.database.isDefined =>
-            // delay the exception into CheckAnalysis, then it could be resolved as data source.
-            u
         }
     }
   }
