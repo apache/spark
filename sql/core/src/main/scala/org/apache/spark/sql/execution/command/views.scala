@@ -63,9 +63,12 @@ case class CreateViewCommand(
   }
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
-    val analzyedPlan = sqlContext.executePlan(child).analyzed
+    // If the plan cannot be analyzed, throw an exception and don't proceed.
+    val qe = sqlContext.executePlan(child)
+    qe.assertAnalyzed()
+    val analyzedPlan = qe.analyzed
 
-    require(tableDesc.schema == Nil || tableDesc.schema.length == analzyedPlan.output.length)
+    require(tableDesc.schema == Nil || tableDesc.schema.length == analyzedPlan.output.length)
     val sessionState = sqlContext.sessionState
 
     if (sessionState.catalog.tableExists(tableIdentifier)) {
@@ -74,7 +77,7 @@ case class CreateViewCommand(
         // already exists.
       } else if (replace) {
         // Handles `CREATE OR REPLACE VIEW v0 AS SELECT ...`
-        sessionState.catalog.alterTable(prepareTable(sqlContext, analzyedPlan))
+        sessionState.catalog.alterTable(prepareTable(sqlContext, analyzedPlan))
       } else {
         // Handles `CREATE VIEW v0 AS SELECT ...`. Throws exception when the target view already
         // exists.
@@ -85,68 +88,74 @@ case class CreateViewCommand(
     } else {
       // Create the view if it doesn't exist.
       sessionState.catalog.createTable(
-        prepareTable(sqlContext, analzyedPlan), ignoreIfExists = false)
+        prepareTable(sqlContext, analyzedPlan), ignoreIfExists = false)
     }
 
     Seq.empty[Row]
   }
 
-  private def prepareTable(sqlContext: SQLContext, analzyedPlan: LogicalPlan): CatalogTable = {
-    val expandedText = if (sqlContext.conf.canonicalView) {
-      try rebuildViewQueryString(sqlContext, analzyedPlan) catch {
-        case NonFatal(e) => wrapViewTextWithSelect(analzyedPlan)
+  /**
+   * Returns a [[CatalogTable]] that can be used to save in the catalog. This comment canonicalize
+   * SQL based on the analyzed plan, and also creates the proper schema for the view.
+   */
+  private def prepareTable(sqlContext: SQLContext, analyzedPlan: LogicalPlan): CatalogTable = {
+    val viewSQL: String =
+      if (sqlContext.conf.canonicalView) {
+        val logicalPlan =
+          if (tableDesc.schema.isEmpty) {
+            analyzedPlan
+          } else {
+            val projectList = analyzedPlan.output.zip(tableDesc.schema).map {
+              case (attr, col) => Alias(attr, col.name)()
+            }
+            sqlContext.executePlan(Project(projectList, analyzedPlan)).analyzed
+          }
+        new SQLBuilder(logicalPlan).toSQL
+      } else {
+        // When user specified column names for view, we should create a project to do the renaming.
+        // When no column name specified, we still need to create a project to declare the columns
+        // we need, to make us more robust to top level `*`s.
+        val viewOutput = {
+          val columnNames = analyzedPlan.output.map(f => quote(f.name))
+          if (tableDesc.schema.isEmpty) {
+            columnNames.mkString(", ")
+          } else {
+            columnNames.zip(tableDesc.schema.map(f => quote(f.name))).map {
+              case (name, alias) => s"$name AS $alias"
+            }.mkString(", ")
+          }
+        }
+
+        val viewText = tableDesc.viewText.get
+        val viewName = quote(tableDesc.identifier.table)
+        s"SELECT $viewOutput FROM ($viewText) $viewName"
       }
-    } else {
-      wrapViewTextWithSelect(analzyedPlan)
+
+    // Validate the view SQL - make sure we can parse it and analyze it.
+    // If we cannot analyze the generated query, there is probably a bug in SQL generation.
+    try {
+      sqlContext.sql(viewSQL).queryExecution.assertAnalyzed()
+    } catch {
+      case NonFatal(e) =>
+        throw new RuntimeException(
+          "Failed to analyze the canonicalized SQL. It is possible there is a bug in Spark.", e)
     }
 
-    val viewSchema = {
+    val viewSchema: Seq[CatalogColumn] = {
       if (tableDesc.schema.isEmpty) {
-        analzyedPlan.output.map { a =>
+        analyzedPlan.output.map { a =>
           CatalogColumn(a.name, a.dataType.simpleString)
         }
       } else {
-        analzyedPlan.output.zip(tableDesc.schema).map { case (a, col) =>
+        analyzedPlan.output.zip(tableDesc.schema).map { case (a, col) =>
           CatalogColumn(col.name, a.dataType.simpleString, nullable = true, col.comment)
         }
       }
     }
 
-    tableDesc.copy(schema = viewSchema, viewText = Some(expandedText))
+    tableDesc.copy(schema = viewSchema, viewText = Some(viewSQL))
   }
 
-  private def wrapViewTextWithSelect(analzyedPlan: LogicalPlan): String = {
-    // When user specified column names for view, we should create a project to do the renaming.
-    // When no column name specified, we still need to create a project to declare the columns
-    // we need, to make us more robust to top level `*`s.
-    val viewOutput = {
-      val columnNames = analzyedPlan.output.map(f => quote(f.name))
-      if (tableDesc.schema.isEmpty) {
-        columnNames.mkString(", ")
-      } else {
-        columnNames.zip(tableDesc.schema.map(f => quote(f.name))).map {
-          case (name, alias) => s"$name AS $alias"
-        }.mkString(", ")
-      }
-    }
-
-    val viewText = tableDesc.viewText.get
-    val viewName = quote(tableDesc.identifier.table)
-    s"SELECT $viewOutput FROM ($viewText) $viewName"
-  }
-
-  private def rebuildViewQueryString(sqlContext: SQLContext, analzyedPlan: LogicalPlan): String = {
-    val logicalPlan = if (tableDesc.schema.isEmpty) {
-      analzyedPlan
-    } else {
-      val projectList = analzyedPlan.output.zip(tableDesc.schema).map {
-        case (attr, col) => Alias(attr, col.name)()
-      }
-      sqlContext.executePlan(Project(projectList, analzyedPlan)).analyzed
-    }
-    new SQLBuilder(logicalPlan).toSQL
-  }
-
-  // escape backtick with double-backtick in column name and wrap it with backtick.
+  /** Escape backtick with double-backtick in column name and wrap it with backtick. */
   private def quote(name: String) = s"`${name.replaceAll("`", "``")}`"
 }
