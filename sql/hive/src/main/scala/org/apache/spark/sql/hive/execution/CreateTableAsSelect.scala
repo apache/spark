@@ -18,11 +18,10 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
-import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable}
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan}
 import org.apache.spark.sql.execution.command.RunnableCommand
-import org.apache.spark.sql.hive.{HiveContext, HiveMetastoreTypes, MetastoreRelation}
+import org.apache.spark.sql.hive.MetastoreRelation
 
 /**
  * Create table and insert the query result into it.
@@ -62,7 +61,7 @@ case class CreateTableAsSelect(
         // Hive doesn't support specifying the column list for target table in CTAS
         // However we don't think SparkSQL should follow that.
         tableDesc.copy(schema = query.output.map { c =>
-          CatalogColumn(c.name, HiveMetastoreTypes.toMetastoreType(c.dataType))
+          CatalogColumn(c.name, c.dataType.catalogString)
         })
       } else {
         withFormat
@@ -85,7 +84,8 @@ case class CreateTableAsSelect(
         throw new AnalysisException(s"$tableIdentifier already exists.")
       }
     } else {
-      sqlContext.executePlan(InsertIntoTable(metastoreRelation, Map(), query, true, false)).toRdd
+      sqlContext.executePlan(InsertIntoTable(
+        metastoreRelation, Map(), query, overwrite = true, ifNotExists = false)).toRdd
     }
 
     Seq.empty[Row]
