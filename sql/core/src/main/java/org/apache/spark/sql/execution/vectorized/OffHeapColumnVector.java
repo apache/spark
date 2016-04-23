@@ -16,10 +16,6 @@
  */
 package org.apache.spark.sql.execution.vectorized;
 
-import java.nio.ByteOrder;
-
-import org.apache.commons.lang.NotImplementedException;
-
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
@@ -27,11 +23,11 @@ import org.apache.spark.unsafe.Platform;
 /**
  * Column data backed using offheap memory.
  */
-public final class OffHeapColumnVector extends ColumnVector {
+public class OffHeapColumnVector extends ColumnVector {
   // The data stored in these two allocations need to maintain binary compatible. We can
   // directly pass this buffer to external components.
   private long nulls;
-  private long data;
+  protected long data;
 
   // Set iff the type is array.
   private long lengthData;
@@ -39,9 +35,7 @@ public final class OffHeapColumnVector extends ColumnVector {
 
   protected OffHeapColumnVector(int capacity, DataType type) {
     super(capacity, type, MemoryMode.OFF_HEAP);
-    if (!ByteOrder.nativeOrder().equals(ByteOrder.LITTLE_ENDIAN)) {
-      throw new NotImplementedException("Only little endian is supported.");
-    }
+
     nulls = 0;
     data = 0;
     lengthData = 0;

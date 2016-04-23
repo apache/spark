@@ -26,7 +26,7 @@ import org.apache.spark.unsafe.Platform;
  * A column backed by an in memory JVM array. This stores the NULLs as a byte per value
  * and a java array for the values.
  */
-public final class OnHeapColumnVector extends ColumnVector {
+public class OnHeapColumnVector extends ColumnVector {
   // The data stored in these arrays need to maintain binary compatible. We can
   // directly pass this buffer to external components.
 
@@ -36,10 +36,10 @@ public final class OnHeapColumnVector extends ColumnVector {
   // Array for each type. Only 1 is populated for any type.
   private byte[] byteData;
   private short[] shortData;
-  private int[] intData;
-  private long[] longData;
-  private float[] floatData;
-  private double[] doubleData;
+  protected int[] intData;
+  protected long[] longData;
+  protected float[] floatData;
+  protected double[] doubleData;
 
   // Only set if type is Array.
   private int[] arrayLengths;
