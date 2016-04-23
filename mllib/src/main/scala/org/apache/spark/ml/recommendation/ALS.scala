@@ -1314,7 +1314,8 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
   /**
    * Private function to clean up its all of the shuffles eagerly.
    */
-  private[spark] def cleanDependencies[T](sc: SparkContext, deps: Seq[Dependency[_]], blocking: Boolean = false): Unit = {
+  private[spark] def cleanDependencies[T](sc: SparkContext, deps: Seq[Dependency[_]],
+      blocking: Boolean = false): Unit = {
     // If there is no reference tracking we skip clean up.
     if (sc.cleaner.isEmpty) {
       return
