@@ -52,10 +52,6 @@ case class CreateViewCommand(
 
   override def output: Seq[Attribute] = Seq.empty[Attribute]
 
-  override def children: Seq[LogicalPlan] = child :: Nil
-
-  private lazy val childSchema = child.output
-
   require(tableDesc.tableType == CatalogTableType.VIRTUAL_VIEW)
   require(tableDesc.viewText.isDefined)
 
@@ -67,7 +63,9 @@ case class CreateViewCommand(
   }
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
-    require(tableDesc.schema == Nil || tableDesc.schema.length == childSchema.length)
+    val analzyedPlan = sqlContext.executePlan(child).analyzed
+
+    require(tableDesc.schema == Nil || tableDesc.schema.length == analzyedPlan.output.length)
     val sessionState = sqlContext.sessionState
 
     if (sessionState.catalog.tableExists(tableIdentifier)) {
@@ -76,7 +74,7 @@ case class CreateViewCommand(
         // already exists.
       } else if (replace) {
         // Handles `CREATE OR REPLACE VIEW v0 AS SELECT ...`
-        sessionState.catalog.alterTable(prepareTable(sqlContext))
+        sessionState.catalog.alterTable(prepareTable(sqlContext, analzyedPlan))
       } else {
         // Handles `CREATE VIEW v0 AS SELECT ...`. Throws exception when the target view already
         // exists.
@@ -86,28 +84,29 @@ case class CreateViewCommand(
       }
     } else {
       // Create the view if it doesn't exist.
-      sessionState.catalog.createTable(prepareTable(sqlContext), ignoreIfExists = false)
+      sessionState.catalog.createTable(
+        prepareTable(sqlContext, analzyedPlan), ignoreIfExists = false)
     }
 
     Seq.empty[Row]
   }
 
-  private def prepareTable(sqlContext: SQLContext): CatalogTable = {
+  private def prepareTable(sqlContext: SQLContext, analzyedPlan: LogicalPlan): CatalogTable = {
     val expandedText = if (sqlContext.conf.canonicalView) {
-      try rebuildViewQueryString(sqlContext) catch {
-        case NonFatal(e) => wrapViewTextWithSelect
+      try rebuildViewQueryString(sqlContext, analzyedPlan) catch {
+        case NonFatal(e) => wrapViewTextWithSelect(analzyedPlan)
       }
     } else {
-      wrapViewTextWithSelect
+      wrapViewTextWithSelect(analzyedPlan)
     }
 
     val viewSchema = {
       if (tableDesc.schema.isEmpty) {
-        childSchema.map { a =>
+        analzyedPlan.output.map { a =>
           CatalogColumn(a.name, a.dataType.simpleString)
         }
       } else {
-        childSchema.zip(tableDesc.schema).map { case (a, col) =>
+        analzyedPlan.output.zip(tableDesc.schema).map { case (a, col) =>
           CatalogColumn(col.name, a.dataType.simpleString, nullable = true, col.comment)
         }
       }
@@ -116,12 +115,12 @@ case class CreateViewCommand(
     tableDesc.copy(schema = viewSchema, viewText = Some(expandedText))
   }
 
-  private def wrapViewTextWithSelect: String = {
+  private def wrapViewTextWithSelect(analzyedPlan: LogicalPlan): String = {
     // When user specified column names for view, we should create a project to do the renaming.
     // When no column name specified, we still need to create a project to declare the columns
     // we need, to make us more robust to top level `*`s.
     val viewOutput = {
-      val columnNames = childSchema.map(f => quote(f.name))
+      val columnNames = analzyedPlan.output.map(f => quote(f.name))
       if (tableDesc.schema.isEmpty) {
         columnNames.mkString(", ")
       } else {
@@ -136,14 +135,14 @@ case class CreateViewCommand(
     s"SELECT $viewOutput FROM ($viewText) $viewName"
   }
 
-  private def rebuildViewQueryString(sqlContext: SQLContext): String = {
+  private def rebuildViewQueryString(sqlContext: SQLContext, analzyedPlan: LogicalPlan): String = {
     val logicalPlan = if (tableDesc.schema.isEmpty) {
-      child
+      analzyedPlan
     } else {
-      val projectList = childSchema.zip(tableDesc.schema).map {
+      val projectList = analzyedPlan.output.zip(tableDesc.schema).map {
         case (attr, col) => Alias(attr, col.name)()
       }
-      sqlContext.executePlan(Project(projectList, child)).analyzed
+      sqlContext.executePlan(Project(projectList, analzyedPlan)).analyzed
     }
     new SQLBuilder(logicalPlan).toSQL
   }

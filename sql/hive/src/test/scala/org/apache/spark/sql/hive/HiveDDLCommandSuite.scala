@@ -521,14 +521,13 @@ class HiveDDLCommandSuite extends PlanTest {
   test("create view - full") {
     val v1 =
       """
-        |CREATE OR REPLACE VIEW IF NOT EXISTS view1
+        |CREATE OR REPLACE VIEW view1
         |(col1, col3)
         |COMMENT 'BLABLA'
         |TBLPROPERTIES('prop1Key'="prop1Val")
         |AS SELECT * FROM tab1
       """.stripMargin
     val (desc, exists) = extractTableDesc(v1)
-    assert(exists)
     assert(desc.identifier.database.isEmpty)
     assert(desc.identifier.table == "view1")
     assert(desc.tableType == CatalogTableType.VIRTUAL_VIEW)
