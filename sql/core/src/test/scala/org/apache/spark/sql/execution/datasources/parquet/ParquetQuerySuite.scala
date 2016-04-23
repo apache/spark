@@ -24,7 +24,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions.SpecificMutableRow
-import org.apache.spark.sql.execution.BatchedDataSourceScan
+import org.apache.spark.sql.execution.BatchedDataSourceScanExec
 import org.apache.spark.sql.execution.datasources.parquet.TestingUDT.{NestedStruct, NestedStructUDT}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -600,14 +600,14 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
 
         // donot return batch, because whole stage codegen is disabled for wide table (>200 columns)
         val df2 = sqlContext.read.parquet(path)
-        assert(df2.queryExecution.sparkPlan.find(_.isInstanceOf[BatchedDataSourceScan]).isEmpty,
+        assert(df2.queryExecution.sparkPlan.find(_.isInstanceOf[BatchedDataSourceScanExec]).isEmpty,
           "Should not return batch")
         checkAnswer(df2, df)
 
         // return batch
         val columns = Seq.tabulate(90) {i => s"c$i"}
         val df3 = df2.selectExpr(columns : _*)
-        assert(df3.queryExecution.sparkPlan.find(_.isInstanceOf[BatchedDataSourceScan]).isDefined,
+        assert(df3.queryExecution.sparkPlan.find(_.isInstanceOf[BatchedDataSourceScanExec]).isDefined,
           "Should not return batch")
         checkAnswer(df3, df.selectExpr(columns : _*))
       }
