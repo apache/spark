@@ -1497,7 +1497,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           .map(_.references)
           .reduceOption(_ ++ _)
           .getOrElse(AttributeSet.empty)
-        val missingReferences = localPredicateReferences -- p.references -- query.outputSet
+        val missingReferences = localPredicateReferences -- p.outputSet -- query.outputSet
 
         // Create a new project if we need to add missing references.
         if (missingReferences.nonEmpty) {

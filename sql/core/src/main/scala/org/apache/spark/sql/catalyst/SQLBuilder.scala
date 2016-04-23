@@ -69,7 +69,13 @@ class SQLBuilder(logicalPlan: LogicalPlan) extends Logging {
     try {
       val replaced = finalPlan.transformAllExpressions {
         case e: SubqueryExpression =>
-          SubqueryHolder(new SQLBuilder(e.query).toSQL)
+          val query = new SQLBuilder(e.query).toSQL
+          val sql = e match {
+            case in: InSubQuery => s"${in.value.sql} IN ($query)"
+            case exist: Exists => s"EXISTS($query)"
+            case _ => s"($query)"
+          }
+          SubqueryHolder(sql)
         case e: NonSQLExpression =>
           throw new UnsupportedOperationException(
             s"Expression $e doesn't have a SQL representation"
@@ -525,9 +531,8 @@ class SQLBuilder(logicalPlan: LogicalPlan) extends Logging {
   /**
    * A place holder for generated SQL for subquery expression.
    */
-  case class SubqueryHolder(query: String) extends LeafExpression with Unevaluable {
+  case class SubqueryHolder(override val sql: String) extends LeafExpression with Unevaluable {
     override def dataType: DataType = NullType
     override def nullable: Boolean = true
-    override def sql: String = s"($query)"
   }
 }

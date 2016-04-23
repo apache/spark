@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.Utils
 
 /**
  * Runs the test cases that are included in the hive distribution.
@@ -61,6 +62,15 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     // Ensures that the plans generation use metastore relation and not OrcRelation
     // Was done because SqlBuilder does not work with plans having logical relation
     TestHive.setConf(HiveUtils.CONVERT_METASTORE_ORC, false)
+
+    // The following settings are used for generating golden files with Hive.
+    val testTempDir = Utils.createTempDir()
+    TestHive.sql("set hive.plan.serialization.format=kryo")
+    // Explicitly set fs to local fs.
+    TestHive.sql(s"set fs.default.name=file://$testTempDir/")
+    // Ask Hive to run jobs in-process as a single map and reduce task.
+    TestHive.sql("set mapred.job.tracker=local")
+
     RuleExecutor.resetTime()
   }
 
@@ -903,6 +913,13 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "stats_empty_partition",
     "stats_publisher_error_1",
     "subq2",
+    "subquery_exists",
+    "subquery_exists_having",
+    "subquery_notexists",
+    "subquery_notexists_having",
+    "subquery_in",
+    "subquery_in_having",
+    "subquery_notin_having",
     "tablename_with_select",
     "timestamp_3",
     "timestamp_comparison",

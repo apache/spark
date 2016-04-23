@@ -363,7 +363,9 @@ abstract class HiveComparisonTest
                     case _: ExplainCommand =>
                       // No need to execute EXPLAIN queries as we don't check the output.
                       Nil
-                    case _ => TestHive.sessionState.runNativeSql(queryString)
+                    case _ =>
+                      TestHive.sessionState.runNativeSql(
+                        queryString.replace("../../data", testDataPath))
                   }
 
                   // We need to add a new line to non-empty answers so we can differentiate Seq()
