@@ -484,7 +484,7 @@ class ALSSuite
 }
 
 class ALSCleanerSuite extends SparkFunSuite {
-  test("checkpointAndCleanParents") {
+  test("Clean shuffles") {
     val conf = new SparkConf()
     val localDir = Utils.createTempDir()
     val tempDir = Utils.createTempDir()
@@ -502,8 +502,10 @@ class ALSCleanerSuite extends SparkFunSuite {
         val keyed = input.map(x => (x % 20, 1))
         val shuffled = keyed.reduceByKey(_ + _)
         val keysOnly = shuffled.map{case (x, _) => x}
-        ALS.checkpointAndCleanParents(keysOnly, true)
+        val deps = keysOnly.dependencies
+        keysOnly.checkpoint()
         keysOnly.count()
+        ALS.cleanDependencies(sc, deps, true)
         assert(keysOnly.isCheckpointed)
         val resultingFiles = getAllFiles -- filesBefore
         assert(resultingFiles === Set())

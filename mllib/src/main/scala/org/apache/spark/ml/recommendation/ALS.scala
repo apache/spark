@@ -30,7 +30,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
 
-import org.apache.spark.{Dependency, Partitioner, ShuffleDependency}
+import org.apache.spark.{Dependency, Partitioner, ShuffleDependency, SparkContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
@@ -656,14 +656,15 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
         previousItemFactors.unpersist()
         itemFactors.setName(s"itemFactors-$iter").persist(intermediateRDDStorageLevel)
         // TODO: Generalize PeriodicGraphCheckpointer and use it here.
+        val deps = itemFactors.dependencies
         if (shouldCheckpoint(iter)) {
-          // itemFactors gets materialized in computeFactors & here.
-          ALS.checkpointAndCleanParents(itemFactors)
+          itemFactors.checkpoint() // itemFactors gets materialized in computeFactors
         }
         val previousUserFactors = userFactors
         userFactors = computeFactors(itemFactors, itemOutBlocks, userInBlocks, rank, regParam,
           itemLocalIndexEncoder, implicitPrefs, alpha, solver)
         if (shouldCheckpoint(iter)) {
+          ALS.cleanDependencies(sc, deps)
           deletePreviousCheckpointFile()
           previousCheckpointFile = itemFactors.getCheckpointFile
         }
@@ -674,8 +675,11 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
         itemFactors = computeFactors(userFactors, userOutBlocks, itemInBlocks, rank, regParam,
           userLocalIndexEncoder, solver = solver)
         if (shouldCheckpoint(iter)) {
-          ALS.checkpointAndCleanParents(itemFactors)
+          val deps = itemFactors.dependencies
+          itemFactors.checkpoint()
+          itemFactors.count() // checkpoint item factors and cut lineage
           deletePreviousCheckpointFile()
+          ALS.cleanDependencies(sc, deps)
           previousCheckpointFile = itemFactors.getCheckpointFile
         }
         userFactors = computeFactors(itemFactors, itemOutBlocks, userInBlocks, rank, regParam,
@@ -1308,13 +1312,12 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
   private[recommendation] type ALSPartitioner = org.apache.spark.HashPartitioner
 
   /**
-   * Private function to checkpoint the RDD and clean up its all of its parents' shuffles eagerly.
+   * Private function to clean up its all of the shuffles eagerly.
    */
-  private[spark] def checkpointAndCleanParents[T](rdd: RDD[T], blocking: Boolean = false): Unit = {
-    val sc = rdd.sparkContext
+  private[spark] def cleanDependencies[T](sc: SparkContext, deps: Seq[Dependency[_]], blocking: Boolean = false): Unit = {
     // If there is no reference tracking we skip clean up.
     if (sc.cleaner.isEmpty) {
-      return rdd.checkpoint()
+      return
     }
     val cleaner = sc.cleaner.get
     /**
@@ -1330,9 +1333,6 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
         rdd.dependencies.foreach(cleanEagerly)
       }
     }
-    val deps = rdd.dependencies
-    rdd.checkpoint()
-    rdd.count()
     deps.foreach(cleanEagerly)
   }
 }
