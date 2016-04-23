@@ -61,14 +61,6 @@ class SessionCatalogSuite extends SparkFunSuite {
     assert(!catalog.databaseExists("does_not_exist"))
   }
 
-  test("create database having an illegal name") {
-    val catalog = new SessionCatalog(newBasicCatalog())
-    val e = intercept[AnalysisException] {
-      catalog.createDatabase(newDb("db:1"), ignoreIfExists = true)
-    }
-    assert(e.getMessage.contains("Database name 'db:1' is not a valid name"))
-  }
-
   test("get database when a database exists") {
     val catalog = new SessionCatalog(newBasicCatalog())
     val db1 = catalog.getDatabaseMetadata("db1")
@@ -167,6 +159,37 @@ class SessionCatalogSuite extends SparkFunSuite {
     assert(catalog.getCurrentDatabase == "deebo")
   }
 
+  test("database-related commands having an illegal database name") {
+    val illegalDBName = "db:1"
+    val expectedMsg = s"Database name '$illegalDBName' is not a valid name"
+    val catalog = new SessionCatalog(newBasicCatalog())
+
+    var e = intercept[AnalysisException] {
+      catalog.createDatabase(newDb(illegalDBName), ignoreIfExists = true)
+    }
+    assert(e.getMessage.contains(expectedMsg))
+
+    e = intercept[AnalysisException] {
+      catalog.dropDatabase(illegalDBName, ignoreIfNotExists = false, cascade = false)
+    }
+    assert(e.getMessage.contains(expectedMsg))
+
+    e = intercept[AnalysisException] {
+      catalog.getDatabaseMetadata(illegalDBName)
+    }
+    assert(e.getMessage.contains(expectedMsg))
+
+    e = intercept[AnalysisException] {
+      catalog.alterDatabase(newDb(illegalDBName))
+    }
+    assert(e.getMessage.contains(expectedMsg))
+
+    e = intercept[AnalysisException] {
+      catalog.setCurrentDatabase(illegalDBName)
+    }
+    assert(e.getMessage.contains(expectedMsg))
+  }
+
   // --------------------------------------------------------------------------
   // Tables
   // --------------------------------------------------------------------------
@@ -188,12 +211,58 @@ class SessionCatalogSuite extends SparkFunSuite {
     assert(externalCatalog.listTables("db2").toSet == Set("tbl1", "tbl2", "tbl3"))
   }
 
-  test("create table having an illegal name") {
+  test("table-related commands having an illegal table name") {
+    val illegalTableName = "tbl:3"
+    val expectedMsg = s"Table name '$illegalTableName' is not a valid name"
     val catalog = new SessionCatalog(newBasicCatalog())
-    val e = intercept[AnalysisException] {
-      catalog.createTable(newTable("tbl:3"), ignoreIfExists = false)
+
+    var e = intercept[AnalysisException] {
+      catalog.createTable(newTable(illegalTableName), ignoreIfExists = false)
     }
-    assert(e.getMessage.contains("Table name 'tbl:3' is not a valid name"))
+    assert(e.getMessage.contains(expectedMsg))
+
+    val tempTable1 = Range(1, 10, 1, 10, Seq())
+    e = intercept[AnalysisException] {
+      catalog.createTempTable(illegalTableName, tempTable1, overrideIfExists = false)
+    }
+    assert(e.getMessage.contains(expectedMsg))
+
+    e = intercept[AnalysisException] {
+      catalog.getTempTable(illegalTableName)
+    }
+    assert(e.getMessage.contains(expectedMsg))
+
+    e = intercept[AnalysisException] {
+      catalog.dropTable(TableIdentifier(illegalTableName), ignoreIfNotExists = false)
+    }
+    assert(e.getMessage.contains(expectedMsg))
+
+    e = intercept[AnalysisException] {
+      catalog.renameTable(
+        TableIdentifier(illegalTableName, Some("db2")), TableIdentifier("newTab", Some("db2")))
+    }
+    assert(e.getMessage.contains(expectedMsg))
+
+    e = intercept[AnalysisException] {
+      catalog.renameTable(
+        TableIdentifier("oldTab", Some("db2")), TableIdentifier(illegalTableName, Some("db2")))
+    }
+    assert(e.getMessage.contains(expectedMsg))
+
+    e = intercept[AnalysisException] {
+      catalog.alterTable(newTable(illegalTableName, "unknown_db"))
+    }
+    assert(e.getMessage.contains(expectedMsg))
+
+    e = intercept[AnalysisException] {
+      catalog.lookupRelation(TableIdentifier(illegalTableName, Some("db2")))
+    }
+    assert(e.getMessage.contains(expectedMsg))
+
+    e = intercept[AnalysisException] {
+      catalog.tableExists(TableIdentifier(illegalTableName, Some("db2")))
+    }
+    assert(e.getMessage.contains(expectedMsg))
   }
 
   test("create table when database does not exist") {

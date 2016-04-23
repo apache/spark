@@ -435,6 +435,7 @@ class SessionCatalog(
    * For testing only.
    */
   private[catalog] def getTempTable(name: String): Option[LogicalPlan] = {
+    validateTableName(name)
     tempTables.get(name)
   }
 
