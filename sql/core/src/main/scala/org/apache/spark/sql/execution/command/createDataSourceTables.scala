@@ -40,15 +40,18 @@ import org.apache.spark.sql.types._
  * This is not intended for temporary tables.
  *
  * The syntax of using this command in SQL is:
- *
- *
+ * {{{
+ *   CREATE TABLE [IF NOT EXISTS] [db_name.]table_name
+ *   [(col1 data_type [COMMENT col_comment], ...)]
+ *   USING format OPTIONS ([option1_name "option1_value", option2_name "option2_value", ...])
+ * }}}
  */
 case class CreateDataSourceTableCommand(
     tableIdent: TableIdentifier,
     userSpecifiedSchema: Option[StructType],
     provider: String,
     options: Map[String, String],
-    allowExisting: Boolean,
+    ignoreIfExists: Boolean,
     managedIfNoPath: Boolean)
   extends RunnableCommand {
 
@@ -72,7 +75,7 @@ case class CreateDataSourceTableCommand(
     val sessionState = sqlContext.sessionState
 
     if (sessionState.catalog.tableExists(tableIdent)) {
-      if (allowExisting) {
+      if (ignoreIfExists) {
         return Seq.empty[Row]
       } else {
         throw new AnalysisException(s"Table $tableName already exists.")
@@ -110,6 +113,19 @@ case class CreateDataSourceTableCommand(
   }
 }
 
+/**
+ * A command used to create a data source table using the result of a query.
+ *
+ * Note: This is different from [[CreateTableAsSelect]]. Please check the syntax for difference.
+ * This is not intended for temporary tables.
+ *
+ * The syntax of using this command in SQL is:
+ * {{{
+ *   CREATE TABLE [IF NOT EXISTS] [db_name.]table_name
+ *   USING format OPTIONS ([option1_name "option1_value", option2_name "option2_value", ...])
+ *   AS SELECT ...
+ * }}}
+ */
 case class CreateDataSourceTableAsSelectCommand(
     tableIdent: TableIdentifier,
     provider: String,
