@@ -28,7 +28,6 @@ import org.apache.spark.sql.{AnalysisException, SaveMode, SQLContext}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.parser.DataTypeParser
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -270,7 +269,7 @@ private[hive] class HiveMetastoreCatalog(hive: SQLContext) extends Logging {
           serdeProperties = options
         ),
         schema = relation.schema.map { f =>
-          CatalogColumn(f.name, HiveMetastoreTypes.toMetastoreType(f.dataType))
+          CatalogColumn(f.name, f.dataType.catalogString)
         },
         properties = tableProperties.toMap,
         viewText = None) // TODO: We need to place the SQL string here
@@ -637,7 +636,7 @@ private[hive] class HiveMetastoreCatalog(hive: SQLContext) extends Logging {
           table.schema
         } else {
           child.output.map { a =>
-            CatalogColumn(a.name, HiveMetastoreTypes.toMetastoreType(a.dataType), a.nullable)
+            CatalogColumn(a.name, a.dataType.catalogString, a.nullable)
           }
         }
 
@@ -768,37 +767,5 @@ private[hive] case class InsertIntoHiveTable(
 
   override lazy val resolved: Boolean = childrenResolved && child.output.zip(tableOutput).forall {
     case (childAttr, tableAttr) => childAttr.dataType.sameType(tableAttr.dataType)
-  }
-}
-
-
-private[hive] object HiveMetastoreTypes {
-  def toDataType(metastoreType: String): DataType = DataTypeParser.parse(metastoreType)
-
-  def decimalMetastoreString(decimalType: DecimalType): String = decimalType match {
-    case DecimalType.Fixed(precision, scale) => s"decimal($precision,$scale)"
-    case _ => s"decimal($HiveShim.UNLIMITED_DECIMAL_PRECISION,$HiveShim.UNLIMITED_DECIMAL_SCALE)"
-  }
-
-  def toMetastoreType(dt: DataType): String = dt match {
-    case ArrayType(elementType, _) => s"array<${toMetastoreType(elementType)}>"
-    case StructType(fields) =>
-      s"struct<${fields.map(f => s"${f.name}:${toMetastoreType(f.dataType)}").mkString(",")}>"
-    case MapType(keyType, valueType, _) =>
-      s"map<${toMetastoreType(keyType)},${toMetastoreType(valueType)}>"
-    case StringType => "string"
-    case FloatType => "float"
-    case IntegerType => "int"
-    case ByteType => "tinyint"
-    case ShortType => "smallint"
-    case DoubleType => "double"
-    case LongType => "bigint"
-    case BinaryType => "binary"
-    case BooleanType => "boolean"
-    case DateType => "date"
-    case d: DecimalType => decimalMetastoreString(d)
-    case TimestampType => "timestamp"
-    case NullType => "void"
-    case udt: UserDefinedType[_] => toMetastoreType(udt.sqlType)
   }
 }

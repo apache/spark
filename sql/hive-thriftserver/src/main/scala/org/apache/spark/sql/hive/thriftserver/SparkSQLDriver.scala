@@ -29,10 +29,9 @@ import org.apache.hadoop.hive.ql.processors.CommandProcessorResponse
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.hive.{HiveContext, HiveMetastoreTypes}
+import org.apache.spark.sql.hive.HiveContext
 
-private[hive] class SparkSQLDriver(
-    val context: HiveContext = SparkSQLEnv.hiveContext)
+private[hive] class SparkSQLDriver(val context: HiveContext = SparkSQLEnv.hiveContext)
   extends Driver
   with Logging {
 
@@ -49,7 +48,7 @@ private[hive] class SparkSQLDriver(
       new Schema(Arrays.asList(new FieldSchema("Response code", "string", "")), null)
     } else {
       val fieldSchemas = analyzed.output.map { attr =>
-        new FieldSchema(attr.name, HiveMetastoreTypes.toMetastoreType(attr.dataType), "")
+        new FieldSchema(attr.name, attr.dataType.catalogString, "")
       }
 
       new Schema(fieldSchemas.asJava, null)
