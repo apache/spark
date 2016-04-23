@@ -29,13 +29,13 @@ class OrcOptions(@transient private val parameters: Map[String, String])
   import org.apache.spark.sql.execution.datasources.ParameterUtils._
 
   /**
-   * Compression codec to use. By default use [[CompressionKind.NONE]].
+   * Compression codec to use. By default use [[CompressionKind.ZLIB]].
    * Acceptable values are defined in [[shortOrcCompressionCodecNames]].
    */
 
   val compressionCodec: String = {
     val codecName =
-      getNullSafeString(parameters, "compression", CompressionKind.NONE.name()).toLowerCase
+      getNullSafeString(parameters, "compression", CompressionKind.ZLIB.name()).toLowerCase
     if (!shortOrcCompressionCodecNames.contains(codecName)) {
       val availableCodecs = shortOrcCompressionCodecNames.keys.map(_.toLowerCase)
       throw new IllegalArgumentException(s"Codec [$codecName] " +
