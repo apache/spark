@@ -155,9 +155,9 @@ class FileStreamSinkWriter(
   }
 
   /**
-    * Writes a RDD partition to a single file without dynamic partitioning.
-    * This gets called in the executor, and it uses a [[OutputWriter]] to write the data.
-    */
+   * Writes a RDD partition to a single file without dynamic partitioning.
+   * This gets called in the executor, and it uses a [[OutputWriter]] to write the data.
+   */
   def writePartitionToSingleFile(iterator: Iterator[InternalRow]): SinkFileStatus = {
     var writer: OutputWriter = null
     try {
@@ -184,10 +184,10 @@ class FileStreamSinkWriter(
   }
 
   /**
-    * Writes a RDD partition to multiple dynamically partitioned files.
-    * This gets called in the executor. It first sorts the data based on the partitioning columns
-    * and then writes the data of each key to separate files using [[OutputWriter]]s.
-    */
+   * Writes a RDD partition to multiple dynamically partitioned files.
+   * This gets called in the executor. It first sorts the data based on the partitioning columns
+   * and then writes the data of each key to separate files using [[OutputWriter]]s.
+   */
   def writePartitionToPartitionedFiles(iterator: Iterator[InternalRow]): Seq[SinkFileStatus] = {
 
     // Returns the partitioning columns for sorting
