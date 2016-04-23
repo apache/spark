@@ -44,13 +44,13 @@ import org.apache.spark.util.Utils
  * @param partitionPruningPred An optional partition pruning predicate for partitioned table.
  */
 private[hive]
-case class HiveTableScan(
+case class HiveTableScanExec(
     requestedAttributes: Seq[Attribute],
     relation: MetastoreRelation,
     partitionPruningPred: Seq[Expression])(
     @transient val context: SQLContext,
     @transient val hiveconf: HiveConf)
-  extends LeafNode {
+  extends LeafExecNode {
 
   require(partitionPruningPred.isEmpty || relation.hiveQlTable.isPartitioned,
     "Partition pruning predicates only supported for partitioned tables.")

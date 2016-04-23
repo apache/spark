@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.metric
 
+import java.text.NumberFormat
+
 import org.apache.spark.{Accumulable, AccumulableParam, Accumulators, SparkContext}
 import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.util.Utils
@@ -119,7 +121,8 @@ private class LongSQLMetricParam(val stringValue: Seq[Long] => String, initialVa
   override def zero: LongSQLMetricValue = new LongSQLMetricValue(initialValue)
 }
 
-private object LongSQLMetricParam extends LongSQLMetricParam(_.sum.toString, 0L)
+private object LongSQLMetricParam
+  extends LongSQLMetricParam(x => NumberFormat.getInstance().format(x.sum), 0L)
 
 private object StatisticsBytesSQLMetricParam extends LongSQLMetricParam(
   (values: Seq[Long]) => {
