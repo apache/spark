@@ -106,15 +106,17 @@ class GaussianMixtureModel private[ml] (
   def gaussians: Array[MultivariateGaussian] = parentModel.gaussians
 
   /**
-   * Helper method used in Python.
    * Retrieve Gaussian distributions as a DataFrame.
    * Each row represents a Gaussian Distribution.
    * Two columns are defined: mean and cov.
    * Schema:
+   * {{{
    * root
    * |-- mean: vector (nullable = true)
    * |-- cov: matrix (nullable = true)
+   * }}}
    */
+  @Since("2.0.0")
   def gaussiansDF: DataFrame = {
     val modelGaussians = gaussians.map { gaussian =>
       (gaussian.mu, gaussian.sigma)
