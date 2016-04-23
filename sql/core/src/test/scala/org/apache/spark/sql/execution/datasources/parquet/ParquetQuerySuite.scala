@@ -607,7 +607,8 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
         // return batch
         val columns = Seq.tabulate(90) {i => s"c$i"}
         val df3 = df2.selectExpr(columns : _*)
-        assert(df3.queryExecution.sparkPlan.find(_.isInstanceOf[BatchedDataSourceScanExec]).isDefined,
+        assert(
+          df3.queryExecution.sparkPlan.find(_.isInstanceOf[BatchedDataSourceScanExec]).isDefined,
           "Should not return batch")
         checkAnswer(df3, df.selectExpr(columns : _*))
       }
