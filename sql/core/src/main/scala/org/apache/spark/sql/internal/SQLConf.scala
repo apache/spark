@@ -54,9 +54,16 @@ object SQLConf {
 
   val OPTIMIZER_MAX_ITERATIONS = SQLConfigBuilder("spark.sql.optimizer.maxIterations")
     .internal()
-    .doc("The max number of iterations the optimizer and analyzer runs")
+    .doc("The max number of iterations the optimizer and analyzer runs.")
     .intConf
     .createWithDefault(100)
+
+  val OPTIMIZER_INSET_CONVERSION_THRESHOLD =
+    SQLConfigBuilder("spark.sql.optimizer.inSetConversionThreshold")
+      .internal()
+      .doc("The threshold of set size for InSet conversion.")
+      .intConf
+      .createWithDefault(10)
 
   val ALLOW_MULTIPLE_CONTEXTS = SQLConfigBuilder("spark.sql.allowMultipleContexts")
     .doc("When set to true, creating multiple SQLContexts/HiveContexts is allowed. " +
@@ -92,6 +99,14 @@ object SQLConf {
   val PREFER_SORTMERGEJOIN = SQLConfigBuilder("spark.sql.join.preferSortMergeJoin")
     .internal()
     .doc("When true, prefer sort merge join over shuffle hash join.")
+    .booleanConf
+    .createWithDefault(true)
+
+  val RADIX_SORT_ENABLED = SQLConfigBuilder("spark.sql.sort.enableRadixSort")
+    .internal()
+    .doc("When true, enable use of radix sort when possible. Radix sort is much faster but " +
+      "requires additional memory to be reserved up-front. The memory overhead may be " +
+      "significant when sorting very small rows (up to 50% more in this case).")
     .booleanConf
     .createWithDefault(true)
 
@@ -147,7 +162,7 @@ object SQLConf {
       .createWithDefault(true)
 
   val CASE_SENSITIVE = SQLConfigBuilder("spark.sql.caseSensitive")
-    .doc("Whether the query analyzer should be case sensitive or not.")
+    .doc("Whether the query analyzer should be case sensitive or not. Default to case sensitive.")
     .booleanConf
     .createWithDefault(true)
 
@@ -474,7 +489,7 @@ object SQLConf {
     .internal()
     .doc("When true, aggregate with keys use an in-memory columnar map to speed up execution.")
     .booleanConf
-    .createWithDefault(false)
+    .createWithDefault(true)
 
   val FILE_SINK_LOG_DELETION = SQLConfigBuilder("spark.sql.streaming.fileSink.log.deletion")
     .internal()
@@ -528,6 +543,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   /** ************************ Spark SQL Params/Hints ******************* */
 
   def optimizerMaxIterations: Int = getConf(OPTIMIZER_MAX_ITERATIONS)
+
+  def optimizerInSetConversionThreshold: Int = getConf(OPTIMIZER_INSET_CONVERSION_THRESHOLD)
 
   def checkpointLocation: String = getConf(CHECKPOINT_LOCATION)
 
@@ -583,6 +600,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def autoBroadcastJoinThreshold: Int = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
 
   def preferSortMergeJoin: Boolean = getConf(PREFER_SORTMERGEJOIN)
+
+  def enableRadixSort: Boolean = getConf(RADIX_SORT_ENABLED)
 
   def defaultSizeInBytes: Long =
     getConf(DEFAULT_SIZE_IN_BYTES, autoBroadcastJoinThreshold + 1L)

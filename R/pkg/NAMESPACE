@@ -24,6 +24,9 @@ export("setJobGroup",
        "clearJobGroup",
        "cancelJobGroup")
 
+# Export Utility methods
+export("setLogLevel")
+
 exportClasses("DataFrame")
 
 exportMethods("arrange",

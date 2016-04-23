@@ -154,6 +154,9 @@ class DefaultSource extends FileFormat with DataSourceRegister {
   }
 
   override def toString: String = "JSON"
+
+  override def hashCode(): Int = getClass.hashCode()
+
   override def equals(other: Any): Boolean = other.isInstanceOf[DefaultSource]
 }
 

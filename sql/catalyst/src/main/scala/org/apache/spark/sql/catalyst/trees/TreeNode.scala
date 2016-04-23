@@ -408,8 +408,11 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     }
   }
 
-  /** Returns the name of this type of TreeNode.  Defaults to the class name. */
-  def nodeName: String = getClass.getSimpleName
+  /**
+   * Returns the name of this type of TreeNode.  Defaults to the class name.
+   * Note that we remove the "Exec" suffix for physical operators here.
+   */
+  def nodeName: String = getClass.getSimpleName.replaceAll("Exec$", "")
 
   /**
    * The arguments that should be included in the arg string.  Defaults to the `productIterator`.
@@ -426,7 +429,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     case other => other :: Nil
   }.mkString(", ")
 
-  /** String representation of this node without any children */
+  /** String representation of this node without any children. */
   def simpleString: String = s"$nodeName $argString".trim
 
   override def toString: String = treeString

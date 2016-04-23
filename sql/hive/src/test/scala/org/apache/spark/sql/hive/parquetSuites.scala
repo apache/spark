@@ -21,10 +21,10 @@ import java.io.File
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.execution.DataSourceScan
-import org.apache.spark.sql.execution.command.ExecutedCommand
+import org.apache.spark.sql.execution.DataSourceScanExec
+import org.apache.spark.sql.execution.command.ExecutedCommandExec
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, InsertIntoDataSource, InsertIntoHadoopFsRelation, LogicalRelation}
-import org.apache.spark.sql.hive.execution.HiveTableScan
+import org.apache.spark.sql.hive.execution.HiveTableScanExec
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
@@ -174,7 +174,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
     (1 to 10).map(i => (i, s"str$i")).toDF("a", "b").registerTempTable("jt")
     (1 to 10).map(i => Tuple1(Seq(new Integer(i), null))).toDF("a").registerTempTable("jt_array")
 
-    setConf(HiveContext.CONVERT_METASTORE_PARQUET, true)
+    setConf(HiveUtils.CONVERT_METASTORE_PARQUET, true)
   }
 
   override def afterAll(): Unit = {
@@ -186,17 +186,17 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
       "jt",
       "jt_array",
        "test_parquet")
-    setConf(HiveContext.CONVERT_METASTORE_PARQUET, false)
+    setConf(HiveUtils.CONVERT_METASTORE_PARQUET, false)
   }
 
   test(s"conversion is working") {
     assert(
       sql("SELECT * FROM normal_parquet").queryExecution.sparkPlan.collect {
-        case _: HiveTableScan => true
+        case _: HiveTableScanExec => true
       }.isEmpty)
     assert(
       sql("SELECT * FROM normal_parquet").queryExecution.sparkPlan.collect {
-        case _: DataSourceScan => true
+        case _: DataSourceScanExec => true
       }.nonEmpty)
   }
 
@@ -307,7 +307,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
 
       val df = sql("INSERT INTO TABLE test_insert_parquet SELECT a FROM jt")
       df.queryExecution.sparkPlan match {
-        case ExecutedCommand(_: InsertIntoHadoopFsRelation) => // OK
+        case ExecutedCommandExec(_: InsertIntoHadoopFsRelation) => // OK
         case o => fail("test_insert_parquet should be converted to a " +
           s"${classOf[HadoopFsRelation ].getCanonicalName} and " +
           s"${classOf[InsertIntoDataSource].getCanonicalName} is expected as the SparkPlan. " +
@@ -337,7 +337,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
 
       val df = sql("INSERT INTO TABLE test_insert_parquet SELECT a FROM jt_array")
       df.queryExecution.sparkPlan match {
-        case ExecutedCommand(_: InsertIntoHadoopFsRelation) => // OK
+        case ExecutedCommandExec(_: InsertIntoHadoopFsRelation) => // OK
         case o => fail("test_insert_parquet should be converted to a " +
           s"${classOf[HadoopFsRelation ].getCanonicalName} and " +
           s"${classOf[InsertIntoDataSource].getCanonicalName} is expected as the SparkPlan." +
@@ -619,7 +619,7 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
 
       withTable("array_of_struct") {
         val conf = Seq(
-          HiveContext.CONVERT_METASTORE_PARQUET.key -> "false",
+          HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false",
           SQLConf.PARQUET_BINARY_AS_STRING.key -> "true",
           SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key -> "false")
 

@@ -30,7 +30,7 @@ import org.apache.spark.{SparkException, SparkFiles}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions.Cast
 import org.apache.spark.sql.catalyst.plans.logical.Project
-import org.apache.spark.sql.execution.joins.BroadcastNestedLoopJoin
+import org.apache.spark.sql.execution.joins.BroadcastNestedLoopJoinExec
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.test.{TestHive, TestHiveContext}
 import org.apache.spark.sql.hive.test.TestHive._
@@ -121,7 +121,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   test("SPARK-10484 Optimize the Cartesian (Cross) Join with broadcast based JOIN") {
     def assertBroadcastNestedLoopJoin(sqlText: String): Unit = {
       assert(sql(sqlText).queryExecution.sparkPlan.collect {
-        case _: BroadcastNestedLoopJoin => 1
+        case _: BroadcastNestedLoopJoinExec => 1
       }.nonEmpty)
     }
 
