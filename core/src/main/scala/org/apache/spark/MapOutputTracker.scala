@@ -446,9 +446,10 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
           // If we got here, we failed to find the serialized locations in the cache, so we pulled
           // out a snapshot of the locations as "statuses"; let's serialize and return that
           byteArr = MapOutputTracker.serializeMapStatuses(statuses)
-          logInfo("Size of output statuses for shuffle %d is %d bytes".format(shuffleId, byteArr.length))
+          logInfo("Size of output statuses for shuffle %d is %d bytes"
+            .format(shuffleId, byteArr.length))
       }
-      
+
       // Add them into the table only if the epoch hasn't changed while we were working
       if (epoch == epochGotten) {
         cachedSerializedStatuses(shuffleId) = byteArr
