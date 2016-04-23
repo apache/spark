@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import org.apache.hadoop.fs.{BlockLocation, FileStatus, RawLocalFileSystem}
 import org.apache.hadoop.mapreduce.Job
 
+import org.apache.spark.SparkConf
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionSet, PredicateHelper}
@@ -37,6 +38,8 @@ import org.apache.spark.util.Utils
 
 class FileSourceStrategySuite extends QueryTest with SharedSQLContext with PredicateHelper {
   import testImplicits._
+
+  protected override val sparkConf = new SparkConf().set("spark.default.parallelism", "1")
 
   test("unpartitioned table, single partition") {
     val table =
