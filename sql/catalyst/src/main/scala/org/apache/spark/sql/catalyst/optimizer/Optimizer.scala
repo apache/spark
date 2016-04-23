@@ -87,7 +87,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       CombineUnions,
       // Constant folding and strength reduction
       NullPropagation,
-      OptimizeIn,
+      OptimizeIn(conf),
       ConstantFolding,
       LikeSimplification,
       BooleanSimplification,
@@ -682,10 +682,11 @@ object ConstantFolding extends Rule[LogicalPlan] {
  * Replaces [[In (value, seq[Literal])]] with optimized version[[InSet (value, HashSet[Literal])]]
  * which is much faster
  */
-object OptimizeIn extends Rule[LogicalPlan] {
+case class OptimizeIn(conf: CatalystConf) extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsDown {
-      case In(v, list) if !list.exists(!_.isInstanceOf[Literal]) && list.size > 10 =>
+      case In(v, list) if !list.exists(!_.isInstanceOf[Literal]) &&
+          list.size > conf.optimizerInSetConversionThreshold =>
         val hSet = list.map(e => e.eval(EmptyRow))
         InSet(v, HashSet() ++ hSet)
     }
