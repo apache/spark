@@ -65,17 +65,16 @@ abstract class OutputWriterFactory extends Serializable {
       dataSchema: StructType,
       context: TaskAttemptContext): OutputWriter
 
-
   /**
-    * Returns a new instance of [[OutputWriter]] that will write data to the given path.
-    * This method gets called by each task on executor to write [[InternalRow]]s to
-    * format-specific files. Compared to the other `newInstance()`, this is a newer API that
-    * passes only the path that the writer must write to. The writer must write to the exact path
-    * and not modify it (do not add subdirectories, extensions, etc.). All other
-    * file-format-specific information needed to create the writer must be passed
-    * through the [[OutputWriterFactory]] implementation.
-    * @since 2.0.0
-    */
+   * Returns a new instance of [[OutputWriter]] that will write data to the given path.
+   * This method gets called by each task on executor to write [[InternalRow]]s to
+   * format-specific files. Compared to the other `newInstance()`, this is a newer API that
+   * passes only the path that the writer must write to. The writer must write to the exact path
+   * and not modify it (do not add subdirectories, extensions, etc.). All other
+   * file-format-specific information needed to create the writer must be passed
+   * through the [[OutputWriterFactory]] implementation.
+   * @since 2.0.0
+   */
   private[sql] def newWriter(path: String): OutputWriter = {
     throw new UnsupportedOperationException("newInstance with just path not supported")
   }

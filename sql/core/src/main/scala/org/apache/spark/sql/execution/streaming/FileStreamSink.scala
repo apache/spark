@@ -23,15 +23,15 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.sql.execution.UnsafeKVExternalSorter
-import org.apache.spark.util.SerializableConfiguration
-import org.apache.spark.{SparkEnv, SparkException, TaskContextImpl, TaskContext}
+import org.apache.spark.{SparkEnv, SparkException, TaskContext, TaskContextImpl}
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.types.{StructType, StringType}
-import org.apache.spark.sql.{DataFrame, SQLContext}
-import org.apache.spark.sql.execution.datasources.{OutputWriter, PartitioningUtils, FileFormat}
+import org.apache.spark.sql.execution.UnsafeKVExternalSorter
+import org.apache.spark.sql.execution.datasources.{FileFormat, OutputWriter, PartitioningUtils}
+import org.apache.spark.sql.types.{StringType, StructType}
+import org.apache.spark.util.SerializableConfiguration
 
 object FileStreamSink {
   // The name of the subdirectory that is used to store metadata about which files are valid.
@@ -215,7 +215,7 @@ class FileStreamSinkWriter(
     logDebug(s"Sorting complete. Writing out partition files one at a time.")
 
     val sortedIterator = sorter.sortedIterator()
-    val fileStatuses = new ArrayBuffer[SinkFileStatus]
+    val paths = new ArrayBuffer[Path]
 
     // Write the sorted data to partitioned files, one for each unique key
     var currentWriter: OutputWriter = null
@@ -233,8 +233,7 @@ class FileStreamSinkWriter(
           currentKey = nextKey.copy()
           val partitionPath = getPartitionString(currentKey).getString(0)
           val path = new Path(new Path(basePath, partitionPath), UUID.randomUUID.toString)
-          fileStatuses +=
-            SinkFileStatus(path.getFileSystem(serializableConf.value).getFileStatus(path))
+          paths += path
           currentWriter = newOutputWriter(path)
           logInfo(s"Writing partition $currentKey to $path")
         }
@@ -244,7 +243,10 @@ class FileStreamSinkWriter(
         currentWriter.close()
         currentWriter = null
       }
-      fileStatuses
+      if (paths.nonEmpty) {
+        val fs = paths.head.getFileSystem(serializableConf.value)
+        paths.map(p => SinkFileStatus(fs.getFileStatus(p)))
+      } else Seq.empty
     } catch {
       case cause: Throwable =>
         logError("Aborting task.", cause)
