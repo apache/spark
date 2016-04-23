@@ -45,7 +45,7 @@ class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
         .select($"id", lit(100).as("data"))
       val writer = new FileStreamSinkWriter(
         df, fileFormat, path.toString, partitionColumnNames = Nil, options = Map.empty)
-      writer.write()
+      writer.write().map(_.path)
     }
 
     // Write and check whether new files are written correctly
@@ -79,7 +79,7 @@ class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
       require(df.rdd.partitions.size === numPartitions)
       val writer = new FileStreamSinkWriter(
         df, fileFormat, path.toString, partitionColumnNames = Seq("id"), options = Map.empty)
-      writer.write()
+      writer.write().map(_.path)
     }
 
     def checkOneFileWrittenPerKey(keys: Seq[Int], filesWritten: Seq[String]): Unit = {

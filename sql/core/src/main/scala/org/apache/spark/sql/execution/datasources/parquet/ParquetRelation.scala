@@ -256,17 +256,6 @@ private[sql] class DefaultSource
       schema.forall(_.dataType.isInstanceOf[AtomicType])
   }
 
-  override def buildWriter(
-      sqlContext: SQLContext,
-      dataSchema: StructType,
-      options: Map[String, String]): OutputWriterFactory = {
-    new ParquetOutputWriterFactory(
-      sqlContext.conf,
-      dataSchema,
-      sqlContext.sparkContext.hadoopConfiguration,
-      options)
-  }
-
   override def buildReader(
       sqlContext: SQLContext,
       dataSchema: StructType,
@@ -381,6 +370,17 @@ private[sql] class DefaultSource
             .map(d => appendPartitionColumns(joinedRow(d, file.partitionValues)))
       }
     }
+  }
+
+  override def buildWriter(
+      sqlContext: SQLContext,
+      dataSchema: StructType,
+      options: Map[String, String]): OutputWriterFactory = {
+    new ParquetOutputWriterFactory(
+      sqlContext.conf,
+      dataSchema,
+      sqlContext.sparkContext.hadoopConfiguration,
+      options)
   }
 }
 
