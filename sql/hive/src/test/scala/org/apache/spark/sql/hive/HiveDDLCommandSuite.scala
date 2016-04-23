@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.JsonTuple
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, ScriptTransformation}
-import org.apache.spark.sql.execution.command.{CreateTable, CreateTableAsSelectLogicalPlan, CreateTableLike, CreateViewAsSelectLogicalCommand, HiveNativeCommand, LoadData}
+import org.apache.spark.sql.execution.command.{CreateTable, CreateTableAsSelectLogicalPlan, CreateTableLike, CreateViewCommand, HiveNativeCommand, LoadData}
 import org.apache.spark.sql.hive.test.TestHive
 
 class HiveDDLCommandSuite extends PlanTest {
@@ -39,7 +39,7 @@ class HiveDDLCommandSuite extends PlanTest {
     parser.parsePlan(sql).collect {
       case CreateTable(desc, allowExisting) => (desc, allowExisting)
       case CreateTableAsSelectLogicalPlan(desc, _, allowExisting) => (desc, allowExisting)
-      case CreateViewAsSelectLogicalCommand(desc, _, allowExisting, _, _) => (desc, allowExisting)
+      case CreateViewCommand(desc, _, allowExisting, _, _) => (desc, allowExisting)
     }.head
   }
 
@@ -521,14 +521,13 @@ class HiveDDLCommandSuite extends PlanTest {
   test("create view - full") {
     val v1 =
       """
-        |CREATE OR REPLACE VIEW IF NOT EXISTS view1
+        |CREATE OR REPLACE VIEW view1
         |(col1, col3)
         |COMMENT 'BLABLA'
         |TBLPROPERTIES('prop1Key'="prop1Val")
         |AS SELECT * FROM tab1
       """.stripMargin
     val (desc, exists) = extractTableDesc(v1)
-    assert(exists)
     assert(desc.identifier.database.isEmpty)
     assert(desc.identifier.table == "view1")
     assert(desc.tableType == CatalogTableType.VIRTUAL_VIEW)

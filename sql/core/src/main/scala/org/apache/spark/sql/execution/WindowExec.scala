@@ -80,12 +80,12 @@ import org.apache.spark.util.collection.unsafe.sort.{UnsafeExternalSorter, Unsaf
  * Entire Partition, Sliding, Growing & Shrinking. Boundary evaluation is also delegated to a pair
  * of specialized classes: [[RowBoundOrdering]] & [[RangeBoundOrdering]].
  */
-case class Window(
+case class WindowExec(
     windowExpression: Seq[NamedExpression],
     partitionSpec: Seq[Expression],
     orderSpec: Seq[SortOrder],
     child: SparkPlan)
-  extends UnaryNode {
+  extends UnaryExecNode {
 
   override def output: Seq[Attribute] =
     child.output ++ windowExpression.map(_.toAttribute)

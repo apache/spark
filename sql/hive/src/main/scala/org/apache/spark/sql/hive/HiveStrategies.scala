@@ -78,7 +78,7 @@ private[hive] trait HiveStrategies {
           projectList,
           otherPredicates,
           identity[Seq[Expression]],
-          HiveTableScan(_, relation, pruningPredicates)(context, hiveconf)) :: Nil
+          HiveTableScanExec(_, relation, pruningPredicates)(context, hiveconf)) :: Nil
       case _ =>
         Nil
     }
@@ -91,17 +91,17 @@ private[hive] trait HiveStrategies {
         val cmd =
           CreateMetastoreDataSource(
             tableIdent, userSpecifiedSchema, provider, opts, allowExisting, managedIfNoPath)
-        ExecutedCommand(cmd) :: Nil
+        ExecutedCommandExec(cmd) :: Nil
 
       case c: CreateTableUsingAsSelect if c.temporary =>
         val cmd = CreateTempTableUsingAsSelect(
           c.tableIdent, c.provider, c.partitionColumns, c.mode, c.options, c.child)
-        ExecutedCommand(cmd) :: Nil
+        ExecutedCommandExec(cmd) :: Nil
 
       case c: CreateTableUsingAsSelect =>
         val cmd = CreateMetastoreDataSourceAsSelect(c.tableIdent, c.provider, c.partitionColumns,
           c.bucketSpec, c.mode, c.options, c.child)
-        ExecutedCommand(cmd) :: Nil
+        ExecutedCommandExec(cmd) :: Nil
 
       case _ => Nil
     }

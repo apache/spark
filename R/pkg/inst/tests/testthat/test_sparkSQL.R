@@ -101,8 +101,8 @@ test_that("create DataFrame from RDD", {
   rdd <- lapply(parallelize(sc, 1:10), function(x) { list(x, as.character(x)) })
   df <- createDataFrame(sqlContext, rdd, list("a", "b"))
   dfAsDF <- as.DataFrame(sqlContext, rdd, list("a", "b"))
-  expect_is(df, "DataFrame")
-  expect_is(dfAsDF, "DataFrame")
+  expect_is(df, "SparkDataFrame")
+  expect_is(dfAsDF, "SparkDataFrame")
   expect_equal(count(df), 10)
   expect_equal(count(dfAsDF), 10)
   expect_equal(nrow(df), 10)
@@ -118,21 +118,21 @@ test_that("create DataFrame from RDD", {
 
   df <- createDataFrame(sqlContext, rdd)
   dfAsDF <- as.DataFrame(sqlContext, rdd)
-  expect_is(df, "DataFrame")
-  expect_is(dfAsDF, "DataFrame")
+  expect_is(df, "SparkDataFrame")
+  expect_is(dfAsDF, "SparkDataFrame")
   expect_equal(columns(df), c("_1", "_2"))
   expect_equal(columns(dfAsDF), c("_1", "_2"))
 
   schema <- structType(structField(x = "a", type = "integer", nullable = TRUE),
                         structField(x = "b", type = "string", nullable = TRUE))
   df <- createDataFrame(sqlContext, rdd, schema)
-  expect_is(df, "DataFrame")
+  expect_is(df, "SparkDataFrame")
   expect_equal(columns(df), c("a", "b"))
   expect_equal(dtypes(df), list(c("a", "int"), c("b", "string")))
 
   rdd <- lapply(parallelize(sc, 1:10), function(x) { list(a = x, b = as.character(x)) })
   df <- createDataFrame(sqlContext, rdd)
-  expect_is(df, "DataFrame")
+  expect_is(df, "SparkDataFrame")
   expect_equal(count(df), 10)
   expect_equal(columns(df), c("a", "b"))
   expect_equal(dtypes(df), list(c("a", "int"), c("b", "string")))
@@ -155,7 +155,7 @@ test_that("create DataFrame from RDD", {
                         age = c(19L, 23L, 18L),
                         height = c(176.5, 181.4, 173.7))
   df <- createDataFrame(sqlContext, localDF, schema)
-  expect_is(df, "DataFrame")
+  expect_is(df, "SparkDataFrame")
   expect_equal(count(df), 3)
   expect_equal(columns(df), c("name", "age", "height"))
   expect_equal(dtypes(df), list(c("name", "string"), c("age", "int"), c("height", "float")))
@@ -218,25 +218,25 @@ test_that("convert NAs to null type in DataFrames", {
 test_that("toDF", {
   rdd <- lapply(parallelize(sc, 1:10), function(x) { list(x, as.character(x)) })
   df <- toDF(rdd, list("a", "b"))
-  expect_is(df, "DataFrame")
+  expect_is(df, "SparkDataFrame")
   expect_equal(count(df), 10)
   expect_equal(columns(df), c("a", "b"))
   expect_equal(dtypes(df), list(c("a", "int"), c("b", "string")))
 
   df <- toDF(rdd)
-  expect_is(df, "DataFrame")
+  expect_is(df, "SparkDataFrame")
   expect_equal(columns(df), c("_1", "_2"))
 
   schema <- structType(structField(x = "a", type = "integer", nullable = TRUE),
                         structField(x = "b", type = "string", nullable = TRUE))
   df <- toDF(rdd, schema)
-  expect_is(df, "DataFrame")
+  expect_is(df, "SparkDataFrame")
   expect_equal(columns(df), c("a", "b"))
   expect_equal(dtypes(df), list(c("a", "int"), c("b", "string")))
 
   rdd <- lapply(parallelize(sc, 1:10), function(x) { list(a = x, b = as.character(x)) })
   df <- toDF(rdd)
-  expect_is(df, "DataFrame")
+  expect_is(df, "SparkDataFrame")
   expect_equal(count(df), 10)
   expect_equal(columns(df), c("a", "b"))
   expect_equal(dtypes(df), list(c("a", "int"), c("b", "string")))
@@ -377,7 +377,7 @@ test_that("Collect DataFrame with complex types", {
 test_that("read/write json files", {
   # Test read.df
   df <- read.df(sqlContext, jsonPath, "json")
-  expect_is(df, "DataFrame")
+  expect_is(df, "SparkDataFrame")
   expect_equal(count(df), 3)
 
   # Test read.df with a user defined schema
@@ -385,17 +385,17 @@ test_that("read/write json files", {
                        structField("age", type = "double"))
 
   df1 <- read.df(sqlContext, jsonPath, "json", schema)
-  expect_is(df1, "DataFrame")
+  expect_is(df1, "SparkDataFrame")
   expect_equal(dtypes(df1), list(c("name", "string"), c("age", "double")))
 
   # Test loadDF
   df2 <- loadDF(sqlContext, jsonPath, "json", schema)
-  expect_is(df2, "DataFrame")
+  expect_is(df2, "SparkDataFrame")
   expect_equal(dtypes(df2), list(c("name", "string"), c("age", "double")))
 
   # Test read.json
   df <- read.json(sqlContext, jsonPath)
-  expect_is(df, "DataFrame")
+  expect_is(df, "SparkDataFrame")
   expect_equal(count(df), 3)
 
   # Test write.df
@@ -408,11 +408,11 @@ test_that("read/write json files", {
 
   # Test read.json()/jsonFile() works with multiple input paths
   jsonDF1 <- read.json(sqlContext, c(jsonPath2, jsonPath3))
-  expect_is(jsonDF1, "DataFrame")
+  expect_is(jsonDF1, "SparkDataFrame")
   expect_equal(count(jsonDF1), 6)
   # Suppress warnings because jsonFile is deprecated
   jsonDF2 <- suppressWarnings(jsonFile(sqlContext, c(jsonPath2, jsonPath3)))
-  expect_is(jsonDF2, "DataFrame")
+  expect_is(jsonDF2, "SparkDataFrame")
   expect_equal(count(jsonDF2), 6)
 
   unlink(jsonPath2)
@@ -423,12 +423,12 @@ test_that("jsonRDD() on a RDD with json string", {
   rdd <- parallelize(sc, mockLines)
   expect_equal(count(rdd), 3)
   df <- suppressWarnings(jsonRDD(sqlContext, rdd))
-  expect_is(df, "DataFrame")
+  expect_is(df, "SparkDataFrame")
   expect_equal(count(df), 3)
 
   rdd2 <- flatMap(rdd, function(x) c(x, x))
   df <- suppressWarnings(jsonRDD(sqlContext, rdd2))
-  expect_is(df, "DataFrame")
+  expect_is(df, "SparkDataFrame")
   expect_equal(count(df), 6)
 })
 
@@ -454,7 +454,7 @@ test_that("registerTempTable() results in a queryable table and sql() results in
   df <- read.json(sqlContext, jsonPath)
   registerTempTable(df, "table1")
   newdf <- sql(sqlContext, "SELECT * FROM table1 where name = 'Michael'")
-  expect_is(newdf, "DataFrame")
+  expect_is(newdf, "SparkDataFrame")
   expect_equal(count(newdf), 1)
   dropTempTable(sqlContext, "table1")
 })
@@ -493,7 +493,7 @@ test_that("tableToDF() returns a new DataFrame", {
   df <- read.json(sqlContext, jsonPath)
   registerTempTable(df, "table1")
   tabledf <- tableToDF(sqlContext, "table1")
-  expect_is(tabledf, "DataFrame")
+  expect_is(tabledf, "SparkDataFrame")
   expect_equal(count(tabledf), 3)
   tabledf2 <- tableToDF(sqlContext, "table1")
   expect_equal(count(tabledf2), 3)
@@ -595,7 +595,7 @@ test_that("collect() returns a data.frame", {
 test_that("limit() returns DataFrame with the correct number of rows", {
   df <- read.json(sqlContext, jsonPath)
   dfLimited <- limit(df, 2)
-  expect_is(dfLimited, "DataFrame")
+  expect_is(dfLimited, "SparkDataFrame")
   expect_equal(count(dfLimited), 2)
 })
 
@@ -750,11 +750,11 @@ test_that("distinct(), unique() and dropDuplicates() on DataFrames", {
 
   df <- read.json(sqlContext, jsonPathWithDup)
   uniques <- distinct(df)
-  expect_is(uniques, "DataFrame")
+  expect_is(uniques, "SparkDataFrame")
   expect_equal(count(uniques), 3)
 
   uniques2 <- unique(df)
-  expect_is(uniques2, "DataFrame")
+  expect_is(uniques2, "SparkDataFrame")
   expect_equal(count(uniques2), 3)
 
   # Test dropDuplicates()
@@ -798,7 +798,7 @@ test_that("sample on a DataFrame", {
   df <- read.json(sqlContext, jsonPath)
   sampled <- sample(df, FALSE, 1.0)
   expect_equal(nrow(collect(sampled)), count(df))
-  expect_is(sampled, "DataFrame")
+  expect_is(sampled, "SparkDataFrame")
   sampled2 <- sample(df, FALSE, 0.1, 0) # set seed for predictable result
   expect_true(count(sampled2) < 3)
 
@@ -822,11 +822,11 @@ test_that("select operators", {
   expect_is(df[[2]], "Column")
   expect_is(df[["age"]], "Column")
 
-  expect_is(df[, 1], "DataFrame")
+  expect_is(df[, 1], "SparkDataFrame")
   expect_equal(columns(df[, 1]), c("name"))
   expect_equal(columns(df[, "age"]), c("age"))
   df2 <- df[, c("age", "name")]
-  expect_is(df2, "DataFrame")
+  expect_is(df2, "SparkDataFrame")
   expect_equal(columns(df2), c("age", "name"))
 
   df$age2 <- df$age
@@ -890,7 +890,7 @@ test_that("subsetting", {
   expect_equal(collect(filtered)$name, "Andy")
 
   df2 <- df[df$age == 19, 1]
-  expect_is(df2, "DataFrame")
+  expect_is(df2, "SparkDataFrame")
   expect_equal(count(df2), 1)
   expect_equal(columns(df2), c("name"))
   expect_equal(collect(df2)$name, "Justin")
@@ -940,7 +940,7 @@ test_that("column calculation", {
   d <- collect(select(df, alias(df$age + 1, "age2")))
   expect_equal(names(d), c("age2"))
   df2 <- select(df, lower(df$name), abs(df$age))
-  expect_is(df2, "DataFrame")
+  expect_is(df2, "SparkDataFrame")
   expect_equal(count(df2), 3)
 })
 
@@ -953,30 +953,30 @@ test_that("test HiveContext", {
     skip("Hive is not build with SparkSQL, skipped")
   })
   df <- createExternalTable(hiveCtx, "json", jsonPath, "json")
-  expect_is(df, "DataFrame")
+  expect_is(df, "SparkDataFrame")
   expect_equal(count(df), 3)
   df2 <- sql(hiveCtx, "select * from json")
-  expect_is(df2, "DataFrame")
+  expect_is(df2, "SparkDataFrame")
   expect_equal(count(df2), 3)
 
   jsonPath2 <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
   invisible(saveAsTable(df, "json2", "json", "append", path = jsonPath2))
   df3 <- sql(hiveCtx, "select * from json2")
-  expect_is(df3, "DataFrame")
+  expect_is(df3, "SparkDataFrame")
   expect_equal(count(df3), 3)
   unlink(jsonPath2)
 
   hivetestDataPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
   invisible(saveAsTable(df, "hivetestbl", path = hivetestDataPath))
   df4 <- sql(hiveCtx, "select * from hivetestbl")
-  expect_is(df4, "DataFrame")
+  expect_is(df4, "SparkDataFrame")
   expect_equal(count(df4), 3)
   unlink(hivetestDataPath)
 
   parquetDataPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
   invisible(saveAsTable(df, "parquetest", "parquet", mode = "overwrite", path = parquetDataPath))
   df5 <- sql(hiveCtx, "select * from parquetest")
-  expect_is(df5, "DataFrame")
+  expect_is(df5, "SparkDataFrame")
   expect_equal(count(df5), 3)
   unlink(parquetDataPath)
 })
@@ -1272,28 +1272,28 @@ test_that("group by, agg functions", {
   gd <- groupBy(df, "name")
   expect_is(gd, "GroupedData")
   df2 <- count(gd)
-  expect_is(df2, "DataFrame")
+  expect_is(df2, "SparkDataFrame")
   expect_equal(3, count(df2))
 
   # Also test group_by, summarize, mean
   gd1 <- group_by(df, "name")
   expect_is(gd1, "GroupedData")
   df_summarized <- summarize(gd, mean_age = mean(df$age))
-  expect_is(df_summarized, "DataFrame")
+  expect_is(df_summarized, "SparkDataFrame")
   expect_equal(3, count(df_summarized))
 
   df3 <- agg(gd, age = "stddev")
-  expect_is(df3, "DataFrame")
+  expect_is(df3, "SparkDataFrame")
   df3_local <- collect(df3)
   expect_true(is.nan(df3_local[df3_local$name == "Andy", ][1, 2]))
 
   df4 <- agg(gd, sumAge = sum(df$age))
-  expect_is(df4, "DataFrame")
+  expect_is(df4, "SparkDataFrame")
   expect_equal(3, count(df4))
   expect_equal(columns(df4), c("name", "sumAge"))
 
   df5 <- sum(gd, "age")
-  expect_is(df5, "DataFrame")
+  expect_is(df5, "SparkDataFrame")
   expect_equal(3, count(df5))
 
   expect_equal(3, count(mean(gd)))
@@ -1521,22 +1521,22 @@ test_that("unionAll(), rbind(), except(), and intersect() on a DataFrame", {
   df2 <- read.df(sqlContext, jsonPath2, "json")
 
   unioned <- arrange(unionAll(df, df2), df$age)
-  expect_is(unioned, "DataFrame")
+  expect_is(unioned, "SparkDataFrame")
   expect_equal(count(unioned), 6)
   expect_equal(first(unioned)$name, "Michael")
 
   unioned2 <- arrange(rbind(unioned, df, df2), df$age)
-  expect_is(unioned2, "DataFrame")
+  expect_is(unioned2, "SparkDataFrame")
   expect_equal(count(unioned2), 12)
   expect_equal(first(unioned2)$name, "Michael")
 
   excepted <- arrange(except(df, df2), desc(df$age))
-  expect_is(unioned, "DataFrame")
+  expect_is(unioned, "SparkDataFrame")
   expect_equal(count(excepted), 2)
   expect_equal(first(excepted)$name, "Justin")
 
   intersected <- arrange(intersect(df, df2), df$age)
-  expect_is(unioned, "DataFrame")
+  expect_is(unioned, "SparkDataFrame")
   expect_equal(count(intersected), 1)
   expect_equal(first(intersected)$name, "Andy")
 
@@ -1601,7 +1601,7 @@ test_that("read/write Parquet files", {
   # Test write.df and read.df
   write.df(df, parquetPath, "parquet", mode = "overwrite")
   df2 <- read.df(sqlContext, parquetPath, "parquet")
-  expect_is(df2, "DataFrame")
+  expect_is(df2, "SparkDataFrame")
   expect_equal(count(df2), 3)
 
   # Test write.parquet/saveAsParquetFile and read.parquet/parquetFile
@@ -1610,10 +1610,10 @@ test_that("read/write Parquet files", {
   parquetPath3 <- tempfile(pattern = "parquetPath3", fileext = ".parquet")
   suppressWarnings(saveAsParquetFile(df, parquetPath3))
   parquetDF <- read.parquet(sqlContext, c(parquetPath2, parquetPath3))
-  expect_is(parquetDF, "DataFrame")
+  expect_is(parquetDF, "SparkDataFrame")
   expect_equal(count(parquetDF), count(df) * 2)
   parquetDF2 <- suppressWarnings(parquetFile(sqlContext, parquetPath2, parquetPath3))
-  expect_is(parquetDF2, "DataFrame")
+  expect_is(parquetDF2, "SparkDataFrame")
   expect_equal(count(parquetDF2), count(df) * 2)
 
   # Test if varargs works with variables
@@ -1630,7 +1630,7 @@ test_that("read/write Parquet files", {
 test_that("read/write text files", {
   # Test write.df and read.df
   df <- read.df(sqlContext, jsonPath, "text")
-  expect_is(df, "DataFrame")
+  expect_is(df, "SparkDataFrame")
   expect_equal(colnames(df), c("value"))
   expect_equal(count(df), 3)
   textPath <- tempfile(pattern = "textPath", fileext = ".txt")
@@ -1640,7 +1640,7 @@ test_that("read/write text files", {
   textPath2 <- tempfile(pattern = "textPath2", fileext = ".txt")
   write.text(df, textPath2)
   df2 <- read.text(sqlContext, c(textPath, textPath2))
-  expect_is(df2, "DataFrame")
+  expect_is(df2, "SparkDataFrame")
   expect_equal(colnames(df2), c("value"))
   expect_equal(count(df2), count(df) * 2)
 
@@ -1877,7 +1877,7 @@ test_that("attach() on a DataFrame", {
   df <- read.json(sqlContext, jsonPath)
   expect_error(age)
   attach(df)
-  expect_is(age, "DataFrame")
+  expect_is(age, "SparkDataFrame")
   expected_age <- data.frame(age = c(NA, 30, 19))
   expect_equal(head(age), expected_age)
   stat <- summary(age)
@@ -1936,7 +1936,7 @@ test_that("Method coltypes() to get and set R's data types of a DataFrame", {
   expect_equal(dtypes(df), list(c("name", "string"), c("age", "double")))
 
   expect_error(coltypes(df) <- c("character"),
-               "Length of type vector should match the number of columns for DataFrame")
+               "Length of type vector should match the number of columns for SparkDataFrame")
   expect_error(coltypes(df) <- c("environment", "list"),
                "Only atomic type is supported for column types")
 })
@@ -1950,7 +1950,7 @@ test_that("Method str()", {
 
   out <- capture.output(str(irisDF2))
   expect_equal(length(out), 7)
-  expect_equal(out[1], "'DataFrame': 6 variables:")
+  expect_equal(out[1], "'SparkDataFrame': 6 variables:")
   expect_equal(out[2], " $ Sepal_Length: num 5.1 4.9 4.7 4.6 5 5.4")
   expect_equal(out[3], " $ Sepal_Width : num 3.5 3 3.2 3.1 3.6 3.9")
   expect_equal(out[4], " $ Petal_Length: num 1.4 1.4 1.3 1.5 1.4 1.7")

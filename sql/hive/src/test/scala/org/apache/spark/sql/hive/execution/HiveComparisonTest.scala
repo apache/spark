@@ -485,7 +485,7 @@ abstract class HiveComparisonTest
               // also print out the query plans and results for those.
               val computedTablesMessages: String = try {
                 val tablesRead = new TestHiveQueryExecution(query).executedPlan.collect {
-                  case ts: HiveTableScan => ts.relation.tableName
+                  case ts: HiveTableScanExec => ts.relation.tableName
                 }.toSet
 
                 TestHive.reset()
