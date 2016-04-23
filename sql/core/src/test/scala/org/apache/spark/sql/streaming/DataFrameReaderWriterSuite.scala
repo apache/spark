@@ -79,7 +79,7 @@ class DefaultSource extends StreamSourceProvider with StreamSinkProvider {
 
       override def getOffset: Option[Offset] = Some(new LongOffset(0))
 
-      override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
+      override def getData(start: Option[Offset], end: Offset): DataFrame = {
         import sqlContext.implicits._
 
         Seq[Int]().toDS().toDF()
@@ -95,7 +95,7 @@ class DefaultSource extends StreamSourceProvider with StreamSinkProvider {
     LastOptions.partitionColumns = partitionColumns
     LastOptions.mockStreamSinkProvider.createSink(sqlContext, parameters, partitionColumns)
     new Sink {
-      override def addBatch(batchId: Long, data: DataFrame): Unit = {}
+      override def addData(batchId: Long, data: DataFrame): Unit = {}
     }
   }
 }

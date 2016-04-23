@@ -91,9 +91,9 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
   }
 
   /**
-   * Returns the next batch of data that is available after `start`, if any is available.
+   * Returns the data that is between the offsets (`start`, `end`].
    */
-  override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
+  override def getData(start: Option[Offset], end: Offset): DataFrame = {
     val startOrdinal =
       start.map(_.asInstanceOf[LongOffset]).getOrElse(LongOffset(-1)).offset.toInt + 1
     val endOrdinal = end.asInstanceOf[LongOffset].offset.toInt + 1
@@ -135,7 +135,7 @@ class MemorySink(val schema: StructType) extends Sink with Logging {
     }.mkString("\n")
   }
 
-  override def addBatch(batchId: Long, data: DataFrame): Unit = synchronized {
+  override def addData(batchId: Long, data: DataFrame): Unit = synchronized {
     if (batchId == batches.size) {
       logDebug(s"Committing batch $batchId")
       batches.append(data.collect())
