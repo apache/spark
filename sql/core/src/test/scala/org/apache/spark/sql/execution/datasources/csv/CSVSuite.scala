@@ -490,4 +490,28 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
     verifyCars(cars, withHeader = false, checkTypes = false)
   }
+
+  test("No NullPointerException even if the values of options are null") {
+    val cars = sqlContext
+      .read
+      .format("csv")
+      .option("header", null)
+      .option("sep", null)
+      .option("encoding", null)
+      .option("quote", null)
+      .option("escape", null)
+      .option("comment", null)
+      .option("header", null)
+      .option("inferSchema", null)
+      .option("ignoreLeadingWhiteSpace", null)
+      .option("ignoreTrailingWhiteSpace", null)
+      .option("mode", null)
+      .option("nullValue", null)
+      .option("compress", null)
+      .option("maxColumns", null)
+      .option("maxCharsPerColumn", null)
+      .load(testFile(carsFile))
+
+    verifyCars(cars, withHeader = false, checkTypes = false)
+  }
 }

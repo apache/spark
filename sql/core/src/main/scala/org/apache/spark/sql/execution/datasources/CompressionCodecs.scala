@@ -38,7 +38,12 @@ private[datasources] object CompressionCodecs {
    * If it is already a class name, just return it.
    */
   def getCodecClassName(name: String): String = {
-    val codecName = shortCompressionCodecNames.getOrElse(name.toLowerCase, name)
+    val safeName = if (name == null) {
+      "none"
+    } else {
+      name
+    }
+    val codecName = shortCompressionCodecNames.getOrElse(safeName.toLowerCase, name)
     try {
       // Validate the codec name
       if (codecName != null) {

@@ -1679,4 +1679,24 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     assert(df.schema.size === 2)
     df.collect()
   }
+
+  test("No NullPointerException even if the values of options are null") {
+    val jsonDF = sqlContext.read
+      .option("samplingRatio", null)
+      .option("primitivesAsString", null)
+      .option("prefersDecimal", null)
+      .option("allowComments", null)
+      .option("allowUnquotedFieldNames", null)
+      .option("allowSingleQuotes", null)
+      .option("allowNumericLeadingZeros", null)
+      .option("prefersDecimal", null)
+      .option("allowNonNumericNumbers", null)
+      .option("allowBackslashEscapingAnyCharacter", null)
+      .option("compression", null)
+      .option("mode", null)
+      .option("columnNameOfCorruptRecord", null)
+      .json(floatingValueRecords)
+
+    checkAnswer(jsonDF, Row(1.0E-39D, BigDecimal(0.01)))
+  }
 }
