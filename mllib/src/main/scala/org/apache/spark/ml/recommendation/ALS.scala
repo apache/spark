@@ -55,6 +55,7 @@ private[recommendation] trait ALSModelParams extends Params with HasPredictionCo
   /**
    * Param for the column name for user ids.
    * Default: "user"
+   *
    * @group param
    */
   val userCol = new Param[String](this, "userCol", "column name for user ids")
@@ -65,6 +66,7 @@ private[recommendation] trait ALSModelParams extends Params with HasPredictionCo
   /**
    * Param for the column name for item ids.
    * Default: "item"
+   *
    * @group param
    */
   val itemCol = new Param[String](this, "itemCol", "column name for item ids")
@@ -82,6 +84,7 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
   /**
    * Param for rank of the matrix factorization (>= 1).
    * Default: 10
+   *
    * @group param
    */
   val rank = new IntParam(this, "rank", "rank of the factorization", ParamValidators.gtEq(1))
@@ -92,6 +95,7 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
   /**
    * Param for number of user blocks (>= 1).
    * Default: 10
+   *
    * @group param
    */
   val numUserBlocks = new IntParam(this, "numUserBlocks", "number of user blocks",
@@ -103,6 +107,7 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
   /**
    * Param for number of item blocks (>= 1).
    * Default: 10
+   *
    * @group param
    */
   val numItemBlocks = new IntParam(this, "numItemBlocks", "number of item blocks",
@@ -114,6 +119,7 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
   /**
    * Param to decide whether to use implicit preference.
    * Default: false
+   *
    * @group param
    */
   val implicitPrefs = new BooleanParam(this, "implicitPrefs", "whether to use implicit preference")
@@ -124,6 +130,7 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
   /**
    * Param for the alpha parameter in the implicit preference formulation (>= 0).
    * Default: 1.0
+   *
    * @group param
    */
   val alpha = new DoubleParam(this, "alpha", "alpha for implicit preference",
@@ -135,6 +142,7 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
   /**
    * Param for the column name for ratings.
    * Default: "rating"
+   *
    * @group param
    */
   val ratingCol = new Param[String](this, "ratingCol", "column name for ratings")
@@ -145,6 +153,7 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
   /**
    * Param for whether to apply nonnegativity constraints.
    * Default: false
+   *
    * @group param
    */
   val nonnegative = new BooleanParam(
@@ -153,12 +162,43 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
   /** @group getParam */
   def getNonnegative: Boolean = $(nonnegative)
 
+  /**
+   * Param for intermediate RDD StorageLevel. Pass in a string representation of [[StorageLevel]].
+   * Cannot be "NONE".
+   * Default: "MEMORY_AND_DISK"
+   *
+   * @group expertParam
+   */
+  val intermediateRDDStorageLevel = new Param[String](this,
+    "intermediateRDDStorageLevel", "intermediate RDD StorageLevel. Cannot be 'NONE'. " +
+    "Default: 'MEMORY_AND_DISK'.",
+    (s: String) => ALS.getStorageLevel(s).isInstanceOf[StorageLevel] && s != "NONE")
+
+  /** @group expertGetParam */
+  def getIntermediateRDDStorageLevel: String = $(intermediateRDDStorageLevel)
+
+  /**
+   * Param for StorageLevel for ALS model factors. Pass in a string representation of
+   * [[StorageLevel]].
+   * Default: "MEMORY_AND_DISK"
+   *
+   * @group expertParam
+   */
+  val finalRDDStorageLevel = new Param[String](this,
+    "finalRDDStorageLevel", "StorageLevel for ALS model factors. Default: 'MEMORY_AND_DISK'.",
+    (s: String) => ALS.getStorageLevel(s).isInstanceOf[StorageLevel])
+
+  /** @group expertGetParam */
+  def getFinalRDDStorageLevel: String = $(finalRDDStorageLevel)
+
   setDefault(rank -> 10, maxIter -> 10, regParam -> 0.1, numUserBlocks -> 10, numItemBlocks -> 10,
     implicitPrefs -> false, alpha -> 1.0, userCol -> "user", itemCol -> "item",
-    ratingCol -> "rating", nonnegative -> false, checkpointInterval -> 10)
+    ratingCol -> "rating", nonnegative -> false, checkpointInterval -> 10,
+    intermediateRDDStorageLevel -> "MEMORY_AND_DISK", finalRDDStorageLevel -> "MEMORY_AND_DISK")
 
   /**
    * Validates and transforms the input schema.
+   *
    * @param schema input schema
    * @return output schema
    */
@@ -374,8 +414,21 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
   @Since("1.3.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
+  /** @group expertSetParam */
+  @Since("2.0.0")
+  def setIntermediateRDDStorageLevel(value: String): this.type = {
+    set(intermediateRDDStorageLevel, value)
+  }
+
+  /** @group expertSetParam */
+  @Since("2.0.0")
+  def setFinalRDDStorageLevel(value: String): this.type = {
+    set(finalRDDStorageLevel, value)
+  }
+
   /**
    * Sets both numUserBlocks and numItemBlocks to the specific value.
+   *
    * @group setParam
    */
   @Since("1.3.0")
@@ -399,6 +452,8 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
       numUserBlocks = $(numUserBlocks), numItemBlocks = $(numItemBlocks),
       maxIter = $(maxIter), regParam = $(regParam), implicitPrefs = $(implicitPrefs),
       alpha = $(alpha), nonnegative = $(nonnegative),
+      intermediateRDDStorageLevel = ALS.getStorageLevel($(intermediateRDDStorageLevel)),
+      finalRDDStorageLevel = ALS.getStorageLevel($(finalRDDStorageLevel)),
       checkpointInterval = $(checkpointInterval), seed = $(seed))
     val userDF = userFactors.toDF("id", "features")
     val itemDF = itemFactors.toDF("id", "features")
@@ -436,6 +491,10 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
 
   @Since("1.6.0")
   override def load(path: String): ALS = super.load(path)
+
+  private[recommendation] def getStorageLevel(s: String): StorageLevel = {
+    StorageLevel.fromString(s)
+  }
 
   /** Trait for least squares solvers applied to the normal equation. */
   private[recommendation] trait LeastSquaresNESolver extends Serializable {
@@ -749,7 +808,6 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
    *                ratings are associated with srcIds(i).
    * @param dstEncodedIndices encoded dst indices
    * @param ratings ratings
-   *
    * @see [[LocalIndexEncoder]]
    */
   private[recommendation] case class InBlock[@specialized(Int, Long) ID: ClassTag](
@@ -845,7 +903,6 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
    * @param ratings raw ratings
    * @param srcPart partitioner for src IDs
    * @param dstPart partitioner for dst IDs
-   *
    * @return an RDD of rating blocks in the form of ((srcBlockId, dstBlockId), ratingBlock)
    */
   private def partitionRatings[ID: ClassTag](
@@ -894,6 +951,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
 
   /**
    * Builder for uncompressed in-blocks of (srcId, dstEncodedIndex, rating) tuples.
+   *
    * @param encoder encoder for dst indices
    */
   private[recommendation] class UncompressedInBlockBuilder[@specialized(Int, Long) ID: ClassTag](
@@ -1094,6 +1152,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
 
   /**
    * Creates in-blocks and out-blocks from rating blocks.
+   *
    * @param prefix prefix for in/out-block names
    * @param ratingBlocks rating blocks
    * @param srcPart partitioner for src IDs
@@ -1182,7 +1241,6 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
    * @param implicitPrefs whether to use implicit preference
    * @param alpha the alpha constant in the implicit preference formulation
    * @param solver solver for least squares problems
-   *
    * @return dst factors
    */
   private def computeFactors[ID](

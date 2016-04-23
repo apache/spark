@@ -33,7 +33,9 @@ import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.storage.StorageLevel
 
 class ALSSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest with Logging {
@@ -512,6 +514,30 @@ class ALSSuite
     assert(getFactors(model.userFactors) === getFactors(model2.userFactors))
     assert(getFactors(model.itemFactors) === getFactors(model2.itemFactors))
   }
+
+  test("StorageLevel param") {
+    intercept[IllegalArgumentException] {
+      new ALS().setIntermediateRDDStorageLevel("foo")
+    }
+    intercept[IllegalArgumentException] {
+      new ALS().setIntermediateRDDStorageLevel("NONE")
+    }
+    intercept[IllegalArgumentException] {
+      new ALS().setFinalRDDStorageLevel("foo")
+    }
+    /* TODO
+    // test final factor StorageLevel
+    val sqlContext = this.sqlContext
+    import sqlContext.implicits._
+    val (ratings, _) = genExplicitTestData(numUsers = 2, numItems = 2, rank = 1)
+    val data = ratings.toDF
+
+    val als = new ALS().setMaxIter(1)
+    assert(als.fit(data).userFactors.rdd.getStorageLevel == StorageLevel.MEMORY_AND_DISK)
+    als.setFinalRDDStorageLevel("MEMORY_ONLY")
+    assert(als.fit(data).userFactors.rdd.getStorageLevel == StorageLevel.MEMORY_ONLY)
+    */
+  }
 }
 
 object ALSSuite {
@@ -539,6 +565,8 @@ object ALSSuite {
     "implicitPrefs" -> true,
     "alpha" -> 0.9,
     "nonnegative" -> true,
-    "checkpointInterval" -> 20
+    "checkpointInterval" -> 20,
+    "intermediateRDDStorageLevel" -> "MEMORY_ONLY",
+    "finalRDDStorageLevel" -> "MEMORY_AND_DISK_SER"
   )
 }
