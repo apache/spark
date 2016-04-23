@@ -221,6 +221,13 @@ class SessionCatalog(
       inheritTableSpecs, isSkewedStoreAsSubdir)
   }
 
+  def defaultTablePath(tableIdent: TableIdentifier): String = {
+    val dbName = tableIdent.database.getOrElse(currentDb)
+    val dbLocation = getDatabaseMetadata(dbName).locationUri
+
+    new Path(new Path(dbLocation), formatTableName(tableIdent.table)).toString
+  }
+
   // -------------------------------------------------------------
   // | Methods that interact with temporary and metastore tables |
   // -------------------------------------------------------------

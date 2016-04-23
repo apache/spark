@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.datasources.{CreateTableUsing, CreateTableUsingAsSelect, CreateTempTableUsingAsSelect}
+import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.execution._
 
 private[hive] trait HiveStrategies {
@@ -89,7 +89,7 @@ private[hive] trait HiveStrategies {
       case CreateTableUsing(
         tableIdent, userSpecifiedSchema, provider, false, opts, allowExisting, managedIfNoPath) =>
         val cmd =
-          CreateMetastoreDataSource(
+          CreateDataSourceTableCommand(
             tableIdent, userSpecifiedSchema, provider, opts, allowExisting, managedIfNoPath)
         ExecutedCommandExec(cmd) :: Nil
 
@@ -99,7 +99,7 @@ private[hive] trait HiveStrategies {
         ExecutedCommandExec(cmd) :: Nil
 
       case c: CreateTableUsingAsSelect =>
-        val cmd = CreateMetastoreDataSourceAsSelect(c.tableIdent, c.provider, c.partitionColumns,
+        val cmd = CreateDataSourceTableAsSelectCommand(c.tableIdent, c.provider, c.partitionColumns,
           c.bucketSpec, c.mode, c.options, c.child)
         ExecutedCommandExec(cmd) :: Nil
 
