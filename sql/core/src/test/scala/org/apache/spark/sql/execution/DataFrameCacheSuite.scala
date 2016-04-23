@@ -32,8 +32,8 @@ class DataFrameCacheSuite extends QueryTest with SharedSQLContext {
     assert(df.collect() === Array(Row(2)))
     val plan = df.queryExecution.executedPlan
     assert(plan.find(p =>
-      p.isInstanceOf[WholeStageCodegen] &&
-        p.asInstanceOf[WholeStageCodegen].enableColumnCodeGen).isDefined)
+      p.isInstanceOf[WholeStageCodegenExec] &&
+        p.asInstanceOf[WholeStageCodegenExec].enableColumnCodeGen).isDefined)
   }
 
   test("filters should be combined with column codegen") {
@@ -42,8 +42,8 @@ class DataFrameCacheSuite extends QueryTest with SharedSQLContext {
     assert(df.collect() === Array(Row(0), Row(6)))
     val plan = df.queryExecution.executedPlan
     assert(plan.find(p =>
-      p.isInstanceOf[WholeStageCodegen] &&
-        p.asInstanceOf[WholeStageCodegen].enableColumnCodeGen).isDefined)
+      p.isInstanceOf[WholeStageCodegenExec] &&
+        p.asInstanceOf[WholeStageCodegenExec].enableColumnCodeGen).isDefined)
   }
 
   test("filter with null should be included in WholeStageCodegen with column codegen") {
@@ -54,8 +54,8 @@ class DataFrameCacheSuite extends QueryTest with SharedSQLContext {
     assert(df.collect() === Array(Row(0), Row(4)))
     val plan = df.queryExecution.executedPlan
     assert(plan.find(p =>
-      p.isInstanceOf[WholeStageCodegen] &&
-        p.asInstanceOf[WholeStageCodegen].enableColumnCodeGen).isDefined)
+      p.isInstanceOf[WholeStageCodegenExec] &&
+        p.asInstanceOf[WholeStageCodegenExec].enableColumnCodeGen).isDefined)
   }
 
   test("Aggregate should be included in WholeStageCodegen with column codegen") {
@@ -64,9 +64,9 @@ class DataFrameCacheSuite extends QueryTest with SharedSQLContext {
     assert(df.collect() === Array(Row(9, 4.5)))
     val plan = df.queryExecution.executedPlan
     assert(plan.find(p =>
-      p.isInstanceOf[WholeStageCodegen] &&
-        p.asInstanceOf[WholeStageCodegen].enableColumnCodeGen &&
-        p.asInstanceOf[WholeStageCodegen].child.isInstanceOf[TungstenAggregate]).isDefined)
+      p.isInstanceOf[WholeStageCodegenExec] &&
+        p.asInstanceOf[WholeStageCodegenExec].enableColumnCodeGen &&
+        p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[TungstenAggregate]).isDefined)
   }
 
   test("Aggregate with grouping keys should be included in WholeStageCodegen with column codegen") {
@@ -75,9 +75,9 @@ class DataFrameCacheSuite extends QueryTest with SharedSQLContext {
     assert(df.collect() === Array(Row(0, 1), Row(1, 1), Row(2, 1)))
     val plan = df.queryExecution.executedPlan
     assert(plan.find(p =>
-      p.isInstanceOf[WholeStageCodegen] &&
-        p.asInstanceOf[WholeStageCodegen].enableColumnCodeGen &&
-        p.asInstanceOf[WholeStageCodegen].child.isInstanceOf[TungstenAggregate]).isDefined)
+      p.isInstanceOf[WholeStageCodegenExec] &&
+        p.asInstanceOf[WholeStageCodegenExec].enableColumnCodeGen &&
+        p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[TungstenAggregate]).isDefined)
   }
 
   test("Aggregate with columns should be included in WholeStageCodegen with column codegen") {
@@ -86,9 +86,9 @@ class DataFrameCacheSuite extends QueryTest with SharedSQLContext {
     assert(df.collect() === Array(Row(110.0)))
     val plan = df.queryExecution.executedPlan
     assert(plan.find(p =>
-      p.isInstanceOf[WholeStageCodegen] &&
-        p.asInstanceOf[WholeStageCodegen].enableColumnCodeGen &&
-        p.asInstanceOf[WholeStageCodegen].child.isInstanceOf[TungstenAggregate]).isDefined)
+      p.isInstanceOf[WholeStageCodegenExec] &&
+        p.asInstanceOf[WholeStageCodegenExec].enableColumnCodeGen &&
+        p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[TungstenAggregate]).isDefined)
   }
 
   test("Sort should be included in WholeStageCodegen without column codegen") {
@@ -96,8 +96,8 @@ class DataFrameCacheSuite extends QueryTest with SharedSQLContext {
     val plan = df.queryExecution.executedPlan
     assert(df.collect() === Array(Row(1), Row(2), Row(3)))
     assert(plan.find(p =>
-      p.isInstanceOf[WholeStageCodegen] &&
-        !p.asInstanceOf[WholeStageCodegen].enableColumnCodeGen &&
-        p.asInstanceOf[WholeStageCodegen].child.isInstanceOf[Sort]).isDefined)
+      p.isInstanceOf[WholeStageCodegenExec] &&
+        !p.asInstanceOf[WholeStageCodegenExec].enableColumnCodeGen &&
+        p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[SortExec]).isDefined)
   }
 }

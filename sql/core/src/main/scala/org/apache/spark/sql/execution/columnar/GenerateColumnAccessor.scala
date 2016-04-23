@@ -22,7 +22,8 @@ import scala.collection.Iterator
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodeAndComment, CodeFormatter, CodeGenerator, UnsafeRowWriter}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodeFormatter, CodeGenerator, UnsafeRowWriter}
+import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.vectorized.ColumnVector
 import org.apache.spark.sql.types._
 
@@ -31,7 +32,7 @@ import org.apache.spark.sql.types._
  */
 abstract class ColumnarIterator extends Iterator[InternalRow] {
   def initialize(input: Iterator[CachedBatch], columnTypes: Array[DataType],
-    columnIndexes: Array[Int], inMemoryColumnarTableScan: InMemoryColumnarTableScan): Unit
+    columnIndexes: Array[Int], inMemoryTableScanExec: InMemoryTableScanExec): Unit
   def getColumnIndexes(index: Int) : Int
   def getColumnTypes(index: Int): DataType
   def isSupportColumnarCodeGen: Boolean
@@ -168,7 +169,7 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
       import org.apache.spark.sql.types.DataType;
       import org.apache.spark.sql.catalyst.expressions.codegen.BufferHolder;
       import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter;
-      import org.apache.spark.sql.execution.columnar.InMemoryColumnarTableScan;
+      import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec;
       import org.apache.spark.sql.execution.columnar.CachedBatch;
       import org.apache.spark.sql.execution.columnar.MutableUnsafeRow;
       import org.apache.spark.sql.execution.vectorized.ColumnVector;
@@ -184,7 +185,7 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
         private UnsafeRow unsafeRow = new UnsafeRow($numFields);
         private BufferHolder bufferHolder = new BufferHolder(unsafeRow);
         private UnsafeRowWriter rowWriter = new UnsafeRowWriter(bufferHolder, $numFields);
-        private InMemoryColumnarTableScan inMemoryColumnarTableScan = null;
+        private InMemoryTableScanExec inMemoryTableScanExec = null;
         private MutableUnsafeRow mutableRow = null;
         private boolean readPartitionIncremented = false;
         private CachedBatch cachedBatch = null;
@@ -205,11 +206,11 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
         }
 
         public void initialize(Iterator input, DataType[] columnTypes,
-          int[] columnIndexes, InMemoryColumnarTableScan inMemoryColumnarTableScan) {
+          int[] columnIndexes, InMemoryTableScanExec inMemoryTableScanExec) {
           this.input = input;
           this.columnTypes = columnTypes;
           this.columnIndexes = columnIndexes;
-          this.inMemoryColumnarTableScan = inMemoryColumnarTableScan;
+          this.inMemoryTableScanExec = inMemoryTableScanExec;
         }
 
         ${ctx.declareAddedFunctions()}
@@ -254,8 +255,8 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
           if (!input.hasNext()) {
             return -1;
           }
-          if ((inMemoryColumnarTableScan != null) && !readPartitionIncremented) {
-            inMemoryColumnarTableScan.incrementReadPartitionAccumulator();
+          if ((inMemoryTableScanExec != null) && !readPartitionIncremented) {
+            inMemoryTableScanExec.incrementReadPartitionAccumulator();
             readPartitionIncremented = true;
           }
           cachedBatch = (CachedBatch) input.next();

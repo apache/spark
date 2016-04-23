@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.toCommentSafeString
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.aggregate.TungstenAggregate
-import org.apache.spark.sql.execution.columnar.InMemoryColumnarTableScan
+import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
@@ -258,7 +258,7 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupp
        | }
      """.stripMargin
     } else {
-      val idx = WholeStageCodegen.columnarBatchIdxName
+      val idx = WholeStageCodegenExec.columnarBatchIdxName
       val numRows = "columnar_numRows"
       ctx.addMutableState("int", idx, s"$idx = 0;")
       ctx.addMutableState("int", numRows, s"$numRows = 0;")
@@ -268,7 +268,7 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupp
       val columnAssigns = colVars.zipWithIndex.map { case (name, i) =>
         ctx.addMutableState("org.apache.spark.sql.execution.vectorized.ColumnVector",
           name, s"$name = null;", s"$name = null;")
-        s"$name = ${WholeStageCodegen.columnarItrName}.getColumn($i);"
+        s"$name = ${WholeStageCodegenExec.columnarItrName}.getColumn($i);"
       }
       val columns = (output zip colVars).map { case (attr, colVar) =>
         new ColumnVectorReference(colVar, rowidx, attr.dataType, attr.nullable).genCode(ctx) }
@@ -276,7 +276,7 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupp
       s"""
        | while (true) {
        |   if ($idx == 0) {
-       |     $numRows = ${WholeStageCodegen.columnarItrName}.initForColumnar();
+       |     $numRows = ${WholeStageCodegenExec.columnarItrName}.initForColumnar();
        |     if ($numRows < 0) {
        |       cleanup();
        |       break;
@@ -363,7 +363,7 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
 
     enableColumnCodeGen = ctx.enableColumnCodeGen &&
       sqlContext.getConf(SQLConf.COLUMN_VECTOR_CODEGEN.key).toBoolean &&
-      child.find(c => c.isInstanceOf[InMemoryColumnarTableScan]).isDefined &&
+      child.find(c => c.isInstanceOf[InMemoryTableScanExec]).isDefined &&
       child.find(c => c.isInstanceOf[CodegenSupport] &&
         c.asInstanceOf[CodegenSupport].useUnsafeRow).isEmpty
 
@@ -378,7 +378,7 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
       val codeCol = child.asInstanceOf[CodegenSupport].produce(ctx, this)
 
       val columnarItrClz = "org.apache.spark.sql.execution.columnar.ColumnarIterator"
-      val colItr = WholeStageCodegen.columnarItrName
+      val colItr = WholeStageCodegenExec.columnarItrName
       ctx.addMutableState(s"$columnarItrClz", colItr, s"$colItr = null;", s"$colItr = null;")
 
       s"""
@@ -395,7 +395,7 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
       }
 
       protected void processNext() throws java.io.IOException {
-        if ((${WholeStageCodegen.columnarBatchIdxName} != 0) ||
+        if ((${WholeStageCodegenExec.columnarBatchIdxName} != 0) ||
             (${ctx.iteratorInput} instanceof $columnarItrClz &&
              ($colItr = ($columnarItrClz)${ctx.iteratorInput}).isSupportColumnarCodeGen())) {
           processBatch();
