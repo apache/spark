@@ -59,7 +59,7 @@ abstract class OutputWriterFactory extends Serializable {
    * @param context The Hadoop MapReduce task context.
    * @since 1.4.0
    */
-  private[sql] def newInstance(
+  def newInstance(
       path: String,
       bucketId: Option[Int], // TODO: This doesn't belong here...
       dataSchema: StructType,
