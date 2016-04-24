@@ -40,7 +40,6 @@ import org.apache.spark.sql.execution.ui.{SQLListener, SQLTab}
 import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.udt.BuiltInUDT
 import org.apache.spark.sql.util.ExecutionListenerManager
 
 /**
@@ -118,11 +117,6 @@ class SQLContext private[sql](
    *
    * @since 1.6.0
    */
-
-  /** Pre-Load built-in User Defined Types */
-  if (isRootContext) {
-    BuiltInUDT.preloadBuiltInUDT
-  }
 
   def newSession(): SQLContext = sparkSession.newSession().wrapped
 

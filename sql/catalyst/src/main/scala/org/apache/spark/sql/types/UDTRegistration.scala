@@ -33,8 +33,13 @@ private[spark]
 object UDTRegistration extends Serializable with Logging {
 
   /** The mapping between the Class between UserDefinedType and user classes. */
-  private val udtMap: mutable.Map[String, String] =
-    mutable.HashMap.empty[String, String]
+  private lazy val udtMap: mutable.Map[String, String] = mutable.Map(
+    ("org.apache.spark.ml.linalg.Vector", "org.apache.spark.ml.linalg.VectorUDT"),
+    ("org.apache.spark.ml.linalg.DenseVector", "org.apache.spark.ml.linalg.VectorUDT"),
+    ("org.apache.spark.ml.linalg.SparseVector", "org.apache.spark.ml.linalg.VectorUDT"),
+    ("org.apache.spark.ml.linalg.Matrix", "org.apache.spark.ml.linalg.MatrixUDT"),
+    ("org.apache.spark.ml.linalg.DenseMatrix", "org.apache.spark.ml.linalg.MatrixUDT"),
+    ("org.apache.spark.ml.linalg.SparseMatrix", "org.apache.spark.ml.linalg.MatrixUDT"))
 
   /**
    * Queries if a given user class is already registered or not.

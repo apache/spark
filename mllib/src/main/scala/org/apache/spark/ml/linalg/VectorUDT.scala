@@ -15,22 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.linalg.udt
+package org.apache.spark.ml.linalg
 
-import org.apache.spark.annotation.AlphaComponent
-import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.types._
 
 /**
- * :: AlphaComponent ::
- *
  * User-defined type for [[Vector]] in [[mllib-local]] which allows easy interaction with SQL
  * via [[org.apache.spark.sql.Dataset]].
  */
-@AlphaComponent
 private[ml] class VectorUDT extends UserDefinedType[Vector] {
 
   override def sqlType: StructType = {

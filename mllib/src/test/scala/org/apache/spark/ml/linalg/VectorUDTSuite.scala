@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.linalg.udt
+package org.apache.spark.ml.linalg
 
 import scala.beans.{BeanInfo, BeanProperty}
 
@@ -40,23 +40,20 @@ class VectorUDTSuite extends SparkFunSuite with MLlibTestSparkContext {
     val sv0 = Vectors.sparse(2, Array.empty, Array.empty)
     val sv1 = Vectors.sparse(2, Array(1), Array(2.0))
 
-    val vectorRDD = Seq(
+    val vectorDF = Seq(
       MyVectorPoint(1.0, dv0),
       MyVectorPoint(2.0, dv1),
       MyVectorPoint(3.0, sv0),
       MyVectorPoint(4.0, sv1)).toDF()
 
-    val labels: RDD[Double] = vectorRDD.select('label).rdd.map { case Row(v: Double) => v }
-    val labelsArrays: Array[Double] = labels.collect()
-    assert(labelsArrays.size === 4)
-    assert(labelsArrays.sorted === Array(1.0, 2.0, 3.0, 4.0))
+    val labels = vectorDF.select('label).as[Double].collect()
+    assert(labels.size === 4)
+    assert(labels.sorted === Array(1.0, 2.0, 3.0, 4.0))
 
-    val vectors: RDD[Vector] =
-      vectorRDD.select('vector).rdd.map { case Row(v: Vector) => v }
-    val vectorsArrays: Array[Vector] = vectors.collect()
-    assert(vectorsArrays.contains(dv0))
-    assert(vectorsArrays.contains(dv1))
-    assert(vectorsArrays.contains(sv0))
-    assert(vectorsArrays.contains(sv1))
+    val vectors = vectorDF.select('vector).rdd.map { case Row(v: Vector) => v }.collect()
+    assert(vectors.contains(dv0))
+    assert(vectors.contains(dv1))
+    assert(vectors.contains(sv0))
+    assert(vectors.contains(sv1))
   }
 }

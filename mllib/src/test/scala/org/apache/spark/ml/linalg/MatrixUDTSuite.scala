@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.linalg.udt
+package org.apache.spark.ml.linalg
 
 import scala.beans.{BeanInfo, BeanProperty}
 
@@ -42,7 +42,7 @@ class MatrixUDTSuite extends SparkFunSuite with MLlibTestSparkContext {
     val sm2 = dm2.toSparse
     val sm3 = dm3.toSparse
 
-    val matrixRDD = Seq(
+    val matrixDF = Seq(
       MyMatrixPoint(1.0, dm1),
       MyMatrixPoint(2.0, dm2),
       MyMatrixPoint(3.0, dm3),
@@ -50,19 +50,16 @@ class MatrixUDTSuite extends SparkFunSuite with MLlibTestSparkContext {
       MyMatrixPoint(5.0, sm2),
       MyMatrixPoint(6.0, sm3)).toDF()
 
-    val labels: RDD[Double] = matrixRDD.select('label).rdd.map { case Row(v: Double) => v }
-    val labelsArrays: Array[Double] = labels.collect()
-    assert(labelsArrays.size === 6)
-    assert(labelsArrays.sorted === Array(1.0, 2.0, 3.0, 4.0, 5.0, 6.0))
+    val labels = matrixDF.select('label).as[Double].collect()
+    assert(labels.size === 6)
+    assert(labels.sorted === Array(1.0, 2.0, 3.0, 4.0, 5.0, 6.0))
 
-    val matrices: RDD[Matrix] =
-      matrixRDD.select('matrix).rdd.map { case Row(v: Matrix) => v }
-    val matrixArrays: Array[Matrix] = matrices.collect()
-    assert(matrixArrays.contains(dm1))
-    assert(matrixArrays.contains(dm2))
-    assert(matrixArrays.contains(dm3))
-    assert(matrixArrays.contains(sm1))
-    assert(matrixArrays.contains(sm2))
-    assert(matrixArrays.contains(sm3))
+    val matrices = matrixDF.select('matrix).rdd.map { case Row(m: Matrix) => m }.collect()
+    assert(matrices.contains(dm1))
+    assert(matrices.contains(dm2))
+    assert(matrices.contains(dm3))
+    assert(matrices.contains(sm1))
+    assert(matrices.contains(sm2))
+    assert(matrices.contains(sm3))
   }
 }
