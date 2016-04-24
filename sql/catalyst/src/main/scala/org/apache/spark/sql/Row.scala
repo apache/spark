@@ -19,7 +19,6 @@ package org.apache.spark.sql
 
 import scala.collection.JavaConverters._
 import scala.util.{Failure, Success, Try}
-import scala.util.control.Exception.catching
 import scala.util.hashing.MurmurHash3
 
 import org.apache.spark.sql.catalyst.expressions.GenericRow
