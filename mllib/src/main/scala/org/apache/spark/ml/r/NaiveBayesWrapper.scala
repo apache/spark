@@ -113,8 +113,8 @@ private[r] object NaiveBayesWrapper extends MLReadable[NaiveBayesWrapper] {
 
       val rMetadataStr = sc.textFile(rMetadataPath, 1).first()
       val rMetadata = parse(rMetadataStr)
-      val labels = (rMetadata \ "labels").extract[Seq[String]].toArray
-      val features = (rMetadata \ "features").extract[Seq[String]].toArray
+      val labels = (rMetadata \ "labels").extract[Array[String]]
+      val features = (rMetadata \ "features").extract[Array[String]]
 
       val pipeline = PipelineModel.load(pipelinePath)
       new NaiveBayesWrapper(pipeline, labels, features)
