@@ -81,7 +81,7 @@ public class UnsafeArrayData extends ArrayData {
   }
 
   public Object[] array() {
-    throw new UnsupportedOperationException("Only supported on GenericArrayData.");
+    throw new UnsupportedOperationException("Not supported on UnsafeArrayData.");
   }
 
   /**
@@ -336,4 +336,62 @@ public class UnsafeArrayData extends ArrayData {
     arrayCopy.pointTo(arrayDataCopy, Platform.BYTE_ARRAY_OFFSET, sizeInBytes);
     return arrayCopy;
   }
+
+  public int[] toPrimitiveIntArray() {
+    int[] result = new int[numElements];
+    Platform.copyMemory(baseObject, baseOffset + 4 + 4 * numElements,
+      result, Platform.INT_ARRAY_OFFSET, 4 * numElements);
+    return result;
+  }
+
+  public double[] toPrimitiveDoubleArray() {
+    double[] result = new double[numElements];
+    Platform.copyMemory(baseObject, baseOffset + 4 + 4 * numElements,
+      result, Platform.DOUBLE_ARRAY_OFFSET, 8 * numElements);
+    return result;
+  }
+
+  public static UnsafeArrayData fromPrimitiveArray(int[] arr) {
+    int offsetRegionSize = 4 * arr.length;
+    int valueRegionSize = 4 * arr.length;
+    int totalSize = 4 + offsetRegionSize + valueRegionSize;
+    byte[] data = new byte[totalSize];
+
+    Platform.putInt(data, Platform.BYTE_ARRAY_OFFSET, arr.length);
+
+    int elementOffsetStart = 4 + offsetRegionSize;
+    for (int i = 0; i < arr.length; i++) {
+      Platform.putInt(data, Platform.BYTE_ARRAY_OFFSET + 4 + i * 4, elementOffsetStart + i * 4);
+    }
+
+    Platform.copyMemory(arr, Platform.INT_ARRAY_OFFSET, data,
+      Platform.BYTE_ARRAY_OFFSET + elementOffsetStart, valueRegionSize);
+
+    UnsafeArrayData result = new UnsafeArrayData();
+    result.pointTo(data, Platform.BYTE_ARRAY_OFFSET, totalSize);
+    return result;
+  }
+
+  public static UnsafeArrayData fromPrimitiveArray(double[] arr) {
+    int offsetRegionSize = 4 * arr.length;
+    int valueRegionSize = 8 * arr.length;
+    int totalSize = 4 + offsetRegionSize + valueRegionSize;
+    byte[] data = new byte[totalSize];
+
+    Platform.putInt(data, Platform.BYTE_ARRAY_OFFSET, arr.length);
+
+    int elementOffsetStart = 4 + offsetRegionSize;
+    for (int i = 0; i < arr.length; i++) {
+      Platform.putInt(data, Platform.BYTE_ARRAY_OFFSET + 4 + i * 4, elementOffsetStart + i * 8);
+    }
+
+    Platform.copyMemory(arr, Platform.DOUBLE_ARRAY_OFFSET, data,
+      Platform.BYTE_ARRAY_OFFSET + elementOffsetStart, valueRegionSize);
+
+    UnsafeArrayData result = new UnsafeArrayData();
+    result.pointTo(data, Platform.BYTE_ARRAY_OFFSET, totalSize);
+    return result;
+  }
+
+  // TODO: add more specialized methods.
 }

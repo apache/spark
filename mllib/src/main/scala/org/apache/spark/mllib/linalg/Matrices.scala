@@ -27,8 +27,7 @@ import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{linalg => newlinalg}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
-import org.apache.spark.sql.catalyst.util.{DoubleArrayData, IntArrayData}
+import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, UnsafeArrayData}
 import org.apache.spark.sql.types._
 
 /**
@@ -194,9 +193,9 @@ private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
         row.setByte(0, 0)
         row.setInt(1, sm.numRows)
         row.setInt(2, sm.numCols)
-        row.update(3, new IntArrayData(sm.colPtrs))
-        row.update(4, new IntArrayData(sm.rowIndices))
-        row.update(5, new DoubleArrayData(sm.values))
+        row.update(3, UnsafeArrayData.fromPrimitiveArray(sm.colPtrs))
+        row.update(4, UnsafeArrayData.fromPrimitiveArray(sm.rowIndices))
+        row.update(5, UnsafeArrayData.fromPrimitiveArray(sm.values))
         row.setBoolean(6, sm.isTransposed)
 
       case dm: DenseMatrix =>
@@ -205,7 +204,7 @@ private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
         row.setInt(2, dm.numCols)
         row.setNullAt(3)
         row.setNullAt(4)
-        row.update(5, new DoubleArrayData(dm.values))
+        row.update(5, UnsafeArrayData.fromPrimitiveArray(dm.values))
         row.setBoolean(6, dm.isTransposed)
     }
     row
@@ -219,12 +218,21 @@ private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
         val tpe = row.getByte(0)
         val numRows = row.getInt(1)
         val numCols = row.getInt(2)
-        val values = row.getArray(5).toDoubleArray()
+        val values = row.getArray(5) match {
+          case u: UnsafeArrayData => u.toPrimitiveDoubleArray
+          case a => a.toDoubleArray()
+        }
         val isTransposed = row.getBoolean(6)
         tpe match {
           case 0 =>
-            val colPtrs = row.getArray(3).toIntArray()
-            val rowIndices = row.getArray(4).toIntArray()
+            val colPtrs = row.getArray(3) match {
+              case u: UnsafeArrayData => u.toPrimitiveIntArray
+              case a => a.toIntArray()
+            }
+            val rowIndices = row.getArray(4) match {
+              case u: UnsafeArrayData => u.toPrimitiveIntArray
+              case a => a.toIntArray()
+            }
             new SparseMatrix(numRows, numCols, colPtrs, rowIndices, values, isTransposed)
           case 1 =>
             new DenseMatrix(numRows, numCols, values, isTransposed)
