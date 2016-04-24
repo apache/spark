@@ -110,7 +110,6 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
         experimentalMethods.extraStrategies ++ Seq(
           FileSourceStrategy,
           DataSourceStrategy,
-          HiveDDLStrategy,
           DDLStrategy,
           SpecialLimits,
           InMemoryScans,

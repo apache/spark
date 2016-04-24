@@ -27,6 +27,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.parser.DataTypeParser
+import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
@@ -699,8 +700,9 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           val schema = StructType((1 to 5000).map(i => StructField(s"c_$i", StringType, true)))
 
           // Manually create a metastore data source table.
-          sessionState.catalog.createDataSourceTable(
-            name = TableIdentifier("wide_schema"),
+          CreateDataSourceTableUtils.createDataSourceTable(
+            sqlContext = sqlContext,
+            tableIdent = TableIdentifier("wide_schema"),
             userSpecifiedSchema = Some(schema),
             partitionColumns = Array.empty[String],
             bucketSpec = None,
@@ -907,8 +909,9 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
     withTempDir { tempPath =>
       val schema = StructType((1 to 5).map(i => StructField(s"c_$i", StringType)))
 
-      sessionState.catalog.createDataSourceTable(
-        name = TableIdentifier("not_skip_hive_metadata"),
+      CreateDataSourceTableUtils.createDataSourceTable(
+        sqlContext = sqlContext,
+        tableIdent = TableIdentifier("not_skip_hive_metadata"),
         userSpecifiedSchema = Some(schema),
         partitionColumns = Array.empty[String],
         bucketSpec = None,
@@ -921,8 +924,9 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       assert(sharedState.externalCatalog.getTable("default", "not_skip_hive_metadata").schema
         .forall(column => DataTypeParser.parse(column.dataType) == StringType))
 
-      sessionState.catalog.createDataSourceTable(
-        name = TableIdentifier("skip_hive_metadata"),
+      CreateDataSourceTableUtils.createDataSourceTable(
+        sqlContext = sqlContext,
+        tableIdent = TableIdentifier("skip_hive_metadata"),
         userSpecifiedSchema = Some(schema),
         partitionColumns = Array.empty[String],
         bucketSpec = None,

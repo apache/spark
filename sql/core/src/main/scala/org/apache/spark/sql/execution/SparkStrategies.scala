@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.Strategy
+import org.apache.spark.sql.{AnalysisException, Strategy}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions._
@@ -421,10 +421,21 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         ExecutedCommandExec(
           CreateTempTableUsing(
             tableIdent, userSpecifiedSchema, provider, opts)) :: Nil
+
       case c: CreateTableUsing if !c.temporary =>
-        sys.error("Tables created with SQLContext must be TEMPORARY. Use a HiveContext instead.")
+        val cmd =
+          CreateDataSourceTableCommand(
+            c.tableIdent,
+            c.userSpecifiedSchema,
+            c.provider,
+            c.options,
+            c.allowExisting,
+            c.managedIfNoPath)
+        ExecutedCommandExec(cmd) :: Nil
+
       case c: CreateTableUsing if c.temporary && c.allowExisting =>
-        sys.error("allowExisting should be set to false when creating a temporary table.")
+        throw new AnalysisException(
+          "allowExisting should be set to false when creating a temporary table.")
 
       case c: CreateTableUsingAsSelect if c.temporary && c.partitionColumns.nonEmpty =>
         sys.error("Cannot create temporary partitioned table.")
@@ -433,8 +444,18 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         val cmd = CreateTempTableUsingAsSelect(
           c.tableIdent, c.provider, Array.empty[String], c.mode, c.options, c.child)
         ExecutedCommandExec(cmd) :: Nil
+
       case c: CreateTableUsingAsSelect if !c.temporary =>
-        sys.error("Tables created with SQLContext must be TEMPORARY. Use a HiveContext instead.")
+        val cmd =
+          CreateDataSourceTableAsSelectCommand(
+            c.tableIdent,
+            c.provider,
+            c.partitionColumns,
+            c.bucketSpec,
+            c.mode,
+            c.options,
+            c.child)
+        ExecutedCommandExec(cmd) :: Nil
 
       case logical.ShowFunctions(db, pattern) =>
         ExecutedCommandExec(ShowFunctions(db, pattern)) :: Nil
