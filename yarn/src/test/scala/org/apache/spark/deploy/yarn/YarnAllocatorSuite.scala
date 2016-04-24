@@ -85,6 +85,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
   }
 
   class MockSplitInfo(host: String) extends SplitInfo(null, host, null, 1, null) {
+    override def hashCode(): Int = 0
     override def equals(other: Any): Boolean = false
   }
 

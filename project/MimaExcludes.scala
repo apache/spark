@@ -114,6 +114,10 @@ object MimaExcludes {
           "org.apache.spark.api.java.function.FlatMapGroupsFunction.call")
       ) ++
       Seq(
+        // [SPARK-6429] Implement hashCode and equals together
+        ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.Partition.org$apache$spark$Partition$$super=uals")
+      ) ++
+      Seq(
         // SPARK-4819 replace Guava Optional
         ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.api.java.JavaSparkContext.getCheckpointDir"),
         ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.api.java.JavaSparkContext.getSparkHome"),
@@ -653,9 +657,16 @@ object MimaExcludes {
         ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.TaskMetricDistributions.shuffleReadMetrics"),
         ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.status.api.v1.TaskMetricDistributions.this")
       ) ++ Seq(
+        // SPARK-13643: Move functionality from SQLContext to SparkSession
+        ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.SQLContext.getSchema")
+      ) ++ Seq(
         // [SPARK-14407] Hides HadoopFsRelation related data source API into execution package
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.OutputWriter"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.sources.OutputWriterFactory")
+      ) ++ Seq(
+        // SPARK-14734: Add conversions between mllib and ml Vector, Matrix types
+        ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.mllib.linalg.Vector.asML"),
+        ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.mllib.linalg.Matrix.asML")
       ) ++ Seq(
         // SPARK-14704: Create accumulators in TaskMetrics
         ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.executor.InputMetrics.this"),

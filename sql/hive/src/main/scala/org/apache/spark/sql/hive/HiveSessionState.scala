@@ -21,17 +21,13 @@ import java.util.regex.Pattern
 
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hadoop.hive.ql.parse.VariableSubstitution
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.Analyzer
-import org.apache.spark.sql.catalyst.parser.ParserInterface
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlanner
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.client.{HiveClient, HiveClientImpl}
-import org.apache.spark.sql.hive.execution.{AnalyzeTable, HiveSqlParser}
-import org.apache.spark.sql.internal.{SessionState, SQLConf}
+import org.apache.spark.sql.internal.SessionState
 
 
 /**
@@ -52,11 +48,6 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
    * A Hive client used for interacting with the metastore.
    */
   lazy val metadataHive: HiveClient = sharedState.metadataHive.newSession()
-
-  override lazy val conf: SQLConf = new SQLConf {
-    override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
-  }
-
 
   /**
    * SQLConf and HiveConf contracts:
@@ -100,16 +91,11 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
         catalog.PreInsertionCasts ::
         PreInsertCastAndRename ::
         DataSourceAnalysis ::
-        (if (conf.runSQLOnFile) new ResolveDataSource(ctx) :: Nil else Nil)
+        (if (conf.runSQLonFile) new ResolveDataSource(ctx) :: Nil else Nil)
 
       override val extendedCheckRules = Seq(PreWriteCheck(conf, catalog))
     }
   }
-
-  /**
-   * Parser for HiveQl query texts.
-   */
-  override lazy val sqlParser: ParserInterface = new HiveSqlParser(conf, hiveconf)
 
   /**
    * Planner that takes into account Hive-specific strategies.
@@ -124,8 +110,6 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
         experimentalMethods.extraStrategies ++ Seq(
           FileSourceStrategy,
           DataSourceStrategy,
-          HiveCommandStrategy,
-          HiveDDLStrategy,
           DDLStrategy,
           SpecialLimits,
           InMemoryScans,
@@ -149,16 +133,13 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
   //  Helper methods, partially leftover from pre-2.0 days
   // ------------------------------------------------------
 
-  override def executePlan(plan: LogicalPlan): HiveQueryExecution = {
-    new HiveQueryExecution(ctx, plan)
-  }
-
   /**
    * Overrides default Hive configurations to avoid breaking changes to Spark SQL users.
    *  - allow SQL11 keywords to be used as identifiers
    */
   def setDefaultOverrideConfs(): Unit = {
     setConf(ConfVars.HIVE_SUPPORT_SQL11_RESERVED_KEYWORDS.varname, "false")
+    conf.setConfString("spark.sql.caseSensitive", "false")
   }
 
   override def setConf(key: String, value: String): Unit = {
@@ -173,17 +154,6 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
     executionHive.addJar(path)
     metadataHive.addJar(path)
     Thread.currentThread().setContextClassLoader(executionHive.clientLoader.classLoader)
-  }
-
-  /**
-   * Analyzes the given table in the current database to generate statistics, which will be
-   * used in query optimizations.
-   *
-   * Right now, it only supports Hive tables and it only updates the size of a Hive table
-   * in the Hive metastore.
-   */
-  override def analyze(tableName: String): Unit = {
-    AnalyzeTable(tableName).run(ctx)
   }
 
   /**
@@ -209,7 +179,7 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
    * SerDe.
    */
   def convertMetastoreParquet: Boolean = {
-    conf.getConf(HiveContext.CONVERT_METASTORE_PARQUET)
+    conf.getConf(HiveUtils.CONVERT_METASTORE_PARQUET)
   }
 
   /**
@@ -219,7 +189,7 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
    * This configuration is only effective when "spark.sql.hive.convertMetastoreParquet" is true.
    */
   def convertMetastoreParquetWithSchemaMerging: Boolean = {
-    conf.getConf(HiveContext.CONVERT_METASTORE_PARQUET_WITH_SCHEMA_MERGING)
+    conf.getConf(HiveUtils.CONVERT_METASTORE_PARQUET_WITH_SCHEMA_MERGING)
   }
 
   /**
@@ -228,7 +198,7 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
    * SerDe.
    */
   def convertMetastoreOrc: Boolean = {
-    conf.getConf(HiveContext.CONVERT_METASTORE_ORC)
+    conf.getConf(HiveUtils.CONVERT_METASTORE_ORC)
   }
 
   /**
@@ -244,14 +214,14 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
    *     and no SerDe is specified (no ROW FORMAT SERDE clause).
    */
   def convertCTAS: Boolean = {
-    conf.getConf(HiveContext.CONVERT_CTAS)
+    conf.getConf(HiveUtils.CONVERT_CTAS)
   }
 
   /**
    * When true, Hive Thrift server will execute SQL queries asynchronously using a thread pool."
    */
   def hiveThriftServerAsync: Boolean = {
-    conf.getConf(HiveContext.HIVE_THRIFT_SERVER_ASYNC)
+    conf.getConf(HiveUtils.HIVE_THRIFT_SERVER_ASYNC)
   }
 
   def hiveThriftServerSingleSession: Boolean = {
