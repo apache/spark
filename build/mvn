@@ -128,6 +128,7 @@ ZINC_PORT=${ZINC_PORT:-"3030"}
 
 # Remove `--force` for backward compatibility.
 if [ "$1" == "--force" ]; then
+  echo "WARNING: '--force' is deprecated and ignored."
   shift
 fi
 
