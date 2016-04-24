@@ -756,7 +756,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   test("inner join where, one match per row") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
       checkAnswer(
-        sql("SELECT * FROM upperCaseData JOIN lowerCaseData WHERE n = N"),
+        sql("SELECT * FROM uppercasedata JOIN lowercasedata WHERE n = N"),
         Seq(
           Row(1, "A", 1, "a"),
           Row(2, "B", 2, "b"),
@@ -768,7 +768,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   test("inner join ON, one match per row") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
       checkAnswer(
-        sql("SELECT * FROM upperCaseData JOIN lowerCaseData ON n = N"),
+        sql("SELECT * FROM uppercasedata JOIN lowercasedata ON n = N"),
         Seq(
           Row(1, "A", 1, "a"),
           Row(2, "B", 2, "b"),
@@ -783,8 +783,8 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         sql(
           """
           |SELECT * FROM
-          |  (SELECT * FROM testData2 WHERE a = 1) x JOIN
-          |  (SELECT * FROM testData2 WHERE a = 1) y
+          |  (SELECT * FROM testdata2 WHERE a = 1) x JOIN
+          |  (SELECT * FROM testdata2 WHERE a = 1) y
           |WHERE x.a = y.a""".stripMargin),
         Row(1, 1, 1, 1) ::
         Row(1, 1, 1, 2) ::
@@ -834,7 +834,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   test("left outer join") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
       checkAnswer(
-        sql("SELECT * FROM upperCaseData LEFT OUTER JOIN lowerCaseData ON n = N"),
+        sql("SELECT * FROM uppercasedata LEFT OUTER JOIN lowercasedata ON n = N"),
         Row(1, "A", 1, "a") ::
           Row(2, "B", 2, "b") ::
           Row(3, "C", 3, "c") ::
@@ -847,7 +847,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   test("right outer join") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
       checkAnswer(
-        sql("SELECT * FROM lowerCaseData RIGHT OUTER JOIN upperCaseData ON n = N"),
+        sql("SELECT * FROM lowercasedata RIGHT OUTER JOIN uppercasedata ON n = N"),
         Row(1, "a", 1, "A") ::
           Row(2, "b", 2, "B") ::
           Row(3, "c", 3, "C") ::

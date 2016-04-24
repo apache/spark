@@ -257,7 +257,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
         sql(
           """
           |SELECT l.N, count(*)
-          |FROM upperCaseData l LEFT OUTER JOIN allNulls r ON (l.N = r.a)
+          |FROM uppercasedata l LEFT OUTER JOIN allNulls r ON (l.N = r.a)
           |GROUP BY l.N
         """.stripMargin),
       Row(
@@ -272,7 +272,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
         sql(
           """
             |SELECT r.a, count(*)
-            |FROM upperCaseData l LEFT OUTER JOIN allNulls r ON (l.N = r.a)
+            |FROM uppercasedata l LEFT OUTER JOIN allNulls r ON (l.N = r.a)
             |GROUP BY r.a
           """.stripMargin),
         Row(null, 6) :: Nil)
