@@ -384,10 +384,11 @@ You can inspect the search path in R with [`search()`](https://stat.ethz.ch/R-ma
 
 # Migration Guide
 
-## Upgrading From SparkR 1.5.x to 1.6
+## Upgrading From SparkR 1.5.x to 1.6.x
 
- - Before Spark 1.6, the default mode for writes was `append`. It was changed in Spark 1.6.0 to `error` to match the Scala API.
+ - Before Spark 1.6.0, the default mode for writes was `append`. It was changed in Spark 1.6.0 to `error` to match the Scala API.
 
 ## Upgrading From SparkR 1.6.x to 2.0
 
  - The method `table` has been removed and replaced by `tableToDF`.
+ - The class `DataFrame` has been renamed to `SparkDataFrame` to avoid name conflicts.
