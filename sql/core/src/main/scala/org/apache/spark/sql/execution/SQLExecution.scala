@@ -49,7 +49,7 @@ private[sql] object SQLExecution {
         // Utils.getCallSite(); because call Utils.getCallSite() on continuous queries directly
         // would give us call site like "run at <unknown>:0"
         val callSite = sqlContext.sparkContext.getCallSite()
-        
+
         sqlContext.sparkContext.listenerBus.post(SparkListenerSQLExecutionStart(
           executionId, callSite.shortForm, callSite.longForm, queryExecution.toString,
           SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan), System.currentTimeMillis()))
