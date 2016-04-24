@@ -135,7 +135,7 @@ class SparkContextSchedulerCreationSuite
       assert(sched.getClass === Utils.classForName(expectedClassName))
     } catch {
       case e: SparkException =>
-        assert(e.getMessage.contains("YARN mode not available"))
+        assert(e.getMessage.contains("Could not parse Master URL: 'yarn'"))
         logWarning("YARN not available, could not test actual YARN scheduler creation")
       case e: Throwable => fail(e)
     }
