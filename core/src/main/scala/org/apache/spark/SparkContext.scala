@@ -2119,7 +2119,7 @@ object SparkContext extends Logging {
       sc: SparkContext,
       allowMultipleContexts: Boolean): Unit = {
     SPARK_CONTEXT_CONSTRUCTOR_LOCK.synchronized {
-      Option(activeContext.get()).foreach { ctx =>
+      Option(activeContext.get()).filter(_ ne sc).foreach { ctx =>
           val errMsg = "Only one SparkContext may be running in this JVM (see SPARK-2243)." +
             " To ignore this error, set spark.driver.allowMultipleContexts = true. " +
             s"The currently running SparkContext was created at:\n${ctx.creationSite.longForm}"
