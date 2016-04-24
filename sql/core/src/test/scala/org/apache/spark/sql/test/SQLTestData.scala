@@ -103,6 +103,19 @@ private[sql] trait SQLTestData { self =>
     df
   }
 
+  protected lazy val decimalDataWithNulls: DataFrame = {
+    val df = sqlContext.sparkContext.parallelize(
+      DecimalDataWithNulls(1, 1) ::
+      DecimalDataWithNulls(1, null) ::
+      DecimalDataWithNulls(2, 1) ::
+      DecimalDataWithNulls(2, null) ::
+      DecimalDataWithNulls(3, 1) ::
+      DecimalDataWithNulls(3, 2) ::
+      DecimalDataWithNulls(null, 2) :: Nil).toDF()
+    df.registerTempTable("decimalDataWithNulls")
+    df
+  }
+
   protected lazy val binaryData: DataFrame = {
     val df = sqlContext.sparkContext.parallelize(
       BinaryData("12".getBytes(StandardCharsets.UTF_8), 1) ::
@@ -267,6 +280,7 @@ private[sql] trait SQLTestData { self =>
     negativeData
     largeAndSmallInts
     decimalData
+    decimalDataWithNulls
     binaryData
     upperCaseData
     lowerCaseData
@@ -296,6 +310,7 @@ private[sql] object SQLTestData {
   case class TestData3(a: Int, b: Option[Int])
   case class LargeAndSmallInts(a: Int, b: Int)
   case class DecimalData(a: BigDecimal, b: BigDecimal)
+  case class DecimalDataWithNulls(a: BigDecimal, b: BigDecimal)
   case class BinaryData(a: Array[Byte], b: Int)
   case class UpperCaseData(N: Int, L: String)
   case class LowerCaseData(n: Int, l: String)
