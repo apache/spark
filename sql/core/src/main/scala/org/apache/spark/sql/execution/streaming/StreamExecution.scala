@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.util.ContinuousQueryListener
 import org.apache.spark.sql.util.ContinuousQueryListener._
-import org.apache.spark.util.UninterruptibleThread
+import org.apache.spark.util.{Utils, CallSite, UninterruptibleThread}
 
 /**
  * Manages the execution of a streaming Spark SQL query that is occurring in a separate thread.
@@ -98,7 +98,15 @@ class StreamExecution(
   /** The thread that runs the micro-batches of this stream. */
   private[sql] val microBatchThread =
     new UninterruptibleThread(s"stream execution thread for $name") {
-      override def run(): Unit = { runBatches() }
+
+      private val callSite = Utils.getCallSite()
+
+      override def run(): Unit = {
+        // To fix call site like "run at <unknown>:0", we bridge the call site from the calling
+        // thread to this micro batch thread
+        sqlContext.sparkContext.setCallSite(callSite)
+        runBatches()
+      }
     }
 
   /**
