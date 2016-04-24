@@ -631,7 +631,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkDataset(wideDF.map(_.getLong(0)), 0L until 10 : _*)
   }
 
-  test("Estimate size on ObjectProducer will cause failure") {
+  test("SPARK-14838: estimating sizeInBytes in operators with ObjectProducer shouldn't fail") {
     val dataset = Seq(
       (0, 3, 54f),
       (0, 4, 44f),
