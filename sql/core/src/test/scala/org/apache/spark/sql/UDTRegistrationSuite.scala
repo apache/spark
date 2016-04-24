@@ -65,7 +65,7 @@ class UDTRegistrationSuite extends SparkFunSuite {
     val userClasses = Seq(
     "org.apache.spark.ml.linalg.Vector",
     "org.apache.spark.ml.linalg.DenseVector",
-    "org.apache.spark.ml.linalg.SparseVector", 
+    "org.apache.spark.ml.linalg.SparseVector",
     "org.apache.spark.ml.linalg.Matrix",
     "org.apache.spark.ml.linalg.DenseMatrix",
     "org.apache.spark.ml.linalg.SparseMatrix")
