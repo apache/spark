@@ -43,6 +43,8 @@ private[sql] class TestUserClassUDT extends UserDefinedType[TestUserClass] {
 
   private[spark] override def asNullable: TestUserClassUDT = this
 
+  override def hashCode(): Int = classOf[TestUserClassUDT].getName.hashCode()
+
   override def equals(other: Any): Boolean = other match {
     case _: TestUserClassUDT => true
     case _ => false
