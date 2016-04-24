@@ -29,6 +29,7 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.{SparkException, SparkFiles}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions.Cast
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.execution.joins.BroadcastNestedLoopJoinExec
 import org.apache.spark.sql.hive._
@@ -68,8 +69,8 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   }
 
   private def assertUnsupportedFeature(body: => Unit): Unit = {
-    val e = intercept[AnalysisException] { body }
-    assert(e.getMessage.toLowerCase.contains("unsupported operation"))
+    val e = intercept[ParseException] { body }
+    assert(e.getMessage.toLowerCase.contains("operation not allowed"))
   }
 
   test("SPARK-4908: concurrent hive native commands") {
