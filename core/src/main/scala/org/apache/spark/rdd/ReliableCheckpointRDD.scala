@@ -243,7 +243,16 @@ private[spark] object ReliableCheckpointRDD extends Logging {
       if (fs.exists(partitionerFilePath)) {
         val fileInputStream = fs.open(partitionerFilePath, bufferSize)
         val serializer = SparkEnv.get.serializer.newInstance()
-        val deserializeStream = serializer.deserializeStream(fileInputStream)
+        // make sure that the file is closed if error occurrs during deserialization
+        val deserializeStream =
+          try {
+            serializer.deserializeStream(fileInputStream)
+          } catch {
+            case ex =>
+              fileInputStream.close()
+              throw ex
+          }
+
         val partitioner = Utils.tryWithSafeFinally[Partitioner] {
           deserializeStream.readObject[Partitioner]
         } {
