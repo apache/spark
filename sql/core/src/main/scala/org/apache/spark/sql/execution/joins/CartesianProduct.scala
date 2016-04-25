@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.joins
 import org.apache.spark._
 import org.apache.spark.rdd.{CartesianPartition, CartesianRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{JoinedRow, Expression, Attribute, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeRowJoiner
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
@@ -79,7 +79,10 @@ class UnsafeCartesianRDD(left : RDD[UnsafeRow], right : RDD[UnsafeRow], numField
 }
 
 
-case class CartesianProduct(left: SparkPlan, right: SparkPlan) extends BinaryNode {
+case class CartesianProduct(
+    left: SparkPlan,
+    right: SparkPlan,
+    condition: Option[Expression]) extends BinaryNode {
   override def output: Seq[Attribute] = left.output ++ right.output
 
   override private[sql] lazy val metrics = Map(
@@ -94,7 +97,18 @@ case class CartesianProduct(left: SparkPlan, right: SparkPlan) extends BinaryNod
     val pair = new UnsafeCartesianRDD(leftResults, rightResults, right.output.size)
     pair.mapPartitionsInternal { iter =>
       val joiner = GenerateUnsafeRowJoiner.create(left.schema, right.schema)
-      iter.map { r =>
+      val filtered = if (condition.isDefined) {
+        val boundCondition: (InternalRow) => Boolean =
+          newPredicate(condition.get, left.output ++ right.output)
+        val joined = new JoinedRow
+
+        iter.filter { r =>
+          boundCondition(joined(r._1, r._2))
+        }
+      } else {
+        iter
+      }
+      filtered.map { r =>
         numOutputRows += 1
         joiner.join(r._1, r._2)
       }

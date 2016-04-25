@@ -37,7 +37,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     val x = testData2.as("x")
     val y = testData2.as("y")
     val join = x.join(y, $"x.a" === $"y.a", "inner").queryExecution.optimizedPlan
-    val planned = sqlContext.sessionState.planner.EquiJoinSelection(join)
+    val planned = sqlContext.sessionState.planner.JoinSelection(join)
     assert(planned.size === 1)
   }
 
@@ -140,7 +140,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     val x = testData2.as("x")
     val y = testData2.as("y")
     val join = x.join(y, ($"x.a" === $"y.a") && ($"x.b" === $"y.b")).queryExecution.optimizedPlan
-    val planned = sqlContext.sessionState.planner.EquiJoinSelection(join)
+    val planned = sqlContext.sessionState.planner.JoinSelection(join)
     assert(planned.size === 1)
   }
 

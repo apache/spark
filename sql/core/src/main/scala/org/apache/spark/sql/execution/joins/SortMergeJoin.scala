@@ -103,10 +103,6 @@ case class SortMergeJoin(
           (r: InternalRow) => true
         }
       }
-      // The projection used to extract keys from input rows of the left child.
-      val leftKeyGenerator = UnsafeProjection.create(leftKeys, left.output)
-      // The projection used to extract keys from input rows of the right child.
-      val rightKeyGenerator = UnsafeProjection.create(rightKeys, right.output)
 
       // An ordering that can be used to compare keys from both sides.
       val keyOrdering = newNaturalAscendingOrdering(leftKeys.map(_.dataType))
@@ -119,8 +115,8 @@ case class SortMergeJoin(
             private[this] var currentRightMatches: ArrayBuffer[InternalRow] = _
             private[this] var currentMatchIdx: Int = -1
             private[this] val smjScanner = new SortMergeJoinScanner(
-              leftKeyGenerator,
-              rightKeyGenerator,
+              createLeftKeyGenerator(),
+              createRightKeyGenerator(),
               keyOrdering,
               RowIterator.fromScala(leftIter),
               RowIterator.fromScala(rightIter)
@@ -206,8 +202,8 @@ case class SortMergeJoin(
           new RowIterator {
             private[this] var currentLeftRow: InternalRow = _
             private[this] val smjScanner = new SortMergeJoinScanner(
-              leftKeyGenerator,
-              rightKeyGenerator,
+              createLeftKeyGenerator(),
+              createRightKeyGenerator(),
               keyOrdering,
               RowIterator.fromScala(leftIter),
               RowIterator.fromScala(rightIter)
@@ -238,8 +234,8 @@ case class SortMergeJoin(
           new RowIterator {
             private[this] var currentLeftRow: InternalRow = _
             private[this] val smjScanner = new SortMergeJoinScanner(
-              leftKeyGenerator,
-              rightKeyGenerator,
+              createLeftKeyGenerator(),
+              createRightKeyGenerator(),
               keyOrdering,
               RowIterator.fromScala(leftIter),
               RowIterator.fromScala(rightIter)

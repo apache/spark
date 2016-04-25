@@ -125,9 +125,8 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
           DataSinks,
           Scripts,
           Aggregation,
-          EquiJoinSelection,
-          BasicOperators,
-          DefaultJoin
+          JoinSelection,
+          BasicOperators
         )
       }
     }

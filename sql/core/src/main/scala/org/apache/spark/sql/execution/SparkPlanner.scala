@@ -38,10 +38,9 @@ class SparkPlanner(
       DDLStrategy ::
       SpecialLimits ::
       Aggregation ::
-      EquiJoinSelection ::
+      JoinSelection ::
       InMemoryScans ::
-      BasicOperators ::
-      DefaultJoin :: Nil)
+      BasicOperators :: Nil)
 
   /**
    * Used to build table scan operators where complex projection and filtering are done using
