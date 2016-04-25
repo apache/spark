@@ -258,51 +258,41 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
   }
 
   test("invalid database name and table names") {
-    {
-      val message = intercept[AnalysisException] {
-        df.write.format("parquet").saveAsTable("`d:b`.`t:a`")
-      }.getMessage
-      assert(message.contains("is not a valid name"))
+    var message = intercept[AnalysisException] {
+      df.write.format("parquet").saveAsTable("`d:b`.`t:a`")
     }
+    assert(message.getMessage.contains("is not a valid name"))
 
-    {
-      val message = intercept[AnalysisException] {
-        df.write.format("parquet").saveAsTable("`d:b`.`table`")
-      }.getMessage
-      assert(message.contains("is not a valid name"))
+    message = intercept[AnalysisException] {
+      df.write.format("parquet").saveAsTable("`d:b`.`table`")
     }
+    assert(message.getMessage.contains("is not a valid name"))
 
     withTempPath { dir =>
       val path = dir.getCanonicalPath
 
-      {
-        val message = intercept[AnalysisException] {
-          sql(
-            s"""
-            |CREATE TABLE `d:b`.`t:a` (a int)
+      var message = intercept[AnalysisException] {
+        sql(
+          s"""
+          |CREATE TABLE `d:b`.`t:a` (a int)
+          |USING parquet
+          |OPTIONS (
+          |  path '$path'
+          |)
+          """.stripMargin)
+      }.getMessage
+      assert(message.contains("is not a valid name"))
+      message = intercept[AnalysisException] {
+        sql(
+          s"""
+            |CREATE TABLE `d:b`.`table` (a int)
             |USING parquet
             |OPTIONS (
             |  path '$path'
-            |  /'
             |)
             """.stripMargin)
-        }.getMessage
-        assert(message.contains("is not a valid name"))
-      }
-
-      {
-        val message = intercept[AnalysisException] {
-          sql(
-            s"""
-              |CREATE TABLE `d:b`.`table` (a int)
-              |USING parquet
-              |OPTIONS (
-              |  path '$path'
-              |)
-              """.stripMargin)
-        }.getMessage
-        assert(message.contains("is not a valid name"))
-      }
+      }.getMessage
+      assert(message.contains("is not a valid name"))
     }
   }
 }

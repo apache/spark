@@ -56,9 +56,12 @@ case class CreateDataSourceTableCommand(
   extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
-    val tableName = tableIdent.unquotedString
     val sessionState = sqlContext.sessionState
 
+    sessionState.catalog.validateDatabaseName(tableIdent.database)
+    sessionState.catalog.validateTableName(tableIdent.table)
+
+    val tableName = tableIdent.unquotedString
     if (sessionState.catalog.tableExists(tableIdent)) {
       if (ignoreIfExists) {
         return Seq.empty[Row]
@@ -122,8 +125,12 @@ case class CreateDataSourceTableAsSelectCommand(
   extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
-    val tableName = tableIdent.unquotedString
     val sessionState = sqlContext.sessionState
+
+    sessionState.catalog.validateDatabaseName(tableIdent.database)
+    sessionState.catalog.validateTableName(tableIdent.table)
+
+    val tableName = tableIdent.unquotedString
     var createMetastoreTable = false
     var isExternal = true
     val optionsWithPath =

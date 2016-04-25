@@ -85,10 +85,6 @@ private[sql] class HiveSessionCatalog(
     MetaStoreUtils.validateName(name)
   }
 
-  override def validateDatabaseName(dbName: Option[String]): Unit = {
-    if (dbName.isDefined) validateDatabaseName(dbName.get)
-  }
-
   override def getDefaultDBPath(db: String): String = {
     val defaultPath = hiveconf.getVar(HiveConf.ConfVars.METASTOREWAREHOUSE)
     new Path(new Path(defaultPath), db + ".db").toString

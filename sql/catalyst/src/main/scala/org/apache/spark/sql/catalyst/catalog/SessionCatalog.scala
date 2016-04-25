@@ -96,11 +96,11 @@ class SessionCatalog(
   /**
    * Validate database names
    */
-  protected[this] def validateDatabaseName(dbName: Option[String]): Unit = {
+  def validateDatabaseName(dbName: Option[String]): Unit = {
     if (dbName.isDefined) validateDatabaseName(dbName.get)
   }
 
-  protected[this] def validateDatabaseName(dbName: String): Unit = {
+  def validateDatabaseName(dbName: String): Unit = {
     if (!validateName(dbName)) {
       throw new AnalysisException(s"Database name '$dbName' is not a valid name. " +
         s"Valid database names only contain characters, numbers and _.")
@@ -110,7 +110,7 @@ class SessionCatalog(
   /**
    * Validate table names
    */
-  protected[this] def validateTableName(tableName: String): Unit = {
+  def validateTableName(tableName: String): Unit = {
     if (!validateName(tableName)) {
       throw new AnalysisException(s"Table name '$tableName' is not a valid name. " +
         s"Valid table names only contain characters, numbers and _.")
