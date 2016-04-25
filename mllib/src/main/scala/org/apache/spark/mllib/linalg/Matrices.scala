@@ -606,6 +606,8 @@ class SparseMatrix @Since("1.3.0") (
     case _ => false
   }
 
+  override def hashCode(): Int = toBreeze.hashCode
+
   private[mllib] def toBreeze: BM[Double] = {
      if (!isTransposed) {
        new BSM[Double](values, numRows, numCols, colPtrs, rowIndices)

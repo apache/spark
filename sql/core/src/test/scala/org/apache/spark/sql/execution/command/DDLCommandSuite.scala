@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
@@ -31,7 +30,7 @@ class DDLCommandSuite extends PlanTest {
   private val parser = new SparkSqlParser(new SQLConf)
 
   private def assertUnsupported(sql: String): Unit = {
-    val e = intercept[AnalysisException] {
+    val e = intercept[ParseException] {
       parser.parsePlan(sql)
     }
     assert(e.getMessage.toLowerCase.contains("operation not allowed"))
@@ -501,6 +500,21 @@ class DDLCommandSuite extends PlanTest {
     assertUnsupported("ALTER TABLE table_name CONCATENATE")
     assertUnsupported(
       "ALTER TABLE table_name PARTITION (dt='2008-08-08', country='us') CONCATENATE")
+  }
+
+  test("alter table: cluster by (not supported)") {
+    assertUnsupported(
+      "ALTER TABLE table_name CLUSTERED BY (col_name) SORTED BY (col2_name) INTO 3 BUCKETS")
+    assertUnsupported("ALTER TABLE table_name CLUSTERED BY (col_name) INTO 3 BUCKETS")
+    assertUnsupported("ALTER TABLE table_name NOT CLUSTERED")
+    assertUnsupported("ALTER TABLE table_name NOT SORTED")
+  }
+
+  test("alter table: skewed by (not supported)") {
+    assertUnsupported("ALTER TABLE table_name NOT SKEWED")
+    assertUnsupported("ALTER TABLE table_name NOT STORED AS DIRECTORIES")
+    assertUnsupported("ALTER TABLE table_name SET SKEWED LOCATION (col_name1=\"location1\"")
+    assertUnsupported("ALTER TABLE table_name SKEWED BY (key) ON (1,5,6) STORED AS DIRECTORIES")
   }
 
   test("alter table: change column name/type/position/comment") {

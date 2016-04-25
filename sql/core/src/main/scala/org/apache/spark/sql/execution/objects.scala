@@ -34,7 +34,7 @@ import org.apache.spark.sql.types.{DataType, ObjectType}
 case class DeserializeToObject(
     deserializer: Expression,
     outputObjAttr: Attribute,
-    child: SparkPlan) extends UnaryNode with CodegenSupport {
+    child: SparkPlan) extends UnaryExecNode with CodegenSupport {
 
   override def output: Seq[Attribute] = outputObjAttr :: Nil
   override def producedAttributes: AttributeSet = AttributeSet(outputObjAttr)
@@ -67,9 +67,9 @@ case class DeserializeToObject(
  * Takes the input object from child and turns in into unsafe row using the given serializer
  * expression.  The output of its child must be a single-field row containing the input object.
  */
-case class SerializeFromObject(
+case class SerializeFromObjectExec(
     serializer: Seq[NamedExpression],
-    child: SparkPlan) extends UnaryNode with CodegenSupport {
+    child: SparkPlan) extends UnaryExecNode with CodegenSupport {
 
   override def output: Seq[Attribute] = serializer.map(_.toAttribute)
 
@@ -136,10 +136,11 @@ trait ObjectOperator extends SparkPlan {
  * Applies the given function to input object iterator.
  * The output of its child must be a single-field row containing the input object.
  */
-case class MapPartitions(
+case class MapPartitionsExec(
     func: Iterator[Any] => Iterator[Any],
     outputObjAttr: Attribute,
-    child: SparkPlan) extends UnaryNode with ObjectOperator {
+    child: SparkPlan)
+  extends UnaryExecNode with ObjectOperator {
 
   override def output: Seq[Attribute] = outputObjAttr :: Nil
   override def producedAttributes: AttributeSet = AttributeSet(outputObjAttr)
@@ -157,13 +158,14 @@ case class MapPartitions(
  * Applies the given function to each input object.
  * The output of its child must be a single-field row containing the input object.
  *
- * This operator is kind of a safe version of [[Project]], as it's output is custom object, we need
- * to use safe row to contain it.
+ * This operator is kind of a safe version of [[ProjectExec]], as it's output is custom object,
+ * we need to use safe row to contain it.
  */
-case class MapElements(
+case class MapElementsExec(
     func: AnyRef,
     outputObjAttr: Attribute,
-    child: SparkPlan) extends UnaryNode with ObjectOperator with CodegenSupport {
+    child: SparkPlan)
+  extends UnaryExecNode with ObjectOperator with CodegenSupport {
 
   override def output: Seq[Attribute] = outputObjAttr :: Nil
   override def producedAttributes: AttributeSet = AttributeSet(outputObjAttr)
@@ -211,11 +213,11 @@ case class MapElements(
 /**
  * Applies the given function to each input row, appending the encoded result at the end of the row.
  */
-case class AppendColumns(
+case class AppendColumnsExec(
     func: Any => Any,
     deserializer: Expression,
     serializer: Seq[NamedExpression],
-    child: SparkPlan) extends UnaryNode with ObjectOperator {
+    child: SparkPlan) extends UnaryExecNode with ObjectOperator {
 
   override def output: Seq[Attribute] = child.output ++ serializer.map(_.toAttribute)
 
@@ -236,13 +238,14 @@ case class AppendColumns(
 }
 
 /**
- * An optimized version of [[AppendColumns]], that can be executed on deserialized object directly.
+ * An optimized version of [[AppendColumnsExec]], that can be executed
+ * on deserialized object directly.
  */
-case class AppendColumnsWithObject(
+case class AppendColumnsWithObjectExec(
     func: Any => Any,
     inputSerializer: Seq[NamedExpression],
     newColumnsSerializer: Seq[NamedExpression],
-    child: SparkPlan) extends UnaryNode with ObjectOperator {
+    child: SparkPlan) extends UnaryExecNode with ObjectOperator {
 
   override def output: Seq[Attribute] = (inputSerializer ++ newColumnsSerializer).map(_.toAttribute)
 
@@ -269,14 +272,14 @@ case class AppendColumnsWithObject(
  * Groups the input rows together and calls the function with each group and an iterator containing
  * all elements in the group.  The result of this function is flattened before being output.
  */
-case class MapGroups(
+case class MapGroupsExec(
     func: (Any, Iterator[Any]) => TraversableOnce[Any],
     keyDeserializer: Expression,
     valueDeserializer: Expression,
     groupingAttributes: Seq[Attribute],
     dataAttributes: Seq[Attribute],
     outputObjAttr: Attribute,
-    child: SparkPlan) extends UnaryNode with ObjectOperator {
+    child: SparkPlan) extends UnaryExecNode with ObjectOperator {
 
   override def output: Seq[Attribute] = outputObjAttr :: Nil
   override def producedAttributes: AttributeSet = AttributeSet(outputObjAttr)
@@ -310,7 +313,7 @@ case class MapGroups(
  * iterators containing all elements in the group from left and right side.
  * The result of this function is flattened before being output.
  */
-case class CoGroup(
+case class CoGroupExec(
     func: (Any, Iterator[Any], Iterator[Any]) => TraversableOnce[Any],
     keyDeserializer: Expression,
     leftDeserializer: Expression,
@@ -321,7 +324,7 @@ case class CoGroup(
     rightAttr: Seq[Attribute],
     outputObjAttr: Attribute,
     left: SparkPlan,
-    right: SparkPlan) extends BinaryNode with ObjectOperator {
+    right: SparkPlan) extends BinaryExecNode with ObjectOperator {
 
   override def output: Seq[Attribute] = outputObjAttr :: Nil
   override def producedAttributes: AttributeSet = AttributeSet(outputObjAttr)

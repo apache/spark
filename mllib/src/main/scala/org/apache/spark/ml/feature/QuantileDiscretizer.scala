@@ -17,8 +17,6 @@
 
 package org.apache.spark.ml.feature
 
-import scala.collection.mutable
-
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml._
@@ -26,9 +24,8 @@ import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol, HasSeed}
 import org.apache.spark.ml.util._
-import org.apache.spark.sql.{Dataset, Row}
+import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.types.{DoubleType, StructType}
-import org.apache.spark.util.random.XORShiftRandom
 
 /**
  * Params for [[QuantileDiscretizer]].

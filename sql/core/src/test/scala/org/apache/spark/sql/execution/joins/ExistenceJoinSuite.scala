@@ -83,7 +83,7 @@ class ExistenceJoinSuite extends SparkPlanTest with SharedSQLContext {
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
             EnsureRequirements(left.sqlContext.sessionState.conf).apply(
-              ShuffledHashJoin(
+              ShuffledHashJoinExec(
                 leftKeys, rightKeys, joinType, BuildRight, boundCondition, left, right)),
             expectedAnswer,
             sortAnswers = true)
@@ -96,7 +96,7 @@ class ExistenceJoinSuite extends SparkPlanTest with SharedSQLContext {
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
             EnsureRequirements(left.sqlContext.sessionState.conf).apply(
-              BroadcastHashJoin(
+              BroadcastHashJoinExec(
                 leftKeys, rightKeys, joinType, BuildRight, boundCondition, left, right)),
             expectedAnswer,
             sortAnswers = true)
@@ -109,7 +109,7 @@ class ExistenceJoinSuite extends SparkPlanTest with SharedSQLContext {
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
             EnsureRequirements(left.sqlContext.sessionState.conf).apply(
-              SortMergeJoin(leftKeys, rightKeys, joinType, boundCondition, left, right)),
+              SortMergeJoinExec(leftKeys, rightKeys, joinType, boundCondition, left, right)),
             expectedAnswer,
             sortAnswers = true)
         }
@@ -120,7 +120,7 @@ class ExistenceJoinSuite extends SparkPlanTest with SharedSQLContext {
       withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
         checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
           EnsureRequirements(left.sqlContext.sessionState.conf).apply(
-            BroadcastNestedLoopJoin(left, right, BuildLeft, joinType, Some(condition))),
+            BroadcastNestedLoopJoinExec(left, right, BuildLeft, joinType, Some(condition))),
           expectedAnswer,
           sortAnswers = true)
       }
@@ -130,7 +130,7 @@ class ExistenceJoinSuite extends SparkPlanTest with SharedSQLContext {
       withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
         checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
           EnsureRequirements(left.sqlContext.sessionState.conf).apply(
-            BroadcastNestedLoopJoin(left, right, BuildRight, joinType, Some(condition))),
+            BroadcastNestedLoopJoinExec(left, right, BuildRight, joinType, Some(condition))),
           expectedAnswer,
           sortAnswers = true)
       }

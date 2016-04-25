@@ -39,6 +39,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions.ExpressionInfo
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.command.{CacheTableCommand, HiveNativeCommand}
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.client.HiveClient
@@ -71,7 +72,7 @@ object TestHive
  * test cases that rely on TestHive must be serialized.
  */
 class TestHiveContext(@transient val sparkSession: TestHiveSparkSession, isRootContext: Boolean)
-  extends HiveContext(sparkSession, isRootContext) {
+  extends SQLContext(sparkSession, isRootContext) {
 
   def this(sc: SparkContext) {
     this(new TestHiveSparkSession(HiveUtils.withHiveExternalCatalog(sc)), true)
@@ -207,7 +208,7 @@ private[hive] class TestHiveSparkSession(
 
   protected[hive] implicit class SqlCmd(sql: String) {
     def cmd: () => Unit = {
-      () => new TestHiveQueryExecution(sql).stringResult(): Unit
+      () => new TestHiveQueryExecution(sql).hiveResultString(): Unit
     }
   }
 
@@ -462,7 +463,7 @@ private[hive] class TestHiveSparkSession(
 private[hive] class TestHiveQueryExecution(
     sparkSession: TestHiveSparkSession,
     logicalPlan: LogicalPlan)
-  extends HiveQueryExecution(new SQLContext(sparkSession), logicalPlan) with Logging {
+  extends QueryExecution(new SQLContext(sparkSession), logicalPlan) with Logging {
 
   def this(sparkSession: TestHiveSparkSession, sql: String) {
     this(sparkSession, sparkSession.sessionState.sqlParser.parsePlan(sql))

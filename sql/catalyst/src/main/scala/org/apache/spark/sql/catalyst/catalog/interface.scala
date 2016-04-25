@@ -100,6 +100,23 @@ abstract class ExternalCatalog {
 
   def listTables(db: String, pattern: String): Seq[String]
 
+  def loadTable(
+      db: String,
+      table: String,
+      loadPath: String,
+      isOverwrite: Boolean,
+      holdDDLTime: Boolean): Unit
+
+  def loadPartition(
+      db: String,
+      table: String,
+      loadPath: String,
+      partition: TablePartitionSpec,
+      isOverwrite: Boolean,
+      holdDDLTime: Boolean,
+      inheritTableSpecs: Boolean,
+      isSkewedStoreAsSubdir: Boolean): Unit
+
   // --------------------------------------------------------------------------
   // Partitions
   // --------------------------------------------------------------------------

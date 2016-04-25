@@ -122,7 +122,7 @@ class MLWritable(object):
 
     @property
     def write(self):
-        """Returns an JavaMLWriter instance for this ML instance."""
+        """Returns an MLWriter instance for this ML instance."""
         raise NotImplementedError("MLWritable is not yet implemented for type: %r" % type(self))
 
     def save(self, path):
@@ -138,7 +138,7 @@ class JavaMLWritable(MLWritable):
 
     @property
     def write(self):
-        """Returns an JavaMLWriter instance for this ML instance."""
+        """Returns an MLWriter instance for this ML instance."""
         return JavaMLWriter(self)
 
 
@@ -221,7 +221,7 @@ class MLReadable(object):
 
     @classmethod
     def read(cls):
-        """Returns an JavaMLReader instance for this class."""
+        """Returns an MLReader instance for this class."""
         raise NotImplementedError("MLReadable.read() not implemented for type: %r" % cls)
 
     @classmethod
@@ -238,5 +238,5 @@ class JavaMLReadable(MLReadable):
 
     @classmethod
     def read(cls):
-        """Returns an JavaMLReader instance for this class."""
+        """Returns an MLReader instance for this class."""
         return JavaMLReader(cls)
