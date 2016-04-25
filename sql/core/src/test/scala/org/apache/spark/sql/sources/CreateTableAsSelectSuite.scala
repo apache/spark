@@ -67,6 +67,8 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSQLContext with
   }
 
   test("CREATE TEMPORARY TABLE AS SELECT based on the file without write permission") {
+    // setWritable(boolean) doesn't work on Windows
+    assume(!Utils.isWindows)
     val childPath = new File(path.toString, "child")
     path.mkdir()
     childPath.createNewFile()
