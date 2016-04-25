@@ -48,7 +48,7 @@ class SimpleTextSource extends FileFormat with DataSourceRegister {
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = new OutputWriterFactory {
-    override private[sql] def newInstance(
+    override def newInstance(
         path: String,
         bucketId: Option[Int],
         dataSchema: StructType,

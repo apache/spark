@@ -21,6 +21,8 @@ import java.io.File
 
 import scala.collection.mutable
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystConf, SimpleCatalystConf}
@@ -185,6 +187,47 @@ class SessionCatalog(
     val db = name.database.getOrElse(currentDb)
     val table = formatTableName(name.table)
     externalCatalog.getTableOption(db, table)
+  }
+
+  /**
+   * Load files stored in given path into an existing metastore table.
+   * If no database is specified, assume the table is in the current database.
+   * If the specified table is not found in the database then an [[AnalysisException]] is thrown.
+   */
+  def loadTable(
+      name: TableIdentifier,
+      loadPath: String,
+      isOverwrite: Boolean,
+      holdDDLTime: Boolean): Unit = {
+    val db = name.database.getOrElse(currentDb)
+    val table = formatTableName(name.table)
+    externalCatalog.loadTable(db, table, loadPath, isOverwrite, holdDDLTime)
+  }
+
+  /**
+   * Load files stored in given path into the partition of an existing metastore table.
+   * If no database is specified, assume the table is in the current database.
+   * If the specified table is not found in the database then an [[AnalysisException]] is thrown.
+   */
+  def loadPartition(
+      name: TableIdentifier,
+      loadPath: String,
+      partition: TablePartitionSpec,
+      isOverwrite: Boolean,
+      holdDDLTime: Boolean,
+      inheritTableSpecs: Boolean,
+      isSkewedStoreAsSubdir: Boolean): Unit = {
+    val db = name.database.getOrElse(currentDb)
+    val table = formatTableName(name.table)
+    externalCatalog.loadPartition(db, table, loadPath, partition, isOverwrite, holdDDLTime,
+      inheritTableSpecs, isSkewedStoreAsSubdir)
+  }
+
+  def defaultTablePath(tableIdent: TableIdentifier): String = {
+    val dbName = tableIdent.database.getOrElse(currentDb)
+    val dbLocation = getDatabaseMetadata(dbName).locationUri
+
+    new Path(new Path(dbLocation), formatTableName(tableIdent.table)).toString
   }
 
   // -------------------------------------------------------------

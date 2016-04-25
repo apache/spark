@@ -177,6 +177,13 @@ public final class UnsafeKVExternalSorter {
   }
 
   /**
+   * Return the total number of bytes that has been spilled into disk so far.
+   */
+  public long getSpillSize() {
+    return sorter.getSpillSize();
+  }
+
+  /**
    * Return the peak memory used so far, in bytes.
    */
   public long getPeakMemoryUsedBytes() {

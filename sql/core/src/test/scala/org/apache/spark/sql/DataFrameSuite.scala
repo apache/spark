@@ -29,7 +29,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Union}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.aggregate.TungstenAggregate
-import org.apache.spark.sql.execution.exchange.{BroadcastExchange, ReusedExchange, ShuffleExchange}
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchange}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSQLContext}
@@ -1355,16 +1355,18 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       checkAnswer(join, df)
       assert(
         join.queryExecution.executedPlan.collect { case e: ShuffleExchange => true }.size === 1)
-      assert(join.queryExecution.executedPlan.collect { case e: ReusedExchange => true }.size === 1)
+      assert(
+        join.queryExecution.executedPlan.collect { case e: ReusedExchangeExec => true }.size === 1)
       val broadcasted = broadcast(join)
       val join2 = join.join(broadcasted, "id").join(broadcasted, "id")
       checkAnswer(join2, df)
       assert(
         join2.queryExecution.executedPlan.collect { case e: ShuffleExchange => true }.size === 1)
       assert(
-        join2.queryExecution.executedPlan.collect { case e: BroadcastExchange => true }.size === 1)
+        join2.queryExecution.executedPlan
+          .collect { case e: BroadcastExchangeExec => true }.size === 1)
       assert(
-        join2.queryExecution.executedPlan.collect { case e: ReusedExchange => true }.size === 4)
+        join2.queryExecution.executedPlan.collect { case e: ReusedExchangeExec => true }.size === 4)
     }
   }
 

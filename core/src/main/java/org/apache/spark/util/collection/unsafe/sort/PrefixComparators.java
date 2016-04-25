@@ -22,7 +22,6 @@ import com.google.common.primitives.UnsignedLongs;
 import org.apache.spark.annotation.Private;
 import org.apache.spark.unsafe.types.ByteArray;
 import org.apache.spark.unsafe.types.UTF8String;
-import org.apache.spark.util.Utils;
 
 @Private
 public class PrefixComparators {
@@ -69,7 +68,7 @@ public class PrefixComparators {
    * Provides radix sort parameters. Comparators implementing this also are indicating that the
    * ordering they define is compatible with radix sort.
    */
-  public static abstract class RadixSortSupport extends PrefixComparator {
+  public abstract static class RadixSortSupport extends PrefixComparator {
     /** @return Whether the sort should be descending in binary sort order. */
     public abstract boolean sortDescending();
 
@@ -82,37 +81,37 @@ public class PrefixComparators {
   //
 
   public static final class UnsignedPrefixComparator extends RadixSortSupport {
-    @Override public final boolean sortDescending() { return false; }
-    @Override public final boolean sortSigned() { return false; }
+    @Override public boolean sortDescending() { return false; }
+    @Override public boolean sortSigned() { return false; }
     @Override
-    public final int compare(long aPrefix, long bPrefix) {
+    public int compare(long aPrefix, long bPrefix) {
       return UnsignedLongs.compare(aPrefix, bPrefix);
     }
   }
 
   public static final class UnsignedPrefixComparatorDesc extends RadixSortSupport {
-    @Override public final boolean sortDescending() { return true; }
-    @Override public final boolean sortSigned() { return false; }
+    @Override public boolean sortDescending() { return true; }
+    @Override public boolean sortSigned() { return false; }
     @Override
-    public final int compare(long bPrefix, long aPrefix) {
+    public int compare(long bPrefix, long aPrefix) {
       return UnsignedLongs.compare(aPrefix, bPrefix);
     }
   }
 
   public static final class SignedPrefixComparator extends RadixSortSupport {
-    @Override public final boolean sortDescending() { return false; }
-    @Override public final boolean sortSigned() { return true; }
+    @Override public boolean sortDescending() { return false; }
+    @Override public boolean sortSigned() { return true; }
     @Override
-    public final int compare(long a, long b) {
+    public int compare(long a, long b) {
       return (a < b) ? -1 : (a > b) ? 1 : 0;
     }
   }
 
   public static final class SignedPrefixComparatorDesc extends RadixSortSupport {
-    @Override public final boolean sortDescending() { return true; }
-    @Override public final boolean sortSigned() { return true; }
+    @Override public boolean sortDescending() { return true; }
+    @Override public boolean sortSigned() { return true; }
     @Override
-    public final int compare(long b, long a) {
+    public int compare(long b, long a) {
       return (a < b) ? -1 : (a > b) ? 1 : 0;
     }
   }
