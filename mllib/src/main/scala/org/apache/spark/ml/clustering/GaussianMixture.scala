@@ -128,7 +128,7 @@ class GaussianMixtureModel private[ml] (
   @Since("2.0.0")
   def gaussiansDF: DataFrame = {
     val modelGaussians = gaussians.map { gaussian =>
-      (gaussian.mean, gaussian.cov)
+      (Vectors.fromML(gaussian.mean), Matrices.fromML(gaussian.cov))
     }
     val sc = SparkContext.getOrCreate()
     val sqlContext = SQLContext.getOrCreate(sc)
