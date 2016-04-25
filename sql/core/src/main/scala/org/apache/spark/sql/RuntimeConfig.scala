@@ -27,7 +27,7 @@ import org.apache.spark.sql.internal.SQLConf
  *
  * @since 2.0.0
  */
-abstract class RuntimeConfig {
+abstract class RuntimeConfig extends Serializable {
 
   protected[sql] val sqlConf: SQLConf
   protected[sql] val hadoopConf: Configuration
