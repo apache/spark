@@ -138,6 +138,6 @@ test_that("sparkJars sparkPackages as comma-separated strings", {
 })
 
 test_that("sparkLapply should perform simple transforms", {
-  doubled <- sparkLapply(1:10, function(x){2 * x})
+  doubled <- spark.lapply(1:10, function(x){2 * x})
   expect_equal(doubled, as.list(2 * 1:10))
 })
