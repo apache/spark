@@ -44,6 +44,11 @@ class IllegalArgumentException(CapturedException):
     Passed an illegal or inappropriate argument.
     """
 
+class ContinuousQueryException(CapturedException):
+    """
+    Failed to analyze a SQL query plan.
+    """
+
 
 def capture_sql_exception(f):
     def deco(*a, **kw):
@@ -57,6 +62,8 @@ def capture_sql_exception(f):
                 raise AnalysisException(s.split(': ', 1)[1], stackTrace)
             if s.startswith('org.apache.spark.sql.catalyst.parser.ParseException: '):
                 raise ParseException(s.split(': ', 1)[1], stackTrace)
+            if s.startswith('org.apache.spark.sql.ContinuousQueryException: '):
+                raise ContinuousQueryException(s.split(': ', 1)[1], stackTrace)
             if s.startswith('java.lang.IllegalArgumentException: '):
                 raise IllegalArgumentException(s.split(': ', 1)[1], stackTrace)
             raise

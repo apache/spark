@@ -602,6 +602,15 @@ class SQLContext(object):
         """
         return DataFrameReader(self)
 
+    @property
+    @since(2.0)
+    def streams(self):
+        """Returns a :class:`ContinuousQueryManager` that allows managing all the
+        :class:`ContinuousQuery` ContinuousQueries active on `this` context.
+        """
+        from pyspark.sql.streaming import ContinuousQueryManager
+        return ContinuousQueryManager(self._ssql_ctx.streams())
+
 
 class HiveContext(SQLContext):
     """A variant of Spark SQL that integrates with data stored in Hive.

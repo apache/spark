@@ -924,6 +924,8 @@ class SQLTests(ReusedPySparkTestCase):
 
     def test_stream_save_options(self):
         df = self.sqlCtx.read.format('text').stream('python/test_support/sql/streaming')
+        for cq in self.sqlCtx.streams.active:
+            cq.stop()
         tmpPath = tempfile.mkdtemp()
         shutil.rmtree(tmpPath)
         self.assertTrue(df.isStreaming)
@@ -944,6 +946,8 @@ class SQLTests(ReusedPySparkTestCase):
 
     def test_stream_save_options_overwrite(self):
         df = self.sqlCtx.read.format('text').stream('python/test_support/sql/streaming')
+        for cq in self.sqlCtx.streams.active:
+            cq.stop()
         tmpPath = tempfile.mkdtemp()
         shutil.rmtree(tmpPath)
         self.assertTrue(df.isStreaming)
@@ -969,6 +973,8 @@ class SQLTests(ReusedPySparkTestCase):
 
     def test_stream_await_termination(self):
         df = self.sqlCtx.read.format('text').stream('python/test_support/sql/streaming')
+        for cq in self.sqlCtx.streams.active:
+            cq.stop()
         tmpPath = tempfile.mkdtemp()
         shutil.rmtree(tmpPath)
         self.assertTrue(df.isStreaming)
@@ -984,6 +990,31 @@ class SQLTests(ReusedPySparkTestCase):
             pass
         now = time.time()
         res = cq.awaitTermination(2600)  # test should take at least 2 seconds
+        duration = time.time() - now
+        self.assertTrue(duration >= 2)
+        self.assertFalse(res)
+        cq.stop()
+        shutil.rmtree(tmpPath)
+
+    def test_query_manager_await_termination(self):
+        df = self.sqlCtx.read.format('text').stream('python/test_support/sql/streaming')
+        for cq in self.sqlCtx.streams.active:
+            cq.stop()
+        tmpPath = tempfile.mkdtemp()
+        shutil.rmtree(tmpPath)
+        self.assertTrue(df.isStreaming)
+        out = os.path.join(tmpPath, 'out')
+        chk = os.path.join(tmpPath, 'chk')
+        cq = df.write.startStream(path=out, format='parquet', queryName='this_query',
+                                  checkpointLocation=chk)
+        self.assertTrue(cq.isActive)
+        try:
+            self.sqlCtx.streams.awaitAnyTermination("hello")
+            self.fail("Expected a value exception")
+        except ValueError:
+            pass
+        now = time.time()
+        res = self.sqlCtx.streams.awaitAnyTermination(2600)  # test should take at least 2 seconds
         duration = time.time() - now
         self.assertTrue(duration >= 2)
         self.assertFalse(res)
