@@ -19,13 +19,12 @@ package org.apache.spark.sql.hive.orc
 
 import java.io.File
 
-import org.apache.hadoop.hive.ql.io.orc.OrcFile.OrcTableProperties
-
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.ql.io.orc.{CompressionKind, OrcFile}
+import org.apache.hadoop.hive.ql.io.orc.OrcFile.OrcTableProperties
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.Row
