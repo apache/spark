@@ -71,7 +71,7 @@ class FileScanRDD(
    * such as starting up connections to open the file and any initial buffering. The expectation
    * is that `currentIterator` is CPU intensive and `nextFile` is IO intensive.
    */
-  val asyncIO = sqlContext.conf.filesAsyncIO
+  val isAsyncIOEnabled = sqlContext.conf.filesAsyncIO
 
   case class NextFile(file: PartitionedFile, iter: Iterator[Object])
 
@@ -105,11 +105,10 @@ class FileScanRDD(
 
       private[this] val files = split.asInstanceOf[FilePartition].files.toIterator
       private[this] var currentFile: PartitionedFile = null
-
-      // TODO: do we need to close this?
       private[this] var currentIterator: Iterator[Object] = null
 
-      private[this] var nextFile: Future[NextFile] = if (asyncIO) prepareNextFile() else null
+      private[this] var nextFile: Future[NextFile] =
+        if (isAsyncIOEnabled) prepareNextFile() else null
 
       def hasNext = (currentIterator != null && currentIterator.hasNext) || nextIterator()
       def next() = {
@@ -145,10 +144,13 @@ class FileScanRDD(
 
       /** Advances to the next file. Returns true if a new non-empty iterator is available. */
       private def nextIterator2(): Boolean = {
-        val file = if (asyncIO) {
-          if (nextFile == null) return false
-          // Wait for the async task to complete
-          ThreadUtils.awaitResult(nextFile, Duration.Inf)
+        val file = if (isAsyncIOEnabled) {
+          if (nextFile == null) {
+            return false
+          } else {
+            // Wait for the async task to complete
+            ThreadUtils.awaitResult(nextFile, Duration.Inf)
+          }
         } else {
           if (!files.hasNext) return false
           val f = files.next()
@@ -159,7 +161,7 @@ class FileScanRDD(
         InputFileNameHolder.setInputFileName(file.file.filePath)
         currentIterator = file.iter
 
-        if (asyncIO) {
+        if (isAsyncIOEnabled) {
           // Asynchronously start the next file.
           nextFile = prepareNextFile()
         }
@@ -173,14 +175,14 @@ class FileScanRDD(
         InputFileNameHolder.unsetInputFileName()
       }
 
-      def prepareNextFile() = {
+      def prepareNextFile(): Future[NextFile] = {
         if (files.hasNext) {
           Future {
-            val file = files.next()
-            val it = readFunction(file)
+            val nextFile = files.next()
+            val nextFileIter = readFunction(nextFile)
             // Read something from the file to trigger some initial IO.
-            it.hasNext
-            NextFile(file, it)
+            nextFileIter.hasNext
+            NextFile(nextFile, nextFileIter)
           }(FileScanRDD.ioExecutionContext)
         } else {
           null
