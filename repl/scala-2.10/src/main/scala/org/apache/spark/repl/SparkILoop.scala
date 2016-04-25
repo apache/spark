@@ -1026,7 +1026,16 @@ class SparkILoop(
   }
 
   @DeveloperApi
-  def createSparkSession(): SparkSession = Main.createSparkSession()
+  // TODO: don't duplicate this code
+  def createSparkSession(): SparkSession = {
+    if (SparkSession.hiveClassesArePresent) {
+      logInfo("Creating Spark session with Hive support")
+      SparkSession.withHiveSupport(sparkContext)
+    } else {
+      logInfo("Creating Spark session")
+      new SparkSession(sparkContext)
+    }
+  }
 
   private def getMaster(): String = {
     val master = this.master match {
