@@ -232,7 +232,8 @@ private[deploy] object RPackageUtils extends Logging {
     try {
       filesToBundle.foreach { file =>
         // get the relative paths for proper naming in the zip file
-        val relPath = file.getAbsolutePath.replaceFirst(dir.getAbsolutePath, "")
+        val relPath = Utils.normalizePath(file.getAbsolutePath)
+          .replaceFirst(Utils.normalizePath(dir.getAbsolutePath), "")
         val fis = new FileInputStream(file)
         val zipEntry = new ZipEntry(relPath)
         zipOutputStream.putNextEntry(zipEntry)
