@@ -78,7 +78,6 @@ private[sql] class HiveSessionCatalog(
   // ----------------------------------------------------------------
 
   override def validateName(name: String): Boolean = {
-    super.validateName(name)
     // Since we are saving metadata to metastore, we need to check if metastore supports
     // the table name and database name we have for this query. MetaStoreUtils.validateName
     // is the method used by Hive to check if a table name or a database name is valid for
