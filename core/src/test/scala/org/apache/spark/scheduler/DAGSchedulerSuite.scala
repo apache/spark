@@ -335,7 +335,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
    * then check if all stages have correct parent stages.
    * Note: [] means an RDD, () means a shuffle dependency.
    */
-  test("parent stages") {
+  test("[SPARK-13902] parent stages") {
     val rddA = new MyRDD(sc, 1, Nil)
 
     val shuffleDef1 = new ShuffleDependency(rddA, new HashPartitioner(1))
