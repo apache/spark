@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared.HasInputCols
@@ -38,6 +38,7 @@ class ColumnPruner (override val uid: String)
   /** @group setParam */
   def setInputCols(values: Array[String]): this.type = set(inputCols, values)
 
+  @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     checkCanTransform(dataset.schema)
     val columnsToKeep = dataset.columns.filter(!$(inputCols).contains(_))
@@ -57,6 +58,8 @@ class ColumnPruner (override val uid: String)
   override def copy(extra: ParamMap): ColumnPruner = defaultCopy(extra)
 }
 
+@Since("2.0.0")
 object ColumnPruner extends DefaultParamsReadable[ColumnPruner] {
+  @Since("2.0.0")
   override def load(path: String): ColumnPruner = super.load(path)
 }
