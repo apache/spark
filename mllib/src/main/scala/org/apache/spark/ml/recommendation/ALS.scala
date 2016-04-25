@@ -311,7 +311,6 @@ class ALSModel private[ml] (
   @Since("1.3.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema)
-    transformSchema(dataset.schema)
     if (isRecommendingTopK) {
       $(recommendFor) match {
         case "user" => recommendItems(dataset, $(k))
