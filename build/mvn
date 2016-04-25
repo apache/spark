@@ -70,8 +70,7 @@ install_app() {
 # Determine the Maven version from the root pom.xml file and
 # install maven under the build/ folder if needed.
 install_mvn() {
-  local MVN_VERSION=`grep "<maven.version>" "${_DIR}/../pom.xml" | \
-                     head -1 | cut -f2 -d'>' | cut -f1 -d'<'`
+  local MVN_VERSION=`grep "<maven.version>" "${_DIR}/../pom.xml" | head -n1 | awk -F '[<>]' '{print $3}'`
   MVN_BIN="$(command -v mvn)"
   if [ "$MVN_BIN" ]; then
     local MVN_DETECTED_VERSION="$(mvn --version | head -n1 | awk '{print $3}')"
@@ -108,8 +107,7 @@ install_zinc() {
 # the build/ folder
 install_scala() {
   # determine the Scala version used in Spark
-  local scala_version=`grep "scala.version" "${_DIR}/../pom.xml" | \
-                       head -1 | cut -f2 -d'>' | cut -f1 -d'<'`
+  local scala_version=`grep "scala.version" "${_DIR}/../pom.xml" | head -n1 | awk -F '[<>]' '{print $3}'`
   local scala_bin="${_DIR}/scala-${scala_version}/bin/scala"
   local TYPESAFE_MIRROR=${TYPESAFE_MIRROR:-https://downloads.typesafe.com}
 
