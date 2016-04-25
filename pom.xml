@@ -126,8 +126,6 @@
     <hadoop.version>2.2.0</hadoop.version>
     <protobuf.version>2.5.0</protobuf.version>
     <yarn.version>${hadoop.version}</yarn.version>
-    <hbase.version>0.98.17-hadoop2</hbase.version>
-    <hbase.artifact>hbase</hbase.artifact>
     <flume.version>1.6.0</flume.version>
     <zookeeper.version>3.4.5</zookeeper.version>
     <curator.version>2.4.0</curator.version>
@@ -205,7 +203,6 @@
     -->
     <flume.deps.scope>compile</flume.deps.scope>
     <hadoop.deps.scope>compile</hadoop.deps.scope>
-    <hbase.deps.scope>compile</hbase.deps.scope>
     <hive.deps.scope>compile</hive.deps.scope>
     <parquet.deps.scope>compile</parquet.deps.scope>
     <parquet.test.deps.scope>test</parquet.test.deps.scope>
@@ -739,7 +736,7 @@
           <exclusion>
             <groupId>jline</groupId>
             <artifactId>jline</artifactId>
-          </exclusion>          
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
@@ -2571,9 +2568,6 @@
     </profile>
     <profile>
       <id>hadoop-provided</id>
-    </profile>
-    <profile>
-      <id>hbase-provided</id>
     </profile>
     <profile>
       <id>hive-provided</id>
