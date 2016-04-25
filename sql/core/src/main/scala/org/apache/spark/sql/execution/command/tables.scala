@@ -388,3 +388,31 @@ case class ShowTablePropertiesCommand(table: TableIdentifier, propertyKey: Optio
     }
   }
 }
+
+/**
+* A command for users to get the DDL of an existing table
+* The syntax of using this command in SQL is:
+* {{{
+*   SHOW CREATE TABLE tableIdentifier
+* }}}
+*/
+case class ShowCreateTableCommand(tableIdentifier: TableIdentifier)
+  extends RunnableCommand{
+
+  // The result of SHOW CREATE TABLE is the whole string of DDL command
+  override val output: Seq[Attribute] = {
+    AttributeReference("DDL", StringType, nullable = false)() :: Nil
+  }
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    val catalog = sqlContext.sessionState.catalog
+    val ddl = catalog.showCreateTable(tableIdentifier)
+    if (ddl.contains("CLUSTERED BY") || ddl.contains("SKEWED BY") || ddl.contains("STORED BY")) {
+      Seq(Row("WARN: This DDL is not supported by Spark SQL natively, " +
+          "because it contains 'CLUSTERED BY', 'SKEWED BY' or 'STORED BY' clause."),
+          Row(ddl))
+    } else {
+      Seq(Row(ddl))
+    }
+  }
+}

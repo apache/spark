@@ -20,10 +20,9 @@ package org.apache.spark.sql.hive
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
-import org.apache.spark.sql.hive.execution.HiveNativeCommand
+import org.apache.spark.sql.execution.command.HiveNativeCommand
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
-import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 class HiveShowDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
@@ -107,7 +106,6 @@ class HiveShowDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
             |create external table t1(c1 int COMMENT 'first column', c2 string)
             |COMMENT 'some table'
             |PARTITIONED BY (c3 int COMMENT 'partition column', c4 string)
-            |CLUSTERED BY (c1, c2) INTO 5 BUCKETS
             |row format delimited fields terminated by ','
             |COLLECTION ITEMS TERMINATED BY '@'
             |MAP KEYS TERMINATED BY '#'
@@ -133,7 +131,6 @@ class HiveShowDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
             s"""
               |create table t1(c1 int, c2 string)
               |row format delimited fields terminated by ','
-              |stored as parquet
               |location '${tmpDir}'
             """.stripMargin)
           sql(
