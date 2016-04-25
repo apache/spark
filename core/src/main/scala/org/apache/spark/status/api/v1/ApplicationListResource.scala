@@ -68,7 +68,10 @@ private[spark] object ApplicationsListResource {
       memoryPerExecutorMB = None,
       attempts = app.attempts.map { internalAttemptInfo =>
         new ApplicationAttemptInfo(
-          attemptId = internalAttemptInfo.attemptId,
+          attemptId = internalAttemptInfo.attemptId match {
+            case Some(str) => internalAttemptInfo.attemptId
+            case None => Some("1")
+          },
           startTime = new Date(internalAttemptInfo.startTime),
           endTime = new Date(internalAttemptInfo.endTime),
           duration =
@@ -97,7 +100,7 @@ private[spark] object ApplicationsListResource {
       coresPerExecutor = internal.desc.coresPerExecutor,
       memoryPerExecutorMB = Some(internal.desc.memoryPerExecutorMB),
       attempts = Seq(new ApplicationAttemptInfo(
-        attemptId = None,
+        attemptId = Some("1"),
         startTime = new Date(internal.startTime),
         endTime = new Date(internal.endTime),
         duration =
