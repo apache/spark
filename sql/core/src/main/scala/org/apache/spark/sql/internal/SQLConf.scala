@@ -438,6 +438,12 @@ object SQLConf {
     .longConf
     .createWithDefault(4 * 1024 * 1024)
 
+  val FILES_ASYNC_IO = SQLConfigBuilder("spark.sql.files.asyncIO")
+    .internal()
+    .doc("If true, attempts to asynchronously do IO when reading data.")
+    .booleanConf
+    .createWithDefault(true)
+
   val EXCHANGE_REUSE_ENABLED = SQLConfigBuilder("spark.sql.exchange.reuse")
     .internal()
     .doc("When true, the planner will try to find out duplicated exchanges and re-use them.")
@@ -551,6 +557,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def filesMaxPartitionBytes: Long = getConf(FILES_MAX_PARTITION_BYTES)
 
   def filesOpenCostInBytes: Long = getConf(FILES_OPEN_COST_IN_BYTES)
+
+  def filesAsyncIO: Boolean = getConf(FILES_ASYNC_IO)
 
   def useCompression: Boolean = getConf(COMPRESS_CACHED)
 
