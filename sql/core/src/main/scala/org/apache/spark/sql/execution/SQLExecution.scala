@@ -52,8 +52,14 @@ private[sql] object SQLExecution {
         try {
           body
         } finally {
+          val driverAccumUpdates = queryExecution.executedPlan
+            .collect { case plan: SparkPlan => plan }
+            .flatMap(_.metrics.values.toSeq)
+            .map { a => a.toInfo(Some(a.localValue), None) }
           sqlContext.sparkContext.listenerBus.post(SparkListenerSQLExecutionEnd(
-            executionId, System.currentTimeMillis()))
+            executionId,
+            System.currentTimeMillis(),
+            driverAccumUpdates))
         }
       } finally {
         sc.setLocalProperty(EXECUTION_ID_KEY, null)
