@@ -505,7 +505,7 @@ class ALSCleanerSuite extends SparkFunSuite {
         val deps = keysOnly.dependencies
         keysOnly.checkpoint()
         keysOnly.count()
-        ALS.cleanDependencies(sc, deps, true)
+        ALS.cleanShuffleDependencies(sc, deps, true)
         assert(keysOnly.isCheckpointed)
         val resultingFiles = getAllFiles -- filesBefore
         assert(resultingFiles === Set())
@@ -541,7 +541,6 @@ class ALSCleanerSuite extends SparkFunSuite {
           .setRegParam(1e-5)
           .setSeed(0)
           .setCheckpointInterval(1)
-        val alpha = als.getAlpha
         val model = als.fit(training.toDF())
         val resultingFiles = getAllFiles -- filesBefore
         // We expect the last shuffles file to be around, but no more

@@ -664,7 +664,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
         userFactors = computeFactors(itemFactors, itemOutBlocks, userInBlocks, rank, regParam,
           itemLocalIndexEncoder, implicitPrefs, alpha, solver)
         if (shouldCheckpoint(iter)) {
-          ALS.cleanDependencies(sc, deps)
+          ALS.cleanShuffleDependencies(sc, deps)
           deletePreviousCheckpointFile()
           previousCheckpointFile = itemFactors.getCheckpointFile
         }
@@ -678,8 +678,8 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
           val deps = itemFactors.dependencies
           itemFactors.checkpoint()
           itemFactors.count() // checkpoint item factors and cut lineage
+          ALS.cleanShuffleDependencies(sc, deps)
           deletePreviousCheckpointFile()
-          ALS.cleanDependencies(sc, deps)
           previousCheckpointFile = itemFactors.getCheckpointFile
         }
         userFactors = computeFactors(itemFactors, itemOutBlocks, userInBlocks, rank, regParam,
@@ -1314,7 +1314,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
   /**
    * Private function to clean up its all of the shuffles eagerly.
    */
-  private[spark] def cleanDependencies[T](sc: SparkContext, deps: Seq[Dependency[_]],
+  private[spark] def cleanShuffleDependencies[T](sc: SparkContext, deps: Seq[Dependency[_]],
       blocking: Boolean = false): Unit = {
     // If there is no reference tracking we skip clean up.
     if (sc.cleaner.isEmpty) {
