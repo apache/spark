@@ -54,8 +54,8 @@ object MLTestingUtils extends SparkFunSuite {
     val thrown = intercept[IllegalArgumentException] {
       estimator.fit(dfWithStringLabels)
     }
-    assert(thrown.getMessage contains
-      "Column label must be of type NumericType but was actually of type StringType")
+    assert(thrown.getMessage.contains(
+      "Column label must be of type NumericType but was actually of type StringType"))
   }
 
   def checkNumericTypes[T <: Evaluator](evaluator: T, sqlContext: SQLContext): Unit = {
@@ -70,8 +70,8 @@ object MLTestingUtils extends SparkFunSuite {
     val thrown = intercept[IllegalArgumentException] {
       evaluator.evaluate(dfWithStringLabels)
     }
-    assert(thrown.getMessage contains
-      "Column label must be of type NumericType but was actually of type StringType")
+    assert(thrown.getMessage.contains(
+      "Column label must be of type NumericType but was actually of type StringType"))
   }
 
   def genClassifDFWithNumericLabelCol(
