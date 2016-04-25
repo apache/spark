@@ -35,6 +35,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.*;
 
+import org.apache.spark.util.Utils;
 import scala.Tuple2;
 import scala.Tuple3;
 import scala.Tuple4;
@@ -1071,7 +1072,7 @@ public class JavaAPISuite implements Serializable {
     byte[] content1 = "spark is easy to use.\n".getBytes(StandardCharsets.UTF_8);
     byte[] content2 = "spark is also easy to use.\n".getBytes(StandardCharsets.UTF_8);
 
-    String tempDirName = tempDir.getAbsolutePath();
+    String tempDirName = Utils.normalizePath(tempDir.getAbsolutePath());
     Files.write(content1, new File(tempDirName + "/part-00000"));
     Files.write(content2, new File(tempDirName + "/part-00001"));
 
