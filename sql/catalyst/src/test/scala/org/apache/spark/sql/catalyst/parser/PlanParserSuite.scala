@@ -17,11 +17,13 @@
 package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.types.{BooleanType, IntegerType}
+import org.apache.spark.sql.types.IntegerType
+
 
 class PlanParserSuite extends PlanTest {
   import CatalystSqlParser._
@@ -300,7 +302,7 @@ class PlanParserSuite extends PlanTest {
     // Unresolved generator.
     val expected = table("t")
       .generate(
-        UnresolvedGenerator("posexplode", Seq('x)),
+        UnresolvedGenerator(FunctionIdentifier("posexplode"), Seq('x)),
         join = true,
         outer = false,
         Some("posexpl"),
