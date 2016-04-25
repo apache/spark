@@ -249,10 +249,11 @@ class ReplSuite extends SparkFunSuite {
     assertDoesNotContain("Exception", output)
   }
 
-  test("SPARK-2576 importing SQLContext.createDataFrame.") {
+  test("SPARK-2576 importing implicits") {
     // We need to use local-cluster to test this case.
     val output = runInterpreter("local-cluster[1,1,1024]",
       """
+        |import spark.implicits._
         |case class TestCaseClass(value: Int)
         |sc.parallelize(1 to 10).map(x => TestCaseClass(x)).toDF().collect()
         |
@@ -366,7 +367,7 @@ class ReplSuite extends SparkFunSuite {
   test("define case class and create Dataset together with paste mode") {
     val output = runInterpreterInPasteMode("local-cluster[1,1,1024]",
       """
-        |import sqlContext.implicits._
+        |import spark.implicits._
         |case class TestClass(value: Int)
         |Seq(TestClass(1)).toDS()
       """.stripMargin)
