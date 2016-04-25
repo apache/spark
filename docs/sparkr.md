@@ -141,7 +141,7 @@ head(people)
 # SparkR automatically infers the schema from the JSON file
 printSchema(people)
 # root
-#  |-- age: integer (nullable = true)
+#  |-- age: long (nullable = true)
 #  |-- name: string (nullable = true)
 
 {% endhighlight %}
@@ -195,7 +195,7 @@ df <- createDataFrame(sqlContext, faithful)
 
 # Get basic information about the DataFrame
 df
-## DataFrame[eruptions:double, waiting:double]
+## SparkDataFrame[eruptions:double, waiting:double]
 
 # Select only the "eruptions" column
 head(select(df, df$eruptions))
@@ -228,14 +228,13 @@ SparkR data frames support a number of commonly used functions to aggregate data
 # We use the `n` operator to count the number of times each waiting time appears
 head(summarize(groupBy(df, df$waiting), count = n(df$waiting)))
 ##  waiting count
-##1      81    13
-##2      60     6
-##3      68     1
+##1      70     4
+##2      67     1
+##3      69     2
 
 # We can also sort the output from the aggregation to get the most common waiting times
 waiting_counts <- summarize(groupBy(df, df$waiting), count = n(df$waiting))
 head(arrange(waiting_counts, desc(waiting_counts$count)))
-
 ##   waiting count
 ##1      78    15
 ##2      83    14
