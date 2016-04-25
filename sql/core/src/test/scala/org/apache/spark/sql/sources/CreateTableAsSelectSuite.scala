@@ -83,6 +83,8 @@ class CreateTableAsSelectSuite
   }
 
   test("CREATE TABLE USING AS SELECT based on the file without write permission") {
+    // setWritable(boolean) doesn't work on Windows
+    assume(!Utils.isWindows)
     val childPath = new File(path.toString, "child")
     path.mkdir()
     path.setWritable(false)
