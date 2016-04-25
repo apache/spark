@@ -1253,12 +1253,11 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   private def verifyNonExchangingSingleAgg(df: DataFrame) = {
     var atFirstAgg: Boolean = false
     df.queryExecution.executedPlan.foreach {
-      case agg: HashAggregateExec => {
+      case agg: HashAggregateExec =>
         if (atFirstAgg) {
           fail("Should not have back to back Aggregates")
         }
         atFirstAgg = true
-      }
       case _ =>
     }
   }
