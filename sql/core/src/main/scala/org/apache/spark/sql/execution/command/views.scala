@@ -144,11 +144,11 @@ case class CreateViewCommand(
     val viewSchema: Seq[CatalogColumn] = {
       if (tableDesc.schema.isEmpty) {
         analyzedPlan.output.map { a =>
-          CatalogColumn(a.name, a.dataType.simpleString)
+          CatalogColumn(a.name, a.dataType.catalogString)
         }
       } else {
         analyzedPlan.output.zip(tableDesc.schema).map { case (a, col) =>
-          CatalogColumn(col.name, a.dataType.simpleString, nullable = true, col.comment)
+          CatalogColumn(col.name, a.dataType.catalogString, nullable = true, col.comment)
         }
       }
     }

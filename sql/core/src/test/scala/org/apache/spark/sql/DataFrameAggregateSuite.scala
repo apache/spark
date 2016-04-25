@@ -61,6 +61,21 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
       df1.groupBy("key").min("value2"),
       Seq(Row("a", 0), Row("b", 4))
     )
+
+    checkAnswer(
+      decimalData.groupBy("a").agg(sum("b")),
+      Seq(Row(new java.math.BigDecimal(1.0), new java.math.BigDecimal(3.0)),
+        Row(new java.math.BigDecimal(2.0), new java.math.BigDecimal(3.0)),
+        Row(new java.math.BigDecimal(3.0), new java.math.BigDecimal(3.0)))
+    )
+
+    checkAnswer(
+      decimalDataWithNulls.groupBy("a").agg(sum("b")),
+      Seq(Row(new java.math.BigDecimal(1.0), new java.math.BigDecimal(1.0)),
+        Row(new java.math.BigDecimal(2.0), new java.math.BigDecimal(1.0)),
+        Row(new java.math.BigDecimal(3.0), new java.math.BigDecimal(3.0)),
+        Row(null, new java.math.BigDecimal(2.0)))
+    )
   }
 
   test("rollup") {

@@ -31,7 +31,7 @@ import org.apache.spark.sql.internal.SessionState
 
 
 /**
- * A class that holds all session-specific state in a given [[HiveContext]].
+ * A class that holds all session-specific state in a given [[SparkSession]] backed by Hive.
  */
 private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) {
 
@@ -110,7 +110,6 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
         experimentalMethods.extraStrategies ++ Seq(
           FileSourceStrategy,
           DataSourceStrategy,
-          HiveDDLStrategy,
           DDLStrategy,
           SpecialLimits,
           InMemoryScans,
@@ -140,7 +139,6 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
    */
   def setDefaultOverrideConfs(): Unit = {
     setConf(ConfVars.HIVE_SUPPORT_SQL11_RESERVED_KEYWORDS.varname, "false")
-    conf.setConfString("spark.sql.caseSensitive", "false")
   }
 
   override def setConf(key: String, value: String): Unit = {
