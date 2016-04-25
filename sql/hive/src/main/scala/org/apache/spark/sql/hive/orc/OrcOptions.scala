@@ -43,6 +43,7 @@ class OrcOptions(
     // with keys in `shortOrcCompressionCodecNames` in Spark, this value should not be
     // used as the key for `shortOrcCompressionCodecNames` but just a return value.
     parameters.get("compression") match {
+      case Some(null) if default != null => default
       case Some(name) =>
         if (!shortOrcCompressionCodecNames.contains(name)) {
           val availableCodecs = shortOrcCompressionCodecNames.keys.map(_.toLowerCase)
@@ -51,7 +52,6 @@ class OrcOptions(
         }
         shortOrcCompressionCodecNames(name).name()
       case None if default != null => default
-      case Some(null) if default != null => default
       case _ => CompressionKind.ZLIB.name()
     }
   }
