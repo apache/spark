@@ -108,11 +108,11 @@ class TestHiveContext(
 
 
 private[hive] class TestHiveSparkSession(
-    sc: SparkContext,
+    @transient private val sc: SparkContext,
     val warehousePath: File,
     scratchDirPath: File,
     metastoreTemporaryConf: Map[String, String],
-    existingSharedState: Option[TestHiveSharedState])
+    @transient private val existingSharedState: Option[TestHiveSharedState])
   extends SparkSession(sc) with Logging { self =>
 
   def this(sc: SparkContext) {
