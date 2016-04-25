@@ -193,7 +193,12 @@ class SessionCatalogSuite extends SparkFunSuite {
     e = intercept[AnalysisException] {
       catalog.setCurrentDatabase(illegalDBName)
     }
-    assert(e.getMessage.contains(expectedMsg))
+    assert(e.getMessage.contains(s"cannot set current database to non-existent '$illegalDBName'"))
+
+    // We do not issue an exception if the database does not exist when the illegal name is used.
+    // Users are allowed to issue queries directly on files. For example,
+    // select id from `org.apache.spark.sql.parquet`.`path/to/parquet/files` as p
+    assert(!catalog.databaseExists(illegalDBName))
   }
 
   // --------------------------------------------------------------------------
@@ -265,10 +270,10 @@ class SessionCatalogSuite extends SparkFunSuite {
     }
     assert(e.getMessage.contains(expectedMsg))
 
-    e = intercept[AnalysisException] {
-      catalog.tableExists(TableIdentifier(illegalTableName, Some("db2")))
-    }
-    assert(e.getMessage.contains(expectedMsg))
+    // We do not issue an exception if the table does not exist when the illegal name is used.
+    // Users are allowed to issue queries directly on files. For example,
+    // select id from `org.apache.spark.sql.parquet`.`path/to/parquet/files` as p
+    assert(!catalog.tableExists(TableIdentifier(illegalTableName, Some("db2"))))
   }
 
   test("create table when database does not exist") {

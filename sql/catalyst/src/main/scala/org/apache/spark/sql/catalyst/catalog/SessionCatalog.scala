@@ -61,6 +61,8 @@ class SessionCatalog(
 
   protected[this] val tempTables = new mutable.HashMap[String, LogicalPlan]
 
+  protected[this] val validName = "([\\w_]+)".r
+
   // Note: we track current database here because certain operations do not explicitly
   // specify the database (e.g. DROP TABLE my_table). In these cases we must first
   // check whether the temporary table or function exists, then, if not, operate on
@@ -81,10 +83,13 @@ class SessionCatalog(
   }
 
   /**
-   * Validate names
+   * Checks if the given name conforms the Hive standard ("[a-zA-z_0-9]+"),
+   * i.e. if this name only contains characters, numbers, and _.
+   *
+   * This method is intended to have the same behavior of
+   * org.apache.hadoop.hive.metastore.MetaStoreUtils.validateName.
    */
   protected[this] def validateName(name: String): Boolean = {
-    val validName = "([_A-Za-z0-9]+)".r
     validName.pattern.matcher(name).matches()
   }
 
@@ -138,8 +143,14 @@ class SessionCatalog(
     externalCatalog.getDatabase(db)
   }
 
+ /**
+  * Return whether a database with the specified name exists.
+  *
+  * We do not validate if names are following the naming rules when checking if database exists.
+  * Running SQL on files directly could break the rules. For example,
+  *   select id from `org.apache.spark.sql.parquet`.`path/to/parquet/files` as p
+  */
   def databaseExists(db: String): Boolean = {
-    validateDatabaseName(db)
     externalCatalog.databaseExists(db)
   }
 
@@ -379,12 +390,14 @@ class SessionCatalog(
    * exists in that particular database instead. In that case, even if there is a temporary
    * table with the same name, we will return false if the specified database does not
    * contain the table.
+   *
+   * We do not validate if names are following the naming rules when checking if table exists.
+   * Running SQL on files directly could break the rules. For example,
+   *   select id from `org.apache.spark.sql.parquet`.`path/to/parquet/files` as p
    */
   def tableExists(name: TableIdentifier): Boolean = {
     val db = name.database.getOrElse(currentDb)
-    validateDatabaseName(db)
     val table = formatTableName(name.table)
-    validateTableName(table)
     if (name.database.isDefined || !tempTables.contains(table)) {
       externalCatalog.tableExists(db, table)
     } else {

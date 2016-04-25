@@ -90,20 +90,6 @@ private[sql] class HiveSessionCatalog(
     if (dbName.isDefined) validateDatabaseName(dbName.get)
   }
 
-  override def validateDatabaseName(dbName: String): Unit = {
-    if (!validateName(dbName)) {
-      throw new AnalysisException(s"Database name '$dbName' is not a valid name for metastore. " +
-        s"Metastore only accepts database name containing characters, numbers and _.")
-    }
-  }
-
-  override def validateTableName(tableName: String): Unit = {
-    if (!validateName(tableName)) {
-      throw new AnalysisException(s"Table name '$tableName' is not a valid name for metastore. " +
-        s"Metastore only accepts table name containing characters, numbers and _.")
-    }
-  }
-
   override def getDefaultDBPath(db: String): String = {
     val defaultPath = hiveconf.getVar(HiveConf.ConfVars.METASTOREWAREHOUSE)
     new Path(new Path(defaultPath), db + ".db").toString

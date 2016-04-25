@@ -262,14 +262,14 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
       val message = intercept[AnalysisException] {
         df.write.format("parquet").saveAsTable("`d:b`.`t:a`")
       }.getMessage
-      assert(message.contains("is not a valid name for metastore"))
+      assert(message.contains("is not a valid name"))
     }
 
     {
       val message = intercept[AnalysisException] {
         df.write.format("parquet").saveAsTable("`d:b`.`table`")
       }.getMessage
-      assert(message.contains("is not a valid name for metastore"))
+      assert(message.contains("is not a valid name"))
     }
 
     withTempPath { dir =>
@@ -283,10 +283,11 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
             |USING parquet
             |OPTIONS (
             |  path '$path'
+            |  /'
             |)
             """.stripMargin)
         }.getMessage
-        assert(message.contains("is not a valid name for metastore"))
+        assert(message.contains("is not a valid name"))
       }
 
       {
@@ -300,7 +301,7 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
               |)
               """.stripMargin)
         }.getMessage
-        assert(message.contains("is not a valid name for metastore"))
+        assert(message.contains("is not a valid name"))
       }
     }
   }
