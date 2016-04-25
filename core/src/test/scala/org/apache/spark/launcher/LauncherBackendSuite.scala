@@ -26,12 +26,15 @@ import org.scalatest.Matchers
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark._
+import org.apache.spark.util.Utils
 
 class LauncherBackendSuite extends SparkFunSuite with Matchers {
 
   private val tests = Seq(
     "local" -> "local",
     "standalone/client" -> "local-cluster[1,1,1024]")
+
+  val tempDir = Utils.createTempDir()
 
   tests.foreach { case (name, master) =>
     test(s"$name: launcher handle") {
@@ -42,16 +45,22 @@ class LauncherBackendSuite extends SparkFunSuite with Matchers {
   private def testWithMaster(master: String): Unit = {
     val env = new java.util.HashMap[String, String]()
     env.put("SPARK_PRINT_LAUNCH_COMMAND", "1")
-    val handle = new SparkLauncher(env)
+
+    val launcher = new SparkLauncher(env)
       .setSparkHome(sys.props("spark.test.home"))
-      .setConf(SparkLauncher.DRIVER_EXTRA_CLASSPATH, System.getProperty("java.class.path"))
       .setConf("spark.ui.enabled", "false")
       .setConf(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS, s"-Dtest.appender=console")
       .setMaster(master)
       .setAppResource("spark-internal")
       .setMainClass(TestApp.getClass.getName().stripSuffix("$"))
-      .startApplication()
+    if (Utils.isWindows) {
+      launcher.setConf(SparkLauncher.DRIVER_EXTRA_CLASSPATH,
+        Utils.createShortClassPath(tempDir, System.getProperty("java.class.path")))
+    } else {
+      launcher.setConf(SparkLauncher.DRIVER_EXTRA_CLASSPATH, System.getProperty("java.class.path"))
+    }
 
+    val handle = launcher.startApplication()
     try {
       eventually(timeout(30 seconds), interval(100 millis)) {
         handle.getAppId() should not be (null)
