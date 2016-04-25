@@ -393,10 +393,10 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     }
 
     // Extract database, name & alias.
-    val (database, function) = visitFunctionName(ctx.qualifiedName)
+    val functionIdentifier = visitFunctionName(ctx.qualifiedName)
     CreateFunction(
-      database,
-      function,
+      functionIdentifier.database,
+      functionIdentifier.funcName,
       string(ctx.className),
       resources,
       ctx.TEMPORARY != null)
@@ -411,19 +411,12 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    * }}}
    */
   override def visitDropFunction(ctx: DropFunctionContext): LogicalPlan = withOrigin(ctx) {
-    val (database, function) = visitFunctionName(ctx.qualifiedName)
-    DropFunction(database, function, ctx.EXISTS != null, ctx.TEMPORARY != null)
-  }
-
-  /**
-   * Create a function database (optional) and name pair.
-   */
-  private def visitFunctionName(ctx: QualifiedNameContext): (Option[String], String) = {
-    ctx.identifier().asScala.map(_.getText) match {
-      case Seq(db, fn) => (Option(db), fn)
-      case Seq(fn) => (None, fn)
-      case other => throw new ParseException(s"Unsupported function name '${ctx.getText}'", ctx)
-    }
+    val functionIdentifier = visitFunctionName(ctx.qualifiedName)
+    DropFunction(
+      functionIdentifier.database,
+      functionIdentifier.funcName,
+      ctx.EXISTS != null,
+      ctx.TEMPORARY != null)
   }
 
   /**

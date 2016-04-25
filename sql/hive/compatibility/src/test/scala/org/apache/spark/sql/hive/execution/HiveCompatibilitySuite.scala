@@ -74,7 +74,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
       TestHive.setConf(HiveUtils.CONVERT_METASTORE_ORC, originalConvertMetastoreOrc)
       TestHive.sessionState.functionRegistry.restore()
 
-      // For debugging dump some statistics about how much time was spent in various optimizer rules.
+      // For debugging dump some statistics about how much time was spent in various optimizer rules
       logWarning(RuleExecutor.dumpTimeSpent())
     } finally {
       super.afterAll()
