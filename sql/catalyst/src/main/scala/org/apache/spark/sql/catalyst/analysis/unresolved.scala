@@ -18,7 +18,8 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{InternalRow, FunctionIdentifier, TableIdentifier, errors}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
+import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
@@ -30,8 +31,8 @@ import org.apache.spark.sql.types.{DataType, StructType}
  * Thrown when an invalid attempt is made to access a property of a tree that has yet to be fully
  * resolved.
  */
-class UnresolvedException[TreeType <: TreeNode[_]](tree: TreeType, function: String) extends
-  errors.TreeNodeException(tree, s"Invalid call to $function on unresolved object", null)
+class UnresolvedException[TreeType <: TreeNode[_]](tree: TreeType, function: String)
+  extends TreeNodeException(tree, s"Invalid call to $function on unresolved object", null)
 
 /**
  * Holds the name of a relation that has yet to be looked up in a catalog.
