@@ -41,8 +41,6 @@ import org.apache.spark.sql.util.ExecutionListenerManager
  */
 private[sql] class SessionState(ctx: SQLContext) {
 
-  self =>
-
   // Note: These are all lazy vals because they depend on each other (e.g. conf) and we
   // want subclasses to override some of the fields. Otherwise, we would get a lot of NPEs.
 
@@ -51,11 +49,6 @@ private[sql] class SessionState(ctx: SQLContext) {
    */
   lazy val sqlConf: SQLConf = new SQLConf
   lazy val hadoopConf: Configuration = new Configuration(ctx.sparkContext.hadoopConfiguration)
-
-  final lazy val conf: RuntimeConfig = new RuntimeConfigImpl {
-    protected[sql] override val sqlConf: SQLConf = self.sqlConf
-    protected[sql] override val hadoopConf: Configuration = self.hadoopConf
-  }
 
   // Automatically extract `spark.sql.*` entries and put it in our SQLConf
   setConf(SQLContext.getSQLProperties(ctx.sparkContext.getConf))

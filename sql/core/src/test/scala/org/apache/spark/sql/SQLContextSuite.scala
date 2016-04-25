@@ -90,17 +90,18 @@ class SQLContextSuite extends SparkFunSuite with SharedSparkContext {
     val mySpecialValue = "msv"
     try {
       sc.hadoopConfiguration.set(mySpecialKey, mySpecialValue)
-      val sessionState = SQLContext.getOrCreate(sc).sessionState
+      val sqlContext = SQLContext.getOrCreate(sc)
+      val sessionState = sqlContext.sessionState
       assert(sessionState.hadoopConf.get(mySpecialKey) === mySpecialValue)
-      assert(sessionState.conf.getHadoop(mySpecialKey) === mySpecialValue)
+      assert(sqlContext.runtimeConf.getHadoop(mySpecialKey) === mySpecialValue)
       // mutating hadoop conf in SQL doesn't mutate the underlying one
       sessionState.hadoopConf.set(mySpecialKey, "no no no")
       assert(sessionState.hadoopConf.get(mySpecialKey) === "no no no")
-      assert(sessionState.conf.getHadoop(mySpecialKey) === "no no no")
+      assert(sqlContext.runtimeConf.getHadoop(mySpecialKey) === "no no no")
       assert(sc.hadoopConfiguration.get(mySpecialKey) === mySpecialValue)
-      sessionState.conf.setHadoop(mySpecialKey, "yes yes yes")
+      sqlContext.runtimeConf.setHadoop(mySpecialKey, "yes yes yes")
       assert(sessionState.hadoopConf.get(mySpecialKey) === "yes yes yes")
-      assert(sessionState.conf.getHadoop(mySpecialKey) === "yes yes yes")
+      assert(sqlContext.runtimeConf.getHadoop(mySpecialKey) === "yes yes yes")
       assert(sc.hadoopConfiguration.get(mySpecialKey) === mySpecialValue)
     } finally {
       sc.hadoopConfiguration.unset(mySpecialKey)

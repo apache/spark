@@ -210,8 +210,12 @@ case class LoadData(
           // Follow Hive's behavior:
           // If no schema or authority is provided with non-local inpath,
           // we will use hadoop configuration "fs.default.name".
-          val defaultFS =
-            new URI(sqlContext.sessionState.conf.getHadoopOption("fs.default.name").getOrElse(""))
+          val defaultFSConf = sqlContext.sessionState.hadoopConf.get("fs.default.name")
+          val defaultFS = if (defaultFSConf == null) {
+            new URI("")
+          } else {
+            new URI(defaultFSConf)
+          }
 
           val scheme = if (uri.getScheme() != null) {
             uri.getScheme()

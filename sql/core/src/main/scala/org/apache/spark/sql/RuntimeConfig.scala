@@ -17,20 +17,13 @@
 
 package org.apache.spark.sql
 
-import org.apache.hadoop.conf.Configuration
-
-import org.apache.spark.sql.internal.SQLConf
-
 
 /**
  * Runtime configuration interface for Spark. To access this, use `SparkSession.conf`.
  *
  * @since 2.0.0
  */
-abstract class RuntimeConfig extends Serializable {
-
-  protected[sql] val sqlConf: SQLConf
-  protected[sql] val hadoopConf: Configuration
+abstract class RuntimeConfig {
 
   /**
    * Sets the given Spark runtime configuration property.

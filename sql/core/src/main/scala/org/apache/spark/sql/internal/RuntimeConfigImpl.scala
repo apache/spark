@@ -25,10 +25,10 @@ import org.apache.spark.sql.RuntimeConfig
 /**
  * Implementation for [[RuntimeConfig]].
  */
-class RuntimeConfigImpl extends RuntimeConfig {
-
-  protected[sql] override val sqlConf: SQLConf = new SQLConf
-  protected[sql] override val hadoopConf: Configuration = new Configuration
+class RuntimeConfigImpl(
+    sqlConf: SQLConf = new SQLConf,
+    hadoopConf: Configuration = new Configuration)
+  extends RuntimeConfig {
 
   override def set(key: String, value: String): RuntimeConfig = {
     sqlConf.setConfString(key, value)

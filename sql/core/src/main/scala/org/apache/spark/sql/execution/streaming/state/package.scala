@@ -20,7 +20,8 @@ package org.apache.spark.sql.execution.streaming
 import scala.reflect.ClassTag
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{RuntimeConfig, SQLContext}
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.types.StructType
 
 package object state {
@@ -43,7 +44,7 @@ package object state {
         storeVersion,
         keySchema,
         valueSchema,
-        sqlContext.sessionState.conf,
+        sqlContext.sessionState,
         Some(sqlContext.streams.stateStoreCoordinator))(
         storeUpdateFunction)
     }
@@ -55,7 +56,7 @@ package object state {
         storeVersion: Long,
         keySchema: StructType,
         valueSchema: StructType,
-        conf: RuntimeConfig,
+        sessionState: SessionState,
         storeCoordinator: Option[StateStoreCoordinatorRef])(
         storeUpdateFunction: (StateStore, Iterator[T]) => Iterator[U]): StateStoreRDD[T, U] = {
       val cleanedF = dataRDD.sparkContext.clean(storeUpdateFunction)
@@ -67,7 +68,7 @@ package object state {
         storeVersion,
         keySchema,
         valueSchema,
-        conf,
+        sessionState,
         storeCoordinator)
     }
   }
