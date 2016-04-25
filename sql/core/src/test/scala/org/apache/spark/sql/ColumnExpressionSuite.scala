@@ -598,7 +598,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
       data.write.parquet(dir.getCanonicalPath)
       val answer = sqlContext.read.parquet(dir.getCanonicalPath).select(input_file_name())
         .head.getString(0)
-      assert(answer.contains(dir.getCanonicalPath))
+      assert(answer.contains(dir.getCanonicalPath.replace("\\", "/")))
 
       checkAnswer(data.select(input_file_name()).limit(1), Row(""))
     }

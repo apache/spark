@@ -64,7 +64,7 @@ class UDFSuite extends QueryTest with SharedSQLContext {
       data.write.parquet(dir.getCanonicalPath)
       sqlContext.read.parquet(dir.getCanonicalPath).registerTempTable("test_table")
       val answer = sql("select input_file_name() from test_table").head().getString(0)
-      assert(answer.contains(dir.getCanonicalPath))
+      assert(answer.contains(dir.getCanonicalPath.replace("\\", "/")))
       assert(sql("select input_file_name() from test_table").distinct().collect().length >= 2)
       sqlContext.dropTempTable("test_table")
     }
