@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.toCommentSafeString
 import org.apache.spark.sql.execution.aggregate.TungstenAggregate
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, SortMergeJoin}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.{LongSQLMetricValue, SQLMetrics}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -39,10 +39,10 @@ trait CodegenSupport extends SparkPlan {
   /** Prefix used in the current operator's variable names. */
   private def variablePrefix: String = this match {
     case _: TungstenAggregate => "agg"
-    case _: BroadcastHashJoin => "bhj"
-    case _: SortMergeJoin => "smj"
-    case _: PhysicalRDD => "rdd"
-    case _: DataSourceScan => "scan"
+    case _: BroadcastHashJoinExec => "bhj"
+    case _: SortMergeJoinExec => "smj"
+    case _: RDDScanExec => "rdd"
+    case _: DataSourceScanExec => "scan"
     case _ => nodeName.toLowerCase
   }
 
@@ -79,10 +79,9 @@ trait CodegenSupport extends SparkPlan {
   /**
    * Returns Java source code to process the rows from input RDD.
    */
-  final def produce(ctx: CodegenContext, parent: CodegenSupport): String = {
+  final def produce(ctx: CodegenContext, parent: CodegenSupport): String = executeQuery {
     this.parent = parent
     ctx.freshNamePrefix = variablePrefix
-    waitForSubqueries()
     s"""
        |/*** PRODUCE: ${toCommentSafeString(this.simpleString)} */
        |${doProduce(ctx)}
@@ -220,7 +219,7 @@ trait CodegenSupport extends SparkPlan {
  * This is the leaf node of a tree with WholeStageCodegen, is used to generate code that consumes
  * an RDD iterator of InternalRow.
  */
-case class InputAdapter(child: SparkPlan) extends UnaryNode with CodegenSupport {
+case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupport {
 
   override def output: Seq[Attribute] = child.output
   override def outputPartitioning: Partitioning = child.outputPartitioning
@@ -257,7 +256,7 @@ case class InputAdapter(child: SparkPlan) extends UnaryNode with CodegenSupport 
   override def treeChildren: Seq[SparkPlan] = Nil
 }
 
-object WholeStageCodegen {
+object WholeStageCodegenExec {
   val PIPELINE_DURATION_METRIC = "duration"
 }
 
@@ -289,7 +288,7 @@ object WholeStageCodegen {
  * doCodeGen() will create a CodeGenContext, which will hold a list of variables for input,
  * used to generated code for BoundReference.
  */
-case class WholeStageCodegen(child: SparkPlan) extends UnaryNode with CodegenSupport {
+case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with CodegenSupport {
 
   override def output: Seq[Attribute] = child.output
   override def outputPartitioning: Partitioning = child.outputPartitioning
@@ -297,7 +296,7 @@ case class WholeStageCodegen(child: SparkPlan) extends UnaryNode with CodegenSup
 
   override private[sql] lazy val metrics = Map(
     "pipelineTime" -> SQLMetrics.createTimingMetric(sparkContext,
-      WholeStageCodegen.PIPELINE_DURATION_METRIC))
+      WholeStageCodegenExec.PIPELINE_DURATION_METRIC))
 
   /**
    * Generates code for this subtree.
@@ -458,7 +457,7 @@ case class CollapseCodegenStages(conf: SQLConf) extends Rule[SparkPlan] {
    * Inserts a InputAdapter on top of those that do not support codegen.
    */
   private def insertInputAdapter(plan: SparkPlan): SparkPlan = plan match {
-    case j @ SortMergeJoin(_, _, _, _, left, right) if j.supportCodegen =>
+    case j @ SortMergeJoinExec(_, _, _, _, left, right) if j.supportCodegen =>
       // The children of SortMergeJoin should do codegen separately.
       j.copy(left = InputAdapter(insertWholeStageCodegen(left)),
         right = InputAdapter(insertWholeStageCodegen(right)))
@@ -478,7 +477,7 @@ case class CollapseCodegenStages(conf: SQLConf) extends Rule[SparkPlan] {
     case plan if plan.output.length == 1 && plan.output.head.dataType.isInstanceOf[ObjectType] =>
       plan.withNewChildren(plan.children.map(insertWholeStageCodegen))
     case plan: CodegenSupport if supportCodegen(plan) =>
-      WholeStageCodegen(insertInputAdapter(plan))
+      WholeStageCodegenExec(insertInputAdapter(plan))
     case other =>
       other.withNewChildren(other.children.map(insertWholeStageCodegen))
   }

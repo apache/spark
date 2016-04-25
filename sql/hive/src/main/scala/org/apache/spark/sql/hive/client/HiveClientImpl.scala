@@ -342,14 +342,6 @@ private[hive] class HiveClientImpl(
     }
   }
 
-  override def createView(view: CatalogTable): Unit = withHiveState {
-    client.createTable(toHiveViewTable(view))
-  }
-
-  override def alertView(view: CatalogTable): Unit = withHiveState {
-    client.alterTable(view.qualifiedName, toHiveViewTable(view))
-  }
-
   override def createTable(table: CatalogTable, ignoreIfExists: Boolean): Unit = withHiveState {
     client.createTable(toHiveTable(table), ignoreIfExists)
   }

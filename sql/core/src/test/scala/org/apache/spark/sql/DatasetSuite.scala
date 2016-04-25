@@ -630,6 +630,29 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     // Make sure the generated code for this plan can compile and execute.
     checkDataset(wideDF.map(_.getLong(0)), 0L until 10 : _*)
   }
+
+  test("SPARK-14838: estimating sizeInBytes in operators with ObjectProducer shouldn't fail") {
+    val dataset = Seq(
+      (0, 3, 54f),
+      (0, 4, 44f),
+      (0, 5, 42f),
+      (1, 3, 39f),
+      (1, 5, 33f),
+      (1, 4, 26f),
+      (2, 3, 51f),
+      (2, 5, 45f),
+      (2, 4, 30f)
+    ).toDF("user", "item", "rating")
+
+    val actual = dataset
+      .select("user", "item")
+      .as[(Int, Int)]
+      .groupByKey(_._1)
+      .mapGroups { case (src, ids) => (src, ids.map(_._2).toArray) }
+      .toDF("id", "actual")
+
+    dataset.join(actual, dataset("user") === actual("id")).collect()
+  }
 }
 
 case class OtherTuple(_1: String, _2: Int)

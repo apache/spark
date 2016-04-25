@@ -91,7 +91,7 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
         catalog.PreInsertionCasts ::
         PreInsertCastAndRename ::
         DataSourceAnalysis ::
-        (if (conf.runSQLOnFile) new ResolveDataSource(ctx) :: Nil else Nil)
+        (if (conf.runSQLonFile) new ResolveDataSource(ctx) :: Nil else Nil)
 
       override val extendedCheckRules = Seq(PreWriteCheck(conf, catalog))
     }
@@ -110,7 +110,6 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
         experimentalMethods.extraStrategies ++ Seq(
           FileSourceStrategy,
           DataSourceStrategy,
-          HiveDDLStrategy,
           DDLStrategy,
           SpecialLimits,
           InMemoryScans,
@@ -140,7 +139,6 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
    */
   def setDefaultOverrideConfs(): Unit = {
     setConf(ConfVars.HIVE_SUPPORT_SQL11_RESERVED_KEYWORDS.varname, "false")
-    conf.setConfString("spark.sql.caseSensitive", "false")
   }
 
   override def setConf(key: String, value: String): Unit = {

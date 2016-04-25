@@ -123,6 +123,14 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("SPARK-14791: scalar subquery inside broadcast join") {
+    val df = sql("select a, sum(b) as s from l group by a having a > (select avg(a) from l)")
+    val expected = Row(3, 2.0, 3, 3.0) :: Row(6, null, 6, null) :: Nil
+    (1 to 10).foreach { _ =>
+      checkAnswer(r.join(df, $"c" === $"a"), expected)
+    }
+  }
+
   test("EXISTS predicate subquery") {
     checkAnswer(
       sql("select * from l where exists (select * from r where l.a = r.c)"),
