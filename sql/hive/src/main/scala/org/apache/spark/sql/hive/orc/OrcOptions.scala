@@ -17,25 +17,31 @@
 
 package org.apache.spark.sql.hive.orc
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.ql.io.orc.CompressionKind
+import org.apache.hadoop.hive.ql.io.orc.OrcFile.OrcTableProperties
 
 /**
  * Options for the ORC data source.
  */
-class OrcOptions(@transient private val parameters: Map[String, String])
+class OrcOptions(
+    @transient private val parameters: Map[String, String],
+    @transient private val conf: Configuration)
   extends Serializable {
 
   import OrcOptions._
   import org.apache.spark.sql.execution.datasources.ParameterUtils._
 
   /**
-   * Compression codec to use. By default use [[CompressionKind.ZLIB]].
+   * Compression codec to use. By default use the value specified in Hadoop configuration.
+   * If it is not specified, then use [[CompressionKind.ZLIB]] because it is the default value.
    * Acceptable values are defined in [[shortOrcCompressionCodecNames]].
    */
 
   val compressionCodec: String = {
-    val codecName =
-      getNullSafeString(parameters, "compression", CompressionKind.ZLIB.name()).toLowerCase
+    val defaultName =
+      conf.get(OrcTableProperties.COMPRESSION.getPropName, CompressionKind.ZLIB.name())
+    val codecName = getNullSafeString(parameters, "compression", defaultName).toLowerCase
     if (!shortOrcCompressionCodecNames.contains(codecName)) {
       val availableCodecs = shortOrcCompressionCodecNames.keys.map(_.toLowerCase)
       throw new IllegalArgumentException(s"Codec [$codecName] " +

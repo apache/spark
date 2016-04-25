@@ -68,11 +68,11 @@ private[sql] class DefaultSource
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
 
-    val orcOptions = new OrcOptions(options)
-    job.getConfiguration
-      .set(OrcTableProperties.COMPRESSION.getPropName, orcOptions.compressionCodec)
+    val configuration = job.getConfiguration
+    val orcOptions = new OrcOptions(options, configuration)
 
-    job.getConfiguration match {
+    configuration.set(OrcTableProperties.COMPRESSION.getPropName, orcOptions.compressionCodec)
+    configuration match {
       case conf: JobConf =>
         conf.setOutputFormat(classOf[OrcOutputFormat])
       case conf =>

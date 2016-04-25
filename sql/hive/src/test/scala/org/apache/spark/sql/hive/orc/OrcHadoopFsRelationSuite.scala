@@ -19,6 +19,11 @@ package org.apache.spark.sql.hive.orc
 
 import java.io.File
 
+import org.apache.hadoop.hive.ql.io.orc.OrcFile.OrcTableProperties
+
+import scala.collection.JavaConverters._
+
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.ql.io.orc.{CompressionKind, OrcFile}
 
@@ -128,6 +133,35 @@ class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
 
       val copyDf = sqlContext.read.orc(path)
       checkAnswer(df, copyDf)
+    }
+  }
+
+  test("Use the codec specified in Hadoop configuration if compression is not given as option") {
+    val clonedConf = new Configuration(hadoopConfiguration)
+    hadoopConfiguration
+      .set(OrcTableProperties.COMPRESSION.getPropName, CompressionKind.SNAPPY.name())
+    withTempPath { dir =>
+      try {
+        val path = s"${dir.getCanonicalPath}/table1"
+        val df = (1 to 5).map(i => (i, (i % 2).toString)).toDF("a", "b")
+        df.write.orc(path)
+
+        // Check if this is compressed as SNAPPY.
+        val conf = sparkContext.hadoopConfiguration
+        val fs = FileSystem.getLocal(conf)
+        val maybeOrcFile = new File(path).listFiles().find(_.getName.endsWith(".snappy.orc"))
+        assert(maybeOrcFile.isDefined)
+        val orcFilePath = new Path(maybeOrcFile.get.toPath.toString)
+        val orcReader = OrcFile.createReader(orcFilePath, OrcFile.readerOptions(conf))
+        assert(orcReader.getCompression == CompressionKind.SNAPPY)
+
+        val copyDf = sqlContext.read.orc(path)
+        checkAnswer(df, copyDf)
+      } finally {
+        // Hadoop 1 doesn't have `Configuration.unset`
+        hadoopConfiguration.clear()
+        clonedConf.asScala.foreach(entry => hadoopConfiguration.set(entry.getKey, entry.getValue))
+      }
     }
   }
 }
