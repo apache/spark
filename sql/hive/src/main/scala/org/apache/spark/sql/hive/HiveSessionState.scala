@@ -31,7 +31,7 @@ import org.apache.spark.sql.internal.SessionState
 
 
 /**
- * A class that holds all session-specific state in a given [[HiveContext]].
+ * A class that holds all session-specific state in a given [[SparkSession]] backed by Hive.
  */
 private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) {
 

@@ -905,7 +905,7 @@ class SparkSession private(
 }
 
 
-private[spark] object SparkSession {
+object SparkSession {
 
   private val HIVE_SHARED_STATE_CLASS_NAME = "org.apache.spark.sql.hive.HiveSharedState"
   private val HIVE_SESSION_STATE_CLASS_NAME = "org.apache.spark.sql.hive.HiveSessionState"
@@ -944,7 +944,7 @@ private[spark] object SparkSession {
   /**
    * Return true if Hive classes can be loaded, otherwise false.
    */
-  def hiveClassesArePresent: Boolean = {
+  private[spark] def hiveClassesArePresent: Boolean = {
     try {
       Utils.classForName(HIVE_SESSION_STATE_CLASS_NAME)
       Utils.classForName(HIVE_SHARED_STATE_CLASS_NAME)
