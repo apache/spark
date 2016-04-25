@@ -24,7 +24,8 @@ import org.apache.spark.sql.test.SQLTestUtils
 
 class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import testImplicits._
-   protected override def beforeAll(): Unit = {
+
+  protected override def beforeAll(): Unit = {
     super.beforeAll()
     sql(
       """
@@ -32,19 +33,34 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         |USING org.apache.spark.sql.parquet.DefaultSource
       """.stripMargin)
 
-     sql(
+    sql(
       """
         |CREATE EXTERNAL TABLE parquet_tab2 (c1 INT, c2 STRING)
         |STORED AS PARQUET
         |TBLPROPERTIES('prop1Key'="prop1Val", '`prop2Key`'="prop2Val")
       """.stripMargin)
-     sql("CREATE TABLE parquet_tab3(col1 int, `col 2` int)")
-     sql("CREATE TABLE parquet_tab4 (price int, qty int) partitioned by (year int, month int)")
-     sql("INSERT INTO parquet_tab4 PARTITION(year = 2015, month=1) SELECT 1,1")
-     sql("INSERT INTO parquet_tab4 PARTITION(year = 2015, month=2) SELECT 2,2")
-     sql("INSERT INTO parquet_tab4 PARTITION(year = 2016, month=2) SELECT 3,3")
-     sql("INSERT INTO parquet_tab4 PARTITION(year = 2016, month=3) SELECT 3,3")
-     sql("CREATE VIEW parquet_view1 as select * from parquet_tab4")
+    sql("CREATE TABLE parquet_tab3(col1 int, `col 2` int)")
+    sql("CREATE TABLE parquet_tab4 (price int, qty int) partitioned by (year int, month int)")
+    sql("INSERT INTO parquet_tab4 PARTITION(year = 2015, month = 1) SELECT 1, 1")
+    sql("INSERT INTO parquet_tab4 PARTITION(year = 2015, month = 2) SELECT 2, 2")
+    sql("INSERT INTO parquet_tab4 PARTITION(year = 2016, month = 2) SELECT 3, 3")
+    sql("INSERT INTO parquet_tab4 PARTITION(year = 2016, month = 3) SELECT 3, 3")
+    sql(
+      """
+        |CREATE TABLE parquet_tab5 (price int, qty int)
+        |PARTITIONED BY (year int, month int, hour int, minute int, sec int, extra int)
+      """.stripMargin)
+    sql(
+      """
+        |INSERT INTO parquet_tab5
+        |PARTITION(year = 2016, month = 3, hour = 10, minute = 10, sec = 10, extra = 1) SELECT 3, 3
+      """.stripMargin)
+    sql(
+      """
+        |INSERT INTO parquet_tab5
+        |PARTITION(year = 2016, month = 4, hour = 10, minute = 10, sec = 10, extra = 1) SELECT 3, 3
+      """.stripMargin)
+    sql("CREATE VIEW parquet_view1 as select * from parquet_tab4")
   }
 
   override protected def afterAll(): Unit = {
@@ -54,6 +70,7 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       sql("DROP TABLE IF EXISTS parquet_tab3")
       sql("DROP VIEW IF EXISTS parquet_view1")
       sql("DROP TABLE IF EXISTS parquet_tab4")
+      sql("DROP TABLE IF EXISTS parquet_tab5")
     } finally {
       super.afterAll()
     }
@@ -259,8 +276,8 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       hiveContext.sessionState.hadoopConf.set("fs.default.name", originalFsName)
     }
   }
-  
-    test("show columns") {
+
+  test("show columns") {
     checkAnswer(
       sql("SHOW COLUMNS IN parquet_tab3"),
       Row("col1") :: Row("col 2") :: Nil)
@@ -297,6 +314,13 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         Row("year=2015/month=2") ::
         Row("year=2016/month=2") ::
         Row("year=2016/month=3") :: Nil)
+  }
+
+  test("show partitions - show everything more than 5 part keys") {
+    checkAnswer(
+      sql("show partitions parquet_tab5"),
+      Row("year=2016/month=3/hour=10/minute=10/sec=10/extra=1") ::
+        Row("year=2016/month=4/hour=10/minute=10/sec=10/extra=1") :: Nil)
   }
 
   test("show partitions - filter") {
@@ -336,7 +360,7 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       val message3 = intercept[AnalysisException] {
         sql("SHOW PARTITIONS parquet_tab4 PARTITION(abcd=2015, xyz=1)")
       }.getMessage
-      assert(message3.contains("Non-partitioned column(s) [abcd, xyz] are specified"))
+      assert(message3.contains("Non-partitioning column(s) [abcd, xyz] are specified"))
 
       val message4 = intercept[AnalysisException] {
         sql("SHOW PARTITIONS parquet_view1")

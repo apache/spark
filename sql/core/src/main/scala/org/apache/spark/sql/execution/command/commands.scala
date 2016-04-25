@@ -18,11 +18,9 @@
 package org.apache.spark.sql.execution.command
 
 import java.io.File
-import java.util.NoSuchElementException
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Dataset, Row, SQLContext}
+import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalog.TablePartitionSpec
@@ -121,7 +119,7 @@ case class ExplainCommand(
 }
 
 /**
- * A command for users to list the column names for a table. This function creates a
+ * A command to list the column names for a table. This function creates a
  * [[ShowColumnsCommand]] logical plan.
  *
  * The syntax of using this command in SQL is:
@@ -135,15 +133,15 @@ case class ShowColumnsCommand(table: TableIdentifier) extends RunnableCommand {
     AttributeReference("result", StringType, nullable = false)() :: Nil
   }
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.sessionState.catalog.getTableMetadata(table).schema.map { c =>
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    sparkSession.sessionState.catalog.getTableMetadata(table).schema.map { c =>
       Row(c.name)
     }
   }
 }
 
 /**
- * A command for users to list the partition names of a table. If the partition spec is specified,
+ * A command to list the partition names of a table. If the partition spec is specified,
  * partitions that match the spec are returned. [[AnalysisException]] exception is thrown under
  * the following conditions:
  *
@@ -165,17 +163,18 @@ case class ShowPartitionsCommand(
     AttributeReference("result", StringType, nullable = false)() :: Nil
   }
 
-  def getPartName(spec: TablePartitionSpec): String = {
-    spec.map {s =>
-      PartitioningUtils.escapePathName(s._1) + "=" + PartitioningUtils.escapePathName(s._2)
+  private def getPartName(spec: TablePartitionSpec, partColNames: Seq[String]): String = {
+    partColNames.map { name =>
+      PartitioningUtils.escapePathName(name) + "=" + PartitioningUtils.escapePathName(spec(name))
     }.mkString(File.separator)
   }
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    val catalog = sqlContext.sessionState.catalog
+
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
     val db = table.database.getOrElse(catalog.getCurrentDatabase)
     if (catalog.isTemporaryTable(table)) {
       throw new AnalysisException("SHOW PARTITIONS is not allowed on a temporary table: " +
-          s"${table.unquotedString}")
+        s"${table.unquotedString}")
     } else {
       val tab = catalog.getTableMetadata(table)
       /**
@@ -206,11 +205,12 @@ case class ShowPartitionsCommand(
         val badColumns = spec.get.keySet.filterNot(tab.partitionColumns.map(_.name).contains)
         if (badColumns.nonEmpty) {
           throw new AnalysisException(
-            s"Non-partitioned column(s) [${badColumns.mkString(", ")}] are " +
+            s"Non-partitioning column(s) [${badColumns.mkString(", ")}] are " +
               s"specified for SHOW PARTITIONS")
         }
       }
-      val partNames = catalog.listPartitions(table, spec).map(p => getPartName(p.spec))
+      val partNames =
+        catalog.listPartitions(table, spec).map(p => getPartName(p.spec, tab.partitionColumnNames))
       partNames.map { p => Row(p) }
     }
   }
