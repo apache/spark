@@ -627,7 +627,9 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
         ssc.graph.getInputStreams().head.asInstanceOf[FileInputDStream[_, _, _]]
       val filenames = fileInputDStream.batchTimeToSelectedFiles.synchronized
          { fileInputDStream.batchTimeToSelectedFiles.values.flatten }
-      filenames.map(_.split(File.separator).last.toInt).toSeq.sorted
+      // on both win and *nix, the separator will be normalized to slash (/)
+      // Using File.separator will cause problem on windows.
+      filenames.map(_.split("/").last.toInt).toSeq.sorted
     }
 
     try {
