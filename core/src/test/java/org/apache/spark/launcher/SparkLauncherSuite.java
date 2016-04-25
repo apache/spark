@@ -105,7 +105,8 @@ public class SparkLauncherSuite {
       .addSparkArg(opts.CLASS, "ShouldBeOverriddenBelow")
       .setMainClass(SparkLauncherTestApp.class.getName())
       .addAppArgs("proc");
-        File tempDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "spark");
+
+    File tempDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "spark");
     try {
       if (SystemUtils.IS_OS_WINDOWS) {
         launcher.setConf(SparkLauncher.DRIVER_EXTRA_CLASSPATH,
@@ -122,7 +123,8 @@ public class SparkLauncherSuite {
       if(tempDir.exists()) {
         Utils.deleteRecursively(tempDir);
       }
-    }  }
+    }
+  }
 
   public static class SparkLauncherTestApp {
 
