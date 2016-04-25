@@ -35,8 +35,9 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.model.{GradientBoostedTreesModel => OldGBTModel}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.DoubleType
 
 /**
  * :: Experimental ::
@@ -126,8 +127,16 @@ final class GBTClassifier @Since("1.4.0") (
   override protected def train(dataset: Dataset[_]): GBTClassificationModel = {
     val categoricalFeatures: Map[Int, Int] =
       MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
+    // We copy and modify this from Classifier.extractLabeledPoints since GBT only supports
+    // 2 classes now.  This lets us provide a more precise error message.
     val oldDataset: RDD[LabeledPoint] =
-      Classifier.extractLabeledPoints(dataset, $(labelCol), $(featuresCol), 2)
+      dataset.select(col($(labelCol)).cast(DoubleType), col($(featuresCol))).rdd.map {
+        case Row(label: Double, features: Vector) =>
+          require(label % 1 == 0 && label >= 0 && label < 2, s"GBTClassifier was given" +
+            s" dataset with invalid label $label.  Labels must be in {0,1}; note that" +
+            s" GBTClassifier currently only supports binary classification.")
+          LabeledPoint(label, features)
+      }
     val numFeatures = oldDataset.first().features.size
     val boostingStrategy = super.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Classification)
     val (baseLearners, learnerWeights) = GradientBoostedTrees.run(oldDataset, boostingStrategy,
@@ -157,6 +166,7 @@ object GBTClassifier extends DefaultParamsReadable[GBTClassifier] {
  * model for classification.
  * It supports binary labels, as well as both continuous and categorical features.
  * Note: Multiclass labels are not currently supported.
+ *
  * @param _trees  Decision trees in the ensemble.
  * @param _treeWeights  Weights for the decision trees in the ensemble.
  */
@@ -177,6 +187,7 @@ final class GBTClassificationModel private[ml](
 
   /**
    * Construct a GBTClassificationModel
+   *
    * @param _trees  Decision trees in the ensemble.
    * @param _treeWeights  Weights for the decision trees in the ensemble.
    */

@@ -116,27 +116,6 @@ abstract class Classifier[
   }
 }
 
-private[ml] object Classifier {
-  /**
-   * Extract labelCol and featuresCol from the given dataset,
-   * and put it in an RDD with strong types.
-   * @throws SparkException  if any label is not an integer >= 0 and < numClasses
-   */
-  def extractLabeledPoints(
-      dataset: Dataset[_],
-      labelCol: String,
-      featuresCol: String,
-      numClasses: Int): RDD[LabeledPoint] = {
-    dataset.select(col(labelCol).cast(DoubleType), col(featuresCol)).rdd.map {
-      case Row(label: Double, features: Vector) =>
-        require(label % 1 == 0 && label >= 0 && label < numClasses, s"Classifier was given" +
-          s" dataset with invalid label $label.  Labels must be integers in range" +
-          s" [0, 1, ..., ${numClasses - 1}], where numClasses = $numClasses.")
-        LabeledPoint(label, features)
-    }
-  }
-}
-
 /**
  * :: DeveloperApi ::
  *

@@ -54,15 +54,6 @@ class ClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
       }
       assert(e.getMessage.contains("given dataset with invalid label"))
     }
-
-    // Bad numClasses
-    withClue("Classifier should fail for labels >= numClasses") {
-      val e: SparkException = intercept[SparkException] {
-        Classifier.extractLabeledPoints(df1, c.getLabelCol, c.getFeaturesCol, numClasses = 4)
-          .count()
-      }
-      assert(e.getMessage.contains("where numClasses = 4"))
-    }
   }
 }
 
