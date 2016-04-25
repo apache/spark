@@ -283,15 +283,7 @@ object CreateDataSourceTableUtils extends Logging {
       val columns = relation.location.partitionSpec.partitionColumns
       relation.location.partitionSpec.partitions.map { part =>
         val specs = columns.fieldNames.map(_.toLowerCase).zip(part.values.toSeq(columns).map { c =>
-          c match {
-            case b: Boolean => b.toString
-            case i: Int => s"$i"
-            case l: Long => s"$l"
-            case f: Float => s"$f"
-            case d: Double => s"$d"
-            case d: Decimal => d.toString
-            case s: UTF8String => s.toString
-          }
+          c.toString
         }).toMap
 
         val storage = CatalogStorageFormat(
@@ -451,13 +443,6 @@ object CreateDataSourceTableUtils extends Logging {
     def newHiveCompatibleMetastoreTable(
         relation: HadoopFsRelation,
         serde: HiveSerDe): CatalogTable = {
-      // Exclude partition columns from data columns: as HadoopFsRelation's dataSchema
-      // can preserve partition columns if these columns are in actual data files. Hive
-      // doesn't allow partition columns to conflict with data columns. So we need to
-      // exclude partition columns first.
-      val dataSchema = relation.dataSchema.filterNot { f =>
-        relation.partitionSchema.fieldNames.contains(f.name)
-      }
       CatalogTable(
         identifier = tableIdent,
         tableType = tableType,
