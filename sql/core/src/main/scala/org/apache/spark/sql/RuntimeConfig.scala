@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql
 
-
 /**
  * Runtime configuration interface for Spark. To access this, use `SparkSession.conf`.
  *

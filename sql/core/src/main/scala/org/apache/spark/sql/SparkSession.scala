@@ -208,32 +208,47 @@ class SparkSession private(
 
   /**
    * Set Spark SQL configuration properties.
+   *
+   * @group config
+   * @since 2.0.0
    */
-  protected[sql] def setConf(props: Properties): Unit = sessionState.setConf(props)
+  def setConf(props: Properties): Unit = sessionState.setConf(props)
 
   /**
    * Set the given Spark SQL configuration property.
+   *
+   * @group config
+   * @since 2.0.0
    */
-  protected[sql] def setConf(key: String, value: String): Unit = sessionState.setConf(key, value)
+  def setConf(key: String, value: String): Unit = sessionState.setConf(key, value)
 
   /**
    * Return the value of Spark SQL configuration property for the given key.
+   *
+   * @group config
+   * @since 2.0.0
    */
-  protected[sql] def getConf(key: String): String = sessionState.conf.getConfString(key)
+  def getConf(key: String): String = sessionState.conf.getConfString(key)
 
   /**
    * Return the value of Spark SQL configuration property for the given key. If the key is not set
    * yet, return `defaultValue`.
+   *
+   * @group config
+   * @since 2.0.0
    */
-  protected[sql] def getConf(key: String, defaultValue: String): String = {
+  def getConf(key: String, defaultValue: String): String = {
     sessionState.conf.getConfString(key, defaultValue)
   }
 
   /**
    * Return all the configuration properties that have been set (i.e. not the default).
    * This creates a new copy of the config properties in the form of a Map.
+   *
+   * @group config
+   * @since 2.0.0
    */
-  protected[sql] def getAllConfs: immutable.Map[String, String] = sessionState.conf.getAllConfs
+  def getAllConfs: immutable.Map[String, String] = sessionState.conf.getAllConfs
 
   /**
    * Set the given Spark SQL configuration property.
