@@ -1147,10 +1147,6 @@ parquetFile <- read.parquet(sqlContext, "people.parquet")
 # Parquet files can also be registered as tables and then used in SQL statements.
 registerTempTable(parquetFile, "parquetFile")
 teenagers <- sql(sqlContext, "SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19")
-teenNames <- SparkR:::lapply(teenagers, function(p) { paste("Name:", p$name) })
-for (teenName in collect(teenNames)) {
-  cat(teenName, "\n")
-}
 {% endhighlight %}
 
 </div>
