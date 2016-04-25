@@ -22,7 +22,7 @@ import java.io.IOException
 
 import scala.collection.mutable
 import scala.reflect.ClassTag
-import scala.util.Sorting
+import scala.util.{Sorting, Try}
 import scala.util.hashing.byteswap64
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
@@ -162,7 +162,7 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
    */
   val intermediateRDDStorageLevel = new Param[String](this, "intermediateRDDStorageLevel",
     "StorageLevel for intermediate RDDs. Cannot be 'NONE'. Default: 'MEMORY_AND_DISK'.",
-    (s: String) => ALS.getStorageLevel(s).isInstanceOf[StorageLevel] && s != "NONE")
+    (s: String) => Try(StorageLevel.fromString(s)).isSuccess && s != "NONE")
 
   /** @group expertGetParam */
   def getIntermediateRDDStorageLevel: String = $(intermediateRDDStorageLevel)
@@ -176,7 +176,7 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
    */
   val finalRDDStorageLevel = new Param[String](this, "finalRDDStorageLevel",
     "StorageLevel for ALS model factor RDDs. Default: 'MEMORY_AND_DISK'.",
-    (s: String) => ALS.getStorageLevel(s).isInstanceOf[StorageLevel])
+    (s: String) => Try(StorageLevel.fromString(s)).isSuccess)
 
   /** @group expertGetParam */
   def getFinalRDDStorageLevel: String = $(finalRDDStorageLevel)
@@ -442,8 +442,8 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
       numUserBlocks = $(numUserBlocks), numItemBlocks = $(numItemBlocks),
       maxIter = $(maxIter), regParam = $(regParam), implicitPrefs = $(implicitPrefs),
       alpha = $(alpha), nonnegative = $(nonnegative),
-      intermediateRDDStorageLevel = ALS.getStorageLevel($(intermediateRDDStorageLevel)),
-      finalRDDStorageLevel = ALS.getStorageLevel($(finalRDDStorageLevel)),
+      intermediateRDDStorageLevel = StorageLevel.fromString($(intermediateRDDStorageLevel)),
+      finalRDDStorageLevel = StorageLevel.fromString($(finalRDDStorageLevel)),
       checkpointInterval = $(checkpointInterval), seed = $(seed))
     val userDF = userFactors.toDF("id", "features")
     val itemDF = itemFactors.toDF("id", "features")
@@ -481,10 +481,6 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
 
   @Since("1.6.0")
   override def load(path: String): ALS = super.load(path)
-
-  private[recommendation] def getStorageLevel(s: String): StorageLevel = {
-    StorageLevel.fromString(s)
-  }
 
   /** Trait for least squares solvers applied to the normal equation. */
   private[recommendation] trait LeastSquaresNESolver extends Serializable {
