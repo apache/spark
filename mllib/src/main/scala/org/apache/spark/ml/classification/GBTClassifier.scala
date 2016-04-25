@@ -126,16 +126,8 @@ final class GBTClassifier @Since("1.4.0") (
   override protected def train(dataset: Dataset[_]): GBTClassificationModel = {
     val categoricalFeatures: Map[Int, Int] =
       MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
-    val numClasses: Int = MetadataUtils.getNumClasses(dataset.schema($(labelCol))) match {
-      case Some(n: Int) => n
-      case None => throw new IllegalArgumentException("GBTClassifier was given input" +
-        s" with invalid label column ${$(labelCol)}, without the number of classes" +
-        " specified. See StringIndexer.")
-      // TODO: Automatically index labels: SPARK-7126
-    }
-    require(numClasses == 2,
-      s"GBTClassifier only supports binary classification but was given numClasses = $numClasses")
-    val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
+    val oldDataset: RDD[LabeledPoint] =
+      Classifier.extractLabeledPoints(dataset, $(labelCol), $(featuresCol), 2)
     val numFeatures = oldDataset.first().features.size
     val boostingStrategy = super.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Classification)
     val (baseLearners, learnerWeights) = GradientBoostedTrees.run(oldDataset, boostingStrategy,

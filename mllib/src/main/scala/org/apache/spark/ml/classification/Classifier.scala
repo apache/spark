@@ -17,14 +17,17 @@
 
 package org.apache.spark.ml.classification
 
+import org.apache.spark.SparkException
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.ml.{PredictionModel, Predictor, PredictorParams}
 import org.apache.spark.ml.param.shared.HasRawPredictionCol
-import org.apache.spark.ml.util.SchemaUtils
+import org.apache.spark.ml.util.{MetadataUtils, SchemaUtils}
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
-import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
 
 /**
  * (private[spark]) Params for classification.
@@ -62,6 +65,76 @@ abstract class Classifier[
   def setRawPredictionCol(value: String): E = set(rawPredictionCol, value).asInstanceOf[E]
 
   // TODO: defaultEvaluator (follow-up PR)
+
+  /**
+   * Extract [[labelCol]] and [[featuresCol]] from the given dataset,
+   * and put it in an RDD with strong types.
+   * @throws SparkException  if any label is not an integer >= 0
+   */
+  override protected def extractLabeledPoints(dataset: Dataset[_]): RDD[LabeledPoint] = {
+    dataset.select(col($(labelCol)).cast(DoubleType), col($(featuresCol))).rdd.map {
+      case Row(label: Double, features: Vector) =>
+        require(label % 1 == 0 && label >= 0, s"Classifier was given dataset with invalid label" +
+          s" $label.  Labels must be integers in range [0, 1, ..., numClasses-1]")
+        LabeledPoint(label, features)
+    }
+  }
+
+  /**
+   * Get the number of classes.  This looks in column metadata first, and if that is missing,
+   * then this assumes classes are indexed 0,1,...,numClasses-1 and computes numClasses
+   * by finding the maximum label value.
+   *
+   * Label validation (ensuring all labels are integers >= 0) needs to be handled elsewhere,
+   * such as in [[extractLabeledPoints()]].
+   *
+   * @param dataset  Dataset which contains a column [[labelCol]]
+   * @param maxNumClasses  Maximum number of classes allowed when inferred from data.  If numClasses
+   *                       is specified in the metadata, then maxNumClasses is ignored.
+   * @return  number of classes
+   * @throws IllegalArgumentException  if metadata does not specify numClasses, and the
+   *                                   actual numClasses exceeds maxNumClasses
+   */
+  protected def getNumClasses(dataset: Dataset[_], maxNumClasses: Int = 1000): Int = {
+    MetadataUtils.getNumClasses(dataset.schema($(labelCol))) match {
+      case Some(n: Int) => n
+      case None =>
+        // Get number of classes from dataset itself.
+        val maxLabelRow: Array[Row] = dataset.select(max($(labelCol))).take(1)
+        if (maxLabelRow.isEmpty) {
+          throw new SparkException("ML algorithm was given empty dataset.")
+        }
+        val maxLabel: Int = maxLabelRow.head.getDouble(0).toInt
+        val numClasses = maxLabel + 1
+        require(numClasses <= maxNumClasses, s"Classifier inferred $numClasses from label values" +
+          s" in column $labelCol since numClasses were not specified in dataset metadata, but" +
+          s" this exceeded the max numClasses ($maxNumClasses) allowed to be inferred from" +
+          s" values.  To avoid this error, specify numClasses in metadata, such as by applying" +
+          s" StringIndexer to the label column.")
+        numClasses
+    }
+  }
+}
+
+private[ml] object Classifier {
+  /**
+   * Extract labelCol and featuresCol from the given dataset,
+   * and put it in an RDD with strong types.
+   * @throws SparkException  if any label is not an integer >= 0 and < numClasses
+   */
+  def extractLabeledPoints(
+      dataset: Dataset[_],
+      labelCol: String,
+      featuresCol: String,
+      numClasses: Int): RDD[LabeledPoint] = {
+    dataset.select(col(labelCol).cast(DoubleType), col(featuresCol)).rdd.map {
+      case Row(label: Double, features: Vector) =>
+        require(label % 1 == 0 && label >= 0 && label < numClasses, s"Classifier was given" +
+          s" dataset with invalid label $label.  Labels must be integers in range" +
+          s" [0, 1, ..., ${numClasses - 1}], where numClasses = $numClasses.")
+        LabeledPoint(label, features)
+    }
+  }
 }
 
 /**
