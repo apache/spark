@@ -232,7 +232,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
   test("binary file input as byte array") {
     sc = new SparkContext("local", "test")
     val outFile = new File(tempDir, "record-bytestream-00000.bin")
-    val outFileName = outFile.getAbsolutePath()
+    val outFileName = Utils.normalizePath(outFile.getAbsolutePath())
 
     // create file
     val testOutput = Array[Byte](1, 2, 3, 4, 5, 6)
@@ -516,7 +516,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
 
   test("Get input files via old Hadoop API") {
     sc = new SparkContext("local", "test")
-    val outDir = new File(tempDir, "output").getAbsolutePath
+    val outDir = Utils.normalizePath(new File(tempDir, "output").getAbsolutePath)
     sc.makeRDD(1 to 4, 2).saveAsTextFile(outDir)
 
     val inputPaths =
@@ -530,7 +530,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
 
   test("Get input files via new Hadoop API") {
     sc = new SparkContext("local", "test")
-    val outDir = new File(tempDir, "output").getAbsolutePath
+    val outDir = Utils.normalizePath(new File(tempDir, "output").getAbsolutePath)
     sc.makeRDD(1 to 4, 2).saveAsTextFile(outDir)
 
     val inputPaths =
