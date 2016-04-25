@@ -129,44 +129,33 @@ class FileScanRDD(
       /** Advances to the next file. Returns true if a new non-empty iterator is available. */
       private def nextIterator(): Boolean = {
         updateBytesReadWithFileSize()
-        if (files.hasNext) {
-          currentFile = files.next()
-          logInfo(s"Reading File $currentFile")
-          InputFileNameHolder.setInputFileName(currentFile.filePath)
-          currentIterator = readFunction(currentFile)
-          hasNext
-        } else {
-          currentFile = null
-          InputFileNameHolder.unsetInputFileName()
-          false
-        }
-      }
-
-      /** Advances to the next file. Returns true if a new non-empty iterator is available. */
-      private def nextIterator2(): Boolean = {
-        val file = if (isAsyncIOEnabled) {
-          if (nextFile == null) {
-            return false
-          } else {
+        if (isAsyncIOEnabled) {
+          if (nextFile != null) {
             // Wait for the async task to complete
-            ThreadUtils.awaitResult(nextFile, Duration.Inf)
+            val file = ThreadUtils.awaitResult(nextFile, Duration.Inf)
+            InputFileNameHolder.setInputFileName(file.file.filePath)
+            currentIterator = file.iter
+            // Asynchronously start the next file.
+            nextFile = prepareNextFile()
+            hasNext
+          } else {
+            currentFile = null
+            InputFileNameHolder.unsetInputFileName()
+            false
           }
         } else {
-          if (!files.hasNext) return false
-          val f = files.next()
-          NextFile(f, readFunction(f))
+          if (files.hasNext) {
+            currentFile = files.next()
+            logInfo(s"Reading File $currentFile")
+            InputFileNameHolder.setInputFileName(currentFile.filePath)
+            currentIterator = readFunction(currentFile)
+            hasNext
+          } else {
+            currentFile = null
+            InputFileNameHolder.unsetInputFileName()
+            false
+          }
         }
-
-        // This is only used to evaluate the rest of the execution so we can safely set it here.
-        InputFileNameHolder.setInputFileName(file.file.filePath)
-        currentIterator = file.iter
-
-        if (isAsyncIOEnabled) {
-          // Asynchronously start the next file.
-          nextFile = prepareNextFile()
-        }
-
-        hasNext
       }
 
       override def close() = {
