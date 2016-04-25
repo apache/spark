@@ -644,8 +644,10 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
         val mappedStream = fileStream.map(s => {
           val i = s.toInt
           if (i == 3) {
-            while (CheckpointSuite.batchThreeShouldBlockIndefinitely) {
-              Thread.sleep(Long.MaxValue)
+            if (CheckpointSuite.batchThreeShouldBlockIndefinitely) {
+              // It's not a good idea to let the thread run forever
+              // as resource won't be correctly released
+              Thread.sleep(6000)
             }
           }
           i
