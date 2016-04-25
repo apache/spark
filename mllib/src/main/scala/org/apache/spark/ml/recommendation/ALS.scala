@@ -55,7 +55,6 @@ private[recommendation] trait ALSModelParams extends Params with HasPredictionCo
   /**
    * Param for the column name for user ids.
    * Default: "user"
-   *
    * @group param
    */
   val userCol = new Param[String](this, "userCol", "column name for user ids")
@@ -66,7 +65,6 @@ private[recommendation] trait ALSModelParams extends Params with HasPredictionCo
   /**
    * Param for the column name for item ids.
    * Default: "item"
-   *
    * @group param
    */
   val itemCol = new Param[String](this, "itemCol", "column name for item ids")
@@ -84,7 +82,6 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
   /**
    * Param for rank of the matrix factorization (>= 1).
    * Default: 10
-   *
    * @group param
    */
   val rank = new IntParam(this, "rank", "rank of the factorization", ParamValidators.gtEq(1))
@@ -95,7 +92,6 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
   /**
    * Param for number of user blocks (>= 1).
    * Default: 10
-   *
    * @group param
    */
   val numUserBlocks = new IntParam(this, "numUserBlocks", "number of user blocks",
@@ -107,7 +103,6 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
   /**
    * Param for number of item blocks (>= 1).
    * Default: 10
-   *
    * @group param
    */
   val numItemBlocks = new IntParam(this, "numItemBlocks", "number of item blocks",
@@ -119,7 +114,6 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
   /**
    * Param to decide whether to use implicit preference.
    * Default: false
-   *
    * @group param
    */
   val implicitPrefs = new BooleanParam(this, "implicitPrefs", "whether to use implicit preference")
@@ -130,7 +124,6 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
   /**
    * Param for the alpha parameter in the implicit preference formulation (>= 0).
    * Default: 1.0
-   *
    * @group param
    */
   val alpha = new DoubleParam(this, "alpha", "alpha for implicit preference",
@@ -142,7 +135,6 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
   /**
    * Param for the column name for ratings.
    * Default: "rating"
-   *
    * @group param
    */
   val ratingCol = new Param[String](this, "ratingCol", "column name for ratings")
@@ -153,7 +145,6 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
   /**
    * Param for whether to apply nonnegativity constraints.
    * Default: false
-   *
    * @group param
    */
   val nonnegative = new BooleanParam(
