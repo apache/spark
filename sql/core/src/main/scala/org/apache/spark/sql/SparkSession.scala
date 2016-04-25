@@ -907,16 +907,19 @@ class SparkSession private(
 
 object SparkSession {
 
+  private val HIVE_SHARED_STATE_CLASS_NAME = "org.apache.spark.sql.hive.HiveSharedState"
+  private val HIVE_SESSION_STATE_CLASS_NAME = "org.apache.spark.sql.hive.HiveSessionState"
+
   private def sharedStateClassName(conf: SparkConf): String = {
     conf.get(CATALOG_IMPLEMENTATION) match {
-      case "hive" => "org.apache.spark.sql.hive.HiveSharedState"
+      case "hive" => HIVE_SHARED_STATE_CLASS_NAME
       case "in-memory" => classOf[SharedState].getCanonicalName
     }
   }
 
   private def sessionStateClassName(conf: SparkConf): String = {
     conf.get(CATALOG_IMPLEMENTATION) match {
-      case "hive" => "org.apache.spark.sql.hive.HiveSessionState"
+      case "hive" => HIVE_SESSION_STATE_CLASS_NAME
       case "in-memory" => classOf[SessionState].getCanonicalName
     }
   }
@@ -938,10 +941,31 @@ object SparkSession {
     }
   }
 
-  // TODO: do we want to expose this?
+  /**
+   * Return true if Hive classes can be loaded, otherwise false.
+   */
+  private[spark] def hiveClassesArePresent: Boolean = {
+    try {
+      Utils.classForName(HIVE_SESSION_STATE_CLASS_NAME)
+      Utils.classForName(HIVE_SHARED_STATE_CLASS_NAME)
+      Utils.classForName("org.apache.hadoop.hive.conf.HiveConf")
+      true
+    } catch {
+      case _: ClassNotFoundException | _: NoClassDefFoundError => false
+    }
+  }
+
+  /**
+   * Create a new [[SparkSession]] with a catalog backed by Hive.
+   */
   def withHiveSupport(sc: SparkContext): SparkSession = {
-    sc.conf.set(CATALOG_IMPLEMENTATION.key, "hive")
-    new SparkSession(sc)
+    if (hiveClassesArePresent) {
+      sc.conf.set(CATALOG_IMPLEMENTATION.key, "hive")
+      new SparkSession(sc)
+    } else {
+      throw new IllegalArgumentException(
+        "Unable to instantiate SparkSession with Hive support because Hive classes are not found.")
+    }
   }
 
 }
