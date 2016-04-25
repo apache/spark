@@ -44,6 +44,7 @@ class IllegalArgumentException(CapturedException):
     Passed an illegal or inappropriate argument.
     """
 
+
 class ContinuousQueryException(CapturedException):
     """
     Failed to analyze a SQL query plan.
