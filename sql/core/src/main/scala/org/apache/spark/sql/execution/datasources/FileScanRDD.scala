@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import scala.concurrent.{Await, ExecutionContext, Future}
-import scala.concurrent.duration.Duration
 import scala.collection.mutable
+import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration.Duration
 
 import org.apache.spark.{Partition => RDDPartition, TaskContext}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -148,7 +148,7 @@ class FileScanRDD(
         val file = if (asyncIO) {
           if (nextFile == null) return false
           // Wait for the async task to complete
-          Await.result(nextFile, Duration.Inf)
+          ThreadUtils.awaitResult(nextFile, Duration.Inf)
         } else {
           if (!files.hasNext) return false
           val f = files.next()
@@ -156,7 +156,7 @@ class FileScanRDD(
         }
 
         // This is only used to evaluate the rest of the execution so we can safely set it here.
-        SqlNewHadoopRDDState.setInputFileName(file.file.filePath)
+        InputFileNameHolder.setInputFileName(file.file.filePath)
         currentIterator = file.iter
 
         if (asyncIO) {
