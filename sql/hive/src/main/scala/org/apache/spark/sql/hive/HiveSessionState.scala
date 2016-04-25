@@ -139,7 +139,6 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
    */
   def setDefaultOverrideConfs(): Unit = {
     setConf(ConfVars.HIVE_SUPPORT_SQL11_RESERVED_KEYWORDS.varname, "false")
-    conf.setConfString("spark.sql.caseSensitive", "false")
   }
 
   override def setConf(key: String, value: String): Unit = {

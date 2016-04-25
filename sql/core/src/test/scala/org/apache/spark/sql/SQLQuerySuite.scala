@@ -754,36 +754,43 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("inner join where, one match per row") {
-    checkAnswer(
-      sql("SELECT * FROM upperCaseData JOIN lowerCaseData WHERE n = N"),
-      Seq(
-        Row(1, "A", 1, "a"),
-        Row(2, "B", 2, "b"),
-        Row(3, "C", 3, "c"),
-        Row(4, "D", 4, "d")))
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      checkAnswer(
+        sql("SELECT * FROM uppercasedata JOIN lowercasedata WHERE n = N"),
+        Seq(
+          Row(1, "A", 1, "a"),
+          Row(2, "B", 2, "b"),
+          Row(3, "C", 3, "c"),
+          Row(4, "D", 4, "d")))
+    }
   }
 
   test("inner join ON, one match per row") {
-    checkAnswer(
-      sql("SELECT * FROM upperCaseData JOIN lowerCaseData ON n = N"),
-      Seq(
-        Row(1, "A", 1, "a"),
-        Row(2, "B", 2, "b"),
-        Row(3, "C", 3, "c"),
-        Row(4, "D", 4, "d")))
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      checkAnswer(
+        sql("SELECT * FROM uppercasedata JOIN lowercasedata ON n = N"),
+        Seq(
+          Row(1, "A", 1, "a"),
+          Row(2, "B", 2, "b"),
+          Row(3, "C", 3, "c"),
+          Row(4, "D", 4, "d")))
+    }
   }
 
   test("inner join, where, multiple matches") {
-    checkAnswer(
-      sql("""
-        |SELECT * FROM
-        |  (SELECT * FROM testData2 WHERE a = 1) x JOIN
-        |  (SELECT * FROM testData2 WHERE a = 1) y
-        |WHERE x.a = y.a""".stripMargin),
-      Row(1, 1, 1, 1) ::
-      Row(1, 1, 1, 2) ::
-      Row(1, 2, 1, 1) ::
-      Row(1, 2, 1, 2) :: Nil)
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      checkAnswer(
+        sql(
+          """
+          |SELECT * FROM
+          |  (SELECT * FROM testdata2 WHERE a = 1) x JOIN
+          |  (SELECT * FROM testdata2 WHERE a = 1) y
+          |WHERE x.a = y.a""".stripMargin),
+        Row(1, 1, 1, 1) ::
+        Row(1, 1, 1, 2) ::
+        Row(1, 2, 1, 1) ::
+        Row(1, 2, 1, 2) :: Nil)
+    }
   }
 
   test("inner join, no matches") {
@@ -825,25 +832,29 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("left outer join") {
-    checkAnswer(
-      sql("SELECT * FROM upperCaseData LEFT OUTER JOIN lowerCaseData ON n = N"),
-      Row(1, "A", 1, "a") ::
-      Row(2, "B", 2, "b") ::
-      Row(3, "C", 3, "c") ::
-      Row(4, "D", 4, "d") ::
-      Row(5, "E", null, null) ::
-      Row(6, "F", null, null) :: Nil)
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      checkAnswer(
+        sql("SELECT * FROM uppercasedata LEFT OUTER JOIN lowercasedata ON n = N"),
+        Row(1, "A", 1, "a") ::
+          Row(2, "B", 2, "b") ::
+          Row(3, "C", 3, "c") ::
+          Row(4, "D", 4, "d") ::
+          Row(5, "E", null, null) ::
+          Row(6, "F", null, null) :: Nil)
+    }
   }
 
   test("right outer join") {
-    checkAnswer(
-      sql("SELECT * FROM lowerCaseData RIGHT OUTER JOIN upperCaseData ON n = N"),
-      Row(1, "a", 1, "A") ::
-      Row(2, "b", 2, "B") ::
-      Row(3, "c", 3, "C") ::
-      Row(4, "d", 4, "D") ::
-      Row(null, null, 5, "E") ::
-      Row(null, null, 6, "F") :: Nil)
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      checkAnswer(
+        sql("SELECT * FROM lowercasedata RIGHT OUTER JOIN uppercasedata ON n = N"),
+        Row(1, "a", 1, "A") ::
+          Row(2, "b", 2, "B") ::
+          Row(3, "c", 3, "C") ::
+          Row(4, "d", 4, "D") ::
+          Row(null, null, 5, "E") ::
+          Row(null, null, 6, "F") :: Nil)
+    }
   }
 
   test("full outer join") {
