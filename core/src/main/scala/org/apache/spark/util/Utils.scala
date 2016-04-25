@@ -1137,23 +1137,6 @@ private[spark] object Utils extends Logging {
 
 
   /**
-   * Normalize the local path for windows. If the path is absolute (starts with drive label)
-   * it will append a leading slash. The back slashes will be replaced with slash
-   * @param path the path to be normalized
-   * @return the normalized path
-   */
-  def normalizePath(path: String): String = {
-    if (isWindows) {
-      if (path.matches("""^[A-Za-z]:[/\\].*$""")) {
-        "/" + path.replace("\\", "/")
-      } else {
-        path.replace("\\", "/")
-      }
-    } else {
-      path
-    }
-  }
-  /**
    * Execute a command and return the process running the command.
    */
   def executeCommand(
