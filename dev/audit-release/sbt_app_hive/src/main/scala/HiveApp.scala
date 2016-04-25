@@ -20,10 +20,8 @@ package main.scala
 
 import scala.collection.mutable.{ListBuffer, Queue}
 
-import org.apache.spark.SparkConf
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkConf, SparkContext, SparkSession}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.hive.HiveContext
 
 case class Person(name: String, age: Int)
 
@@ -35,9 +33,9 @@ object SparkSqlExample {
       case None => new SparkConf().setAppName("Simple Sql App")
     }
     val sc = new SparkContext(conf)
-    val hiveContext = new HiveContext(sc)
+    val sparkSession = SparkSession.withHiveSupport(sc)
 
-    import hiveContext._
+    import sparkSession._
     sql("DROP TABLE IF EXISTS src")
     sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
     sql("LOAD DATA LOCAL INPATH 'data.txt' INTO TABLE src")

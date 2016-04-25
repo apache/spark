@@ -23,7 +23,7 @@ import java.util.{Locale, TimeZone}
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.internal.SQLConf
 
@@ -60,7 +60,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     TestHive.sessionState.functionRegistry.unregisterFunction("hash")
     // Ensures that the plans generation use metastore relation and not OrcRelation
     // Was done because SqlBuilder does not work with plans having logical relation
-    TestHive.setConf(HiveContext.CONVERT_METASTORE_ORC, false)
+    TestHive.setConf(HiveUtils.CONVERT_METASTORE_ORC, false)
     RuleExecutor.resetTime()
   }
 
@@ -71,7 +71,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
       Locale.setDefault(originalLocale)
       TestHive.setConf(SQLConf.COLUMN_BATCH_SIZE, originalColumnBatchSize)
       TestHive.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, originalInMemoryPartitionPruning)
-      TestHive.setConf(HiveContext.CONVERT_METASTORE_ORC, originalConvertMetastoreOrc)
+      TestHive.setConf(HiveUtils.CONVERT_METASTORE_ORC, originalConvertMetastoreOrc)
       TestHive.sessionState.functionRegistry.restore()
 
       // For debugging dump some statistics about how much time was spent in various optimizer rules.
@@ -451,7 +451,10 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "alter_merge_2",
 
     // TOUCH is not supported
-    "touch"
+    "touch",
+
+    // INPUTDRIVER and OUTPUTDRIVER are not supported
+    "inoutdriver"
   )
 
   /**
@@ -641,7 +644,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "index_serde",
     "infer_bucket_sort_dyn_part",
     "innerjoin",
-    "inoutdriver",
     "input",
     "input0",
     "input1",

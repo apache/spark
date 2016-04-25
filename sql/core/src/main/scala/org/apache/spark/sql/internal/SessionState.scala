@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.command.AnalyzeTable
 import org.apache.spark.sql.execution.datasources.{DataSourceAnalysis, PreInsertCastAndRename, ResolveDataSource}
 import org.apache.spark.sql.util.ExecutionListenerManager
 
@@ -56,7 +57,9 @@ private[sql] class SessionState(ctx: SQLContext) {
    */
   lazy val functionRegistry: FunctionRegistry = FunctionRegistry.builtin.copy()
 
-  /** A [[FunctionResourceLoader]] that can be used in SessionCatalog. */
+  /**
+   * A class for loading resources specified by a function.
+   */
   lazy val functionResourceLoader: FunctionResourceLoader = {
     new FunctionResourceLoader {
       override def loadResource(resource: FunctionResource): Unit = {
@@ -95,7 +98,7 @@ private[sql] class SessionState(ctx: SQLContext) {
       override val extendedResolutionRules =
         PreInsertCastAndRename ::
         DataSourceAnalysis ::
-        (if (conf.runSQLOnFile) new ResolveDataSource(ctx) :: Nil else Nil)
+        (if (conf.runSQLonFile) new ResolveDataSource(ctx) :: Nil else Nil)
 
       override val extendedCheckRules = Seq(datasources.PreWriteCheck(conf, catalog))
     }
@@ -160,12 +163,19 @@ private[sql] class SessionState(ctx: SQLContext) {
     ctx.sparkContext.addJar(path)
   }
 
+  /**
+   * Analyzes the given table in the current database to generate statistics, which will be
+   * used in query optimizations.
+   *
+   * Right now, it only supports catalog tables and it only updates the size of a catalog table
+   * in the external catalog.
+   */
   def analyze(tableName: String): Unit = {
-    throw new UnsupportedOperationException
+    AnalyzeTable(tableName).run(ctx)
   }
 
   def runNativeSql(sql: String): Seq[String] = {
-    throw new UnsupportedOperationException
+    throw new AnalysisException("Unsupported query: " + sql)
   }
 
 }

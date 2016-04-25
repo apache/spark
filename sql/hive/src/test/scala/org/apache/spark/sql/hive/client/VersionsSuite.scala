@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Literal, NamedExpression}
 import org.apache.spark.sql.catalyst.util.quietly
-import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.tags.ExtendedHiveTest
 import org.apache.spark.util.Utils
@@ -62,7 +62,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
 
   test("success sanity check") {
     val badClient = IsolatedClientLoader.forVersion(
-      hiveMetastoreVersion = HiveContext.hiveExecutionVersion,
+      hiveMetastoreVersion = HiveUtils.hiveExecutionVersion,
       hadoopVersion = VersionInfo.getVersion,
       sparkConf = sparkConf,
       hadoopConf = new Configuration(),
@@ -76,7 +76,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
     val hadoopConf = new Configuration();
     hadoopConf.set("test", "success")
     val client = IsolatedClientLoader.forVersion(
-      hiveMetastoreVersion = HiveContext.hiveExecutionVersion,
+      hiveMetastoreVersion = HiveUtils.hiveExecutionVersion,
       hadoopVersion = VersionInfo.getVersion,
       sparkConf = sparkConf,
       hadoopConf = hadoopConf,

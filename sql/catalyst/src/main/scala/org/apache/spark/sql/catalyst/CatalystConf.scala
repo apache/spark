@@ -29,7 +29,10 @@ trait CatalystConf {
   def groupByOrdinal: Boolean
 
   def optimizerMaxIterations: Int
+  def optimizerInSetConversionThreshold: Int
   def maxCaseBranchesForCodegen: Int
+
+  def runSQLonFile: Boolean
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two
@@ -47,6 +50,7 @@ case class SimpleCatalystConf(
     orderByOrdinal: Boolean = true,
     groupByOrdinal: Boolean = true,
     optimizerMaxIterations: Int = 100,
-    maxCaseBranchesForCodegen: Int = 20)
-  extends CatalystConf {
-}
+    optimizerInSetConversionThreshold: Int = 10,
+    maxCaseBranchesForCodegen: Int = 20,
+    runSQLonFile: Boolean = true)
+  extends CatalystConf
