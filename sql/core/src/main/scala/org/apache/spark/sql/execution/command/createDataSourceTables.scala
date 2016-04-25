@@ -275,7 +275,7 @@ object CreateDataSourceTableUtils extends Logging {
     // stored into a single metastore SerDe property.  In this case, we split the JSON string and
     // store each part as a separate SerDe property.
     userSpecifiedSchema.foreach { schema =>
-      val threshold = sqlContext.sessionState.conf.schemaStringLengthThreshold
+      val threshold = sqlContext.sessionState.sqlConf.schemaStringLengthThreshold
       val schemaJsonString = schema.json
       // Split the JSON string.
       val parts = schemaJsonString.grouped(threshold).toSeq
@@ -329,7 +329,7 @@ object CreateDataSourceTableUtils extends Logging {
       CatalogTableType.MANAGED_TABLE
     }
 
-    val maybeSerDe = HiveSerDe.sourceToSerDe(provider, sqlContext.sessionState.conf)
+    val maybeSerDe = HiveSerDe.sourceToSerDe(provider, sqlContext.sessionState.sqlConf)
     val dataSource =
       DataSource(
         sqlContext,

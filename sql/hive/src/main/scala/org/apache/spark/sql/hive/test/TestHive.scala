@@ -34,7 +34,7 @@ import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.CATALOG_IMPLEMENTATION
-import org.apache.spark.sql.{SparkSession, SQLContext}
+import org.apache.spark.sql.{RuntimeConfig, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions.ExpressionInfo
@@ -43,7 +43,7 @@ import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.command.{CacheTableCommand, HiveNativeCommand}
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.client.HiveClient
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{RuntimeConfigImpl, SQLConf}
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 
 // SPARK-3729: Test key required to check for initialization errors with config.
@@ -159,7 +159,7 @@ private[hive] class TestHiveSparkSession(
   // This snapshot is saved when we create this TestHiveSparkSession.
   val initialSQLConf: SQLConf = {
     val snapshot = new SQLConf
-    sessionState.conf.getAllConfs.foreach { case (k, v) => snapshot.setConfString(k, v) }
+    sessionState.sqlConf.getAllConfs.foreach { case (k, v) => snapshot.setConfString(k, v) }
     snapshot
   }
 
@@ -527,7 +527,7 @@ private[hive] class TestHiveSharedState(
 private[hive] class TestHiveSessionState(sparkSession: TestHiveSparkSession)
   extends HiveSessionState(new SQLContext(sparkSession)) {
 
-  override lazy val conf: SQLConf = {
+  override lazy val sqlConf: SQLConf = {
     new SQLConf {
       clear()
       override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)

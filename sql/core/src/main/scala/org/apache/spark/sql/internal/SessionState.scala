@@ -39,13 +39,19 @@ import org.apache.spark.sql.util.ExecutionListenerManager
  */
 private[sql] class SessionState(ctx: SQLContext) {
 
+  self =>
+
   // Note: These are all lazy vals because they depend on each other (e.g. conf) and we
   // want subclasses to override some of the fields. Otherwise, we would get a lot of NPEs.
 
   /**
    * SQL-specific key-value configurations.
    */
-  lazy val conf: SQLConf = new SQLConf
+  lazy val sqlConf: SQLConf = new SQLConf
+
+  final lazy val conf: RuntimeConfig = new RuntimeConfigImpl {
+    protected[sql] override val sqlConf: SQLConf = self.sqlConf
+  }
 
   // Automatically extract `spark.sql.*` entries and put it in our SQLConf
   setConf(SQLContext.getSQLProperties(ctx.sparkContext.getConf))
@@ -83,7 +89,7 @@ private[sql] class SessionState(ctx: SQLContext) {
       ctx.externalCatalog,
       functionResourceLoader,
       functionRegistry,
-      conf)
+      sqlConf)
 
   /**
    * Interface exposed to the user for registering user-defined functions.
@@ -94,31 +100,31 @@ private[sql] class SessionState(ctx: SQLContext) {
    * Logical query plan analyzer for resolving unresolved attributes and relations.
    */
   lazy val analyzer: Analyzer = {
-    new Analyzer(catalog, conf) {
+    new Analyzer(catalog, sqlConf) {
       override val extendedResolutionRules =
         PreInsertCastAndRename ::
         DataSourceAnalysis ::
-        (if (conf.runSQLonFile) new ResolveDataSource(ctx) :: Nil else Nil)
+        (if (sqlConf.runSQLonFile) new ResolveDataSource(ctx) :: Nil else Nil)
 
-      override val extendedCheckRules = Seq(datasources.PreWriteCheck(conf, catalog))
+      override val extendedCheckRules = Seq(datasources.PreWriteCheck(sqlConf, catalog))
     }
   }
 
   /**
    * Logical query plan optimizer.
    */
-  lazy val optimizer: Optimizer = new SparkOptimizer(catalog, conf, experimentalMethods)
+  lazy val optimizer: Optimizer = new SparkOptimizer(catalog, sqlConf, experimentalMethods)
 
   /**
    * Parser that extracts expressions, plans, table identifiers etc. from SQL texts.
    */
-  lazy val sqlParser: ParserInterface = new SparkSqlParser(conf)
+  lazy val sqlParser: ParserInterface = new SparkSqlParser(sqlConf)
 
   /**
    * Planner that converts optimized logical plans to physical plans.
    */
   def planner: SparkPlanner =
-    new SparkPlanner(ctx.sparkContext, conf, experimentalMethods.extraStrategies)
+    new SparkPlanner(ctx.sparkContext, sqlConf, experimentalMethods.extraStrategies)
 
   /**
    * An interface to register custom [[org.apache.spark.sql.util.QueryExecutionListener]]s
@@ -151,12 +157,12 @@ private[sql] class SessionState(ctx: SQLContext) {
   }
 
   final def setConf[T](entry: ConfigEntry[T], value: T): Unit = {
-    conf.setConf(entry, value)
+    sqlConf.setConf(entry, value)
     setConf(entry.key, entry.stringConverter(value))
   }
 
   def setConf(key: String, value: String): Unit = {
-    conf.setConfString(key, value)
+    sqlConf.setConfString(key, value)
   }
 
   def addJar(path: String): Unit = {
