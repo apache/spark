@@ -38,12 +38,14 @@ class OrcOptions(
    */
 
   val compressionCodec: String = {
-    val default = conf.get(OrcTableProperties.COMPRESSION.getPropName)
+    val default =
+      conf.get(OrcTableProperties.COMPRESSION.getPropName, CompressionKind.ZLIB.name())
     // Because the ORC configuration value in `default` is not guaranteed to be the same
     // with keys in `shortOrcCompressionCodecNames` in Spark, this value should not be
     // used as the key for `shortOrcCompressionCodecNames` but just a return value.
     parameters.get("compression") match {
-      case Some(null) if default != null => default
+      case Some(null) => default
+      case None => default
       case Some(name) =>
         if (!shortOrcCompressionCodecNames.contains(name)) {
           val availableCodecs = shortOrcCompressionCodecNames.keys.map(_.toLowerCase)
@@ -51,8 +53,6 @@ class OrcOptions(
             s"is not available. Available codecs are ${availableCodecs.mkString(", ")}.")
         }
         shortOrcCompressionCodecNames(name).name()
-      case None if default != null => default
-      case _ => CompressionKind.ZLIB.name()
     }
   }
 }
