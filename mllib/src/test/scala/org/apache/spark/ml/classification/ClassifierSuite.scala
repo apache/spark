@@ -85,7 +85,8 @@ object ClassifierSuite {
 
     override def copy(extra: ParamMap): MockClassifier = throw new NotImplementedError()
 
-    override def train(dataset: Dataset[_]): MockClassificationModel = throw new NotImplementedError()
+    override def train(dataset: Dataset[_]): MockClassificationModel =
+      throw new NotImplementedError()
 
     // Make method public
     override def extractLabeledPoints(dataset: Dataset[_]): RDD[LabeledPoint] =

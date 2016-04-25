@@ -33,7 +33,6 @@ import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => O
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeModel}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Dataset
-import org.apache.spark.sql.functions.max
 
 
 /**

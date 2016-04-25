@@ -128,6 +128,12 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
   }
   */
 
+  test("Fitting without numClasses in metadata") {
+    val df: DataFrame = sqlContext.createDataFrame(TreeTests.featureImportanceData(sc))
+    val gbt = new GBTClassifier().setMaxDepth(1).setMaxIter(1)
+    gbt.fit(df)
+  }
+
   /////////////////////////////////////////////////////////////////////////////
   // Tests of feature importance
   /////////////////////////////////////////////////////////////////////////////
