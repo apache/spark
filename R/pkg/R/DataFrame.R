@@ -1130,14 +1130,14 @@ setMethod("summarize",
 #'
 #' Apply a function to each partition of a DataFrame.
 #'
-#' @param x A DataFrame
-#' @param func A function to be applied to each partition of the DataFrame.
+#' @param x A SparkDataFrame
+#' @param func A function to be applied to each partition of the SparkDataFrame.
 #'             func should have only one parameter, to which a data.frame corresponds
 #'             to each partition will be passed.
 #'             The output of func should be a data.frame.
 #' @param schema The schema of the resulting DataFrame after the function is applied.
 #'               It must match the output of func.
-#' @family DataFrame functions
+#' @family SparkDataFrame functions
 #' @rdname dapply
 #' @name dapply
 #' @export
@@ -1168,7 +1168,7 @@ setMethod("summarize",
 #'   #     2 3 3 3 4
 #' }
 setMethod("dapply",
-          signature(x = "DataFrame", func = "function", schema = "structType"),
+          signature(x = "SparkDataFrame", func = "function", schema = "structType"),
           function(x, func, schema) {
             packageNamesArr <- serialize(.sparkREnv[[".packages"]],
                                          connection = NULL)
