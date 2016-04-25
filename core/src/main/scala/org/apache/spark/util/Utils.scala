@@ -1099,16 +1099,15 @@ private[spark] object Utils extends Logging {
   def createShortClassPath(tempDir: File, classPath: String) : String = {
     if (isWindows) {
       val env = new util.HashMap[String, String](System.getenv())
-      val javaCp = FileUtil
+      val javaCps = FileUtil
         .createJarWithClassPath(classPath, new Path(tempDir.getAbsolutePath), env)
-        .mkString(File.pathSeparator)
-      logInfo("Shorten the class path to: " + javaCp)
-      javaCp
+      val javaCpStr = javaCps(0) + javaCps(1)
+      logInfo("Shorten the class path to: " + javaCpStr)
+      javaCpStr
     } else {
       classPath
     }
   }
-
 
   def createShortClassPath(classPath: String) : String = {
     val tempDir = createTempDir("classpaths")
