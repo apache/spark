@@ -52,7 +52,8 @@ import org.apache.spark.util.Utils
  */
 class SparkSession private(
     @transient val sparkContext: SparkContext,
-    @transient private val existingSharedState: Option[SharedState]) { self =>
+    @transient private val existingSharedState: Option[SharedState])
+  extends Serializable { self =>
 
   def this(sc: SparkContext) {
     this(sc, None)
