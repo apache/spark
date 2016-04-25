@@ -61,8 +61,7 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
     pw.close()
 
     // Path to tmpFile
-    tmpFilePath = "file://" + tmpFile.getAbsolutePath
-  }
+    tmpFilePath = Utils.resolveURI(tmpFile.getAbsolutePath).toString  }
 
   after {
     Utils.deleteRecursively(tmpDir)
@@ -181,7 +180,7 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
     sc.textFile(tmpFilePath, 4)
       .map(key => (key, 1))
       .reduceByKey(_ + _)
-      .saveAsTextFile("file://" + tmpFile.getAbsolutePath)
+      .saveAsTextFile(Utils.resolveURI(tmpFile.getAbsolutePath).toString)
 
     sc.listenerBus.waitUntilEmpty(500)
     assert(inputRead == numRecords)
@@ -197,7 +196,7 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
     val numPartitions = 2
     val cartVector = 0 to 9
     val cartFile = new File(tmpDir, getClass.getSimpleName + "_cart.txt")
-    val cartFilePath = "file://" + cartFile.getAbsolutePath
+    val cartFilePath = Utils.resolveURI(cartFile.getAbsolutePath).toString
 
     // write files to disk so we can read them later.
     sc.parallelize(cartVector).saveAsTextFile(cartFilePath)
@@ -265,7 +264,7 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
     // Only supported on newer Hadoop
     if (SparkHadoopUtil.get.getFSBytesWrittenOnThreadCallback().isDefined) {
       val file = new File(tmpDir, getClass.getSimpleName)
-      val filePath = "file://" + file.getAbsolutePath
+      val filePath = Utils.resolveURI(file.getAbsolutePath).toString
 
       val records = runAndReturnRecordsWritten {
         sc.parallelize(1 to numRecords).saveAsTextFile(filePath)
@@ -278,7 +277,7 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
     // Only supported on newer Hadoop
     if (SparkHadoopUtil.get.getFSBytesWrittenOnThreadCallback().isDefined) {
       val file = new File(tmpDir, getClass.getSimpleName)
-      val filePath = "file://" + file.getAbsolutePath
+      val filePath = Utils.resolveURI(file.getAbsolutePath).toString
 
       val records = runAndReturnRecordsWritten {
         sc.parallelize(1 to numRecords).map(key => (key.toString, key.toString))
