@@ -21,6 +21,8 @@ import java.io.File
 
 import scala.collection.mutable
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystConf, SimpleCatalystConf}
@@ -219,6 +221,13 @@ class SessionCatalog(
     val table = formatTableName(name.table)
     externalCatalog.loadPartition(db, table, loadPath, partition, isOverwrite, holdDDLTime,
       inheritTableSpecs, isSkewedStoreAsSubdir)
+  }
+
+  def defaultTablePath(tableIdent: TableIdentifier): String = {
+    val dbName = tableIdent.database.getOrElse(currentDb)
+    val dbLocation = getDatabaseMetadata(dbName).locationUri
+
+    new Path(new Path(dbLocation), formatTableName(tableIdent.table)).toString
   }
 
   // -------------------------------------------------------------

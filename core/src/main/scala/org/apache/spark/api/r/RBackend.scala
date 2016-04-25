@@ -94,6 +94,8 @@ private[spark] class RBackend {
 }
 
 private[spark] object RBackend extends Logging {
+  initializeLogIfNecessary(true)
+
   def main(args: Array[String]): Unit = {
     if (args.length < 1) {
       // scalastyle:off println
@@ -101,6 +103,7 @@ private[spark] object RBackend extends Logging {
       // scalastyle:on println
       System.exit(-1)
     }
+
     val sparkRBackend = new RBackend()
     try {
       // bind to random port

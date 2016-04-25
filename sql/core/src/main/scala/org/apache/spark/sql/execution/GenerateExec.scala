@@ -47,13 +47,13 @@ private[execution] sealed case class LazyIterator(func: () => TraversableOnce[In
  * @param output the output attributes of this node, which constructed in analysis phase,
  *               and we can not change it, as the parent node bound with it already.
  */
-case class Generate(
+case class GenerateExec(
     generator: Generator,
     join: Boolean,
     outer: Boolean,
     output: Seq[Attribute],
     child: SparkPlan)
-  extends UnaryNode {
+  extends UnaryExecNode {
 
   private[sql] override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))

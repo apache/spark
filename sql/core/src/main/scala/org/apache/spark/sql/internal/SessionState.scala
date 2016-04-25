@@ -98,7 +98,7 @@ private[sql] class SessionState(sparkSession: SparkSession) {
       override val extendedResolutionRules =
         PreInsertCastAndRename ::
         DataSourceAnalysis ::
-        (if (conf.runSQLOnFile) new ResolveDataSource(sparkSession) :: Nil else Nil)
+        (if (conf.runSQLonFile) new ResolveDataSource(sparkSession) :: Nil else Nil)
 
       override val extendedCheckRules = Seq(datasources.PreWriteCheck(conf, catalog))
     }

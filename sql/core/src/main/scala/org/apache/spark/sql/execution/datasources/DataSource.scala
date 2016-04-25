@@ -67,7 +67,10 @@ case class DataSource(
     bucketSpec: Option[BucketSpec] = None,
     options: Map[String, String] = Map.empty) extends Logging {
 
+  case class SourceInfo(name: String, schema: StructType)
+
   lazy val providingClass: Class[_] = lookupDataSource(className)
+  lazy val sourceInfo = sourceSchema()
 
   /** A map to maintain backward compatibility in case we move data sources around. */
   private val backwardCompatibilityMap = Map(
@@ -145,17 +148,20 @@ case class DataSource(
   }
 
   /** Returns the name and schema of the source that can be used to continually read data. */
-  def sourceSchema(): (String, StructType) = {
+  private def sourceSchema(): SourceInfo = {
     providingClass.newInstance() match {
       case s: StreamSourceProvider =>
-        s.sourceSchema(sparkSession.wrapped, userSpecifiedSchema, className, options)
+        val (name, schema) = s.sourceSchema(
+          sparkSession.wrapped, userSpecifiedSchema, className, options)
+        SourceInfo(name, schema)
 
       case format: FileFormat =>
         val caseInsensitiveOptions = new CaseInsensitiveMap(options)
         val path = caseInsensitiveOptions.getOrElse("path", {
           throw new IllegalArgumentException("'path' is not specified")
         })
-        (s"FileSource[$path]", inferFileFormatSchema(format))
+        SourceInfo(s"FileSource[$path]", inferFileFormatSchema(format))
+
       case _ =>
         throw new UnsupportedOperationException(
           s"Data source $className does not support streamed reading")
@@ -174,24 +180,20 @@ case class DataSource(
           throw new IllegalArgumentException("'path' is not specified")
         })
 
-        val dataSchema = inferFileFormatSchema(format)
-
         def dataFrameBuilder(files: Array[String]): DataFrame = {
-          Dataset.ofRows(
-            sparkSession,
-            LogicalRelation(
-              DataSource(
-                sparkSession,
-                paths = files,
-                userSpecifiedSchema = Some(dataSchema),
-                className = className,
-                options =
-                  new CaseInsensitiveMap(
-                    options.filterKeys(_ != "path") + ("basePath" -> path))).resolveRelation()))
+          val newOptions = options.filterKeys(_ != "path") + ("basePath" -> path)
+          val newDataSource =
+            DataSource(
+              sparkSession,
+              paths = files,
+              userSpecifiedSchema = Some(sourceInfo.schema),
+              className = className,
+              options = new CaseInsensitiveMap(newOptions))
+          Dataset.ofRows(sparkSession, LogicalRelation(newDataSource.resolveRelation()))
         }
 
         new FileStreamSource(
-          sparkSession, metadataPath, path, Some(dataSchema), className, dataFrameBuilder)
+          sparkSession, metadataPath, path, sourceInfo.schema, dataFrameBuilder)
       case _ =>
         throw new UnsupportedOperationException(
           s"Data source $className does not support streamed reading")

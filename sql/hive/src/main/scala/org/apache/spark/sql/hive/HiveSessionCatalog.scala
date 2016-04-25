@@ -103,18 +103,6 @@ private[sql] class HiveSessionCatalog(
     metastoreCatalog.cachedDataSourceTables.invalidateAll()
   }
 
-  def createDataSourceTable(
-      name: TableIdentifier,
-      userSpecifiedSchema: Option[StructType],
-      partitionColumns: Array[String],
-      bucketSpec: Option[BucketSpec],
-      provider: String,
-      options: Map[String, String],
-      isExternal: Boolean): Unit = {
-    metastoreCatalog.createDataSourceTable(
-      name, userSpecifiedSchema, partitionColumns, bucketSpec, provider, options, isExternal)
-  }
-
   def hiveDefaultTableFilePath(name: TableIdentifier): String = {
     metastoreCatalog.hiveDefaultTableFilePath(name)
   }

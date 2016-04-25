@@ -38,7 +38,7 @@ case class TungstenAggregate(
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     child: SparkPlan)
-  extends UnaryNode with CodegenSupport {
+  extends UnaryExecNode with CodegenSupport {
 
   private[this] val aggregateBufferAttributes = {
     aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
@@ -633,7 +633,8 @@ case class TungstenAggregate(
           updateExpr.map(BindReferences.bindReference(_, inputAttr).genCode(ctx))
         val updateVectorizedRow = vectorizedRowEvals.zipWithIndex.map { case (ev, i) =>
           val dt = updateExpr(i).dataType
-          ctx.updateColumn(vectorizedRowBuffer, dt, i, ev, updateExpr(i).nullable)
+          ctx.updateColumn(vectorizedRowBuffer, dt, i, ev, updateExpr(i).nullable,
+            isVectorized = true)
         }
         Option(
           s"""

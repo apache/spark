@@ -40,7 +40,7 @@ case class ScalarSubquery(
   override def withNewPlan(plan: LogicalPlan): SubqueryExpression = {
     throw new UnsupportedOperationException
   }
-  override def plan: SparkPlan = Subquery(simpleString, executedPlan)
+  override def plan: SparkPlan = SubqueryExec(simpleString, executedPlan)
 
   override def dataType: DataType = executedPlan.schema.fields.head.dataType
   override def children: Seq[Expression] = Nil

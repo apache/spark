@@ -28,7 +28,7 @@ import org.apache.parquet.hadoop.ParquetOutputCommitter
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql._
-import org.apache.spark.sql.execution.DataSourceScan
+import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.datasources.{FileScanRDD, HadoopFsRelation, LocalityTestFileSystem, LogicalRelation}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
@@ -688,7 +688,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
             .load(path)
 
           val Some(fileScanRDD) = df2.queryExecution.executedPlan.collectFirst {
-            case scan: DataSourceScan if scan.rdd.isInstanceOf[FileScanRDD] =>
+            case scan: DataSourceScanExec if scan.rdd.isInstanceOf[FileScanRDD] =>
               scan.rdd.asInstanceOf[FileScanRDD]
           }
 
