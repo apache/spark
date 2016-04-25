@@ -40,7 +40,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.ShowTablesCommand
 import org.apache.spark.sql.execution.datasources.{CreateTableUsing, LogicalRelation}
 import org.apache.spark.sql.execution.ui.SQLListener
-import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf}
+import org.apache.spark.sql.internal.{SessionState, SharedState}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.{DataType, LongType, StructType}
 import org.apache.spark.sql.util.ExecutionListenerManager
@@ -103,7 +103,6 @@ class SparkSession private(
     _wrapped = sqlContext
   }
 
-  protected[sql] def conf: SQLConf = sessionState.sqlConf
   protected[sql] def cacheManager: CacheManager = sharedState.cacheManager
   protected[sql] def listener: SQLListener = sharedState.listener
   protected[sql] def externalCatalog: ExternalCatalog = sharedState.externalCatalog
@@ -192,46 +191,43 @@ class SparkSession private(
    * -------------------------------------------------- */
 
   /**
-   * Set Spark SQL configuration properties.
+   * Runtime configuration interface for Spark.
+   *
+   * // TODO: rxin please expand on this.
    *
    * @group config
    * @since 2.0.0
    */
-  def setConf(props: Properties): Unit = sessionState.setConf(props)
+  def conf: RuntimeConfig = sessionState.conf
+
+  /**
+   * Set Spark SQL configuration properties.
+   */
+  protected[sql] def setConf(props: Properties): Unit = sessionState.setConf(props)
 
   /**
    * Set the given Spark SQL configuration property.
-   *
-   * @group config
-   * @since 2.0.0
    */
-  def setConf(key: String, value: String): Unit = sessionState.setConf(key, value)
+  protected[sql] def setConf(key: String, value: String): Unit = sessionState.setConf(key, value)
 
   /**
    * Return the value of Spark SQL configuration property for the given key.
-   *
-   * @group config
-   * @since 2.0.0
    */
-  def getConf(key: String): String = conf.getConfString(key)
+  protected[sql] def getConf(key: String): String = sessionState.sqlConf.getConfString(key)
 
   /**
    * Return the value of Spark SQL configuration property for the given key. If the key is not set
    * yet, return `defaultValue`.
-   *
-   * @group config
-   * @since 2.0.0
    */
-  def getConf(key: String, defaultValue: String): String = conf.getConfString(key, defaultValue)
+  protected[sql] def getConf(key: String, defaultValue: String): String = {
+    sessionState.sqlConf.getConfString(key, defaultValue)
+  }
 
   /**
    * Return all the configuration properties that have been set (i.e. not the default).
    * This creates a new copy of the config properties in the form of a Map.
-   *
-   * @group config
-   * @since 2.0.0
    */
-  def getAllConfs: immutable.Map[String, String] = conf.getAllConfs
+  protected[sql] def getAllConfs: immutable.Map[String, String] = sessionState.sqlConf.getAllConfs
 
   /**
    * Set the given Spark SQL configuration property.
@@ -244,7 +240,7 @@ class SparkSession private(
    * Return the value of Spark SQL configuration property for the given key. If the key is not set
    * yet, return `defaultValue` in [[ConfigEntry]].
    */
-  protected[sql] def getConf[T](entry: ConfigEntry[T]): T = conf.getConf(entry)
+  protected[sql] def getConf[T](entry: ConfigEntry[T]): T = sessionState.sqlConf.getConf(entry)
 
   /**
    * Return the value of Spark SQL configuration property for the given key. If the key is not set
@@ -252,7 +248,7 @@ class SparkSession private(
    * desired one.
    */
   protected[sql] def getConf[T](entry: ConfigEntry[T], defaultValue: T): T = {
-    conf.getConf(entry, defaultValue)
+    sessionState.sqlConf.getConf(entry, defaultValue)
   }
 
 
@@ -601,7 +597,7 @@ class SparkSession private(
    */
   @Experimental
   def createExternalTable(tableName: String, path: String): DataFrame = {
-    val dataSourceName = conf.defaultDataSourceName
+    val dataSourceName = sessionState.sqlConf.defaultDataSourceName
     createExternalTable(tableName, path, dataSourceName)
   }
 
