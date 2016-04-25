@@ -72,7 +72,7 @@ object TestHive
  * test cases that rely on TestHive must be serialized.
  */
 class TestHiveContext(@transient val sparkSession: TestHiveSparkSession, isRootContext: Boolean)
-  extends HiveContext(sparkSession, isRootContext) {
+  extends SQLContext(sparkSession, isRootContext) {
 
   def this(sc: SparkContext) {
     this(new TestHiveSparkSession(HiveUtils.withHiveExternalCatalog(sc)), true)

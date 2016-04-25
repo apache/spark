@@ -451,7 +451,10 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "alter_merge_2",
 
     // TOUCH is not supported
-    "touch"
+    "touch",
+
+    // INPUTDRIVER and OUTPUTDRIVER are not supported
+    "inoutdriver"
   )
 
   /**
@@ -641,7 +644,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "index_serde",
     "infer_bucket_sort_dyn_part",
     "innerjoin",
-    "inoutdriver",
     "input",
     "input0",
     "input1",
