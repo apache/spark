@@ -138,16 +138,22 @@ abstract class ProbabilisticClassificationModel[
         }
         predictUDF(col($(featuresCol)))
       }
-      // determine number of classes either from metadata if provided.
-      val labelSchema = dataset.schema($(labelCol))
-      // extract label metadata from label column if present, or create a nominal attribute
-      // to output the number of labels
-      val labelAttribute = Attribute.fromStructField(labelSchema) match {
-        case _: NumericAttribute | UnresolvedAttribute =>
-          NominalAttribute.defaultAttr.withName("label").withNumValues(numClasses)
-        case attr: Attribute => attr
+      // The label column for base binary classifier of OneVsRest will not be retained during
+      // model transformation, so we should not handle label column metadata as well.
+      if (dataset.schema.fieldNames.contains($(labelCol))) {
+        // determine number of classes either from metadata if provided.
+        val labelSchema = dataset.schema($(labelCol))
+        // extract label metadata from label column if present, or create a nominal attribute
+        // to output the number of labels
+        val labelAttribute = Attribute.fromStructField(labelSchema) match {
+          case _: NumericAttribute | UnresolvedAttribute =>
+            NominalAttribute.defaultAttr.withName("label").withNumValues(numClasses)
+          case attr: Attribute => attr
+        }
+        outputData = outputData.withColumn(getPredictionCol, predUDF, labelAttribute.toMetadata)
+      } else {
+        outputData = outputData.withColumn(getPredictionCol, predUDF)
       }
-      outputData = outputData.withColumn(getPredictionCol, predUDF, labelAttribute.toMetadata)
       numColsOutput += 1
     }
 
