@@ -33,6 +33,7 @@ import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
+import org.apache.spark.scheduler.{SparkListener, SparkListenerStageCompleted}
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.storage.StorageLevel
 
@@ -515,6 +516,7 @@ class ALSSuite
   }
 
   test("StorageLevel param") {
+    // test invalid param values
     intercept[IllegalArgumentException] {
       new ALS().setIntermediateRDDStorageLevel("foo")
     }
@@ -524,7 +526,7 @@ class ALSSuite
     intercept[IllegalArgumentException] {
       new ALS().setFinalRDDStorageLevel("foo")
     }
-    // test final factor StorageLevel
+    // test StorageLevels
     val sqlContext = this.sqlContext
     import sqlContext.implicits._
     val (ratings, _) = genExplicitTestData(numUsers = 2, numItems = 2, rank = 1)
@@ -535,12 +537,32 @@ class ALSSuite
       case (id, rdd) if rdd.name == "userFactors" => rdd
     }.head
     assert(factorRDD.getStorageLevel == StorageLevel.MEMORY_AND_DISK)
-    als.setFinalRDDStorageLevel("MEMORY_ONLY").fit(data)
+    val listener = new RDDStorageListener
+    sc.addSparkListener(listener)
+    als
+      .setFinalRDDStorageLevel("MEMORY_ONLY")
+      .setIntermediateRDDStorageLevel("DISK_ONLY")
+      .fit(data)
     val level = sc.getRDDStorageInfo { rdd =>
       rdd.name == "userFactors" && rdd.id != factorRDD.id
     }.head.storageLevel
     assert(level == StorageLevel.MEMORY_ONLY)
+    listener.infos.foreach(level => assert(level == StorageLevel.DISK_ONLY))
   }
+}
+
+private class RDDStorageListener extends SparkListener {
+
+  var infos: Seq[StorageLevel] = Seq()
+
+  override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = {
+    val info = stageCompleted.stageInfo.rddInfos.collect {
+      case info if info.name.contains("Blocks") || info.name.contains("Factors-") =>
+        info.storageLevel
+    }
+    infos = info
+  }
+
 }
 
 object ALSSuite {
