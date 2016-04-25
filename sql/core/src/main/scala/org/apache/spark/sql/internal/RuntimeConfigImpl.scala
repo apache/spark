@@ -17,17 +17,18 @@
 
 package org.apache.spark.sql.internal
 
+import org.apache.hadoop.conf.Configuration
+
 import org.apache.spark.sql.RuntimeConfig
+
 
 /**
  * Implementation for [[RuntimeConfig]].
  */
 class RuntimeConfigImpl extends RuntimeConfig {
 
-  protected[sql] override val sqlConf = new SQLConf
-
-  private val hadoopConf = java.util.Collections.synchronizedMap(
-    new java.util.HashMap[String, String]())
+  protected[sql] override val sqlConf: SQLConf = new SQLConf
+  protected[sql] override val hadoopConf: Configuration = new Configuration
 
   override def set(key: String, value: String): RuntimeConfig = {
     sqlConf.setConfString(key, value)
@@ -49,25 +50,24 @@ class RuntimeConfigImpl extends RuntimeConfig {
 
   override def unset(key: String): Unit = sqlConf.unsetConf(key)
 
-  override def setHadoop(key: String, value: String): RuntimeConfig = {
-    hadoopConf.put(key, value)
+  override def setHadoop(key: String, value: String): RuntimeConfig = hadoopConf.synchronized {
+    hadoopConf.set(key, value)
     this
   }
 
   @throws[NoSuchElementException]("if the key is not set")
   override def getHadoop(key: String): String = hadoopConf.synchronized {
-    if (hadoopConf.containsKey(key)) {
-      hadoopConf.get(key)
-    } else {
+    Option(hadoopConf.get(key)).getOrElse {
       throw new NoSuchElementException(key)
     }
   }
 
-  override def getHadoopOption(key: String): Option[String] = {
-    try Option(getHadoop(key)) catch {
-      case _: NoSuchElementException => None
-    }
+  override def getHadoopOption(key: String): Option[String] = hadoopConf.synchronized {
+    Option(hadoopConf.get(key))
   }
 
-  override def unsetHadoop(key: String): Unit = hadoopConf.remove(key)
+  override def unsetHadoop(key: String): Unit = hadoopConf.synchronized {
+    hadoopConf.unset(key)
+  }
+
 }

@@ -57,7 +57,7 @@ private[sql] class DefaultSource
       files: Seq[FileStatus]): Option[StructType] = {
     OrcFileOperator.readSchema(
       files.map(_.getPath.toUri.toString),
-      Some(sqlContext.sparkContext.hadoopConfiguration)
+      Some(new Configuration(sqlContext.sessionState.hadoopConf))
     )
   }
 
@@ -115,7 +115,7 @@ private[sql] class DefaultSource
       requiredSchema: StructType,
       filters: Seq[Filter],
       options: Map[String, String]): (PartitionedFile) => Iterator[InternalRow] = {
-    val orcConf = new Configuration(sqlContext.sparkContext.hadoopConfiguration)
+    val orcConf = new Configuration(sqlContext.sessionState.hadoopConf)
 
     if (sqlContext.conf.orcFilterPushDown) {
       // Sets pushed predicates
@@ -278,7 +278,7 @@ private[orc] case class OrcTableScan(
   with HiveInspectors {
 
   def execute(): RDD[InternalRow] = {
-    val job = Job.getInstance(sqlContext.sparkContext.hadoopConfiguration)
+    val job = Job.getInstance(new Configuration(sqlContext.sessionState.hadoopConf))
     val conf = job.getConfiguration
 
     // Tries to push down filters if ORC filter push-down is enabled

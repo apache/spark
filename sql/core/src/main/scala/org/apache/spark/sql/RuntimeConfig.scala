@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import org.apache.hadoop.conf.Configuration
+
 import org.apache.spark.sql.internal.SQLConf
 
 
@@ -28,6 +30,7 @@ import org.apache.spark.sql.internal.SQLConf
 abstract class RuntimeConfig {
 
   protected[sql] val sqlConf: SQLConf
+  protected[sql] val hadoopConf: Configuration
 
   /**
    * Sets the given Spark runtime configuration property.

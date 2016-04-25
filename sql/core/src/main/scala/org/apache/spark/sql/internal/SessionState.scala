@@ -21,6 +21,8 @@ import java.util.Properties
 
 import scala.collection.JavaConverters._
 
+import org.apache.hadoop.conf.Configuration
+
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry}
@@ -48,9 +50,11 @@ private[sql] class SessionState(ctx: SQLContext) {
    * SQL-specific key-value configurations.
    */
   lazy val sqlConf: SQLConf = new SQLConf
+  lazy val hadoopConf: Configuration = new Configuration(ctx.sparkContext.hadoopConfiguration)
 
   final lazy val conf: RuntimeConfig = new RuntimeConfigImpl {
     protected[sql] override val sqlConf: SQLConf = self.sqlConf
+    protected[sql] override val hadoopConf: Configuration = self.hadoopConf
   }
 
   // Automatically extract `spark.sql.*` entries and put it in our SQLConf

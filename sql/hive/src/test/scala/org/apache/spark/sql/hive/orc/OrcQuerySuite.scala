@@ -181,7 +181,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
   // Following codec is supported in hive-0.13.1, ignore it now
   ignore("Other compression options for writing to an ORC file - 0.13.1 and above") {
     val data = (1 to 100).map(i => (i, s"val_$i"))
-    val conf = sparkContext.hadoopConfiguration
+    val conf = sqlContext.sessionState.hadoopConf
 
     conf.set(ConfVars.HIVE_ORC_DEFAULT_COMPRESS.varname, "SNAPPY")
     withOrcFile(data) { file =>
