@@ -155,12 +155,14 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
     val tempDir = Utils.createTempDir()
     val outputDir = new File(tempDir, "output")
     MLUtils.saveAsLibSVMFile(examples, outputDir.toURI.toString)
-    val lines = outputDir.listFiles()
+    val sources = outputDir.listFiles()
       .filter(_.getName.startsWith("part-"))
-      .flatMap(Source.fromFile(_).getLines())
-      .toSet
+      .map(Source.fromFile)
+
+    val lines = sources.flatMap(_.getLines()).toSet
     val expected = Set("1.1 1:1.23 3:4.56", "0.0 1:1.01 2:2.02 3:3.03")
     assert(lines === expected)
+    sources.foreach(_.close())
     Utils.deleteRecursively(tempDir)
   }
 
