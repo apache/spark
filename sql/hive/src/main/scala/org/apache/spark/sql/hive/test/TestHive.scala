@@ -74,7 +74,7 @@ object TestHive
 class TestHiveContext(
     @transient override val sparkSession: TestHiveSparkSession,
     isRootContext: Boolean)
-  extends HiveContext(sparkSession, isRootContext) {
+  extends SQLContext(sparkSession, isRootContext) {
 
   def this(sc: SparkContext) {
     this(new TestHiveSparkSession(HiveUtils.withHiveExternalCatalog(sc)), true)

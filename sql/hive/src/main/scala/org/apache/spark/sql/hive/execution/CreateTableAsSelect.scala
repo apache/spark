@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan
 import org.apache.spark.sql.execution.command.RunnableCommand
 import org.apache.spark.sql.hive.MetastoreRelation
 
+
 /**
  * Create table and insert the query result into it.
  * @param tableDesc the Table Describe, which may contains serde, storage handler etc.

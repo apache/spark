@@ -603,6 +603,7 @@ class SQLContext(object):
         return DataFrameReader(self)
 
 
+# TODO(andrew): remove this too
 class HiveContext(SQLContext):
     """A variant of Spark SQL that integrates with data stored in Hive.
 
@@ -632,7 +633,7 @@ class HiveContext(SQLContext):
             raise
 
     def _get_hive_ctx(self):
-        return self._jvm.HiveContext(self._jsc.sc())
+        return self._jvm.SparkSession.withHiveSupport(self._jsc.sc()).wrapped()
 
     def refreshTable(self, tableName):
         """Invalidate and refresh all the cached the metadata of the given

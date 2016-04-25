@@ -918,7 +918,8 @@ class HashingTFTest(PySparkTestCase):
         df = sqlContext.createDataFrame([(0, ["a", "a", "b", "c", "c", "c"])], ["id", "words"])
         n = 100
         hashingTF = HashingTF()
-        hashingTF.setInputCol("words").setOutputCol("features").setNumFeatures(n).setBinary(True)
+        hashingTF.setInputCol("words").setOutputCol("features").setNumFeatures(n)\
+            .setBinary(True).setHashAlgorithm("native")
         output = hashingTF.transform(df)
         features = output.select("features").first().features.toArray()
         expected = Vectors.sparse(n, {(ord("a") % n): 1.0,
