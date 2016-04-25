@@ -126,8 +126,10 @@ class ExpressionParserSuite extends PlanTest {
     assertEqual("a != b", 'a =!= 'b)
     assertEqual("a < b", 'a < 'b)
     assertEqual("a <= b", 'a <= 'b)
+    assertEqual("a !> b", 'a <= 'b)
     assertEqual("a > b", 'a > 'b)
     assertEqual("a >= b", 'a >= 'b)
+    assertEqual("a !< b", 'a >= 'b)
   }
 
   test("between expressions") {
