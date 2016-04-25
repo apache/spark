@@ -53,6 +53,14 @@ class DDLCommandSuite extends PlanTest {
     comparePlans(parsed, expected)
   }
 
+  test("create database with illegal names") {
+    val sql = "CREATE DATABASE illegal:database:Name"
+    val e = intercept[ParseException] {
+      parser.parsePlan(sql)
+    }
+    assert(e.getMessage.contains("mismatched input ':' expecting"))
+  }
+
   test("drop database") {
     val sql1 = "DROP DATABASE IF EXISTS database_name RESTRICT"
     val sql2 = "DROP DATABASE IF EXISTS database_name CASCADE"
