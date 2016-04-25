@@ -17,6 +17,7 @@
 
 package org.apache.spark.scheduler.cluster.mesos
 
+import java.io.File
 import java.nio.ByteBuffer
 import java.util.Arrays
 import java.util.Collection
@@ -25,7 +26,6 @@ import java.util.Collections
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-
 import org.apache.mesos.{Protos, Scheduler, SchedulerDriver}
 import org.apache.mesos.Protos._
 import org.apache.mesos.Protos.Value.Scalar
@@ -33,11 +33,9 @@ import org.mockito.{ArgumentCaptor, Matchers}
 import org.mockito.Matchers._
 import org.mockito.Mockito._
 import org.scalatest.mock.MockitoSugar
-
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.executor.MesosExecutorBackend
-import org.apache.spark.scheduler.{LiveListenerBus, SparkListenerExecutorAdded,
-  TaskDescription, TaskSchedulerImpl, WorkerOffer}
+import org.apache.spark.scheduler.{LiveListenerBus, SparkListenerExecutorAdded, TaskDescription, TaskSchedulerImpl, WorkerOffer}
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 
 class MesosSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext with MockitoSugar {
@@ -135,8 +133,8 @@ class MesosSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext wi
     // uri is null.
     val (executorInfo, _) = mesosSchedulerBackend.createExecutorInfo(resources, "test-id")
     assert(executorInfo.getCommand.getValue ===
-      s" /mesos-home/bin/spark-class ${classOf[MesosExecutorBackend].getName}")
-
+      " " + new File(s"/mesos-home/bin/spark-class ${classOf[MesosExecutorBackend].getName}")
+      .getAbsolutePath)
     // uri exists.
     conf.set("spark.executor.uri", "hdfs:///test-app-1.0.0.tgz")
     val (executorInfo1, _) = mesosSchedulerBackend.createExecutorInfo(resources, "test-id")
