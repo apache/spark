@@ -27,7 +27,7 @@ import org.scalatest.BeforeAndAfterAll
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
 import org.apache.spark.sql.internal.SQLConf
@@ -406,7 +406,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
   test("SPARK-14070 Use ORC data source for SQL queries on ORC tables") {
     withTempPath { dir =>
       withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true",
-        HiveContext.CONVERT_METASTORE_ORC.key -> "true") {
+        HiveUtils.CONVERT_METASTORE_ORC.key -> "true") {
         val path = dir.getCanonicalPath
 
         withTable("dummy_orc") {

@@ -19,7 +19,6 @@ package org.apache.spark.mllib.util
 
 import java.io.File
 
-import org.apache.hadoop.fs.Path
 import org.scalatest.Suite
 
 import org.apache.spark.{SparkConf, SparkContext}

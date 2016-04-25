@@ -43,7 +43,7 @@ setClass("KMeansModel", representation(jobj = "jobj"))
 #'
 #' @param formula A symbolic description of the model to be fitted. Currently only a few formula
 #'                operators are supported, including '~', '.', ':', '+', and '-'.
-#' @param data DataFrame for training.
+#' @param data SparkDataFrame for training.
 #' @param family A description of the error distribution and link function to be used in the model.
 #'               This can be a character string naming a family function, a family function or
 #'               the result of a call to a family function. Refer R family at
@@ -62,7 +62,7 @@ setClass("KMeansModel", representation(jobj = "jobj"))
 #' model <- glm(Sepal_Length ~ Sepal_Width, df, family="gaussian")
 #' summary(model)
 #' }
-setMethod("glm", signature(formula = "formula", family = "ANY", data = "DataFrame"),
+setMethod("glm", signature(formula = "formula", family = "ANY", data = "SparkDataFrame"),
           function(formula, family = gaussian, data, epsilon = 1e-06, maxit = 25) {
             if (is.character(family)) {
               family <- get(family, mode = "function", envir = parent.frame())
@@ -155,8 +155,8 @@ print.summary.GeneralizedLinearRegressionModel <- function(x, ...) {
 #' Makes predictions from a generalized linear model produced by glm(), similarly to R's predict().
 #'
 #' @param object A fitted generalized linear model
-#' @param newData DataFrame for testing
-#' @return DataFrame containing predicted labels in a column named "prediction"
+#' @param newData SparkDataFrame for testing
+#' @return SparkDataFrame containing predicted labels in a column named "prediction"
 #' @rdname predict
 #' @export
 #' @examples
@@ -175,8 +175,8 @@ setMethod("predict", signature(object = "GeneralizedLinearRegressionModel"),
 #' Makes predictions from a model produced by naiveBayes(), similarly to R package e1071's predict.
 #'
 #' @param object A fitted naive Bayes model
-#' @param newData DataFrame for testing
-#' @return DataFrame containing predicted labels in a column named "prediction"
+#' @param newData SparkDataFrame for testing
+#' @return SparkDataFrame containing predicted labels in a column named "prediction"
 #' @rdname predict
 #' @export
 #' @examples
@@ -223,7 +223,7 @@ setMethod("summary", signature(object = "NaiveBayesModel"),
 #'
 #' Fit a k-means model, similarly to R's kmeans().
 #'
-#' @param x DataFrame for training
+#' @param x SparkDataFrame for training
 #' @param centers Number of centers
 #' @param iter.max Maximum iteration number
 #' @param algorithm Algorithm choosen to fit the model
@@ -234,7 +234,7 @@ setMethod("summary", signature(object = "NaiveBayesModel"),
 #' \dontrun{
 #' model <- kmeans(x, centers = 2, algorithm="random")
 #' }
-setMethod("kmeans", signature(x = "DataFrame"),
+setMethod("kmeans", signature(x = "SparkDataFrame"),
           function(x, centers, iter.max = 10, algorithm = c("random", "k-means||")) {
             columnNames <- as.array(colnames(x))
             algorithm <- match.arg(algorithm)
@@ -248,7 +248,7 @@ setMethod("kmeans", signature(x = "DataFrame"),
 #' Get fitted result from a k-means model, similarly to R's fitted().
 #'
 #' @param object A fitted k-means model
-#' @return DataFrame containing fitted values
+#' @return SparkDataFrame containing fitted values
 #' @rdname fitted
 #' @export
 #' @examples
@@ -296,8 +296,8 @@ setMethod("summary", signature(object = "KMeansModel"),
 #' Make predictions from a model produced by kmeans().
 #'
 #' @param object A fitted k-means model
-#' @param newData DataFrame for testing
-#' @return DataFrame containing predicted labels in a column named "prediction"
+#' @param newData SparkDataFrame for testing
+#' @return SparkDataFrame containing predicted labels in a column named "prediction"
 #' @rdname predict
 #' @export
 #' @examples
@@ -314,12 +314,12 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' Fit a Bernoulli naive Bayes model
 #'
 #' Fit a Bernoulli naive Bayes model, similarly to R package e1071's naiveBayes() while only
-#' categorical features are supported. The input should be a DataFrame of observations instead of a
-#' contingency table.
+#' categorical features are supported. The input should be a SparkDataFrame of observations instead
+#' of a contingency table.
 #'
 #' @param object A symbolic description of the model to be fitted. Currently only a few formula
 #'               operators are supported, including '~', '.', ':', '+', and '-'.
-#' @param data DataFrame for training
+#' @param data SparkDataFrame for training
 #' @param laplace Smoothing parameter
 #' @return a fitted naive Bayes model
 #' @rdname naiveBayes
@@ -330,7 +330,7 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' df <- createDataFrame(sqlContext, infert)
 #' model <- naiveBayes(education ~ ., df, laplace = 0)
 #'}
-setMethod("naiveBayes", signature(formula = "formula", data = "DataFrame"),
+setMethod("naiveBayes", signature(formula = "formula", data = "SparkDataFrame"),
           function(formula, data, laplace = 0, ...) {
             formula <- paste(deparse(formula), collapse = "")
             jobj <- callJStatic("org.apache.spark.ml.r.NaiveBayesWrapper", "fit",
@@ -345,7 +345,7 @@ setMethod("naiveBayes", signature(formula = "formula", data = "DataFrame"),
 #' @param formula A symbolic description of the model to be fitted. Currently only a few formula
 #'                operators are supported, including '~', ':', '+', and '-'.
 #'                Note that operator '.' is not supported currently.
-#' @param data DataFrame for training.
+#' @param data SparkDataFrame for training.
 #' @return a fitted AFT survival regression model
 #' @rdname survreg
 #' @seealso survival: \url{https://cran.r-project.org/web/packages/survival/}
@@ -355,7 +355,7 @@ setMethod("naiveBayes", signature(formula = "formula", data = "DataFrame"),
 #' df <- createDataFrame(sqlContext, ovarian)
 #' model <- survreg(Surv(futime, fustat) ~ ecog_ps + rx, df)
 #' }
-setMethod("survreg", signature(formula = "formula", data = "DataFrame"),
+setMethod("survreg", signature(formula = "formula", data = "SparkDataFrame"),
           function(formula, data, ...) {
             formula <- paste(deparse(formula), collapse = "")
             jobj <- callJStatic("org.apache.spark.ml.r.AFTSurvivalRegressionWrapper",
@@ -393,8 +393,8 @@ setMethod("summary", signature(object = "AFTSurvivalRegressionModel"),
 #' Make predictions from a model produced by survreg(), similarly to R package survival's predict.
 #'
 #' @param object A fitted AFT survival regression model
-#' @param newData DataFrame for testing
-#' @return DataFrame containing predicted labels in a column named "prediction"
+#' @param newData SparkDataFrame for testing
+#' @return SparkDataFrame containing predicted labels in a column named "prediction"
 #' @rdname predict
 #' @export
 #' @examples
