@@ -51,12 +51,15 @@ from pyspark.ml.evaluation import BinaryClassificationEvaluator, RegressionEvalu
 from pyspark.ml.feature import *
 from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.param.shared import HasMaxIter, HasInputCol, HasSeed
+from pyspark.ml.recommendation import ALS
 from pyspark.ml.regression import LinearRegression, DecisionTreeRegressor
 from pyspark.ml.tuning import *
 from pyspark.ml.wrapper import JavaParams
 from pyspark.mllib.linalg import Vectors, DenseVector, SparseVector
 from pyspark.sql import DataFrame, SQLContext, Row
 from pyspark.sql.functions import rand
+from pyspark.sql.utils import IllegalArgumentException
+from pyspark.storagelevel import *
 from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
 
 
@@ -947,6 +950,50 @@ class HashingTFTest(PySparkTestCase):
         for i in range(0, n):
             self.assertAlmostEqual(features[i], expected[i], 14, "Error at " + str(i) +
                                    ": expected " + str(expected[i]) + ", got " + str(features[i]))
+
+
+class ALSTest(PySparkTestCase):
+
+    def test_storage_levels(self):
+        sqlContext = SQLContext(self.sc)
+        df = sqlContext.createDataFrame(
+            [(0, 0, 4.0), (0, 1, 2.0), (1, 1, 3.0), (1, 2, 4.0), (2, 1, 1.0), (2, 2, 5.0)],
+            ["user", "item", "rating"])
+        als = ALS().setMaxIter(1)
+        # test default
+        als.fit(df)
+        item_factors = [(r[0], r[1]) for r in self.sc._jsc.getPersistentRDDs().iteritems()
+                        if r[1].name() == "itemFactors"][0][1]
+        java_storage_level = item_factors.getStorageLevel()
+        self.assertEqual(java_storage_level.useDisk(), True)
+        self.assertEqual(java_storage_level.useMemory(), True)
+        self.assertEqual(java_storage_level.useOffHeap(), False)
+        self.assertEqual(java_storage_level.deserialized(), True)
+        self.assertEqual(java_storage_level.replication(), 1)
+        # set intermediate and final RDD storage level to non-default values
+        als.setIntermediateRDDStorageLevel("MEMORY_ONLY")
+        als.setFinalRDDStorageLevel("MEMORY_ONLY_2")
+        als.fit(df)
+        item_factors2 = [(r[0], r[1]) for r in self.sc._jsc.getPersistentRDDs().iteritems()
+                         if r[1].name() == "itemFactors" and r[0] != item_factors.id()][0][1]
+        java_storage_level2 = item_factors2.getStorageLevel()
+        self.assertEqual(java_storage_level2.useDisk(), False)
+        self.assertEqual(java_storage_level2.useMemory(), True)
+        self.assertEqual(java_storage_level2.useOffHeap(), False)
+        self.assertEqual(java_storage_level2.deserialized(), True)
+        self.assertEqual(java_storage_level2.replication(), 2)
+
+    def test_invalid(self):
+        sqlContext = SQLContext(self.sc)
+        df = sqlContext.createDataFrame(
+            [(0, 0, 4.0), (0, 1, 2.0), (1, 1, 3.0), (1, 2, 4.0), (2, 1, 1.0), (2, 2, 5.0)],
+            ["user", "item", "rating"])
+        als = ALS().setIntermediateRDDStorageLevel("NONE")
+        self.assertRaises(IllegalArgumentException, lambda: als.fit(df))
+        als = ALS().setIntermediateRDDStorageLevel("foo")
+        self.assertRaises(IllegalArgumentException, lambda: als.fit(df))
+        als = ALS().setFinalRDDStorageLevel("foo")
+        self.assertRaises(IllegalArgumentException, lambda: als.fit(df))
 
 
 if __name__ == "__main__":
