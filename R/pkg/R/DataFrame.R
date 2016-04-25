@@ -21,6 +21,7 @@
 NULL
 
 setOldClass("jobj")
+setOldClass("structType")
 
 #' @title S4 class that represents a SparkDataFrame
 #' @description DataFrames can be created using functions like \link{createDataFrame},

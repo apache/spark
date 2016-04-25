@@ -116,12 +116,16 @@ if (isEmpty != 0) {
         names(data) <- colNames
       } else {
         # Check to see if data is a valid data.frame
+        stopifnot(deserializer == "byte")
         stopifnot(class(data) == "data.frame")
       }
       output <- computeFunc(data)
       if (serializer == "row") {
         # Transform the result data.frame back to a list of rows
         output <- split(output, seq(nrow(output)))
+      } else {
+        # Serialize the ouput to a byte array
+        stopifnot(serializer == "byte")
       }
     } else {
       output <- computeFunc(partition, data)
