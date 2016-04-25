@@ -24,12 +24,14 @@ import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.impl.Utils.EPSILON
+import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.{IntParam, ParamMap, Params}
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.stat.distribution.MultivariateGaussian
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.clustering.{GaussianMixture => MLlibGM}
-import org.apache.spark.mllib.linalg._
+import org.apache.spark.mllib.linalg.{Matrices => OldMatrices, Matrix => OldMatrix,
+  Vector => OldVector, VectorUDT => OldVectorUDT, Vectors => OldVectors}
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SQLContext}
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{IntegerType, StructType}
@@ -58,9 +60,9 @@ private[clustering] trait GaussianMixtureParams extends Params with HasMaxIter w
    * @return output schema
    */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
-    SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
+    SchemaUtils.checkColumnType(schema, $(featuresCol), new OldVectorUDT)
     SchemaUtils.appendColumn(schema, $(predictionCol), IntegerType)
-    SchemaUtils.appendColumn(schema, $(probabilityCol), new VectorUDT)
+    SchemaUtils.appendColumn(schema, $(probabilityCol), new OldVectorUDT)
   }
 }
 
@@ -92,8 +94,8 @@ class GaussianMixtureModel private[ml] (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    val predUDF = udf((vector: Vector) => predict(vector))
-    val probUDF = udf((vector: Vector) => predictProbability(vector))
+    val predUDF = udf((vector: OldVector) => predict(vector.asML))
+    val probUDF = udf((vector: OldVector) => predictProbability(vector.asML))
     dataset.withColumn($(predictionCol), predUDF(col($(featuresCol))))
       .withColumn($(probabilityCol), probUDF(col($(featuresCol))))
   }
@@ -128,7 +130,7 @@ class GaussianMixtureModel private[ml] (
   @Since("2.0.0")
   def gaussiansDF: DataFrame = {
     val modelGaussians = gaussians.map { gaussian =>
-      (Vectors.fromML(gaussian.mean), Matrices.fromML(gaussian.cov))
+      (OldVectors.fromML(gaussian.mean), OldMatrices.fromML(gaussian.cov))
     }
     val sc = SparkContext.getOrCreate()
     val sqlContext = SQLContext.getOrCreate(sc)
@@ -175,7 +177,7 @@ object GaussianMixtureModel extends MLReadable[GaussianMixtureModel] {
   private[GaussianMixtureModel] class GaussianMixtureModelWriter(
       instance: GaussianMixtureModel) extends MLWriter {
 
-    private case class Data(weights: Array[Double], mus: Array[Vector], sigmas: Array[Matrix])
+    private case class Data(weights: Array[Double], mus: Array[OldVector], sigmas: Array[OldMatrix])
 
     override protected def saveImpl(path: String): Unit = {
       // Save metadata and Params
@@ -183,8 +185,8 @@ object GaussianMixtureModel extends MLReadable[GaussianMixtureModel] {
       // Save model data: weights and gaussians
       val weights = instance.weights
       val gaussians = instance.gaussians
-      val mus = gaussians.map(g => Vectors.fromML(g.mean))
-      val sigmas = gaussians.map(c => Matrices.fromML(c.cov))
+      val mus = gaussians.map(g => OldVectors.fromML(g.mean))
+      val sigmas = gaussians.map(c => OldMatrices.fromML(c.cov))
       val data = Data(weights, mus, sigmas)
       val dataPath = new Path(path, "data").toString
       sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
@@ -202,8 +204,8 @@ object GaussianMixtureModel extends MLReadable[GaussianMixtureModel] {
       val dataPath = new Path(path, "data").toString
       val row = sqlContext.read.parquet(dataPath).select("weights", "mus", "sigmas").head()
       val weights = row.getSeq[Double](0).toArray
-      val mus = row.getSeq[Vector](1).toArray
-      val sigmas = row.getSeq[Matrix](2).toArray
+      val mus = row.getSeq[OldVector](1).toArray
+      val sigmas = row.getSeq[OldMatrix](2).toArray
       require(mus.length == sigmas.length, "Length of Mu and Sigma array must match")
       require(mus.length == weights.length, "Length of weight and Gaussian array must match")
 
@@ -294,7 +296,7 @@ class GaussianMixture @Since("2.0.0") (
 
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): GaussianMixtureModel = {
-    val rdd = dataset.select(col($(featuresCol))).rdd.map { case Row(point: Vector) => point }
+    val rdd = dataset.select(col($(featuresCol))).rdd.map { case Row(point: OldVector) => point }
 
     val algo = new MLlibGM()
       .setK($(k))
