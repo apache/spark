@@ -107,7 +107,9 @@ statement
     | SHOW TBLPROPERTIES table=tableIdentifier
         ('(' key=tablePropertyKey ')')?                                #showTblProperties
     | SHOW FUNCTIONS (LIKE? (qualifiedName | pattern=STRING))?         #showFunctions
-    | (DESC | DESCRIBE) FUNCTION EXTENDED? qualifiedName               #describeFunction
+    | (DESC | DESCRIBE) FUNCTION EXTENDED?
+        (qualifiedName | STRING | comparisonOperator |
+         arithmeticOperator | predicateOperator)                       #describeFunction
     | (DESC | DESCRIBE) option=(EXTENDED | FORMATTED)?
         tableIdentifier partitionSpec? describeColName?                #describeTable
     | (DESC | DESCRIBE) DATABASE EXTENDED? identifier                  #describeDatabase
@@ -517,6 +519,14 @@ constant
 
 comparisonOperator
     : EQ | NEQ | NEQJ | LT | LTE | GT | GTE | NSEQ
+    ;
+
+arithmeticOperator
+    : PLUS | MINUS | ASTERISK | SLASH | PERCENT | DIV | TILDE | AMPERSAND | PIPE | HAT
+    ;
+
+predicateOperator
+    : OR | AND | IN | NOT
     ;
 
 booleanValue
