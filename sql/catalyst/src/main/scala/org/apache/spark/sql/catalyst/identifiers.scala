@@ -30,11 +30,11 @@ sealed trait IdentifierWithDatabase {
   def database: Option[String]
 
   def quotedString: String = {
-    if (database.isDefined) s"`$database`.`$identifier`" else s"`$identifier`"
+    if (database.isDefined) s"`${database.get}`.`$identifier`" else s"`$identifier`"
   }
 
   def unquotedString: String = {
-    if (database.isDefined) s"$database.$identifier" else identifier
+    if (database.isDefined) s"${database.get}.$identifier" else identifier
   }
 
   override def toString: String = quotedString
