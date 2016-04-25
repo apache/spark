@@ -38,12 +38,9 @@ class SparkPlanner(
       DDLStrategy ::
       SpecialLimits ::
       Aggregation ::
-      ExistenceJoin ::
       EquiJoinSelection ::
       InMemoryScans ::
       BasicOperators ::
-      BroadcastNestedLoop ::
-      CartesianProduct ::
       DefaultJoin :: Nil)
 
   /**

@@ -125,11 +125,8 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
           DataSinks,
           Scripts,
           Aggregation,
-          ExistenceJoin,
           EquiJoinSelection,
           BasicOperators,
-          BroadcastNestedLoop,
-          CartesianProduct,
           DefaultJoin
         )
       }

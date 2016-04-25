@@ -62,21 +62,6 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 
-  object ExistenceJoin extends Strategy with PredicateHelper {
-    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case ExtractEquiJoinKeys(
-             LeftExistence(jt), leftKeys, rightKeys, condition, left, CanBroadcast(right)) =>
-        Seq(joins.BroadcastHashJoin(
-          leftKeys, rightKeys, jt, BuildRight, condition, planLater(left), planLater(right)))
-      // Find left semi joins where at least some predicates can be evaluated by matching join keys
-      case ExtractEquiJoinKeys(
-             LeftExistence(jt), leftKeys, rightKeys, condition, left, right) =>
-        Seq(joins.ShuffledHashJoin(
-          leftKeys, rightKeys, jt, BuildRight, condition, planLater(left), planLater(right)))
-      case _ => Nil
-    }
-  }
-
   /**
    * Matches a plan whose output should be small enough to be used in broadcast join.
    */
@@ -199,6 +184,24 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         joins.SortMergeJoin(
           leftKeys, rightKeys, joinType, condition, planLater(left), planLater(right)) :: Nil
 
+      // --- Existence join -----------------------------------------------------------------------
+
+      case ExtractEquiJoinKeys(
+              LeftExistence(jt), leftKeys, rightKeys, condition, left, CanBroadcast(right)) =>
+        Seq(joins.BroadcastHashJoin(
+          leftKeys, rightKeys, jt, BuildRight, condition, planLater(left), planLater(right)))
+
+      case ExtractEquiJoinKeys(LeftExistence(jt), leftKeys, rightKeys, condition, left, right)
+        if !conf.preferSortMergeJoin && canBuildHashMap(right) && muchSmaller(right, left) ||
+          !RowOrdering.isOrderable(leftKeys) =>
+        Seq(joins.ShuffledHashJoin(
+          leftKeys, rightKeys, jt, BuildRight, condition, planLater(left), planLater(right)))
+
+      case ExtractEquiJoinKeys(LeftExistence(jt), leftKeys, rightKeys, condition, left, right)
+        if RowOrdering.isOrderable(leftKeys) =>
+        Seq(joins.SortMergeJoin(
+          leftKeys, rightKeys, jt, condition, planLater(left), planLater(right)))
+
       // --- Cases where this strategy does not apply ---------------------------------------------
 
       case _ => Nil
@@ -275,31 +278,27 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 
-  object BroadcastNestedLoop extends Strategy {
+  /**
+   * Plan the joins that does not have joining keys.
+   */
+  object DefaultJoin extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+
+      // Pick BroadcastNestedLoopJoin if one side could be broadcasted
       case j @ logical.Join(CanBroadcast(left), right, Inner | RightOuter, condition) =>
         execution.joins.BroadcastNestedLoopJoin(
           planLater(left), planLater(right), joins.BuildLeft, j.joinType, condition) :: Nil
       case j @ logical.Join(left, CanBroadcast(right), Inner | LeftOuter | LeftSemi, condition) =>
         execution.joins.BroadcastNestedLoopJoin(
           planLater(left), planLater(right), joins.BuildRight, j.joinType, condition) :: Nil
-      case _ => Nil
-    }
-  }
 
-  object CartesianProduct extends Strategy {
-    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      // Pick CartesianProduct for InnerJoin
       case logical.Join(left, right, Inner, None) =>
         execution.joins.CartesianProduct(planLater(left), planLater(right)) :: Nil
       case logical.Join(left, right, Inner, Some(condition)) =>
         execution.Filter(condition,
           execution.joins.CartesianProduct(planLater(left), planLater(right))) :: Nil
-      case _ => Nil
-    }
-  }
 
-  object DefaultJoin extends Strategy {
-    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.Join(left, right, joinType, condition) =>
         val buildSide =
           if (right.statistics.sizeInBytes <= left.statistics.sizeInBytes) {
@@ -307,9 +306,10 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           } else {
             joins.BuildLeft
           }
-        // This join could be very slow or even hang forever
+        // This join could be very slow or OOM
         joins.BroadcastNestedLoopJoin(
           planLater(left), planLater(right), buildSide, joinType, condition) :: Nil
+
       case _ => Nil
     }
   }
