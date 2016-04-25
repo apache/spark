@@ -37,6 +37,7 @@ import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSui
 import org.apache.spark.executor.MesosExecutorBackend
 import org.apache.spark.scheduler.{LiveListenerBus, SparkListenerExecutorAdded, TaskDescription, TaskSchedulerImpl, WorkerOffer}
 import org.apache.spark.scheduler.cluster.ExecutorInfo
+import org.apache.spark.util.Utils
 
 class MesosSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext with MockitoSugar {
 
@@ -109,7 +110,8 @@ class MesosSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext wi
 
   test("check spark-class location correctly") {
     val conf = new SparkConf
-    conf.set("spark.mesos.executor.home", "/mesos-home")
+    conf.set("spark.mesos.executor.home",
+      if (Utils.isWindows) "D:\\mesos-home" else "/mesos-home")
 
     val listenerBus = mock[LiveListenerBus]
     listenerBus.post(
@@ -132,8 +134,14 @@ class MesosSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext wi
       mesosSchedulerBackend.createResource("mem", 1024))
     // uri is null.
     val (executorInfo, _) = mesosSchedulerBackend.createExecutorInfo(resources, "test-id")
+    val expectedSparkClass =
+      if (Utils.isWindows) {
+        "D:\\mesos-home\\bin\\spark-class"
+      } else {
+        "/mesos-home/bin/spark-class"
+      }
     assert(executorInfo.getCommand.getValue ===
-      " " + new File(s"/mesos-home/bin/spark-class ${classOf[MesosExecutorBackend].getName}")
+      " " + new File(s"$expectedSparkClass ${classOf[MesosExecutorBackend].getName}")
       .getAbsolutePath)
     // uri exists.
     conf.set("spark.executor.uri", "hdfs:///test-app-1.0.0.tgz")
