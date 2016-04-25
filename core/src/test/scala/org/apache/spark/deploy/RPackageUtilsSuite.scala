@@ -77,6 +77,7 @@ class RPackageUtilsSuite
       assert(RPackageUtils.checkManifestForR(jars(0)), "should have R code")
       assert(!RPackageUtils.checkManifestForR(jars(1)), "should not have R code")
       assert(!RPackageUtils.checkManifestForR(jars(2)), "should not have R code")
+      jars.foreach(_.close())
     }
   }
 
@@ -144,13 +145,15 @@ class RPackageUtilsSuite
       IvyTestUtils.writeFile(fakePackageDir, "DESCRIPTION", "abc")
       val finalZip = RPackageUtils.zipRLibraries(tempDir, "sparkr.zip")
       assert(finalZip.exists())
-      val entries = new ZipFile(finalZip).entries().asScala.map(_.getName).toSeq
+      val zipFile = new ZipFile(finalZip)
+      val entries = zipFile.entries().asScala.map(_.getName).toSeq
       assert(entries.contains("/test.R"))
       assert(entries.contains("/SparkR/abc.R"))
       assert(entries.contains("/SparkR/DESCRIPTION"))
       assert(!entries.contains("/package.zip"))
       assert(entries.contains("/packageTest/def.R"))
       assert(entries.contains("/packageTest/DESCRIPTION"))
+      zipFile.close()
     } finally {
       FileUtils.deleteDirectory(tempDir)
     }
