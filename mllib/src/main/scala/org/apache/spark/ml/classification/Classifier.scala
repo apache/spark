@@ -95,7 +95,7 @@ abstract class Classifier[
    * @throws IllegalArgumentException  if metadata does not specify numClasses, and the
    *                                   actual numClasses exceeds maxNumClasses
    */
-  protected def getNumClasses(dataset: Dataset[_], maxNumClasses: Int = 1000): Int = {
+  protected def getNumClasses(dataset: Dataset[_], maxNumClasses: Int = 100): Int = {
     MetadataUtils.getNumClasses(dataset.schema($(labelCol))) match {
       case Some(n: Int) => n
       case None =>
@@ -107,10 +107,12 @@ abstract class Classifier[
         val maxLabel: Int = maxLabelRow.head.getDouble(0).toInt
         val numClasses = maxLabel + 1
         require(numClasses <= maxNumClasses, s"Classifier inferred $numClasses from label values" +
-          s" in column $labelCol since numClasses were not specified in dataset metadata, but" +
-          s" this exceeded the max numClasses ($maxNumClasses) allowed to be inferred from" +
-          s" values.  To avoid this error, specify numClasses in metadata, such as by applying" +
+          s" in column $labelCol, but this exceeded the max numClasses ($maxNumClasses) allowed" +
+          s" to be inferred from values.  To avoid this error for labels with > $maxNumClasses" +
+          s" classes, specify numClasses explicitly in the metadata; this can be done by applying" +
           s" StringIndexer to the label column.")
+        logInfo(this.getClass.getCanonicalName + s" inferred $numClasses classes for" +
+          s" labelCol=$labelCol since numClasses was not specified in the column metadata.")
         numClasses
     }
   }
