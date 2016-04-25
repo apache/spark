@@ -22,10 +22,12 @@ import java.util.Arrays
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.util.io.ChunkedByteBuffer
+import org.apache.spark.util.Utils
 
 class DiskStoreSuite extends SparkFunSuite {
 
   test("reads of memory-mapped and non memory-mapped files are equivalent") {
+    assume(!Utils.isWindows)
     val confKey = "spark.storage.memoryMapThreshold"
 
     // Create a non-trivial (not all zeros) byte array
