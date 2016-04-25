@@ -17,7 +17,7 @@
 
 from pyspark import since, keyword_only
 from pyspark.ml.util import *
-from pyspark.ml.wrapper import JavaEstimator, JavaModel
+from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaWrapper
 from pyspark.ml.param.shared import *
 from pyspark.mllib.common import inherit_doc
 
@@ -58,6 +58,125 @@ class GaussianMixtureModel(JavaModel, JavaMLWritable, JavaMLReadable):
         """
         return self._call_java("gaussiansDF")
 
+    @property
+    @since("2.0.0")
+    def summary(self):
+        """
+        Gets summary of model on
+        training set. An exception is thrown if
+        `trainingSummary is None`.
+        """
+        java_gmt_summary = self._call_java("summary")
+        return GaussianMixtureTrainingSummary(java_gmt_summary)
+
+    @property
+    @since("2.0.0")
+    def hasSummary(self):
+        """
+        Indicates whether a training summary exists for this model
+        instance.
+        """
+        return self._call_java("hasSummary")
+
+    @since("2.0.0")
+    def evaluate(self, dataset):
+        """
+        Evaluates the model on a test dataset.
+
+        :param dataset:
+          Test dataset to evaluate model on, where dataset is an
+          instance of :py:class:`pyspark.sql.DataFrame`
+        """
+        if not isinstance(dataset, DataFrame):
+            raise ValueError("dataset must be a DataFrame but got %s." % type(dataset))
+        java_gmt_summary = self._call_java("evaluate", dataset)
+        return GaussianMixtureSummary(java_gmt_summary)
+
+
+class GaussianMixtureSummary(JavaWrapper):
+    """
+    Abstraction for Gaussian Mixture Results for a given model.
+
+    .. versionadded:: 2.0.0
+    """
+
+    @property
+    @since("2.0.0")
+    def predictions(self):
+        """
+        Dataframe outputted by the model's `transform` method.
+        """
+        return self._call_java("predictions")
+
+    @property
+    @since("2.0.0")
+    def probabilityCol(self):
+        """
+        Field in "predictions" which gives the probability
+        of each class.
+        """
+        return self._call_java("probabilityCol")
+
+    @property
+    @since("2.0.0")
+    def featuresCol(self):
+        """
+        Field in "predictions" which gives the features of each instance.
+        """
+        return self._call_java("featuresCol")
+
+    @property
+    @since("2.0.0")
+    def cluster(self):
+        """
+        Cluster centers of the transformed data.
+        """
+        return self._call_java("cluster")
+
+    @property
+    @since("2.0.0")
+    def probability(self):
+        """
+        Probability of each cluster.
+        """
+        return self._call_java("probability")
+
+    @property
+    @since("2.0.0")
+    def clusterSizes(self):
+        """
+        Size of (number of data points in) each cluster.
+        """
+        return self._call_java("clusterSizes")
+
+
+@inherit_doc
+class GaussianMixtureTrainingSummary(GaussianMixtureSummary):
+    """
+    Abstraction for Gaussian Mixture Training results.
+    Currently, the training summary ignores the training weights except
+    for the objective trace.
+
+    .. versionadded:: 2.0.0
+    """
+
+    @property
+    @since("2.0.0")
+    def objectiveHistory(self):
+        """
+        Objective function (scaled loss + regularization) at each
+        iteration.
+        """
+        return self._call_java("objectiveHistory")
+
+    @property
+    @since("2.0.0")
+    def totalIterations(self):
+        """
+        Number of training iterations until termination.
+        """
+        return self._call_java("totalIterations")
+
 
 @inherit_doc
 class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol, HasSeed,
@@ -91,6 +210,7 @@ class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     |[-0.87,-0.7200000...|0.001600000000000...|
     +--------------------+--------------------+
     ...
+
     >>> transformed = model.transform(df).select("features", "prediction")
     >>> rows = transformed.collect()
     >>> rows[4].prediction == rows[5].prediction
@@ -116,6 +236,7 @@ class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     |[-0.87,-0.7200000...|0.001600000000000...|
     +--------------------+--------------------+
     ...
+
 
     .. versionadded:: 2.0.0
     """
