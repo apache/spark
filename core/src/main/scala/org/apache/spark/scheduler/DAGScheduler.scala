@@ -423,16 +423,22 @@ class DAGScheduler(
 
         r.dependencies.foreach {
           case dep: ShuffleDependency[_, _, _] if !shuffleToMapStage.contains(dep.shuffleId) =>
-            if (visited(dep.rdd)) visitedShuffleDeps += dep
-            else unvisitedDeps += dep
-          case dep if !visited(dep.rdd) => unvisitedDeps += dep
+            if (visited(dep.rdd)) {
+              visitedShuffleDeps += dep
+            } else {
+              unvisitedDeps += dep
+            }
+          case dep if !visited(dep.rdd) =>
+            unvisitedDeps += dep
           case _ =>
         }
 
         if (unvisitedDeps.isEmpty) {
           waitingForVisit.pop()
           visited += r
-          for (shufDep <- visitedShuffleDeps) { parents += shufDep }
+          for (shufDep <- visitedShuffleDeps) {
+            parents += shufDep
+          }
         } else {
           for (dep <- unvisitedDeps) {
             waitingForVisit.push(dep.rdd)
