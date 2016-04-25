@@ -50,12 +50,9 @@ public class ExternalShuffleIntegrationSuite {
 
   static String APP_ID = "app-id";
   static String SORT_MANAGER = "sort";
-  static String HASH_MANAGER = "hash";
 
   // Executor 0 is sort-based
   static TestShuffleDataContext dataContext0;
-  // Executor 1 is hash-based
-  static TestShuffleDataContext dataContext1;
 
   static ExternalShuffleBlockHandler handler;
   static TransportServer server;
@@ -87,10 +84,6 @@ public class ExternalShuffleIntegrationSuite {
     dataContext0.create();
     dataContext0.insertSortShuffleData(0, 0, exec0Blocks);
 
-    dataContext1 = new TestShuffleDataContext(6, 2);
-    dataContext1.create();
-    dataContext1.insertHashShuffleData(1, 0, exec1Blocks);
-
     conf = new TransportConf("shuffle", new SystemPropertyConfigProvider());
     handler = new ExternalShuffleBlockHandler(conf, null);
     TransportContext transportContext = new TransportContext(conf, handler);
@@ -100,7 +93,6 @@ public class ExternalShuffleIntegrationSuite {
   @AfterClass
   public static void afterAll() {
     dataContext0.cleanup();
-    dataContext1.cleanup();
     server.close();
   }
 
@@ -193,39 +185,17 @@ public class ExternalShuffleIntegrationSuite {
   }
 
   @Test
-  public void testFetchHash() throws Exception {
-    registerExecutor("exec-1", dataContext1.createExecutorInfo(HASH_MANAGER));
-    FetchResult execFetch = fetchBlocks("exec-1",
-      new String[] { "shuffle_1_0_0", "shuffle_1_0_1" });
-    assertEquals(Sets.newHashSet("shuffle_1_0_0", "shuffle_1_0_1"), execFetch.successBlocks);
-    assertTrue(execFetch.failedBlocks.isEmpty());
-    assertBufferListsEqual(execFetch.buffers, Lists.newArrayList(exec1Blocks));
-    execFetch.releaseBuffers();
-  }
-
-  @Test
-  public void testFetchWrongShuffle() throws Exception {
-    registerExecutor("exec-1", dataContext1.createExecutorInfo(SORT_MANAGER /* wrong manager */));
-    FetchResult execFetch = fetchBlocks("exec-1",
-      new String[] { "shuffle_1_0_0", "shuffle_1_0_1" });
-    assertTrue(execFetch.successBlocks.isEmpty());
-    assertEquals(Sets.newHashSet("shuffle_1_0_0", "shuffle_1_0_1"), execFetch.failedBlocks);
-  }
-
-  @Test
   public void testFetchInvalidShuffle() throws Exception {
-    registerExecutor("exec-1", dataContext1.createExecutorInfo("unknown sort manager"));
-    FetchResult execFetch = fetchBlocks("exec-1",
-      new String[] { "shuffle_1_0_0" });
+    registerExecutor("exec-1", dataContext0.createExecutorInfo("unknown sort manager"));
+    FetchResult execFetch = fetchBlocks("exec-1", new String[] { "shuffle_1_0_0" });
     assertTrue(execFetch.successBlocks.isEmpty());
     assertEquals(Sets.newHashSet("shuffle_1_0_0"), execFetch.failedBlocks);
   }
 
   @Test
   public void testFetchWrongBlockId() throws Exception {
-    registerExecutor("exec-1", dataContext1.createExecutorInfo(SORT_MANAGER /* wrong manager */));
-    FetchResult execFetch = fetchBlocks("exec-1",
-      new String[] { "rdd_1_0_0" });
+    registerExecutor("exec-1", dataContext0.createExecutorInfo(SORT_MANAGER));
+    FetchResult execFetch = fetchBlocks("exec-1", new String[] { "rdd_1_0_0" });
     assertTrue(execFetch.successBlocks.isEmpty());
     assertEquals(Sets.newHashSet("rdd_1_0_0"), execFetch.failedBlocks);
   }

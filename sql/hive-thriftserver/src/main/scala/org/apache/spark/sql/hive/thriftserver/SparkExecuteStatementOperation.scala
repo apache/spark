@@ -35,7 +35,7 @@ import org.apache.hive.service.cli.session.HiveSession
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Row => SparkRow}
 import org.apache.spark.sql.execution.command.SetCommand
-import org.apache.spark.sql.hive.{HiveContext, HiveMetastoreTypes}
+import org.apache.spark.sql.hive.{HiveContext, HiveUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{Utils => SparkUtils}
@@ -60,7 +60,7 @@ private[hive] class SparkExecuteStatementOperation(
     } else {
       logInfo(s"Result Schema: ${result.queryExecution.analyzed.output}")
       val schema = result.queryExecution.analyzed.output.map { attr =>
-        new FieldSchema(attr.name, HiveMetastoreTypes.toMetastoreType(attr.dataType), "")
+        new FieldSchema(attr.name, attr.dataType.catalogString, "")
       }
       new TableSchema(schema.asJava)
     }
@@ -98,7 +98,7 @@ private[hive] class SparkExecuteStatementOperation(
       case TimestampType =>
         to +=  from.getAs[Timestamp](ordinal)
       case BinaryType | _: ArrayType | _: StructType | _: MapType =>
-        val hiveString = HiveContext.toHiveString((from.get(ordinal), dataTypes(ordinal)))
+        val hiveString = HiveUtils.toHiveString((from.get(ordinal), dataTypes(ordinal)))
         to += hiveString
     }
   }
@@ -195,7 +195,7 @@ private[hive] class SparkExecuteStatementOperation(
     setState(OperationState.RUNNING)
     // Always use the latest class loader provided by executionHive's state.
     val executionHiveClassLoader =
-      hiveContext.executionHive.state.getConf.getClassLoader
+      hiveContext.sessionState.executionHive.state.getConf.getClassLoader
     Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
 
     HiveThriftServer2.listener.onStatementStart(

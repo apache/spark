@@ -18,9 +18,10 @@
 package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.analysis.OutputMode
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SparkPlanner, UnaryNode}
+import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SparkPlanner, UnaryExecNode}
 
 /**
  * A variant of [[QueryExecution]] that allows the execution of the given [[LogicalPlan]]
@@ -29,6 +30,7 @@ import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SparkPlanner, 
 class IncrementalExecution(
     ctx: SQLContext,
     logicalPlan: LogicalPlan,
+    outputMode: OutputMode,
     checkpointLocation: String,
     currentBatchId: Long) extends QueryExecution(ctx, logicalPlan) {
 
@@ -51,17 +53,17 @@ class IncrementalExecution(
   /** Locates save/restore pairs surrounding aggregation. */
   val state = new Rule[SparkPlan] {
     override def apply(plan: SparkPlan): SparkPlan = plan transform {
-      case StateStoreSave(keys, None,
-             UnaryNode(agg,
-               StateStoreRestore(keys2, None, child))) =>
+      case StateStoreSaveExec(keys, None,
+             UnaryExecNode(agg,
+               StateStoreRestoreExec(keys2, None, child))) =>
         val stateId = OperatorStateId(checkpointLocation, operatorId, currentBatchId - 1)
         operatorId += 1
 
-        StateStoreSave(
+        StateStoreSaveExec(
           keys,
           Some(stateId),
           agg.withNewChildren(
-            StateStoreRestore(
+            StateStoreRestoreExec(
               keys,
               Some(stateId),
               child) :: Nil))
@@ -69,4 +71,7 @@ class IncrementalExecution(
   }
 
   override def preparations: Seq[Rule[SparkPlan]] = state +: super.preparations
+
+  /** No need assert supported, as this check has already been done */
+  override def assertSupported(): Unit = { }
 }

@@ -225,3 +225,20 @@ broadcast <- function(sc, object) {
 setCheckpointDir <- function(sc, dirName) {
   invisible(callJMethod(sc, "setCheckpointDir", suppressWarnings(normalizePath(dirName))))
 }
+
+#' Set new log level
+#'
+#' Set new log level: "ALL", "DEBUG", "ERROR", "FATAL", "INFO", "OFF", "TRACE", "WARN"
+#'
+#' @rdname setLogLevel
+#' @param sc Spark Context to use
+#' @param level New log level
+#' @export
+#' @examples
+#'\dontrun{
+#' setLogLevel(sc, "ERROR")
+#'}
+
+setLogLevel <- function(sc, level) {
+  callJMethod(sc, "setLogLevel", level)
+}

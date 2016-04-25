@@ -36,8 +36,8 @@ object BuildCommons {
 
   private val buildLocation = file(".").getAbsoluteFile.getParentFile
 
-  val sqlProjects@Seq(catalyst, sql, hive, hiveThriftServer) = Seq(
-    "catalyst", "sql", "hive", "hive-thriftserver"
+  val sqlProjects@Seq(catalyst, sql, hive, hiveThriftServer, hiveCompatibility) = Seq(
+    "catalyst", "sql", "hive", "hive-thriftserver", "hivecontext-compatibility"
   ).map(ProjectRef(buildLocation, _))
 
   val streamingProjects@Seq(
@@ -253,7 +253,7 @@ object SparkBuild extends PomBuild {
 
   val mimaProjects = allProjects.filterNot { x =>
     Seq(
-      spark, hive, hiveThriftServer, catalyst, repl, networkCommon, networkShuffle, networkYarn,
+      spark, hive, hiveThriftServer, hiveCompatibility, catalyst, repl, networkCommon, networkShuffle, networkYarn,
       unsafe, testTags, sketch, mllibLocal
     ).contains(x)
   }
@@ -367,9 +367,9 @@ object DockerIntegrationTests {
   // This serves to override the override specified in DependencyOverrides:
   lazy val settings = Seq(
     dependencyOverrides += "com.google.guava" % "guava" % "18.0",
-    resolvers ++= Seq("DB2" at "https://app.camunda.com/nexus/content/repositories/public/")
+    resolvers ++= Seq("DB2" at "https://app.camunda.com/nexus/content/repositories/public/"),
+    libraryDependencies += "com.oracle" % "ojdbc6" % "11.2.0.1.0" from "https://app.camunda.com/nexus/content/repositories/public/com/oracle/ojdbc6/11.2.0.1.0/ojdbc6-11.2.0.1.0.jar" // scalastyle:ignore
   )
-
 }
 
 /**

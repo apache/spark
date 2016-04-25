@@ -17,7 +17,7 @@
 
 package org.apache.spark.rpc.netty
 
-import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark._
 import org.apache.spark.rpc._
 
 class NettyRpcEnvSuite extends RpcEnvSuite {
@@ -34,10 +34,11 @@ class NettyRpcEnvSuite extends RpcEnvSuite {
 
   test("non-existent endpoint") {
     val uri = RpcEndpointAddress(env.address, "nonexist-endpoint").toString
-    val e = intercept[RpcEndpointNotFoundException] {
+    val e = intercept[SparkException] {
       env.setupEndpointRef(env.address, "nonexist-endpoint")
     }
-    assert(e.getMessage.contains(uri))
+    assert(e.getCause.isInstanceOf[RpcEndpointNotFoundException])
+    assert(e.getCause.getMessage.contains(uri))
   }
 
 }

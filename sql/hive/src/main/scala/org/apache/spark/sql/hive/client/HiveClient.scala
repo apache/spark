@@ -75,12 +75,6 @@ private[hive] trait HiveClient {
   /** Returns the metadata for the specified table or None if it doesn't exist. */
   def getTableOption(dbName: String, tableName: String): Option[CatalogTable]
 
-  /** Creates a view with the given metadata. */
-  def createView(view: CatalogTable): Unit
-
-  /** Updates the given view with new metadata. */
-  def alertView(view: CatalogTable): Unit
-
   /** Creates a table with the given metadata. */
   def createTable(table: CatalogTable, ignoreIfExists: Boolean): Unit
 

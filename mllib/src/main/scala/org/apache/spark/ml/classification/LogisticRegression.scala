@@ -273,6 +273,10 @@ class LogisticRegression @Since("1.2.0") (
 
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
 
+    val instr = Instrumentation.create(this, instances)
+    instr.logParams(regParam, elasticNetParam, standardization, threshold,
+      maxIter, tol, fitIntercept)
+
     val (summarizer, labelSummarizer) = {
       val seqOp = (c: (MultivariateOnlineSummarizer, MultiClassSummarizer),
         instance: Instance) =>
@@ -290,6 +294,9 @@ class LogisticRegression @Since("1.2.0") (
     val numInvalid = labelSummarizer.countInvalid
     val numClasses = histogram.length
     val numFeatures = summarizer.mean.size
+
+    instr.logNumClasses(numClasses)
+    instr.logNumFeatures(numFeatures)
 
     val (coefficients, intercept, objectiveHistory) = {
       if (numInvalid != 0) {
@@ -444,7 +451,9 @@ class LogisticRegression @Since("1.2.0") (
       $(labelCol),
       $(featuresCol),
       objectiveHistory)
-    model.setSummary(logRegSummary)
+    val m = model.setSummary(logRegSummary)
+    instr.logSuccess(m)
+    m
   }
 
   @Since("1.4.0")

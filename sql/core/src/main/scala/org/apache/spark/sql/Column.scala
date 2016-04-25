@@ -59,14 +59,14 @@ class TypedColumn[-T, U](
    * on a decoded object.
    */
   private[sql] def withInputType(
-      inputEncoder: ExpressionEncoder[_],
-      schema: Seq[Attribute]): TypedColumn[T, U] = {
-    val boundEncoder = inputEncoder.bind(schema).asInstanceOf[ExpressionEncoder[Any]]
-    new TypedColumn[T, U](
-      expr transform { case ta: TypedAggregateExpression if ta.aEncoder.isEmpty =>
-        ta.copy(aEncoder = Some(boundEncoder), children = schema)
-      },
-      encoder)
+      inputDeserializer: Expression,
+      inputAttributes: Seq[Attribute]): TypedColumn[T, U] = {
+    val unresolvedDeserializer = UnresolvedDeserializer(inputDeserializer, inputAttributes)
+    val newExpr = expr transform {
+      case ta: TypedAggregateExpression if ta.inputDeserializer.isEmpty =>
+        ta.copy(inputDeserializer = Some(unresolvedDeserializer))
+    }
+    new TypedColumn[T, U](newExpr, encoder)
   }
 }
 

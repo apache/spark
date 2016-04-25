@@ -29,7 +29,7 @@ import org.apache.hadoop.mapred.{FileOutputFormat, JobConf}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.execution.{SparkPlan, UnaryNode}
+import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.SparkException
@@ -41,11 +41,12 @@ case class InsertIntoHiveTable(
     partition: Map[String, Option[String]],
     child: SparkPlan,
     overwrite: Boolean,
-    ifNotExists: Boolean) extends UnaryNode {
+    ifNotExists: Boolean) extends UnaryExecNode {
 
-  @transient val sc: HiveContext = sqlContext.asInstanceOf[HiveContext]
-  @transient private lazy val hiveContext = new Context(sc.hiveconf)
-  @transient private lazy val client = sc.metadataHive
+  @transient private val sessionState = sqlContext.sessionState.asInstanceOf[HiveSessionState]
+  @transient private val client = sessionState.metadataHive
+  @transient private val hiveconf = sessionState.hiveconf
+  @transient private lazy val hiveContext = new Context(hiveconf)
 
   def output: Seq[Attribute] = Seq.empty
 
@@ -67,7 +68,7 @@ case class InsertIntoHiveTable(
       SparkHiveWriterContainer.createPathFromString(fileSinkConf.getDirName, conf.value))
     log.debug("Saving as hadoop file of type " + valueClass.getSimpleName)
     writerContainer.driverSideSetup()
-    sc.sparkContext.runJob(rdd, writerContainer.writeToFile _)
+    sqlContext.sparkContext.runJob(rdd, writerContainer.writeToFile _)
     writerContainer.commitJob()
 
   }
@@ -86,17 +87,17 @@ case class InsertIntoHiveTable(
     val tableLocation = table.hiveQlTable.getDataLocation
     val tmpLocation = hiveContext.getExternalTmpPath(tableLocation)
     val fileSinkConf = new FileSinkDesc(tmpLocation.toString, tableDesc, false)
-    val isCompressed = sc.hiveconf.getBoolean(
+    val isCompressed = hiveconf.getBoolean(
       ConfVars.COMPRESSRESULT.varname, ConfVars.COMPRESSRESULT.defaultBoolVal)
 
     if (isCompressed) {
       // Please note that isCompressed, "mapred.output.compress", "mapred.output.compression.codec",
       // and "mapred.output.compression.type" have no impact on ORC because it uses table properties
       // to store compression information.
-      sc.hiveconf.set("mapred.output.compress", "true")
+      hiveconf.set("mapred.output.compress", "true")
       fileSinkConf.setCompressed(true)
-      fileSinkConf.setCompressCodec(sc.hiveconf.get("mapred.output.compression.codec"))
-      fileSinkConf.setCompressType(sc.hiveconf.get("mapred.output.compression.type"))
+      fileSinkConf.setCompressCodec(hiveconf.get("mapred.output.compression.codec"))
+      fileSinkConf.setCompressType(hiveconf.get("mapred.output.compression.type"))
     }
 
     val numDynamicPartitions = partition.values.count(_.isEmpty)
@@ -113,13 +114,13 @@ case class InsertIntoHiveTable(
     // Validate partition spec if there exist any dynamic partitions
     if (numDynamicPartitions > 0) {
       // Report error if dynamic partitioning is not enabled
-      if (!sc.hiveconf.getBoolVar(HiveConf.ConfVars.DYNAMICPARTITIONING)) {
+      if (!hiveconf.getBoolVar(HiveConf.ConfVars.DYNAMICPARTITIONING)) {
         throw new SparkException(ErrorMsg.DYNAMIC_PARTITION_DISABLED.getMsg)
       }
 
       // Report error if dynamic partition strict mode is on but no static partition is found
-      if (numStaticPartitions == 0 &&
-        sc.hiveconf.getVar(HiveConf.ConfVars.DYNAMICPARTITIONINGMODE).equalsIgnoreCase("strict")) {
+      if (numStaticPartitions == 0 && hiveconf.getVar(
+          HiveConf.ConfVars.DYNAMICPARTITIONINGMODE).equalsIgnoreCase("strict")) {
         throw new SparkException(ErrorMsg.DYNAMIC_PARTITION_STRICT_MODE.getMsg)
       }
 
@@ -130,7 +131,7 @@ case class InsertIntoHiveTable(
       }
     }
 
-    val jobConf = new JobConf(sc.hiveconf)
+    val jobConf = new JobConf(hiveconf)
     val jobConfSer = new SerializableJobConf(jobConf)
 
     // When speculation is on and output committer class name contains "Direct", we should warn

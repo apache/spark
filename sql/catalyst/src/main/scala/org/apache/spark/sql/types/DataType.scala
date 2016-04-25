@@ -62,6 +62,9 @@ abstract class DataType extends AbstractDataType {
   /** Readable string representation for the type. */
   def simpleString: String = typeName
 
+  /** String representation for the type saved in external catalogs. */
+  def catalogString: String = simpleString
+
   /** Readable string representation for the type with truncation */
   private[sql] def simpleString(maxNumberFields: Int): String = simpleString
 

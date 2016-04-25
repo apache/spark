@@ -29,40 +29,40 @@ class ListTablesSuite extends QueryTest with BeforeAndAfter with SharedSQLContex
   private lazy val df = (1 to 10).map(i => (i, s"str$i")).toDF("key", "value")
 
   before {
-    df.registerTempTable("ListTablesSuiteTable")
+    df.registerTempTable("listtablessuitetable")
   }
 
   after {
     sqlContext.sessionState.catalog.dropTable(
-      TableIdentifier("ListTablesSuiteTable"), ignoreIfNotExists = true)
+      TableIdentifier("listtablessuitetable"), ignoreIfNotExists = true)
   }
 
   test("get all tables") {
     checkAnswer(
-      sqlContext.tables().filter("tableName = 'ListTablesSuiteTable'"),
-      Row("ListTablesSuiteTable", true))
+      sqlContext.tables().filter("tableName = 'listtablessuitetable'"),
+      Row("listtablessuitetable", true))
 
     checkAnswer(
-      sql("SHOW tables").filter("tableName = 'ListTablesSuiteTable'"),
-      Row("ListTablesSuiteTable", true))
+      sql("SHOW tables").filter("tableName = 'listtablessuitetable'"),
+      Row("listtablessuitetable", true))
 
     sqlContext.sessionState.catalog.dropTable(
-      TableIdentifier("ListTablesSuiteTable"), ignoreIfNotExists = true)
-    assert(sqlContext.tables().filter("tableName = 'ListTablesSuiteTable'").count() === 0)
+      TableIdentifier("listtablessuitetable"), ignoreIfNotExists = true)
+    assert(sqlContext.tables().filter("tableName = 'listtablessuitetable'").count() === 0)
   }
 
   test("getting all tables with a database name has no impact on returned table names") {
     checkAnswer(
-      sqlContext.tables("default").filter("tableName = 'ListTablesSuiteTable'"),
-      Row("ListTablesSuiteTable", true))
+      sqlContext.tables("default").filter("tableName = 'listtablessuitetable'"),
+      Row("listtablessuitetable", true))
 
     checkAnswer(
-      sql("show TABLES in default").filter("tableName = 'ListTablesSuiteTable'"),
-      Row("ListTablesSuiteTable", true))
+      sql("show TABLES in default").filter("tableName = 'listtablessuitetable'"),
+      Row("listtablessuitetable", true))
 
     sqlContext.sessionState.catalog.dropTable(
-      TableIdentifier("ListTablesSuiteTable"), ignoreIfNotExists = true)
-    assert(sqlContext.tables().filter("tableName = 'ListTablesSuiteTable'").count() === 0)
+      TableIdentifier("listtablessuitetable"), ignoreIfNotExists = true)
+    assert(sqlContext.tables().filter("tableName = 'listtablessuitetable'").count() === 0)
   }
 
   test("query the returned DataFrame of tables") {
@@ -77,8 +77,8 @@ class ListTablesSuite extends QueryTest with BeforeAndAfter with SharedSQLContex
         tableDF.registerTempTable("tables")
         checkAnswer(
           sql(
-            "SELECT isTemporary, tableName from tables WHERE tableName = 'ListTablesSuiteTable'"),
-          Row(true, "ListTablesSuiteTable")
+            "SELECT isTemporary, tableName from tables WHERE tableName = 'listtablessuitetable'"),
+          Row(true, "listtablessuitetable")
         )
         checkAnswer(
           sqlContext.tables().filter("tableName = 'tables'").select("tableName", "isTemporary"),

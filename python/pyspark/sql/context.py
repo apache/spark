@@ -146,13 +146,27 @@ class SQLContext(object):
         """
         self._ssql_ctx.setConf(key, value)
 
+    @ignore_unicode_prefix
     @since(1.3)
-    def getConf(self, key, defaultValue):
+    def getConf(self, key, defaultValue=None):
         """Returns the value of Spark SQL configuration property for the given key.
 
-        If the key is not set, returns defaultValue.
+        If the key is not set and defaultValue is not None, return
+        defaultValue. If the key is not set and defaultValue is None, return
+        the system default value.
+
+        >>> sqlContext.getConf("spark.sql.shuffle.partitions")
+        u'200'
+        >>> sqlContext.getConf("spark.sql.shuffle.partitions", "10")
+        u'10'
+        >>> sqlContext.setConf("spark.sql.shuffle.partitions", "50")
+        >>> sqlContext.getConf("spark.sql.shuffle.partitions", "10")
+        u'50'
         """
-        return self._ssql_ctx.getConf(key, defaultValue)
+        if defaultValue is not None:
+            return self._ssql_ctx.getConf(key, defaultValue)
+        else:
+            return self._ssql_ctx.getConf(key)
 
     @property
     @since("1.3.1")
@@ -405,7 +419,7 @@ class SQLContext(object):
         >>> sqlContext.createDataFrame(rdd, "boolean").collect() # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
             ...
-        Py4JJavaError:...
+        Py4JJavaError: ...
         """
         if isinstance(data, DataFrame):
             raise TypeError("data is already a DataFrame")
