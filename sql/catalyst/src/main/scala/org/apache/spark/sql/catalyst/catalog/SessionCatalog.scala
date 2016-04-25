@@ -80,6 +80,38 @@ class SessionCatalog(
     if (conf.caseSensitiveAnalysis) name else name.toLowerCase
   }
 
+  /**
+   * Validate names
+   */
+  protected[this] def validateName(name: String): Boolean = {
+    val validName = "([_A-Za-z0-9]+)".r
+    validName.pattern.matcher(name).matches()
+  }
+
+  /**
+   * Validate database names
+   */
+  protected[this] def validateDatabaseName(dbName: Option[String]): Unit = {
+    if (dbName.isDefined) validateDatabaseName(dbName.get)
+  }
+
+  protected[this] def validateDatabaseName(dbName: String): Unit = {
+    if (!validateName(dbName)) {
+      throw new AnalysisException(s"Database name '$dbName' is not a valid name. " +
+        s"Valid database names only contain characters, numbers and _.")
+    }
+  }
+
+  /**
+   * Validate table names
+   */
+  protected[this] def validateTableName(tableName: String): Unit = {
+    if (!validateName(tableName)) {
+      throw new AnalysisException(s"Table name '$tableName' is not a valid name. " +
+        s"Valid table names only contain characters, numbers and _.")
+    }
+  }
+
   // ----------------------------------------------------------------------------
   // Databases
   // ----------------------------------------------------------------------------
@@ -87,22 +119,27 @@ class SessionCatalog(
   // ----------------------------------------------------------------------------
 
   def createDatabase(dbDefinition: CatalogDatabase, ignoreIfExists: Boolean): Unit = {
+    validateDatabaseName(dbDefinition.name)
     externalCatalog.createDatabase(dbDefinition, ignoreIfExists)
   }
 
   def dropDatabase(db: String, ignoreIfNotExists: Boolean, cascade: Boolean): Unit = {
+    validateDatabaseName(db)
     externalCatalog.dropDatabase(db, ignoreIfNotExists, cascade)
   }
 
   def alterDatabase(dbDefinition: CatalogDatabase): Unit = {
+    validateDatabaseName(dbDefinition.name)
     externalCatalog.alterDatabase(dbDefinition)
   }
 
   def getDatabaseMetadata(db: String): CatalogDatabase = {
+    validateDatabaseName(db)
     externalCatalog.getDatabase(db)
   }
 
   def databaseExists(db: String): Boolean = {
+    validateDatabaseName(db)
     externalCatalog.databaseExists(db)
   }
 
@@ -146,7 +183,9 @@ class SessionCatalog(
    */
   def createTable(tableDefinition: CatalogTable, ignoreIfExists: Boolean): Unit = {
     val db = tableDefinition.identifier.database.getOrElse(currentDb)
+    validateDatabaseName(db)
     val table = formatTableName(tableDefinition.identifier.table)
+    validateTableName(table)
     val newTableDefinition = tableDefinition.copy(identifier = TableIdentifier(table, Some(db)))
     externalCatalog.createTable(db, newTableDefinition, ignoreIfExists)
   }
@@ -162,7 +201,9 @@ class SessionCatalog(
    */
   def alterTable(tableDefinition: CatalogTable): Unit = {
     val db = tableDefinition.identifier.database.getOrElse(currentDb)
+    validateDatabaseName(db)
     val table = formatTableName(tableDefinition.identifier.table)
+    validateTableName(table)
     val newTableDefinition = tableDefinition.copy(identifier = TableIdentifier(table, Some(db)))
     externalCatalog.alterTable(db, newTableDefinition)
   }
@@ -174,7 +215,9 @@ class SessionCatalog(
    */
   def getTableMetadata(name: TableIdentifier): CatalogTable = {
     val db = name.database.getOrElse(currentDb)
+    validateDatabaseName(db)
     val table = formatTableName(name.table)
+    validateTableName(table)
     externalCatalog.getTable(db, table)
   }
 
@@ -185,7 +228,9 @@ class SessionCatalog(
    */
   def getTableMetadataOption(name: TableIdentifier): Option[CatalogTable] = {
     val db = name.database.getOrElse(currentDb)
+    validateDatabaseName(db)
     val table = formatTableName(name.table)
+    validateTableName(table)
     externalCatalog.getTableOption(db, table)
   }
 
@@ -242,6 +287,7 @@ class SessionCatalog(
       tableDefinition: LogicalPlan,
       overrideIfExists: Boolean): Unit = {
     val table = formatTableName(name)
+    validateTableName(table)
     if (tempTables.contains(table) && !overrideIfExists) {
       throw new AnalysisException(s"Temporary table '$name' already exists.")
     }
@@ -262,8 +308,11 @@ class SessionCatalog(
       throw new AnalysisException("rename does not support moving tables across databases")
     }
     val db = oldName.database.getOrElse(currentDb)
+    validateDatabaseName(db)
     val oldTableName = formatTableName(oldName.table)
+    validateTableName(oldTableName)
     val newTableName = formatTableName(newName.table)
+    validateTableName(newTableName)
     if (oldName.database.isDefined || !tempTables.contains(oldTableName)) {
       externalCatalog.renameTable(db, oldTableName, newTableName)
     } else {
@@ -282,7 +331,9 @@ class SessionCatalog(
    */
   def dropTable(name: TableIdentifier, ignoreIfNotExists: Boolean): Unit = {
     val db = name.database.getOrElse(currentDb)
+    validateDatabaseName(db)
     val table = formatTableName(name.table)
+    validateTableName(table)
     if (name.database.isDefined || !tempTables.contains(table)) {
       // When ignoreIfNotExists is false, no exception is issued when the table does not exist.
       // Instead, log it as an error message.
@@ -305,7 +356,9 @@ class SessionCatalog(
    */
   def lookupRelation(name: TableIdentifier, alias: Option[String] = None): LogicalPlan = {
     val db = name.database.getOrElse(currentDb)
+    validateDatabaseName(db)
     val table = formatTableName(name.table)
+    validateTableName(table)
     val relation =
       if (name.database.isDefined || !tempTables.contains(table)) {
         val metadata = externalCatalog.getTable(db, table)
@@ -329,7 +382,9 @@ class SessionCatalog(
    */
   def tableExists(name: TableIdentifier): Boolean = {
     val db = name.database.getOrElse(currentDb)
+    validateDatabaseName(db)
     val table = formatTableName(name.table)
+    validateTableName(table)
     if (name.database.isDefined || !tempTables.contains(table)) {
       externalCatalog.tableExists(db, table)
     } else {
@@ -356,6 +411,7 @@ class SessionCatalog(
    * List all matching tables in the specified database, including temporary tables.
    */
   def listTables(db: String, pattern: String): Seq[TableIdentifier] = {
+    validateDatabaseName(db)
     val dbTables =
       externalCatalog.listTables(db, pattern).map { t => TableIdentifier(t, Some(db)) }
     val _tempTables = StringUtils.filterPattern(tempTables.keys.toSeq, pattern)
@@ -388,6 +444,7 @@ class SessionCatalog(
    * For testing only.
    */
   private[catalog] def getTempTable(name: String): Option[LogicalPlan] = {
+    validateTableName(name)
     tempTables.get(name)
   }
 
@@ -412,7 +469,9 @@ class SessionCatalog(
       parts: Seq[CatalogTablePartition],
       ignoreIfExists: Boolean): Unit = {
     val db = tableName.database.getOrElse(currentDb)
+    validateDatabaseName(db)
     val table = formatTableName(tableName.table)
+    validateTableName(table)
     externalCatalog.createPartitions(db, table, parts, ignoreIfExists)
   }
 
@@ -425,7 +484,9 @@ class SessionCatalog(
       parts: Seq[TablePartitionSpec],
       ignoreIfNotExists: Boolean): Unit = {
     val db = tableName.database.getOrElse(currentDb)
+    validateDatabaseName(db)
     val table = formatTableName(tableName.table)
+    validateTableName(table)
     externalCatalog.dropPartitions(db, table, parts, ignoreIfNotExists)
   }
 
@@ -440,7 +501,9 @@ class SessionCatalog(
       specs: Seq[TablePartitionSpec],
       newSpecs: Seq[TablePartitionSpec]): Unit = {
     val db = tableName.database.getOrElse(currentDb)
+    validateDatabaseName(db)
     val table = formatTableName(tableName.table)
+    validateTableName(table)
     externalCatalog.renamePartitions(db, table, specs, newSpecs)
   }
 
@@ -455,7 +518,9 @@ class SessionCatalog(
    */
   def alterPartitions(tableName: TableIdentifier, parts: Seq[CatalogTablePartition]): Unit = {
     val db = tableName.database.getOrElse(currentDb)
+    validateDatabaseName(db)
     val table = formatTableName(tableName.table)
+    validateTableName(table)
     externalCatalog.alterPartitions(db, table, parts)
   }
 
@@ -465,7 +530,9 @@ class SessionCatalog(
    */
   def getPartition(tableName: TableIdentifier, spec: TablePartitionSpec): CatalogTablePartition = {
     val db = tableName.database.getOrElse(currentDb)
+    validateDatabaseName(db)
     val table = formatTableName(tableName.table)
+    validateTableName(table)
     externalCatalog.getPartition(db, table, spec)
   }
 
@@ -475,7 +542,9 @@ class SessionCatalog(
    */
   def listPartitions(tableName: TableIdentifier): Seq[CatalogTablePartition] = {
     val db = tableName.database.getOrElse(currentDb)
+    validateDatabaseName(db)
     val table = formatTableName(tableName.table)
+    validateTableName(table)
     externalCatalog.listPartitions(db, table)
   }
 
@@ -498,6 +567,7 @@ class SessionCatalog(
    */
   def createFunction(funcDefinition: CatalogFunction, ignoreIfExists: Boolean): Unit = {
     val db = funcDefinition.identifier.database.getOrElse(currentDb)
+    validateDatabaseName(db)
     val identifier = FunctionIdentifier(funcDefinition.identifier.funcName, Some(db))
     val newFuncDefinition = funcDefinition.copy(identifier = identifier)
     if (!functionExists(identifier)) {
@@ -513,6 +583,7 @@ class SessionCatalog(
    */
   def dropFunction(name: FunctionIdentifier, ignoreIfNotExists: Boolean): Unit = {
     val db = name.database.getOrElse(currentDb)
+    validateDatabaseName(db)
     val identifier = name.copy(database = Some(db))
     if (functionExists(identifier)) {
       // TODO: registry should just take in FunctionIdentifier for type safety
@@ -537,6 +608,7 @@ class SessionCatalog(
    */
   def getFunctionMetadata(name: FunctionIdentifier): CatalogFunction = {
     val db = name.database.getOrElse(currentDb)
+    validateDatabaseName(db)
     externalCatalog.getFunction(db, name.funcName)
   }
 
@@ -545,6 +617,7 @@ class SessionCatalog(
    */
   def functionExists(name: FunctionIdentifier): Boolean = {
     val db = name.database.getOrElse(currentDb)
+    validateDatabaseName(db)
     functionRegistry.functionExists(name.unquotedString) ||
       externalCatalog.functionExists(db, name.funcName)
   }
