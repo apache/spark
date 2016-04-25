@@ -39,18 +39,15 @@ class MapWithStateSuite extends SparkFunSuite
 
   before {
     StreamingContext.getActive().foreach { _.stop(stopSparkContext = false) }
-    checkpointDir = Utils.createTempDir("checkpoint")
   }
 
   after {
     StreamingContext.getActive().foreach { _.stop(stopSparkContext = false) }
-    if (checkpointDir != null) {
-      Utils.deleteRecursively(checkpointDir)
-    }
   }
 
   override def beforeAll(): Unit = {
     super.beforeAll()
+    checkpointDir = Utils.createTempDir("checkpoint")
     val conf = new SparkConf().setMaster("local").setAppName("MapWithStateSuite")
     conf.set("spark.streaming.clock", classOf[ManualClock].getName())
     sc = new SparkContext(conf)
@@ -63,6 +60,9 @@ class MapWithStateSuite extends SparkFunSuite
       }
     } finally {
       super.afterAll()
+    }
+    if (checkpointDir != null) {
+      Utils.deleteRecursively(checkpointDir)
     }
   }
 
