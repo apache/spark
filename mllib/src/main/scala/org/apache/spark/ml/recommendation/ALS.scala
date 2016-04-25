@@ -163,29 +163,28 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
   def getNonnegative: Boolean = $(nonnegative)
 
   /**
-   * Param for intermediate RDD StorageLevel. Pass in a string representation of [[StorageLevel]].
-   * Cannot be "NONE".
-   * Default: "MEMORY_AND_DISK"
+   * Param for StorageLevel for intermediate RDDs. Pass in a string representation of
+   * [[StorageLevel]]. Cannot be "NONE".
+   * Default: "MEMORY_AND_DISK".
    *
    * @group expertParam
    */
-  val intermediateRDDStorageLevel = new Param[String](this,
-    "intermediateRDDStorageLevel", "intermediate RDD StorageLevel. Cannot be 'NONE'. " +
-    "Default: 'MEMORY_AND_DISK'.",
+  val intermediateRDDStorageLevel = new Param[String](this, "intermediateRDDStorageLevel",
+    "StorageLevel for intermediate RDDs. Cannot be 'NONE'. Default: 'MEMORY_AND_DISK'.",
     (s: String) => ALS.getStorageLevel(s).isInstanceOf[StorageLevel] && s != "NONE")
 
   /** @group expertGetParam */
   def getIntermediateRDDStorageLevel: String = $(intermediateRDDStorageLevel)
 
   /**
-   * Param for StorageLevel for ALS model factors. Pass in a string representation of
+   * Param for StorageLevel for ALS model factor RDDs. Pass in a string representation of
    * [[StorageLevel]].
-   * Default: "MEMORY_AND_DISK"
+   * Default: "MEMORY_AND_DISK".
    *
    * @group expertParam
    */
-  val finalRDDStorageLevel = new Param[String](this,
-    "finalRDDStorageLevel", "StorageLevel for ALS model factors. Default: 'MEMORY_AND_DISK'.",
+  val finalRDDStorageLevel = new Param[String](this, "finalRDDStorageLevel",
+    "StorageLevel for ALS model factor RDDs. Default: 'MEMORY_AND_DISK'.",
     (s: String) => ALS.getStorageLevel(s).isInstanceOf[StorageLevel])
 
   /** @group expertGetParam */

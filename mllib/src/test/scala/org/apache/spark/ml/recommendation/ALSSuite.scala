@@ -33,7 +33,6 @@ import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.storage.StorageLevel
 
@@ -525,18 +524,22 @@ class ALSSuite
     intercept[IllegalArgumentException] {
       new ALS().setFinalRDDStorageLevel("foo")
     }
-    /* TODO
     // test final factor StorageLevel
     val sqlContext = this.sqlContext
     import sqlContext.implicits._
     val (ratings, _) = genExplicitTestData(numUsers = 2, numItems = 2, rank = 1)
     val data = ratings.toDF
-
     val als = new ALS().setMaxIter(1)
-    assert(als.fit(data).userFactors.rdd.getStorageLevel == StorageLevel.MEMORY_AND_DISK)
-    als.setFinalRDDStorageLevel("MEMORY_ONLY")
-    assert(als.fit(data).userFactors.rdd.getStorageLevel == StorageLevel.MEMORY_ONLY)
-    */
+    als.fit(data)
+    val factorRDD = sc.getPersistentRDDs.collect {
+      case (id, rdd) if rdd.name == "userFactors" => rdd
+    }.head
+    assert(factorRDD.getStorageLevel == StorageLevel.MEMORY_AND_DISK)
+    als.setFinalRDDStorageLevel("MEMORY_ONLY").fit(data)
+    val level = sc.getRDDStorageInfo { rdd =>
+      rdd.name == "userFactors" && rdd.id != factorRDD.id
+    }.head.storageLevel
+    assert(level == StorageLevel.MEMORY_ONLY)
   }
 }
 
