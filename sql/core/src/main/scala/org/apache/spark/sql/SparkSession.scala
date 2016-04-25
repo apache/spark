@@ -191,7 +191,7 @@ class SparkSession private(
    * -------------------------------------------------- */
 
   @transient private lazy val _conf: RuntimeConfig = {
-    new RuntimeConfigImpl(sessionState.sqlConf, sessionState.hadoopConf)
+    new RuntimeConfigImpl(sessionState.conf, sessionState.hadoopConf)
   }
 
   /**
@@ -219,21 +219,21 @@ class SparkSession private(
   /**
    * Return the value of Spark SQL configuration property for the given key.
    */
-  protected[sql] def getConf(key: String): String = sessionState.sqlConf.getConfString(key)
+  protected[sql] def getConf(key: String): String = sessionState.conf.getConfString(key)
 
   /**
    * Return the value of Spark SQL configuration property for the given key. If the key is not set
    * yet, return `defaultValue`.
    */
   protected[sql] def getConf(key: String, defaultValue: String): String = {
-    sessionState.sqlConf.getConfString(key, defaultValue)
+    sessionState.conf.getConfString(key, defaultValue)
   }
 
   /**
    * Return all the configuration properties that have been set (i.e. not the default).
    * This creates a new copy of the config properties in the form of a Map.
    */
-  protected[sql] def getAllConfs: immutable.Map[String, String] = sessionState.sqlConf.getAllConfs
+  protected[sql] def getAllConfs: immutable.Map[String, String] = sessionState.conf.getAllConfs
 
   /**
    * Set the given Spark SQL configuration property.
@@ -246,7 +246,7 @@ class SparkSession private(
    * Return the value of Spark SQL configuration property for the given key. If the key is not set
    * yet, return `defaultValue` in [[ConfigEntry]].
    */
-  protected[sql] def getConf[T](entry: ConfigEntry[T]): T = sessionState.sqlConf.getConf(entry)
+  protected[sql] def getConf[T](entry: ConfigEntry[T]): T = sessionState.conf.getConf(entry)
 
   /**
    * Return the value of Spark SQL configuration property for the given key. If the key is not set
@@ -254,7 +254,7 @@ class SparkSession private(
    * desired one.
    */
   protected[sql] def getConf[T](entry: ConfigEntry[T], defaultValue: T): T = {
-    sessionState.sqlConf.getConf(entry, defaultValue)
+    sessionState.conf.getConf(entry, defaultValue)
   }
 
 
@@ -603,7 +603,7 @@ class SparkSession private(
    */
   @Experimental
   def createExternalTable(tableName: String, path: String): DataFrame = {
-    val dataSourceName = sessionState.sqlConf.defaultDataSourceName
+    val dataSourceName = sessionState.conf.defaultDataSourceName
     createExternalTable(tableName, path, dataSourceName)
   }
 

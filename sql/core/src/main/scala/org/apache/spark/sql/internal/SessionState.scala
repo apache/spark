@@ -47,7 +47,7 @@ private[sql] class SessionState(ctx: SQLContext) {
   /**
    * SQL-specific key-value configurations.
    */
-  lazy val sqlConf: SQLConf = new SQLConf
+  lazy val conf: SQLConf = new SQLConf
   lazy val hadoopConf: Configuration = new Configuration(ctx.sparkContext.hadoopConfiguration)
 
   // Automatically extract `spark.sql.*` entries and put it in our SQLConf
@@ -86,7 +86,7 @@ private[sql] class SessionState(ctx: SQLContext) {
       ctx.externalCatalog,
       functionResourceLoader,
       functionRegistry,
-      sqlConf)
+      conf)
 
   /**
    * Interface exposed to the user for registering user-defined functions.
@@ -97,31 +97,31 @@ private[sql] class SessionState(ctx: SQLContext) {
    * Logical query plan analyzer for resolving unresolved attributes and relations.
    */
   lazy val analyzer: Analyzer = {
-    new Analyzer(catalog, sqlConf) {
+    new Analyzer(catalog, conf) {
       override val extendedResolutionRules =
         PreInsertCastAndRename ::
         DataSourceAnalysis ::
-        (if (sqlConf.runSQLonFile) new ResolveDataSource(ctx) :: Nil else Nil)
+        (if (conf.runSQLonFile) new ResolveDataSource(ctx) :: Nil else Nil)
 
-      override val extendedCheckRules = Seq(datasources.PreWriteCheck(sqlConf, catalog))
+      override val extendedCheckRules = Seq(datasources.PreWriteCheck(conf, catalog))
     }
   }
 
   /**
    * Logical query plan optimizer.
    */
-  lazy val optimizer: Optimizer = new SparkOptimizer(catalog, sqlConf, experimentalMethods)
+  lazy val optimizer: Optimizer = new SparkOptimizer(catalog, conf, experimentalMethods)
 
   /**
    * Parser that extracts expressions, plans, table identifiers etc. from SQL texts.
    */
-  lazy val sqlParser: ParserInterface = new SparkSqlParser(sqlConf)
+  lazy val sqlParser: ParserInterface = new SparkSqlParser(conf)
 
   /**
    * Planner that converts optimized logical plans to physical plans.
    */
   def planner: SparkPlanner =
-    new SparkPlanner(ctx.sparkContext, sqlConf, experimentalMethods.extraStrategies)
+    new SparkPlanner(ctx.sparkContext, conf, experimentalMethods.extraStrategies)
 
   /**
    * An interface to register custom [[org.apache.spark.sql.util.QueryExecutionListener]]s
@@ -154,12 +154,12 @@ private[sql] class SessionState(ctx: SQLContext) {
   }
 
   final def setConf[T](entry: ConfigEntry[T], value: T): Unit = {
-    sqlConf.setConf(entry, value)
+    conf.setConf(entry, value)
     setConf(entry.key, entry.stringConverter(value))
   }
 
   def setConf(key: String, value: String): Unit = {
-    sqlConf.setConfString(key, value)
+    conf.setConfString(key, value)
   }
 
   def addJar(path: String): Unit = {

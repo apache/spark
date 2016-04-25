@@ -70,7 +70,7 @@ private[sql] class DefaultSource
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
 
-    val parquetOptions = new ParquetOptions(options, sqlContext.sessionState.sqlConf)
+    val parquetOptions = new ParquetOptions(options, sqlContext.sessionState.conf)
 
     val conf = ContextUtil.getConfiguration(job)
 

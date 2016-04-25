@@ -52,7 +52,7 @@ case class AnalyzeTable(tableName: String) extends RunnableCommand {
         // Seems fs.getContentSummary returns wrong table size on Jenkins. So we use
         // countFileSize to count the table size.
         val stagingDir =
-          sessionState.sqlConf.getConfString("hive.exec.stagingdir", ".hive-staging")
+          sessionState.conf.getConfString("hive.exec.stagingdir", ".hive-staging")
 
         def calculateTableSize(fs: FileSystem, path: Path): Long = {
           val fileStatus = fs.getFileStatus(path)

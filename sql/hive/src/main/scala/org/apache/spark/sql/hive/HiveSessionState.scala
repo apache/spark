@@ -59,7 +59,7 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
    */
   lazy val hiveconf: HiveConf = {
     val c = executionHive.conf
-    sqlConf.setConf(c.getAllProperties)
+    conf.setConf(c.getAllProperties)
     c
   }
 
@@ -75,7 +75,7 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
       ctx,
       ctx.sessionState.functionResourceLoader,
       functionRegistry,
-      sqlConf,
+      conf,
       hiveconf)
   }
 
@@ -83,7 +83,7 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
    * An analyzer that uses the Hive metastore.
    */
   override lazy val analyzer: Analyzer = {
-    new Analyzer(catalog, sqlConf) {
+    new Analyzer(catalog, conf) {
       override val extendedResolutionRules =
         catalog.ParquetConversions ::
         catalog.OrcConversions ::
@@ -91,9 +91,9 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
         catalog.PreInsertionCasts ::
         PreInsertCastAndRename ::
         DataSourceAnalysis ::
-        (if (sqlConf.runSQLonFile) new ResolveDataSource(ctx) :: Nil else Nil)
+        (if (conf.runSQLonFile) new ResolveDataSource(ctx) :: Nil else Nil)
 
-      override val extendedCheckRules = Seq(PreWriteCheck(sqlConf, catalog))
+      override val extendedCheckRules = Seq(PreWriteCheck(conf, catalog))
     }
   }
 
@@ -101,7 +101,7 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
    * Planner that takes into account Hive-specific strategies.
    */
   override def planner: SparkPlanner = {
-    new SparkPlanner(ctx.sparkContext, sqlConf, experimentalMethods.extraStrategies)
+    new SparkPlanner(ctx.sparkContext, conf, experimentalMethods.extraStrategies)
       with HiveStrategies {
       override val context: SQLContext = ctx
       override val hiveconf: HiveConf = self.hiveconf
@@ -178,7 +178,7 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
    * SerDe.
    */
   def convertMetastoreParquet: Boolean = {
-    sqlConf.getConf(HiveUtils.CONVERT_METASTORE_PARQUET)
+    conf.getConf(HiveUtils.CONVERT_METASTORE_PARQUET)
   }
 
   /**
@@ -188,7 +188,7 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
    * This configuration is only effective when "spark.sql.hive.convertMetastoreParquet" is true.
    */
   def convertMetastoreParquetWithSchemaMerging: Boolean = {
-    sqlConf.getConf(HiveUtils.CONVERT_METASTORE_PARQUET_WITH_SCHEMA_MERGING)
+    conf.getConf(HiveUtils.CONVERT_METASTORE_PARQUET_WITH_SCHEMA_MERGING)
   }
 
   /**
@@ -197,7 +197,7 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
    * SerDe.
    */
   def convertMetastoreOrc: Boolean = {
-    sqlConf.getConf(HiveUtils.CONVERT_METASTORE_ORC)
+    conf.getConf(HiveUtils.CONVERT_METASTORE_ORC)
   }
 
   /**
@@ -213,14 +213,14 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
    *     and no SerDe is specified (no ROW FORMAT SERDE clause).
    */
   def convertCTAS: Boolean = {
-    sqlConf.getConf(HiveUtils.CONVERT_CTAS)
+    conf.getConf(HiveUtils.CONVERT_CTAS)
   }
 
   /**
    * When true, Hive Thrift server will execute SQL queries asynchronously using a thread pool."
    */
   def hiveThriftServerAsync: Boolean = {
-    sqlConf.getConf(HiveUtils.HIVE_THRIFT_SERVER_ASYNC)
+    conf.getConf(HiveUtils.HIVE_THRIFT_SERVER_ASYNC)
   }
 
   // TODO: why do we get this from SparkConf but not SQLConf?

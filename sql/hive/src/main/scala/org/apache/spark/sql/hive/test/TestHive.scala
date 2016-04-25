@@ -159,7 +159,7 @@ private[hive] class TestHiveSparkSession(
   // This snapshot is saved when we create this TestHiveSparkSession.
   val initialSQLConf: SQLConf = {
     val snapshot = new SQLConf
-    sessionState.sqlConf.getAllConfs.foreach { case (k, v) => snapshot.setConfString(k, v) }
+    sessionState.conf.getAllConfs.foreach { case (k, v) => snapshot.setConfString(k, v) }
     snapshot
   }
 
@@ -527,7 +527,7 @@ private[hive] class TestHiveSharedState(
 private[hive] class TestHiveSessionState(sparkSession: TestHiveSparkSession)
   extends HiveSessionState(new SQLContext(sparkSession)) {
 
-  override lazy val sqlConf: SQLConf = {
+  override lazy val conf: SQLConf = {
     new SQLConf {
       clear()
       override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
