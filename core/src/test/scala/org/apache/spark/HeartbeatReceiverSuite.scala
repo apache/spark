@@ -211,7 +211,7 @@ class HeartbeatReceiverSuite
   private def triggerHeartbeat(
       executorId: String,
       executorShouldReregister: Boolean): Unit = {
-    val metrics = new TaskMetrics
+    val metrics = TaskMetrics.empty
     val blockManagerId = BlockManagerId(executorId, "localhost", 12345)
     val response = heartbeatReceiverRef.askWithRetry[HeartbeatResponse](
       Heartbeat(executorId, Array(1L -> metrics.accumulatorUpdates()), blockManagerId))

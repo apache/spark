@@ -375,18 +375,18 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
       execSummary.taskTime += info.duration
       stageData.numActiveTasks -= 1
 
-      val (errorMessage, accums): (Option[String], Seq[AccumulableInfo]) =
+      val (errorMessage, accums): (Option[String], Seq[AccumulatorUpdates]) =
         taskEnd.reason match {
           case org.apache.spark.Success =>
             stageData.completedIndices.add(info.index)
             stageData.numCompleteTasks += 1
-            (None, taskEnd.taskMetrics.accumulatorUpdates())
+            (None, taskEnd.taskMetrics.accumulatorUpdates)
           case e: ExceptionFailure => // Handle ExceptionFailure because we might have accumUpdates
             stageData.numFailedTasks += 1
             (Some(e.toErrorString), e.accumUpdates)
           case e: TaskFailedReason => // All other failure cases
             stageData.numFailedTasks += 1
-            (Some(e.toErrorString), Seq.empty[AccumulableInfo])
+            (Some(e.toErrorString), Seq.empty)
         }
 
       val taskMetrics =

@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler
 
-import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.{AccumulatorUpdates, LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.storage.BlockManagerId
 
@@ -68,6 +68,6 @@ private class DummyTaskScheduler extends TaskScheduler {
   override def applicationAttemptId(): Option[String] = None
   def executorHeartbeatReceived(
       execId: String,
-      accumUpdates: Array[(Long, Seq[AccumulableInfo])],
+      accumUpdates: Array[(Long, Seq[AccumulatorUpdates])],
       blockManagerId: BlockManagerId): Boolean = true
 }

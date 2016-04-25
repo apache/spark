@@ -25,7 +25,6 @@ import org.apache.spark.storage.{BlockId, BlockStatus, StorageLevel, TestBlockId
 
 
 class TaskMetricsSuite extends SparkFunSuite {
-  import AccumulatorParam._
   import StorageLevel._
   import TaskMetricsSuite._
 
@@ -59,8 +58,8 @@ class TaskMetricsSuite extends SparkFunSuite {
     tm.incPeakExecutionMemory(8L)
     val block1 = (TestBlockId("a"), BlockStatus(MEMORY_ONLY, 1L, 2L))
     val block2 = (TestBlockId("b"), BlockStatus(MEMORY_ONLY, 3L, 4L))
-    tm.incUpdatedBlockStatuses(Seq(block1))
-    tm.incUpdatedBlockStatuses(Seq(block2))
+    tm.incUpdatedBlockStatuses(block1)
+    tm.incUpdatedBlockStatuses(block2)
     // assert new values exist
     assert(tm.executorDeserializeTime == 1L)
     assert(tm.executorRunTime == 2L)
@@ -194,17 +193,17 @@ class TaskMetricsSuite extends SparkFunSuite {
   }
 
   test("additional accumulables") {
-    val tm = new TaskMetrics
-    val acc1 = new Accumulator(0, IntAccumulatorParam, Some("a"))
-    val acc2 = new Accumulator(0, IntAccumulatorParam, Some("b"))
-    val acc3 = new Accumulator(0, IntAccumulatorParam, Some("c"))
-    val acc4 = new Accumulator(0, IntAccumulatorParam, Some("d"), countFailedValues = true)
+    val tm = TaskMetrics.empty
+    val acc1 = AccumulatorSuite.createLongAccum("a")
+    val acc2 = AccumulatorSuite.createLongAccum("b")
+    val acc3 = AccumulatorSuite.createLongAccum("c")
+    val acc4 = AccumulatorSuite.createLongAccum("d", true)
     tm.registerAccumulator(acc1)
     tm.registerAccumulator(acc2)
     tm.registerAccumulator(acc3)
     tm.registerAccumulator(acc4)
-    acc1 += 1
-    acc2 += 2
+    acc1 += 1L
+    acc2 += 2L
     val newUpdates = tm.accumulatorUpdates().map { a => (a.id, a) }.toMap
     assert(newUpdates.contains(acc1.id))
     assert(newUpdates.contains(acc2.id))
@@ -214,42 +213,36 @@ class TaskMetricsSuite extends SparkFunSuite {
     assert(newUpdates(acc2.id).name === Some("b"))
     assert(newUpdates(acc3.id).name === Some("c"))
     assert(newUpdates(acc4.id).name === Some("d"))
-    assert(newUpdates(acc1.id).update === Some(1))
-    assert(newUpdates(acc2.id).update === Some(2))
-    assert(newUpdates(acc3.id).update === Some(0))
-    assert(newUpdates(acc4.id).update === Some(0))
+    assert(newUpdates(acc1.id).value === UpdatedLongValue(1))
+    assert(newUpdates(acc2.id).value === UpdatedLongValue(2))
+    assert(newUpdates(acc3.id).value === UpdatedLongValue(0))
+    assert(newUpdates(acc4.id).value === UpdatedLongValue(0))
     assert(!newUpdates(acc3.id).countFailedValues)
     assert(newUpdates(acc4.id).countFailedValues)
-    assert(newUpdates.values.map(_.update).forall(_.isDefined))
-    assert(newUpdates.values.map(_.value).forall(_.isEmpty))
     assert(newUpdates.size === tm.internalAccums.size + 4)
   }
 
   test("from accumulator updates") {
-    val accumUpdates1 = TaskMetrics.empty.internalAccums.map { a =>
-      AccumulableInfo(a.id, a.name, Some(3L), None, true, a.countFailedValues)
-    }
+    val accumUpdates1 = TaskMetrics.empty.internalAccums.map(_.getUpdates)
     val metrics1 = TaskMetrics.fromAccumulatorUpdates(accumUpdates1)
     assertUpdatesEquals(metrics1.accumulatorUpdates(), accumUpdates1)
     // Test this with additional accumulators to ensure that we do not crash when handling
     // updates from unregistered accumulators. In practice, all accumulators created
     // on the driver, internal or not, should be registered with `Accumulators` at some point.
-    val param = IntAccumulatorParam
     val registeredAccums = Seq(
-      new Accumulator(0, param, Some("a"), countFailedValues = true),
-      new Accumulator(0, param, Some("b"), countFailedValues = false))
+      AccumulatorSuite.createLongAccum("a", true),
+      AccumulatorSuite.createLongAccum("b", false))
     val unregisteredAccums = Seq(
-      new Accumulator(0, param, Some("c"), countFailedValues = true),
-      new Accumulator(0, param, Some("d"), countFailedValues = false))
-    registeredAccums.foreach(Accumulators.register)
-    registeredAccums.foreach(a => assert(Accumulators.originals.contains(a.id)))
-    unregisteredAccums.foreach(a => Accumulators.remove(a.id))
-    unregisteredAccums.foreach(a => assert(!Accumulators.originals.contains(a.id)))
+      AccumulatorSuite.createLongAccum("c", true),
+      AccumulatorSuite.createLongAccum("d", false))
+    registeredAccums.foreach(a => assert(AccumulatorContext.originals.containsKey(a.id)))
+    unregisteredAccums.foreach(a => AccumulatorContext.remove(a.id))
+    unregisteredAccums.foreach(a => assert(!AccumulatorContext.originals.containsKey(a.id)))
     // set some values in these accums
     registeredAccums.zipWithIndex.foreach { case (a, i) => a.setValue(i) }
     unregisteredAccums.zipWithIndex.foreach { case (a, i) => a.setValue(i) }
-    val registeredAccumInfos = registeredAccums.map(makeInfo)
-    val unregisteredAccumInfos = unregisteredAccums.map(makeInfo)
+    val registeredAccumInfos = registeredAccums.map(_.getUpdates)
+    val unregisteredAccumInfos = unregisteredAccums.map(_.getUpdates)
     val accumUpdates2 = accumUpdates1 ++ registeredAccumInfos ++ unregisteredAccumInfos
     // Simply checking that this does not crash:
     TaskMetrics.fromAccumulatorUpdates(accumUpdates2)
@@ -264,21 +257,14 @@ private[spark] object TaskMetricsSuite extends Assertions {
    * Note: this does NOT check accumulator ID equality.
    */
   def assertUpdatesEquals(
-      updates1: Seq[AccumulableInfo],
-      updates2: Seq[AccumulableInfo]): Unit = {
+      updates1: Seq[AccumulatorUpdates],
+      updates2: Seq[AccumulatorUpdates]): Unit = {
     assert(updates1.size === updates2.size)
     updates1.zip(updates2).foreach { case (info1, info2) =>
       // do not assert ID equals here
       assert(info1.name === info2.name)
-      assert(info1.update === info2.update)
-      assert(info1.value === info2.value)
       assert(info1.countFailedValues === info2.countFailedValues)
+      assert(info1.value === info2.value)
     }
   }
-
-  /**
-   * Make an [[AccumulableInfo]] out of an [[Accumulable]] with the intent to use the
-   * info as an accumulator update.
-   */
-  def makeInfo(a: Accumulable[_, _]): AccumulableInfo = a.toInfo(Some(a.value), None)
 }

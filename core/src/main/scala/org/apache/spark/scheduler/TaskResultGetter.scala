@@ -93,9 +93,9 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
           // we would have to serialize the result again after updating the size.
           result.accumUpdates = result.accumUpdates.map { a =>
             if (a.name == Some(InternalAccumulator.RESULT_SIZE)) {
-              assert(a.update == Some(0L),
+              assert(a.value.asInstanceOf[UpdatedLongValue].l == 0L,
                 "task result size should not have been set on the executors")
-              a.copy(update = Some(size.toLong))
+              a.copy(value = new UpdatedLongValue(size.toLong))
             } else {
               a
             }

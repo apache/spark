@@ -17,13 +17,11 @@
 
 package org.apache.spark.executor
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.{ArrayBuffer, LinkedHashMap}
 
 import org.apache.spark._
-import org.apache.spark.AccumulatorParam.{IntAccumulatorParam, LongAccumulatorParam, UpdatedBlockStatusesAccumulatorParam}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
-import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.storage.{BlockId, BlockStatus}
 
 
@@ -42,53 +40,51 @@ import org.apache.spark.storage.{BlockId, BlockStatus}
  */
 @DeveloperApi
 class TaskMetrics private[spark] () extends Serializable {
-  import InternalAccumulator._
-
   // Each metric is internally represented as an accumulator
-  private val _executorDeserializeTime = TaskMetrics.createLongAccum(EXECUTOR_DESERIALIZE_TIME)
-  private val _executorRunTime = TaskMetrics.createLongAccum(EXECUTOR_RUN_TIME)
-  private val _resultSize = TaskMetrics.createLongAccum(RESULT_SIZE)
-  private val _jvmGCTime = TaskMetrics.createLongAccum(JVM_GC_TIME)
-  private val _resultSerializationTime = TaskMetrics.createLongAccum(RESULT_SERIALIZATION_TIME)
-  private val _memoryBytesSpilled = TaskMetrics.createLongAccum(MEMORY_BYTES_SPILLED)
-  private val _diskBytesSpilled = TaskMetrics.createLongAccum(DISK_BYTES_SPILLED)
-  private val _peakExecutionMemory = TaskMetrics.createLongAccum(PEAK_EXECUTION_MEMORY)
-  private val _updatedBlockStatuses = TaskMetrics.createBlocksAccum(UPDATED_BLOCK_STATUSES)
+  private val _executorDeserializeTime = new LongAccumulator
+  private val _executorRunTime = new LongAccumulator
+  private val _resultSize = new LongAccumulator
+  private val _jvmGCTime = new LongAccumulator
+  private val _resultSerializationTime = new LongAccumulator
+  private val _memoryBytesSpilled = new LongAccumulator
+  private val _diskBytesSpilled = new LongAccumulator
+  private val _peakExecutionMemory = new LongAccumulator
+  private val _updatedBlockStatuses = new BlockStatusesAccumulator
 
   /**
    * Time taken on the executor to deserialize this task.
    */
-  def executorDeserializeTime: Long = _executorDeserializeTime.localValue
+  def executorDeserializeTime: Long = _executorDeserializeTime.unboxValue
 
   /**
    * Time the executor spends actually running the task (including fetching shuffle data).
    */
-  def executorRunTime: Long = _executorRunTime.localValue
+  def executorRunTime: Long = _executorRunTime.unboxValue
 
   /**
    * The number of bytes this task transmitted back to the driver as the TaskResult.
    */
-  def resultSize: Long = _resultSize.localValue
+  def resultSize: Long = _resultSize.unboxValue
 
   /**
    * Amount of time the JVM spent in garbage collection while executing this task.
    */
-  def jvmGCTime: Long = _jvmGCTime.localValue
+  def jvmGCTime: Long = _jvmGCTime.unboxValue
 
   /**
    * Amount of time spent serializing the task result.
    */
-  def resultSerializationTime: Long = _resultSerializationTime.localValue
+  def resultSerializationTime: Long = _resultSerializationTime.unboxValue
 
   /**
    * The number of in-memory bytes spilled by this task.
    */
-  def memoryBytesSpilled: Long = _memoryBytesSpilled.localValue
+  def memoryBytesSpilled: Long = _memoryBytesSpilled.unboxValue
 
   /**
    * The number of on-disk bytes spilled by this task.
    */
-  def diskBytesSpilled: Long = _diskBytesSpilled.localValue
+  def diskBytesSpilled: Long = _diskBytesSpilled.unboxValue
 
   /**
    * Peak memory used by internal data structures created during shuffles, aggregations and
@@ -96,7 +92,7 @@ class TaskMetrics private[spark] () extends Serializable {
    * across all such data structures created in this task. For SQL jobs, this only tracks all
    * unsafe operators and ExternalSort.
    */
-  def peakExecutionMemory: Long = _peakExecutionMemory.localValue
+  def peakExecutionMemory: Long = _peakExecutionMemory.unboxValue
 
   /**
    * Storage statuses of any blocks that have been updated as a result of this task.
@@ -114,7 +110,7 @@ class TaskMetrics private[spark] () extends Serializable {
   private[spark] def incMemoryBytesSpilled(v: Long): Unit = _memoryBytesSpilled.add(v)
   private[spark] def incDiskBytesSpilled(v: Long): Unit = _diskBytesSpilled.add(v)
   private[spark] def incPeakExecutionMemory(v: Long): Unit = _peakExecutionMemory.add(v)
-  private[spark] def incUpdatedBlockStatuses(v: Seq[(BlockId, BlockStatus)]): Unit =
+  private[spark] def incUpdatedBlockStatuses(v: (BlockId, BlockStatus)): Unit =
     _updatedBlockStatuses.add(v)
   private[spark] def setUpdatedBlockStatuses(v: Seq[(BlockId, BlockStatus)]): Unit =
     _updatedBlockStatuses.setValue(v)
@@ -175,51 +171,59 @@ class TaskMetrics private[spark] () extends Serializable {
   }
 
   // Only used for test
-  private[spark] val testAccum =
-    sys.props.get("spark.testing").map(_ => TaskMetrics.createLongAccum(TEST_ACCUM))
+  private[spark] val testAccum = sys.props.get("spark.testing").map(_ => new LongAccumulator)
 
-  @transient private[spark] lazy val internalAccums: Seq[Accumulable[_, _]] = {
-    val in = inputMetrics
-    val out = outputMetrics
-    val sr = shuffleReadMetrics
-    val sw = shuffleWriteMetrics
-    Seq(_executorDeserializeTime, _executorRunTime, _resultSize, _jvmGCTime,
-      _resultSerializationTime, _memoryBytesSpilled, _diskBytesSpilled, _peakExecutionMemory,
-      _updatedBlockStatuses, sr._remoteBlocksFetched, sr._localBlocksFetched, sr._remoteBytesRead,
-      sr._localBytesRead, sr._fetchWaitTime, sr._recordsRead, sw._bytesWritten, sw._recordsWritten,
-      sw._writeTime, in._bytesRead, in._recordsRead, out._bytesWritten, out._recordsWritten) ++
-      testAccum
-  }
+
+  import InternalAccumulator._
+  @transient private[spark] lazy val nameToAccums = LinkedHashMap(
+    EXECUTOR_DESERIALIZE_TIME -> _executorDeserializeTime,
+    EXECUTOR_RUN_TIME -> _executorRunTime,
+    RESULT_SIZE -> _resultSize,
+    JVM_GC_TIME -> _jvmGCTime,
+    RESULT_SERIALIZATION_TIME -> _resultSerializationTime,
+    MEMORY_BYTES_SPILLED -> _memoryBytesSpilled,
+    DISK_BYTES_SPILLED -> _diskBytesSpilled,
+    PEAK_EXECUTION_MEMORY -> _peakExecutionMemory,
+    UPDATED_BLOCK_STATUSES -> _updatedBlockStatuses,
+    shuffleRead.REMOTE_BLOCKS_FETCHED -> shuffleReadMetrics._remoteBlocksFetched,
+    shuffleRead.LOCAL_BLOCKS_FETCHED -> shuffleReadMetrics._localBlocksFetched,
+    shuffleRead.REMOTE_BYTES_READ -> shuffleReadMetrics._remoteBytesRead,
+    shuffleRead.LOCAL_BYTES_READ -> shuffleReadMetrics._localBytesRead,
+    shuffleRead.FETCH_WAIT_TIME -> shuffleReadMetrics._fetchWaitTime,
+    shuffleRead.RECORDS_READ -> shuffleReadMetrics._recordsRead,
+    shuffleWrite.BYTES_WRITTEN -> shuffleWriteMetrics._bytesWritten,
+    shuffleWrite.RECORDS_WRITTEN -> shuffleWriteMetrics._recordsWritten,
+    shuffleWrite.WRITE_TIME -> shuffleWriteMetrics._writeTime,
+    input.BYTES_READ -> inputMetrics._bytesRead,
+    input.RECORDS_READ -> inputMetrics._recordsRead,
+    output.BYTES_WRITTEN -> outputMetrics._bytesWritten,
+    output.RECORDS_WRITTEN -> outputMetrics._recordsWritten
+  ) ++ testAccum.map(TEST_ACCUM -> _)
+
+  @transient private[spark] lazy val internalAccums: Seq[NewAccumulator[_, _]] =
+    nameToAccums.values.toIndexedSeq
 
   /* ========================== *
    |        OTHER THINGS        |
    * ========================== */
 
-  private[spark] def registerForCleanup(sc: SparkContext): Unit = {
-    internalAccums.foreach { accum =>
-      sc.cleaner.foreach(_.registerAccumulatorForCleanup(accum))
+  private[spark] def register(sc: SparkContext): Unit = {
+    nameToAccums.foreach {
+      case (name, acc) => acc.register(sc, name = Some(name), countFailedValues = true)
     }
   }
 
   /**
    * External accumulators registered with this task.
    */
-  @transient private lazy val externalAccums = new ArrayBuffer[Accumulable[_, _]]
+  @transient private lazy val externalAccums = new ArrayBuffer[NewAccumulator[_, _]]
 
-  private[spark] def registerAccumulator(a: Accumulable[_, _]): Unit = {
+  private[spark] def registerAccumulator(a: NewAccumulator[_, _]): Unit = {
     externalAccums += a
   }
 
-  /**
-   * Return the latest updates of accumulators in this task.
-   *
-   * The [[AccumulableInfo.update]] field is always defined and the [[AccumulableInfo.value]]
-   * field is always empty, since this represents the partial updates recorded in this task,
-   * not the aggregated value across multiple tasks.
-   */
-  def accumulatorUpdates(): Seq[AccumulableInfo] = {
-    (internalAccums ++ externalAccums).map { a => a.toInfo(Some(a.localValue), None) }
-  }
+  private[spark] def accumulatorUpdates(): Seq[AccumulatorUpdates] =
+    (internalAccums ++ externalAccums).map(_.getUpdates)
 }
 
 /**
@@ -232,11 +236,11 @@ class TaskMetrics private[spark] () extends Serializable {
  * UnsupportedOperationException, we choose not to do so because the overrides would quickly become
  * out-of-date when new metrics are added.
  */
-private[spark] class ListenerTaskMetrics(accumUpdates: Seq[AccumulableInfo]) extends TaskMetrics {
+private[spark] class ListenerTaskMetrics(accUpdates: Seq[AccumulatorUpdates]) extends TaskMetrics {
 
-  override def accumulatorUpdates(): Seq[AccumulableInfo] = accumUpdates
+  override def accumulatorUpdates(): Seq[AccumulatorUpdates] = accUpdates
 
-  override private[spark] def registerAccumulator(a: Accumulable[_, _]): Unit = {
+  override private[spark] def registerAccumulator(a: NewAccumulator[_, _]): Unit = {
     throw new UnsupportedOperationException("This TaskMetrics is read-only")
   }
 }
@@ -247,31 +251,17 @@ private[spark] object TaskMetrics extends Logging {
    * Create an empty task metrics that doesn't register its accumulators.
    */
   def empty: TaskMetrics = {
-    val metrics = new TaskMetrics
-    metrics.internalAccums.foreach(acc => Accumulators.remove(acc.id))
-    metrics
+    val tm = new TaskMetrics
+    tm.nameToAccums.foreach { case (name, acc) =>
+      acc.metadata = AccumulatorMetadata(AccumulatorContext.newId(), Some(name), true)
+    }
+    tm
   }
 
-  /**
-   * Create a new accumulator representing an internal task metric.
-   */
-  private def newMetric[T](
-      initialValue: T,
-      name: String,
-      param: AccumulatorParam[T]): Accumulator[T] = {
-    new Accumulator[T](initialValue, param, Some(name), countFailedValues = true)
-  }
-
-  def createLongAccum(name: String): Accumulator[Long] = {
-    newMetric(0L, name, LongAccumulatorParam)
-  }
-
-  def createIntAccum(name: String): Accumulator[Int] = {
-    newMetric(0, name, IntAccumulatorParam)
-  }
-
-  def createBlocksAccum(name: String): Accumulator[Seq[(BlockId, BlockStatus)]] = {
-    newMetric(Nil, name, UpdatedBlockStatusesAccumulatorParam)
+  def registered: TaskMetrics = {
+    val tm = empty
+    tm.internalAccums.foreach(AccumulatorContext.register)
+    tm
   }
 
   /**
@@ -284,15 +274,40 @@ private[spark] object TaskMetrics extends Logging {
    * This assumes the provided updates contain the initial set of accumulators representing
    * internal task level metrics.
    */
-  def fromAccumulatorUpdates(accumUpdates: Seq[AccumulableInfo]): TaskMetrics = {
-    val definedAccumUpdates = accumUpdates.filter(_.update.isDefined)
-    val metrics = new ListenerTaskMetrics(definedAccumUpdates)
-    // We don't register this [[ListenerTaskMetrics]] for cleanup, and this is only used to post
-    // event, we should un-register all accumulators immediately.
-    metrics.internalAccums.foreach(acc => Accumulators.remove(acc.id))
-    definedAccumUpdates.filter(_.internal).foreach { accum =>
-      metrics.internalAccums.find(_.name == accum.name).foreach(_.setValueAny(accum.update.get))
+  def fromAccumulatorUpdates(accumUpdates: Seq[AccumulatorUpdates]): TaskMetrics = {
+    val tm = new ListenerTaskMetrics(accumUpdates)
+    accumUpdates.filter(_.name.isDefined).foreach { updates =>
+      tm.nameToAccums.get(updates.name.get).foreach(_.applyUpdates(updates.value))
     }
-    metrics
+    tm
+  }
+}
+
+
+private[spark] class BlockStatusesAccumulator
+  extends NewAccumulator[(BlockId, BlockStatus), Seq[(BlockId, BlockStatus)]] {
+  @transient private[this] var _seq = ArrayBuffer.empty[(BlockId, BlockStatus)]
+
+  override def updatedValue: UpdatedValue = new GenericUpdatedValue(_seq)
+
+  override def initialize(): Unit = _seq = ArrayBuffer.empty[(BlockId, BlockStatus)]
+
+  override def add(v: (BlockId, BlockStatus)): Unit = _seq += v
+
+  override def isNoOp(updates: UpdatedValue): Boolean = {
+    val v = updates.asInstanceOf[GenericUpdatedValue[Seq[(BlockId, BlockStatus)]]].value
+    v.isEmpty
+  }
+
+  override def applyUpdates(updates: UpdatedValue): Unit = {
+    val v = updates.asInstanceOf[GenericUpdatedValue[Seq[(BlockId, BlockStatus)]]].value
+    _seq ++= v
+  }
+
+  override def localValue: Seq[(BlockId, BlockStatus)] = _seq
+
+  def setValue(newValue: Seq[(BlockId, BlockStatus)]): Unit = {
+    _seq.clear()
+    _seq ++= newValue
   }
 }

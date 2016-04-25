@@ -1217,10 +1217,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Create an [[org.apache.spark.Accumulator]] variable of a given type, which tasks can "add"
    * values to using the `+=` method. Only the driver can access the accumulator's `value`.
    */
-  def accumulator[T](initialValue: T)(implicit param: AccumulatorParam[T]): Accumulator[T] =
-  {
+  def accumulator[T](initialValue: T)(implicit param: AccumulatorParam[T]): Accumulator[T] = {
     val acc = new Accumulator(initialValue, param)
-    cleaner.foreach(_.registerAccumulatorForCleanup(acc))
+    cleaner.foreach(_.registerAccumulatorForCleanup(acc.newAcc))
     acc
   }
 
@@ -1232,7 +1231,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   def accumulator[T](initialValue: T, name: String)(implicit param: AccumulatorParam[T])
     : Accumulator[T] = {
     val acc = new Accumulator(initialValue, param, Some(name))
-    cleaner.foreach(_.registerAccumulatorForCleanup(acc))
+    cleaner.foreach(_.registerAccumulatorForCleanup(acc.newAcc))
     acc
   }
 
@@ -1245,7 +1244,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   def accumulable[R, T](initialValue: R)(implicit param: AccumulableParam[R, T])
     : Accumulable[R, T] = {
     val acc = new Accumulable(initialValue, param)
-    cleaner.foreach(_.registerAccumulatorForCleanup(acc))
+    cleaner.foreach(_.registerAccumulatorForCleanup(acc.newAcc))
     acc
   }
 
@@ -1259,7 +1258,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   def accumulable[R, T](initialValue: R, name: String)(implicit param: AccumulableParam[R, T])
     : Accumulable[R, T] = {
     val acc = new Accumulable(initialValue, param, Some(name))
-    cleaner.foreach(_.registerAccumulatorForCleanup(acc))
+    cleaner.foreach(_.registerAccumulatorForCleanup(acc.newAcc))
     acc
   }
 
@@ -1273,7 +1272,31 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       (initialValue: R): Accumulable[R, T] = {
     val param = new GrowableAccumulableParam[R, T]
     val acc = new Accumulable(initialValue, param)
-    cleaner.foreach(_.registerAccumulatorForCleanup(acc))
+    cleaner.foreach(_.registerAccumulatorForCleanup(acc.newAcc))
+    acc
+  }
+
+  def longAccumulator: LongAccumulator = {
+    val acc = new LongAccumulator
+    acc.register(this)
+    acc
+  }
+
+  def longAccumulator(name: String): LongAccumulator = {
+    val acc = new LongAccumulator
+    acc.register(this, name = Some(name))
+    acc
+  }
+
+  def doubleAccumulator: DoubleAccumulator = {
+    val acc = new DoubleAccumulator
+    acc.register(this)
+    acc
+  }
+
+  def doubleAccumulator(name: String): DoubleAccumulator = {
+    val acc = new DoubleAccumulator
+    acc.register(this, name = Some(name))
     acc
   }
 

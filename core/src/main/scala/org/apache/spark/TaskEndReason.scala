@@ -120,17 +120,8 @@ case class ExceptionFailure(
     stackTrace: Array[StackTraceElement],
     fullStackTrace: String,
     private val exceptionWrapper: Option[ThrowableSerializationWrapper],
-    accumUpdates: Seq[AccumulableInfo] = Seq.empty[AccumulableInfo])
+    accumUpdates: Seq[AccumulatorUpdates] = Seq.empty)
   extends TaskFailedReason {
-
-  @deprecated("use accumUpdates instead", "2.0.0")
-  val metrics: Option[TaskMetrics] = {
-    if (accumUpdates.nonEmpty) {
-      Try(TaskMetrics.fromAccumulatorUpdates(accumUpdates)).toOption
-    } else {
-      None
-    }
-  }
 
   /**
    * `preserveCause` is used to keep the exception itself so it is available to the
@@ -139,13 +130,13 @@ case class ExceptionFailure(
    */
   private[spark] def this(
       e: Throwable,
-      accumUpdates: Seq[AccumulableInfo],
+      accumUpdates: Seq[AccumulatorUpdates],
       preserveCause: Boolean) {
     this(e.getClass.getName, e.getMessage, e.getStackTrace, Utils.exceptionString(e),
       if (preserveCause) Some(new ThrowableSerializationWrapper(e)) else None, accumUpdates)
   }
 
-  private[spark] def this(e: Throwable, accumUpdates: Seq[AccumulableInfo]) {
+  private[spark] def this(e: Throwable, accumUpdates: Seq[AccumulatorUpdates]) {
     this(e, accumUpdates, preserveCause = true)
   }
 

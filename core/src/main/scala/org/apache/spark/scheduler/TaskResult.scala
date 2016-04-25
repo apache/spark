@@ -22,7 +22,7 @@ import java.nio.ByteBuffer
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.SparkEnv
+import org.apache.spark.{AccumulatorUpdates, SparkEnv}
 import org.apache.spark.storage.BlockId
 import org.apache.spark.util.Utils
 
@@ -36,7 +36,7 @@ private[spark] case class IndirectTaskResult[T](blockId: BlockId, size: Int)
 /** A TaskResult that contains the task's return value and accumulator updates. */
 private[spark] class DirectTaskResult[T](
     var valueBytes: ByteBuffer,
-    var accumUpdates: Seq[AccumulableInfo])
+    var accumUpdates: Seq[AccumulatorUpdates])
   extends TaskResult[T] with Externalizable {
 
   private var valueObjectDeserialized = false
@@ -61,9 +61,9 @@ private[spark] class DirectTaskResult[T](
     if (numUpdates == 0) {
       accumUpdates = null
     } else {
-      val _accumUpdates = new ArrayBuffer[AccumulableInfo]
+      val _accumUpdates = new ArrayBuffer[AccumulatorUpdates]
       for (i <- 0 until numUpdates) {
-        _accumUpdates += in.readObject.asInstanceOf[AccumulableInfo]
+        _accumUpdates += in.readObject.asInstanceOf[AccumulatorUpdates]
       }
       accumUpdates = _accumUpdates
     }

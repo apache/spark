@@ -209,7 +209,7 @@ class DAGScheduler(
       task: Task[_],
       reason: TaskEndReason,
       result: Any,
-      accumUpdates: Seq[AccumulableInfo],
+      accumUpdates: Seq[AccumulatorUpdates],
       taskInfo: TaskInfo): Unit = {
     eventProcessLoop.post(
       CompletionEvent(task, reason, result, accumUpdates, taskInfo))
@@ -223,7 +223,7 @@ class DAGScheduler(
   def executorHeartbeatReceived(
       execId: String,
       // (taskId, stageId, stageAttemptId, accumUpdates)
-      accumUpdates: Array[(Long, Int, Int, Seq[AccumulableInfo])],
+      accumUpdates: Array[(Long, Int, Int, Seq[AccumulatorUpdates])],
       blockManagerId: BlockManagerId): Boolean = {
     listenerBus.post(SparkListenerExecutorMetricsUpdate(execId, accumUpdates))
     blockManagerMaster.driverEndpoint.askWithRetry[Boolean](
@@ -1088,21 +1088,19 @@ class DAGScheduler(
     val task = event.task
     val stage = stageIdToStage(task.stageId)
     try {
-      event.accumUpdates.foreach { ainfo =>
-        assert(ainfo.update.isDefined, "accumulator from task should have a partial value")
-        val id = ainfo.id
-        val partialValue = ainfo.update.get
+      event.accumUpdates.foreach { updates =>
+        val id = updates.id
         // Find the corresponding accumulator on the driver and update it
-        val acc: Accumulable[Any, Any] = Accumulators.get(id) match {
-          case Some(accum) => accum.asInstanceOf[Accumulable[Any, Any]]
+        val acc: NewAccumulator[Any, Any] = AccumulatorContext.get(id) match {
+          case Some(accum) => accum.asInstanceOf[NewAccumulator[Any, Any]]
           case None =>
             throw new SparkException(s"attempted to access non-existent accumulator $id")
         }
-        acc ++= partialValue
+        acc.applyUpdates(updates.value)
         // To avoid UI cruft, ignore cases where value wasn't updated
-        if (acc.name.isDefined && partialValue != acc.zero) {
+        if (acc.name.isDefined && !acc.isNoOp(updates.value)) {
           stage.latestInfo.accumulables(id) = acc.toInfo(None, Some(acc.value))
-          event.taskInfo.accumulables += acc.toInfo(Some(partialValue), Some(acc.value))
+          event.taskInfo.accumulables += acc.toInfo(Some(updates.value), Some(acc.value))
         }
       }
     } catch {

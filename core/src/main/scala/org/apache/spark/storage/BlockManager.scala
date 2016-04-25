@@ -801,7 +801,7 @@ private[spark] class BlockManager(
           reportBlockStatus(blockId, info, putBlockStatus)
         }
         Option(TaskContext.get()).foreach { c =>
-          c.taskMetrics().incUpdatedBlockStatuses(Seq((blockId, putBlockStatus)))
+          c.taskMetrics().incUpdatedBlockStatuses(blockId -> putBlockStatus)
         }
       }
       logDebug("Put block %s locally took %s".format(blockId, Utils.getUsedTimeMs(startTimeMs)))
@@ -958,7 +958,7 @@ private[spark] class BlockManager(
           reportBlockStatus(blockId, info, putBlockStatus)
         }
         Option(TaskContext.get()).foreach { c =>
-          c.taskMetrics().incUpdatedBlockStatuses(Seq((blockId, putBlockStatus)))
+          c.taskMetrics().incUpdatedBlockStatuses(blockId -> putBlockStatus)
         }
         logDebug("Put block %s locally took %s".format(blockId, Utils.getUsedTimeMs(startTimeMs)))
         if (level.replication > 1) {
@@ -1257,7 +1257,7 @@ private[spark] class BlockManager(
     }
     if (blockIsUpdated) {
       Option(TaskContext.get()).foreach { c =>
-        c.taskMetrics().incUpdatedBlockStatuses(Seq((blockId, status)))
+        c.taskMetrics().incUpdatedBlockStatuses(blockId -> status)
       }
     }
     status.storageLevel
@@ -1311,7 +1311,7 @@ private[spark] class BlockManager(
           reportBlockStatus(blockId, info, removeBlockStatus)
         }
         Option(TaskContext.get()).foreach { c =>
-          c.taskMetrics().incUpdatedBlockStatuses(Seq((blockId, removeBlockStatus)))
+          c.taskMetrics().incUpdatedBlockStatuses(blockId -> removeBlockStatus)
         }
     }
   }
