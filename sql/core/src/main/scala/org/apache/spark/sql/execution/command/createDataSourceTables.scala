@@ -32,7 +32,7 @@ import org.apache.spark.sql.execution.datasources.{BucketSpec, DataSource, Hadoo
 import org.apache.spark.sql.internal.HiveSerDe
 import org.apache.spark.sql.sources.InsertableRelation
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String 
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * A command used to create a data source table.
