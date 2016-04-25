@@ -2469,7 +2469,6 @@ setMethod("drop",
             base::drop(x)
           })
 
-<<<<<<< HEAD
 #' This function computes a histogram for a given SparkR Column.
 #' 
 #' @name histogram
