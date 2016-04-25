@@ -202,33 +202,37 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
 
     // Make sure expected events exist in the log file.
     val logData = EventLoggingListener.openEventLog(new Path(eventLogger.logPath), fileSystem)
-    val logStart = SparkListenerLogStart(SPARK_VERSION)
-    val lines = readLines(logData)
-    val eventSet = mutable.Set(
-      SparkListenerApplicationStart,
-      SparkListenerBlockManagerAdded,
-      SparkListenerExecutorAdded,
-      SparkListenerEnvironmentUpdate,
-      SparkListenerJobStart,
-      SparkListenerJobEnd,
-      SparkListenerStageSubmitted,
-      SparkListenerStageCompleted,
-      SparkListenerTaskStart,
-      SparkListenerTaskEnd,
-      SparkListenerApplicationEnd).map(Utils.getFormattedClassName)
-    lines.foreach { line =>
-      eventSet.foreach { event =>
-        if (line.contains(event)) {
-          val parsedEvent = JsonProtocol.sparkEventFromJson(parse(line))
-          val eventType = Utils.getFormattedClassName(parsedEvent)
-          if (eventType == event) {
-            eventSet.remove(event)
+    try {
+      val logStart = SparkListenerLogStart(SPARK_VERSION)
+      val lines = readLines(logData)
+      val eventSet = mutable.Set(
+        SparkListenerApplicationStart,
+        SparkListenerBlockManagerAdded,
+        SparkListenerExecutorAdded,
+        SparkListenerEnvironmentUpdate,
+        SparkListenerJobStart,
+        SparkListenerJobEnd,
+        SparkListenerStageSubmitted,
+        SparkListenerStageCompleted,
+        SparkListenerTaskStart,
+        SparkListenerTaskEnd,
+        SparkListenerApplicationEnd).map(Utils.getFormattedClassName)
+      lines.foreach { line =>
+        eventSet.foreach { event =>
+          if (line.contains(event)) {
+            val parsedEvent = JsonProtocol.sparkEventFromJson(parse(line))
+            val eventType = Utils.getFormattedClassName(parsedEvent)
+            if (eventType == event) {
+              eventSet.remove(event)
+            }
           }
         }
       }
+      assert(JsonProtocol.sparkEventFromJson(parse(lines(0))) === logStart)
+      assert(eventSet.isEmpty, "The following events are missing: " + eventSet.toSeq)
+    } finally {
+      logData.close()
     }
-    assert(JsonProtocol.sparkEventFromJson(parse(lines(0))) === logStart)
-    assert(eventSet.isEmpty, "The following events are missing: " + eventSet.toSeq)
   }
 
   private def readLines(in: InputStream): Seq[String] = {
