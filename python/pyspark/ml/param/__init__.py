@@ -40,22 +40,15 @@ class Param(object):
     """
     A param with self-contained documentation.
 
-    Note: `expectedType` is deprecated and will be removed in 2.1. Use typeConverter instead,
-          as a keyword argument.
-
     .. versionadded:: 1.3.0
     """
 
-    def __init__(self, parent, name, doc, expectedType=None, typeConverter=None):
+    def __init__(self, parent, name, doc, typeConverter=None):
         if not isinstance(parent, Identifiable):
             raise TypeError("Parent must be an Identifiable but got type %s." % type(parent))
         self.parent = parent.uid
         self.name = str(name)
         self.doc = str(doc)
-        self.expectedType = expectedType
-        if expectedType is not None:
-            warnings.warn("expectedType is deprecated and will be removed in 2.1. " +
-                          "Use typeConverter instead, as a keyword argument.")
         self.typeConverter = TypeConverters.identity if typeConverter is None else typeConverter
 
     def _copy_new_parent(self, parent):
@@ -485,10 +478,11 @@ class Params(Identifiable):
         Changes the uid of this instance. This updates both
         the stored uid and the parent uid of params and param maps.
         This is used by persistence (loading).
-        :param newUid: new uid to use
+        :param newUid: new uid to use, which is converted to unicode
         :return: same instance, but with the uid and Param.parent values
                  updated, including within param maps
         """
+        newUid = unicode(newUid)
         self.uid = newUid
         newDefaultParamMap = dict()
         newParamMap = dict()

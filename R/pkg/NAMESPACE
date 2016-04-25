@@ -24,7 +24,10 @@ export("setJobGroup",
        "clearJobGroup",
        "cancelJobGroup")
 
-exportClasses("DataFrame")
+# Export Utility methods
+export("setLogLevel")
+
+exportClasses("SparkDataFrame")
 
 exportMethods("arrange",
               "as.data.frame",
@@ -101,6 +104,7 @@ exportMethods("arrange",
               "withColumn",
               "withColumnRenamed",
               "write.df",
+              "write.jdbc",
               "write.json",
               "write.parquet",
               "write.text")
@@ -125,6 +129,7 @@ exportMethods("%in%",
               "between",
               "bin",
               "bitwiseNOT",
+              "bround",
               "cast",
               "cbrt",
               "ceil",
@@ -284,6 +289,7 @@ export("as.DataFrame",
        "loadDF",
        "parquetFile",
        "read.df",
+       "read.jdbc",
        "read.json",
        "read.parquet",
        "read.text",

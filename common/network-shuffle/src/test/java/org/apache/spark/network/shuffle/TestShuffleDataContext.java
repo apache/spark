@@ -29,7 +29,7 @@ import com.google.common.io.Files;
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 
 /**
- * Manages some sort- and hash-based shuffle data, including the creation
+ * Manages some sort-shuffle data, including the creation
  * and cleanup of directories that can be read by the {@link ExternalShuffleBlockResolver}.
  */
 public class TestShuffleDataContext {
@@ -82,15 +82,6 @@ public class TestShuffleDataContext {
     } finally {
       Closeables.close(dataStream, suppressExceptionsDuringClose);
       Closeables.close(indexStream, suppressExceptionsDuringClose);
-    }
-  }
-
-  /** Creates reducer blocks in a hash-based data format within our local dirs. */
-  public void insertHashShuffleData(int shuffleId, int mapId, byte[][] blocks) throws IOException {
-    for (int i = 0; i < blocks.length; i ++) {
-      String blockId = "shuffle_" + shuffleId + "_" + mapId + "_" + i;
-      Files.write(blocks[i],
-        ExternalShuffleBlockResolver.getFile(localDirs, subDirsPerLocalDir, blockId));
     }
   }
 

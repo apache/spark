@@ -35,35 +35,16 @@ class FileStreamSource(
     sqlContext: SQLContext,
     metadataPath: String,
     path: String,
-    dataSchema: Option[StructType],
-    providerName: String,
+    override val schema: StructType,
     dataFrameBuilder: Array[String] => DataFrame) extends Source with Logging {
 
-  private val fs = FileSystem.get(sqlContext.sparkContext.hadoopConfiguration)
+  private val fs = new Path(path).getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
   private val metadataLog = new HDFSMetadataLog[Seq[String]](sqlContext, metadataPath)
   private var maxBatchId = metadataLog.getLatest().map(_._1).getOrElse(-1L)
 
   private val seenFiles = new OpenHashSet[String]
   metadataLog.get(None, Some(maxBatchId)).foreach { case (batchId, files) =>
     files.foreach(seenFiles.add)
-  }
-
-  /** Returns the schema of the data from this source */
-  override lazy val schema: StructType = {
-    dataSchema.getOrElse {
-      val filesPresent = fetchAllFiles()
-      if (filesPresent.isEmpty) {
-        if (providerName == "text") {
-          // Add a default schema for "text"
-          new StructType().add("value", StringType)
-        } else {
-          throw new IllegalArgumentException("No schema specified")
-        }
-      } else {
-        // There are some existing files. Use them to infer the schema.
-        dataFrameBuilder(filesPresent.toArray).schema
-      }
-    }
   }
 
   /**
@@ -118,7 +99,6 @@ class FileStreamSource(
     logInfo(s"Processing ${files.length} files from ${startId + 1}:$endId")
     logDebug(s"Streaming ${files.mkString(", ")}")
     dataFrameBuilder(files)
-
   }
 
   private def fetchAllFiles(): Seq[String] = {

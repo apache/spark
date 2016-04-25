@@ -63,7 +63,8 @@ private[yarn] class YarnAllocator(
     sparkConf: SparkConf,
     amClient: AMRMClient[ContainerRequest],
     appAttemptId: ApplicationAttemptId,
-    securityMgr: SecurityManager)
+    securityMgr: SecurityManager,
+    localResources: Map[String, LocalResource])
   extends Logging {
 
   import YarnAllocator._
@@ -477,7 +478,8 @@ private[yarn] class YarnAllocator(
         executorMemory,
         executorCores,
         appAttemptId.getApplicationId.toString,
-        securityMgr)
+        securityMgr,
+        localResources)
       if (launchContainers) {
         logInfo("Launching ExecutorRunnable. driverUrl: %s,  executorHostname: %s".format(
           driverUrl, executorHostname))

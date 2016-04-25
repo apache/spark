@@ -133,7 +133,7 @@ class PartitionBatchPruningSuite
       }
 
       val (readPartitions, readBatches) = df.queryExecution.sparkPlan.collect {
-        case in: InMemoryColumnarTableScan => (in.readPartitions.value, in.readBatches.value)
+        case in: InMemoryTableScanExec => (in.readPartitions.value, in.readBatches.value)
       }.head
 
       assert(readBatches === expectedReadBatches, s"Wrong number of read batches: $queryExecution")

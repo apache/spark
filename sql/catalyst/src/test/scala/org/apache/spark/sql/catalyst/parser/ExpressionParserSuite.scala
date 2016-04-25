@@ -113,7 +113,9 @@ class ExpressionParserSuite extends PlanTest {
   }
 
   test("exists expression") {
-    intercept("exists (select 1 from b where b.x = a.x)", "EXISTS clauses are not supported")
+    assertEqual(
+      "exists (select 1 from b where b.x = a.x)",
+      Exists(table("b").where(Symbol("b.x") === Symbol("a.x")).select(1)))
   }
 
   test("comparison expressions") {
@@ -124,8 +126,10 @@ class ExpressionParserSuite extends PlanTest {
     assertEqual("a != b", 'a =!= 'b)
     assertEqual("a < b", 'a < 'b)
     assertEqual("a <= b", 'a <= 'b)
+    assertEqual("a !> b", 'a <= 'b)
     assertEqual("a > b", 'a > 'b)
     assertEqual("a >= b", 'a >= 'b)
+    assertEqual("a !< b", 'a >= 'b)
   }
 
   test("between expressions") {
@@ -139,7 +143,9 @@ class ExpressionParserSuite extends PlanTest {
   }
 
   test("in sub-query") {
-    intercept("a in (select b from c)", "IN with a Sub-query is currently not supported")
+    assertEqual(
+      "a in (select b from c)",
+      InSubQuery('a, table("c").select('b)))
   }
 
   test("like expressions") {

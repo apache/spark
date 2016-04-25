@@ -22,6 +22,7 @@ import java.io.File
 import org.apache.spark.sql.{QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
+import org.apache.spark.sql.catalyst.parser.DataTypeParser
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePointUDT, SQLTestUtils}
@@ -32,14 +33,14 @@ class HiveMetastoreCatalogSuite extends TestHiveSingleton {
 
   test("struct field should accept underscore in sub-column name") {
     val hiveTypeStr = "struct<a: int, b_1: string, c: string>"
-    val dateType = HiveMetastoreTypes.toDataType(hiveTypeStr)
+    val dateType = DataTypeParser.parse(hiveTypeStr)
     assert(dateType.isInstanceOf[StructType])
   }
 
   test("udt to metastore type conversion") {
     val udt = new ExamplePointUDT
-    assertResult(HiveMetastoreTypes.toMetastoreType(udt.sqlType)) {
-      HiveMetastoreTypes.toMetastoreType(udt)
+    assertResult(udt.sqlType.catalogString) {
+      udt.catalogString
     }
   }
 
@@ -96,7 +97,7 @@ class DataSourceWithHiveMetastoreCatalogSuite
         assert(columns.map(_.dataType) === Seq("decimal(10,3)", "string"))
 
         checkAnswer(table("t"), testDF)
-        assert(runSqlHive("SELECT * FROM t") === Seq("1.1\t1", "2.1\t2"))
+        assert(sessionState.runNativeSql("SELECT * FROM t") === Seq("1.1\t1", "2.1\t2"))
       }
     }
 
@@ -129,7 +130,7 @@ class DataSourceWithHiveMetastoreCatalogSuite
           assert(columns.map(_.dataType) === Seq("decimal(10,3)", "string"))
 
           checkAnswer(table("t"), testDF)
-          assert(runSqlHive("SELECT * FROM t") === Seq("1.1\t1", "2.1\t2"))
+          assert(sessionState.runNativeSql("SELECT * FROM t") === Seq("1.1\t1", "2.1\t2"))
         }
       }
     }
@@ -159,7 +160,7 @@ class DataSourceWithHiveMetastoreCatalogSuite
           assert(columns.map(_.dataType) === Seq("int", "string"))
 
           checkAnswer(table("t"), Row(1, "val_1"))
-          assert(runSqlHive("SELECT * FROM t") === Seq("1\tval_1"))
+          assert(sessionState.runNativeSql("SELECT * FROM t") === Seq("1\tval_1"))
         }
       }
     }

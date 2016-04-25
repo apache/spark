@@ -201,6 +201,11 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     changePrecision(precision, scale, ROUND_HALF_UP)
   }
 
+  def changePrecision(precision: Int, scale: Int, mode: Int): Boolean = mode match {
+    case java.math.BigDecimal.ROUND_HALF_UP => changePrecision(precision, scale, ROUND_HALF_UP)
+    case java.math.BigDecimal.ROUND_HALF_EVEN => changePrecision(precision, scale, ROUND_HALF_EVEN)
+  }
+
   /**
    * Update precision and scale while keeping our value the same, and return true if successful.
    *
@@ -337,6 +342,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
 object Decimal {
   val ROUND_HALF_UP = BigDecimal.RoundingMode.HALF_UP
+  val ROUND_HALF_EVEN = BigDecimal.RoundingMode.HALF_EVEN
   val ROUND_CEILING = BigDecimal.RoundingMode.CEILING
   val ROUND_FLOOR = BigDecimal.RoundingMode.FLOOR
 
