@@ -18,8 +18,10 @@
 package org.apache.spark.launcher;
 
 import java.io.BufferedReader;
+import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.InputStreamReader;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -28,8 +30,12 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.jar.Attributes;
+import java.util.jar.JarOutputStream;
+import java.util.jar.Manifest;
 import java.util.Properties;
 import java.util.regex.Pattern;
+import java.util.regex.Matcher;
 
 import static org.apache.spark.launcher.CommandBuilderUtils.*;
 
@@ -52,6 +58,8 @@ abstract class AbstractCommandBuilder {
   final List<String> pyFiles;
   final Map<String, String> childEnv;
   final Map<String, String> conf;
+
+  private static File classPathShortDir = new File(System.getProperty("java.io.tmpdir"), "spark-classpath");
 
   // The merged configuration for the application. Cached to avoid having to read / parse
   // properties files multiple times.
@@ -115,8 +123,155 @@ abstract class AbstractCommandBuilder {
     }
 
     cmd.add("-cp");
-    cmd.add(join(File.pathSeparator, buildClassPath(extraClassPath)));
+    List<String> classPathEntries = buildClassPath(extraClassPath);
+    String classPath = null;
+    if(isWindows()) {
+      String[] jarCp = createJarWithClassPath(
+          classPathEntries.toArray(new String[classPathEntries.size()]),
+          classPathShortDir,
+          new HashMap<>(System.getenv()));
+      classPath = jarCp[0] + File.pathSeparator + jarCp[1];
+    } else {
+      classPath = join(File.pathSeparator, classPathEntries);
+    }
+    cmd.add(classPath);
     return cmd;
+  }
+
+  /**
+   * Create a jar file at the given path, containing a manifest with a classpath
+   * that references all specified entries.
+   *
+   * Some platforms may have an upper limit on command line length.  For example,
+   * the maximum command line length on Windows is 8191 characters, but the
+   * length of the classpath may exceed this.  To work around this limitation,
+   * use this method to create a small intermediate jar with a manifest that
+   * contains the full classpath.  It returns the absolute path to the new jar,
+   * which the caller may set as the classpath for a new process.
+   *
+   * Environment variable evaluation is not supported within a jar manifest, so
+   * this method expands environment variables before inserting classpath entries
+   * to the manifest.  The method parses environment variables according to
+   * platform-specific syntax (%VAR% on Windows, or $VAR otherwise).  On Windows,
+   * environment variables are case-insensitive.  For example, %VAR% and %var%
+   * evaluate to the same value.
+   *
+   * Specifying the classpath in a jar manifest does not support wildcards, so
+   * this method expands wildcards internally.  Any classpath entry that ends
+   * with * is translated to all files at that path with extension .jar or .JAR.
+   *
+   * This method is adapted from the Hadoop-common-project FSUtils#createJarWithClassPath
+   * Reimplement the mehtod here to avoid heavy dependencies
+   *
+   * @param classPathEntries String input classpath to bundle into the jar manifest
+   * @param workingDir Path to working directory to save jar
+   * @param callerEnv Map<String, String> caller's environment variables to use
+   *   for expansion
+   * @return String[] with absolute path to new jar in position 0 and
+   *   unexpanded wild card entry path in position 1
+   * @throws IOException if there is an I/O error while writing the jar file
+   */
+  public static String[] createJarWithClassPath(String[] classPathEntries, File workingDir,
+                                                Map<String, String> callerEnv) throws IOException {
+    // Replace environment variables, case-insensitive on Windows
+    Map<String, String> env = new HashMap<>();
+    if (isWindows()) {
+      for(Map.Entry<String, String> entry : callerEnv.entrySet()) {
+        env.put(entry.getKey().toLowerCase(), entry.getValue());
+      }
+    } else {
+      env = callerEnv;
+    }
+
+    // expand the environment variables
+    Pattern envVarPattern = isWindows() ? Pattern.compile("%(.*?)%") :
+        Pattern.compile("\\$([A-Za-z_]{1}[A-Za-z0-9_]*)");
+    for (int i = 0; i < classPathEntries.length; ++i) {
+      String template = classPathEntries[i];
+      StringBuffer sb = new StringBuffer();
+      Matcher matcher = envVarPattern.matcher(template);
+      while (matcher.find()) {
+        String replacement = env.get(matcher.group(1));
+        if (replacement == null) {
+          replacement = "";
+        }
+        matcher.appendReplacement(sb, Matcher.quoteReplacement(replacement));
+      }
+      matcher.appendTail(sb);
+      classPathEntries[i] = sb.toString();
+    }
+
+    if (!workingDir.exists()) {
+      workingDir.mkdirs();
+    }
+
+    StringBuilder unexpandedWildcardClasspath = new StringBuilder();
+    // Append all entries
+    List<String> classPathEntryList = new ArrayList<String>(
+        classPathEntries.length);
+    for (String classPathEntry: classPathEntries) {
+      if (classPathEntry.length() == 0) {
+        continue;
+      }
+      if (classPathEntry.endsWith("*")) {
+        boolean foundWildCardJar = false;
+        // Append all jars that match the wildcard
+        File[] files = new File(classPathEntry.substring(0, classPathEntry.length() - 2)).listFiles();
+        for(File f: files) {
+          if (f.getName().toLowerCase().endsWith("jar")) {
+            foundWildCardJar = true;
+            classPathEntryList.add(f.getAbsoluteFile().toURI().toURL().toExternalForm());
+          }
+        }
+
+        if (!foundWildCardJar) {
+          unexpandedWildcardClasspath.append(File.pathSeparator);
+          unexpandedWildcardClasspath.append(classPathEntry);
+        }
+      } else {
+        // Append just this entry
+        File fileCpEntry = new File(classPathEntry);
+        String classPathEntryUrl = fileCpEntry.toURI().toURL()
+            .toExternalForm();
+
+        // File.toURI only appends trailing '/' if it can determine that it is a
+        // directory that already exists.  (See JavaDocs.)  If this entry had a
+        // trailing '/' specified by the caller, then guarantee that the
+        // classpath entry in the manifest has a trailing '/', and thus refers to
+        // a directory instead of a file.  This can happen if the caller is
+        // creating a classpath jar referencing a directory that hasn't been
+        // created yet, but will definitely be created before running.
+        if (classPathEntry.endsWith("/") &&
+            !classPathEntryUrl.endsWith("/")) {
+          classPathEntryUrl = classPathEntryUrl + "/";
+        }
+        classPathEntryList.add(classPathEntryUrl);
+      }
+    }
+    String jarClassPath = join(" ", classPathEntryList);
+
+    // Create the manifest
+    Manifest jarManifest = new Manifest();
+    jarManifest.getMainAttributes().putValue(
+        Attributes.Name.MANIFEST_VERSION.toString(), "1.0");
+    jarManifest.getMainAttributes().putValue(
+        Attributes.Name.CLASS_PATH.toString(), jarClassPath);
+
+    // Write the manifest to output JAR file
+    File classPathJar = File.createTempFile("classpath-", ".jar", workingDir);
+    FileOutputStream fos = null;
+    BufferedOutputStream bos = null;
+    JarOutputStream jos = null;
+    try {
+      fos = new FileOutputStream(classPathJar);
+      bos = new BufferedOutputStream(fos);
+      jos = new JarOutputStream(bos, jarManifest);
+    } finally {
+      jos.close();
+    }
+    String[] jarCp = {classPathJar.getCanonicalPath(),
+        unexpandedWildcardClasspath.toString()};
+    return jarCp;
   }
 
   void addOptionString(List<String> cmd, String options) {
