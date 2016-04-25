@@ -72,7 +72,7 @@ private[clustering] trait GaussianMixtureParams extends Params with HasMaxIter w
  *
  * @param weights Weight for each Gaussian distribution in the mixture.
  *                This is a multinomial probability distribution over the k Gaussians,
- *                where weights(i) is the weight for Gaussian i, and weights.sum == 1.
+ *                where weights(i) is the weight for Gaussian i, and weights sum to 1.
  * @param gaussians Array of [[MultivariateGaussian]] where gaussians(i) represents
  *                  the Multivariate Gaussian (Normal) Distribution for Gaussian i
  */
@@ -120,9 +120,9 @@ class GaussianMixtureModel private[ml] (
    * Two columns are defined: mean and cov.
    * Schema:
    * {{{
-   * root
-   * |-- mean: vector (nullable = true)
-   * |-- cov: matrix (nullable = true)
+   *  root
+   *   |-- mean: vector (nullable = true)
+   *   |-- cov: matrix (nullable = true)
    * }}}
    */
   @Since("2.0.0")
@@ -245,7 +245,7 @@ object GaussianMixtureModel extends MLReadable[GaussianMixtureModel] {
 
 /**
  * :: Experimental ::
- * GaussianMixture clustering.
+ * Gaussian Mixture clustering.
  */
 @Since("2.0.0")
 @Experimental

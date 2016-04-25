@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.stat.distribution
 
-import breeze.linalg.{diag, eigSym, max, DenseMatrix => DBM, DenseVector => DBV, Vector => BV}
+import breeze.linalg.{diag, eigSym, max, DenseMatrix => BDM, DenseVector => BDV, Vector => BV}
 
 import org.apache.spark.ml.impl.Utils
 import org.apache.spark.ml.linalg.{Matrices, Matrix, Vector, Vectors}
@@ -40,7 +40,7 @@ class MultivariateGaussian(
   require(mean.size == cov.numCols, "Mean vector length must match covariance matrix size")
 
   /** Private constructor taking Breeze types */
-  private[ml] def this(mean: DBV[Double], cov: DBM[Double]) = {
+  private[ml] def this(mean: BDV[Double], cov: BDM[Double]) = {
     this(Vectors.fromBreeze(mean), Matrices.fromBreeze(cov))
   }
 
@@ -51,7 +51,7 @@ class MultivariateGaussian(
    *    rootSigmaInv = D^(-1/2)^ * U.t, where sigma = U * D * U.t
    *    u = log((2*pi)^(-k/2)^ * det(sigma)^(-1/2)^)
    */
-  private val (rootSigmaInv: DBM[Double], u: Double) = calculateCovarianceConstants
+  private val (rootSigmaInv: BDM[Double], u: Double) = calculateCovarianceConstants
 
   /**
    * Returns density of this multivariate Gaussian at given point, x
@@ -107,7 +107,7 @@ class MultivariateGaussian(
    * to be non-zero only if they exceed a tolerance based on machine precision, matrix size, and
    * relation to the maximum singular value (same tolerance used by, e.g., Octave).
    */
-  private def calculateCovarianceConstants: (DBM[Double], Double) = {
+  private def calculateCovarianceConstants: (BDM[Double], Double) = {
     val eigSym.EigSym(d, u) = eigSym(cov.toBreeze.toDenseMatrix) // sigma = u * diag(d) * u.t
 
     // For numerical stability, values are considered to be non-zero only if they exceed tol.
@@ -120,7 +120,7 @@ class MultivariateGaussian(
 
       // calculate the root-pseudo-inverse of the diagonal matrix of singular values
       // by inverting the square root of all non-zero values
-      val pinvS = diag(new DBV(d.map(v => if (v > tol) math.sqrt(1.0 / v) else 0.0).toArray))
+      val pinvS = diag(new BDV(d.map(v => if (v > tol) math.sqrt(1.0 / v) else 0.0).toArray))
 
       (pinvS * u.t, -0.5 * (mean.size * math.log(2.0 * math.Pi) + logPseudoDetSigma))
     } catch {
