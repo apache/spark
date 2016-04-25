@@ -821,6 +821,9 @@ class FilterPushdownSuite extends PlanTest {
       .window(winExpr1.as('window1) :: Nil, 'a.attr :: 'b.attr :: Nil, 'b.asc :: Nil)
       .select('a, 'b, 'c, 'window1, 'window2).analyze
 
+    // When Analyzer adding Window operators after grouping the extracted Window Expressions
+    // based on their Partition and Order Specs, the order of Window operators is
+    // non-deterministic. Thus, we have two correct plans
     val optimizedQuery = Optimize.execute(originalQuery.analyze)
     try {
       comparePlans(optimizedQuery, correctAnswer1)
@@ -851,6 +854,9 @@ class FilterPushdownSuite extends PlanTest {
       .select('a, 'window1, 'b, 'c, 'window2).analyze
 
     val optimizedQuery = Optimize.execute(originalQuery.analyze)
+    // When Analyzer adding Window operators after grouping the extracted Window Expressions
+    // based on their Partition and Order Specs, the order of Window operators is
+    // non-deterministic. Thus, we have two correct plans
     try {
       comparePlans(optimizedQuery, correctAnswer1)
     } catch {
