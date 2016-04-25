@@ -962,7 +962,7 @@ class ALSTest(PySparkTestCase):
         als = ALS().setMaxIter(1)
         # test default
         als.fit(df)
-        item_factors = [(r[0], r[1]) for r in self.sc._jsc.getPersistentRDDs().iteritems()
+        item_factors = [(r[0], r[1]) for r in self.sc._jsc.getPersistentRDDs().items()
                         if r[1].name() == "itemFactors"][0][1]
         java_storage_level = item_factors.getStorageLevel()
         self.assertEqual(java_storage_level.useDisk(), True)
@@ -974,7 +974,7 @@ class ALSTest(PySparkTestCase):
         als.setIntermediateRDDStorageLevel("MEMORY_ONLY")
         als.setFinalRDDStorageLevel("MEMORY_ONLY_2")
         als.fit(df)
-        item_factors2 = [(r[0], r[1]) for r in self.sc._jsc.getPersistentRDDs().iteritems()
+        item_factors2 = [(r[0], r[1]) for r in self.sc._jsc.getPersistentRDDs().items()
                          if r[1].name() == "itemFactors" and r[0] != item_factors.id()][0][1]
         java_storage_level2 = item_factors2.getStorageLevel()
         self.assertEqual(java_storage_level2.useDisk(), False)
