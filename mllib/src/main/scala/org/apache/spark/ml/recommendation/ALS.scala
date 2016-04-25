@@ -1312,7 +1312,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
   private[recommendation] type ALSPartitioner = org.apache.spark.HashPartitioner
 
   /**
-   * Private function to clean up its all of the shuffles eagerly.
+   * Private function to clean up all of the shuffles files from the dependencies and their parents.
    */
   private[spark] def cleanShuffleDependencies[T](sc: SparkContext, deps: Seq[Dependency[_]],
       blocking: Boolean = false): Unit = {
