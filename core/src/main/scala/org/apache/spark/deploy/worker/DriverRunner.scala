@@ -181,6 +181,11 @@ private[deploy] class DriverRunner(
       Files.append(header, stderr, StandardCharsets.UTF_8)
       CommandUtils.redirectStream(process.getErrorStream, stderr)
     }
+
+    if (Utils.isWindows) {
+      Utils.shortenClasspath(builder)
+    }
+
     runCommandWithRetry(ProcessBuilderLike(builder), initialize, supervise)
   }
 

@@ -145,6 +145,11 @@ private[deploy] class ExecutorRunner(
       val builder = CommandUtils.buildProcessBuilder(appDesc.command, new SecurityManager(conf),
         memory, sparkHome.getAbsolutePath, substituteVariables)
       val command = builder.command()
+
+      if (Utils.isWindows) {
+        Utils.shortenClasspath(builder)
+      }
+
       val formattedCommand = command.asScala.mkString("\"", "\" \"", "\"")
       logInfo(s"Launch command: $formattedCommand")
 

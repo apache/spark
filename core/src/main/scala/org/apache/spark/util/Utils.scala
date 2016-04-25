@@ -24,6 +24,7 @@ import java.nio.ByteBuffer
 import java.nio.channels.Channels
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
+import java.util
 import java.util.{Locale, Properties, Random, UUID}
 import java.util.concurrent._
 import javax.net.ssl.HttpsURLConnection
@@ -1090,6 +1091,68 @@ private[spark] object Utils extends Logging {
     bytesToString(megabytes * 1024L * 1024L)
   }
 
+
+  /**
+   * Create a jar file at the given path, containing a manifest with a classpath
+   * that references all specified entries.
+   */
+  def createShortClassPath(tempDir: File, classPath: String) : String = {
+    if (isWindows) {
+      val env = new util.HashMap[String, String](System.getenv())
+      val javaCp = FileUtil
+        .createJarWithClassPath(classPath, new Path(tempDir.getAbsolutePath), env)
+        .mkString(File.pathSeparator)
+      logInfo("Shorten the class path to: " + javaCp)
+      javaCp
+    } else {
+      classPath
+    }
+  }
+
+
+  def createShortClassPath(classPath: String) : String = {
+    val tempDir = createTempDir("classpaths")
+    createShortClassPath(tempDir, classPath)
+  }
+
+  /**
+   * Create a jar file at the given path, containing a manifest with a classpath
+   * that references all specified entries.
+   */
+  def shortenClasspath(builder: ProcessBuilder): Unit = {
+    if (builder.command.asScala.mkString("\"", "\" \"", "\"").length > 8190) {
+      logWarning("Cmd too long, try to shorten the classpath")
+      // look for the class path
+      // note that environment set in teh ProcessBuilder is process-local. So it
+      // won't pollute the environment
+      val command = builder.command()
+      val idxCp = command.indexOf("-cp")
+      if (idxCp > 0 && idxCp + 1 < command.size()) {
+        val classPath = command.get(idxCp + 1)
+        val shortPath = createShortClassPath(classPath)
+        command.set(idxCp + 1, shortPath)
+      }
+    }
+  }
+
+
+  /**
+   * Normalize the local path for windows. If the path is absolute (starts with drive label)
+   * it will append a leading slash. The back slashes will be replaced with slash
+   * @param path the path to be normalized
+   * @return the normalized path
+   */
+  def normalizePath(path: String): String = {
+    if (isWindows) {
+      if (path.matches("""^[A-Za-z]:[/\\].*$""")) {
+        "/" + path.replace("\\", "/")
+      } else {
+        path.replace("\\", "/")
+      }
+    } else {
+      path
+    }
+  }
   /**
    * Execute a command and return the process running the command.
    */
@@ -1103,6 +1166,11 @@ private[spark] object Utils extends Logging {
     for ((key, value) <- extraEnvironment) {
       environment.put(key, value)
     }
+
+    if (Utils.isWindows) {
+      Utils.shortenClasspath(builder)
+    }
+
     val process = builder.start()
     if (redirectStderr) {
       val threadName = "redirect stderr for command " + command(0)
