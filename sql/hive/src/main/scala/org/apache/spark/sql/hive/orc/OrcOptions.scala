@@ -30,7 +30,6 @@ class OrcOptions(
   extends Serializable {
 
   import OrcOptions._
-  import org.apache.spark.sql.execution.datasources.ParameterUtils._
 
   /**
    * Compression codec to use. By default use the value specified in Hadoop configuration.
@@ -39,15 +38,22 @@ class OrcOptions(
    */
 
   val compressionCodec: String = {
-    val defaultName =
-      conf.get(OrcTableProperties.COMPRESSION.getPropName, CompressionKind.ZLIB.name())
-    val codecName = getNullSafeString(parameters, "compression", defaultName).toLowerCase
-    if (!shortOrcCompressionCodecNames.contains(codecName)) {
-      val availableCodecs = shortOrcCompressionCodecNames.keys.map(_.toLowerCase)
-      throw new IllegalArgumentException(s"Codec [$codecName] " +
-        s"is not available. Available codecs are ${availableCodecs.mkString(", ")}.")
+    val default = conf.get(OrcTableProperties.COMPRESSION.getPropName)
+    // Because the ORC configuration value in `default` is not guaranteed to be the same
+    // with keys in `shortOrcCompressionCodecNames` in Spark, this value should not be
+    // used as the key for `shortOrcCompressionCodecNames` but just a return value.
+    parameters.get("compression") match {
+      case Some(name) =>
+        if (!shortOrcCompressionCodecNames.contains(name)) {
+          val availableCodecs = shortOrcCompressionCodecNames.keys.map(_.toLowerCase)
+          throw new IllegalArgumentException(s"Codec [$name] " +
+            s"is not available. Available codecs are ${availableCodecs.mkString(", ")}.")
+        }
+        shortOrcCompressionCodecNames(name).name()
+      case None if default != null => default
+      case Some(null) if default != null => default
+      case _ => CompressionKind.ZLIB.name()
     }
-    shortOrcCompressionCodecNames(codecName).name()
   }
 }
 
