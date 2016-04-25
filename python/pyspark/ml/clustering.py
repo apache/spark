@@ -237,7 +237,6 @@ class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     +--------------------+--------------------+
     ...
 
-
     .. versionadded:: 2.0.0
     """
 

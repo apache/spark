@@ -878,7 +878,7 @@ class TrainingSummaryTest(PySparkTestCase):
         self.assertTrue(isinstance(s.cluster, DataFrame))
         self.assertTrue(isinstance(s.probability, DataFrame))
         self.assertEqual(isinstance(cluster_sizes[0], long))
-        # test evaluation (with training dataset) produces a summary with same values
+        # test evaluation (with a training dataset) produces a summary with same values
         # one check is enough to verify a summary is returned, Scala version runs full test
         sameSummary = model.evaluate(df)
         self.assertAlmostEqual(sameSummary.cluster, s.cluster)
