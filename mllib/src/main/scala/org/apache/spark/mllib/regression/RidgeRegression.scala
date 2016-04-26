@@ -86,7 +86,8 @@ object RidgeRegressionModel extends Loader[RidgeRegressionModel] {
  * See also the documentation for the precise formulation.
  */
 @Since("0.8.0")
-@deprecated("Use ml.regression.LinearRegression with elasticNetParam = 0.0", "2.0.0")
+@deprecated("Use ml.regression.LinearRegression with elasticNetParam = 0.0 and regParam = 0.01",
+  "2.0.0")
 class RidgeRegressionWithSGD private (
     private var stepSize: Double,
     private var numIterations: Int,
@@ -120,7 +121,8 @@ class RidgeRegressionWithSGD private (
  *
  */
 @Since("0.8.0")
-@deprecated("Use ml.regression.LinearRegression with elasticNetParam = 0.0", "2.0.0")
+@deprecated("Use ml.regression.LinearRegression with elasticNetParam = 0.0 and regParam = 0.01",
+  "2.0.0")
 object RidgeRegressionWithSGD {
 
   /**
