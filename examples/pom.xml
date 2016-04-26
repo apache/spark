@@ -46,6 +46,7 @@
     <dependency>
       <groupId>org.spark-project.spark</groupId>
       <artifactId>unused</artifactId>
+      <version>1.0.0</version>
       <scope>provided</scope>
     </dependency>
     <dependency>
