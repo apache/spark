@@ -641,20 +641,25 @@ class DataFrame(object):
             on = [on]
 
 
-        if how is None:
-            how = "inner"
-
-        if isinstance(on[0], basestring):
-            on = self._jseq(on)
-        else:
-            assert isinstance(on[0], Column), "on should be Column or list of Column"
-            if len(on) > 1:
-                on = reduce(lambda x, y: x.__and__(y), on)
+        if on is not None:
+            if isinstance(on[0], basestring):
+                on = self._jseq(on)
             else:
-                on = on[0]
+                assert isinstance(on[0], Column), "on should be Column or list of Column"
+                if len(on) > 1:
+                    on = reduce(lambda x, y: x.__and__(y), on)
+                else:
+                    on = on[0]
 
-        assert isinstance(how, basestring), "how should be basestring"
-        jdf = self._jdf.join(other._jdf, on._jc, how)
+        if how is None:
+            how  = "inner"
+        else:
+            assert isinstance(how, basestring), "how should be basestring"
+
+        if on is None:
+            jdf = self._jdf.join(other._jdf, on, how)
+        else:
+            jdf = self._jdf.join(other._jdf, on._jc, how)
         return DataFrame(jdf, self.sql_ctx)
 
     @since(1.6)
