@@ -484,12 +484,14 @@ object SQLConf {
       .intConf
       .createWithDefault(40)
 
-  // TODO: This is still WIP and shouldn't be turned on without extensive test coverage
-  val COLUMNAR_AGGREGATE_MAP_ENABLED = SQLConfigBuilder("spark.sql.codegen.aggregate.map.enabled")
-    .internal()
-    .doc("When true, aggregate with keys use an in-memory columnar map to speed up execution.")
-    .booleanConf
-    .createWithDefault(false)
+  val VECTORIZED_AGG_MAP_MAX_COLUMNS =
+    SQLConfigBuilder("spark.sql.codegen.aggregate.map.columns.max")
+      .internal()
+      .doc("Sets the maximum width of schema (aggregate keys + values) for which aggregate with" +
+        "keys uses an in-memory columnar map to speed up execution. Setting this to 0 effectively" +
+        "disables the columnar map")
+      .intConf
+      .createWithDefault(3)
 
   val FILE_SINK_LOG_DELETION = SQLConfigBuilder("spark.sql.streaming.fileSink.log.deletion")
     .internal()
@@ -644,7 +646,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   override def runSQLonFile: Boolean = getConf(RUN_SQL_ON_FILES)
 
-  def columnarAggregateMapEnabled: Boolean = getConf(COLUMNAR_AGGREGATE_MAP_ENABLED)
+  def vectorizedAggregateMapMaxColumns: Int = getConf(VECTORIZED_AGG_MAP_MAX_COLUMNS)
 
   def variableSubstituteEnabled: Boolean = getConf(VARIABLE_SUBSTITUTE_ENABLED)
 
