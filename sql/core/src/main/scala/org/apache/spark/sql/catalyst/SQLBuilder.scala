@@ -39,7 +39,8 @@ import org.apache.spark.sql.types.{ByteType, DataType, IntegerType, NullType}
  * supported by this builder (yet).
  */
 class SQLBuilder(logicalPlan: LogicalPlan) extends Logging {
-  require(logicalPlan.resolved, "SQLBuilder only supports resolved logical query plans")
+  require(logicalPlan.resolved,
+    "SQLBuilder only supports resolved logical query plans. Current plan:\n" + logicalPlan)
 
   def this(df: Dataset[_]) = this(df.queryExecution.analyzed)
 

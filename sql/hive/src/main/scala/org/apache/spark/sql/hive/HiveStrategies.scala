@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.datasources.{CreateTableUsing, CreateTableUsingAsSelect, CreateTempTableUsingAsSelect}
+import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.execution._
 
 private[hive] trait HiveStrategies {
@@ -81,29 +81,6 @@ private[hive] trait HiveStrategies {
           HiveTableScanExec(_, relation, pruningPredicates)(context, hiveconf)) :: Nil
       case _ =>
         Nil
-    }
-  }
-
-  object HiveDDLStrategy extends Strategy {
-    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case CreateTableUsing(
-        tableIdent, userSpecifiedSchema, provider, false, opts, allowExisting, managedIfNoPath) =>
-        val cmd =
-          CreateMetastoreDataSource(
-            tableIdent, userSpecifiedSchema, provider, opts, allowExisting, managedIfNoPath)
-        ExecutedCommandExec(cmd) :: Nil
-
-      case c: CreateTableUsingAsSelect if c.temporary =>
-        val cmd = CreateTempTableUsingAsSelect(
-          c.tableIdent, c.provider, c.partitionColumns, c.mode, c.options, c.child)
-        ExecutedCommandExec(cmd) :: Nil
-
-      case c: CreateTableUsingAsSelect =>
-        val cmd = CreateMetastoreDataSourceAsSelect(c.tableIdent, c.provider, c.partitionColumns,
-          c.bucketSpec, c.mode, c.options, c.child)
-        ExecutedCommandExec(cmd) :: Nil
-
-      case _ => Nil
     }
   }
 }

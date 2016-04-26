@@ -209,7 +209,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       testDF.write.mode(SaveMode.Ignore).format(dataSourceName).save(file.getCanonicalPath)
 
       val path = new Path(file.getCanonicalPath)
-      val fs = path.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
+      val fs = path.getFileSystem(sqlContext.sessionState.hadoopConf)
       assert(fs.listStatus(path).isEmpty)
     }
   }
@@ -510,7 +510,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         s"${file.getCanonicalFile}/p1=2/p2=bar"
       ).map { p =>
         val path = new Path(p)
-        val fs = path.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
+        val fs = path.getFileSystem(sqlContext.sessionState.hadoopConf)
         path.makeQualified(fs.getUri, fs.getWorkingDirectory).toString
       }
 

@@ -31,7 +31,7 @@ import org.apache.spark.sql.execution.datasources.parquet.{DefaultSource => Parq
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.BaseRelation
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types.{DataType, StructType}
 
 object RDDConversions {
   def productToRowRdd[A <: Product](data: RDD[A], outputTypes: Seq[DataType]): RDD[InternalRow] = {
@@ -348,7 +348,8 @@ private[sql] object DataSourceScanExec {
     }
 
     relation match {
-      case r: HadoopFsRelation if r.fileFormat.supportBatch(r.sqlContext, relation.schema) =>
+      case r: HadoopFsRelation
+        if r.fileFormat.supportBatch(r.sqlContext, StructType.fromAttributes(output)) =>
         BatchedDataSourceScanExec(output, rdd, relation, outputPartitioning, metadata)
       case _ =>
         RowDataSourceScanExec(output, rdd, relation, outputPartitioning, metadata)

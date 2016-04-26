@@ -71,7 +71,9 @@ object CurrentOrigin {
   }
 }
 
+// scalastyle:off
 abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
+// scalastyle:on
   self: BaseType =>
 
   val origin: Origin = CurrentOrigin.get
@@ -83,6 +85,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   def children: Seq[BaseType]
 
   lazy val containsChild: Set[TreeNode[_]] = children.toSet
+
+  private lazy val _hashCode: Int = scala.util.hashing.MurmurHash3.productHash(this)
+  override def hashCode(): Int = _hashCode
 
   /**
    * Faster version of equality which short-circuits when two treeNodes are the same instance.

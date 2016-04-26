@@ -91,6 +91,8 @@ abstract class UserDefinedType[UserType >: Null] extends DataType with Serializa
     case that: UserDefinedType[_] => this.acceptsType(that)
     case _ => false
   }
+
+  override def catalogString: String = sqlType.simpleString
 }
 
 /**

@@ -59,7 +59,7 @@ abstract class OutputWriterFactory extends Serializable {
    * @param context The Hadoop MapReduce task context.
    * @since 1.4.0
    */
-  private[sql] def newInstance(
+  def newInstance(
       path: String,
       bucketId: Option[Int], // TODO: This doesn't belong here...
       dataSchema: StructType,
@@ -271,7 +271,7 @@ class HDFSFileCatalog(
     val partitionSchema: Option[StructType])
   extends FileCatalog with Logging {
 
-  private val hadoopConf = new Configuration(sqlContext.sparkContext.hadoopConfiguration)
+  private val hadoopConf = new Configuration(sqlContext.sessionState.hadoopConf)
 
   var leafFiles = mutable.LinkedHashMap.empty[Path, FileStatus]
   var leafDirToChildrenFiles = mutable.Map.empty[Path, Array[FileStatus]]

@@ -204,6 +204,18 @@ test_that("naiveBayes", {
                                "Yes", "Yes", "Yes", "Yes", "Yes", "Yes", "Yes", "Yes", "No", "No",
                                "Yes", "Yes", "No", "No"))
 
+  # Test model save/load
+  modelPath <- tempfile(pattern = "naiveBayes", fileext = ".tmp")
+  ml.save(m, modelPath)
+  expect_error(ml.save(m, modelPath))
+  ml.save(m, modelPath, overwrite = TRUE)
+  m2 <- ml.load(modelPath)
+  s2 <- summary(m2)
+  expect_equal(s$apriori, s2$apriori)
+  expect_equal(s$tables, s2$tables)
+
+  unlink(modelPath)
+
   # Test e1071::naiveBayes
   if (requireNamespace("e1071", quietly = TRUE)) {
     expect_that(m <- e1071::naiveBayes(Survived ~ ., data = t1), not(throws_error()))

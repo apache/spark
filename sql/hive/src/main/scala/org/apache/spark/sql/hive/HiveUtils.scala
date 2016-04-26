@@ -35,7 +35,6 @@ import org.apache.hadoop.hive.serde2.io.{DateWritable, TimestampWritable}
 import org.apache.hadoop.util.VersionInfo
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.api.java.JavaSparkContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql._
@@ -44,44 +43,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
-
-/**
- * An instance of the Spark SQL execution engine that integrates with data stored in Hive.
- * Configuration for Hive is read from hive-site.xml on the classpath.
- *
- * @since 1.0.0
- */
-class HiveContext private[hive](
-    @transient private val sparkSession: SparkSession,
-    isRootContext: Boolean)
-  extends SQLContext(sparkSession, isRootContext) with Logging {
-
-  self =>
-
-  def this(sc: SparkContext) = {
-    this(new SparkSession(HiveUtils.withHiveExternalCatalog(sc)), true)
-  }
-
-  def this(sc: JavaSparkContext) = this(sc.sc)
-
-  /**
-   * Returns a new HiveContext as new session, which will have separated SQLConf, UDF/UDAF,
-   * temporary tables and SessionState, but sharing the same CacheManager, IsolatedClientLoader
-   * and Hive client (both of execution and metadata) with existing HiveContext.
-   */
-  override def newSession(): HiveContext = {
-    new HiveContext(sparkSession.newSession(), isRootContext = false)
-  }
-
-  protected[sql] override def sessionState: HiveSessionState = {
-    sparkSession.sessionState.asInstanceOf[HiveSessionState]
-  }
-
-  protected[sql] override def sharedState: HiveSharedState = {
-    sparkSession.sharedState.asInstanceOf[HiveSharedState]
-  }
-
-}
 
 
 private[spark] object HiveUtils extends Logging {

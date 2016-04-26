@@ -162,9 +162,9 @@ object SQLConf {
       .createWithDefault(true)
 
   val CASE_SENSITIVE = SQLConfigBuilder("spark.sql.caseSensitive")
-    .doc("Whether the query analyzer should be case sensitive or not. Default to case sensitive.")
+    .doc("Whether the query analyzer should be case sensitive or not. Default to case insensitive.")
     .booleanConf
-    .createWithDefault(true)
+    .createWithDefault(false)
 
   val PARQUET_SCHEMA_MERGING_ENABLED = SQLConfigBuilder("spark.sql.parquet.mergeSchema")
     .doc("When true, the Parquet data source merges schemas collected from all data files, " +
@@ -489,7 +489,7 @@ object SQLConf {
     .internal()
     .doc("When true, aggregate with keys use an in-memory columnar map to speed up execution.")
     .booleanConf
-    .createWithDefault(true)
+    .createWithDefault(false)
 
   val FILE_SINK_LOG_DELETION = SQLConfigBuilder("spark.sql.streaming.fileSink.log.deletion")
     .internal()
@@ -642,7 +642,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def dataFrameRetainGroupColumns: Boolean = getConf(DATAFRAME_RETAIN_GROUP_COLUMNS)
 
-  def runSQLOnFile: Boolean = getConf(RUN_SQL_ON_FILES)
+  override def runSQLonFile: Boolean = getConf(RUN_SQL_ON_FILES)
 
   def columnarAggregateMapEnabled: Boolean = getConf(COLUMNAR_AGGREGATE_MAP_ENABLED)
 
