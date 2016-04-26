@@ -76,6 +76,19 @@ class RegressionEvaluatorSuite
     assert(evaluator.evaluate(predictions) ~== 0.08399089 absTol 0.01)
   }
 
+  test("support dropping NaNs from prediction column") {
+    val local = this.sqlContext
+    import local.implicits._
+    val dataset = Seq(
+      (5.0, 4.0), (1.0, 4.0), (2.0, Double.NaN), (3.0, 1.0), (4.0, Double.NaN)
+    ).toDF("label", "prediction")
+
+    val evaluator = new RegressionEvaluator()
+    assert(evaluator.evaluate(dataset).isNaN)
+    evaluator.setDropNaN(true)
+    assert(evaluator.evaluate(dataset) ~== 2.16024 absTol 1e-2)
+  }
+
   test("read/write") {
     val evaluator = new RegressionEvaluator()
       .setPredictionCol("myPrediction")

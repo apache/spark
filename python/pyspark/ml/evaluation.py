@@ -187,6 +187,13 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol):
     0.993...
     >>> evaluator.evaluate(dataset, {evaluator.metricName: "mae"})
     2.649...
+    >>> scoreAndLabels = [(4.0, 5.0), (4.0, 1.0), (float('nan'), 2.0),
+    ...   (1.0, 3.0), (float('nan'), 4.0)]
+    >>> dataset = sqlContext.createDataFrame(scoreAndLabels, ["raw", "label"])
+    ...
+    >>> evaluator = RegressionEvaluator(predictionCol="raw").setDropNaN(True)
+    >>> evaluator.evaluate(dataset)
+    2.160...
 
     .. versionadded:: 1.4.0
     """
@@ -197,18 +204,24 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol):
                        "metric name in evaluation (mse|rmse|r2|mae)",
                        typeConverter=TypeConverters.toString)
 
+    dropNaN = Param(Params._dummy(), "dropNaN",
+                    "whether to drop rows where 'predictionCol' is NaN. NOTE - only set this to " +
+                    "True if you are certain that NaN predictions should be ignored! " +
+                    "(default: False)",
+                    typeConverter=TypeConverters.toBoolean)
+
     @keyword_only
     def __init__(self, predictionCol="prediction", labelCol="label",
-                 metricName="rmse"):
+                 metricName="rmse", dropNaN=False):
         """
         __init__(self, predictionCol="prediction", labelCol="label", \
-                 metricName="rmse")
+                 metricName="rmse", dropNaN=False)
         """
         super(RegressionEvaluator, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.evaluation.RegressionEvaluator", self.uid)
         self._setDefault(predictionCol="prediction", labelCol="label",
-                         metricName="rmse")
+                         metricName="rmse", dropNaN=False)
         kwargs = self.__init__._input_kwargs
         self._set(**kwargs)
 
@@ -227,13 +240,28 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol):
         """
         return self.getOrDefault(self.metricName)
 
+    @since("2.0.0")
+    def setDropNaN(self, value):
+        """
+        Sets the value of :py:attr:`dropNaN`.
+        """
+        self._set(dropNaN=value)
+        return self
+
+    @since("2.0.0")
+    def getDropNaN(self):
+        """
+        Gets the value of dropNaN or its default value.
+        """
+        return self.getOrDefault(self.dropNaN)
+
     @keyword_only
     @since("1.4.0")
     def setParams(self, predictionCol="prediction", labelCol="label",
-                  metricName="rmse"):
+                  metricName="rmse", dropNaN=False):
         """
         setParams(self, predictionCol="prediction", labelCol="label", \
-                  metricName="rmse")
+                  metricName="rmse", dropNaN=False)
         Sets params for regression evaluator.
         """
         kwargs = self.setParams._input_kwargs
