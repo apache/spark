@@ -702,8 +702,8 @@ class SessionCatalog(
   // -----------------
 
   /**
-   * Drop all existing databases (except "default") along with all associated tables,
-   * partitions and functions, and set the current database to "default".
+   * Drop all existing databases (except "default"), tables, partitions and functions,
+   * and set the current database to "default".
    *
    * This is mainly used for tests.
    */
@@ -711,6 +711,16 @@ class SessionCatalog(
     val default = "default"
     listDatabases().filter(_ != default).foreach { db =>
       dropDatabase(db, ignoreIfNotExists = false, cascade = true)
+    }
+    listTables(default).foreach { table =>
+      dropTable(table, ignoreIfNotExists = false)
+    }
+    listFunctions(default).foreach { func =>
+      if (func.database.isDefined) {
+        dropFunction(func, ignoreIfNotExists = false)
+      } else {
+        dropTempFunction(func.funcName, ignoreIfNotExists = false)
+      }
     }
     tempTables.clear()
     functionRegistry.clear()

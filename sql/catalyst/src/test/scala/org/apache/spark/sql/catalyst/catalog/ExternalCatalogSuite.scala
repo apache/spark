@@ -30,7 +30,7 @@ import org.apache.spark.util.Utils
  *
  * Implementations of the [[ExternalCatalog]] interface can create test suites by extending this.
  */
-abstract class CatalogTestCases extends SparkFunSuite with BeforeAndAfterEach {
+abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEach {
   protected val utils: CatalogTestUtils
   import utils._
 
@@ -558,7 +558,8 @@ abstract class CatalogTestUtils {
         CatalogColumn("col2", "string"),
         CatalogColumn("a", "int"),
         CatalogColumn("b", "string")),
-      partitionColumnNames = Seq("a", "b"))
+      partitionColumnNames = Seq("a", "b"),
+      bucketColumnNames = Seq("col1"))
   }
 
   def newFunc(name: String, database: Option[String] = None): CatalogFunction = {
