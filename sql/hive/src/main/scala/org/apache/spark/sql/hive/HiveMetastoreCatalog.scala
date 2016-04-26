@@ -18,13 +18,12 @@
 package org.apache.spark.sql.hive
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable
 
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 import org.apache.hadoop.fs.{FileStatus, Path}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession, SQLContext}
+import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
@@ -35,7 +34,6 @@ import org.apache.spark.sql.execution.command.{CreateTableAsSelectLogicalPlan, C
 import org.apache.spark.sql.execution.datasources.{Partition => _, _}
 import org.apache.spark.sql.execution.datasources.parquet.{DefaultSource => ParquetDefaultSource, ParquetRelation}
 import org.apache.spark.sql.hive.orc.{DefaultSource => OrcDefaultSource}
-import org.apache.spark.sql.internal.HiveSerDe
 import org.apache.spark.sql.types._
 
 
@@ -46,7 +44,6 @@ import org.apache.spark.sql.types._
  * cleaned up to integrate more nicely with [[HiveExternalCatalog]].
  */
 private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Logging {
-  private val conf = sparkSession.conf
   private val sessionState = sparkSession.sessionState.asInstanceOf[HiveSessionState]
   private val client = sparkSession.sharedState.asInstanceOf[HiveSharedState].metadataHive
 

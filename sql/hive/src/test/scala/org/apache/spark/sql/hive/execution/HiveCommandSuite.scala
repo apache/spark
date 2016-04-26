@@ -19,12 +19,12 @@ package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
-import org.apache.spark.sql.hive.test.{TestHive, TestHiveSingleton}
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 
 class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import testImplicits._
-   protected override def beforeAll(): Unit = {
+  protected override def beforeAll(): Unit = {
     super.beforeAll()
     sql(
       """

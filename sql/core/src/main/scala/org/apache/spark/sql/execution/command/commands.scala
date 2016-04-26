@@ -18,9 +18,8 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Row, SparkSession}
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.{AnalysisException, Dataset, Row, SQLContext}
+import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalog.TablePartitionSpec
@@ -119,8 +118,7 @@ case class ExplainCommand(
 }
 
 /**
- * A command for users to list the column names for a table. This function creates a
- * [[ShowColumnsCommand]] logical plan.
+ * A command that lists column names of a given table.
  *
  * The syntax of using this command in SQL is:
  * {{{
@@ -133,20 +131,18 @@ case class ShowColumnsCommand(table: TableIdentifier) extends RunnableCommand {
     AttributeReference("result", StringType, nullable = false)() :: Nil
   }
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.sessionState.catalog.getTableMetadata(table).schema.map { c =>
-      Row(c.name)
-    }
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    sparkSession.sessionState.catalog.getTableMetadata(table).schema.map(c => Row(c.name))
   }
 }
 
 /**
- * A command for users to list the partition names of a table. If the partition spec is specified,
- * partitions that match the spec are returned. [[AnalysisException]] exception is thrown under
- * the following conditions:
+ * A command that lists the partition names of a given table. If the partition spec is specified,
+ * partitions that match the spec are returned. [[AnalysisException]] is thrown under the following
+ * conditions:
  *
- * 1. If the command is called for a non partitioned table.
- * 2. If the partition spec refers to the columns that are not defined as partitioning columns.
+ *  1. If the command is called for a non partitioned table.
+ *  2. If the partition spec refers to the columns that are not defined as partitioning columns.
  *
  * This function creates a [[ShowPartitionsCommand]] logical plan
  *
@@ -163,53 +159,64 @@ case class ShowPartitionsCommand(
     AttributeReference("result", StringType, nullable = false)() :: Nil
   }
 
-  def getPartName(spec: TablePartitionSpec): String = {
-    spec.map {s =>
-      PartitioningUtils.escapePathName(s._1) + "=" + PartitioningUtils.escapePathName(s._2)
+  private def getPartName(spec: TablePartitionSpec, partitionColumns: Seq[String]): String = {
+    partitionColumns.map { col =>
+      PartitioningUtils.escapePathName(col) + "=" + PartitioningUtils.escapePathName(spec(col))
     }.mkString("/")
   }
-  override def run(sqlContext: SQLContext): Seq[Row] = {
+
+  override def run(sqlContext: SparkSession): Seq[Row] = {
     val catalog = sqlContext.sessionState.catalog
-    val db = table.database.getOrElse(catalog.getCurrentDatabase)
+
     if (catalog.isTemporaryTable(table)) {
-      throw new AnalysisException("SHOW PARTITIONS is not allowed on a temporary table: " +
-          s"${table.unquotedString}")
-    } else {
-      val tab = catalog.getTableMetadata(table)
-      /**
-       * Validate and throws an [[AnalysisException]] exception under the following conditions:
-       * 1. If the table is not partitioned.
-       * 2. If it is a datasource table.
-       * 3. If it is a view or index table.
-       */
-      if (tab.tableType == CatalogTableType.VIRTUAL_VIEW ||
-        tab.tableType == CatalogTableType.INDEX_TABLE) {
-        throw new AnalysisException("SHOW PARTITIONS is not allowed on a view or index table: " +
-          s"${tab.qualifiedName}")
-      }
-      if (!DDLUtils.isTablePartitioned(tab)) {
-        throw new AnalysisException("SHOW PARTITIONS is not allowed on a table that is not " +
-          s"partitioned: ${tab.qualifiedName}")
-      }
-      if (DDLUtils.isDatasourceTable(tab)) {
-        throw new AnalysisException("SHOW PARTITIONS is not allowed on a datasource table: " +
-          s"${tab.qualifiedName}")
-      }
-      /**
-       * Validate the partitioning spec by making sure all the referenced columns are
-       * defined as partitioning columns in table definition. An AnalysisException exception is
-       * thrown if the partitioning spec is invalid.
-       */
-      if (spec.isDefined) {
-        val badColumns = spec.get.keySet.filterNot(tab.partitionColumns.map(_.name).contains)
-        if (badColumns.nonEmpty) {
-          throw new AnalysisException(
-            s"Non-partitioned column(s) [${badColumns.mkString(", ")}] are " +
-              s"specified for SHOW PARTITIONS")
-        }
-      }
-      val partNames = catalog.listPartitions(table, spec).map(p => getPartName(p.spec))
-      partNames.map { p => Row(p) }
+      throw new AnalysisException(
+        s"SHOW PARTITIONS is not allowed on a temporary table: ${table.unquotedString}")
     }
+
+    val tab = catalog.getTableMetadata(table)
+
+    /**
+     * Validate and throws an [[AnalysisException]] exception under the following conditions:
+     * 1. If the table is not partitioned.
+     * 2. If it is a datasource table.
+     * 3. If it is a view or index table.
+     */
+    if (tab.tableType == CatalogTableType.VIRTUAL_VIEW ||
+      tab.tableType == CatalogTableType.INDEX_TABLE) {
+      throw new AnalysisException(
+        s"SHOW PARTITIONS is not allowed on a view or index table: ${tab.qualifiedName}")
+    }
+
+    if (!DDLUtils.isTablePartitioned(tab)) {
+      throw new AnalysisException(
+        s"SHOW PARTITIONS is not allowed on a table that is not partitioned: ${tab.qualifiedName}"
+      )
+    }
+
+    if (DDLUtils.isDatasourceTable(tab)) {
+      throw new AnalysisException(
+        s"SHOW PARTITIONS is not allowed on a datasource table: ${tab.qualifiedName}")
+    }
+
+    /**
+     * Validates the partitioning spec by making sure all the referenced columns are
+     * defined as partitioning columns in table definition. An AnalysisException exception is
+     * thrown if the partitioning spec is invalid.
+     */
+    if (spec.isDefined) {
+      val badColumns = spec.get.keySet.filterNot(tab.partitionColumns.map(_.name).contains)
+      if (badColumns.nonEmpty) {
+        throw new AnalysisException(
+          s"Non-partitioning column(s) [${badColumns.mkString(", ")}] are " +
+            s"specified for SHOW PARTITIONS")
+      }
+    }
+
+    val partNames = {
+      val partitionColumns = tab.partitionColumnNames
+      catalog.listPartitions(table, spec).map(p => getPartName(p.spec, partitionColumns))
+    }
+
+    partNames.map(Row(_))
   }
 }
