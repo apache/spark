@@ -25,6 +25,9 @@ import com.codahale.metrics.{MetricRegistry, Slf4jReporter}
 import org.apache.spark.SecurityManager
 import org.apache.spark.metrics.MetricsSystem
 
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
+
 private[spark] class Slf4jSink(
     val property: Properties,
     val registry: MetricRegistry,
@@ -49,6 +52,7 @@ private[spark] class Slf4jSink(
   MetricsSystem.checkMinimalPollingPeriod(pollUnit, pollPeriod)
 
   val reporter: Slf4jReporter = Slf4jReporter.forRegistry(registry)
+    .outputTo(LoggerFactory.getLogger("org.apache.spark.metrics"))
     .convertDurationsTo(TimeUnit.MILLISECONDS)
     .convertRatesTo(TimeUnit.SECONDS)
     .build()
