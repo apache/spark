@@ -51,11 +51,11 @@ class ContinuousQuery(object):
         return self._jcq.isActive()
 
     @since(2.0)
-    def awaitTermination(self, timeoutMs=None):
+    def awaitTermination(self, timeout=None):
         """Waits for the termination of `this` query, either by :func:`query.stop()` or by an
         exception. If the query has terminated with an exception, then the exception will be thrown.
-        If `timeoutMs` is set, it returns whether the query has terminated or not within the
-        `timeoutMs` milliseconds.
+        If `timeout` is set, it returns whether the query has terminated or not within the
+        `timeout` seconds.
 
         If the query has terminated, then all subsequent calls to this method will either return
         immediately (if the query was terminated by :func:`stop()`), or throw the exception
@@ -63,10 +63,10 @@ class ContinuousQuery(object):
 
         throws :class:`ContinuousQueryException`, if `this` query has terminated with an exception
         """
-        if timeoutMs is not None:
-            if type(timeoutMs) != int or timeoutMs < 0:
-                raise ValueError("timeoutMs must be a positive integer. Got %s" % timeoutMs)
-            return self._jcq.awaitTermination(timeoutMs)
+        if timeout is not None:
+            if type(timeout) != int or timeout < 0:
+                raise ValueError("timeout must be a positive integer. Got %s" % timeout)
+            return self._jcq.awaitTermination(timeout)
         else:
             return self._jcq.awaitTermination()
 
@@ -125,15 +125,17 @@ class ContinuousQueryManager(object):
         True
         >>> cq.stop()
         """
-        if name is None or type(name) != str or len(name.strip()) == 0:
+        if type(name) != str or len(name.strip()) == 0:
             raise ValueError("The name for the query must be a non-empty string. Got: %s" % name)
         return ContinuousQuery(self._jcqm.get(name))
 
     @since(2.0)
-    def awaitAnyTermination(self, timeoutMs=None):
+    def awaitAnyTermination(self, timeout=None):
         """Wait until any of the queries on the associated SQLContext has terminated since the
         creation of the context, or since :func:`resetTerminated()` was called. If any query was
         terminated with an exception, then the exception will be thrown.
+        If `timeout` is set, it returns whether the query has terminated or not within the
+        `timeout` seconds.
 
         If a query has terminated, then subsequent calls to :func:`awaitAnyTermination()` will
         either return immediately (if the query was terminated by :func:`query.stop()`),
@@ -148,10 +150,10 @@ class ContinuousQueryManager(object):
 
         throws :class:`ContinuousQueryException`, if `this` query has terminated with an exception
         """
-        if timeoutMs is not None:
-            if type(timeoutMs) != int or timeoutMs < 0:
-                raise ValueError("timeoutMs must be a positive integer. Got %s" % timeoutMs)
-            return self._jcqm.awaitAnyTermination(timeoutMs)
+        if timeout is not None:
+            if type(timeout) != int or timeout < 0:
+                raise ValueError("timeout must be a positive integer. Got %s" % timeout)
+            return self._jcqm.awaitAnyTermination(timeout)
         else:
             return self._jcqm.awaitAnyTermination()
 
@@ -194,7 +196,7 @@ class ProcessingTime(Trigger):
     """
 
     def __init__(self, interval):
-        if interval is None or type(interval) != str or len(interval.strip()) == 0:
+        if type(interval) != str or len(interval.strip()) == 0:
             raise ValueError("interval should be a non empty interval string, e.g. '2 seconds'.")
         self.interval = interval
 
