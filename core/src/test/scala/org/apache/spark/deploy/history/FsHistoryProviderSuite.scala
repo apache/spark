@@ -23,11 +23,10 @@ import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 import java.util.zip.{ZipInputStream, ZipOutputStream}
 
-import com.codahale.metrics.MetricRegistry
-
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
+import com.codahale.metrics.MetricRegistry
 import com.google.common.io.{ByteStreams, Files}
 import org.apache.hadoop.hdfs.DistributedFileSystem
 import org.json4s.jackson.JsonMethods._

@@ -25,7 +25,7 @@ import java.util.zip.{ZipEntry, ZipOutputStream}
 import scala.collection.mutable
 import scala.xml.Node
 
-import com.codahale.metrics._
+import com.codahale.metrics.{Counter, MetricRegistry, Timer}
 import com.google.common.io.ByteStreams
 import com.google.common.util.concurrent.{MoreExecutors, ThreadFactoryBuilder}
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
