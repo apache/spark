@@ -152,6 +152,18 @@ test_that("kmeans", {
   expect_equal(sort(collect(distinct(select(cluster, "prediction")))$prediction), c(0, 1))
 })
 
+  # Test KMeans model save/load
+  modelPath <- tempfile(pattern = "KMeans", fileext = ".tmp")
+  ml.save(m, modelPath)
+  expect_error(ml.save(m, modelPath))
+  ml.save(m, modelPath, overwrite = TRUE)
+  m2 <- ml.load(modelPath)
+  s2 <- summary(m2)
+  expect_equal(s$coefficients, s2$coefficients)
+  expect_equal(s$size, s2$size)
+
+  unlink(modelPath)
+
 test_that("naiveBayes", {
   # R code to reproduce the result.
   # We do not support instance weights yet. So we ignore the frequencies.

@@ -243,6 +243,54 @@ setMethod("kmeans", signature(x = "SparkDataFrame"),
             return(new("KMeansModel", jobj = jobj))
          })
 
+#' Save the KMeans model to the input path.
+#'
+#' @param object A fitted KMeans model
+#' @param path The directory where the model is saved
+#' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
+#'                  which means throw exception if the output path exists.
+#'
+#' @rdname ml.save
+#' @name ml.save
+#' @export
+#' @examples
+#' \dontrun{
+#' df <- createDataFrame(sqlContext, infert)
+#' model <- KMeans(df)
+#' path <- "path/to/model"
+#' ml.save(model, path)
+#' }
+setMethod("ml.save", signature(object = "KMeansModel", path = "character"),
+function(object, path, overwrite = FALSE) {
+    writer <- callJMethod(object@jobj, "write")
+    if (overwrite) {
+        writer <- callJMethod(writer, "overwrite")
+    }
+    invisible(callJMethod(writer, "save", path))
+})
+
+#' Load a fitted MLlib model from the input path.
+#'
+#' @param path Path of the model to read.
+#' @return a fitted MLlib model
+#' @rdname ml.load
+#' @name ml.load
+#' @export
+#' @examples
+#' \dontrun{
+#' path <- "path/to/model"
+#' model <- ml.load(path)
+#' }
+ml.load <- function(path) {
+    path <- suppressWarnings(normalizePath(path))
+    jobj <- callJStatic("org.apache.spark.ml.r.RWrappers", "load", path)
+    if (isInstanceOf(jobj, "org.apache.spark.ml.r.KMeansWrapper")) {
+        return(new("KMeansModel", jobj = jobj))
+    } else {
+        stop(paste("Unsupported model: ", jobj))
+    }
+}
+
 #' Get fitted result from a k-means model
 #'
 #' Get fitted result from a k-means model, similarly to R's fitted().
