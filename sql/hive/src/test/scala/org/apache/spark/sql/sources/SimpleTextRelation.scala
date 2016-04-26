@@ -25,7 +25,7 @@ import org.apache.hadoop.io.{NullWritable, Text}
 import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat, TextOutputFormat}
 
-import org.apache.spark.sql.{sources, Row, SQLContext}
+import org.apache.spark.sql.{sources, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, GenericInternalRow, InterpretedPredicate, InterpretedProjection, JoinedRow, Literal}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
@@ -37,14 +37,14 @@ class SimpleTextSource extends FileFormat with DataSourceRegister {
   override def shortName(): String = "test"
 
   override def inferSchema(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
     Some(DataType.fromJson(options("dataSchema")).asInstanceOf[StructType])
   }
 
   override def prepareWrite(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = new OutputWriterFactory {
@@ -58,7 +58,7 @@ class SimpleTextSource extends FileFormat with DataSourceRegister {
   }
 
   override def buildReader(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       dataSchema: StructType,
       partitionSchema: StructType,
       requiredSchema: StructType,
@@ -74,9 +74,9 @@ class SimpleTextSource extends FileFormat with DataSourceRegister {
       inputAttributes.find(_.name == field.name)
     }
 
-    val conf = new Configuration(sqlContext.sessionState.hadoopConf)
+    val conf = new Configuration(sparkSession.sessionState.hadoopConf)
     val broadcastedConf =
-      sqlContext.sparkContext.broadcast(new SerializableConfiguration(conf))
+      sparkSession.sparkContext.broadcast(new SerializableConfiguration(conf))
 
     (file: PartitionedFile) => {
       val predicate = {

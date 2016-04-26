@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
+import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable}
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan}
 import org.apache.spark.sql.execution.command.RunnableCommand
@@ -42,7 +42,7 @@ case class CreateTableAsSelect(
 
   override def children: Seq[LogicalPlan] = Seq(query)
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
+  override def run(sparkSession: SparkSession): Seq[Row] = {
     lazy val metastoreRelation: MetastoreRelation = {
       import org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
       import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
@@ -68,24 +68,24 @@ case class CreateTableAsSelect(
         withFormat
       }
 
-      sqlContext.sessionState.catalog.createTable(withSchema, ignoreIfExists = false)
+      sparkSession.sessionState.catalog.createTable(withSchema, ignoreIfExists = false)
 
       // Get the Metastore Relation
-      sqlContext.sessionState.catalog.lookupRelation(tableIdentifier) match {
+      sparkSession.sessionState.catalog.lookupRelation(tableIdentifier) match {
         case r: MetastoreRelation => r
       }
     }
     // TODO ideally, we should get the output data ready first and then
     // add the relation into catalog, just in case of failure occurs while data
     // processing.
-    if (sqlContext.sessionState.catalog.tableExists(tableIdentifier)) {
+    if (sparkSession.sessionState.catalog.tableExists(tableIdentifier)) {
       if (allowExisting) {
         // table already exists, will do nothing, to keep consistent with Hive
       } else {
         throw new AnalysisException(s"$tableIdentifier already exists.")
       }
     } else {
-      sqlContext.executePlan(InsertIntoTable(
+      sparkSession.executePlan(InsertIntoTable(
         metastoreRelation, Map(), query, overwrite = true, ifNotExists = false)).toRdd
     }
 

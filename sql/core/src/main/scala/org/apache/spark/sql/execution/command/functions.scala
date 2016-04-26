@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
+import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogFunction
 import org.apache.spark.sql.catalyst.expressions.{Attribute, ExpressionInfo}
@@ -47,8 +47,8 @@ case class CreateFunction(
     isTemp: Boolean)
   extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    val catalog = sqlContext.sessionState.catalog
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
     if (isTemp) {
       if (databaseName.isDefined) {
         throw new AnalysisException(
@@ -99,7 +99,7 @@ case class DescribeFunction(
     }
   }
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
+  override def run(sparkSession: SparkSession): Seq[Row] = {
     // Hard code "<>", "!=", "between", and "case" for now as there is no corresponding functions.
     functionName.toLowerCase match {
       case "<>" =>
@@ -116,7 +116,7 @@ case class DescribeFunction(
         Row(s"Function: case") ::
           Row(s"Usage: CASE a WHEN b THEN c [WHEN d THEN e]* [ELSE f] END - " +
             s"When a = b, returns c; when a = d, return e; else return f") :: Nil
-      case _ => sqlContext.sessionState.functionRegistry.lookupFunction(functionName) match {
+      case _ => sparkSession.sessionState.functionRegistry.lookupFunction(functionName) match {
         case Some(info) =>
           val result =
             Row(s"Function: ${info.getName}") ::
@@ -149,8 +149,8 @@ case class DropFunction(
     isTemp: Boolean)
   extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    val catalog = sqlContext.sessionState.catalog
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
     if (isTemp) {
       if (databaseName.isDefined) {
         throw new AnalysisException(
@@ -187,12 +187,12 @@ case class ShowFunctions(db: Option[String], pattern: Option[String]) extends Ru
     schema.toAttributes
   }
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    val dbName = db.getOrElse(sqlContext.sessionState.catalog.getCurrentDatabase)
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val dbName = db.getOrElse(sparkSession.sessionState.catalog.getCurrentDatabase)
     // If pattern is not specified, we use '*', which is used to
     // match any sequence of characters (including no characters).
     val functionNames =
-      sqlContext.sessionState.catalog
+      sparkSession.sessionState.catalog
         .listFunctions(dbName, pattern.getOrElse("*"))
         .map(_.unquotedString)
     // The session catalog caches some persistent functions in the FunctionRegistry

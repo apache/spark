@@ -36,7 +36,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{EmptyRDD, HadoopRDD, RDD, UnionRDD}
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -61,7 +61,7 @@ private[hive]
 class HadoopTableReader(
     @transient private val attributes: Seq[Attribute],
     @transient private val relation: MetastoreRelation,
-    @transient private val sc: SQLContext,
+    @transient private val sparkSession: SparkSession,
     hiveconf: HiveConf)
   extends TableReader with Logging {
 
@@ -69,15 +69,15 @@ class HadoopTableReader(
   // https://hadoop.apache.org/docs/r1.0.4/mapred-default.html
   //
   // In order keep consistency with Hive, we will let it be 0 in local mode also.
-  private val _minSplitsPerRDD = if (sc.sparkContext.isLocal) {
+  private val _minSplitsPerRDD = if (sparkSession.sparkContext.isLocal) {
     0 // will splitted based on block by default.
   } else {
-    math.max(hiveconf.getInt("mapred.map.tasks", 1), sc.sparkContext.defaultMinPartitions)
+    math.max(hiveconf.getInt("mapred.map.tasks", 1), sparkSession.sparkContext.defaultMinPartitions)
   }
 
-  SparkHadoopUtil.get.appendS3AndSparkHadoopConfigurations(sc.sparkContext.conf, hiveconf)
+  SparkHadoopUtil.get.appendS3AndSparkHadoopConfigurations(sparkSession.sparkContext.conf, hiveconf)
   private val _broadcastedHiveConf =
-    sc.sparkContext.broadcast(new SerializableConfiguration(hiveconf))
+    sparkSession.sparkContext.broadcast(new SerializableConfiguration(hiveconf))
 
   override def makeRDDForTable(hiveTable: HiveTable): RDD[InternalRow] =
     makeRDDForTable(
@@ -153,7 +153,7 @@ class HadoopTableReader(
     def verifyPartitionPath(
         partitionToDeserializer: Map[HivePartition, Class[_ <: Deserializer]]):
         Map[HivePartition, Class[_ <: Deserializer]] = {
-      if (!sc.conf.verifyPartitionPath) {
+      if (!sparkSession.sessionState.conf.verifyPartitionPath) {
         partitionToDeserializer
       } else {
         var existPathSet = collection.mutable.Set[String]()
@@ -246,7 +246,7 @@ class HadoopTableReader(
 
     // Even if we don't use any partitions, we still need an empty RDD
     if (hivePartitionRDDs.size == 0) {
-      new EmptyRDD[InternalRow](sc.sparkContext)
+      new EmptyRDD[InternalRow](sparkSession.sparkContext)
     } else {
       new UnionRDD(hivePartitionRDDs(0).context, hivePartitionRDDs)
     }
@@ -278,7 +278,7 @@ class HadoopTableReader(
     val initializeJobConfFunc = HadoopTableReader.initializeLocalJobConfFunc(path, tableDesc) _
 
     val rdd = new HadoopRDD(
-      sc.sparkContext,
+      sparkSession.sparkContext,
       _broadcastedHiveConf.asInstanceOf[Broadcast[SerializableConfiguration]],
       Some(initializeJobConfFunc),
       inputFormatClass,
