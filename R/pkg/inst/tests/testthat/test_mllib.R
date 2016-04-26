@@ -126,6 +126,18 @@ test_that("glm summary", {
   expect_true(abs(baseSummary$deviance - 12.19313) < 1e-4)
 })
 
+  # Test model save/load
+  modelPath <- tempfile(pattern = "GLM", fileext = ".tmp")
+  ml.save(m, modelPath)
+  expect_error(ml.save(m, modelPath))
+  ml.save(m, modelPath, overwrite = TRUE)
+  m2 <- ml.load(modelPath)
+  s2 <- summary(m2)
+  expect_equal(s$rCoefficients, s2$rCoefficients)
+  expect_equal(s$rFeatures, s2$rFeatures)
+
+  unlink(modelPath)
+
 test_that("kmeans", {
   newIris <- iris
   newIris$Species <- NULL

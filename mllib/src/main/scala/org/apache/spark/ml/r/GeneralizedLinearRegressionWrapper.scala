@@ -17,15 +17,22 @@
 
 package org.apache.spark.ml.r
 
+import org.apache.hadoop.fs.Path
+import org.json4s._
+import org.json4s.DefaultFormats
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods._
+
 import org.apache.spark.ml.{Pipeline, PipelineModel}
 import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.feature.RFormula
 import org.apache.spark.ml.regression._
+import org.apache.spark.ml.util._
 import org.apache.spark.sql._
 
 private[r] class GeneralizedLinearRegressionWrapper private (
-    pipeline: PipelineModel,
-    val features: Array[String]) {
+    val pipeline: PipelineModel,
+    val features: Array[String]) extends MLWritable {
 
   private val glm: GeneralizedLinearRegressionModel =
     pipeline.stages(1).asInstanceOf[GeneralizedLinearRegressionModel]
@@ -85,9 +92,13 @@ private[r] class GeneralizedLinearRegressionWrapper private (
   def transform(dataset: Dataset[_]): DataFrame = {
     pipeline.transform(dataset).drop(glm.getFeaturesCol)
   }
+
+  override def write: MLWriter =
+    new GeneralizedLinearRegressionWrapper.GeneralizedLinearRegressionWrapperWriter(this)
 }
 
-private[r] object GeneralizedLinearRegressionWrapper {
+private[r] object GeneralizedLinearRegressionWrapper extends
+  MLReadable[GeneralizedLinearRegressionWrapper] {
 
   def fit(
       formula: String,
@@ -115,5 +126,43 @@ private[r] object GeneralizedLinearRegressionWrapper {
       .setStages(Array(rFormulaModel, glm))
       .fit(data)
     new GeneralizedLinearRegressionWrapper(pipeline, features)
+  }
+
+  override def read: MLReader[GeneralizedLinearRegressionWrapper] =
+    new GeneralizedLinearRegressionWrapperReader
+
+  override def load(path: String): GeneralizedLinearRegressionWrapper = super.load(path)
+
+  class GeneralizedLinearRegressionWrapperWriter(instance: GeneralizedLinearRegressionWrapper)
+    extends MLWriter {
+
+    override protected def saveImpl(path: String): Unit = {
+      val rMetadataPath = new Path(path, "rMetadata").toString
+      val pipelinePath = new Path(path, "pipeline").toString
+
+      val rMetadata = ("class" -> instance.getClass.getName) ~
+        ("features" -> instance.features.toSeq)
+      val rMetadataJson: String = compact(render(rMetadata))
+      sc.parallelize(Seq(rMetadataJson), 1).saveAsTextFile(rMetadataPath)
+
+      instance.pipeline.save(pipelinePath)
+    }
+  }
+
+  class GeneralizedLinearRegressionWrapperReader extends
+    MLReader[GeneralizedLinearRegressionWrapper] {
+
+    override def load(path: String): GeneralizedLinearRegressionWrapper = {
+      implicit val format = DefaultFormats
+      val rMetadataPath = new Path(path, "rMetadata").toString
+      val pipelinePath = new Path(path, "pipeline").toString
+
+      val rMetadataStr = sc.textFile(rMetadataPath, 1).first()
+      val rMetadata = parse(rMetadataStr)
+      val features = (rMetadata \ "features").extract[Array[String]]
+
+      val pipeline = PipelineModel.load(pipelinePath)
+      new GeneralizedLinearRegressionWrapper(pipeline, features)
+    }
   }
 }

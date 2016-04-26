@@ -83,6 +83,54 @@ setMethod("glm", signature(formula = "formula", family = "ANY", data = "SparkDat
             return(new("GeneralizedLinearRegressionModel", jobj = jobj))
           })
 
+#' Save the GeneralizedLinearRegression model to the input path.
+#'
+#' @param object A fitted GLM model
+#' @param path The directory where the model is saved
+#' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
+#'                  which means throw exception if the output path exists.
+#'
+#' @rdname ml.save
+#' @name ml.save
+#' @export
+#' @examples
+#' \dontrun{
+#' df <- createDataFrame(sqlContext, infert)
+#' model <- glm(education ~ ., df)
+#' path <- "path/to/model"
+#' ml.save(model, path)
+#' }
+setMethod("ml.save", signature(object = "GeneralizedLinearRegressionModel", path = "character"),
+function(object, path, overwrite = FALSE) {
+    writer <- callJMethod(object@jobj, "write")
+    if (overwrite) {
+        writer <- callJMethod(writer, "overwrite")
+    }
+    invisible(callJMethod(writer, "save", path))
+})
+
+#' Load a fitted MLlib model from the input path.
+#'
+#' @param path Path of the model to read.
+#' @return a fitted MLlib model
+#' @rdname ml.load
+#' @name ml.load
+#' @export
+#' @examples
+#' \dontrun{
+#' path <- "path/to/model"
+#' model <- ml.load(path)
+#' }
+ml.load <- function(path) {
+    path <- suppressWarnings(normalizePath(path))
+    jobj <- callJStatic("org.apache.spark.ml.r.RWrappers", "load", path)
+    if (isInstanceOf(jobj, "org.apache.spark.ml.r.GeneralizedLinearRegressionWrapper")) {
+        return(new("GeneralizedLinearRegressionModel", jobj = jobj))
+    } else {
+        stop(paste("Unsupported model: ", jobj))
+    }
+}
+
 #' Get the summary of a generalized linear model
 #'
 #' Returns the summary of a model produced by glm(), similarly to R's summary().
