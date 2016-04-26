@@ -135,6 +135,8 @@ private[spark] class TaskSchedulerImpl(
           new FIFOSchedulableBuilder(rootPool)
         case SchedulingMode.FAIR =>
           new FairSchedulableBuilder(rootPool, conf)
+        case _ =>
+          throw new IllegalArgumentException(s"Unsupported spark.scheduler.mode: $schedulingMode")
       }
     }
     schedulableBuilder.buildPools()

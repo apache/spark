@@ -36,12 +36,12 @@ import org.apache.spark.sql.types.StructType
 /**
  * :: Experimental ::
  * Interface used to load a [[DataFrame]] from external storage systems (e.g. file systems,
- * key-value stores, etc) or data streams. Use [[SQLContext.read]] to access this.
+ * key-value stores, etc) or data streams. Use [[SparkSession.read]] to access this.
  *
  * @since 1.4.0
  */
 @Experimental
-class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
+class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
   /**
    * Specifies the input data source format.
@@ -125,11 +125,11 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
   def load(): DataFrame = {
     val dataSource =
       DataSource(
-        sqlContext,
+        sparkSession,
         userSpecifiedSchema = userSpecifiedSchema,
         className = source,
         options = extraOptions.toMap)
-    Dataset.ofRows(sqlContext, LogicalRelation(dataSource.resolveRelation()))
+    Dataset.ofRows(sparkSession, LogicalRelation(dataSource.resolveRelation()))
   }
 
   /**
@@ -151,11 +151,11 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
   @scala.annotation.varargs
   def load(paths: String*): DataFrame = {
     if (paths.isEmpty) {
-      sqlContext.emptyDataFrame
+      sparkSession.emptyDataFrame
     } else {
-      sqlContext.baseRelationToDataFrame(
+      sparkSession.baseRelationToDataFrame(
         DataSource.apply(
-          sqlContext,
+          sparkSession,
           paths = paths,
           userSpecifiedSchema = userSpecifiedSchema,
           className = source,
@@ -172,11 +172,11 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
   def stream(): DataFrame = {
     val dataSource =
       DataSource(
-        sqlContext,
+        sparkSession,
         userSpecifiedSchema = userSpecifiedSchema,
         className = source,
         options = extraOptions.toMap)
-    Dataset.ofRows(sqlContext, StreamingRelation(dataSource))
+    Dataset.ofRows(sparkSession, StreamingRelation(dataSource))
   }
 
   /**
@@ -271,8 +271,8 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
     }
     // connectionProperties should override settings in extraOptions
     props.putAll(connectionProperties)
-    val relation = JDBCRelation(url, table, parts, props)(sqlContext)
-    sqlContext.baseRelationToDataFrame(relation)
+    val relation = JDBCRelation(url, table, parts, props)(sparkSession)
+    sparkSession.baseRelationToDataFrame(relation)
   }
 
   /**
@@ -368,7 +368,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
     val parsedOptions: JSONOptions = new JSONOptions(extraOptions.toMap)
     val columnNameOfCorruptRecord =
       parsedOptions.columnNameOfCorruptRecord
-        .getOrElse(sqlContext.conf.columnNameOfCorruptRecord)
+        .getOrElse(sparkSession.sessionState.conf.columnNameOfCorruptRecord)
     val schema = userSpecifiedSchema.getOrElse {
       InferSchema.infer(
         jsonRDD,
@@ -377,14 +377,14 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
     }
 
     Dataset.ofRows(
-      sqlContext,
+      sparkSession,
       LogicalRDD(
         schema.toAttributes,
         JacksonParser.parse(
           jsonRDD,
           schema,
           columnNameOfCorruptRecord,
-          parsedOptions))(sqlContext))
+          parsedOptions))(sparkSession))
   }
 
   /**
@@ -424,9 +424,9 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * @since 1.4.0
    */
   def table(tableName: String): DataFrame = {
-    Dataset.ofRows(sqlContext,
-      sqlContext.sessionState.catalog.lookupRelation(
-        sqlContext.sessionState.sqlParser.parseTableIdentifier(tableName)))
+    Dataset.ofRows(sparkSession,
+      sparkSession.sessionState.catalog.lookupRelation(
+        sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)))
   }
 
   /**
@@ -447,14 +447,14 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    */
   @scala.annotation.varargs
   def text(paths: String*): Dataset[String] = {
-    format("text").load(paths : _*).as[String](sqlContext.implicits.newStringEncoder)
+    format("text").load(paths : _*).as[String](sparkSession.implicits.newStringEncoder)
   }
 
   ///////////////////////////////////////////////////////////////////////////////////////
   // Builder pattern config options
   ///////////////////////////////////////////////////////////////////////////////////////
 
-  private var source: String = sqlContext.conf.defaultDataSourceName
+  private var source: String = sparkSession.sessionState.conf.defaultDataSourceName
 
   private var userSpecifiedSchema: Option[StructType] = None
 

@@ -194,9 +194,8 @@ class KMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
 class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol, HasSeed,
              JavaMLWritable, JavaMLReadable):
     """
-    K-means clustering with support for multiple parallel runs and a k-means++ like initialization
-    mode (the k-means|| algorithm by Bahmani et al). When multiple concurrent runs are requested,
-    they are executed together with joint passes over the data for efficiency.
+    K-means clustering with a k-means++ like initialization mode
+    (the k-means|| algorithm by Bahmani et al).
 
     >>> from pyspark.mllib.linalg import Vectors
     >>> data = [(Vectors.dense([0.0, 0.0]),), (Vectors.dense([1.0, 1.0]),),

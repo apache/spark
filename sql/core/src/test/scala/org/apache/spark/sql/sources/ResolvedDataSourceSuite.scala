@@ -22,7 +22,7 @@ import org.apache.spark.sql.execution.datasources.DataSource
 
 class ResolvedDataSourceSuite extends SparkFunSuite {
   private def getProvidingClass(name: String): Class[_] =
-    DataSource(sqlContext = null, className = name).providingClass
+    DataSource(sparkSession = null, className = name).providingClass
 
   test("jdbc") {
     assert(
