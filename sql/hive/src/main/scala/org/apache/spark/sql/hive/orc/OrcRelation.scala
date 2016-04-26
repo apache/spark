@@ -114,22 +114,21 @@ private[sql] class DefaultSource
       partitionSchema: StructType,
       requiredSchema: StructType,
       filters: Seq[Filter],
-      options: Map[String, String]): (PartitionedFile) => Iterator[InternalRow] = {
-    val orcConf = new Configuration(sparkSession.sessionState.hadoopConf)
-
+      options: Map[String, String],
+      hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
     if (sparkSession.sessionState.conf.orcFilterPushDown) {
       // Sets pushed predicates
       OrcFilters.createFilter(filters.toArray).foreach { f =>
-        orcConf.set(OrcTableScan.SARG_PUSHDOWN, f.toKryo)
-        orcConf.setBoolean(ConfVars.HIVEOPTINDEXFILTER.varname, true)
+        hadoopConf.set(OrcTableScan.SARG_PUSHDOWN, f.toKryo)
+        hadoopConf.setBoolean(ConfVars.HIVEOPTINDEXFILTER.varname, true)
       }
     }
 
-    val broadcastedConf =
-      sparkSession.sparkContext.broadcast(new SerializableConfiguration(orcConf))
+    val broadcastedHadoopConf =
+      sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
     (file: PartitionedFile) => {
-      val conf = broadcastedConf.value.value
+      val conf = broadcastedHadoopConf.value.value
 
       // SPARK-8501: Empty ORC files always have an empty schema stored in their footer. In this
       // case, `OrcFileOperator.readSchema` returns `None`, and we can't read the underlying file
@@ -154,7 +153,7 @@ private[sql] class DefaultSource
           // Specifically would be helpful for partitioned datasets.
           val orcReader = OrcFile.createReader(
             new Path(new URI(file.filePath)), OrcFile.readerOptions(conf))
-          new SparkOrcNewRecordReader(orcReader, conf, fileSplit.getStart(), fileSplit.getLength())
+          new SparkOrcNewRecordReader(orcReader, conf, fileSplit.getStart, fileSplit.getLength)
         }
 
         // Unwraps `OrcStruct`s to `UnsafeRow`s
