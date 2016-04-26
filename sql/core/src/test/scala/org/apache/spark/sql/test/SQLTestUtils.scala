@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.execution.Filter
+import org.apache.spark.sql.execution.FilterExec
 import org.apache.spark.util.Utils
 
 /**
@@ -88,7 +88,7 @@ private[sql] trait SQLTestUtils
    * The Hadoop configuration used by the active [[SQLContext]].
    */
   protected def hadoopConfiguration: Configuration = {
-    sparkContext.hadoopConfiguration
+    sqlContext.sessionState.hadoopConf
   }
 
   /**
@@ -242,7 +242,7 @@ private[sql] trait SQLTestUtils
   protected def stripSparkFilter(df: DataFrame): DataFrame = {
     val schema = df.schema
     val withoutFilters = df.queryExecution.sparkPlan transform {
-      case Filter(_, child) => child
+      case FilterExec(_, child) => child
     }
 
     val childRDD = withoutFilters
@@ -257,7 +257,7 @@ private[sql] trait SQLTestUtils
    * way to construct [[DataFrame]] directly out of local data without relying on implicits.
    */
   protected implicit def logicalPlanToSparkQuery(plan: LogicalPlan): DataFrame = {
-    Dataset.ofRows(sqlContext, plan)
+    Dataset.ofRows(sqlContext.sparkSession, plan)
   }
 
   /**

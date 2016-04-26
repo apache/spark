@@ -34,15 +34,16 @@ import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.CATALOG_IMPLEMENTATION
-import org.apache.spark.sql.{SparkSession, SQLContext}
+import org.apache.spark.sql.{RuntimeConfig, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions.ExpressionInfo
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.command.{CacheTableCommand, HiveNativeCommand}
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.client.HiveClient
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{RuntimeConfigImpl, SQLConf}
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 
 // SPARK-3729: Test key required to check for initialization errors with config.
@@ -70,8 +71,10 @@ object TestHive
  * hive metastore seems to lead to weird non-deterministic failures.  Therefore, the execution of
  * test cases that rely on TestHive must be serialized.
  */
-class TestHiveContext(@transient val sparkSession: TestHiveSparkSession, isRootContext: Boolean)
-  extends HiveContext(sparkSession, isRootContext) {
+class TestHiveContext(
+    @transient override val sparkSession: TestHiveSparkSession,
+    isRootContext: Boolean)
+  extends SQLContext(sparkSession, isRootContext) {
 
   def this(sc: SparkContext) {
     this(new TestHiveSparkSession(HiveUtils.withHiveExternalCatalog(sc)), true)
@@ -105,11 +108,11 @@ class TestHiveContext(@transient val sparkSession: TestHiveSparkSession, isRootC
 
 
 private[hive] class TestHiveSparkSession(
-    sc: SparkContext,
+    @transient private val sc: SparkContext,
     val warehousePath: File,
     scratchDirPath: File,
     metastoreTemporaryConf: Map[String, String],
-    existingSharedState: Option[TestHiveSharedState])
+    @transient private val existingSharedState: Option[TestHiveSharedState])
   extends SparkSession(sc) with Logging { self =>
 
   def this(sc: SparkContext) {
@@ -207,7 +210,7 @@ private[hive] class TestHiveSparkSession(
 
   protected[hive] implicit class SqlCmd(sql: String) {
     def cmd: () => Unit = {
-      () => new TestHiveQueryExecution(sql).stringResult(): Unit
+      () => new TestHiveQueryExecution(sql).hiveResultString(): Unit
     }
   }
 
@@ -462,7 +465,7 @@ private[hive] class TestHiveSparkSession(
 private[hive] class TestHiveQueryExecution(
     sparkSession: TestHiveSparkSession,
     logicalPlan: LogicalPlan)
-  extends HiveQueryExecution(new SQLContext(sparkSession), logicalPlan) with Logging {
+  extends QueryExecution(sparkSession, logicalPlan) with Logging {
 
   def this(sparkSession: TestHiveSparkSession, sql: String) {
     this(sparkSession, sparkSession.sessionState.sqlParser.parsePlan(sql))
@@ -524,7 +527,7 @@ private[hive] class TestHiveSharedState(
 
 
 private[hive] class TestHiveSessionState(sparkSession: TestHiveSparkSession)
-  extends HiveSessionState(new SQLContext(sparkSession)) {
+  extends HiveSessionState(sparkSession) {
 
   override lazy val conf: SQLConf = {
     new SQLConf {

@@ -19,7 +19,7 @@ package org.apache.spark.repl
 
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
-import org.apache.spark.util.{Signaling => USignaling}
+import org.apache.spark.util.SignalUtils
 
 private[repl] object Signaling extends Logging {
 
@@ -28,7 +28,7 @@ private[repl] object Signaling extends Logging {
    * when no jobs are currently running.
    * This makes it possible to interrupt a running shell job by pressing Ctrl+C.
    */
-  def cancelOnInterrupt(ctx: SparkContext): Unit = USignaling.register("INT") {
+  def cancelOnInterrupt(ctx: SparkContext): Unit = SignalUtils.register("INT") {
     if (!ctx.statusTracker.getActiveJobIds().isEmpty) {
       logWarning("Cancelling all active jobs, this can take a while. " +
         "Press Ctrl+C again to exit now.")

@@ -38,13 +38,9 @@ class SparkPlanner(
       DDLStrategy ::
       SpecialLimits ::
       Aggregation ::
-      ExistenceJoin ::
-      EquiJoinSelection ::
+      JoinSelection ::
       InMemoryScans ::
-      BasicOperators ::
-      BroadcastNestedLoop ::
-      CartesianProduct ::
-      DefaultJoin :: Nil)
+      BasicOperators :: Nil)
 
   /**
    * Used to build table scan operators where complex projection and filtering are done using
@@ -82,10 +78,10 @@ class SparkPlanner(
       // when the columns of this projection are enough to evaluate all filter conditions,
       // just do a scan followed by a filter, with no extra project.
       val scan = scanBuilder(projectList.asInstanceOf[Seq[Attribute]])
-      filterCondition.map(Filter(_, scan)).getOrElse(scan)
+      filterCondition.map(FilterExec(_, scan)).getOrElse(scan)
     } else {
       val scan = scanBuilder((projectSet ++ filterSet).toSeq)
-      Project(projectList, filterCondition.map(Filter(_, scan)).getOrElse(scan))
+      ProjectExec(projectList, filterCondition.map(FilterExec(_, scan)).getOrElse(scan))
     }
   }
 }

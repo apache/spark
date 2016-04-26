@@ -114,6 +114,10 @@ object MimaExcludes {
           "org.apache.spark.api.java.function.FlatMapGroupsFunction.call")
       ) ++
       Seq(
+        // [SPARK-6429] Implement hashCode and equals together
+        ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.Partition.org$apache$spark$Partition$$super=uals")
+      ) ++
+      Seq(
         // SPARK-4819 replace Guava Optional
         ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.api.java.JavaSparkContext.getCheckpointDir"),
         ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.api.java.JavaSparkContext.getSparkHome"),
@@ -667,6 +671,20 @@ object MimaExcludes {
         // SPARK-14704: Create accumulators in TaskMetrics
         ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.executor.InputMetrics.this"),
         ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.executor.OutputMetrics.this")
+      ) ++ Seq(
+        // SPARK-14861: Replace internal usages of SQLContext with SparkSession
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "org.apache.spark.ml.clustering.LocalLDAModel.this"),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "org.apache.spark.ml.clustering.DistributedLDAModel.this"),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "org.apache.spark.ml.clustering.LDAModel.this"),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "org.apache.spark.ml.clustering.LDAModel.sqlContext"),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "org.apache.spark.sql.Dataset.this"),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "org.apache.spark.sql.DataFrameReader.this")
       ) ++ Seq(
         // [SPARK-4452][Core]Shuffle data structures can starve others on the same thread for memory
         ProblemFilters.exclude[IncompatibleTemplateDefProblem]("org.apache.spark.util.collection.Spillable")

@@ -628,6 +628,8 @@ class DenseVector @Since("1.0.0") (
     }
   }
 
+  override def equals(other: Any): Boolean = super.equals(other)
+
   override def hashCode(): Int = {
     var result: Int = 31 + size
     var i = 0
@@ -774,6 +776,8 @@ class SparseVector @Since("1.0.0") (
       i += 1
     }
   }
+
+  override def equals(other: Any): Boolean = super.equals(other)
 
   override def hashCode(): Int = {
     var result: Int = 31 + size

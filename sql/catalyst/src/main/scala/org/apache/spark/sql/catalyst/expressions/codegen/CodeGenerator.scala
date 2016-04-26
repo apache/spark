@@ -239,16 +239,19 @@ class CodegenContext {
 
   /**
    * Update a column in MutableRow from ExprCode.
+   *
+   * @param isVectorized True if the underlying row is of type `ColumnarBatch.Row`, false otherwise
    */
   def updateColumn(
       row: String,
       dataType: DataType,
       ordinal: Int,
       ev: ExprCode,
-      nullable: Boolean): String = {
+      nullable: Boolean,
+      isVectorized: Boolean = false): String = {
     if (nullable) {
       // Can't call setNullAt on DecimalType, because we need to keep the offset
-      if (dataType.isInstanceOf[DecimalType]) {
+      if (!isVectorized && dataType.isInstanceOf[DecimalType]) {
         s"""
            if (!${ev.isNull}) {
              ${setColumn(row, dataType, ordinal, ev.value)};
