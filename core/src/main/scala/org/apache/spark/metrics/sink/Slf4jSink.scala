@@ -22,11 +22,11 @@ import java.util.concurrent.TimeUnit
 
 import com.codahale.metrics.{MetricRegistry, Slf4jReporter}
 
-import org.apache.spark.SecurityManager
-import org.apache.spark.metrics.MetricsSystem
-
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+
+import org.apache.spark.SecurityManager
+import org.apache.spark.metrics.MetricsSystem
 
 private[spark] class Slf4jSink(
     val property: Properties,
