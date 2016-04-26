@@ -78,7 +78,7 @@ private[sql] case class InsertIntoHadoopFsRelation(
           s"cannot save to file.")
     }
 
-    val hadoopConf = new Configuration(sparkSession.sessionState.hadoopConf)
+    val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(options)
     val fs = outputPath.getFileSystem(hadoopConf)
     val qualifiedOutputPath = outputPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
 
@@ -106,10 +106,6 @@ private[sql] case class InsertIntoHadoopFsRelation(
       val job = Job.getInstance(hadoopConf)
       job.setOutputKeyClass(classOf[Void])
       job.setOutputValueClass(classOf[InternalRow])
-
-      // Also set the options in Hadoop Configuration
-      options.foreach { case (k, v) => if (v ne null) job.getConfiguration.set(k, v) }
-
       FileOutputFormat.setOutputPath(job, qualifiedOutputPath)
 
       val partitionSet = AttributeSet(partitionColumns)

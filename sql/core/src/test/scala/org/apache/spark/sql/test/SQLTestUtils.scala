@@ -88,7 +88,7 @@ private[sql] trait SQLTestUtils
    * The Hadoop configuration used by the active [[SQLContext]].
    */
   protected def hadoopConfiguration: Configuration = {
-    sqlContext.sessionState.hadoopConf
+    sqlContext.sessionState.newHadoopConf()
   }
 
   /**
@@ -164,7 +164,7 @@ private[sql] trait SQLTestUtils
     } finally {
       // If the test failed part way, we don't want to mask the failure by failing to remove
       // temp tables that never got created.
-      try functions.foreach { case (functionName, isTemporary) =>
+      functions.foreach { case (functionName, isTemporary) =>
         val withTemporary = if (isTemporary) "TEMPORARY" else ""
         sqlContext.sql(s"DROP $withTemporary FUNCTION IF EXISTS $functionName")
         assert(

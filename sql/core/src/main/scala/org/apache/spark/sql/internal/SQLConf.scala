@@ -516,13 +516,6 @@ object SQLConf {
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
-    val EXTERNAL_SORT = "spark.sql.planner.externalSort"
-    val USE_SQL_AGGREGATE2 = "spark.sql.useAggregate2"
-    val TUNGSTEN_ENABLED = "spark.sql.tungsten.enabled"
-    val CODEGEN_ENABLED = "spark.sql.codegen"
-    val UNSAFE_ENABLED = "spark.sql.unsafe.enabled"
-    val SORTMERGE_JOIN = "spark.sql.planner.sortMergeJoin"
-    val PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED = "spark.sql.parquet.enableUnsafeRowRecordReader"
   }
 }
 
@@ -764,7 +757,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
     settings.remove(key)
   }
 
-  private[spark] def unsetConf(entry: ConfigEntry[_]): Unit = {
+  def unsetConf(entry: ConfigEntry[_]): Unit = {
     settings.remove(entry.key)
   }
 

@@ -40,7 +40,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.ShowTablesCommand
 import org.apache.spark.sql.execution.datasources.{CreateTableUsing, LogicalRelation}
 import org.apache.spark.sql.execution.ui.SQLListener
-import org.apache.spark.sql.internal.{RuntimeConfigImpl, SessionState, SharedState}
+import org.apache.spark.sql.internal.{SessionState, SharedState}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.{DataType, LongType, StructType}
 import org.apache.spark.sql.util.ExecutionListenerManager
@@ -191,10 +191,6 @@ class SparkSession private(
    |  Methods for accessing or mutating configurations  |
    * -------------------------------------------------- */
 
-  @transient private lazy val _conf: RuntimeConfig = {
-    new RuntimeConfigImpl(sessionState.conf, sessionState.hadoopConf)
-  }
-
   /**
    * Runtime configuration interface for Spark.
    *
@@ -205,7 +201,7 @@ class SparkSession private(
    * @group config
    * @since 2.0.0
    */
-  def conf: RuntimeConfig = _conf
+  @transient val conf: RuntimeConfig = new RuntimeConfig(sessionState.conf)
 
   /**
    * Set Spark SQL configuration properties.
