@@ -1070,6 +1070,58 @@ class TrainingSummaryTest(SparkSessionTestCase):
         sameSummary = model.evaluate(df)
         self.assertAlmostEqual(sameSummary.areaUnderROC, s.areaUnderROC)
 
+        def test_gaussian_mixture_summary(self):
+            from pyspark.mllib.linalg import Vectors
+        sqlContext = SQLContext(self.sc)
+        df = sqlContext.createDataFrame([(1.0, 2.0, Vectors.dense(1.0)),
+                                         (0.0, 2.0, Vectors.sparse(1, [], []))],
+                                        ["features"])
+        gm = GaussianMixture(k=3, tol=0.0001, maxIter=10, seed=10)
+        model = gm.fit(df)
+        self.assertTrue(model.hasSummary)
+        s = model.summary
+        # test that api is callable and returns expected types
+        self.assertGreater(s.totalIterations, 0)
+        self.assertTrue(isinstance(s.predictions, DataFrame))
+        self.assertEqual(s.predictionCol, "prediction")
+        self.assertEqual(s.featuresCol, "features")
+        objHist = s.objectiveHistory
+        cluster_sizes = s.clusterSizes
+        self.assertTrue(isinstance(objHist, list) and isinstance(objHist[0], float))
+        self.assertTrue(isinstance(s.cluster, DataFrame))
+        self.assertTrue(isinstance(s.probability, DataFrame))
+        self.assertEqual(isinstance(cluster_sizes[0], long))
+        # test evaluation (with a training dataset) produces a summary with same values
+        # one check is enough to verify a summary is returned, Scala version runs full test
+        sameSummary = model.evaluate(df)
+        self.assertAlmostEqual(sameSummary.cluster, s.cluster)
+
+    def test_gaussian_mixture_summary(self):
+        from pyspark.mllib.linalg import Vectors
+        sqlContext = SQLContext(self.sc)
+        df = sqlContext.createDataFrame([(1.0, 2.0, Vectors.dense(1.0)),
+                                         (0.0, 2.0, Vectors.sparse(1, [], []))],
+                                        ["features"])
+        gm = GaussianMixture(k=3, tol=0.0001, maxIter=10, seed=10)
+        model = gm.fit(df)
+        self.assertTrue(model.hasSummary)
+        s = model.summary
+        # test that api is callable and returns expected types
+        self.assertGreater(s.totalIterations, 0)
+        self.assertTrue(isinstance(s.predictions, DataFrame))
+        self.assertEqual(s.predictionCol, "prediction")
+        self.assertEqual(s.featuresCol, "features")
+        objHist = s.objectiveHistory
+        cluster_sizes = s.clusterSizes
+        self.assertTrue(isinstance(objHist, list) and isinstance(objHist[0], float))
+        self.assertTrue(isinstance(s.cluster, DataFrame))
+        self.assertTrue(isinstance(s.probability, DataFrame))
+        self.assertEqual(isinstance(cluster_sizes[0], long))
+        # test evaluation (with a training dataset) produces a summary with same values
+        # one check is enough to verify a summary is returned, Scala version runs full test
+        sameSummary = model.evaluate(df)
+        self.assertAlmostEqual(sameSummary.cluster, s.cluster)
+
 
 class OneVsRestTests(SparkSessionTestCase):
 
