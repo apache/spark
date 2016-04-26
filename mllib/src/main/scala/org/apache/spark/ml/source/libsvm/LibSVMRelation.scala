@@ -202,7 +202,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
             LabeledPoint(label, Vectors.sparse(numFeatures, indices, values))
           }
 
-      val converter = RowEncoder(requiredSchema)
+      val converter = RowEncoder(dataSchema)
 
       val unsafeRowIterator = points.map { pt =>
         val features = if (sparse) pt.features.toSparse else pt.features.toDense
@@ -213,9 +213,12 @@ class DefaultSource extends FileFormat with DataSourceRegister {
         AttributeReference(f.name, f.dataType, f.nullable, f.metadata)()
 
       // Appends partition values
-      val fullOutput = (requiredSchema ++ partitionSchema).map(toAttribute)
+      val fullOutput = (dataSchema ++ partitionSchema).map(toAttribute)
+      val requiredOutput = fullOutput.filter { a =>
+        requiredSchema.fieldNames.contains(a.name) || partitionSchema.fieldNames.contains(a.name)
+      }
       val joinedRow = new JoinedRow()
-      val appendPartitionColumns = GenerateUnsafeProjection.generate(fullOutput, fullOutput)
+      val appendPartitionColumns = GenerateUnsafeProjection.generate(requiredOutput, fullOutput)
 
       unsafeRowIterator.map { dataRow =>
         appendPartitionColumns(joinedRow(dataRow, file.partitionValues))

@@ -87,7 +87,6 @@ case class ScalarSubquery(
  */
 abstract class PredicateSubquery extends SubqueryExpression with Unevaluable with Predicate {
   override def nullable: Boolean = false
-  override def plan: LogicalPlan = SubqueryAlias(prettyName, query)
 }
 
 object PredicateSubquery {
@@ -105,10 +104,14 @@ object PredicateSubquery {
  *                    FROM    b)
  * }}}
  */
-case class InSubQuery(value: Expression, query: LogicalPlan) extends PredicateSubquery {
+case class InSubQuery(
+    value: Expression,
+    query: LogicalPlan,
+    exprId: ExprId = NamedExpression.newExprId) extends PredicateSubquery {
   override def children: Seq[Expression] = value :: Nil
   override lazy val resolved: Boolean = value.resolved && query.resolved
-  override def withNewPlan(plan: LogicalPlan): InSubQuery = InSubQuery(value, plan)
+  override def withNewPlan(plan: LogicalPlan): InSubQuery = InSubQuery(value, plan, exprId)
+  override def plan: LogicalPlan = SubqueryAlias(s"subquery#${exprId.id}", query)
 
   /**
    * The unwrapped value side expressions.
@@ -124,7 +127,7 @@ case class InSubQuery(value: Expression, query: LogicalPlan) extends PredicateSu
   override def checkInputDataTypes(): TypeCheckResult = {
     // Check the number of arguments.
     if (expressions.length != query.output.length) {
-      TypeCheckResult.TypeCheckFailure(
+      return TypeCheckResult.TypeCheckFailure(
         s"The number of fields in the value (${expressions.length}) does not match with " +
           s"the number of columns in the subquery (${query.output.length})")
     }
@@ -132,14 +135,16 @@ case class InSubQuery(value: Expression, query: LogicalPlan) extends PredicateSu
     // Check the argument types.
     expressions.zip(query.output).zipWithIndex.foreach {
       case ((e, a), i) if e.dataType != a.dataType =>
-        TypeCheckResult.TypeCheckFailure(
-          s"The data type of value[$i](${e.dataType}) does not match " +
+        return TypeCheckResult.TypeCheckFailure(
+          s"The data type of value[$i] (${e.dataType}) does not match " +
             s"subquery column '${a.name}' (${a.dataType}).")
       case _ =>
     }
 
     TypeCheckResult.TypeCheckSuccess
   }
+
+  override def toString: String = s"$value IN subquery#${exprId.id}"
 }
 
 /**
@@ -153,7 +158,11 @@ case class InSubQuery(value: Expression, query: LogicalPlan) extends PredicateSu
  *                   WHERE   b.id = a.id)
  * }}}
  */
-case class Exists(query: LogicalPlan) extends PredicateSubquery {
+case class Exists(
+    query: LogicalPlan,
+    exprId: ExprId = NamedExpression.newExprId) extends PredicateSubquery {
   override def children: Seq[Expression] = Nil
-  override def withNewPlan(plan: LogicalPlan): Exists = Exists(plan)
+  override def withNewPlan(plan: LogicalPlan): Exists = Exists(plan, exprId)
+  override def plan: LogicalPlan = SubqueryAlias(toString, query)
+  override def toString: String = s"exists#${exprId.id}"
 }
