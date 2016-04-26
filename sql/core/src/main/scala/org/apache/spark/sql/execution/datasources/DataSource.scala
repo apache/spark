@@ -143,7 +143,7 @@ case class DataSource(
         caseInsensitiveOptions,
         fileCatalog.allFiles())
     }.getOrElse {
-      throw new AnalysisException("Unable to infer schema.  It must be specified manually.")
+      throw new AnalysisException("Unable to infer schema. It must be specified manually.")
     }
   }
 
