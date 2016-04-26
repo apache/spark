@@ -217,10 +217,12 @@ abstract class AbstractCommandBuilder {
         boolean foundWildCardJar = false;
         // Append all jars that match the wildcard
         File[] files = new File(classPathEntry.substring(0, classPathEntry.length() - 2)).listFiles();
-        for(File f: files) {
-          if (f.getName().toLowerCase().endsWith("jar")) {
-            foundWildCardJar = true;
-            classPathEntryList.add(f.getAbsoluteFile().toURI().toURL().toExternalForm());
+        if (files != null) {
+          for (File f : files) {
+            if (f.getName().toLowerCase().endsWith("jar")) {
+              foundWildCardJar = true;
+              classPathEntryList.add(f.getAbsoluteFile().toURI().toURL().toExternalForm());
+            }
           }
         }
 
