@@ -85,6 +85,7 @@ object LassoModel extends Loader[LassoModel] {
  * See also the documentation for the precise formulation.
  */
 @Since("0.8.0")
+@deprecated("Use ml.regression.LinearRegression with elasticNetParam = 1.0", "2.0.0")
 class LassoWithSGD private (
     private var stepSize: Double,
     private var numIterations: Int,
@@ -118,6 +119,7 @@ class LassoWithSGD private (
  *
  */
 @Since("0.8.0")
+@deprecated("Use ml.regression.LinearRegression with elasticNetParam = 1.0", "2.0.0")
 object LassoWithSGD {
 
   /**

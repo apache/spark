@@ -267,6 +267,8 @@ class LogisticRegressionModel(LinearClassificationModel):
 class LogisticRegressionWithSGD(object):
     """
     .. versionadded:: 0.9.0
+    .. note:: Deprecated in 2.0.0. Use ml.classification.LogisticRegression or
+            LogisticRegressionWithLBFGS.
     """
     @classmethod
     @since('0.9.0')

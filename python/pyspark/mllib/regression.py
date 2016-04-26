@@ -222,6 +222,7 @@ def _regression_train_wrapper(train_func, modelClass, data, initial_weights):
 class LinearRegressionWithSGD(object):
     """
     .. versionadded:: 0.9.0
+    .. note:: Deprecated in 2.0.0. Use ml.regression.LinearRegression.
     """
     @classmethod
     @since("0.9.0")
@@ -277,7 +278,7 @@ class LinearRegressionWithSGD(object):
           A condition which decides iteration termination.
           (default: 0.001)
         """
-        warnings.warn("Deprecated in  2.0.0. Use ml.regression.LinearRegression.")
+        warnings.warn("Deprecated in 2.0.0. Use ml.regression.LinearRegression.")
 
         def train(rdd, i):
             return callMLlibFunc("trainLinearRegressionModelWithSGD", rdd, int(iterations),
@@ -369,6 +370,7 @@ class LassoModel(LinearRegressionModelBase):
 class LassoWithSGD(object):
     """
     .. versionadded:: 0.9.0
+    .. note:: Deprecated in 2.0.0. Use ml.regression.LinearRegression with elasticNetParam = 1.0.
     """
     @classmethod
     @since("0.9.0")
@@ -416,6 +418,9 @@ class LassoWithSGD(object):
           A condition which decides iteration termination.
           (default: 0.001)
         """
+        warnings.warn(
+            "Deprecated in 2.0.0. Use ml.regression.LinearRegression with elasticNetParam = 1.0.")
+
         def train(rdd, i):
             return callMLlibFunc("trainLassoModelWithSGD", rdd, int(iterations), float(step),
                                  float(regParam), float(miniBatchFraction), i, bool(intercept),
@@ -506,6 +511,7 @@ class RidgeRegressionModel(LinearRegressionModelBase):
 class RidgeRegressionWithSGD(object):
     """
     .. versionadded:: 0.9.0
+    .. note:: Deprecated in 2.0.0. Use ml.regression.LinearRegression with elasticNetParam = 0.0.
     """
     @classmethod
     @since("0.9.0")
@@ -553,6 +559,9 @@ class RidgeRegressionWithSGD(object):
           A condition which decides iteration termination.
           (default: 0.001)
         """
+        warnings.warn(
+            "Deprecated in 2.0.0. Use ml.regression.LinearRegression with elasticNetParam = 0.0.")
+
         def train(rdd, i):
             return callMLlibFunc("trainRidgeModelWithSGD", rdd, int(iterations), float(step),
                                  float(regParam), float(miniBatchFraction), i, bool(intercept),
