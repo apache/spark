@@ -666,7 +666,7 @@ class PersistenceTest(PySparkTestCase):
             self.assertEqual(m1.getOrDefault(param), m2.getOrDefault(param))
             self.assertEqual(param.parent, m2.getParam(param.name).parent)
         else:
-            pass # fow now, wait until the default value mismatch between Spark and PySpark fixed.
+            pass  # fow now, wait until the default value mismatch between Spark and PySpark fixed.
             # If m1 is not defined param, then m2 should not, too.
             # self.assertEqual(m2.isDefined(m2.getParam(param.name)), False)
 
