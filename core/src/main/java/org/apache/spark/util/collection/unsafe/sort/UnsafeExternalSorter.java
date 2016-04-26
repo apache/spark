@@ -75,6 +75,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
   private MemoryBlock currentPage = null;
   private long pageCursor = -1;
   private long peakMemoryUsedBytes = 0;
+  private long totalSpillBytes = 0L;
   private volatile SpillableIterator readingIterator = null;
 
   public static UnsafeExternalSorter createWithExistingInMemorySorter(
@@ -89,7 +90,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       UnsafeInMemorySorter inMemorySorter) throws IOException {
     UnsafeExternalSorter sorter = new UnsafeExternalSorter(taskMemoryManager, blockManager,
       serializerManager, taskContext, recordComparator, prefixComparator, initialSize,
-        pageSizeBytes, inMemorySorter);
+        pageSizeBytes, inMemorySorter, false /* ignored */);
     sorter.spill(Long.MAX_VALUE, sorter);
     // The external sorter will be used to insert records, in-memory sorter is not needed.
     sorter.inMemSorter = null;
@@ -104,9 +105,11 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       RecordComparator recordComparator,
       PrefixComparator prefixComparator,
       int initialSize,
-      long pageSizeBytes) {
+      long pageSizeBytes,
+      boolean canUseRadixSort) {
     return new UnsafeExternalSorter(taskMemoryManager, blockManager, serializerManager,
-      taskContext, recordComparator, prefixComparator, initialSize, pageSizeBytes, null);
+      taskContext, recordComparator, prefixComparator, initialSize, pageSizeBytes, null,
+      canUseRadixSort);
   }
 
   private UnsafeExternalSorter(
@@ -118,7 +121,8 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       PrefixComparator prefixComparator,
       int initialSize,
       long pageSizeBytes,
-      @Nullable UnsafeInMemorySorter existingInMemorySorter) {
+      @Nullable UnsafeInMemorySorter existingInMemorySorter,
+      boolean canUseRadixSort) {
     super(taskMemoryManager, pageSizeBytes);
     this.taskMemoryManager = taskMemoryManager;
     this.blockManager = blockManager;
@@ -133,7 +137,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
 
     if (existingInMemorySorter == null) {
       this.inMemSorter = new UnsafeInMemorySorter(
-        this, taskMemoryManager, recordComparator, prefixComparator, initialSize);
+        this, taskMemoryManager, recordComparator, prefixComparator, initialSize, canUseRadixSort);
     } else {
       this.inMemSorter = existingInMemorySorter;
     }
@@ -208,11 +212,11 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     // written to disk. This also counts the space needed to store the sorter's pointer array.
     inMemSorter.reset();
     // Reset the in-memory sorter's pointer array only after freeing up the memory pages holding the
-    // records. Otherwise, if the task is over allocated memory, then without freeing the memory pages,
-    // we might not be able to get memory for the pointer array.
+    // records. Otherwise, if the task is over allocated memory, then without freeing the memory
+    // pages, we might not be able to get memory for the pointer array.
 
     taskContext.taskMetrics().incMemoryBytesSpilled(spillSize);
-
+    totalSpillBytes += spillSize;
     return spillSize;
   }
 
@@ -241,6 +245,13 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
   public long getPeakMemoryUsedBytes() {
     updatePeakMemoryUsed();
     return peakMemoryUsedBytes;
+  }
+
+  /**
+   * Return the total number of bytes that has been spilled into disk so far.
+   */
+  public long getSpillSize() {
+    return totalSpillBytes;
   }
 
   @VisibleForTesting
@@ -496,6 +507,8 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
         released += inMemSorter.getMemoryUsage();
         inMemSorter.free();
         inMemSorter = null;
+        taskContext.taskMetrics().incMemoryBytesSpilled(released);
+        totalSpillBytes += released;
         return released;
       }
     }

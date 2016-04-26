@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
@@ -31,8 +31,8 @@ case class AddJar(path: String) extends RunnableCommand {
     schema.toAttributes
   }
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.addJar(path)
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    sparkSession.sessionState.addJar(path)
     Seq(Row(0))
   }
 }
@@ -41,8 +41,8 @@ case class AddJar(path: String) extends RunnableCommand {
  * Adds a file to the current session so it can be used.
  */
 case class AddFile(path: String) extends RunnableCommand {
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.sparkContext.addFile(path)
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    sparkSession.sparkContext.addFile(path)
     Seq.empty[Row]
   }
 }

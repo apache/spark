@@ -21,27 +21,26 @@ import java.util.regex.Pattern
 
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hadoop.hive.ql.parse.VariableSubstitution
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.Analyzer
-import org.apache.spark.sql.catalyst.parser.ParserInterface
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlanner
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.client.{HiveClient, HiveClientImpl}
-import org.apache.spark.sql.hive.execution.{AnalyzeTable, HiveSqlParser}
-import org.apache.spark.sql.internal.{SessionState, SQLConf}
+import org.apache.spark.sql.internal.SessionState
 
 
 /**
- * A class that holds all session-specific state in a given [[HiveContext]].
+ * A class that holds all session-specific state in a given [[SparkSession]] backed by Hive.
  */
-private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) {
+private[hive] class HiveSessionState(sparkSession: SparkSession)
+  extends SessionState(sparkSession) {
 
   self =>
 
-  private lazy val sharedState: HiveSharedState = ctx.sharedState.asInstanceOf[HiveSharedState]
+  private lazy val sharedState: HiveSharedState = {
+    sparkSession.sharedState.asInstanceOf[HiveSharedState]
+  }
 
   /**
    * A Hive client used for execution.
@@ -52,11 +51,6 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
    * A Hive client used for interacting with the metastore.
    */
   lazy val metadataHive: HiveClient = sharedState.metadataHive.newSession()
-
-  override lazy val conf: SQLConf = new SQLConf {
-    override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
-  }
-
 
   /**
    * SQLConf and HiveConf contracts:
@@ -81,8 +75,8 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
     new HiveSessionCatalog(
       sharedState.externalCatalog,
       metadataHive,
-      ctx,
-      ctx.sessionState.functionResourceLoader,
+      sparkSession,
+      functionResourceLoader,
       functionRegistry,
       conf,
       hiveconf)
@@ -100,32 +94,25 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
         catalog.PreInsertionCasts ::
         PreInsertCastAndRename ::
         DataSourceAnalysis ::
-        (if (conf.runSQLOnFile) new ResolveDataSource(ctx) :: Nil else Nil)
+        (if (conf.runSQLonFile) new ResolveDataSource(sparkSession) :: Nil else Nil)
 
       override val extendedCheckRules = Seq(PreWriteCheck(conf, catalog))
     }
   }
 
   /**
-   * Parser for HiveQl query texts.
-   */
-  override lazy val sqlParser: ParserInterface = new HiveSqlParser(conf, hiveconf)
-
-  /**
    * Planner that takes into account Hive-specific strategies.
    */
   override def planner: SparkPlanner = {
-    new SparkPlanner(ctx.sparkContext, conf, experimentalMethods.extraStrategies)
+    new SparkPlanner(sparkSession.sparkContext, conf, experimentalMethods.extraStrategies)
       with HiveStrategies {
-      override val context: SQLContext = ctx
+      override val sparkSession: SparkSession = self.sparkSession
       override val hiveconf: HiveConf = self.hiveconf
 
       override def strategies: Seq[Strategy] = {
         experimentalMethods.extraStrategies ++ Seq(
           FileSourceStrategy,
           DataSourceStrategy,
-          HiveCommandStrategy,
-          HiveDDLStrategy,
           DDLStrategy,
           SpecialLimits,
           InMemoryScans,
@@ -149,10 +136,6 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
   //  Helper methods, partially leftover from pre-2.0 days
   // ------------------------------------------------------
 
-  override def executePlan(plan: LogicalPlan): HiveQueryExecution = {
-    new HiveQueryExecution(ctx, plan)
-  }
-
   /**
    * Overrides default Hive configurations to avoid breaking changes to Spark SQL users.
    *  - allow SQL11 keywords to be used as identifiers
@@ -173,17 +156,6 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
     executionHive.addJar(path)
     metadataHive.addJar(path)
     Thread.currentThread().setContextClassLoader(executionHive.clientLoader.classLoader)
-  }
-
-  /**
-   * Analyzes the given table in the current database to generate statistics, which will be
-   * used in query optimizations.
-   *
-   * Right now, it only supports Hive tables and it only updates the size of a Hive table
-   * in the Hive metastore.
-   */
-  override def analyze(tableName: String): Unit = {
-    AnalyzeTable(tableName).run(ctx)
   }
 
   /**
@@ -209,7 +181,7 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
    * SerDe.
    */
   def convertMetastoreParquet: Boolean = {
-    conf.getConf(HiveContext.CONVERT_METASTORE_PARQUET)
+    conf.getConf(HiveUtils.CONVERT_METASTORE_PARQUET)
   }
 
   /**
@@ -219,7 +191,7 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
    * This configuration is only effective when "spark.sql.hive.convertMetastoreParquet" is true.
    */
   def convertMetastoreParquetWithSchemaMerging: Boolean = {
-    conf.getConf(HiveContext.CONVERT_METASTORE_PARQUET_WITH_SCHEMA_MERGING)
+    conf.getConf(HiveUtils.CONVERT_METASTORE_PARQUET_WITH_SCHEMA_MERGING)
   }
 
   /**
@@ -228,7 +200,7 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
    * SerDe.
    */
   def convertMetastoreOrc: Boolean = {
-    conf.getConf(HiveContext.CONVERT_METASTORE_ORC)
+    conf.getConf(HiveUtils.CONVERT_METASTORE_ORC)
   }
 
   /**
@@ -244,18 +216,19 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
    *     and no SerDe is specified (no ROW FORMAT SERDE clause).
    */
   def convertCTAS: Boolean = {
-    conf.getConf(HiveContext.CONVERT_CTAS)
+    conf.getConf(HiveUtils.CONVERT_CTAS)
   }
 
   /**
    * When true, Hive Thrift server will execute SQL queries asynchronously using a thread pool."
    */
   def hiveThriftServerAsync: Boolean = {
-    conf.getConf(HiveContext.HIVE_THRIFT_SERVER_ASYNC)
+    conf.getConf(HiveUtils.HIVE_THRIFT_SERVER_ASYNC)
   }
 
+  // TODO: why do we get this from SparkConf but not SQLConf?
   def hiveThriftServerSingleSession: Boolean = {
-    ctx.sparkContext.conf.getBoolean(
+    sparkSession.sparkContext.conf.getBoolean(
       "spark.sql.hive.thriftServer.singleSession", defaultValue = false)
   }
 
