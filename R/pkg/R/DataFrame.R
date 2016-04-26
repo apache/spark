@@ -2482,19 +2482,20 @@ setMethod("drop",
 #' @export
 #' @examples 
 #' \dontrun{
+#' 
 #' # Create a DataFrame from the Iris dataset
 #' irisDF <- createDataFrame(sqlContext, iris)
 #' 
 #' # Compute histogram statistics
-#' histData <- histogram(df, df$Sepal_Length, nbins = 12)
+#' histStats <- histogram(irisDF, irisDF$Sepal_Length, nbins = 12)
 #'
 #' # Once SparkR has computed the histogram statistics, the histogram can be
 #' # rendered using the ggplot2 library:
 #'
 #' require(ggplot2)
-#' plot <- ggplot(histStats, aes(x = centroids, y = counts))
-#' plot <- plot + geom_histogram(data = histStats, stat = "identity", binwidth = 100)
-#' plot <- plot + xlab("Sepal_Length") + ylab("Frequency")   
+#' plot <- ggplot(histStats, aes(x = centroids, y = counts)) +
+#'         geom_bar(stat = "identity") +
+#'         xlab("Sepal_Length") + ylab("Frequency")   
 #' } 
 setMethod("histogram",
           signature(df = "SparkDataFrame", col = "characterOrColumn"),
