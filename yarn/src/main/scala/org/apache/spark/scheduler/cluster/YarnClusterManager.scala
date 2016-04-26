@@ -23,31 +23,30 @@ import org.apache.spark.scheduler.{ExternalClusterManager, SchedulerBackend, Tas
 /**
  * Cluster Manager for creation of Yarn scheduler and backend
  */
-class YarnClusterManager extends ExternalClusterManager {
+private[spark] class YarnClusterManager extends ExternalClusterManager {
 
   override def canCreate(masterURL: String): Boolean = {
     masterURL == "yarn"
   }
 
   override def createTaskScheduler(sc: SparkContext, masterURL: String): TaskScheduler = {
-    if (sc.deployMode == "cluster") {
-      new YarnClusterScheduler(sc)
-    } else if (sc.deployMode == "client") {
-      new YarnScheduler(sc)
-    } else {
-      throw new SparkException(s"Unknown deploy mode '${sc.deployMode}' for Yarn")
+    sc.deployMode match {
+      case "cluster" => new YarnClusterScheduler(sc)
+      case "client" => new YarnScheduler(sc)
+      case _ => throw new SparkException(s"Unknown deploy mode '${sc.deployMode}' for Yarn")
     }
   }
 
   override def createSchedulerBackend(sc: SparkContext,
       masterURL: String,
       scheduler: TaskScheduler): SchedulerBackend = {
-    if (sc.deployMode == "cluster") {
-       new YarnClusterSchedulerBackend(scheduler.asInstanceOf[TaskSchedulerImpl], sc)
-    } else if (sc.deployMode == "client") {
-      new YarnClientSchedulerBackend(scheduler.asInstanceOf[TaskSchedulerImpl], sc)
-    } else {
-      throw new SparkException(s"Unknown deploy mode '${sc.deployMode}' for Yarn")
+    sc.deployMode match {
+      case "cluster" =>
+        new YarnClusterSchedulerBackend(scheduler.asInstanceOf[TaskSchedulerImpl], sc)
+      case "client" =>
+        new YarnClientSchedulerBackend(scheduler.asInstanceOf[TaskSchedulerImpl], sc)
+      case  _ =>
+        throw new SparkException(s"Unknown deploy mode '${sc.deployMode}' for Yarn")
     }
   }
 
