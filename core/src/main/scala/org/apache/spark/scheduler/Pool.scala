@@ -55,6 +55,8 @@ private[spark] class Pool(
         new FairSchedulingAlgorithm()
       case SchedulingMode.FIFO =>
         new FIFOSchedulingAlgorithm()
+      case _ =>
+        throw new IllegalArgumentException(s"Unsupported spark.scheduler.mode: $schedulingMode")
     }
   }
 
