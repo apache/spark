@@ -153,7 +153,7 @@ class ValidatorParams(HasSeed):
         This utility method helps CrossValidator and TrainValidationSplit implementing their
         _transfer_param_map_to_java().
         """
-        estimator, epms, evaluator, seed = self._to_java_impl()
+        estimator, epms, evaluator, seed = self.copy(pyParamMap)._to_java_impl()
         java_params = []
 
         paramMap = JavaParams._new_java_obj("org.apache.spark.ml.param.ParamMap")
