@@ -48,7 +48,7 @@ private[sql] object SQLExecution {
       val r = try {
         val callSite = Utils.getCallSite()
         val user = Utils.getCurrentUserName()
-        sqlSession.sparkContext.listenerBus.post(
+        sparkSession.sparkContext.listenerBus.post(
           SparkListenerSQLExecutionStart(
             executionId,
             user,
