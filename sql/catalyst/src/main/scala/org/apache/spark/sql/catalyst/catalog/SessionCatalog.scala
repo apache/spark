@@ -124,6 +124,7 @@ class SessionCatalog(
     currentDb = db
   }
 
+  /** Get the path for creating a non-default database. */
   def createDatabasePath(dbName: String, path: Option[String]): String = {
     val dbPath = path.map(new Path(_)).getOrElse {
       new Path(new Path(System.getProperty("java.io.tmpdir")), dbName.toLowerCase() + ".db")
@@ -696,12 +697,6 @@ class SessionCatalog(
       dropDatabase(db, ignoreIfNotExists = false, cascade = true)
     }
     tempTables.clear()
-    // Do not remove the function `current_database`, which is registered in each
-    // new session of HiveContext. Otherwise, it could load the Hive UDF function
-    // with the same function name.
-    functionRegistry.listFunction().filter(_ != "current_database").foreach { f =>
-      functionRegistry.dropFunction(f)
-    }
     // restore built-in functions
     FunctionRegistry.builtin.listFunction().foreach { f =>
       val expressionInfo = FunctionRegistry.builtin.lookupFunction(f)

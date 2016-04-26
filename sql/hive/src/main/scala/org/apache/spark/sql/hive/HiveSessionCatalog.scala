@@ -74,13 +74,13 @@ private[sql] class HiveSessionCatalog(
   // | Methods and fields for interacting with HiveMetastoreCatalog |
   // ----------------------------------------------------------------
 
-  // This function is to get the path for creating a non-default database
+  /** Get the path for creating a non-default database. */
   override def createDatabasePath(dbName: String, path: Option[String] = None): String = {
     val dbPath = path.map(new Path(_)).getOrElse {
-      val defaultPath = hiveconf.getVar(HiveConf.ConfVars.METASTOREWAREHOUSE)
+      val defaultPath = conf.hiveMetastoreWarehouse
       if (StringUtils.isBlank(defaultPath)) {
         throw new AnalysisException(
-          s"${HiveConf.ConfVars.METASTOREWAREHOUSE.varname} is not set in the config or blank")
+          "hive.metastore.warehouse.dir is not set in the config or blank")
       }
       new Path(new Path(defaultPath), dbName.toLowerCase() + ".db")
     }

@@ -247,6 +247,11 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val HIVE_METASTORE_WAREHOUSE_DIR = SQLConfigBuilder("hive.metastore.warehouse.dir")
+    .doc("The location of default database for the warehouse.")
+    .stringConf
+    .createWithDefault("/user/hive/warehouse")
+
   val HIVE_METASTORE_PARTITION_PRUNING =
     SQLConfigBuilder("spark.sql.hive.metastorePartitionPruning")
       .doc("When true, some predicates will be pushed down into the Hive metastore so that " +
@@ -619,6 +624,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def broadcastTimeout: Int = getConf(BROADCAST_TIMEOUT)
 
   def defaultDataSourceName: String = getConf(DEFAULT_DATA_SOURCE_NAME)
+
+  def hiveMetastoreWarehouse: String = getConf(HIVE_METASTORE_WAREHOUSE_DIR)
 
   def partitionDiscoveryEnabled(): Boolean =
     getConf(SQLConf.PARTITION_DISCOVERY_ENABLED)
