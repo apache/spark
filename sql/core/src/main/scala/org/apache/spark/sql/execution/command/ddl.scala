@@ -39,6 +39,7 @@ import org.apache.spark.sql.types._
 abstract class NativeDDLCommand(val sql: String) extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
+    logWarning(s"Native command: ${sql.trim}")
     sparkSession.runNativeSql(sql)
   }
 
