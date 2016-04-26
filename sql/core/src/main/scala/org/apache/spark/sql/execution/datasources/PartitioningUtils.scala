@@ -442,8 +442,8 @@ private[sql] object PartitioningUtils {
       if (c == '%' && i + 2 < path.length) {
         val code: Int = try {
           Integer.parseInt(path.substring(i + 1, i + 3), 16)
-        } catch { case e: Exception =>
-          -1: Integer
+        } catch {
+          case _: Exception => -1
         }
         if (code >= 0) {
           sb.append(code.asInstanceOf[Char])
