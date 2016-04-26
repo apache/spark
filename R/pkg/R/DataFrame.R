@@ -2538,8 +2538,8 @@ setMethod("histogram",
               # 1 in 4.4 x 10 ^ 96
               colname <- paste(base:::sample(c(letters, LETTERS),
                                              size = min(max(nchar(colnames(df))) + 1, 100),
-                                             replace=TRUE),
-                               collapse="")
+                                             replace = TRUE),
+                               collapse = "")
 
               # Append the given column to the dataset. This is to support Columns that
               # don't belong to the DataFrame but are rather expressions
