@@ -97,10 +97,10 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       partitionSchema: StructType,
       requiredSchema: StructType,
       filters: Seq[Filter],
-      options: Map[String, String]): PartitionedFile => Iterator[InternalRow] = {
-    val conf = new Configuration(sparkSession.sessionState.hadoopConf)
-    val broadcastedConf =
-      sparkSession.sparkContext.broadcast(new SerializableConfiguration(conf))
+      options: Map[String, String],
+      hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
+    val broadcastedHadoopConf =
+      sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
     val parsedOptions: JSONOptions = new JSONOptions(options)
     val columnNameOfCorruptRecord = parsedOptions.columnNameOfCorruptRecord
@@ -109,8 +109,8 @@ class DefaultSource extends FileFormat with DataSourceRegister {
     val fullSchema = requiredSchema.toAttributes ++ partitionSchema.toAttributes
     val joinedRow = new JoinedRow()
 
-    file => {
-      val lines = new HadoopFileLinesReader(file, broadcastedConf.value.value).map(_.toString)
+    (file: PartitionedFile) => {
+      val lines = new HadoopFileLinesReader(file, broadcastedHadoopConf.value.value).map(_.toString)
 
       val rows = JacksonParser.parseJson(
         lines,

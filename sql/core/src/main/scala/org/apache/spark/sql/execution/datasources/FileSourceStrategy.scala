@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{BlockLocation, FileStatus, LocatedFileStatus, Path}
 
 import org.apache.spark.internal.Logging
@@ -106,13 +107,17 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
       val pushedDownFilters = dataFilters.flatMap(DataSourceStrategy.translateFilter)
       logInfo(s"Pushed Filters: ${pushedDownFilters.mkString(",")}")
 
+      val hadoopConf = new Configuration(files.sparkSession.sessionState.hadoopConf)
+      files.options.foreach { case (k, v) => if (v ne null) hadoopConf.set(k, v) }
+
       val readFile = files.fileFormat.buildReader(
         sparkSession = files.sparkSession,
         dataSchema = files.dataSchema,
         partitionSchema = files.partitionSchema,
         requiredSchema = prunedDataSchema,
         filters = pushedDownFilters,
-        options = files.options)
+        options = files.options,
+        hadoopConf = hadoopConf)
 
       val plannedPartitions = files.bucketSpec match {
         case Some(bucketing) if files.sparkSession.sessionState.conf.bucketingEnabled =>
