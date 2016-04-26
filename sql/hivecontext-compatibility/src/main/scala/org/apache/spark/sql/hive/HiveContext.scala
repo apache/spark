@@ -29,7 +29,7 @@ import org.apache.spark.sql.{SparkSession, SQLContext}
  */
 @deprecated("Use SparkSession.withHiveSupport instead", "2.0.0")
 class HiveContext private[hive](
-    @transient private val sparkSession: SparkSession,
+    sparkSession: SparkSession,
     isRootContext: Boolean)
   extends SQLContext(sparkSession, isRootContext) with Logging {
 
@@ -47,15 +47,15 @@ class HiveContext private[hive](
    * and Hive client (both of execution and metadata) with existing HiveContext.
    */
   override def newSession(): HiveContext = {
-    new HiveContext(sparkSession.newSession(), isRootContext = false)
+    new HiveContext(super.sparkSession.newSession(), isRootContext = false)
   }
 
   protected[sql] override def sessionState: HiveSessionState = {
-    sparkSession.sessionState.asInstanceOf[HiveSessionState]
+    super.sparkSession.sessionState.asInstanceOf[HiveSessionState]
   }
 
   protected[sql] override def sharedState: HiveSharedState = {
-    sparkSession.sharedState.asInstanceOf[HiveSharedState]
+    super.sparkSession.sharedState.asInstanceOf[HiveSharedState]
   }
 
 }
