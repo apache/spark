@@ -22,7 +22,7 @@ import java.util.NoSuchElementException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SQLConf, VariableSubstitution}
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
 
@@ -129,8 +129,10 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
     // Configures a single property.
     case Some((key, Some(value))) =>
       val runFunc = (sparkSession: SparkSession) => {
-        sparkSession.setConf(key, value)
-        Seq(Row(key, value))
+        val substitutedValue =
+          new VariableSubstitution(sparkSession.sessionState.conf).substitute(value)
+        sparkSession.sessionState.setConf(key, substitutedValue)
+        Seq(Row(key, substitutedValue))
       }
       (keyValueOutput, runFunc)
 

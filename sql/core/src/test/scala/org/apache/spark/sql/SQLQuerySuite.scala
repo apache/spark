@@ -1082,6 +1082,16 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       sql(s"SET $nonexistentKey"),
       Row(nonexistentKey, "<undefined>")
     )
+
+    // substitution
+    sql("SET xxx=5")
+    sql("SET spark.sql.variable.substitute=false")
+    sql("SET yyy=${xxx}")
+    checkAnswer(sql("SET yyy"), Row("yyy", "${xxx}"))
+    sql("SET spark.sql.variable.substitute=true")
+    sql("SET zzz=${xxx}")
+    checkAnswer(sql("SET zzz"), Row("zzz", "5"))
+
     sqlContext.conf.clear()
   }
 
