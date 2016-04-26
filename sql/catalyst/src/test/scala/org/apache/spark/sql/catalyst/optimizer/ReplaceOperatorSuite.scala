@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.plans.{LeftSemi, PlanTest}
+import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
@@ -42,6 +42,24 @@ class ReplaceOperatorSuite extends PlanTest {
     val correctAnswer =
       Aggregate(table1.output, table1.output,
         Join(table1, table2, LeftSemi, Option('a <=> 'c && 'b <=> 'd))).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("replace except with Left-anti Join") {
+    val table1 = LocalRelation('a.int, 'b.int)
+    val table2 = LocalRelation('c.int, 'd.int)
+
+    val query = Except(table1, table2)
+    val optimized = Optimize.execute(query.analyze)
+
+    val correctAnswer =
+      Aggregate(table1.output, table1.output,
+        Join(table1, table2, LeftAnti, Option('a <=> 'c && 'b <=> 'd))).analyze
+
+    println(optimized) //scalastyle:ignore
+
+    println(correctAnswer) //scalastyle:ignore
 
     comparePlans(optimized, correctAnswer)
   }

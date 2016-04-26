@@ -1405,6 +1405,27 @@ object ReplaceIntersectWithSemiJoin extends Rule[LogicalPlan] {
 }
 
 /**
+  * Replaces logical [[Except]] operator with a left-anti [[Join]] operator.
+  * {{{
+  *   SELECT a1, a2 FROM Tab1 EXCEPT SELECT b1, b2 FROM Tab2
+  *   ==>  SELECT DISTINCT a1, a2 FROM Tab1 LEFT ANTI JOIN Tab2 ON a1<=>b1 AND a2<=>b2
+  * }}}
+  *
+  * Note:
+  * 1. This rule is only applicable to EXCEPT DISTINCT. Do not use it for INTERSECT ALL.
+  * 2. This rule has to be done after de-duplicating the attributes; otherwise, the generated
+  *    join conditions will be incorrect.
+  */
+object ReplaceIntersectWithAntiJoin extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case Except(left, right) =>
+      assert(left.output.size == right.output.size)
+      val joinCond = left.output.zip(right.output).map { case (l, r) => EqualNullSafe(l, r) }
+      Distinct(Join(left, right, LeftAnti, joinCond.reduceLeftOption(And)))
+  }
+}
+
+/**
  * Removes literals from group expressions in [[Aggregate]], as they have no effect to the result
  * but only makes the grouping key bigger.
  */
