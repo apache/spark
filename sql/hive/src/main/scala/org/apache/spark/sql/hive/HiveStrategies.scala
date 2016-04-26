@@ -33,7 +33,7 @@ private[hive] trait HiveStrategies {
   // Possibly being too clever with types here... or not clever enough.
   self: SparkPlanner =>
 
-  val context: SQLContext
+  val sparkSession: SparkSession
   val hiveconf: HiveConf
 
   object Scripts extends Strategy {
@@ -78,7 +78,7 @@ private[hive] trait HiveStrategies {
           projectList,
           otherPredicates,
           identity[Seq[Expression]],
-          HiveTableScanExec(_, relation, pruningPredicates)(context, hiveconf)) :: Nil
+          HiveTableScanExec(_, relation, pruningPredicates)(sparkSession, hiveconf)) :: Nil
       case _ =>
         Nil
     }

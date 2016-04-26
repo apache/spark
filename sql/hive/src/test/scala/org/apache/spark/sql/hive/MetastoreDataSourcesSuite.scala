@@ -374,7 +374,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       val expectedPath =
         sessionState.catalog.hiveDefaultTableFilePath(TableIdentifier("ctasJsonTable"))
       val filesystemPath = new Path(expectedPath)
-      val fs = filesystemPath.getFileSystem(sparkContext.hadoopConfiguration)
+      val fs = filesystemPath.getFileSystem(sqlContext.sessionState.hadoopConf)
       if (fs.exists(filesystemPath)) fs.delete(filesystemPath, true)
 
       // It is a managed table when we do not specify the location.
@@ -701,7 +701,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
 
           // Manually create a metastore data source table.
           CreateDataSourceTableUtils.createDataSourceTable(
-            sqlContext = sqlContext,
+            sparkSession = sqlContext.sparkSession,
             tableIdent = TableIdentifier("wide_schema"),
             userSpecifiedSchema = Some(schema),
             partitionColumns = Array.empty[String],
@@ -910,7 +910,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       val schema = StructType((1 to 5).map(i => StructField(s"c_$i", StringType)))
 
       CreateDataSourceTableUtils.createDataSourceTable(
-        sqlContext = sqlContext,
+        sparkSession = sqlContext.sparkSession,
         tableIdent = TableIdentifier("not_skip_hive_metadata"),
         userSpecifiedSchema = Some(schema),
         partitionColumns = Array.empty[String],
@@ -925,7 +925,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         .forall(column => DataTypeParser.parse(column.dataType) == StringType))
 
       CreateDataSourceTableUtils.createDataSourceTable(
-        sqlContext = sqlContext,
+        sparkSession = sqlContext.sparkSession,
         tableIdent = TableIdentifier("skip_hive_metadata"),
         userSpecifiedSchema = Some(schema),
         partitionColumns = Array.empty[String],

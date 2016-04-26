@@ -230,7 +230,7 @@ class CountVectorizerModel(override val uid: String, val vocabulary: Array[Strin
     transformSchema(dataset.schema, logging = true)
     if (broadcastDict.isEmpty) {
       val dict = vocabulary.zipWithIndex.toMap
-      broadcastDict = Some(dataset.sqlContext.sparkContext.broadcast(dict))
+      broadcastDict = Some(dataset.sparkSession.sparkContext.broadcast(dict))
     }
     val dictBr = broadcastDict.get
     val minTf = $(minTF)

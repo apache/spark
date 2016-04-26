@@ -40,7 +40,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.ShowTablesCommand
 import org.apache.spark.sql.execution.datasources.{CreateTableUsing, LogicalRelation}
 import org.apache.spark.sql.execution.ui.SQLListener
-import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf}
+import org.apache.spark.sql.internal.{RuntimeConfigImpl, SessionState, SharedState}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.{DataType, LongType, StructType}
 import org.apache.spark.sql.util.ExecutionListenerManager
@@ -52,7 +52,8 @@ import org.apache.spark.util.Utils
  */
 class SparkSession private(
     @transient val sparkContext: SparkContext,
-    @transient private val existingSharedState: Option[SharedState]) { self =>
+    @transient private val existingSharedState: Option[SharedState])
+  extends Serializable { self =>
 
   def this(sc: SparkContext) {
     this(sc, None)
@@ -76,14 +77,14 @@ class SparkSession private(
   }
 
   /**
-   * State isolated across sessions, including SQL configurations, temporary tables,
-   * registered functions, and everything else that accepts a [[SQLConf]].
+   * State isolated across sessions, including SQL configurations, temporary tables, registered
+   * functions, and everything else that accepts a [[org.apache.spark.sql.internal.SQLConf]].
    */
   @transient
   protected[sql] lazy val sessionState: SessionState = {
-    SparkSession.reflect[SessionState, SQLContext](
+    SparkSession.reflect[SessionState, SparkSession](
       SparkSession.sessionStateClassName(sparkContext.conf),
-      new SQLContext(self, isRootContext = false))
+      self)
   }
 
   /**
@@ -103,7 +104,6 @@ class SparkSession private(
     _wrapped = sqlContext
   }
 
-  protected[sql] def conf: SQLConf = sessionState.conf
   protected[sql] def cacheManager: CacheManager = sharedState.cacheManager
   protected[sql] def listener: SQLListener = sharedState.listener
   protected[sql] def externalCatalog: ExternalCatalog = sharedState.externalCatalog
@@ -191,6 +191,22 @@ class SparkSession private(
    |  Methods for accessing or mutating configurations  |
    * -------------------------------------------------- */
 
+  @transient private lazy val _conf: RuntimeConfig = {
+    new RuntimeConfigImpl(sessionState.conf, sessionState.hadoopConf)
+  }
+
+  /**
+   * Runtime configuration interface for Spark.
+   *
+   * This is the interface through which the user can get and set all Spark and Hadoop
+   * configurations that are relevant to Spark SQL. When getting the value of a config,
+   * this defaults to the value set in the underlying [[SparkContext]], if any.
+   *
+   * @group config
+   * @since 2.0.0
+   */
+  def conf: RuntimeConfig = _conf
+
   /**
    * Set Spark SQL configuration properties.
    *
@@ -213,7 +229,7 @@ class SparkSession private(
    * @group config
    * @since 2.0.0
    */
-  def getConf(key: String): String = conf.getConfString(key)
+  def getConf(key: String): String = sessionState.conf.getConfString(key)
 
   /**
    * Return the value of Spark SQL configuration property for the given key. If the key is not set
@@ -222,7 +238,9 @@ class SparkSession private(
    * @group config
    * @since 2.0.0
    */
-  def getConf(key: String, defaultValue: String): String = conf.getConfString(key, defaultValue)
+  def getConf(key: String, defaultValue: String): String = {
+    sessionState.conf.getConfString(key, defaultValue)
+  }
 
   /**
    * Return all the configuration properties that have been set (i.e. not the default).
@@ -231,7 +249,7 @@ class SparkSession private(
    * @group config
    * @since 2.0.0
    */
-  def getAllConfs: immutable.Map[String, String] = conf.getAllConfs
+  def getAllConfs: immutable.Map[String, String] = sessionState.conf.getAllConfs
 
   /**
    * Set the given Spark SQL configuration property.
@@ -244,7 +262,7 @@ class SparkSession private(
    * Return the value of Spark SQL configuration property for the given key. If the key is not set
    * yet, return `defaultValue` in [[ConfigEntry]].
    */
-  protected[sql] def getConf[T](entry: ConfigEntry[T]): T = conf.getConf(entry)
+  protected[sql] def getConf[T](entry: ConfigEntry[T]): T = sessionState.conf.getConf(entry)
 
   /**
    * Return the value of Spark SQL configuration property for the given key. If the key is not set
@@ -252,7 +270,7 @@ class SparkSession private(
    * desired one.
    */
   protected[sql] def getConf[T](entry: ConfigEntry[T], defaultValue: T): T = {
-    conf.getConf(entry, defaultValue)
+    sessionState.conf.getConf(entry, defaultValue)
   }
 
 
@@ -341,7 +359,7 @@ class SparkSession private(
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
     val attributeSeq = schema.toAttributes
     val rowRDD = RDDConversions.productToRowRdd(rdd, schema.map(_.dataType))
-    Dataset.ofRows(wrapped, LogicalRDD(attributeSeq, rowRDD)(wrapped))
+    Dataset.ofRows(self, LogicalRDD(attributeSeq, rowRDD)(self))
   }
 
   /**
@@ -356,7 +374,7 @@ class SparkSession private(
     SQLContext.setActive(wrapped)
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
     val attributeSeq = schema.toAttributes
-    Dataset.ofRows(wrapped, LocalRelation.fromProduct(attributeSeq, data))
+    Dataset.ofRows(self, LocalRelation.fromProduct(attributeSeq, data))
   }
 
   /**
@@ -421,7 +439,7 @@ class SparkSession private(
    */
   @DeveloperApi
   def createDataFrame(rows: java.util.List[Row], schema: StructType): DataFrame = {
-    Dataset.ofRows(wrapped, LocalRelation.fromExternalRows(schema.toAttributes, rows.asScala))
+    Dataset.ofRows(self, LocalRelation.fromExternalRows(schema.toAttributes, rows.asScala))
   }
 
   /**
@@ -441,7 +459,7 @@ class SparkSession private(
       val localBeanInfo = Introspector.getBeanInfo(Utils.classForName(className))
       SQLContext.beansToRows(iter, localBeanInfo, attributeSeq)
     }
-    Dataset.ofRows(wrapped, LogicalRDD(attributeSeq, rowRdd)(wrapped))
+    Dataset.ofRows(self, LogicalRDD(attributeSeq, rowRdd)(self))
   }
 
   /**
@@ -469,7 +487,7 @@ class SparkSession private(
     val attrSeq = getSchema(beanClass)
     val beanInfo = Introspector.getBeanInfo(beanClass)
     val rows = SQLContext.beansToRows(data.asScala.iterator, beanInfo, attrSeq)
-    Dataset.ofRows(wrapped, LocalRelation(attrSeq, rows.toSeq))
+    Dataset.ofRows(self, LocalRelation(attrSeq, rows.toSeq))
   }
 
   /**
@@ -479,7 +497,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   def baseRelationToDataFrame(baseRelation: BaseRelation): DataFrame = {
-    Dataset.ofRows(wrapped, LogicalRelation(baseRelation))
+    Dataset.ofRows(self, LogicalRelation(baseRelation))
   }
 
   def createDataset[T : Encoder](data: Seq[T]): Dataset[T] = {
@@ -487,15 +505,15 @@ class SparkSession private(
     val attributes = enc.schema.toAttributes
     val encoded = data.map(d => enc.toRow(d).copy())
     val plan = new LocalRelation(attributes, encoded)
-    Dataset[T](wrapped, plan)
+    Dataset[T](self, plan)
   }
 
   def createDataset[T : Encoder](data: RDD[T]): Dataset[T] = {
     val enc = encoderFor[T]
     val attributes = enc.schema.toAttributes
     val encoded = data.map(d => enc.toRow(d))
-    val plan = LogicalRDD(attributes, encoded)(wrapped)
-    Dataset[T](wrapped, plan)
+    val plan = LogicalRDD(attributes, encoded)(self)
+    Dataset[T](self, plan)
   }
 
   def createDataset[T : Encoder](data: java.util.List[T]): Dataset[T] = {
@@ -550,7 +568,7 @@ class SparkSession private(
    */
   @Experimental
   def range(start: Long, end: Long, step: Long, numPartitions: Int): Dataset[java.lang.Long] = {
-    new Dataset(wrapped, Range(start, end, step, numPartitions), Encoders.LONG)
+    new Dataset(self, Range(start, end, step, numPartitions), Encoders.LONG)
   }
 
   /**
@@ -562,8 +580,8 @@ class SparkSession private(
       schema: StructType): DataFrame = {
     // TODO: use MutableProjection when rowRDD is another DataFrame and the applied
     // schema differs from the existing schema on any field data type.
-    val logicalPlan = LogicalRDD(schema.toAttributes, catalystRows)(wrapped)
-    Dataset.ofRows(wrapped, logicalPlan)
+    val logicalPlan = LogicalRDD(schema.toAttributes, catalystRows)(self)
+    Dataset.ofRows(self, logicalPlan)
   }
 
   /**
@@ -582,8 +600,8 @@ class SparkSession private(
     } else {
       rowRDD.map{r: Row => InternalRow.fromSeq(r.toSeq)}
     }
-    val logicalPlan = LogicalRDD(schema.toAttributes, catalystRows)(wrapped)
-    Dataset.ofRows(wrapped, logicalPlan)
+    val logicalPlan = LogicalRDD(schema.toAttributes, catalystRows)(self)
+    Dataset.ofRows(self, logicalPlan)
   }
 
 
@@ -601,7 +619,7 @@ class SparkSession private(
    */
   @Experimental
   def createExternalTable(tableName: String, path: String): DataFrame = {
-    val dataSourceName = conf.defaultDataSourceName
+    val dataSourceName = sessionState.conf.defaultDataSourceName
     createExternalTable(tableName, path, dataSourceName)
   }
 
@@ -732,7 +750,7 @@ class SparkSession private(
   }
 
   private def table(tableIdent: TableIdentifier): DataFrame = {
-    Dataset.ofRows(wrapped, sessionState.catalog.lookupRelation(tableIdent))
+    Dataset.ofRows(self, sessionState.catalog.lookupRelation(tableIdent))
   }
 
   /**
@@ -744,7 +762,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   def tables(): DataFrame = {
-    Dataset.ofRows(wrapped, ShowTablesCommand(None, None))
+    Dataset.ofRows(self, ShowTablesCommand(None, None))
   }
 
   /**
@@ -756,7 +774,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   def tables(databaseName: String): DataFrame = {
-    Dataset.ofRows(wrapped, ShowTablesCommand(Some(databaseName), None))
+    Dataset.ofRows(self, ShowTablesCommand(Some(databaseName), None))
   }
 
   /**
@@ -803,7 +821,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   def sql(sqlText: String): DataFrame = {
-    Dataset.ofRows(wrapped, parseSql(sqlText))
+    Dataset.ofRows(self, parseSql(sqlText))
   }
 
   /**
@@ -818,7 +836,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   @Experimental
-  def read: DataFrameReader = new DataFrameReader(wrapped)
+  def read: DataFrameReader = new DataFrameReader(self)
 
 
   // scalastyle:off
@@ -889,7 +907,7 @@ class SparkSession private(
       rdd: RDD[Array[Any]],
       schema: StructType): DataFrame = {
     val rowRdd = rdd.map(r => python.EvaluatePython.fromJava(r, schema).asInstanceOf[InternalRow])
-    Dataset.ofRows(wrapped, LogicalRDD(schema.toAttributes, rowRdd)(wrapped))
+    Dataset.ofRows(self, LogicalRDD(schema.toAttributes, rowRdd)(self))
   }
 
   /**

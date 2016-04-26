@@ -39,6 +39,8 @@ private[r] object RWrappers extends MLReader[Object] {
     className match {
       case "org.apache.spark.ml.r.NaiveBayesWrapper" => NaiveBayesWrapper.load(path)
       case "org.apache.spark.ml.r.KMeansWrapper" => KMeansWrapper.load(path)
+      case "org.apache.spark.ml.r.AFTSurvivalRegressionWrapper" =>
+        AFTSurvivalRegressionWrapper.load(path)
       case _ =>
         throw new SparkException(s"SparkR ml.load does not support load $className")
     }

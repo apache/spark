@@ -228,10 +228,10 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton {
       assert(bhj.isEmpty, "BroadcastHashJoin still planned even though it is switched off")
 
       val shj = df.queryExecution.sparkPlan.collect {
-        case j: ShuffledHashJoinExec => j
+        case j: SortMergeJoinExec => j
       }
       assert(shj.size === 1,
-        "LeftSemiJoinHash should be planned when BroadcastHashJoin is turned off")
+        "SortMergeJoinExec should be planned when BroadcastHashJoin is turned off")
 
       sql(s"SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key}=$tmp")
     }

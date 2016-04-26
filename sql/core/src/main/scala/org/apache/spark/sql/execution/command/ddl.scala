@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.command
 import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
+import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTablePartition, CatalogTableType, SessionCatalog}
@@ -38,8 +38,8 @@ import org.apache.spark.sql.types._
  */
 abstract class NativeDDLCommand(val sql: String) extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.runNativeSql(sql)
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    sparkSession.runNativeSql(sql)
   }
 
   override val output: Seq[Attribute] = {
@@ -66,8 +66,8 @@ case class CreateDatabase(
     props: Map[String, String])
   extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    val catalog = sqlContext.sessionState.catalog
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
     catalog.createDatabase(
       CatalogDatabase(
         databaseName,
@@ -104,8 +104,8 @@ case class DropDatabase(
     cascade: Boolean)
   extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.sessionState.catalog.dropDatabase(databaseName, ifExists, cascade)
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    sparkSession.sessionState.catalog.dropDatabase(databaseName, ifExists, cascade)
     Seq.empty[Row]
   }
 
@@ -126,8 +126,8 @@ case class AlterDatabaseProperties(
     props: Map[String, String])
   extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    val catalog = sqlContext.sessionState.catalog
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
     val db: CatalogDatabase = catalog.getDatabaseMetadata(databaseName)
     catalog.alterDatabase(db.copy(properties = db.properties ++ props))
 
@@ -152,9 +152,9 @@ case class DescribeDatabase(
     extended: Boolean)
   extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
+  override def run(sparkSession: SparkSession): Seq[Row] = {
     val dbMetadata: CatalogDatabase =
-      sqlContext.sessionState.catalog.getDatabaseMetadata(databaseName)
+      sparkSession.sessionState.catalog.getDatabaseMetadata(databaseName)
     val result =
       Row("Database Name", dbMetadata.name) ::
         Row("Description", dbMetadata.description) ::
@@ -193,8 +193,8 @@ case class DropTable(
     ifExists: Boolean,
     isView: Boolean) extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    val catalog = sqlContext.sessionState.catalog
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
     if (!catalog.tableExists(tableName)) {
       if (!ifExists) {
         val objectName = if (isView) "View" else "Table"
@@ -213,7 +213,7 @@ case class DropTable(
         case _ =>
       })
       try {
-        sqlContext.cacheManager.tryUncacheQuery(sqlContext.table(tableName.quotedString))
+        sparkSession.cacheManager.tryUncacheQuery(sparkSession.table(tableName.quotedString))
       } catch {
         case NonFatal(e) => log.warn(s"${e.getMessage}", e)
       }
@@ -239,8 +239,8 @@ case class AlterTableSetProperties(
     isView: Boolean)
   extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    val catalog = sqlContext.sessionState.catalog
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
     DDLUtils.verifyAlterTableType(catalog, tableName, isView)
     val table = catalog.getTableMetadata(tableName)
     val newProperties = table.properties ++ properties
@@ -271,8 +271,8 @@ case class AlterTableUnsetProperties(
     isView: Boolean)
   extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    val catalog = sqlContext.sessionState.catalog
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
     DDLUtils.verifyAlterTableType(catalog, tableName, isView)
     val table = catalog.getTableMetadata(tableName)
     if (DDLUtils.isDatasourceTable(table)) {
@@ -315,8 +315,8 @@ case class AlterTableSerDeProperties(
   require(serdeClassName.isDefined || serdeProperties.isDefined,
     "alter table attempted to set neither serde class name nor serde properties")
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    val catalog = sqlContext.sessionState.catalog
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
     // Do not support setting serde for datasource tables
     if (serdeClassName.isDefined && DDLUtils.isDatasourceTable(table)) {
@@ -350,8 +350,8 @@ case class AlterTableAddPartition(
     ifNotExists: Boolean)
   extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    val catalog = sqlContext.sessionState.catalog
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
     if (DDLUtils.isDatasourceTable(table)) {
       throw new AnalysisException(
@@ -381,8 +381,8 @@ case class AlterTableRenamePartition(
     newPartition: TablePartitionSpec)
   extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.sessionState.catalog.renamePartitions(
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    sparkSession.sessionState.catalog.renamePartitions(
       tableName, Seq(oldPartition), Seq(newPartition))
     Seq.empty[Row]
   }
@@ -409,8 +409,8 @@ case class AlterTableDropPartition(
     ifExists: Boolean)
   extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    val catalog = sqlContext.sessionState.catalog
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
     if (DDLUtils.isDatasourceTable(table)) {
       throw new AnalysisException(
@@ -446,8 +446,8 @@ case class AlterTableSetLocation(
     location: String)
   extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    val catalog = sqlContext.sessionState.catalog
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
     partitionSpec match {
       case Some(spec) =>

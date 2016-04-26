@@ -64,7 +64,7 @@ abstract class SQLBuilderTest extends QueryTest with TestHiveSingleton {
            """.stripMargin)
     }
 
-    checkAnswer(sqlContext.sql(generatedSQL), Dataset.ofRows(sqlContext, plan))
+    checkAnswer(sqlContext.sql(generatedSQL), Dataset.ofRows(sqlContext.sparkSession, plan))
   }
 
   protected def checkSQL(df: DataFrame, expectedSQL: String): Unit = {

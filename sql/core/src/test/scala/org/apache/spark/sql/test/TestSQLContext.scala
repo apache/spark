@@ -18,14 +18,14 @@
 package org.apache.spark.sql.test
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.sql.{SparkSession, SQLContext}
-import org.apache.spark.sql.internal.{SessionState, SQLConf}
+import org.apache.spark.sql.{RuntimeConfig, SparkSession, SQLContext}
+import org.apache.spark.sql.internal.{RuntimeConfigImpl, SessionState, SQLConf}
 
 /**
  * A special [[SQLContext]] prepared for testing.
  */
 private[sql] class TestSQLContext(
-    @transient private val sparkSession: SparkSession,
+    @transient override val sparkSession: SparkSession,
     isRootContext: Boolean)
   extends SQLContext(sparkSession, isRootContext) { self =>
 
@@ -57,7 +57,7 @@ private[sql] class TestSQLContext(
 private[sql] class TestSparkSession(sc: SparkContext) extends SparkSession(sc) { self =>
 
   @transient
-  protected[sql] override lazy val sessionState: SessionState = new SessionState(wrapped) {
+  protected[sql] override lazy val sessionState: SessionState = new SessionState(self) {
     override lazy val conf: SQLConf = {
       new SQLConf {
         clear()

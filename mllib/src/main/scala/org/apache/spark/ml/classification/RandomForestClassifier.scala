@@ -181,7 +181,7 @@ final class RandomForestClassificationModel private[ml] (
   override def treeWeights: Array[Double] = _treeWeights
 
   override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
-    val bcastModel = dataset.sqlContext.sparkContext.broadcast(this)
+    val bcastModel = dataset.sparkSession.sparkContext.broadcast(this)
     val predictUDF = udf { (features: Any) =>
       bcastModel.value.predict(features.asInstanceOf[Vector])
     }
