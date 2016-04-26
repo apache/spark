@@ -66,8 +66,8 @@ public class JavaStreamingTestExample {
     }
 
     String dataDir = args[0];
-    Duration batchDuration = Seconds.apply(Long.valueOf(args[1]));
-    int numBatchesTimeout = Integer.valueOf(args[2]);
+    Duration batchDuration = Seconds.apply(Long.parseLong(args[1]));
+    int numBatchesTimeout = Integer.parseInt(args[2]);
 
     SparkConf conf = new SparkConf().setMaster("local").setAppName("StreamingTestExample");
     JavaStreamingContext ssc = new JavaStreamingContext(conf, batchDuration);
@@ -80,8 +80,8 @@ public class JavaStreamingTestExample {
         @Override
         public BinarySample call(String line) {
           String[] ts = line.split(",");
-          boolean label = Boolean.valueOf(ts[0]);
-          double value = Double.valueOf(ts[1]);
+          boolean label = Boolean.parseBoolean(ts[0]);
+          double value = Double.parseDouble(ts[1]);
           return new BinarySample(label, value);
         }
       });

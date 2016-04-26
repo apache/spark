@@ -56,7 +56,7 @@ case class CreateDataSourceTableCommand(
     managedIfNoPath: Boolean)
   extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
+  override def run(sparkSession: SparkSession): Seq[Row] = {
     // Since we are saving metadata to metastore, we need to check if metastore supports
     // the table name and database name we have for this query. MetaStoreUtils.validateName
     // is the method used by Hive to check if a table name or a database name is valid for
@@ -73,7 +73,7 @@ case class CreateDataSourceTableCommand(
     }
 
     val tableName = tableIdent.unquotedString
-    val sessionState = sqlContext.sessionState
+    val sessionState = sparkSession.sessionState
 
     if (sessionState.catalog.tableExists(tableIdent)) {
       if (ignoreIfExists) {
@@ -94,14 +94,14 @@ case class CreateDataSourceTableCommand(
 
     // Create the relation to validate the arguments before writing the metadata to the metastore.
     DataSource(
-      sqlContext = sqlContext,
+      sparkSession = sparkSession,
       userSpecifiedSchema = userSpecifiedSchema,
       className = provider,
       bucketSpec = None,
       options = optionsWithPath).resolveRelation()
 
     CreateDataSourceTableUtils.createDataSourceTable(
-      sqlContext = sqlContext,
+      sparkSession = sparkSession,
       tableIdent = tableIdent,
       userSpecifiedSchema = userSpecifiedSchema,
       partitionColumns = Array.empty[String],
@@ -137,7 +137,7 @@ case class CreateDataSourceTableAsSelectCommand(
     query: LogicalPlan)
   extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
+  override def run(sparkSession: SparkSession): Seq[Row] = {
     // Since we are saving metadata to metastore, we need to check if metastore supports
     // the table name and database name we have for this query. MetaStoreUtils.validateName
     // is the method used by Hive to check if a table name or a database name is valid for
@@ -154,7 +154,7 @@ case class CreateDataSourceTableAsSelectCommand(
     }
 
     val tableName = tableIdent.unquotedString
-    val sessionState = sqlContext.sessionState
+    val sessionState = sparkSession.sessionState
     var createMetastoreTable = false
     var isExternal = true
     val optionsWithPath =
@@ -166,7 +166,7 @@ case class CreateDataSourceTableAsSelectCommand(
       }
 
     var existingSchema = None: Option[StructType]
-    if (sqlContext.sessionState.catalog.tableExists(tableIdent)) {
+    if (sparkSession.sessionState.catalog.tableExists(tableIdent)) {
       // Check if we need to throw an exception or just return.
       mode match {
         case SaveMode.ErrorIfExists =>
@@ -181,7 +181,7 @@ case class CreateDataSourceTableAsSelectCommand(
         case SaveMode.Append =>
           // Check if the specified data source match the data source of the existing table.
           val dataSource = DataSource(
-            sqlContext = sqlContext,
+            sparkSession = sparkSession,
             userSpecifiedSchema = Some(query.schema.asNullable),
             partitionColumns = partitionColumns,
             bucketSpec = bucketSpec,
@@ -198,7 +198,7 @@ case class CreateDataSourceTableAsSelectCommand(
               throw new AnalysisException(s"Saving data in ${o.toString} is not supported.")
           }
         case SaveMode.Overwrite =>
-          sqlContext.sql(s"DROP TABLE IF EXISTS $tableName")
+          sparkSession.sql(s"DROP TABLE IF EXISTS $tableName")
           // Need to create the table again.
           createMetastoreTable = true
       }
@@ -207,7 +207,7 @@ case class CreateDataSourceTableAsSelectCommand(
       createMetastoreTable = true
     }
 
-    val data = Dataset.ofRows(sqlContext, query)
+    val data = Dataset.ofRows(sparkSession, query)
     val df = existingSchema match {
       // If we are inserting into an existing table, just use the existing schema.
       case Some(s) => data.selectExpr(s.fieldNames: _*)
@@ -216,7 +216,7 @@ case class CreateDataSourceTableAsSelectCommand(
 
     // Create the relation based on the data of df.
     val dataSource = DataSource(
-      sqlContext,
+      sparkSession,
       className = provider,
       partitionColumns = partitionColumns,
       bucketSpec = bucketSpec,
@@ -229,7 +229,7 @@ case class CreateDataSourceTableAsSelectCommand(
       // the schema of df). It is important since the nullability may be changed by the relation
       // provider (for example, see org.apache.spark.sql.parquet.DefaultSource).
       CreateDataSourceTableUtils.createDataSourceTable(
-        sqlContext = sqlContext,
+        sparkSession = sparkSession,
         tableIdent = tableIdent,
         userSpecifiedSchema = Some(result.schema),
         partitionColumns = partitionColumns,
@@ -243,7 +243,7 @@ case class CreateDataSourceTableAsSelectCommand(
     // we have to add corresponding metadata to Hive metastore.
     if (mode == SaveMode.Append) {
       CreateDataSourceTableUtils.updateDataSourceTablePartitions(
-        sqlContext,
+        sparkSession,
         tableIdent,
         Some(result.schema),
         partitionColumns,
@@ -299,17 +299,17 @@ object CreateDataSourceTableUtils extends Logging {
   }
 
   def updateDataSourceTablePartitions(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       tableIdent: TableIdentifier,
       userSpecifiedSchema: Option[StructType],
       partitionColumns: Array[String],
       bucketSpec: Option[BucketSpec],
       provider: String,
       options: Map[String, String]): Unit = {
-    val maybeSerDe = HiveSerDe.sourceToSerDe(provider, sqlContext.sessionState.conf)
+    val maybeSerDe = HiveSerDe.sourceToSerDe(provider, sparkSession.sessionState.conf)
     val dataSource =
       DataSource(
-        sqlContext,
+        sparkSession = sparkSession,
         userSpecifiedSchema = userSpecifiedSchema,
         partitionColumns = partitionColumns,
         bucketSpec = bucketSpec,
@@ -317,7 +317,7 @@ object CreateDataSourceTableUtils extends Logging {
         options = options)
 
     val existingPartitionSpecs =
-      sqlContext.sessionState.catalog.listPartitions(tableIdent).map(_.spec)
+      sparkSession.sessionState.catalog.listPartitions(tableIdent).map(_.spec)
 
     val qualifiedTableName = tableIdent.quotedString
     val hiveParts = (maybeSerDe, dataSource.resolveRelation()) match {
@@ -340,13 +340,13 @@ object CreateDataSourceTableUtils extends Logging {
       logInfo(s"Persisting partitions of data source relation $qualifiedTableName " +
         "into Hive metastore in Hive compatible format.")
       hiveParts.map { part =>
-        sqlContext.sessionState.catalog.createPartitions(tableIdent, part, ignoreIfExists = false)
+        sparkSession.sessionState.catalog.createPartitions(tableIdent, part, ignoreIfExists = false)
       }
     }
   }
 
   def createDataSourceTable(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       tableIdent: TableIdentifier,
       userSpecifiedSchema: Option[StructType],
       partitionColumns: Array[String],
@@ -361,7 +361,7 @@ object CreateDataSourceTableUtils extends Logging {
     // stored into a single metastore SerDe property.  In this case, we split the JSON string and
     // store each part as a separate SerDe property.
     userSpecifiedSchema.foreach { schema =>
-      val threshold = sqlContext.sessionState.conf.schemaStringLengthThreshold
+      val threshold = sparkSession.sessionState.conf.schemaStringLengthThreshold
       val schemaJsonString = schema.json
       // Split the JSON string.
       val parts = schemaJsonString.grouped(threshold).toSeq
@@ -415,10 +415,10 @@ object CreateDataSourceTableUtils extends Logging {
       CatalogTableType.MANAGED_TABLE
     }
 
-    val maybeSerDe = HiveSerDe.sourceToSerDe(provider, sqlContext.sessionState.conf)
+    val maybeSerDe = HiveSerDe.sourceToSerDe(provider, sparkSession.sessionState.conf)
     val dataSource =
       DataSource(
-        sqlContext,
+        sparkSession,
         userSpecifiedSchema = userSpecifiedSchema,
         partitionColumns = partitionColumns,
         bucketSpec = bucketSpec,
@@ -508,9 +508,10 @@ object CreateDataSourceTableUtils extends Logging {
         // specific way.
         try {
           logInfo(message)
-          sqlContext.sessionState.catalog.createTable(table, ignoreIfExists = false)
+          sparkSession.sessionState.catalog.createTable(table, ignoreIfExists = false)
           hiveParts.map { p =>
-            sqlContext.sessionState.catalog.createPartitions(tableIdent, p, ignoreIfExists = false)
+            sparkSession.sessionState.catalog.createPartitions(tableIdent, p,
+              ignoreIfExists = false)
           }
         } catch {
           case NonFatal(e) =>
@@ -519,13 +520,13 @@ object CreateDataSourceTableUtils extends Logging {
                 s"it into Hive metastore in Spark SQL specific format."
             logWarning(warningMessage, e)
             val table = newSparkSQLSpecificMetastoreTable()
-            sqlContext.sessionState.catalog.createTable(table, ignoreIfExists = false)
+            sparkSession.sessionState.catalog.createTable(table, ignoreIfExists = false)
         }
 
       case (None, message) =>
         logWarning(message)
         val table = newSparkSQLSpecificMetastoreTable()
-        sqlContext.sessionState.catalog.createTable(table, ignoreIfExists = false)
+        sparkSession.sessionState.catalog.createTable(table, ignoreIfExists = false)
     }
   }
 }

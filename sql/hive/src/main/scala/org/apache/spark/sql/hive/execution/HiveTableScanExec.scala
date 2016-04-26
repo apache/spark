@@ -27,7 +27,7 @@ import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.Object
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution._
@@ -48,8 +48,8 @@ case class HiveTableScanExec(
     requestedAttributes: Seq[Attribute],
     relation: MetastoreRelation,
     partitionPruningPred: Seq[Expression])(
-    @transient val context: SQLContext,
-    @transient val hiveconf: HiveConf)
+    @transient private val sparkSession: SparkSession,
+    @transient private val hiveconf: HiveConf)
   extends LeafExecNode {
 
   require(partitionPruningPred.isEmpty || relation.hiveQlTable.isPartitioned,
@@ -84,7 +84,7 @@ case class HiveTableScanExec(
 
   @transient
   private[this] val hadoopReader =
-    new HadoopTableReader(attributes, relation, context, hiveExtraConf)
+    new HadoopTableReader(attributes, relation, sparkSession, hiveExtraConf)
 
   private[this] def castFromString(value: String, dataType: DataType) = {
     Cast(Literal(value), dataType).eval(null)

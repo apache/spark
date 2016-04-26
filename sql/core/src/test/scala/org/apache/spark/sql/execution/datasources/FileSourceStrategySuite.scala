@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources
 import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{BlockLocation, FileStatus, RawLocalFileSystem}
 import org.apache.hadoop.mapreduce.Job
 
@@ -280,7 +281,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
     ))
 
     val fakeRDD = new FileScanRDD(
-      sqlContext,
+      sqlContext.sparkSession,
       (file: PartitionedFile) => Iterator.empty,
       Seq(partition)
     )
@@ -414,7 +415,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
           l.copy(relation =
             r.copy(bucketSpec = Some(BucketSpec(numBuckets = buckets, "c1" :: Nil, Nil))))
       }
-      Dataset.ofRows(sqlContext, bucketed)
+      Dataset.ofRows(sqlContext.sparkSession, bucketed)
     } else {
       df
     }
@@ -449,7 +450,7 @@ class TestFileFormat extends FileFormat {
    * Spark will require that user specify the schema manually.
    */
   override def inferSchema(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] =
     Some(
@@ -463,7 +464,7 @@ class TestFileFormat extends FileFormat {
    * by setting the output committer class in the conf of spark.sql.sources.outputCommitterClass.
    */
   override def prepareWrite(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
@@ -471,12 +472,13 @@ class TestFileFormat extends FileFormat {
   }
 
   override def buildReader(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       dataSchema: StructType,
       partitionSchema: StructType,
       requiredSchema: StructType,
       filters: Seq[Filter],
-      options: Map[String, String]): PartitionedFile => Iterator[InternalRow] = {
+      options: Map[String, String],
+      hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
 
     // Record the arguments so they can be checked in the test case.
     LastArguments.partitionSchema = partitionSchema
