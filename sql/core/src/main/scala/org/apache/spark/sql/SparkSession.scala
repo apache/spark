@@ -52,7 +52,8 @@ import org.apache.spark.util.Utils
  */
 class SparkSession private(
     @transient val sparkContext: SparkContext,
-    @transient private val existingSharedState: Option[SharedState]) { self =>
+    @transient private val existingSharedState: Option[SharedState])
+  extends Serializable { self =>
 
   def this(sc: SparkContext) {
     this(sc, None)
@@ -81,9 +82,9 @@ class SparkSession private(
    */
   @transient
   protected[sql] lazy val sessionState: SessionState = {
-    SparkSession.reflect[SessionState, SQLContext](
+    SparkSession.reflect[SessionState, SparkSession](
       SparkSession.sessionStateClassName(sparkContext.conf),
-      new SQLContext(self, isRootContext = false))
+      self)
   }
 
   /**
@@ -358,7 +359,7 @@ class SparkSession private(
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
     val attributeSeq = schema.toAttributes
     val rowRDD = RDDConversions.productToRowRdd(rdd, schema.map(_.dataType))
-    Dataset.ofRows(wrapped, LogicalRDD(attributeSeq, rowRDD)(wrapped))
+    Dataset.ofRows(self, LogicalRDD(attributeSeq, rowRDD)(self))
   }
 
   /**
@@ -373,7 +374,7 @@ class SparkSession private(
     SQLContext.setActive(wrapped)
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
     val attributeSeq = schema.toAttributes
-    Dataset.ofRows(wrapped, LocalRelation.fromProduct(attributeSeq, data))
+    Dataset.ofRows(self, LocalRelation.fromProduct(attributeSeq, data))
   }
 
   /**
@@ -438,7 +439,7 @@ class SparkSession private(
    */
   @DeveloperApi
   def createDataFrame(rows: java.util.List[Row], schema: StructType): DataFrame = {
-    Dataset.ofRows(wrapped, LocalRelation.fromExternalRows(schema.toAttributes, rows.asScala))
+    Dataset.ofRows(self, LocalRelation.fromExternalRows(schema.toAttributes, rows.asScala))
   }
 
   /**
@@ -458,7 +459,7 @@ class SparkSession private(
       val localBeanInfo = Introspector.getBeanInfo(Utils.classForName(className))
       SQLContext.beansToRows(iter, localBeanInfo, attributeSeq)
     }
-    Dataset.ofRows(wrapped, LogicalRDD(attributeSeq, rowRdd)(wrapped))
+    Dataset.ofRows(self, LogicalRDD(attributeSeq, rowRdd)(self))
   }
 
   /**
@@ -486,7 +487,7 @@ class SparkSession private(
     val attrSeq = getSchema(beanClass)
     val beanInfo = Introspector.getBeanInfo(beanClass)
     val rows = SQLContext.beansToRows(data.asScala.iterator, beanInfo, attrSeq)
-    Dataset.ofRows(wrapped, LocalRelation(attrSeq, rows.toSeq))
+    Dataset.ofRows(self, LocalRelation(attrSeq, rows.toSeq))
   }
 
   /**
@@ -496,7 +497,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   def baseRelationToDataFrame(baseRelation: BaseRelation): DataFrame = {
-    Dataset.ofRows(wrapped, LogicalRelation(baseRelation))
+    Dataset.ofRows(self, LogicalRelation(baseRelation))
   }
 
   def createDataset[T : Encoder](data: Seq[T]): Dataset[T] = {
@@ -504,15 +505,15 @@ class SparkSession private(
     val attributes = enc.schema.toAttributes
     val encoded = data.map(d => enc.toRow(d).copy())
     val plan = new LocalRelation(attributes, encoded)
-    Dataset[T](wrapped, plan)
+    Dataset[T](self, plan)
   }
 
   def createDataset[T : Encoder](data: RDD[T]): Dataset[T] = {
     val enc = encoderFor[T]
     val attributes = enc.schema.toAttributes
     val encoded = data.map(d => enc.toRow(d))
-    val plan = LogicalRDD(attributes, encoded)(wrapped)
-    Dataset[T](wrapped, plan)
+    val plan = LogicalRDD(attributes, encoded)(self)
+    Dataset[T](self, plan)
   }
 
   def createDataset[T : Encoder](data: java.util.List[T]): Dataset[T] = {
@@ -567,7 +568,7 @@ class SparkSession private(
    */
   @Experimental
   def range(start: Long, end: Long, step: Long, numPartitions: Int): Dataset[java.lang.Long] = {
-    new Dataset(wrapped, Range(start, end, step, numPartitions), Encoders.LONG)
+    new Dataset(self, Range(start, end, step, numPartitions), Encoders.LONG)
   }
 
   /**
@@ -579,8 +580,8 @@ class SparkSession private(
       schema: StructType): DataFrame = {
     // TODO: use MutableProjection when rowRDD is another DataFrame and the applied
     // schema differs from the existing schema on any field data type.
-    val logicalPlan = LogicalRDD(schema.toAttributes, catalystRows)(wrapped)
-    Dataset.ofRows(wrapped, logicalPlan)
+    val logicalPlan = LogicalRDD(schema.toAttributes, catalystRows)(self)
+    Dataset.ofRows(self, logicalPlan)
   }
 
   /**
@@ -599,8 +600,8 @@ class SparkSession private(
     } else {
       rowRDD.map{r: Row => InternalRow.fromSeq(r.toSeq)}
     }
-    val logicalPlan = LogicalRDD(schema.toAttributes, catalystRows)(wrapped)
-    Dataset.ofRows(wrapped, logicalPlan)
+    val logicalPlan = LogicalRDD(schema.toAttributes, catalystRows)(self)
+    Dataset.ofRows(self, logicalPlan)
   }
 
 
@@ -749,7 +750,7 @@ class SparkSession private(
   }
 
   private def table(tableIdent: TableIdentifier): DataFrame = {
-    Dataset.ofRows(wrapped, sessionState.catalog.lookupRelation(tableIdent))
+    Dataset.ofRows(self, sessionState.catalog.lookupRelation(tableIdent))
   }
 
   /**
@@ -761,7 +762,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   def tables(): DataFrame = {
-    Dataset.ofRows(wrapped, ShowTablesCommand(None, None))
+    Dataset.ofRows(self, ShowTablesCommand(None, None))
   }
 
   /**
@@ -773,7 +774,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   def tables(databaseName: String): DataFrame = {
-    Dataset.ofRows(wrapped, ShowTablesCommand(Some(databaseName), None))
+    Dataset.ofRows(self, ShowTablesCommand(Some(databaseName), None))
   }
 
   /**
@@ -820,7 +821,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   def sql(sqlText: String): DataFrame = {
-    Dataset.ofRows(wrapped, parseSql(sqlText))
+    Dataset.ofRows(self, parseSql(sqlText))
   }
 
   /**
@@ -835,7 +836,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   @Experimental
-  def read: DataFrameReader = new DataFrameReader(wrapped)
+  def read: DataFrameReader = new DataFrameReader(self)
 
 
   // scalastyle:off
@@ -906,7 +907,7 @@ class SparkSession private(
       rdd: RDD[Array[Any]],
       schema: StructType): DataFrame = {
     val rowRdd = rdd.map(r => python.EvaluatePython.fromJava(r, schema).asInstanceOf[InternalRow])
-    Dataset.ofRows(wrapped, LogicalRDD(schema.toAttributes, rowRdd)(wrapped))
+    Dataset.ofRows(self, LogicalRDD(schema.toAttributes, rowRdd)(self))
   }
 
   /**

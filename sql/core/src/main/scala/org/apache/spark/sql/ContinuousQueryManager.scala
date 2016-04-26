@@ -29,16 +29,16 @@ import org.apache.spark.sql.util.ContinuousQueryListener
 /**
  * :: Experimental ::
  * A class to manage all the [[org.apache.spark.sql.ContinuousQuery ContinuousQueries]] active
- * on a [[SQLContext]].
+ * on a [[SparkSession]].
  *
  * @since 2.0.0
  */
 @Experimental
-class ContinuousQueryManager(sqlContext: SQLContext) {
+class ContinuousQueryManager(sparkSession: SparkSession) {
 
   private[sql] val stateStoreCoordinator =
-    StateStoreCoordinatorRef.forDriver(sqlContext.sparkContext.env)
-  private val listenerBus = new ContinuousQueryListenerBus(sqlContext.sparkContext.listenerBus)
+    StateStoreCoordinatorRef.forDriver(sparkSession.sparkContext.env)
+  private val listenerBus = new ContinuousQueryListenerBus(sparkSession.sparkContext.listenerBus)
   private val activeQueries = new mutable.HashMap[String, ContinuousQuery]
   private val activeQueriesLock = new Object
   private val awaitTerminationLock = new Object
@@ -184,7 +184,7 @@ class ContinuousQueryManager(sqlContext: SQLContext) {
       val analyzedPlan = df.queryExecution.analyzed
       df.queryExecution.assertAnalyzed()
 
-      if (sqlContext.conf.getConf(SQLConf.UNSUPPORTED_OPERATION_CHECK_ENABLED)) {
+      if (sparkSession.getConf(SQLConf.UNSUPPORTED_OPERATION_CHECK_ENABLED)) {
         UnsupportedOperationChecker.checkForStreaming(analyzedPlan, outputMode)
       }
 
@@ -201,7 +201,7 @@ class ContinuousQueryManager(sqlContext: SQLContext) {
           StreamingExecutionRelation(source, output)
       }
       val query = new StreamExecution(
-        sqlContext,
+        sparkSession,
         name,
         checkpointLocation,
         logicalPlan,

@@ -1316,7 +1316,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         .map(i => s"""{"a": 1, "b": "str$i"}""").saveAsTextFile(path)
 
       val d1 = DataSource(
-        sqlContext,
+        sqlContext.sparkSession,
         userSpecifiedSchema = None,
         partitionColumns = Array.empty[String],
         bucketSpec = None,
@@ -1324,7 +1324,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         options = Map("path" -> path)).resolveRelation()
 
       val d2 = DataSource(
-        sqlContext,
+        sqlContext.sparkSession,
         userSpecifiedSchema = None,
         partitionColumns = Array.empty[String],
         bucketSpec = None,

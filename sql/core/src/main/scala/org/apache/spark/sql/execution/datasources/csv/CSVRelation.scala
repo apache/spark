@@ -53,14 +53,14 @@ class DefaultSource extends FileFormat with DataSourceRegister {
   override def equals(other: Any): Boolean = other.isInstanceOf[DefaultSource]
 
   override def inferSchema(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
     val csvOptions = new CSVOptions(options)
 
     // TODO: Move filtering.
     val paths = files.filterNot(_.getPath.getName startsWith "_").map(_.getPath.toString)
-    val rdd = createBaseRdd(sqlContext, csvOptions, paths)
+    val rdd = createBaseRdd(sparkSession, csvOptions, paths)
     val schema = if (csvOptions.inferSchemaFlag) {
       InferSchema.infer(rdd, csvOptions)
     } else {
@@ -82,7 +82,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
   }
 
   override def prepareWrite(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
@@ -96,7 +96,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
   }
 
   override def buildReader(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       dataSchema: StructType,
       partitionSchema: StructType,
       requiredSchema: StructType,
@@ -105,8 +105,8 @@ class DefaultSource extends FileFormat with DataSourceRegister {
     val csvOptions = new CSVOptions(options)
     val headers = requiredSchema.fields.map(_.name)
 
-    val conf = new Configuration(sqlContext.sessionState.hadoopConf)
-    val broadcastedConf = sqlContext.sparkContext.broadcast(new SerializableConfiguration(conf))
+    val conf = new Configuration(sparkSession.sessionState.hadoopConf)
+    val broadcastedConf = sparkSession.sparkContext.broadcast(new SerializableConfiguration(conf))
 
     (file: PartitionedFile) => {
       val lines = {
@@ -138,15 +138,15 @@ class DefaultSource extends FileFormat with DataSourceRegister {
   }
 
   private def createBaseRdd(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       options: CSVOptions,
       inputPaths: Seq[String]): RDD[String] = {
     val location = inputPaths.mkString(",")
     if (Charset.forName(options.charset) == StandardCharsets.UTF_8) {
-      sqlContext.sparkContext.textFile(location)
+      sparkSession.sparkContext.textFile(location)
     } else {
       val charset = options.charset
-      sqlContext.sparkContext
+      sparkSession.sparkContext
         .hadoopFile[LongWritable, Text, TextInputFormat](location)
         .mapPartitions(_.map(pair => new String(pair._2.getBytes, 0, pair._2.getLength, charset)))
     }
