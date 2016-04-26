@@ -149,7 +149,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
       val table =
         CatalogTable(
           identifier = TableIdentifier("src", Some("default")),
-          tableType = CatalogTableType.MANAGED_TABLE,
+          tableType = CatalogTableType.MANAGED,
           schema = Seq(CatalogColumn("key", "int")),
           storage = CatalogStorageFormat(
             locationUri = None,

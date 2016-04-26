@@ -608,6 +608,25 @@ class SessionCatalog(
   }
 
   /**
+   * Look up the [[ExpressionInfo]] associated with the specified function, assuming it exists.
+   */
+  def lookupFunctionInfo(name: FunctionIdentifier): ExpressionInfo = {
+    // TODO: just make function registry take in FunctionIdentifier instead of duplicating this
+    val qualifiedName = name.copy(database = name.database.orElse(Some(currentDb)))
+    functionRegistry.lookupFunction(name.funcName)
+      .orElse(functionRegistry.lookupFunction(qualifiedName.unquotedString))
+      .getOrElse {
+        val db = qualifiedName.database.get
+        if (externalCatalog.functionExists(db, name.funcName)) {
+          val metadata = externalCatalog.getFunction(db, name.funcName)
+          new ExpressionInfo(metadata.className, qualifiedName.unquotedString)
+        } else {
+          failFunctionLookup(name.funcName)
+        }
+      }
+  }
+
+  /**
    * Return an [[Expression]] that represents the specified function, assuming it exists.
    *
    * For a temporary function or a permanent function that has been loaded,
@@ -641,6 +660,7 @@ class SessionCatalog(
     // The function has not been loaded to the function registry, which means
     // that the function is a permanent function (if it actually has been registered
     // in the metastore). We need to first put the function in the FunctionRegistry.
+    // TODO: why not just check whether the function exists first?
     val catalogFunction = try {
       externalCatalog.getFunction(currentDb, name.funcName)
     } catch {
@@ -657,7 +677,7 @@ class SessionCatalog(
     val builder = makeFunctionBuilder(qualifiedName.unquotedString, catalogFunction.className)
     createTempFunction(qualifiedName.unquotedString, info, builder, ignoreIfExists = false)
     // Now, we need to create the Expression.
-    return functionRegistry.lookupFunction(qualifiedName.unquotedString, children)
+    functionRegistry.lookupFunction(qualifiedName.unquotedString, children)
   }
 
   /**

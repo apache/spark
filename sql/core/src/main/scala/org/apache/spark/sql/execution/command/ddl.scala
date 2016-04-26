@@ -204,10 +204,10 @@ case class DropTable(
       // If the command DROP VIEW is to drop a table or DROP TABLE is to drop a view
       // issue an exception.
       catalog.getTableMetadataOption(tableName).map(_.tableType match {
-        case CatalogTableType.VIRTUAL_VIEW if !isView =>
+        case CatalogTableType.VIEW if !isView =>
           throw new AnalysisException(
             "Cannot drop a view with DROP TABLE. Please use DROP VIEW instead")
-        case o if o != CatalogTableType.VIRTUAL_VIEW && isView =>
+        case o if o != CatalogTableType.VIEW && isView =>
           throw new AnalysisException(
             s"Cannot drop a table with DROP VIEW. Please use DROP TABLE instead")
         case _ =>
@@ -527,10 +527,10 @@ private[sql] object DDLUtils {
       tableIdentifier: TableIdentifier,
       isView: Boolean): Unit = {
     catalog.getTableMetadataOption(tableIdentifier).map(_.tableType match {
-      case CatalogTableType.VIRTUAL_VIEW if !isView =>
+      case CatalogTableType.VIEW if !isView =>
         throw new AnalysisException(
           "Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead")
-      case o if o != CatalogTableType.VIRTUAL_VIEW && isView =>
+      case o if o != CatalogTableType.VIEW && isView =>
         throw new AnalysisException(
           s"Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead")
       case _ =>
