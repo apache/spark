@@ -457,15 +457,21 @@ case class TungstenAggregate(
    * This list of supported use-cases should be expanded over time.
    */
   private def enableVectorizedHashMap(ctx: CodegenContext): Boolean = {
+    val schemaLength = (groupingKeySchema ++ bufferSchema).length
     val isSupported =
       (groupingKeySchema ++ bufferSchema).forall(f => ctx.isPrimitiveType(f.dataType) ||
         f.dataType.isInstanceOf[DecimalType] || f.dataType.isInstanceOf[StringType]) &&
-        bufferSchema.forall(!_.dataType.isInstanceOf[StringType]) && bufferSchema.nonEmpty &&
-        modes.forall(mode => mode == Partial || mode == PartialMerge)
+        bufferSchema.nonEmpty && modes.forall(mode => mode == Partial || mode == PartialMerge)
 
-    isSupported && bufferSchema.map(_.dataType).filter(_.isInstanceOf[DecimalType])
-      .forall(!DecimalType.isByteArrayDecimalType(_)) &&
-      (groupingKeySchema ++ bufferSchema).length <= sqlContext.conf.vectorizedAggregateMapMaxColumns
+    // We do not support byte array based decimal type for aggregate values as
+    // ColumnVector.putDecimal for high-precision decimals doesn't currently support in-place
+    // updates. Due to this, appending the byte array in the vectorized hash map can turn out to be
+    // quite inefficient and can potentially OOM the executor.
+    val isNotByteArrayDecimalType = bufferSchema.map(_.dataType).filter(_.isInstanceOf[DecimalType])
+      .forall(!DecimalType.isByteArrayDecimalType(_))
+
+    isSupported  && isNotByteArrayDecimalType &&
+      schemaLength <= sqlContext.conf.vectorizedAggregateMapMaxColumns
   }
 
   private def doProduceWithKeys(ctx: CodegenContext): String = {
