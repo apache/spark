@@ -34,21 +34,6 @@ import org.apache.spark.sql.types._
 // https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DDL
 
 /**
- * A DDL command expected to be parsed and run in an underlying system instead of in Spark.
- */
-abstract class NativeDDLCommand(val sql: String) extends RunnableCommand {
-
-  override def run(sparkSession: SparkSession): Seq[Row] = {
-    sparkSession.runNativeSql(sql)
-  }
-
-  override val output: Seq[Attribute] = {
-    Seq(AttributeReference("result", StringType, nullable = false)())
-  }
-
-}
-
-/**
  * A command for users to create a new database.
  *
  * It will issue an error message when the database with the same name already exists,
@@ -422,13 +407,6 @@ case class AlterTableDropPartition(
 
 }
 
-case class AlterTableSetFileFormat(
-    tableName: TableIdentifier,
-    partitionSpec: Option[TablePartitionSpec],
-    fileFormat: Seq[String],
-    genericFormat: Option[String])(sql: String)
-  extends NativeDDLCommand(sql) with Logging
-
 /**
  * A command that sets the location of a table or a partition.
  *
@@ -478,35 +456,6 @@ case class AlterTableSetLocation(
   }
 
 }
-
-case class AlterTableChangeCol(
-    tableName: TableIdentifier,
-    partitionSpec: Option[TablePartitionSpec],
-    oldColName: String,
-    newColName: String,
-    dataType: DataType,
-    comment: Option[String],
-    afterColName: Option[String],
-    restrict: Boolean,
-    cascade: Boolean)(sql: String)
-  extends NativeDDLCommand(sql) with Logging
-
-case class AlterTableAddCol(
-    tableName: TableIdentifier,
-    partitionSpec: Option[TablePartitionSpec],
-    columns: StructType,
-    restrict: Boolean,
-    cascade: Boolean)(sql: String)
-  extends NativeDDLCommand(sql) with Logging
-
-case class AlterTableReplaceCol(
-    tableName: TableIdentifier,
-    partitionSpec: Option[TablePartitionSpec],
-    columns: StructType,
-    restrict: Boolean,
-    cascade: Boolean)(sql: String)
-  extends NativeDDLCommand(sql) with Logging
-
 
 private[sql] object DDLUtils {
 

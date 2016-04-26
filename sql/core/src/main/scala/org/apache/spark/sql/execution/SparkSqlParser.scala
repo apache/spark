@@ -582,35 +582,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   }
 
   /**
-   * Create an [[AlterTableSetFileFormat]] command
-   *
-   * For example:
-   * {{{
-   *   ALTER TABLE table [PARTITION spec] SET FILEFORMAT file_format;
-   * }}}
-   */
-  override def visitSetTableFileFormat(
-      ctx: SetTableFileFormatContext): LogicalPlan = withOrigin(ctx) {
-    // AlterTableSetFileFormat currently takes both a GenericFileFormat and a
-    // TableFileFormatContext. This is a bit weird because it should only take one. It also should
-    // use a CatalogFileFormat instead of either a String or a Sequence of Strings. We will address
-    // this in a follow-up PR.
-    val (fileFormat, genericFormat) = ctx.fileFormat match {
-      case s: GenericFileFormatContext =>
-        (Seq.empty[String], Option(s.identifier.getText))
-      case s: TableFileFormatContext =>
-        val elements = Seq(s.inFmt, s.outFmt) ++ Option(s.serdeCls).toSeq
-        (elements.map(string), None)
-    }
-    AlterTableSetFileFormat(
-      visitTableIdentifier(ctx.tableIdentifier),
-      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec),
-      fileFormat,
-      genericFormat)(
-      command(ctx))
-  }
-
-  /**
    * Create an [[AlterTableSetLocation]] command
    *
    * For example:
@@ -623,79 +594,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       visitTableIdentifier(ctx.tableIdentifier),
       Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec),
       visitLocationSpec(ctx.locationSpec))
-  }
-
-  /**
-   * Create an [[AlterTableChangeCol]] command
-   *
-   * For example:
-   * {{{
-   *   ALTER TABLE tableIdentifier [PARTITION spec]
-   *    CHANGE [COLUMN] col_old_name col_new_name column_type [COMMENT col_comment]
-   *    [FIRST|AFTER column_name] [CASCADE|RESTRICT];
-   * }}}
-   */
-  override def visitChangeColumn(ctx: ChangeColumnContext): LogicalPlan = withOrigin(ctx) {
-    val col = visitColType(ctx.colType())
-    val comment = if (col.metadata.contains("comment")) {
-      Option(col.metadata.getString("comment"))
-    } else {
-      None
-    }
-
-    AlterTableChangeCol(
-      visitTableIdentifier(ctx.tableIdentifier),
-      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec),
-      ctx.oldName.getText,
-      // We could also pass in a struct field - seems easier.
-      col.name,
-      col.dataType,
-      comment,
-      Option(ctx.after).map(_.getText),
-      // Note that Restrict and Cascade are mutually exclusive.
-      ctx.RESTRICT != null,
-      ctx.CASCADE != null)(
-      command(ctx))
-  }
-
-  /**
-   * Create an [[AlterTableAddCol]] command
-   *
-   * For example:
-   * {{{
-   *   ALTER TABLE tableIdentifier [PARTITION spec]
-   *    ADD COLUMNS (name type [COMMENT comment], ...) [CASCADE|RESTRICT]
-   * }}}
-   */
-  override def visitAddColumns(ctx: AddColumnsContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableAddCol(
-      visitTableIdentifier(ctx.tableIdentifier),
-      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec),
-      createStructType(ctx.colTypeList),
-      // Note that Restrict and Cascade are mutually exclusive.
-      ctx.RESTRICT != null,
-      ctx.CASCADE != null)(
-      command(ctx))
-  }
-
-  /**
-   * Create an [[AlterTableReplaceCol]] command
-   *
-   * For example:
-   * {{{
-   *   ALTER TABLE tableIdentifier [PARTITION spec]
-   *    REPLACE COLUMNS (name type [COMMENT comment], ...) [CASCADE|RESTRICT]
-   * }}}
-   */
-  override def visitReplaceColumns(ctx: ReplaceColumnsContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableReplaceCol(
-      visitTableIdentifier(ctx.tableIdentifier),
-      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec),
-      createStructType(ctx.colTypeList),
-      // Note that Restrict and Cascade are mutually exclusive.
-      ctx.RESTRICT != null,
-      ctx.CASCADE != null)(
-      command(ctx))
   }
 
   /**
