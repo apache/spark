@@ -22,10 +22,10 @@ import java.util.concurrent.ConcurrentHashMap
 import scala.collection.JavaConverters._
 import scala.collection.mutable.LinkedHashSet
 
-import org.apache.avro.{ Schema, SchemaNormalization }
+import org.apache.avro.{Schema, SchemaNormalization}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{ ConfigEntry, OptionalConfigEntry }
+import org.apache.spark.internal.config.{ConfigEntry, OptionalConfigEntry}
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.util.Utils
 
@@ -191,8 +191,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
    */
   def registerKryoClasses(classes: Array[Class[_]]): SparkConf = {
     val allClassNames = new LinkedHashSet[String]()
-    allClassNames ++= get("spark.kryo.classesToRegister", "").replaceAll("\\s+", "").split(',')
-      .filter(!_.isEmpty)
+    allClassNames ++= get("spark.kryo.classesToRegister", "").split(',').filter(!_.isEmpty)
     allClassNames ++= classes.map(_.getName)
 
     set("spark.kryo.classesToRegister", allClassNames.mkString(","))
@@ -393,8 +392,8 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   /** Get all executor environment variables set on this SparkConf */
   def getExecutorEnv: Seq[(String, String)] = {
     val prefix = "spark.executorEnv."
-    getAll.filter { case (k, v) => k.startsWith(prefix) }
-      .map { case (k, v) => (k.substring(prefix.length), v) }
+    getAll.filter{case (k, v) => k.startsWith(prefix)}
+          .map{case (k, v) => (k.substring(prefix.length), v)}
   }
 
   /**
@@ -597,7 +596,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
    * configuration out for debugging.
    */
   def toDebugString: String = {
-    getAll.sorted.map { case (k, v) => k + "=" + v }.mkString("\n")
+    getAll.sorted.map{case (k, v) => k + "=" + v}.mkString("\n")
   }
 
 }
@@ -614,16 +613,17 @@ private[spark] object SparkConf extends Logging {
     val configs = Seq(
       DeprecatedConfig("spark.cache.class", "0.8",
         "The spark.cache.class property is no longer being used! Specify storage levels using " +
-          "the RDD.persist() method instead."),
+        "the RDD.persist() method instead."),
       DeprecatedConfig("spark.yarn.user.classpath.first", "1.3",
         "Please use spark.{driver,executor}.userClassPathFirst instead."),
       DeprecatedConfig("spark.kryoserializer.buffer.mb", "1.4",
         "Please use spark.kryoserializer.buffer instead. The default value for " +
           "spark.kryoserializer.buffer.mb was previously specified as '0.064'. Fractional values " +
           "are no longer accepted. To specify the equivalent now, one may use '64k'."),
-      DeprecatedConfig("spark.rpc", "2.0", "Not used any more."))
+      DeprecatedConfig("spark.rpc", "2.0", "Not used any more.")
+    )
 
-    Map(configs.map { cfg => (cfg.key -> cfg) }: _*)
+    Map(configs.map { cfg => (cfg.key -> cfg) } : _*)
   }
 
   /**
@@ -650,8 +650,8 @@ private[spark] object SparkConf extends Logging {
     "spark.reducer.maxSizeInFlight" -> Seq(
       AlternateConfig("spark.reducer.maxMbInFlight", "1.4")),
     "spark.kryoserializer.buffer" ->
-      Seq(AlternateConfig("spark.kryoserializer.buffer.mb", "1.4",
-        translation = s => s"${(s.toDouble * 1000).toInt}k")),
+        Seq(AlternateConfig("spark.kryoserializer.buffer.mb", "1.4",
+          translation = s => s"${(s.toDouble * 1000).toInt}k")),
     "spark.kryoserializer.buffer.max" -> Seq(
       AlternateConfig("spark.kryoserializer.buffer.max.mb", "1.4")),
     "spark.shuffle.file.buffer" -> Seq(
@@ -679,7 +679,8 @@ private[spark] object SparkConf extends Logging {
     "spark.rpc.message.maxSize" -> Seq(
       AlternateConfig("spark.akka.frameSize", "1.6")),
     "spark.yarn.jars" -> Seq(
-      AlternateConfig("spark.yarn.jar", "2.0")))
+      AlternateConfig("spark.yarn.jar", "2.0"))
+    )
 
   /**
    * A view of `configsWithAlternatives` that makes it more efficient to look up deprecated
@@ -701,9 +702,9 @@ private[spark] object SparkConf extends Logging {
    */
   def isExecutorStartupConf(name: String): Boolean = {
     (name.startsWith("spark.auth") && name != SecurityManager.SPARK_AUTH_SECRET_CONF) ||
-      name.startsWith("spark.ssl") ||
-      name.startsWith("spark.rpc") ||
-      isSparkPortConf(name)
+    name.startsWith("spark.ssl") ||
+    name.startsWith("spark.rpc") ||
+    isSparkPortConf(name)
   }
 
   /**
@@ -719,10 +720,9 @@ private[spark] object SparkConf extends Logging {
    */
   def getDeprecatedConfig(key: String, conf: SparkConf): Option[String] = {
     configsWithAlternatives.get(key).flatMap { alts =>
-      alts.collectFirst {
-        case alt if conf.contains(alt.key) =>
-          val value = conf.get(alt.key)
-          if (alt.translation != null) alt.translation(value) else value
+      alts.collectFirst { case alt if conf.contains(alt.key) =>
+        val value = conf.get(alt.key)
+        if (alt.translation != null) alt.translation(value) else value
       }
     }
   }
@@ -734,16 +734,15 @@ private[spark] object SparkConf extends Logging {
     deprecatedConfigs.get(key).foreach { cfg =>
       logWarning(
         s"The configuration key '$key' has been deprecated as of Spark ${cfg.version} and " +
-          s"may be removed in the future. ${cfg.deprecationMessage}")
+        s"may be removed in the future. ${cfg.deprecationMessage}")
       return
     }
 
-    allAlternatives.get(key).foreach {
-      case (newKey, cfg) =>
-        logWarning(
-          s"The configuration key '$key' has been deprecated as of Spark ${cfg.version} and " +
-            s"may be removed in the future. Please use the new key '$newKey' instead.")
-        return
+    allAlternatives.get(key).foreach { case (newKey, cfg) =>
+      logWarning(
+        s"The configuration key '$key' has been deprecated as of Spark ${cfg.version} and " +
+        s"may be removed in the future. Please use the new key '$newKey' instead.")
+      return
     }
     if (key.startsWith("spark.akka") || key.startsWith("spark.ssl.akka")) {
       logWarning(
@@ -760,9 +759,9 @@ private[spark] object SparkConf extends Logging {
    * @param deprecationMessage Message to include in the deprecation warning.
    */
   private case class DeprecatedConfig(
-    key: String,
-    version: String,
-    deprecationMessage: String)
+      key: String,
+      version: String,
+      deprecationMessage: String)
 
   /**
    * Information about an alternate configuration key that has been deprecated.
@@ -772,8 +771,8 @@ private[spark] object SparkConf extends Logging {
    * @param translation A translation function for converting old config values into new ones.
    */
   private case class AlternateConfig(
-    key: String,
-    version: String,
-    translation: String => String = null)
+      key: String,
+      version: String,
+      translation: String => String = null)
 
 }
