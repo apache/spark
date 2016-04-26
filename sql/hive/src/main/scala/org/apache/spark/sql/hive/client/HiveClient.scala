@@ -163,13 +163,24 @@ private[hive] trait HiveClient {
       table: CatalogTable,
       spec: ExternalCatalog.TablePartitionSpec): Option[CatalogTablePartition]
 
-  /** Returns all partitions for the given table. */
-  final def getAllPartitions(db: String, table: String): Seq[CatalogTablePartition] = {
-    getAllPartitions(getTable(db, table))
+  /**
+   * Returns the partitions for the given table that match the supplied partition spec.
+   * If no partition spec is specified, all partitions are returned.
+   */
+  final def getPartitions(
+      db: String,
+      table: String,
+      partialSpec: Option[ExternalCatalog.TablePartitionSpec]): Seq[CatalogTablePartition] = {
+    getPartitions(getTable(db, table), partialSpec)
   }
 
-  /** Returns all partitions for the given table. */
-  def getAllPartitions(table: CatalogTable): Seq[CatalogTablePartition]
+  /**
+   * Returns the partitions for the given table that match the supplied partition spec.
+   * If no partition spec is specified, all partitions are returned.
+   */
+  def getPartitions(
+      table: CatalogTable,
+      partialSpec: Option[ExternalCatalog.TablePartitionSpec] = None): Seq[CatalogTablePartition]
 
   /** Returns partitions filtered by predicates for the given table. */
   def getPartitionsByFilter(

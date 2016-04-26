@@ -298,9 +298,19 @@ class InMemoryCatalog extends ExternalCatalog {
     catalog(db).tables(table).partitions(spec)
   }
 
+  /**
+   * TODO: Currently partialSpec is not used for memory catalog and it returns all the partitions.
+   */
   override def listPartitions(
       db: String,
-      table: String): Seq[CatalogTablePartition] = synchronized {
+      table: String,
+      partialSpec: Option[TablePartitionSpec] = None): Seq[CatalogTablePartition] = synchronized {
+    partialSpec.foreach { _ =>
+      throw new UnsupportedOperationException(
+        "In-memory catalog doesn't support listing partitions using partial partition spec"
+      )
+    }
+
     requireTableExists(db, table)
     catalog(db).tables(table).partitions.values.toSeq
   }
