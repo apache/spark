@@ -95,7 +95,7 @@ class GaussianMixtureModel private[ml] (
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     val predUDF = udf((vector: OldVector) => predict(vector.asML))
-    val probUDF = udf((vector: OldVector) => predictProbability(vector.asML))
+    val probUDF = udf((vector: OldVector) => OldVectors.fromML(predictProbability(vector.asML)))
     dataset.withColumn($(predictionCol), predUDF(col($(featuresCol))))
       .withColumn($(probabilityCol), probUDF(col($(featuresCol))))
   }
