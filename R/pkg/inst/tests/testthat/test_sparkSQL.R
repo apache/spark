@@ -1588,6 +1588,7 @@ test_that("mutate(), transform(), rename() and names()", {
 
   newDF <- mutate(df, df$age + 3)
   expect_equal(length(columns(newDF)), 3)
+  expect_equal(columns(newDF)[[3]], "df$age + 3")
   expect_equal(first(filter(newDF, df$name != "Michael"))[[3]], 33)
 
   newDF2 <- rename(df, newerAge = df$age)

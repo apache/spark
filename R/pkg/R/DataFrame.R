@@ -1455,7 +1455,9 @@ setMethod("mutate",
               return(x)
             }
 
-            stopifnot(class(cols[[1]]) == "Column")
+            lapply(cols, function(col) {
+              stopifnot(class(col) == "Column")
+            })
 
             # Check if there is any duplicated column name in the DataFrame
             dfCols <- columns(x)
@@ -1465,22 +1467,28 @@ setMethod("mutate",
 
             # TODO: simplify the implementation of this method after SPARK-12225 is resolved.
 
-            # The last column of the same name in the specific columns takes effect
+            # For named arguments, use the names for arguments as the column names
+            # For unnamed arguments, use the argument symbols as the column names
+            args <- sapply(substitute(list(...))[-1], deparse)
             ns <- names(cols)
+            if (!is.null(ns)) {
+              lapply(seq_along(args), function(i) {
+                if (ns[[i]] != "") {
+                  args[[i]] <<- ns[[i]]
+                }
+              })
+            }
+            ns <- args
+
+            # The last column of the same name in the specific columns takes effect
             deDupCols <- list()
             for (i in 1:length(cols)) {
-              if (!is.null(ns) && ns[[i]] != "") {
-                deDupCols[[ns[[i]]]] <- alias(cols[[i]], ns[[i]])
-              } else {
-                # TODO: how to check if there are columns of the same name in unnamed Columns.
-                deDupCols[[length(deDupCols) + 1]] <- cols[[i]]
-              }
+              deDupCols[[ns[[i]]]] <- alias(cols[[i]], ns[[i]])
             }
 
             # Construct the column list for projection
-            ns <- names(deDupCols)
             colList <- lapply(dfCols, function(col) {
-              if (col %in% ns) {
+              if (!is.null(deDupCols[[col]])) {
                 # Replace existing column
                 tmpCol <- deDupCols[[col]]
                 deDupCols[[col]] <<- NULL
