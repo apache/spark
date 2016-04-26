@@ -25,13 +25,13 @@ import scala.util.control.NonFatal
 import org.scalatest.{BeforeAndAfterAll, GivenWhenThen}
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.SQLBuilder
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.execution.command.{ExplainCommand, SetCommand}
-import org.apache.spark.sql.execution.datasources.DescribeCommand
-import org.apache.spark.sql.hive.{InsertIntoHiveTable => LogicalInsertIntoHiveTable, SQLBuilder}
-import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.execution.command.{DescribeTableCommand, ExplainCommand, HiveNativeCommand, SetCommand}
+import org.apache.spark.sql.hive.{InsertIntoHiveTable => LogicalInsertIntoHiveTable}
+import org.apache.spark.sql.hive.test.{TestHive, TestHiveQueryExecution}
 
 /**
  * Allows the creations of tests that execute the same query against both hive
@@ -45,6 +45,17 @@ import org.apache.spark.sql.hive.test.TestHive
  */
 abstract class HiveComparisonTest
   extends SparkFunSuite with BeforeAndAfterAll with GivenWhenThen {
+
+  /**
+   * Path to the test datasets. We find this by looking up "hive-test-path-helper.txt" file.
+   *
+   * Before we run the query in Spark, we replace "../../data" with this path.
+   */
+  private val testDataPath: String = {
+    Thread.currentThread.getContextClassLoader
+      .getResource("hive-test-path-helper.txt")
+      .getPath.replace("/hive-test-path-helper.txt", "/data")
+  }
 
   /**
    * When set, any cache files that result in test failures will be deleted.  Used when the test
@@ -141,7 +152,7 @@ abstract class HiveComparisonTest
   }
 
   protected def prepareAnswer(
-    hiveQuery: TestHive.type#QueryExecution,
+    hiveQuery: TestHiveQueryExecution,
     answer: Seq[String]): Seq[String] = {
 
     def isSorted(plan: LogicalPlan): Boolean = plan match {
@@ -164,7 +175,7 @@ abstract class HiveComparisonTest
           .filterNot(_ == "")
       case _: HiveNativeCommand => answer.filterNot(nonDeterministicLine).filterNot(_ == "")
       case _: ExplainCommand => answer
-      case _: DescribeCommand =>
+      case _: DescribeTableCommand =>
         // Filter out non-deterministic lines and lines which do not have actual results but
         // can introduce problems because of the way Hive formats these lines.
         // Then, remove empty lines. Do not sort the results.
@@ -332,7 +343,7 @@ abstract class HiveComparisonTest
             hiveCachedResults
           } else {
 
-            val hiveQueries = queryList.map(new TestHive.QueryExecution(_))
+            val hiveQueries = queryList.map(new TestHiveQueryExecution(_))
             // Make sure we can at least parse everything before attempting hive execution.
             // Note this must only look at the logical plan as we might not be able to analyze if
             // other DDL has not been executed yet.
@@ -352,7 +363,7 @@ abstract class HiveComparisonTest
                     case _: ExplainCommand =>
                       // No need to execute EXPLAIN queries as we don't check the output.
                       Nil
-                    case _ => TestHive.runSqlHive(queryString)
+                    case _ => TestHive.sessionState.runNativeSql(queryString)
                   }
 
                   // We need to add a new line to non-empty answers so we can differentiate Seq()
@@ -382,10 +393,11 @@ abstract class HiveComparisonTest
 
         // Run w/ catalyst
         val catalystResults = queryList.zip(hiveResults).map { case (queryString, hive) =>
-          var query: TestHive.QueryExecution = null
+          var query: TestHiveQueryExecution = null
           try {
             query = {
-              val originalQuery = new TestHive.QueryExecution(queryString)
+              val originalQuery = new TestHiveQueryExecution(
+                queryString.replace("../../data", testDataPath))
               val containsCommands = originalQuery.analyzed.collectFirst {
                 case _: Command => ()
                 case _: LogicalInsertIntoHiveTable => ()
@@ -395,7 +407,7 @@ abstract class HiveComparisonTest
                 originalQuery
               } else {
                 val convertedSQL = try {
-                  new SQLBuilder(originalQuery.analyzed, TestHive).toSQL
+                  new SQLBuilder(originalQuery.analyzed).toSQL
                 } catch {
                   case NonFatal(e) => fail(
                     s"""Cannot convert the following HiveQL query plan back to SQL query string:
@@ -409,7 +421,7 @@ abstract class HiveComparisonTest
                 }
 
                 try {
-                  val queryExecution = new TestHive.QueryExecution(convertedSQL)
+                  val queryExecution = new TestHiveQueryExecution(convertedSQL)
                   // Trigger the analysis of this converted SQL query.
                   queryExecution.analyzed
                   queryExecution
@@ -430,7 +442,7 @@ abstract class HiveComparisonTest
               }
             }
 
-            (query, prepareAnswer(query, query.stringResult()))
+            (query, prepareAnswer(query, query.hiveResultString()))
           } catch {
             case e: Throwable =>
               val errorMessage =
@@ -472,12 +484,12 @@ abstract class HiveComparisonTest
               // If this query is reading other tables that were created during this test run
               // also print out the query plans and results for those.
               val computedTablesMessages: String = try {
-                val tablesRead = new TestHive.QueryExecution(query).executedPlan.collect {
-                  case ts: HiveTableScan => ts.relation.tableName
+                val tablesRead = new TestHiveQueryExecution(query).executedPlan.collect {
+                  case ts: HiveTableScanExec => ts.relation.tableName
                 }.toSet
 
                 TestHive.reset()
-                val executions = queryList.map(new TestHive.QueryExecution(_))
+                val executions = queryList.map(new TestHiveQueryExecution(_))
                 executions.foreach(_.toRdd)
                 val tablesGenerated = queryList.zip(executions).flatMap {
                   // We should take executedPlan instead of sparkPlan, because in following codes we
@@ -562,8 +574,8 @@ abstract class HiveComparisonTest
             // okay by running a simple query. If this fails then we halt testing since
             // something must have gone seriously wrong.
             try {
-              new TestHive.QueryExecution("SELECT key FROM src").stringResult()
-              TestHive.runSqlHive("SELECT key FROM src")
+              new TestHiveQueryExecution("SELECT key FROM src").hiveResultString()
+              TestHive.sessionState.runNativeSql("SELECT key FROM src")
             } catch {
               case e: Exception =>
                 logError(s"FATAL ERROR: Canary query threw $e This implies that the " +

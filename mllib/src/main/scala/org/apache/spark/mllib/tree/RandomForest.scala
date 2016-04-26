@@ -18,6 +18,7 @@
 package org.apache.spark.mllib.tree
 
 import scala.collection.JavaConverters._
+import scala.util.Try
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
@@ -76,9 +77,10 @@ private class RandomForest (
   strategy.assertValid()
   require(numTrees > 0, s"RandomForest requires numTrees > 0, but was given numTrees = $numTrees.")
   require(RandomForest.supportedFeatureSubsetStrategies.contains(featureSubsetStrategy)
-    || featureSubsetStrategy.matches(NewRFParams.supportedFeatureSubsetStrategiesRegex),
+    || Try(featureSubsetStrategy.toInt).filter(_ > 0).isSuccess
+    || Try(featureSubsetStrategy.toDouble).filter(_ > 0).filter(_ <= 1.0).isSuccess,
     s"RandomForest given invalid featureSubsetStrategy: $featureSubsetStrategy." +
-    s" Supported values: ${RandomForest.supportedFeatureSubsetStrategies.mkString(", ")}," +
+    s" Supported values: ${NewRFParams.supportedFeatureSubsetStrategies.mkString(", ")}," +
     s" (0.0-1.0], [1-n].")
 
   /**

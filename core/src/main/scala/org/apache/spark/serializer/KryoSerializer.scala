@@ -359,7 +359,7 @@ private[spark] class KryoSerializerInstance(ks: KryoSerializer) extends Serializ
  * serialization.
  */
 trait KryoRegistrator {
-  def registerClasses(kryo: Kryo)
+  def registerClasses(kryo: Kryo): Unit
 }
 
 private[serializer] object KryoSerializer {

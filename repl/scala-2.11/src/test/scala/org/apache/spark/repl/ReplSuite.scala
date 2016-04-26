@@ -249,10 +249,11 @@ class ReplSuite extends SparkFunSuite {
     assertDoesNotContain("Exception", output)
   }
 
-  test("SPARK-2576 importing SQLContext.createDataFrame.") {
+  test("SPARK-2576 importing implicits") {
     // We need to use local-cluster to test this case.
     val output = runInterpreter("local-cluster[1,1,1024]",
       """
+        |import spark.implicits._
         |case class TestCaseClass(value: Int)
         |sc.parallelize(1 to 10).map(x => TestCaseClass(x)).toDF().collect()
         |
@@ -366,11 +367,38 @@ class ReplSuite extends SparkFunSuite {
   test("define case class and create Dataset together with paste mode") {
     val output = runInterpreterInPasteMode("local-cluster[1,1,1024]",
       """
-        |import sqlContext.implicits._
+        |import spark.implicits._
         |case class TestClass(value: Int)
         |Seq(TestClass(1)).toDS()
       """.stripMargin)
     assertDoesNotContain("error:", output)
+    assertDoesNotContain("Exception", output)
+  }
+
+  test("should clone and clean line object in ClosureCleaner") {
+    val output = runInterpreterInPasteMode("local-cluster[1,4,4096]",
+      """
+        |import org.apache.spark.rdd.RDD
+        |
+        |val lines = sc.textFile("pom.xml")
+        |case class Data(s: String)
+        |val dataRDD = lines.map(line => Data(line.take(3)))
+        |dataRDD.cache.count
+        |val repartitioned = dataRDD.repartition(dataRDD.partitions.size)
+        |repartitioned.cache.count
+        |
+        |def getCacheSize(rdd: RDD[_]) = {
+        |  sc.getRDDStorageInfo.filter(_.id == rdd.id).map(_.memSize).sum
+        |}
+        |val cacheSize1 = getCacheSize(dataRDD)
+        |val cacheSize2 = getCacheSize(repartitioned)
+        |
+        |// The cache size of dataRDD and the repartitioned one should be similar.
+        |val deviation = math.abs(cacheSize2 - cacheSize1).toDouble / cacheSize1
+        |assert(deviation < 0.2,
+        |  s"deviation too large: $deviation, first size: $cacheSize1, second size: $cacheSize2")
+      """.stripMargin)
+    assertDoesNotContain("AssertionError", output)
     assertDoesNotContain("Exception", output)
   }
 }

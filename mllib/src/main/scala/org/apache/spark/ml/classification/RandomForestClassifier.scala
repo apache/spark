@@ -181,7 +181,7 @@ final class RandomForestClassificationModel private[ml] (
   override def treeWeights: Array[Double] = _treeWeights
 
   override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
-    val bcastModel = dataset.sqlContext.sparkContext.broadcast(this)
+    val bcastModel = dataset.sparkSession.sparkContext.broadcast(this)
     val predictUDF = udf { (features: Any) =>
       bcastModel.value.predict(features.asInstanceOf[Vector])
     }
@@ -294,7 +294,7 @@ object RandomForestClassificationModel extends MLReadable[RandomForestClassifica
 
     override def load(path: String): RandomForestClassificationModel = {
       implicit val format = DefaultFormats
-      val (metadata: Metadata, treesData: Array[(Metadata, Node)]) =
+      val (metadata: Metadata, treesData: Array[(Metadata, Node)], _) =
         EnsembleModelReadWrite.loadImpl(path, sqlContext, className, treeClassName)
       val numFeatures = (metadata.metadata \ "numFeatures").extract[Int]
       val numClasses = (metadata.metadata \ "numClasses").extract[Int]

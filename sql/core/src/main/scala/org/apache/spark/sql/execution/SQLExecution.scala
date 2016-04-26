@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution
 import java.util.concurrent.atomic.AtomicLong
 
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLExecutionEnd,
   SparkListenerSQLExecutionStart}
 import org.apache.spark.util.Utils
@@ -38,21 +38,22 @@ private[sql] object SQLExecution {
    * we can connect them with an execution.
    */
   def withNewExecutionId[T](
-      sqlContext: SQLContext, queryExecution: QueryExecution)(body: => T): T = {
-    val sc = sqlContext.sparkContext
+      sparkSession: SparkSession,
+      queryExecution: QueryExecution)(body: => T): T = {
+    val sc = sparkSession.sparkContext
     val oldExecutionId = sc.getLocalProperty(EXECUTION_ID_KEY)
     if (oldExecutionId == null) {
       val executionId = SQLExecution.nextExecutionId
       sc.setLocalProperty(EXECUTION_ID_KEY, executionId.toString)
       val r = try {
         val callSite = Utils.getCallSite()
-        sqlContext.sparkContext.listenerBus.post(SparkListenerSQLExecutionStart(
+        sparkSession.sparkContext.listenerBus.post(SparkListenerSQLExecutionStart(
           executionId, callSite.shortForm, callSite.longForm, queryExecution.toString,
           SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan), System.currentTimeMillis()))
         try {
           body
         } finally {
-          sqlContext.sparkContext.listenerBus.post(SparkListenerSQLExecutionEnd(
+          sparkSession.sparkContext.listenerBus.post(SparkListenerSQLExecutionEnd(
             executionId, System.currentTimeMillis()))
         }
       } finally {
