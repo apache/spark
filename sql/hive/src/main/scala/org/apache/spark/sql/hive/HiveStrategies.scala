@@ -26,14 +26,14 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.datasources.{CreateTableUsing, CreateTableUsingAsSelect, CreateTempTableUsingAsSelect}
+import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.execution._
 
 private[hive] trait HiveStrategies {
   // Possibly being too clever with types here... or not clever enough.
   self: SparkPlanner =>
 
-  val context: SQLContext
+  val sparkSession: SparkSession
   val hiveconf: HiveConf
 
   object Scripts extends Strategy {
@@ -78,32 +78,9 @@ private[hive] trait HiveStrategies {
           projectList,
           otherPredicates,
           identity[Seq[Expression]],
-          HiveTableScanExec(_, relation, pruningPredicates)(context, hiveconf)) :: Nil
+          HiveTableScanExec(_, relation, pruningPredicates)(sparkSession, hiveconf)) :: Nil
       case _ =>
         Nil
-    }
-  }
-
-  object HiveDDLStrategy extends Strategy {
-    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case CreateTableUsing(
-        tableIdent, userSpecifiedSchema, provider, false, opts, allowExisting, managedIfNoPath) =>
-        val cmd =
-          CreateMetastoreDataSource(
-            tableIdent, userSpecifiedSchema, provider, opts, allowExisting, managedIfNoPath)
-        ExecutedCommandExec(cmd) :: Nil
-
-      case c: CreateTableUsingAsSelect if c.temporary =>
-        val cmd = CreateTempTableUsingAsSelect(
-          c.tableIdent, c.provider, c.partitionColumns, c.mode, c.options, c.child)
-        ExecutedCommandExec(cmd) :: Nil
-
-      case c: CreateTableUsingAsSelect =>
-        val cmd = CreateMetastoreDataSourceAsSelect(c.tableIdent, c.provider, c.partitionColumns,
-          c.bucketSpec, c.mode, c.options, c.child)
-        ExecutedCommandExec(cmd) :: Nil
-
-      case _ => Nil
     }
   }
 }

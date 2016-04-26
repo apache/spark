@@ -62,7 +62,7 @@ class InMemoryCatalog extends ExternalCatalog {
   private def requireTableExists(db: String, table: String): Unit = {
     if (!tableExists(db, table)) {
       throw new AnalysisException(
-        s"Table or View not found: '$table' does not exist in database '$db'")
+        s"Table or view not found: '$table' does not exist in database '$db'")
     }
   }
 
