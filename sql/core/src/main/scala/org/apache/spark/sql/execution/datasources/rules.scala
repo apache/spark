@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.sql.{AnalysisException, SaveMode, SQLContext}
+import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, RowOrdering}
@@ -30,12 +30,12 @@ import org.apache.spark.sql.sources.{BaseRelation, InsertableRelation}
 /**
  * Try to replaces [[UnresolvedRelation]]s with [[ResolvedDataSource]].
  */
-private[sql] class ResolveDataSource(sqlContext: SQLContext) extends Rule[LogicalPlan] {
+private[sql] class ResolveDataSource(sparkSession: SparkSession) extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case u: UnresolvedRelation if u.tableIdentifier.database.isDefined =>
       try {
         val dataSource = DataSource(
-          sqlContext,
+          sparkSession,
           paths = u.tableIdentifier.table :: Nil,
           className = u.tableIdentifier.database.get)
         val plan = LogicalRelation(dataSource.resolveRelation())

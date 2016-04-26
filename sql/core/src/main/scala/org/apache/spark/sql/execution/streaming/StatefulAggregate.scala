@@ -63,7 +63,7 @@ case class StateStoreRestoreExec(
       storeVersion = getStateId.batchId,
       keyExpressions.toStructType,
       child.output.toStructType,
-      new StateStoreConf(sqlContext.conf),
+      sqlContext.sessionState,
       Some(sqlContext.streams.stateStoreCoordinator)) { case (store, iter) =>
         val getKey = GenerateUnsafeProjection.generate(keyExpressions, child.output)
         iter.flatMap { row =>
@@ -92,7 +92,7 @@ case class StateStoreSaveExec(
       storeVersion = getStateId.batchId,
       keyExpressions.toStructType,
       child.output.toStructType,
-      new StateStoreConf(sqlContext.conf),
+      sqlContext.sessionState,
       Some(sqlContext.streams.stateStoreCoordinator)) { case (store, iter) =>
         new Iterator[InternalRow] {
           private[this] val baseIterator = iter

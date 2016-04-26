@@ -845,7 +845,7 @@ setMethod("ncol",
             length(columns(x))
           })
 
-#' Returns the dimentions (number of rows and columns) of a SparkDataFrame
+#' Returns the dimensions (number of rows and columns) of a SparkDataFrame
 #' @param x a SparkDataFrame
 #'
 #' @family SparkDataFrame functions

@@ -59,13 +59,14 @@ class SessionCatalog(
     this(externalCatalog, new SimpleFunctionRegistry, new SimpleCatalystConf(true))
   }
 
-  protected[this] val tempTables = new mutable.HashMap[String, LogicalPlan]
+  /** List of temporary tables, mapping from table name to their logical plan. */
+  protected val tempTables = new mutable.HashMap[String, LogicalPlan]
 
   // Note: we track current database here because certain operations do not explicitly
   // specify the database (e.g. DROP TABLE my_table). In these cases we must first
   // check whether the temporary table or function exists, then, if not, operate on
   // the corresponding item in the current database.
-  protected[this] var currentDb = {
+  protected var currentDb = {
     val defaultName = "default"
     val defaultDbDefinition = CatalogDatabase(defaultName, "default database", "", Map())
     // Initialize default database if it doesn't already exist
@@ -118,7 +119,7 @@ class SessionCatalog(
 
   def setCurrentDatabase(db: String): Unit = {
     if (!databaseExists(db)) {
-      throw new AnalysisException(s"cannot set current database to non-existent '$db'")
+      throw new AnalysisException(s"Database '$db' does not exist.")
     }
     currentDb = db
   }
@@ -593,9 +594,6 @@ class SessionCatalog(
   /**
    * Drop a temporary function.
    */
-  // TODO: The reason that we distinguish dropFunction and dropTempFunction is that
-  // Hive has DROP FUNCTION and DROP TEMPORARY FUNCTION. We may want to consolidate
-  // dropFunction and dropTempFunction.
   def dropTempFunction(name: String, ignoreIfNotExists: Boolean): Unit = {
     if (!functionRegistry.dropFunction(name) && !ignoreIfNotExists) {
       throw new AnalysisException(
@@ -622,40 +620,44 @@ class SessionCatalog(
    * based on the function class and put the builder into the FunctionRegistry.
    * The name of this function in the FunctionRegistry will be `databaseName.functionName`.
    */
-  def lookupFunction(name: String, children: Seq[Expression]): Expression = {
-    // TODO: Right now, the name can be qualified or not qualified.
-    // It will be better to get a FunctionIdentifier.
-    // TODO: Right now, we assume that name is not qualified!
-    val qualifiedName = FunctionIdentifier(name, Some(currentDb)).unquotedString
-    if (functionRegistry.functionExists(name)) {
+  def lookupFunction(name: FunctionIdentifier, children: Seq[Expression]): Expression = {
+    // Note: the implementation of this function is a little bit convoluted.
+    // We probably shouldn't use a single FunctionRegistry to register all three kinds of functions
+    // (built-in, temp, and external).
+    if (name.database.isEmpty && functionRegistry.functionExists(name.funcName)) {
       // This function has been already loaded into the function registry.
-      functionRegistry.lookupFunction(name, children)
-    } else if (functionRegistry.functionExists(qualifiedName)) {
+      return functionRegistry.lookupFunction(name.funcName, children)
+    }
+
+    // If the name itself is not qualified, add the current database to it.
+    val qualifiedName = if (name.database.isEmpty) name.copy(database = Some(currentDb)) else name
+
+    if (functionRegistry.functionExists(qualifiedName.unquotedString)) {
       // This function has been already loaded into the function registry.
       // Unlike the above block, we find this function by using the qualified name.
-      functionRegistry.lookupFunction(qualifiedName, children)
-    } else {
-      // The function has not been loaded to the function registry, which means
-      // that the function is a permanent function (if it actually has been registered
-      // in the metastore). We need to first put the function in the FunctionRegistry.
-      val catalogFunction = try {
-        externalCatalog.getFunction(currentDb, name)
-      } catch {
-        case e: AnalysisException => failFunctionLookup(name)
-        case e: NoSuchFunctionException => failFunctionLookup(name)
-      }
-      loadFunctionResources(catalogFunction.resources)
-      // Please note that qualifiedName is provided by the user. However,
-      // catalogFunction.identifier.unquotedString is returned by the underlying
-      // catalog. So, it is possible that qualifiedName is not exactly the same as
-      // catalogFunction.identifier.unquotedString (difference is on case-sensitivity).
-      // At here, we preserve the input from the user.
-      val info = new ExpressionInfo(catalogFunction.className, qualifiedName)
-      val builder = makeFunctionBuilder(qualifiedName, catalogFunction.className)
-      createTempFunction(qualifiedName, info, builder, ignoreIfExists = false)
-      // Now, we need to create the Expression.
-      functionRegistry.lookupFunction(qualifiedName, children)
+      return functionRegistry.lookupFunction(qualifiedName.unquotedString, children)
     }
+
+    // The function has not been loaded to the function registry, which means
+    // that the function is a permanent function (if it actually has been registered
+    // in the metastore). We need to first put the function in the FunctionRegistry.
+    val catalogFunction = try {
+      externalCatalog.getFunction(currentDb, name.funcName)
+    } catch {
+      case e: AnalysisException => failFunctionLookup(name.funcName)
+      case e: NoSuchFunctionException => failFunctionLookup(name.funcName)
+    }
+    loadFunctionResources(catalogFunction.resources)
+    // Please note that qualifiedName is provided by the user. However,
+    // catalogFunction.identifier.unquotedString is returned by the underlying
+    // catalog. So, it is possible that qualifiedName is not exactly the same as
+    // catalogFunction.identifier.unquotedString (difference is on case-sensitivity).
+    // At here, we preserve the input from the user.
+    val info = new ExpressionInfo(catalogFunction.className, qualifiedName.unquotedString)
+    val builder = makeFunctionBuilder(qualifiedName.unquotedString, catalogFunction.className)
+    createTempFunction(qualifiedName.unquotedString, info, builder, ignoreIfExists = false)
+    // Now, we need to create the Expression.
+    return functionRegistry.lookupFunction(qualifiedName.unquotedString, children)
   }
 
   /**
@@ -671,8 +673,6 @@ class SessionCatalog(
       externalCatalog.listFunctions(db, pattern).map { f => FunctionIdentifier(f, Some(db)) }
     val loadedFunctions = StringUtils.filterPattern(functionRegistry.listFunction(), pattern)
       .map { f => FunctionIdentifier(f) }
-    // TODO: Actually, there will be dbFunctions that have been loaded into the FunctionRegistry.
-    // So, the returned list may have two entries for the same function.
     dbFunctions ++ loadedFunctions
   }
 
