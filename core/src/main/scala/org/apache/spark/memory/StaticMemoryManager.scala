@@ -34,7 +34,7 @@ private[spark] class StaticMemoryManager(
     totalOffHeapMemory: Long)
   extends MemoryManager(conf, numCores) {
 
-  private val MIN_MEMORY_BYTES = 32 * 1024 * 1024
+  private val MIN_MEMORY_BYTES = if (conf.contains("spark.testing")) 0 else 32 * 1024 * 1024
 
   if (totalHeapMemory < MIN_MEMORY_BYTES) {
     throw new IllegalArgumentException(s"System memory $totalHeapMemory must " +

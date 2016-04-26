@@ -40,6 +40,7 @@ class MemoryStoreSuite
   with ResetSystemProperties {
 
   var conf: SparkConf = new SparkConf(false)
+    .set("spark.testing", "true")
     .set("spark.test.useCompressedOops", "true")
     .set("spark.storage.memoryFraction", "1")
     .set("spark.storage.safetyFraction", "1")
