@@ -2478,7 +2478,7 @@ setMethod("drop",
 #' @param colname the name of the column to build the histogram from.
 #' @return a data.frame with the histogram statistics, i.e., counts and centroids.
 #' @rdname histogram
-#' @family DataFrame functions
+#' @family SparkDataFrame functions
 #' @export
 #' @examples 
 #' \dontrun{
@@ -2486,7 +2486,7 @@ setMethod("drop",
 #' irisDF <- createDataFrame(sqlContext, iris)
 #' 
 #' # Compute histogram statistics
-#' histData <- histogram(df, "colname"Sepal_Length", nbins = 12)
+#' histData <- histogram(df, df$Sepal_Length, nbins = 12)
 #'
 #' # Once SparkR has computed the histogram statistics, the histogram can be
 #' # rendered using the ggplot2 library:
@@ -2497,7 +2497,7 @@ setMethod("drop",
 #' plot <- plot + xlab("Sepal_Length") + ylab("Frequency")   
 #' } 
 setMethod("histogram",
-          signature(df = "DataFrame", col = "characterOrColumn"),
+          signature(df = "SparkDataFrame", col = "characterOrColumn"),
           function(df, col, nbins = 10) {
             # Validate nbins
             if (nbins < 2) {
@@ -2524,15 +2524,30 @@ setMethod("histogram",
 
             } else if (class(col) == "Column") {
 
+              # The given column needs to be appended to the SparkDataFrame so that we can
+              # use method describe() to compute statistics in one single pass. The new
+              # column must have a name that doesn't exist in the dataset.
+              # To do so, we generate a random column name with more characters than the
+              # longest colname in the dataset, but no more than 100 (think of a UUID).
+              # This column name will never be visible to the user, so the name is irrelevant.
+              # Limiting the colname length to 100 makes debugging easier and it does
+              # introduce a negligible probability of collision: assuming the user has 1 million
+              # columns AND all of them have names 100 characters long (which is very unlikely),
+              # AND they run 1 billion histograms, the probability of collision will roughly be
+              # 1 in 4.4 x 10 ^ 96
+              colname <- paste(base:::sample(c(letters, LETTERS),
+                                             size = min(max(nchar(colnames(df))) + 1, 100),
+                                             replace=TRUE),
+                               collapse="")
+
               # Append the given column to the dataset. This is to support Columns that
               # don't belong to the DataFrame but are rather expressions
-              df$x <- col
+              df <- withColumn(df, colname, col)
 
               # Filter NA values in the target column. Cannot remove all other columns
               # since given Column may be an expression on one or more existing columns
               df <- na.omit(df)
 
-              colname <- "x"
               col
             }
 
