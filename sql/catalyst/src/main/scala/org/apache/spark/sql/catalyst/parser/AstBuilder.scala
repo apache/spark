@@ -113,15 +113,15 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    */
   override def visitDescribeFunction(ctx: DescribeFunctionContext): LogicalPlan = withOrigin(ctx) {
     import ctx._
-    if (describeFuncName.STRING() != null) {
-      DescribeFunction(string(describeFuncName.STRING()), EXTENDED != null)
-    } else if (describeFuncName.qualifiedName() != null) {
-      val functionName =
+    val functionName =
+      if (describeFuncName.STRING() != null) {
+        string(describeFuncName.STRING())
+      } else if (describeFuncName.qualifiedName() != null) {
         describeFuncName.qualifiedName().identifier().asScala.map(_.getText).mkString(".")
-      DescribeFunction(functionName, EXTENDED != null)
-    } else {
-      DescribeFunction(describeFuncName.getText, EXTENDED != null)
-    }
+      } else {
+        describeFuncName.getText
+      }
+    DescribeFunction(functionName, EXTENDED != null)
   }
 
   /**
