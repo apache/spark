@@ -108,7 +108,7 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
       logInfo(s"Pushed Filters: ${pushedDownFilters.mkString(",")}")
 
       val hadoopConf = new Configuration(files.sparkSession.sessionState.hadoopConf)
-      files.options.foreach { case (k, v) => hadoopConf.set(k, v) }
+      files.options.foreach { case (k, v) => if (v ne null) hadoopConf.set(k, v) }
 
       val readFile = files.fileFormat.buildReader(
         sparkSession = files.sparkSession,

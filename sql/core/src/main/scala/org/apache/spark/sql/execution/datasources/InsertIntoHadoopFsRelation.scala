@@ -108,7 +108,7 @@ private[sql] case class InsertIntoHadoopFsRelation(
       job.setOutputValueClass(classOf[InternalRow])
 
       // Also set the options in Hadoop Configuration
-      options.foreach { case (k, v) => job.getConfiguration.set(k, v) }
+      options.foreach { case (k, v) => if (v ne null) job.getConfiguration.set(k, v) }
 
       FileOutputFormat.setOutputPath(job, qualifiedOutputPath)
 
