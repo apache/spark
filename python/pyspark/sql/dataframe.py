@@ -640,25 +640,21 @@ class DataFrame(object):
         if on is not None and not isinstance(on, list):
             on = [on]
 
-        if on is None or len(on) == 0:
-            jdf = self._jdf.crossJoin(other._jdf)
-        elif isinstance(on[0], basestring):
-            if how is None:
-                jdf = self._jdf.join(other._jdf, self._jseq(on), "inner")
-            else:
-                assert isinstance(how, basestring), "how should be basestring"
-                jdf = self._jdf.join(other._jdf, self._jseq(on), how)
+
+        if how is None:
+            how = "inner"
+
+        if isinstance(on[0], basestring):
+            on = self._jseq(on)
         else:
             assert isinstance(on[0], Column), "on should be Column or list of Column"
             if len(on) > 1:
                 on = reduce(lambda x, y: x.__and__(y), on)
             else:
                 on = on[0]
-            if how is None:
-                jdf = self._jdf.join(other._jdf, on._jc, "inner")
-            else:
-                assert isinstance(how, basestring), "how should be basestring"
-                jdf = self._jdf.join(other._jdf, on._jc, how)
+
+        assert isinstance(how, basestring), "how should be basestring"
+        jdf = self._jdf.join(other._jdf, on._jc, how)
         return DataFrame(jdf, self.sql_ctx)
 
     @since(1.6)
