@@ -85,7 +85,9 @@ class HiveContextCompatibilitySuite extends SparkFunSuite with BeforeAndAfterEac
     df.registerTempTable("mee_table")
     hc.sql("CREATE TABLE moo_table (name string, age int)")
     hc.sql("INSERT INTO moo_table SELECT * FROM mee_table")
-    assert(hc.sql("SELECT * FROM moo_table").collect().toSeq == df.collect().toSeq)
+    assert(
+      hc.sql("SELECT * FROM moo_table order by name").collect().toSeq ==
+      df.collect().toSeq.sortBy(_.getString(0)))
     val tables = hc.sql("SHOW TABLES IN mee_db").collect().map(_.getString(0))
     assert(tables.toSet == Set("moo_table", "mee_table"))
     hc.sql("DROP TABLE moo_table")
