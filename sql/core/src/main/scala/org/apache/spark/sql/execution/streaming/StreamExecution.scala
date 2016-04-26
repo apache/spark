@@ -287,7 +287,7 @@ class StreamExecution(
     val newData = availableOffsets.flatMap {
       case (source, available) if committedOffsets.get(source).map(_ < available).getOrElse(true) =>
         val current = committedOffsets.get(source)
-        val batch = source.getData(current, available)
+        val batch = source.getBatch(current, available)
         logDebug(s"Retrieving data from $source: $current -> $available")
         Some(source -> batch)
       case _ => None
@@ -329,7 +329,7 @@ class StreamExecution(
 
     val nextBatch =
       new Dataset(sqlContext, lastExecution, RowEncoder(lastExecution.analyzed.schema))
-    sink.addData(currentBatchId - 1, nextBatch)
+    sink.addBatch(currentBatchId - 1, nextBatch)
 
     awaitBatchLock.synchronized {
       // Wake up any threads that are waiting for the stream to progress.

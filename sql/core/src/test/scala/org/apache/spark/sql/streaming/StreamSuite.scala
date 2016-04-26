@@ -172,7 +172,7 @@ class FakeDefaultSource extends StreamSourceProvider {
         }
       }
 
-      override def getData(start: Option[Offset], end: Offset): DataFrame = {
+      override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
         val startOffset = start.map(_.asInstanceOf[LongOffset].offset).getOrElse(-1L) + 1
         sqlContext.range(startOffset, end.asInstanceOf[LongOffset].offset + 1).toDF("a")
       }

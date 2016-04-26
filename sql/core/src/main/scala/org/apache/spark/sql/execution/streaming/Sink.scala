@@ -31,5 +31,5 @@ trait Sink {
    * this method is called more than once with the same batchId (which will happen in the case of
    * failures), then `data` should only be added once.
    */
-  def addData(batchId: Long, data: DataFrame): Unit
+  def addBatch(batchId: Long, data: DataFrame): Unit
 }

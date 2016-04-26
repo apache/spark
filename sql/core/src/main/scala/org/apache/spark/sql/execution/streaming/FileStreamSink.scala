@@ -47,7 +47,7 @@ class FileStreamSink(
   private val fileLog = new FileStreamSinkLog(sqlContext, logPath.toUri.toString)
   private val fs = basePath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
 
-  override def addData(batchId: Long, data: DataFrame): Unit = {
+  override def addBatch(batchId: Long, data: DataFrame): Unit = {
     if (batchId <= fileLog.getLatest().map(_._1).getOrElse(-1L)) {
       logInfo(s"Skipping already committed batch $batchId")
     } else {
