@@ -18,6 +18,7 @@ package org.apache.spark.sql.catalyst.parser
 
 import java.sql.{Date, Timestamp}
 
+import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, _}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
@@ -126,8 +127,10 @@ class ExpressionParserSuite extends PlanTest {
     assertEqual("a != b", 'a =!= 'b)
     assertEqual("a < b", 'a < 'b)
     assertEqual("a <= b", 'a <= 'b)
+    assertEqual("a !> b", 'a <= 'b)
     assertEqual("a > b", 'a > 'b)
     assertEqual("a >= b", 'a >= 'b)
+    assertEqual("a !< b", 'a >= 'b)
   }
 
   test("between expressions") {
@@ -197,7 +200,8 @@ class ExpressionParserSuite extends PlanTest {
 
   test("function expressions") {
     assertEqual("foo()", 'foo.function())
-    assertEqual("foo.bar()", Symbol("foo.bar").function())
+    assertEqual("foo.bar()",
+      UnresolvedFunction(FunctionIdentifier("bar", Some("foo")), Seq.empty, isDistinct = false))
     assertEqual("foo(*)", 'foo.function(star()))
     assertEqual("count(*)", 'count.function(1))
     assertEqual("foo(a, b)", 'foo.function('a, 'b))

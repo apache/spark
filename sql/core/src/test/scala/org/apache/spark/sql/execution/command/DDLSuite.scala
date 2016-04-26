@@ -716,4 +716,55 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
+  test("describe function") {
+    checkAnswer(
+      sql("DESCRIBE FUNCTION log"),
+      Row("Class: org.apache.spark.sql.catalyst.expressions.Logarithm") ::
+        Row("Function: log") ::
+        Row("Usage: log(b, x) - Returns the logarithm of x with base b.") :: Nil
+    )
+    // predicate operator
+    checkAnswer(
+      sql("DESCRIBE FUNCTION or"),
+      Row("Class: org.apache.spark.sql.catalyst.expressions.Or") ::
+        Row("Function: or") ::
+        Row("Usage: a or b - Logical OR.") :: Nil
+    )
+    checkAnswer(
+      sql("DESCRIBE FUNCTION !"),
+      Row("Class: org.apache.spark.sql.catalyst.expressions.Not") ::
+        Row("Function: !") ::
+        Row("Usage: ! a - Logical not") :: Nil
+    )
+    // arithmetic operators
+    checkAnswer(
+      sql("DESCRIBE FUNCTION +"),
+      Row("Class: org.apache.spark.sql.catalyst.expressions.Add") ::
+        Row("Function: +") ::
+        Row("Usage: a + b - Returns a+b.") :: Nil
+    )
+    // comparison operators
+    checkAnswer(
+      sql("DESCRIBE FUNCTION <"),
+      Row("Class: org.apache.spark.sql.catalyst.expressions.LessThan") ::
+        Row("Function: <") ::
+        Row("Usage: a < b - Returns TRUE if a is less than b.") :: Nil
+    )
+    // STRING
+    checkAnswer(
+      sql("DESCRIBE FUNCTION 'concat'"),
+      Row("Class: org.apache.spark.sql.catalyst.expressions.Concat") ::
+        Row("Function: concat") ::
+        Row("Usage: concat(str1, str2, ..., strN) " +
+          "- Returns the concatenation of str1, str2, ..., strN") :: Nil
+    )
+    // extended mode
+    checkAnswer(
+      sql("DESCRIBE FUNCTION EXTENDED ^"),
+      Row("Class: org.apache.spark.sql.catalyst.expressions.BitwiseXor") ::
+        Row("Extended Usage:\n> SELECT 3 ^ 5; 2") ::
+        Row("Function: ^") ::
+        Row("Usage: a ^ b - Bitwise exclusive OR.") :: Nil
+    )
+  }
 }

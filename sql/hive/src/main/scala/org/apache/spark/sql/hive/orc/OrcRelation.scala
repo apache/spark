@@ -34,12 +34,12 @@ import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat, FileSplit}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{HadoopRDD, RDD}
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.hive.{HiveInspectors, HiveMetastoreTypes, HiveShim}
+import org.apache.spark.sql.hive.{HiveInspectors, HiveShim}
 import org.apache.spark.sql.sources.{Filter, _}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
@@ -52,17 +52,17 @@ private[sql] class DefaultSource
   override def toString: String = "ORC"
 
   override def inferSchema(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
     OrcFileOperator.readSchema(
       files.map(_.getPath.toUri.toString),
-      Some(sqlContext.sparkContext.hadoopConfiguration)
+      Some(new Configuration(sparkSession.sessionState.hadoopConf))
     )
   }
 
   override def prepareWrite(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
@@ -109,26 +109,26 @@ private[sql] class DefaultSource
   }
 
   override def buildReader(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       dataSchema: StructType,
       partitionSchema: StructType,
       requiredSchema: StructType,
       filters: Seq[Filter],
-      options: Map[String, String]): (PartitionedFile) => Iterator[InternalRow] = {
-    val orcConf = new Configuration(sqlContext.sparkContext.hadoopConfiguration)
-
-    if (sqlContext.conf.orcFilterPushDown) {
+      options: Map[String, String],
+      hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
+    if (sparkSession.sessionState.conf.orcFilterPushDown) {
       // Sets pushed predicates
       OrcFilters.createFilter(filters.toArray).foreach { f =>
-        orcConf.set(OrcTableScan.SARG_PUSHDOWN, f.toKryo)
-        orcConf.setBoolean(ConfVars.HIVEOPTINDEXFILTER.varname, true)
+        hadoopConf.set(OrcTableScan.SARG_PUSHDOWN, f.toKryo)
+        hadoopConf.setBoolean(ConfVars.HIVEOPTINDEXFILTER.varname, true)
       }
     }
 
-    val broadcastedConf = sqlContext.sparkContext.broadcast(new SerializableConfiguration(orcConf))
+    val broadcastedHadoopConf =
+      sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
     (file: PartitionedFile) => {
-      val conf = broadcastedConf.value.value
+      val conf = broadcastedHadoopConf.value.value
 
       // SPARK-8501: Empty ORC files always have an empty schema stored in their footer. In this
       // case, `OrcFileOperator.readSchema` returns `None`, and we can't read the underlying file
@@ -153,7 +153,7 @@ private[sql] class DefaultSource
           // Specifically would be helpful for partitioned datasets.
           val orcReader = OrcFile.createReader(
             new Path(new URI(file.filePath)), OrcFile.readerOptions(conf))
-          new SparkOrcNewRecordReader(orcReader, conf, fileSplit.getStart(), fileSplit.getLength())
+          new SparkOrcNewRecordReader(orcReader, conf, fileSplit.getStart, fileSplit.getLength)
         }
 
         // Unwraps `OrcStruct`s to `UnsafeRow`s
@@ -186,9 +186,7 @@ private[orc] class OrcOutputWriter(
   private val serializer = {
     val table = new Properties()
     table.setProperty("columns", dataSchema.fieldNames.mkString(","))
-    table.setProperty("columns.types", dataSchema.map { f =>
-      HiveMetastoreTypes.toMetastoreType(f.dataType)
-    }.mkString(":"))
+    table.setProperty("columns.types", dataSchema.map(_.dataType.catalogString).mkString(":"))
 
     val serde = new OrcSerde
     val configuration = context.getConfiguration
@@ -198,10 +196,7 @@ private[orc] class OrcOutputWriter(
 
   // Object inspector converted from the schema of the relation to be written.
   private val structOI = {
-    val typeInfo =
-      TypeInfoUtils.getTypeInfoFromTypeString(
-        HiveMetastoreTypes.toMetastoreType(dataSchema))
-
+    val typeInfo = TypeInfoUtils.getTypeInfoFromTypeString(dataSchema.catalogString)
     OrcStruct.createObjectInspector(typeInfo.asInstanceOf[StructTypeInfo])
       .asInstanceOf[SettableStructObjectInspector]
   }
@@ -275,7 +270,7 @@ private[orc] class OrcOutputWriter(
 }
 
 private[orc] case class OrcTableScan(
-    @transient sqlContext: SQLContext,
+    @transient sparkSession: SparkSession,
     attributes: Seq[Attribute],
     filters: Array[Filter],
     @transient inputPaths: Seq[FileStatus])
@@ -283,11 +278,11 @@ private[orc] case class OrcTableScan(
   with HiveInspectors {
 
   def execute(): RDD[InternalRow] = {
-    val job = Job.getInstance(sqlContext.sparkContext.hadoopConfiguration)
+    val job = Job.getInstance(new Configuration(sparkSession.sessionState.hadoopConf))
     val conf = job.getConfiguration
 
     // Tries to push down filters if ORC filter push-down is enabled
-    if (sqlContext.conf.orcFilterPushDown) {
+    if (sparkSession.sessionState.conf.orcFilterPushDown) {
       OrcFilters.createFilter(filters).foreach { f =>
         conf.set(OrcTableScan.SARG_PUSHDOWN, f.toKryo)
         conf.setBoolean(ConfVars.HIVEOPTINDEXFILTER.varname, true)
@@ -299,14 +294,14 @@ private[orc] case class OrcTableScan(
     val orcFormat = new DefaultSource
     val dataSchema =
       orcFormat
-        .inferSchema(sqlContext, Map.empty, inputPaths)
+        .inferSchema(sparkSession, Map.empty, inputPaths)
         .getOrElse(sys.error("Failed to read schema from target ORC files."))
     // Sets requested columns
     OrcRelation.setRequiredColumns(conf, dataSchema, StructType.fromAttributes(attributes))
 
     if (inputPaths.isEmpty) {
       // the input path probably be pruned, return an empty RDD.
-      return sqlContext.sparkContext.emptyRDD[InternalRow]
+      return sparkSession.sparkContext.emptyRDD[InternalRow]
     }
     FileInputFormat.setInputPaths(job, inputPaths.map(_.getPath): _*)
 
@@ -314,7 +309,7 @@ private[orc] case class OrcTableScan(
       classOf[OrcInputFormat]
         .asInstanceOf[Class[_ <: MapRedInputFormat[NullWritable, Writable]]]
 
-    val rdd = sqlContext.sparkContext.hadoopRDD(
+    val rdd = sparkSession.sparkContext.hadoopRDD(
       conf.asInstanceOf[JobConf],
       inputFormatClass,
       classOf[NullWritable],

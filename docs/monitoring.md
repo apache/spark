@@ -229,27 +229,46 @@ both running applications, and in the history server.  The endpoints are mounted
 for the history server, they would typically be accessible at `http://<server-url>:18080/api/v1`, and
 for a running application, at `http://localhost:4040/api/v1`.
 
+In the API, an application is referenced by its application ID, `[app-id]`.
+When running on YARN, each application may have multiple attempts; each identified by their `[attempt-id]`.
+In the API listed below, `[app-id]` will actually be `[base-app-id]/[attempt-id]`,
+where `[base-app-id]` is the YARN application ID.
+
 <table class="table">
   <tr><th>Endpoint</th><th>Meaning</th></tr>
   <tr>
     <td><code>/applications</code></td>
-    <td>A list of all applications</td>
+    <td>A list of all applications.
+    <br>
+    <code>?status=[completed|running]</code> list only applications in the chosen state.
+    <br>
+    <code>?minDate=[date]</code> earliest date/time to list.
+    <br>Examples:
+    <br><code>?minDate=2015-02-10</code>
+    <br><code>?minDate=2015-02-03T16:42:40.000GMT</code>
+    <br><code>?maxDate=[date]</code> latest date/time to list; uses same format as <code>minDate</code>.</td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/jobs</code></td>
-    <td>A list of all jobs for a given application</td>
+    <td>
+      A list of all jobs for a given application.
+      <br><code>?status=[complete|succeeded|failed]</code> list only jobs in the specific state.
+    </td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/jobs/[job-id]</code></td>
-    <td>Details for the given job</td>
+    <td>Details for the given job.</td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/stages</code></td>
-    <td>A list of all stages for a given application</td>
+    <td>A list of all stages for a given application.</td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/stages/[stage-id]</code></td>
-    <td>A list of all attempts for the given stage</td>
+    <td>
+      A list of all attempts for the given stage.
+      <br><code>?status=[active|complete|pending|failed]</code> list only stages in the state.
+    </td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/stages/[stage-id]/[stage-attempt-id]</code></td>
@@ -257,36 +276,52 @@ for a running application, at `http://localhost:4040/api/v1`.
   </tr>
   <tr>
     <td><code>/applications/[app-id]/stages/[stage-id]/[stage-attempt-id]/taskSummary</code></td>
-    <td>Summary metrics of all tasks in the given stage attempt</td>
+    <td>
+      Summary metrics of all tasks in the given stage attempt.
+      <br><code>?quantiles</code> summarize the metrics with the given quantiles.
+      <br>Example: <code>?quantiles=0.01,0.5,0.99</code>
+    </td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/stages/[stage-id]/[stage-attempt-id]/taskList</code></td>
-    <td>A list of all tasks for the given stage attempt</td>
+    <td>
+       A list of all tasks for the given stage attempt.
+      <br><code>?offset=[offset]&amp;length=[len]</code> list tasks in the given range.
+      <br><code>?sortBy=[runtime|-runtime]</code> sort the tasks.
+      <br>Example: <code>?offset=10&amp;length=50&amp;sortBy=runtime</code>
+    </td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/executors</code></td>
-    <td>A list of all executors for the given application</td>
+    <td>A list of all executors for the given application.</td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/storage/rdd</code></td>
-    <td>A list of stored RDDs for the given application</td>
+    <td>A list of stored RDDs for the given application.</td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/storage/rdd/[rdd-id]</code></td>
-    <td>Details for the storage status of a given RDD</td>
+    <td>Details for the storage status of a given RDD.</td>
   </tr>
   <tr>
-    <td><code>/applications/[app-id]/logs</code></td>
-    <td>Download the event logs for all attempts of the given application as a zip file</td>
+    <td><code>/applications/[base-app-id]/logs</code></td>
+    <td>Download the event logs for all attempts of the given application as files within
+    a zip file.
+    </td>
   </tr>
   <tr>
-    <td><code>/applications/[app-id]/[attempt-id]/logs</code></td>
-    <td>Download the event logs for the specified attempt of the given application as a zip file</td>
+    <td><code>/applications/[base-app-id]/[attempt-id]/logs</code></td>
+    <td>Download the event logs for a specific application attempt as a zip file.</td>
   </tr>
 </table>
 
-When running on Yarn, each application has multiple attempts, so `[app-id]` is actually
-`[app-id]/[attempt-id]` in all cases.
+The number of jobs and stages which can retrieved is constrained by the same retention
+mechanism of the standalone Spark UI; `"spark.ui.retainedJobs"` defines the threshold
+value triggering garbage collection on jobs, and `spark.ui.retainedStages` that for stages.
+Note that the garbage collection takes place on playback: it is possible to retrieve
+more entries by increasing these values and restarting the history server.
+
+### API Versioning Policy
 
 These endpoints have been strongly versioned to make it easier to develop applications on top.
  In particular, Spark guarantees:

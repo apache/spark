@@ -932,7 +932,7 @@ object functions {
    * @since 1.5.0
    */
   def broadcast(df: DataFrame): DataFrame = {
-    Dataset.ofRows(df.sqlContext, BroadcastHint(df.logicalPlan))
+    Dataset.ofRows(df.sparkSession, BroadcastHint(df.logicalPlan))
   }
 
   /**
