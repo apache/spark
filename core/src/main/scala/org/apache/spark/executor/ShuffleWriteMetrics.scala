@@ -35,21 +35,21 @@ class ShuffleWriteMetrics private[spark] () extends Serializable {
   /**
    * Number of bytes written for the shuffle by this task.
    */
-  def bytesWritten: Long = _bytesWritten.unboxValue
+  def bytesWritten: Long = _bytesWritten.sum
 
   /**
    * Total number of records written to the shuffle by this task.
    */
-  def recordsWritten: Long = _recordsWritten.unboxValue
+  def recordsWritten: Long = _recordsWritten.sum
 
   /**
    * Time the task spent blocking on writes to disk or buffer cache, in nanoseconds.
    */
-  def writeTime: Long = _writeTime.unboxValue
+  def writeTime: Long = _writeTime.sum
 
-  private[spark] def incBytesWritten(v: Long): Unit = _bytesWritten.unboxAdd(v)
-  private[spark] def incRecordsWritten(v: Long): Unit = _recordsWritten.unboxAdd(v)
-  private[spark] def incWriteTime(v: Long): Unit = _writeTime.unboxAdd(v)
+  private[spark] def incBytesWritten(v: Long): Unit = _bytesWritten.add(v)
+  private[spark] def incRecordsWritten(v: Long): Unit = _recordsWritten.add(v)
+  private[spark] def incWriteTime(v: Long): Unit = _writeTime.add(v)
   private[spark] def decBytesWritten(v: Long): Unit = {
     _bytesWritten.setValue(bytesWritten - v)
   }

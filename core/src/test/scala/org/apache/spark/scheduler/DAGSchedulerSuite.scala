@@ -112,7 +112,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     override def stop() = {}
     override def executorHeartbeatReceived(
         execId: String,
-        accumUpdates: Array[(Long, Seq[AccumulatorUpdates])],
+        accumUpdates: Array[(Long, Seq[NewAccumulator[_, _]])],
         blockManagerId: BlockManagerId): Boolean = true
     override def submitTasks(taskSet: TaskSet) = {
       // normally done by TaskSetManager
@@ -277,7 +277,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
           taskSet.tasks(i),
           result._1,
           result._2,
-          Seq(AccumulatorUpdates(accumId, Some(""), false, UpdatedLongValue(1)))))
+          Seq(AccumulatorSuite.createLongAccum("", initValue = 1, id = accumId))))
       }
     }
   }
@@ -483,7 +483,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
       override def defaultParallelism(): Int = 2
       override def executorHeartbeatReceived(
           execId: String,
-          accumUpdates: Array[(Long, Seq[AccumulatorUpdates])],
+          accumUpdates: Array[(Long, Seq[NewAccumulator[_, _]])],
           blockManagerId: BlockManagerId): Boolean = true
       override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {}
       override def applicationAttemptId(): Option[String] = None
@@ -1612,17 +1612,14 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
 
   test("accumulator not calculated for resubmitted result stage") {
     // just for register
-    val accum = sc.longAccumulator
+    val accum = AccumulatorSuite.createLongAccum("a")
     val finalRdd = new MyRDD(sc, 1, Nil)
     submit(finalRdd, Array(0))
     completeWithAccumulator(accum.id, taskSets(0), Seq((Success, 42)))
     completeWithAccumulator(accum.id, taskSets(0), Seq((Success, 42)))
     assert(results === Map(0 -> 42))
 
-    val accVal = AccumulatorContext.get(accum.id).get.value
-
-    assert(accVal === 1)
-
+    assert(accum.value === 1)
     assertDataStructuresEmpty()
   }
 
@@ -1633,11 +1630,20 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     assert(AccumulatorContext.get(acc1.id).isDefined)
     assert(AccumulatorContext.get(acc2.id).isDefined)
     assert(AccumulatorContext.get(acc3.id).isDefined)
-    val accInfo1 = acc1.getUpdates.copy(value = UpdatedLongValue(15))
-    val accInfo2 = acc2.getUpdates.copy(value = UpdatedLongValue(13))
-    val accInfo3 = acc3.getUpdates.copy(value = UpdatedLongValue(18))
-    val accumUpdates = Seq(accInfo1, accInfo2, accInfo3)
-    val exceptionFailure = new ExceptionFailure(new SparkException("fondue?"), accumUpdates)
+    val accUpdate1 = new LongAccumulator
+    accUpdate1.metadata = acc1.metadata
+    accUpdate1.setValue(15)
+    val accUpdate2 = new LongAccumulator
+    accUpdate2.metadata = acc2.metadata
+    accUpdate2.setValue(13)
+    val accUpdate3 = new LongAccumulator
+    accUpdate3.metadata = acc3.metadata
+    accUpdate3.setValue(18)
+    val accumUpdates = Seq(accUpdate1, accUpdate2, accUpdate3)
+    val accumInfo = accumUpdates.map(AccumulatorSuite.makeInfo)
+    val exceptionFailure = new ExceptionFailure(
+      new SparkException("fondue?"),
+      accumInfo).copy(accums = accumUpdates)
     submit(new MyRDD(sc, 1, Nil), Array(0))
     runEvent(makeCompletionEvent(taskSets.head.tasks.head, exceptionFailure, "result"))
     assert(AccumulatorContext.get(acc1.id).get.value === 15L)
@@ -2006,11 +2012,11 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
       task: Task[_],
       reason: TaskEndReason,
       result: Any,
-      extraAccumUpdates: Seq[AccumulatorUpdates] = Seq.empty,
+      extraAccumUpdates: Seq[NewAccumulator[_, _]] = Seq.empty,
       taskInfo: TaskInfo = createFakeTaskInfo()): CompletionEvent = {
     val accumUpdates = reason match {
-      case Success => task.metrics.accumulatorUpdates()
-      case ef: ExceptionFailure => ef.accumUpdates
+      case Success => task.metrics.accumulators()
+      case ef: ExceptionFailure => ef.accums
       case _ => Seq.empty
     }
     CompletionEvent(task, reason, result, accumUpdates ++ extraAccumUpdates, taskInfo)

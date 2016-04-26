@@ -240,7 +240,7 @@ private[spark] object JsonProtocol {
       ("Task ID" -> taskId) ~
       ("Stage ID" -> stageId) ~
       ("Stage Attempt ID" -> stageAttemptId) ~
-      ("Accumulator Updates" -> JArray(updates.map(accumUpdatesToJson).toList))
+      ("Accumulator Updates" -> JArray(updates.map(accumulableInfoToJson).toList))
     })
   }
 
@@ -292,57 +292,6 @@ private[spark] object JsonProtocol {
     ("Internal" -> accumulableInfo.internal) ~
     ("Count Failed Values" -> accumulableInfo.countFailedValues) ~
     ("Metadata" -> accumulableInfo.metadata)
-  }
-
-  def accumUpdatesToJson(updates: AccumulatorUpdates): JValue = {
-    val name = updates.name
-    ("ID" -> updates.id) ~
-    ("Name" -> name) ~
-    ("Count Failed Values" -> updates.countFailedValues) ~
-    ("Value" -> updatedValueToJson(name, updates.value))
-  }
-
-  def accumUpdatesFromJson(json: JValue): AccumulatorUpdates = {
-    val id = (json \ "ID").extract[Long]
-    val name = (json \ "Name").extractOpt[String]
-    val countFailedValues = (json \ "Count Failed Values").extract[Boolean]
-    val value = updatedValueFromJson(name, json \ "Value")
-    AccumulatorUpdates(id, name, countFailedValues, value)
-  }
-
-  def updatedValueToJson(name: Option[String], value: UpdatedValue): JValue = {
-    if (name.exists(_.startsWith(InternalAccumulator.METRICS_PREFIX))) {
-      value match {
-        case UpdatedLongValue(l) => JInt(l)
-        case _ =>
-          val blocks = value.asInstanceOf[GenericUpdatedValue[Seq[(BlockId, BlockStatus)]]].value
-          JArray(blocks.toList.map { case (id, status) =>
-            ("Block ID" -> id.toString) ~
-            ("Status" -> blockStatusToJson(status))
-          })
-      }
-    } else {
-      JString(value.toString)
-    }
-  }
-
-  def updatedValueFromJson(name: Option[String], value: JValue): UpdatedValue = {
-    if (name.exists(_.startsWith(InternalAccumulator.METRICS_PREFIX))) {
-      value match {
-        case JInt(v) => UpdatedLongValue(v.toLong)
-        case JArray(v) =>
-          val blocks = v.map { blockJson =>
-            val id = BlockId((blockJson \ "Block ID").extract[String])
-            val status = blockStatusFromJson(blockJson \ "Status")
-            (id, status)
-          }
-          new GenericUpdatedValue(blocks)
-        case _ => throw new IllegalArgumentException(s"unexpected json value $value for " +
-          "accumulator " + name.get)
-      }
-    } else {
-      new UpdatedValueString(value.extract[String])
-    }
   }
 
   /**
@@ -423,7 +372,7 @@ private[spark] object JsonProtocol {
         ("Message" -> fetchFailed.message)
       case exceptionFailure: ExceptionFailure =>
         val stackTrace = stackTraceToJson(exceptionFailure.stackTrace)
-        val accumUpdates = JArray(exceptionFailure.accumUpdates.map(accumUpdatesToJson).toList)
+        val accumUpdates = JArray(exceptionFailure.accumUpdates.map(accumulableInfoToJson).toList)
         ("Class Name" -> exceptionFailure.className) ~
         ("Description" -> exceptionFailure.description) ~
         ("Stack Trace" -> stackTrace) ~
@@ -697,7 +646,7 @@ private[spark] object JsonProtocol {
       val stageId = (json \ "Stage ID").extract[Int]
       val stageAttemptId = (json \ "Stage Attempt ID").extract[Int]
       val updates =
-        (json \ "Accumulator Updates").extract[List[JValue]].map(accumUpdatesFromJson)
+        (json \ "Accumulator Updates").extract[List[JValue]].map(accumulableInfoFromJson)
       (taskId, stageId, stageAttemptId, updates)
     }
     SparkListenerExecutorMetricsUpdate(execInfo, accumUpdates)
@@ -890,8 +839,10 @@ private[spark] object JsonProtocol {
         val fullStackTrace = (json \ "Full Stack Trace").extractOpt[String].orNull
         // Fallback on getting accumulator updates from TaskMetrics, which was logged in Spark 1.x
         val accumUpdates = Utils.jsonOption(json \ "Accumulator Updates")
-          .map(_.extract[List[JValue]].map(accumUpdatesFromJson))
-          .getOrElse(taskMetricsFromJson(json \ "Metrics").accumulatorUpdates)
+          .map(_.extract[List[JValue]].map(accumulableInfoFromJson))
+          .getOrElse(taskMetricsFromJson(json \ "Metrics").accumulators().map(acc => {
+            acc.toInfo(Some(acc.localValue), None)
+          }))
         ExceptionFailure(className, description, stackTrace, fullStackTrace, None, accumUpdates)
       case `taskResultLost` => TaskResultLost
       case `taskKilled` => TaskKilled

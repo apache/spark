@@ -45,12 +45,12 @@ class OutputMetrics private[spark] () extends Serializable {
   /**
    * Total number of bytes written.
    */
-  def bytesWritten: Long = _bytesWritten.unboxValue
+  def bytesWritten: Long = _bytesWritten.sum
 
   /**
    * Total number of records written.
    */
-  def recordsWritten: Long = _recordsWritten.unboxValue
+  def recordsWritten: Long = _recordsWritten.sum
 
   private[spark] def setBytesWritten(v: Long): Unit = _bytesWritten.setValue(v)
   private[spark] def setRecordsWritten(v: Long): Unit = _recordsWritten.setValue(v)

@@ -38,7 +38,7 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
 
   test("internal accumulators in TaskContext") {
     val taskContext = TaskContext.empty()
-    val accumUpdates = taskContext.taskMetrics.accumulatorUpdates()
+    val accumUpdates = taskContext.taskMetrics.accumulators()
     assert(accumUpdates.size > 0)
     val testAccum = taskContext.taskMetrics.testAccum.get
     assert(accumUpdates.exists(_.id == testAccum.id))
@@ -67,7 +67,7 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
       val taskAccumValues = taskInfos.map { taskInfo =>
         val taskAccum = findTestAccum(taskInfo.accumulables)
         assert(taskAccum.update.isDefined)
-        assert(taskAccum.update.get.asInstanceOf[UpdatedLongValue].l === 1L)
+        assert(taskAccum.update.get.asInstanceOf[Long] === 1L)
         taskAccum.value.get.asInstanceOf[Long]
       }
       // Each task should keep track of the partial value on the way, i.e. 1, 2, ... numPartitions

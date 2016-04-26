@@ -22,6 +22,7 @@ import scala.collection.mutable.{ArrayBuffer, LinkedHashMap}
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
+import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.storage.{BlockId, BlockStatus}
 
 
@@ -54,37 +55,37 @@ class TaskMetrics private[spark] () extends Serializable {
   /**
    * Time taken on the executor to deserialize this task.
    */
-  def executorDeserializeTime: Long = _executorDeserializeTime.unboxValue
+  def executorDeserializeTime: Long = _executorDeserializeTime.sum
 
   /**
    * Time the executor spends actually running the task (including fetching shuffle data).
    */
-  def executorRunTime: Long = _executorRunTime.unboxValue
+  def executorRunTime: Long = _executorRunTime.sum
 
   /**
    * The number of bytes this task transmitted back to the driver as the TaskResult.
    */
-  def resultSize: Long = _resultSize.unboxValue
+  def resultSize: Long = _resultSize.sum
 
   /**
    * Amount of time the JVM spent in garbage collection while executing this task.
    */
-  def jvmGCTime: Long = _jvmGCTime.unboxValue
+  def jvmGCTime: Long = _jvmGCTime.sum
 
   /**
    * Amount of time spent serializing the task result.
    */
-  def resultSerializationTime: Long = _resultSerializationTime.unboxValue
+  def resultSerializationTime: Long = _resultSerializationTime.sum
 
   /**
    * The number of in-memory bytes spilled by this task.
    */
-  def memoryBytesSpilled: Long = _memoryBytesSpilled.unboxValue
+  def memoryBytesSpilled: Long = _memoryBytesSpilled.sum
 
   /**
    * The number of on-disk bytes spilled by this task.
    */
-  def diskBytesSpilled: Long = _diskBytesSpilled.unboxValue
+  def diskBytesSpilled: Long = _diskBytesSpilled.sum
 
   /**
    * Peak memory used by internal data structures created during shuffles, aggregations and
@@ -92,7 +93,7 @@ class TaskMetrics private[spark] () extends Serializable {
    * across all such data structures created in this task. For SQL jobs, this only tracks all
    * unsafe operators and ExternalSort.
    */
-  def peakExecutionMemory: Long = _peakExecutionMemory.unboxValue
+  def peakExecutionMemory: Long = _peakExecutionMemory.sum
 
   /**
    * Storage statuses of any blocks that have been updated as a result of this task.
@@ -222,30 +223,12 @@ class TaskMetrics private[spark] () extends Serializable {
     externalAccums += a
   }
 
-  private[spark] def accumulatorUpdates(): Seq[AccumulatorUpdates] =
-    (internalAccums ++ externalAccums).map(_.getUpdates)
+  private[spark] def accumulators(): Seq[NewAccumulator[_, _]] = internalAccums ++ externalAccums
 }
 
-/**
- * Internal subclass of [[TaskMetrics]] which is used only for posting events to listeners.
- * Its purpose is to obviate the need for the driver to reconstruct the original accumulators,
- * which might have been garbage-collected. See SPARK-13407 for more details.
- *
- * Instances of this class should be considered read-only and users should not call `inc*()` or
- * `set*()` methods. While we could override the setter methods to throw
- * UnsupportedOperationException, we choose not to do so because the overrides would quickly become
- * out-of-date when new metrics are added.
- */
-private[spark] class ListenerTaskMetrics(accUpdates: Seq[AccumulatorUpdates]) extends TaskMetrics {
-
-  override def accumulatorUpdates(): Seq[AccumulatorUpdates] = accUpdates
-
-  override private[spark] def registerAccumulator(a: NewAccumulator[_, _]): Unit = {
-    throw new UnsupportedOperationException("This TaskMetrics is read-only")
-  }
-}
 
 private[spark] object TaskMetrics extends Logging {
+  import InternalAccumulator._
 
   /**
    * Create an empty task metrics that doesn't register its accumulators.
@@ -274,10 +257,27 @@ private[spark] object TaskMetrics extends Logging {
    * This assumes the provided updates contain the initial set of accumulators representing
    * internal task level metrics.
    */
-  def fromAccumulatorUpdates(accumUpdates: Seq[AccumulatorUpdates]): TaskMetrics = {
-    val tm = new ListenerTaskMetrics(accumUpdates)
-    accumUpdates.filter(_.name.isDefined).foreach { updates =>
-      tm.nameToAccums.get(updates.name.get).foreach(_.applyUpdates(updates.value))
+  def fromAccumulatorUpdates(updates: Seq[AccumulableInfo]): TaskMetrics = {
+    val tm = new TaskMetrics
+    updates.filter(info => info.name.isDefined && info.update.isDefined).foreach { info =>
+      val name = info.name.get
+      val value = info.update.get
+      if (name == UPDATED_BLOCK_STATUSES) {
+        tm.setUpdatedBlockStatuses(value.asInstanceOf[Seq[(BlockId, BlockStatus)]])
+      } else {
+        tm.nameToAccums.get(name).foreach(
+          _.asInstanceOf[LongAccumulator].setValue(value.asInstanceOf[Long])
+        )
+      }
+    }
+    tm
+  }
+
+  def fromAccumulators(accums: Seq[NewAccumulator[_, _]]): TaskMetrics = {
+    val tm = new TaskMetrics
+    accums.filter(_.name.isDefined).foreach { acc =>
+      tm.nameToAccums.get(acc.name.get).foreach(_.asInstanceOf[NewAccumulator[Any, Any]]
+        .merge(acc.asInstanceOf[NewAccumulator[Any, Any]]))
     }
     tm
   }
@@ -286,22 +286,19 @@ private[spark] object TaskMetrics extends Logging {
 
 private[spark] class BlockStatusesAccumulator
   extends NewAccumulator[(BlockId, BlockStatus), Seq[(BlockId, BlockStatus)]] {
-  @transient private[this] var _seq = ArrayBuffer.empty[(BlockId, BlockStatus)]
+  private[this] var _seq = ArrayBuffer.empty[(BlockId, BlockStatus)]
 
-  override def updatedValue: UpdatedValue = new GenericUpdatedValue(_seq)
+  override def copyAndReset(): BlockStatusesAccumulator = new BlockStatusesAccumulator
 
-  override def initialize(): Unit = _seq = ArrayBuffer.empty[(BlockId, BlockStatus)]
+  override def isZero(): Boolean = _seq.isEmpty
 
   override def add(v: (BlockId, BlockStatus)): Unit = _seq += v
 
-  override def isNoOp(updates: UpdatedValue): Boolean = {
-    val v = updates.asInstanceOf[GenericUpdatedValue[Seq[(BlockId, BlockStatus)]]].value
-    v.isEmpty
-  }
-
-  override def applyUpdates(updates: UpdatedValue): Unit = {
-    val v = updates.asInstanceOf[GenericUpdatedValue[Seq[(BlockId, BlockStatus)]]].value
-    _seq ++= v
+  override def merge(other: NewAccumulator[(BlockId, BlockStatus), Seq[(BlockId, BlockStatus)]])
+  : Unit = other match {
+    case o: BlockStatusesAccumulator => _seq ++= o.localValue
+    case _ => throw new UnsupportedOperationException(
+      s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
   }
 
   override def localValue: Seq[(BlockId, BlockStatus)] = _seq

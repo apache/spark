@@ -19,10 +19,7 @@ package org.apache.spark
 
 import java.io.{ObjectInputStream, ObjectOutputStream}
 
-import scala.util.Try
-
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.storage.BlockManagerId
@@ -120,7 +117,8 @@ case class ExceptionFailure(
     stackTrace: Array[StackTraceElement],
     fullStackTrace: String,
     private val exceptionWrapper: Option[ThrowableSerializationWrapper],
-    accumUpdates: Seq[AccumulatorUpdates] = Seq.empty)
+    accumUpdates: Seq[AccumulableInfo] = Seq.empty,
+    private[spark] var accums: Seq[NewAccumulator[_, _]] = Nil)
   extends TaskFailedReason {
 
   /**
@@ -130,14 +128,19 @@ case class ExceptionFailure(
    */
   private[spark] def this(
       e: Throwable,
-      accumUpdates: Seq[AccumulatorUpdates],
+      accumUpdates: Seq[AccumulableInfo],
       preserveCause: Boolean) {
     this(e.getClass.getName, e.getMessage, e.getStackTrace, Utils.exceptionString(e),
       if (preserveCause) Some(new ThrowableSerializationWrapper(e)) else None, accumUpdates)
   }
 
-  private[spark] def this(e: Throwable, accumUpdates: Seq[AccumulatorUpdates]) {
+  private[spark] def this(e: Throwable, accumUpdates: Seq[AccumulableInfo]) {
     this(e, accumUpdates, preserveCause = true)
+  }
+
+  private[spark] def withAccums(accums: Seq[NewAccumulator[_, _]]): ExceptionFailure = {
+    this.accums = accums
+    this
   }
 
   def exception: Option[Throwable] = exceptionWrapper.flatMap(w => Option(w.exception))

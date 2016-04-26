@@ -209,7 +209,7 @@ class DAGScheduler(
       task: Task[_],
       reason: TaskEndReason,
       result: Any,
-      accumUpdates: Seq[AccumulatorUpdates],
+      accumUpdates: Seq[NewAccumulator[_, _]],
       taskInfo: TaskInfo): Unit = {
     eventProcessLoop.post(
       CompletionEvent(task, reason, result, accumUpdates, taskInfo))
@@ -223,7 +223,7 @@ class DAGScheduler(
   def executorHeartbeatReceived(
       execId: String,
       // (taskId, stageId, stageAttemptId, accumUpdates)
-      accumUpdates: Array[(Long, Int, Int, Seq[AccumulatorUpdates])],
+      accumUpdates: Array[(Long, Int, Int, Seq[AccumulableInfo])],
       blockManagerId: BlockManagerId): Boolean = {
     listenerBus.post(SparkListenerExecutorMetricsUpdate(execId, accumUpdates))
     blockManagerMaster.driverEndpoint.askWithRetry[Boolean](
@@ -1096,9 +1096,9 @@ class DAGScheduler(
           case None =>
             throw new SparkException(s"attempted to access non-existent accumulator $id")
         }
-        acc.applyUpdates(updates.value)
+        acc.merge(updates.asInstanceOf[NewAccumulator[Any, Any]])
         // To avoid UI cruft, ignore cases where value wasn't updated
-        if (acc.name.isDefined && !acc.isNoOp(updates.value)) {
+        if (acc.name.isDefined && !updates.isZero()) {
           stage.latestInfo.accumulables(id) = acc.toInfo(None, Some(acc.value))
           event.taskInfo.accumulables += acc.toInfo(Some(updates.value), Some(acc.value))
         }
@@ -1129,7 +1129,7 @@ class DAGScheduler(
     val taskMetrics: TaskMetrics =
       if (event.accumUpdates.nonEmpty) {
         try {
-          TaskMetrics.fromAccumulatorUpdates(event.accumUpdates)
+          TaskMetrics.fromAccumulators(event.accumUpdates)
         } catch {
           case NonFatal(e) =>
             logError(s"Error when attempting to reconstruct metrics for task $taskId", e)

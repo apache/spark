@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler
 
-import org.apache.spark.AccumulatorUpdates
+import org.apache.spark.NewAccumulator
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.storage.BlockManagerId
 
@@ -67,7 +67,7 @@ private[spark] trait TaskScheduler {
    */
   def executorHeartbeatReceived(
       execId: String,
-      accumUpdates: Array[(Long, Seq[AccumulatorUpdates])],
+      accumUpdates: Array[(Long, Seq[NewAccumulator[_, _]])],
       blockManagerId: BlockManagerId): Boolean
 
   /**

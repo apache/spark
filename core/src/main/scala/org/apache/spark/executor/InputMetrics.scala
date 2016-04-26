@@ -46,14 +46,14 @@ class InputMetrics private[spark] () extends Serializable {
   /**
    * Total number of bytes read.
    */
-  def bytesRead: Long = _bytesRead.unboxValue
+  def bytesRead: Long = _bytesRead.sum
 
   /**
    * Total number of records read.
    */
-  def recordsRead: Long = _recordsRead.unboxValue
+  def recordsRead: Long = _recordsRead.sum
 
-  private[spark] def incBytesRead(v: Long): Unit = _bytesRead.unboxAdd(v)
-  private[spark] def incRecordsRead(v: Long): Unit = _recordsRead.unboxAdd(v)
+  private[spark] def incBytesRead(v: Long): Unit = _bytesRead.add(v)
+  private[spark] def incRecordsRead(v: Long): Unit = _recordsRead.add(v)
   private[spark] def setBytesRead(v: Long): Unit = _bytesRead.setValue(v)
 }

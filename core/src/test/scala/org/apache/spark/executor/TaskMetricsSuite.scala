@@ -204,7 +204,8 @@ class TaskMetricsSuite extends SparkFunSuite {
     tm.registerAccumulator(acc4)
     acc1 += 1L
     acc2 += 2L
-    val newUpdates = tm.accumulatorUpdates().map { a => (a.id, a) }.toMap
+    val newUpdates = tm.accumulators()
+      .map(a => (a.id, a.asInstanceOf[NewAccumulator[Any, Any]])).toMap
     assert(newUpdates.contains(acc1.id))
     assert(newUpdates.contains(acc2.id))
     assert(newUpdates.contains(acc3.id))
@@ -213,39 +214,13 @@ class TaskMetricsSuite extends SparkFunSuite {
     assert(newUpdates(acc2.id).name === Some("b"))
     assert(newUpdates(acc3.id).name === Some("c"))
     assert(newUpdates(acc4.id).name === Some("d"))
-    assert(newUpdates(acc1.id).value === UpdatedLongValue(1))
-    assert(newUpdates(acc2.id).value === UpdatedLongValue(2))
-    assert(newUpdates(acc3.id).value === UpdatedLongValue(0))
-    assert(newUpdates(acc4.id).value === UpdatedLongValue(0))
+    assert(newUpdates(acc1.id).value === 1)
+    assert(newUpdates(acc2.id).value === 2)
+    assert(newUpdates(acc3.id).value === 0)
+    assert(newUpdates(acc4.id).value === 0)
     assert(!newUpdates(acc3.id).countFailedValues)
     assert(newUpdates(acc4.id).countFailedValues)
     assert(newUpdates.size === tm.internalAccums.size + 4)
-  }
-
-  test("from accumulator updates") {
-    val accumUpdates1 = TaskMetrics.empty.internalAccums.map(_.getUpdates)
-    val metrics1 = TaskMetrics.fromAccumulatorUpdates(accumUpdates1)
-    assertUpdatesEquals(metrics1.accumulatorUpdates(), accumUpdates1)
-    // Test this with additional accumulators to ensure that we do not crash when handling
-    // updates from unregistered accumulators. In practice, all accumulators created
-    // on the driver, internal or not, should be registered with `Accumulators` at some point.
-    val registeredAccums = Seq(
-      AccumulatorSuite.createLongAccum("a", true),
-      AccumulatorSuite.createLongAccum("b", false))
-    val unregisteredAccums = Seq(
-      AccumulatorSuite.createLongAccum("c", true),
-      AccumulatorSuite.createLongAccum("d", false))
-    registeredAccums.foreach(a => assert(AccumulatorContext.originals.containsKey(a.id)))
-    unregisteredAccums.foreach(a => AccumulatorContext.remove(a.id))
-    unregisteredAccums.foreach(a => assert(!AccumulatorContext.originals.containsKey(a.id)))
-    // set some values in these accums
-    registeredAccums.zipWithIndex.foreach { case (a, i) => a.setValue(i) }
-    unregisteredAccums.zipWithIndex.foreach { case (a, i) => a.setValue(i) }
-    val registeredAccumInfos = registeredAccums.map(_.getUpdates)
-    val unregisteredAccumInfos = unregisteredAccums.map(_.getUpdates)
-    val accumUpdates2 = accumUpdates1 ++ registeredAccumInfos ++ unregisteredAccumInfos
-    // Simply checking that this does not crash:
-    TaskMetrics.fromAccumulatorUpdates(accumUpdates2)
   }
 }
 
@@ -257,14 +232,14 @@ private[spark] object TaskMetricsSuite extends Assertions {
    * Note: this does NOT check accumulator ID equality.
    */
   def assertUpdatesEquals(
-      updates1: Seq[AccumulatorUpdates],
-      updates2: Seq[AccumulatorUpdates]): Unit = {
+      updates1: Seq[NewAccumulator[_, _]],
+      updates2: Seq[NewAccumulator[_, _]]): Unit = {
     assert(updates1.size === updates2.size)
-    updates1.zip(updates2).foreach { case (info1, info2) =>
+    updates1.zip(updates2).foreach { case (acc1, acc2) =>
       // do not assert ID equals here
-      assert(info1.name === info2.name)
-      assert(info1.countFailedValues === info2.countFailedValues)
-      assert(info1.value === info2.value)
+      assert(acc1.name === acc2.name)
+      assert(acc1.countFailedValues === acc2.countFailedValues)
+      assert(acc1.value == acc2.value)
     }
   }
 }

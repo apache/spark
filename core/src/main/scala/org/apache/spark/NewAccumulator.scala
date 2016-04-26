@@ -18,7 +18,7 @@
 package org.apache.spark
 
 import java.{lang => jl}
-import java.io.{ObjectInputStream, ObjectOutputStream}
+import java.io.ObjectInputStream
 import java.util.concurrent.atomic.AtomicLong
 import javax.annotation.concurrent.GuardedBy
 
@@ -31,17 +31,6 @@ private[spark] case class AccumulatorMetadata(
     name: Option[String],
     countFailedValues: Boolean) extends Serializable
 
-trait UpdatedValue extends Serializable
-
-private[spark] class UpdatedValueString(s: String) extends UpdatedValue {
-  override def toString: String = s
-}
-
-private[spark] case class AccumulatorUpdates(
-    id: Long,
-    name: Option[String],
-    countFailedValues: Boolean,
-    value: UpdatedValue) extends Serializable
 
 abstract class NewAccumulator[IN, OUT] extends Serializable {
   private[spark] var metadata: AccumulatorMetadata = _
@@ -59,18 +48,27 @@ abstract class NewAccumulator[IN, OUT] extends Serializable {
     sc.cleaner.foreach(_.registerAccumulatorForCleanup(this))
   }
 
+  final def isRegistered: Boolean =
+    metadata != null && AccumulatorContext.originals.containsKey(metadata.id)
+
+  private def assertMetadataNotNull(): Unit = {
+    if (metadata == null) {
+      throw new IllegalAccessError("The metadata of this accumulator has not been assigned yet.")
+    }
+  }
+
   def id: Long = {
-    assert(metadata != null, "Cannot get accumulator id with null metadata")
+    assertMetadataNotNull()
     metadata.id
   }
 
   def name: Option[String] = {
-    assert(metadata != null, "Cannot get accumulator name with null metadata")
+    assertMetadataNotNull()
     metadata.name
   }
 
   def countFailedValues: Boolean = {
-    assert(metadata != null, "Cannot get accumulator countFailedValues with null metadata")
+    assertMetadataNotNull()
     metadata.countFailedValues
   }
 
@@ -81,20 +79,15 @@ abstract class NewAccumulator[IN, OUT] extends Serializable {
 
   final private[spark] def isAtDriverSide: Boolean = atDriverSide
 
-  final def isRegistered: Boolean =
-    metadata != null && AccumulatorContext.originals.containsKey(metadata.id)
+  def copyAndReset(): NewAccumulator[IN, OUT]
 
-  def initialize(): Unit = {}
+  def isZero(): Boolean
 
   def add(v: IN): Unit
 
   def +=(v: IN): Unit = add(v)
 
-  def updatedValue: UpdatedValue
-
-  def isNoOp(updates: UpdatedValue): Boolean
-
-  def applyUpdates(updates: UpdatedValue): Unit
+  def merge(other: NewAccumulator[IN, OUT]): Unit
 
   final def value: OUT = {
     if (atDriverSide) {
@@ -106,30 +99,45 @@ abstract class NewAccumulator[IN, OUT] extends Serializable {
 
   def localValue: OUT
 
-  private[spark] def getUpdates: AccumulatorUpdates =
-    AccumulatorUpdates(id, name, countFailedValues, updatedValue)
-
   // Called by Java when serializing an object
-  private def writeObject(out: ObjectOutputStream): Unit = Utils.tryOrIOException {
-    if (atDriverSide && !isRegistered) {
-      throw new IllegalStateException(
-        "Accumulator must be registered before serialize and send to executor")
+  protected def writeReplace(): Any = {
+    if (atDriverSide) {
+      if (!isRegistered) {
+        throw new UnsupportedOperationException(
+          "Accumulator must be registered before send to executor")
+      }
+      val copy = copyAndReset()
+      assert(copy.isZero(), "copyAndReset must return a zero value copy")
+      copy.metadata = metadata
+      copy
+    } else {
+      this
     }
-    out.defaultWriteObject()
   }
 
   // Called by Java when deserializing an object
   private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
     in.defaultReadObject()
-    initialize()
-    atDriverSide = false
+    if (atDriverSide) {
+      atDriverSide = false
 
-    // Automatically register the accumulator when it is deserialized with the task closure.
-    // This is for external accumulators and internal ones that do not represent task level
-    // metrics, e.g. internal SQL metrics, which are per-operator.
-    val taskContext = TaskContext.get()
-    if (taskContext != null) {
-      taskContext.registerAccumulator(this)
+      // Automatically register the accumulator when it is deserialized with the task closure.
+      // This is for external accumulators and internal ones that do not represent task level
+      // metrics, e.g. internal SQL metrics, which are per-operator.
+      val taskContext = TaskContext.get()
+      if (taskContext != null) {
+        taskContext.registerAccumulator(this)
+      }
+    } else {
+      atDriverSide = true
+    }
+  }
+
+  override def toString: String = {
+    if (metadata == null) {
+      "Un-registered Accumulator: " + getClass.getSimpleName
+    } else {
+      getClass.getSimpleName + s"(id: $id, name: $name, value: $localValue)"
     }
   }
 }
@@ -201,92 +209,80 @@ private[spark] object AccumulatorContext {
 }
 
 
-case class UpdatedLongValue(l: Long) extends UpdatedValue {
-  override def toString: String = l.toString
-}
-
 class LongAccumulator extends NewAccumulator[jl.Long, jl.Long] {
-  @transient private[this] var _sum = 0L
+  private[this] var _sum = 0L
 
-  override def updatedValue: UpdatedValue = new UpdatedLongValue(_sum)
+  override def copyAndReset(): LongAccumulator = new LongAccumulator
+
+  override def isZero(): Boolean = _sum == 0
 
   override def add(v: jl.Long): Unit = _sum += v
 
-  private[spark] def unboxAdd(v: Long): Unit = _sum += v
+  def add(v: Long): Unit = _sum += v
 
-  private[spark] def unboxValue: Long = _sum
+  def sum: Long = _sum
+
+  override def merge(other: NewAccumulator[jl.Long, jl.Long]): Unit = other match {
+    case o: LongAccumulator => _sum += o.sum
+    case _ => throw new UnsupportedOperationException(
+      s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
+  }
 
   private[spark] def setValue(newValue: Long): Unit = _sum = newValue
-
-  override def isNoOp(updates: UpdatedValue): Boolean = {
-    val v = updates.asInstanceOf[UpdatedLongValue].l
-    v == 0
-  }
-
-  override def applyUpdates(updates: UpdatedValue): Unit = {
-    val v = updates.asInstanceOf[UpdatedLongValue].l
-    _sum += v
-  }
 
   override def localValue: jl.Long = _sum
 }
 
 
-case class UpdatedDoubleValue(d: Double) extends UpdatedValue {
-  override def toString: String = d.toString
-}
-
 class DoubleAccumulator extends NewAccumulator[jl.Double, jl.Double] {
-  @transient private[this] var _sum = 0.0
+  private[this] var _sum = 0.0
 
-  override def updatedValue: UpdatedValue = new UpdatedDoubleValue(_sum)
+  override def copyAndReset(): DoubleAccumulator = new DoubleAccumulator
+
+  override def isZero(): Boolean = _sum == 0.0
 
   override def add(v: jl.Double): Unit = _sum += v
 
-  private[spark] def unboxAdd(v: Double): Unit = _sum += v
+  def add(v: Double): Unit = _sum += v
 
-  private[spark] def unboxValue: Double = _sum
+  def sum: Double = _sum
+
+  override def merge(other: NewAccumulator[jl.Double, jl.Double]): Unit = other match {
+    case o: DoubleAccumulator => _sum += o.sum
+    case _ => throw new UnsupportedOperationException(
+      s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
+  }
 
   private[spark] def setValue(newValue: Double): Unit = _sum = newValue
-
-  override def isNoOp(updates: UpdatedValue): Boolean = {
-    val v = updates.asInstanceOf[UpdatedDoubleValue].d
-    v == 0.0
-  }
-
-  override def applyUpdates(updates: UpdatedValue): Unit = {
-    val v = updates.asInstanceOf[UpdatedDoubleValue].d
-    _sum += v
-  }
 
   override def localValue: jl.Double = _sum
 }
 
 
-case class UpdatedAverageValue(sum: Double, count: Long) extends UpdatedValue {
-  override def toString: String = s"sum: $sum, count: $count"
-}
-
 class AverageAccumulator extends NewAccumulator[jl.Double, jl.Double] {
-  @transient private[this] var _sum = 0.0
-  @transient private[this] var _count = 0L
+  private[this] var _sum = 0.0
+  private[this] var _count = 0L
 
-  override def updatedValue: UpdatedValue = new UpdatedAverageValue(_sum, _count)
+  override def copyAndReset(): AverageAccumulator = new AverageAccumulator
+
+  override def isZero(): Boolean = _sum == 0.0 && _count == 0
 
   override def add(v: jl.Double): Unit = {
     _sum += v
     _count += 1
   }
 
-  override def isNoOp(updates: UpdatedValue): Boolean = {
-    val v = updates.asInstanceOf[UpdatedAverageValue]
-    v.sum == 0.0 && v.count == 0
+  def add(d: Double): Unit = {
+    _sum += d
+    _count += 1
   }
 
-  override def applyUpdates(updates: UpdatedValue): Unit = {
-    val v = updates.asInstanceOf[UpdatedAverageValue]
-    _sum += v.sum
-    _count += v.count
+  override def merge(other: NewAccumulator[jl.Double, jl.Double]): Unit = other match {
+    case o: AverageAccumulator =>
+      _sum += o.sum
+      _count += o.count
+    case _ => throw new UnsupportedOperationException(
+      s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
   }
 
   override def localValue: jl.Double = if (_count == 0) {
@@ -301,28 +297,19 @@ class AverageAccumulator extends NewAccumulator[jl.Double, jl.Double] {
 }
 
 
-case class GenericUpdatedValue[T](value: T) extends UpdatedValue {
-  override def toString: String = value.toString
-}
-
-
 class CollectionAccumulator[T] extends NewAccumulator[T, java.util.List[T]] {
-  @transient private[this] var _list: java.util.List[T] = new java.util.ArrayList[T]
+  private[this] val _list: java.util.List[T] = new java.util.ArrayList[T]
 
-  override def updatedValue: UpdatedValue = new GenericUpdatedValue(_list)
+  override def copyAndReset(): CollectionAccumulator[T] = new CollectionAccumulator
 
-  override def initialize(): Unit = _list = new java.util.ArrayList[T]
+  override def isZero(): Boolean = _list.isEmpty
 
   override def add(v: T): Unit = _list.add(v)
 
-  override def isNoOp(updates: UpdatedValue): Boolean = {
-    val v = updates.asInstanceOf[GenericUpdatedValue[java.util.List[T]]].value
-    v.isEmpty
-  }
-
-  override def applyUpdates(updates: UpdatedValue): Unit = {
-    val v = updates.asInstanceOf[GenericUpdatedValue[java.util.List[T]]].value
-    _list.addAll(v)
+  override def merge(other: NewAccumulator[T, java.util.List[T]]): Unit = other match {
+    case o: CollectionAccumulator[T] => _list.addAll(o.localValue)
+    case _ => throw new UnsupportedOperationException(
+      s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
   }
 
   override def localValue: java.util.List[T] = java.util.Collections.unmodifiableList(_list)
@@ -332,24 +319,22 @@ class CollectionAccumulator[T] extends NewAccumulator[T, java.util.List[T]] {
 class LegacyAccumulatorWrapper[R, T](
     initialValue: R,
     param: org.apache.spark.AccumulableParam[R, T]) extends NewAccumulator[T, R] {
+  private[spark] var _value = initialValue  // Current value on driver
 
-  @transient private[spark] var _value = initialValue  // Current value on driver
-  val zero = param.zero(initialValue) // Zero value to be passed to executors
+  override def copyAndReset(): LegacyAccumulatorWrapper[R, T] = {
+    val acc = new LegacyAccumulatorWrapper(initialValue, param)
+    acc._value = param.zero(initialValue)
+    acc
+  }
 
-  override def updatedValue: UpdatedValue = new GenericUpdatedValue(_value)
-
-  override def initialize(): Unit = _value = param.zero(initialValue)
+  override def isZero(): Boolean = _value == param.zero(initialValue)
 
   override def add(v: T): Unit = _value = param.addAccumulator(_value, v)
 
-  override def isNoOp(updates: UpdatedValue): Boolean = {
-    val v = updates.asInstanceOf[GenericUpdatedValue[R]].value
-    v == zero
-  }
-
-  override def applyUpdates(updates: UpdatedValue): Unit = {
-    val v = updates.asInstanceOf[GenericUpdatedValue[R]].value
-    _value = param.addInPlace(_value, v)
+  override def merge(other: NewAccumulator[T, R]): Unit = other match {
+    case o: LegacyAccumulatorWrapper[R, T] => _value = param.addInPlace(_value, o.localValue)
+    case _ => throw new UnsupportedOperationException(
+      s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
   }
 
   override def localValue: R = _value
