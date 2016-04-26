@@ -544,8 +544,8 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures, Java
                    typeConverter=TypeConverters.toBoolean)
 
     hashAlgorithm = Param(Params._dummy(), "hashAlgorithm", "The hash algorithm used when " +
-                          "mapping term to integer. Supported options: murmur3(default) " +
-                          "and native.", typeConverter=TypeConverters.toString)
+                          "mapping term to integer. Supported options: murmur3 (default).",
+                          typeConverter=TypeConverters.toString)
 
     @keyword_only
     def __init__(self, numFeatures=1 << 18, binary=False, inputCol=None, outputCol=None,
