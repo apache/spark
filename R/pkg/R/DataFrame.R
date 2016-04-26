@@ -2474,7 +2474,7 @@ setMethod("drop",
 #' @name histogram
 #' @title Histogram
 #' @param nbins the number of bins (optional). Default value is 10.
-#' @param df the DataFrame containing the Column to build the histogram from.
+#' @param df the SparkDataFrame containing the Column to build the histogram from.
 #' @param colname the name of the column to build the histogram from.
 #' @return a data.frame with the histogram statistics, i.e., counts and centroids.
 #' @rdname histogram
@@ -2483,7 +2483,7 @@ setMethod("drop",
 #' @examples 
 #' \dontrun{
 #' 
-#' # Create a DataFrame from the Iris dataset
+#' # Create a SparkDataFrame from the Iris dataset
 #' irisDF <- createDataFrame(sqlContext, iris)
 #' 
 #' # Compute histogram statistics
@@ -2516,7 +2516,7 @@ setMethod("histogram",
             colname <- col
             x <- if (class(col) == "character") {
               if (!colname %in% names(df)) {
-                stop("Specified colname does not belong to the given DataFrame.")
+                stop("Specified colname does not belong to the given SparkDataFrame.")
               }
 
               # Filter NA values in the target column and remove all other columns
@@ -2542,7 +2542,7 @@ setMethod("histogram",
                                collapse = "")
 
               # Append the given column to the dataset. This is to support Columns that
-              # don't belong to the DataFrame but are rather expressions
+              # don't belong to the SparkDataFrame but are rather expressions
               df <- withColumn(df, colname, col)
 
               # Filter NA values in the target column. Cannot remove all other columns
