@@ -19,18 +19,19 @@ package org.apache.spark.ml.evaluation
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.param.{IntParam, Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasLabelCol, HasPredictionCol}
 import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable}
+import org.apache.spark.mllib.evaluation.RankingMetrics
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SQLContext}
 import org.apache.spark.sql.functions._
 
 /**
  * :: Experimental ::
  * Evaluator for ranking, which expects two input columns: prediction and label.
+ * Both prediction and label columns need to be instances of Array[T] where T is the ClassTag.
  */
 @Since("2.0.0")
 @Experimental
@@ -65,7 +66,7 @@ final class RankingEvaluator[T: ClassTag] @Since("2.0.0") (@Since("2.0.0") overr
   @Since("2.0.0")
   val metricName: Param[String] = {
     val allowedParams = ParamValidators.inArray(Array("map", "mapk", "ndcg", "mrr"))
-    new Param(this, "metricName", "metric name in evaluation (map|mapk|ndcg||mrr)", allowedParams)
+    new Param(this, "metricName", "metric name in evaluation (map|mapk|ndcg|mrr)", allowedParams)
   }
 
   /** @group getParam */
@@ -98,173 +99,19 @@ final class RankingEvaluator[T: ClassTag] @Since("2.0.0") (@Since("2.0.0") overr
         s"must be of the same type, but Prediction column $predictionColName is $predictionType " +
         s"and Label column $labelColName is $labelType")
 
+    val predictionAndLabels = dataset
+      .select(col($(predictionCol)).cast(predictionType), col($(labelCol)).cast(labelType))
+      .rdd.
+      map { case Row(prediction: Seq[T], label: Seq[T]) => (prediction.toArray, label.toArray) }
+
+    val metrics = new RankingMetrics[T](predictionAndLabels)
     val metric = $(metricName) match {
-      case "map" => meanAveragePrecision(dataset)
-      case "ndcg" => normalizedDiscountedCumulativeGain(dataset)
-      case "mapk" => meanAveragePrecisionAtK(dataset)
-      case "mrr" => meanReciprocalRank(dataset)
+      case "map" => metrics.meanAveragePrecision
+      case "ndcg" => metrics.ndcgAt($(k))
+      case "mapk" => metrics.precisionAt($(k))
+      case "mrr" => metrics.meanReciprocalRank
     }
     metric
-  }
-
-  /**
-   * Returns the mean average precision (MAP) of all the queries.
-   * If a query has an empty ground truth set, the average precision will be zero and a log
-   * warning is generated.
-   */
-  private def meanAveragePrecision(dataset: Dataset[_]): Double = {
-    val sc = SparkContext.getOrCreate()
-    val sqlContext = SQLContext.getOrCreate(sc)
-    import sqlContext.implicits._
-
-    dataset.map{ case (prediction: Array[T], label: Array[T]) =>
-      val labSet = label.toSet
-
-      if (labSet.nonEmpty) {
-        var i = 0
-        var cnt = 0
-        var precSum = 0.0
-        val n = prediction.length
-        while (i < n) {
-          if (labSet.contains(prediction(i))) {
-            cnt += 1
-            precSum += cnt.toDouble / (i + 1)
-          }
-          i += 1
-        }
-        precSum / labSet.size
-      } else {
-        logWarning("Empty ground truth set, check input data")
-        0.0
-      }
-    }.reduce{ (a, b) => a + b } / dataset.count
-  }
-
-  /**
-   * Compute the average NDCG value of all the queries, truncated at ranking position k.
-   * The discounted cumulative gain at position k is computed as:
-   *    sum,,i=1,,^k^ (2^{relevance of ''i''th item}^ - 1) / log(i + 1),
-   * and the NDCG is obtained by dividing the DCG value on the ground truth set. In the current
-   * implementation, the relevance value is binary.
-
-   * If a query has an empty ground truth set, zero will be used as ndcg together with
-   * a log warning.
-   *
-   * See the following paper for detail:
-   *
-   * IR evaluation methods for retrieving highly relevant documents. K. Jarvelin and J. Kekalainen
-   */
-  private def normalizedDiscountedCumulativeGain(dataset: Dataset[_]): Double = {
-    val sc = SparkContext.getOrCreate()
-    val sqlContext = SQLContext.getOrCreate(sc)
-    import sqlContext.implicits._
-
-    dataset.map{ case (prediction: Array[T], label: Array[T]) =>
-      val labSet = label.toSet
-
-      if (labSet.nonEmpty) {
-        val labSetSize = labSet.size
-        val n = math.min(math.max(prediction.length, labSetSize), $(k))
-        var maxDcg = 0.0
-        var dcg = 0.0
-        var i = 0
-        while (i < n) {
-          val gain = 1.0 / math.log(i + 2)
-          if (labSet.contains(prediction(i))) {
-            dcg += gain
-          }
-          if (i < labSetSize) {
-            maxDcg += gain
-          }
-          i += 1
-        }
-        dcg / maxDcg
-      } else {
-        logWarning("Empty ground truth set, check input data")
-        0.0
-      }
-    }.reduce{ (a, b) => a + b } / dataset.count
-  }
-
-  /**
-   * Compute the average precision of all the queries, truncated at ranking position k.
-   *
-   * If for a query, the ranking algorithm returns n (n < k) results, the precision value will be
-   * computed as #(relevant items retrieved) / k. This formula also applies when the size of the
-   * ground truth set is less than k.
-   *
-   * If a query has an empty ground truth set, zero will be used as precision together with
-   * a log warning.
-   *
-   * See the following paper for detail:
-   *
-   * IR evaluation methods for retrieving highly relevant documents. K. Jarvelin and J. Kekalainen
-   */
-  private def meanAveragePrecisionAtK(dataset: Dataset[_]): Double = {
-    val sc = SparkContext.getOrCreate()
-    val sqlContext = SQLContext.getOrCreate(sc)
-    import sqlContext.implicits._
-
-    dataset.map{ case (prediction: Array[T], label: Array[T]) =>
-      val labSet = label.toSet
-
-      if (labSet.nonEmpty) {
-        val n = math.min(prediction.length, $(k))
-        var i = 0
-        var cnt = 0
-        while (i < n) {
-          if (labSet.contains(prediction(i))) {
-            cnt += 1
-          }
-          i += 1
-        }
-        cnt.toDouble / $(k)
-      } else {
-        logWarning("Empty ground truth set, check input data")
-        0.0
-      }
-    }.reduce{ (a, b) => a + b } / dataset.count
-  }
-
-  /**
-   * Compute the mean reciprocal rank (MRR) of all the queries.
-   *
-   * MRR is the inverse position of the first relevant document, and is therefore well-suited
-   * to applications in which only the first result matters.The reciprocal rank is the
-   * multiplicative inverse of the rank of the first correct answer for a query response and
-   * the mean  reciprocal rank is the average of the reciprocal ranks of results for a sample
-   * of queries. MRR is well-suited to applications in which only the first result matters.
-   *
-   * If a query has an empty ground truth set, zero will be used as precision together with
-   * a log warning.
-   *
-   * See the following paper for detail:
-   *
-   * Brian McFee, Gert R. G. Lanckriet Metric Learning to Rank. ICML 2010: 775-782
-   */
-  private def meanReciprocalRank(dataset: Dataset[_]): Double = {
-    val sc = SparkContext.getOrCreate()
-    val sqlContext = SQLContext.getOrCreate(sc)
-    import sqlContext.implicits._
-
-    dataset.map{ case (prediction: Array[T], label: Array[T]) =>
-      val labSet = label.toSet
-
-      if (labSet.nonEmpty) {
-        var i = 0
-        var reciprocalRank = 0.0
-        while (i < prediction.length && reciprocalRank == 0.0) {
-          if (labSet.contains(prediction(i))) {
-            reciprocalRank = 1.0 / (i + 1)
-          }
-          i += 1
-        }
-        reciprocalRank
-      } else {
-        logWarning("Empty ground truth set, check input data")
-        0.0
-      }
-    }.reduce{ (a, b) => a + b } / dataset.count
   }
 
   @Since("2.0.0")
