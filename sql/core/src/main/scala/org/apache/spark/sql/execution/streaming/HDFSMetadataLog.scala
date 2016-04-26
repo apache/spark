@@ -31,7 +31,7 @@ import org.apache.hadoop.fs.permission.FsPermission
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.JavaSerializer
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 
 
 /**
@@ -45,7 +45,7 @@ import org.apache.spark.sql.SQLContext
  * Note: [[HDFSMetadataLog]] doesn't support S3-like file systems as they don't guarantee listing
  * files in a directory always shows the latest files.
  */
-class HDFSMetadataLog[T: ClassTag](sqlContext: SQLContext, path: String)
+class HDFSMetadataLog[T: ClassTag](sparkSession: SparkSession, path: String)
   extends MetadataLog[T]
   with Logging {
 
@@ -65,7 +65,7 @@ class HDFSMetadataLog[T: ClassTag](sqlContext: SQLContext, path: String)
     override def accept(path: Path): Boolean = isBatchFile(path)
   }
 
-  private val serializer = new JavaSerializer(sqlContext.sparkContext.conf).newInstance()
+  private val serializer = new JavaSerializer(sparkSession.sparkContext.conf).newInstance()
 
   protected def batchIdToPath(batchId: Long): Path = {
     new Path(metadataPath, batchId.toString)
@@ -212,7 +212,7 @@ class HDFSMetadataLog[T: ClassTag](sqlContext: SQLContext, path: String)
   }
 
   private def createFileManager(): FileManager = {
-    val hadoopConf = new Configuration(sqlContext.sessionState.hadoopConf)
+    val hadoopConf = new Configuration(sparkSession.sessionState.hadoopConf)
     try {
       new FileContextManager(metadataPath, hadoopConf)
     } catch {

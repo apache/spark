@@ -58,7 +58,7 @@ import org.apache.spark.sql.util.ExecutionListenerManager
  * @since 1.0.0
  */
 class SQLContext private[sql](
-    @transient private val sparkSession: SparkSession,
+    val sparkSession: SparkSession,
     val isRootContext: Boolean)
   extends Logging with Serializable {
 

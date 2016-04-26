@@ -18,8 +18,8 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Dataset, Row, SQLContext}
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, TableIdentifier}
+import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical
@@ -35,7 +35,7 @@ import org.apache.spark.sql.types._
 private[sql] trait RunnableCommand extends LogicalPlan with logical.Command {
   override def output: Seq[Attribute] = Seq.empty
   override def children: Seq[LogicalPlan] = Seq.empty
-  def run(sqlContext: SQLContext): Seq[Row]
+  def run(sparkSession: SparkSession): Seq[Row]
 }
 
 /**
@@ -54,7 +54,7 @@ private[sql] case class ExecutedCommandExec(cmd: RunnableCommand) extends SparkP
    */
   protected[sql] lazy val sideEffectResult: Seq[InternalRow] = {
     val converter = CatalystTypeConverters.createToCatalystConverter(schema)
-    cmd.run(sqlContext).map(converter(_).asInstanceOf[InternalRow])
+    cmd.run(sqlContext.sparkSession).map(converter(_).asInstanceOf[InternalRow])
   }
 
   override def output: Seq[Attribute] = cmd.output
@@ -97,8 +97,8 @@ case class ExplainCommand(
   extends RunnableCommand {
 
   // Run through the optimizer to generate the physical plan.
-  override def run(sqlContext: SQLContext): Seq[Row] = try {
-    val queryExecution = sqlContext.executePlan(logicalPlan)
+  override def run(sparkSession: SparkSession): Seq[Row] = try {
+    val queryExecution = sparkSession.executePlan(logicalPlan)
     val outputString =
       if (codegen) {
         codegenString(queryExecution.executedPlan)
