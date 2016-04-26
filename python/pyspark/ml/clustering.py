@@ -638,33 +638,39 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
     .. versionadded:: 2.0.0
     """
 
-    k = Param(Params._dummy(), "k", "number of topics (clusters) to infer")
+    k = Param(Params._dummy(), "k", "number of topics (clusters) to infer",
+              typeConverter=TypeConverters.toInt)
     optimizer = Param(Params._dummy(), "optimizer",
                       "Optimizer or inference algorithm used to estimate the LDA model.  "
-                      "Supported: online, em")
+                      "Supported: online, em", typeConverter=TypeConverters.toString)
     learningOffset = Param(Params._dummy(), "learningOffset",
                            "A (positive) learning parameter that downweights early iterations."
-                           " Larger values make early iterations count less")
+                           " Larger values make early iterations count less",
+                           typeConverter=TypeConverters.toFloat)
     learningDecay = Param(Params._dummy(), "learningDecay", "Learning rate, set as an"
                           "exponential decay rate. This should be between (0.5, 1.0] to "
-                          "guarantee asymptotic convergence.")
+                          "guarantee asymptotic convergence.", typeConverter=TypeConverters.toFloat)
     subsamplingRate = Param(Params._dummy(), "subsamplingRate",
                             "Fraction of the corpus to be sampled and used in each iteration "
-                            "of mini-batch gradient descent, in range (0, 1].")
+                            "of mini-batch gradient descent, in range (0, 1].",
+                            typeConverter=TypeConverters.toFloat)
     optimizeDocConcentration = Param(Params._dummy(), "optimizeDocConcentration",
                                      "Indicates whether the docConcentration (Dirichlet parameter "
                                      "for document-topic distribution) will be optimized during "
-                                     "training.")
+                                     "training.", typeConverter=TypeConverters.toBoolean)
     docConcentration = Param(Params._dummy(), "docConcentration",
                              "Concentration parameter (commonly named \"alpha\") for the "
-                             "prior placed on documents' distributions over topics (\"theta\").")
+                             "prior placed on documents' distributions over topics (\"theta\").",
+                             typeConverter=TypeConverters.toListFloat)
     topicConcentration = Param(Params._dummy(), "topicConcentration",
                                "Concentration parameter (commonly named \"beta\" or \"eta\") for "
-                               "the prior placed on topic' distributions over terms.")
+                               "the prior placed on topic' distributions over terms.",
+                               typeConverter=TypeConverters.toFloat)
     topicDistributionCol = Param(Params._dummy(), "topicDistributionCol",
                                  "Output column with estimates of the topic mixture distribution "
                                  "for each document (often called \"theta\" in the literature). "
-                                 "Returns a vector of zeros for an empty document.")
+                                 "Returns a vector of zeros for an empty document.",
+                                 typeConverter=TypeConverters.toString)
 
     @keyword_only
     def __init__(self, featuresCol="features", k=10,
@@ -723,8 +729,7 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
         >>> algo.getK()
         10
         """
-        self._paramMap[self.k] = value
-        return self
+        return self._set(k=value)
 
     @since("2.0.0")
     def getK(self):
@@ -743,8 +748,7 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
         >>> algo.getOptimizer()
         'em'
         """
-        self._paramMap[self.optimizer] = value
-        return self
+        return self._set(optimizer=value)
 
     @since("2.0.0")
     def getOptimizer(self):
@@ -762,8 +766,7 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
         >>> algo.getLearningOffset()
         100
         """
-        self._paramMap[self.learningOffset] = value
-        return self
+        return self._set(learningOffset=value)
 
     @since("2.0.0")
     def getLearningOffset(self):
@@ -781,8 +784,7 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
         >>> algo.getLearningDecay()
         0.1...
         """
-        self._paramMap[self.learningDecay] = value
-        return self
+        return self._set(learningDecay=value)
 
     @since("2.0.0")
     def getLearningDecay(self):
@@ -800,8 +802,7 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
         >>> algo.getSubsamplingRate()
         0.1...
         """
-        self._paramMap[self.subsamplingRate] = value
-        return self
+        return self._set(subsamplingRate=value)
 
     @since("2.0.0")
     def getSubsamplingRate(self):
@@ -819,8 +820,7 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
         >>> algo.getOptimizeDocConcentration()
         True
         """
-        self._paramMap[self.optimizeDocConcentration] = value
-        return self
+        return self._set(optimizeDocConcentration=value)
 
     @since("2.0.0")
     def getOptimizeDocConcentration(self):
@@ -838,8 +838,7 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
         >>> algo.getDocConcentration()
         [0.1..., 0.2...]
         """
-        self._paramMap[self.docConcentration] = value
-        return self
+        return self._set(docConcentration=value)
 
     @since("2.0.0")
     def getDocConcentration(self):
@@ -857,8 +856,7 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
         >>> algo.getTopicConcentration()
         0.5...
         """
-        self._paramMap[self.topicConcentration] = value
-        return self
+        return self._set(topicConcentration=value)
 
     @since("2.0.0")
     def getTopicConcentration(self):
@@ -876,8 +874,7 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
         >>> algo.getTopicDistributionCol()
         'topicDistributionCol'
         """
-        self._paramMap[self.topicDistributionCol] = value
-        return self
+        return self._set(topicDistributionCol=value)
 
     @since("2.0.0")
     def getTopicDistributionCol(self):
