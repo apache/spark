@@ -170,8 +170,7 @@ class RowMatrix @Since("1.0.0") (
    *
    * @note The conditions that decide which method to use internally and the default parameters are
    *       subject to change.
-   *
-   * @param k number of leading singular values to keep (0 &lt; k &lt;= n).
+    * @param k number of leading singular values to keep (0 &lt; k &lt;= n).
    *          It might return less than k if
    *          there are numerically zero singular values or there are not enough Ritz values
    *          converged before the maximum number of Arnoldi update iterations is reached (in case
@@ -321,7 +320,8 @@ class RowMatrix @Since("1.0.0") (
   /**
    * Computes the covariance matrix, treating each row as an observation. Note that this cannot
    * be computed on matrices with more than 65535 columns.
-   * @return a local dense matrix of size n x n
+    *
+    * @return a local dense matrix of size n x n
    */
   @Since("1.0.0")
   def computeCovariance(): Matrix = {
@@ -379,15 +379,21 @@ class RowMatrix @Since("1.0.0") (
    *
    * Note that this cannot be computed on matrices with more than 65535 columns.
    *
-   * @param k number of top principal components.
+   * @param filter either the number of top principal components or variance
+   *               retained by the minimal set of principal components.
    * @return a matrix of size n-by-k, whose columns are principal components, and
    * a vector of values which indicate how much variance each principal component
    * explains
    */
   @Since("1.6.0")
-  def computePrincipalComponentsAndExplainedVariance(k: Int): (Matrix, Vector) = {
+  def computePrincipalComponentsAndExplainedVariance(filter: Either[Int, Double])
+      : (Matrix, Vector) = {
     val n = numCols().toInt
-    require(k > 0 && k <= n, s"k = $k out of range (0, n = $n]")
+    filter match {
+      case Left(k) => require(k > 0 && k <= n, s"k = $k out of range (0, n = $n]")
+      case Right(requiredVariance) => require(requiredVariance > 0.0 && requiredVariance <= 1.0,
+        s"requiredVariance = $requiredVariance out of range (0, 1.0]")
+    }
 
     val Cov = computeCovariance().toBreeze.asInstanceOf[BDM[Double]]
 
@@ -395,6 +401,17 @@ class RowMatrix @Since("1.0.0") (
 
     val eigenSum = s.data.sum
     val explainedVariance = s.data.map(_ / eigenSum)
+
+    val k = filter match {
+      case Left(k) => k
+      case Right(requiredVariance) =>
+        val minFeatures = explainedVariance
+          .scanLeft(0.0)(_ + _)
+          .indexWhere(_ >= requiredVariance)
+        require(minFeatures > 0 && minFeatures <= n, s"minFeatures computed using " +
+          s"requiredVariance was $minFeatures and was out of range (0, n = $n]")
+        minFeatures
+    }
 
     if (k == n) {
       (Matrices.dense(n, k, u.data), Vectors.dense(explainedVariance))
@@ -413,7 +430,7 @@ class RowMatrix @Since("1.0.0") (
    */
   @Since("1.0.0")
   def computePrincipalComponents(k: Int): Matrix = {
-    computePrincipalComponentsAndExplainedVariance(k)._1
+    computePrincipalComponentsAndExplainedVariance(Left(k))._1
   }
 
   /**

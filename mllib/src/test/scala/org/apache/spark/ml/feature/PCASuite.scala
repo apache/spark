@@ -85,14 +85,12 @@ class PCASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
     // given
     val df = sqlContext.createDataFrame(dataRDD.zipWithIndex()).toDF("features", "index")
 
-    val pca = new PCA()
+    // when
+    val trimmed = new PCA()
       .setInputCol("features")
       .setOutputCol("pca_features")
-      .setK(4)
+      .setRequiredVariance(0.9)
       .fit(df)
-
-    // when
-    val trimmed = pca.trimByVarianceRetained(0.90)
 
     // then
     val pcaWithExpectedK = new PCA()

@@ -45,6 +45,16 @@ private[feature] trait PCAParams extends Params with HasInputCol with HasOutputC
   /** @group getParam */
   def getK: Int = $(k)
 
+  /**
+    * Minimal variance retained by principal components.
+    *
+    * @group param
+    */
+  final val requiredVariance: DoubleParam = new DoubleParam(this, "requiredVariance",
+    "minimal variance retained by principal components")
+
+  /** @group getParam */
+  def getRequiredVariance: Double = $(requiredVariance)
 }
 
 /**
@@ -64,7 +74,16 @@ class PCA (override val uid: String) extends Estimator[PCAModel] with PCAParams
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /** @group setParam */
-  def setK(value: Int): this.type = set(k, value)
+  def setK(value: Int): this.type = {
+    if (isSet(requiredVariance)) clear(requiredVariance)
+    set(k, value)
+  }
+
+  /** @group setParam */
+  def setRequiredVariance(value: Double): this.type = {
+    if (isSet(k)) clear(k)
+    set(requiredVariance, value)
+  }
 
   /**
    * Computes a [[PCAModel]] that contains the principal components of the input vectors.
@@ -73,7 +92,11 @@ class PCA (override val uid: String) extends Estimator[PCAModel] with PCAParams
   override def fit(dataset: Dataset[_]): PCAModel = {
     transformSchema(dataset.schema, logging = true)
     val input = dataset.select($(inputCol)).rdd.map { case Row(v: Vector) => v}
-    val pca = new feature.PCA(k = $(k))
+    val pca = if (isSet(k)) {
+      new feature.PCA(k = $(k))
+    } else {
+      new feature.PCA(requiredVariance = $(requiredVariance))
+    }
     val pcaModel = pca.fit(input)
     copyValues(new PCAModel(uid, pcaModel.pc, pcaModel.explainedVariance).setParent(this))
   }
@@ -151,12 +174,6 @@ class PCAModel private[ml] (
 
   @Since("1.6.0")
   override def write: MLWriter = new PCAModelWriter(this)
-
-  def trimByVarianceRetained(requiredVariance: Double): PCAModel = {
-    feature.PCAModel.trimByVarianceRetained(requiredVariance, pc, explainedVariance)
-      .map(model => new PCAModel(uid, model.pc, model.explainedVariance))
-      .getOrElse(this)
-  }
 }
 
 @Since("1.6.0")

@@ -37,7 +37,7 @@ class PCASuite extends SparkFunSuite with MLlibTestSparkContext {
     val pca = new PCA(k).fit(dataRDD)
 
     val mat = new RowMatrix(dataRDD)
-    val (pc, explainedVariance) = mat.computePrincipalComponentsAndExplainedVariance(k)
+    val (pc, explainedVariance) = mat.computePrincipalComponentsAndExplainedVariance(Left(k))
 
     val pca_transform = pca.transform(dataRDD).collect()
     val mat_multiply = mat.multiply(pc).rows.collect()
@@ -47,14 +47,11 @@ class PCASuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("should return model with minimal number of features that retain given level of variance") {
-    // given
-    val pca = new PCA(4).fit(dataRDD)
-
     // when
-    val trimmed = pca.trimByVarianceRetained(0.90)
+    val trimmed = new PCA(requiredVariance = 0.90).fit(dataRDD)
 
     // then
-    val pcaWithExpectedK = new PCA(2).fit(dataRDD)
+    val pcaWithExpectedK = new PCA(k = 2).fit(dataRDD)
     assert(trimmed.k === pcaWithExpectedK.k)
     assert(trimmed.explainedVariance === pcaWithExpectedK.explainedVariance)
     assert(trimmed.pc === pcaWithExpectedK.pc)

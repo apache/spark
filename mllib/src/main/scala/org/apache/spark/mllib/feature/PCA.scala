@@ -33,7 +33,14 @@ import org.apache.spark.rdd.RDD
 @Since("1.4.0")
 class PCA @Since("1.4.0") (@Since("1.4.0") val k: Int) {
   require(k > 0,
-    s"Number of principal components must be positive but got ${k}")
+    s"Number of principal components must be positive but got $k")
+
+  var pcFilter: Either[Int, Double] = Left(k)
+
+  def this(requiredVariance: Double) = {
+    this(k = 1)
+    pcFilter = Right(requiredVariance)
+  }
 
   /**
    * Computes a [[PCAModel]] that contains the principal components of the input vectors.
@@ -46,7 +53,7 @@ class PCA @Since("1.4.0") (@Since("1.4.0") val k: Int) {
       s"source vector size is ${sources.first().size} must be greater than k=$k")
 
     val mat = new RowMatrix(sources)
-    val (pc, explainedVariance) = mat.computePrincipalComponentsAndExplainedVariance(k)
+    val (pc, explainedVariance) = mat.computePrincipalComponentsAndExplainedVariance(pcFilter)
     val densePC = pc match {
       case dm: DenseMatrix =>
         dm
@@ -68,7 +75,7 @@ class PCA @Since("1.4.0") (@Since("1.4.0") val k: Int) {
       case sv: SparseVector =>
         sv.toDense
     }
-    new PCAModel(k, densePC, denseExplainedVariance)
+    new PCAModel(explainedVariance.size, densePC, denseExplainedVariance)
   }
 
   /**
@@ -109,30 +116,6 @@ class PCAModel private[spark] (
       case _ =>
         throw new IllegalArgumentException("Unsupported vector format. Expected " +
           s"SparseVector or DenseVector. Instead got: ${vector.getClass}")
-    }
-  }
-
-  def trimByVarianceRetained(requiredVariance: Double): PCAModel = {
-    PCAModel.trimByVarianceRetained(requiredVariance, pc, explainedVariance)
-      .getOrElse(this)
-  }
-}
-
-object PCAModel {
-  def trimByVarianceRetained(requiredVariance: Double,
-                             pc: DenseMatrix,
-                             explainedVariance: DenseVector): Option[PCAModel] = {
-    require(requiredVariance > 0.0 && requiredVariance <= 1.0,
-      s"Requested variance must be between 0 and 1 but was $requiredVariance.")
-    val minFeaturesNum = explainedVariance.values
-      .scanLeft(0.0)(_ + _)
-      .indexWhere(_ >= requiredVariance)
-    if(minFeaturesNum == 0) None else {
-      val trimmedPc = Arrays.copyOfRange(pc.values, 0, pc.numRows * minFeaturesNum)
-      val trimmedExplainedVariance = Arrays.copyOfRange(explainedVariance.values, 0, minFeaturesNum)
-      Some(new PCAModel(minFeaturesNum,
-        Matrices.dense(pc.numRows, minFeaturesNum, trimmedPc).asInstanceOf[DenseMatrix],
-        Vectors.dense(trimmedExplainedVariance).asInstanceOf[DenseVector]))
     }
   }
 }
