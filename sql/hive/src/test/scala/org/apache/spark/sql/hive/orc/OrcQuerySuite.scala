@@ -175,23 +175,23 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
     val conf = sqlContext.sessionState.hadoopConf
 
     withOrcFile(data) { file =>
-      assertResult(CompressionKind.ZLIB) {
+      val expectedCompressionKind =
         OrcFileOperator.getFileReader(file).get.getCompression
-      }
+      assert(CompressionKind.ZLIB === expectedCompressionKind)
     }
 
     conf.set(ConfVars.HIVE_ORC_DEFAULT_COMPRESS.varname, "SNAPPY")
     withOrcFile(data) { file =>
-      assertResult(CompressionKind.SNAPPY) {
+      val expectedCompressionKind =
         OrcFileOperator.getFileReader(file).get.getCompression
-      }
+      assert(CompressionKind.SNAPPY === expectedCompressionKind)
     }
 
     conf.set(ConfVars.HIVE_ORC_DEFAULT_COMPRESS.varname, "NONE")
     withOrcFile(data) { file =>
-      assertResult(CompressionKind.NONE) {
+      val expectedCompressionKind =
         OrcFileOperator.getFileReader(file).get.getCompression
-      }
+      assert(CompressionKind.NONE === expectedCompressionKind)
     }
   }
 
@@ -202,9 +202,9 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
 
     conf.set(ConfVars.HIVE_ORC_DEFAULT_COMPRESS.varname, "LZO")
     withOrcFile(data) { file =>
-      assertResult(CompressionKind.LZO) {
+      val expectedCompressionKind =
         OrcFileOperator.getFileReader(file).get.getCompression
-      }
+      assert(CompressionKind.LZO === expectedCompressionKind)
     }
   }
 
