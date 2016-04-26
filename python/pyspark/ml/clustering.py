@@ -60,8 +60,7 @@ class GaussianMixtureModel(JavaModel, JavaMLWritable, JavaMLReadable):
     @since("2.0.0")
     def summary(self):
         """
-        Gets summary of model on
-        training set. An exception is thrown if
+        Gets summary of model on training set. An exception is thrown if
         `trainingSummary is None`.
         """
         java_gmt_summary = self._call_java("summary")
