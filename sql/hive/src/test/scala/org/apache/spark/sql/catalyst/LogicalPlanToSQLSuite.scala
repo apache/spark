@@ -742,7 +742,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     checkHiveQl("SELECT a FROM (SELECT key + 1 AS a FROM parquet_t1) t WHERE a > 5")
   }
 
-  test("select parquet table") {
+  test("SPARK-14933 - select parquet table") {
     withTable("parquet_t") {
       sql(
         """
@@ -759,7 +759,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     }
   }
 
-  test("select orc table") {
+  test("SPARK-14933 - select orc table") {
     withTable("orc_t") {
       sql(
         """
