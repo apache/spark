@@ -2003,7 +2003,7 @@ test_that("Histogram", {
 
   # Wrong colname
   expect_error(histogram(irisDF, "xxx"),
-               "Specified colname does not belong to the given DataFrame.")
+               "Specified colname does not belong to the given SparkDataFrame.")
 
   # Invalid nbins
   expect_error(histogram(irisDF, "Petal_Width", nbins = 0),
