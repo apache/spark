@@ -261,35 +261,13 @@ setMethod("kmeans", signature(x = "SparkDataFrame"),
 #' ml.save(model, path)
 #' }
 setMethod("ml.save", signature(object = "KMeansModel", path = "character"),
-function(object, path, overwrite = FALSE) {
-    writer <- callJMethod(object@jobj, "write")
-    if (overwrite) {
-        writer <- callJMethod(writer, "overwrite")
-    }
-    invisible(callJMethod(writer, "save", path))
-})
-
-#' Load a fitted MLlib model from the input path.
-#'
-#' @param path Path of the model to read.
-#' @return a fitted MLlib model
-#' @rdname ml.load
-#' @name ml.load
-#' @export
-#' @examples
-#' \dontrun{
-#' path <- "path/to/model"
-#' model <- ml.load(path)
-#' }
-ml.load <- function(path) {
-    path <- suppressWarnings(normalizePath(path))
-    jobj <- callJStatic("org.apache.spark.ml.r.RWrappers", "load", path)
-    if (isInstanceOf(jobj, "org.apache.spark.ml.r.KMeansWrapper")) {
-        return(new("KMeansModel", jobj = jobj))
-    } else {
-        stop(paste("Unsupported model: ", jobj))
-    }
-}
+          function(object, path, overwrite = FALSE) {
+            writer <- callJMethod(object@jobj, "write")
+            if (overwrite) {
+              writer <- callJMethod(writer, "overwrite")
+            }
+            invisible(callJMethod(writer, "save", path))
+          })
 
 #' Get fitted result from a k-means model
 #'
@@ -429,6 +407,8 @@ ml.load <- function(path) {
   jobj <- callJStatic("org.apache.spark.ml.r.RWrappers", "load", path)
   if (isInstanceOf(jobj, "org.apache.spark.ml.r.NaiveBayesWrapper")) {
     return(new("NaiveBayesModel", jobj = jobj))
+  } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.KMeansWrapper")) {
+      return(new("KMeansModel", jobj = jobj))
   } else {
     stop(paste("Unsupported model: ", jobj))
   }
