@@ -23,8 +23,7 @@ import javax.annotation.Nullable
 class Database(
     val name: String,
     val description: String,
-    val locationUri: String,
-    val properties: java.util.Map[String, String])
+    val locationUri: String)
 
 class Table(
     val name: String,

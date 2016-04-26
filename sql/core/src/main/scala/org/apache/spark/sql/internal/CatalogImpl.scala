@@ -50,7 +50,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     }
   }
 
-  // TODO: This fails right now because Database et al are not Product
+  // TODO: Not used; this fails right now because Database et al are not Product.
   private def makeDataset[T: TypeTag](data: Seq[T]): Dataset[T] = {
     val enc = ExpressionEncoder[T]()
     val encoded = data.map(d => enc.toRow(d).copy())
@@ -76,23 +76,22 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   /**
    * Returns a list of databases available across all sessions.
    */
-  override def listDatabases(): Dataset[Database] = {
+  override def listDatabases(): Array[Database] = {
     val databases = sessionCatalog.listDatabases().map { dbName =>
       val metadata = sessionCatalog.getDatabaseMetadata(dbName)
       new Database(
         name = metadata.name,
         description = metadata.description,
-        locationUri = metadata.locationUri,
-        properties = metadata.properties.asJava)
+        locationUri = metadata.locationUri)
     }
-    makeDataset(databases)
+    databases.toArray
   }
 
   /**
    * Returns a list of tables in the current database.
    * This includes all temporary tables.
    */
-  override def listTables(): Dataset[Table] = {
+  override def listTables(): Array[Table] = {
     listTables(currentDatabase)
   }
 
@@ -101,7 +100,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * This includes all temporary tables.
    */
   @throws[AnalysisException]("database does not exist")
-  override def listTables(dbName: String): Dataset[Table] = {
+  override def listTables(dbName: String): Array[Table] = {
     requireDatabaseExists(dbName)
     val tables = sessionCatalog.listTables(dbName).map { tableIdent =>
       val isTemp = tableIdent.database.isEmpty
@@ -113,14 +112,14 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
         tableType = metadata.map(_.tableType.name).getOrElse("TEMPORARY"),
         isTemporary = isTemp)
     }
-    makeDataset(tables)
+    tables.toArray
   }
 
   /**
    * Returns a list of functions registered in the current database.
    * This includes all temporary functions
    */
-  override def listFunctions(): Dataset[Function] = {
+  override def listFunctions(): Array[Function] = {
     listFunctions(currentDatabase)
   }
 
@@ -129,7 +128,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * This includes all temporary functions
    */
   @throws[AnalysisException]("database does not exist")
-  override def listFunctions(dbName: String): Dataset[Function] = {
+  override def listFunctions(dbName: String): Array[Function] = {
     requireDatabaseExists(dbName)
     val functions = sessionCatalog.listFunctions(dbName).map { funcIdent =>
       val metadata = sessionCatalog.lookupFunctionInfo(funcIdent)
@@ -139,14 +138,14 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
         className = metadata.getClassName,
         isTemporary = funcIdent.database.isEmpty)
     }
-    makeDataset(functions)
+    functions.toArray
   }
 
   /**
    * Returns a list of columns for the given table in the current database.
    */
   @throws[AnalysisException]("table does not exist")
-  override def listColumns(tableName: String): Dataset[Column] = {
+  override def listColumns(tableName: String): Array[Column] = {
     listColumns(currentDatabase, tableName)
   }
 
@@ -154,7 +153,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * Returns a list of columns for the given table in the specified database.
    */
   @throws[AnalysisException]("database or table does not exist")
-  override def listColumns(dbName: String, tableName: String): Dataset[Column] = {
+  override def listColumns(dbName: String, tableName: String): Array[Column] = {
     requireTableExists(dbName, tableName)
     val tableMetadata = sessionCatalog.getTableMetadata(TableIdentifier(tableName, Some(dbName)))
     val partitionColumnNames = tableMetadata.partitionColumnNames.toSet
@@ -168,7 +167,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
         isPartition = partitionColumnNames.contains(c.name),
         isBucket = bucketColumnNames.contains(c.name))
     }
-    makeDataset(columns)
+    columns.toArray
   }
 
   /**
