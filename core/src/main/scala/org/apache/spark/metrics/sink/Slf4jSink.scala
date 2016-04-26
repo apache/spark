@@ -52,7 +52,7 @@ private[spark] class Slf4jSink(
   MetricsSystem.checkMinimalPollingPeriod(pollUnit, pollPeriod)
 
   val reporter: Slf4jReporter = Slf4jReporter.forRegistry(registry)
-    .outputTo(LoggerFactory.getLogger("org.apache.spark.metrics"))
+    .outputTo(LoggerFactory.getLogger("org.apache.spark.metrics.sink.Slf4jSink"))
     .convertDurationsTo(TimeUnit.MILLISECONDS)
     .convertRatesTo(TimeUnit.SECONDS)
     .build()
