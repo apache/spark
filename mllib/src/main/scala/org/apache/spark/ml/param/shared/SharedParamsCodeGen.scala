@@ -71,8 +71,10 @@ private[shared] object SharedParamsCodeGen {
       ParamDesc[Double]("elasticNetParam", "the ElasticNet mixing parameter, in range [0, 1]." +
         " For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty",
         isValid = "ParamValidators.inRange(0, 1)"),
-      ParamDesc[Double]("tol", "the convergence tolerance for iterative algorithms"),
-      ParamDesc[Double]("stepSize", "Step size to be used for each iteration of optimization"),
+      ParamDesc[Double]("tol", "the convergence tolerance for iterative algorithms (>= 0)",
+        isValid = "ParamValidators.gtEq(0)"),
+      ParamDesc[Double]("stepSize", "Step size to be used for each iteration of optimization (>" +
+        " 0)", isValid = "ParamValidators.gt(0)"),
       ParamDesc[String]("weightCol", "weight column name. If this is not set or empty, we treat " +
         "all instance weights as 1.0"),
       ParamDesc[String]("solver", "the solver algorithm for optimization. If this is not set or " +

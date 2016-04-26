@@ -23,8 +23,7 @@ import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.api.hive_metastoreConstants._
 import org.apache.hadoop.hive.ql.exec.Utilities
-import org.apache.hadoop.hive.ql.metadata.{HiveUtils, Partition => HivePartition,
-  Table => HiveTable}
+import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition, Table => HiveTable}
 import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.hadoop.hive.serde2.Deserializer
 import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspectorConverters,
@@ -37,6 +36,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{EmptyRDD, HadoopRDD, RDD, UnionRDD}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -61,23 +61,23 @@ private[hive]
 class HadoopTableReader(
     @transient private val attributes: Seq[Attribute],
     @transient private val relation: MetastoreRelation,
-    @transient private val sc: HiveContext,
-    hiveExtraConf: HiveConf)
+    @transient private val sparkSession: SparkSession,
+    hiveconf: HiveConf)
   extends TableReader with Logging {
 
   // Hadoop honors "mapred.map.tasks" as hint, but will ignore when mapred.job.tracker is "local".
   // https://hadoop.apache.org/docs/r1.0.4/mapred-default.html
   //
   // In order keep consistency with Hive, we will let it be 0 in local mode also.
-  private val _minSplitsPerRDD = if (sc.sparkContext.isLocal) {
+  private val _minSplitsPerRDD = if (sparkSession.sparkContext.isLocal) {
     0 // will splitted based on block by default.
   } else {
-    math.max(sc.hiveconf.getInt("mapred.map.tasks", 1), sc.sparkContext.defaultMinPartitions)
+    math.max(hiveconf.getInt("mapred.map.tasks", 1), sparkSession.sparkContext.defaultMinPartitions)
   }
 
-  SparkHadoopUtil.get.appendS3AndSparkHadoopConfigurations(sc.sparkContext.conf, hiveExtraConf)
+  SparkHadoopUtil.get.appendS3AndSparkHadoopConfigurations(sparkSession.sparkContext.conf, hiveconf)
   private val _broadcastedHiveConf =
-    sc.sparkContext.broadcast(new SerializableConfiguration(hiveExtraConf))
+    sparkSession.sparkContext.broadcast(new SerializableConfiguration(hiveconf))
 
   override def makeRDDForTable(hiveTable: HiveTable): RDD[InternalRow] =
     makeRDDForTable(
@@ -153,7 +153,7 @@ class HadoopTableReader(
     def verifyPartitionPath(
         partitionToDeserializer: Map[HivePartition, Class[_ <: Deserializer]]):
         Map[HivePartition, Class[_ <: Deserializer]] = {
-      if (!sc.conf.verifyPartitionPath) {
+      if (!sparkSession.sessionState.conf.verifyPartitionPath) {
         partitionToDeserializer
       } else {
         var existPathSet = collection.mutable.Set[String]()
@@ -162,7 +162,7 @@ class HadoopTableReader(
           case (partition, partDeserializer) =>
             def updateExistPathSetByPathPattern(pathPatternStr: String) {
               val pathPattern = new Path(pathPatternStr)
-              val fs = pathPattern.getFileSystem(sc.hiveconf)
+              val fs = pathPattern.getFileSystem(hiveconf)
               val matches = fs.globStatus(pathPattern)
               matches.foreach(fileStatus => existPathSet += fileStatus.getPath.toString)
             }
@@ -246,7 +246,7 @@ class HadoopTableReader(
 
     // Even if we don't use any partitions, we still need an empty RDD
     if (hivePartitionRDDs.size == 0) {
-      new EmptyRDD[InternalRow](sc.sparkContext)
+      new EmptyRDD[InternalRow](sparkSession.sparkContext)
     } else {
       new UnionRDD(hivePartitionRDDs(0).context, hivePartitionRDDs)
     }
@@ -259,7 +259,7 @@ class HadoopTableReader(
   private def applyFilterIfNeeded(path: Path, filterOpt: Option[PathFilter]): String = {
     filterOpt match {
       case Some(filter) =>
-        val fs = path.getFileSystem(sc.hiveconf)
+        val fs = path.getFileSystem(hiveconf)
         val filteredFiles = fs.listStatus(path, filter).map(_.getPath.toString)
         filteredFiles.mkString(",")
       case None => path.toString
@@ -278,7 +278,7 @@ class HadoopTableReader(
     val initializeJobConfFunc = HadoopTableReader.initializeLocalJobConfFunc(path, tableDesc) _
 
     val rdd = new HadoopRDD(
-      sc.sparkContext,
+      sparkSession.sparkContext,
       _broadcastedHiveConf.asInstanceOf[Broadcast[SerializableConfiguration]],
       Some(initializeJobConfFunc),
       inputFormatClass,
@@ -299,7 +299,8 @@ private[hive] object HiveTableUtil {
   def configureJobPropertiesForStorageHandler(
       tableDesc: TableDesc, jobConf: JobConf, input: Boolean) {
     val property = tableDesc.getProperties.getProperty(META_TABLE_STORAGE)
-    val storageHandler = HiveUtils.getStorageHandler(jobConf, property)
+    val storageHandler =
+      org.apache.hadoop.hive.ql.metadata.HiveUtils.getStorageHandler(jobConf, property)
     if (storageHandler != null) {
       val jobProperties = new util.LinkedHashMap[String, String]
       if (input) {

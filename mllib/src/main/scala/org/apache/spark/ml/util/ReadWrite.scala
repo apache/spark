@@ -33,7 +33,7 @@ import org.apache.spark.ml.classification.{OneVsRest, OneVsRestModel}
 import org.apache.spark.ml.feature.RFormulaModel
 import org.apache.spark.ml.param.{ParamPair, Params}
 import org.apache.spark.ml.tuning.ValidatorParams
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.util.Utils
 
 /**
@@ -61,8 +61,10 @@ private[util] sealed trait BaseReadWrite {
     optionSQLContext.get
   }
 
-  /** Returns the [[SparkContext]] underlying [[sqlContext]] */
-  protected final def sc: SparkContext = sqlContext.sparkContext
+  protected final def sparkSession: SparkSession = sqlContext.sparkSession
+
+  /** Returns the underlying [[SparkContext]]. */
+  protected final def sc: SparkContext = sparkSession.sparkContext
 }
 
 /**

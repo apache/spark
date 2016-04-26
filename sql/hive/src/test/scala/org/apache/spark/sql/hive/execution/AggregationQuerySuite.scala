@@ -868,7 +868,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
       FloatType, DoubleType, DecimalType(25, 5), DecimalType(6, 5),
       DateType, TimestampType,
       ArrayType(IntegerType), MapType(StringType, LongType), struct,
-      new MyDenseVectorUDT())
+      new UDT.MyDenseVectorUDT())
     // Right now, we will use SortBasedAggregate to handle UDAFs.
     // UnsafeRow.mutableFieldTypes.asScala.toSeq will trigger SortBasedAggregate to use
     // UnsafeRow as the aggregation buffer. While, dataTypes will trigger
@@ -975,7 +975,7 @@ class TungstenAggregationQueryWithControlledFallbackSuite extends AggregationQue
             // Create a new df to make sure its physical operator picks up
             // spark.sql.TungstenAggregate.testFallbackStartsAt.
             // todo: remove it?
-            val newActual = Dataset.ofRows(sqlContext, actual.logicalPlan)
+            val newActual = Dataset.ofRows(sqlContext.sparkSession, actual.logicalPlan)
 
             QueryTest.checkAnswer(newActual, expectedAnswer) match {
               case Some(errorMessage) =>

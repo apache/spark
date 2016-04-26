@@ -45,7 +45,10 @@ private[spark] class NewHadoopPartition(
   extends Partition {
 
   val serializableHadoopSplit = new SerializableWritable(rawSplit)
-  override def hashCode(): Int = 41 * (41 + rddId) + index
+
+  override def hashCode(): Int = 31 * (31 + rddId) + index
+
+  override def equals(other: Any): Boolean = super.equals(other)
 }
 
 /**
@@ -130,7 +133,7 @@ class NewHadoopRDD[K, V](
       logInfo("Input split: " + split.serializableHadoopSplit)
       val conf = getConf
 
-      val inputMetrics = context.taskMetrics().registerInputMetrics(DataReadMethod.Hadoop)
+      val inputMetrics = context.taskMetrics().inputMetrics
       val existingBytesRead = inputMetrics.bytesRead
 
       // Find a function that will return the FileSystem bytes read by this thread. Do this before

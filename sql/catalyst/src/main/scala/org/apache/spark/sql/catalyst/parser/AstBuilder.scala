@@ -25,7 +25,7 @@ import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
@@ -391,9 +391,13 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
 
         // Having
         val withHaving = withProject.optional(having) {
-          // Note that we added a cast to boolean. If the expression itself is already boolean,
-          // the optimizer will get rid of the unnecessary cast.
-          Filter(Cast(expression(having), BooleanType), withProject)
+          // Note that we add a cast to non-predicate expressions. If the expression itself is
+          // already boolean, the optimizer will get rid of the unnecessary cast.
+          val predicate = expression(having) match {
+            case p: Predicate => p
+            case e => Cast(e, BooleanType)
+          }
+          Filter(predicate, withProject)
         }
 
         // Distinct
@@ -550,7 +554,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       case "json_tuple" =>
         JsonTuple(expressions)
       case name =>
-        UnresolvedGenerator(name, expressions)
+        UnresolvedGenerator(visitFunctionName(ctx.qualifiedName), expressions)
     }
 
     Generate(
@@ -866,10 +870,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   }
 
   /**
-   * Create a filtering correlated sub-query. This is not supported yet.
+   * Create a filtering correlated sub-query (EXISTS).
    */
   override def visitExists(ctx: ExistsContext): Expression = {
-    throw new ParseException("EXISTS clauses are not supported.", ctx)
+    Exists(plan(ctx.query))
   }
 
   /**
@@ -944,7 +948,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
           GreaterThanOrEqual(e, expression(ctx.lower)),
           LessThanOrEqual(e, expression(ctx.upper))))
       case SqlBaseParser.IN if ctx.query != null =>
-        throw new ParseException("IN with a Sub-query is currently not supported.", ctx)
+        invertIfNotDefined(InSubQuery(e, plan(ctx.query)))
       case SqlBaseParser.IN =>
         invertIfNotDefined(In(e, ctx.expression.asScala.map(expression)))
       case SqlBaseParser.LIKE =>
@@ -1029,12 +1033,12 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     val isDistinct = Option(ctx.setQuantifier()).exists(_.DISTINCT != null)
     val arguments = ctx.expression().asScala.map(expression) match {
       case Seq(UnresolvedStar(None)) if name.toLowerCase == "count" && !isDistinct =>
-        // Transform COUNT(*) into COUNT(1). Move this to analysis?
+        // Transform COUNT(*) into COUNT(1).
         Seq(Literal(1))
       case expressions =>
         expressions
     }
-    val function = UnresolvedFunction(name, arguments, isDistinct)
+    val function = UnresolvedFunction(visitFunctionName(ctx.qualifiedName), arguments, isDistinct)
 
     // Check if the function is evaluated in a windowed context.
     ctx.windowSpec match {
@@ -1043,6 +1047,17 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       case spec: WindowDefContext =>
         WindowExpression(function, visitWindowDef(spec))
       case _ => function
+    }
+  }
+
+  /**
+   * Create a function database (optional) and name pair.
+   */
+  protected def visitFunctionName(ctx: QualifiedNameContext): FunctionIdentifier = {
+    ctx.identifier().asScala.map(_.getText) match {
+      case Seq(db, fn) => FunctionIdentifier(fn, Option(db))
+      case Seq(fn) => FunctionIdentifier(fn, None)
+      case other => throw new ParseException(s"Unsupported function name '${ctx.getText}'", ctx)
     }
   }
 

@@ -23,7 +23,7 @@ import scala.collection.mutable
 
 import org.apache.commons.lang3.StringEscapeUtils
 
-import org.apache.spark.sql.execution.{SparkPlanInfo, WholeStageCodegen}
+import org.apache.spark.sql.execution.{SparkPlanInfo, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
@@ -178,7 +178,7 @@ private[ui] class SparkPlanGraphCluster(
   extends SparkPlanGraphNode(id, name, desc, Map.empty, metrics) {
 
   override def makeDotNode(metricsValue: Map[Long, String]): String = {
-    val duration = metrics.filter(_.name.startsWith(WholeStageCodegen.PIPELINE_DURATION_METRIC))
+    val duration = metrics.filter(_.name.startsWith(WholeStageCodegenExec.PIPELINE_DURATION_METRIC))
     val labelStr = if (duration.nonEmpty) {
       require(duration.length == 1)
       val id = duration(0).accumulatorId

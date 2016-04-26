@@ -476,6 +476,8 @@ class DenseVector (val values: Array[Double]) extends Vector {
     }
   }
 
+  override def equals(other: Any): Boolean = super.equals(other)
+
   override def hashCode(): Int = {
     var result: Int = 31 + size
     var i = 0
@@ -601,6 +603,8 @@ class SparseVector (
       i += 1
     }
   }
+
+  override def equals(other: Any): Boolean = super.equals(other)
 
   override def hashCode(): Int = {
     var result: Int = 31 + size
