@@ -47,8 +47,8 @@ private[sql] class HiveSessionCatalog(
     sparkSession: SparkSession,
     functionResourceLoader: FunctionResourceLoader,
     functionRegistry: FunctionRegistry,
-    conf: SQLConf,
-    hiveconf: HiveConf)
+    hiveconf: HiveConf,
+    conf: SQLConf)
   extends SessionCatalog(externalCatalog, functionResourceLoader, functionRegistry, conf) {
 
   override def setCurrentDatabase(db: String): Unit = {

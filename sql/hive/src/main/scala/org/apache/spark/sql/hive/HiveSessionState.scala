@@ -63,6 +63,9 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
   lazy val hiveconf: HiveConf = {
     val c = executionHive.conf
     conf.setConf(c.getAllProperties)
+    // scalastyle:off println
+    println("conf.hiveMetastoreWarehouse: " + conf.hiveMetastoreWarehouse)
+    // scalastyle:on println
     c
   }
 
@@ -78,8 +81,8 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
       sparkSession,
       functionResourceLoader,
       functionRegistry,
-      conf,
-      hiveconf)
+      hiveconf,
+      conf)
   }
 
   /**
