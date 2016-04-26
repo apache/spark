@@ -45,7 +45,7 @@ class FileStreamSink(
   private val basePath = new Path(path)
   private val logPath = new Path(basePath, FileStreamSink.metadataDir)
   private val fileLog = new FileStreamSinkLog(sqlContext, logPath.toUri.toString)
-  private val fs = basePath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
+  private val fs = basePath.getFileSystem(sqlContext.sessionState.hadoopConf)
 
   override def addBatch(batchId: Long, data: DataFrame): Unit = {
     if (batchId <= fileLog.getLatest().map(_._1).getOrElse(-1L)) {

@@ -263,7 +263,7 @@ private[sql] class DefaultSource
       requiredSchema: StructType,
       filters: Seq[Filter],
       options: Map[String, String]): PartitionedFile => Iterator[InternalRow] = {
-    val parquetConf = new Configuration(sqlContext.sparkContext.hadoopConfiguration)
+    val parquetConf = new Configuration(sqlContext.sessionState.hadoopConf)
     parquetConf.set(ParquetInputFormat.READ_SUPPORT_CLASS, classOf[CatalystReadSupport].getName)
     parquetConf.set(
       CatalystReadSupport.SPARK_ROW_REQUESTED_SCHEMA,
@@ -648,7 +648,7 @@ private[sql] object ParquetRelation extends Logging {
     val assumeBinaryIsString = sqlContext.conf.isParquetBinaryAsString
     val assumeInt96IsTimestamp = sqlContext.conf.isParquetINT96AsTimestamp
     val writeLegacyParquetFormat = sqlContext.conf.writeLegacyParquetFormat
-    val serializedConf = new SerializableConfiguration(sqlContext.sparkContext.hadoopConfiguration)
+    val serializedConf = new SerializableConfiguration(sqlContext.sessionState.hadoopConf)
 
     // !! HACK ALERT !!
     //
