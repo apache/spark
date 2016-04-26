@@ -39,7 +39,7 @@ import org.apache.spark.sql.Dataset
  * @param dataset the training dataset
  * @tparam E the type of the estimator
  */
-private[ml] class Instrumentation[E <: Estimator[_]] private (
+private[spark] class Instrumentation[E <: Estimator[_]] private (
     estimator: E, dataset: RDD[_]) extends Logging {
 
   private val id = Instrumentation.counter.incrementAndGet()
@@ -95,7 +95,7 @@ private[ml] class Instrumentation[E <: Estimator[_]] private (
 /**
  * Some common methods for logging information about a training session.
  */
-private[ml] object Instrumentation {
+private[spark] object Instrumentation {
   private val counter = new AtomicLong(0)
 
   /**

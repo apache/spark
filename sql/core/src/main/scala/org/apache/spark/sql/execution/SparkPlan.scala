@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration._
+import scala.util.control.NonFatal
 
 import org.apache.spark.{broadcast, SparkEnv}
 import org.apache.spark.internal.Logging
@@ -40,6 +41,8 @@ import org.apache.spark.util.ThreadUtils
 
 /**
  * The base class for physical operators.
+ *
+ * The naming convention is that physical operators end with "Exec" suffix, e.g. [[ProjectExec]].
  */
 abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializable {
 
@@ -61,11 +64,6 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   } else {
     false
   }
-
-  /**
-   * Whether the "prepare" method is called.
-   */
-  private val prepareCalled = new AtomicBoolean(false)
 
   /** Overridden make copy also propagates sqlContext to copied plan. */
   override def makeCopy(newArgs: Array[AnyRef]): SparkPlan = {
@@ -130,7 +128,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * Execute a query after preparing the query and adding query plan information to created RDDs
    * for visualization.
    */
-  private final def executeQuery[T](query: => T): T = {
+  protected final def executeQuery[T](query: => T): T = {
     RDDOperationScope.withScope(sparkContext, nodeName, false, true) {
       prepare()
       waitForSubqueries()
@@ -164,10 +162,10 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   /**
    * Blocks the thread until all subqueries finish evaluation and update the results.
    */
-  protected def waitForSubqueries(): Unit = {
+  protected def waitForSubqueries(): Unit = synchronized {
     // fill in the result of subqueries
     subqueryResults.foreach { case (e, futureResult) =>
-      val rows = Await.result(futureResult, Duration.Inf)
+      val rows = ThreadUtils.awaitResult(futureResult, Duration.Inf)
       if (rows.length > 1) {
         sys.error(s"more than one row returned by a subquery used as an expression:\n${e.plan}")
       }
@@ -184,13 +182,22 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   }
 
   /**
+   * Whether the "prepare" method is called.
+   */
+  private var prepared = false
+
+  /**
    * Prepare a SparkPlan for execution. It's idempotent.
    */
   final def prepare(): Unit = {
-    if (prepareCalled.compareAndSet(false, true)) {
-      doPrepare()
-      prepareSubqueries()
-      children.foreach(_.prepare())
+    // doPrepare() may depend on it's children, we should call prepare() on all the children first.
+    children.foreach(_.prepare())
+    synchronized {
+      if (!prepared) {
+        prepareSubqueries()
+        doPrepare()
+        prepared = true
+      }
     }
   }
 
@@ -201,6 +208,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    *
    * Note: the prepare method has already walked down the tree, so the implementation doesn't need
    * to call children's prepare methods.
+   *
+   * This will only be called once, protected by `this`.
    */
   protected def doPrepare(): Unit = {}
 
@@ -351,12 +360,10 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     }
   }
 
-  private[this] def isTesting: Boolean = sys.props.contains("spark.testing")
-
   protected def newMutableProjection(
       expressions: Seq[Expression],
       inputSchema: Seq[Attribute],
-      useSubexprElimination: Boolean = false): () => MutableProjection = {
+      useSubexprElimination: Boolean = false): MutableProjection = {
     log.debug(s"Creating MutableProj: $expressions, inputSchema: $inputSchema")
     GenerateMutableProjection.generate(expressions, inputSchema, useSubexprElimination)
   }
@@ -387,19 +394,19 @@ object SparkPlan {
     ThreadUtils.newDaemonCachedThreadPool("subquery", 16))
 }
 
-private[sql] trait LeafNode extends SparkPlan {
+private[sql] trait LeafExecNode extends SparkPlan {
   override def children: Seq[SparkPlan] = Nil
   override def producedAttributes: AttributeSet = outputSet
 }
 
-object UnaryNode {
+object UnaryExecNode {
   def unapply(a: Any): Option[(SparkPlan, SparkPlan)] = a match {
     case s: SparkPlan if s.children.size == 1 => Some((s, s.children.head))
     case _ => None
   }
 }
 
-private[sql] trait UnaryNode extends SparkPlan {
+private[sql] trait UnaryExecNode extends SparkPlan {
   def child: SparkPlan
 
   override def children: Seq[SparkPlan] = child :: Nil
@@ -407,7 +414,7 @@ private[sql] trait UnaryNode extends SparkPlan {
   override def outputPartitioning: Partitioning = child.outputPartitioning
 }
 
-private[sql] trait BinaryNode extends SparkPlan {
+private[sql] trait BinaryExecNode extends SparkPlan {
   def left: SparkPlan
   def right: SparkPlan
 

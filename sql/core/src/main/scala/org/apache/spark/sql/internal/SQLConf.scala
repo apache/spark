@@ -18,6 +18,7 @@
 package org.apache.spark.sql.internal
 
 import java.util.{NoSuchElementException, Properties}
+import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
 import scala.collection.immutable
@@ -53,9 +54,16 @@ object SQLConf {
 
   val OPTIMIZER_MAX_ITERATIONS = SQLConfigBuilder("spark.sql.optimizer.maxIterations")
     .internal()
-    .doc("The max number of iterations the optimizer and analyzer runs")
+    .doc("The max number of iterations the optimizer and analyzer runs.")
     .intConf
     .createWithDefault(100)
+
+  val OPTIMIZER_INSET_CONVERSION_THRESHOLD =
+    SQLConfigBuilder("spark.sql.optimizer.inSetConversionThreshold")
+      .internal()
+      .doc("The threshold of set size for InSet conversion.")
+      .intConf
+      .createWithDefault(10)
 
   val ALLOW_MULTIPLE_CONTEXTS = SQLConfigBuilder("spark.sql.allowMultipleContexts")
     .doc("When set to true, creating multiple SQLContexts/HiveContexts is allowed. " +
@@ -91,6 +99,14 @@ object SQLConf {
   val PREFER_SORTMERGEJOIN = SQLConfigBuilder("spark.sql.join.preferSortMergeJoin")
     .internal()
     .doc("When true, prefer sort merge join over shuffle hash join.")
+    .booleanConf
+    .createWithDefault(true)
+
+  val RADIX_SORT_ENABLED = SQLConfigBuilder("spark.sql.sort.enableRadixSort")
+    .internal()
+    .doc("When true, enable use of radix sort when possible. Radix sort is much faster but " +
+      "requires additional memory to be reserved up-front. The memory overhead may be " +
+      "significant when sorting very small rows (up to 50% more in this case).")
     .booleanConf
     .createWithDefault(true)
 
@@ -146,9 +162,9 @@ object SQLConf {
       .createWithDefault(true)
 
   val CASE_SENSITIVE = SQLConfigBuilder("spark.sql.caseSensitive")
-    .doc("Whether the query analyzer should be case sensitive or not.")
+    .doc("Whether the query analyzer should be case sensitive or not. Default to case insensitive.")
     .booleanConf
-    .createWithDefault(true)
+    .createWithDefault(false)
 
   val PARQUET_SCHEMA_MERGING_ENABLED = SQLConfigBuilder("spark.sql.parquet.mergeSchema")
     .doc("When true, the Parquet data source merges schemas collected from all data files, " +
@@ -288,7 +304,7 @@ object SQLConf {
   val DEFAULT_DATA_SOURCE_NAME = SQLConfigBuilder("spark.sql.sources.default")
     .doc("The default data source to use in input/output.")
     .stringConf
-    .createWithDefault("org.apache.spark.sql.parquet")
+    .createWithDefault("parquet")
 
   // This is used to control the when we will split a schema's JSON string to multiple pieces
   // in order to fit the JSON string in metastore's table property (by default, the value has
@@ -402,6 +418,12 @@ object SQLConf {
     .intConf
     .createWithDefault(200)
 
+  val MAX_CASES_BRANCHES = SQLConfigBuilder("spark.sql.codegen.maxCaseBranches")
+    .internal()
+    .doc("The maximum number of switches supported with codegen.")
+    .intConf
+    .createWithDefault(20)
+
   val FILES_MAX_PARTITION_BYTES = SQLConfigBuilder("spark.sql.files.maxPartitionBytes")
     .doc("The maximum number of bytes to pack into a single partition when reading files.")
     .longConf
@@ -450,12 +472,45 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val VARIABLE_SUBSTITUTE_ENABLED =
+    SQLConfigBuilder("spark.sql.variable.substitute")
+      .doc("This enables substitution using syntax like ${var} ${system:var} and ${env:var}.")
+      .booleanConf
+      .createWithDefault(true)
+
+  val VARIABLE_SUBSTITUTE_DEPTH =
+    SQLConfigBuilder("spark.sql.variable.substitute.depth")
+      .doc("The maximum replacements the substitution engine will do.")
+      .intConf
+      .createWithDefault(40)
+
   // TODO: This is still WIP and shouldn't be turned on without extensive test coverage
   val COLUMNAR_AGGREGATE_MAP_ENABLED = SQLConfigBuilder("spark.sql.codegen.aggregate.map.enabled")
     .internal()
     .doc("When true, aggregate with keys use an in-memory columnar map to speed up execution.")
     .booleanConf
     .createWithDefault(false)
+
+  val FILE_SINK_LOG_DELETION = SQLConfigBuilder("spark.sql.streaming.fileSink.log.deletion")
+    .internal()
+    .doc("Whether to delete the expired log files in file stream sink.")
+    .booleanConf
+    .createWithDefault(true)
+
+  val FILE_SINK_LOG_COMPACT_INTERVAL =
+    SQLConfigBuilder("spark.sql.streaming.fileSink.log.compactInterval")
+      .internal()
+      .doc("Number of log files after which all the previous files " +
+        "are compacted into the next log file.")
+      .intConf
+      .createWithDefault(10)
+
+  val FILE_SINK_LOG_CLEANUP_DELAY =
+    SQLConfigBuilder("spark.sql.streaming.fileSink.log.cleanupDelay")
+      .internal()
+      .doc("How long in milliseconds a file is guaranteed to be visible for all readers.")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefault(60 * 1000L) // 10 minutes
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
@@ -488,6 +543,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   /** ************************ Spark SQL Params/Hints ******************* */
 
   def optimizerMaxIterations: Int = getConf(OPTIMIZER_MAX_ITERATIONS)
+
+  def optimizerInSetConversionThreshold: Int = getConf(OPTIMIZER_INSET_CONVERSION_THRESHOLD)
 
   def checkpointLocation: String = getConf(CHECKPOINT_LOCATION)
 
@@ -529,6 +586,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def wholeStageMaxNumFields: Int = getConf(WHOLESTAGE_MAX_NUM_FIELDS)
 
+  def maxCaseBranchesForCodegen: Int = getConf(MAX_CASES_BRANCHES)
+
   def exchangeReuseEnabled: Boolean = getConf(EXCHANGE_REUSE_ENABLED)
 
   def canonicalView: Boolean = getConf(CANONICAL_NATIVE_VIEW)
@@ -541,6 +600,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def autoBroadcastJoinThreshold: Int = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
 
   def preferSortMergeJoin: Boolean = getConf(PREFER_SORTMERGEJOIN)
+
+  def enableRadixSort: Boolean = getConf(RADIX_SORT_ENABLED)
 
   def defaultSizeInBytes: Long =
     getConf(DEFAULT_SIZE_IN_BYTES, autoBroadcastJoinThreshold + 1L)
@@ -581,9 +642,13 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def dataFrameRetainGroupColumns: Boolean = getConf(DATAFRAME_RETAIN_GROUP_COLUMNS)
 
-  def runSQLOnFile: Boolean = getConf(RUN_SQL_ON_FILES)
+  override def runSQLonFile: Boolean = getConf(RUN_SQL_ON_FILES)
 
   def columnarAggregateMapEnabled: Boolean = getConf(COLUMNAR_AGGREGATE_MAP_ENABLED)
+
+  def variableSubstituteEnabled: Boolean = getConf(VARIABLE_SUBSTITUTE_ENABLED)
+
+  def variableSubstituteDepth: Int = getConf(VARIABLE_SUBSTITUTE_DEPTH)
 
   override def orderByOrdinal: Boolean = getConf(ORDER_BY_ORDINAL)
 

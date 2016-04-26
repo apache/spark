@@ -19,6 +19,7 @@ package org.apache.spark.ml.clustering
 
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param.{IntParam, ParamMap, Params}
@@ -27,7 +28,7 @@ import org.apache.spark.ml.util._
 import org.apache.spark.mllib.clustering.{GaussianMixture => MLlibGM, GaussianMixtureModel => MLlibGMModel}
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.stat.distribution.MultivariateGaussian
-import org.apache.spark.sql.{DataFrame, Dataset, Row}
+import org.apache.spark.sql.{DataFrame, Dataset, Row, SQLContext}
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{IntegerType, StructType}
 
@@ -103,6 +104,27 @@ class GaussianMixtureModel private[ml] (
 
   @Since("2.0.0")
   def gaussians: Array[MultivariateGaussian] = parentModel.gaussians
+
+  /**
+   * Retrieve Gaussian distributions as a DataFrame.
+   * Each row represents a Gaussian Distribution.
+   * Two columns are defined: mean and cov.
+   * Schema:
+   * {{{
+   * root
+   * |-- mean: vector (nullable = true)
+   * |-- cov: matrix (nullable = true)
+   * }}}
+   */
+  @Since("2.0.0")
+  def gaussiansDF: DataFrame = {
+    val modelGaussians = gaussians.map { gaussian =>
+      (gaussian.mu, gaussian.sigma)
+    }
+    val sc = SparkContext.getOrCreate()
+    val sqlContext = SQLContext.getOrCreate(sc)
+    sqlContext.createDataFrame(modelGaussians).toDF("mean", "cov")
+  }
 
   @Since("2.0.0")
   override def write: MLWriter = new GaussianMixtureModel.GaussianMixtureModelWriter(this)
@@ -247,7 +269,8 @@ class GaussianMixture @Since("2.0.0") (
       .setSeed($(seed))
       .setConvergenceTol($(tol))
     val parentModel = algo.run(rdd)
-    val model = copyValues(new GaussianMixtureModel(uid, parentModel).setParent(this))
+    val model = copyValues(new GaussianMixtureModel(uid, parentModel)
+      .setParent(this))
     val summary = new GaussianMixtureSummary(model.transform(dataset),
       $(predictionCol), $(probabilityCol), $(featuresCol), $(k))
     model.setSummary(summary)

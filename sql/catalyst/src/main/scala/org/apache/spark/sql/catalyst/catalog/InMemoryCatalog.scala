@@ -62,7 +62,7 @@ class InMemoryCatalog extends ExternalCatalog {
   private def requireTableExists(db: String, table: String): Unit = {
     if (!tableExists(db, table)) {
       throw new AnalysisException(
-        s"Table or View not found: '$table' does not exist in database '$db'")
+        s"Table or view not found: '$table' does not exist in database '$db'")
     }
   }
 
@@ -203,6 +203,27 @@ class InMemoryCatalog extends ExternalCatalog {
 
   override def listTables(db: String, pattern: String): Seq[String] = synchronized {
     StringUtils.filterPattern(listTables(db), pattern)
+  }
+
+  override def loadTable(
+      db: String,
+      table: String,
+      loadPath: String,
+      isOverwrite: Boolean,
+      holdDDLTime: Boolean): Unit = {
+    throw new AnalysisException("loadTable is not implemented for InMemoryCatalog.")
+  }
+
+  override def loadPartition(
+      db: String,
+      table: String,
+      loadPath: String,
+      partition: TablePartitionSpec,
+      isOverwrite: Boolean,
+      holdDDLTime: Boolean,
+      inheritTableSpecs: Boolean,
+      isSkewedStoreAsSubdir: Boolean): Unit = {
+    throw new AnalysisException("loadPartition is not implemented for InMemoryCatalog.")
   }
 
   // --------------------------------------------------------------------------

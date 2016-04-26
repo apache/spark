@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import scala.language.postfixOps
 
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.expressions.scala.typed
 import org.apache.spark.sql.functions._
@@ -69,6 +70,16 @@ object NameAgg extends Aggregator[AggData, String, String] {
   def finish(r: String): String = r
   override def bufferEncoder: Encoder[String] = Encoders.STRING
   override def outputEncoder: Encoder[String] = Encoders.STRING
+}
+
+
+object SeqAgg extends Aggregator[AggData, Seq[Int], Seq[Int]] {
+  def zero: Seq[Int] = Nil
+  def reduce(b: Seq[Int], a: AggData): Seq[Int] = a.a +: b
+  def merge(b1: Seq[Int], b2: Seq[Int]): Seq[Int] = b1 ++ b2
+  def finish(r: Seq[Int]): Seq[Int] = r
+  override def bufferEncoder: Encoder[Seq[Int]] = ExpressionEncoder()
+  override def outputEncoder: Encoder[Seq[Int]] = ExpressionEncoder()
 }
 
 
@@ -211,5 +222,14 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
   test("aggregator in DataFrame/Dataset[Row]") {
     val df = Seq(1 -> "a", 2 -> "b", 3 -> "b").toDF("i", "j")
     checkAnswer(df.groupBy($"j").agg(RowAgg.toColumn), Row("a", 1) :: Row("b", 5) :: Nil)
+  }
+
+  test("SPARK-14675: ClassFormatError when use Seq as Aggregator buffer type") {
+    val ds = Seq(AggData(1, "a"), AggData(2, "a")).toDS()
+
+    checkDataset(
+      ds.groupByKey(_.b).agg(SeqAgg.toColumn),
+      "a" -> Seq(1, 2)
+    )
   }
 }

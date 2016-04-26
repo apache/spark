@@ -34,6 +34,23 @@ private[spark] class StaticMemoryManager(
     totalOffHeapMemory: Long)
   extends MemoryManager(conf, numCores) {
 
+  private val MIN_MEMORY_BYTES = 32 * 1024 * 1024
+
+  if (totalHeapMemory < MIN_MEMORY_BYTES) {
+    throw new IllegalArgumentException(s"System memory $totalHeapMemory must " +
+      s"be at least $MIN_MEMORY_BYTES. Please increase heap size using the --driver-memory " +
+      s"option or spark.driver.memory in Spark configuration.")
+  }
+
+  if (conf.contains("spark.executor.memory")) {
+    val executorMemory = conf.getSizeAsBytes("spark.executor.memory")
+    if (executorMemory < MIN_MEMORY_BYTES) {
+      throw new IllegalArgumentException(s"Executor memory $executorMemory must be at least " +
+        s"$MIN_MEMORY_BYTES. Please increase executor memory using the " +
+        s"--executor-memory option or spark.executor.memory in Spark configuration.")
+    }
+  }
+
   def this(conf: SparkConf, numCores: Int) {
     this(
       conf,

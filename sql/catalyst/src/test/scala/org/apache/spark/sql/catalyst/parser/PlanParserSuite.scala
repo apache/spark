@@ -17,11 +17,13 @@
 package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.types.{BooleanType, IntegerType}
+import org.apache.spark.sql.types.IntegerType
+
 
 class PlanParserSuite extends PlanTest {
   import CatalystSqlParser._
@@ -107,7 +109,7 @@ class PlanParserSuite extends PlanTest {
     assertEqual("select a, b from db.c where x < 1", table("db", "c").where('x < 1).select('a, 'b))
     assertEqual(
       "select a, b from db.c having x < 1",
-      table("db", "c").select('a, 'b).where(('x < 1).cast(BooleanType)))
+      table("db", "c").select('a, 'b).where('x < 1))
     assertEqual("select distinct a, b from db.c", Distinct(table("db", "c").select('a, 'b)))
     assertEqual("select all a, b from db.c", table("db", "c").select('a, 'b))
   }
@@ -300,7 +302,7 @@ class PlanParserSuite extends PlanTest {
     // Unresolved generator.
     val expected = table("t")
       .generate(
-        UnresolvedGenerator("posexplode", Seq('x)),
+        UnresolvedGenerator(FunctionIdentifier("posexplode"), Seq('x)),
         join = true,
         outer = false,
         Some("posexpl"),
@@ -405,7 +407,7 @@ class PlanParserSuite extends PlanTest {
       "select g from t group by g having a > (select b from s)",
       table("t")
         .groupBy('g)('g)
-        .where(('a > ScalarSubquery(table("s").select('b))).cast(BooleanType)))
+        .where('a > ScalarSubquery(table("s").select('b))))
   }
 
   test("table reference") {
@@ -427,5 +429,14 @@ class PlanParserSuite extends PlanTest {
     intercept("values (1, 'a'), (2, 'b') as tbl(a, b, c)",
       "Number of aliases must match the number of fields in an inline table.")
     intercept[ArrayIndexOutOfBoundsException](parsePlan("values (1, 'a'), (2, 'b', 5Y)"))
+  }
+
+  test("simple select query with !> and !<") {
+    // !< is equivalent to >=
+    assertEqual("select a, b from db.c where x !< 1",
+      table("db", "c").where('x >= 1).select('a, 'b))
+    // !> is equivalent to <=
+    assertEqual("select a, b from db.c where x !> 1",
+      table("db", "c").where('x <= 1).select('a, 'b))
   }
 }

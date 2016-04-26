@@ -17,7 +17,6 @@
 
 import sys
 import uuid
-from functools import wraps
 
 if sys.version > '3':
     basestring = str
@@ -37,20 +36,6 @@ def _jvm():
         return jvm
     else:
         raise AttributeError("Cannot load _jvm from SparkContext. Is SparkContext initialized?")
-
-
-def keyword_only(func):
-    """
-    A decorator that forces keyword arguments in the wrapped method
-    and saves actual input keyword arguments in `_input_kwargs`.
-    """
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        if len(args) > 1:
-            raise TypeError("Method %s forces keyword arguments." % func.__name__)
-        wrapper._input_kwargs = kwargs
-        return func(*args, **kwargs)
-    return wrapper
 
 
 class Identifiable(object):
@@ -137,7 +122,7 @@ class MLWritable(object):
 
     @property
     def write(self):
-        """Returns an JavaMLWriter instance for this ML instance."""
+        """Returns an MLWriter instance for this ML instance."""
         raise NotImplementedError("MLWritable is not yet implemented for type: %r" % type(self))
 
     def save(self, path):
@@ -153,7 +138,7 @@ class JavaMLWritable(MLWritable):
 
     @property
     def write(self):
-        """Returns an JavaMLWriter instance for this ML instance."""
+        """Returns an MLWriter instance for this ML instance."""
         return JavaMLWriter(self)
 
 
@@ -236,7 +221,7 @@ class MLReadable(object):
 
     @classmethod
     def read(cls):
-        """Returns an JavaMLReader instance for this class."""
+        """Returns an MLReader instance for this class."""
         raise NotImplementedError("MLReadable.read() not implemented for type: %r" % cls)
 
     @classmethod
@@ -253,5 +238,5 @@ class JavaMLReadable(MLReadable):
 
     @classmethod
     def read(cls):
-        """Returns an JavaMLReader instance for this class."""
+        """Returns an MLReader instance for this class."""
         return JavaMLReader(cls)
