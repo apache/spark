@@ -29,8 +29,10 @@ from pyspark.ml.wrapper import JavaParams
 from pyspark.sql.functions import rand
 from pyspark.mllib.common import inherit_doc, _py2java, _java2py
 
-__all__ = ['ParamGridBuilder', 'CrossValidator', 'CrossValidatorModel', 'TrainValidationSplit',
-           'TrainValidationSplitModel', 'ValidatorParams']
+__all__ = ['ParamGridBuilder',
+           'CrossValidator', 'CrossValidatorModel',
+           'TrainValidationSplit', 'TrainValidationSplitModel',
+           'ValidatorParams']
 
 
 class ParamGridBuilder(object):
@@ -273,7 +275,7 @@ class CrossValidatorParams(ValidatorParams):
 
         if self.numFolds in pyParamMap:
             java_num_folds_param = java_obj.getParam(self.numFolds.name)
-            paramMap.put([java_num_folds_param.w(self.getNumFolds())])
+            paramMap.put([java_num_folds_param.w(java_obj.getNumFolds())])
 
         return paramMap
 

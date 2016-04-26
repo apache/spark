@@ -657,6 +657,20 @@ class PersistenceTest(PySparkTestCase):
         except OSError:
             pass
 
+    def _compare_param(self, m1, m2, param):
+        """
+        Compare 2 ML params, assert they have the same param.
+        """
+        # Prevent key not found error in case of some param neither in paramMap and
+        # defaultParamMap.
+        if m1.isDefined(param):
+            self.assertEqual(m1.getOrDefault(param), m2.getOrDefault(param))
+            self.assertEqual(param.parent, m2.getParam(param.name).parent)
+        else:
+            pass # fow now
+            # If m1 is not defined param, then m2 should not, too.
+            # self.assertEqual(m2.isDefined(m2.getParam(param.name)), False)
+
     def _compare_pipelines(self, m1, m2):
         """
         Compare 2 ML types, asserting that they are equivalent.
@@ -676,11 +690,7 @@ class PersistenceTest(PySparkTestCase):
         if isinstance(m1, JavaParams):
             self.assertEqual(len(m1.params), len(m2.params))
             for p in m1.params:
-                # Prevent key not found error in case of some param neither in paramMap and
-                # defaultParamMap.
-                if p in m1._paramMap or p in m1._defaultParamMap:
-                    self.assertEqual(m1.getOrDefault(p), m2.getOrDefault(p))
-                    self.assertEqual(p.parent, m2.getParam(p.name).parent)
+                self._compare_param(m1, m2, p)
         elif isinstance(m1, Pipeline):
             self.assertEqual(len(m1.getStages()), len(m2.getStages()))
             for s1, s2 in zip(m1.getStages(), m2.getStages()):
@@ -715,11 +725,18 @@ class PersistenceTest(PySparkTestCase):
             self.assertEqual(m1.evaluator.parent, m2.evaluator.parent)
 
             # Check the equality of estimator parameter maps (value and parent).
+            def epms2str(epms):
+                return str(epms)
+
             self.assertEqual(len(m1.getEstimatorParamMaps()), len(m2.getEstimatorParamMaps()))
             for epm1, epm2 in zip(m1.getEstimatorParamMaps(), m2.getEstimatorParamMaps()):
                 self.assertEqual(len(epm1), len(epm2))
-                for pair in epm1:
-                    self.assertIn(pair, epm2)
+                for param in epm1:
+                    self.assertIn(param, epm2)
+                    if isinstance(epm1[param], Params):
+                        self._compare_pipelines(epm1[param], epm2[param])
+                    else:
+                        self.assertEqual(epm1[param], epm2[param])
             self.assertEqual(m1.estimatorParamMaps.parent, m2.estimatorParamMaps.parent)
 
             # Check extra attributes/params.
@@ -813,7 +830,7 @@ class PersistenceTest(PySparkTestCase):
             lr = LogisticRegression()
 
             # Check the estimator of CrossValidator(TrainValidationSplit(LogisticRegression))
-            tvs_grid = ParamGridBuilder().addGrid(lr.maxIter, [5, 10]).build()
+            tvs_grid = ParamGridBuilder().addGrid(lr.maxIter, [1, 2]).build()
             tvs_evaluator = BinaryClassificationEvaluator()
             tvs = TrainValidationSplit(estimator=lr, estimatorParamMaps=tvs_grid,
                                        evaluator=tvs_evaluator)
@@ -836,7 +853,7 @@ class PersistenceTest(PySparkTestCase):
             self._compare_pipelines(model, loaded_model)
 
             # Check the estimator of TrainValidationSplit(CrossValidator(LogisticRegression))
-            cv_grid = ParamGridBuilder().addGrid(lr.maxIter, [5, 10]).build()
+            cv_grid = ParamGridBuilder().addGrid(lr.maxIter, [1, 2]).build()
             cv_evaluator = BinaryClassificationEvaluator()
             cv = CrossValidator(estimator=lr, estimatorParamMaps=cv_grid, evaluator=cv_evaluator)
 
