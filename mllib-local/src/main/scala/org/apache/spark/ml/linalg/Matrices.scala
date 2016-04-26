@@ -177,7 +177,7 @@ class DenseMatrix @Since("2.0.0") (
     @Since("2.0.0") val numRows: Int,
     @Since("2.0.0") val numCols: Int,
     @Since("2.0.0") val values: Array[Double],
-    @Since("2.0.0") override val isTransposed: Boolean) extends Matrix {
+    override val isTransposed: Boolean) extends Matrix {
 
   require(values.length == numRows * numCols, "The number of values supplied doesn't match the " +
     s"size of the matrix! values.length: ${values.length}, numRows * numCols: ${numRows * numCols}")
@@ -450,7 +450,7 @@ class SparseMatrix @Since("2.0.0") (
     @Since("2.0.0") val colPtrs: Array[Int],
     @Since("2.0.0") val rowIndices: Array[Int],
     @Since("2.0.0") val values: Array[Double],
-    @Since("2.0.0") override val isTransposed: Boolean) extends Matrix {
+    override val isTransposed: Boolean) extends Matrix {
 
   require(values.length == rowIndices.length, "The number of row indices and values don't match! " +
     s"values.length: ${values.length}, rowIndices.length: ${rowIndices.length}")

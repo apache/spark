@@ -591,7 +591,7 @@ object DenseVector {
  */
 @Since("2.0.0")
 class SparseVector @Since("2.0.0") (
-    @Since("2.0.0") override val size: Int,
+    override val size: Int,
     @Since("2.0.0") val indices: Array[Int],
     @Since("2.0.0") val values: Array[Double]) extends Vector {
 
