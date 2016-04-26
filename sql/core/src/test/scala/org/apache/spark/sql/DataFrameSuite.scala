@@ -398,6 +398,14 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       Row(4, "d") :: Nil)
     checkAnswer(lowerCaseData.except(lowerCaseData), Nil)
     checkAnswer(upperCaseData.except(upperCaseData), Nil)
+
+    // check if values are de-duplicated
+    val df1 = Seq(("id1", 1), ("id1", 1), ("id", 1), ("id1", 2)).toDF("id", "value")
+    val df2 = Seq(("id1", 2)).toDF("id", "value")
+    checkAnswer(
+      df1.except(df2),
+        Row("id1", 1) ::
+        Row("id", 1) :: Nil)
   }
 
   test("intersect") {
