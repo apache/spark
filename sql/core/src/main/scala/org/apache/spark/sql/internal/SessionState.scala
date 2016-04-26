@@ -58,7 +58,7 @@ private[sql] class SessionState(sparkSession: SparkSession) {
   def newHadoopConfWithOptions(options: Map[String, String]): Configuration = {
     val hadoopConf = newHadoopConf()
     options.foreach { case (k, v) =>
-      if (v ne null && k != "path" && k != "paths") {
+      if ((v ne null) && k != "path" && k != "paths") {
         hadoopConf.set(k, v)
       }
     }
