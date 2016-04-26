@@ -88,7 +88,7 @@ private[sql] trait SQLTestUtils
    * The Hadoop configuration used by the active [[SQLContext]].
    */
   protected def hadoopConfiguration: Configuration = {
-    sparkContext.hadoopConfiguration
+    sqlContext.sessionState.hadoopConf
   }
 
   /**

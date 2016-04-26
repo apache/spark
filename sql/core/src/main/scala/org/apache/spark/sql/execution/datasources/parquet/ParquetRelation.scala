@@ -110,15 +110,15 @@ private[sql] class DefaultSource
     // and `CatalystWriteSupport` (writing actual rows to Parquet files).
     conf.set(
       SQLConf.PARQUET_BINARY_AS_STRING.key,
-      sparkSession.conf.isParquetBinaryAsString.toString)
+      sparkSession.sessionState.conf.isParquetBinaryAsString.toString)
 
     conf.set(
       SQLConf.PARQUET_INT96_AS_TIMESTAMP.key,
-      sparkSession.conf.isParquetINT96AsTimestamp.toString)
+      sparkSession.sessionState.conf.isParquetINT96AsTimestamp.toString)
 
     conf.set(
       SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key,
-      sparkSession.conf.writeLegacyParquetFormat.toString)
+      sparkSession.sessionState.conf.writeLegacyParquetFormat.toString)
 
     // Sets compression scheme
     conf.set(ParquetOutputFormat.COMPRESSION, parquetOptions.compressionCodec)
@@ -143,10 +143,10 @@ private[sql] class DefaultSource
       parameters
           .get(ParquetRelation.MERGE_SCHEMA)
           .map(_.toBoolean)
-          .getOrElse(sparkSession.conf.getConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED))
+          .getOrElse(sparkSession.getConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED))
 
     val mergeRespectSummaries =
-      sparkSession.conf.getConf(SQLConf.PARQUET_SCHEMA_RESPECT_SUMMARIES)
+      sparkSession.getConf(SQLConf.PARQUET_SCHEMA_RESPECT_SUMMARIES)
 
     val filesByType = splitFiles(files)
 
@@ -250,7 +250,7 @@ private[sql] class DefaultSource
    * Returns whether the reader will return the rows as batch or not.
    */
   override def supportBatch(sparkSession: SparkSession, schema: StructType): Boolean = {
-    val conf = sparkSession.conf
+    val conf = sparkSession.sessionState.conf
     conf.parquetVectorizedReaderEnabled && conf.wholeStageEnabled &&
       schema.length <= conf.wholeStageMaxNumFields &&
       schema.forall(_.dataType.isInstanceOf[AtomicType])
@@ -263,7 +263,7 @@ private[sql] class DefaultSource
       requiredSchema: StructType,
       filters: Seq[Filter],
       options: Map[String, String]): PartitionedFile => Iterator[InternalRow] = {
-    val parquetConf = new Configuration(sparkSession.sparkContext.hadoopConfiguration)
+    val parquetConf = new Configuration(sparkSession.sessionState.hadoopConf)
     parquetConf.set(ParquetInputFormat.READ_SUPPORT_CLASS, classOf[CatalystReadSupport].getName)
     parquetConf.set(
       CatalystReadSupport.SPARK_ROW_REQUESTED_SCHEMA,
@@ -281,10 +281,10 @@ private[sql] class DefaultSource
     // Sets flags for `CatalystSchemaConverter`
     parquetConf.setBoolean(
       SQLConf.PARQUET_BINARY_AS_STRING.key,
-      sparkSession.conf.getConf(SQLConf.PARQUET_BINARY_AS_STRING))
+      sparkSession.getConf(SQLConf.PARQUET_BINARY_AS_STRING))
     parquetConf.setBoolean(
       SQLConf.PARQUET_INT96_AS_TIMESTAMP.key,
-      sparkSession.conf.getConf(SQLConf.PARQUET_INT96_AS_TIMESTAMP))
+      sparkSession.getConf(SQLConf.PARQUET_INT96_AS_TIMESTAMP))
 
     // Try to push down filters when filter push-down is enabled.
     val pushed = if (sparkSession.getConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key).toBoolean) {
@@ -305,7 +305,8 @@ private[sql] class DefaultSource
     // If true, enable using the custom RecordReader for parquet. This only works for
     // a subset of the types (no complex types).
     val resultSchema = StructType(partitionSchema.fields ++ requiredSchema.fields)
-    val enableVectorizedReader: Boolean = sparkSession.conf.parquetVectorizedReaderEnabled &&
+    val enableVectorizedReader: Boolean =
+      sparkSession.sessionState.conf.parquetVectorizedReaderEnabled &&
       resultSchema.forall(_.dataType.isInstanceOf[AtomicType])
     // Whole stage codegen (PhysicalRDD) is able to deal with batches directly
     val returningBatch = supportBatch(sparkSession, resultSchema)
@@ -511,9 +512,9 @@ private[sql] object ParquetRelation extends Logging {
 
     def parseParquetSchema(schema: MessageType): StructType = {
       val converter = new CatalystSchemaConverter(
-        sparkSession.conf.isParquetBinaryAsString,
-        sparkSession.conf.isParquetBinaryAsString,
-        sparkSession.conf.writeLegacyParquetFormat)
+        sparkSession.sessionState.conf.isParquetBinaryAsString,
+        sparkSession.sessionState.conf.isParquetBinaryAsString,
+        sparkSession.sessionState.conf.writeLegacyParquetFormat)
 
       converter.convert(schema)
     }
@@ -644,12 +645,13 @@ private[sql] object ParquetRelation extends Logging {
    *     S3 nodes).
    */
   def mergeSchemasInParallel(
-      filesToTouch: Seq[FileStatus], sparkSession: SparkSession): Option[StructType] = {
-    val assumeBinaryIsString = sparkSession.conf.isParquetBinaryAsString
-    val assumeInt96IsTimestamp = sparkSession.conf.isParquetINT96AsTimestamp
-    val writeLegacyParquetFormat = sparkSession.conf.writeLegacyParquetFormat
+      filesToTouch: Seq[FileStatus],
+      sparkSession: SparkSession): Option[StructType] = {
+    val assumeBinaryIsString = sparkSession.sessionState.conf.isParquetBinaryAsString
+    val assumeInt96IsTimestamp = sparkSession.sessionState.conf.isParquetINT96AsTimestamp
+    val writeLegacyParquetFormat = sparkSession.sessionState.conf.writeLegacyParquetFormat
     val serializedConf =
-      new SerializableConfiguration(sparkSession.sparkContext.hadoopConfiguration)
+      new SerializableConfiguration(sparkSession.sessionState.hadoopConf)
 
     // !! HACK ALERT !!
     //

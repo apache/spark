@@ -100,7 +100,7 @@ case class CreateViewCommand(
    */
   private def prepareTable(sparkSession: SparkSession, analyzedPlan: LogicalPlan): CatalogTable = {
     val viewSQL: String =
-      if (sparkSession.conf.canonicalView) {
+      if (sparkSession.sessionState.conf.canonicalView) {
         val logicalPlan =
           if (tableDesc.schema.isEmpty) {
             analyzedPlan

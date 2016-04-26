@@ -284,7 +284,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
         new Path(userSpecified).toUri.toString
       }.orElse {
         val checkpointConfig: Option[String] =
-          df.sparkSession.conf.getConf(
+          df.sparkSession.getConf(
             SQLConf.CHECKPOINT_LOCATION,
             None)
 
@@ -297,7 +297,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
 
       // If offsets have already been created, we trying to resume a query.
       val checkpointPath = new Path(checkpointLocation, "offsets")
-      val fs = checkpointPath.getFileSystem(df.sparkSession.sparkContext.hadoopConfiguration)
+      val fs = checkpointPath.getFileSystem(df.sparkSession.sessionState.hadoopConf)
       if (fs.exists(checkpointPath)) {
         throw new AnalysisException(
           s"Unable to resume query written to memory sink. Delete $checkpointPath to start over.")
@@ -325,7 +325,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
 
       val queryName = extraOptions.getOrElse("queryName", StreamExecution.nextName)
       val checkpointLocation = extraOptions.getOrElse("checkpointLocation", {
-        new Path(df.sparkSession.conf.checkpointLocation, queryName).toUri.toString
+        new Path(df.sparkSession.sessionState.conf.checkpointLocation, queryName).toUri.toString
       })
       df.sparkSession.sessionState.continuousQueryManager.startQuery(
         queryName,
@@ -620,7 +620,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   // Builder pattern config options
   ///////////////////////////////////////////////////////////////////////////////////////
 
-  private var source: String = df.sparkSession.conf.defaultDataSourceName
+  private var source: String = df.sparkSession.sessionState.conf.defaultDataSourceName
 
   private var mode: SaveMode = SaveMode.ErrorIfExists
 

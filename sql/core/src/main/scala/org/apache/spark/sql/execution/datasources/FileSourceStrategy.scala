@@ -115,7 +115,7 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
         options = files.options)
 
       val plannedPartitions = files.bucketSpec match {
-        case Some(bucketing) if files.sparkSession.conf.bucketingEnabled =>
+        case Some(bucketing) if files.sparkSession.sessionState.conf.bucketingEnabled =>
           logInfo(s"Planning with ${bucketing.numBuckets} buckets")
           val bucketed =
             selectedPartitions.flatMap { p =>
@@ -134,8 +134,8 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
           }
 
         case _ =>
-          val defaultMaxSplitBytes = files.sparkSession.conf.filesMaxPartitionBytes
-          val openCostInBytes = files.sparkSession.conf.filesOpenCostInBytes
+          val defaultMaxSplitBytes = files.sparkSession.sessionState.conf.filesMaxPartitionBytes
+          val openCostInBytes = files.sparkSession.sessionState.conf.filesOpenCostInBytes
           val defaultParallelism = files.sparkSession.sparkContext.defaultParallelism
           val totalBytes = selectedPartitions.flatMap(_.files.map(_.getLen + openCostInBytes)).sum
           val bytesPerCore = totalBytes / defaultParallelism

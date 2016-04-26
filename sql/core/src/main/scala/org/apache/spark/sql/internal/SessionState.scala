@@ -21,6 +21,8 @@ import java.util.Properties
 
 import scala.collection.JavaConverters._
 
+import org.apache.hadoop.conf.Configuration
+
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry}
@@ -46,6 +48,9 @@ private[sql] class SessionState(sparkSession: SparkSession) {
    * SQL-specific key-value configurations.
    */
   lazy val conf: SQLConf = new SQLConf
+  lazy val hadoopConf: Configuration = {
+    new Configuration(sparkSession.sparkContext.hadoopConfiguration)
+  }
 
   // Automatically extract `spark.sql.*` entries and put it in our SQLConf
   setConf(SQLContext.getSQLProperties(sparkSession.sparkContext.getConf))
@@ -78,12 +83,11 @@ private[sql] class SessionState(sparkSession: SparkSession) {
   /**
    * Internal catalog for managing table and database states.
    */
-  lazy val catalog =
-    new SessionCatalog(
-      sparkSession.externalCatalog,
-      functionResourceLoader,
-      functionRegistry,
-      conf)
+  lazy val catalog = new SessionCatalog(
+    sparkSession.externalCatalog,
+    functionResourceLoader,
+    functionRegistry,
+    conf)
 
   /**
    * Interface exposed to the user for registering user-defined functions.

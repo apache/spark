@@ -42,7 +42,7 @@ class IncrementalExecution(
   override def planner: SparkPlanner =
     new SparkPlanner(
       sparkSession.sparkContext,
-      sparkSession.conf,
+      sparkSession.sessionState.conf,
       stateStrategy)
 
   /**

@@ -217,7 +217,7 @@ class FileStreamSinkLogSuite extends SparkFunSuite with SharedSQLContext {
       SQLConf.FILE_SINK_LOG_COMPACT_INTERVAL.key -> "3",
       SQLConf.FILE_SINK_LOG_CLEANUP_DELAY.key -> "0") {
       withFileStreamSinkLog { sinkLog =>
-        val fs = sinkLog.metadataPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
+        val fs = sinkLog.metadataPath.getFileSystem(sqlContext.sessionState.hadoopConf)
 
         def listBatchFiles(): Set[String] = {
           fs.listStatus(sinkLog.metadataPath).map(_.getPath.getName).filter { fileName =>

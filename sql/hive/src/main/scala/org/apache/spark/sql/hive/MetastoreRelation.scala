@@ -124,7 +124,7 @@ private[hive] case class MetastoreRelation(
         // if the size is still less than zero, we use default size
         Option(totalSize).map(_.toLong).filter(_ > 0)
           .getOrElse(Option(rawDataSize).map(_.toLong).filter(_ > 0)
-            .getOrElse(sparkSession.conf.defaultSizeInBytes)))
+            .getOrElse(sparkSession.sessionState.conf.defaultSizeInBytes)))
     }
   )
 
@@ -133,7 +133,7 @@ private[hive] case class MetastoreRelation(
   private lazy val allPartitions: Seq[CatalogTablePartition] = client.getAllPartitions(catalogTable)
 
   def getHiveQlPartitions(predicates: Seq[Expression] = Nil): Seq[Partition] = {
-    val rawPartitions = if (sparkSession.conf.metastorePartitionPruning) {
+    val rawPartitions = if (sparkSession.sessionState.conf.metastorePartitionPruning) {
       client.getPartitionsByFilter(catalogTable, predicates)
     } else {
       allPartitions

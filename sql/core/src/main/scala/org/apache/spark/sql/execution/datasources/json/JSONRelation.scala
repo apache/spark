@@ -53,7 +53,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       val parsedOptions: JSONOptions = new JSONOptions(options)
       val columnNameOfCorruptRecord =
         parsedOptions.columnNameOfCorruptRecord
-          .getOrElse(sparkSession.conf.columnNameOfCorruptRecord)
+          .getOrElse(sparkSession.sessionState.conf.columnNameOfCorruptRecord)
       val jsonFiles = files.filterNot { status =>
         val name = status.getPath.getName
         name.startsWith("_") || name.startsWith(".")
@@ -98,13 +98,13 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       requiredSchema: StructType,
       filters: Seq[Filter],
       options: Map[String, String]): PartitionedFile => Iterator[InternalRow] = {
-    val conf = new Configuration(sparkSession.sparkContext.hadoopConfiguration)
+    val conf = new Configuration(sparkSession.sessionState.hadoopConf)
     val broadcastedConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(conf))
 
     val parsedOptions: JSONOptions = new JSONOptions(options)
     val columnNameOfCorruptRecord = parsedOptions.columnNameOfCorruptRecord
-      .getOrElse(sparkSession.conf.columnNameOfCorruptRecord)
+      .getOrElse(sparkSession.sessionState.conf.columnNameOfCorruptRecord)
 
     val fullSchema = requiredSchema.toAttributes ++ partitionSchema.toAttributes
     val joinedRow = new JoinedRow()
@@ -128,7 +128,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
   private def createBaseRdd(
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus]): RDD[String] = {
-    val job = Job.getInstance(sparkSession.sparkContext.hadoopConfiguration)
+    val job = Job.getInstance(sparkSession.sessionState.hadoopConf)
     val conf = job.getConfiguration
 
     val paths = inputPaths.map(_.getPath)

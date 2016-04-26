@@ -436,7 +436,8 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       case p: LogicalPlan if !p.childrenResolved => p
       case p: LogicalPlan if p.resolved => p
 
-      case CreateViewCommand(table, child, allowExisting, replace, sql) if !conf.nativeView =>
+      case CreateViewCommand(table, child, allowExisting, replace, sql)
+        if !sessionState.conf.nativeView =>
         HiveNativeCommand(sql)
 
       case p @ CreateTableAsSelectLogicalPlan(table, child, allowExisting) =>
@@ -462,7 +463,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
           val mode = if (allowExisting) SaveMode.Ignore else SaveMode.ErrorIfExists
           CreateTableUsingAsSelect(
             TableIdentifier(desc.identifier.table),
-            conf.defaultDataSourceName,
+            sessionState.conf.defaultDataSourceName,
             temporary = false,
             Array.empty[String],
             bucketSpec = None,
@@ -548,7 +549,7 @@ private[hive] class MetaStoreFileCatalog(
     Some(partitionSpecFromHive.partitionColumns)) {
 
   override def getStatus(path: Path): Array[FileStatus] = {
-    val fs = path.getFileSystem(sparkSession.sparkContext.hadoopConfiguration)
+    val fs = path.getFileSystem(sparkSession.sessionState.hadoopConf)
     fs.listStatus(path)
   }
 

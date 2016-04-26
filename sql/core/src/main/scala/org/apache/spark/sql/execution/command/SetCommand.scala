@@ -146,7 +146,7 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
     // SQLConf of the sparkSession.
     case Some(("-v", None)) =>
       val runFunc = (sparkSession: SparkSession) => {
-        sparkSession.conf.getAllDefinedConfs.map { case (key, defaultValue, doc) =>
+        sparkSession.sessionState.conf.getAllDefinedConfs.map { case (key, defaultValue, doc) =>
           Row(key, defaultValue, doc)
         }
       }
@@ -162,7 +162,9 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
         logWarning(
           s"Property ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} is deprecated, " +
             s"showing ${SQLConf.SHUFFLE_PARTITIONS.key} instead.")
-        Seq(Row(SQLConf.SHUFFLE_PARTITIONS.key, sparkSession.conf.numShufflePartitions.toString))
+        Seq(Row(
+          SQLConf.SHUFFLE_PARTITIONS.key,
+          sparkSession.sessionState.conf.numShufflePartitions.toString))
       }
       (keyValueOutput, runFunc)
 

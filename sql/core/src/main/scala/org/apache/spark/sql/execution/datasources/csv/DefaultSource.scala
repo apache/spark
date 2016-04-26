@@ -103,7 +103,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
     val csvOptions = new CSVOptions(options)
     val headers = requiredSchema.fields.map(_.name)
 
-    val conf = new Configuration(sparkSession.sparkContext.hadoopConfiguration)
+    val conf = new Configuration(sparkSession.sessionState.hadoopConf)
     val broadcastedConf = sparkSession.sparkContext.broadcast(new SerializableConfiguration(conf))
 
     (file: PartitionedFile) => {

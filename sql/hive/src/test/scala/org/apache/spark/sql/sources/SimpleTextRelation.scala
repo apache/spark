@@ -74,7 +74,7 @@ class SimpleTextSource extends FileFormat with DataSourceRegister {
       inputAttributes.find(_.name == field.name)
     }
 
-    val conf = new Configuration(sparkSession.sparkContext.hadoopConfiguration)
+    val conf = new Configuration(sparkSession.sessionState.hadoopConf)
     val broadcastedConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(conf))
 

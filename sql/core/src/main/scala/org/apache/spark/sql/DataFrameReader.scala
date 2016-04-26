@@ -368,7 +368,7 @@ class DataFrameReader protected[sql](sparkSession: SparkSession) extends Logging
     val parsedOptions: JSONOptions = new JSONOptions(extraOptions.toMap)
     val columnNameOfCorruptRecord =
       parsedOptions.columnNameOfCorruptRecord
-        .getOrElse(sparkSession.conf.columnNameOfCorruptRecord)
+        .getOrElse(sparkSession.sessionState.conf.columnNameOfCorruptRecord)
     val schema = userSpecifiedSchema.getOrElse {
       InferSchema.infer(
         jsonRDD,
@@ -454,7 +454,7 @@ class DataFrameReader protected[sql](sparkSession: SparkSession) extends Logging
   // Builder pattern config options
   ///////////////////////////////////////////////////////////////////////////////////////
 
-  private var source: String = sparkSession.conf.defaultDataSourceName
+  private var source: String = sparkSession.sessionState.conf.defaultDataSourceName
 
   private var userSpecifiedSchema: Option[StructType] = None
 

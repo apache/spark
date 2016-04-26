@@ -700,7 +700,7 @@ class Dataset[T] protected[sql](
       .queryExecution.analyzed.asInstanceOf[Join]
 
     // If auto self join alias is disabled, return the plan.
-    if (!sparkSession.conf.dataFrameSelfJoinAutoResolveAmbiguity) {
+    if (!sparkSession.sessionState.conf.dataFrameSelfJoinAutoResolveAmbiguity) {
       return withPlan(plan)
     }
 

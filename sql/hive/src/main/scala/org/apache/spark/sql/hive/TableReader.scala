@@ -153,7 +153,7 @@ class HadoopTableReader(
     def verifyPartitionPath(
         partitionToDeserializer: Map[HivePartition, Class[_ <: Deserializer]]):
         Map[HivePartition, Class[_ <: Deserializer]] = {
-      if (!sparkSession.conf.verifyPartitionPath) {
+      if (!sparkSession.sessionState.conf.verifyPartitionPath) {
         partitionToDeserializer
       } else {
         var existPathSet = collection.mutable.Set[String]()

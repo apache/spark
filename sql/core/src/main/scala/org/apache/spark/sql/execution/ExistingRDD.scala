@@ -95,7 +95,7 @@ private[sql] case class LogicalRDD(
   @transient override lazy val statistics: Statistics = Statistics(
     // TODO: Instead of returning a default value here, find a way to return a meaningful size
     // estimate for RDDs. See PR 1238 for more discussions.
-    sizeInBytes = BigInt(session.conf.defaultSizeInBytes)
+    sizeInBytes = BigInt(session.sessionState.conf.defaultSizeInBytes)
   )
 }
 
@@ -329,7 +329,8 @@ private[sql] object DataSourceScanExec {
     val outputPartitioning = {
       val bucketSpec = relation match {
         // TODO: this should be closer to bucket planning.
-        case r: HadoopFsRelation if r.sparkSession.conf.bucketingEnabled => r.bucketSpec
+        case r: HadoopFsRelation
+          if r.sparkSession.sessionState.conf.bucketingEnabled => r.bucketSpec
         case _ => None
       }
 

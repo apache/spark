@@ -239,12 +239,12 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       }
 
       // Unset default URI Scheme and Authority: throw exception
-      val originalFsName = hiveContext.sparkContext.hadoopConfiguration.get("fs.default.name")
-      hiveContext.sparkContext.hadoopConfiguration.unset("fs.default.name")
+      val originalFsName = hiveContext.sessionState.hadoopConf.get("fs.default.name")
+      hiveContext.sessionState.hadoopConf.unset("fs.default.name")
       intercept[AnalysisException] {
         sql(s"""LOAD DATA INPATH "$testData" INTO TABLE non_part_table""")
       }
-      hiveContext.sparkContext.hadoopConfiguration.set("fs.default.name", originalFsName)
+      hiveContext.sessionState.hadoopConf.set("fs.default.name", originalFsName)
     }
   }
 }

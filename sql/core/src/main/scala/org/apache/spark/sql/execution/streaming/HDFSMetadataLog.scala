@@ -212,7 +212,7 @@ class HDFSMetadataLog[T: ClassTag](sparkSession: SparkSession, path: String)
   }
 
   private def createFileManager(): FileManager = {
-    val hadoopConf = sparkSession.sparkContext.hadoopConfiguration
+    val hadoopConf = new Configuration(sparkSession.sessionState.hadoopConf)
     try {
       new FileContextManager(metadataPath, hadoopConf)
     } catch {

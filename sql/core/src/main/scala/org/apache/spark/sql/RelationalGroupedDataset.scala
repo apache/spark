@@ -42,7 +42,7 @@ class RelationalGroupedDataset protected[sql](
     groupType: RelationalGroupedDataset.GroupType) {
 
   private[this] def toDF(aggExprs: Seq[Expression]): DataFrame = {
-    val aggregates = if (df.sparkSession.conf.dataFrameRetainGroupColumns) {
+    val aggregates = if (df.sparkSession.sessionState.conf.dataFrameRetainGroupColumns) {
       groupingExprs ++ aggExprs
     } else {
       aggExprs
@@ -302,7 +302,7 @@ class RelationalGroupedDataset protected[sql](
    */
   def pivot(pivotColumn: String): RelationalGroupedDataset = {
     // This is to prevent unintended OOM errors when the number of distinct values is large
-    val maxValues = df.sparkSession.conf.getConf(SQLConf.DATAFRAME_PIVOT_MAX_VALUES)
+    val maxValues = df.sparkSession.getConf(SQLConf.DATAFRAME_PIVOT_MAX_VALUES)
     // Get the distinct values of the column and sort them so its consistent
     val values = df.select(pivotColumn)
       .distinct()

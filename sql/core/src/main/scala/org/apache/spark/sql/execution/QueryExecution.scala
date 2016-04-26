@@ -54,7 +54,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
   }
 
   def assertSupported(): Unit = {
-    if (sparkSession.conf.getConf(SQLConf.UNSUPPORTED_OPERATION_CHECK_ENABLED)) {
+    if (sparkSession.sessionState.conf.getConf(SQLConf.UNSUPPORTED_OPERATION_CHECK_ENABLED)) {
       UnsupportedOperationChecker.checkForBatch(analyzed)
     }
   }
@@ -96,9 +96,9 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
   protected def preparations: Seq[Rule[SparkPlan]] = Seq(
     python.ExtractPythonUDFs,
     PlanSubqueries(sparkSession),
-    EnsureRequirements(sparkSession.conf),
-    CollapseCodegenStages(sparkSession.conf),
-    ReuseExchange(sparkSession.conf))
+    EnsureRequirements(sparkSession.sessionState.conf),
+    CollapseCodegenStages(sparkSession.sessionState.conf),
+    ReuseExchange(sparkSession.sessionState.conf))
 
   protected def stringOrError[A](f: => A): String =
     try f.toString catch { case e: Throwable => e.toString }

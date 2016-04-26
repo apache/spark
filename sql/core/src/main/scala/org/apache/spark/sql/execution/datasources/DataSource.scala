@@ -131,7 +131,7 @@ case class DataSource(
     val allPaths = caseInsensitiveOptions.get("path")
     val globbedPaths = allPaths.toSeq.flatMap { path =>
       val hdfsPath = new Path(path)
-      val fs = hdfsPath.getFileSystem(sparkSession.sparkContext.hadoopConfiguration)
+      val fs = hdfsPath.getFileSystem(sparkSession.sessionState.hadoopConf)
       val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
       SparkHadoopUtil.get.globPathIfNecessary(qualified)
     }.toArray
@@ -226,7 +226,7 @@ case class DataSource(
       case Seq(singlePath) =>
         try {
           val hdfsPath = new Path(singlePath)
-          val fs = hdfsPath.getFileSystem(sparkSession.sparkContext.hadoopConfiguration)
+          val fs = hdfsPath.getFileSystem(sparkSession.sessionState.hadoopConf)
           val metadataPath = new Path(hdfsPath, FileStreamSink.metadataDir)
           val res = fs.exists(metadataPath)
           res
@@ -284,7 +284,7 @@ case class DataSource(
         val allPaths = caseInsensitiveOptions.get("path") ++ paths
         val globbedPaths = allPaths.flatMap { path =>
           val hdfsPath = new Path(path)
-          val fs = hdfsPath.getFileSystem(sparkSession.sparkContext.hadoopConfiguration)
+          val fs = hdfsPath.getFileSystem(sparkSession.sessionState.hadoopConf)
           val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
           val globPath = SparkHadoopUtil.get.globPathIfNecessary(qualified)
 
@@ -315,7 +315,7 @@ case class DataSource(
 
         val dataSchema = userSpecifiedSchema.map { schema =>
           val equality =
-            if (sparkSession.conf.caseSensitiveAnalysis) {
+            if (sparkSession.sessionState.conf.caseSensitiveAnalysis) {
               org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
             } else {
               org.apache.spark.sql.catalyst.analysis.caseInsensitiveResolution
@@ -374,11 +374,11 @@ case class DataSource(
           val path = new Path(caseInsensitiveOptions.getOrElse("path", {
             throw new IllegalArgumentException("'path' is not specified")
           }))
-          val fs = path.getFileSystem(sparkSession.sparkContext.hadoopConfiguration)
+          val fs = path.getFileSystem(sparkSession.sessionState.hadoopConf)
           path.makeQualified(fs.getUri, fs.getWorkingDirectory)
         }
 
-        val caseSensitive = sparkSession.conf.caseSensitiveAnalysis
+        val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
         PartitioningUtils.validatePartitionColumnDataTypes(
           data.schema, partitionColumns, caseSensitive)
 

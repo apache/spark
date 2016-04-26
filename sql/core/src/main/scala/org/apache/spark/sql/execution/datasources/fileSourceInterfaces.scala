@@ -273,7 +273,7 @@ class HDFSFileCatalog(
     partitionSchema: Option[StructType])
   extends FileCatalog with Logging {
 
-  private val hadoopConf = new Configuration(sparkSession.sparkContext.hadoopConfiguration)
+  private val hadoopConf = new Configuration(sparkSession.sessionState.hadoopConf)
 
   var leafFiles = mutable.LinkedHashMap.empty[Path, FileStatus]
   var leafDirToChildrenFiles = mutable.Map.empty[Path, Array[FileStatus]]
@@ -341,7 +341,7 @@ class HDFSFileCatalog(
   def getStatus(path: Path): Array[FileStatus] = leafDirToChildrenFiles(path)
 
   private def listLeafFiles(paths: Seq[Path]): mutable.LinkedHashSet[FileStatus] = {
-    if (paths.length >= sparkSession.conf.parallelPartitionDiscoveryThreshold) {
+    if (paths.length >= sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold) {
       HadoopFsRelation.listLeafFilesInParallel(paths, hadoopConf, sparkSession.sparkContext)
     } else {
       val statuses: Seq[FileStatus] = paths.flatMap { path =>
@@ -414,7 +414,7 @@ class HDFSFileCatalog(
         PartitioningUtils.parsePartitions(
           leafDirs,
           PartitioningUtils.DEFAULT_PARTITION_NAME,
-          typeInference = sparkSession.conf.partitionColumnTypeInferenceEnabled(),
+          typeInference = sparkSession.sessionState.conf.partitionColumnTypeInferenceEnabled(),
           basePaths = basePaths)
     }
   }
