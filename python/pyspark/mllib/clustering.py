@@ -179,7 +179,7 @@ class KMeansModel(Saveable, Loader):
 
     >>> data = array([0.0,0.0, 1.0,1.0, 9.0,8.0, 8.0,9.0]).reshape(4, 2)
     >>> model = KMeans.train(
-    ...     sc.parallelize(data), 2, maxIterations=10, runs=30, initializationMode="random",
+    ...     sc.parallelize(data), 2, maxIterations=10, initializationMode="random",
     ...                    seed=50, initializationSteps=5, epsilon=1e-4)
     >>> model.predict(array([0.0, 0.0])) == model.predict(array([1.0, 1.0]))
     True
@@ -347,6 +347,8 @@ class KMeans(object):
           rather than using the random or k-means|| initializationModel.
           (default: None)
         """
+        if runs != 1:
+            warnings.warn("The param `runs` has no effect since Spark 2.0.0.")
         clusterInitialModel = []
         if initialModel is not None:
             if not isinstance(initialModel, KMeansModel):
