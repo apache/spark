@@ -652,7 +652,7 @@ class DataFrame(object):
                     on = on[0]
 
         if how is None:
-            how  = "inner"
+            how = "inner"
         else:
             assert isinstance(how, basestring), "how should be basestring"
 
