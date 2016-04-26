@@ -99,8 +99,8 @@ class ContinuousQueryManager(object):
     def __init__(self, jcqm):
         self._jcqm = jcqm
 
-    @ignore_unicode_prefix
     @property
+    @ignore_unicode_prefix
     @since(2.0)
     def active(self):
         """Returns a list of active queries associated with this SQLContext
