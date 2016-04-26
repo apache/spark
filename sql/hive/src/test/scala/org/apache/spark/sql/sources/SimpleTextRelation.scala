@@ -48,7 +48,7 @@ class SimpleTextSource extends FileFormat with DataSourceRegister {
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = new OutputWriterFactory {
-    override private[sql] def newInstance(
+    override def newInstance(
         path: String,
         bucketId: Option[Int],
         dataSchema: StructType,
@@ -74,7 +74,7 @@ class SimpleTextSource extends FileFormat with DataSourceRegister {
       inputAttributes.find(_.name == field.name)
     }
 
-    val conf = new Configuration(sqlContext.sparkContext.hadoopConfiguration)
+    val conf = new Configuration(sqlContext.sessionState.hadoopConf)
     val broadcastedConf =
       sqlContext.sparkContext.broadcast(new SerializableConfiguration(conf))
 

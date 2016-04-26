@@ -98,7 +98,7 @@ class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
         .orc(path)
 
       // Check if this is not compressed. Default is ZLIB.
-      val conf = sparkContext.hadoopConfiguration
+      val conf = sqlContext.sessionState.hadoopConf
       val fs = FileSystem.getLocal(conf)
       val maybeOrcFile = new File(path).listFiles().find(_.getName.endsWith(".orc"))
       assert(maybeOrcFile.isDefined)
@@ -122,7 +122,7 @@ class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
         .orc(path)
 
       // Check if this is compressed as ZLIB. Default is ZLIB
-      val conf = sparkContext.hadoopConfiguration
+      val conf = sqlContext.sessionState.hadoopConf
       val fs = FileSystem.getLocal(conf)
       val maybeOrcFile = new File(path).listFiles().find(_.getName.endsWith(".zlib.orc"))
       assert(maybeOrcFile.isDefined)
@@ -146,7 +146,7 @@ class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
         df.write.orc(path)
 
         // Check if this is compressed as SNAPPY.
-        val conf = sparkContext.hadoopConfiguration
+        val conf = sqlContext.sessionState.hadoopConf
         val fs = FileSystem.getLocal(conf)
         val maybeOrcFile = new File(path).listFiles().find(_.getName.endsWith(".snappy.orc"))
         assert(maybeOrcFile.isDefined)

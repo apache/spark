@@ -21,6 +21,8 @@ import java.util.Properties
 
 import scala.collection.JavaConverters._
 
+import org.apache.hadoop.conf.Configuration
+
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry}
@@ -46,6 +48,7 @@ private[sql] class SessionState(ctx: SQLContext) {
    * SQL-specific key-value configurations.
    */
   lazy val conf: SQLConf = new SQLConf
+  lazy val hadoopConf: Configuration = new Configuration(ctx.sparkContext.hadoopConfiguration)
 
   // Automatically extract `spark.sql.*` entries and put it in our SQLConf
   setConf(SQLContext.getSQLProperties(ctx.sparkContext.getConf))
@@ -78,8 +81,7 @@ private[sql] class SessionState(ctx: SQLContext) {
   /**
    * Internal catalog for managing table and database states.
    */
-  lazy val catalog =
-    new SessionCatalog(
+  lazy val catalog = new SessionCatalog(
       ctx.externalCatalog,
       functionResourceLoader,
       functionRegistry,
@@ -98,7 +100,7 @@ private[sql] class SessionState(ctx: SQLContext) {
       override val extendedResolutionRules =
         PreInsertCastAndRename ::
         DataSourceAnalysis ::
-        (if (conf.runSQLOnFile) new ResolveDataSource(ctx) :: Nil else Nil)
+        (if (conf.runSQLonFile) new ResolveDataSource(ctx) :: Nil else Nil)
 
       override val extendedCheckRules = Seq(datasources.PreWriteCheck(conf, catalog))
     }
