@@ -458,8 +458,8 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
 
     // We do not support ALTER TABLE ADD COLUMN, ALTER TABLE REPLACE COLUMN,
     // ALTER TABLE CHANGE COLUMN, and ALTER TABLE SET FILEFORMAT.
-    // We have extracted the useful parts of these tests to tests
-    // in HiveQuerySuite.
+    // We have converted the useful parts of these tests to tests
+    // in org.apache.spark.sql.hive.execution.SQLQuerySuite.
     "alter_partition_format_loc",
     "alter_varchar1",
     "alter_varchar2",
