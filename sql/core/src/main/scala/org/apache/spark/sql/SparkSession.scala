@@ -201,7 +201,7 @@ class SparkSession private(
    * @group config
    * @since 2.0.0
    */
-  @transient val conf: RuntimeConfig = new RuntimeConfig(sessionState.conf)
+  @transient lazy val conf: RuntimeConfig = new RuntimeConfig(sessionState.conf)
 
   /**
    * Set Spark SQL configuration properties.
