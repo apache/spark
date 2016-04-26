@@ -1254,6 +1254,27 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.admin.acls.groups</code></td>
+  <td>Empty</td>
+  <td>
+    Comma separated list of groups that have view and modify access to all Spark jobs.
+    This can be used if you have a set of administrators or devs who help debug when things work.
+    Putting a "*" in the list means any user in any group can have the privilege of admin.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.user.groups.mapping</code></td>
+  <td>org.apache.spark.security.ShellBasedGroupsMapping</td>
+  <td>
+    The list of groups for a user are determined by a group mapping service defined by the trait
+    org.apache.spark.security.GroupMappingServiceProvider which can configured by this property.
+    The default implementation is a unix shell based mapping provided by
+    org.apache.spark.security.ShellBasedGroupsMappingProvider will resolve a list of groups for a
+    user. This implementation shells out with the bash -c groups command for a Linux/Unix
+    environment. Windows environment is currently not supported.
+  </td>
+</tr>
+<tr>
   <td><code>spark.authenticate</code></td>
   <td>false</td>
   <td>
@@ -1312,6 +1333,13 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.modify.acls.groups</code></td>
+  <td>Empty</td>
+  <td>
+    Comma separated list of groups that have modify access to the Spark job.
+  </td>
+</tr>
+<tr>
   <td><code>spark.ui.filters</code></td>
   <td>None</td>
   <td>
@@ -1332,6 +1360,13 @@ Apart from these, the following properties are also available, and may be useful
     Comma separated list of users that have view access to the Spark web ui. By default only the
     user that started the Spark job has view access. Putting a "*" in the list means any user can
     have view access to this Spark job.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.ui.view.acls.groups</code></td>
+  <td>Empty</td>
+  <td>
+    Comma separated list of groups that have view access to the Spark web ui.
   </td>
 </tr>
 </table>

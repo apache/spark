@@ -21,13 +21,13 @@ import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.LinkedHashSet
-
 import org.apache.avro.{Schema, SchemaNormalization}
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{ConfigEntry, OptionalConfigEntry}
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.util.Utils
+
+import scala.sys.process.Process
 
 /**
  * Configuration for a Spark application. Used to set various Spark parameters as key-value pairs.
@@ -521,6 +521,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
       }
     }
 
+    logInfo("SPARK_CLASSPATH=" + sys.env.get("SPARK_CLASSPATH").mkString(","))
     sys.env.get("SPARK_CLASSPATH").foreach { value =>
       val warning =
         s"""
@@ -538,7 +539,8 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
           throw new SparkException(s"Found both $key and SPARK_CLASSPATH. Use only the former.")
         } else {
           logWarning(s"Setting '$key' to '$value' as a work-around.")
-          set(key, value)
+
+          set(key, Process(Seq("bash", "-c", "echo " + value)).!!.stripLineEnd)
         }
       }
     }

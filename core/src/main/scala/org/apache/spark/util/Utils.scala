@@ -2179,6 +2179,16 @@ private[spark] object Utils extends Logging {
       .getOrElse(UserGroupInformation.getCurrentUser().getShortUserName())
   }
 
+
+  // Returns the groups to which the current user belongs.
+  def getCurrentUserGroups(sparkConf: SparkConf, username: String): Set[String] = {
+    val groupMappingServiceProvider = Utils.classForName(sparkConf.get("spark.user.groups.mapping",
+      "org.apache.spark.security.ShellBasedGroupsMappingProvider")).newInstance.
+      asInstanceOf[org.apache.spark.security.GroupMappingServiceProvider]
+    val currentUserGroups = groupMappingServiceProvider.getGroups(username)
+    currentUserGroups
+  }
+
   /**
    * Split the comma delimited string of master URLs into a list.
    * For instance, "spark://abc,def" becomes [spark://abc, spark://def].

@@ -464,11 +464,15 @@ object YarnSparkHadoopUtil {
     }
   }
 
+  // YARN/Hadoop acls are specified as user1,user2 group1,group2
+  // Users and groups are separated by a space and hence we need to pass the acls in same format
   def getApplicationAclsForYarn(securityMgr: SecurityManager)
       : Map[ApplicationAccessType, String] = {
     Map[ApplicationAccessType, String] (
-      ApplicationAccessType.VIEW_APP -> securityMgr.getViewAcls,
-      ApplicationAccessType.MODIFY_APP -> securityMgr.getModifyAcls
+      ApplicationAccessType.VIEW_APP -> (securityMgr.getViewAcls + " " +
+        securityMgr.getViewAclsGroups),
+      ApplicationAccessType.MODIFY_APP -> (securityMgr.getModifyAcls + " " +
+        securityMgr.getModifyAclsGroups)
     )
   }
 

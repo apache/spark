@@ -1,0 +1,49 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.security
+
+import org.apache.spark.internal.Logging
+import org.apache.spark.util.Utils
+
+/**
+* This class is responsible for getting the groups for a particular user in Unix based environments.
+*/
+
+class ShellBasedGroupsMappingProvider extends GroupMappingServiceProvider with Logging{
+
+  override def getGroups(username: String): Set[String] = {
+    val userGroups = getUnixGroups(username)
+    logInfo("User: " + username + " Groups: " + userGroups.mkString(","))
+    userGroups
+  }
+
+  private def getUnixGroups(username: String): Set[String] = {
+    logDebug("getUnixGroupsFromSparkUtil got username=" + username)
+    val cmdSeq = Seq("bash", "-c", "id -Gn " + username)
+    var result: String = null
+    try {
+      result = Utils.executeAndGetOutput(cmdSeq)
+      // we need to get rid of the trailing "\n" from the result of command execution
+      result = result.stripLineEnd
+      logDebug("Usergroups from executeAndGetOutput= " + result)
+    } catch {
+      case e: Exception => logError("Unable to get groups for user=" + username + e.getMessage)
+    }
+    result.split(" ").toSet
+  }
+}
