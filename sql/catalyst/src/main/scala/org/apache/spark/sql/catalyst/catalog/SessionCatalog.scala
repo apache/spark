@@ -610,7 +610,7 @@ class SessionCatalog(
   /**
    * Look up the [[ExpressionInfo]] associated with the specified function, assuming it exists.
    */
-  def lookupFunctionInfo(name: FunctionIdentifier): ExpressionInfo = {
+  private[spark] def lookupFunctionInfo(name: FunctionIdentifier): ExpressionInfo = {
     // TODO: just make function registry take in FunctionIdentifier instead of duplicating this
     val qualifiedName = name.copy(database = name.database.orElse(Some(currentDb)))
     functionRegistry.lookupFunction(name.funcName)
