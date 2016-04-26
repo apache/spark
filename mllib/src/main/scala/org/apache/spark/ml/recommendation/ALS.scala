@@ -403,7 +403,7 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
       numUserBlocks = $(numUserBlocks), numItemBlocks = $(numItemBlocks),
       maxIter = $(maxIter), regParam = $(regParam), implicitPrefs = $(implicitPrefs),
       alpha = $(alpha), nonnegative = $(nonnegative),
-      checkpointInterval = $(checkpointInterval), seed = $(seed), instr = Option(instrLog))
+      checkpointInterval = $(checkpointInterval), seed = $(seed))
     val userDF = userFactors.toDF("id", "features")
     val itemDF = itemFactors.toDF("id", "features")
     val model = new ALSModel(uid, $(rank), userDF, itemDF).setParent(this)
@@ -611,8 +611,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
       intermediateRDDStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK,
       finalRDDStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK,
       checkpointInterval: Int = 10,
-      seed: Long = 0L,
-                           instr: Option[Instrumentation[ALS]] = None)(
+      seed: Long = 0L)(
       implicit ord: Ordering[ID]): (RDD[(ID, Array[Float])], RDD[(ID, Array[Float])]) = {
     require(intermediateRDDStorageLevel != StorageLevel.NONE,
       "ALS is not designed to run without persisting intermediate RDDs.")
@@ -710,20 +709,14 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
       .setName("itemFactors")
       .persist(finalRDDStorageLevel)
     if (finalRDDStorageLevel != StorageLevel.NONE) {
-      val numUserFeatures = userIdAndFactors.count()
+      userIdAndFactors.count()
       itemFactors.unpersist()
-      val numItemFeatures = itemIdAndFactors.count()
+      itemIdAndFactors.count()
       userInBlocks.unpersist()
       userOutBlocks.unpersist()
       itemInBlocks.unpersist()
       itemOutBlocks.unpersist()
       blockRatings.unpersist()
-      instr match {
-        case Some(i) =>
-          i.logNamedValue("numUserFeatures", numUserFeatures)
-          i.logNamedValue("numItemFeatures", numItemFeatures)
-        case None => // No Instrumentation, do nothing
-      }
     }
     (userIdAndFactors, itemIdAndFactors)
   }
