@@ -657,7 +657,7 @@ class PersistenceTest(PySparkTestCase):
         except OSError:
             pass
 
-    def _compare_param(self, m1, m2, param):
+    def _compare_params(self, m1, m2, param):
         """
         Compare 2 ML params, assert they have the same param.
         """
@@ -667,7 +667,7 @@ class PersistenceTest(PySparkTestCase):
             self.assertEqual(m1.getOrDefault(param), m2.getOrDefault(param))
             self.assertEqual(param.parent, m2.getParam(param.name).parent)
         else:
-            pass # fow now
+            pass # fow now, wait until the default value mismatch between Spark and PySpark fixed.
             # If m1 is not defined param, then m2 should not, too.
             # self.assertEqual(m2.isDefined(m2.getParam(param.name)), False)
 
@@ -687,18 +687,22 @@ class PersistenceTest(PySparkTestCase):
         """
         self.assertEqual(m1.uid, m2.uid)
         self.assertEqual(type(m1), type(m2))
+
         if isinstance(m1, JavaParams):
             self.assertEqual(len(m1.params), len(m2.params))
             for p in m1.params:
-                self._compare_param(m1, m2, p)
+                self._compare_params(m1, m2, p)
+
         elif isinstance(m1, Pipeline):
             self.assertEqual(len(m1.getStages()), len(m2.getStages()))
             for s1, s2 in zip(m1.getStages(), m2.getStages()):
                 self._compare_pipelines(s1, s2)
+
         elif isinstance(m1, PipelineModel):
             self.assertEqual(len(m1.stages), len(m2.stages))
             for s1, s2 in zip(m1.stages, m2.stages):
                 self._compare_pipelines(s1, s2)
+
         elif isinstance(m1, OneVsRestParams):
             # Check the equality of classifiers (value and parent).
             self._compare_pipelines(m1.getClassifier(), m2.getClassifier())
@@ -715,6 +719,7 @@ class PersistenceTest(PySparkTestCase):
                 self.assertEqual(len(m1.models), len(m2.models))
                 for x, y in zip(m1.models, m2.models):
                     self._compare_pipelines(x, y)
+
         elif isinstance(m1, ValidatorParams):
             # Check the equality of estimators (value and parent).
             self._compare_pipelines(m1.getEstimator(), m2.getEstimator())
@@ -725,9 +730,6 @@ class PersistenceTest(PySparkTestCase):
             self.assertEqual(m1.evaluator.parent, m2.evaluator.parent)
 
             # Check the equality of estimator parameter maps (value and parent).
-            def epms2str(epms):
-                return str(epms)
-
             self.assertEqual(len(m1.getEstimatorParamMaps()), len(m2.getEstimatorParamMaps()))
             for epm1, epm2 in zip(m1.getEstimatorParamMaps(), m2.getEstimatorParamMaps()):
                 self.assertEqual(len(epm1), len(epm2))
@@ -752,6 +754,7 @@ class PersistenceTest(PySparkTestCase):
                 self._compare_pipelines(m1.bestModel, m2.bestModel)
             else:
                 raise RuntimeError("_compare_pipelines does not yet support type: %s" % type(m1))
+
         else:
             raise RuntimeError("_compare_pipelines does not yet support type: %s" % type(m1))
 
