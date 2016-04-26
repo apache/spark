@@ -36,7 +36,7 @@ class HiveDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     val expectedTablePath =
       hiveContext.sessionState.catalog.hiveDefaultTableFilePath(tableIdentifier)
     val filesystemPath = new Path(expectedTablePath)
-    val fs = filesystemPath.getFileSystem(sparkContext.hadoopConfiguration)
+    val fs = filesystemPath.getFileSystem(hiveContext.sessionState.hadoopConf)
     fs.exists(filesystemPath)
   }
 

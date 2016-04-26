@@ -223,6 +223,7 @@ private[hive] class HiveSessionState(ctx: SQLContext) extends SessionState(ctx) 
     conf.getConf(HiveUtils.HIVE_THRIFT_SERVER_ASYNC)
   }
 
+  // TODO: why do we get this from SparkConf but not SQLConf?
   def hiveThriftServerSingleSession: Boolean = {
     ctx.sparkContext.conf.getBoolean(
       "spark.sql.hive.thriftServer.singleSession", defaultValue = false)

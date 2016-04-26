@@ -544,7 +544,7 @@ private[hive] class MetaStoreFileCatalog(
   extends HDFSFileCatalog(ctx, Map.empty, paths, Some(partitionSpecFromHive.partitionColumns)) {
 
   override def getStatus(path: Path): Array[FileStatus] = {
-    val fs = path.getFileSystem(ctx.sparkContext.hadoopConfiguration)
+    val fs = path.getFileSystem(ctx.sessionState.hadoopConf)
     fs.listStatus(path)
   }
 
