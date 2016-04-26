@@ -44,6 +44,7 @@ case class ScalarSubquery(
 
   override def dataType: DataType = executedPlan.schema.fields.head.dataType
   override def children: Seq[Expression] = Nil
+  override def conditions: Seq[Expression] = Nil
   override def nullable: Boolean = true
   override def toString: String = s"subquery#${exprId.id}"
 

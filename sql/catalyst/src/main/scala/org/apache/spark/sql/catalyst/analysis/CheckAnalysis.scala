@@ -102,6 +102,8 @@ trait CheckAnalysis extends PredicateHelper {
               case None => w
             }
 
+          case ScalarSubquery(_, Some(conditions), _) if conditions.nonEmpty =>
+            failAnalysis("Correlated scalar subqueries are not supported.")
         }
 
         operator match {
@@ -111,38 +113,8 @@ trait CheckAnalysis extends PredicateHelper {
                 s"of type ${f.condition.dataType.simpleString} is not a boolean.")
 
           case f @ Filter(condition, child) =>
-            // Make sure that no correlated reference is below Aggregates, Outer Joins and on the
-            // right hand side of Unions.
-            lazy val outerAttributes = child.outputSet
-            def failOnCorrelatedReference(
-                plan: LogicalPlan,
-                message: String): Unit = plan foreach {
-              case p =>
-                lazy val inputs = p.inputSet
-                p.transformExpressions {
-                  case e: AttributeReference
-                    if !inputs.contains(e) && outerAttributes.contains(e) =>
-                    failAnalysis(s"Accessing outer query column is not allowed in $message: $e")
-                }
-            }
-            def checkForCorrelatedReferences(p: PredicateSubquery): Unit = p.query.foreach {
-              case a @ Aggregate(_, _, source) =>
-                failOnCorrelatedReference(source, "an AGGREGATE")
-              case j @ Join(left, _, RightOuter, _) =>
-                failOnCorrelatedReference(left, "a RIGHT OUTER JOIN")
-              case j @ Join(_, right, jt, _) if jt != Inner =>
-                failOnCorrelatedReference(right, "a LEFT (OUTER) JOIN")
-              case Union(_ :: xs) =>
-                xs.foreach(failOnCorrelatedReference(_, "a UNION"))
-              case s: SetOperation =>
-                failOnCorrelatedReference(s.right, "an INTERSECT/EXCEPT")
-              case _ =>
-            }
             splitConjunctivePredicates(condition).foreach {
-              case p: PredicateSubquery =>
-                checkForCorrelatedReferences(p)
-              case Not(p: PredicateSubquery) =>
-                checkForCorrelatedReferences(p)
+              case _: PredicateSubquery | Not(_: PredicateSubquery) =>
               case e if PredicateSubquery.hasPredicateSubquery(e) =>
                 failAnalysis(s"Predicate sub-queries cannot be used in nested conditions: $e")
               case e =>

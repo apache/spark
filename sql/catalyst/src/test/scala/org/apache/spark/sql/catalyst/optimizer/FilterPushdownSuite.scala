@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.{LeftOuter, LeftSemi, PlanTest, RightOuter}
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.types.IntegerType
@@ -757,5 +757,22 @@ class FilterPushdownSuite extends PlanTest {
     val optimized = Optimize.execute(query)
     val correctedAnswer = agg.copy(child = agg.child.where(a > 1 && b > 2)).analyze
     comparePlans(optimized, correctedAnswer)
+  }
+
+  test("predicate subquery: push down simple") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+    val z = LocalRelation('a.int, 'b.int, 'c.int).subquery('z)
+
+    val query = x
+      .join(y, Inner, Option("x.a".attr === "y.a".attr))
+      .where(Exists(z.where("x.a".attr === "z.a".attr)))
+      .analyze
+    val answer = x
+      .where(Exists(z.where("x.a".attr === "z.a".attr)))
+      .join(y, Inner, Option("x.a".attr === "y.a".attr))
+      .analyze
+    val optimized = Optimize.execute(Optimize.execute(query))
+    comparePlans(optimized, answer)
   }
 }
