@@ -30,6 +30,7 @@ case class HiveNativeCommand(sql: String) extends RunnableCommand {
     Seq(AttributeReference("result", StringType, nullable = false)())
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
+    logWarning(s"Native command: ${sql.trim}")
     sparkSession.sessionState.runNativeSql(sql).map(Row(_))
   }
 }
