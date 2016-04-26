@@ -674,7 +674,7 @@ object MimaExcludes {
       ) ++ Seq(
         // SPARK-14861: Replace internal usages of SQLContext with SparkSession
         ProblemFilters.exclude[DirectMissingMethodProblem](
-          "org.apache.spark.ml.clustering.LDAModel.sqlContext"),
+          "org.apache.spark.ml.clustering.LDAModel.sqlContext")
       ) ++ Seq(
         // [SPARK-4452][Core]Shuffle data structures can starve others on the same thread for memory
         ProblemFilters.exclude[IncompatibleTemplateDefProblem]("org.apache.spark.util.collection.Spillable")
