@@ -877,10 +877,8 @@ private[clustering] object LDA extends DefaultParamsReadable[LDA] {
     dataset
       .withColumn("docId", monotonicallyIncreasingId())
       .select("docId", featuresCol)
+      .as[(Long, Vector)]
       .rdd
-      .map { case Row(docId: Long, features: Vector) =>
-        (docId, features)
-      }
   }
 
   @Since("1.6.0")

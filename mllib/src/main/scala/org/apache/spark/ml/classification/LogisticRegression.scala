@@ -266,10 +266,8 @@ class LogisticRegression @Since("1.2.0") (
       LogisticRegressionModel = {
     val w = if ($(weightCol).isEmpty) lit(1.0) else col($(weightCol))
     val instances: RDD[Instance] =
-      dataset.select(col($(labelCol)).cast(DoubleType), w, col($(featuresCol))).rdd.map {
-        case Row(label: Double, weight: Double, features: Vector) =>
-          Instance(label, weight, features)
-      }
+      dataset.select(col($(labelCol)).cast(DoubleType), w, col($(featuresCol)))
+        .as[Instance].rdd
 
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
 
@@ -849,9 +847,9 @@ class BinaryLogisticRegressionSummary private[classification] (
   // TODO: Allow the user to vary the number of bins using a setBins method in
   // BinaryClassificationMetrics. For now the default is set to 100.
   @transient private val binaryMetrics = new BinaryClassificationMetrics(
-    predictions.select(probabilityCol, labelCol).rdd.map {
+    predictions.select(probabilityCol, labelCol).map {
       case Row(score: Vector, label: Double) => (score(1), label)
-    }, 100
+    }.rdd, 100
   )
 
   /**
