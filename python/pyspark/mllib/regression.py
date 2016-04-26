@@ -371,7 +371,7 @@ class LassoWithSGD(object):
     """
     .. versionadded:: 0.9.0
     .. note:: Deprecated in 2.0.0. Use ml.regression.LinearRegression with elasticNetParam = 1.0
-      and regParam = 0.01.
+            and regParam = 0.01.
     """
     @classmethod
     @since("0.9.0")
@@ -514,7 +514,7 @@ class RidgeRegressionWithSGD(object):
     """
     .. versionadded:: 0.9.0
     .. note:: Deprecated in 2.0.0. Use ml.regression.LinearRegression with elasticNetParam = 0.0
-      and regParam = 0.01.
+            and regParam = 0.01.
     """
     @classmethod
     @since("0.9.0")
