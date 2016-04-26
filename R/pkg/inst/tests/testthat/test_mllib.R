@@ -135,6 +135,12 @@ test_that("glm summary", {
   s2 <- summary(m2)
   expect_equal(s$rCoefficients, s2$rCoefficients)
   expect_equal(s$rFeatures, s2$rFeatures)
+  expect_equal(s$rDispersion, s2$rDispersion)
+  expect_equal(s$rDeviance, s2$rDeviance)
+  expect_equal(s$rNullDeviance,s2$rNullDeviance)
+  expect_equal(s$rAic,s2$rAic)
+  expect_equal(s$rDevianceResiduals,s2$rDevianceResiduals)
+  expect_equal(s$rResidualDegreeOfFreedomNull,s2$rResidualDegreeOfFreedomNull)
 
   unlink(modelPath)
 
