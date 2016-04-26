@@ -169,19 +169,16 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
     }
   }
 
-  // We only support zlib in Hive 0.12.0 now
-  test("Default compression options for writing to an ORC file") {
-    withOrcFile((1 to 100).map(i => (i, s"val_$i"))) { file =>
+  // Hive supports zlib, snappy and none for Hive 1.2.1.
+  test("Compression options for writing to an ORC file (SNAPPY, ZLIB and NONE)") {
+    val data = (1 to 100).map(i => (i, s"val_$i"))
+    val conf = sqlContext.sessionState.hadoopConf
+
+    withOrcFile(data) { file =>
       assertResult(CompressionKind.ZLIB) {
         OrcFileOperator.getFileReader(file).get.getCompression
       }
     }
-  }
-
-  // Following codec is supported in hive-0.13.1, ignore it now
-  ignore("Other compression options for writing to an ORC file - 0.13.1 and above") {
-    val data = (1 to 100).map(i => (i, s"val_$i"))
-    val conf = sqlContext.sessionState.hadoopConf
 
     conf.set(ConfVars.HIVE_ORC_DEFAULT_COMPRESS.varname, "SNAPPY")
     withOrcFile(data) { file =>
@@ -196,6 +193,12 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
         OrcFileOperator.getFileReader(file).get.getCompression
       }
     }
+  }
+
+  // Following codec is not supported in Hive 1.2.1, ignore it now
+  ignore("LZO compression options for writing to an ORC file not supported in Hive 1.2.1") {
+    val data = (1 to 100).map(i => (i, s"val_$i"))
+    val conf = sqlContext.sessionState.hadoopConf
 
     conf.set(ConfVars.HIVE_ORC_DEFAULT_COMPRESS.varname, "LZO")
     withOrcFile(data) { file =>
