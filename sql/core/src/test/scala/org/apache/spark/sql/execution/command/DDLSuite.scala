@@ -74,6 +74,10 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       schema = Seq()), ignoreIfExists = false)
   }
 
+  private def dropTable(catalog: SessionCatalog, name: TableIdentifier): Unit = {
+    catalog.dropTable(name, ignoreIfNotExists = false)
+  }
+
   private def createTablePartition(
       catalog: SessionCatalog,
       spec: TablePartitionSpec,
@@ -82,9 +86,12 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     catalog.createPartitions(tableName, Seq(part), ignoreIfExists = false)
   }
 
+  private def appendTrailingSlash(path: String): String = {
+    if (!path.endsWith("/")) path + "/" else path
+  }
+
   test("Create/Drop Database") {
     val catalog = sqlContext.sessionState.catalog
-
     val databaseNames = Seq("db1", "`database`")
 
     databaseNames.foreach { dbName =>
@@ -96,7 +103,30 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         assert(db1 == CatalogDatabase(
           dbNameWithoutBackTicks,
           "",
-          System.getProperty("java.io.tmpdir") + File.separator + s"$dbNameWithoutBackTicks.db",
+          appendTrailingSlash(System.getProperty("java.io.tmpdir")) + s"$dbNameWithoutBackTicks.db",
+          Map.empty))
+        sql(s"DROP DATABASE $dbName CASCADE")
+        assert(!catalog.databaseExists(dbNameWithoutBackTicks))
+      } finally {
+        catalog.reset()
+      }
+    }
+  }
+
+  test("Create/Drop Database - location") {
+    val catalog = sqlContext.sessionState.catalog
+    val databaseNames = Seq("db1", "`database`")
+    val defaultPath = System.getProperty("java.io.tmpdir")
+
+    databaseNames.foreach { dbName =>
+      try {
+        val dbNameWithoutBackTicks = cleanIdentifier(dbName)
+        sql(s"CREATE DATABASE $dbName Location '${System.getProperty("java.io.tmpdir")}'")
+        val db1 = catalog.getDatabaseMetadata(dbNameWithoutBackTicks)
+        assert(db1 == CatalogDatabase(
+          dbNameWithoutBackTicks,
+          "",
+          if (defaultPath.endsWith(File.separator)) defaultPath.dropRight(1) else defaultPath,
           Map.empty))
         sql(s"DROP DATABASE $dbName CASCADE")
         assert(!catalog.databaseExists(dbNameWithoutBackTicks))
@@ -118,7 +148,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         assert(db1 == CatalogDatabase(
           dbNameWithoutBackTicks,
           "",
-          System.getProperty("java.io.tmpdir") + File.separator + s"$dbNameWithoutBackTicks.db",
+          appendTrailingSlash(System.getProperty("java.io.tmpdir")) + s"$dbNameWithoutBackTicks.db",
           Map.empty))
 
         val message = intercept[AnalysisException] {
@@ -139,7 +169,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       try {
         val dbNameWithoutBackTicks = cleanIdentifier(dbName)
         val location =
-          System.getProperty("java.io.tmpdir") + File.separator + s"$dbNameWithoutBackTicks.db"
+          appendTrailingSlash(System.getProperty("java.io.tmpdir")) + s"$dbNameWithoutBackTicks.db"
         sql(s"CREATE DATABASE $dbName")
 
         checkAnswer(
@@ -198,7 +228,42 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
-  // TODO: test drop database in restrict mode
+  test("drop non-empty database in restrict mode") {
+    val catalog = sqlContext.sessionState.catalog
+    val dbName = "db1"
+    sql(s"CREATE DATABASE $dbName")
+
+    // create a table in database
+    val tableIdent1 = TableIdentifier("tab1", Some(dbName))
+    createTable(catalog, tableIdent1)
+
+    // drop a non-empty database in Restrict mode
+    val message = intercept[AnalysisException] {
+      sql(s"DROP DATABASE $dbName RESTRICT")
+    }.getMessage
+    assert(message.contains(s"Database '$dbName' is not empty. One or more tables exist"))
+
+    dropTable(catalog, tableIdent1)
+    assert(catalog.listDatabases().contains(dbName))
+    sql(s"DROP DATABASE $dbName RESTRICT")
+    assert(!catalog.listDatabases().contains(dbName))
+  }
+
+  test("drop non-empty database in cascade mode") {
+    val catalog = sqlContext.sessionState.catalog
+    val dbName = "db1"
+    sql(s"CREATE DATABASE $dbName")
+
+    // create a table in database
+    val tableIdent1 = TableIdentifier("tab1", Some(dbName))
+    createTable(catalog, tableIdent1)
+
+    // drop a non-empty database in CASCADE mode
+    assert(catalog.listTables(dbName).contains(tableIdent1))
+    assert(catalog.listDatabases().contains(dbName))
+    sql(s"DROP DATABASE $dbName CASCADE")
+    assert(!catalog.listDatabases().contains(dbName))
+  }
 
   test("alter table: rename") {
     val catalog = sqlContext.sessionState.catalog
