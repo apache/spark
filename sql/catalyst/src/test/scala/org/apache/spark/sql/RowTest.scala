@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import scala.util.{Failure, Success, Try}
+
 import org.scalatest.{FunSpec, Matchers}
 
 import org.apache.spark.sql.catalyst.InternalRow
@@ -27,17 +29,18 @@ class RowTest extends FunSpec with Matchers {
 
   val schema = StructType(
     StructField("col1", StringType) ::
-    StructField("col2", StringType) ::
-    StructField("col3", IntegerType) :: Nil)
-  val values = Array("value1", "value2", 1)
-  val valuesWithoutCol3 = Array[Any](null, "value2", null)
+    StructField("col2", DoubleType) ::
+    StructField("col3", IntegerType) ::
+    Nil)
+  val values = Array("value1", 1.0, 1)
+  val valuesWithoutCol3 = Array[Any]("value1", 1.0, null)
 
   val sampleRow: Row = new GenericRowWithSchema(values, schema)
   val sampleRowWithoutCol3: Row = new GenericRowWithSchema(valuesWithoutCol3, schema)
   val noSchemaRow: Row = new GenericRow(values)
 
   describe("Row (without schema)") {
-    it("throws an exception when accessing by fieldName") {
+    it("throws an exception when accessing by field name") {
       intercept[UnsupportedOperationException] {
         noSchemaRow.fieldIndex("col1")
       }
@@ -45,17 +48,128 @@ class RowTest extends FunSpec with Matchers {
         noSchemaRow.getAs("col1")
       }
     }
+
+    it("getAs[T]() should throw ClassCastException when casting fails.") {
+      intercept[ClassCastException] {
+        noSchemaRow.getAs[Int](0)
+      }
+    }
+
+    it("attempt[T]() returns Success for valid indices.") {
+      noSchemaRow.attempt[String](0) should be (Success("value1"))
+      noSchemaRow.attempt[Double](1) should be (Success(1.0))
+      noSchemaRow.attempt[Int](2) should be (Success(1))
+    }
+
+    it("attempt[T]() returns Failure for an invalid index.") {
+      val value = noSchemaRow.attempt[String](3)
+      value.getClass should be (classOf[Failure[String]])
+      intercept[IndexOutOfBoundsException] { value.get }
+    }
+
+    it("attempt[T]() returns Failure for invalid casts.") {
+      val value = noSchemaRow.attempt[Int](0)
+      value.getClass should be (classOf[Failure[Int]])
+      intercept[ClassCastException] { value.get }
+    }
+
+    it("attempt[T]() cannot get values using field names.") {
+      val value = noSchemaRow.attempt[String]("col1")
+      value.getClass should be (classOf[Failure[String]])
+      intercept[UnsupportedOperationException] { value.get }
+    }
+
+    it("getOption[T]() can get values for valid indices.") {
+      noSchemaRow.getOption[String](0) should be (Some("value1"))
+      noSchemaRow.getOption[Double](1) should be (Some(1.0))
+      noSchemaRow.getOption[Int](2) should be (Some(1))
+    }
+
+    it("getOption[T]() returns None for an invalid index.") {
+      noSchemaRow.getOption[String](3) should be (None)
+    }
+
+    it("getOption[T]() cannot get values using field names.") {
+      noSchemaRow.getOption[String]("col1") should be (None)
+      noSchemaRow.getOption[Double]("col2") should be (None)
+      noSchemaRow.getOption[Int]("col3") should be (None)
+    }
   }
 
   describe("Row (with schema)") {
     it("fieldIndex(name) returns field index") {
-      sampleRow.fieldIndex("col1") shouldBe 0
-      sampleRow.fieldIndex("col3") shouldBe 2
+      sampleRow.fieldIndex("col1") should be (0)
+      sampleRow.fieldIndex("col3") should be (2)
     }
 
-    it("getAs[T] retrieves a value by fieldname") {
-      sampleRow.getAs[String]("col1") shouldBe "value1"
-      sampleRow.getAs[Int]("col3") shouldBe 1
+    it("getAs[T] retrieves a value by field name") {
+      sampleRow.getAs[String]("col1") should be ("value1")
+      sampleRow.getAs[Int]("col3") should be (1)
+    }
+
+    it("attempt[T]() returns Success for valid indices.") {
+      sampleRow.attempt[String](0) should be (Success("value1"))
+      sampleRow.attempt[Double](1) should be (Success(1.0))
+      sampleRow.attempt[Int](2) should be (Success(1))
+    }
+
+    it("attempt[T]() returns Failure for an invalid index.") {
+      val value = sampleRow.attempt[String](3)
+      value.getClass should be (classOf[Failure[String]])
+      intercept[IndexOutOfBoundsException] { value.get }
+    }
+
+    it("attempt[T]() can get values using field names.") {
+      sampleRow.attempt[String]("col1") should be (Success("value1"))
+      sampleRow.attempt[Double]("col2") should be (Success(1.0))
+      sampleRow.attempt[Int]("col3") should be (Success(1))
+    }
+
+    it("attempt[T]() returns Failure for an invalid field name.") {
+      val value = sampleRow.attempt[String]("col4")
+      value.getClass should be (classOf[Failure[String]])
+      intercept[IllegalArgumentException] { value.get }
+    }
+
+    it("attempt[T]() returns Success for valid casts.") {
+      sampleRow.attempt[Int]("col2") should be (Success(1))
+      sampleRow.attempt[Long]("col2") should be (Success(1L))
+    }
+
+    it("attempt[T]() returns Failure for invalid casts.") {
+      val value = sampleRow.attempt[Int]("col1")
+      value.getClass should be (classOf[Failure[Int]])
+      intercept[ClassCastException] { value.get }
+    }
+
+    it("getOption[T]() can get values for valid indices.") {
+      sampleRow.getOption[String](0) should be (Some("value1"))
+      sampleRow.getOption[Double](1) should be (Some(1.0))
+      sampleRow.getOption[Int](2) should be (Some(1))
+    }
+
+    it("getOption[T]() returns None for an invalid index.") {
+      sampleRow.getOption[String](3) should be (None)
+    }
+
+    it("getOption[T]() can get values using field names.") {
+      sampleRow.getOption[String]("col1") should be (Some("value1"))
+      sampleRow.getOption[Double]("col2") should be (Some(1.0))
+      sampleRow.getOption[Int]("col3") should be (Some(1))
+    }
+
+    it("getOption[T]() returns None for an invalid field name.") {
+      sampleRow.getOption[String]("col4") should be (None)
+    }
+
+    it("getOption[T]() retrieves values for valid casts.") {
+      sampleRow.getOption[Int]("col2") should be (Some(1))
+      sampleRow.getOption[Long]("col2") should be (Some(1L))
+    }
+
+    it("getOption[T]() returns None for invalid casts.") {
+      sampleRow.getOption[Int]("col1") should be (None)
+      sampleRow.getOption[String]("col2") should be (None)
     }
 
     it("Accessing non existent field throws an exception") {
@@ -67,17 +181,19 @@ class RowTest extends FunSpec with Matchers {
     it("getValuesMap() retrieves values of multiple fields as a Map(field -> value)") {
       val expected = Map(
         "col1" -> "value1",
-        "col2" -> "value2"
+        "col2" -> 1.0,
+        "col3" -> 1
       )
-      sampleRow.getValuesMap(List("col1", "col2")) shouldBe expected
+      sampleRow.getValuesMap(List("col1", "col2", "col3")) should be (expected)
     }
 
     it("getValuesMap() retrieves null value on non AnyVal Type") {
       val expected = Map(
-        "col1" -> null,
-        "col2" -> "value2"
+        "col1" -> "value1",
+        "col2" -> 1.0,
+        "col3" -> null
       )
-      sampleRowWithoutCol3.getValuesMap[String](List("col1", "col2")) shouldBe expected
+      sampleRowWithoutCol3.getValuesMap[String](List("col1", "col2", "col3")) should be (expected)
     }
 
     it("getAs() on type extending AnyVal throws an exception when accessing field that is null") {
@@ -87,7 +203,7 @@ class RowTest extends FunSpec with Matchers {
     }
 
     it("getAs() on type extending AnyVal does not throw exception when value is null") {
-      sampleRowWithoutCol3.getAs[String](sampleRowWithoutCol3.fieldIndex("col1")) shouldBe null
+      sampleRowWithoutCol3.getAs[String](sampleRowWithoutCol3.fieldIndex("col3")) should be (null)
     }
   }
 
@@ -136,3 +252,4 @@ class RowTest extends FunSpec with Matchers {
     }
   }
 }
+

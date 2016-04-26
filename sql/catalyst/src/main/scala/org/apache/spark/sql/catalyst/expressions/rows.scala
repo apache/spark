@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.util.{Failure, Success, Try}
+
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
@@ -211,6 +213,15 @@ class GenericRowWithSchema(values: Array[Any], override val schema: StructType)
   protected def this() = this(null, null)
 
   override def fieldIndex(name: String): Int = schema.fieldIndex(name)
+
+  override def attempt[T](fieldName: String): Try[T] = {
+    Try(fieldIndex(fieldName)) match {
+      case Success(i) => attempt[T](i)
+      case Failure(exception) => Failure[T](exception)
+    }
+  }
+
+  override def getOption[T](fieldName: String): Option[T] = attempt[T](fieldName).toOption
 }
 
 /**
@@ -251,3 +262,4 @@ class GenericMutableRow(values: Array[Any]) extends MutableRow with BaseGenericI
 
   override def copy(): InternalRow = new GenericInternalRow(values.clone())
 }
+

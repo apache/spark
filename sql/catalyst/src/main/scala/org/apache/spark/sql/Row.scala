@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import scala.collection.JavaConverters._
+import scala.util.{Failure, Success, Try}
 import scala.util.hashing.MurmurHash3
 
 import org.apache.spark.sql.catalyst.expressions.GenericRow
@@ -324,6 +325,26 @@ trait Row extends Serializable {
   def getAs[T](i: Int): T = get(i).asInstanceOf[T]
 
   /**
+   * Returns the value at position i as a scala.util.Try object.
+   */
+  def attempt[T](i: Int): Try[T] = {
+    Try(isNullAt(i)) match {
+      case Success(isNull) => {
+        if (isNull) Failure(new NullPointerException(s"Value at index $i is null."))
+        else Try(getAs[T](i))
+      }
+      case Failure(exception) => Failure[T](exception)
+    }
+  }
+
+  /**
+   * Returns the Optional value at position i.
+   * If the value is null or if it cannot be cast to the requested type, None is returned. None is
+   * also returned if i greater then the number of fields in the row.
+   */
+  def getOption[T](i: Int): Option[T] = attempt[T](i).toOption
+
+  /**
    * Returns the value of a given fieldName.
    * For primitive types if value is null it returns 'zero value' specific for primitive
    * ie. 0 for Int - use isNullAt to ensure that value is not null
@@ -333,6 +354,19 @@ trait Row extends Serializable {
    * @throws ClassCastException when data type does not match.
    */
   def getAs[T](fieldName: String): T = getAs[T](fieldIndex(fieldName))
+
+  /**
+   * Returns the value of a given fieldName as a scala.util.Try object.
+   */
+  def attempt[T](fieldName: String): Try[T] = Try(getAs[T](fieldIndex(fieldName)))
+
+  /**
+   * Returns the Optional value of a given fieldName.
+   * If the value is null or if it cannot be cast to the requested type, None is returned. None is
+   * also returned if either the schema is not defined or else the given fieldName does not exist
+   * in the schema.
+   */
+  def getOption[T](fieldName: String): Option[T] = attempt[T](fieldName).toOption
 
   /**
    * Returns the index of a given field name.
@@ -474,3 +508,4 @@ trait Row extends Serializable {
     if (isNullAt(i)) throw new NullPointerException(s"Value at index $i in null")
     else getAs[T](i)
 }
+
