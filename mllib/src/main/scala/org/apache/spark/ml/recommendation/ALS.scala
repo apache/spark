@@ -1317,23 +1317,22 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
   private[spark] def cleanShuffleDependencies[T](sc: SparkContext, deps: Seq[Dependency[_]],
       blocking: Boolean = false): Unit = {
     // If there is no reference tracking we skip clean up.
-    if (sc.cleaner.isEmpty) {
-      return
-    }
-    val cleaner = sc.cleaner.get
-    /**
-     * Clean the shuffles & all of its parents.
-     */
-    def cleanEagerly(dep: Dependency[_]): Unit = {
-      if (dep.isInstanceOf[ShuffleDependency[_, _, _]]) {
-        val shuffleId = dep.asInstanceOf[ShuffleDependency[_, _, _]].shuffleId
-        cleaner.doCleanupShuffle(shuffleId, blocking)
+    sc.cleaner.foreach{cleaner =>
+      /**
+       * Clean the shuffles & all of its parents.
+       */
+      def cleanEagerly(dep: Dependency[_]): Unit = {
+        if (dep.isInstanceOf[ShuffleDependency[_, _, _]]) {
+          val shuffleId = dep.asInstanceOf[ShuffleDependency[_, _, _]].shuffleId
+          cleaner.doCleanupShuffle(shuffleId, blocking)
+        }
+        val rdd = dep.rdd
+        val rddDeps = rdd.dependencies
+        if (rddDeps != null) {
+          rddDeps.foreach(cleanEagerly)
+        }
       }
-      val rdd = dep.rdd
-      if (rdd.dependencies != null) {
-        rdd.dependencies.foreach(cleanEagerly)
-      }
+      deps.foreach(cleanEagerly)
     }
-    deps.foreach(cleanEagerly)
   }
 }
