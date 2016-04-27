@@ -836,7 +836,7 @@ test_that("select operators", {
   df$age2 <- df$age * 2
   expect_equal(columns(df), c("name", "age", "age2"))
   expect_equal(count(where(df, df$age2 == df$age * 2)), 2)
-  
+
   # Test parameter drop
   expect_equal(class(df[, 1]) == "Column", T)
   expect_equal(class(df[, 1, drop = T]) == "Column", T)
