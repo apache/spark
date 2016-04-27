@@ -21,11 +21,12 @@ import java.util.UUID
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SparkEnv, SparkException, TaskContext, TaskContextImpl}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.UnsafeKVExternalSorter
@@ -46,7 +47,7 @@ object FileStreamSink {
  * in the log.
  */
 class FileStreamSink(
-    sqlContext: SQLContext,
+    sparkSession: SparkSession,
     path: String,
     fileFormat: FileFormat,
     partitionColumnNames: Seq[String],
@@ -54,14 +55,16 @@ class FileStreamSink(
 
   private val basePath = new Path(path)
   private val logPath = new Path(basePath, FileStreamSink.metadataDir)
-  private val fileLog = new FileStreamSinkLog(sqlContext, logPath.toUri.toString)
-  private val fs = basePath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
+  private val fileLog = new FileStreamSinkLog(sparkSession, logPath.toUri.toString)
+  private val hadoopConf = sparkSession.sessionState.newHadoopConf()
+  private val fs = basePath.getFileSystem(hadoopConf)
 
   override def addBatch(batchId: Long, data: DataFrame): Unit = {
     if (batchId <= fileLog.getLatest().map(_._1).getOrElse(-1L)) {
       logInfo(s"Skipping already committed batch $batchId")
     } else {
-      val writer = new FileStreamSinkWriter(data, fileFormat, path, partitionColumnNames, options)
+      val writer = new FileStreamSinkWriter(
+        data, fileFormat, path, partitionColumnNames, hadoopConf, options)
       val fileStatuses = writer.write()
       if (fileLog.add(batchId, fileStatuses)) {
         logInfo(s"Committed batch $batchId")
@@ -85,20 +88,20 @@ class FileStreamSinkWriter(
     fileFormat: FileFormat,
     basePath: String,
     partitionColumnNames: Seq[String],
+    hadoopConf: Configuration,
     options: Map[String, String]) extends Serializable with Logging {
 
   PartitioningUtils.validatePartitionColumnDataTypes(
     data.schema, partitionColumnNames, data.sqlContext.conf.caseSensitiveAnalysis)
 
-  private val serializableConf = new SerializableConfiguration(
-    data.sqlContext.sparkContext.hadoopConfiguration)
+  private val serializableConf = new SerializableConfiguration(hadoopConf)
   private val dataSchema = data.schema
   private val dataColumns = data.logicalPlan.output
 
   // Get the actual partition columns as attributes after matching them by name with
   // the given columns names.
   private val partitionColumns = partitionColumnNames.map { col =>
-    val nameEquality = if (data.sqlContext.conf.caseSensitiveAnalysis) {
+    val nameEquality = if (data.sparkSession.sessionState.conf.caseSensitiveAnalysis) {
       org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
     } else {
       org.apache.spark.sql.catalyst.analysis.caseInsensitiveResolution

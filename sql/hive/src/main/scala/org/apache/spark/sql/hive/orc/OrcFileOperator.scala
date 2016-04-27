@@ -24,7 +24,7 @@ import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.hive.HiveMetastoreTypes
+import org.apache.spark.sql.catalyst.parser.DataTypeParser
 import org.apache.spark.sql.types.StructType
 
 private[orc] object OrcFileOperator extends Logging {
@@ -78,7 +78,7 @@ private[orc] object OrcFileOperator extends Logging {
       val readerInspector = reader.getObjectInspector.asInstanceOf[StructObjectInspector]
       val schema = readerInspector.getTypeName
       logDebug(s"Reading schema from file $paths, got Hive schema string: $schema")
-      HiveMetastoreTypes.toDataType(schema).asInstanceOf[StructType]
+      DataTypeParser.parse(schema).asInstanceOf[StructType]
     }
   }
 

@@ -21,6 +21,7 @@ import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SQLTestData.DecimalData
 import org.apache.spark.sql.types.DecimalType
 
 case class Fact(date: Int, hour: Int, minute: Int, room_name: String, temp: Double)
@@ -60,6 +61,29 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df1.groupBy("key").min("value2"),
       Seq(Row("a", 0), Row("b", 4))
+    )
+
+    checkAnswer(
+      decimalData.groupBy("a").agg(sum("b")),
+      Seq(Row(new java.math.BigDecimal(1.0), new java.math.BigDecimal(3.0)),
+        Row(new java.math.BigDecimal(2.0), new java.math.BigDecimal(3.0)),
+        Row(new java.math.BigDecimal(3.0), new java.math.BigDecimal(3.0)))
+    )
+
+    val decimalDataWithNulls = sqlContext.sparkContext.parallelize(
+      DecimalData(1, 1) ::
+      DecimalData(1, null) ::
+      DecimalData(2, 1) ::
+      DecimalData(2, null) ::
+      DecimalData(3, 1) ::
+      DecimalData(3, 2) ::
+      DecimalData(null, 2) :: Nil).toDF()
+    checkAnswer(
+      decimalDataWithNulls.groupBy("a").agg(sum("b")),
+      Seq(Row(new java.math.BigDecimal(1.0), new java.math.BigDecimal(1.0)),
+        Row(new java.math.BigDecimal(2.0), new java.math.BigDecimal(1.0)),
+        Row(new java.math.BigDecimal(3.0), new java.math.BigDecimal(3.0)),
+        Row(null, new java.math.BigDecimal(2.0)))
     )
   }
 

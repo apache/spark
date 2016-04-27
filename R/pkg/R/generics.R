@@ -106,6 +106,10 @@ setGeneric("getJRDD", function(rdd, ...) { standardGeneric("getJRDD") })
 # @export
 setGeneric("glom", function(x) { standardGeneric("glom") })
 
+# @rdname histogram
+# @export
+setGeneric("histogram", function(df, col, nbins=10) { standardGeneric("histogram") })
+
 # @rdname keyBy
 # @export
 setGeneric("keyBy", function(x, func) { standardGeneric("keyBy") })
@@ -385,7 +389,7 @@ setGeneric("subtractByKey",
 setGeneric("value", function(bcast) { standardGeneric("value") })
 
 
-####################  DataFrame Methods ########################
+####################  SparkDataFrame Methods ########################
 
 #' @rdname agg
 #' @export
@@ -1200,3 +1204,7 @@ setGeneric("naiveBayes", function(formula, data, ...) { standardGeneric("naiveBa
 #' @rdname survreg
 #' @export
 setGeneric("survreg", function(formula, data, ...) { standardGeneric("survreg") })
+
+#' @rdname ml.save
+#' @export
+setGeneric("ml.save", function(object, path, ...) { standardGeneric("ml.save") })

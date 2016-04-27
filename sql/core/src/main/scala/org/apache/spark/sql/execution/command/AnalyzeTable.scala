@@ -21,7 +21,7 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogTable}
 
@@ -35,8 +35,8 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogTable}
  */
 case class AnalyzeTable(tableName: String) extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    val sessionState = sqlContext.sessionState
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val sessionState = sparkSession.sessionState
     val tableIdent = sessionState.sqlParser.parseTableIdentifier(tableName)
     val relation = EliminateSubqueryAliases(sessionState.catalog.lookupRelation(tableIdent))
 
@@ -77,7 +77,7 @@ case class AnalyzeTable(tableName: String) extends RunnableCommand {
           catalogTable.storage.locationUri.map { p =>
             val path = new Path(p)
             try {
-              val fs = path.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
+              val fs = path.getFileSystem(sparkSession.sessionState.newHadoopConf())
               calculateTableSize(fs, path)
             } catch {
               case NonFatal(e) =>

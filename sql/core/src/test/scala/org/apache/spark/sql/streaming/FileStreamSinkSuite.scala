@@ -33,10 +33,12 @@ import org.apache.spark.util.Utils
 class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
   import testImplicits._
 
+
   test("FileStreamSinkWriter - unpartitioned data") {
     val path = Utils.createTempDir()
     path.delete()
 
+    val hadoopConf = sqlContext.sparkContext.hadoopConfiguration
     val fileFormat = new parquet.DefaultSource()
 
     def writeRange(start: Int, end: Int, numPartitions: Int): Seq[String] = {
@@ -44,7 +46,7 @@ class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
         .range(start, end, 1, numPartitions)
         .select($"id", lit(100).as("data"))
       val writer = new FileStreamSinkWriter(
-        df, fileFormat, path.toString, partitionColumnNames = Nil, options = Map.empty)
+        df, fileFormat, path.toString, partitionColumnNames = Nil, hadoopConf, Map.empty)
       writer.write().map(_.path.stripPrefix("file://"))
     }
 
@@ -68,6 +70,7 @@ class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
     val path = Utils.createTempDir()
     path.delete()
 
+    val hadoopConf = sqlContext.sparkContext.hadoopConfiguration
     val fileFormat = new parquet.DefaultSource()
 
     def writeRange(start: Int, end: Int, numPartitions: Int): Seq[String] = {
@@ -78,7 +81,7 @@ class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
 
       require(df.rdd.partitions.size === numPartitions)
       val writer = new FileStreamSinkWriter(
-        df, fileFormat, path.toString, partitionColumnNames = Seq("id"), options = Map.empty)
+        df, fileFormat, path.toString, partitionColumnNames = Seq("id"), hadoopConf, Map.empty)
       writer.write().map(_.path.stripPrefix("file://"))
     }
 

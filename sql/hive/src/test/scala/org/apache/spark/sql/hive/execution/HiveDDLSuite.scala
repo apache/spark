@@ -36,7 +36,7 @@ class HiveDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     val expectedTablePath =
       hiveContext.sessionState.catalog.hiveDefaultTableFilePath(tableIdentifier)
     val filesystemPath = new Path(expectedTablePath)
-    val fs = filesystemPath.getFileSystem(sparkContext.hadoopConfiguration)
+    val fs = filesystemPath.getFileSystem(hiveContext.sessionState.newHadoopConf())
     fs.exists(filesystemPath)
   }
 
@@ -73,7 +73,7 @@ class HiveDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           hiveContext.sessionState.catalog
             .getTableMetadata(TableIdentifier(tabName, Some("default")))
         // It is a managed table, although it uses external in SQL
-        assert(hiveTable.tableType == CatalogTableType.MANAGED_TABLE)
+        assert(hiveTable.tableType == CatalogTableType.MANAGED)
 
         assert(tmpDir.listFiles.nonEmpty)
         sql(s"DROP TABLE $tabName")
@@ -102,7 +102,7 @@ class HiveDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           hiveContext.sessionState.catalog
             .getTableMetadata(TableIdentifier(tabName, Some("default")))
         // This data source table is external table
-        assert(hiveTable.tableType == CatalogTableType.EXTERNAL_TABLE)
+        assert(hiveTable.tableType == CatalogTableType.EXTERNAL)
 
         assert(tmpDir.listFiles.nonEmpty)
         sql(s"DROP TABLE $tabName")
@@ -166,7 +166,7 @@ class HiveDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         }
 
         val hiveTable = catalog.getTableMetadata(TableIdentifier(externalTab, Some("default")))
-        assert(hiveTable.tableType == CatalogTableType.EXTERNAL_TABLE)
+        assert(hiveTable.tableType == CatalogTableType.EXTERNAL)
         // After data insertion, all the directory are not empty
         assert(dirSet.forall(dir => dir.listFiles.nonEmpty))
 
