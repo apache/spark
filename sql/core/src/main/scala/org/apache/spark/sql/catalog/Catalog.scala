@@ -29,28 +29,43 @@ abstract class Catalog {
 
   /**
    * Returns the current default database in this session.
+   *
+   * @group ddl_ops
+   * @since 2.0.0
    */
   def currentDatabase: String
 
   /**
    * Sets the current default database in this session.
+   *
+   * @group ddl_ops
+   * @since 2.0.0
    */
   def setCurrentDatabase(dbName: String): Unit
 
   /**
    * Returns a list of databases available across all sessions.
+   *
+   * @group ddl_ops
+   * @since 2.0.0
    */
   def listDatabases(): Dataset[Database]
 
   /**
    * Returns a list of tables in the current database.
    * This includes all temporary tables.
+   *
+   * @group ddl_ops
+   * @since 2.0.0
    */
   def listTables(): Dataset[Table]
 
   /**
    * Returns a list of tables in the specified database.
    * This includes all temporary tables.
+   *
+   * @group ddl_ops
+   * @since 2.0.0
    */
   @throws[AnalysisException]("database does not exist")
   def listTables(dbName: String): Dataset[Table]
@@ -58,24 +73,36 @@ abstract class Catalog {
   /**
    * Returns a list of functions registered in the current database.
    * This includes all temporary functions
+   *
+   * @group ddl_ops
+   * @since 2.0.0
    */
   def listFunctions(): Dataset[Function]
 
   /**
    * Returns a list of functions registered in the specified database.
    * This includes all temporary functions
+   *
+   * @group ddl_ops
+   * @since 2.0.0
    */
   @throws[AnalysisException]("database does not exist")
   def listFunctions(dbName: String): Dataset[Function]
 
   /**
    * Returns a list of columns for the given table in the current database.
+   *
+   * @group ddl_ops
+   * @since 2.0.0
    */
   @throws[AnalysisException]("table does not exist")
   def listColumns(tableName: String): Dataset[Column]
 
   /**
    * Returns a list of columns for the given table in the specified database.
+   *
+   * @group ddl_ops
+   * @since 2.0.0
    */
   @throws[AnalysisException]("database or table does not exist")
   def listColumns(dbName: String, tableName: String): Dataset[Column]
