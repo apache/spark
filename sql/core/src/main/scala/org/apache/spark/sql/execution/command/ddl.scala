@@ -536,5 +536,9 @@ private[sql] object DDLUtils {
       case _ =>
     })
   }
+  def isTablePartitioned(table: CatalogTable): Boolean = {
+    table.partitionColumns.size > 0 ||
+      table.properties.contains("spark.sql.sources.schema.numPartCols")
+  }
 }
 
