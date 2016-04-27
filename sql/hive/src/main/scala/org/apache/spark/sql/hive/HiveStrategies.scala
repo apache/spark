@@ -25,8 +25,6 @@ import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.execution._
 
 private[hive] trait HiveStrategies {
@@ -40,7 +38,7 @@ private[hive] trait HiveStrategies {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.ScriptTransformation(input, script, output, child, ioschema) =>
         val hiveIoSchema = HiveScriptIOSchema(ioschema)
-        ScriptTransformation(input, script, output, planLater(child), hiveIoSchema)(hiveconf) :: Nil
+        ScriptTransformation(input, script, output, planLater(child), hiveIoSchema) :: Nil
       case _ => Nil
     }
   }
