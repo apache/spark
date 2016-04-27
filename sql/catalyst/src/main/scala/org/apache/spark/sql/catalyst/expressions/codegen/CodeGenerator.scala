@@ -47,6 +47,25 @@ import org.apache.spark.util.Utils
 case class ExprCode(var code: String, var isNull: String, var value: String)
 
 /**
+ * State used for subexpression elimination.
+ *
+ * @param isNull A term that holds a boolean value representing whether the expression evaluated
+ *               to null.
+ * @param value A term for a value of a common sub-expression. Not valid if `isNull`
+ *              is set to `true`.
+ */
+case class SubExprEliminationState(isNull: String, value: String)
+
+/**
+ * Codes and common subexpressions mapping used for subexpression elimination.
+ *
+ * @param codes Strings representing the codes that evaluate common subexpressions.
+ * @param states Foreach expression that is participating in subexpression elimination,
+ *               the state to use.
+ */
+case class SubExprCodes(codes: Seq[String], states: Map[Expression, SubExprEliminationState])
+
+/**
  * A context for codegen, tracking a list of objects that could be passed into generated Java
  * function.
  */
@@ -147,9 +166,6 @@ class CodegenContext {
    *  be evaluated once.
    */
   val equivalentExpressions: EquivalentExpressions = new EquivalentExpressions
-
-  // State used for subexpression elimination.
-  case class SubExprEliminationState(isNull: String, value: String)
 
   // Foreach expression that is participating in subexpression elimination, the state to use.
   val subExprEliminationExprs = mutable.HashMap.empty[Expression, SubExprEliminationState]
@@ -578,9 +594,10 @@ class CodegenContext {
    * code snippets will be returned and should be inserted into generated codes before these
    * common subexpressions actually are used first time.
    */
-  def subexpressionEliminationForWholeStageCodegen(expressions: Seq[Expression]): Seq[String] = {
-    // Create a clear EquivalentExpressions
+  def subexpressionEliminationForWholeStageCodegen(expressions: Seq[Expression]): SubExprCodes = {
+    // Create a clear EquivalentExpressions and SubExprEliminationState mapping
     val equivalentExpressions: EquivalentExpressions = new EquivalentExpressions
+    val subExprEliminationExprs = mutable.HashMap.empty[Expression, SubExprEliminationState]
 
     // Add each expression tree and compute the common subexpressions.
     expressions.foreach(equivalentExpressions.addExprTree(_, true, false))
@@ -588,7 +605,7 @@ class CodegenContext {
     // Get all the expressions that appear at least twice and set up the state for subexpression
     // elimination.
     val commonExprs = equivalentExpressions.getAllEquivalentExprs.filter(_.size > 1)
-    commonExprs.map { e =>
+    val codes = commonExprs.map { e =>
       val expr = e.head
       val fnName = freshName("evalExpr")
       val isNull = s"${fnName}IsNull"
@@ -611,6 +628,7 @@ class CodegenContext {
       e.foreach(subExprEliminationExprs.put(_, state))
       effectiveCode
     }
+    SubExprCodes(codes, subExprEliminationExprs.toMap)
   }
 
   /**

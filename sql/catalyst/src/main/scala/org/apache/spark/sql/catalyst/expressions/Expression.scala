@@ -94,7 +94,22 @@ abstract class Expression extends TreeNode[Expression] {
    * @return [[ExprCode]]
    */
   def genCode(ctx: CodegenContext): ExprCode = {
-    ctx.subExprEliminationExprs.get(this).map { subExprState =>
+    genCode(ctx, ctx.subExprEliminationExprs.toMap)
+  }
+
+  /**
+   * Returns an [[ExprCode]], that contains the Java source code to generate the result of
+   * evaluating the expression on an input row.
+   *
+   * @param ctx a [[CodegenContext]]
+   * @param subExprEliminationExprs a [[Map]] which contains the mapping between expressions
+   *                                and common sub-expressions.
+   * @return [[ExprCode]]
+   */
+  def genCode(
+      ctx: CodegenContext,
+      subExprEliminationExprs: Map[Expression, SubExprEliminationState]): ExprCode = {
+    subExprEliminationExprs.get(this).map { subExprState =>
       // This expression is repeated which means that the code to evaluate it has already been added
       // as a function before. In that case, we just re-use it.
       val code = s"/* ${toCommentSafeString(this.toString)} */"
