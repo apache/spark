@@ -23,11 +23,8 @@ import scala.util.Try
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.classification.RandomForestClassifier
-import org.apache.spark.ml.regression.RandomForestRegressor
 import org.apache.spark.ml.tree.{DecisionTreeModel => NewDTModel, RandomForestParams => NewRFParams}
 import org.apache.spark.ml.tree.impl.{RandomForest => NewRandomForest}
-import org.apache.spark.ml.util.Instrumentation
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
@@ -74,8 +71,7 @@ private class RandomForest (
     private val strategy: Strategy,
     private val numTrees: Int,
     featureSubsetStrategy: String,
-    private val seed: Int,
-    private val instr: Instrumentation[_])
+    private val seed: Int)
   extends Serializable with Logging {
 
   strategy.assertValid()
@@ -95,7 +91,7 @@ private class RandomForest (
    */
   def run(input: RDD[LabeledPoint]): RandomForestModel = {
     val trees: Array[NewDTModel] =
-      NewRandomForest.run(input, strategy, numTrees, featureSubsetStrategy, seed.toLong, instr)
+      NewRandomForest.run(input, strategy, numTrees, featureSubsetStrategy, seed.toLong, None)
     new RandomForestModel(strategy.algo, trees.map(_.toOld))
   }
 
@@ -128,8 +124,7 @@ object RandomForest extends Serializable with Logging {
       seed: Int): RandomForestModel = {
     require(strategy.algo == Classification,
       s"RandomForest.trainClassifier given Strategy with invalid algo: ${strategy.algo}")
-    val instr = Instrumentation.create(new RandomForestClassifier, input)
-    val rf = new RandomForest(strategy, numTrees, featureSubsetStrategy, seed, instr)
+    val rf = new RandomForest(strategy, numTrees, featureSubsetStrategy, seed)
     rf.run(input)
   }
 
@@ -218,8 +213,7 @@ object RandomForest extends Serializable with Logging {
       seed: Int): RandomForestModel = {
     require(strategy.algo == Regression,
       s"RandomForest.trainRegressor given Strategy with invalid algo: ${strategy.algo}")
-    val instr = Instrumentation.create(new RandomForestRegressor, input)
-    val rf = new RandomForest(strategy, numTrees, featureSubsetStrategy, seed, instr)
+    val rf = new RandomForest(strategy, numTrees, featureSubsetStrategy, seed)
     rf.run(input)
   }
 

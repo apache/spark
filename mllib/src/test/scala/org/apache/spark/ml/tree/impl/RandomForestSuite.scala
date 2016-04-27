@@ -21,9 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.classification.DecisionTreeClassificationModel
-import org.apache.spark.ml.regression.RandomForestRegressor
 import org.apache.spark.ml.tree._
-import org.apache.spark.ml.util.Instrumentation
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{DecisionTreeSuite => OldDTSuite, EnsembleTestHelper}
@@ -323,10 +321,8 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     val strategy = new OldStrategy(algo = OldAlgo.Classification, impurity = Gini, maxDepth = 1,
       numClasses = 2, categoricalFeaturesInfo = Map(0 -> 3), maxBins = 3)
 
-    val instr = Instrumentation.create(new RandomForestRegressor, input)
-
     val model = RandomForest.run(input, strategy, numTrees = 1, featureSubsetStrategy = "all",
-      seed = 42, instr).head
+      seed = 42, instr = None).head
     model.rootNode match {
       case n: InternalNode => n.split match {
         case s: CategoricalSplit =>
@@ -348,12 +344,10 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     val strategy2 =
       new OldStrategy(OldAlgo.Classification, Entropy, 3, 2, 100, maxMemoryInMB = 0)
 
-    val instr = Instrumentation.create(new RandomForestRegressor, rdd)
-
     val tree1 = RandomForest.run(rdd, strategy1, numTrees = 1, featureSubsetStrategy = "all",
-      seed = 42, instr).head
+      seed = 42, instr = None).head
     val tree2 = RandomForest.run(rdd, strategy2, numTrees = 1, featureSubsetStrategy = "all",
-      seed = 42, instr).head
+      seed = 42, instr = None).head
 
     def getChildren(rootNode: Node): Array[InternalNode] = rootNode match {
       case n: InternalNode =>

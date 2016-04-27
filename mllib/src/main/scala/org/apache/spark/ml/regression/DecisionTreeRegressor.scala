@@ -93,7 +93,7 @@ final class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val 
     instr.logParams(params: _*)
 
     val trees = RandomForest.run(oldDataset, strategy, numTrees = 1, featureSubsetStrategy = "all",
-      seed = $(seed), instr, parentUID = Some(uid))
+      seed = $(seed), instr = Some(instr), parentUID = Some(uid))
 
     val m = trees.head.asInstanceOf[DecisionTreeRegressionModel]
     instr.logSuccess(m)
@@ -107,7 +107,7 @@ final class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val 
     instr.logParams(params: _*)
 
     val trees = RandomForest.run(data, oldStrategy, numTrees = 1, featureSubsetStrategy = "all",
-      seed = $(seed), instr, parentUID = Some(uid))
+      seed = $(seed), instr = Some(instr), parentUID = Some(uid))
 
     val m = trees.head.asInstanceOf[DecisionTreeRegressionModel]
     instr.logSuccess(m)

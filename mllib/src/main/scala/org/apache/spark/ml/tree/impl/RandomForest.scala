@@ -91,7 +91,7 @@ private[spark] object RandomForest extends Logging {
       numTrees: Int,
       featureSubsetStrategy: String,
       seed: Long,
-      instr: Instrumentation[_],
+      instr: Option[Instrumentation[_]],
       parentUID: Option[String] = None): Array[DecisionTreeModel] = {
 
     val timer = new TimeTracker()
@@ -103,8 +103,14 @@ private[spark] object RandomForest extends Logging {
     val retaggedInput = input.retag(classOf[LabeledPoint])
     val metadata =
       DecisionTreeMetadata.buildMetadata(retaggedInput, strategy, numTrees, featureSubsetStrategy)
-    instr.logNumFeatures(metadata.numFeatures)
-    instr.logNumClasses(metadata.numClasses)
+    instr match {
+      case Some(instrumentation) =>
+        instrumentation.logNumFeatures(metadata.numFeatures)
+        instrumentation.logNumClasses(metadata.numClasses)
+      case None =>
+        log.info("numFeatures: " + metadata.numFeatures)
+        log.info("numClasses: " + metadata.numClasses)
+    }
 
     // Find the splits and the corresponding bins (interval between the splits) using a sample
     // of the input data.

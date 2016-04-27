@@ -103,9 +103,9 @@ final class RandomForestRegressor @Since("1.4.0") (@Since("1.4.0") override val 
     val instr = Instrumentation.create(this, oldDataset)
     instr.logParams(params: _*)
 
-    val trees =
-      RandomForest.run(oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed, instr)
-        .map(_.asInstanceOf[DecisionTreeRegressionModel])
+    val trees = RandomForest
+      .run(oldDataset, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed, Some(instr))
+      .map(_.asInstanceOf[DecisionTreeRegressionModel])
 
     val numFeatures = oldDataset.first().features.size
     val m = new RandomForestRegressionModel(trees, numFeatures)
