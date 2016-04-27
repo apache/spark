@@ -22,6 +22,7 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hadoop.hive.metastore.MetaStoreUtils
 import org.apache.hadoop.hive.ql.exec.{UDAF, UDF}
 import org.apache.hadoop.hive.ql.exec.{FunctionRegistry => HiveFunctionRegistry}
 import org.apache.hadoop.hive.ql.udf.generic.{AbstractGenericUDAFResolver, GenericUDF, GenericUDTF}
@@ -57,6 +58,7 @@ private[sql] class HiveSessionCatalog(
 
   override def lookupRelation(name: TableIdentifier, alias: Option[String]): LogicalPlan = {
     val table = formatTableName(name.table)
+    validateTableName(table)
     if (name.database.isDefined || !tempTables.contains(table)) {
       val newName = name.copy(table = table)
       metastoreCatalog.lookupRelation(newName, alias)
@@ -72,6 +74,14 @@ private[sql] class HiveSessionCatalog(
   // ----------------------------------------------------------------
   // | Methods and fields for interacting with HiveMetastoreCatalog |
   // ----------------------------------------------------------------
+
+  override def validateName(name: String): Boolean = {
+    // Since we are saving metadata to metastore, we need to check if metastore supports
+    // the table name and database name we have for this query. MetaStoreUtils.validateName
+    // is the method used by Hive to check if a table name or a database name is valid for
+    // the metastore.
+    MetaStoreUtils.validateName(name)
+  }
 
   override def getDefaultDBPath(db: String): String = {
     val defaultPath = hiveconf.getVar(HiveConf.ConfVars.METASTOREWAREHOUSE)
@@ -90,10 +100,14 @@ private[sql] class HiveSessionCatalog(
   val PreInsertionCasts: Rule[LogicalPlan] = metastoreCatalog.PreInsertionCasts
 
   override def refreshTable(name: TableIdentifier): Unit = {
+    validateDatabaseName(name.database)
+    validateTableName(name.table)
     metastoreCatalog.refreshTable(name)
   }
 
   override def invalidateTable(name: TableIdentifier): Unit = {
+    validateDatabaseName(name.database)
+    validateTableName(name.table)
     metastoreCatalog.invalidateTable(name)
   }
 
@@ -102,11 +116,15 @@ private[sql] class HiveSessionCatalog(
   }
 
   def hiveDefaultTableFilePath(name: TableIdentifier): String = {
+    validateDatabaseName(name.database)
+    validateTableName(name.table)
     metastoreCatalog.hiveDefaultTableFilePath(name)
   }
 
   // For testing only
   private[hive] def getCachedDataSourceTable(table: TableIdentifier): LogicalPlan = {
+    validateDatabaseName(table.database)
+    validateTableName(table.table)
     val key = metastoreCatalog.getQualifiedTableName(table)
     metastoreCatalog.cachedDataSourceTables.getIfPresent(key)
   }
