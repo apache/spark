@@ -17,7 +17,6 @@
 
 package org.apache.spark
 
-import SparkMasterRegex._
 import org.scalatest.concurrent.Timeouts._
 import org.scalatest.Matchers
 import org.scalatest.time.{Millis, Span}
@@ -52,6 +51,8 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
   }
 
   test("local-cluster format") {
+    import SparkMasterRegex._
+
     val masterStrings = Seq(
       "local-cluster[2,1,1024]",
       "local-cluster[2 , 1 , 1024]",
