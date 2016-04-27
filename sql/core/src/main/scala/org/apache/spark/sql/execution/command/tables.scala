@@ -73,7 +73,7 @@ case class CreateTableLike(
 
     val tableToCreate = catalog.getTableMetadata(sourceTable).copy(
       identifier = targetTable,
-      tableType = CatalogTableType.MANAGED_TABLE,
+      tableType = CatalogTableType.MANAGED,
       createTime = System.currentTimeMillis,
       lastAccessTime = -1).withNewStorage(locationUri = None)
 

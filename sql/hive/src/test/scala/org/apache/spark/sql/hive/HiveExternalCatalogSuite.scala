@@ -26,7 +26,7 @@ import org.apache.spark.sql.hive.client.HiveClient
 /**
  * Test suite for the [[HiveExternalCatalog]].
  */
-class HiveExternalCatalogSuite extends CatalogTestCases {
+class HiveExternalCatalogSuite extends ExternalCatalogSuite {
 
   private val client: HiveClient = {
     // We create a metastore at a temp location to avoid any potential

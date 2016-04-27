@@ -32,7 +32,7 @@ case class CacheTableCommand(
     plan.foreach { logicalPlan =>
       sparkSession.registerDataFrameAsTable(Dataset.ofRows(sparkSession, logicalPlan), tableName)
     }
-    sparkSession.cacheTable(tableName)
+    sparkSession.catalog.cacheTable(tableName)
 
     if (!isLazy) {
       // Performs eager caching
@@ -62,7 +62,7 @@ case class UncacheTableCommand(tableName: String) extends RunnableCommand {
 case object ClearCacheCommand extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    sparkSession.clearCache()
+    sparkSession.catalog.clearCache()
     Seq.empty[Row]
   }
 

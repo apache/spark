@@ -69,7 +69,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   private def createTable(catalog: SessionCatalog, name: TableIdentifier): Unit = {
     catalog.createTable(CatalogTable(
       identifier = name,
-      tableType = CatalogTableType.EXTERNAL_TABLE,
+      tableType = CatalogTableType.EXTERNAL,
       storage = CatalogStorageFormat(None, None, None, None, Map()),
       schema = Seq()), ignoreIfExists = false)
   }
