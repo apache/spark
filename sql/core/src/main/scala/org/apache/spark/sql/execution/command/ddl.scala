@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTablePartition, CatalogTableType, SessionCatalog}
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalog.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.types._
 
 
@@ -34,12 +35,17 @@ import org.apache.spark.sql.types._
 // https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DDL
 
 /**
- * A DDL command expected to be parsed and run in an underlying system instead of in Spark.
+ * A DDL command that is not supported right now. Since we have already implemented
+ * the parsing rules for some commands that are not allowed, we use this as the base class
+ * of those commands.
  */
-abstract class NativeDDLCommand(val sql: String) extends RunnableCommand {
+abstract class UnsupportedCommand(exception: ParseException) extends RunnableCommand {
+
+  // Throws the ParseException when we create this command.
+  throw exception
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    sparkSession.runNativeSql(sql)
+    Seq.empty[Row]
   }
 
   override val output: Seq[Attribute] = {
@@ -204,10 +210,10 @@ case class DropTable(
       // If the command DROP VIEW is to drop a table or DROP TABLE is to drop a view
       // issue an exception.
       catalog.getTableMetadataOption(tableName).map(_.tableType match {
-        case CatalogTableType.VIRTUAL_VIEW if !isView =>
+        case CatalogTableType.VIEW if !isView =>
           throw new AnalysisException(
             "Cannot drop a view with DROP TABLE. Please use DROP VIEW instead")
-        case o if o != CatalogTableType.VIRTUAL_VIEW && isView =>
+        case o if o != CatalogTableType.VIEW && isView =>
           throw new AnalysisException(
             s"Cannot drop a table with DROP VIEW. Please use DROP TABLE instead")
         case _ =>
@@ -426,8 +432,8 @@ case class AlterTableSetFileFormat(
     tableName: TableIdentifier,
     partitionSpec: Option[TablePartitionSpec],
     fileFormat: Seq[String],
-    genericFormat: Option[String])(sql: String)
-  extends NativeDDLCommand(sql) with Logging
+    genericFormat: Option[String])(exception: ParseException)
+  extends UnsupportedCommand(exception) with Logging
 
 /**
  * A command that sets the location of a table or a partition.
@@ -488,24 +494,24 @@ case class AlterTableChangeCol(
     comment: Option[String],
     afterColName: Option[String],
     restrict: Boolean,
-    cascade: Boolean)(sql: String)
-  extends NativeDDLCommand(sql) with Logging
+    cascade: Boolean)(exception: ParseException)
+  extends UnsupportedCommand(exception) with Logging
 
 case class AlterTableAddCol(
     tableName: TableIdentifier,
     partitionSpec: Option[TablePartitionSpec],
     columns: StructType,
     restrict: Boolean,
-    cascade: Boolean)(sql: String)
-  extends NativeDDLCommand(sql) with Logging
+    cascade: Boolean)(exception: ParseException)
+  extends UnsupportedCommand(exception) with Logging
 
 case class AlterTableReplaceCol(
     tableName: TableIdentifier,
     partitionSpec: Option[TablePartitionSpec],
     columns: StructType,
     restrict: Boolean,
-    cascade: Boolean)(sql: String)
-  extends NativeDDLCommand(sql) with Logging
+    cascade: Boolean)(exception: ParseException)
+  extends UnsupportedCommand(exception) with Logging
 
 
 private[sql] object DDLUtils {
@@ -527,14 +533,18 @@ private[sql] object DDLUtils {
       tableIdentifier: TableIdentifier,
       isView: Boolean): Unit = {
     catalog.getTableMetadataOption(tableIdentifier).map(_.tableType match {
-      case CatalogTableType.VIRTUAL_VIEW if !isView =>
+      case CatalogTableType.VIEW if !isView =>
         throw new AnalysisException(
           "Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead")
-      case o if o != CatalogTableType.VIRTUAL_VIEW && isView =>
+      case o if o != CatalogTableType.VIEW && isView =>
         throw new AnalysisException(
           s"Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead")
       case _ =>
     })
+  }
+  def isTablePartitioned(table: CatalogTable): Boolean = {
+    table.partitionColumns.size > 0 ||
+      table.properties.contains("spark.sql.sources.schema.numPartCols")
   }
 }
 

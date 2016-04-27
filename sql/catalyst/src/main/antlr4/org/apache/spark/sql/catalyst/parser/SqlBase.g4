@@ -108,6 +108,9 @@ statement
     | SHOW DATABASES (LIKE pattern=STRING)?                            #showDatabases
     | SHOW TBLPROPERTIES table=tableIdentifier
         ('(' key=tablePropertyKey ')')?                                #showTblProperties
+    | SHOW COLUMNS (FROM | IN) tableIdentifier
+        ((FROM | IN) db=identifier)?                                   #showColumns
+    | SHOW PARTITIONS tableIdentifier partitionSpec?                   #showPartitions
     | SHOW FUNCTIONS (LIKE? (qualifiedName | pattern=STRING))?         #showFunctions
     | (DESC | DESCRIBE) FUNCTION EXTENDED? describeFuncName            #describeFunction
     | (DESC | DESCRIBE) option=(EXTENDED | FORMATTED)?
@@ -127,15 +130,8 @@ statement
     ;
 
 hiveNativeCommands
-    : DELETE FROM tableIdentifier (WHERE booleanExpression)?
-    | TRUNCATE TABLE tableIdentifier partitionSpec?
+    : TRUNCATE TABLE tableIdentifier partitionSpec?
         (COLUMNS identifierList)?
-    | SHOW COLUMNS (FROM | IN) tableIdentifier ((FROM|IN) identifier)?
-    | START TRANSACTION (transactionMode (',' transactionMode)*)?
-    | COMMIT WORK?
-    | ROLLBACK WORK?
-    | SHOW PARTITIONS tableIdentifier partitionSpec?
-    | DFS .*?
     | (CREATE | ALTER | DROP | SHOW | DESC | DESCRIBE) .*?
     ;
 
@@ -179,6 +175,11 @@ unsupportedHiveNativeCommands
     | kw1=ALTER kw2=TABLE tableIdentifier kw3=TOUCH
     | kw1=ALTER kw2=TABLE tableIdentifier partitionSpec? kw3=COMPACT
     | kw1=ALTER kw2=TABLE tableIdentifier partitionSpec? kw3=CONCATENATE
+    | kw1=START kw2=TRANSACTION
+    | kw1=COMMIT
+    | kw1=ROLLBACK
+    | kw1=DFS
+    | kw1=DELETE kw2=FROM
     ;
 
 createTableHeader
