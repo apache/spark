@@ -231,7 +231,7 @@ setCheckpointDir <- function(sc, dirName) {
 #' @description
 #' Applies a function in a manner that is similar to doParallel or lapply to elements of a list.
 #' The computations are distributed using Spark. It is conceptually the same as the following code:
-#'   unlist(lapply(list, func))
+#'   lapply(list, func)
 #'
 #' Known limitations:
 #'  - variable scoping and capture: compared to R's rich support for variable resolutions, the
@@ -252,12 +252,15 @@ setCheckpointDir <- function(sc, dirName) {
 #' }
 #'}
 #'
+#' @rdname spark.lapply
 #' @param list the list of elements
 #' @param func a function that takes one argument.
+#' @return a list of results (the exact type being determined by the function)
+#' @export
 #' @examples
 #' Here is a trivial example that double the values in a list
 #'\dontrun{
-#' doubled <- sparkLapply(1:10, function(x){2 * x})
+#' doubled <- spark.lapply(1:10, function(x){2 * x})
 #'}
 spark.lapply <- function(list, func) {
   sc <- get(".sparkRjsc", envir = .sparkREnv)
