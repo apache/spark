@@ -54,7 +54,7 @@ object SQLConf {
 
   val OPTIMIZER_MAX_ITERATIONS = SQLConfigBuilder("spark.sql.optimizer.maxIterations")
     .internal()
-    .doc("The max number of iterations the optimizer and analyzer runs.")
+    .doc("The max number of itertions the optimizer and analyzer runs.")
     .intConf
     .createWithDefault(100)
 
@@ -644,6 +644,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def variableSubstituteEnabled: Boolean = getConf(VARIABLE_SUBSTITUTE_ENABLED)
 
   def variableSubstituteDepth: Int = getConf(VARIABLE_SUBSTITUTE_DEPTH)
+
+  def warehousePath: String = getConfString("hive.metastore.warehouse.dir", "/user/hive/warehouse")
 
   override def orderByOrdinal: Boolean = getConf(ORDER_BY_ORDINAL)
 
