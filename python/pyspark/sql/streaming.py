@@ -64,9 +64,9 @@ class ContinuousQuery(object):
         throws :class:`ContinuousQueryException`, if `this` query has terminated with an exception
         """
         if timeout is not None:
-            if (type(timeout) != int and type(timeout) != float) or timeout < 0:
+            if not isinstance(timeout, (int, float)) or timeout < 0:
                 raise ValueError("timeout must be a positive integer or float. Got %s" % timeout)
-            return self._jcq.awaitTermination(timeout * 1000)
+            return self._jcq.awaitTermination(int(timeout * 1000))
         else:
             return self._jcq.awaitTermination()
 
@@ -151,9 +151,9 @@ class ContinuousQueryManager(object):
         throws :class:`ContinuousQueryException`, if `this` query has terminated with an exception
         """
         if timeout is not None:
-            if (type(timeout) != int and type(timeout) != float) or timeout < 0:
+            if not isinstance(timeout, (int, float)) or timeout < 0:
                 raise ValueError("timeout must be a positive integer or float. Got %s" % timeout)
-            return self._jcqm.awaitAnyTermination(timeout * 1000)
+            return self._jcqm.awaitAnyTermination(int(timeout * 1000))
         else:
             return self._jcqm.awaitAnyTermination()
 
