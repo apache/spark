@@ -38,6 +38,16 @@ private[memory] class MemoryPool(
     val maxStorageMemory: Long,
     val unevictableStorageMemory: Long) extends Logging {
 
+  logDebug(
+    s"""|MemoryPool initialized with following conf:
+       |    memoryMode = $memoryMode
+       |    numCores = $numCores
+       |    totalMemory = $totalMemory
+       |    maxExecutionMemory = $maxExecutionMemory
+       |    maxStorageMemory = $maxStorageMemory
+       |    unevictableStorageMemory = $unevictableStorageMemory
+     """.stripMargin)
+
   // Access to all of these fields is guarded by synchronizing on `this`:
 
   def freeMemory: Long = synchronized { _freeMemory }

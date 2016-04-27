@@ -154,6 +154,8 @@ private[spark] class MemoryStore(
         blockId, Utils.bytesToString(size), Utils.bytesToString(maxMemory - blocksMemoryUsed)))
       true
     } else {
+      logDebug(
+        s"Could not acquire enough memory ($size bytes) to store block $blockId as bytes in memory")
       false
     }
   }
