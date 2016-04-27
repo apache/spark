@@ -28,8 +28,7 @@ import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.{PartitionDropOptions, TableType => HiveTableType}
 import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, FieldSchema, Function => HiveFunction, FunctionType, PrincipalType, ResourceType, ResourceUri}
 import org.apache.hadoop.hive.ql.Driver
-import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition, Table => HiveTable}
-import org.apache.hadoop.hive.ql.metadata.{Hive, HiveException}
+import org.apache.hadoop.hive.ql.metadata.{Hive, HiveException, Partition => HivePartition, Table => HiveTable}
 import org.apache.hadoop.hive.ql.plan.AddPartitionDesc
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
@@ -41,6 +40,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchPartitionException}
 import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.catalyst.catalog.ExternalCatalog.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.util.{CircularBuffer, Utils}
@@ -422,15 +422,24 @@ private[hive] class HiveClientImpl(
 
   override def getPartitionOption(
       table: CatalogTable,
-      spec: ExternalCatalog.TablePartitionSpec): Option[CatalogTablePartition] = withHiveState {
+      spec: TablePartitionSpec): Option[CatalogTablePartition] = withHiveState {
     val hiveTable = toHiveTable(table)
     val hivePartition = client.getPartition(hiveTable, spec.asJava, false)
     Option(hivePartition).map(fromHivePartition)
   }
 
-  override def getAllPartitions(table: CatalogTable): Seq[CatalogTablePartition] = withHiveState {
+  /**
+   * Returns the partitions for the given table that match the supplied partition spec.
+   * If no partition spec is specified, all partitions are returned.
+   */
+  override def getPartitions(
+      table: CatalogTable,
+      spec: Option[TablePartitionSpec]): Seq[CatalogTablePartition] = withHiveState {
     val hiveTable = toHiveTable(table)
-    shim.getAllPartitions(client, hiveTable).map(fromHivePartition)
+    spec match {
+      case None => shim.getAllPartitions(client, hiveTable).map(fromHivePartition)
+      case Some(s) => client.getPartitions(hiveTable, s.asJava).asScala.map(fromHivePartition)
+    }
   }
 
   override def getPartitionsByFilter(

@@ -471,13 +471,18 @@ class SessionCatalog(
   }
 
   /**
-   * List all partitions in a table, assuming it exists.
-   * If no database is specified, assume the table is in the current database.
+   * List the metadata of all partitions that belong to the specified table, assuming it exists.
+   *
+   * A partial partition spec may optionally be provided to filter the partitions returned.
+   * For instance, if there exist partitions (a='1', b='2'), (a='1', b='3') and (a='2', b='4'),
+   * then a partial spec of (a='1') will return the first two only.
    */
-  def listPartitions(tableName: TableIdentifier): Seq[CatalogTablePartition] = {
+  def listPartitions(
+      tableName: TableIdentifier,
+      partialSpec: Option[TablePartitionSpec] = None): Seq[CatalogTablePartition] = {
     val db = tableName.database.getOrElse(currentDb)
     val table = formatTableName(tableName.table)
-    externalCatalog.listPartitions(db, table)
+    externalCatalog.listPartitions(db, table, partialSpec)
   }
 
   // ----------------------------------------------------------------------------
