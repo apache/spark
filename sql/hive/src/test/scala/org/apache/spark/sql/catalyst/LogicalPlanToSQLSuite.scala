@@ -746,16 +746,11 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     withTable("parquet_t") {
       sql(
         """
-          |create table parquet_t (c1 int, c2 string) stored as parquet
+          |create table parquet_t (c1 int, c2 string)
+          |stored as parquet select 1, 'abc'
         """.stripMargin)
-      sql(
-        """
-          |insert into parquet_t values (1, 'abc')
-        """.stripMargin)
-      checkHiveQl(
-        """
-          |select * from parquet_t
-        """.stripMargin)
+
+      checkHiveQl("select * from parquet_t")
     }
   }
 
@@ -763,16 +758,11 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     withTable("orc_t") {
       sql(
         """
-          |create table orc_t (c1 int, c2 string) stored as orc
+          |create table orc_t (c1 int, c2 string)
+          |stored as orc select 1, 'abc'
         """.stripMargin)
-      sql(
-        """
-          |insert into orc_t values (1, 'abc')
-        """.stripMargin)
-      checkHiveQl(
-        """
-          |select * from orc_t
-        """.stripMargin)
+
+      checkHiveQl("select * from orc_t")
     }
   }
 }
