@@ -573,6 +573,45 @@ class CodegenContext {
 
   /**
    * Checks and sets up the state and codegen for subexpression elimination. This finds the
+   * common subexpressions, generates the code snippets that evaluate those expressions and
+   * populates the mapping of common subexpressions to the generated code snippets. The generated
+   * code snippets will be returned and should be inserted into generated codes before these
+   * common subexpressions actually are used first time.
+   */
+  def subexpressionEliminationForWholeStageCodegen(expressions: Seq[Expression]): Seq[String] = {
+    // Add each expression tree and compute the common subexpressions.
+    expressions.foreach(equivalentExpressions.addExprTree(_, true, false))
+
+    // Get all the expressions that appear at least twice and set up the state for subexpression
+    // elimination.
+    val commonExprs = equivalentExpressions.getAllEquivalentExprs.filter(_.size > 1)
+    commonExprs.map { e =>
+      val expr = e.head
+      val fnName = freshName("evalExpr")
+      val isNull = s"${fnName}IsNull"
+      val value = s"${fnName}Value"
+
+      // Generate the code for this expression tree.
+      val code = expr.genCode(this)
+      val effectiveCode =
+        s"""
+           |  ${code.code.trim}
+           |  $isNull = ${code.isNull};
+           |  $value = ${code.value};
+           """.stripMargin
+
+      addMutableState("boolean", isNull, s"$isNull = false;")
+      addMutableState(javaType(expr.dataType), value,
+        s"$value = ${defaultValue(expr.dataType)};")
+
+      val state = SubExprEliminationState(isNull, value)
+      e.foreach(subExprEliminationExprs.put(_, state))
+      effectiveCode
+    }
+  }
+
+  /**
+   * Checks and sets up the state and codegen for subexpression elimination. This finds the
    * common subexpressions, generates the functions that evaluate those expressions and populates
    * the mapping of common subexpressions to the generated functions.
    */

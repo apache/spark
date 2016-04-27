@@ -244,8 +244,10 @@ case class TungstenAggregate(
       }
     }
     ctx.currentVars = bufVars ++ input
-    // TODO: support subexpression elimination
-    val aggVals = updateExpr.map(BindReferences.bindReference(_, inputAttrs).genCode(ctx))
+    val boundUpdateExpr = updateExpr.map(BindReferences.bindReference(_, inputAttrs))
+    val effectiveCodes =
+      ctx.subexpressionEliminationForWholeStageCodegen(boundUpdateExpr).mkString("\n")
+    val aggVals = boundUpdateExpr.map(_.genCode(ctx))
     // aggregate buffer should be updated atomic
     val updates = aggVals.zipWithIndex.map { case (ev, i) =>
       s"""
@@ -255,6 +257,7 @@ case class TungstenAggregate(
     }
     s"""
        | // do aggregate
+       | $effectiveCodes
        | ${evaluateVariables(aggVals)}
        | // update aggregation buffer
        | ${updates.mkString("\n").trim}
@@ -650,8 +653,10 @@ case class TungstenAggregate(
     val updateRowInVectorizedHashMap: Option[String] = {
       if (isVectorizedHashMapEnabled) {
         ctx.INPUT_ROW = vectorizedRowBuffer
-        val vectorizedRowEvals =
-          updateExpr.map(BindReferences.bindReference(_, inputAttr).genCode(ctx))
+        val boundUpdateExpr = updateExpr.map(BindReferences.bindReference(_, inputAttr))
+        val effectiveCodes =
+          ctx.subexpressionEliminationForWholeStageCodegen(boundUpdateExpr).mkString("\n")
+        val vectorizedRowEvals = boundUpdateExpr.map(_.genCode(ctx))
         val updateVectorizedRow = vectorizedRowEvals.zipWithIndex.map { case (ev, i) =>
           val dt = updateExpr(i).dataType
           ctx.updateColumn(vectorizedRowBuffer, dt, i, ev, updateExpr(i).nullable,
@@ -660,6 +665,7 @@ case class TungstenAggregate(
         Option(
           s"""
              |// evaluate aggregate function
+             |$effectiveCodes
              |${evaluateVariables(vectorizedRowEvals)}
              |// update vectorized row
              |${updateVectorizedRow.mkString("\n").trim}
@@ -701,14 +707,17 @@ case class TungstenAggregate(
 
     val updateRowInUnsafeRowMap: String = {
       ctx.INPUT_ROW = unsafeRowBuffer
-      val unsafeRowBufferEvals =
-        updateExpr.map(BindReferences.bindReference(_, inputAttr).genCode(ctx))
+      val boundUpdateExpr = updateExpr.map(BindReferences.bindReference(_, inputAttr))
+      val effectiveCodes =
+        ctx.subexpressionEliminationForWholeStageCodegen(boundUpdateExpr).mkString("\n")
+      val unsafeRowBufferEvals = boundUpdateExpr.map(_.genCode(ctx))
       val updateUnsafeRowBuffer = unsafeRowBufferEvals.zipWithIndex.map { case (ev, i) =>
         val dt = updateExpr(i).dataType
         ctx.updateColumn(unsafeRowBuffer, dt, i, ev, updateExpr(i).nullable)
       }
       s"""
          |// evaluate aggregate function
+         |$effectiveCodes
          |${evaluateVariables(unsafeRowBufferEvals)}
          |// update unsafe row buffer
          |${updateUnsafeRowBuffer.mkString("\n").trim}
