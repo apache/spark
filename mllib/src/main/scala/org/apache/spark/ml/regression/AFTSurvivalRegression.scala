@@ -185,6 +185,9 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
    * and put it in an RDD with strong types.
    */
   protected[ml] def extractAFTPoints(dataset: Dataset[_]): RDD[AFTPoint] = {
+    val sqlContext = dataset.sqlContext
+    import sqlContext.implicits._
+
     dataset.select(col($(featuresCol)), col($(labelCol)).cast(DoubleType), col($(censorCol)))
       .as[AFTPoint].rdd
   }

@@ -71,7 +71,7 @@ class PCA (override val uid: String) extends Estimator[PCAModel] with PCAParams
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): PCAModel = {
     transformSchema(dataset.schema, logging = true)
-    val input = dataset.select($(inputCol)).as[Vector].rdd
+    val input = dataset.select($(inputCol)).rdd.map { case Row(v: Vector) => v}
     val pca = new feature.PCA(k = $(k))
     val pcaModel = pca.fit(input)
     copyValues(new PCAModel(uid, pcaModel.pc, pcaModel.explainedVariance).setParent(this))

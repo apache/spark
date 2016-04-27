@@ -264,6 +264,9 @@ class LogisticRegression @Since("1.2.0") (
 
   protected[spark] def train(dataset: Dataset[_], handlePersistence: Boolean):
       LogisticRegressionModel = {
+    val sqlContext = dataset.sqlContext
+    import sqlContext.implicits._
+
     val w = if ($(weightCol).isEmpty) lit(1.0) else col($(weightCol))
     val instances: RDD[Instance] =
       dataset.select(col($(labelCol)).cast(DoubleType), w, col($(featuresCol)))
