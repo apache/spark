@@ -28,7 +28,6 @@ import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.types.NumericType
 
 /**
  * Params for [[Imputer]] and [[ImputerModel]].
@@ -38,16 +37,14 @@ private[feature] trait ImputerParams extends Params with HasInputCol with HasOut
   /**
    * The imputation strategy.
    * If "mean", then replace missing values using the mean value of the feature.
-   * If "median", then replace missing values using the median value of the feature.
-   * If "mode", then replace missing using the most frequent value of the feature.
+   * If "median", then replace missing values using the approximate median value of the feature.
    * Default: mean
    *
    * @group param
    */
-  val strategy: Param[String] = new Param(this, "strategy", "strategy for imputation. " +
+  final val strategy: Param[String] = new Param(this, "strategy", "strategy for imputation. " +
     "If mean, then replace missing values using the mean value of the feature." +
-    "If median, then replace missing values using the median value of the feature." +
-    "If mode, then replace missing using the most frequent value of the feature.",
+    "If median, then replace missing values using the median value of the feature.",
     ParamValidators.inArray[String](Imputer.supportedStrategyNames.toArray))
 
   /** @group getParam */
@@ -59,7 +56,7 @@ private[feature] trait ImputerParams extends Params with HasInputCol with HasOut
    *
    * @group param
    */
-  val missingValue: DoubleParam = new DoubleParam(this, "missingValue",
+  final val missingValue: DoubleParam = new DoubleParam(this, "missingValue",
     "The placeholder for the missing values. All occurrences of missingValue will be imputed")
 
   /** @group getParam */
@@ -68,22 +65,19 @@ private[feature] trait ImputerParams extends Params with HasInputCol with HasOut
   /** Validates and transforms the input schema. */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
     val inputType = schema($(inputCol)).dataType
-    require(inputType.isInstanceOf[NumericType],
-      s"Input column ${$(inputCol)} must be of NumericType")
+    SchemaUtils.checkColumnTypes(schema, $(inputCol), Seq(DoubleType, FloatType))
     require(!schema.fieldNames.contains($(outputCol)),
       s"Output column ${$(outputCol)} already exists.")
-    val outputFields = schema.fields :+
-      StructField($(outputCol), inputType, schema($(inputCol)).nullable)
-    StructType(outputFields)
+    SchemaUtils.appendColumn(schema, $(outputCol), inputType)
   }
-
 }
 
 /**
  * :: Experimental ::
- * Imputation estimator for completing missing values, either using the mean("mean"), the
- * median("median") or the most frequent value("mode") of the column in which the missing
- * values are located.
+ * Imputation estimator for completing missing values, either using the mean("mean") or the
+ * median("median") of the column in which the missing values are located.
+ *
+ * Note that all the null values will be imputed as well.
  */
 @Experimental
 class Imputer @Since("2.0.0")(override val uid: String)
@@ -99,7 +93,7 @@ class Imputer @Since("2.0.0")(override val uid: String)
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /**
-   * Imputation strategy. Available options are ["mean", "median" and "mode"].
+   * Imputation strategy. Available options are ["mean", "median"].
    * @group setParam
    */
   def setStrategy(value: String): this.type = set(strategy, value)
@@ -117,8 +111,6 @@ class Imputer @Since("2.0.0")(override val uid: String)
     val surrogate = $(strategy) match {
       case "mean" => filtered.filter(!ic.isNaN).select(avg($(inputCol))).first().getDouble(0)
       case "median" => filtered.stat.approxQuantile($(inputCol), Array(0.5), 0.001)(0)
-      case "mode" => filtered.rdd.map(r => r.getDouble(0)).map(d => (d, 1)).reduceByKey(_ + _)
-        .sortBy(-_._2).first()._1
     }
     copyValues(new ImputerModel(uid, surrogate).setParent(this))
   }
@@ -137,7 +129,7 @@ class Imputer @Since("2.0.0")(override val uid: String)
 object Imputer extends DefaultParamsReadable[Imputer] {
 
   /** Set of strategy names that Imputer currently supports. */
-  private[ml] val supportedStrategyNames = Set("mean", "median", "mode")
+  private[ml] val supportedStrategyNames = Set("mean", "median")
 
   @Since("2.0.0")
   override def load(path: String): Imputer = super.load(path)
@@ -166,15 +158,11 @@ class ImputerModel private[ml](
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     val inputType = dataset.select($(inputCol)).schema.fields(0).dataType
-    inputType match {
-      case _: NumericType =>
-        val ic = col($(inputCol)).cast(DoubleType)
-        dataset.withColumn($(outputCol), when(ic.isNull, surrogate)
-          .when(ic === $(missingValue), surrogate)
-          .otherwise(ic)
-          .cast(inputType))
-      case _ => throw new SparkException("imputer supports numeric type only")
-    }
+    val ic = col($(inputCol))
+    dataset.withColumn($(outputCol), when(ic.isNull, surrogate)
+      .when(ic === $(missingValue), surrogate)
+      .otherwise(ic)
+      .cast(inputType))
   }
 
   override def transformSchema(schema: StructType): StructType = {

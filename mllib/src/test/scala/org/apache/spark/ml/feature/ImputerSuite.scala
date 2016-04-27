@@ -26,77 +26,98 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
 
   test("Imputer for Double with default missing Value NaN") {
     val df = sqlContext.createDataFrame( Seq(
-      (0, 1.0, 1.0, 1.0, 1.0),
-      (1, 1.0, 1.0, 1.0, 1.0),
-      (2, 3.0, 3.0, 3.0, 3.0),
-      (3, 4.0, 4.0, 4.0, 4.0),
-      (4, Double.NaN, 2.25, 1.0, 1.0 )
-    )).toDF("id", "value", "mean", "median", "mode")
-    Seq("mean", "median", "mode").foreach { strategy =>
+      (0, 1.0, 1.0, 1.0),
+      (1, 1.0, 1.0, 1.0),
+      (2, 3.0, 3.0, 3.0),
+      (3, 4.0, 4.0, 4.0),
+      (4, Double.NaN, 2.25, 1.0)
+    )).toDF("id", "value", "exp_mean", "exp_median")
+    Seq("mean", "median").foreach { strategy =>
       val imputer = new Imputer().setInputCol("value").setOutputCol("out").setStrategy(strategy)
       val model = imputer.fit(df)
-      model.transform(df).select(strategy, "out").collect()
-        .foreach { case Row(d1: Double, d2: Double) =>
-          assert(d1 ~== d2 absTol 1e-5, s"Imputer ut error: $d2 should be $d1")
-        }
+      model.transform(df).select("exp_" + strategy, "out").collect().foreach {
+       case Row(exp: Double, out: Double) =>
+          assert(exp ~== out absTol 1e-5, s"Imputed values differ. Expected: $exp, actual: $out")
+      }
     }
   }
 
   test("Imputer for Double with missing Value -1.0") {
     val df = sqlContext.createDataFrame( Seq(
-      (0, 1.0, 1.0, 1.0, 1.0),
-      (1, 1.0, 1.0, 1.0, 1.0),
-      (2, 3.0, 3.0, 3.0, 3.0),
-      (3, 4.0, 4.0, 4.0, 4.0),
-      (4, -1.0, 2.25, 1.0, 1.0 )
-    )).toDF("id", "value", "mean", "median", "mode")
-    Seq("mean", "median", "mode").foreach { strategy =>
+      (0, 1.0, 1.0, 1.0),
+      (1, 1.0, 1.0, 1.0),
+      (2, 3.0, 3.0, 3.0),
+      (3, 4.0, 4.0, 4.0),
+      (4, -1.0, 2.25, 1.0)
+    )).toDF("id", "value", "exp_mean", "exp_median")
+    Seq("mean", "median").foreach { strategy =>
       val imputer = new Imputer().setInputCol("value").setOutputCol("out").setStrategy(strategy)
         .setMissingValue(-1.0)
       val model = imputer.fit(df)
-      model.transform(df).select(strategy, "out").collect()
-        .foreach { case Row(d1: Double, d2: Double) =>
-          assert(d1 ~== d2 absTol 1e-5, s"Imputer ut error: $d2 should be $d1")
-        }
+      model.transform(df).select("exp_" + strategy, "out").collect().foreach {
+        case Row(exp: Double, out: Double) =>
+          assert(exp ~== out absTol 1e-5, s"Impute($strategy) error. Expected: $exp, actual: $out")
+      }
     }
   }
 
-  test("Imputer for Int with missing Value -1") {
+  test("Imputer for Double with missing Value -1.0 and contains NaN") {
     val df = sqlContext.createDataFrame( Seq(
-      (0, 1, 1, 1, 1),
-      (1, 3, 3, 3, 3),
-      (2, 10, 10, 10, 10),
-      (3, 10, 10, 10, 10),
-      (4, -1, 6, 3, 10)
-    )).toDF("id", "value", "mean", "median", "mode")
+      (0, 1.0, 1.0, 1.0),
+      (1, 3.0, 3.0, 3.0),
+      (2, Double.NaN, Double.NaN, Double.NaN),
+      (3, -1.0, 2.0, 3.0)
+    )).toDF("id", "value", "exp_mean", "exp_median")
+    Seq("mean", "median").foreach { strategy =>
+      val imputer = new Imputer().setInputCol("value").setOutputCol("out").setStrategy(strategy)
+        .setMissingValue(-1.0)
+      val model = imputer.fit(df)
+      model.transform(df).select("exp_" + strategy, "out").collect().foreach {
+        case Row(exp: Double, out: Double) =>
+          assert((exp.isNaN && out.isNaN) || (exp ~== out absTol 1e-5),
+            s"Imputed values differ. Expected: $exp, actual: $out")
+      }
+    }
+  }
 
-    Seq("mean", "median", "mode").foreach { strategy =>
+  test("Imputer for Float with missing Value -1.0") {
+    val df = sqlContext.createDataFrame( Seq(
+      (0, 1.0F, 1.0F, 1.0F),
+      (1, 3.0F, 3.0F, 3.0F),
+      (2, 10.0F, 10.0F, 10.0F),
+      (3, 10.0F, 10.0F, 10.0F),
+      (4, -1.0F, 6.0F, 3.0F)
+    )).toDF("id", "value", "exp_mean", "exp_median")
+
+    Seq("mean", "median").foreach { strategy =>
       val imputer = new Imputer().setInputCol("value").setOutputCol("out").setStrategy(strategy)
         .setMissingValue(-1)
       val model = imputer.fit(df)
-      model.transform(df).select(strategy, "out").collect()
-        .foreach { case Row(d1: Int, d2: Int) =>
-          assert(d1 === d2, s"Imputer ut error: $d2 should be $d1")
-        }
+      val result = model.transform(df)
+        result.printSchema()
+      model.transform(df).select("exp_" + strategy, "out").collect().foreach {
+        case Row(exp: Float, out: Float) =>
+          assert(exp == out, s"Imputed values differ. Expected: $exp, actual: $out")
+      }
     }
   }
 
   test("Imputer should impute null") {
     val df = sqlContext.createDataFrame( Seq(
-      (0, 1, 1, 1, 1),
-      (1, 3, 3, 3, 3),
-      (2, 10, 10, 10, 10),
-      (3, 10, 10, 10, 10),
-      (4, -1, 6, 3, 10)
-    )).toDF("id", "value", "mean", "median", "mode")
-    val df2 = df.selectExpr("*", "IF(value=-1, null, value) as nullable_value")
-    Seq("mean", "median", "mode").foreach { strategy =>
+      (0, 4.0, 4.0, 4.0),
+      (1, 10.0, 10.0, 10.0),
+      (2, 10.0, 10.0, 10.0),
+      (3, Double.NaN, 8.0, 10.0),
+      (4, -1.0, 8.0, 10.0)
+    )).toDF("id", "value", "exp_mean", "exp_median")
+    val df2 = df.selectExpr("*", "IF(value=-1.0, null, value) as nullable_value")
+    Seq("mean", "median").foreach { strategy =>
       val imputer = new Imputer().setInputCol("nullable_value").setOutputCol("out")
         .setStrategy(strategy)
       val model = imputer.fit(df2)
-      model.transform(df2).select(strategy, "out").collect()
-        .foreach { case Row(d1: Int, d2: Int) =>
-        assert(d1 == d2, s"Imputer ut error: $d2 should be $d1")
+      model.transform(df2).select("exp_" + strategy, "out").collect().foreach {
+        case Row(exp: Double, out: Double) =>
+          assert(exp ~== out absTol 1e-5, s"Imputed values differ. Expected: $exp, actual: $out")
       }
     }
   }
