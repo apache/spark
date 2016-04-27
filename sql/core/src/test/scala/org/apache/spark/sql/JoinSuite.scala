@@ -37,7 +37,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     val x = testData2.as("x")
     val y = testData2.as("y")
     val join = x.join(y, $"x.a" === $"y.a", "inner").queryExecution.optimizedPlan
-    val planned = sqlContext.sessionState.planner.EquiJoinSelection(join)
+    val planned = sqlContext.sessionState.planner.JoinSelection(join)
     assert(planned.size === 1)
   }
 
@@ -65,7 +65,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     withSQLConf("spark.sql.autoBroadcastJoinThreshold" -> "0") {
       Seq(
         ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a",
-          classOf[ShuffledHashJoinExec]),
+          classOf[SortMergeJoinExec]),
         ("SELECT * FROM testData LEFT SEMI JOIN testData2", classOf[BroadcastNestedLoopJoinExec]),
         ("SELECT * FROM testData JOIN testData2", classOf[CartesianProductExec]),
         ("SELECT * FROM testData JOIN testData2 WHERE key = 2", classOf[CartesianProductExec]),
@@ -99,7 +99,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
           classOf[BroadcastNestedLoopJoinExec]),
         ("SELECT * FROM testData full JOIN testData2 ON (key * a != key + a)",
           classOf[BroadcastNestedLoopJoinExec]),
-        ("SELECT * FROM testData ANTI JOIN testData2 ON key = a", classOf[ShuffledHashJoinExec]),
+        ("SELECT * FROM testData ANTI JOIN testData2 ON key = a", classOf[SortMergeJoinExec]),
         ("SELECT * FROM testData LEFT ANTI JOIN testData2", classOf[BroadcastNestedLoopJoinExec])
       ).foreach(assertJoin)
     }
@@ -144,7 +144,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     val x = testData2.as("x")
     val y = testData2.as("y")
     val join = x.join(y, ($"x.a" === $"y.a") && ($"x.b" === $"y.b")).queryExecution.optimizedPlan
-    val planned = sqlContext.sessionState.planner.EquiJoinSelection(join)
+    val planned = sqlContext.sessionState.planner.JoinSelection(join)
     assert(planned.size === 1)
   }
 
@@ -449,9 +449,9 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       Seq(
         ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a",
-          classOf[ShuffledHashJoinExec]),
+          classOf[SortMergeJoinExec]),
         ("SELECT * FROM testData LEFT ANTI JOIN testData2 ON key = a",
-          classOf[ShuffledHashJoinExec])
+          classOf[SortMergeJoinExec])
       ).foreach(assertJoin)
     }
 
@@ -475,7 +475,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
 
       Seq(
         ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a",
-          classOf[ShuffledHashJoinExec]),
+          classOf[SortMergeJoinExec]),
         ("SELECT * FROM testData LEFT SEMI JOIN testData2",
           classOf[BroadcastNestedLoopJoinExec]),
         ("SELECT * FROM testData JOIN testData2",

@@ -120,12 +120,8 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
           DataSinks,
           Scripts,
           Aggregation,
-          ExistenceJoin,
-          EquiJoinSelection,
-          BasicOperators,
-          BroadcastNestedLoop,
-          CartesianProduct,
-          DefaultJoin
+          JoinSelection,
+          BasicOperators
         )
       }
     }

@@ -57,7 +57,7 @@ import org.apache.spark.sql.functions._
  */
 @Since("1.4.0")
 @Experimental
-final class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
+class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends Predictor[Vector, GBTRegressor, GBTRegressionModel]
   with GBTRegressorParams with DefaultParamsWritable with Logging {
 
@@ -157,7 +157,7 @@ object GBTRegressor extends DefaultParamsReadable[GBTRegressor] {
  */
 @Since("1.4.0")
 @Experimental
-final class GBTRegressionModel private[ml](
+class GBTRegressionModel private[ml](
     override val uid: String,
     private val _trees: Array[DecisionTreeRegressionModel],
     private val _treeWeights: Array[Double],

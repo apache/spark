@@ -75,7 +75,7 @@ private[tree] object Split {
  * @param numCategories  Number of categories for this feature.
  */
 @DeveloperApi
-final class CategoricalSplit private[ml] (
+class CategoricalSplit private[ml] (
     override val featureIndex: Int,
     _leftCategories: Array[Double],
     @Since("2.0.0") val numCategories: Int)
@@ -160,7 +160,7 @@ final class CategoricalSplit private[ml] (
  *                    Otherwise, it goes right.
  */
 @DeveloperApi
-final class ContinuousSplit private[ml] (override val featureIndex: Int, val threshold: Double)
+class ContinuousSplit private[ml] (override val featureIndex: Int, val threshold: Double)
   extends Split {
 
   override private[ml] def shouldGoLeft(features: Vector): Boolean = {
