@@ -18,6 +18,8 @@
 package test.org.apache.spark.sql;
 
 import java.io.Serializable;
+import java.net.URISyntaxException;
+import java.net.URL;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
@@ -220,7 +222,8 @@ public class JavaDataFrameSuite {
     StructType schema1 = StructType$.MODULE$.apply(fields1);
     Assert.assertEquals(0, schema1.fieldIndex("id"));
 
-    List<StructField> fields2 = Arrays.asList(new StructField("id", DataTypes.StringType, true, Metadata.empty()));
+    List<StructField> fields2 =
+        Arrays.asList(new StructField("id", DataTypes.StringType, true, Metadata.empty()));
     StructType schema2 = StructType$.MODULE$.apply(fields2);
     Assert.assertEquals(0, schema2.fieldIndex("id"));
   }
@@ -302,33 +305,48 @@ public class JavaDataFrameSuite {
     Assert.assertEquals(30000.0, actual.get(1).getDouble(2), 0.01);
   }
 
+  private String getResource(String resource) {
+    try {
+      // The following "getResource" has different behaviors in SBT and Maven.
+      // When running in Jenkins, the file path may contain "@" when there are multiple
+      // SparkPullRequestBuilders running in the same worker
+      // (e.g., /home/jenkins/workspace/SparkPullRequestBuilder@2)
+      // When running in SBT, "@" in the file path will be returned as "@", however,
+      // when running in Maven, "@" will be encoded as "%40".
+      // Therefore, we convert it to URI then call "getPath" to decode it back so that it can both
+      // work both in SBT and Maven.
+      URL url = Thread.currentThread().getContextClassLoader().getResource(resource);
+      return url.toURI().getPath();
+    } catch (URISyntaxException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
   @Test
   public void testGenericLoad() {
-    Dataset<Row> df1 = context.read().format("text").load(
-      Thread.currentThread().getContextClassLoader().getResource("text-suite.txt").toString());
+    Dataset<Row> df1 = context.read().format("text").load(getResource("text-suite.txt"));
     Assert.assertEquals(4L, df1.count());
 
     Dataset<Row> df2 = context.read().format("text").load(
-      Thread.currentThread().getContextClassLoader().getResource("text-suite.txt").toString(),
-      Thread.currentThread().getContextClassLoader().getResource("text-suite2.txt").toString());
+      getResource("text-suite.txt"),
+      getResource("text-suite2.txt"));
     Assert.assertEquals(5L, df2.count());
   }
 
   @Test
   public void testTextLoad() {
-    Dataset<String> ds1 = context.read().text(
-      Thread.currentThread().getContextClassLoader().getResource("text-suite.txt").toString());
+    Dataset<String> ds1 = context.read().text(getResource("text-suite.txt"));
     Assert.assertEquals(4L, ds1.count());
 
     Dataset<String> ds2 = context.read().text(
-      Thread.currentThread().getContextClassLoader().getResource("text-suite.txt").toString(),
-      Thread.currentThread().getContextClassLoader().getResource("text-suite2.txt").toString());
+      getResource("text-suite.txt"),
+      getResource("text-suite2.txt"));
     Assert.assertEquals(5L, ds2.count());
   }
 
   @Test
   public void testCountMinSketch() {
-    Dataset df = context.range(1000);
+    Dataset<Long> df = context.range(1000);
 
     CountMinSketch sketch1 = df.stat().countMinSketch("id", 10, 20, 42);
     Assert.assertEquals(sketch1.totalCount(), 1000);
@@ -353,7 +371,7 @@ public class JavaDataFrameSuite {
 
   @Test
   public void testBloomFilter() {
-    Dataset df = context.range(1000);
+    Dataset<Long> df = context.range(1000);
 
     BloomFilter filter1 = df.stat().bloomFilter("id", 1000, 0.03);
     Assert.assertTrue(filter1.expectedFpp() - 0.03 < 1e-3);

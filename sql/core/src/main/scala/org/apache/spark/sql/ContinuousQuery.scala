@@ -35,10 +35,10 @@ trait ContinuousQuery {
   def name: String
 
   /**
-   * Returns the SQLContext associated with `this` query
+   * Returns the [[SparkSession]] associated with `this`.
    * @since 2.0.0
    */
-  def sqlContext: SQLContext
+  def sparkSession: SparkSession
 
   /**
    * Whether the query is currently active or not
@@ -56,7 +56,7 @@ trait ContinuousQuery {
    * Returns current status of all the sources.
    * @since 2.0.0
    */
-   def sourceStatuses: Array[SourceStatus]
+  def sourceStatuses: Array[SourceStatus]
 
   /** Returns current status of the sink. */
   def sinkStatus: SinkStatus
@@ -77,7 +77,7 @@ trait ContinuousQuery {
 
   /**
    * Waits for the termination of `this` query, either by `query.stop()` or by an exception.
-   * If the query has terminated with an exception, then the exception will be throw.
+   * If the query has terminated with an exception, then the exception will be thrown.
    * Otherwise, it returns whether the query has terminated or not within the `timeoutMs`
    * milliseconds.
    *
@@ -90,6 +90,15 @@ trait ContinuousQuery {
    * @since 2.0.0
    */
   def awaitTermination(timeoutMs: Long): Boolean
+
+  /**
+   * Blocks until all available data in the source has been processed an committed to the sink.
+   * This method is intended for testing. Note that in the case of continually arriving data, this
+   * method may block forever. Additionally, this method is only guaranteed to block until data that
+   * has been synchronously appended data to a [[org.apache.spark.sql.execution.streaming.Source]]
+   * prior to invocation. (i.e. `getOffset` must immediately reflect the addition).
+   */
+  def processAllAvailable(): Unit
 
   /**
    * Stops the execution of this query if it is running. This method blocks until the threads

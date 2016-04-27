@@ -85,17 +85,19 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
   }
 
   class MockSplitInfo(host: String) extends SplitInfo(null, host, null, 1, null) {
+    override def hashCode(): Int = 0
     override def equals(other: Any): Boolean = false
   }
 
   def createAllocator(maxExecutors: Int = 5): YarnAllocator = {
     val args = Array(
-      "--executor-cores", "5",
-      "--executor-memory", "2048",
       "--jar", "somejar.jar",
       "--class", "SomeClass")
     val sparkConfClone = sparkConf.clone()
-    sparkConfClone.set("spark.executor.instances", maxExecutors.toString)
+    sparkConfClone
+      .set("spark.executor.instances", maxExecutors.toString)
+      .set("spark.executor.cores", "5")
+      .set("spark.executor.memory", "2048")
     new YarnAllocator(
       "not used",
       mock(classOf[RpcEndpointRef]),
@@ -103,8 +105,8 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       sparkConfClone,
       rmClient,
       appAttemptId,
-      new ApplicationMasterArguments(args),
-      new SecurityManager(sparkConf))
+      new SecurityManager(sparkConf),
+      Map())
   }
 
   def createContainer(host: String): Container = {

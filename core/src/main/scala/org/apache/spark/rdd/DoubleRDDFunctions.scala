@@ -17,7 +17,8 @@
 
 package org.apache.spark.rdd
 
-import org.apache.spark.{Logging, TaskContext}
+import org.apache.spark.TaskContext
+import org.apache.spark.internal.Logging
 import org.apache.spark.partial.BoundedDouble
 import org.apache.spark.partial.MeanEvaluator
 import org.apache.spark.partial.PartialResult
@@ -165,8 +166,8 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
       val counters = new Array[Long](buckets.length - 1)
       while (iter.hasNext) {
         bucketFunction(iter.next()) match {
-          case Some(x: Int) => {counters(x) += 1}
-          case _ => {}
+          case Some(x: Int) => counters(x) += 1
+          case _ => // No-Op
         }
       }
       Iterator(counters)

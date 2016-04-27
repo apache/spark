@@ -20,6 +20,10 @@ package org.apache.spark.sql.catalyst.catalog
 import javax.annotation.Nullable
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.parser.DataTypeParser
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
 
 
 /**
@@ -36,7 +40,7 @@ abstract class ExternalCatalog {
 
   protected def requireDbExists(db: String): Unit = {
     if (!databaseExists(db)) {
-      throw new AnalysisException(s"Database $db does not exist")
+      throw new AnalysisException(s"Database '$db' does not exist")
     }
   }
 
@@ -88,9 +92,30 @@ abstract class ExternalCatalog {
 
   def getTable(db: String, table: String): CatalogTable
 
+  def getTableOption(db: String, table: String): Option[CatalogTable]
+
+  def tableExists(db: String, table: String): Boolean
+
   def listTables(db: String): Seq[String]
 
   def listTables(db: String, pattern: String): Seq[String]
+
+  def loadTable(
+      db: String,
+      table: String,
+      loadPath: String,
+      isOverwrite: Boolean,
+      holdDDLTime: Boolean): Unit
+
+  def loadPartition(
+      db: String,
+      table: String,
+      loadPath: String,
+      partition: TablePartitionSpec,
+      isOverwrite: Boolean,
+      holdDDLTime: Boolean,
+      inheritTableSpecs: Boolean,
+      isSkewedStoreAsSubdir: Boolean): Unit
 
   // --------------------------------------------------------------------------
   // Partitions
@@ -145,16 +170,9 @@ abstract class ExternalCatalog {
 
   def renameFunction(db: String, oldName: String, newName: String): Unit
 
-  /**
-   * Alter a function whose name that matches the one specified in `funcDefinition`,
-   * assuming the function exists.
-   *
-   * Note: If the underlying implementation does not support altering a certain field,
-   * this becomes a no-op.
-   */
-  def alterFunction(db: String, funcDefinition: CatalogFunction): Unit
-
   def getFunction(db: String, funcName: String): CatalogFunction
+
+  def functionExists(db: String, funcName: String): Boolean
 
   def listFunctions(db: String, pattern: String): Seq[String]
 
@@ -164,10 +182,15 @@ abstract class ExternalCatalog {
 /**
  * A function defined in the catalog.
  *
- * @param name name of the function
+ * @param identifier name of the function
  * @param className fully qualified class name, e.g. "org.apache.spark.util.MyFunc"
+ * @param resources resource types and Uris used by the function
  */
-case class CatalogFunction(name: String, className: String)
+// TODO: Use FunctionResource instead of (String, String) as the element type of resources.
+case class CatalogFunction(
+    identifier: FunctionIdentifier,
+    className: String,
+    resources: Seq[(String, String)])
 
 
 /**
@@ -211,27 +234,42 @@ case class CatalogTablePartition(
  * future once we have a better understanding of how we want to handle skewed columns.
  */
 case class CatalogTable(
-    specifiedDatabase: Option[String],
-    name: String,
+    identifier: TableIdentifier,
     tableType: CatalogTableType,
     storage: CatalogStorageFormat,
     schema: Seq[CatalogColumn],
-    partitionColumns: Seq[CatalogColumn] = Seq.empty,
-    sortColumns: Seq[CatalogColumn] = Seq.empty,
-    numBuckets: Int = 0,
+    partitionColumnNames: Seq[String] = Seq.empty,
+    sortColumnNames: Seq[String] = Seq.empty,
+    bucketColumnNames: Seq[String] = Seq.empty,
+    numBuckets: Int = -1,
     createTime: Long = System.currentTimeMillis,
-    lastAccessTime: Long = System.currentTimeMillis,
+    lastAccessTime: Long = -1,
     properties: Map[String, String] = Map.empty,
     viewOriginalText: Option[String] = None,
-    viewText: Option[String] = None) {
+    viewText: Option[String] = None,
+    comment: Option[String] = None) {
+
+  // Verify that the provided columns are part of the schema
+  private val colNames = schema.map(_.name).toSet
+  private def requireSubsetOfSchema(cols: Seq[String], colType: String): Unit = {
+    require(cols.toSet.subsetOf(colNames), s"$colType columns (${cols.mkString(", ")}) " +
+      s"must be a subset of schema (${colNames.mkString(", ")}) in table '$identifier'")
+  }
+  requireSubsetOfSchema(partitionColumnNames, "partition")
+  requireSubsetOfSchema(sortColumnNames, "sort")
+  requireSubsetOfSchema(bucketColumnNames, "bucket")
+
+  /** Columns this table is partitioned by. */
+  def partitionColumns: Seq[CatalogColumn] =
+    schema.filter { c => partitionColumnNames.contains(c.name) }
 
   /** Return the database this table was specified to belong to, assuming it exists. */
-  def database: String = specifiedDatabase.getOrElse {
-    throw new AnalysisException(s"table $name did not specify database")
+  def database: String = identifier.database.getOrElse {
+    throw new AnalysisException(s"table $identifier did not specify database")
   }
 
   /** Return the fully qualified name of this table, assuming the database was specified. */
-  def qualifiedName: String = s"$database.$name"
+  def qualifiedName: String = identifier.unquotedString
 
   /** Syntactic sugar to update a field in `storage`. */
   def withNewStorage(
@@ -271,4 +309,46 @@ object ExternalCatalog {
    * Specifications of a table partition. Mapping column name to column value.
    */
   type TablePartitionSpec = Map[String, String]
+}
+
+
+/**
+ * An interface that is implemented by logical plans to return the underlying catalog table.
+ * If we can in the future consolidate SimpleCatalogRelation and MetastoreRelation, we should
+ * probably remove this interface.
+ */
+trait CatalogRelation {
+  def catalogTable: CatalogTable
+  def output: Seq[Attribute]
+}
+
+
+/**
+ * A [[LogicalPlan]] that wraps [[CatalogTable]].
+ *
+ * Note that in the future we should consolidate this and HiveCatalogRelation.
+ */
+case class SimpleCatalogRelation(
+    databaseName: String,
+    metadata: CatalogTable,
+    alias: Option[String] = None)
+  extends LeafNode with CatalogRelation {
+
+  override def catalogTable: CatalogTable = metadata
+
+  override val output: Seq[Attribute] = {
+    val cols = catalogTable.schema
+      .filter { c => !catalogTable.partitionColumnNames.contains(c.name) }
+    (cols ++ catalogTable.partitionColumns).map { f =>
+      AttributeReference(
+        f.name,
+        DataTypeParser.parse(f.dataType),
+        // Since data can be dumped in randomly with no validation, everything is nullable.
+        nullable = true
+      )(qualifier = Some(alias.getOrElse(metadata.identifier.table)))
+    }
+  }
+
+  require(metadata.identifier.database == Some(databaseName),
+    "provided database does not match the one specified in the table definition")
 }

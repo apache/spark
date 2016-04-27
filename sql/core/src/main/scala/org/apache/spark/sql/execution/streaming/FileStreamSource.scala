@@ -19,10 +19,10 @@ package org.apache.spark.sql.execution.streaming
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.Path
 
-import org.apache.spark.Logging
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.collection.OpenHashSet
 
@@ -32,38 +32,19 @@ import org.apache.spark.util.collection.OpenHashSet
  * TODO Clean up the metadata files periodically
  */
 class FileStreamSource(
-    sqlContext: SQLContext,
+    sparkSession: SparkSession,
     metadataPath: String,
     path: String,
-    dataSchema: Option[StructType],
-    providerName: String,
+    override val schema: StructType,
     dataFrameBuilder: Array[String] => DataFrame) extends Source with Logging {
 
-  private val fs = FileSystem.get(sqlContext.sparkContext.hadoopConfiguration)
-  private val metadataLog = new HDFSMetadataLog[Seq[String]](sqlContext, metadataPath)
+  private val fs = new Path(path).getFileSystem(sparkSession.sessionState.hadoopConf)
+  private val metadataLog = new HDFSMetadataLog[Seq[String]](sparkSession, metadataPath)
   private var maxBatchId = metadataLog.getLatest().map(_._1).getOrElse(-1L)
 
   private val seenFiles = new OpenHashSet[String]
-  metadataLog.get(None, maxBatchId).foreach { case (batchId, files) =>
+  metadataLog.get(None, Some(maxBatchId)).foreach { case (batchId, files) =>
     files.foreach(seenFiles.add)
-  }
-
-  /** Returns the schema of the data from this source */
-  override lazy val schema: StructType = {
-    dataSchema.getOrElse {
-      val filesPresent = fetchAllFiles()
-      if (filesPresent.isEmpty) {
-        if (providerName == "text") {
-          // Add a default schema for "text"
-          new StructType().add("value", StringType)
-        } else {
-          throw new IllegalArgumentException("No schema specified")
-        }
-      } else {
-        // There are some existing files. Use them to infer the schema.
-        dataFrameBuilder(filesPresent.toArray).schema
-      }
-    }
   }
 
   /**
@@ -109,25 +90,28 @@ class FileStreamSource(
   /**
    * Returns the next batch of data that is available after `start`, if any is available.
    */
-  override def getNextBatch(start: Option[Offset]): Option[Batch] = {
+  override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
     val startId = start.map(_.asInstanceOf[LongOffset].offset).getOrElse(-1L)
-    val end = fetchMaxOffset()
-    val endId = end.offset
+    val endId = end.asInstanceOf[LongOffset].offset
 
-    if (startId + 1 <= endId) {
-      val files = metadataLog.get(Some(startId + 1), endId).map(_._2).flatten
-      logDebug(s"Return files from batches ${startId + 1}:$endId")
-      logDebug(s"Streaming ${files.mkString(", ")}")
-      Some(new Batch(end, dataFrameBuilder(files)))
-    }
-    else {
-      None
-    }
+    assert(startId <= endId)
+    val files = metadataLog.get(Some(startId + 1), Some(endId)).map(_._2).flatten
+    logInfo(s"Processing ${files.length} files from ${startId + 1}:$endId")
+    logDebug(s"Streaming ${files.mkString(", ")}")
+    dataFrameBuilder(files)
   }
 
   private def fetchAllFiles(): Seq[String] = {
-    fs.listStatus(new Path(path))
+    val startTime = System.nanoTime()
+    val files = fs.listStatus(new Path(path))
       .filterNot(_.getPath.getName.startsWith("_"))
       .map(_.getPath.toUri.toString)
+    val endTime = System.nanoTime()
+    logDebug(s"Listed ${files.size} in ${(endTime.toDouble - startTime) / 1000000}ms")
+    files
   }
+
+  override def getOffset: Option[Offset] = Some(fetchMaxOffset()).filterNot(_.offset == -1)
+
+  override def toString: String = s"FileSource[$path]"
 }

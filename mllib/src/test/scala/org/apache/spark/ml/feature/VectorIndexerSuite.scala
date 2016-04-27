@@ -19,7 +19,8 @@ package org.apache.spark.ml.feature
 
 import scala.beans.{BeanInfo, BeanProperty}
 
-import org.apache.spark.{Logging, SparkException, SparkFunSuite}
+import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.internal.Logging
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}

@@ -20,6 +20,8 @@ package org.apache.spark.sql.jdbc
 import java.sql.Connection
 import java.util.Properties
 
+import org.scalatest.Ignore
+
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.tags.DockerTest
 
@@ -44,6 +46,7 @@ import org.apache.spark.tags.DockerTest
  * repository.
  */
 @DockerTest
+@Ignore
 class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLContext {
   import testImplicits._
 
@@ -52,15 +55,17 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
     override val env = Map(
       "ORACLE_ROOT_PASSWORD" -> "oracle"
     )
+    override val usesIpc = false
     override val jdbcPort: Int = 1521
     override def getJdbcUrl(ip: String, port: Int): String =
       s"jdbc:oracle:thin:system/oracle@//$ip:$port/xe"
+    override def getStartupProcessName: Option[String] = None
   }
 
   override def dataPreparation(conn: Connection): Unit = {
   }
 
-  ignore("SPARK-12941: String datatypes to be mapped to Varchar in Oracle") {
+  test("SPARK-12941: String datatypes to be mapped to Varchar in Oracle") {
     // create a sample dataframe with string type
     val df1 = sparkContext.parallelize(Seq(("foo"))).toDF("x")
     // write the dataframe to the oracle table tbl

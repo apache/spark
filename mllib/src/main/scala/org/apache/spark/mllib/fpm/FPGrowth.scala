@@ -29,10 +29,11 @@ import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods.{compact, render}
 
-import org.apache.spark.{HashPartitioner, Logging, Partitioner, SparkContext, SparkException}
+import org.apache.spark.{HashPartitioner, Partitioner, SparkContext, SparkException}
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
+import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.fpm.FPGrowth._
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
@@ -179,6 +180,8 @@ class FPGrowth private (
    */
   @Since("1.3.0")
   def setMinSupport(minSupport: Double): this.type = {
+    require(minSupport >= 0.0 && minSupport <= 1.0,
+      s"Minimal support level must be in range [0, 1] but got ${minSupport}")
     this.minSupport = minSupport
     this
   }
@@ -189,6 +192,8 @@ class FPGrowth private (
    */
   @Since("1.3.0")
   def setNumPartitions(numPartitions: Int): this.type = {
+    require(numPartitions > 0,
+      s"Number of partitions must be positive but got ${numPartitions}")
     this.numPartitions = numPartitions
     this
   }

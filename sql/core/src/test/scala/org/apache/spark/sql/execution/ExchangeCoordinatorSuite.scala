@@ -342,7 +342,7 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
           sqlContext
             .range(0, 1000)
             .selectExpr("id % 500 as key", "id as value")
-            .unionAll(sqlContext.range(0, 1000).selectExpr("id % 500 as key", "id as value"))
+            .union(sqlContext.range(0, 1000).selectExpr("id % 500 as key", "id as value"))
         checkAnswer(
           join,
           expectedAnswer.collect())

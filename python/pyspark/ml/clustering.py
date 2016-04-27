@@ -15,17 +15,161 @@
 # limitations under the License.
 #
 
-from pyspark import since
+from pyspark import since, keyword_only
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel
 from pyspark.ml.param.shared import *
 from pyspark.mllib.common import inherit_doc
 
 __all__ = ['BisectingKMeans', 'BisectingKMeansModel',
-           'KMeans', 'KMeansModel']
+           'KMeans', 'KMeansModel',
+           'GaussianMixture', 'GaussianMixtureModel']
 
 
-class KMeansModel(JavaModel, MLWritable, MLReadable):
+class GaussianMixtureModel(JavaModel, JavaMLWritable, JavaMLReadable):
+    """
+    .. note:: Experimental
+
+    Model fitted by GaussianMixture.
+
+    .. versionadded:: 2.0.0
+    """
+
+    @property
+    @since("2.0.0")
+    def weights(self):
+        """
+        Weights for each Gaussian distribution in the mixture, where weights[i] is
+        the weight for Gaussian i, and weights.sum == 1.
+        """
+        return self._call_java("weights")
+
+    @property
+    @since("2.0.0")
+    def gaussiansDF(self):
+        """
+        Retrieve Gaussian distributions as a DataFrame.
+        Each row represents a Gaussian Distribution.
+        Two columns are defined: mean and cov.
+        Schema:
+        root
+        -- mean: vector (nullable = true)
+        -- cov: matrix (nullable = true)
+        """
+        return self._call_java("gaussiansDF")
+
+
+@inherit_doc
+class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol, HasSeed,
+                      HasProbabilityCol, JavaMLWritable, JavaMLReadable):
+    """
+    .. note:: Experimental
+
+    GaussianMixture clustering.
+
+    >>> from pyspark.mllib.linalg import Vectors
+
+    >>> data = [(Vectors.dense([-0.1, -0.05 ]),),
+    ...         (Vectors.dense([-0.01, -0.1]),),
+    ...         (Vectors.dense([0.9, 0.8]),),
+    ...         (Vectors.dense([0.75, 0.935]),),
+    ...         (Vectors.dense([-0.83, -0.68]),),
+    ...         (Vectors.dense([-0.91, -0.76]),)]
+    >>> df = sqlContext.createDataFrame(data, ["features"])
+    >>> gm = GaussianMixture(k=3, tol=0.0001,
+    ...                      maxIter=10, seed=10)
+    >>> model = gm.fit(df)
+    >>> weights = model.weights
+    >>> len(weights)
+    3
+    >>> model.gaussiansDF.show()
+    +--------------------+--------------------+
+    |                mean|                 cov|
+    +--------------------+--------------------+
+    |[-0.0550000000000...|0.002025000000000...|
+    |[0.82499999999999...|0.005625000000000...|
+    |[-0.87,-0.7200000...|0.001600000000000...|
+    +--------------------+--------------------+
+    ...
+    >>> transformed = model.transform(df).select("features", "prediction")
+    >>> rows = transformed.collect()
+    >>> rows[4].prediction == rows[5].prediction
+    True
+    >>> rows[2].prediction == rows[3].prediction
+    True
+    >>> gmm_path = temp_path + "/gmm"
+    >>> gm.save(gmm_path)
+    >>> gm2 = GaussianMixture.load(gmm_path)
+    >>> gm2.getK()
+    3
+    >>> model_path = temp_path + "/gmm_model"
+    >>> model.save(model_path)
+    >>> model2 = GaussianMixtureModel.load(model_path)
+    >>> model2.weights == model.weights
+    True
+    >>> model2.gaussiansDF.show()
+    +--------------------+--------------------+
+    |                mean|                 cov|
+    +--------------------+--------------------+
+    |[-0.0550000000000...|0.002025000000000...|
+    |[0.82499999999999...|0.005625000000000...|
+    |[-0.87,-0.7200000...|0.001600000000000...|
+    +--------------------+--------------------+
+    ...
+
+    .. versionadded:: 2.0.0
+    """
+
+    k = Param(Params._dummy(), "k", "number of clusters to create",
+              typeConverter=TypeConverters.toInt)
+
+    @keyword_only
+    def __init__(self, featuresCol="features", predictionCol="prediction", k=2,
+                 probabilityCol="probability", tol=0.01, maxIter=100, seed=None):
+        """
+        __init__(self, featuresCol="features", predictionCol="prediction", k=2, \
+                 probabilityCol="probability", tol=0.01, maxIter=100, seed=None)
+        """
+        super(GaussianMixture, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.clustering.GaussianMixture",
+                                            self.uid)
+        self._setDefault(k=2, tol=0.01, maxIter=100)
+        kwargs = self.__init__._input_kwargs
+        self.setParams(**kwargs)
+
+    def _create_model(self, java_model):
+        return GaussianMixtureModel(java_model)
+
+    @keyword_only
+    @since("2.0.0")
+    def setParams(self, featuresCol="features", predictionCol="prediction", k=2,
+                  probabilityCol="probability", tol=0.01, maxIter=100, seed=None):
+        """
+        setParams(self, featuresCol="features", predictionCol="prediction", k=2, \
+                  probabilityCol="probability", tol=0.01, maxIter=100, seed=None)
+
+        Sets params for GaussianMixture.
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
+
+    @since("2.0.0")
+    def setK(self, value):
+        """
+        Sets the value of :py:attr:`k`.
+        """
+        self._set(k=value)
+        return self
+
+    @since("2.0.0")
+    def getK(self):
+        """
+        Gets the value of `k`
+        """
+        return self.getOrDefault(self.k)
+
+
+class KMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
     Model fitted by KMeans.
 
@@ -48,11 +192,10 @@ class KMeansModel(JavaModel, MLWritable, MLReadable):
 
 @inherit_doc
 class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol, HasSeed,
-             MLWritable, MLReadable):
+             JavaMLWritable, JavaMLReadable):
     """
-    K-means clustering with support for multiple parallel runs and a k-means++ like initialization
-    mode (the k-means|| algorithm by Bahmani et al). When multiple concurrent runs are requested,
-    they are executed together with joint passes over the data for efficiency.
+    K-means clustering with a k-means++ like initialization mode
+    (the k-means|| algorithm by Bahmani et al).
 
     >>> from pyspark.mllib.linalg import Vectors
     >>> data = [(Vectors.dense([0.0, 0.0]),), (Vectors.dense([1.0, 1.0]),),
@@ -87,12 +230,15 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
     .. versionadded:: 1.5.0
     """
 
-    k = Param(Params._dummy(), "k", "number of clusters to create")
+    k = Param(Params._dummy(), "k", "number of clusters to create",
+              typeConverter=TypeConverters.toInt)
     initMode = Param(Params._dummy(), "initMode",
                      "the initialization algorithm. This can be either \"random\" to " +
                      "choose random points as initial cluster centers, or \"k-means||\" " +
-                     "to use a parallel variant of k-means++")
-    initSteps = Param(Params._dummy(), "initSteps", "steps for k-means initialization mode")
+                     "to use a parallel variant of k-means++",
+                     typeConverter=TypeConverters.toString)
+    initSteps = Param(Params._dummy(), "initSteps", "steps for k-means initialization mode",
+                      typeConverter=TypeConverters.toInt)
 
     @keyword_only
     def __init__(self, featuresCol="features", predictionCol="prediction", k=2,
@@ -128,7 +274,7 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
         """
         Sets the value of :py:attr:`k`.
         """
-        self._paramMap[self.k] = value
+        self._set(k=value)
         return self
 
     @since("1.5.0")
@@ -143,7 +289,7 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
         """
         Sets the value of :py:attr:`initMode`.
         """
-        self._paramMap[self.initMode] = value
+        self._set(initMode=value)
         return self
 
     @since("1.5.0")
@@ -158,7 +304,7 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
         """
         Sets the value of :py:attr:`initSteps`.
         """
-        self._paramMap[self.initSteps] = value
+        self._set(initSteps=value)
         return self
 
     @since("1.5.0")
@@ -169,7 +315,7 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
         return self.getOrDefault(self.initSteps)
 
 
-class BisectingKMeansModel(JavaModel):
+class BisectingKMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
     .. note:: Experimental
 
@@ -193,7 +339,8 @@ class BisectingKMeansModel(JavaModel):
 
 
 @inherit_doc
-class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasSeed):
+class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasSeed,
+                      JavaMLWritable, JavaMLReadable):
     """
     .. note:: Experimental
 
@@ -223,14 +370,28 @@ class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     True
     >>> rows[2].prediction == rows[3].prediction
     True
+    >>> bkm_path = temp_path + "/bkm"
+    >>> bkm.save(bkm_path)
+    >>> bkm2 = BisectingKMeans.load(bkm_path)
+    >>> bkm2.getK()
+    2
+    >>> model_path = temp_path + "/bkm_model"
+    >>> model.save(model_path)
+    >>> model2 = BisectingKMeansModel.load(model_path)
+    >>> model.clusterCenters()[0] == model2.clusterCenters()[0]
+    array([ True,  True], dtype=bool)
+    >>> model.clusterCenters()[1] == model2.clusterCenters()[1]
+    array([ True,  True], dtype=bool)
 
     .. versionadded:: 2.0.0
     """
 
-    k = Param(Params._dummy(), "k", "number of clusters to create")
+    k = Param(Params._dummy(), "k", "number of clusters to create",
+              typeConverter=TypeConverters.toInt)
     minDivisibleClusterSize = Param(Params._dummy(), "minDivisibleClusterSize",
                                     "the minimum number of points (if >= 1.0) " +
-                                    "or the minimum proportion")
+                                    "or the minimum proportion",
+                                    typeConverter=TypeConverters.toFloat)
 
     @keyword_only
     def __init__(self, featuresCol="features", predictionCol="prediction", maxIter=20,
@@ -263,7 +424,7 @@ class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
         """
         Sets the value of :py:attr:`k`.
         """
-        self._paramMap[self.k] = value
+        self._set(k=value)
         return self
 
     @since("2.0.0")
@@ -278,7 +439,7 @@ class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
         """
         Sets the value of :py:attr:`minDivisibleClusterSize`.
         """
-        self._paramMap[self.minDivisibleClusterSize] = value
+        self._set(minDivisibleClusterSize=value)
         return self
 
     @since("2.0.0")

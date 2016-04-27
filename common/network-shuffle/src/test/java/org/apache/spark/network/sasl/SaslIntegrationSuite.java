@@ -212,14 +212,16 @@ public class SaslIntegrationSuite {
       };
 
       String[] blockIds = { "shuffle_2_3_4", "shuffle_6_7_8" };
-      OneForOneBlockFetcher fetcher = new OneForOneBlockFetcher(client1, "app-2", "0", blockIds, listener);
+      OneForOneBlockFetcher fetcher =
+          new OneForOneBlockFetcher(client1, "app-2", "0", blockIds, listener);
       fetcher.start();
       blockFetchLatch.await();
       checkSecurityException(exception.get());
 
       // Register an executor so that the next steps work.
       ExecutorShuffleInfo executorInfo = new ExecutorShuffleInfo(
-        new String[] { System.getProperty("java.io.tmpdir") }, 1, "sort");
+        new String[] { System.getProperty("java.io.tmpdir") }, 1,
+          "org.apache.spark.shuffle.sort.SortShuffleManager");
       RegisterExecutor regmsg = new RegisterExecutor("app-1", "0", executorInfo);
       client1.sendRpcSync(regmsg.toByteBuffer(), TIMEOUT_MS);
 

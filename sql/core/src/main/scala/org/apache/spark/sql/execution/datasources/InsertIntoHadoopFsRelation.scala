@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import java.io.IOException
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
@@ -31,8 +32,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.RunnableCommand
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources._
-import org.apache.spark.util.Utils
 
 /**
  * A command for writing data to a [[HadoopFsRelation]].  Supports both overwriting and appending.
@@ -69,7 +68,7 @@ private[sql] case class InsertIntoHadoopFsRelation(
 
   override def children: Seq[LogicalPlan] = query :: Nil
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
+  override def run(sparkSession: SparkSession): Seq[Row] = {
     // Most formats don't do well with duplicate columns, so lets not allow that
     if (query.schema.fieldNames.length != query.schema.fieldNames.distinct.length) {
       val duplicateColumns = query.schema.fieldNames.groupBy(identity).collect {
@@ -79,7 +78,7 @@ private[sql] case class InsertIntoHadoopFsRelation(
           s"cannot save to file.")
     }
 
-    val hadoopConf = sqlContext.sparkContext.hadoopConfiguration
+    val hadoopConf = new Configuration(sparkSession.sessionState.hadoopConf)
     val fs = outputPath.getFileSystem(hadoopConf)
     val qualifiedOutputPath = outputPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
 
@@ -88,11 +87,9 @@ private[sql] case class InsertIntoHadoopFsRelation(
       case (SaveMode.ErrorIfExists, true) =>
         throw new AnalysisException(s"path $qualifiedOutputPath already exists.")
       case (SaveMode.Overwrite, true) =>
-        Utils.tryOrIOException {
-          if (!fs.delete(qualifiedOutputPath, true /* recursively */)) {
-            throw new IOException(s"Unable to clear output " +
-              s"directory $qualifiedOutputPath prior to writing to it")
-          }
+        if (!fs.delete(qualifiedOutputPath, true /* recursively */)) {
+          throw new IOException(s"Unable to clear output " +
+            s"directory $qualifiedOutputPath prior to writing to it")
         }
         true
       case (SaveMode.Append, _) | (SaveMode.Overwrite, _) | (SaveMode.ErrorIfExists, false) =>
@@ -109,19 +106,23 @@ private[sql] case class InsertIntoHadoopFsRelation(
       val job = Job.getInstance(hadoopConf)
       job.setOutputKeyClass(classOf[Void])
       job.setOutputValueClass(classOf[InternalRow])
+
+      // Also set the options in Hadoop Configuration
+      options.foreach { case (k, v) => if (v ne null) job.getConfiguration.set(k, v) }
+
       FileOutputFormat.setOutputPath(job, qualifiedOutputPath)
 
       val partitionSet = AttributeSet(partitionColumns)
       val dataColumns = query.output.filterNot(partitionSet.contains)
 
-      val queryExecution = Dataset.newDataFrame(sqlContext, query).queryExecution
-      SQLExecution.withNewExecutionId(sqlContext, queryExecution) {
+      val queryExecution = Dataset.ofRows(sparkSession, query).queryExecution
+      SQLExecution.withNewExecutionId(sparkSession, queryExecution) {
         val relation =
           WriteRelation(
-            sqlContext,
+            sparkSession,
             dataColumns.toStructType,
             qualifiedOutputPath.toString,
-            fileFormat.prepareWrite(sqlContext, _, options, dataColumns.toStructType),
+            fileFormat.prepareWrite(sparkSession, _, options, dataColumns.toStructType),
             bucketSpec)
 
         val writerContainer = if (partitionColumns.isEmpty && bucketSpec.isEmpty) {
@@ -134,7 +135,7 @@ private[sql] case class InsertIntoHadoopFsRelation(
             dataColumns = dataColumns,
             inputSchema = query.output,
             PartitioningUtils.DEFAULT_PARTITION_NAME,
-            sqlContext.conf.getConf(SQLConf.PARTITION_MAX_FILES),
+            sparkSession.getConf(SQLConf.PARTITION_MAX_FILES),
             isAppend)
         }
 
@@ -143,7 +144,7 @@ private[sql] case class InsertIntoHadoopFsRelation(
         writerContainer.driverSideSetup()
 
         try {
-          sqlContext.sparkContext.runJob(queryExecution.toRdd, writerContainer.writeRows _)
+          sparkSession.sparkContext.runJob(queryExecution.toRdd, writerContainer.writeRows _)
           writerContainer.commitJob()
           refreshFunction()
         } catch { case cause: Throwable =>

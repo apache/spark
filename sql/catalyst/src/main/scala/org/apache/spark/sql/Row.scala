@@ -338,7 +338,7 @@ trait Row extends Serializable {
    * Returns the index of a given field name.
    *
    * @throws UnsupportedOperationException when schema is not defined.
-   * @throws IllegalArgumentException when fieldName do not exist.
+   * @throws IllegalArgumentException when a field `name` does not exist.
    */
   def fieldIndex(name: String): Int = {
     throw new UnsupportedOperationException("fieldIndex on a Row without schema is undefined.")

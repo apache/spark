@@ -36,7 +36,8 @@ import org.mockito.stubbing.Answer
 import org.scalatest.Matchers
 import org.scalatest.mock.MockitoSugar
 
-import org.apache.spark.{Logging, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.internal.Logging
 import org.apache.spark.status.api.v1.{ApplicationAttemptInfo => AttemptInfo, ApplicationInfo}
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{Clock, ManualClock, Utils}

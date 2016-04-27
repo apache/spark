@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.metric
 
+import java.text.NumberFormat
+
 import org.apache.spark.{Accumulable, AccumulableParam, Accumulators, SparkContext}
 import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.util.Utils
@@ -29,12 +31,11 @@ import org.apache.spark.util.Utils
  */
 private[sql] abstract class SQLMetric[R <: SQLMetricValue[T], T](
     name: String,
-    val param: SQLMetricParam[R, T])
-  extends Accumulable[R, T](param.zero, param, Some(name), internal = true) {
+    val param: SQLMetricParam[R, T]) extends Accumulable[R, T](param.zero, param, Some(name)) {
 
   // Provide special identifier as metadata so we can tell that this is a `SQLMetric` later
   override def toInfo(update: Option[Any], value: Option[Any]): AccumulableInfo = {
-    new AccumulableInfo(id, Some(name), update, value, isInternal, countFailedValues,
+    new AccumulableInfo(id, Some(name), update, value, true, countFailedValues,
       Some(SQLMetrics.ACCUM_IDENTIFIER))
   }
 
@@ -83,12 +84,12 @@ private[sql] class LongSQLMetricValue(private var _value : Long) extends SQLMetr
   override def value: Long = _value
 
   // Needed for SQLListenerSuite
-  override def equals(other: Any): Boolean = {
-    other match {
-      case o: LongSQLMetricValue => value == o.value
-      case _ => false
-    }
+  override def equals(other: Any): Boolean = other match {
+    case o: LongSQLMetricValue => value == o.value
+    case _ => false
   }
+
+  override def hashCode(): Int = _value.hashCode()
 }
 
 /**
@@ -120,9 +121,10 @@ private class LongSQLMetricParam(val stringValue: Seq[Long] => String, initialVa
   override def zero: LongSQLMetricValue = new LongSQLMetricValue(initialValue)
 }
 
-private object LongSQLMetricParam extends LongSQLMetricParam(_.sum.toString, 0L)
+private object LongSQLMetricParam
+  extends LongSQLMetricParam(x => NumberFormat.getInstance().format(x.sum), 0L)
 
-private object StaticsLongSQLMetricParam extends LongSQLMetricParam(
+private object StatisticsBytesSQLMetricParam extends LongSQLMetricParam(
   (values: Seq[Long]) => {
     // This is a workaround for SPARK-11013.
     // We use -1 as initial value of the accumulator, if the accumulator is valid, we will update
@@ -136,6 +138,24 @@ private object StaticsLongSQLMetricParam extends LongSQLMetricParam(
         Seq(sorted.sum, sorted(0), sorted(validValues.length / 2), sorted(validValues.length - 1))
       }
       metric.map(Utils.bytesToString)
+    }
+    s"\n$sum ($min, $med, $max)"
+  }, -1L)
+
+private object StatisticsTimingSQLMetricParam extends LongSQLMetricParam(
+  (values: Seq[Long]) => {
+    // This is a workaround for SPARK-11013.
+    // We use -1 as initial value of the accumulator, if the accumulator is valid, we will update
+    // it at the end of task and the value will be at least 0.
+    val validValues = values.filter(_ >= 0)
+    val Seq(sum, min, med, max) = {
+      val metric = if (validValues.length == 0) {
+        Seq.fill(4)(0L)
+      } else {
+        val sorted = validValues.sorted
+        Seq(sorted.sum, sorted(0), sorted(validValues.length / 2), sorted(validValues.length - 1))
+      }
+      metric.map(Utils.msDurationToString)
     }
     s"\n$sum ($min, $med, $max)"
   }, -1L)
@@ -168,15 +188,24 @@ private[sql] object SQLMetrics {
     // The final result of this metric in physical operator UI may looks like:
     // data size total (min, med, max):
     // 100GB (100MB, 1GB, 10GB)
-    createLongMetric(sc, s"$name total (min, med, max)", StaticsLongSQLMetricParam)
+    createLongMetric(sc, s"$name total (min, med, max)", StatisticsBytesSQLMetricParam)
+  }
+
+  def createTimingMetric(sc: SparkContext, name: String): LongSQLMetric = {
+    // The final result of this metric in physical operator UI may looks like:
+    // duration(min, med, max):
+    // 5s (800ms, 1s, 2s)
+    createLongMetric(sc, s"$name total (min, med, max)", StatisticsTimingSQLMetricParam)
   }
 
   def getMetricParam(metricParamName: String): SQLMetricParam[SQLMetricValue[Any], Any] = {
     val longSQLMetricParam = Utils.getFormattedClassName(LongSQLMetricParam)
-    val staticsSQLMetricParam = Utils.getFormattedClassName(StaticsLongSQLMetricParam)
+    val bytesSQLMetricParam = Utils.getFormattedClassName(StatisticsBytesSQLMetricParam)
+    val timingsSQLMetricParam = Utils.getFormattedClassName(StatisticsTimingSQLMetricParam)
     val metricParam = metricParamName match {
       case `longSQLMetricParam` => LongSQLMetricParam
-      case `staticsSQLMetricParam` => StaticsLongSQLMetricParam
+      case `bytesSQLMetricParam` => StatisticsBytesSQLMetricParam
+      case `timingsSQLMetricParam` => StatisticsTimingSQLMetricParam
     }
     metricParam.asInstanceOf[SQLMetricParam[SQLMetricValue[Any], Any]]
   }

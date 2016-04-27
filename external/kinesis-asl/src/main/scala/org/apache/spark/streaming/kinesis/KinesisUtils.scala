@@ -225,51 +225,6 @@ object KinesisUtils {
    * Create an input stream that pulls messages from a Kinesis stream.
    * This uses the Kinesis Client Library (KCL) to pull messages from Kinesis.
    *
-   * Note:
-   *
-   *  - The AWS credentials will be discovered using the DefaultAWSCredentialsProviderChain
-   *    on the workers. See AWS documentation to understand how DefaultAWSCredentialsProviderChain
-   *    gets AWS credentials.
-   *  - The region of the `endpointUrl` will be used for DynamoDB and CloudWatch.
-   *  - The Kinesis application name used by the Kinesis Client Library (KCL) will be the app name
-   *    in [[org.apache.spark.SparkConf]].
-   *
-   * @param ssc StreamingContext object
-   * @param streamName   Kinesis stream name
-   * @param endpointUrl  Endpoint url of Kinesis service
-   *                     (e.g., https://kinesis.us-east-1.amazonaws.com)
-   * @param checkpointInterval  Checkpoint interval for Kinesis checkpointing.
-   *                            See the Kinesis Spark Streaming documentation for more
-   *                            details on the different types of checkpoints.
-   * @param initialPositionInStream  In the absence of Kinesis checkpoint info, this is the
-   *                                 worker's initial starting position in the stream.
-   *                                 The values are either the beginning of the stream
-   *                                 per Kinesis' limit of 24 hours
-   *                                 (InitialPositionInStream.TRIM_HORIZON) or
-   *                                 the tip of the stream (InitialPositionInStream.LATEST).
-   * @param storageLevel Storage level to use for storing the received objects
-   *                     StorageLevel.MEMORY_AND_DISK_2 is recommended.
-   */
-  @deprecated("use other forms of createStream", "1.4.0")
-  def createStream(
-      ssc: StreamingContext,
-      streamName: String,
-      endpointUrl: String,
-      checkpointInterval: Duration,
-      initialPositionInStream: InitialPositionInStream,
-      storageLevel: StorageLevel
-    ): ReceiverInputDStream[Array[Byte]] = {
-    ssc.withNamedScope("kinesis stream") {
-      new KinesisInputDStream[Array[Byte]](ssc, streamName, endpointUrl,
-        getRegionByEndpoint(endpointUrl), initialPositionInStream, ssc.sc.appName,
-        checkpointInterval, storageLevel, defaultMessageHandler, None)
-    }
-  }
-
-  /**
-   * Create an input stream that pulls messages from a Kinesis stream.
-   * This uses the Kinesis Client Library (KCL) to pull messages from Kinesis.
-   *
    * Note: The AWS credentials will be discovered using the DefaultAWSCredentialsProviderChain
    * on the workers. See AWS documentation to understand how DefaultAWSCredentialsProviderChain
    * gets the AWS credentials.
@@ -451,47 +406,6 @@ object KinesisUtils {
     createStream[Array[Byte]](jssc.ssc, kinesisAppName, streamName, endpointUrl, regionName,
       initialPositionInStream, checkpointInterval, storageLevel,
       defaultMessageHandler(_), awsAccessKeyId, awsSecretKey)
-  }
-
-  /**
-   * Create an input stream that pulls messages from a Kinesis stream.
-   * This uses the Kinesis Client Library (KCL) to pull messages from Kinesis.
-   *
-   * Note:
-   * - The AWS credentials will be discovered using the DefaultAWSCredentialsProviderChain
-   *   on the workers. See AWS documentation to understand how DefaultAWSCredentialsProviderChain
-   *   gets AWS credentials.
-   * - The region of the `endpointUrl` will be used for DynamoDB and CloudWatch.
-   * - The Kinesis application name used by the Kinesis Client Library (KCL) will be the app name in
-   *   [[org.apache.spark.SparkConf]].
-   *
-   * @param jssc Java StreamingContext object
-   * @param streamName   Kinesis stream name
-   * @param endpointUrl  Endpoint url of Kinesis service
-   *                     (e.g., https://kinesis.us-east-1.amazonaws.com)
-   * @param checkpointInterval  Checkpoint interval for Kinesis checkpointing.
-   *                            See the Kinesis Spark Streaming documentation for more
-   *                            details on the different types of checkpoints.
-   * @param initialPositionInStream  In the absence of Kinesis checkpoint info, this is the
-   *                                 worker's initial starting position in the stream.
-   *                                 The values are either the beginning of the stream
-   *                                 per Kinesis' limit of 24 hours
-   *                                 (InitialPositionInStream.TRIM_HORIZON) or
-   *                                 the tip of the stream (InitialPositionInStream.LATEST).
-   * @param storageLevel Storage level to use for storing the received objects
-   *                     StorageLevel.MEMORY_AND_DISK_2 is recommended.
-   */
-  @deprecated("use other forms of createStream", "1.4.0")
-  def createStream(
-      jssc: JavaStreamingContext,
-      streamName: String,
-      endpointUrl: String,
-      checkpointInterval: Duration,
-      initialPositionInStream: InitialPositionInStream,
-      storageLevel: StorageLevel
-    ): JavaReceiverInputDStream[Array[Byte]] = {
-    createStream(
-      jssc.ssc, streamName, endpointUrl, checkpointInterval, initialPositionInStream, storageLevel)
   }
 
   private def getRegionByEndpoint(endpointUrl: String): String = {

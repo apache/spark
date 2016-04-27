@@ -137,7 +137,7 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
       fs.delete(commonSummaryPath, true)
 
       df.write.mode(SaveMode.Append).parquet(path)
-      checkAnswer(sqlContext.read.parquet(path), df.unionAll(df))
+      checkAnswer(sqlContext.read.parquet(path), df.union(df))
 
       assert(fs.exists(summaryPath))
       assert(fs.exists(commonSummaryPath))
@@ -152,8 +152,8 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
       val df = sqlContext.read.parquet(path).filter('a === 0).select('b)
       val physicalPlan = df.queryExecution.sparkPlan
 
-      assert(physicalPlan.collect { case p: execution.Project => p }.length === 1)
-      assert(physicalPlan.collect { case p: execution.Filter => p }.length === 1)
+      assert(physicalPlan.collect { case p: execution.ProjectExec => p }.length === 1)
+      assert(physicalPlan.collect { case p: execution.FilterExec => p }.length === 1)
     }
   }
 

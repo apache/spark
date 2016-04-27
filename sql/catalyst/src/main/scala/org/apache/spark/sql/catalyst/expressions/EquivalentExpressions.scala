@@ -35,7 +35,8 @@ class EquivalentExpressions {
       case other: Expr => e.semanticEquals(other.e)
       case _ => false
     }
-    override val hashCode: Int = e.semanticHash()
+
+    override def hashCode: Int = e.semanticHash()
   }
 
   // For each expression, the set of equivalent expressions.
@@ -69,8 +70,17 @@ class EquivalentExpressions {
    */
   def addExprTree(root: Expression, ignoreLeaf: Boolean = true): Unit = {
     val skip = root.isInstanceOf[LeafExpression] && ignoreLeaf
-    // the children of CodegenFallback will not be used to generate code (call eval() instead)
-    if (!skip && !addExpr(root) && !root.isInstanceOf[CodegenFallback]) {
+    // There are some special expressions that we should not recurse into children.
+    //   1. CodegenFallback: it's children will not be used to generate code (call eval() instead)
+    //   2. ReferenceToExpressions: it's kind of an explicit sub-expression elimination.
+    val shouldRecurse = root match {
+      // TODO: some expressions implements `CodegenFallback` but can still do codegen,
+      // e.g. `CaseWhen`, we should support them.
+      case _: CodegenFallback => false
+      case _: ReferenceToExpressions => false
+      case _ => true
+    }
+    if (!skip && !addExpr(root) && shouldRecurse) {
       root.children.foreach(addExprTree(_, ignoreLeaf))
     }
   }
@@ -97,11 +107,11 @@ class EquivalentExpressions {
   def debugString(all: Boolean = false): String = {
     val sb: mutable.StringBuilder = new StringBuilder()
     sb.append("Equivalent expressions:\n")
-    equivalenceMap.foreach { case (k, v) => {
+    equivalenceMap.foreach { case (k, v) =>
       if (all || v.length > 1) {
         sb.append("  " + v.mkString(", ")).append("\n")
       }
-    }}
+    }
     sb.toString()
   }
 }

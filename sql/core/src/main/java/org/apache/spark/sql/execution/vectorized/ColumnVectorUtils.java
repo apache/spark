@@ -105,7 +105,7 @@ public class ColumnVectorUtils {
       int[] result = new int[array.length];
       ColumnVector data = array.data;
       for (int i = 0; i < result.length; i++) {
-        if (data.getIsNull(array.offset + i)) {
+        if (data.isNullAt(array.offset + i)) {
           throw new RuntimeException("Cannot handle NULL values.");
         }
         result[i] = data.getInt(array.offset + i);
@@ -142,9 +142,11 @@ public class ColumnVectorUtils {
         byte[] b =((String)o).getBytes(StandardCharsets.UTF_8);
         dst.appendByteArray(b, 0, b.length);
       } else if (t instanceof DecimalType) {
-        DecimalType dt = (DecimalType)t;
-        Decimal d = Decimal.apply((BigDecimal)o, dt.precision(), dt.scale());
-        if (dt.precision() <= Decimal.MAX_LONG_DIGITS()) {
+        DecimalType dt = (DecimalType) t;
+        Decimal d = Decimal.apply((BigDecimal) o, dt.precision(), dt.scale());
+        if (dt.precision() <= Decimal.MAX_INT_DIGITS()) {
+          dst.appendInt((int) d.toUnscaledLong());
+        } else if (dt.precision() <= Decimal.MAX_LONG_DIGITS()) {
           dst.appendLong(d.toUnscaledLong());
         } else {
           final BigInteger integer = d.toJavaBigDecimal().unscaledValue();

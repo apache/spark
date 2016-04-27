@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
 
-class SQLContextSuite extends SparkFunSuite with SharedSparkContext{
+class SQLContextSuite extends SparkFunSuite with SharedSparkContext {
 
   object DummyRule extends Rule[LogicalPlan] {
     def apply(p: LogicalPlan): LogicalPlan = p
@@ -78,4 +78,34 @@ class SQLContextSuite extends SparkFunSuite with SharedSparkContext{
     sqlContext.experimental.extraOptimizations = Seq(DummyRule)
     assert(sqlContext.sessionState.optimizer.batches.flatMap(_.rules).contains(DummyRule))
   }
+
+  test("SQLContext can access `spark.sql.*` configs") {
+    sc.conf.set("spark.sql.with.or.without.you", "my love")
+    val sqlContext = new SQLContext(sc)
+    assert(sqlContext.getConf("spark.sql.with.or.without.you") == "my love")
+  }
+
+  test("Hadoop conf interaction between SQLContext and SparkContext") {
+    val mySpecialKey = "mai.special.key"
+    val mySpecialValue = "msv"
+    try {
+      sc.hadoopConfiguration.set(mySpecialKey, mySpecialValue)
+      val sqlContext = SQLContext.getOrCreate(sc)
+      val sessionState = sqlContext.sessionState
+      assert(sessionState.hadoopConf.get(mySpecialKey) === mySpecialValue)
+      assert(sqlContext.runtimeConf.getHadoop(mySpecialKey) === mySpecialValue)
+      // mutating hadoop conf in SQL doesn't mutate the underlying one
+      sessionState.hadoopConf.set(mySpecialKey, "no no no")
+      assert(sessionState.hadoopConf.get(mySpecialKey) === "no no no")
+      assert(sqlContext.runtimeConf.getHadoop(mySpecialKey) === "no no no")
+      assert(sc.hadoopConfiguration.get(mySpecialKey) === mySpecialValue)
+      sqlContext.runtimeConf.setHadoop(mySpecialKey, "yes yes yes")
+      assert(sessionState.hadoopConf.get(mySpecialKey) === "yes yes yes")
+      assert(sqlContext.runtimeConf.getHadoop(mySpecialKey) === "yes yes yes")
+      assert(sc.hadoopConfiguration.get(mySpecialKey) === mySpecialValue)
+    } finally {
+      sc.hadoopConfiguration.unset(mySpecialKey)
+    }
+  }
+
 }
