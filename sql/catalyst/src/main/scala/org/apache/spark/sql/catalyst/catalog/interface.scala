@@ -117,6 +117,8 @@ abstract class ExternalCatalog {
       inheritTableSpecs: Boolean,
       isSkewedStoreAsSubdir: Boolean): Unit
 
+  def showCreateTable(db: String, table: String): String
+
   // --------------------------------------------------------------------------
   // Partitions
   // --------------------------------------------------------------------------

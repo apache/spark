@@ -239,6 +239,11 @@ private[spark] class HiveExternalCatalog(client: HiveClient) extends ExternalCat
       isSkewedStoreAsSubdir)
   }
 
+  override def showCreateTable(db: String, table: String): String = withClient {
+    require(this.tableExists(db, table), s"The table $db.$table does not exist.")
+    client.showCreateTable(db, table)
+  }
+
   // --------------------------------------------------------------------------
   // Partitions
   // --------------------------------------------------------------------------

@@ -226,6 +226,11 @@ class InMemoryCatalog extends ExternalCatalog {
     throw new AnalysisException("loadPartition is not implemented for InMemoryCatalog.")
   }
 
+  override def showCreateTable(db: String, table: String): String = {
+    throw new AnalysisException(
+      "SHOW CREATE TABLE command is not supported for temporary tables created in SQLContext.")
+  }
+
   // --------------------------------------------------------------------------
   // Partitions
   // --------------------------------------------------------------------------
