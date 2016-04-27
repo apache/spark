@@ -1394,43 +1394,6 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
-  test("derived from Hive query file: date_3.q") {
-    sql("drop table if exists date_3")
-    sql("create table date_3 (c1 int, c2 date)")
-    sql(
-      """
-        |insert overwrite table date_3
-        |select 1, cast(cast('2011-01-01 00:00:00' as timestamp) as date)
-        |from (select 1) temp
-      """.stripMargin)
-    checkAnswer(
-      sql("select c1, c2 from date_3"),
-      Row(1, java.sql.Date.valueOf("2011-01-01")))
-    sql("drop table date_3")
-  }
-
-  test("derived from Hive query file: input3.q") {
-    sql("drop table if exists TEST3a")
-    sql("CREATE TABLE TEST3b(A ARRAY<INT>, B DOUBLE, C MAP<DOUBLE, INT>) STORED AS TEXTFILE")
-    assert(tableNames().contains("test3b"))
-    sql("ALTER TABLE TEST3b RENAME TO TEST3c")
-    assert(tableNames().contains("test3c"))
-    sql("drop table test3c")
-    val names = tableNames()
-    assert(!names.contains("test3b") && !names.contains("test3c"))
-  }
-
-  test("derived from Hive query file: partition_schema1.q") {
-    sql("drop table if exists partition_schema1")
-    sql("create table partition_schema1(key int, value string) partitioned by (dt string)")
-    sql("insert overwrite table partition_schema1 partition(dt='100') select * from src1")
-    checkAnswer(
-      sql("select dt, key, value from partition_schema1"),
-      sql("select '100' as dt, key, value from src1")
-    )
-    sql("drop table partition_schema1")
-  }
-
   test("derived from Hive query file: drop_database_removes_partition_dirs.q") {
     // This test verifies that if a partition exists outside a table's current location when the
     // database is dropped the partition's location is dropped as well.

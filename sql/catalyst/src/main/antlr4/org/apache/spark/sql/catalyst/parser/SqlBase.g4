@@ -79,7 +79,16 @@ statement
         DROP (IF EXISTS)? partitionSpec (',' partitionSpec)* PURGE?    #dropTablePartitions
     | ALTER VIEW tableIdentifier
         DROP (IF EXISTS)? partitionSpec (',' partitionSpec)*           #dropTablePartitions
+    | ALTER TABLE tableIdentifier partitionSpec?
+        SET FILEFORMAT fileFormat                                      #setTableFileFormat
     | ALTER TABLE tableIdentifier partitionSpec? SET locationSpec      #setTableLocation
+    | ALTER TABLE tableIdentifier partitionSpec?
+        CHANGE COLUMN? oldName=identifier colType
+        (FIRST | AFTER after=identifier)? (CASCADE | RESTRICT)?        #changeColumn
+    | ALTER TABLE tableIdentifier partitionSpec?
+        ADD COLUMNS '(' colTypeList ')' (CASCADE | RESTRICT)?          #addColumns
+    | ALTER TABLE tableIdentifier partitionSpec?
+        REPLACE COLUMNS '(' colTypeList ')' (CASCADE | RESTRICT)?      #replaceColumns
     | DROP TABLE (IF EXISTS)? tableIdentifier PURGE?
         (FOR METADATA? REPLICATION '(' STRING ')')?                    #dropTable
     | DROP VIEW (IF EXISTS)? tableIdentifier                           #dropTable
@@ -169,10 +178,6 @@ unsupportedHiveNativeCommands
     | kw1=ROLLBACK
     | kw1=DFS
     | kw1=DELETE kw2=FROM
-    | kw1=ALTER kw2=TABLE tableIdentifier partitionSpec? kw3=ADD kw4=COLUMNS
-    | kw1=ALTER kw2=TABLE tableIdentifier partitionSpec? kw3=REPLACE kw4=COLUMNS
-    | kw1=ALTER kw2=TABLE tableIdentifier partitionSpec? kw3=SET kw4=FILEFORMAT
-    | kw1=ALTER kw2=TABLE tableIdentifier partitionSpec? kw3=CHANGE
     ;
 
 createTableHeader
