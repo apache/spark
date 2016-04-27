@@ -248,18 +248,13 @@ private[spark] object TaskMetrics extends Logging {
   }
 
   /**
-   * Construct a [[TaskMetrics]] object from a list of accumulator updates, called on driver only.
-   *
-   * Executors only send accumulator updates back to the driver, not [[TaskMetrics]]. However, we
-   * need the latter to post task end events to listeners, so we need to reconstruct the metrics
-   * on the driver.
-   *
-   * This assumes the provided updates contain the initial set of accumulators representing
-   * internal task level metrics.
+   * Construct a [[TaskMetrics]] object from a list of [[AccumulableInfo]], called on driver only.
+   * The returned [[TaskMetrics]] is only used to get some internal metrics, we don't need to take
+   * care of external accumulator info passed in.
    */
-  def fromAccumulatorUpdates(updates: Seq[AccumulableInfo]): TaskMetrics = {
+  def fromAccumulatorInfos(infos: Seq[AccumulableInfo]): TaskMetrics = {
     val tm = new TaskMetrics
-    updates.filter(info => info.name.isDefined && info.update.isDefined).foreach { info =>
+    infos.filter(info => info.name.isDefined && info.update.isDefined).foreach { info =>
       val name = info.name.get
       val value = info.update.get
       if (name == UPDATED_BLOCK_STATUSES) {
@@ -273,12 +268,21 @@ private[spark] object TaskMetrics extends Logging {
     tm
   }
 
+  /**
+   * Construct a [[TaskMetrics]] object from a list of accumulator updates, called on driver only.
+   */
   def fromAccumulators(accums: Seq[NewAccumulator[_, _]]): TaskMetrics = {
     val tm = new TaskMetrics
-    accums.filter(_.name.isDefined).foreach { acc =>
-      tm.nameToAccums.get(acc.name.get).foreach(_.asInstanceOf[NewAccumulator[Any, Any]]
-        .merge(acc.asInstanceOf[NewAccumulator[Any, Any]]))
+    val (internalAccums, externalAccums) =
+      accums.partition(a => a.name.isDefined && tm.nameToAccums.contains(a.name.get))
+
+    internalAccums.foreach { acc =>
+      val tmAcc = tm.nameToAccums(acc.name.get).asInstanceOf[NewAccumulator[Any, Any]]
+      tmAcc.metadata = acc.metadata
+      tmAcc.merge(acc.asInstanceOf[NewAccumulator[Any, Any]])
     }
+
+    tm.externalAccums ++= externalAccums
     tm
   }
 }
