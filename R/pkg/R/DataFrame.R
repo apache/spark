@@ -1237,29 +1237,38 @@ setMethod("[[", signature(x = "SparkDataFrame", i = "numericOrcharacter"),
 
 #' @rdname subset
 #' @name [
-setMethod("[", signature(x = "SparkDataFrame", i = "missing"),
-          function(x, i, j, ...) {
-            if (is.numeric(j)) {
-              cols <- columns(x)
-              j <- cols[j]
-            }
-            if (length(j) > 1) {
-              j <- as.list(j)
-            }
-            select(x, j)
-          })
-
-#' @rdname subset
-#' @name [
-setMethod("[", signature(x = "SparkDataFrame", i = "Column"),
-          function(x, i, j, ...) {
-            # It could handle i as "character" but it seems confusing and not required
-            # https://stat.ethz.ch/R-manual/R-devel/library/base/html/Extract.data.frame.html
-            filtered <- filter(x, i)
-            if (!missing(j)) {
-              filtered[, j, ...]
+setMethod("[", signature(x = "SparkDataFrame"),
+          function(x, i, j, ..., drop = F) {
+            # Perform filtering first if needed
+            filtered <- if (missing(i)) {
+              x
             } else {
+              if (class(i) != "Column") {
+                stop(paste0("Expressions other than filtering predicates are not supported ",
+                      "in the first parameter of extract operator [ or subset() method."))
+              }
+              filter(x, i)
+            }
+
+            # If something is to be projected, then do so on the filtered SparkDataFrame
+            if (missing(j)) {
               filtered
+            } else {
+              if (is.numeric(j)) {
+                cols <- columns(filtered)
+                j <- cols[j]
+              }
+              if (length(j) > 1) {
+                j <- as.list(j)
+              }
+              selected <- select(filtered, j)
+
+              # Acknowledge parameter drop. Return a Column or SparkDataFrame accordingly
+              if (ncol(selected) == 1 & drop == T) {
+                getColumn(selected, names(selected))
+              } else {
+                selected
+              }
             }
           })
 
@@ -1268,10 +1277,10 @@ setMethod("[", signature(x = "SparkDataFrame", i = "Column"),
 #' Return subsets of SparkDataFrame according to given conditions
 #' @param x A SparkDataFrame
 #' @param subset (Optional) A logical expression to filter on rows
-#' @param select expression for the single Column or a list of columns to select from the
-#' SparkDataFrame
-#' @return A new SparkDataFrame containing only the rows that meet the condition with selected
-#' columns
+#' @param select expression for the single Column or a list of columns to select from the SparkDataFrame
+#' @param drop if TRUE, a Column will be returned if the resulting dataset has only one column.
+#' Otherwise, a SparkDataFrame will always be returned.
+#' @return A new SparkDataFrame containing only the rows that meet the condition with selected columns
 #' @export
 #' @family SparkDataFrame functions
 #' @rdname subset
@@ -1293,12 +1302,8 @@ setMethod("[", signature(x = "SparkDataFrame", i = "Column"),
 #'   subset(df, select = c(1,2))
 #' }
 setMethod("subset", signature(x = "SparkDataFrame"),
-          function(x, subset, select, ...) {
-            if (missing(subset)) {
-              x[, select, ...]
-            } else {
-              x[subset, select, ...]
-            }
+          function(x, subset, select, drop = F, ...) {
+            x[subset, select, drop = drop]
           })
 
 #' Select
@@ -2520,7 +2525,7 @@ setMethod("histogram",
               }
 
               # Filter NA values in the target column and remove all other columns
-              df <- na.omit(df[, colname])
+              df <- na.omit(df[, colname, drop = F])
               getColumn(df, colname)
 
             } else if (class(col) == "Column") {
@@ -2552,8 +2557,7 @@ setMethod("histogram",
               col
             }
 
-            # At this point, df only has one column: the one to compute the histogram from
-            stats <- collect(describe(df[, colname]))
+            stats <- collect(describe(df[, colname, drop = F]))
             min <- as.numeric(stats[4, 2])
             max <- as.numeric(stats[5, 2])
 
