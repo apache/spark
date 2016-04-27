@@ -21,10 +21,14 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
 /**
-* This class is responsible for getting the groups for a particular user in Unix based environments.
+ * This class is responsible for getting the groups for a particular user in Unix based
+ * environments. This implementation uses the Unix Shell based id command to fetch the user groups
+ * for the specified user. It does not cache the user groups as the invocations are expected
+ * to be infrequent.
 */
 
-class ShellBasedGroupsMappingProvider extends GroupMappingServiceProvider with Logging{
+private[spark] class ShellBasedGroupsMappingProvider extends GroupMappingServiceProvider
+  with Logging {
 
   override def getGroups(username: String): Set[String] = {
     val userGroups = getUnixGroups(username)

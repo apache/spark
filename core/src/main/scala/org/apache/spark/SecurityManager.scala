@@ -454,67 +454,63 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
 
   /**
    * Check to see if Acls for the UI are enabled
-    *
-    * @return true if UI authentication is enabled, otherwise false
+   * @return true if UI authentication is enabled, otherwise false
    */
   def aclsEnabled(): Boolean = aclsOn
 
   /**
-   * Checks the given user or group against the view acl and groups list to see if they have
+   * Checks the given user against the view acl and groups list to see if they have
    * authorization to view the UI. If the UI acls are disabled
-   * via spark.acls.enable, all users have view access. If the user or group is null
-   * it is assumed authentication is off and all users have access.
+   * via spark.acls.enable, all users have view access. If the user is null
+   * it is assumed authentication is off and all users have access. Also if any one of the
+   * UI acls or groups specify the WILDCARD(*) then all users have view access.
    *
-   * @param userOrGroup to see if is authorized
+   * @param user to see if is authorized
    * @return true is the user has permission, otherwise false
    */
-  def checkUIViewPermissions(userOrGroup: String): Boolean = {
-    logDebug("user=" + userOrGroup + " aclsEnabled=" + aclsEnabled() + " viewAcls=" +
+  def checkUIViewPermissions(user: String): Boolean = {
+    logDebug("user=" + user + " aclsEnabled=" + aclsEnabled() + " viewAcls=" +
       viewAcls.mkString(",") + " viewAclsGroups=" + viewAclsGroups.mkString(","))
-    if (userOrGroup == null)
+    if (!aclsEnabled || user == null || viewAcls.contains(user) ||
+        viewAcls.contains(WILDCARD_ACL) || viewAclsGroups.contains(WILDCARD_ACL)) {
       return true
-    val currentUserGroups = Utils.getCurrentUserGroups(sparkConf, userOrGroup)
-    logDebug("user=" + userOrGroup + " userGroups=" + currentUserGroups)
-    val isAllowed = (!aclsEnabled || viewAcls.contains(userOrGroup) ||
-      viewAcls.contains(WILDCARD_ACL) || viewAclsGroups.exists(currentUserGroups.contains(_))
-      || viewAclsGroups.contains(WILDCARD_ACL))
-    isAllowed
+    }
+    val currentUserGroups = Utils.getCurrentUserGroups(sparkConf, user)
+    logDebug("userGroups=" + currentUserGroups)
+    viewAclsGroups.exists(currentUserGroups.contains(_))
   }
 
   /**
-   * Checks the given user or group against the modify acl and groups list to see if they have
-   * authorization to modify the application. If the UI acls are disabled
-   * via spark.acls.enable, all users have modify access. If the user or group is null
-   * it is assumed authentication isn't turned on and all users have access.
+   * Checks the given user against the modify acl and groups list to see if they have
+   * authorization to modify the application. If the modify acls are disabled
+   * via spark.acls.enable, all users have modify access. If the user is null
+   * it is assumed authentication isn't turned on and all users have access. Also if any one
+   * of the modify acls or groups specify the WILDCARD(*) then all users have modify access.
    *
-   * @param userOrGroup to see if is authorized
+   * @param user to see if is authorized
    * @return true is the user has permission, otherwise false
    */
-  def checkModifyPermissions(userOrGroup: String): Boolean = {
-    logDebug("user=" + userOrGroup + " aclsEnabled=" + aclsEnabled() + " modifyAcls=" +
+  def checkModifyPermissions(user: String): Boolean = {
+    logDebug("user=" + user + " aclsEnabled=" + aclsEnabled() + " modifyAcls=" +
       modifyAcls.mkString(",") + " modifyAclsGroups=" + modifyAclsGroups.mkString(","))
-    if (userOrGroup == null)
+    if (!aclsEnabled || user == null || modifyAcls.contains(user) ||
+        modifyAcls.contains(WILDCARD_ACL) || modifyAclsGroups.contains(WILDCARD_ACL)) {
       return true
-    val currentUserGroups = Utils.getCurrentUserGroups(sparkConf, userOrGroup)
-    logDebug("user=" + userOrGroup + " userGroups=" + currentUserGroups)
-    val isAllowed = (!aclsEnabled || modifyAcls.contains(userOrGroup) ||
-      modifyAcls.contains(WILDCARD_ACL) ||
-      modifyAclsGroups.exists(currentUserGroups.contains(_)) ||
-      modifyAclsGroups.contains(WILDCARD_ACL))
-    isAllowed
+    }
+    val currentUserGroups = Utils.getCurrentUserGroups(sparkConf, user)
+    logDebug("userGroups=" + currentUserGroups)
+    modifyAclsGroups.exists(currentUserGroups.contains(_))
   }
 
   /**
    * Check to see if authentication for the Spark communication protocols is enabled
-    *
-    * @return true if authentication is enabled, otherwise false
+   * @return true if authentication is enabled, otherwise false
    */
   def isAuthenticationEnabled(): Boolean = authOn
 
   /**
    * Checks whether SASL encryption should be enabled.
-    *
-    * @return Whether to enable SASL encryption when connecting to services that support it.
+   * @return Whether to enable SASL encryption when connecting to services that support it.
    */
   def isSaslEncryptionEnabled(): Boolean = {
     sparkConf.getBoolean("spark.authenticate.enableSaslEncryption", false)
@@ -523,23 +519,20 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
   /**
    * Gets the user used for authenticating HTTP connections.
    * For now use a single hardcoded user.
-    *
-    * @return the HTTP user as a String
+   * @return the HTTP user as a String
    */
   def getHttpUser(): String = "sparkHttpUser"
 
   /**
    * Gets the user used for authenticating SASL connections.
    * For now use a single hardcoded user.
-    *
-    * @return the SASL user as a String
+   * @return the SASL user as a String
    */
   def getSaslUser(): String = "sparkSaslUser"
 
   /**
    * Gets the secret key.
-    *
-    * @return the secret key as a String if authentication is enabled, otherwise returns null
+   * @return the secret key as a String if authentication is enabled, otherwise returns null
    */
   def getSecretKey(): String = secretKey
 
