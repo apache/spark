@@ -183,8 +183,8 @@ case class ShowPartitionsCommand(
        * 2. If it is a datasource table.
        * 3. If it is a view or index table.
        */
-      if (tab.tableType == CatalogTableType.VIRTUAL_VIEW ||
-        tab.tableType == CatalogTableType.INDEX_TABLE) {
+      if (tab.tableType == CatalogTableType.VIEW ||
+        tab.tableType == CatalogTableType.INDEX) {
         throw new AnalysisException("SHOW PARTITIONS is not allowed on a view or index table: " +
           s"${tab.qualifiedName}")
       }

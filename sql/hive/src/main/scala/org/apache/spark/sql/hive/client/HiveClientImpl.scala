@@ -317,10 +317,10 @@ private[hive] class HiveClientImpl(
       CatalogTable(
         identifier = TableIdentifier(h.getTableName, Option(h.getDbName)),
         tableType = h.getTableType match {
-          case HiveTableType.EXTERNAL_TABLE => CatalogTableType.EXTERNAL_TABLE
-          case HiveTableType.MANAGED_TABLE => CatalogTableType.MANAGED_TABLE
-          case HiveTableType.INDEX_TABLE => CatalogTableType.INDEX_TABLE
-          case HiveTableType.VIRTUAL_VIEW => CatalogTableType.VIRTUAL_VIEW
+          case HiveTableType.EXTERNAL_TABLE => CatalogTableType.EXTERNAL
+          case HiveTableType.MANAGED_TABLE => CatalogTableType.MANAGED
+          case HiveTableType.INDEX_TABLE => CatalogTableType.INDEX
+          case HiveTableType.VIRTUAL_VIEW => CatalogTableType.VIEW
         },
         schema = schema,
         partitionColumnNames = partCols.map(_.name),
@@ -696,13 +696,13 @@ private[hive] class HiveClientImpl(
     // Otherwise, Hive metastore will change the table to a MANAGED_TABLE.
     // (metastore/src/java/org/apache/hadoop/hive/metastore/ObjectStore.java#L1095-L1105)
     hiveTable.setTableType(table.tableType match {
-      case CatalogTableType.EXTERNAL_TABLE =>
+      case CatalogTableType.EXTERNAL =>
         hiveTable.setProperty("EXTERNAL", "TRUE")
         HiveTableType.EXTERNAL_TABLE
-      case CatalogTableType.MANAGED_TABLE =>
+      case CatalogTableType.MANAGED =>
         HiveTableType.MANAGED_TABLE
-      case CatalogTableType.INDEX_TABLE => HiveTableType.INDEX_TABLE
-      case CatalogTableType.VIRTUAL_VIEW => HiveTableType.VIRTUAL_VIEW
+      case CatalogTableType.INDEX => HiveTableType.INDEX_TABLE
+      case CatalogTableType.VIEW => HiveTableType.VIRTUAL_VIEW
     })
     // Note: In Hive the schema and partition columns must be disjoint sets
     val (partCols, schema) = table.schema.map(toHiveColumn).partition { c =>

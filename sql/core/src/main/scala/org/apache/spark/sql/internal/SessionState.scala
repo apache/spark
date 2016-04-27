@@ -48,8 +48,21 @@ private[sql] class SessionState(sparkSession: SparkSession) {
    * SQL-specific key-value configurations.
    */
   lazy val conf: SQLConf = new SQLConf
-  lazy val hadoopConf: Configuration = {
-    new Configuration(sparkSession.sparkContext.hadoopConfiguration)
+
+  def newHadoopConf(): Configuration = {
+    val hadoopConf = new Configuration(sparkSession.sparkContext.hadoopConfiguration)
+    conf.getAllConfs.foreach { case (k, v) => if (v ne null) hadoopConf.set(k, v) }
+    hadoopConf
+  }
+
+  def newHadoopConfWithOptions(options: Map[String, String]): Configuration = {
+    val hadoopConf = newHadoopConf()
+    options.foreach { case (k, v) =>
+      if ((v ne null) && k != "path" && k != "paths") {
+        hadoopConf.set(k, v)
+      }
+    }
+    hadoopConf
   }
 
   // Automatically extract `spark.sql.*` entries and put it in our SQLConf

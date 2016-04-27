@@ -30,7 +30,7 @@ import org.apache.spark.util.Utils
  *
  * Implementations of the [[ExternalCatalog]] interface can create test suites by extending this.
  */
-abstract class CatalogTestCases extends SparkFunSuite with BeforeAndAfterEach {
+abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEach {
   protected val utils: CatalogTestUtils
   import utils._
 
@@ -152,10 +152,10 @@ abstract class CatalogTestCases extends SparkFunSuite with BeforeAndAfterEach {
   test("the table type of an external table should be EXTERNAL_TABLE") {
     val catalog = newBasicCatalog()
     val table =
-      newTable("external_table1", "db2").copy(tableType = CatalogTableType.EXTERNAL_TABLE)
+      newTable("external_table1", "db2").copy(tableType = CatalogTableType.EXTERNAL)
     catalog.createTable("db2", table, ignoreIfExists = false)
     val actual = catalog.getTable("db2", "external_table1")
-    assert(actual.tableType === CatalogTableType.EXTERNAL_TABLE)
+    assert(actual.tableType === CatalogTableType.EXTERNAL)
   }
 
   test("drop table") {
@@ -551,14 +551,15 @@ abstract class CatalogTestUtils {
   def newTable(name: String, database: Option[String] = None): CatalogTable = {
     CatalogTable(
       identifier = TableIdentifier(name, database),
-      tableType = CatalogTableType.EXTERNAL_TABLE,
+      tableType = CatalogTableType.EXTERNAL,
       storage = storageFormat,
       schema = Seq(
         CatalogColumn("col1", "int"),
         CatalogColumn("col2", "string"),
         CatalogColumn("a", "int"),
         CatalogColumn("b", "string")),
-      partitionColumnNames = Seq("a", "b"))
+      partitionColumnNames = Seq("a", "b"),
+      bucketColumnNames = Seq("col1"))
   }
 
   def newFunc(name: String, database: Option[String] = None): CatalogFunction = {
