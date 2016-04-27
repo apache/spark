@@ -691,7 +691,7 @@ object MimaExcludes {
       ) ++ Seq(
         // [SPARK-14952][Core][ML] Remove methods deprecated in 1.6
         ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.input.PortableDataStream.close"),
-        ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.classification.LogisticRegressionModel.weights")
+        ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.classification.LogisticRegressionModel.weights"),
         ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.regression.LinearRegressionModel.weights")
       )
     case v if v.startsWith("1.6") =>
