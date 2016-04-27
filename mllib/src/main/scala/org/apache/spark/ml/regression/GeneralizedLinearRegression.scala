@@ -876,8 +876,8 @@ class GeneralizedLinearRegressionSummary private[regression] (
   /** predictions output by the model's `transform` method */
   @Since("2.0.0") @transient val predictions: DataFrame = model.transform(dataset)
 
-  private[regression] val family: Family = Family.fromName(model.getFamily)
-  private[regression] val link: Link = if (model.isDefined(model.link)) {
+  private[regression] lazy val family: Family = Family.fromName(model.getFamily)
+  private[regression] lazy val link: Link = if (model.isDefined(model.link)) {
     Link.fromName(model.getLink)
   } else {
     family.defaultLink
