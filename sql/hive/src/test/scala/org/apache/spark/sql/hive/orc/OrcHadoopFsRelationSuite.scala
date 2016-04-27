@@ -137,7 +137,8 @@ class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
   }
 
   test("Use the codec specified in Hadoop configuration if compression is not given as option") {
-    val extraOptions = Map(OrcTableProperties.COMPRESSION.getPropName -> CompressionKind.SNAPPY.name())
+    val extraOptions =
+      Map(OrcTableProperties.COMPRESSION.getPropName -> CompressionKind.SNAPPY.name())
     withTempPath { dir =>
       val path = s"${dir.getCanonicalPath}/table1"
       val df = (1 to 5).map(i => (i, (i % 2).toString)).toDF("a", "b")
