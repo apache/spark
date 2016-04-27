@@ -439,10 +439,10 @@ private[ml] object EnsembleModelReadWrite {
 
     val treesMetadataPath = new Path(path, "treesMetadata").toString
     val treesMetadataRDD: RDD[(Int, (Metadata, Double))] = sql.read.parquet(treesMetadataPath)
-      .select("treeID", "metadata", "weights").as[(Int, String, Double)].map {
+      .select("treeID", "metadata", "weights").as[(Int, String, Double)].rdd.map {
       case (treeID: Int, json: String, weights: Double) =>
         treeID -> (DefaultParamsReader.parseMetadata(json, treeClassName), weights)
-    }.rdd
+    }
 
     val treesMetadataWeights = treesMetadataRDD.sortByKey().values.collect()
     val treesMetadata = treesMetadataWeights.map(_._1)
