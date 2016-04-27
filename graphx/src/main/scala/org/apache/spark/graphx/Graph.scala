@@ -365,7 +365,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    *
    * @note By expressing computation at the edge level we achieve
    * maximum parallelism.  This is one of the core functions in the
-   * Graph API in that enables neighborhood level computation. For
+   * Graph API that enables neighborhood level computation. For
    * example this function can be used to count neighbors satisfying a
    * predicate or implement PageRank.
    *

@@ -29,9 +29,9 @@ import org.apache.spark.sql.{SparkSession, SQLContext}
  */
 @deprecated("Use SparkSession.withHiveSupport instead", "2.0.0")
 class HiveContext private[hive](
-    @transient private val sparkSession: SparkSession,
+    _sparkSession: SparkSession,
     isRootContext: Boolean)
-  extends SQLContext(sparkSession, isRootContext) with Logging {
+  extends SQLContext(_sparkSession, isRootContext) with Logging {
 
   self =>
 

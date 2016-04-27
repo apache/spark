@@ -46,8 +46,7 @@ import org.apache.spark.sql.SparkSession
  * files in a directory always shows the latest files.
  */
 class HDFSMetadataLog[T: ClassTag](sparkSession: SparkSession, path: String)
-  extends MetadataLog[T]
-  with Logging {
+  extends MetadataLog[T] with Logging {
 
   import HDFSMetadataLog._
 

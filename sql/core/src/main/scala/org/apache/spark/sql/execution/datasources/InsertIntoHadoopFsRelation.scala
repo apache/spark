@@ -106,6 +106,10 @@ private[sql] case class InsertIntoHadoopFsRelation(
       val job = Job.getInstance(hadoopConf)
       job.setOutputKeyClass(classOf[Void])
       job.setOutputValueClass(classOf[InternalRow])
+
+      // Also set the options in Hadoop Configuration
+      options.foreach { case (k, v) => if (v ne null) job.getConfiguration.set(k, v) }
+
       FileOutputFormat.setOutputPath(job, qualifiedOutputPath)
 
       val partitionSet = AttributeSet(partitionColumns)
