@@ -374,7 +374,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       val expectedPath =
         sessionState.catalog.hiveDefaultTableFilePath(TableIdentifier("ctasJsonTable"))
       val filesystemPath = new Path(expectedPath)
-      val fs = filesystemPath.getFileSystem(sqlContext.sessionState.hadoopConf)
+      val fs = filesystemPath.getFileSystem(sqlContext.sessionState.newHadoopConf())
       if (fs.exists(filesystemPath)) fs.delete(filesystemPath, true)
 
       // It is a managed table when we do not specify the location.
@@ -502,13 +502,13 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         }
 
         withSQLConf(SQLConf.DEFAULT_DATA_SOURCE_NAME.key -> "json") {
-          createExternalTable("createdJsonTable", tempPath.toString)
+          sparkSession.catalog.createExternalTable("createdJsonTable", tempPath.toString)
           assert(table("createdJsonTable").schema === df.schema)
           checkAnswer(sql("SELECT * FROM createdJsonTable"), df)
 
           assert(
             intercept[AnalysisException] {
-              createExternalTable("createdJsonTable", jsonFilePath.toString)
+              sparkSession.catalog.createExternalTable("createdJsonTable", jsonFilePath.toString)
             }.getMessage.contains("Table createdJsonTable already exists."),
             "We should complain that createdJsonTable already exists")
         }
@@ -520,7 +520,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         // Try to specify the schema.
         withSQLConf(SQLConf.DEFAULT_DATA_SOURCE_NAME.key -> "not a source name") {
           val schema = StructType(StructField("b", StringType, true) :: Nil)
-          createExternalTable(
+          sparkSession.catalog.createExternalTable(
             "createdJsonTable",
             "org.apache.spark.sql.json",
             schema,
@@ -539,7 +539,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
   test("path required error") {
     assert(
       intercept[AnalysisException] {
-        createExternalTable(
+        sparkSession.catalog.createExternalTable(
           "createdJsonTable",
           "org.apache.spark.sql.json",
           Map.empty[String, String])
@@ -701,7 +701,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
 
           // Manually create a metastore data source table.
           CreateDataSourceTableUtils.createDataSourceTable(
-            sqlContext = sqlContext,
+            sparkSession = sqlContext.sparkSession,
             tableIdent = TableIdentifier("wide_schema"),
             userSpecifiedSchema = Some(schema),
             partitionColumns = Array.empty[String],
@@ -725,7 +725,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       val schema = StructType(StructField("int", IntegerType, true) :: Nil)
       val hiveTable = CatalogTable(
         identifier = TableIdentifier(tableName, Some("default")),
-        tableType = CatalogTableType.MANAGED_TABLE,
+        tableType = CatalogTableType.MANAGED,
         schema = Seq.empty,
         storage = CatalogStorageFormat(
           locationUri = None,
@@ -910,7 +910,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       val schema = StructType((1 to 5).map(i => StructField(s"c_$i", StringType)))
 
       CreateDataSourceTableUtils.createDataSourceTable(
-        sqlContext = sqlContext,
+        sparkSession = sqlContext.sparkSession,
         tableIdent = TableIdentifier("not_skip_hive_metadata"),
         userSpecifiedSchema = Some(schema),
         partitionColumns = Array.empty[String],
@@ -925,7 +925,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         .forall(column => DataTypeParser.parse(column.dataType) == StringType))
 
       CreateDataSourceTableUtils.createDataSourceTable(
-        sqlContext = sqlContext,
+        sparkSession = sqlContext.sparkSession,
         tableIdent = TableIdentifier("skip_hive_metadata"),
         userSpecifiedSchema = Some(schema),
         partitionColumns = Array.empty[String],

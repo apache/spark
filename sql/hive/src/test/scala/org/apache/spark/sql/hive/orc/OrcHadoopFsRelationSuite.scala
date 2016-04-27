@@ -33,6 +33,7 @@ import org.apache.spark.sql.sources.HadoopFsRelationTest
 import org.apache.spark.sql.types._
 
 class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
+
   import testImplicits._
 
   override val dataSourceName: String = classOf[DefaultSource].getCanonicalName
@@ -98,7 +99,7 @@ class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
         .orc(path)
 
       // Check if this is not compressed. Default is ZLIB.
-      val conf = sqlContext.sessionState.hadoopConf
+      val conf = sqlContext.sessionState.newHadoopConf()
       val fs = FileSystem.getLocal(conf)
       val maybeOrcFile = new File(path).listFiles().find(_.getName.endsWith(".orc"))
       assert(maybeOrcFile.isDefined)
@@ -122,7 +123,7 @@ class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
         .orc(path)
 
       // Check if this is compressed as ZLIB. Default is ZLIB
-      val conf = sqlContext.sessionState.hadoopConf
+      val conf = sqlContext.sessionState.newHadoopConf()
       val fs = FileSystem.getLocal(conf)
       val maybeOrcFile = new File(path).listFiles().find(_.getName.endsWith(".zlib.orc"))
       assert(maybeOrcFile.isDefined)
@@ -136,31 +137,25 @@ class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
   }
 
   test("Use the codec specified in Hadoop configuration if compression is not given as option") {
-    val clonedConf = new Configuration(hadoopConfiguration)
-    hadoopConfiguration
-      .set(OrcTableProperties.COMPRESSION.getPropName, CompressionKind.SNAPPY.name())
+    val extraOptions = Map(OrcTableProperties.COMPRESSION.getPropName -> CompressionKind.SNAPPY.name())
     withTempPath { dir =>
-      try {
-        val path = s"${dir.getCanonicalPath}/table1"
-        val df = (1 to 5).map(i => (i, (i % 2).toString)).toDF("a", "b")
-        df.write.orc(path)
+      val path = s"${dir.getCanonicalPath}/table1"
+      val df = (1 to 5).map(i => (i, (i % 2).toString)).toDF("a", "b")
+      df.write
+        .options(extraOptions)
+        .orc(path)
 
-        // Check if this is compressed as SNAPPY.
-        val conf = sqlContext.sessionState.hadoopConf
-        val fs = FileSystem.getLocal(conf)
-        val maybeOrcFile = new File(path).listFiles().find(_.getName.endsWith(".snappy.orc"))
-        assert(maybeOrcFile.isDefined)
-        val orcFilePath = new Path(maybeOrcFile.get.toPath.toString)
-        val orcReader = OrcFile.createReader(orcFilePath, OrcFile.readerOptions(conf))
-        assert(orcReader.getCompression == CompressionKind.SNAPPY)
+      // Check if this is compressed as SNAPPY.
+      val conf = sqlContext.sessionState.newHadoopConf()
+      val fs = FileSystem.getLocal(conf)
+      val maybeOrcFile = new File(path).listFiles().find(_.getName.endsWith(".snappy.orc"))
+      assert(maybeOrcFile.isDefined)
+      val orcFilePath = new Path(maybeOrcFile.get.toPath.toString)
+      val orcReader = OrcFile.createReader(orcFilePath, OrcFile.readerOptions(conf))
+      assert(orcReader.getCompression == CompressionKind.SNAPPY)
 
-        val copyDf = sqlContext.read.orc(path)
-        checkAnswer(df, copyDf)
-      } finally {
-        // Hadoop 1 doesn't have `Configuration.unset`
-        hadoopConfiguration.clear()
-        clonedConf.asScala.foreach(entry => hadoopConfiguration.set(entry.getKey, entry.getValue))
-      }
+      val copyDf = sqlContext.read.orc(path)
+      checkAnswer(df, copyDf)
     }
   }
 }

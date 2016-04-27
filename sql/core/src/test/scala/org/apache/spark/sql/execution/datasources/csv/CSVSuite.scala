@@ -430,42 +430,37 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   }
 
   test("SPARK-13543 Write the output as uncompressed via option()") {
-    val clonedConf = new Configuration(hadoopConfiguration)
-    hadoopConfiguration.set("mapreduce.output.fileoutputformat.compress", "true")
-    hadoopConfiguration
-      .set("mapreduce.output.fileoutputformat.compress.type", CompressionType.BLOCK.toString)
-    hadoopConfiguration
-      .set("mapreduce.output.fileoutputformat.compress.codec", classOf[GzipCodec].getName)
-    hadoopConfiguration.set("mapreduce.map.output.compress", "true")
-    hadoopConfiguration.set("mapreduce.map.output.compress.codec", classOf[GzipCodec].getName)
+    val extraOptions = Map(
+      "mapreduce.output.fileoutputformat.compress" -> "true",
+      "mapreduce.output.fileoutputformat.compress.type" -> CompressionType.BLOCK.toString,
+      "mapreduce.map.output.compress" -> "true",
+      "mapreduce.map.output.compress.codec" -> classOf[GzipCodec].getName
+    )
     withTempDir { dir =>
-      try {
-        val csvDir = new File(dir, "csv").getCanonicalPath
-        val cars = sqlContext.read
-          .format("csv")
-          .option("header", "true")
-          .load(testFile(carsFile))
+      val csvDir = new File(dir, "csv").getCanonicalPath
+      val cars = sqlContext.read
+        .format("csv")
+        .option("header", "true")
+        .options(extraOptions)
+        .load(testFile(carsFile))
 
-        cars.coalesce(1).write
-          .format("csv")
-          .option("header", "true")
-          .option("compression", "none")
-          .save(csvDir)
+      cars.coalesce(1).write
+        .format("csv")
+        .option("header", "true")
+        .option("compression", "none")
+        .options(extraOptions)
+        .save(csvDir)
 
-        val compressedFiles = new File(csvDir).listFiles()
-        assert(compressedFiles.exists(!_.getName.endsWith(".csv.gz")))
+      val compressedFiles = new File(csvDir).listFiles()
+      assert(compressedFiles.exists(!_.getName.endsWith(".csv.gz")))
 
-        val carsCopy = sqlContext.read
-          .format("csv")
-          .option("header", "true")
-          .load(csvDir)
+      val carsCopy = sqlContext.read
+        .format("csv")
+        .option("header", "true")
+        .options(extraOptions)
+        .load(csvDir)
 
-        verifyCars(carsCopy, withHeader = true)
-      } finally {
-        // Hadoop 1 doesn't have `Configuration.unset`
-        hadoopConfiguration.clear()
-        clonedConf.asScala.foreach(entry => hadoopConfiguration.set(entry.getKey, entry.getValue))
-      }
+      verifyCars(carsCopy, withHeader = true)
     }
   }
 
