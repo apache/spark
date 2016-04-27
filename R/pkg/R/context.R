@@ -258,7 +258,6 @@ setCheckpointDir <- function(sc, dirName) {
 #' @return a list of results (the exact type being determined by the function)
 #' @export
 #' @examples
-#' Here is a trivial example that double the values in a list
 #'\dontrun{
 #' doubled <- spark.lapply(1:10, function(x){2 * x})
 #'}
