@@ -92,10 +92,8 @@ case class InsertIntoHiveTable(
       // to store compression information.
       hadoopConf.set("mapred.output.compress", "true")
       fileSinkConf.setCompressed(true)
-      fileSinkConf.setCompressCodec(
-        sessionState.conf.getConfString("mapred.output.compression.codec"))
-      fileSinkConf.setCompressType(
-        sessionState.conf.getConfString("mapred.output.compression.type"))
+      fileSinkConf.setCompressCodec(hadoopConf.get("mapred.output.compression.codec"))
+      fileSinkConf.setCompressType(hadoopConf.get("mapred.output.compression.type"))
     }
 
     val numDynamicPartitions = partition.values.count(_.isEmpty)
