@@ -112,7 +112,8 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
         partitionSchema = files.partitionSchema,
         requiredSchema = prunedDataSchema,
         filters = pushedDownFilters,
-        options = files.options)
+        options = files.options,
+        hadoopConf = files.sparkSession.sessionState.newHadoopConfWithOptions(files.options))
 
       val plannedPartitions = files.bucketSpec match {
         case Some(bucketing) if files.sparkSession.sessionState.conf.bucketingEnabled =>

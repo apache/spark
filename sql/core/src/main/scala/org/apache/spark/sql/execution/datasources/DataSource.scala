@@ -131,7 +131,7 @@ case class DataSource(
     val allPaths = caseInsensitiveOptions.get("path")
     val globbedPaths = allPaths.toSeq.flatMap { path =>
       val hdfsPath = new Path(path)
-      val fs = hdfsPath.getFileSystem(sparkSession.sessionState.hadoopConf)
+      val fs = hdfsPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
       val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
       SparkHadoopUtil.get.globPathIfNecessary(qualified)
     }.toArray
@@ -226,7 +226,7 @@ case class DataSource(
       case Seq(singlePath) =>
         try {
           val hdfsPath = new Path(singlePath)
-          val fs = hdfsPath.getFileSystem(sparkSession.sessionState.hadoopConf)
+          val fs = hdfsPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
           val metadataPath = new Path(hdfsPath, FileStreamSink.metadataDir)
           val res = fs.exists(metadataPath)
           res
@@ -284,7 +284,7 @@ case class DataSource(
         val allPaths = caseInsensitiveOptions.get("path") ++ paths
         val globbedPaths = allPaths.flatMap { path =>
           val hdfsPath = new Path(path)
-          val fs = hdfsPath.getFileSystem(sparkSession.sessionState.hadoopConf)
+          val fs = hdfsPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
           val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
           val globPath = SparkHadoopUtil.get.globPathIfNecessary(qualified)
 
@@ -374,7 +374,7 @@ case class DataSource(
           val path = new Path(caseInsensitiveOptions.getOrElse("path", {
             throw new IllegalArgumentException("'path' is not specified")
           }))
-          val fs = path.getFileSystem(sparkSession.sessionState.hadoopConf)
+          val fs = path.getFileSystem(sparkSession.sessionState.newHadoopConf())
           path.makeQualified(fs.getUri, fs.getWorkingDirectory)
         }
 

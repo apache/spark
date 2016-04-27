@@ -41,7 +41,7 @@ import org.apache.spark.sql.types.StructType
  * @since 1.4.0
  */
 @Experimental
-class DataFrameReader protected[sql](sparkSession: SparkSession) extends Logging {
+class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
   /**
    * Specifies the input data source format.

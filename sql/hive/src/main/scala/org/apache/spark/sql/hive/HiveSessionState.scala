@@ -107,7 +107,6 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
     new SparkPlanner(sparkSession.sparkContext, conf, experimentalMethods.extraStrategies)
       with HiveStrategies {
       override val sparkSession: SparkSession = self.sparkSession
-      override val hiveconf: HiveConf = self.hiveconf
 
       override def strategies: Seq[Strategy] = {
         experimentalMethods.extraStrategies ++ Seq(
@@ -120,12 +119,8 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
           DataSinks,
           Scripts,
           Aggregation,
-          ExistenceJoin,
-          EquiJoinSelection,
-          BasicOperators,
-          BroadcastNestedLoop,
-          CartesianProduct,
-          DefaultJoin
+          JoinSelection,
+          BasicOperators
         )
       }
     }

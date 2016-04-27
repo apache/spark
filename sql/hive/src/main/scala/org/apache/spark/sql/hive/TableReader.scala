@@ -17,17 +17,14 @@
 
 package org.apache.spark.sql.hive
 
-import java.util
-
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{Path, PathFilter}
-import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.api.hive_metastoreConstants._
 import org.apache.hadoop.hive.ql.exec.Utilities
 import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition, Table => HiveTable}
 import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.hadoop.hive.serde2.Deserializer
-import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspectorConverters,
-  StructObjectInspector}
+import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspectorConverters, StructObjectInspector}
 import org.apache.hadoop.hive.serde2.objectinspector.primitive._
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf}
@@ -62,7 +59,7 @@ class HadoopTableReader(
     @transient private val attributes: Seq[Attribute],
     @transient private val relation: MetastoreRelation,
     @transient private val sparkSession: SparkSession,
-    hiveconf: HiveConf)
+    hadoopConf: Configuration)
   extends TableReader with Logging {
 
   // Hadoop honors "mapred.map.tasks" as hint, but will ignore when mapred.job.tracker is "local".
@@ -72,12 +69,15 @@ class HadoopTableReader(
   private val _minSplitsPerRDD = if (sparkSession.sparkContext.isLocal) {
     0 // will splitted based on block by default.
   } else {
-    math.max(hiveconf.getInt("mapred.map.tasks", 1), sparkSession.sparkContext.defaultMinPartitions)
+    math.max(hadoopConf.getInt("mapred.map.tasks", 1),
+      sparkSession.sparkContext.defaultMinPartitions)
   }
 
-  SparkHadoopUtil.get.appendS3AndSparkHadoopConfigurations(sparkSession.sparkContext.conf, hiveconf)
-  private val _broadcastedHiveConf =
-    sparkSession.sparkContext.broadcast(new SerializableConfiguration(hiveconf))
+  SparkHadoopUtil.get.appendS3AndSparkHadoopConfigurations(
+    sparkSession.sparkContext.conf, hadoopConf)
+
+  private val _broadcastedHadoopConf =
+    sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
   override def makeRDDForTable(hiveTable: HiveTable): RDD[InternalRow] =
     makeRDDForTable(
@@ -105,7 +105,7 @@ class HadoopTableReader(
     // Create local references to member variables, so that the entire `this` object won't be
     // serialized in the closure below.
     val tableDesc = relation.tableDesc
-    val broadcastedHiveConf = _broadcastedHiveConf
+    val broadcastedHiveConf = _broadcastedHadoopConf
 
     val tablePath = hiveTable.getPath
     val inputPathStr = applyFilterIfNeeded(tablePath, filterOpt)
@@ -162,7 +162,7 @@ class HadoopTableReader(
           case (partition, partDeserializer) =>
             def updateExistPathSetByPathPattern(pathPatternStr: String) {
               val pathPattern = new Path(pathPatternStr)
-              val fs = pathPattern.getFileSystem(hiveconf)
+              val fs = pathPattern.getFileSystem(hadoopConf)
               val matches = fs.globStatus(pathPattern)
               matches.foreach(fileStatus => existPathSet += fileStatus.getPath.toString)
             }
@@ -209,7 +209,7 @@ class HadoopTableReader(
 
       // Create local references so that the outer object isn't serialized.
       val tableDesc = relation.tableDesc
-      val broadcastedHiveConf = _broadcastedHiveConf
+      val broadcastedHiveConf = _broadcastedHadoopConf
       val localDeserializer = partDeserializer
       val mutableRow = new SpecificMutableRow(attributes.map(_.dataType))
 
@@ -259,7 +259,7 @@ class HadoopTableReader(
   private def applyFilterIfNeeded(path: Path, filterOpt: Option[PathFilter]): String = {
     filterOpt match {
       case Some(filter) =>
-        val fs = path.getFileSystem(hiveconf)
+        val fs = path.getFileSystem(hadoopConf)
         val filteredFiles = fs.listStatus(path, filter).map(_.getPath.toString)
         filteredFiles.mkString(",")
       case None => path.toString
@@ -279,7 +279,7 @@ class HadoopTableReader(
 
     val rdd = new HadoopRDD(
       sparkSession.sparkContext,
-      _broadcastedHiveConf.asInstanceOf[Broadcast[SerializableConfiguration]],
+      _broadcastedHadoopConf.asInstanceOf[Broadcast[SerializableConfiguration]],
       Some(initializeJobConfFunc),
       inputFormatClass,
       classOf[Writable],
@@ -302,7 +302,7 @@ private[hive] object HiveTableUtil {
     val storageHandler =
       org.apache.hadoop.hive.ql.metadata.HiveUtils.getStorageHandler(jobConf, property)
     if (storageHandler != null) {
-      val jobProperties = new util.LinkedHashMap[String, String]
+      val jobProperties = new java.util.LinkedHashMap[String, String]
       if (input) {
         storageHandler.configureInputJobProperties(tableDesc, jobProperties)
       } else {

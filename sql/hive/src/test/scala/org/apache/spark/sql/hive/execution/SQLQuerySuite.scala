@@ -19,6 +19,8 @@ package org.apache.spark.sql.hive.execution
 
 import java.sql.{Date, Timestamp}
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, FunctionRegistry}
@@ -1390,5 +1392,100 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
       assert(message == "'path' is not specified")
     }
+  }
+
+  test("derived from Hive query file: drop_database_removes_partition_dirs.q") {
+    // This test verifies that if a partition exists outside a table's current location when the
+    // database is dropped the partition's location is dropped as well.
+    sql("DROP database if exists test_database CASCADE")
+    sql("CREATE DATABASE test_database")
+    val previousCurrentDB = sessionState.catalog.getCurrentDatabase
+    sql("USE test_database")
+    sql("drop table if exists test_table")
+
+    val tempDir = System.getProperty("test.tmp.dir")
+    assert(tempDir != null, "TestHive should set test.tmp.dir.")
+
+    sql(
+      """
+        |CREATE TABLE test_table (key int, value STRING)
+        |PARTITIONED BY (part STRING)
+        |STORED AS RCFILE
+        |LOCATION 'file:${system:test.tmp.dir}/drop_database_removes_partition_dirs_table'
+      """.stripMargin)
+    sql(
+      """
+        |ALTER TABLE test_table ADD PARTITION (part = '1')
+        |LOCATION 'file:${system:test.tmp.dir}/drop_database_removes_partition_dirs_table2/part=1'
+      """.stripMargin)
+    sql(
+      """
+        |INSERT OVERWRITE TABLE test_table PARTITION (part = '1')
+        |SELECT * FROM default.src
+      """.stripMargin)
+     checkAnswer(
+       sql("select part, key, value from test_table"),
+       sql("select '1' as part, key, value from default.src")
+     )
+    val path = new Path(
+      new Path(s"file:$tempDir"),
+      "drop_database_removes_partition_dirs_table2")
+    val fs = path.getFileSystem(sparkContext.hadoopConfiguration)
+    // The partition dir is not empty.
+    assert(fs.listStatus(new Path(path, "part=1")).nonEmpty)
+
+    sql(s"USE $previousCurrentDB")
+    sql("DROP DATABASE test_database CASCADE")
+
+    // This table dir should not exist after we drop the entire database with the mode
+    // of CASCADE. This probably indicates a Hive bug, which returns the wrong table
+    // root location. So, the table's directory still there. We should change the condition
+    // to fs.exists(path) after we handle fs operations.
+    assert(
+      fs.exists(path),
+      "Thank you for making the changes of letting Spark SQL handle filesystem operations " +
+        "for DDL commands. Originally, Hive metastore does not delete the table root directory " +
+        "for this case. Now, please change this condition to !fs.exists(path).")
+  }
+
+  test("derived from Hive query file: drop_table_removes_partition_dirs.q") {
+    // This test verifies that if a partition exists outside the table's current location when the
+    // table is dropped the partition's location is dropped as well.
+    sql("drop table if exists test_table")
+
+    val tempDir = System.getProperty("test.tmp.dir")
+    assert(tempDir != null, "TestHive should set test.tmp.dir.")
+
+    sql(
+      """
+        |CREATE TABLE test_table (key int, value STRING)
+        |PARTITIONED BY (part STRING)
+        |STORED AS RCFILE
+        |LOCATION 'file:${system:test.tmp.dir}/drop_table_removes_partition_dirs_table2'
+      """.stripMargin)
+    sql(
+      """
+        |ALTER TABLE test_table ADD PARTITION (part = '1')
+        |LOCATION 'file:${system:test.tmp.dir}/drop_table_removes_partition_dirs_table2/part=1'
+      """.stripMargin)
+    sql(
+      """
+        |INSERT OVERWRITE TABLE test_table PARTITION (part = '1')
+        |SELECT * FROM default.src
+      """.stripMargin)
+    checkAnswer(
+      sql("select part, key, value from test_table"),
+      sql("select '1' as part, key, value from src")
+    )
+    val path = new Path(new Path(s"file:$tempDir"), "drop_table_removes_partition_dirs_table2")
+    val fs = path.getFileSystem(sparkContext.hadoopConfiguration)
+    // The partition dir is not empty.
+    assert(fs.listStatus(new Path(path, "part=1")).nonEmpty)
+
+    sql("drop table test_table")
+    assert(
+      !fs.exists(path),
+      "Once a managed table has been dropped, " +
+        "dirs of this table should also have been deleted.")
   }
 }

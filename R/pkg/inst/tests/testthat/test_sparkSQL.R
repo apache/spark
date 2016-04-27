@@ -1972,6 +1972,51 @@ test_that("Method str()", {
   expect_equal(capture.output(utils:::str(iris)), capture.output(str(iris)))
 })
 
+test_that("Histogram", {
+
+  # Basic histogram test with colname
+  expect_equal(
+    all(histogram(irisDF, "Petal_Width", 8) ==
+        data.frame(bins = seq(0, 7),
+                   counts = c(48, 2, 7, 21, 24, 19, 15, 14),
+                   centroids = seq(0, 7) * 0.3 + 0.25)),
+        TRUE)
+
+  # Basic histogram test with Column
+  expect_equal(
+    all(histogram(irisDF, irisDF$Petal_Width, 8) ==
+          data.frame(bins = seq(0, 7),
+                     counts = c(48, 2, 7, 21, 24, 19, 15, 14),
+                     centroids = seq(0, 7) * 0.3 + 0.25)),
+    TRUE)
+
+  # Basic histogram test with derived column
+  expect_equal(
+    all(round(histogram(irisDF, irisDF$Petal_Width + 1, 8), 2) ==
+          data.frame(bins = seq(0, 7),
+                     counts = c(48, 2, 7, 21, 24, 19, 15, 14),
+                     centroids = seq(0, 7) * 0.3 + 1.25)),
+    TRUE)
+
+  # Missing nbins
+  expect_equal(length(histogram(irisDF, "Petal_Width")$counts), 10)
+
+  # Wrong colname
+  expect_error(histogram(irisDF, "xxx"),
+               "Specified colname does not belong to the given SparkDataFrame.")
+
+  # Invalid nbins
+  expect_error(histogram(irisDF, "Petal_Width", nbins = 0),
+               "The number of bins must be a positive integer number greater than 1.")
+
+  # Test against R's hist
+  expect_equal(all(hist(iris$Sepal.Width)$counts ==
+                   histogram(irisDF, "Sepal_Width", 12)$counts), T)
+
+  # Test when there are zero counts
+  df <- as.DataFrame(sqlContext, data.frame(x = c(1, 2, 3, 4, 100)))
+  expect_equal(histogram(df, "x")$counts, c(4, 0, 0, 0, 0, 0, 0, 0, 0, 1))
+})
 unlink(parquetPath)
 unlink(jsonPath)
 unlink(jsonPathNa)

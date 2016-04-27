@@ -82,7 +82,7 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
   }
 
   testQuietly("HDFSMetadataLog: fallback from FileContext to FileSystem") {
-    sqlContext.sessionState.hadoopConf.set(
+    sqlContext.conf.setConfString(
       s"fs.$scheme.impl",
       classOf[FakeFileSystem].getName)
     withTempDir { temp =>

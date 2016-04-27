@@ -363,6 +363,7 @@ object FunctionRegistry {
     expression[Not]("not"),
     expression[Or]("or"),
 
+    // comparison operators
     expression[EqualNullSafe]("<=>"),
     expression[EqualTo]("="),
     expression[EqualTo]("=="),
