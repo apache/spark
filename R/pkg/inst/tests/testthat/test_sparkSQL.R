@@ -839,10 +839,10 @@ test_that("select operators", {
   
   # Test parameter drop
   expect_equal(class(df[, 1]) == "Column", T)
-  expect_equal(class(df[, 1, drop=T]) == "Column", T)
-  expect_equal(class(df[, 1, drop=F]) == "SparkDataFrame", T)
-  expect_equal(class(df[df$age > 4, 2, drop=T]) == "Column", T)
-  expect_equal(class(df[df$age > 4, 2, drop=F]) == "SparkDataFrame", T)
+  expect_equal(class(df[, 1, drop = T]) == "Column", T)
+  expect_equal(class(df[, 1, drop = F]) == "SparkDataFrame", T)
+  expect_equal(class(df[df$age > 4, 2, drop = T]) == "Column", T)
+  expect_equal(class(df[df$age > 4, 2, drop = F]) == "SparkDataFrame", T)
 })
 
 test_that("select with column", {
