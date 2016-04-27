@@ -235,7 +235,7 @@ object SparkEnv extends Logging {
     // for incoming connections.
     if (isDriver) {
       conf.set("spark.driver.port", rpcEnv.address.port.toString)
-    } else if (rpcEnv.address != null) {
+    } else if (rpcEnv.address.port != -1) {
       conf.set("spark.executor.port", rpcEnv.address.port.toString)
     }
 

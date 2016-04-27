@@ -120,8 +120,14 @@ private[netty] class NettyRpcEnv(
       RpcEndpointVerifier.NAME, new RpcEndpointVerifier(this, dispatcher))
   }
 
-  @Nullable
   override lazy val address: RpcAddress = {
+    // When running in client mode (i.e.: not opening a listening port, but connecting to a
+    // 'server' with an open port), the server value is null.
+    // But a valid host still has to be provided, as it is needed later on.
+    // Previously, the server side of the connection was attempting to guess the client
+    // hostname, using the connection information. But the value generated is wrong when
+    // the connection is NATed.
+    // [SPARK-14849]
     if (server != null) RpcAddress(host, server.getPort()) else RpcAddress(host, -1)
   }
 
@@ -152,8 +158,8 @@ private[netty] class NettyRpcEnv(
     if (receiver.client != null) {
       message.sendWith(receiver.client)
     } else {
-      require(receiver.address != null,
-        "Cannot send message to client endpoint with no listen address.")
+      require(receiver.address.port != -1,
+        "Cannot send message to client endpoint with no listen port.")
       val targetOutbox = {
         val outbox = outboxes.get(receiver.address)
         if (outbox == null) {
