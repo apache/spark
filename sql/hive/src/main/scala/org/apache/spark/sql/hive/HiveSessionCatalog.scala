@@ -34,11 +34,9 @@ import org.apache.spark.sql.catalyst.catalog.{FunctionResourceLoader, SessionCat
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.datasources.BucketSpec
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
 
