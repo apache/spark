@@ -121,7 +121,6 @@ statement
 hiveNativeCommands
     : TRUNCATE TABLE tableIdentifier partitionSpec?
         (COLUMNS identifierList)?
-    | SHOW PARTITIONS tableIdentifier partitionSpec?
     | (CREATE | ALTER | DROP | SHOW | DESC | DESCRIBE) .*?
     ;
 
