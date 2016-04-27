@@ -135,8 +135,6 @@ object HashingTF {
 
   private[spark] val Murmur3: String = "murmur3"
 
-  private[spark] val supportedHashAlgorithms: Array[String] = Array(Murmur3)
-
   private val seed = 42
 
   /**
@@ -148,7 +146,7 @@ object HashingTF {
   /**
    * Calculate a hash code value for the term object using
    * Austin Appleby's MurmurHash 3 algorithm (MurmurHash3_x86_32).
-   * This is the default hash algorithm used after Spark 2.0.
+   * This is the default hash algorithm used from Spark 2.0 onwards.
    */
   private[spark] def murmur3Hash(term: Any): Int = {
     term match {
