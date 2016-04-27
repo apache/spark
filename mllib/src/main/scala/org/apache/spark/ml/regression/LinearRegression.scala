@@ -389,9 +389,6 @@ class LinearRegressionModel private[ml] (
 
   private var trainingSummary: Option[LinearRegressionTrainingSummary] = None
 
-  @deprecated("Use coefficients instead.", "1.6.0")
-  def weights: Vector = coefficients
-
   override val numFeatures: Int = coefficients.size
 
   /**

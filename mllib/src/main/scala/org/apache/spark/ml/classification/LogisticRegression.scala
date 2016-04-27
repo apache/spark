@@ -480,9 +480,6 @@ class LogisticRegressionModel private[spark] (
   extends ProbabilisticClassificationModel[Vector, LogisticRegressionModel]
   with LogisticRegressionParams with MLWritable {
 
-  @deprecated("Use coefficients instead.", "1.6.0")
-  def weights: Vector = coefficients
-
   @Since("1.5.0")
   override def setThreshold(value: Double): this.type = super.setThreshold(value)
 
