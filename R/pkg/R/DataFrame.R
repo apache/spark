@@ -2525,7 +2525,7 @@ setMethod("histogram",
               }
 
               # Filter NA values in the target column and remove all other columns
-              df <- na.omit(df[, colname])
+              df <- na.omit(df[, colname, drop=F])
               getColumn(df, colname)
 
             } else if (class(col) == "Column") {
@@ -2558,7 +2558,7 @@ setMethod("histogram",
             }
 
             # At this point, df only has one column: the one to compute the histogram from
-            stats <- collect(describe(df[, colname]))
+            stats <- collect(describe(df[, colname, drop=F]))
             min <- as.numeric(stats[4, 2])
             max <- as.numeric(stats[5, 2])
 
