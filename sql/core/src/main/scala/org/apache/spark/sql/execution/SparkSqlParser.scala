@@ -289,6 +289,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     }
     val options = Option(ctx.tablePropertyList).map(visitTablePropertyList).getOrElse(Map.empty)
     val provider = ctx.tableProvider.qualifiedName.getText
+    val bucketSpec = Option(ctx.bucketSpec()).map(visitBucketSpec)
 
     if (ctx.query != null) {
       // Get the backing query.
@@ -302,9 +303,16 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       } else {
         SaveMode.ErrorIfExists
       }
-      CreateTableUsingAsSelect(table, provider, temp, Array.empty, None, mode, options, query)
+
+      val partitionColumnNames =
+        Option(ctx.partitionColumnNames)
+          .map(visitIdentifierList(_).toArray)
+          .getOrElse(Array.empty[String])
+
+      CreateTableUsingAsSelect(
+        table, provider, temp, partitionColumnNames, bucketSpec, mode, options, query)
     } else {
-      val struct = Option(ctx.colTypeList).map(createStructType)
+      val struct = Option(ctx.colTypeList()).map(createStructType)
       CreateTableUsing(table, struct, provider, temp, options, ifNotExists, managedIfNoPath = false)
     }
   }
