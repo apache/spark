@@ -97,6 +97,9 @@ statement
     | SHOW DATABASES (LIKE pattern=STRING)?                            #showDatabases
     | SHOW TBLPROPERTIES table=tableIdentifier
         ('(' key=tablePropertyKey ')')?                                #showTblProperties
+    | SHOW COLUMNS (FROM | IN) tableIdentifier
+        ((FROM | IN) db=identifier)?                                   #showColumns
+    | SHOW PARTITIONS tableIdentifier partitionSpec?                   #showPartitions
     | SHOW FUNCTIONS (LIKE? (qualifiedName | pattern=STRING))?         #showFunctions
     | (DESC | DESCRIBE) FUNCTION EXTENDED? describeFuncName            #describeFunction
     | (DESC | DESCRIBE) option=(EXTENDED | FORMATTED)?
@@ -118,7 +121,6 @@ statement
 hiveNativeCommands
     : TRUNCATE TABLE tableIdentifier partitionSpec?
         (COLUMNS identifierList)?
-    | SHOW COLUMNS (FROM | IN) tableIdentifier ((FROM|IN) identifier)?
     | SHOW PARTITIONS tableIdentifier partitionSpec?
     | (CREATE | ALTER | DROP | SHOW | DESC | DESCRIBE) .*?
     ;

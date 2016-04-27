@@ -163,13 +163,13 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
 
     benchmark.addCase(s"codegen = T hashmap = F") { iter =>
       sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
-      sqlContext.setConf("spark.sql.codegen.aggregate.map.enabled", "false")
+      sqlContext.setConf("spark.sql.codegen.aggregate.map.columns.max", "0")
       f()
     }
 
     benchmark.addCase(s"codegen = T hashmap = T") { iter =>
       sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
-      sqlContext.setConf("spark.sql.codegen.aggregate.map.enabled", "true")
+      sqlContext.setConf("spark.sql.codegen.aggregate.map.columns.max", "3")
       f()
     }
 
@@ -201,13 +201,13 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
 
     benchmark.addCase(s"codegen = T hashmap = F") { iter =>
       sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
-      sqlContext.setConf("spark.sql.codegen.aggregate.map.enabled", "false")
+      sqlContext.setConf("spark.sql.codegen.aggregate.map.columns.max", "0")
       f()
     }
 
     benchmark.addCase(s"codegen = T hashmap = T") { iter =>
       sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
-      sqlContext.setConf("spark.sql.codegen.aggregate.map.enabled", "true")
+      sqlContext.setConf("spark.sql.codegen.aggregate.map.columns.max", "3")
       f()
     }
 
@@ -238,13 +238,13 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
 
     benchmark.addCase(s"codegen = T hashmap = F") { iter =>
       sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
-      sqlContext.setConf("spark.sql.codegen.aggregate.map.enabled", "false")
+      sqlContext.setConf("spark.sql.codegen.aggregate.map.columns.max", "0")
       f()
     }
 
     benchmark.addCase(s"codegen = T hashmap = T") { iter =>
       sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
-      sqlContext.setConf("spark.sql.codegen.aggregate.map.enabled", "true")
+      sqlContext.setConf("spark.sql.codegen.aggregate.map.columns.max", "3")
       f()
     }
 
@@ -275,13 +275,13 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
 
     benchmark.addCase(s"codegen = T hashmap = F") { iter =>
       sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
-      sqlContext.setConf("spark.sql.codegen.aggregate.map.enabled", "false")
+      sqlContext.setConf("spark.sql.codegen.aggregate.map.columns.max", "0")
       f()
     }
 
     benchmark.addCase(s"codegen = T hashmap = T") { iter =>
       sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
-      sqlContext.setConf("spark.sql.codegen.aggregate.map.enabled", "true")
+      sqlContext.setConf("spark.sql.codegen.aggregate.map.columns.max", "3")
       f()
     }
 
@@ -322,13 +322,13 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
 
     benchmark.addCase(s"codegen = T hashmap = F") { iter =>
       sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
-      sqlContext.setConf("spark.sql.codegen.aggregate.map.enabled", "false")
+      sqlContext.setConf("spark.sql.codegen.aggregate.map.columns.max", "0")
       f()
     }
 
     benchmark.addCase(s"codegen = T hashmap = T") { iter =>
       sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
-      sqlContext.setConf("spark.sql.codegen.aggregate.map.enabled", "true")
+      sqlContext.setConf("spark.sql.codegen.aggregate.map.columns.max", "10")
       f()
     }
 

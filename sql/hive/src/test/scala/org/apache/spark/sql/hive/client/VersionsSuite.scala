@@ -189,7 +189,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
     }
 
     test(s"$version: getPartitions") {
-      client.getAllPartitions(client.getTable("default", "src_part"))
+      client.getPartitions(client.getTable("default", "src_part"))
     }
 
     test(s"$version: getPartitionsByFilter") {

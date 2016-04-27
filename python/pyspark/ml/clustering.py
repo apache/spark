@@ -39,8 +39,9 @@ class GaussianMixtureModel(JavaModel, JavaMLWritable, JavaMLReadable):
     @since("2.0.0")
     def weights(self):
         """
-        Weights for each Gaussian distribution in the mixture, where weights[i] is
-        the weight for Gaussian i, and weights.sum == 1.
+        Weight for each Gaussian distribution in the mixture.
+        This is a multinomial probability distribution over the k Gaussians,
+        where weights[i] is the weight for Gaussian i, and weights sum to 1.
         """
         return self._call_java("weights")
 
@@ -50,11 +51,7 @@ class GaussianMixtureModel(JavaModel, JavaMLWritable, JavaMLReadable):
         """
         Retrieve Gaussian distributions as a DataFrame.
         Each row represents a Gaussian Distribution.
-        Two columns are defined: mean and cov.
-        Schema:
-        root
-        -- mean: vector (nullable = true)
-        -- cov: matrix (nullable = true)
+        The DataFrame has two columns: mean (Vector) and cov (Matrix).
         """
         return self._call_java("gaussiansDF")
 
@@ -194,9 +191,8 @@ class KMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
 class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol, HasSeed,
              JavaMLWritable, JavaMLReadable):
     """
-    K-means clustering with support for multiple parallel runs and a k-means++ like initialization
-    mode (the k-means|| algorithm by Bahmani et al). When multiple concurrent runs are requested,
-    they are executed together with joint passes over the data for efficiency.
+    K-means clustering with a k-means++ like initialization mode
+    (the k-means|| algorithm by Bahmani et al).
 
     >>> from pyspark.mllib.linalg import Vectors
     >>> data = [(Vectors.dense([0.0, 0.0]),), (Vectors.dense([1.0, 1.0]),),
