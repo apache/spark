@@ -29,7 +29,7 @@ import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.execution.datasources.jdbc.JDBCRDD
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRDD, JDBCRelation}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -651,5 +651,26 @@ class JDBCSuite extends SparkFunSuite
     val oracleDialect = JdbcDialects.get("jdbc:oracle://127.0.0.1/db")
     assert(oracleDialect.getJDBCType(StringType).
       map(_.databaseTypeDefinition).get == "VARCHAR2(255)")
+  }
+
+  test("SPARK-14955: avoid stride value equals to zero") {
+    val parts1 = JDBCRelation.columnPartition(JDBCPartitioningInfo("partitionColumn", 0L, 2L, 3))
+    val expected1 = Array(JDBCPartition("partitionColumn < 1 OR partitionColumn IS NULL", 0),
+      JDBCPartition("partitionColumn >= 1 AND partitionColumn < 2", 1),
+      JDBCPartition("partitionColumn >= 2", 2))
+    assert(parts1.sameElements(expected1))
+
+    val parts2 = JDBCRelation.columnPartition(JDBCPartitioningInfo("partitionColumn", 0L, 4L, 3))
+    val expected2 = Array(JDBCPartition("partitionColumn < 1 OR partitionColumn IS NULL", 0),
+      JDBCPartition("partitionColumn >= 1 AND partitionColumn < 2", 1),
+      JDBCPartition("partitionColumn >= 2", 2))
+    assert(parts2.sameElements(expected2))
+
+    val parts3 = JDBCRelation.columnPartition(JDBCPartitioningInfo("partitionColumn", 0L, 2L, 4))
+    val expected3 = Array(JDBCPartition("partitionColumn < 1 OR partitionColumn IS NULL", 0),
+      JDBCPartition("partitionColumn >= 1 AND partitionColumn < 2", 1),
+      JDBCPartition("partitionColumn >= 2 AND partitionColumn < 3", 2),
+      JDBCPartition("partitionColumn >= 3", 3))
+    assert(parts3.sameElements(expected3))
   }
 }

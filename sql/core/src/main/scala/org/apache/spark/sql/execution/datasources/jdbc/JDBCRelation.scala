@@ -54,15 +54,22 @@ private[sql] object JDBCRelation {
   def columnPartition(partitioning: JDBCPartitioningInfo): Array[Partition] = {
     if (partitioning == null) return Array[Partition](JDBCPartition(null, 0))
 
+    // make sure the input is valid
+    val lower = partitioning.lowerBound
+    val upper = partitioning.upperBound
     val numPartitions = partitioning.numPartitions
     val column = partitioning.column
+    require(lower < upper, "lower bound must be less than upper bound")
+    require(numPartitions > 0, "number of partition must be great than zero")
+
     if (numPartitions == 1) return Array[Partition](JDBCPartition(null, 0))
-    // Overflow and silliness can happen if you subtract then divide.
-    // Here we get a little roundoff, but that's (hopefully) OK.
-    val stride: Long = (partitioning.upperBound / numPartitions
-                      - partitioning.lowerBound / numPartitions)
+
+    val stride: Long = {
+      val inc = (upper - lower + 1) / numPartitions
+      if (inc > 0) inc else 1
+    }
     var i: Int = 0
-    var currentValue: Long = partitioning.lowerBound
+    var currentValue: Long = lower
     var ans = new ArrayBuffer[Partition]()
     while (i < numPartitions) {
       val lowerBound = if (i != 0) s"$column >= $currentValue" else null
@@ -72,7 +79,7 @@ private[sql] object JDBCRelation {
         if (upperBound == null) {
           lowerBound
         } else if (lowerBound == null) {
-          s"$upperBound or $column is null"
+          s"$upperBound OR $column IS NULL"
         } else {
           s"$lowerBound AND $upperBound"
         }
