@@ -967,25 +967,26 @@ class TungstenAggregationQuerySuite extends AggregationQuerySuite
 class TungstenAggregationQueryWithControlledFallbackSuite extends AggregationQuerySuite {
 
   override protected def checkAnswer(actual: => DataFrame, expectedAnswer: Seq[Row]): Unit = {
-    Seq(false, true).foreach { enableColumnarHashMap =>
-      withSQLConf("spark.sql.codegen.aggregate.map.enabled" -> enableColumnarHashMap.toString) {
+    Seq(0, 10).foreach { maxColumnarHashMapColumns =>
+      withSQLConf("spark.sql.codegen.aggregate.map.columns.max" ->
+        maxColumnarHashMapColumns.toString) {
         (1 to 3).foreach { fallbackStartsAt =>
           withSQLConf("spark.sql.TungstenAggregate.testFallbackStartsAt" ->
             s"${(fallbackStartsAt - 1).toString}, ${fallbackStartsAt.toString}") {
             // Create a new df to make sure its physical operator picks up
             // spark.sql.TungstenAggregate.testFallbackStartsAt.
             // todo: remove it?
-            val newActual = Dataset.ofRows(sqlContext, actual.logicalPlan)
+            val newActual = Dataset.ofRows(sqlContext.sparkSession, actual.logicalPlan)
 
             QueryTest.checkAnswer(newActual, expectedAnswer) match {
               case Some(errorMessage) =>
                 val newErrorMessage =
                   s"""
-                    |The following aggregation query failed when using TungstenAggregate with
-                    |controlled fallback (it falls back to bytes to bytes map once it has processed
-                    |${fallbackStartsAt -1} input rows and to sort-based aggregation once it has
-                    |processed $fallbackStartsAt input rows). The query is ${actual.queryExecution}
-                    |
+                     |The following aggregation query failed when using TungstenAggregate with
+                     |controlled fallback (it falls back to bytes to bytes map once it has processed
+                     |${fallbackStartsAt - 1} input rows and to sort-based aggregation once it has
+                     |processed $fallbackStartsAt input rows). The query is ${actual.queryExecution}
+                     |
                     |$errorMessage
                   """.stripMargin
 

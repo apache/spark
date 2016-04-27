@@ -157,8 +157,20 @@ abstract class ExternalCatalog {
 
   def getPartition(db: String, table: String, spec: TablePartitionSpec): CatalogTablePartition
 
-  // TODO: support listing by pattern
-  def listPartitions(db: String, table: String): Seq[CatalogTablePartition]
+  /**
+   * List the metadata of all partitions that belong to the specified table, assuming it exists.
+   *
+   * A partial partition spec may optionally be provided to filter the partitions returned.
+   * For instance, if there exist partitions (a='1', b='2'), (a='1', b='3') and (a='2', b='4'),
+   * then a partial spec of (a='1') will return the first two only.
+   * @param db database name
+   * @param table table name
+   * @param partialSpec  partition spec
+   */
+  def listPartitions(
+      db: String,
+      table: String,
+      partialSpec: Option[TablePartitionSpec] = None): Seq[CatalogTablePartition]
 
   // --------------------------------------------------------------------------
   // Functions
@@ -287,10 +299,10 @@ case class CatalogTable(
 
 case class CatalogTableType private(name: String)
 object CatalogTableType {
-  val EXTERNAL_TABLE = new CatalogTableType("EXTERNAL_TABLE")
-  val MANAGED_TABLE = new CatalogTableType("MANAGED_TABLE")
-  val INDEX_TABLE = new CatalogTableType("INDEX_TABLE")
-  val VIRTUAL_VIEW = new CatalogTableType("VIRTUAL_VIEW")
+  val EXTERNAL = new CatalogTableType("EXTERNAL")
+  val MANAGED = new CatalogTableType("MANAGED")
+  val INDEX = new CatalogTableType("INDEX")
+  val VIEW = new CatalogTableType("VIEW")
 }
 
 

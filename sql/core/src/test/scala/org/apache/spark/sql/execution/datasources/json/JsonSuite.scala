@@ -1316,7 +1316,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         .map(i => s"""{"a": 1, "b": "str$i"}""").saveAsTextFile(path)
 
       val d1 = DataSource(
-        sqlContext,
+        sqlContext.sparkSession,
         userSpecifiedSchema = None,
         partitionColumns = Array.empty[String],
         bucketSpec = None,
@@ -1324,7 +1324,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         options = Map("path" -> path)).resolveRelation()
 
       val d2 = DataSource(
-        sqlContext,
+        sqlContext.sparkSession,
         userSpecifiedSchema = None,
         partitionColumns = Array.empty[String],
         bucketSpec = None,
@@ -1507,23 +1507,11 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       df.write.json(path + "/p=2")
       assert(sqlContext.read.json(path).count() === 4)
 
-      val clonedConf = new Configuration(hadoopConfiguration)
-      try {
-        // Setting it twice as the name of the propery has changed between hadoop versions.
-        hadoopConfiguration.setClass(
-          "mapred.input.pathFilter.class",
-          classOf[TestFileFilter],
-          classOf[PathFilter])
-        hadoopConfiguration.setClass(
-          "mapreduce.input.pathFilter.class",
-          classOf[TestFileFilter],
-          classOf[PathFilter])
-        assert(sqlContext.read.json(path).count() === 2)
-      } finally {
-        // Hadoop 1 doesn't have `Configuration.unset`
-        hadoopConfiguration.clear()
-        clonedConf.asScala.foreach(entry => hadoopConfiguration.set(entry.getKey, entry.getValue))
-      }
+      val extraOptions = Map(
+        "mapred.input.pathFilter.class" -> classOf[TestFileFilter].getName,
+        "mapreduce.input.pathFilter.class" -> classOf[TestFileFilter].getName
+      )
+      assert(sqlContext.read.options(extraOptions).json(path).count() === 2)
     }
   }
 
@@ -1609,45 +1597,40 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   }
 
   test("SPARK-13543 Write the output as uncompressed via option()") {
-    val clonedConf = new Configuration(hadoopConfiguration)
-    hadoopConfiguration.set("mapreduce.output.fileoutputformat.compress", "true")
-    hadoopConfiguration
-      .set("mapreduce.output.fileoutputformat.compress.type", CompressionType.BLOCK.toString)
-    hadoopConfiguration
-      .set("mapreduce.output.fileoutputformat.compress.codec", classOf[GzipCodec].getName)
-    hadoopConfiguration.set("mapreduce.map.output.compress", "true")
-    hadoopConfiguration.set("mapreduce.map.output.compress.codec", classOf[GzipCodec].getName)
+    val extraOptions = Map[String, String](
+      "mapreduce.output.fileoutputformat.compress" -> "true",
+      "mapreduce.output.fileoutputformat.compress.type" -> CompressionType.BLOCK.toString,
+      "mapreduce.output.fileoutputformat.compress.codec" -> classOf[GzipCodec].getName,
+      "mapreduce.map.output.compress" -> "true",
+      "mapreduce.map.output.compress.codec" -> classOf[GzipCodec].getName
+    )
     withTempDir { dir =>
-      try {
-        val dir = Utils.createTempDir()
-        dir.delete()
+      val dir = Utils.createTempDir()
+      dir.delete()
 
-        val path = dir.getCanonicalPath
-        primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).saveAsTextFile(path)
+      val path = dir.getCanonicalPath
+      primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).saveAsTextFile(path)
 
-        val jsonDF = sqlContext.read.json(path)
-        val jsonDir = new File(dir, "json").getCanonicalPath
-        jsonDF.coalesce(1).write
-          .format("json")
-          .option("compression", "none")
-          .save(jsonDir)
+      val jsonDF = sqlContext.read.json(path)
+      val jsonDir = new File(dir, "json").getCanonicalPath
+      jsonDF.coalesce(1).write
+        .format("json")
+        .option("compression", "none")
+        .options(extraOptions)
+        .save(jsonDir)
 
-        val compressedFiles = new File(jsonDir).listFiles()
-        assert(compressedFiles.exists(!_.getName.endsWith(".json.gz")))
+      val compressedFiles = new File(jsonDir).listFiles()
+      assert(compressedFiles.exists(!_.getName.endsWith(".json.gz")))
 
-        val jsonCopy = sqlContext.read
-          .format("json")
-          .load(jsonDir)
+      val jsonCopy = sqlContext.read
+        .format("json")
+        .options(extraOptions)
+        .load(jsonDir)
 
-        assert(jsonCopy.count == jsonDF.count)
-        val jsonCopySome = jsonCopy.selectExpr("string", "long", "boolean")
-        val jsonDFSome = jsonDF.selectExpr("string", "long", "boolean")
-        checkAnswer(jsonCopySome, jsonDFSome)
-      } finally {
-        // Hadoop 1 doesn't have `Configuration.unset`
-        hadoopConfiguration.clear()
-        clonedConf.asScala.foreach(entry => hadoopConfiguration.set(entry.getKey, entry.getValue))
-      }
+      assert(jsonCopy.count == jsonDF.count)
+      val jsonCopySome = jsonCopy.selectExpr("string", "long", "boolean")
+      val jsonDFSome = jsonDF.selectExpr("string", "long", "boolean")
+      checkAnswer(jsonCopySome, jsonDFSome)
     }
   }
 

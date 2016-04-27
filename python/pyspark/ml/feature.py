@@ -523,12 +523,12 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures, Java
     >>> df = sqlContext.createDataFrame([(["a", "b", "c"],)], ["words"])
     >>> hashingTF = HashingTF(numFeatures=10, inputCol="words", outputCol="features")
     >>> hashingTF.transform(df).head().features
-    SparseVector(10, {7: 1.0, 8: 1.0, 9: 1.0})
+    SparseVector(10, {0: 1.0, 1: 1.0, 2: 1.0})
     >>> hashingTF.setParams(outputCol="freqs").transform(df).head().freqs
-    SparseVector(10, {7: 1.0, 8: 1.0, 9: 1.0})
+    SparseVector(10, {0: 1.0, 1: 1.0, 2: 1.0})
     >>> params = {hashingTF.numFeatures: 5, hashingTF.outputCol: "vector"}
     >>> hashingTF.transform(df, params).head().vector
-    SparseVector(5, {2: 1.0, 3: 1.0, 4: 1.0})
+    SparseVector(5, {0: 1.0, 1: 1.0, 2: 1.0})
     >>> hashingTFPath = temp_path + "/hashing-tf"
     >>> hashingTF.save(hashingTFPath)
     >>> loadedHashingTF = HashingTF.load(hashingTFPath)
@@ -543,22 +543,30 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures, Java
                    "rather than integer counts. Default False.",
                    typeConverter=TypeConverters.toBoolean)
 
+    hashAlgorithm = Param(Params._dummy(), "hashAlgorithm", "The hash algorithm used when " +
+                          "mapping term to integer. Supported options: murmur3(default) " +
+                          "and native.", typeConverter=TypeConverters.toString)
+
     @keyword_only
-    def __init__(self, numFeatures=1 << 18, binary=False, inputCol=None, outputCol=None):
+    def __init__(self, numFeatures=1 << 18, binary=False, inputCol=None, outputCol=None,
+                 hashAlgorithm="murmur3"):
         """
-        __init__(self, numFeatures=1 << 18, inputCol=None, outputCol=None)
+        __init__(self, numFeatures=1 << 18, binary=False, inputCol=None, outputCol=None, \
+                 hashAlgorithm="murmur3")
         """
         super(HashingTF, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.HashingTF", self.uid)
-        self._setDefault(numFeatures=1 << 18, binary=False)
+        self._setDefault(numFeatures=1 << 18, binary=False, hashAlgorithm="murmur3")
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("1.3.0")
-    def setParams(self, numFeatures=1 << 18, inputCol=None, outputCol=None):
+    def setParams(self, numFeatures=1 << 18, binary=False, inputCol=None, outputCol=None,
+                  hashAlgorithm="murmur3"):
         """
-        setParams(self, numFeatures=1 << 18, inputCol=None, outputCol=None)
+        setParams(self, numFeatures=1 << 18, binary=False, inputCol=None, outputCol=None, \
+                  hashAlgorithm="murmur3")
         Sets params for this HashingTF.
         """
         kwargs = self.setParams._input_kwargs
@@ -578,6 +586,21 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures, Java
         Gets the value of binary or its default value.
         """
         return self.getOrDefault(self.binary)
+
+    @since("2.0.0")
+    def setHashAlgorithm(self, value):
+        """
+        Sets the value of :py:attr:`hashAlgorithm`.
+        """
+        self._set(hashAlgorithm=value)
+        return self
+
+    @since("2.0.0")
+    def getHashAlgorithm(self):
+        """
+        Gets the value of hashAlgorithm or its default value.
+        """
+        return self.getOrDefault(self.hashAlgorithm)
 
 
 @inherit_doc

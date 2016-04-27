@@ -282,7 +282,7 @@ abstract class QueryTest extends PlanTest {
     def renormalize: PartialFunction[LogicalPlan, LogicalPlan] = {
       case l: LogicalRDD =>
         val origin = logicalRDDs.pop()
-        LogicalRDD(l.output, origin.rdd)(sqlContext)
+        LogicalRDD(l.output, origin.rdd)(sqlContext.sparkSession)
       case l: LocalRelation =>
         val origin = localRelations.pop()
         l.copy(data = origin.data)

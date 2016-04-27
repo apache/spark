@@ -189,7 +189,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
     test(s"$testName using CartesianProduct") {
       withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
         checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-          FilterExec(condition(), CartesianProductExec(left, right)),
+          CartesianProductExec(left, right, Some(condition())),
           expectedAnswer.map(Row.fromTuple),
           sortAnswers = true)
       }

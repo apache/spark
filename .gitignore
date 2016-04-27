@@ -20,6 +20,7 @@ out/
 build/apache-maven*
 build/zinc*
 build/scala*
+scalastyle-on-compile.generated.xml
 conf/java-opts
 conf/*.sh
 conf/*.cmd
