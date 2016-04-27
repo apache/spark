@@ -177,8 +177,6 @@ case class WindowExec(
         case e @ WindowExpression(function, spec) =>
           val frame = spec.frameSpecification.asInstanceOf[SpecifiedWindowFrame]
           function match {
-            case MakeDecimal(AggregateExpression(f, _, _, _), prec, scale) =>
-              collect("AGGREGATE", frame, e, f)
             case AggregateExpression(f, _, _, _) => collect("AGGREGATE", frame, e, f)
             case f: AggregateWindowFunction => collect("AGGREGATE", frame, e, f)
             case f: OffsetWindowFunction => collect("OFFSET", frame, e, f)
