@@ -464,8 +464,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
   test("callUDF in SQLContext") {
     val df = Seq(("id1", 1), ("id2", 4), ("id3", 5)).toDF("id", "value")
-    val sqlctx = df.sqlContext
-    sqlctx.udf.register("simpleUDF", (v: Int) => v * v)
+    df.sparkSession.udf.register("simpleUDF", (v: Int) => v * v)
     checkAnswer(
       df.select($"id", callUDF("simpleUDF", $"value")),
       Row("id1", 1) :: Row("id2", 16) :: Row("id3", 25) :: Nil)
@@ -618,7 +617,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("apply on query results (SPARK-5462)") {
-    val df = testData.sqlContext.sql("select key from testData")
+    val df = testData.sparkSession.sql("select key from testData")
     checkAnswer(df.select(df("key")), testData.select('key).collect().toSeq)
   }
 
@@ -975,7 +974,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       assert(e2.getMessage.contains("Inserting into an RDD-based table is not allowed."))
 
       // error case: insert into an OneRowRelation
-      Dataset.ofRows(sqlContext, OneRowRelation).registerTempTable("one_row")
+      Dataset.ofRows(sqlContext.sparkSession, OneRowRelation).registerTempTable("one_row")
       val e3 = intercept[AnalysisException] {
         insertion.write.insertInto("one_row")
       }

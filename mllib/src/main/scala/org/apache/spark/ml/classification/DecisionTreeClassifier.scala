@@ -44,7 +44,7 @@ import org.apache.spark.sql.Dataset
  */
 @Since("1.4.0")
 @Experimental
-final class DecisionTreeClassifier @Since("1.4.0") (
+class DecisionTreeClassifier @Since("1.4.0") (
     @Since("1.4.0") override val uid: String)
   extends ProbabilisticClassifier[Vector, DecisionTreeClassifier, DecisionTreeClassificationModel]
   with DecisionTreeClassifierParams with DefaultParamsWritable {
@@ -138,7 +138,7 @@ object DecisionTreeClassifier extends DefaultParamsReadable[DecisionTreeClassifi
  */
 @Since("1.4.0")
 @Experimental
-final class DecisionTreeClassificationModel private[ml] (
+class DecisionTreeClassificationModel private[ml] (
     @Since("1.4.0")override val uid: String,
     @Since("1.4.0")override val rootNode: Node,
     @Since("1.6.0")override val numFeatures: Int,

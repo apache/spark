@@ -104,6 +104,18 @@ class ExistenceJoinSuite extends SparkPlanTest with SharedSQLContext {
       }
     }
 
+    test(s"$testName using SortMergeJoin") {
+      extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _) =>
+        withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+          checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
+            EnsureRequirements(left.sqlContext.sessionState.conf).apply(
+              SortMergeJoinExec(leftKeys, rightKeys, joinType, boundCondition, left, right)),
+            expectedAnswer,
+            sortAnswers = true)
+        }
+      }
+    }
+
     test(s"$testName using BroadcastNestedLoopJoin build left") {
       withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
         checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>

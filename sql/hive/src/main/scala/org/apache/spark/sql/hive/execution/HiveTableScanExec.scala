@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive.execution
 
 import scala.collection.JavaConverters._
 
-import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition}
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.objectinspector._
@@ -27,7 +27,7 @@ import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.Object
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution._
@@ -48,8 +48,7 @@ case class HiveTableScanExec(
     requestedAttributes: Seq[Attribute],
     relation: MetastoreRelation,
     partitionPruningPred: Seq[Expression])(
-    @transient val context: SQLContext,
-    @transient val hiveconf: HiveConf)
+    @transient private val sparkSession: SparkSession)
   extends LeafExecNode {
 
   require(partitionPruningPred.isEmpty || relation.hiveQlTable.isPartitioned,
@@ -77,20 +76,20 @@ case class HiveTableScanExec(
   // Create a local copy of hiveconf,so that scan specific modifications should not impact
   // other queries
   @transient
-  private[this] val hiveExtraConf = new HiveConf(hiveconf)
+  private[this] val hadoopConf = sparkSession.sessionState.newHadoopConf()
 
   // append columns ids and names before broadcast
-  addColumnMetadataToConf(hiveExtraConf)
+  addColumnMetadataToConf(hadoopConf)
 
   @transient
   private[this] val hadoopReader =
-    new HadoopTableReader(attributes, relation, context, hiveExtraConf)
+    new HadoopTableReader(attributes, relation, sparkSession, hadoopConf)
 
   private[this] def castFromString(value: String, dataType: DataType) = {
     Cast(Literal(value), dataType).eval(null)
   }
 
-  private def addColumnMetadataToConf(hiveConf: HiveConf) {
+  private def addColumnMetadataToConf(hiveConf: Configuration) {
     // Specifies needed column IDs for those non-partitioning columns.
     val neededColumnIDs = attributes.flatMap(relation.columnOrdinals.get).map(o => o: Integer)
 
