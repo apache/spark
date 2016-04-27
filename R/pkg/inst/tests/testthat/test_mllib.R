@@ -128,9 +128,9 @@ test_that("glm summary", {
 
   # Test model save/load
   modelPath <- tempfile(pattern = "GLM", fileext = ".tmp")
-  ml.save(m, modelPath)
-  expect_error(ml.save(m, modelPath))
-  ml.save(m, modelPath, overwrite = TRUE)
+  ml.save(model, modelPath)
+  expect_error(ml.save(model, modelPath))
+  ml.save(model, modelPath, overwrite = TRUE)
   m2 <- ml.load(modelPath)
   s2 <- summary(m2)
   expect_equal(s$rCoefficients, s2$rCoefficients)
