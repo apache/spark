@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTablePartition, CatalogTableType, SessionCatalog}
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalog.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.types._
 
 
@@ -34,12 +35,17 @@ import org.apache.spark.sql.types._
 // https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DDL
 
 /**
- * A DDL command expected to be parsed and run in an underlying system instead of in Spark.
+ * A DDL command that is not supported right now. Since we have already implemented
+ * the parsing rules for some commands that are not allowed, we use this as the base class
+ * of those commands.
  */
-abstract class NativeDDLCommand(val sql: String) extends RunnableCommand {
+abstract class UnsupportedCommand(exception: ParseException) extends RunnableCommand {
+
+  // Throws the ParseException when we create this command.
+  throw exception
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    sparkSession.runNativeSql(sql)
+    Seq.empty[Row]
   }
 
   override val output: Seq[Attribute] = {
@@ -426,8 +432,8 @@ case class AlterTableSetFileFormat(
     tableName: TableIdentifier,
     partitionSpec: Option[TablePartitionSpec],
     fileFormat: Seq[String],
-    genericFormat: Option[String])(sql: String)
-  extends NativeDDLCommand(sql) with Logging
+    genericFormat: Option[String])(exception: ParseException)
+  extends UnsupportedCommand(exception) with Logging
 
 /**
  * A command that sets the location of a table or a partition.
@@ -488,24 +494,24 @@ case class AlterTableChangeCol(
     comment: Option[String],
     afterColName: Option[String],
     restrict: Boolean,
-    cascade: Boolean)(sql: String)
-  extends NativeDDLCommand(sql) with Logging
+    cascade: Boolean)(exception: ParseException)
+  extends UnsupportedCommand(exception) with Logging
 
 case class AlterTableAddCol(
     tableName: TableIdentifier,
     partitionSpec: Option[TablePartitionSpec],
     columns: StructType,
     restrict: Boolean,
-    cascade: Boolean)(sql: String)
-  extends NativeDDLCommand(sql) with Logging
+    cascade: Boolean)(exception: ParseException)
+  extends UnsupportedCommand(exception) with Logging
 
 case class AlterTableReplaceCol(
     tableName: TableIdentifier,
     partitionSpec: Option[TablePartitionSpec],
     columns: StructType,
     restrict: Boolean,
-    cascade: Boolean)(sql: String)
-  extends NativeDDLCommand(sql) with Logging
+    cascade: Boolean)(exception: ParseException)
+  extends UnsupportedCommand(exception) with Logging
 
 
 private[sql] object DDLUtils {

@@ -645,7 +645,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec),
       fileFormat,
       genericFormat)(
-      command(ctx))
+      parseException("ALTER TABLE SET FILEFORMAT", ctx))
   }
 
   /**
@@ -693,7 +693,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       // Note that Restrict and Cascade are mutually exclusive.
       ctx.RESTRICT != null,
       ctx.CASCADE != null)(
-      command(ctx))
+      parseException("ALTER TABLE CHANGE COLUMN", ctx))
   }
 
   /**
@@ -713,7 +713,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       // Note that Restrict and Cascade are mutually exclusive.
       ctx.RESTRICT != null,
       ctx.CASCADE != null)(
-      command(ctx))
+      parseException("ALTER TABLE ADD COLUMNS", ctx))
   }
 
   /**
@@ -733,7 +733,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       // Note that Restrict and Cascade are mutually exclusive.
       ctx.RESTRICT != null,
       ctx.CASCADE != null)(
-      command(ctx))
+      parseException("ALTER TABLE REPLACE COLUMNS", ctx))
   }
 
   /**
@@ -782,7 +782,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       // SET ROLE is the exception to the rule, because we handle this before other SET commands.
       "SET ROLE"
     }
-    throw new ParseException(s"Operation not allowed: $keywords", ctx)
+    throw parseException(keywords, ctx)
   }
 
   /**
