@@ -32,6 +32,21 @@ private[spark] case class AccumulatorMetadata(
     countFailedValues: Boolean) extends Serializable
 
 
+/**
+ * The base class for accumulators, that can accumulate inputs of type `IN`, and produce output of
+ * type `OUT`.  Implementations must define following methods:
+ *  - isZero:       tell if this accumulator is zero value or not. e.g. for a counter accumulator,
+ *                  0 is zero value; for a list accumulator, Nil is zero value.
+ *  - copyAndReset: create a new copy of this accumulator, which is zero value. i.e. call `isZero`
+ *                  on the copy must return true.
+ *  - add:          defines how to accumulate the inputs. e.g. it can be a simple `+=` for counter
+ *                  accumulator
+ *  - merge:        defines how to merge another accumulator of same type.
+ *  - localValue:   defines how to produce the output by the current state of this accumulator.
+ *
+ * The implementations decide how to store intermediate values, e.g. a long field for a counter
+ * accumulator, a double and a long field for a average accumulator(storing the sum and count).
+ */
 abstract class NewAccumulator[IN, OUT] extends Serializable {
   private[spark] var metadata: AccumulatorMetadata = _
   private[this] var atDriverSide = true
@@ -57,17 +72,17 @@ abstract class NewAccumulator[IN, OUT] extends Serializable {
     }
   }
 
-  def id: Long = {
+  final def id: Long = {
     assertMetadataNotNull()
     metadata.id
   }
 
-  def name: Option[String] = {
+  final def name: Option[String] = {
     assertMetadataNotNull()
     metadata.name
   }
 
-  def countFailedValues: Boolean = {
+  final def countFailedValues: Boolean = {
     assertMetadataNotNull()
     metadata.countFailedValues
   }
@@ -79,9 +94,9 @@ abstract class NewAccumulator[IN, OUT] extends Serializable {
 
   final private[spark] def isAtDriverSide: Boolean = atDriverSide
 
-  def copyAndReset(): NewAccumulator[IN, OUT]
-
   def isZero(): Boolean
+
+  def copyAndReset(): NewAccumulator[IN, OUT]
 
   def add(v: IN): Unit
 
@@ -100,7 +115,7 @@ abstract class NewAccumulator[IN, OUT] extends Serializable {
   def localValue: OUT
 
   // Called by Java when serializing an object
-  protected def writeReplace(): Any = {
+  final protected def writeReplace(): Any = {
     if (atDriverSide) {
       if (!isRegistered) {
         throw new UnsupportedOperationException(
@@ -212,9 +227,9 @@ private[spark] object AccumulatorContext {
 class LongAccumulator extends NewAccumulator[jl.Long, jl.Long] {
   private[this] var _sum = 0L
 
-  override def copyAndReset(): LongAccumulator = new LongAccumulator
-
   override def isZero(): Boolean = _sum == 0
+
+  override def copyAndReset(): LongAccumulator = new LongAccumulator
 
   override def add(v: jl.Long): Unit = _sum += v
 
@@ -237,9 +252,9 @@ class LongAccumulator extends NewAccumulator[jl.Long, jl.Long] {
 class DoubleAccumulator extends NewAccumulator[jl.Double, jl.Double] {
   private[this] var _sum = 0.0
 
-  override def copyAndReset(): DoubleAccumulator = new DoubleAccumulator
-
   override def isZero(): Boolean = _sum == 0.0
+
+  override def copyAndReset(): DoubleAccumulator = new DoubleAccumulator
 
   override def add(v: jl.Double): Unit = _sum += v
 
@@ -263,9 +278,9 @@ class AverageAccumulator extends NewAccumulator[jl.Double, jl.Double] {
   private[this] var _sum = 0.0
   private[this] var _count = 0L
 
-  override def copyAndReset(): AverageAccumulator = new AverageAccumulator
-
   override def isZero(): Boolean = _sum == 0.0 && _count == 0
+
+  override def copyAndReset(): AverageAccumulator = new AverageAccumulator
 
   override def add(v: jl.Double): Unit = {
     _sum += v
@@ -297,17 +312,17 @@ class AverageAccumulator extends NewAccumulator[jl.Double, jl.Double] {
 }
 
 
-class CollectionAccumulator[T] extends NewAccumulator[T, java.util.List[T]] {
+class ListAccumulator[T] extends NewAccumulator[T, java.util.List[T]] {
   private[this] val _list: java.util.List[T] = new java.util.ArrayList[T]
 
-  override def copyAndReset(): CollectionAccumulator[T] = new CollectionAccumulator
-
   override def isZero(): Boolean = _list.isEmpty
+
+  override def copyAndReset(): ListAccumulator[T] = new ListAccumulator
 
   override def add(v: T): Unit = _list.add(v)
 
   override def merge(other: NewAccumulator[T, java.util.List[T]]): Unit = other match {
-    case o: CollectionAccumulator[T] => _list.addAll(o.localValue)
+    case o: ListAccumulator[T] => _list.addAll(o.localValue)
     case _ => throw new UnsupportedOperationException(
       s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
   }
@@ -321,13 +336,13 @@ class LegacyAccumulatorWrapper[R, T](
     param: org.apache.spark.AccumulableParam[R, T]) extends NewAccumulator[T, R] {
   private[spark] var _value = initialValue  // Current value on driver
 
+  override def isZero(): Boolean = _value == param.zero(initialValue)
+
   override def copyAndReset(): LegacyAccumulatorWrapper[R, T] = {
     val acc = new LegacyAccumulatorWrapper(initialValue, param)
     acc._value = param.zero(initialValue)
     acc
   }
-
-  override def isZero(): Boolean = _value == param.zero(initialValue)
 
   override def add(v: T): Unit = _value = param.addAccumulator(_value, v)
 

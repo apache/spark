@@ -292,9 +292,9 @@ private[spark] class BlockStatusesAccumulator
   extends NewAccumulator[(BlockId, BlockStatus), Seq[(BlockId, BlockStatus)]] {
   private[this] var _seq = ArrayBuffer.empty[(BlockId, BlockStatus)]
 
-  override def copyAndReset(): BlockStatusesAccumulator = new BlockStatusesAccumulator
-
   override def isZero(): Boolean = _seq.isEmpty
+
+  override def copyAndReset(): BlockStatusesAccumulator = new BlockStatusesAccumulator
 
   override def add(v: (BlockId, BlockStatus)): Unit = _seq += v
 

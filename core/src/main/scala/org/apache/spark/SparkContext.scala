@@ -1276,27 +1276,97 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     acc
   }
 
+  /**
+   * Register the given accumulator.  Note that accumulators must be registered before use, or it
+   * will throw exception.
+   */
+  def register(acc: NewAccumulator[_, _]): Unit = {
+    acc.register(this)
+  }
+
+  /**
+   * Register the given accumulator with given name.  Note that accumulators must be registered
+   * before use, or it will throw exception.
+   */
+  def register(acc: NewAccumulator[_, _], name: String): Unit = {
+    acc.register(this, name = Some(name))
+  }
+
+  /**
+   * Create and register a long accumulator, which starts with 0 and accumulates inputs by `+=`.
+   */
   def longAccumulator: LongAccumulator = {
     val acc = new LongAccumulator
-    acc.register(this)
+    register(acc)
     acc
   }
 
+  /**
+   * Create and register a long accumulator, which starts with 0 and accumulates inputs by `+=`.
+   */
   def longAccumulator(name: String): LongAccumulator = {
     val acc = new LongAccumulator
-    acc.register(this, name = Some(name))
+    register(acc, name)
     acc
   }
 
+  /**
+   * Create and register a double accumulator, which starts with 0 and accumulates inputs by `+=`.
+   */
   def doubleAccumulator: DoubleAccumulator = {
     val acc = new DoubleAccumulator
-    acc.register(this)
+    register(acc)
     acc
   }
 
+  /**
+   * Create and register a double accumulator, which starts with 0 and accumulates inputs by `+=`.
+   */
   def doubleAccumulator(name: String): DoubleAccumulator = {
     val acc = new DoubleAccumulator
-    acc.register(this, name = Some(name))
+    register(acc, name)
+    acc
+  }
+
+  /**
+   * Create and register an average accumulator, which accumulates double inputs by recording the
+   * total sum and total count, and produce the output by sum / total.  Note that Double.NaN will be
+   * returned if no input is added.
+   */
+  def averageAccumulator: AverageAccumulator = {
+    val acc = new AverageAccumulator
+    register(acc)
+    acc
+  }
+
+  /**
+   * Create and register an average accumulator, which accumulates double inputs by recording the
+   * total sum and total count, and produce the output by sum / total.  Note that Double.NaN will be
+   * returned if no input is added.
+   */
+  def averageAccumulator(name: String): AverageAccumulator = {
+    val acc = new AverageAccumulator
+    register(acc, name)
+    acc
+  }
+
+  /**
+   * Create and register a list accumulator, which starts with empty list and accumulates inputs
+   * by adding them into the inner list.
+   */
+  def listAccumulator[T]: ListAccumulator[T] = {
+    val acc = new ListAccumulator[T]
+    register(acc)
+    acc
+  }
+
+  /**
+   * Create and register a list accumulator, which starts with empty list and accumulates inputs
+   * by adding them into the inner list.
+   */
+  def listAccumulator[T](name: String): ListAccumulator[T] = {
+    val acc = new ListAccumulator[T]
+    register(acc, name)
     acc
   }
 
