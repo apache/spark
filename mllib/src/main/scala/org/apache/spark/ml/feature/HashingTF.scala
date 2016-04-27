@@ -20,7 +20,7 @@ package org.apache.spark.ml.feature
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.AttributeGroup
-import org.apache.spark.ml.param.{BooleanParam, IntParam, ParamMap, ParamValidators}
+import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.feature
@@ -31,6 +31,12 @@ import org.apache.spark.sql.types.{ArrayType, StructType}
 /**
  * :: Experimental ::
  * Maps a sequence of terms to their term frequencies using the hashing trick.
+ * Currently we support two hash algorithms: "murmur3" (default) and "native".
+ * "murmur3" calculates a hash code value for the term object using
+ * Austin Appleby's MurmurHash 3 algorithm (MurmurHash3_x86_32);
+ * "native" calculates the hash code value using the native Scala implementation.
+ * In Spark 1.6 and earlier, "native" is the default hash algorithm;
+ * after Spark 2.0, we use "murmur3" as the default one.
  */
 @Experimental
 class HashingTF(override val uid: String)
@@ -63,7 +69,20 @@ class HashingTF(override val uid: String)
     "This is useful for discrete probabilistic models that model binary events rather " +
     "than integer counts")
 
-  setDefault(numFeatures -> (1 << 18), binary -> false)
+  /**
+   * The hash algorithm used when mapping term to integer.
+   * Supported options: "murmur3" and "native". We use "native" as default hash algorithm
+   * in Spark 1.6 and earlier. After Spark 2.0, we use "murmur3" as default one.
+   * (Default = "murmur3")
+   * @group expertParam
+   */
+  val hashAlgorithm = new Param[String](this, "hashAlgorithm", "The hash algorithm used when " +
+    "mapping term to integer. Supported options: " +
+    s"${feature.HashingTF.supportedHashAlgorithms.mkString(",")}.",
+    ParamValidators.inArray[String](feature.HashingTF.supportedHashAlgorithms))
+
+  setDefault(numFeatures -> (1 << 18), binary -> false,
+    hashAlgorithm -> feature.HashingTF.Murmur3)
 
   /** @group getParam */
   def getNumFeatures: Int = $(numFeatures)
@@ -77,10 +96,18 @@ class HashingTF(override val uid: String)
   /** @group setParam */
   def setBinary(value: Boolean): this.type = set(binary, value)
 
+  /** @group expertGetParam */
+  def getHashAlgorithm: String = $(hashAlgorithm)
+
+  /** @group expertSetParam */
+  def setHashAlgorithm(value: String): this.type = set(hashAlgorithm, value)
+
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema)
-    val hashingTF = new feature.HashingTF($(numFeatures)).setBinary($(binary))
+    val hashingTF = new feature.HashingTF($(numFeatures))
+      .setBinary($(binary))
+      .setHashAlgorithm($(hashAlgorithm))
     val t = udf { terms: Seq[_] => hashingTF.transform(terms) }
     val metadata = outputSchema($(outputCol)).metadata
     dataset.select(col("*"), t(col($(inputCol))).as($(outputCol), metadata))

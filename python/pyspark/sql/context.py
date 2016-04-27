@@ -146,13 +146,27 @@ class SQLContext(object):
         """
         self._ssql_ctx.setConf(key, value)
 
+    @ignore_unicode_prefix
     @since(1.3)
-    def getConf(self, key, defaultValue):
+    def getConf(self, key, defaultValue=None):
         """Returns the value of Spark SQL configuration property for the given key.
 
-        If the key is not set, returns defaultValue.
+        If the key is not set and defaultValue is not None, return
+        defaultValue. If the key is not set and defaultValue is None, return
+        the system default value.
+
+        >>> sqlContext.getConf("spark.sql.shuffle.partitions")
+        u'200'
+        >>> sqlContext.getConf("spark.sql.shuffle.partitions", "10")
+        u'10'
+        >>> sqlContext.setConf("spark.sql.shuffle.partitions", "50")
+        >>> sqlContext.getConf("spark.sql.shuffle.partitions", "10")
+        u'50'
         """
-        return self._ssql_ctx.getConf(key, defaultValue)
+        if defaultValue is not None:
+            return self._ssql_ctx.getConf(key, defaultValue)
+        else:
+            return self._ssql_ctx.getConf(key)
 
     @property
     @since("1.3.1")
@@ -589,6 +603,7 @@ class SQLContext(object):
         return DataFrameReader(self)
 
 
+# TODO(andrew): remove this too
 class HiveContext(SQLContext):
     """A variant of Spark SQL that integrates with data stored in Hive.
 
@@ -618,7 +633,7 @@ class HiveContext(SQLContext):
             raise
 
     def _get_hive_ctx(self):
-        return self._jvm.HiveContext(self._jsc.sc())
+        return self._jvm.SparkSession.withHiveSupport(self._jsc.sc()).wrapped()
 
     def refreshTable(self, tableName):
         """Invalidate and refresh all the cached the metadata of the given

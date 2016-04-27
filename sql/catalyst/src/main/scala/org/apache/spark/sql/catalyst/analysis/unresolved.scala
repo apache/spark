@@ -18,7 +18,8 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{errors, InternalRow, TableIdentifier}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
+import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
@@ -30,8 +31,8 @@ import org.apache.spark.sql.types.{DataType, StructType}
  * Thrown when an invalid attempt is made to access a property of a tree that has yet to be fully
  * resolved.
  */
-class UnresolvedException[TreeType <: TreeNode[_]](tree: TreeType, function: String) extends
-  errors.TreeNodeException(tree, s"Invalid call to $function on unresolved object", null)
+class UnresolvedException[TreeType <: TreeNode[_]](tree: TreeType, function: String)
+  extends TreeNodeException(tree, s"Invalid call to $function on unresolved object", null)
 
 /**
  * Holds the name of a relation that has yet to be looked up in a catalog.
@@ -138,7 +139,8 @@ object UnresolvedAttribute {
  * the [[org.apache.spark.sql.catalyst.plans.logical.Generate]] operator.
  * The analyzer will resolve this generator.
  */
-case class UnresolvedGenerator(name: String, children: Seq[Expression]) extends Generator {
+case class UnresolvedGenerator(name: FunctionIdentifier, children: Seq[Expression])
+  extends Generator {
 
   override def elementTypes: Seq[(DataType, Boolean, String)] =
     throw new UnresolvedException(this, "elementTypes")
@@ -147,7 +149,7 @@ case class UnresolvedGenerator(name: String, children: Seq[Expression]) extends 
   override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
   override lazy val resolved = false
 
-  override def prettyName: String = name
+  override def prettyName: String = name.unquotedString
   override def toString: String = s"'$name(${children.mkString(", ")})"
 
   override def eval(input: InternalRow = null): TraversableOnce[InternalRow] =
@@ -161,7 +163,7 @@ case class UnresolvedGenerator(name: String, children: Seq[Expression]) extends 
 }
 
 case class UnresolvedFunction(
-    name: String,
+    name: FunctionIdentifier,
     children: Seq[Expression],
     isDistinct: Boolean)
   extends Expression with Unevaluable {
@@ -171,8 +173,14 @@ case class UnresolvedFunction(
   override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
   override lazy val resolved = false
 
-  override def prettyName: String = name
+  override def prettyName: String = name.unquotedString
   override def toString: String = s"'$name(${children.mkString(", ")})"
+}
+
+object UnresolvedFunction {
+  def apply(name: String, children: Seq[Expression], isDistinct: Boolean): UnresolvedFunction = {
+    UnresolvedFunction(FunctionIdentifier(name, None), children, isDistinct)
+  }
 }
 
 /**

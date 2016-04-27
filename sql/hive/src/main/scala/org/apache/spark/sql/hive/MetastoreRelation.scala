@@ -26,7 +26,7 @@ import org.apache.hadoop.hive.metastore.api.FieldSchema
 import org.apache.hadoop.hive.ql.metadata.{Partition, Table => HiveTable}
 import org.apache.hadoop.hive.ql.plan.TableDesc
 
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{AttributeMap, AttributeReference, Expression}
@@ -42,7 +42,7 @@ private[hive] case class MetastoreRelation(
     alias: Option[String])
     (val catalogTable: CatalogTable,
      @transient private val client: HiveClient,
-     @transient private val sqlContext: SQLContext)
+     @transient private val sparkSession: SparkSession)
   extends LeafNode with MultiInstanceRelation with FileRelation with CatalogRelation {
 
   override def equals(other: Any): Boolean = other match {
@@ -58,7 +58,7 @@ private[hive] case class MetastoreRelation(
     Objects.hashCode(databaseName, tableName, alias, output)
   }
 
-  override protected def otherCopyArgs: Seq[AnyRef] = catalogTable :: sqlContext :: Nil
+  override protected def otherCopyArgs: Seq[AnyRef] = catalogTable :: sparkSession :: Nil
 
   private def toHiveColumn(c: CatalogColumn): FieldSchema = {
     new FieldSchema(c.name, c.dataType, c.comment.orNull)
@@ -124,16 +124,16 @@ private[hive] case class MetastoreRelation(
         // if the size is still less than zero, we use default size
         Option(totalSize).map(_.toLong).filter(_ > 0)
           .getOrElse(Option(rawDataSize).map(_.toLong).filter(_ > 0)
-            .getOrElse(sqlContext.conf.defaultSizeInBytes)))
+            .getOrElse(sparkSession.sessionState.conf.defaultSizeInBytes)))
     }
   )
 
   // When metastore partition pruning is turned off, we cache the list of all partitions to
   // mimic the behavior of Spark < 1.5
-  private lazy val allPartitions: Seq[CatalogTablePartition] = client.getAllPartitions(catalogTable)
+  private lazy val allPartitions: Seq[CatalogTablePartition] = client.getPartitions(catalogTable)
 
   def getHiveQlPartitions(predicates: Seq[Expression] = Nil): Seq[Partition] = {
-    val rawPartitions = if (sqlContext.conf.metastorePartitionPruning) {
+    val rawPartitions = if (sparkSession.sessionState.conf.metastorePartitionPruning) {
       client.getPartitionsByFilter(catalogTable, predicates)
     } else {
       allPartitions
@@ -226,6 +226,6 @@ private[hive] case class MetastoreRelation(
   }
 
   override def newInstance(): MetastoreRelation = {
-    MetastoreRelation(databaseName, tableName, alias)(catalogTable, client, sqlContext)
+    MetastoreRelation(databaseName, tableName, alias)(catalogTable, client, sparkSession)
   }
 }

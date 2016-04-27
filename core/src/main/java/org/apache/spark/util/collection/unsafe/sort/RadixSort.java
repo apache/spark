@@ -16,7 +16,7 @@
  */
 
 package org.apache.spark.util.collection.unsafe.sort;
- 
+
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.LongArray;
 
@@ -227,7 +227,7 @@ public class RadixSort {
     }
     return counts;
   }
-  
+
   /**
    * Specialization of sortAtByte() for key-prefix arrays.
    */
