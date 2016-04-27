@@ -393,9 +393,9 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       lowerCaseData.except(upperCaseData),
       Row(1, "a") ::
-        Row(2, "b") ::
-        Row(3, "c") ::
-        Row(4, "d") :: Nil)
+      Row(2, "b") ::
+      Row(3, "c") ::
+      Row(4, "d") :: Nil)
     checkAnswer(lowerCaseData.except(lowerCaseData), Nil)
     checkAnswer(upperCaseData.except(upperCaseData), Nil)
 
@@ -420,8 +420,8 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.except(df.filter("0 = 1")),
       Row("id1", 1) ::
-        Row("id", 1) ::
-        Row("id1", 2) :: Nil)
+      Row("id", 1) ::
+      Row("id1", 2) :: Nil)
 
     // check if the empty set on the left side works
     checkAnswer(
@@ -1135,7 +1135,6 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val df2 = (1 to 30).map(Tuple1.apply).toDF("i")
     val intersect = df1.intersect(df2)
     val except = df1.except(df2)
-    except.explain(true)
     assert(intersect.count() === 30)
     assert(except.count() === 70)
   }
