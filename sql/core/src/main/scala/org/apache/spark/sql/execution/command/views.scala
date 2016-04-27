@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.command
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
+import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.SQLBuilder
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
@@ -52,7 +52,7 @@ case class CreateViewCommand(
 
   override def output: Seq[Attribute] = Seq.empty[Attribute]
 
-  require(tableDesc.tableType == CatalogTableType.VIRTUAL_VIEW)
+  require(tableDesc.tableType == CatalogTableType.VIEW)
   require(tableDesc.viewText.isDefined)
 
   private val tableIdentifier = tableDesc.identifier
@@ -62,14 +62,14 @@ case class CreateViewCommand(
       "It is not allowed to define a view with both IF NOT EXISTS and OR REPLACE.")
   }
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
+  override def run(sparkSession: SparkSession): Seq[Row] = {
     // If the plan cannot be analyzed, throw an exception and don't proceed.
-    val qe = sqlContext.executePlan(child)
+    val qe = sparkSession.executePlan(child)
     qe.assertAnalyzed()
     val analyzedPlan = qe.analyzed
 
     require(tableDesc.schema == Nil || tableDesc.schema.length == analyzedPlan.output.length)
-    val sessionState = sqlContext.sessionState
+    val sessionState = sparkSession.sessionState
 
     if (sessionState.catalog.tableExists(tableIdentifier)) {
       if (allowExisting) {
@@ -77,7 +77,7 @@ case class CreateViewCommand(
         // already exists.
       } else if (replace) {
         // Handles `CREATE OR REPLACE VIEW v0 AS SELECT ...`
-        sessionState.catalog.alterTable(prepareTable(sqlContext, analyzedPlan))
+        sessionState.catalog.alterTable(prepareTable(sparkSession, analyzedPlan))
       } else {
         // Handles `CREATE VIEW v0 AS SELECT ...`. Throws exception when the target view already
         // exists.
@@ -88,7 +88,7 @@ case class CreateViewCommand(
     } else {
       // Create the view if it doesn't exist.
       sessionState.catalog.createTable(
-        prepareTable(sqlContext, analyzedPlan), ignoreIfExists = false)
+        prepareTable(sparkSession, analyzedPlan), ignoreIfExists = false)
     }
 
     Seq.empty[Row]
@@ -98,9 +98,9 @@ case class CreateViewCommand(
    * Returns a [[CatalogTable]] that can be used to save in the catalog. This comment canonicalize
    * SQL based on the analyzed plan, and also creates the proper schema for the view.
    */
-  private def prepareTable(sqlContext: SQLContext, analyzedPlan: LogicalPlan): CatalogTable = {
+  private def prepareTable(sparkSession: SparkSession, analyzedPlan: LogicalPlan): CatalogTable = {
     val viewSQL: String =
-      if (sqlContext.conf.canonicalView) {
+      if (sparkSession.sessionState.conf.canonicalView) {
         val logicalPlan =
           if (tableDesc.schema.isEmpty) {
             analyzedPlan
@@ -108,7 +108,7 @@ case class CreateViewCommand(
             val projectList = analyzedPlan.output.zip(tableDesc.schema).map {
               case (attr, col) => Alias(attr, col.name)()
             }
-            sqlContext.executePlan(Project(projectList, analyzedPlan)).analyzed
+            sparkSession.executePlan(Project(projectList, analyzedPlan)).analyzed
           }
         new SQLBuilder(logicalPlan).toSQL
       } else {
@@ -134,7 +134,7 @@ case class CreateViewCommand(
     // Validate the view SQL - make sure we can parse it and analyze it.
     // If we cannot analyze the generated query, there is probably a bug in SQL generation.
     try {
-      sqlContext.sql(viewSQL).queryExecution.assertAnalyzed()
+      sparkSession.sql(viewSQL).queryExecution.assertAnalyzed()
     } catch {
       case NonFatal(e) =>
         throw new RuntimeException(

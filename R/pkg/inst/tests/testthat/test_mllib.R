@@ -204,6 +204,18 @@ test_that("naiveBayes", {
                                "Yes", "Yes", "Yes", "Yes", "Yes", "Yes", "Yes", "Yes", "No", "No",
                                "Yes", "Yes", "No", "No"))
 
+  # Test model save/load
+  modelPath <- tempfile(pattern = "naiveBayes", fileext = ".tmp")
+  ml.save(m, modelPath)
+  expect_error(ml.save(m, modelPath))
+  ml.save(m, modelPath, overwrite = TRUE)
+  m2 <- ml.load(modelPath)
+  s2 <- summary(m2)
+  expect_equal(s$apriori, s2$apriori)
+  expect_equal(s$tables, s2$tables)
+
+  unlink(modelPath)
+
   # Test e1071::naiveBayes
   if (requireNamespace("e1071", quietly = TRUE)) {
     expect_that(m <- e1071::naiveBayes(Survived ~ ., data = t1), not(throws_error()))
@@ -248,6 +260,19 @@ test_that("survreg", {
   p <- collect(select(predict(model, df), "prediction"))
   expect_equal(p$prediction, c(3.724591, 2.545368, 3.079035, 3.079035,
                2.390146, 2.891269, 2.891269), tolerance = 1e-4)
+
+  # Test model save/load
+  modelPath <- tempfile(pattern = "survreg", fileext = ".tmp")
+  ml.save(model, modelPath)
+  expect_error(ml.save(model, modelPath))
+  ml.save(model, modelPath, overwrite = TRUE)
+  model2 <- ml.load(modelPath)
+  stats2 <- summary(model2)
+  coefs2 <- as.vector(stats2$coefficients[, 1])
+  expect_equal(coefs, coefs2)
+  expect_equal(rownames(stats$coefficients), rownames(stats2$coefficients))
+
+  unlink(modelPath)
 
   # Test survival::survreg
   if (requireNamespace("survival", quietly = TRUE)) {

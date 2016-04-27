@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Range, SubqueryAlias}
 /**
  * Tests for [[SessionCatalog]] that assume that [[InMemoryCatalog]] is correctly implemented.
  *
- * Note: many of the methods here are very similar to the ones in [[CatalogTestCases]].
+ * Note: many of the methods here are very similar to the ones in [[ExternalCatalogSuite]].
  * This is because [[SessionCatalog]] and [[ExternalCatalog]] share many similar method
  * signatures but do not extend a common parent. This is largely by design but
  * unfortunately leads to very similar test code in two places.
@@ -705,11 +705,11 @@ class SessionCatalogSuite extends SparkFunSuite {
     catalog.createTempFunction("temp1", info1, tempFunc1, ignoreIfExists = false)
     catalog.createTempFunction("temp2", info2, tempFunc2, ignoreIfExists = false)
     val arguments = Seq(Literal(1), Literal(2), Literal(3))
-    assert(catalog.lookupFunction("temp1", arguments) === Literal(1))
-    assert(catalog.lookupFunction("temp2", arguments) === Literal(3))
+    assert(catalog.lookupFunction(FunctionIdentifier("temp1"), arguments) === Literal(1))
+    assert(catalog.lookupFunction(FunctionIdentifier("temp2"), arguments) === Literal(3))
     // Temporary function does not exist.
     intercept[AnalysisException] {
-      catalog.lookupFunction("temp3", arguments)
+      catalog.lookupFunction(FunctionIdentifier("temp3"), arguments)
     }
     val tempFunc3 = (e: Seq[Expression]) => Literal(e.size)
     val info3 = new ExpressionInfo("tempFunc3", "temp1")
@@ -719,7 +719,8 @@ class SessionCatalogSuite extends SparkFunSuite {
     }
     // Temporary function is overridden
     catalog.createTempFunction("temp1", info3, tempFunc3, ignoreIfExists = true)
-    assert(catalog.lookupFunction("temp1", arguments) === Literal(arguments.length))
+    assert(
+      catalog.lookupFunction(FunctionIdentifier("temp1"), arguments) === Literal(arguments.length))
   }
 
   test("drop function") {
@@ -755,10 +756,10 @@ class SessionCatalogSuite extends SparkFunSuite {
     val tempFunc = (e: Seq[Expression]) => e.head
     catalog.createTempFunction("func1", info, tempFunc, ignoreIfExists = false)
     val arguments = Seq(Literal(1), Literal(2), Literal(3))
-    assert(catalog.lookupFunction("func1", arguments) === Literal(1))
+    assert(catalog.lookupFunction(FunctionIdentifier("func1"), arguments) === Literal(1))
     catalog.dropTempFunction("func1", ignoreIfNotExists = false)
     intercept[AnalysisException] {
-      catalog.lookupFunction("func1", arguments)
+      catalog.lookupFunction(FunctionIdentifier("func1"), arguments)
     }
     intercept[AnalysisException] {
       catalog.dropTempFunction("func1", ignoreIfNotExists = false)
@@ -792,10 +793,11 @@ class SessionCatalogSuite extends SparkFunSuite {
     val info1 = new ExpressionInfo("tempFunc1", "func1")
     val tempFunc1 = (e: Seq[Expression]) => e.head
     catalog.createTempFunction("func1", info1, tempFunc1, ignoreIfExists = false)
-    assert(catalog.lookupFunction("func1", Seq(Literal(1), Literal(2), Literal(3))) == Literal(1))
+    assert(catalog.lookupFunction(
+      FunctionIdentifier("func1"), Seq(Literal(1), Literal(2), Literal(3))) == Literal(1))
     catalog.dropTempFunction("func1", ignoreIfNotExists = false)
     intercept[AnalysisException] {
-      catalog.lookupFunction("func1", Seq(Literal(1), Literal(2), Literal(3)))
+      catalog.lookupFunction(FunctionIdentifier("func1"), Seq(Literal(1), Literal(2), Literal(3)))
     }
   }
 

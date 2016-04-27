@@ -20,17 +20,17 @@ package org.apache.spark.sql.execution.streaming
 import org.apache.hadoop.fs.{FileStatus, Path}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.execution.datasources.{FileCatalog, Partition, PartitionSpec}
 import org.apache.spark.sql.types.StructType
 
-class StreamFileCatalog(sqlContext: SQLContext, path: Path) extends FileCatalog with Logging {
+class StreamFileCatalog(sparkSession: SparkSession, path: Path) extends FileCatalog with Logging {
   val metadataDirectory = new Path(path, FileStreamSink.metadataDir)
   logInfo(s"Reading streaming file log from $metadataDirectory")
-  val metadataLog = new FileStreamSinkLog(sqlContext, metadataDirectory.toUri.toString)
-  val fs = path.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
+  val metadataLog = new FileStreamSinkLog(sparkSession, metadataDirectory.toUri.toString)
+  val fs = path.getFileSystem(sparkSession.sessionState.newHadoopConf())
 
   override def paths: Seq[Path] = path :: Nil
 

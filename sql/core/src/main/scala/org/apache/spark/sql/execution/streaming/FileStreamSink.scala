@@ -22,7 +22,7 @@ import java.util.UUID
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.execution.datasources.FileFormat
 
 object FileStreamSink {
@@ -38,14 +38,14 @@ object FileStreamSink {
  * in the log.
  */
 class FileStreamSink(
-    sqlContext: SQLContext,
+    sparkSession: SparkSession,
     path: String,
     fileFormat: FileFormat) extends Sink with Logging {
 
   private val basePath = new Path(path)
   private val logPath = new Path(basePath, FileStreamSink.metadataDir)
-  private val fileLog = new FileStreamSinkLog(sqlContext, logPath.toUri.toString)
-  private val fs = basePath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
+  private val fileLog = new FileStreamSinkLog(sparkSession, logPath.toUri.toString)
+  private val fs = basePath.getFileSystem(sparkSession.sessionState.newHadoopConf())
 
   override def addBatch(batchId: Long, data: DataFrame): Unit = {
     if (batchId <= fileLog.getLatest().map(_._1).getOrElse(-1L)) {
@@ -73,7 +73,7 @@ class FileStreamSink(
   private def writeFiles(data: DataFrame): Array[Path] = {
     val file = new Path(basePath, UUID.randomUUID().toString).toUri.toString
     data.write.parquet(file)
-    sqlContext.read
+    sparkSession.read
         .schema(data.schema)
         .parquet(file)
         .inputFiles
