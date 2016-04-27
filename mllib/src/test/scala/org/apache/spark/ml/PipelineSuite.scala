@@ -174,6 +174,13 @@ class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
       }
     }
   }
+
+  test("Pipeline.setStages should handle Java Arrays being non-covariant") {
+    val stages0 = Array(new UnWritableStage("b"))
+    val stages1 = Array(new WritableStage("a"))
+    val steps = stages0 ++ stages1
+    val p = new Pipeline().setStages(steps)
+  }
 }
 
 
