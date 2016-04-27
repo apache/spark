@@ -429,6 +429,16 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       Nil)
   }
 
+  test("except distinct - SQL compliance") {
+    val df_left = Seq(1, 2, 2, 3, 3, 4).toDF("id")
+    val df_right = Seq(1, 3).toDF("id")
+
+    checkAnswer(
+      df_left.except(df_right),
+      Row(2) :: Row(4) :: Nil
+    )
+  }
+
   test("except - nullability") {
     val nonNullableInts = Seq(Tuple1(11), Tuple1(3)).toDF()
     assert(nonNullableInts.schema.forall(_.nullable == false))
