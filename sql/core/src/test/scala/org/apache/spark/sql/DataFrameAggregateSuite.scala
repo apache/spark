@@ -433,10 +433,10 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-14664: Decimal sum/avg over window should work.") {
     checkAnswer(
-      sqlContext.sql("select sum(a) over () from (select explode(array(1.0,2.0,3.0)) a) t"),
+      sqlContext.sql("select sum(a) over () from values 1.0, 2.0, 3.0 T(a)"),
       Row(6.0) :: Row(6.0) :: Row(6.0) :: Nil)
     checkAnswer(
-      sqlContext.sql("select avg(a) over () from (select explode(array(1.0,2.0,3.0)) a) t"),
+      sqlContext.sql("select avg(a) over () from values 1.0, 2.0, 3.0 T(a)"),
       Row(2.0) :: Row(2.0) :: Row(2.0) :: Nil)
   }
 }
