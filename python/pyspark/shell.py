@@ -62,7 +62,7 @@ print("Using Python version %s (%s, %s)" % (
     platform.python_version(),
     platform.python_build()[0],
     platform.python_build()[1]))
-print("SparkContext available as 'sc', SparkSession available as 'spark'.")
+print("SparkSession available as 'spark'.")
 
 # The ./bin/pyspark script stores the old PYTHONSTARTUP value in OLD_PYTHONSTARTUP,
 # which allows us to execute the user's PYTHONSTARTUP file:
