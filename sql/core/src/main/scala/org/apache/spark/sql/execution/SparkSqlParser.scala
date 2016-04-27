@@ -274,7 +274,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       CreateTableUsingAsSelect(
         table, provider, temp, partitionColumnNames, bucketSpec, mode, options, query)
     } else {
-      val struct = Option(ctx.partitionColumns).map(createStructType)
+      val struct = Option(ctx.colTypeList()).map(createStructType)
       CreateTableUsing(table, struct, provider, temp, options, ifNotExists, managedIfNoPath = false)
     }
   }

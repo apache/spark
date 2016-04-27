@@ -45,9 +45,7 @@ statement
     | ALTER DATABASE identifier SET DBPROPERTIES tablePropertyList     #setDatabaseProperties
     | DROP DATABASE (IF EXISTS)? identifier (RESTRICT | CASCADE)?      #dropDatabase
     | createTableHeader ('(' colTypeList ')')? tableProvider
-        (OPTIONS tablePropertyList)?
-        (PARTITIONED BY '(' partitionColumns=colTypeList ')')?
-        bucketSpec?                                                    #createTableUsing
+        (OPTIONS tablePropertyList)?                                   #createTableUsing
     | createTableHeader tableProvider
         (OPTIONS tablePropertyList)?
         (PARTITIONED BY partitionColumnNames=identifierList)?
