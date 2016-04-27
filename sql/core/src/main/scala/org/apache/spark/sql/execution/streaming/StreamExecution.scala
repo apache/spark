@@ -160,12 +160,22 @@ class StreamExecution(
 
       // While active, repeatedly attempt to run batches.
       SQLContext.setActive(sparkSession.wrapped)
-      populateStartOffsets()
-      logDebug(s"Stream running from $committedOffsets to $availableOffsets")
+
       triggerExecutor.execute(() => {
         if (isActive) {
-          if (dataAvailable) runBatch()
-          constructNextBatch()
+          if (currentBatchId < 0) {
+            // We'll do this initialization only once
+            populateStartOffsets()
+            logDebug(s"Stream running from $committedOffsets to $availableOffsets")
+          }
+          else {
+            constructNextBatch()
+          }
+          if (dataAvailable) {
+            runBatch()
+            // We'll increase currentBatchId after we complete processing current batch's data
+            currentBatchId += 1
+          }
           true
         } else {
           false
@@ -200,7 +210,7 @@ class StreamExecution(
     offsetLog.getLatest() match {
       case Some((batchId, nextOffsets)) =>
         logInfo(s"Resuming continuous query, starting with batch $batchId")
-        currentBatchId = batchId + 1
+        currentBatchId = batchId
         availableOffsets = nextOffsets.toStreamProgress(sources)
         logDebug(s"Found possibly uncommitted offsets $availableOffsets")
 
@@ -266,7 +276,6 @@ class StreamExecution(
           offsetLog.add(currentBatchId, availableOffsets.toCompositeOffset(sources)),
           s"Concurrent update to the log.  Multiple streaming jobs detected for $currentBatchId")
       }
-      currentBatchId += 1
       logInfo(s"Committed offsets for batch $currentBatchId.")
     } else {
       awaitBatchLock.synchronized {
@@ -330,7 +339,7 @@ class StreamExecution(
 
     val nextBatch =
       new Dataset(sparkSession, lastExecution, RowEncoder(lastExecution.analyzed.schema))
-    sink.addBatch(currentBatchId - 1, nextBatch)
+    sink.addBatch(currentBatchId, nextBatch)
 
     awaitBatchLock.synchronized {
       // Wake up any threads that are waiting for the stream to progress.

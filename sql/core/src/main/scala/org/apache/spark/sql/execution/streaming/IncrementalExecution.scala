@@ -57,7 +57,7 @@ class IncrementalExecution(
       case StateStoreSaveExec(keys, None,
              UnaryExecNode(agg,
                StateStoreRestoreExec(keys2, None, child))) =>
-        val stateId = OperatorStateId(checkpointLocation, operatorId, currentBatchId - 1)
+        val stateId = OperatorStateId(checkpointLocation, operatorId, currentBatchId)
         operatorId += 1
 
         StateStoreSaveExec(
