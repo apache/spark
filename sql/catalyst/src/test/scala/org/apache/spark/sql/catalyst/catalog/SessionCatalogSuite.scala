@@ -193,7 +193,7 @@ class SessionCatalogSuite extends SparkFunSuite {
     e = intercept[AnalysisException] {
       catalog.setCurrentDatabase(illegalDBName)
     }
-    assert(e.getMessage.contains(s"cannot set current database to non-existent '$illegalDBName'"))
+    assert(e.getMessage.contains(s"Database '$illegalDBName' does not exist"))
 
     // We do not issue an exception if the database does not exist when the illegal name is used.
     // Users are allowed to issue queries directly on files. For example,
