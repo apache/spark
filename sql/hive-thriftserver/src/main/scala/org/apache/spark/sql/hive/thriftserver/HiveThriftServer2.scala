@@ -26,7 +26,6 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.commons.logging.LogFactory
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hive.service.cli.thrift.{ThriftBinaryCLIService, ThriftHttpCLIService}
 import org.apache.hive.service.server.{HiveServer2, HiveServerServerOptionsProcessor}
 
@@ -35,7 +34,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd, SparkListenerJobStart}
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.hive.HiveSessionState
+import org.apache.spark.sql.hive.{HiveSharedState, HiveUtils}
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 import org.apache.spark.sql.hive.thriftserver.ui.ThriftServerTab
 import org.apache.spark.sql.internal.SQLConf
@@ -56,9 +55,13 @@ object HiveThriftServer2 extends Logging {
    */
   @DeveloperApi
   def startWithContext(sqlContext: SQLContext): Unit = {
+    val hadoopConf = sqlContext.sessionState.newHadoopConf()
+    HiveUtils.newTemporaryConfiguration(useInMemoryDerby = true).foreach { case (k, v) =>
+      hadoopConf.set(k, v)
+    }
+
     val server = new HiveThriftServer2(sqlContext)
-    val hiveConf = new HiveConf(sqlContext.sessionState.newHadoopConf(), classOf[SessionState])
-    server.init(hiveConf)
+    server.init(SparkSQLEnv.sqlContext.sharedState.asInstanceOf[HiveSharedState].executionHive.conf)
     server.start()
     listener = new HiveThriftServer2Listener(server, sqlContext.conf)
     sqlContext.sparkContext.addSparkListener(listener)
@@ -86,8 +89,8 @@ object HiveThriftServer2 extends Logging {
 
     try {
       val server = new HiveThriftServer2(SparkSQLEnv.sqlContext)
-      server.init(new HiveConf(
-        SparkSQLEnv.sqlContext.sessionState.newHadoopConf(), classOf[SessionState]))
+      server.init(
+        SparkSQLEnv.sqlContext.sharedState.asInstanceOf[HiveSharedState].executionHive.conf)
       server.start()
       logInfo("HiveThriftServer2 started")
       listener = new HiveThriftServer2Listener(server, SparkSQLEnv.sqlContext.conf)
