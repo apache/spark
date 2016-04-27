@@ -268,7 +268,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     val featuresMean = featuresSummarizer.mean.toArray
     val featuresStd = featuresSummarizer.variance.toArray.map(math.sqrt)
 
-    if (!$(fitIntercept) && (0 to numFeatures).exists { i =>
+    if (!$(fitIntercept) && (0 until numFeatures).exists { i =>
       featuresStd(i) == 0.0 && featuresMean(i) != 0.0 }) {
       logWarning("Fitting LinearRegressionModel without intercept on dataset with " +
         "constant nonzero column, Spark ML produce same model as R glmnet but " +
