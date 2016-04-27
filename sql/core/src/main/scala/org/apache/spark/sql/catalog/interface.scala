@@ -27,9 +27,19 @@ import org.apache.spark.sql.catalyst.DefinedByConstructorParams
 
 class Database(
     val name: String,
-    val description: String,
+    @Nullable val description: String,
     val locationUri: String)
-  extends DefinedByConstructorParams
+  extends DefinedByConstructorParams {
+
+  override def toString: String = {
+    "Database[" +
+      s"name='$name', " +
+      Option(description).map { d => s"description='$d', " }.getOrElse("") +
+      s"path='$locationUri']"
+  }
+
+}
+
 
 class Table(
     val name: String,
@@ -37,7 +47,19 @@ class Table(
     @Nullable val description: String,
     val tableType: String,
     val isTemporary: Boolean)
-  extends DefinedByConstructorParams
+  extends DefinedByConstructorParams {
+
+  override def toString: String = {
+    "Table[" +
+      s"name='$name', " +
+      Option(database).map { d => s"database='$d', " }.getOrElse("") +
+      Option(description).map { d => s"description='$d', " }.getOrElse("") +
+      s"tableType='$tableType', " +
+      s"isTemporary='$isTemporary']"
+  }
+
+}
+
 
 class Column(
     val name: String,
@@ -46,11 +68,34 @@ class Column(
     val nullable: Boolean,
     val isPartition: Boolean,
     val isBucket: Boolean)
-  extends DefinedByConstructorParams
+  extends DefinedByConstructorParams {
+
+  override def toString: String = {
+    "Column[" +
+      s"name='$name', " +
+      Option(description).map { d => s"description='$d', " }.getOrElse("") +
+      s"dataType='$dataType', "
+      s"nullable='$nullable', " +
+      s"isPartition='$isPartition', " +
+      s"isBucket='$isBucket']"
+  }
+
+}
+
 
 class Function(
     val name: String,
     @Nullable val description: String,
     val className: String,
     val isTemporary: Boolean)
-  extends DefinedByConstructorParams
+  extends DefinedByConstructorParams {
+
+  override def toString: String = {
+    "Function[" +
+      s"name='$name', " +
+      Option(description).map { d => s"description='$d', " }.getOrElse("") +
+      s"className='$className', " +
+      s"isTemporary='$isTemporary']"
+  }
+
+}
