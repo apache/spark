@@ -911,15 +911,12 @@ class HashingTFTest(PySparkTestCase):
         sqlContext = SQLContext(self.sc)
 
         df = sqlContext.createDataFrame([(0, ["a", "a", "b", "c", "c", "c"])], ["id", "words"])
-        n = 100
+        n = 10
         hashingTF = HashingTF()
-        hashingTF.setInputCol("words").setOutputCol("features").setNumFeatures(n)\
-            .setBinary(True).setHashAlgorithm("native")
+        hashingTF.setInputCol("words").setOutputCol("features").setNumFeatures(n).setBinary(True)
         output = hashingTF.transform(df)
         features = output.select("features").first().features.toArray()
-        expected = Vectors.sparse(n, {(ord("a") % n): 1.0,
-                                      (ord("b") % n): 1.0,
-                                      (ord("c") % n): 1.0}).toArray()
+        expected = Vectors.dense([1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]).toArray()
         for i in range(0, n):
             self.assertAlmostEqual(features[i], expected[i], 14, "Error at " + str(i) +
                                    ": expected " + str(expected[i]) + ", got " + str(features[i]))
