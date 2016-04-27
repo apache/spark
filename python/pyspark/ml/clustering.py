@@ -529,7 +529,7 @@ class LDAModel(JavaModel):
         return self._call_java("estimatedDocConcentration")
 
 
-class DistributedLDAModel(LDAModel):
+class DistributedLDAModel(LDAModel, JavaMLReadable, JavaMLWritable):
     """
     Distributed model fitted by :py:class:`LDA`.
     This type of model is currently only produced by Expectation-Maximization (EM).
@@ -542,6 +542,12 @@ class DistributedLDAModel(LDAModel):
 
     @since("2.0.0")
     def toLocal(self):
+        """
+        Convert this distributed model to a local representation.  This discards info about the
+        training dataset.
+
+        WARNING: This involves collecting a large :py:func:`topicsMatrix` to the driver.
+        """
         return LocalLDAModel(self._call_java("toLocal"))
 
     @since("2.0.0")
@@ -584,7 +590,7 @@ class DistributedLDAModel(LDAModel):
         return self._call_java("getCheckpointFiles")
 
 
-class LocalLDAModel(LDAModel):
+class LocalLDAModel(LDAModel, JavaMLReadable, JavaMLWritable):
     """
     Local (non-distributed) model fitted by :py:class:`LDA`.
     This model stores the inferred topics only; it does not store info about the training dataset.
@@ -594,7 +600,8 @@ class LocalLDAModel(LDAModel):
     pass
 
 
-class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInterval):
+class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInterval,
+          JavaMLReadable, JavaMLWritable):
     """
     Latent Dirichlet Allocation (LDA), a topic model designed for text documents.
 
@@ -768,7 +775,7 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
 
         >>> algo = LDA().setLearningOffset(100)
         >>> algo.getLearningOffset()
-        100
+        100.0
         """
         return self._set(learningOffset=value)
 
