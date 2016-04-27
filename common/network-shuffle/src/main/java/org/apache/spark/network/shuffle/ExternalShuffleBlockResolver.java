@@ -76,6 +76,10 @@ public class ExternalShuffleBlockResolver {
   @VisibleForTesting
   final DB db;
 
+  private final List<String> knownManagers = Arrays.asList(
+    "org.apache.spark.shuffle.sort.SortShuffleManager",
+    "org.apache.spark.shuffle.unsafe.UnsafeShuffleManager");
+
   public ExternalShuffleBlockResolver(TransportConf conf, File registeredExecutorFile)
       throws IOException {
     this(conf, registeredExecutorFile, Executors.newSingleThreadExecutor(
@@ -149,6 +153,10 @@ public class ExternalShuffleBlockResolver {
       ExecutorShuffleInfo executorInfo) {
     AppExecId fullId = new AppExecId(appId, execId);
     logger.info("Registered executor {} with {}", fullId, executorInfo);
+    if (!knownManagers.contains(executorInfo.shuffleManager)) {
+      throw new UnsupportedOperationException(
+        "Unsupported shuffle manager of executor: " + executorInfo);
+    }
     try {
       if (db != null) {
         byte[] key = dbAppExecKey(fullId);
@@ -183,12 +191,7 @@ public class ExternalShuffleBlockResolver {
         String.format("Executor is not registered (appId=%s, execId=%s)", appId, execId));
     }
 
-    if ("sort".equals(executor.shuffleManager) || "tungsten-sort".equals(executor.shuffleManager)) {
-      return getSortBasedShuffleBlockData(executor, shuffleId, mapId, reduceId);
-    } else {
-      throw new UnsupportedOperationException(
-        "Unsupported shuffle manager: " + executor.shuffleManager);
-    }
+    return getSortBasedShuffleBlockData(executor, shuffleId, mapId, reduceId);
   }
 
   /**

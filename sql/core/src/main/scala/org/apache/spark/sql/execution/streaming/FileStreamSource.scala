@@ -19,10 +19,10 @@ package org.apache.spark.sql.execution.streaming
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.collection.OpenHashSet
 
@@ -32,14 +32,14 @@ import org.apache.spark.util.collection.OpenHashSet
  * TODO Clean up the metadata files periodically
  */
 class FileStreamSource(
-    sqlContext: SQLContext,
+    sparkSession: SparkSession,
     metadataPath: String,
     path: String,
     override val schema: StructType,
     dataFrameBuilder: Array[String] => DataFrame) extends Source with Logging {
 
-  private val fs = new Path(path).getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
-  private val metadataLog = new HDFSMetadataLog[Seq[String]](sqlContext, metadataPath)
+  private val fs = new Path(path).getFileSystem(sparkSession.sessionState.newHadoopConf())
+  private val metadataLog = new HDFSMetadataLog[Seq[String]](sparkSession, metadataPath)
   private var maxBatchId = metadataLog.getLatest().map(_._1).getOrElse(-1L)
 
   private val seenFiles = new OpenHashSet[String]
@@ -88,7 +88,7 @@ class FileStreamSource(
   }
 
   /**
-   * Returns the next batch of data that is available after `start`, if any is available.
+   * Returns the data that is between the offsets (`start`, `end`].
    */
   override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
     val startId = start.map(_.asInstanceOf[LongOffset].offset).getOrElse(-1L)

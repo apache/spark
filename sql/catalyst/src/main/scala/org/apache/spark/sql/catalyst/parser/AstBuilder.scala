@@ -25,7 +25,7 @@ import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
@@ -112,8 +112,16 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * Create a plan for a DESCRIBE FUNCTION command.
    */
   override def visitDescribeFunction(ctx: DescribeFunctionContext): LogicalPlan = withOrigin(ctx) {
-    val functionName = ctx.qualifiedName().identifier().asScala.map(_.getText).mkString(".")
-    DescribeFunction(functionName, ctx.EXTENDED != null)
+    import ctx._
+    val functionName =
+      if (describeFuncName.STRING() != null) {
+        string(describeFuncName.STRING())
+      } else if (describeFuncName.qualifiedName() != null) {
+        describeFuncName.qualifiedName().identifier().asScala.map(_.getText).mkString(".")
+      } else {
+        describeFuncName.getText
+      }
+    DescribeFunction(functionName, EXTENDED != null)
   }
 
   /**
@@ -554,7 +562,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       case "json_tuple" =>
         JsonTuple(expressions)
       case name =>
-        UnresolvedGenerator(name, expressions)
+        UnresolvedGenerator(visitFunctionName(ctx.qualifiedName), expressions)
     }
 
     Generate(
@@ -1033,12 +1041,12 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     val isDistinct = Option(ctx.setQuantifier()).exists(_.DISTINCT != null)
     val arguments = ctx.expression().asScala.map(expression) match {
       case Seq(UnresolvedStar(None)) if name.toLowerCase == "count" && !isDistinct =>
-        // Transform COUNT(*) into COUNT(1). Move this to analysis?
+        // Transform COUNT(*) into COUNT(1).
         Seq(Literal(1))
       case expressions =>
         expressions
     }
-    val function = UnresolvedFunction(name, arguments, isDistinct)
+    val function = UnresolvedFunction(visitFunctionName(ctx.qualifiedName), arguments, isDistinct)
 
     // Check if the function is evaluated in a windowed context.
     ctx.windowSpec match {
@@ -1047,6 +1055,17 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       case spec: WindowDefContext =>
         WindowExpression(function, visitWindowDef(spec))
       case _ => function
+    }
+  }
+
+  /**
+   * Create a function database (optional) and name pair.
+   */
+  protected def visitFunctionName(ctx: QualifiedNameContext): FunctionIdentifier = {
+    ctx.identifier().asScala.map(_.getText) match {
+      case Seq(db, fn) => FunctionIdentifier(fn, Option(db))
+      case Seq(fn) => FunctionIdentifier(fn, None)
+      case other => throw new ParseException(s"Unsupported function name '${ctx.getText}'", ctx)
     }
   }
 

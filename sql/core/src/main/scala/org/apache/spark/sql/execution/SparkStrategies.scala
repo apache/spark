@@ -64,39 +64,12 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 
-  object ExistenceJoin extends Strategy with PredicateHelper {
-    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case ExtractEquiJoinKeys(
-             LeftExistence(jt), leftKeys, rightKeys, condition, left, CanBroadcast(right)) =>
-        Seq(joins.BroadcastHashJoinExec(
-          leftKeys, rightKeys, jt, BuildRight, condition, planLater(left), planLater(right)))
-      // Find left semi joins where at least some predicates can be evaluated by matching join keys
-      case ExtractEquiJoinKeys(
-             LeftExistence(jt), leftKeys, rightKeys, condition, left, right) =>
-        Seq(joins.ShuffledHashJoinExec(
-          leftKeys, rightKeys, jt, BuildRight, condition, planLater(left), planLater(right)))
-      case _ => Nil
-    }
-  }
-
   /**
-   * Matches a plan whose output should be small enough to be used in broadcast join.
-   */
-  object CanBroadcast {
-    def unapply(plan: LogicalPlan): Option[LogicalPlan] = {
-      if (plan.statistics.sizeInBytes <= conf.autoBroadcastJoinThreshold) {
-        Some(plan)
-      } else {
-        None
-      }
-    }
-  }
-
-  /**
-   * Uses the [[ExtractEquiJoinKeys]] pattern to find joins where at least some of the predicates
-   * can be evaluated by matching join keys.
+   * Select the proper physical plan for join based on joining keys and size of logical plan.
    *
-   * Join implementations are chosen with the following precedence:
+   * At first, uses the [[ExtractEquiJoinKeys]] pattern to find joins where at least some of the
+   * predicates can be evaluated by matching join keys. If found,  Join implementations are chosen
+   * with the following precedence:
    *
    * - Broadcast: if one side of the join has an estimated physical size that is smaller than the
    *     user-configurable [[SQLConf.AUTO_BROADCASTJOIN_THRESHOLD]] threshold
@@ -107,8 +80,20 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    * - Shuffle hash join: if the average size of a single partition is small enough to build a hash
    *     table.
    * - Sort merge: if the matching join keys are sortable.
+   *
+   * If there is no joining keys, Join implementations are chosen with the following precedence:
+   * - BroadcastNestedLoopJoin: if one side of the join could be broadcasted
+   * - CartesianProduct: for Inner join
+   * - BroadcastNestedLoopJoin
    */
-  object EquiJoinSelection extends Strategy with PredicateHelper {
+  object JoinSelection extends Strategy with PredicateHelper {
+
+    /**
+     * Matches a plan whose output should be small enough to be used in broadcast join.
+     */
+    private def canBroadcast(plan: LogicalPlan): Boolean = {
+      plan.statistics.sizeInBytes <= conf.autoBroadcastJoinThreshold
+    }
 
     /**
      * Matches a plan whose single partition should be small enough to build a hash table.
@@ -116,7 +101,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
      * Note: this assume that the number of partition is fixed, requires additional work if it's
      * dynamic.
      */
-    def canBuildHashMap(plan: LogicalPlan): Boolean = {
+    private def canBuildLocalHashMap(plan: LogicalPlan): Boolean = {
       plan.statistics.sizeInBytes < conf.autoBroadcastJoinThreshold * conf.numShufflePartitions
     }
 
@@ -131,75 +116,79 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       a.statistics.sizeInBytes * 3 <= b.statistics.sizeInBytes
     }
 
-    /**
-     * Returns whether we should use shuffle hash join or not.
-     *
-     * We should only use shuffle hash join when:
-     *  1) any single partition of a small table could fit in memory.
-     *  2) the smaller table is much smaller (3X) than the other one.
-     */
-    private def shouldShuffleHashJoin(left: LogicalPlan, right: LogicalPlan): Boolean = {
-      canBuildHashMap(left) && muchSmaller(left, right) ||
-        canBuildHashMap(right) && muchSmaller(right, left)
+    private def canBuildRight(joinType: JoinType): Boolean = joinType match {
+      case Inner | LeftOuter | LeftSemi | LeftAnti => true
+      case _ => false
+    }
+
+    private def canBuildLeft(joinType: JoinType): Boolean = joinType match {
+      case Inner | RightOuter => true
+      case _ => false
     }
 
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
 
-      // --- Inner joins --------------------------------------------------------------------------
+      // --- BroadcastHashJoin --------------------------------------------------------------------
 
-      case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, CanBroadcast(right)) =>
+      case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right)
+        if canBuildRight(joinType) && canBroadcast(right) =>
         Seq(joins.BroadcastHashJoinExec(
-          leftKeys, rightKeys, Inner, BuildRight, condition, planLater(left), planLater(right)))
+          leftKeys, rightKeys, joinType, BuildRight, condition, planLater(left), planLater(right)))
 
-      case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, CanBroadcast(left), right) =>
+      case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right)
+        if canBuildLeft(joinType) && canBroadcast(left) =>
         Seq(joins.BroadcastHashJoinExec(
-          leftKeys, rightKeys, Inner, BuildLeft, condition, planLater(left), planLater(right)))
+          leftKeys, rightKeys, joinType, BuildLeft, condition, planLater(left), planLater(right)))
 
-      case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right)
-        if !conf.preferSortMergeJoin && shouldShuffleHashJoin(left, right) ||
-          !RowOrdering.isOrderable(leftKeys) =>
+      // --- ShuffledHashJoin ---------------------------------------------------------------------
+
+      case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right)
+         if !conf.preferSortMergeJoin && canBuildRight(joinType) && canBuildLocalHashMap(right)
+           && muchSmaller(right, left) ||
+           !RowOrdering.isOrderable(leftKeys) =>
+        Seq(joins.ShuffledHashJoinExec(
+          leftKeys, rightKeys, joinType, BuildRight, condition, planLater(left), planLater(right)))
+
+      case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right)
+         if !conf.preferSortMergeJoin && canBuildLeft(joinType) && canBuildLocalHashMap(left)
+           && muchSmaller(left, right) ||
+           !RowOrdering.isOrderable(leftKeys) =>
+        Seq(joins.ShuffledHashJoinExec(
+          leftKeys, rightKeys, joinType, BuildLeft, condition, planLater(left), planLater(right)))
+
+      // --- SortMergeJoin ------------------------------------------------------------
+
+      case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right)
+        if RowOrdering.isOrderable(leftKeys) =>
+        joins.SortMergeJoinExec(
+          leftKeys, rightKeys, joinType, condition, planLater(left), planLater(right)) :: Nil
+
+      // --- Without joining keys ------------------------------------------------------------
+
+      // Pick BroadcastNestedLoopJoin if one side could be broadcasted
+      case j @ logical.Join(left, right, joinType, condition)
+          if canBuildRight(joinType) && canBroadcast(right) =>
+        joins.BroadcastNestedLoopJoinExec(
+          planLater(left), planLater(right), BuildRight, joinType, condition) :: Nil
+      case j @ logical.Join(left, right, joinType, condition)
+          if canBuildLeft(joinType) && canBroadcast(left) =>
+        joins.BroadcastNestedLoopJoinExec(
+          planLater(left), planLater(right), BuildLeft, joinType, condition) :: Nil
+
+      // Pick CartesianProduct for InnerJoin
+      case logical.Join(left, right, Inner, condition) =>
+        joins.CartesianProductExec(planLater(left), planLater(right), condition) :: Nil
+
+      case logical.Join(left, right, joinType, condition) =>
         val buildSide =
           if (right.statistics.sizeInBytes <= left.statistics.sizeInBytes) {
             BuildRight
           } else {
             BuildLeft
           }
-        Seq(joins.ShuffledHashJoinExec(
-          leftKeys, rightKeys, Inner, buildSide, condition, planLater(left), planLater(right)))
-
-      case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right)
-        if RowOrdering.isOrderable(leftKeys) =>
-        joins.SortMergeJoinExec(
-          leftKeys, rightKeys, Inner, condition, planLater(left), planLater(right)) :: Nil
-
-      // --- Outer joins --------------------------------------------------------------------------
-
-      case ExtractEquiJoinKeys(
-          LeftOuter, leftKeys, rightKeys, condition, left, CanBroadcast(right)) =>
-        Seq(joins.BroadcastHashJoinExec(
-          leftKeys, rightKeys, LeftOuter, BuildRight, condition, planLater(left), planLater(right)))
-
-      case ExtractEquiJoinKeys(
-          RightOuter, leftKeys, rightKeys, condition, CanBroadcast(left), right) =>
-        Seq(joins.BroadcastHashJoinExec(
-          leftKeys, rightKeys, RightOuter, BuildLeft, condition, planLater(left), planLater(right)))
-
-      case ExtractEquiJoinKeys(LeftOuter, leftKeys, rightKeys, condition, left, right)
-         if !conf.preferSortMergeJoin && canBuildHashMap(right) && muchSmaller(right, left) ||
-           !RowOrdering.isOrderable(leftKeys) =>
-        Seq(joins.ShuffledHashJoinExec(
-          leftKeys, rightKeys, LeftOuter, BuildRight, condition, planLater(left), planLater(right)))
-
-      case ExtractEquiJoinKeys(RightOuter, leftKeys, rightKeys, condition, left, right)
-         if !conf.preferSortMergeJoin && canBuildHashMap(left) && muchSmaller(left, right) ||
-           !RowOrdering.isOrderable(leftKeys) =>
-        Seq(joins.ShuffledHashJoinExec(
-          leftKeys, rightKeys, RightOuter, BuildLeft, condition, planLater(left), planLater(right)))
-
-      case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right)
-        if RowOrdering.isOrderable(leftKeys) =>
-        joins.SortMergeJoinExec(
-          leftKeys, rightKeys, joinType, condition, planLater(left), planLater(right)) :: Nil
+        // This join could be very slow or OOM
+        joins.BroadcastNestedLoopJoinExec(
+          planLater(left), planLater(right), buildSide, joinType, condition) :: Nil
 
       // --- Cases where this strategy does not apply ---------------------------------------------
 
@@ -273,45 +262,6 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
         aggregateOperator
 
-      case _ => Nil
-    }
-  }
-
-  object BroadcastNestedLoop extends Strategy {
-    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case j @ logical.Join(CanBroadcast(left), right, Inner | RightOuter, condition) =>
-        execution.joins.BroadcastNestedLoopJoinExec(
-          planLater(left), planLater(right), joins.BuildLeft, j.joinType, condition) :: Nil
-      case j @ logical.Join(left, CanBroadcast(right), Inner | LeftOuter | LeftSemi, condition) =>
-        execution.joins.BroadcastNestedLoopJoinExec(
-          planLater(left), planLater(right), joins.BuildRight, j.joinType, condition) :: Nil
-      case _ => Nil
-    }
-  }
-
-  object CartesianProduct extends Strategy {
-    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case logical.Join(left, right, Inner, None) =>
-        execution.joins.CartesianProductExec(planLater(left), planLater(right)) :: Nil
-      case logical.Join(left, right, Inner, Some(condition)) =>
-        execution.FilterExec(condition,
-          execution.joins.CartesianProductExec(planLater(left), planLater(right))) :: Nil
-      case _ => Nil
-    }
-  }
-
-  object DefaultJoin extends Strategy {
-    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case logical.Join(left, right, joinType, condition) =>
-        val buildSide =
-          if (right.statistics.sizeInBytes <= left.statistics.sizeInBytes) {
-            joins.BuildRight
-          } else {
-            joins.BuildLeft
-          }
-        // This join could be very slow or even hang forever
-        joins.BroadcastNestedLoopJoinExec(
-          planLater(left), planLater(right), buildSide, joinType, condition) :: Nil
       case _ => Nil
     }
   }

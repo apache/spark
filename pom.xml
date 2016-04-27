@@ -245,6 +245,22 @@
   </pluginRepositories>
   <dependencies>
     <!--
+      This is a dummy dependency that is used to trigger the maven-shade plugin so that Spark's
+      published POMs are flattened and do not contain variables. Without this dependency, some
+      subprojects' published POMs would contain variables like ${scala.binary.version} that will
+      be substituted according to the default properties instead of the ones determined by the
+      profiles that were active during publishing, causing the Scala 2.10 build's POMs to have 2.11
+      dependencies due to the incorrect substitutions. By ensuring that maven-shade runs for all
+      subprojects, we eliminate this problem because the substitutions are baked into the final POM.
+
+      For more details, see SPARK-3812 and MNG-2971.
+    -->
+    <dependency>
+      <groupId>org.spark-project.spark</groupId>
+      <artifactId>unused</artifactId>
+      <version>1.0.0</version>
+    </dependency>
+    <!--
          This is needed by the scalatest plugin, and so is declared here to be available in
          all child modules, just as scalatest is run in all children
     -->
@@ -2195,6 +2211,7 @@
           <shadedArtifactAttached>false</shadedArtifactAttached>
           <artifactSet>
             <includes>
+              <include>org.spark-project.spark:unused</include>
               <include>org.eclipse.jetty:jetty-io</include>
               <include>org.eclipse.jetty:jetty-http</include>
               <include>org.eclipse.jetty:jetty-continuation</include>

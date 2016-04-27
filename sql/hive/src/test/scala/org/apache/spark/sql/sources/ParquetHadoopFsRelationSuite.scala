@@ -132,7 +132,7 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
       val summaryPath = new Path(path, "_metadata")
       val commonSummaryPath = new Path(path, "_common_metadata")
 
-      val fs = summaryPath.getFileSystem(hadoopConfiguration)
+      val fs = summaryPath.getFileSystem(sqlContext.sessionState.newHadoopConf())
       fs.delete(summaryPath, true)
       fs.delete(commonSummaryPath, true)
 

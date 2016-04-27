@@ -23,7 +23,7 @@ import org.apache.hadoop.io.{NullWritable, Text}
 import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
 
-import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
+import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{BufferHolder, UnsafeRowWriter}
@@ -52,12 +52,12 @@ class DefaultSource extends FileFormat with DataSourceRegister {
   }
 
   override def inferSchema(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = Some(new StructType().add("value", StringType))
 
   override def prepareWrite(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
@@ -84,22 +84,22 @@ class DefaultSource extends FileFormat with DataSourceRegister {
   }
 
   override def buildReader(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       dataSchema: StructType,
       partitionSchema: StructType,
       requiredSchema: StructType,
       filters: Seq[Filter],
-      options: Map[String, String]): PartitionedFile => Iterator[InternalRow] = {
-    val conf = new Configuration(sqlContext.sparkContext.hadoopConfiguration)
-    val broadcastedConf =
-      sqlContext.sparkContext.broadcast(new SerializableConfiguration(conf))
+      options: Map[String, String],
+      hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
+    val broadcastedHadoopConf =
+      sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
-    file => {
+    (file: PartitionedFile) => {
       val unsafeRow = new UnsafeRow(1)
       val bufferHolder = new BufferHolder(unsafeRow)
       val unsafeRowWriter = new UnsafeRowWriter(bufferHolder, 1)
 
-      new HadoopFileLinesReader(file, broadcastedConf.value.value).map { line =>
+      new HadoopFileLinesReader(file, broadcastedHadoopConf.value.value).map { line =>
         // Writes to an UnsafeRow directly
         bufferHolder.reset()
         unsafeRowWriter.write(0, line.getBytes, 0, line.getLength)
