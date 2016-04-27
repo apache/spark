@@ -85,13 +85,6 @@ private[sql] trait SQLTestUtils
   }
 
   /**
-   * The Hadoop configuration used by the active [[SQLContext]].
-   */
-  protected def hadoopConfiguration: Configuration = {
-    sqlContext.sessionState.newHadoopConf()
-  }
-
-  /**
    * Sets all SQL configurations specified in `pairs`, calls `f`, and then restore all SQL
    * configurations.
    *
