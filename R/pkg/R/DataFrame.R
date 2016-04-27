@@ -1238,7 +1238,7 @@ setMethod("[[", signature(x = "SparkDataFrame", i = "numericOrcharacter"),
 #' @rdname subset
 #' @name [
 setMethod("[", signature(x = "SparkDataFrame"),
-          function(x, i, j, ..., drop = T) {
+          function(x, i, j, ..., drop = F) {
             # Perform filtering first if needed
             filtered <- if (missing(i)) {
               x
