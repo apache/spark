@@ -19,11 +19,17 @@ package org.apache.spark.sql.catalog
 
 import javax.annotation.Nullable
 
+import org.apache.spark.sql.catalyst.DefinedByConstructorParams
+
+
+// Note: all classes here are expected to be wrapped in Datasets and so must extend
+// DefinedByConstructorParams for the catalog to be able to create encoders for them.
 
 class Database(
     val name: String,
     val description: String,
     val locationUri: String)
+  extends DefinedByConstructorParams
 
 class Table(
     val name: String,
@@ -31,6 +37,7 @@ class Table(
     @Nullable val description: String,
     val tableType: String,
     val isTemporary: Boolean)
+  extends DefinedByConstructorParams
 
 class Column(
     val name: String,
@@ -39,9 +46,11 @@ class Column(
     val nullable: Boolean,
     val isPartition: Boolean,
     val isBucket: Boolean)
+  extends DefinedByConstructorParams
 
 class Function(
     val name: String,
     @Nullable val description: String,
     val className: String,
     val isTemporary: Boolean)
+  extends DefinedByConstructorParams

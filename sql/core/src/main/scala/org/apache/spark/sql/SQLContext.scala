@@ -731,7 +731,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def tableNames(): Array[String] = {
-    sparkSession.catalog.listTables().map(_.name)
+    sparkSession.catalog.listTables().collect().map(_.name)
   }
 
   /**
@@ -741,7 +741,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def tableNames(databaseName: String): Array[String] = {
-    sparkSession.catalog.listTables(databaseName).map(_.name)
+    sparkSession.catalog.listTables(databaseName).collect().map(_.name)
   }
 
   /**

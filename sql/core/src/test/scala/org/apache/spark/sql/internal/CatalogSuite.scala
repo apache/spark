@@ -91,8 +91,8 @@ class CatalogSuite
     assume(tableMetadata.schema.nonEmpty, "bad test")
     assume(tableMetadata.partitionColumnNames.nonEmpty, "bad test")
     assume(tableMetadata.bucketColumnNames.nonEmpty, "bad test")
-    assert(columns.map(_.name).toSet == tableMetadata.schema.map(_.name).toSet)
-    columns.foreach { col =>
+    assert(columns.collect().map(_.name).toSet == tableMetadata.schema.map(_.name).toSet)
+    columns.collect().foreach { col =>
       assert(col.isPartition == tableMetadata.partitionColumnNames.contains(col.name))
       assert(col.isBucket == tableMetadata.bucketColumnNames.contains(col.name))
     }
@@ -120,51 +120,53 @@ class CatalogSuite
   }
 
   test("list databases") {
-    assert(sparkSession.catalog.listDatabases().map(_.name).toSet == Set("default"))
+    assert(sparkSession.catalog.listDatabases().collect().map(_.name).toSet == Set("default"))
     createDatabase("my_db1")
     createDatabase("my_db2")
-    assert(sparkSession.catalog.listDatabases().map(_.name).toSet ==
+    assert(sparkSession.catalog.listDatabases().collect().map(_.name).toSet ==
       Set("default", "my_db1", "my_db2"))
     dropDatabase("my_db1")
-    assert(sparkSession.catalog.listDatabases().map(_.name).toSet ==
+    assert(sparkSession.catalog.listDatabases().collect().map(_.name).toSet ==
       Set("default", "my_db2"))
   }
 
   test("list tables") {
-    assert(sparkSession.catalog.listTables().isEmpty)
+    assert(sparkSession.catalog.listTables().collect().isEmpty)
     createTable("my_table1")
     createTable("my_table2")
     createTempTable("my_temp_table")
-    assert(sparkSession.catalog.listTables().map(_.name).toSet ==
+    assert(sparkSession.catalog.listTables().collect().map(_.name).toSet ==
       Set("my_table1", "my_table2", "my_temp_table"))
     dropTable("my_table1")
-    assert(sparkSession.catalog.listTables().map(_.name).toSet ==
+    assert(sparkSession.catalog.listTables().collect().map(_.name).toSet ==
       Set("my_table2", "my_temp_table"))
     dropTable("my_temp_table")
-    assert(sparkSession.catalog.listTables().map(_.name).toSet == Set("my_table2"))
+    assert(sparkSession.catalog.listTables().collect().map(_.name).toSet == Set("my_table2"))
   }
 
   test("list tables with database") {
-    assert(sparkSession.catalog.listTables("default").isEmpty)
+    assert(sparkSession.catalog.listTables("default").collect().isEmpty)
     createDatabase("my_db1")
     createDatabase("my_db2")
     createTable("my_table1", Some("my_db1"))
     createTable("my_table2", Some("my_db2"))
     createTempTable("my_temp_table")
-    assert(sparkSession.catalog.listTables("default").map(_.name).toSet == Set("my_temp_table"))
-    assert(sparkSession.catalog.listTables("my_db1").map(_.name).toSet ==
+    assert(sparkSession.catalog.listTables("default").collect().map(_.name).toSet ==
+      Set("my_temp_table"))
+    assert(sparkSession.catalog.listTables("my_db1").collect().map(_.name).toSet ==
       Set("my_table1", "my_temp_table"))
-    assert(sparkSession.catalog.listTables("my_db2").map(_.name).toSet ==
+    assert(sparkSession.catalog.listTables("my_db2").collect().map(_.name).toSet ==
       Set("my_table2", "my_temp_table"))
     dropTable("my_table1", Some("my_db1"))
-    assert(sparkSession.catalog.listTables("my_db1").map(_.name).toSet ==
+    assert(sparkSession.catalog.listTables("my_db1").collect().map(_.name).toSet ==
       Set("my_temp_table"))
-    assert(sparkSession.catalog.listTables("my_db2").map(_.name).toSet ==
+    assert(sparkSession.catalog.listTables("my_db2").collect().map(_.name).toSet ==
       Set("my_table2", "my_temp_table"))
     dropTable("my_temp_table")
-    assert(sparkSession.catalog.listTables("default").map(_.name).isEmpty)
-    assert(sparkSession.catalog.listTables("my_db1").map(_.name).isEmpty)
-    assert(sparkSession.catalog.listTables("my_db2").map(_.name).toSet == Set("my_table2"))
+    assert(sparkSession.catalog.listTables("default").collect().map(_.name).isEmpty)
+    assert(sparkSession.catalog.listTables("my_db1").collect().map(_.name).isEmpty)
+    assert(sparkSession.catalog.listTables("my_db2").collect().map(_.name).toSet ==
+      Set("my_table2"))
     val e = intercept[AnalysisException] {
       sparkSession.catalog.listTables("unknown_db")
     }
@@ -173,17 +175,17 @@ class CatalogSuite
 
   test("list functions") {
     assert(Set("+", "current_database", "window").subsetOf(
-      sparkSession.catalog.listFunctions().map(_.name).toSet))
+      sparkSession.catalog.listFunctions().collect().map(_.name).toSet))
     createFunction("my_func1")
     createFunction("my_func2")
     createTempFunction("my_temp_func")
-    val funcNames1 = sparkSession.catalog.listFunctions().map(_.name).toSet
+    val funcNames1 = sparkSession.catalog.listFunctions().collect().map(_.name).toSet
     assert(funcNames1.contains("my_func1"))
     assert(funcNames1.contains("my_func2"))
     assert(funcNames1.contains("my_temp_func"))
     dropFunction("my_func1")
     dropTempFunction("my_temp_func")
-    val funcNames2 = sparkSession.catalog.listFunctions().map(_.name).toSet
+    val funcNames2 = sparkSession.catalog.listFunctions().collect().map(_.name).toSet
     assert(!funcNames2.contains("my_func1"))
     assert(funcNames2.contains("my_func2"))
     assert(!funcNames2.contains("my_temp_func"))
@@ -191,14 +193,14 @@ class CatalogSuite
 
   test("list functions with database") {
     assert(Set("+", "current_database", "window").subsetOf(
-      sparkSession.catalog.listFunctions("default").map(_.name).toSet))
+      sparkSession.catalog.listFunctions("default").collect().map(_.name).toSet))
     createDatabase("my_db1")
     createDatabase("my_db2")
     createFunction("my_func1", Some("my_db1"))
     createFunction("my_func2", Some("my_db2"))
     createTempFunction("my_temp_func")
-    val funcNames1 = sparkSession.catalog.listFunctions("my_db1").map(_.name).toSet
-    val funcNames2 = sparkSession.catalog.listFunctions("my_db2").map(_.name).toSet
+    val funcNames1 = sparkSession.catalog.listFunctions("my_db1").collect().map(_.name).toSet
+    val funcNames2 = sparkSession.catalog.listFunctions("my_db2").collect().map(_.name).toSet
     assert(funcNames1.contains("my_func1"))
     assert(!funcNames1.contains("my_func2"))
     assert(funcNames1.contains("my_temp_func"))
@@ -207,8 +209,8 @@ class CatalogSuite
     assert(funcNames2.contains("my_temp_func"))
     dropFunction("my_func1", Some("my_db1"))
     dropTempFunction("my_temp_func")
-    val funcNames1b = sparkSession.catalog.listFunctions("my_db1").map(_.name).toSet
-    val funcNames2b = sparkSession.catalog.listFunctions("my_db2").map(_.name).toSet
+    val funcNames1b = sparkSession.catalog.listFunctions("my_db1").collect().map(_.name).toSet
+    val funcNames2b = sparkSession.catalog.listFunctions("my_db2").collect().map(_.name).toSet
     assert(!funcNames1b.contains("my_func1"))
     assert(!funcNames1b.contains("my_temp_func"))
     assert(funcNames2b.contains("my_func2"))

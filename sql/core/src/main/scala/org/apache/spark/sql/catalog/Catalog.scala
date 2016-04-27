@@ -18,11 +18,9 @@
 package org.apache.spark.sql.catalog
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.{AnalysisException, DataFrame}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset}
 import org.apache.spark.sql.types.StructType
 
-
-// TODO: make these methods return Datasets instead of Array
 
 /**
  * Catalog interface for Spark. To access this, use `SparkSession.catalog`.
@@ -42,45 +40,45 @@ abstract class Catalog {
   /**
    * Returns a list of databases available across all sessions.
    */
-  def listDatabases(): Array[Database]
+  def listDatabases(): Dataset[Database]
 
   /**
    * Returns a list of tables in the current database.
    * This includes all temporary tables.
    */
-  def listTables(): Array[Table]
+  def listTables(): Dataset[Table]
 
   /**
    * Returns a list of tables in the specified database.
    * This includes all temporary tables.
    */
   @throws[AnalysisException]("database does not exist")
-  def listTables(dbName: String): Array[Table]
+  def listTables(dbName: String): Dataset[Table]
 
   /**
    * Returns a list of functions registered in the current database.
    * This includes all temporary functions
    */
-  def listFunctions(): Array[Function]
+  def listFunctions(): Dataset[Function]
 
   /**
    * Returns a list of functions registered in the specified database.
    * This includes all temporary functions
    */
   @throws[AnalysisException]("database does not exist")
-  def listFunctions(dbName: String): Array[Function]
+  def listFunctions(dbName: String): Dataset[Function]
 
   /**
    * Returns a list of columns for the given table in the current database.
    */
   @throws[AnalysisException]("table does not exist")
-  def listColumns(tableName: String): Array[Column]
+  def listColumns(tableName: String): Dataset[Column]
 
   /**
    * Returns a list of columns for the given table in the specified database.
    */
   @throws[AnalysisException]("database or table does not exist")
-  def listColumns(dbName: String, tableName: String): Array[Column]
+  def listColumns(dbName: String, tableName: String): Dataset[Column]
 
   /**
    * :: Experimental ::

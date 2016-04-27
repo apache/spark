@@ -23,7 +23,7 @@ import scala.reflect.runtime.universe.TypeTag
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalog.{Catalog, Column, Database, Function, Table}
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
@@ -50,8 +50,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     }
   }
 
-  // TODO: Not used; this fails right now because Database et al are not Product.
-  private def makeDataset[T: TypeTag](data: Seq[T]): Dataset[T] = {
+  private def makeDataset[T <: DefinedByConstructorParams: TypeTag](data: Seq[T]): Dataset[T] = {
     val enc = ExpressionEncoder[T]()
     val encoded = data.map(d => enc.toRow(d).copy())
     val plan = new LocalRelation(enc.schema.toAttributes, encoded)
@@ -76,7 +75,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   /**
    * Returns a list of databases available across all sessions.
    */
-  override def listDatabases(): Array[Database] = {
+  override def listDatabases(): Dataset[Database] = {
     val databases = sessionCatalog.listDatabases().map { dbName =>
       val metadata = sessionCatalog.getDatabaseMetadata(dbName)
       new Database(
@@ -84,14 +83,14 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
         description = metadata.description,
         locationUri = metadata.locationUri)
     }
-    databases.toArray
+    makeDataset(databases)
   }
 
   /**
    * Returns a list of tables in the current database.
    * This includes all temporary tables.
    */
-  override def listTables(): Array[Table] = {
+  override def listTables(): Dataset[Table] = {
     listTables(currentDatabase)
   }
 
@@ -100,7 +99,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * This includes all temporary tables.
    */
   @throws[AnalysisException]("database does not exist")
-  override def listTables(dbName: String): Array[Table] = {
+  override def listTables(dbName: String): Dataset[Table] = {
     requireDatabaseExists(dbName)
     val tables = sessionCatalog.listTables(dbName).map { tableIdent =>
       val isTemp = tableIdent.database.isEmpty
@@ -112,14 +111,14 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
         tableType = metadata.map(_.tableType.name).getOrElse("TEMPORARY"),
         isTemporary = isTemp)
     }
-    tables.toArray
+    makeDataset(tables)
   }
 
   /**
    * Returns a list of functions registered in the current database.
    * This includes all temporary functions
    */
-  override def listFunctions(): Array[Function] = {
+  override def listFunctions(): Dataset[Function] = {
     listFunctions(currentDatabase)
   }
 
@@ -128,7 +127,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * This includes all temporary functions
    */
   @throws[AnalysisException]("database does not exist")
-  override def listFunctions(dbName: String): Array[Function] = {
+  override def listFunctions(dbName: String): Dataset[Function] = {
     requireDatabaseExists(dbName)
     val functions = sessionCatalog.listFunctions(dbName).map { funcIdent =>
       val metadata = sessionCatalog.lookupFunctionInfo(funcIdent)
@@ -138,14 +137,14 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
         className = metadata.getClassName,
         isTemporary = funcIdent.database.isEmpty)
     }
-    functions.toArray
+    makeDataset(functions)
   }
 
   /**
    * Returns a list of columns for the given table in the current database.
    */
   @throws[AnalysisException]("table does not exist")
-  override def listColumns(tableName: String): Array[Column] = {
+  override def listColumns(tableName: String): Dataset[Column] = {
     listColumns(currentDatabase, tableName)
   }
 
@@ -153,7 +152,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * Returns a list of columns for the given table in the specified database.
    */
   @throws[AnalysisException]("database or table does not exist")
-  override def listColumns(dbName: String, tableName: String): Array[Column] = {
+  override def listColumns(dbName: String, tableName: String): Dataset[Column] = {
     requireTableExists(dbName, tableName)
     val tableMetadata = sessionCatalog.getTableMetadata(TableIdentifier(tableName, Some(dbName)))
     val partitionColumnNames = tableMetadata.partitionColumnNames.toSet
@@ -167,7 +166,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
         isPartition = partitionColumnNames.contains(c.name),
         isBucket = bucketColumnNames.contains(c.name))
     }
-    columns.toArray
+    makeDataset(columns)
   }
 
   /**
