@@ -46,7 +46,7 @@ private[sql] case class JDBCPartition(whereClause: String, idx: Int) extends Par
   override def equals(other: Any): Boolean = {
     other match {
       case partition: JDBCPartition =>
-        if (whereClause == partition.whereClause && idx == partition.idx) true else false
+        whereClause.compareToIgnoreCase(whereClause) == 0 && idx == partition.idx
       case _ => false
     }
   }

@@ -64,10 +64,7 @@ private[sql] object JDBCRelation {
 
     if (numPartitions == 1) return Array[Partition](JDBCPartition(null, 0))
 
-    val stride: Long = {
-      val inc = (upper - lower + 1) / numPartitions
-      if (inc > 0) inc else 1
-    }
+    val stride: Long = math.max(1, (upper - lower + 1) / numPartitions)
     var i: Int = 0
     var currentValue: Long = lower
     var ans = new ArrayBuffer[Partition]()
