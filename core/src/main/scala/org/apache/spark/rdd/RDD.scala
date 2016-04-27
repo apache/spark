@@ -1073,6 +1073,8 @@ abstract class RDD[T: ClassTag](
     require(depth >= 1, s"Depth must be greater than or equal to 1 but got $depth.")
     if (partitions.length == 0) {
       Utils.clone(zeroValue, context.env.closureSerializer.newInstance())
+    } else if (sparkContext.isLocal) {
+      aggregate(zeroValue)(seqOp, combOp)
     } else {
       val cleanSeqOp = context.clean(seqOp)
       val cleanCombOp = context.clean(combOp)
