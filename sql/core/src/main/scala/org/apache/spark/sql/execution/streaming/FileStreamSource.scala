@@ -38,7 +38,7 @@ class FileStreamSource(
     override val schema: StructType,
     dataFrameBuilder: Array[String] => DataFrame) extends Source with Logging {
 
-  private val fs = new Path(path).getFileSystem(sparkSession.sessionState.hadoopConf)
+  private val fs = new Path(path).getFileSystem(sparkSession.sessionState.newHadoopConf())
   private val metadataLog = new HDFSMetadataLog[Seq[String]](sparkSession, metadataPath)
   private var maxBatchId = metadataLog.getLatest().map(_._1).getOrElse(-1L)
 

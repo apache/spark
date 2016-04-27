@@ -274,7 +274,7 @@ class HDFSFileCatalog(
     partitionSchema: Option[StructType])
   extends FileCatalog with Logging {
 
-  private val hadoopConf = new Configuration(sparkSession.sessionState.hadoopConf)
+  private val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(parameters)
 
   var leafFiles = mutable.LinkedHashMap.empty[Path, FileStatus]
   var leafDirToChildrenFiles = mutable.Map.empty[Path, Array[FileStatus]]

@@ -17,10 +17,8 @@
 
 package org.apache.spark.sql.sources
 
-import scala.collection.JavaConverters._
 import scala.util.Random
 
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
@@ -117,56 +115,55 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
     new UDT.MyDenseVectorUDT()
   ).filter(supportsDataType)
 
-  try {
-    for (dataType <- supportedDataTypes) {
-      for (parquetDictionaryEncodingEnabled <- Seq(true, false)) {
-        test(s"test all data types - $dataType with parquet.enable.dictionary = " +
-          s"$parquetDictionaryEncodingEnabled") {
+  for (dataType <- supportedDataTypes) {
+    for (parquetDictionaryEncodingEnabled <- Seq(true, false)) {
+      test(s"test all data types - $dataType with parquet.enable.dictionary = " +
+        s"$parquetDictionaryEncodingEnabled") {
 
-          hadoopConfiguration.setBoolean("parquet.enable.dictionary",
-            parquetDictionaryEncodingEnabled)
+        val extraOptions = Map[String, String](
+          "parquet.enable.dictionary" -> parquetDictionaryEncodingEnabled.toString
+        )
 
-          withTempPath { file =>
-            val path = file.getCanonicalPath
+        withTempPath { file =>
+          val path = file.getCanonicalPath
 
-            val dataGenerator = RandomDataGenerator.forType(
-              dataType = dataType,
-              nullable = true,
-              new Random(System.nanoTime())
-            ).getOrElse {
-              fail(s"Failed to create data generator for schema $dataType")
-            }
-
-            // Create a DF for the schema with random data. The index field is used to sort the
-            // DataFrame.  This is a workaround for SPARK-10591.
-            val schema = new StructType()
-              .add("index", IntegerType, nullable = false)
-              .add("col", dataType, nullable = true)
-            val rdd =
-              sqlContext.sparkContext.parallelize((1 to 10).map(i => Row(i, dataGenerator())))
-            val df = sqlContext.createDataFrame(rdd, schema).orderBy("index").coalesce(1)
-
-            df.write
-              .mode("overwrite")
-              .format(dataSourceName)
-              .option("dataSchema", df.schema.json)
-              .save(path)
-
-            val loadedDF = sqlContext
-              .read
-              .format(dataSourceName)
-              .option("dataSchema", df.schema.json)
-              .schema(df.schema)
-              .load(path)
-              .orderBy("index")
-
-            checkAnswer(loadedDF, df)
+          val dataGenerator = RandomDataGenerator.forType(
+            dataType = dataType,
+            nullable = true,
+            new Random(System.nanoTime())
+          ).getOrElse {
+            fail(s"Failed to create data generator for schema $dataType")
           }
+
+          // Create a DF for the schema with random data. The index field is used to sort the
+          // DataFrame.  This is a workaround for SPARK-10591.
+          val schema = new StructType()
+            .add("index", IntegerType, nullable = false)
+            .add("col", dataType, nullable = true)
+          val rdd =
+            sqlContext.sparkContext.parallelize((1 to 10).map(i => Row(i, dataGenerator())))
+          val df = sqlContext.createDataFrame(rdd, schema).orderBy("index").coalesce(1)
+
+          df.write
+            .mode("overwrite")
+            .format(dataSourceName)
+            .option("dataSchema", df.schema.json)
+            .options(extraOptions)
+            .save(path)
+
+          val loadedDF = sqlContext
+            .read
+            .format(dataSourceName)
+            .option("dataSchema", df.schema.json)
+            .schema(df.schema)
+            .options(extraOptions)
+            .load(path)
+            .orderBy("index")
+
+          checkAnswer(loadedDF, df)
         }
       }
     }
-  } finally {
-    hadoopConfiguration.unset("parquet.enable.dictionary")
   }
 
   test("save()/load() - non-partitioned table - Overwrite") {
@@ -209,7 +206,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       testDF.write.mode(SaveMode.Ignore).format(dataSourceName).save(file.getCanonicalPath)
 
       val path = new Path(file.getCanonicalPath)
-      val fs = path.getFileSystem(sqlContext.sessionState.hadoopConf)
+      val fs = path.getFileSystem(sqlContext.sessionState.newHadoopConf())
       assert(fs.listStatus(path).isEmpty)
     }
   }
@@ -510,7 +507,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         s"${file.getCanonicalFile}/p1=2/p2=bar"
       ).map { p =>
         val path = new Path(p)
-        val fs = path.getFileSystem(sqlContext.sessionState.hadoopConf)
+        val fs = path.getFileSystem(sqlContext.sessionState.newHadoopConf())
         path.makeQualified(fs.getUri, fs.getWorkingDirectory).toString
       }
 
@@ -605,53 +602,45 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
   }
 
   test("SPARK-8578 specified custom output committer will not be used to append data") {
-    val clonedConf = new Configuration(hadoopConfiguration)
-    try {
-      val df = sqlContext.range(1, 10).toDF("i")
-      withTempPath { dir =>
-        df.write.mode("append").format(dataSourceName).save(dir.getCanonicalPath)
-        hadoopConfiguration.set(
-          SQLConf.OUTPUT_COMMITTER_CLASS.key,
-          classOf[AlwaysFailOutputCommitter].getName)
-        // Since Parquet has its own output committer setting, also set it
-        // to AlwaysFailParquetOutputCommitter at here.
-        hadoopConfiguration.set("spark.sql.parquet.output.committer.class",
-          classOf[AlwaysFailParquetOutputCommitter].getName)
-        // Because there data already exists,
-        // this append should succeed because we will use the output committer associated
-        // with file format and AlwaysFailOutputCommitter will not be used.
-        df.write.mode("append").format(dataSourceName).save(dir.getCanonicalPath)
-        checkAnswer(
-          sqlContext.read
-            .format(dataSourceName)
-            .option("dataSchema", df.schema.json)
-            .load(dir.getCanonicalPath),
-          df.union(df))
+    val extraOptions = Map[String, String](
+      SQLConf.OUTPUT_COMMITTER_CLASS.key -> classOf[AlwaysFailOutputCommitter].getName,
+      // Since Parquet has its own output committer setting, also set it
+      // to AlwaysFailParquetOutputCommitter at here.
+      "spark.sql.parquet.output.committer.class" ->
+        classOf[AlwaysFailParquetOutputCommitter].getName
+    )
 
-        // This will fail because AlwaysFailOutputCommitter is used when we do append.
-        intercept[Exception] {
-          df.write.mode("overwrite").format(dataSourceName).save(dir.getCanonicalPath)
-        }
+    val df = sqlContext.range(1, 10).toDF("i")
+    withTempPath { dir =>
+      df.write.mode("append").format(dataSourceName).save(dir.getCanonicalPath)
+      // Because there data already exists,
+      // this append should succeed because we will use the output committer associated
+      // with file format and AlwaysFailOutputCommitter will not be used.
+      df.write.mode("append").format(dataSourceName).save(dir.getCanonicalPath)
+      checkAnswer(
+        sqlContext.read
+          .format(dataSourceName)
+          .option("dataSchema", df.schema.json)
+          .options(extraOptions)
+          .load(dir.getCanonicalPath),
+        df.union(df))
+
+      // This will fail because AlwaysFailOutputCommitter is used when we do append.
+      intercept[Exception] {
+        df.write.mode("overwrite")
+          .options(extraOptions).format(dataSourceName).save(dir.getCanonicalPath)
       }
-      withTempPath { dir =>
-        hadoopConfiguration.set(
-          SQLConf.OUTPUT_COMMITTER_CLASS.key,
-          classOf[AlwaysFailOutputCommitter].getName)
-        // Since Parquet has its own output committer setting, also set it
-        // to AlwaysFailParquetOutputCommitter at here.
-        hadoopConfiguration.set("spark.sql.parquet.output.committer.class",
-          classOf[AlwaysFailParquetOutputCommitter].getName)
-        // Because there is no existing data,
-        // this append will fail because AlwaysFailOutputCommitter is used when we do append
-        // and there is no existing data.
-        intercept[Exception] {
-          df.write.mode("append").format(dataSourceName).save(dir.getCanonicalPath)
-        }
+    }
+    withTempPath { dir =>
+      // Because there is no existing data,
+      // this append will fail because AlwaysFailOutputCommitter is used when we do append
+      // and there is no existing data.
+      intercept[Exception] {
+        df.write.mode("append")
+          .options(extraOptions)
+          .format(dataSourceName)
+          .save(dir.getCanonicalPath)
       }
-    } finally {
-      // Hadoop 1 doesn't have `Configuration.unset`
-      hadoopConfiguration.clear()
-      clonedConf.asScala.foreach(entry => hadoopConfiguration.set(entry.getKey, entry.getValue))
     }
   }
 
@@ -671,38 +660,38 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
   }
 
   test("Locality support for FileScanRDD") {
-    withHadoopConf(
+    val options = Map[String, String](
       "fs.file.impl" -> classOf[LocalityTestFileSystem].getName,
       "fs.file.impl.disable.cache" -> "true"
-    ) {
-      withTempPath { dir =>
-        val path = "file://" + dir.getCanonicalPath
-        val df1 = sqlContext.range(4)
-        df1.coalesce(1).write.mode("overwrite").format(dataSourceName).save(path)
-        df1.coalesce(1).write.mode("append").format(dataSourceName).save(path)
+    )
+    withTempPath { dir =>
+      val path = "file://" + dir.getCanonicalPath
+      val df1 = sqlContext.range(4)
+      df1.coalesce(1).write.mode("overwrite").options(options).format(dataSourceName).save(path)
+      df1.coalesce(1).write.mode("append").options(options).format(dataSourceName).save(path)
 
-        def checkLocality(): Unit = {
-          val df2 = sqlContext.read
-            .format(dataSourceName)
-            .option("dataSchema", df1.schema.json)
-            .load(path)
+      def checkLocality(): Unit = {
+        val df2 = sqlContext.read
+          .format(dataSourceName)
+          .option("dataSchema", df1.schema.json)
+          .options(options)
+          .load(path)
 
-          val Some(fileScanRDD) = df2.queryExecution.executedPlan.collectFirst {
-            case scan: DataSourceScanExec if scan.rdd.isInstanceOf[FileScanRDD] =>
-              scan.rdd.asInstanceOf[FileScanRDD]
-          }
-
-          val partitions = fileScanRDD.partitions
-          val preferredLocations = partitions.flatMap(fileScanRDD.preferredLocations)
-
-          assert(preferredLocations.distinct.length == 2)
+        val Some(fileScanRDD) = df2.queryExecution.executedPlan.collectFirst {
+          case scan: DataSourceScanExec if scan.rdd.isInstanceOf[FileScanRDD] =>
+            scan.rdd.asInstanceOf[FileScanRDD]
         }
 
+        val partitions = fileScanRDD.partitions
+        val preferredLocations = partitions.flatMap(fileScanRDD.preferredLocations)
+
+        assert(preferredLocations.distinct.length == 2)
+      }
+
+      checkLocality()
+
+      withSQLConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "0") {
         checkLocality()
-
-        withSQLConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "0") {
-          checkLocality()
-        }
       }
     }
   }

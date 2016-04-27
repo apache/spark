@@ -266,14 +266,6 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       intercept[AnalysisException] {
         sql(s"""LOAD DATA LOCAL INPATH "$incorrectUri" INTO TABLE non_part_table""")
       }
-
-      // Unset default URI Scheme and Authority: throw exception
-      val originalFsName = hiveContext.sessionState.hadoopConf.get("fs.default.name")
-      hiveContext.sessionState.hadoopConf.unset("fs.default.name")
-      intercept[AnalysisException] {
-        sql(s"""LOAD DATA INPATH "$testData" INTO TABLE non_part_table""")
-      }
-      hiveContext.sessionState.hadoopConf.set("fs.default.name", originalFsName)
     }
   }
 

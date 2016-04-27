@@ -40,7 +40,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, 
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.ui.SQLListener
-import org.apache.spark.sql.internal.{CatalogImpl, RuntimeConfigImpl, SessionState, SharedState}
+import org.apache.spark.sql.internal.{CatalogImpl, SessionState, SharedState}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.{DataType, LongType, StructType}
 import org.apache.spark.sql.util.ExecutionListenerManager
@@ -201,9 +201,7 @@ class SparkSession private(
    * @group config
    * @since 2.0.0
    */
-  @transient lazy val conf: RuntimeConfig = {
-    new RuntimeConfigImpl(sessionState.conf, sessionState.hadoopConf)
-  }
+  @transient lazy val conf: RuntimeConfig = new RuntimeConfig(sessionState.conf)
 
   /**
    * Set Spark SQL configuration properties.

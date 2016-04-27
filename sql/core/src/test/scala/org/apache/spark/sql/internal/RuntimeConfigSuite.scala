@@ -22,7 +22,7 @@ import org.apache.spark.sql.RuntimeConfig
 
 class RuntimeConfigSuite extends SparkFunSuite {
 
-  private def newConf(): RuntimeConfig = new RuntimeConfigImpl
+  private def newConf(): RuntimeConfig = new RuntimeConfig
 
   test("set and get") {
     val conf = newConf()
@@ -52,35 +52,6 @@ class RuntimeConfigSuite extends SparkFunSuite {
     conf.unset("k1")
     intercept[NoSuchElementException] {
       conf.get("k1")
-    }
-  }
-
-  test("set and get hadoop configuration") {
-    val conf = newConf()
-    conf
-      .setHadoop("k1", "v1")
-      .setHadoop("k2", "v2")
-
-    assert(conf.getHadoop("k1") == "v1")
-    assert(conf.getHadoop("k2") == "v2")
-
-    intercept[NoSuchElementException] {
-      conf.get("notset")
-    }
-  }
-
-  test("getHadoopOption") {
-    val conf = newConf().setHadoop("k1", "v1")
-    assert(conf.getHadoopOption("k1") == Some("v1"))
-    assert(conf.getHadoopOption("notset") == None)
-  }
-
-  test("unsetHadoop") {
-    val conf = newConf().setHadoop("k1", "v1")
-    assert(conf.getHadoop("k1") == "v1")
-    conf.unsetHadoop("k1")
-    intercept[NoSuchElementException] {
-      conf.getHadoop("k1")
     }
   }
 }
