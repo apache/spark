@@ -54,7 +54,7 @@ object SQLConf {
 
   val OPTIMIZER_MAX_ITERATIONS = SQLConfigBuilder("spark.sql.optimizer.maxIterations")
     .internal()
-    .doc("The max number of itertions the optimizer and analyzer runs.")
+    .doc("The max number of iterations the optimizer and analyzer runs.")
     .intConf
     .createWithDefault(100)
 
