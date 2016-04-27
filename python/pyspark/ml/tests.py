@@ -803,9 +803,10 @@ class LDATest(PySparkTestCase):
     def test_persistence(self):
         # Test save/load for LDA, LocalLDAModel, DistributedLDAModel.
         sqlContext = SQLContext(self.sc)
-        df = sqlContext.createDataFrame([[1, Vectors.dense([0.0, 1.0])],
-                                         [2, Vectors.sparse(2, {0: 1.0})],],
-                                        ["id", "features"])
+        df = sqlContext.createDataFrame([
+            [1, Vectors.dense([0.0, 1.0])],
+            [2, Vectors.sparse(2, {0: 1.0})],
+        ], ["id", "features"])
         # Fit model
         lda = LDA(k=2, seed=1, optimizer="em")
         distributedModel = lda.fit(df)

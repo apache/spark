@@ -454,8 +454,11 @@ class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
         return BisectingKMeansModel(java_model)
 
 
+@inherit_doc
 class LDAModel(JavaModel):
     """
+    .. note:: Experimental
+
     Latent Dirichlet Allocation (LDA) model.
     This abstraction permits for different underlying representations,
     including local and distributed data structures.
@@ -529,8 +532,11 @@ class LDAModel(JavaModel):
         return self._call_java("estimatedDocConcentration")
 
 
+@inherit_doc
 class DistributedLDAModel(LDAModel, JavaMLReadable, JavaMLWritable):
     """
+    .. note:: Experimental
+
     Distributed model fitted by :py:class:`LDA`.
     This type of model is currently only produced by Expectation-Maximization (EM).
 
@@ -590,8 +596,11 @@ class DistributedLDAModel(LDAModel, JavaMLReadable, JavaMLWritable):
         return self._call_java("getCheckpointFiles")
 
 
+@inherit_doc
 class LocalLDAModel(LDAModel, JavaMLReadable, JavaMLWritable):
     """
+    .. note:: Experimental
+
     Local (non-distributed) model fitted by :py:class:`LDA`.
     This model stores the inferred topics only; it does not store info about the training dataset.
 
@@ -600,9 +609,12 @@ class LocalLDAModel(LDAModel, JavaMLReadable, JavaMLWritable):
     pass
 
 
+@inherit_doc
 class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInterval,
           JavaMLReadable, JavaMLWritable):
     """
+    .. note:: Experimental
+
     Latent Dirichlet Allocation (LDA), a topic model designed for text documents.
 
     Terminology:
@@ -682,25 +694,32 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
                                  "for each document (often called \"theta\" in the literature). "
                                  "Returns a vector of zeros for an empty document.",
                                  typeConverter=TypeConverters.toString)
+    keepLastCheckpoint = Param(Params._dummy(), "keepLastCheckpoint",
+                               "(For EM optimizer) If using checkpointing, this indicates whether"
+                               " to keep the last checkpoint. If false, then the checkpoint will be"
+                               " deleted. Deleting the checkpoint can cause failures if a data"
+                               " partition is lost, so set this bit with care.",
+                               TypeConverters.toBoolean)
 
     @keyword_only
-    def __init__(self, featuresCol="features", k=10,
-                 optimizer="online", learningOffset=1024.0, learningDecay=0.51,
+    def __init__(self, featuresCol="features", maxIter=20, seed=None, checkpointInterval=10,
+                 k=10, optimizer="online", learningOffset=1024.0, learningDecay=0.51,
                  subsamplingRate=0.05, optimizeDocConcentration=True,
-                 checkpointInterval=10, maxIter=20, docConcentration=None,
-                 topicConcentration=None, topicDistributionCol="topicDistribution", seed=None):
+                 docConcentration=None, topicConcentration=None,
+                 topicDistributionCol="topicDistribution", keepLastCheckpoint=True):
         """
-        __init__(self, featuresCol="features", k=10, \
-                 optimizer="online", learningOffset=1024.0, learningDecay=0.51, \
-                 subsamplingRate=0.05, optimizeDocConcentration=True, \
-                 checkpointInterval=10, maxIter=20, docConcentration=None, \
-                 topicConcentration=None, topicDistributionCol="topicDistribution", seed=None):
+        __init__(self, featuresCol="features", maxIter=20, seed=None, checkpointInterval=10,\
+                  k=10, optimizer="online", learningOffset=1024.0, learningDecay=0.51,\
+                  subsamplingRate=0.05, optimizeDocConcentration=True,\
+                  docConcentration=None, topicConcentration=None,\
+                  topicDistributionCol="topicDistribution", keepLastCheckpoint=True):
         """
         super(LDA, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.clustering.LDA", self.uid)
-        self._setDefault(k=10, optimizer="online", learningOffset=1024.0, learningDecay=0.51,
+        self._setDefault(maxIter=20, checkpointInterval=10,
+                         k=10, optimizer="online", learningOffset=1024.0, learningDecay=0.51,
                          subsamplingRate=0.05, optimizeDocConcentration=True,
-                         checkpointInterval=10, maxIter=20)
+                         topicDistributionCol="topicDistribution", keepLastCheckpoint=True)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
@@ -712,19 +731,17 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
 
     @keyword_only
     @since("2.0.0")
-    def setParams(self, featuresCol="features", k=10,
-                  optimizer="online", learningOffset=1024.0, learningDecay=0.51,
+    def setParams(self, featuresCol="features", maxIter=20, seed=None, checkpointInterval=10,
+                  k=10, optimizer="online", learningOffset=1024.0, learningDecay=0.51,
                   subsamplingRate=0.05, optimizeDocConcentration=True,
-                  checkpointInterval=10, maxIter=20, docConcentration=None,
-                  topicConcentration=None,
-                  topicDistributionCol="topicDistribution", seed=None):
+                  docConcentration=None, topicConcentration=None,
+                  topicDistributionCol="topicDistribution", keepLastCheckpoint=True):
         """
-        setParams(self, featuresCol="features", k=10, \
-                  optimizer="online", learningOffset=1024.0, learningDecay=0.51, \
-                  subsamplingRate=0.05, optimizeDocConcentration=True, \
-                  checkpointInterval=10, maxIter=20, docConcentration=None, \
-                  topicConcentration=None, \
-                  topicDistributionCol="topicDistribution", seed=None):
+        setParams(self, featuresCol="features", maxIter=20, seed=None, checkpointInterval=10,\
+                  k=10, optimizer="online", learningOffset=1024.0, learningDecay=0.51,\
+                  subsamplingRate=0.05, optimizeDocConcentration=True,\
+                  docConcentration=None, topicConcentration=None,\
+                  topicDistributionCol="topicDistribution", keepLastCheckpoint=True):
 
         Sets params for LDA.
         """
@@ -893,6 +910,24 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
         Gets the value of :py:attr:`topicDistributionCol` or its default value.
         """
         return self.getOrDefault(self.topicDistributionCol)
+
+    @since("2.0.0")
+    def setKeepLastCheckpoint(self, value):
+        """
+        Sets the value of :py:attr:`keepLastCheckpoint`.
+
+        >>> algo = LDA().setKeepLastCheckpoint(False)
+        >>> algo.getKeepLastCheckpoint()
+        False
+        """
+        return self._set(keepLastCheckpoint=value)
+
+    @since("2.0.0")
+    def getKeepLastCheckpoint(self):
+        """
+        Gets the value of :py:attr:`keepLastCheckpoint` or its default value.
+        """
+        return self.getOrDefault(self.keepLastCheckpoint)
 
 
 if __name__ == "__main__":
