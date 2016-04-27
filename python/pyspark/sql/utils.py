@@ -47,7 +47,7 @@ class IllegalArgumentException(CapturedException):
 
 class ContinuousQueryException(CapturedException):
     """
-    Failed to analyze a SQL query plan.
+    Exception that stopped a :class:`ContinuousQuery`.
     """
 
 
