@@ -1994,7 +1994,7 @@ class Dataset[T] private[sql](
       schema: StructType): DataFrame = {
     val rowEncoder = encoder.asInstanceOf[ExpressionEncoder[Row]]
     Dataset.ofRows(
-      sqlContext,
+      sparkSession,
       MapPartitionsInR(func, packageNames, broadcastVars, schema, rowEncoder, logicalPlan))
   }
 
