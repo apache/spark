@@ -257,7 +257,9 @@ case class TungstenAggregate(
     }
     s"""
        | // do aggregate
+       | // common sub-expressions
        | $effectiveCodes
+       | // evaluate aggregate function
        | ${evaluateVariables(aggVals)}
        | // update aggregation buffer
        | ${updates.mkString("\n").trim}
@@ -664,14 +666,18 @@ case class TungstenAggregate(
         }
         Option(
           s"""
-             |// evaluate aggregate function
+             |// common sub-expressions
              |$effectiveCodes
+             |// evaluate aggregate function
              |${evaluateVariables(vectorizedRowEvals)}
              |// update vectorized row
              |${updateVectorizedRow.mkString("\n").trim}
            """.stripMargin)
       } else None
     }
+
+    // Clear previous common sub-expressions in VectorizedHashMap
+    ctx.subExprEliminationExprs.clear()
 
     // Next, we generate code to probe and update the unsafe row hash map.
     val findOrInsertInUnsafeRowMap: String = {
@@ -716,8 +722,9 @@ case class TungstenAggregate(
         ctx.updateColumn(unsafeRowBuffer, dt, i, ev, updateExpr(i).nullable)
       }
       s"""
-         |// evaluate aggregate function
+         |// common sub-expressions
          |$effectiveCodes
+         |// evaluate aggregate function
          |${evaluateVariables(unsafeRowBufferEvals)}
          |// update unsafe row buffer
          |${updateUnsafeRowBuffer.mkString("\n").trim}

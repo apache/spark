@@ -579,6 +579,9 @@ class CodegenContext {
    * common subexpressions actually are used first time.
    */
   def subexpressionEliminationForWholeStageCodegen(expressions: Seq[Expression]): Seq[String] = {
+    // Create a clear EquivalentExpressions
+    val equivalentExpressions: EquivalentExpressions = new EquivalentExpressions
+
     // Add each expression tree and compute the common subexpressions.
     expressions.foreach(equivalentExpressions.addExprTree(_, true, false))
 
