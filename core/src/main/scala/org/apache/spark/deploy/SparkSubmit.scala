@@ -24,6 +24,7 @@ import java.security.PrivilegedExceptionAction
 
 import scala.annotation.tailrec
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
+
 import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.security.UserGroupInformation
@@ -38,10 +39,10 @@ import org.apache.ivy.core.settings.IvySettings
 import org.apache.ivy.plugins.matcher.GlobPatternMatcher
 import org.apache.ivy.plugins.repository.file.FileRepository
 import org.apache.ivy.plugins.resolver.{ChainResolver, FileSystemResolver, IBiblioResolver}
+
 import org.apache.spark.{SPARK_VERSION, SparkException, SparkUserAppException}
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.rest._
-import org.apache.spark.internal.Logging
 import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, Utils}
 
 
@@ -111,21 +112,12 @@ object SparkSubmit {
   // scalastyle:on println
 
   def main(args: Array[String]): Unit = {
-    // scalastyle:off println
-    printStream.println("SparkSubmit: args received=" + args.mkString("\n"))
-    printStream.println("1 SpSbmt SPARK_CLASSPATH=" + sys.env.get("SPARK_CLASSPATH").mkString(","))
-    // scalastyle:on println
     val appArgs = new SparkSubmitArguments(args)
     if (appArgs.verbose) {
       // scalastyle:off println
       printStream.println(appArgs)
       // scalastyle:on println
     }
-    // scalastyle:off println
-    printStream.println("2 SpSbmt SPARK_CLASSPATH=" + sys.env.get("SPARK_CLASSPATH").mkString(","))
-    printStream.println("SparkSubmit: args constructed=" + appArgs)
-    // scalastyle:on println
-
     appArgs.action match {
       case SparkSubmitAction.SUBMIT => submit(appArgs)
       case SparkSubmitAction.KILL => kill(appArgs)
@@ -161,21 +153,7 @@ object SparkSubmit {
    */
   @tailrec
   private def submit(args: SparkSubmitArguments): Unit = {
-
-    // scalastyle:off println
-    printStream.println("SpSubmit SPARK_CLASSPATH=" + sys.env.get("SPARK_CLASSPATH").mkString(","))
-    // scalastyle:on println
     val (childArgs, childClasspath, sysProps, childMainClass) = prepareSubmitEnvironment(args)
-    // scalastyle:off println
-    printStream.println("SpSubmit: SPARK_CLASSPATH=" + sys.env.get("SPARK_CLASSPATH").mkString(","))
-    // scalastyle:on println
-
-    // scalastyle:off println
-    printStream.println("SparkSubmit: spark submit childArgs: " + childArgs)
-    printStream.println("SparkSubmit: spark submit childClassPath: " + childClasspath)
-    printStream.println("SparkSubmit: spark submit sysProps: " + sysProps)
-    printStream.println("SparkSubmit: spark submit childMainClass: " + childMainClass)
-    // scalastyle:on println
 
     def doRunMain(): Unit = {
       if (args.proxyUser != null) {

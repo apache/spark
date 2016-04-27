@@ -27,8 +27,8 @@ import java.util.jar.JarFile
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.io.Source
+
 import org.apache.spark.deploy.SparkSubmitAction._
-import org.apache.spark.internal.Logging
 import org.apache.spark.launcher.SparkSubmitArgumentsParser
 import org.apache.spark.util.Utils
 
@@ -37,7 +37,7 @@ import org.apache.spark.util.Utils
  * The env argument is used for testing.
  */
 private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, String] = sys.env)
-  extends SparkSubmitArgumentsParser with Logging{
+  extends SparkSubmitArgumentsParser {
   var master: String = null
   var deployMode: String = null
   var executorMemory: String = null
@@ -78,10 +78,8 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   var submissionToRequestStatusFor: String = null
   var useRest: Boolean = true // used internally
 
-  logInfo("in constructor of SparkSubmitArguments")
   /** Default properties present in the currently defined defaults file. */
   lazy val defaultSparkProperties: HashMap[String, String] = {
-    logInfo("in defaultSparkProperties")
     val defaultProperties = new HashMap[String, String]()
     // scalastyle:off println
     if (verbose) SparkSubmit.printStream.println(s"Using properties file: $propertiesFile")
@@ -113,11 +111,9 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
 
   /**
    * Merge values from the default properties file with those specified through --conf.
-   * When this is called, `sparkProperties` is already filled with configs from the latter. -
-   * This is no longer true
+   * When this is called, `sparkProperties` is already filled with configs from the latter.
    */
   private def mergeDefaultSparkProperties(): Unit = {
-    logInfo("in mergeDefaultSparkProperties with sparkProperties=" + sparkProperties.toString())
     // Use common defaults file, if not specified by user
     propertiesFile = Option(propertiesFile).getOrElse(Utils.getDefaultPropertiesFile(env))
     // Honor --conf before the defaults file
