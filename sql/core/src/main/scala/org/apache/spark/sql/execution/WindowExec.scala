@@ -232,7 +232,7 @@ case class WindowExec(
           // Growing Frame.
           case ("AGGREGATE", frameType, None, Some(high), excludeType) =>
             target: MutableRow => {
-              val toBeCompared = newMutableProjection(orderSpec.map(_.child), child.output)()
+              val toBeCompared = newMutableProjection(orderSpec.map(_.child), child.output)
               new UnboundedPrecedingWindowFunctionFrame(
                 target,
                 processor,
@@ -244,7 +244,7 @@ case class WindowExec(
           // Shrinking Frame.
           case ("AGGREGATE", frameType, Some(low), None, excludeType) =>
             target: MutableRow => {
-              val toBeCompared = newMutableProjection(orderSpec.map(_.child), child.output)()
+              val toBeCompared = newMutableProjection(orderSpec.map(_.child), child.output)
               new UnboundedFollowingWindowFunctionFrame(
                 target,
                 processor,
@@ -255,7 +255,7 @@ case class WindowExec(
           // Moving Frame.
           case ("AGGREGATE", frameType, Some(low), Some(high), excludeType) =>
             target: MutableRow => {
-              val toBeCompared = newMutableProjection(orderSpec.map(_.child), child.output)()
+              val toBeCompared = newMutableProjection(orderSpec.map(_.child), child.output)
               new SlidingWindowFunctionFrame(
                 target,
                 processor,
@@ -267,7 +267,7 @@ case class WindowExec(
           // Entire Partition Frame.
           case ("AGGREGATE", frameType, None, None, excludeType) =>
             target: MutableRow => {
-              val toBeCompared = newMutableProjection(orderSpec.map(_.child), child.output)()
+              val toBeCompared = newMutableProjection(orderSpec.map(_.child), child.output)
               new UnboundedWindowFunctionFrame(
                 target,
                 processor,
