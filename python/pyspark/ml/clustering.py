@@ -482,7 +482,7 @@ class LDAModel(JavaModel):
         This is a matrix of size vocabSize x k, where each column is a topic.
         No guarantees are given about the ordering of the topics.
 
-        WARNING: If this model is actually a :py:attr:`DistributedLDAModel` instance produced by
+        WARNING: If this model is actually a :py:class:`DistributedLDAModel` instance produced by
         the Expectation-Maximization ("em") `optimizer`, then this method could involve
         collecting a large amount of data to the driver (on the order of vocabSize x k).
         """
@@ -494,9 +494,9 @@ class LDAModel(JavaModel):
         Calculates a lower bound on the log likelihood of the entire corpus.
         See Equation (16) in the Online LDA paper (Hoffman et al., 2010).
 
-        WARNING: If this model is an instance of :py:attr:`DistributedLDAModel` (produced when
-        :py:attr:`optimizer` is set to "em"), this involves collecting a large :py:attr:`topicsMatrix` to the
-        driver. This implementation may be changed in the future.
+        WARNING: If this model is an instance of :py:class:`DistributedLDAModel` (produced when
+        :py:attr:`optimizer` is set to "em"), this involves collecting a large
+        :py:func:`topicsMatrix` to the driver. This implementation may be changed in the future.
         """
         return self._call_java("logLikelihood", dataset)
 
@@ -506,9 +506,9 @@ class LDAModel(JavaModel):
         Calculate an upper bound bound on perplexity.  (Lower is better.)
         See Equation (16) in the Online LDA paper (Hoffman et al., 2010).
 
-        WARNING: If this model is an instance of :py:attr:`DistributedLDAModel` (produced when
-        :py:attr:`optimizer` is set to "em"), this involves collecting a large :py:attr:`topicsMatrix` to the
-        driver. This implementation may be changed in the future.
+        WARNING: If this model is an instance of :py:class:`DistributedLDAModel` (produced when
+        :py:attr:`optimizer` is set to "em"), this involves collecting a large
+        :py:func:`topicsMatrix` to the driver. This implementation may be changed in the future.
         """
         return self._call_java("logPerplexity", dataset)
 
@@ -528,6 +528,22 @@ class LDAModel(JavaModel):
         """
         return self._call_java("estimatedDocConcentration")
 
+
+class DistributedLDAModel(LDAModel):
+    """
+    Distributed model fitted by :py:class:`LDA`.
+    This type of model is currently only produced by Expectation-Maximization (EM).
+
+    This model stores the inferred topics, the full training dataset, and the topic distribution
+    for each training document.
+
+    .. versionadded:: 2.0.0
+    """
+
+    @since("2.0.0")
+    def toLocal(self):
+        return LocalLDAModel(self._call_java("toLocal"))
+
     @since("2.0.0")
     def trainingLogLikelihood(self):
         """
@@ -536,27 +552,14 @@ class LDAModel(JavaModel):
         log P(docs | topics, topic distributions for docs, Dirichlet hyperparameters)
 
         Notes:
-          - This excludes the prior; for that, use :py:attr::`logPrior`.
-          - Even with :py:attr::`logPrior`, this is NOT the same as the data log likelihood given
-          the hyperparameters.
+          - This excludes the prior; for that, use :py:func:`logPrior`.
+          - Even with :py:func:`logPrior`, this is NOT the same as the data log likelihood given
+            the hyperparameters.
           - This is computed from the topic distributions computed during training. If you call
-            :py:attr::`logLikelihood` on the same training dataset, the topic distributions
+            :py:func:`logLikelihood` on the same training dataset, the topic distributions
             will be computed again, possibly giving different results.
         """
         return self._call_java("trainingLogLikelihood")
-
-
-class DistributedLDAModel(LDAModel):
-    """
-    Distributed model fitted by :py:attr:`LDA`.
-    This type of model is currently only produced by Expectation-Maximization (EM).
-    This model stores the inferred topics, the full training dataset, and the topic distribution
-    for each training document.
-
-    .. versionadded:: 2.0.0
-    """
-    def toLocal(self):
-        return LocalLDAModel(self._call_java("toLocal"))
 
     @since("2.0.0")
     def logPrior(self):
@@ -569,19 +572,21 @@ class DistributedLDAModel(LDAModel):
     @since("2.0.0")
     def getCheckpointFiles(self):
         """
-        If using checkpointing and :py:attr:`LDA.keepLastCheckpoint` is set to true, then there may be
-        saved checkpoint files.  This method is provided so that users can manage those files.
+        If using checkpointing and :py:attr:`LDA.keepLastCheckpoint` is set to true, then there may
+        be saved checkpoint files.  This method is provided so that users can manage those files.
 
         Note that removing the checkpoints can cause failures if a partition is lost and is needed
-        by certain :py:attr:`DistributedLDAModel` methods.  Reference counting will clean up the
+        by certain :py:class:`DistributedLDAModel` methods.  Reference counting will clean up the
         checkpoints when this model and derivative data go out of scope.
+
+        :return  List of checkpoint files from training
         """
         return self._call_java("getCheckpointFiles")
 
 
 class LocalLDAModel(LDAModel):
     """
-    Local (non-distributed) model fitted by :py:attr:`LDA`.
+    Local (non-distributed) model fitted by :py:class:`LDA`.
     This model stores the inferred topics only; it does not store info about the training dataset.
 
     .. versionadded:: 2.0.0
@@ -592,21 +597,22 @@ class LocalLDAModel(LDAModel):
 class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInterval):
     """
     Latent Dirichlet Allocation (LDA), a topic model designed for text documents.
+
     Terminology:
 
-    - "term" = "word": an el
-    - "token": instance of a term appearing in a document
-    - "topic": multinomial distribution over terms representing some concept
-    - "document": one piece of text, corresponding to one row in the input data
-    References:
-    - Original LDA paper (journal version):
+     - "term" = "word": an el
+     - "token": instance of a term appearing in a document
+     - "topic": multinomial distribution over terms representing some concept
+     - "document": one piece of text, corresponding to one row in the input data
+
+    Original LDA paper (journal version):
       Blei, Ng, and Jordan.  "Latent Dirichlet Allocation."  JMLR, 2003.
 
     Input data (featuresCol):
     LDA is given a collection of documents as input data, via the featuresCol parameter.
-    Each document is specified as a :py:attr:`Vector` of length vocabSize, where each entry is the
+    Each document is specified as a :py:class:`Vector` of length vocabSize, where each entry is the
     count for the corresponding term (word) in the document.  Feature transformers such as
-    :py:attr:`Tokenizer` and :py:attr:`CountVectorizer`
+    :py:class:`pyspark.ml.feature.Tokenizer` and :py:class:`pyspark.ml.feature.CountVectorizer`
     can be useful for converting text to word count vectors.
 
     >>> from pyspark.mllib.linalg import Vectors, SparseVector
@@ -632,8 +638,6 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
     ...
     >>> model.topicsMatrix()
     DenseMatrix(2, 2, [0.496, 0.504, 0.504, 0.496], 0)
-    >>> model.estimatedDocConcentration()
-    DenseVector([26.0, 26.0])
 
     .. versionadded:: 2.0.0
     """
