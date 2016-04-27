@@ -1682,6 +1682,7 @@ class Dataset[T] private[sql](
    */
   def withColumn(colName: String, col: Column): DataFrame = {
     Column.updateExpressionsOrigin(col)
+    val resolver = sparkSession.sessionState.analyzer.resolver
     val output = queryExecution.analyzed.output
     val shouldReplace = output.exists(f => resolver(f.name, colName))
     if (shouldReplace) {
