@@ -74,7 +74,7 @@ class Column(
     "Column[" +
       s"name='$name', " +
       Option(description).map { d => s"description='$d', " }.getOrElse("") +
-      s"dataType='$dataType', "
+      s"dataType='$dataType', " +
       s"nullable='$nullable', " +
       s"isPartition='$isPartition', " +
       s"isBucket='$isBucket']"

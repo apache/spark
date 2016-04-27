@@ -21,6 +21,7 @@ import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.catalog.{Column, Database, Function, Table}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
@@ -230,6 +231,39 @@ class CatalogSuite
     createDatabase("db1")
     createTable("tab1", Some("db1"))
     testListColumns("tab1", dbName = Some("db1"))
+  }
+
+  test("Database.toString") {
+    assert(new Database("cool_db", "cool_desc", "cool_path").toString ==
+      "Database[name='cool_db', description='cool_desc', path='cool_path']")
+    assert(new Database("cool_db", null, "cool_path").toString ==
+      "Database[name='cool_db', path='cool_path']")
+  }
+
+  test("Table.toString") {
+    assert(new Table("volley", "databasa", "one", "world", isTemporary = true).toString ==
+      "Table[name='volley', database='databasa', description='one', " +
+        "tableType='world', isTemporary='true']")
+    assert(new Table("volley", null, null, "world", isTemporary = true).toString ==
+      "Table[name='volley', tableType='world', isTemporary='true']")
+  }
+
+  test("Function.toString") {
+    assert(new Function("nama", "commenta", "classNameAh", isTemporary = true).toString ==
+      "Function[name='nama', description='commenta', className='classNameAh', isTemporary='true']")
+    assert(new Function("nama", null, "classNameAh", isTemporary = false).toString ==
+      "Function[name='nama', className='classNameAh', isTemporary='false']")
+  }
+
+  test("Column.toString") {
+    assert(new Column("namama", "descaca", "datatapa",
+      nullable = true, isPartition = false, isBucket = true).toString ==
+        "Column[name='namama', description='descaca', dataType='datatapa', " +
+          "nullable='true', isPartition='false', isBucket='true']")
+    assert(new Column("namama", null, "datatapa",
+      nullable = false, isPartition = true, isBucket = true).toString ==
+      "Column[name='namama', dataType='datatapa', " +
+        "nullable='false', isPartition='true', isBucket='true']")
   }
 
   // TODO: add tests for the rest of them
