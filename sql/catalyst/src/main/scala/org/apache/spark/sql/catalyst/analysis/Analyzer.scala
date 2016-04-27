@@ -871,7 +871,7 @@ class Analyzer(
      * Resolve a subquery using the outer plan. This rule creates a dedicated analyzer which can
      * also resolve outer plan references.
      */
-   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       // Only a few unary nodes (Project/Filter/Aggregate/Having) can contain subqueries.
       case q: UnaryNode if q.childrenResolved =>
         q transformExpressions {
@@ -963,7 +963,6 @@ class Analyzer(
           if (referencesToAdd.nonEmpty) {
             Aggregate(grouping ++ referencesToAdd, expressions ++ referencesToAdd, child)
           } else {
-
             a
           }
         case j @ Join(left, _, RightOuter, _) =>
@@ -1014,7 +1013,7 @@ class Analyzer(
       } else {
         (basePlan, baseConditions)
       }
-      // Remove outer references from the correlated predicates. We wait with rewriting
+      // Remove outer references from the correlated predicates. We wait with extracting
       // these until collisions between the inner and outer query attributes have been
       // solved.
       val conditions = deDuplicatedConditions.map(_.transform {
