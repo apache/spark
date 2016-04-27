@@ -33,5 +33,10 @@ class NoSuchTableException(db: String, table: String)
 class NoSuchPartitionException(db: String, table: String, spec: TablePartitionSpec) extends
     AnalysisException(s"Partition not found in table $table database $db:\n" + spec.mkString("\n"))
 
+class NoSuchPartitionsException(db: String, table: String, specs: Seq[TablePartitionSpec])
+  extends AnalysisException(
+    s"The following partitions not found in table '$table' database '$db':\n"
+      + specs.mkString("\n===\n"))
+
 class NoSuchFunctionException(db: String, func: String)
   extends AnalysisException(s"Function $func not found in database $db")
