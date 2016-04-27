@@ -548,7 +548,20 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("NodeQueue should be FILO") {
-    // TODO
+    val q = new NodeQueue
+    Range(0, 5).foreach { idx =>
+      val node = LearningNode.emptyNode(idx)
+      q.put(treeIndex = idx, node = node)
+      assert(q.peek()._1 === idx)
+      assert(q.peek()._2.id === node.id)
+    }
+    assert(q.nonEmpty)
+    assert(q.size === 5)
+    Range(0, 5).reverse.foreach { idx =>
+      assert(q.peek()._1 === idx)
+      q.pop()
+    }
+    assert(q.isEmpty)
   }
 }
 
