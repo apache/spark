@@ -226,7 +226,7 @@ class Word2VecModel private[ml] (
     val vectors = wordVectors.getVectors
       .mapValues(vv => Vectors.dense(vv.map(_.toDouble)))
       .map(identity) // mapValues doesn't return a serializable map (SI-7005)
-    val bVectors = dataset.sqlContext.sparkContext.broadcast(vectors)
+    val bVectors = dataset.sparkSession.sparkContext.broadcast(vectors)
     val d = $(vectorSize)
     val word2Vec = udf { sentence: Seq[String] =>
       if (sentence.size == 0) {

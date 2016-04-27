@@ -163,13 +163,13 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
 
     benchmark.addCase(s"codegen = T hashmap = F") { iter =>
       sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
-      sqlContext.setConf("spark.sql.codegen.aggregate.map.enabled", "false")
+      sqlContext.setConf("spark.sql.codegen.aggregate.map.columns.max", "0")
       f()
     }
 
     benchmark.addCase(s"codegen = T hashmap = T") { iter =>
       sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
-      sqlContext.setConf("spark.sql.codegen.aggregate.map.enabled", "true")
+      sqlContext.setConf("spark.sql.codegen.aggregate.map.columns.max", "3")
       f()
     }
 
@@ -201,13 +201,13 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
 
     benchmark.addCase(s"codegen = T hashmap = F") { iter =>
       sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
-      sqlContext.setConf("spark.sql.codegen.aggregate.map.enabled", "false")
+      sqlContext.setConf("spark.sql.codegen.aggregate.map.columns.max", "0")
       f()
     }
 
     benchmark.addCase(s"codegen = T hashmap = T") { iter =>
       sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
-      sqlContext.setConf("spark.sql.codegen.aggregate.map.enabled", "true")
+      sqlContext.setConf("spark.sql.codegen.aggregate.map.columns.max", "3")
       f()
     }
 
@@ -221,6 +221,127 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     codegen = F                              2517 / 2608          8.3         120.0       1.0X
     codegen = T hashmap = F                  1484 / 1560         14.1          70.8       1.7X
     codegen = T hashmap = T                   794 /  908         26.4          37.9       3.2X
+    */
+  }
+
+  ignore("aggregate with string key") {
+    val N = 20 << 20
+
+    val benchmark = new Benchmark("Aggregate w string key", N)
+    def f(): Unit = sqlContext.range(N).selectExpr("id", "cast(id & 1023 as string) as k")
+      .groupBy("k").count().collect()
+
+    benchmark.addCase(s"codegen = F") { iter =>
+      sqlContext.setConf("spark.sql.codegen.wholeStage", "false")
+      f()
+    }
+
+    benchmark.addCase(s"codegen = T hashmap = F") { iter =>
+      sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
+      sqlContext.setConf("spark.sql.codegen.aggregate.map.columns.max", "0")
+      f()
+    }
+
+    benchmark.addCase(s"codegen = T hashmap = T") { iter =>
+      sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
+      sqlContext.setConf("spark.sql.codegen.aggregate.map.columns.max", "3")
+      f()
+    }
+
+    benchmark.run()
+
+    /*
+    Java HotSpot(TM) 64-Bit Server VM 1.8.0_73-b02 on Mac OS X 10.11.4
+    Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
+    Aggregate w string key:             Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    -------------------------------------------------------------------------------------------
+    codegen = F                              3307 / 3376          6.3         157.7       1.0X
+    codegen = T hashmap = F                  2364 / 2471          8.9         112.7       1.4X
+    codegen = T hashmap = T                  1740 / 1841         12.0          83.0       1.9X
+    */
+  }
+
+  ignore("aggregate with decimal key") {
+    val N = 20 << 20
+
+    val benchmark = new Benchmark("Aggregate w decimal key", N)
+    def f(): Unit = sqlContext.range(N).selectExpr("id", "cast(id & 65535 as decimal) as k")
+      .groupBy("k").count().collect()
+
+    benchmark.addCase(s"codegen = F") { iter =>
+      sqlContext.setConf("spark.sql.codegen.wholeStage", "false")
+      f()
+    }
+
+    benchmark.addCase(s"codegen = T hashmap = F") { iter =>
+      sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
+      sqlContext.setConf("spark.sql.codegen.aggregate.map.columns.max", "0")
+      f()
+    }
+
+    benchmark.addCase(s"codegen = T hashmap = T") { iter =>
+      sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
+      sqlContext.setConf("spark.sql.codegen.aggregate.map.columns.max", "3")
+      f()
+    }
+
+    benchmark.run()
+
+    /*
+    Java HotSpot(TM) 64-Bit Server VM 1.8.0_73-b02 on Mac OS X 10.11.4
+    Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
+    Aggregate w decimal key:             Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    -------------------------------------------------------------------------------------------
+    codegen = F                              2756 / 2817          7.6         131.4       1.0X
+    codegen = T hashmap = F                  1580 / 1647         13.3          75.4       1.7X
+    codegen = T hashmap = T                   641 /  662         32.7          30.6       4.3X
+    */
+  }
+
+  ignore("aggregate with multiple key types") {
+    val N = 20 << 20
+
+    val benchmark = new Benchmark("Aggregate w multiple keys", N)
+    def f(): Unit = sqlContext.range(N)
+      .selectExpr(
+        "id",
+        "(id & 1023) as k1",
+        "cast(id & 1023 as string) as k2",
+        "cast(id & 1023 as int) as k3",
+        "cast(id & 1023 as double) as k4",
+        "cast(id & 1023 as float) as k5",
+        "id > 1023 as k6")
+      .groupBy("k1", "k2", "k3", "k4", "k5", "k6")
+      .sum()
+      .collect()
+
+    benchmark.addCase(s"codegen = F") { iter =>
+      sqlContext.setConf("spark.sql.codegen.wholeStage", "false")
+      f()
+    }
+
+    benchmark.addCase(s"codegen = T hashmap = F") { iter =>
+      sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
+      sqlContext.setConf("spark.sql.codegen.aggregate.map.columns.max", "0")
+      f()
+    }
+
+    benchmark.addCase(s"codegen = T hashmap = T") { iter =>
+      sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
+      sqlContext.setConf("spark.sql.codegen.aggregate.map.columns.max", "10")
+      f()
+    }
+
+    benchmark.run()
+
+    /*
+    Java HotSpot(TM) 64-Bit Server VM 1.8.0_73-b02 on Mac OS X 10.11.4
+    Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
+    Aggregate w decimal key:             Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    -------------------------------------------------------------------------------------------
+    codegen = F                              5885 / 6091          3.6         280.6       1.0X
+    codegen = T hashmap = F                  3625 / 4009          5.8         172.8       1.6X
+    codegen = T hashmap = T                  3204 / 3271          6.5         152.8       1.8X
     */
   }
 

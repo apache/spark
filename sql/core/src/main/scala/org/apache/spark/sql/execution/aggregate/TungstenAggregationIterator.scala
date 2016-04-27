@@ -82,12 +82,12 @@ class TungstenAggregationIterator(
     aggregateAttributes: Seq[Attribute],
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
-    newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection),
+    newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection,
     originalInputAttributes: Seq[Attribute],
     inputIter: Iterator[InternalRow],
     testFallbackStartsAt: Option[(Int, Int)],
     numOutputRows: LongSQLMetric,
-    dataSize: LongSQLMetric,
+    peakMemory: LongSQLMetric,
     spillSize: LongSQLMetric)
   extends AggregationIterator(
     groupingExpressions,
@@ -415,11 +415,11 @@ class TungstenAggregationIterator(
       if (!hasNext) {
         val mapMemory = hashMap.getPeakMemoryUsedBytes
         val sorterMemory = Option(externalSorter).map(_.getPeakMemoryUsedBytes).getOrElse(0L)
-        val peakMemory = Math.max(mapMemory, sorterMemory)
+        val maxMemory = Math.max(mapMemory, sorterMemory)
         val metrics = TaskContext.get().taskMetrics()
-        dataSize += peakMemory
+        peakMemory += maxMemory
         spillSize += metrics.memoryBytesSpilled - spillSizeBefore
-        metrics.incPeakExecutionMemory(peakMemory)
+        metrics.incPeakExecutionMemory(maxMemory)
       }
       numOutputRows += 1
       res

@@ -23,6 +23,7 @@ import org.apache.spark.ml.param.shared.{HasLabelCol, HasPredictionCol}
 import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable, SchemaUtils}
 import org.apache.spark.mllib.evaluation.MulticlassMetrics
 import org.apache.spark.sql.{Dataset, Row}
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.DoubleType
 
 /**
@@ -72,12 +73,12 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
   override def evaluate(dataset: Dataset[_]): Double = {
     val schema = dataset.schema
     SchemaUtils.checkColumnType(schema, $(predictionCol), DoubleType)
-    SchemaUtils.checkColumnType(schema, $(labelCol), DoubleType)
+    SchemaUtils.checkNumericType(schema, $(labelCol))
 
-    val predictionAndLabels = dataset.select($(predictionCol), $(labelCol)).rdd.map {
-      case Row(prediction: Double, label: Double) =>
-        (prediction, label)
-    }
+    val predictionAndLabels =
+      dataset.select(col($(predictionCol)), col($(labelCol)).cast(DoubleType)).rdd.map {
+        case Row(prediction: Double, label: Double) => (prediction, label)
+      }
     val metrics = new MulticlassMetrics(predictionAndLabels)
     val metric = $(metricName) match {
       case "f1" => metrics.weightedFMeasure

@@ -21,7 +21,8 @@ import javax.annotation.Nullable
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.parser.DataTypeParser
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
 
 
@@ -99,6 +100,23 @@ abstract class ExternalCatalog {
 
   def listTables(db: String, pattern: String): Seq[String]
 
+  def loadTable(
+      db: String,
+      table: String,
+      loadPath: String,
+      isOverwrite: Boolean,
+      holdDDLTime: Boolean): Unit
+
+  def loadPartition(
+      db: String,
+      table: String,
+      loadPath: String,
+      partition: TablePartitionSpec,
+      isOverwrite: Boolean,
+      holdDDLTime: Boolean,
+      inheritTableSpecs: Boolean,
+      isSkewedStoreAsSubdir: Boolean): Unit
+
   // --------------------------------------------------------------------------
   // Partitions
   // --------------------------------------------------------------------------
@@ -139,8 +157,20 @@ abstract class ExternalCatalog {
 
   def getPartition(db: String, table: String, spec: TablePartitionSpec): CatalogTablePartition
 
-  // TODO: support listing by pattern
-  def listPartitions(db: String, table: String): Seq[CatalogTablePartition]
+  /**
+   * List the metadata of all partitions that belong to the specified table, assuming it exists.
+   *
+   * A partial partition spec may optionally be provided to filter the partitions returned.
+   * For instance, if there exist partitions (a='1', b='2'), (a='1', b='3') and (a='2', b='4'),
+   * then a partial spec of (a='1') will return the first two only.
+   * @param db database name
+   * @param table table name
+   * @param partialSpec  partition spec
+   */
+  def listPartitions(
+      db: String,
+      table: String,
+      partialSpec: Option[TablePartitionSpec] = None): Seq[CatalogTablePartition]
 
   // --------------------------------------------------------------------------
   // Functions
@@ -269,10 +299,10 @@ case class CatalogTable(
 
 case class CatalogTableType private(name: String)
 object CatalogTableType {
-  val EXTERNAL_TABLE = new CatalogTableType("EXTERNAL_TABLE")
-  val MANAGED_TABLE = new CatalogTableType("MANAGED_TABLE")
-  val INDEX_TABLE = new CatalogTableType("INDEX_TABLE")
-  val VIRTUAL_VIEW = new CatalogTableType("VIRTUAL_VIEW")
+  val EXTERNAL = new CatalogTableType("EXTERNAL")
+  val MANAGED = new CatalogTableType("MANAGED")
+  val INDEX = new CatalogTableType("INDEX")
+  val VIEW = new CatalogTableType("VIEW")
 }
 
 
@@ -295,17 +325,42 @@ object ExternalCatalog {
 
 
 /**
- * A [[LogicalPlan]] that wraps [[CatalogTable]].
+ * An interface that is implemented by logical plans to return the underlying catalog table.
+ * If we can in the future consolidate SimpleCatalogRelation and MetastoreRelation, we should
+ * probably remove this interface.
  */
-case class CatalogRelation(
-    db: String,
+trait CatalogRelation {
+  def catalogTable: CatalogTable
+  def output: Seq[Attribute]
+}
+
+
+/**
+ * A [[LogicalPlan]] that wraps [[CatalogTable]].
+ *
+ * Note that in the future we should consolidate this and HiveCatalogRelation.
+ */
+case class SimpleCatalogRelation(
+    databaseName: String,
     metadata: CatalogTable,
     alias: Option[String] = None)
-  extends LeafNode {
+  extends LeafNode with CatalogRelation {
 
-  // TODO: implement this
-  override def output: Seq[Attribute] = Seq.empty
+  override def catalogTable: CatalogTable = metadata
 
-  require(metadata.identifier.database == Some(db),
+  override val output: Seq[Attribute] = {
+    val cols = catalogTable.schema
+      .filter { c => !catalogTable.partitionColumnNames.contains(c.name) }
+    (cols ++ catalogTable.partitionColumns).map { f =>
+      AttributeReference(
+        f.name,
+        DataTypeParser.parse(f.dataType),
+        // Since data can be dumped in randomly with no validation, everything is nullable.
+        nullable = true
+      )(qualifier = Some(alias.getOrElse(metadata.identifier.table)))
+    }
+  }
+
+  require(metadata.identifier.database == Some(databaseName),
     "provided database does not match the one specified in the table definition")
 }
