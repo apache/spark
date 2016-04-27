@@ -25,7 +25,6 @@ import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
-import org.apache.spark.NewAccumulator
 import org.apache.spark.internal.Logging
 
 private[spark] object SerializationDebugger extends Logging {
@@ -94,9 +93,6 @@ private[spark] object SerializationDebugger extends Logging {
           case _ if o.getClass.isPrimitive => List.empty
           case _: String => List.empty
           case _ if o.getClass.isArray && o.getClass.getComponentType.isPrimitive => List.empty
-
-          // accumulators are always serializable.
-          case _ if classOf[NewAccumulator[_, _]].isAssignableFrom(o.getClass) => List.empty
 
           // Traverse non primitive array.
           case a: Array[_] if o.getClass.isArray && !o.getClass.getComponentType.isPrimitive =>
@@ -270,7 +266,13 @@ private[spark] object SerializationDebugger extends Logging {
       (o, desc)
     } else {
       // write place
-      findObjectAndDescriptor(desc.invokeWriteReplace(o))
+      val replaced = desc.invokeWriteReplace(o)
+      // `writeReplace` may return the same object.
+      if (replaced eq o) {
+        (o, desc)
+      } else {
+        findObjectAndDescriptor(replaced)
+      }
     }
   }
 

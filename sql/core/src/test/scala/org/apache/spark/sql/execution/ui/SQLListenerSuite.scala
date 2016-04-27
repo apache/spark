@@ -26,7 +26,7 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.util.quietly
-import org.apache.spark.sql.execution.{SQLExecution, SparkPlanInfo}
+import org.apache.spark.sql.execution.{SparkPlanInfo, SQLExecution}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.ui.SparkUI
@@ -142,7 +142,8 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
     listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate("", Seq(
       // (task id, stage id, stage attempt, accum updates)
       (0L, 0, 0, createTaskMetrics(accumulatorUpdates).accumulators().map(makeInfo)),
-      (1L, 0, 0, createTaskMetrics(accumulatorUpdates.mapValues(_ * 2)).accumulators().map(makeInfo))
+      (1L, 0, 0,
+        createTaskMetrics(accumulatorUpdates.mapValues(_ * 2)).accumulators().map(makeInfo))
     )))
 
     checkAnswer(listener.getExecutionMetrics(0), accumulatorUpdates.mapValues(_ * 3))
