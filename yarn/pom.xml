@@ -156,16 +156,25 @@
        <groupId>com.sun.jersey</groupId>
        <artifactId>jersey-core</artifactId>
        <scope>test</scope>
+       <version>1.9</version>
      </dependency>
      <dependency>
        <groupId>com.sun.jersey</groupId>
        <artifactId>jersey-json</artifactId>
        <scope>test</scope>
+       <version>1.9</version>
      </dependency>
      <dependency>
        <groupId>com.sun.jersey</groupId>
        <artifactId>jersey-server</artifactId>
        <scope>test</scope>
+       <version>1.9</version>
+     </dependency>
+     <dependency>
+       <groupId>com.sun.jersey.contribs</groupId>
+       <artifactId>jersey-guice</artifactId>
+       <scope>test</scope>
+       <version>1.9</version>
      </dependency>
 
     <!--
