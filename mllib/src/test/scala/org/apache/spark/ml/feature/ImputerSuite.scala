@@ -94,7 +94,6 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
         .setMissingValue(-1)
       val model = imputer.fit(df)
       val result = model.transform(df)
-        result.printSchema()
       model.transform(df).select("exp_" + strategy, "out").collect().foreach {
         case Row(exp: Float, out: Float) =>
           assert(exp == out, s"Imputed values differ. Expected: $exp, actual: $out")
