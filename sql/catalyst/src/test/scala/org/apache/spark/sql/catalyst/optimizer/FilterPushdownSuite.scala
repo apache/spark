@@ -776,6 +776,26 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, answer)
   }
 
+  test("predicate subquery: push down complex") {
+    val w = testRelation.subquery('w)
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+    val z = LocalRelation('a.int, 'b.int, 'c.int).subquery('z)
+
+    val query = w
+      .join(x, Inner, Option("w.a".attr === "x.a".attr))
+      .join(y, LeftOuter, Option("x.a".attr === "y.a".attr))
+      .where(Exists(z.where("w.a".attr === "z.a".attr)))
+      .analyze
+    val answer = w
+      .where(Exists(z.where("w.a".attr === "z.a".attr)))
+      .join(x, Inner, Option("w.a".attr === "x.a".attr))
+      .join(y, LeftOuter, Option("x.a".attr === "y.a".attr))
+      .analyze
+    val optimized = Optimize.execute(Optimize.execute(query))
+    comparePlans(optimized, answer)
+  }
+
   test("Window: predicate push down -- basic") {
     val winExpr = windowExpr(count('b), windowSpec('a :: Nil, 'b.asc :: Nil, UnspecifiedFrame))
 

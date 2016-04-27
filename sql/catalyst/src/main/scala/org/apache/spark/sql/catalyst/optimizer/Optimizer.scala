@@ -47,7 +47,6 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
     // However, because we also use the analyzer to canonicalized queries (for view definition),
     // we do not eliminate subqueries or compute current time in the analyzer.
     Batch("Finish Analysis", Once,
-
       EliminateSubqueryAliases,
       ComputeCurrentTime,
       GetCurrentDatabase(sessionCatalog),
@@ -644,9 +643,10 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan] with PredicateHelpe
 
     case join @ Join(left, right, joinType, conditionOpt) =>
       // Only consider constraints that can be pushed down completely to either the left or the
-      // right child
-      val constraints = join.constraints.filter { c =>
-        c.references.subsetOf(left.outputSet) || c.references.subsetOf(right.outputSet)}
+      // right child and that are not a subquery.
+      val constraints = join.constraints.filterNot(PredicateSubquery.hasPredicateSubquery).filter {
+        c => c.references.subsetOf(left.outputSet) || c.references.subsetOf(right.outputSet)
+      }
       // Remove those constraints that are already enforced by either the left or the right child
       val additionalConstraints = constraints -- (left.constraints ++ right.constraints)
       val newConditionOpt = conditionOpt match {
@@ -1139,7 +1139,7 @@ object OuterJoinElimination extends Rule[LogicalPlan] with PredicateHelper {
    * Returns whether the expression returns null or false when all inputs are nulls.
    */
   private def canFilterOutNull(e: Expression): Boolean = {
-    if (!e.deterministic) return false
+    if (!e.deterministic || PredicateSubquery.hasPredicateSubquery(e)) return false
     val attributes = e.references.toSeq
     val emptyRow = new GenericInternalRow(attributes.length)
     val v = BindReferences.bindReference(e, attributes).eval(emptyRow)
@@ -1148,7 +1148,6 @@ object OuterJoinElimination extends Rule[LogicalPlan] with PredicateHelper {
 
   private def buildNewJoinType(filter: Filter, join: Join): JoinType = {
     val splitConjunctiveConditions: Seq[Expression] = splitConjunctivePredicates(filter.condition)
-      .filterNot(PredicateSubquery.hasPredicateSubquery)
     val leftConditions = splitConjunctiveConditions
       .filter(_.references.subsetOf(join.left.outputSet))
     val rightConditions = splitConjunctiveConditions
