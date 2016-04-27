@@ -29,8 +29,8 @@ import org.apache.hadoop.hive.metastore.{PartitionDropOptions, TableType => Hive
 import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, FieldSchema, Function => HiveFunction, FunctionType, PrincipalType, ResourceType, ResourceUri}
 import org.apache.hadoop.hive.metastore.api.hive_metastoreConstants
 import org.apache.hadoop.hive.ql.Driver
-import org.apache.hadoop.hive.ql.parse.BaseSemanticAnalyzer
 import org.apache.hadoop.hive.ql.metadata.{Hive, HiveException, Partition => HivePartition, Table => HiveTable}
+import org.apache.hadoop.hive.ql.parse.BaseSemanticAnalyzer
 import org.apache.hadoop.hive.ql.plan.AddPartitionDesc
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState

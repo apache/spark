@@ -110,7 +110,6 @@ statement
     | SHOW COLUMNS (FROM | IN) tableIdentifier
         ((FROM | IN) db=identifier)?                                   #showColumns
     | SHOW PARTITIONS tableIdentifier partitionSpec?                   #showPartitions
-    | SHOW CREATE TABLE tableIdentifier    
     | SHOW FUNCTIONS (LIKE? (qualifiedName | pattern=STRING))?         #showFunctions
     | (DESC | DESCRIBE) FUNCTION EXTENDED? describeFuncName            #describeFunction
     | (DESC | DESCRIBE) option=(EXTENDED | FORMATTED)?

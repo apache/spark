@@ -173,7 +173,7 @@ class HiveShowDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         s"""
           |create table t1 (c1 int, c2 string)
           |clustered by (c1) sorted by (c2 desc) into 5 buckets
-        """.stripMargin).run(sqlContext)
+        """.stripMargin).run(sqlContext.sparkSession)
       val ddl = sql("show create table t1").collect()
       assert(ddl(0).toSeq(0).toString.contains("WARN"))
       assert(ddl(1).toSeq(0).toString
@@ -189,7 +189,7 @@ class HiveShowDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
            |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe'
            |STORED BY 'org.apache.hadoop.hive.ql.metadata.DefaultStorageHandler'
            |WITH SERDEPROPERTIES ('field.delim'=',', 'serialization.format'=',')
-        """.stripMargin).run(sqlContext)
+        """.stripMargin).run(sqlContext.sparkSession)
       val ddl = sql("show create table tmp_showcrt1").collect()
       assert(ddl(0).toSeq(0).toString.contains("WARN"))
       assert(ddl(1).toSeq(0).toString
@@ -204,7 +204,7 @@ class HiveShowDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
          |CREATE TABLE  stored_as_dirs_multiple (col1 STRING, col2 int, col3 STRING)
          |SKEWED BY (col1, col2) ON (('s1',1), ('s3',3), ('s13',13), ('s78',78))
          |stored as DIRECTORIES
-       """.stripMargin).run(sqlContext)
+       """.stripMargin).run(sqlContext.sparkSession)
       val ddl = sql("show create table stored_as_dirs_multiple").collect()
       assert(ddl(0).toSeq(0).toString.contains("WARN"))
       assert(ddl(1).toSeq(0).toString.contains("SKEWED BY ( `col1`, `col2` )"))

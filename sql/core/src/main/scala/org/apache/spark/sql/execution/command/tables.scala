@@ -404,8 +404,8 @@ case class ShowCreateTableCommand(tableIdentifier: TableIdentifier)
     AttributeReference("DDL", StringType, nullable = false)() :: Nil
   }
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    val catalog = sqlContext.sessionState.catalog
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
     val ddl = catalog.showCreateTable(tableIdentifier)
     if (ddl.contains("CLUSTERED BY") || ddl.contains("SKEWED BY") || ddl.contains("STORED BY")) {
       Seq(Row("WARN: This DDL is not supported by Spark SQL natively, " +
