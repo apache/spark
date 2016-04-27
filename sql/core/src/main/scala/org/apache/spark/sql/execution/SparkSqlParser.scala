@@ -693,7 +693,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       // Note that Restrict and Cascade are mutually exclusive.
       ctx.RESTRICT != null,
       ctx.CASCADE != null)(
-      parseException("ALTER TABLE SET FILEFORMAT", ctx))
+      parseException("ALTER TABLE CHANGE COLUMN", ctx))
   }
 
   /**
@@ -733,7 +733,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       // Note that Restrict and Cascade are mutually exclusive.
       ctx.RESTRICT != null,
       ctx.CASCADE != null)(
-      parseException("ALTER TABLE SET FILEFORMAT", ctx))
+      parseException("ALTER TABLE REPLACE COLUMNS", ctx))
   }
 
   /**
