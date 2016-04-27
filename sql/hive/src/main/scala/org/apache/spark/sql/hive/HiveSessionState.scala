@@ -61,12 +61,8 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
    *    set in the SQLConf *as well as* in the HiveConf.
    */
   lazy val hiveconf: HiveConf = {
-    val c = executionHive.conf
-    conf.setConf(c.getAllProperties)
-    // scalastyle:off println
-    println("conf.hiveMetastoreWarehouse: " + conf.hiveMetastoreWarehouse)
-    // scalastyle:on println
-    c
+    loadHiveConfToSQLConf()
+    executionHive.conf
   }
 
   setDefaultOverrideConfs()
@@ -145,6 +141,13 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
    */
   def setDefaultOverrideConfs(): Unit = {
     setConf(ConfVars.HIVE_SUPPORT_SQL11_RESERVED_KEYWORDS.varname, "false")
+  }
+
+  /**
+   * Load all the params in HiveConf into SQLConf.
+   */
+  def loadHiveConfToSQLConf(): Unit = {
+    conf.setConf(executionHive.conf.getAllProperties)
   }
 
   override def setConf(key: String, value: String): Unit = {

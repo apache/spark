@@ -450,6 +450,7 @@ private[hive] class TestHiveSparkSession(
       TestHiveContext.hiveClientConfigurations(
         sessionState.hiveconf, warehousePath, scratchDirPath, metastoreTemporaryConf)
           .foreach { case (k, v) => sessionState.metadataHive.runSqlHive(s"SET $k=$v") }
+      sessionState.loadHiveConfToSQLConf()
       sessionState.setDefaultOverrideConfs()
 
       sessionState.catalog.setCurrentDatabase("default")

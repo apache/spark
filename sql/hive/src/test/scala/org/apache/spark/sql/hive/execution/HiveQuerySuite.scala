@@ -1177,6 +1177,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     }
 
     conf.clear()
+    TestHive.reset()
   }
 
   test("current_database with multiple sessions") {
