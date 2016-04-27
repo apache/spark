@@ -71,7 +71,7 @@ class FileScanRDD(
    * such as starting up connections to open the file and any initial buffering. The expectation
    * is that `currentIterator` is CPU intensive and `nextFile` is IO intensive.
    */
-  val isAsyncIOEnabled = sqlContext.conf.filesAsyncIO
+  val isAsyncIOEnabled = sparkSession.sessionState.conf.filesAsyncIO
 
   case class NextFile(file: PartitionedFile, iter: Iterator[Object])
 
