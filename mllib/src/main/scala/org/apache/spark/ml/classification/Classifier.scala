@@ -69,13 +69,21 @@ abstract class Classifier[
   /**
    * Extract [[labelCol]] and [[featuresCol]] from the given dataset,
    * and put it in an RDD with strong types.
+   *
+   * @param dataset  DataFrame with columns for labels ([[org.apache.spark.sql.types.NumericType]])
+   *                 and features ([[Vector]]). Labels are cast to [[DoubleType]].
+   * @param numClasses  Number of classes label can take.  Labels must be integers in the range
+   *                    [0, numClasses).
    * @throws SparkException  if any label is not an integer >= 0
    */
-  override protected def extractLabeledPoints(dataset: Dataset[_]): RDD[LabeledPoint] = {
+  protected def extractLabeledPoints(dataset: Dataset[_], numClasses: Int): RDD[LabeledPoint] = {
+    require(numClasses > 0, s"Classifier (in extractLabeledPoints) found numClasses =" +
+      s" $numClasses, but requires numClasses > 0.")
     dataset.select(col($(labelCol)).cast(DoubleType), col($(featuresCol))).rdd.map {
       case Row(label: Double, features: Vector) =>
-        require(label % 1 == 0 && label >= 0, s"Classifier was given dataset with invalid label" +
-          s" $label.  Labels must be integers in range [0, 1, ..., numClasses-1]")
+        require(label % 1 == 0 && label >= 0 && label < numClasses, s"Classifier was given" +
+          s" dataset with invalid label $label.  Labels must be integers in range" +
+          s" [0, 1, ..., $numClasses), where numClasses=$numClasses.")
         LabeledPoint(label, features)
     }
   }
@@ -104,8 +112,10 @@ abstract class Classifier[
         if (maxLabelRow.isEmpty) {
           throw new SparkException("ML algorithm was given empty dataset.")
         }
-        val maxLabel: Int = maxLabelRow.head.getDouble(0).toInt
-        val numClasses = maxLabel + 1
+        val maxDoubleLabel: Double = maxLabelRow.head.getDouble(0)
+        require((maxDoubleLabel + 1).isValidInt, s"Classifier found max label value =" +
+          s" $maxDoubleLabel but requires integers in range [0, ... ${Int.MaxValue})")
+        val numClasses = maxDoubleLabel.toInt + 1
         require(numClasses <= maxNumClasses, s"Classifier inferred $numClasses from label values" +
           s" in column $labelCol, but this exceeded the max numClasses ($maxNumClasses) allowed" +
           s" to be inferred from values.  To avoid this error for labels with > $maxNumClasses" +
