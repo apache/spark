@@ -835,9 +835,9 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       throw new ParseException("Operation not allowed: CREATE TABLE ... CLUSTERED BY ...", ctx)
     }
     val tableType = if (external) {
-      CatalogTableType.EXTERNAL_TABLE
+      CatalogTableType.EXTERNAL
     } else {
-      CatalogTableType.MANAGED_TABLE
+      CatalogTableType.MANAGED
     }
     val comment = Option(ctx.STRING).map(string)
     val partitionCols = Option(ctx.partitionColumns).toSeq.flatMap(visitCatalogColumns)
@@ -1083,7 +1083,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     val sql = Option(source(query))
     val tableDesc = CatalogTable(
       identifier = visitTableIdentifier(name),
-      tableType = CatalogTableType.VIRTUAL_VIEW,
+      tableType = CatalogTableType.VIEW,
       schema = schema,
       storage = EmptyStorageFormat,
       properties = properties,

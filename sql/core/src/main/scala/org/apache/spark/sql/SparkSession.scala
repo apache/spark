@@ -31,16 +31,16 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.config.{CATALOG_IMPLEMENTATION, ConfigEntry}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalog.Catalog
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Range}
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.command.ShowTablesCommand
-import org.apache.spark.sql.execution.datasources.{CreateTableUsing, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.ui.SQLListener
-import org.apache.spark.sql.internal.{RuntimeConfigImpl, SessionState, SharedState}
+import org.apache.spark.sql.internal.{CatalogImpl, RuntimeConfigImpl, SessionState, SharedState}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.{DataType, LongType, StructType}
 import org.apache.spark.sql.util.ExecutionListenerManager
@@ -191,10 +191,6 @@ class SparkSession private(
    |  Methods for accessing or mutating configurations  |
    * -------------------------------------------------- */
 
-  @transient private lazy val _conf: RuntimeConfig = {
-    new RuntimeConfigImpl(sessionState.conf, sessionState.hadoopConf)
-  }
-
   /**
    * Runtime configuration interface for Spark.
    *
@@ -205,7 +201,9 @@ class SparkSession private(
    * @group config
    * @since 2.0.0
    */
-  def conf: RuntimeConfig = _conf
+  @transient lazy val conf: RuntimeConfig = {
+    new RuntimeConfigImpl(sessionState.conf, sessionState.hadoopConf)
+  }
 
   /**
    * Set Spark SQL configuration properties.
@@ -271,61 +269,6 @@ class SparkSession private(
    */
   protected[sql] def getConf[T](entry: ConfigEntry[T], defaultValue: T): T = {
     sessionState.conf.getConf(entry, defaultValue)
-  }
-
-
-  /* ------------------------------------- *
-   |  Methods related to cache management  |
-   * ------------------------------------- */
-
-  /**
-   * Returns true if the table is currently cached in-memory.
-   *
-   * @group cachemgmt
-   * @since 2.0.0
-   */
-  def isCached(tableName: String): Boolean = {
-    cacheManager.lookupCachedData(table(tableName)).nonEmpty
-  }
-
-  /**
-   * Caches the specified table in-memory.
-   *
-   * @group cachemgmt
-   * @since 2.0.0
-   */
-  def cacheTable(tableName: String): Unit = {
-    cacheManager.cacheQuery(table(tableName), Some(tableName))
-  }
-
-  /**
-   * Removes the specified table from the in-memory cache.
-   *
-   * @group cachemgmt
-   * @since 2.0.0
-   */
-  def uncacheTable(tableName: String): Unit = {
-    cacheManager.uncacheQuery(table(tableName))
-  }
-
-  /**
-   * Removes all cached tables from the in-memory cache.
-   *
-   * @group cachemgmt
-   * @since 2.0.0
-   */
-  def clearCache(): Unit = {
-    cacheManager.clearCache()
-  }
-
-  /**
-   * Returns true if the [[Dataset]] is currently cached in-memory.
-   *
-   * @group cachemgmt
-   * @since 2.0.0
-   */
-  protected[sql] def isCached(qName: Dataset[_]): Boolean = {
-    cacheManager.lookupCachedData(qName).nonEmpty
   }
 
 
@@ -605,139 +548,18 @@ class SparkSession private(
   }
 
 
-  /* --------------------------- *
-   |  Methods related to tables  |
-   * --------------------------- */
+  /* ------------------------ *
+   |  Catalog-related methods |
+   * ----------------- ------ */
 
   /**
-   * :: Experimental ::
-   * Creates an external table from the given path and returns the corresponding DataFrame.
-   * It will use the default data source configured by spark.sql.sources.default.
+   * Interface through which the user may create, drop, alter or query underlying
+   * databases, tables, functions etc.
    *
    * @group ddl_ops
    * @since 2.0.0
    */
-  @Experimental
-  def createExternalTable(tableName: String, path: String): DataFrame = {
-    val dataSourceName = sessionState.conf.defaultDataSourceName
-    createExternalTable(tableName, path, dataSourceName)
-  }
-
-  /**
-   * :: Experimental ::
-   * Creates an external table from the given path based on a data source
-   * and returns the corresponding DataFrame.
-   *
-   * @group ddl_ops
-   * @since 2.0.0
-   */
-  @Experimental
-  def createExternalTable(tableName: String, path: String, source: String): DataFrame = {
-    createExternalTable(tableName, source, Map("path" -> path))
-  }
-
-  /**
-   * :: Experimental ::
-   * Creates an external table from the given path based on a data source and a set of options.
-   * Then, returns the corresponding DataFrame.
-   *
-   * @group ddl_ops
-   * @since 2.0.0
-   */
-  @Experimental
-  def createExternalTable(
-      tableName: String,
-      source: String,
-      options: java.util.Map[String, String]): DataFrame = {
-    createExternalTable(tableName, source, options.asScala.toMap)
-  }
-
-  /**
-   * :: Experimental ::
-   * (Scala-specific)
-   * Creates an external table from the given path based on a data source and a set of options.
-   * Then, returns the corresponding DataFrame.
-   *
-   * @group ddl_ops
-   * @since 2.0.0
-   */
-  @Experimental
-  def createExternalTable(
-      tableName: String,
-      source: String,
-      options: Map[String, String]): DataFrame = {
-    val tableIdent = sessionState.sqlParser.parseTableIdentifier(tableName)
-    val cmd =
-      CreateTableUsing(
-        tableIdent,
-        userSpecifiedSchema = None,
-        source,
-        temporary = false,
-        options,
-        allowExisting = false,
-        managedIfNoPath = false)
-    executePlan(cmd).toRdd
-    table(tableIdent)
-  }
-
-  /**
-   * :: Experimental ::
-   * Create an external table from the given path based on a data source, a schema and
-   * a set of options. Then, returns the corresponding DataFrame.
-   *
-   * @group ddl_ops
-   * @since 2.0.0
-   */
-  @Experimental
-  def createExternalTable(
-      tableName: String,
-      source: String,
-      schema: StructType,
-      options: java.util.Map[String, String]): DataFrame = {
-    createExternalTable(tableName, source, schema, options.asScala.toMap)
-  }
-
-  /**
-   * :: Experimental ::
-   * (Scala-specific)
-   * Create an external table from the given path based on a data source, a schema and
-   * a set of options. Then, returns the corresponding DataFrame.
-   *
-   * @group ddl_ops
-   * @since 2.0.0
-   */
-  @Experimental
-  def createExternalTable(
-      tableName: String,
-      source: String,
-      schema: StructType,
-      options: Map[String, String]): DataFrame = {
-    val tableIdent = sessionState.sqlParser.parseTableIdentifier(tableName)
-    val cmd =
-      CreateTableUsing(
-        tableIdent,
-        userSpecifiedSchema = Some(schema),
-        source,
-        temporary = false,
-        options,
-        allowExisting = false,
-        managedIfNoPath = false)
-    executePlan(cmd).toRdd
-    table(tableIdent)
-  }
-
-  /**
-   * Drops the temporary table with the given table name in the catalog.
-   * If the table has been cached/persisted before, it's also unpersisted.
-   *
-   * @param tableName the name of the table to be unregistered.
-   * @group ddl_ops
-   * @since 2.0.0
-   */
-  def dropTempTable(tableName: String): Unit = {
-    cacheManager.tryUncacheQuery(table(tableName))
-    sessionState.catalog.dropTable(TableIdentifier(tableName), ignoreIfNotExists = true)
-  }
+  @transient lazy val catalog: Catalog = new CatalogImpl(self)
 
   /**
    * Returns the specified table as a [[DataFrame]].
@@ -749,52 +571,8 @@ class SparkSession private(
     table(sessionState.sqlParser.parseTableIdentifier(tableName))
   }
 
-  private def table(tableIdent: TableIdentifier): DataFrame = {
+  protected[sql] def table(tableIdent: TableIdentifier): DataFrame = {
     Dataset.ofRows(self, sessionState.catalog.lookupRelation(tableIdent))
-  }
-
-  /**
-   * Returns a [[DataFrame]] containing names of existing tables in the current database.
-   * The returned DataFrame has two columns, tableName and isTemporary (a Boolean
-   * indicating if a table is a temporary one or not).
-   *
-   * @group ddl_ops
-   * @since 2.0.0
-   */
-  def tables(): DataFrame = {
-    Dataset.ofRows(self, ShowTablesCommand(None, None))
-  }
-
-  /**
-   * Returns a [[DataFrame]] containing names of existing tables in the given database.
-   * The returned DataFrame has two columns, tableName and isTemporary (a Boolean
-   * indicating if a table is a temporary one or not).
-   *
-   * @group ddl_ops
-   * @since 2.0.0
-   */
-  def tables(databaseName: String): DataFrame = {
-    Dataset.ofRows(self, ShowTablesCommand(Some(databaseName), None))
-  }
-
-  /**
-   * Returns the names of tables in the current database as an array.
-   *
-   * @group ddl_ops
-   * @since 2.0.0
-   */
-  def tableNames(): Array[String] = {
-    tableNames(sessionState.catalog.getCurrentDatabase)
-  }
-
-  /**
-   * Returns the names of tables in the given database as an array.
-   *
-   * @group ddl_ops
-   * @since 2.0.0
-   */
-  def tableNames(databaseName: String): Array[String] = {
-    sessionState.catalog.listTables(databaseName).map(_.table).toArray
   }
 
   /**

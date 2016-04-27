@@ -90,7 +90,7 @@ class DataSourceWithHiveMetastoreCatalogSuite
         assert(hiveTable.storage.serde === Some(serde))
 
         assert(hiveTable.partitionColumnNames.isEmpty)
-        assert(hiveTable.tableType === CatalogTableType.MANAGED_TABLE)
+        assert(hiveTable.tableType === CatalogTableType.MANAGED)
 
         val columns = hiveTable.schema
         assert(columns.map(_.name) === Seq("d1", "d2"))
@@ -121,7 +121,7 @@ class DataSourceWithHiveMetastoreCatalogSuite
           assert(hiveTable.storage.outputFormat === Some(outputFormat))
           assert(hiveTable.storage.serde === Some(serde))
 
-          assert(hiveTable.tableType === CatalogTableType.EXTERNAL_TABLE)
+          assert(hiveTable.tableType === CatalogTableType.EXTERNAL)
           assert(hiveTable.storage.locationUri ===
             Some(path.toURI.toString.stripSuffix(File.separator)))
 
@@ -153,7 +153,7 @@ class DataSourceWithHiveMetastoreCatalogSuite
           assert(hiveTable.storage.serde === Some(serde))
 
           assert(hiveTable.partitionColumnNames.isEmpty)
-          assert(hiveTable.tableType === CatalogTableType.EXTERNAL_TABLE)
+          assert(hiveTable.tableType === CatalogTableType.EXTERNAL)
 
           val columns = hiveTable.schema
           assert(columns.map(_.name) === Seq("d1", "d2"))

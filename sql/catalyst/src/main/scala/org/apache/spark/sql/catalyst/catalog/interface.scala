@@ -299,10 +299,10 @@ case class CatalogTable(
 
 case class CatalogTableType private(name: String)
 object CatalogTableType {
-  val EXTERNAL_TABLE = new CatalogTableType("EXTERNAL_TABLE")
-  val MANAGED_TABLE = new CatalogTableType("MANAGED_TABLE")
-  val INDEX_TABLE = new CatalogTableType("INDEX_TABLE")
-  val VIRTUAL_VIEW = new CatalogTableType("VIRTUAL_VIEW")
+  val EXTERNAL = new CatalogTableType("EXTERNAL")
+  val MANAGED = new CatalogTableType("MANAGED")
+  val INDEX = new CatalogTableType("INDEX")
+  val VIEW = new CatalogTableType("VIEW")
 }
 
 

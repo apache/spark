@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Range, SubqueryAlias}
 /**
  * Tests for [[SessionCatalog]] that assume that [[InMemoryCatalog]] is correctly implemented.
  *
- * Note: many of the methods here are very similar to the ones in [[CatalogTestCases]].
+ * Note: many of the methods here are very similar to the ones in [[ExternalCatalogSuite]].
  * This is because [[SessionCatalog]] and [[ExternalCatalog]] share many similar method
  * signatures but do not extend a common parent. This is largely by design but
  * unfortunately leads to very similar test code in two places.
