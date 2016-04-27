@@ -476,8 +476,8 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "rename_column",
 
     // We do not support DFS command.
-    // We have extracted the useful parts of these tests to tests
-    // in HiveQuerySuite.
+    // We have converted the useful parts of these tests to tests
+    // in org.apache.spark.sql.hive.execution.SQLQuerySuite.
     "drop_database_removes_partition_dirs",
     "drop_table_removes_partition_dirs"
   )
