@@ -36,7 +36,7 @@ import org.apache.spark.sql.hive.client.HiveClient
  * All public methods must be synchronized for thread-safety.
  */
 private[spark] class HiveExternalCatalog(client: HiveClient) extends ExternalCatalog with Logging {
-  import ExternalCatalog._
+  import CatalogTypes.TablePartitionSpec
 
   // Exceptions thrown by the hive client that we would like to wrap
   private val clientExceptions = Set(

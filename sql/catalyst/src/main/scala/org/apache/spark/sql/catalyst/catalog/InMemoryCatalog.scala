@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.util.StringUtils
  * All public methods should be synchronized for thread-safety.
  */
 class InMemoryCatalog extends ExternalCatalog {
-  import ExternalCatalog._
+  import CatalogTypes.TablePartitionSpec
 
   private class TableDesc(var table: CatalogTable) {
     val partitions = new mutable.HashMap[TablePartitionSpec, CatalogTablePartition]
