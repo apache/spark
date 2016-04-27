@@ -71,10 +71,10 @@ class KryoSerializer(conf: SparkConf)
   private val referenceTracking = conf.getBoolean("spark.kryo.referenceTracking", true)
   private val registrationRequired = conf.getBoolean("spark.kryo.registrationRequired", false)
   private val userRegistrators = conf.get("spark.kryo.registrator", "")
-    .split(',').trim
+    .split(',').map(_.trim)
     .filter(!_.isEmpty)
   private val classesToRegister = conf.get("spark.kryo.classesToRegister", "")
-    .split(',').trim
+    .split(',').map(_.trim)
     .filter(!_.isEmpty)
 
   private val avroSchemas = conf.getAvroSchema
