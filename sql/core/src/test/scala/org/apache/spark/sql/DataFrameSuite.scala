@@ -1086,6 +1086,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val df2 = (1 to 30).map(Tuple1.apply).toDF("i")
     val intersect = df1.intersect(df2)
     val except = df1.except(df2)
+    except.explain(true)
     assert(intersect.count() === 30)
     assert(except.count() === 70)
   }
