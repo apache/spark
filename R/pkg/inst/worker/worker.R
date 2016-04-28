@@ -112,7 +112,13 @@ if (isEmpty != 0) {
     if (isDataFrame) {
       if (deserializer == "row") {
         # Transform the list of rows into a data.frame
-        data <- do.call(rbind.data.frame, c(data, stringsAsFactors = FALSE))
+        # Note that the optional argument stringsAsFactors for rbind is
+        # available since R 3.2.4. So we set the global option here.
+        oldOpt <- getOption("stringsAsFactors")
+        options(stringsAsFactors = FALSE)
+        data <- do.call(rbind.data.frame, data)
+        options(stringsAsFactors = oldOpt)
+
         names(data) <- colNames
       } else {
         # Check to see if data is a valid data.frame
