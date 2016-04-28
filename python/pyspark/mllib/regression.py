@@ -370,8 +370,8 @@ class LassoModel(LinearRegressionModelBase):
 class LassoWithSGD(object):
     """
     .. versionadded:: 0.9.0
-    .. note:: Deprecated in 2.0.0. Use ml.regression.LinearRegression with elasticNetParam = 1.0
-            and regParam = 0.01.
+    .. note:: Deprecated in 2.0.0. Use ml.regression.LinearRegression with elasticNetParam = 1.0.
+            Note the default regParam is 0.01 for LassoWithSGD, but is 0.0 for LinearRegression.
     """
     @classmethod
     @since("0.9.0")
@@ -420,8 +420,8 @@ class LassoWithSGD(object):
           (default: 0.001)
         """
         warnings.warn(
-            "Deprecated in 2.0.0. Use ml.regression.LinearRegression with elasticNetParam = 1.0 "
-            "and regParam = 0.01.")
+            "Deprecated in 2.0.0. Use ml.regression.LinearRegression with elasticNetParam = 1.0. "
+            "Note the default regParam is 0.01 for LassoWithSGD, but is 0.0 for LinearRegression.")
 
         def train(rdd, i):
             return callMLlibFunc("trainLassoModelWithSGD", rdd, int(iterations), float(step),
@@ -513,8 +513,9 @@ class RidgeRegressionModel(LinearRegressionModelBase):
 class RidgeRegressionWithSGD(object):
     """
     .. versionadded:: 0.9.0
-    .. note:: Deprecated in 2.0.0. Use ml.regression.LinearRegression with elasticNetParam = 0.0
-            and regParam = 0.01.
+    .. note:: Deprecated in 2.0.0. Use ml.regression.LinearRegression with elasticNetParam = 0.0.
+            Note the default regParam is 0.01 for RidgeRegressionWithSGD, but is 0.0 for
+            LinearRegression.
     """
     @classmethod
     @since("0.9.0")
@@ -563,8 +564,9 @@ class RidgeRegressionWithSGD(object):
           (default: 0.001)
         """
         warnings.warn(
-            "Deprecated in 2.0.0. Use ml.regression.LinearRegression with elasticNetParam = 0.0 "
-            "and regParam = 0.01.")
+            "Deprecated in 2.0.0. Use ml.regression.LinearRegression with elasticNetParam = 0.0. "
+            "Note the default regParam is 0.01 for RidgeRegressionWithSGD, but is 0.0 for "
+            "LinearRegression.")
 
         def train(rdd, i):
             return callMLlibFunc("trainRidgeModelWithSGD", rdd, int(iterations), float(step),
