@@ -275,6 +275,11 @@ Apart from these, the following properties are also available, and may be useful
     Note that it is illegal to set Spark properties or maximum heap size (-Xmx) settings with this
     option. Spark properties should be set using a SparkConf object or the spark-defaults.conf file
     used with the spark-submit script. Maximum heap size settings can be set with spark.executor.memory.
+
+     The following symbol, if present, will be interpolated: @execid@ is replaced by Executor Id.
+     Any other occurrences of '@' will go unchanged. For example, to enable verbose gc logging to
+     a file named for the Executor Id in /tmp, pass a 'value' of:
+        -verbose:gc -Xloggc:/tmp/@execid@.gc
   </td>
 </tr>
 <tr>

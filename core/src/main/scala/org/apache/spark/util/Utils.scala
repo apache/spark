@@ -2286,6 +2286,13 @@ private[spark] object Utils extends Logging {
     log.info(s"Started daemon with process name: ${Utils.getProcessName()}")
     SignalUtils.registerLogger(log)
   }
+
+  /**
+   * Replaces all the @execid@ occurrences with the Executor Id.
+   */
+  def substituteExecIdWildCard(opt: String, execId: String): String = {
+    opt.replace("@execid@", execId)
+  }
 }
 
 /**

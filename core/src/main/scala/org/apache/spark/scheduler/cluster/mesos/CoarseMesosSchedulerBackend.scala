@@ -166,7 +166,7 @@ private[spark] class CoarseMesosSchedulerBackend(
       environment.addVariables(
         Environment.Variable.newBuilder().setName("SPARK_CLASSPATH").setValue(cp).build())
     }
-    val extraJavaOpts = conf.get("spark.executor.extraJavaOptions", "")
+    var extraJavaOpts = conf.get("spark.executor.extraJavaOptions", "")
 
     // Set the environment variable through a command prefix
     // to append to the existing value of the variable
@@ -174,6 +174,7 @@ private[spark] class CoarseMesosSchedulerBackend(
       Utils.libraryPathEnvPrefix(Seq(p))
     }.getOrElse("")
 
+    extraJavaOpts = Utils.substituteExecIdWildCard(extraJavaOpts, taskId)
     environment.addVariables(
       Environment.Variable.newBuilder()
         .setName("SPARK_EXECUTOR_OPTS")
