@@ -1157,9 +1157,9 @@ class DAGScheduler(
     val stage = stageIdToStage(task.stageId)
     event.reason match {
       case Success =>
-        stage.pendingPartitions -= task.partitionId
         task match {
           case rt: ResultTask[_, _] =>
+            stage.pendingPartitions -= task.partitionId
             // Cast to ResultStage here because it's part of the ResultTask
             // TODO Refactor this out to a function that accepts a ResultStage
             val resultStage = stage.asInstanceOf[ResultStage]
@@ -1200,6 +1200,7 @@ class DAGScheduler(
             if (failedEpoch.contains(execId) && smt.epoch <= failedEpoch(execId)) {
               logInfo(s"Ignoring possibly bogus $smt completion from executor $execId")
             } else {
+              stage.pendingPartitions -= task.partitionId
               shuffleStage.addOutputLoc(smt.partitionId, status)
             }
 
@@ -1339,19 +1340,51 @@ class DAGScheduler(
       logInfo("Executor lost: %s (epoch %d)".format(execId, currentEpoch))
       blockManagerMaster.removeExecutor(execId)
 
+      val resubmitStages: HashSet[Int] = HashSet.empty
       if (!env.blockManager.externalShuffleServiceEnabled || fetchFailed) {
         // TODO: This will be really slow if we keep accumulating shuffle map stages
         for ((shuffleId, stage) <- shuffleToMapStage) {
           stage.removeOutputsOnExecutor(execId)
-          mapOutputTracker.registerMapOutputs(
-            shuffleId,
-            stage.outputLocInMapOutputTrackerFormat(),
-            changeEpoch = true)
+          val locs = stage.outputLocInMapOutputTrackerFormat()
+          if (runningStages.contains(stage)) {
+            // Assumption: 1) not a FetchFailed ExecutorLost, 2) a running shuffleMapStage has
+            // multiple taskSets: 1 active, some Zombie, some removed as finished. Executor lost
+            // may lost the output only finish by the removedTasksets or zombieTasksets, So need
+            // to check if runningStage.pendingPartitions == Missing shuffleMapStage.outputLocs
+            // if is false, says lost locs in removedTaskSets or zombieTaskSets,
+            // So need mark active as zombie and resubmit that stage
+            if (!fetchFailed && stage.findMissingPartitions()
+              .exists(!stage.pendingPartitions.contains(_))) {
+              resubmitStages += stage.id
+            }
+            mapOutputTracker.incrementEpoch()
+          } else {
+            mapOutputTracker.registerMapOutputs(shuffleId, locs, changeEpoch = true)
+          }
         }
+
         if (shuffleToMapStage.isEmpty) {
           mapOutputTracker.incrementEpoch()
         }
+
         clearCacheLocs()
+
+        if (!fetchFailed) {
+          // if FailedStages is not empty,
+          // it implies that had already scheduled a ResubmitFailedStages.
+          if (failedStages.isEmpty) {
+            messageScheduler.schedule(new Runnable {
+              override def run(): Unit = eventProcessLoop.post(ResubmitFailedStages)
+            }, DAGScheduler.RESUBMIT_TIMEOUT, TimeUnit.MILLISECONDS)
+          }
+          resubmitStages.foreach {
+            case stageId =>
+              val stage = stageIdToStage(stageId)
+              logWarning(s"Executor $execId cause $stageId partition lost, So resubmit")
+              markStageAsFinished(stage, Some(s"Executor $execId lost"))
+              failedStages += stage
+          }
+        }
       }
     } else {
       logDebug("Additional executor lost message for " + execId +
@@ -1416,6 +1449,7 @@ class DAGScheduler(
 
     outputCommitCoordinator.stageEnd(stage.id)
     listenerBus.post(SparkListenerStageCompleted(stage.latestInfo))
+    taskScheduler.zombieTasks(stage.id)
     runningStages -= stage
   }
 
