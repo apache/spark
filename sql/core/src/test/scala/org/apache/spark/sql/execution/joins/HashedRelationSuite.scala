@@ -24,8 +24,9 @@ import org.apache.spark.memory.{StaticMemoryManager, TaskMemoryManager}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.unsafe.map.BytesToBytesMap
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.collection.CompactBuffer
 
 class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
@@ -148,5 +149,32 @@ class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
       assert(rows(1).getInt(0) === i)
       assert(rows(1).getInt(1) === i + 1)
     }
+  }
+
+  // This test require 4G heap to run, should run it manually
+  ignore("build HashedRelation that is larger than 1G") {
+    val unsafeProj = UnsafeProjection.create(
+      Seq(BoundReference(0, IntegerType, false),
+        BoundReference(1, StringType, true)))
+    val unsafeRow = unsafeProj(InternalRow(0, UTF8String.fromString(" " * 100)))
+    val key = Seq(BoundReference(0, IntegerType, false))
+    val rows = (0 until (1 << 24)).iterator.map { i =>
+      unsafeRow.setInt(0, i % 1000000)
+      unsafeRow.setInt(1, i)
+      unsafeRow
+    }
+
+    val unsafeRelation = UnsafeHashedRelation(rows, key, 1000, mm)
+    assert(unsafeRelation.estimatedSize > (2L << 30))
+    unsafeRelation.close()
+
+    val rows2 = (0 until (1 << 24)).iterator.map { i =>
+      unsafeRow.setInt(0, i % 1000000)
+      unsafeRow.setInt(1, i)
+      unsafeRow
+    }
+    val longRelation = LongHashedRelation(rows2, key, 1000, mm)
+    assert(longRelation.estimatedSize > (2L << 30))
+    longRelation.close()
   }
 }
