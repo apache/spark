@@ -17,43 +17,23 @@
 
 package org.apache.spark.ml.linalg
 
-import scala.beans.{BeanInfo, BeanProperty}
-
-import org.apache.spark.{SparkException, SparkFunSuite}
-import org.apache.spark.ml.linalg._
-import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.Row
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.types._
 
-@BeanInfo
-private[ml] case class MyVectorPoint(
-    @BeanProperty label: Double,
-    @BeanProperty vector: Vector)
-
-class VectorUDTSuite extends SparkFunSuite with MLlibTestSparkContext {
-  import testImplicits._
+class VectorUDTSuite extends SparkFunSuite {
 
   test("preloaded VectorUDT") {
-    val dv0 = Vectors.dense(Array.empty[Double])
-    val dv1 = Vectors.dense(1.0, 2.0)
-    val sv0 = Vectors.sparse(2, Array.empty, Array.empty)
-    val sv1 = Vectors.sparse(2, Array(1), Array(2.0))
+    val dv1 = Vectors.dense(Array.empty[Double])
+    val dv2 = Vectors.dense(1.0, 2.0)
+    val sv1 = Vectors.sparse(2, Array.empty, Array.empty)
+    val sv2 = Vectors.sparse(2, Array(1), Array(2.0))
 
-    val vectorDF = Seq(
-      MyVectorPoint(1.0, dv0),
-      MyVectorPoint(2.0, dv1),
-      MyVectorPoint(3.0, sv0),
-      MyVectorPoint(4.0, sv1)).toDF()
-
-    val labels = vectorDF.select('label).as[Double].collect()
-    assert(labels.size === 4)
-    assert(labels.sorted === Array(1.0, 2.0, 3.0, 4.0))
-
-    val vectors = vectorDF.select('vector).rdd.map { case Row(v: Vector) => v }.collect()
-    assert(vectors.contains(dv0))
-    assert(vectors.contains(dv1))
-    assert(vectors.contains(sv0))
-    assert(vectors.contains(sv1))
+    for (v <- Seq(dv1, dv2, sv1, sv2)) {
+      val udt = UDTRegistration.getUDTFor(v.getClass.getName).get.newInstance()
+        .asInstanceOf[VectorUDT]
+      assert(v === udt.deserialize(udt.serialize(v)))
+      assert(udt.typeName == "vector")
+      assert(udt.simpleString == "vector")
+    }
   }
 }
