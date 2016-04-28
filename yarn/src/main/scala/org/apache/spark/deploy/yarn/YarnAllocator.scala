@@ -107,13 +107,8 @@ private[yarn] class YarnAllocator(
 
   private var clock: Clock = new SystemClock
 
-  private val executorFailuresValidityInterval = {
-    if (sparkConf.contains("spark.yarn.executor.failuresValidityInterval")) {
-      sparkConf.getTimeAsMs("spark.yarn.executor.failuresValidityInterval")
-    } else {
-      -1L
-    }
-  }
+  private val executorFailuresValidityInterval =
+    sparkConf.get(EXECUTOR_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS).getOrElse(-1L)
 
   @volatile private var targetNumExecutors =
     YarnSparkHadoopUtil.getInitialTargetExecutorNumber(sparkConf)
