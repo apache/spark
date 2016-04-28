@@ -17,13 +17,17 @@
 
 package org.apache.spark.sql.execution.datasources.json
 
+import java.util
+import java.util.Comparator
+
+import scala.collection.mutable
+
 import com.fasterxml.jackson.core._
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion
 import org.apache.spark.sql.execution.datasources.json.JacksonUtils.nextUntil
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
 
 private[sql] object InferSchema {
 
@@ -246,12 +250,35 @@ private[sql] object InferSchema {
           }
 
         case (StructType(fields1), StructType(fields2)) =>
-          val newFields = (fields1 ++ fields2).groupBy(field => field.name).map {
-            case (name, fieldTypes) =>
-              val dataType = fieldTypes.view.map(_.dataType).reduce(compatibleType)
-              StructField(name, dataType, nullable = true)
+          val allFields: Array[StructField] = fields1 ++ fields2
+          util.Arrays.sort(allFields, new Comparator[StructField] {
+            override def compare(f1: StructField, f2: StructField): Int = {
+              f1.name.compareTo(f2.name)
+            }
+          })
+          val newFields = new mutable.ArrayBuffer[StructField]()
+          var fieldWaitingForMatch: StructField = null
+          var i = 0
+          while (i < allFields.length) {
+            val field = allFields(i)
+            if (fieldWaitingForMatch == null) {
+              fieldWaitingForMatch = field
+            } else {
+              if (field.name == fieldWaitingForMatch.name) {
+                val dataType = compatibleType(field.dataType, fieldWaitingForMatch.dataType)
+                newFields += StructField(field.name, dataType, nullable = true)
+                fieldWaitingForMatch = null
+              } else {
+                newFields += fieldWaitingForMatch
+                fieldWaitingForMatch = field
+              }
+            }
+            i += 1
           }
-          StructType(newFields.toSeq.sortBy(_.name))
+          if (fieldWaitingForMatch != null) {
+            newFields += fieldWaitingForMatch
+          }
+          StructType(newFields.toSeq)
 
         case (ArrayType(elementType1, containsNull1), ArrayType(elementType2, containsNull2)) =>
           ArrayType(compatibleType(elementType1, elementType2), containsNull1 || containsNull2)
