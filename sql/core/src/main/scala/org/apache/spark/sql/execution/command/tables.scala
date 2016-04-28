@@ -490,3 +490,108 @@ case class ShowTablePropertiesCommand(table: TableIdentifier, propertyKey: Optio
     }
   }
 }
+
+/**
+ * A command to list the column names for a table. This function creates a
+ * [[ShowColumnsCommand]] logical plan.
+ *
+ * The syntax of using this command in SQL is:
+ * {{{
+ *   SHOW COLUMNS (FROM | IN) table_identifier [(FROM | IN) database];
+ * }}}
+ */
+case class ShowColumnsCommand(table: TableIdentifier) extends RunnableCommand {
+  // The result of SHOW COLUMNS has one column called 'result'
+  override val output: Seq[Attribute] = {
+    AttributeReference("result", StringType, nullable = false)() :: Nil
+  }
+
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    sparkSession.sessionState.catalog.getTableMetadata(table).schema.map { c =>
+      Row(c.name)
+    }
+  }
+}
+
+/**
+ * A command to list the partition names of a table. If the partition spec is specified,
+ * partitions that match the spec are returned. [[AnalysisException]] exception is thrown under
+ * the following conditions:
+ *
+ * 1. If the command is called for a non partitioned table.
+ * 2. If the partition spec refers to the columns that are not defined as partitioning columns.
+ *
+ * This function creates a [[ShowPartitionsCommand]] logical plan
+ *
+ * The syntax of using this command in SQL is:
+ * {{{
+ *   SHOW PARTITIONS [db_name.]table_name [PARTITION(partition_spec)]
+ * }}}
+ */
+case class ShowPartitionsCommand(
+    table: TableIdentifier,
+    spec: Option[TablePartitionSpec]) extends RunnableCommand {
+  // The result of SHOW PARTITIONS has one column called 'result'
+  override val output: Seq[Attribute] = {
+    AttributeReference("result", StringType, nullable = false)() :: Nil
+  }
+
+  private def getPartName(spec: TablePartitionSpec, partColNames: Seq[String]): String = {
+    partColNames.map { name =>
+      PartitioningUtils.escapePathName(name) + "=" + PartitioningUtils.escapePathName(spec(name))
+    }.mkString(File.separator)
+  }
+
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
+
+    if (catalog.isTemporaryTable(table)) {
+      throw new AnalysisException(
+        s"SHOW PARTITIONS is not allowed on a temporary table: ${table.unquotedString}")
+    }
+
+    val tab = catalog.getTableMetadata(table)
+
+    /**
+     * Validate and throws an [[AnalysisException]] exception under the following conditions:
+     * 1. If the table is not partitioned.
+     * 2. If it is a datasource table.
+     * 3. If it is a view or index table.
+     */
+    if (tab.tableType == CatalogTableType.VIEW ||
+      tab.tableType == CatalogTableType.INDEX) {
+      throw new AnalysisException(
+        s"SHOW PARTITIONS is not allowed on a view or index table: ${tab.qualifiedName}")
+    }
+
+    if (!DDLUtils.isTablePartitioned(tab)) {
+      throw new AnalysisException(
+        s"SHOW PARTITIONS is not allowed on a table that is not partitioned: ${tab.qualifiedName}")
+    }
+
+    if (DDLUtils.isDatasourceTable(tab)) {
+      throw new AnalysisException(
+        s"SHOW PARTITIONS is not allowed on a datasource table: ${tab.qualifiedName}")
+    }
+
+    /**
+     * Validate the partitioning spec by making sure all the referenced columns are
+     * defined as partitioning columns in table definition. An AnalysisException exception is
+     * thrown if the partitioning spec is invalid.
+     */
+    if (spec.isDefined) {
+      val badColumns = spec.get.keySet.filterNot(tab.partitionColumns.map(_.name).contains)
+      if (badColumns.nonEmpty) {
+        val badCols = badColumns.mkString("[", ", ", "]")
+        throw new AnalysisException(
+          s"Non-partitioning column(s) $badCols are specified for SHOW PARTITIONS")
+      }
+    }
+
+    val partNames = catalog.listPartitions(table, spec).map { p =>
+      getPartName(p.spec, tab.partitionColumnNames)
+    }
+
+    partNames.map(Row(_))
+  }
+}
