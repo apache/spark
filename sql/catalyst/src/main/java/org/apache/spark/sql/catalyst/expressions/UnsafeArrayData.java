@@ -47,7 +47,7 @@ import org.apache.spark.unsafe.types.UTF8String;
  * Instances of `UnsafeArrayData` act as pointers to row data stored in this format.
  */
 // todo: there is a lof of duplicated code between UnsafeRow and UnsafeArrayData.
-public class UnsafeArrayData extends ArrayData {
+public final class UnsafeArrayData extends ArrayData {
 
   private Object baseObject;
   private long baseOffset;
@@ -339,15 +339,15 @@ public class UnsafeArrayData extends ArrayData {
 
   public int[] toPrimitiveIntArray() {
     int[] result = new int[numElements];
-    Platform.copyMemory(baseObject, baseOffset + 4 + 4 * numElements,
-      result, Platform.INT_ARRAY_OFFSET, 4 * numElements);
+    Platform.copyMemory(baseObject, baseOffset + 4 + 4L * numElements,
+      result, Platform.INT_ARRAY_OFFSET, 4L * numElements);
     return result;
   }
 
   public double[] toPrimitiveDoubleArray() {
     double[] result = new double[numElements];
-    Platform.copyMemory(baseObject, baseOffset + 4 + 4 * numElements,
-      result, Platform.DOUBLE_ARRAY_OFFSET, 8 * numElements);
+    Platform.copyMemory(baseObject, baseOffset + 4 + 4L * numElements,
+      result, Platform.DOUBLE_ARRAY_OFFSET, 8L * numElements);
     return result;
   }
 
@@ -359,13 +359,16 @@ public class UnsafeArrayData extends ArrayData {
 
     Platform.putInt(data, Platform.BYTE_ARRAY_OFFSET, arr.length);
 
-    int elementOffsetStart = 4 + offsetRegionSize;
+    int offsetPosition = Platform.BYTE_ARRAY_OFFSET + 4;
+    int valueOffset = 4 + offsetRegionSize;
     for (int i = 0; i < arr.length; i++) {
-      Platform.putInt(data, Platform.BYTE_ARRAY_OFFSET + 4 + i * 4, elementOffsetStart + i * 4);
+      Platform.putInt(data, offsetPosition, valueOffset);
+      offsetPosition += 4;
+      valueOffset += 4;
     }
 
     Platform.copyMemory(arr, Platform.INT_ARRAY_OFFSET, data,
-      Platform.BYTE_ARRAY_OFFSET + elementOffsetStart, valueRegionSize);
+      Platform.BYTE_ARRAY_OFFSET + 4 + offsetRegionSize, valueRegionSize);
 
     UnsafeArrayData result = new UnsafeArrayData();
     result.pointTo(data, Platform.BYTE_ARRAY_OFFSET, totalSize);
@@ -380,13 +383,16 @@ public class UnsafeArrayData extends ArrayData {
 
     Platform.putInt(data, Platform.BYTE_ARRAY_OFFSET, arr.length);
 
-    int elementOffsetStart = 4 + offsetRegionSize;
+    int offsetPosition = Platform.BYTE_ARRAY_OFFSET + 4;
+    int valueOffset = 4 + offsetRegionSize;
     for (int i = 0; i < arr.length; i++) {
-      Platform.putInt(data, Platform.BYTE_ARRAY_OFFSET + 4 + i * 4, elementOffsetStart + i * 8);
+      Platform.putInt(data, offsetPosition, valueOffset);
+      offsetPosition += 4;
+      valueOffset += 8;
     }
 
     Platform.copyMemory(arr, Platform.DOUBLE_ARRAY_OFFSET, data,
-      Platform.BYTE_ARRAY_OFFSET + elementOffsetStart, valueRegionSize);
+      Platform.BYTE_ARRAY_OFFSET + 4 + offsetRegionSize, valueRegionSize);
 
     UnsafeArrayData result = new UnsafeArrayData();
     result.pointTo(data, Platform.BYTE_ARRAY_OFFSET, totalSize);
