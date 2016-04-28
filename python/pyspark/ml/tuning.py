@@ -203,12 +203,23 @@ class ValidatorParams(HasSeed):
 
         return paramMap
 
-    @abstractmethod
     def _transfer_param_map_to_java(self, pyParamMap):
+        _java_obj = self.copy(pyParamMap)._to_java()
+        paramMap = self._transfer_param_map_to_java_impl(pyParamMap, _java_obj)
+        return paramMap
+
+    def _transfer_param_map_from_java(self, javaParamMap):
+        _java_obj = self._to_java().copy(javaParamMap)
+        paramMap = self._transfer_param_map_from_java_impl(javaParamMap, _java_obj)
+        return paramMap
+
+    @classmethod
+    @abstractmethod
+    def _from_java(cls, java_stage):
         raise NotImplementedError()
 
     @abstractmethod
-    def _transfer_param_map_from_java(self, javaParamMap):
+    def _to_java(self):
         raise NotImplementedError()
 
     @classmethod
@@ -438,22 +449,6 @@ class CrossValidator(Estimator, CrossValidatorParams, MLReadable, MLWritable):
 
         return _java_obj
 
-    def _transfer_param_map_to_java(self, pyParamMap):
-        _java_obj = self.copy(pyParamMap)._to_java()
-
-        paramMap = super(CrossValidator, self)\
-            ._transfer_param_map_to_java_impl(pyParamMap, _java_obj)
-
-        return paramMap
-
-    def _transfer_param_map_from_java(self, javaParamMap):
-        _java_obj = self._to_java().copy(javaParamMap)
-
-        paramMap = super(CrossValidator, self)\
-            ._transfer_param_map_from_java_impl(javaParamMap, _java_obj)
-
-        return paramMap
-
 
 class CrossValidatorModel(Model, CrossValidatorParams, MLReadable, MLWritable):
     """
@@ -544,24 +539,6 @@ class CrossValidatorModel(Model, CrossValidatorParams, MLReadable, MLWritable):
         _java_obj.set("seed", seed)
         _java_obj.set("numFolds", self.getNumFolds())
         return _java_obj
-
-    def _transfer_param_map_to_java(self, pyParamMap):
-
-        _java_obj = self.copy(pyParamMap)._to_java()
-
-        paramMap = super(CrossValidatorModel, self)\
-            ._transfer_param_map_to_java_impl(pyParamMap, _java_obj)
-
-        return paramMap
-
-    def _transfer_param_map_from_java(self, javaParamMap):
-
-        _java_obj = self._to_java().copy(javaParamMap)
-
-        paramMap = super(CrossValidatorModel, self)\
-            ._transfer_param_map_from_java_impl(javaParamMap, _java_obj)
-
-        return paramMap
 
 
 class TrainValidationSplitParams(ValidatorParams):
@@ -749,22 +726,6 @@ class TrainValidationSplit(Estimator, TrainValidationSplitParams, MLReadable, ML
 
         return _java_obj
 
-    def _transfer_param_map_to_java(self, pyParamMap):
-        _java_obj = self.copy(pyParamMap)._to_java()
-
-        paramMap = super(TrainValidationSplit, self)\
-            ._transfer_param_map_to_java_impl(pyParamMap, _java_obj)
-
-        return paramMap
-
-    def _transfer_param_map_from_java(self, javaParamMap):
-        _java_obj = self._to_java().copy(javaParamMap)
-
-        paramMap = super(TrainValidationSplit, self)\
-            ._transfer_param_map_from_java_impl(javaParamMap, _java_obj)
-
-        return paramMap
-
 
 class TrainValidationSplitModel(Model, TrainValidationSplitParams, MLReadable, MLWritable):
     """
@@ -856,22 +817,6 @@ class TrainValidationSplitModel(Model, TrainValidationSplitParams, MLReadable, M
         _java_obj.set("seed", seed)
         _java_obj.set("trainRatio", self.getTrainRatio())
         return _java_obj
-
-    def _transfer_param_map_to_java(self, pyParamMap):
-        _java_obj = self.copy(pyParamMap)._to_java()
-
-        paramMap = super(TrainValidationSplitModel, self)\
-            ._transfer_param_map_to_java_impl(pyParamMap, _java_obj)
-
-        return paramMap
-
-    def _transfer_param_map_from_java(self, javaParamMap):
-        _java_obj = self._to_java().copy(javaParamMap)
-
-        paramMap = super(TrainValidationSplitModel, self)\
-            ._transfer_param_map_from_java_impl(javaParamMap, _java_obj)
-
-        return paramMap
 
 
 if __name__ == "__main__":
