@@ -42,6 +42,8 @@ import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
+import org.apache.spark.sql.types.{FloatType, IntegerType, StringType}
+
 class ALSSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest with Logging {
 
@@ -485,6 +487,40 @@ class ALSSuite
     }
     assert(getFactors(model.userFactors) === getFactors(model2.userFactors))
     assert(getFactors(model.itemFactors) === getFactors(model2.itemFactors))
+  }
+
+  test("input type validation") {
+    val sqlContext = this.sqlContext
+    import sqlContext.implicits._
+
+    val als = new ALS().setMaxIter(1).setRank(1)
+    Seq(("user", IntegerType), ("item", IntegerType), ("rating", FloatType)).foreach {
+      case (colName, sqlType) =>
+        MLTestingUtils.checkNumericTypesALS[ALSModel, ALS](als, sqlContext, colName, sqlType) {
+          (ex, act) =>
+            ex.userFactors.first().getSeq[Float](1) === act.userFactors.first.getSeq[Float](1)
+        }
+    }
+
+    withClue("Should fail when ids exceed integer range. ") {
+      val df = Seq(
+        (0, 0d, 0d, 1, 1d, 1d, 3.0),
+        (0, 2e10, -2e10, 0, 2e10, -2e10, 2.0),
+        (1, 1d, 1d, 0, 0d, 0d, 5.0)
+      ).toDF("user", "user_big", "user_small", "item", "item_big", "item_small", "rating")
+      intercept[IllegalArgumentException] {
+        als.fit(df.select("user_big", "item", "rating"))
+      }
+      intercept[IllegalArgumentException] {
+        als.fit(df.select("user_small", "item", "rating"))
+      }
+      intercept[IllegalArgumentException] {
+        als.fit(df.select("user", "item_big", "rating"))
+      }
+      intercept[IllegalArgumentException] {
+        als.fit(df.select("user", "item_small", "rating"))
+      }
+    }
   }
 }
 

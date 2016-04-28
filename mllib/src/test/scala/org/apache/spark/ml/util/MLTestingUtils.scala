@@ -58,6 +58,27 @@ object MLTestingUtils extends SparkFunSuite {
       "Column label must be of type NumericType but was actually of type StringType"))
   }
 
+  def checkNumericTypesALS[M <: Model[M], T <: Estimator[M]](
+    estimator: T,
+    sqlContext: SQLContext,
+    column: String,
+    baseType: NumericType)(check: (M, M) => Unit): Unit = {
+    val dfs = genRatingsDFWithNumericCols(sqlContext, column)
+    val expected = estimator.fit(dfs(baseType))
+    val actuals = dfs.keys.filter(_ != baseType).map(t => estimator.fit(dfs(t)))
+    actuals.foreach(actual => check(expected, actual))
+
+    val baseDF = dfs(baseType)
+    val others = baseDF.columns.toSeq.diff(Seq(column)).map(col(_))
+    val cols = Seq(col(column).cast(StringType)) ++ others
+    val strDF = baseDF.select(cols: _*)
+    val thrown = intercept[IllegalArgumentException] {
+      estimator.fit(strDF)
+    }
+    assert(thrown.getMessage.contains(
+      s"$column must be of type NumericType but was actually of type StringType"))
+  }
+
   def checkNumericTypes[T <: Evaluator](evaluator: T, spark: SparkSession): Unit = {
     val dfs = genEvaluatorDFWithNumericLabelCol(spark, "label", "prediction")
     val expected = evaluator.evaluate(dfs(DoubleType))
@@ -114,6 +135,27 @@ object MLTestingUtils extends SparkFunSuite {
         t -> TreeTests.setMetadata(castDF, 0, labelColName, featuresColName)
           .withColumn(censorColName, lit(0.0))
       }.toMap
+  }
+
+  def genRatingsDFWithNumericCols(
+      sqlContext: SQLContext,
+      column: String): Map[NumericType, DataFrame] = {
+    val df = sqlContext.createDataFrame(Seq(
+      (0, 10, 1.0),
+      (1, 20, 2.0),
+      (2, 30, 3.0),
+      (3, 40, 4.0),
+      (4, 50, 5.0)
+    )).toDF("user", "item", "rating")
+
+    val others = df.columns.toSeq.diff(Seq(column)).map(col(_))
+    val types: Seq[NumericType] =
+      Seq(ShortType, LongType, IntegerType, FloatType, ByteType, DoubleType, DecimalType(10, 0))
+    types.map { t =>
+      val toCast = col(column).cast(t)
+      val cols = Seq(toCast) ++ others
+      t -> df.select(cols: _*)
+    }.toMap
   }
 
   def genEvaluatorDFWithNumericLabelCol(

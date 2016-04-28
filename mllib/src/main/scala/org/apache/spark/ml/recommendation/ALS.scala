@@ -42,7 +42,7 @@ import org.apache.spark.mllib.optimization.NNLS
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{DoubleType, FloatType, IntegerType, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.{OpenHashMap, OpenHashSet, SortDataFormat, Sorter}
@@ -71,6 +71,20 @@ private[recommendation] trait ALSModelParams extends Params with HasPredictionCo
 
   /** @group getParam */
   def getItemCol: String = $(itemCol)
+
+  /**
+   * Attempts to safely cast a Long user/item id to an Int. Throws an exception if the value is
+   * out of integer range.
+   * @return
+   */
+  protected val checkedCast = udf { (n: Long) =>
+    if (n > Int.MaxValue.toLong || n < Int.MinValue.toLong) {
+      throw new IllegalArgumentException(s"ALS only supports values in Integer range for columns " +
+        s"${$(userCol)} and ${$(itemCol)}. Value $n was out of Integer range.")
+    } else {
+      n.toInt
+    }
+  }
 }
 
 /**
@@ -193,10 +207,11 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
    * @return output schema
    */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
-    SchemaUtils.checkColumnType(schema, $(userCol), IntegerType)
-    SchemaUtils.checkColumnType(schema, $(itemCol), IntegerType)
-    val ratingType = schema($(ratingCol)).dataType
-    require(ratingType == FloatType || ratingType == DoubleType)
+    // user and item will be cast to Int
+    SchemaUtils.checkNumericType(schema, $(userCol))
+    SchemaUtils.checkNumericType(schema, $(itemCol))
+    // rating will be cast to Float
+    SchemaUtils.checkNumericType(schema, $(ratingCol))
     SchemaUtils.appendColumn(schema, $(predictionCol), FloatType)
   }
 }
@@ -232,6 +247,7 @@ class ALSModel private[ml] (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
+    transformSchema(dataset.schema)
     // Register a UDF for DataFrame, and then
     // create a new column named map(predictionCol) by running the predict UDF.
     val predict = udf { (userFeatures: Seq[Float], itemFeatures: Seq[Float]) =>
@@ -242,16 +258,19 @@ class ALSModel private[ml] (
       }
     }
     dataset
-      .join(userFactors, dataset($(userCol)) === userFactors("id"), "left")
-      .join(itemFactors, dataset($(itemCol)) === itemFactors("id"), "left")
+      .join(userFactors,
+        checkedCast(dataset($(userCol)).cast(LongType)) === userFactors("id"), "left")
+      .join(itemFactors,
+        checkedCast(dataset($(itemCol)).cast(LongType)) === itemFactors("id"), "left")
       .select(dataset("*"),
         predict(userFactors("features"), itemFactors("features")).as($(predictionCol)))
   }
 
   @Since("1.3.0")
   override def transformSchema(schema: StructType): StructType = {
-    SchemaUtils.checkColumnType(schema, $(userCol), IntegerType)
-    SchemaUtils.checkColumnType(schema, $(itemCol), IntegerType)
+    // user and item will be cast to Int
+    SchemaUtils.checkNumericType(schema, $(userCol))
+    SchemaUtils.checkNumericType(schema, $(itemCol))
     SchemaUtils.appendColumn(schema, $(predictionCol), FloatType)
   }
 
@@ -430,10 +449,13 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
 
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): ALSModel = {
+    transformSchema(dataset.schema)
     import dataset.sparkSession.implicits._
+
     val r = if ($(ratingCol) != "") col($(ratingCol)).cast(FloatType) else lit(1.0f)
     val ratings = dataset
-      .select(col($(userCol)).cast(IntegerType), col($(itemCol)).cast(IntegerType), r)
+      .select(checkedCast(col($(userCol)).cast(LongType)),
+        checkedCast(col($(itemCol)).cast(LongType)), r)
       .rdd
       .map { row =>
         Rating(row.getInt(0), row.getInt(1), row.getFloat(2))
