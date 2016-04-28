@@ -166,7 +166,7 @@ class CachedTableSuite extends QueryTest with TestHiveSingleton {
     tempPath.delete()
     table("src").write.mode(SaveMode.Overwrite).parquet(tempPath.toString)
     sql("DROP TABLE IF EXISTS refreshTable")
-    createExternalTable("refreshTable", tempPath.toString, "parquet")
+    sparkSession.catalog.createExternalTable("refreshTable", tempPath.toString, "parquet")
     checkAnswer(
       table("refreshTable"),
       table("src").collect())
@@ -190,7 +190,7 @@ class CachedTableSuite extends QueryTest with TestHiveSingleton {
 
     // Drop the table and create it again.
     sql("DROP TABLE refreshTable")
-    createExternalTable("refreshTable", tempPath.toString, "parquet")
+    sparkSession.catalog.createExternalTable("refreshTable", tempPath.toString, "parquet")
     // It is not cached.
     assert(!isCached("refreshTable"), "refreshTable should not be cached.")
     // Refresh the table. REFRESH TABLE command should not make a uncached

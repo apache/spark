@@ -89,17 +89,17 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       partitionSchema: StructType,
       requiredSchema: StructType,
       filters: Seq[Filter],
-      options: Map[String, String]): PartitionedFile => Iterator[InternalRow] = {
-    val conf = new Configuration(sparkSession.sessionState.hadoopConf)
-    val broadcastedConf =
-      sparkSession.sparkContext.broadcast(new SerializableConfiguration(conf))
+      options: Map[String, String],
+      hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
+    val broadcastedHadoopConf =
+      sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
-    file => {
+    (file: PartitionedFile) => {
       val unsafeRow = new UnsafeRow(1)
       val bufferHolder = new BufferHolder(unsafeRow)
       val unsafeRowWriter = new UnsafeRowWriter(bufferHolder, 1)
 
-      new HadoopFileLinesReader(file, broadcastedConf.value.value).map { line =>
+      new HadoopFileLinesReader(file, broadcastedHadoopConf.value.value).map { line =>
         // Writes to an UnsafeRow directly
         bufferHolder.reset()
         unsafeRowWriter.write(0, line.getBytes, 0, line.getLength)

@@ -173,7 +173,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       // Then, if alias is specified, wrap the table with a Subquery using the alias.
       // Otherwise, wrap the table with a Subquery using the table name.
       alias.map(a => SubqueryAlias(a, qualifiedTable)).getOrElse(qualifiedTable)
-    } else if (table.tableType == CatalogTableType.VIRTUAL_VIEW) {
+    } else if (table.tableType == CatalogTableType.VIEW) {
       val viewText = table.viewText.getOrElse(sys.error("Invalid view without text."))
       alias match {
         // because hive use things like `_c0` to build the expanded text
@@ -549,7 +549,7 @@ private[hive] class MetaStoreFileCatalog(
     Some(partitionSpecFromHive.partitionColumns)) {
 
   override def getStatus(path: Path): Array[FileStatus] = {
-    val fs = path.getFileSystem(sparkSession.sessionState.hadoopConf)
+    val fs = path.getFileSystem(sparkSession.sessionState.newHadoopConf())
     fs.listStatus(path)
   }
 

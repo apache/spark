@@ -261,6 +261,19 @@ test_that("survreg", {
   expect_equal(p$prediction, c(3.724591, 2.545368, 3.079035, 3.079035,
                2.390146, 2.891269, 2.891269), tolerance = 1e-4)
 
+  # Test model save/load
+  modelPath <- tempfile(pattern = "survreg", fileext = ".tmp")
+  ml.save(model, modelPath)
+  expect_error(ml.save(model, modelPath))
+  ml.save(model, modelPath, overwrite = TRUE)
+  model2 <- ml.load(modelPath)
+  stats2 <- summary(model2)
+  coefs2 <- as.vector(stats2$coefficients[, 1])
+  expect_equal(coefs, coefs2)
+  expect_equal(rownames(stats$coefficients), rownames(stats2$coefficients))
+
+  unlink(modelPath)
+
   # Test survival::survreg
   if (requireNamespace("survival", quietly = TRUE)) {
     rData <- list(time = c(4, 3, 1, 1, 2, 2, 3), status = c(1, 1, 1, 0, 1, 1, 0),

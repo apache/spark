@@ -153,6 +153,44 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   }
 
   /**
+   * A command for users to list the columm names for a table.
+   * This function creates a [[ShowColumnsCommand]] logical plan.
+   *
+   * The syntax of using this command in SQL is:
+   * {{{
+   *   SHOW COLUMNS (FROM | IN) table_identifier [(FROM | IN) database];
+   * }}}
+   */
+  override def visitShowColumns(ctx: ShowColumnsContext): LogicalPlan = withOrigin(ctx) {
+    val table = visitTableIdentifier(ctx.tableIdentifier)
+
+    val lookupTable = Option(ctx.db) match {
+      case None => table
+      case Some(db) if table.database.isDefined =>
+        throw new ParseException("Duplicates the declaration for database", ctx)
+      case Some(db) => TableIdentifier(table.identifier, Some(db.getText))
+    }
+    ShowColumnsCommand(lookupTable)
+  }
+
+  /**
+   * A command for users to list the partition names of a table. If partition spec is specified,
+   * partitions that match the spec are returned. Otherwise an empty result set is returned.
+   *
+   * This function creates a [[ShowPartitionsCommand]] logical plan
+   *
+   * The syntax of using this command in SQL is:
+   * {{{
+   *   SHOW PARTITIONS table_identifier [partition_spec];
+   * }}}
+   */
+  override def visitShowPartitions(ctx: ShowPartitionsContext): LogicalPlan = withOrigin(ctx) {
+    val table = visitTableIdentifier(ctx.tableIdentifier)
+    val partitionKeys = Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec)
+    ShowPartitionsCommand(table, partitionKeys)
+  }
+
+  /**
    * Create a [[RefreshTable]] logical plan.
    */
   override def visitRefreshTable(ctx: RefreshTableContext): LogicalPlan = withOrigin(ctx) {
@@ -251,6 +289,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     }
     val options = Option(ctx.tablePropertyList).map(visitTablePropertyList).getOrElse(Map.empty)
     val provider = ctx.tableProvider.qualifiedName.getText
+    val bucketSpec = Option(ctx.bucketSpec()).map(visitBucketSpec)
 
     if (ctx.query != null) {
       // Get the backing query.
@@ -264,9 +303,16 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       } else {
         SaveMode.ErrorIfExists
       }
-      CreateTableUsingAsSelect(table, provider, temp, Array.empty, None, mode, options, query)
+
+      val partitionColumnNames =
+        Option(ctx.partitionColumnNames)
+          .map(visitIdentifierList(_).toArray)
+          .getOrElse(Array.empty[String])
+
+      CreateTableUsingAsSelect(
+        table, provider, temp, partitionColumnNames, bucketSpec, mode, options, query)
     } else {
-      val struct = Option(ctx.colTypeList).map(createStructType)
+      val struct = Option(ctx.colTypeList()).map(createStructType)
       CreateTableUsing(table, struct, provider, temp, options, ifNotExists, managedIfNoPath = false)
     }
   }
@@ -607,7 +653,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec),
       fileFormat,
       genericFormat)(
-      command(ctx))
+      parseException("ALTER TABLE SET FILEFORMAT", ctx))
   }
 
   /**
@@ -655,7 +701,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       // Note that Restrict and Cascade are mutually exclusive.
       ctx.RESTRICT != null,
       ctx.CASCADE != null)(
-      command(ctx))
+      parseException("ALTER TABLE CHANGE COLUMN", ctx))
   }
 
   /**
@@ -675,7 +721,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       // Note that Restrict and Cascade are mutually exclusive.
       ctx.RESTRICT != null,
       ctx.CASCADE != null)(
-      command(ctx))
+      parseException("ALTER TABLE ADD COLUMNS", ctx))
   }
 
   /**
@@ -695,7 +741,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       // Note that Restrict and Cascade are mutually exclusive.
       ctx.RESTRICT != null,
       ctx.CASCADE != null)(
-      command(ctx))
+      parseException("ALTER TABLE REPLACE COLUMNS", ctx))
   }
 
   /**
@@ -744,7 +790,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       // SET ROLE is the exception to the rule, because we handle this before other SET commands.
       "SET ROLE"
     }
-    throw new ParseException(s"Operation not allowed: $keywords", ctx)
+    throw parseException(keywords, ctx)
   }
 
   /**
@@ -797,9 +843,9 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       throw new ParseException("Operation not allowed: CREATE TABLE ... CLUSTERED BY ...", ctx)
     }
     val tableType = if (external) {
-      CatalogTableType.EXTERNAL_TABLE
+      CatalogTableType.EXTERNAL
     } else {
-      CatalogTableType.MANAGED_TABLE
+      CatalogTableType.MANAGED
     }
     val comment = Option(ctx.STRING).map(string)
     val partitionCols = Option(ctx.partitionColumns).toSeq.flatMap(visitCatalogColumns)
@@ -1045,7 +1091,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     val sql = Option(source(query))
     val tableDesc = CatalogTable(
       identifier = visitTableIdentifier(name),
-      tableType = CatalogTableType.VIRTUAL_VIEW,
+      tableType = CatalogTableType.VIEW,
       schema = schema,
       storage = EmptyStorageFormat,
       properties = properties,

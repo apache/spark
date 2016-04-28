@@ -151,7 +151,7 @@ private[sql] object Dataset {
  *
  * @since 1.6.0
  */
-class Dataset[T] protected[sql](
+class Dataset[T] private[sql](
     @transient val sparkSession: SparkSession,
     @DeveloperApi @transient val queryExecution: QueryExecution,
     encoder: Encoder[T])
@@ -458,8 +458,8 @@ class Dataset[T] protected[sql](
    * Returns true if this [[Dataset]] contains one or more sources that continuously
    * return data as it arrives. A [[Dataset]] that reads data from a streaming source
    * must be executed as a [[ContinuousQuery]] using the `startStream()` method in
-   * [[DataFrameWriter]].  Methods that return a single answer, (e.g., `count()` or
-   * `collect()`) will throw an [[AnalysisException]] when there is a streaming
+   * [[DataFrameWriter]]. Methods that return a single answer, e.g. `count()` or
+   * `collect()`, will throw an [[AnalysisException]] when there is a streaming
    * source present.
    *
    * @group basic

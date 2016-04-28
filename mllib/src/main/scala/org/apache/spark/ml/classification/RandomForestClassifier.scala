@@ -44,7 +44,7 @@ import org.apache.spark.sql.functions._
  */
 @Since("1.4.0")
 @Experimental
-final class RandomForestClassifier @Since("1.4.0") (
+class RandomForestClassifier @Since("1.4.0") (
     @Since("1.4.0") override val uid: String)
   extends ProbabilisticClassifier[Vector, RandomForestClassifier, RandomForestClassificationModel]
   with RandomForestClassifierParams with DefaultParamsWritable {
@@ -149,7 +149,7 @@ object RandomForestClassifier extends DefaultParamsReadable[RandomForestClassifi
  */
 @Since("1.4.0")
 @Experimental
-final class RandomForestClassificationModel private[ml] (
+class RandomForestClassificationModel private[ml] (
     @Since("1.5.0") override val uid: String,
     private val _trees: Array[DecisionTreeClassificationModel],
     @Since("1.6.0") override val numFeatures: Int,
