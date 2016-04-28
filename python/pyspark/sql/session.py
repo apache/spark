@@ -27,6 +27,7 @@ else:
 
 from pyspark import since
 from pyspark.rdd import RDD, ignore_unicode_prefix
+from pyspark.sql.conf import RuntimeConfig
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.functions import UserDefinedFunction
 from pyspark.sql.readwriter import DataFrameReader
@@ -120,6 +121,19 @@ class SparkSession(object):
         table cache.
         """
         return self.__class__(self._sc, self._jsparkSession.newSession())
+
+    @property
+    @since(2.0)
+    def conf(self):
+        """Runtime configuration interface for Spark.
+
+        This is the interface through which the user can get and set all Spark and Hadoop
+        configurations that are relevant to Spark SQL. When getting the value of a config,
+        this defaults to the value set in the underlying :class:`SparkContext`, if any.
+        """
+        if not hasattr(self, "_conf"):
+            self._conf = RuntimeConfig(self._jsparkSession.conf())
+        return self._conf
 
     @since(2.0)
     def setConf(self, key, value):
