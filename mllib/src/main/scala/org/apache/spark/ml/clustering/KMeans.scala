@@ -197,14 +197,9 @@ object KMeansModel extends MLReadable[KMeansModel] {
     private case class Data(clusterCenters: Array[Vector])
 
     override protected def saveImpl(path: String): Unit = {
-      if (instance.isSet(instance.initialModel)) {
-        val initialModelPath = new Path(path, "initialModel").toString
-        val initialModel = instance.getInitialModel
-        initialModel.save(initialModelPath)
-      }
-
       // Save metadata and Params
       DefaultParamsWriter.saveMetadata(instance, path, sc)
+      DefaultParamsWriter.saveInitialModel(instance, path)
 
       // Save model data: cluster centers
       val data = Data(instance.clusterCenters)
@@ -228,17 +223,7 @@ object KMeansModel extends MLReadable[KMeansModel] {
       val model = new KMeansModel(metadata.uid, new MLlibKMeansModel(clusterCenters))
 
       DefaultParamsReader.getAndSetParams(model, metadata)
-
-      // Try to load initial model after version 2.0.0.
-      if (metadata.sparkVersion.split("\\.").head.toInt >= 2) {
-        val hasInitialModel = (metadata.metadata \ "hasInitialModel").extract[Boolean]
-        if (hasInitialModel) {
-          val initialModelPath = new Path(path, "initialModel").toString
-          val initialModel = KMeansModel.load(initialModelPath)
-          model.set(model.initialModel, initialModel)
-        }
-      }
-
+      DefaultParamsReader.loadInitialModel[KMeansModel](model, path, sc)
       model
     }
   }
@@ -374,17 +359,8 @@ object KMeans extends DefaultParamsReadable[KMeans] {
     import org.json4s.JsonDSL._
 
     override protected def saveImpl(path: String): Unit = {
-      if (instance.isSet(instance.initialModel)) {
-        val initialModelPath = new Path(path, "initialModel").toString
-        val initialModel = instance.getInitialModel
-        initialModel.save(initialModelPath)
-
-        // Save metadata and Params
-        DefaultParamsWriter.saveMetadata(instance, path, sc, Some("hasInitialModel" -> true))
-      } else {
-        // Save metadata and Params
-        DefaultParamsWriter.saveMetadata(instance, path, sc, Some("hasInitialModel" -> false))
-      }
+      DefaultParamsWriter.saveInitialModel(instance, path)
+      DefaultParamsWriter.saveMetadata(instance, path, sc)
     }
   }
 
@@ -398,18 +374,9 @@ object KMeans extends DefaultParamsReadable[KMeans] {
 
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val instance = new KMeans(metadata.uid)
+
       DefaultParamsReader.getAndSetParams(instance, metadata)
-
-      // Try to load initial model after version 2.0.0.
-      if (metadata.sparkVersion.split("\\.").head.toInt >= 2) {
-        val hasInitialModel = (metadata.metadata \ "hasInitialModel").extract[Boolean]
-        if (hasInitialModel) {
-          val initialModelPath = new Path(path, "initialModel").toString
-          val initialModel = KMeansModel.load(initialModelPath)
-          instance.setInitialModel(initialModel)
-        }
-      }
-
+      DefaultParamsReader.loadInitialModel[KMeansModel](instance, path, sc)
       instance
     }
   }

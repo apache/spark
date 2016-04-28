@@ -268,6 +268,17 @@ private[ml] object DefaultParamsWriter {
     val metadataJson: String = compact(render(metadata))
     metadataJson
   }
+
+  def saveInitialModel(instance: Params, path: String): Unit = {
+    val initialModelFlag =
+      instance.hasParam("initialModel") && instance.isDefined(instance.getParam("initialModel"))
+    if (initialModelFlag) {
+      val initialModelPath = new Path(path, "initialModel").toString
+      val initialModel = instance.getOrDefault(instance.getParam("initialModel"))
+      assert(initialModel.isInstanceOf[MLWritable])
+      initialModel.asInstanceOf[MLWritable].save(initialModelPath)
+    }
+  }
 }
 
 /**
@@ -395,6 +406,20 @@ private[ml] object DefaultParamsReader {
     val metadata = DefaultParamsReader.loadMetadata(path, sc)
     val cls = Utils.classForName(metadata.className)
     cls.getMethod("read").invoke(null).asInstanceOf[MLReader[T]].load(path)
+  }
+
+  def loadInitialModel[M <: Model[M]](instance: Params, path: String, sc: SparkContext): Unit = {
+    implicit val format = DefaultFormats
+    val metadata = DefaultParamsReader.loadMetadata(path, sc)
+    // Try to load initial model after version 2.0.0.
+    if (metadata.sparkVersion.split("\\.").head.toInt >= 2) {
+      val hasInitialModel = (metadata.metadata \ "initialModel").extract[Boolean]
+      if (hasInitialModel) {
+        val initialModelPath = new Path(path, "initialModel").toString
+        val initialModel = loadParamsInstance[Model[M]](initialModelPath, sc)
+        instance.set(instance.getParam("initialModel"), initialModel)
+      }
+    }
   }
 }
 
