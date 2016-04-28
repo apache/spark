@@ -442,7 +442,7 @@ class SparkSession(object):
 
         :return: :class:`DataFrame`
 
-        >>> spark.registerDataFrameAsTable(df, "table1")
+        >>> spark.catalog.registerDataFrameAsTable(df, "table1")
         >>> df2 = spark.sql("SELECT field1 AS f1, field2 as f2 from table1")
         >>> df2.collect()
         [Row(f1=1, f2=u'row1'), Row(f1=2, f2=u'row2'), Row(f1=3, f2=u'row3')]
@@ -455,7 +455,7 @@ class SparkSession(object):
 
         :return: :class:`DataFrame`
 
-        >>> spark.registerDataFrameAsTable(df, "table1")
+        >>> spark.catalog.registerDataFrameAsTable(df, "table1")
         >>> df2 = spark.table("table1")
         >>> sorted(df.collect()) == sorted(df2.collect())
         True
@@ -472,3 +472,32 @@ class SparkSession(object):
         :return: :class:`DataFrameReader`
         """
         return DataFrameReader(self._wrapped)
+
+
+def _test():
+    import os
+    import doctest
+    from pyspark.context import SparkContext
+    from pyspark.sql import Row
+    import pyspark.sql.session
+
+    os.chdir(os.environ["SPARK_HOME"])
+
+    globs = pyspark.sql.session.__dict__.copy()
+    sc = SparkContext('local[4]', 'PythonTest')
+    globs['sc'] = sc
+    globs['spark'] = SparkSession(sc)
+    globs['rdd'] = rdd = sc.parallelize(
+        [Row(field1=1, field2="row1"),
+         Row(field1=2, field2="row2"),
+         Row(field1=3, field2="row3")])
+    globs['df'] = rdd.toDF()
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.sql.session, globs=globs,
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)
+    globs['sc'].stop()
+    if failure_count:
+        exit(-1)
+
+if __name__ == "__main__":
+    _test()
