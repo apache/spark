@@ -1273,8 +1273,8 @@ Apart from these, the following properties are also available, and may be useful
     org.apache.spark.security.GroupMappingServiceProvider which can configured by this property.
     The default implementation is a unix shell based mapping provided by
     org.apache.spark.security.ShellBasedGroupsMappingProvider will resolve a list of groups for a
-    user. This implementation shells out with the bash -c id command for a Linux/Unix
-    environment. Windows environment is currently <b>not</b> supported.
+    user. This implementation supports only a Unix/Linux based environment. Windows environment is
+    currently <b>not</b> supported.
   </td>
 </tr>
 <tr>
