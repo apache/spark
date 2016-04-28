@@ -601,10 +601,13 @@ class TrainValidationSplitTests(SparkSessionTestCase):
         tvsModel = tvs.fit(dataset)
         bestModel = tvsModel.bestModel
         bestModelMetric = evaluator.evaluate(bestModel.transform(dataset))
+        validationMetrics = tvsModel.validationMetrics
 
         self.assertEqual(0.0, bestModel.getOrDefault('inducedError'),
                          "Best model should have zero induced error")
         self.assertEqual(0.0, bestModelMetric, "Best model has RMSE of 0")
+        self.assertEqual(len(grid), len(validationMetrics),
+                         "validationMetrics has the same size of grid parameter")
 
     def test_fit_maximize_metric(self):
         dataset = self.spark.createDataFrame([
@@ -624,10 +627,13 @@ class TrainValidationSplitTests(SparkSessionTestCase):
         tvsModel = tvs.fit(dataset)
         bestModel = tvsModel.bestModel
         bestModelMetric = evaluator.evaluate(bestModel.transform(dataset))
+        validationMetrics = tvsModel.validationMetrics
 
         self.assertEqual(0.0, bestModel.getOrDefault('inducedError'),
                          "Best model should have zero induced error")
         self.assertEqual(1.0, bestModelMetric, "Best model has R-squared of 1")
+        self.assertEqual(len(grid), len(validationMetrics),
+                         "validationMetrics has the same size of grid parameter")
 
     def test_save_load(self):
         # This tests saving and loading the trained model only.
@@ -652,6 +658,36 @@ class TrainValidationSplitTests(SparkSessionTestCase):
         loadedLrModel = LogisticRegressionModel.load(tvsModelPath)
         self.assertEqual(loadedLrModel.uid, lrModel.uid)
         self.assertEqual(loadedLrModel.intercept, lrModel.intercept)
+
+    def test_copy(self):
+        sqlContext = SQLContext(self.sc)
+        dataset = sqlContext.createDataFrame([
+            (10, 10.0),
+            (50, 50.0),
+            (100, 100.0),
+            (500, 500.0)] * 10,
+            ["feature", "label"])
+
+        iee = InducedErrorEstimator()
+        evaluator = RegressionEvaluator(metricName="r2")
+
+        grid = (ParamGridBuilder()
+                .addGrid(iee.inducedError, [100.0, 0.0, 10000.0])
+                .build())
+        tvs = TrainValidationSplit(estimator=iee, estimatorParamMaps=grid, evaluator=evaluator)
+        tvsModel = tvs.fit(dataset)
+        tvsCopied = tvs.copy()
+        tvsModelCopied = tvsModel.copy()
+
+        self.assertEqual(tvs.getEstimator().uid, tvsCopied.getEstimator().uid,
+                         "Copied TrainValidationSplit has the same uid of Estimator")
+
+        self.assertEqual(len(tvsModel.validationMetrics),
+                         len(tvsModelCopied.validationMetrics),
+                         "Copied validationMetrics has the same size of the original")
+        for index in range(len(tvsModel.validationMetrics)):
+            self.assertEqual(tvsModel.validationMetrics[index],
+                             tvsModelCopied.validationMetrics[index])
 
 
 class PersistenceTest(SparkSessionTestCase):
