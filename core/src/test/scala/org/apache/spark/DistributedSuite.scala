@@ -60,7 +60,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
       "local-cluster[ 2, 1, 1024 ]"
     )
 
-    masterStrings.map(x => x match {
+    masterStrings.foreach(x => x match {
       case LOCAL_CLUSTER_REGEX(numSlaves, coresPerSlave, memoryPerSlave) =>
         assert(numSlaves.toInt == 2)
         assert(coresPerSlave.toInt == 1)
