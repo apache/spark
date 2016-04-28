@@ -117,7 +117,6 @@ class SQLContext private[sql](
    *
    * @since 1.6.0
    */
-
   def newSession(): SQLContext = sparkSession.newSession().wrapped
 
   /**
