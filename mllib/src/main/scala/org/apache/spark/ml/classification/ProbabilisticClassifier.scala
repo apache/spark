@@ -138,7 +138,7 @@ abstract class ProbabilisticClassificationModel[
         }
         predictUDF(col($(featuresCol)))
       }
-      outputData = outputData.withColumn(getPredictionCol, predUDF, predictionMetadata)
+      outputData = outputData.withColumn($(predictionCol), predUDF, predictionMetadata)
       numColsOutput += 1
     }
 
