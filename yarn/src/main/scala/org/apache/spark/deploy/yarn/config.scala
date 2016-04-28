@@ -41,7 +41,7 @@ package object config {
       .createOptional
 
   private[spark] val EXECUTOR_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS =
-    ConfigBuilder("spark.yarn.executor.failuesValidityInterval")
+    ConfigBuilder("spark.yarn.executor.failuresValidityInterval")
       .doc("Interval after which Executor failures will be considered independent and not " +
         "accumulate towards the attempt count.")
       .timeConf(TimeUnit.MILLISECONDS)
