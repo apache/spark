@@ -1188,13 +1188,24 @@ class OneVsRestParams(HasFeaturesCol, HasLabelCol, HasPredictionCol):
         """
         return self.getOrDefault(self.classifier)
 
+    @classmethod
     @abstractmethod
-    def _transfer_param_map_to_java(self, pyParamMap):
+    def _from_java(cls, java_stage):
         raise NotImplementedError()
 
     @abstractmethod
-    def _transfer_param_map_from_java(self, javaParamMap):
+    def _to_java(self):
         raise NotImplementedError()
+
+    def _transfer_param_map_from_java(self, javaParamMap):
+        _java_obj = self._to_java().copy(javaParamMap)
+        paramMap = self._transfer_param_map_from_java_impl(javaParamMap, _java_obj)
+        return paramMap
+
+    def _transfer_param_map_to_java(self, pyParamMap):
+        _java_obj = self.copy(pyParamMap)._to_java()
+        paramMap = self._transfer_param_map_to_java_impl(pyParamMap, _java_obj)
+        return paramMap
 
     def _transfer_param_map_to_java_impl(self, pyParamMap, java_obj):
         """
@@ -1379,17 +1390,6 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
         _java_obj.setPredictionCol(self.getPredictionCol())
         return _java_obj
 
-    def _transfer_param_map_from_java(self, javaParamMap):
-        _java_obj = self._to_java().copy(javaParamMap)
-        paramMap = super(OneVsRest, self)\
-            ._transfer_param_map_from_java_impl(javaParamMap, _java_obj)
-        return paramMap
-
-    def _transfer_param_map_to_java(self, pyParamMap):
-        _java_obj = self.copy(pyParamMap)._to_java()
-        paramMap = super(OneVsRest, self)._transfer_param_map_to_java_impl(pyParamMap, _java_obj)
-        return paramMap
-
 
 class OneVsRestModel(Model, OneVsRestParams, MLReadable, MLWritable):
     """
@@ -1515,18 +1515,6 @@ class OneVsRestModel(Model, OneVsRestParams, MLReadable, MLWritable):
         _java_obj.set("labelCol", self.getLabelCol())
         _java_obj.set("predictionCol", self.getPredictionCol())
         return _java_obj
-
-    def _transfer_param_map_from_java(self, javaParamMap):
-        _java_obj = self._to_java().copy(javaParamMap)
-        paramMap = super(OneVsRestModel, self)\
-            ._transfer_param_map_from_java_impl(javaParamMap, _java_obj)
-        return paramMap
-
-    def _transfer_param_map_to_java(self, pyParamMap):
-        _java_obj = self.copy(pyParamMap)._to_java()
-        paramMap = super(OneVsRestModel, self)\
-            ._transfer_param_map_to_java_impl(pyParamMap, _java_obj)
-        return paramMap
 
 
 if __name__ == "__main__":
