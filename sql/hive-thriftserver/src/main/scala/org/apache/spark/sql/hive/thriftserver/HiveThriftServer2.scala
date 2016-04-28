@@ -58,7 +58,12 @@ object HiveThriftServer2 extends Logging {
   @DeveloperApi
   def startWithContext(sqlContext: SQLContext): Unit = {
     val server = new HiveThriftServer2(sqlContext)
-    server.init(SparkSQLEnv.sqlContext.sharedState.asInstanceOf[HiveSharedState].executionHive.conf)
+
+    val executionHive = HiveUtils.newClientForExecution(
+      sqlContext.sparkContext.conf,
+      sqlContext.sessionState.newHadoopConf())
+
+    server.init(executionHive.conf)
     server.start()
     listener = new HiveThriftServer2Listener(server, sqlContext.conf)
     sqlContext.sparkContext.addSparkListener(listener)
