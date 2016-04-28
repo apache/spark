@@ -482,7 +482,7 @@ class SparkSession(object):
             if not isinstance(schema, StructType):
                 raise TypeError("schema should be StructType")
             scala_datatype = self._jsparkSession.parseDataType(schema.json())
-            df = self._jsparkSession.catalog().createExternalTable(\
+            df = self._jsparkSession.catalog().createExternalTable(
                 tableName, source, scala_datatype, options)
         return DataFrame(df, self._wrapped)
 
