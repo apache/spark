@@ -195,7 +195,7 @@ class SQLContext(object):
         >>> sqlContext.sql("SELECT stringLengthInt('test')").collect()
         [Row(stringLengthInt(test)=4)]
         """
-        self.sparkSession.registerFunction(name, f, returnType)
+        self.sparkSession.catalog.registerFunction(name, f, returnType)
 
     # TODO(andrew): delete this once we refactor things to take in SparkSession
     def _inferSchema(self, rdd, samplingRatio=None):
@@ -327,7 +327,8 @@ class SQLContext(object):
 
         :return: :class:`DataFrame`
         """
-        return self.sparkSession.createExternalTable(tableName, path, source, schema, **options)
+        return self.sparkSession.catalog.createExternalTable(
+            tableName, path, source, schema, **options)
 
     @ignore_unicode_prefix
     @since(1.0)

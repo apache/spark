@@ -28,8 +28,8 @@ else:
 from pyspark import since
 from pyspark.rdd import RDD, ignore_unicode_prefix
 from pyspark.sql.conf import RuntimeConfig
+from pyspark.sql.catalog import Catalog
 from pyspark.sql.dataframe import DataFrame
-from pyspark.sql.functions import UserDefinedFunction
 from pyspark.sql.readwriter import DataFrameReader
 from pyspark.sql.types import Row, DataType, StringType, StructType, _verify_type, \
     _infer_schema, _has_nulltype, _merge_type, _create_converter, _parse_datatype_string
@@ -57,7 +57,6 @@ def _monkey_patch_RDD(sparkSession):
     RDD.toDF = toDF
 
 
-# TODO(andrew): implement conf and catalog namespaces
 class SparkSession(object):
     """Main entry point for Spark SQL functionality.
 
@@ -106,7 +105,7 @@ class SparkSession(object):
     @classmethod
     @since(2.0)
     def withHiveSupport(cls, sparkContext):
-        """Returns a new SparkSession with a catalog backed by Hive
+        """Returns a new SparkSession with a catalog backed by Hive.
 
         :param sparkContext: The underlying :class:`SparkContext`.
         """
@@ -166,12 +165,22 @@ class SparkSession(object):
 
     @property
     @since(2.0)
+    def catalog(self):
+        """Interface through which the user may create, drop, alter or query underlying
+        databases, tables, functions etc.
+        """
+        if not hasattr(self, "_catalog"):
+            self._catalog = Catalog(self)
+        return self._catalog
+
+    @property
+    @since(2.0)
     def udf(self):
         """Returns a :class:`UDFRegistration` for UDF registration.
 
         :return: :class:`UDFRegistration`
         """
-        return UDFRegistration(self)
+        return UDFRegistration(self._wrapped)
 
     @since(2.0)
     def range(self, start, end=None, step=1, numPartitions=None):
@@ -203,37 +212,6 @@ class SparkSession(object):
             jdf = self._jsparkSession.range(int(start), int(end), int(step), int(numPartitions))
 
         return DataFrame(jdf, self._wrapped)
-
-    @ignore_unicode_prefix
-    @since(2.0)
-    def registerFunction(self, name, f, returnType=StringType()):
-        """Registers a python function (including lambda function) as a UDF
-        so it can be used in SQL statements.
-
-        In addition to a name and the function itself, the return type can be optionally specified.
-        When the return type is not given it default to a string and conversion will automatically
-        be done.  For any other return type, the produced object must match the specified type.
-
-        :param name: name of the UDF
-        :param f: python function
-        :param returnType: a :class:`DataType` object
-
-        >>> spark.registerFunction("stringLengthString", lambda x: len(x))
-        >>> spark.sql("SELECT stringLengthString('test')").collect()
-        [Row(stringLengthString(test)=u'4')]
-
-        >>> from pyspark.sql.types import IntegerType
-        >>> spark.registerFunction("stringLengthInt", lambda x: len(x), IntegerType())
-        >>> spark.sql("SELECT stringLengthInt('test')").collect()
-        [Row(stringLengthInt(test)=4)]
-
-        >>> from pyspark.sql.types import IntegerType
-        >>> spark.udf.register("stringLengthInt", lambda x: len(x), IntegerType())
-        >>> spark.sql("SELECT stringLengthInt('test')").collect()
-        [Row(stringLengthInt(test)=4)]
-        """
-        udf = UserDefinedFunction(f, returnType, name)
-        self._jsparkSession.udf().registerPython(name, udf._judf)
 
     def _inferSchemaFromList(self, data):
         """
@@ -456,49 +434,6 @@ class SparkSession(object):
         df = DataFrame(jdf, self._wrapped)
         df._schema = schema
         return df
-
-    @since(2.0)
-    def registerDataFrameAsTable(self, df, tableName):
-        """Registers the given :class:`DataFrame` as a temporary table in the catalog.
-
-        Temporary tables exist only during the lifetime of this instance of :class:`SparkSession`.
-
-        >>> spark.registerDataFrameAsTable(df, "table1")
-        """
-        if (df.__class__ is DataFrame):
-            self._jsparkSession.registerDataFrameAsTable(df._jdf, tableName)
-        else:
-            raise ValueError("Can only register DataFrame as table")
-
-    @since(2.0)
-    def createExternalTable(self, tableName, path=None, source=None, schema=None, **options):
-        """Creates an external table based on the dataset in a data source.
-
-        It returns the DataFrame associated with the external table.
-
-        The data source is specified by the ``source`` and a set of ``options``.
-        If ``source`` is not specified, the default data source configured by
-        ``spark.sql.sources.default`` will be used.
-
-        Optionally, a schema can be provided as the schema of the returned :class:`DataFrame` and
-        created external table.
-
-        :return: :class:`DataFrame`
-        """
-        if path is not None:
-            options["path"] = path
-        if source is None:
-            source = self.getConf("spark.sql.sources.default",
-                                  "org.apache.spark.sql.parquet")
-        if schema is None:
-            df = self._jsparkSession.catalog().createExternalTable(tableName, source, options)
-        else:
-            if not isinstance(schema, StructType):
-                raise TypeError("schema should be StructType")
-            scala_datatype = self._jsparkSession.parseDataType(schema.json())
-            df = self._jsparkSession.catalog().createExternalTable(
-                tableName, source, scala_datatype, options)
-        return DataFrame(df, self._wrapped)
 
     @ignore_unicode_prefix
     @since(2.0)
