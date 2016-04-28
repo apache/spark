@@ -496,11 +496,26 @@ private[spark] class Client(
             "to uploading libraries under SPARK_HOME.")
           val jarsDir = new File(YarnCommandBuilderUtils.findJarsDir(
             sparkConf.getenv("SPARK_HOME")))
-          jarsDir.listFiles().foreach { f =>
-            if (f.isFile() && f.getName().toLowerCase().endsWith(".jar")) {
-              distribute(f.getAbsolutePath(), targetDir = Some(LOCALIZED_LIB_DIR))
+          val jarsArchive = File.createTempFile(LOCALIZED_LIB_DIR, ".zip",
+            new File(Utils.getLocalDir(sparkConf)))
+          val jarsStream = new ZipOutputStream(new FileOutputStream(jarsArchive))
+
+          try {
+            jarsStream.setLevel(0)
+            jarsDir.listFiles().foreach { f =>
+              if (f.isFile && f.getName.toLowerCase().endsWith(".jar") && f.canRead) {
+                jarsStream.putNextEntry(new ZipEntry(f.getName))
+                Files.copy(f, jarsStream)
+                jarsStream.closeEntry()
+              }
             }
+          } finally {
+            jarsStream.close()
           }
+
+          distribute(jarsArchive.toURI.getPath,
+            resType = LocalResourceType.ARCHIVE,
+            destName = Some(LOCALIZED_LIB_DIR))
       }
     }
 
