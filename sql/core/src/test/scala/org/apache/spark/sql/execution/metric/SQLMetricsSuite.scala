@@ -38,7 +38,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
   import testImplicits._
 
   test("SQLMetric should not box Long") {
-    val l = SQLMetrics.createSumMetric(sparkContext, "long")
+    val l = SQLMetrics.createMetric(sparkContext, "long")
     val f = () => {
       l += 1L
       l.add(1L)
@@ -314,7 +314,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
   }
 
   test("metrics can be loaded by history server") {
-    val metric = SQLMetrics.createSumMetric(sparkContext, "zanzibar")
+    val metric = SQLMetrics.createMetric(sparkContext, "zanzibar")
     metric += 10L
     val metricInfo = metric.toInfo(Some(metric.localValue), None)
     metricInfo.update match {

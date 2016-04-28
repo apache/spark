@@ -43,7 +43,7 @@ class SQLMetric(val metricType: String, initValue: Long = 0L) extends NewAccumul
 
   override def add(v: Long): Unit = _value += v
 
-  override def +=(v: Long): Unit = _value += v
+  def +=(v: Long): Unit = _value += v
 
   override def localValue: Long = _value
 
@@ -64,7 +64,7 @@ private[sql] object SQLMetrics {
   private[sql] val SIZE_METRIC = "size"
   private[sql] val TIMING_METRIC = "timing"
 
-  def createSumMetric(sc: SparkContext, name: String): SQLMetric = {
+  def createMetric(sc: SparkContext, name: String): SQLMetric = {
     val acc = new SQLMetric(SUM_METRIC)
     acc.register(sc, name = Some(name), countFailedValues = true)
     acc

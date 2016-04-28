@@ -676,7 +676,6 @@ object MimaExcludes {
         ProblemFilters.exclude[IncompatibleTemplateDefProblem]("org.apache.spark.util.collection.Spillable")
       ) ++ Seq(
         // SPARK-14654: New accumulator API
-        ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.Accumulable.zero"),
         ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.ExceptionFailure$"),
         ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ExceptionFailure.apply"),
         ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ExceptionFailure.metrics"),

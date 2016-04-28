@@ -83,7 +83,7 @@ case class CartesianProductExec(left: SparkPlan, right: SparkPlan) extends Binar
   override def output: Seq[Attribute] = left.output ++ right.output
 
   override private[sql] lazy val metrics = Map(
-    "numOutputRows" -> SQLMetrics.createSumMetric(sparkContext, "number of output rows"))
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")

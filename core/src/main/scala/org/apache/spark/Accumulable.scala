@@ -72,6 +72,7 @@ class Accumulable[R, T] private (
 
   def this(initialValue: R, param: AccumulableParam[R, T]) = this(initialValue, param, None)
 
+  val zero = param.zero(initialValue)
   private[spark] val newAcc = new LegacyAccumulatorWrapper(initialValue, param)
   newAcc.metadata = AccumulatorMetadata(id, name, countFailedValues)
   // Register the new accumulator in ctor, to follow the previous behaviour.

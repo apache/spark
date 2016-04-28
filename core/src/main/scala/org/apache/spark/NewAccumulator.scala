@@ -34,18 +34,7 @@ private[spark] case class AccumulatorMetadata(
 
 /**
  * The base class for accumulators, that can accumulate inputs of type `IN`, and produce output of
- * type `OUT`.  Implementations must define following methods:
- *  - isZero:       tell if this accumulator is zero value or not. e.g. for a counter accumulator,
- *                  0 is zero value; for a list accumulator, Nil is zero value.
- *  - copyAndReset: create a new copy of this accumulator, which is zero value. i.e. call `isZero`
- *                  on the copy must return true.
- *  - add:          defines how to accumulate the inputs. e.g. it can be a simple `+=` for counter
- *                  accumulator
- *  - merge:        defines how to merge another accumulator of same type.
- *  - localValue:   defines how to produce the output by the current state of this accumulator.
- *
- * The implementations decide how to store intermediate values, e.g. a long field for a counter
- * accumulator, a double and a long field for a average accumulator(storing the sum and count).
+ * type `OUT`.
  */
 abstract class NewAccumulator[IN, OUT] extends Serializable {
   private[spark] var metadata: AccumulatorMetadata = _
@@ -63,6 +52,10 @@ abstract class NewAccumulator[IN, OUT] extends Serializable {
     sc.cleaner.foreach(_.registerAccumulatorForCleanup(this))
   }
 
+  /**
+   * Returns true if this accumulator has been registered.  Note that all accumulators must be
+   * registered before ues, or it will throw exception.
+   */
   final def isRegistered: Boolean =
     metadata != null && AccumulatorContext.originals.containsKey(metadata.id)
 
@@ -72,21 +65,36 @@ abstract class NewAccumulator[IN, OUT] extends Serializable {
     }
   }
 
+  /**
+   * Returns the id of this accumulator, can only be called after registration.
+   */
   final def id: Long = {
     assertMetadataNotNull()
     metadata.id
   }
 
+  /**
+   * Returns the name of this accumulator, can only be called after registration.
+   */
   final def name: Option[String] = {
     assertMetadataNotNull()
     metadata.name
   }
 
-  final def countFailedValues: Boolean = {
+  /**
+   * Whether to accumulate values from failed tasks. This is set to true for system and time
+   * metrics like serialization time or bytes spilled, and false for things with absolute values
+   * like number of input rows.  This should be used for internal metrics only.
+   */
+  private[spark] final def countFailedValues: Boolean = {
     assertMetadataNotNull()
     metadata.countFailedValues
   }
 
+  /**
+   * Creates an [[AccumulableInfo]] representation of this [[NewAccumulator]] with the provided
+   * values.
+   */
   private[spark] def toInfo(update: Option[Any], value: Option[Any]): AccumulableInfo = {
     val isInternal = name.exists(_.startsWith(InternalAccumulator.METRICS_PREFIX))
     new AccumulableInfo(id, name, update, value, isInternal, countFailedValues)
@@ -94,16 +102,32 @@ abstract class NewAccumulator[IN, OUT] extends Serializable {
 
   final private[spark] def isAtDriverSide: Boolean = atDriverSide
 
+  /**
+   * Tells if this accumulator is zero value or not. e.g. for a counter accumulator, 0 is zero
+   * value; for a list accumulator, Nil is zero value.
+   */
   def isZero(): Boolean
 
+  /**
+   * Creates a new copy of this accumulator, which is zero value. i.e. call `isZero` on the copy
+   * must return true.
+   */
   def copyAndReset(): NewAccumulator[IN, OUT]
 
+  /**
+   * Takes the inputs and accumulates. e.g. it can be a simple `+=` for counter accumulator.
+   */
   def add(v: IN): Unit
 
-  def +=(v: IN): Unit = add(v)
-
+  /**
+   * Merges another same-type accumulator into this one and update its state, i.e. this should be
+   * merge-in-place.
+   */
   def merge(other: NewAccumulator[IN, OUT]): Unit
 
+  /**
+   * Access this accumulator's current value; only allowed on driver.
+   */
   final def value: OUT = {
     if (atDriverSide) {
       localValue
@@ -112,6 +136,12 @@ abstract class NewAccumulator[IN, OUT] extends Serializable {
     }
   }
 
+  /**
+   * Defines the current value of this accumulator.
+   *
+   * This is NOT the global value of the accumulator.  To get the global value after a
+   * completed operation on the dataset, call `value`.
+   */
   def localValue: OUT
 
   // Called by Java when serializing an object
@@ -328,6 +358,11 @@ class ListAccumulator[T] extends NewAccumulator[T, java.util.List[T]] {
   }
 
   override def localValue: java.util.List[T] = java.util.Collections.unmodifiableList(_list)
+
+  private[spark] def setValue(newValue: java.util.List[T]): Unit = {
+    _list.clear()
+    _list.addAll(newValue)
+  }
 }
 
 

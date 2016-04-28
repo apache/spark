@@ -20,13 +20,11 @@ package org.apache.spark.executor
 import org.scalatest.Assertions
 
 import org.apache.spark._
-import org.apache.spark.scheduler.AccumulableInfo
-import org.apache.spark.storage.{BlockId, BlockStatus, StorageLevel, TestBlockId}
+import org.apache.spark.storage.{BlockStatus, StorageLevel, TestBlockId}
 
 
 class TaskMetricsSuite extends SparkFunSuite {
   import StorageLevel._
-  import TaskMetricsSuite._
 
   test("mutating values") {
     val tm = new TaskMetrics
@@ -202,8 +200,8 @@ class TaskMetricsSuite extends SparkFunSuite {
     tm.registerAccumulator(acc2)
     tm.registerAccumulator(acc3)
     tm.registerAccumulator(acc4)
-    acc1 += 1L
-    acc2 += 2L
+    acc1.add(1)
+    acc2.add(2)
     val newUpdates = tm.accumulators()
       .map(a => (a.id, a.asInstanceOf[NewAccumulator[Any, Any]])).toMap
     assert(newUpdates.contains(acc1.id))

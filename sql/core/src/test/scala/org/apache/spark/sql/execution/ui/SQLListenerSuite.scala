@@ -362,7 +362,7 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
     val stageSubmitted = SparkListenerStageSubmitted(stageInfo)
     // This task has both accumulators that are SQL metrics and accumulators that are not.
     // The listener should only track the ones that are actually SQL metrics.
-    val sqlMetric = SQLMetrics.createSumMetric(sparkContext, "beach umbrella")
+    val sqlMetric = SQLMetrics.createMetric(sparkContext, "beach umbrella")
     val nonSqlMetric = sparkContext.accumulator[Int](0, "baseball")
     val sqlMetricInfo = sqlMetric.toInfo(Some(sqlMetric.localValue), None)
     val nonSqlMetricInfo = nonSqlMetric.toInfo(Some(nonSqlMetric.localValue), None)

@@ -217,7 +217,7 @@ private[sql] case class InMemoryTableScanExec(
   extends LeafExecNode {
 
   private[sql] override lazy val metrics = Map(
-    "numOutputRows" -> SQLMetrics.createSumMetric(sparkContext, "number of output rows"))
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   override def output: Seq[Attribute] = attributes
 

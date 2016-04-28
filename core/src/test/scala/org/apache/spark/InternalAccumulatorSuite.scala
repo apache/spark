@@ -51,7 +51,7 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
     sc.addSparkListener(listener)
     // Have each task add 1 to the internal accumulator
     val rdd = sc.parallelize(1 to 100, numPartitions).mapPartitions { iter =>
-      TaskContext.get().taskMetrics().testAccum.get += 1L
+      TaskContext.get().taskMetrics().testAccum.get.add(1)
       iter
     }
     // Register asserts in job completion callback to avoid flakiness
@@ -87,17 +87,17 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
     val rdd = sc.parallelize(1 to 100, numPartitions)
       .map { i => (i, i) }
       .mapPartitions { iter =>
-        TaskContext.get().taskMetrics().testAccum.get += 1L
+        TaskContext.get().taskMetrics().testAccum.get.add(1)
         iter
       }
       .reduceByKey { case (x, y) => x + y }
       .mapPartitions { iter =>
-        TaskContext.get().taskMetrics().testAccum.get += 10L
+        TaskContext.get().taskMetrics().testAccum.get.add(10)
         iter
       }
       .repartition(numPartitions * 2)
       .mapPartitions { iter =>
-        TaskContext.get().taskMetrics().testAccum.get += 100L
+        TaskContext.get().taskMetrics().testAccum.get.add(100)
         iter
       }
     // Register asserts in job completion callback to avoid flakiness
@@ -127,7 +127,7 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
     // This should retry both stages in the scheduler. Note that we only want to fail the
     // first stage attempt because we want the stage to eventually succeed.
     val x = sc.parallelize(1 to 100, numPartitions)
-      .mapPartitions { iter => TaskContext.get().taskMetrics().testAccum.get += 1L; iter }
+      .mapPartitions { iter => TaskContext.get().taskMetrics().testAccum.get.add(1); iter }
       .groupBy(identity)
     val sid = x.dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]].shuffleHandle.shuffleId
     val rdd = x.mapPartitionsWithIndex { case (i, iter) =>
