@@ -365,7 +365,7 @@ class DataFrameWriter(object):
 
     def _cq(self, jcq):
         from pyspark.sql.streaming import ContinuousQuery
-        return ContinuousQuery(jcq, self._sqlContext)
+        return ContinuousQuery(jcq)
 
     @since(1.4)
     def mode(self, saveMode):
