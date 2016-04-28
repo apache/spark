@@ -868,21 +868,65 @@ class Analyzer(
    */
   object ResolveSubquery extends Rule[LogicalPlan] with PredicateHelper {
     /**
+     * Resolve the correlated expressions in a subquery by using the an outer plans' references. All
+     * resolved outer references are wrapped in an [[OuterReference]]
+     */
+    private def resolveOuterReferences(plan: LogicalPlan, outer: LogicalPlan): LogicalPlan = {
+      plan resolveOperators {
+        case q: LogicalPlan if q.childrenResolved && !q.resolved =>
+          q transformExpressions {
+            case u @ UnresolvedAttribute(nameParts) =>
+              withPosition(u) {
+                try {
+                  outer.resolve(nameParts, resolver) match {
+                    case Some(outerAttr) => OuterReference(outerAttr)
+                    case None => u
+                  }
+                } catch {
+                  case _: AnalysisException => u
+                }
+              }
+          }
+      }
+    }
+
+    /**
+     * Resolve the subqueries in a single LogicalPlan using the given outer plans. This method
+     * alternates between applying the regular analyzer on the subquery and applying the
+     * resolveOuterReferences rule.
+     */
+    private def resolveSubQueries(
+        plan: LogicalPlan,
+        outerPlans: Seq[LogicalPlan]): LogicalPlan = plan transformExpressions {
+      case e: SubqueryExpression if !e.query.resolved =>
+        var previous: LogicalPlan = null
+        var current = e.query
+        do {
+          previous = current
+          // Try to resolve the subquery plan using the regular analyzer.
+          current = execute(current)
+
+          // Use the outer references to resolve the subquery plan if it isn't resolved yet.
+          val i = outerPlans.iterator
+          while (!current.resolved && i.hasNext) {
+            current = resolveOuterReferences(current, i.next())
+          }
+        } while (!current.resolved && !current.fastEquals(previous))
+        e.withNewPlan(current)
+    }
+
+    /**
      * Resolve a subquery using the outer plan. This rule creates a dedicated analyzer which can
      * also resolve outer plan references.
      */
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      // Only a few unary nodes (Project/Filter/Aggregate/Having) can contain subqueries.
+      // In case of HAVING (a filter after an aggregate) we use both the aggregate and its child for
+      // resolution.
+      case f @ Filter(_, a: Aggregate) if f.childrenResolved =>
+        resolveSubQueries(f, Seq(a, a.child))
+      // Only a few unary nodes (Project/Filter/Aggregate) can contain subqueries.
       case q: UnaryNode if q.childrenResolved =>
-        q transformExpressions {
-          case e: SubqueryExpression if !e.query.resolved =>
-            val analyzer = new Analyzer(catalog, conf) {
-              override val extendedCheckRules = self.extendedCheckRules
-              override val extendedResolutionRules = self.extendedResolutionRules :+
-                ResolveOuterReferences(q.child, resolver)
-            }
-            e.withNewPlan(analyzer.execute(e.query))
-        }
+        resolveSubQueries(q, Seq(q.child))
     }
   }
 
@@ -1953,28 +1997,3 @@ object TimeWindowing extends Rule[LogicalPlan] {
       }
   }
 }
-
-/**
- * Resolve the correlated expressions in a subquery by using the an outer plans' references. All
- * resolved outer references are wrapped in an [[OuterReference]]
- */
-case class ResolveOuterReferences(outer: LogicalPlan, resolver: Resolver)
-    extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case q: LogicalPlan if q.childrenResolved && !q.resolved =>
-      q transformExpressions {
-        case u @ UnresolvedAttribute(nameParts) =>
-          withPosition(u) {
-            try {
-              outer.resolve(nameParts, resolver) match {
-                case Some(outerAttr) => OuterReference(outerAttr)
-                case None => u
-              }
-            } catch {
-              case _: AnalysisException => u
-            }
-          }
-      }
-  }
-}
-
