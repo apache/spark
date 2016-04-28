@@ -219,18 +219,18 @@ private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
         val numRows = row.getInt(1)
         val numCols = row.getInt(2)
         val values = row.getArray(5) match {
-          case u: UnsafeArrayData => u.toPrimitiveDoubleArray
+          case u: UnsafeArrayData => u.toDoubleArrayUnchecked
           case a => a.toDoubleArray()
         }
         val isTransposed = row.getBoolean(6)
         tpe match {
           case 0 =>
             val colPtrs = row.getArray(3) match {
-              case u: UnsafeArrayData => u.toPrimitiveIntArray
+              case u: UnsafeArrayData => u.toIntArrayUnchecked
               case a => a.toIntArray()
             }
             val rowIndices = row.getArray(4) match {
-              case u: UnsafeArrayData => u.toPrimitiveIntArray
+              case u: UnsafeArrayData => u.toIntArrayUnchecked
               case a => a.toIntArray()
             }
             new SparseMatrix(numRows, numCols, colPtrs, rowIndices, values, isTransposed)

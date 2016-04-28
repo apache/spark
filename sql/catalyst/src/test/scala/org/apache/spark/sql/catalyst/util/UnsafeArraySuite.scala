@@ -42,17 +42,17 @@ class UnsafeArraySuite extends SparkFunSuite {
     assert(unsafe.getDouble(2) == 3.3)
   }
 
-  test("to primitive int array") {
+  test("to int array unchecked") {
     val array = Array(1, 10, 100)
     val unsafe = UnsafeArrayData.fromPrimitiveArray(array)
-    val array2 = unsafe.toPrimitiveIntArray
+    val array2 = unsafe.toIntArrayUnchecked
     assert(array.toSeq == array2.toSeq)
   }
 
-  test("to primitive double array") {
+  test("to double array unchecked") {
     val array = Array(1.1, 2.2, 3.3)
     val unsafe = UnsafeArrayData.fromPrimitiveArray(array)
-    val array2 = unsafe.toPrimitiveDoubleArray
+    val array2 = unsafe.toDoubleArrayUnchecked
     assert(array.toSeq == array2.toSeq)
   }
 }
