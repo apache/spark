@@ -78,6 +78,15 @@ private[sql] object InferSchema {
     }
   }
 
+  private def sortFieldsInPlace(fields: Array[StructField]): Unit = {
+    // Note: other code relies on this sorting for correctness, so don't remove it!
+    java.util.Arrays.sort(fields, new Comparator[StructField] {
+      override def compare(o1: StructField, o2: StructField): Int = {
+        o1.name.compare(o2.name)
+      }
+    })
+  }
+
   /**
    * Infer the type of a json document from the parser's token stream
    */
@@ -110,11 +119,7 @@ private[sql] object InferSchema {
         }
         val fields: Array[StructField] = builder.result()
         // Note: other code relies on this sorting for correctness, so don't remove it!
-        java.util.Arrays.sort(fields, new Comparator[StructField] {
-          override def compare(o1: StructField, o2: StructField): Int = {
-            o1.name.compare(o2.name)
-          }
-        })
+        sortFieldsInPlace(fields)
         StructType(fields)
 
       case START_ARRAY =>
@@ -199,7 +204,11 @@ private[sql] object InferSchema {
     if (!struct.fieldNames.contains(columnNameOfCorruptRecords)) {
       // If this given struct does not have a column used for corrupt records,
       // add this field.
-      struct.add(columnNameOfCorruptRecords, StringType, nullable = true)
+      val newFields: Array[StructField] =
+        StructField(columnNameOfCorruptRecords, StringType, nullable = true) +: struct.fields
+      // Note: other code relies on this sorting for correctness, so don't remove it!
+      sortFieldsInPlace(newFields)
+      StructType(newFields)
     } else {
       // Otherwise, just return this struct.
       struct
