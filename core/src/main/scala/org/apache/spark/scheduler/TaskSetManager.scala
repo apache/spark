@@ -716,7 +716,15 @@ private[spark] class TaskSetManager(
     failedExecutors.getOrElseUpdate(index, new HashMap[String, Long]()).
       put(info.executorId, clock.getTimeMillis())
     sched.dagScheduler.taskEnded(tasks(index), reason, null, accumUpdates, info)
-    addPendingTask(index)
+
+    if (successful(index)) {
+      logWarning(
+        s"Task ${info.id} in stage ${taskSet.id} (TID $tid) will not be re-queued " +
+        "as another attempt has already succeeded")
+    } else {
+      addPendingTask(index)
+    }
+
     if (!isZombie && state != TaskState.KILLED
         && reason.isInstanceOf[TaskFailedReason]
         && reason.asInstanceOf[TaskFailedReason].countTowardsTaskFailures) {
