@@ -18,7 +18,6 @@
 package org.apache.spark.ml.clustering
 
 import org.apache.hadoop.fs.Path
-import org.json4s.DefaultFormats
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
@@ -205,8 +204,6 @@ object KMeansModel extends MLReadable[KMeansModel] {
   }
 
   private class KMeansModelReader extends MLReader[KMeansModel] {
-    implicit val format = DefaultFormats
-
     /** Checked against metadata when loading model */
     private val className = classOf[KMeansModel].getName
 
@@ -369,8 +366,6 @@ object KMeans extends DefaultParamsReadable[KMeans] {
     private val className = classOf[KMeans].getName
 
     override def load(path: String): KMeans = {
-      implicit val format = DefaultFormats
-
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val instance = new KMeans(metadata.uid)
 
