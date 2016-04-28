@@ -128,7 +128,7 @@ def determine_tags_to_exclude(changed_modules):
     tags = []
     for m in modules.all_modules:
         if m not in changed_modules:
-            tags += m.tags
+            tags += m.test_tags
     return tags
 
 
