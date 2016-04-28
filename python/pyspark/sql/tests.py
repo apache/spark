@@ -1369,9 +1369,7 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
             cls.tearDownClass()
             raise unittest.SkipTest("Hive is not available")
         os.unlink(cls.tempdir.name)
-        _scala_HiveContext =\
-            cls.sc._jvm.org.apache.spark.sql.hive.test.TestHiveContext(cls.sc._jsc.sc())
-        cls.sqlCtx = HiveContext(cls.sc, _scala_HiveContext)
+        cls.sqlCtx = HiveContext._createForTesting(cls.sc)
         cls.testData = [Row(key=i, value=str(i)) for i in range(100)]
         cls.df = cls.sc.parallelize(cls.testData).toDF()
 

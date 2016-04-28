@@ -21,11 +21,9 @@ import sys
 if sys.version >= '3':
     basestring = unicode = str
 
-from py4j.protocol import Py4JError
-
 from pyspark import since
 from pyspark.rdd import ignore_unicode_prefix
-from pyspark.sql.session import SparkSession
+from pyspark.sql.session import _monkey_patch_RDD, SparkSession
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.readwriter import DataFrameReader
 from pyspark.sql.types import Row, StringType
@@ -35,13 +33,14 @@ __all__ = ["SQLContext", "HiveContext", "UDFRegistration"]
 
 
 class SQLContext(object):
-    """Main entry point for Spark SQL functionality.
+    """Wrapper around :class:`SparkSession`, the main entry point to Spark SQL functionality.
 
     A SQLContext can be used create :class:`DataFrame`, register :class:`DataFrame` as
     tables, execute SQL over tables, cache tables, and read parquet files.
 
     :param sparkContext: The :class:`SparkContext` backing this SQLContext.
-    :param sqlContext: An optional JVM Scala SQLContext. If set, we do not instantiate a new
+    :param sparkSession: The :class:`SparkSession` around which this SQLContext wraps.
+    :param jsqlContext: An optional JVM Scala SQLContext. If set, we do not instantiate a new
         SQLContext in the JVM, instead we make all calls to this object.
     """
 
@@ -68,12 +67,13 @@ class SQLContext(object):
         self._sc = sparkContext
         self._jsc = self._sc._jsc
         self._jvm = self._sc._jvm
+        if sparkSession is None:
+            sparkSession = SparkSession(sparkContext)
+        if jsqlContext is None:
+            jsqlContext = sparkSession._jwrapped
         self.sparkSession = sparkSession
-        if self.sparkSession is None:
-            self.sparkSession = SparkSession(sparkContext)
         self._jsqlContext = jsqlContext
-        if self._jsqlContext is None:
-            self._jsqlContext = self.sparkSession._jwrapped
+        _monkey_patch_RDD(self.sparkSession)
         install_exception_handler()
         if SQLContext._instantiatedContext is None:
             SQLContext._instantiatedContext = self
@@ -432,29 +432,28 @@ class HiveContext(SQLContext):
     It supports running both SQL and HiveQL commands.
 
     :param sparkContext: The SparkContext to wrap.
-    :param hiveContext: An optional JVM Scala HiveContext. If set, we do not instantiate a new
+    :param jhiveContext: An optional JVM Scala HiveContext. If set, we do not instantiate a new
         :class:`HiveContext` in the JVM, instead we make all calls to this object.
     """
 
-    def __init__(self, sparkContext, hiveContext=None):
-        SQLContext.__init__(self, sparkContext)
-        if hiveContext:
-            self._scala_HiveContext = hiveContext
+    def __init__(self, sparkContext, jhiveContext=None):
+        if jhiveContext is None:
+            sparkSession = SparkSession.withHiveSupport(sparkContext)
+        else:
+            sparkSession = SparkSession(sparkContext, jhiveContext.sparkSession())
+        SQLContext.__init__(self, sparkContext, sparkSession, jhiveContext)
 
-    @property
-    def _ssql_ctx(self):
-        try:
-            if not hasattr(self, '_scala_HiveContext'):
-                self._scala_HiveContext = self._get_hive_ctx()
-            return self._scala_HiveContext
-        except Py4JError as e:
-            print("You must build Spark with Hive. "
-                  "Export 'SPARK_HIVE=true' and run "
-                  "build/sbt assembly", file=sys.stderr)
-            raise
+    @classmethod
+    def _createForTesting(cls, sparkContext):
+        """(Internal use only) Create a new HiveContext for testing.
 
-    def _get_hive_ctx(self):
-        return self._jvm.SparkSession.withHiveSupport(self._jsc.sc()).wrapped()
+        All test code that touches HiveContext *must* go through this method. Otherwise,
+        you may end up launching multiple derby instances and encounter with incredibly
+        confusing error messages.
+        """
+        jsc = sparkContext._jsc.sc()
+        jtestHive = sparkContext._jvm.org.apache.spark.sql.hive.test.TestHiveContext(jsc)
+        return cls(sparkContext, jtestHive)
 
     def refreshTable(self, tableName):
         """Invalidate and refresh all the cached the metadata of the given

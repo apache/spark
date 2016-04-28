@@ -56,6 +56,7 @@ def _monkey_patch_RDD(sparkSession):
     RDD.toDF = toDF
 
 
+# TODO(andrew): implement conf and catalog namespaces
 class SparkSession(object):
     """Main entry point for Spark SQL functionality.
 
@@ -91,9 +92,9 @@ class SparkSession(object):
         self._sc = sparkContext
         self._jsc = self._sc._jsc
         self._jvm = self._sc._jvm
+        if jsparkSession is None:
+            jsparkSession = self._jvm.SparkSession(self._jsc.sc())
         self._jsparkSession = jsparkSession
-        if self._jsparkSession is None:
-            self._jsparkSession = self._jvm.SparkSession(self._jsc.sc())
         self._jwrapped = self._jsparkSession.wrapped()
         self._wrapped = SQLContext(self._sc, self, self._jwrapped)
         _monkey_patch_RDD(self)
@@ -104,8 +105,8 @@ class SparkSession(object):
     @classmethod
     @since(2.0)
     def withHiveSupport(cls, sparkContext):
-        """
-        Returns a new SparkSession with a catalog backed by Hive
+        """Returns a new SparkSession with a catalog backed by Hive
+
         :param sparkContext: The underlying :class:`SparkContext`.
         """
         jsparkSession = sparkContext._jvm.SparkSession.withHiveSupport(sparkContext._jsc.sc())
@@ -476,12 +477,13 @@ class SparkSession(object):
             source = self.getConf("spark.sql.sources.default",
                                   "org.apache.spark.sql.parquet")
         if schema is None:
-            df = self._jsparkSession.createExternalTable(tableName, source, options)
+            df = self._jsparkSession.catalog().createExternalTable(tableName, source, options)
         else:
             if not isinstance(schema, StructType):
                 raise TypeError("schema should be StructType")
             scala_datatype = self._jsparkSession.parseDataType(schema.json())
-            df = self._jsparkSession.createExternalTable(tableName, source, scala_datatype, options)
+            df = self._jsparkSession.catalog().createExternalTable(\
+                tableName, source, scala_datatype, options)
         return DataFrame(df, self._wrapped)
 
     @ignore_unicode_prefix

@@ -743,7 +743,7 @@ def _test():
     globs['os'] = os
     globs['sc'] = sc
     globs['sqlContext'] = SQLContext(sc)
-    globs['hiveContext'] = HiveContext(sc)
+    globs['hiveContext'] = HiveContext._createForTesting(sc)
     globs['df'] = globs['sqlContext'].read.parquet('python/test_support/sql/parquet_partitioned')
     globs['sdf'] =\
         globs['sqlContext'].read.format('text').stream('python/test_support/sql/streaming')
