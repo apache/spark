@@ -297,8 +297,8 @@ class GaussianMixture @Since("2.0.0") (
 
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): GaussianMixtureModel = {
-    implicit def vectorEncoder: Encoder[Vector] = ExpressionEncoder()
-    val rdd = dataset.select(col($(featuresCol))).as[Vector].rdd
+    implicit def vectorEncoder: Encoder[OldVector] = ExpressionEncoder()
+    val rdd = dataset.select(col($(featuresCol))).as[OldVector].rdd
 
     val algo = new MLlibGM()
       .setK($(k))
