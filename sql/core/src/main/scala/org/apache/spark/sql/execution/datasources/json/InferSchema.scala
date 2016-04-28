@@ -17,9 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.json
 
-import java.util
-import java.util.Comparator
-
 import scala.collection.mutable
 
 import com.fasterxml.jackson.core._
@@ -111,6 +108,7 @@ private[sql] object InferSchema {
             nullable = true)
         }
 
+        // Note: other code relies on this sorting for correctness, so don't remove it!
         StructType(builder.result().sortBy(_.name))
 
       case START_ARRAY =>
@@ -250,33 +248,37 @@ private[sql] object InferSchema {
           }
 
         case (StructType(fields1), StructType(fields2)) =>
-          val allFields: Array[StructField] = fields1 ++ fields2
-          util.Arrays.sort(allFields, new Comparator[StructField] {
-            override def compare(f1: StructField, f2: StructField): Int = {
-              f1.name.compareTo(f2.name)
-            }
-          })
+          // Both fields1 and fields2 should be sorted by name, since inferField performs sorting.
+          // Therefore, we can take advantage of the fact that we're merging sorted lists and skip
+          // building a hash map or performing additional sorting.
           val newFields = new mutable.ArrayBuffer[StructField]()
-          var fieldWaitingForMatch: StructField = null
-          var i = 0
-          while (i < allFields.length) {
-            val field = allFields(i)
-            if (fieldWaitingForMatch == null) {
-              fieldWaitingForMatch = field
-            } else {
-              if (field.name == fieldWaitingForMatch.name) {
-                val dataType = compatibleType(field.dataType, fieldWaitingForMatch.dataType)
-                newFields += StructField(field.name, dataType, nullable = true)
-                fieldWaitingForMatch = null
-              } else {
-                newFields += fieldWaitingForMatch
-                fieldWaitingForMatch = field
-              }
+
+          var f1Idx = 0
+          var f2Idx = 0
+
+          while (f1Idx < fields1.length && f2Idx < fields2.length) {
+            val f1Name = fields1(f1Idx).name
+            val f2Name = fields2(f2Idx).name
+            if (f1Name == f2Name) {
+              val dataType = compatibleType(fields1(f1Idx).dataType, fields2(f2Idx).dataType)
+              newFields += StructField(f1Name, dataType, nullable = true)
+              f1Idx += 1
+              f2Idx += 1
+            } else if (f1Name < f2Name) {
+              newFields += fields1(f1Idx)
+              f1Idx += 1
+            } else { // f1Name > f2Name
+              newFields += fields2(f2Idx)
+              f2Idx += 1
             }
-            i += 1
           }
-          if (fieldWaitingForMatch != null) {
-            newFields += fieldWaitingForMatch
+          while (f1Idx < fields1.length) {
+            newFields += fields1(f1Idx)
+            f1Idx += 1
+          }
+          while (f2Idx < fields2.length) {
+            newFields += fields2(f2Idx)
+            f2Idx += 1
           }
           StructType(newFields.toSeq)
 
