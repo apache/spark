@@ -243,7 +243,6 @@ setCheckpointDir <- function(sc, dirName) {
 #'
 #'  - loading external packages: In order to use a package, you need to load it inside the
 #'    closure. For example, if you rely on the MASS module, here is how you would use it:
-#'
 #'\dontrun{
 #' train <- function(hyperparam) {
 #'   library(MASS)
@@ -253,6 +252,7 @@ setCheckpointDir <- function(sc, dirName) {
 #'}
 #'
 #' @rdname spark.lapply
+#' @param sc Spark Context to use
 #' @param list the list of elements
 #' @param func a function that takes one argument.
 #' @return a list of results (the exact type being determined by the function)
@@ -261,8 +261,7 @@ setCheckpointDir <- function(sc, dirName) {
 #'\dontrun{
 #' doubled <- spark.lapply(1:10, function(x){2 * x})
 #'}
-spark.lapply <- function(list, func) {
-  sc <- get(".sparkRjsc", envir = .sparkREnv)
+spark.lapply <- function(sc, list, func) {
   rdd <- parallelize(sc, list, length(list))
   results <- map(rdd, func)
   local <- collect(results)
