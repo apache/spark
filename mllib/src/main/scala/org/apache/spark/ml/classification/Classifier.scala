@@ -45,9 +45,9 @@ private[spark] trait ClassifierParams
     if (fitting) {
       SchemaUtils.checkNumericType(schema, $(labelCol))
     }
-    SchemaUtils.appendColumn(schema, $(predictionCol), DoubleType,
+    val newSchema = SchemaUtils.appendColumn(schema, $(predictionCol), DoubleType,
       nullable = false, generatePredictionMetadata(schema))
-    SchemaUtils.appendColumn(schema, $(rawPredictionCol), new VectorUDT)
+    SchemaUtils.appendColumn(newSchema, $(rawPredictionCol), new VectorUDT)
   }
 
   protected def generatePredictionMetadata(schema: StructType): Metadata = {
