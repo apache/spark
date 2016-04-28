@@ -75,7 +75,6 @@ private[recommendation] trait ALSModelParams extends Params with HasPredictionCo
   /**
    * Attempts to safely cast a Long user/item id to an Int. Throws an exception if the value is
    * out of integer range.
-   * @return
    */
   protected val checkedCast = udf { (n: Long) =>
     if (n > Int.MaxValue.toLong || n < Int.MinValue.toLong) {

@@ -62,11 +62,14 @@ object MLTestingUtils extends SparkFunSuite {
     estimator: T,
     sqlContext: SQLContext,
     column: String,
-    baseType: NumericType)(check: (M, M) => Unit): Unit = {
+    baseType: NumericType)
+    (check: (M, M) => Unit)
+    (check2: (M, M, DataFrame) => Unit): Unit = {
     val dfs = genRatingsDFWithNumericCols(sqlContext, column)
     val expected = estimator.fit(dfs(baseType))
-    val actuals = dfs.keys.filter(_ != baseType).map(t => estimator.fit(dfs(t)))
-    actuals.foreach(actual => check(expected, actual))
+    val actuals = dfs.keys.filter(_ != baseType).map(t => (t, estimator.fit(dfs(t))))
+    actuals.foreach { case (_, actual) => check(expected, actual) }
+    actuals.foreach { case (t, actual) => check2(expected, actual, dfs(t)) }
 
     val baseDF = dfs(baseType)
     val others = baseDF.columns.toSeq.diff(Seq(column)).map(col(_))
@@ -152,8 +155,7 @@ object MLTestingUtils extends SparkFunSuite {
     val types: Seq[NumericType] =
       Seq(ShortType, LongType, IntegerType, FloatType, ByteType, DoubleType, DecimalType(10, 0))
     types.map { t =>
-      val toCast = col(column).cast(t)
-      val cols = Seq(toCast) ++ others
+      val cols = Seq(col(column).cast(t)) ++ others
       t -> df.select(cols: _*)
     }.toMap
   }
@@ -173,7 +175,7 @@ object MLTestingUtils extends SparkFunSuite {
     val types =
       Seq(ShortType, LongType, IntegerType, FloatType, ByteType, DoubleType, DecimalType(10, 0))
     types
-      .map(t => t -> df.select(col(labelColName).cast(t), col(predictionColName)))
+      .map(t => t -> df.select(col(labelColName).cast(t) * 1000, col(predictionColName)))
       .toMap
   }
 }
