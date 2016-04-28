@@ -346,7 +346,7 @@ class CrossValidatorModel(Model, ValidatorParams, MLReadable, MLWritable):
     .. versionadded:: 1.4.0
     """
 
-    def __init__(self, bestModel, avgMetrics):
+    def __init__(self, bestModel, avgMetrics=[]):
         super(CrossValidatorModel, self).__init__()
         #: best model from cross validation
         self.bestModel = bestModel

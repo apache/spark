@@ -41,7 +41,6 @@ else:
 from shutil import rmtree
 import tempfile
 import numpy as np
-from numpy.testing import assert_almost_equal
 
 from pyspark.ml import Estimator, Model, Pipeline, PipelineModel, Transformer
 from pyspark.ml.classification import LogisticRegression, DecisionTreeClassifier, OneVsRest
@@ -483,7 +482,9 @@ class CrossValidatorTests(PySparkTestCase):
 
         cvModel = cv.fit(dataset)
         cvModelCopied = cvModel.copy()
-        assert_almost_equal(cvModel.avgMetrics, cvModelCopied.avgMetrics)
+        for index in range(len(cvModel.avgMetrics)):
+            self.assertTrue(abs(cvModel.avgMetrics[index] - cvModelCopied.avgMetrics[index])
+                            < 0.0001)
 
     def test_fit_minimize_metric(self):
         sqlContext = SQLContext(self.sc)
@@ -558,7 +559,8 @@ class CrossValidatorTests(PySparkTestCase):
         cvModel.save(cvModelPath)
         loadedModel = CrossValidatorModel.load(cvModelPath)
         self.assertEqual(loadedModel.bestModel.uid, cvModel.bestModel.uid)
-        assert_almost_equal(loadedModel.avgMetrics, cvModel.avgMetrics)
+        for index in range(len(loadedModel.avgMetrics)):
+            self.assertTrue(abs(loadedModel.avgMetrics[index] - cvModel.avgMetrics[index]) < 0.0001)
 
 
 class TrainValidationSplitTests(PySparkTestCase):
