@@ -67,9 +67,7 @@ private[sql] object InferSchema {
             None
         }
       }
-    }.treeAggregate[DataType](
-      StructType(Seq()))(
-      compatibleRootType(columnNameOfCorruptRecords, shouldHandleCorruptRecord),
+    }.fold(StructType(Seq()))(
       compatibleRootType(columnNameOfCorruptRecords, shouldHandleCorruptRecord))
 
     canonicalizeType(rootType) match {
