@@ -28,7 +28,7 @@ from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql.session import SparkSession
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.readwriter import DataFrameReader
-from pyspark.sql.types import StringType
+from pyspark.sql.types import Row, StringType
 from pyspark.sql.utils import install_exception_handler
 
 __all__ = ["SQLContext", "HiveContext", "UDFRegistration"]
@@ -133,7 +133,7 @@ class SQLContext(object):
         >>> sqlContext.getConf("spark.sql.shuffle.partitions", "10")
         u'50'
         """
-        self.sparkSession.getConf(key, defaultValue)
+        return self.sparkSession.getConf(key, defaultValue)
 
     @property
     @since("1.3.1")
@@ -310,7 +310,7 @@ class SQLContext(object):
         >>> sqlContext.registerDataFrameAsTable(df, "table1")
         >>> sqlContext.dropTempTable("table1")
         """
-        self.sparkSession.dropTempTable(tableName)
+        self._ssql_ctx.dropTempTable(tableName)
 
     @since(1.3)
     def createExternalTable(self, tableName, path=None, source=None, schema=None, **options):
@@ -469,13 +469,13 @@ class HiveContext(SQLContext):
 class UDFRegistration(object):
     """Wrapper for user-defined function registration."""
 
-    def __init__(self, sparkSession):
-        self.sparkSession = sparkSession
+    def __init__(self, sqlContext):
+        self.sqlContext = sqlContext
 
     def register(self, name, f, returnType=StringType()):
-        return self.sparkSession.registerFunction(name, f, returnType)
+        return self.sqlContext.registerFunction(name, f, returnType)
 
-    register.__doc__ = SparkSession.registerFunction.__doc__
+    register.__doc__ = SQLContext.registerFunction.__doc__
 
 
 def _test():

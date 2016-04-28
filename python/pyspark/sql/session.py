@@ -456,15 +456,6 @@ class SparkSession(object):
             raise ValueError("Can only register DataFrame as table")
 
     @since(2.0)
-    def dropTempTable(self, tableName):
-        """ Remove the temp table from catalog.
-
-        >>> spark.registerDataFrameAsTable(df, "table1")
-        >>> spark.dropTempTable("table1")
-        """
-        self._jsparkSession.dropTempTable(tableName)
-
-    @since(2.0)
     def createExternalTable(self, tableName, path=None, source=None, schema=None, **options):
         """Creates an external table based on the dataset in a data source.
 
