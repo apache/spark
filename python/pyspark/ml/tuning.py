@@ -248,7 +248,7 @@ class CrossValidator(Estimator, ValidatorParams, MLReadable, MLWritable):
         h = 1.0 / nFolds
         randCol = self.uid + "_rand"
         df = dataset.select("*", rand(seed).alias(randCol))
-        metrics = np.zeros(numModels)
+        metrics = [0.0] * numModels
         for i in range(nFolds):
             validateLB = i * h
             validateUB = (i + 1) * h
@@ -266,7 +266,7 @@ class CrossValidator(Estimator, ValidatorParams, MLReadable, MLWritable):
         else:
             bestIndex = np.argmin(metrics)
         bestModel = est.fit(dataset, epm[bestIndex])
-        return self._copyValues(CrossValidatorModel(bestModel))
+        return self._copyValues(CrossValidatorModel(bestModel, metrics))
 
     @since("1.4.0")
     def copy(self, extra=None):
@@ -346,10 +346,11 @@ class CrossValidatorModel(Model, ValidatorParams, MLReadable, MLWritable):
     .. versionadded:: 1.4.0
     """
 
-    def __init__(self, bestModel):
+    def __init__(self, bestModel, avgMetrics=[]):
         super(CrossValidatorModel, self).__init__()
         #: best model from cross validation
         self.bestModel = bestModel
+        self.avgMetrics = avgMetrics
 
     def _transform(self, dataset):
         return self.bestModel.transform(dataset)
@@ -367,7 +368,9 @@ class CrossValidatorModel(Model, ValidatorParams, MLReadable, MLWritable):
         """
         if extra is None:
             extra = dict()
-        return CrossValidatorModel(self.bestModel.copy(extra))
+        bestModel = self.bestModel.copy(extra)
+        avgMetrics = self.avgMetrics
+        return CrossValidatorModel(bestModel, avgMetrics)
 
     @since("2.0.0")
     def write(self):
@@ -394,9 +397,10 @@ class CrossValidatorModel(Model, ValidatorParams, MLReadable, MLWritable):
 
         # Load information from java_stage to the instance.
         bestModel = JavaParams._from_java(java_stage.bestModel())
+        avgMetrics = list(java_stage.avgMetrics())
         estimator, epms, evaluator = super(CrossValidatorModel, cls)._from_java_impl(java_stage)
         # Create a new instance of this stage.
-        py_stage = cls(bestModel=bestModel)\
+        py_stage = cls(bestModel=bestModel, avgMetrics=avgMetrics)\
             .setEstimator(estimator).setEstimatorParamMaps(epms).setEvaluator(evaluator)
         py_stage._resetUid(java_stage.uid())
         return py_stage
@@ -408,12 +412,10 @@ class CrossValidatorModel(Model, ValidatorParams, MLReadable, MLWritable):
         :return: Java object equivalent to this instance.
         """
 
-        sc = SparkContext._active_spark_context
-
         _java_obj = JavaParams._new_java_obj("org.apache.spark.ml.tuning.CrossValidatorModel",
                                              self.uid,
                                              self.bestModel._to_java(),
-                                             _py2java(sc, []))
+                                             self.avgMetrics)
         estimator, epms, evaluator = super(CrossValidatorModel, self)._to_java_impl()
 
         _java_obj.set("evaluator", evaluator)

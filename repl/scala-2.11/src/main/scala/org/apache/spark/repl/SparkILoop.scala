@@ -38,6 +38,7 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
       processLine("""
         @transient val sc = {
           val _sc = org.apache.spark.repl.Main.createSparkContext()
+          _sc.uiWebUrl.foreach(webUrl => println(s"Spark context Web UI available at ${webUrl}"))
           println("Spark context available as 'sc' " +
             s"(master = ${_sc.master}, app id = ${_sc.applicationId}).")
           _sc

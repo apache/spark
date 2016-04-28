@@ -63,7 +63,7 @@ class Accumulable[R, T] private (
       param: AccumulableParam[R, T],
       name: Option[String],
       countFailedValues: Boolean) = {
-    this(Accumulators.newId(), initialValue, param, name, countFailedValues)
+    this(AccumulatorContext.newId(), initialValue, param, name, countFailedValues)
   }
 
   private[spark] def this(initialValue: R, param: AccumulableParam[R, T], name: Option[String]) = {
@@ -72,34 +72,23 @@ class Accumulable[R, T] private (
 
   def this(initialValue: R, param: AccumulableParam[R, T]) = this(initialValue, param, None)
 
-  @volatile @transient private var value_ : R = initialValue // Current value on driver
-  val zero = param.zero(initialValue) // Zero value to be passed to executors
-  private var deserialized = false
-
-  Accumulators.register(this)
-
-  /**
-   * Return a copy of this [[Accumulable]].
-   *
-   * The copy will have the same ID as the original and will not be registered with
-   * [[Accumulators]] again. This method exists so that the caller can avoid passing the
-   * same mutable instance around.
-   */
-  private[spark] def copy(): Accumulable[R, T] = {
-    new Accumulable[R, T](id, initialValue, param, name, countFailedValues)
-  }
+  val zero = param.zero(initialValue)
+  private[spark] val newAcc = new LegacyAccumulatorWrapper(initialValue, param)
+  newAcc.metadata = AccumulatorMetadata(id, name, countFailedValues)
+  // Register the new accumulator in ctor, to follow the previous behaviour.
+  AccumulatorContext.register(newAcc)
 
   /**
    * Add more data to this accumulator / accumulable
    * @param term the data to add
    */
-  def += (term: T) { value_ = param.addAccumulator(value_, term) }
+  def += (term: T) { newAcc.add(term) }
 
   /**
    * Add more data to this accumulator / accumulable
    * @param term the data to add
    */
-  def add(term: T) { value_ = param.addAccumulator(value_, term) }
+  def add(term: T) { newAcc.add(term) }
 
   /**
    * Merge two accumulable objects together
@@ -107,7 +96,7 @@ class Accumulable[R, T] private (
    * Normally, a user will not want to use this version, but will instead call `+=`.
    * @param term the other `R` that will get merged with this
    */
-  def ++= (term: R) { value_ = param.addInPlace(value_, term)}
+  def ++= (term: R) { newAcc._value = param.addInPlace(newAcc._value, term) }
 
   /**
    * Merge two accumulable objects together
@@ -115,18 +104,12 @@ class Accumulable[R, T] private (
    * Normally, a user will not want to use this version, but will instead call `add`.
    * @param term the other `R` that will get merged with this
    */
-  def merge(term: R) { value_ = param.addInPlace(value_, term)}
+  def merge(term: R) { newAcc._value = param.addInPlace(newAcc._value, term) }
 
   /**
    * Access the accumulator's current value; only allowed on driver.
    */
-  def value: R = {
-    if (!deserialized) {
-      value_
-    } else {
-      throw new UnsupportedOperationException("Can't read accumulator value in task")
-    }
-  }
+  def value: R = newAcc.value
 
   /**
    * Get the current value of this accumulator from within a task.
@@ -137,14 +120,14 @@ class Accumulable[R, T] private (
    * The typical use of this method is to directly mutate the local value, eg., to add
    * an element to a Set.
    */
-  def localValue: R = value_
+  def localValue: R = newAcc.localValue
 
   /**
    * Set the accumulator's value; only allowed on driver.
    */
   def value_= (newValue: R) {
-    if (!deserialized) {
-      value_ = newValue
+    if (newAcc.isAtDriverSide) {
+      newAcc._value = newValue
     } else {
       throw new UnsupportedOperationException("Can't assign accumulator value in task")
     }
@@ -153,7 +136,7 @@ class Accumulable[R, T] private (
   /**
    * Set the accumulator's value. For internal use only.
    */
-  def setValue(newValue: R): Unit = { value_ = newValue }
+  def setValue(newValue: R): Unit = { newAcc._value = newValue }
 
   /**
    * Set the accumulator's value. For internal use only.
@@ -168,22 +151,7 @@ class Accumulable[R, T] private (
     new AccumulableInfo(id, name, update, value, isInternal, countFailedValues)
   }
 
-  // Called by Java when deserializing an object
-  private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
-    in.defaultReadObject()
-    value_ = zero
-    deserialized = true
-
-    // Automatically register the accumulator when it is deserialized with the task closure.
-    // This is for external accumulators and internal ones that do not represent task level
-    // metrics, e.g. internal SQL metrics, which are per-operator.
-    val taskContext = TaskContext.get()
-    if (taskContext != null) {
-      taskContext.registerAccumulator(this)
-    }
-  }
-
-  override def toString: String = if (value_ == null) "null" else value_.toString
+  override def toString: String = if (newAcc._value == null) "null" else newAcc._value.toString
 }
 
 
