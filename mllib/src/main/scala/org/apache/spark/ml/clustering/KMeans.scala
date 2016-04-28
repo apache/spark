@@ -100,8 +100,6 @@ class KMeansModel private[ml] (
     private val parentModel: MLlibKMeansModel)
   extends Model[KMeansModel] with KMeansParams with MLWritable {
 
-  implicit def vectorEncoder: Encoder[Vector] = ExpressionEncoder()
-
   @Since("1.5.0")
   override def copy(extra: ParamMap): KMeansModel = {
     val copied = new KMeansModel(uid, parentModel)
@@ -132,6 +130,7 @@ class KMeansModel private[ml] (
   @Since("2.0.0")
   def computeCost(dataset: Dataset[_]): Double = {
     SchemaUtils.checkColumnType(dataset.schema, $(featuresCol), new VectorUDT)
+    implicit def vectorEncoder: Encoder[Vector] = ExpressionEncoder()
     val data = dataset.select(col($(featuresCol))).as[Vector].rdd
     parentModel.computeCost(data)
   }
@@ -218,8 +217,6 @@ class KMeans @Since("1.5.0") (
     @Since("1.5.0") override val uid: String)
   extends Estimator[KMeansModel] with KMeansParams with DefaultParamsWritable {
 
-  implicit def vectorEncoder: Encoder[Vector] = ExpressionEncoder()
-
   setDefault(
     k -> 2,
     maxIter -> 20,
@@ -267,6 +264,7 @@ class KMeans @Since("1.5.0") (
 
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): KMeansModel = {
+    implicit def vectorEncoder: Encoder[Vector] = ExpressionEncoder()
     val rdd = dataset.select(col($(featuresCol))).as[Vector].rdd
 
     val instr = Instrumentation.create(this, rdd)

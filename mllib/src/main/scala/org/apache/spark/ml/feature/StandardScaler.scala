@@ -27,6 +27,7 @@ import org.apache.spark.ml.util._
 import org.apache.spark.mllib.feature
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{StructField, StructType}
 
@@ -93,7 +94,8 @@ class StandardScaler(override val uid: String) extends Estimator[StandardScalerM
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): StandardScalerModel = {
     transformSchema(dataset.schema, logging = true)
-    val input = dataset.select($(inputCol)).rdd.map { case Row(v: Vector) => v }
+    implicit def vectorEncoder: Encoder[Vector] = ExpressionEncoder()
+    val input = dataset.select($(inputCol)).as[Vector].rdd
     val scaler = new feature.StandardScaler(withMean = $(withMean), withStd = $(withStd))
     val scalerModel = scaler.fit(input)
     copyValues(new StandardScalerModel(uid, scalerModel.std, scalerModel.mean).setParent(this))
