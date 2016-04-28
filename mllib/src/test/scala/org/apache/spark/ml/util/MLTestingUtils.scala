@@ -175,7 +175,7 @@ object MLTestingUtils extends SparkFunSuite {
     val types =
       Seq(ShortType, LongType, IntegerType, FloatType, ByteType, DoubleType, DecimalType(10, 0))
     types
-      .map(t => t -> df.select(col(labelColName).cast(t) * 1000, col(predictionColName)))
+      .map(t => t -> df.select(col(labelColName).cast(t), col(predictionColName)))
       .toMap
   }
 }
