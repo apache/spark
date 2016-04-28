@@ -874,13 +874,11 @@ private[clustering] object LDA extends DefaultParamsReadable[LDA] {
 
   /** Get dataset for spark.mllib LDA */
   def getOldDataset(dataset: Dataset[_], featuresCol: String): RDD[(Long, Vector)] = {
+    val sqlContext = dataset.sqlContext
+    import sqlContext.implicits._
     dataset
       .withColumn("docId", monotonicallyIncreasingId())
-      .select("docId", featuresCol)
-      .rdd
-      .map { case Row(docId: Long, features: Vector) =>
-        (docId, features)
-      }
+      .select("docId", featuresCol).as[(Long, Vector)].rdd
   }
 
   @Since("1.6.0")

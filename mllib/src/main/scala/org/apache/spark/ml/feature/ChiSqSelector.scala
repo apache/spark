@@ -79,11 +79,12 @@ final class ChiSqSelector(override val uid: String)
 
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): ChiSqSelectorModel = {
+    val sqlContext = dataset.sqlContext
+    import sqlContext.implicits._
+
     transformSchema(dataset.schema, logging = true)
-    val input = dataset.select($(labelCol), $(featuresCol)).rdd.map {
-      case Row(label: Double, features: Vector) =>
-        LabeledPoint(label, features)
-    }
+    val input = dataset.select(col($(labelCol)).cast(DoubleType).as("label"),
+      col($(featuresCol)).as("features")).as[LabeledPoint].rdd
     val chiSqSelector = new feature.ChiSqSelector($(numTopFeatures)).fit(input)
     copyValues(new ChiSqSelectorModel(uid, chiSqSelector).setParent(this))
   }
