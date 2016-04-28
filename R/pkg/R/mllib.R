@@ -432,7 +432,7 @@ ml.load <- function(path) {
   jobj <- callJStatic("org.apache.spark.ml.r.RWrappers", "load", path)
   if (isInstanceOf(jobj, "org.apache.spark.ml.r.NaiveBayesWrapper")) {
     return(new("NaiveBayesModel", jobj = jobj))
-  } else if (isInstanceOf(jobj, "org.apache.spark.ml.GeneralizedLinearRegressionWrapper")) {
+  } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.GeneralizedLinearRegressionWrapper")) {
     return(new("GeneralizedLinearRegressionModel", jobj = jobj))
   } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.AFTSurvivalRegressionWrapper")) {
     return(new("AFTSurvivalRegressionModel", jobj = jobj))
