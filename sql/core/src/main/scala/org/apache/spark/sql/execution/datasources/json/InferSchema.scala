@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.json
 
+import java.util.Comparator
+
 import scala.collection.mutable
 
 import com.fasterxml.jackson.core._
@@ -25,6 +27,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion
 import org.apache.spark.sql.execution.datasources.json.JacksonUtils.nextUntil
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 private[sql] object InferSchema {
 
@@ -100,16 +103,21 @@ private[sql] object InferSchema {
 
       case VALUE_STRING => StringType
       case START_OBJECT =>
-        val builder = Seq.newBuilder[StructField]
+        val builder = Array.newBuilder[StructField]
         while (nextUntil(parser, END_OBJECT)) {
           builder += StructField(
             parser.getCurrentName,
             inferField(parser, configOptions),
             nullable = true)
         }
-
+        val fields: Array[StructField] = builder.result()
         // Note: other code relies on this sorting for correctness, so don't remove it!
-        StructType(builder.result().sortBy(_.name))
+        java.util.Arrays.sort(fields, new Comparator[StructField] {
+          override def compare(o1: StructField, o2: StructField): Int = {
+            o1.name.compare(o2.name)
+          }
+        })
+        StructType(fields)
 
       case START_ARRAY =>
         // If this JSON array is empty, we use NullType as a placeholder.
