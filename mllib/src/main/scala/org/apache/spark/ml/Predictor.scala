@@ -123,7 +123,9 @@ abstract class Predictor[
   protected def extractLabeledPoints(dataset: Dataset[_]): RDD[LabeledPoint] = {
     val sqlContext = dataset.sqlContext
     import sqlContext.implicits._
-    dataset.select($(labelCol), $(featuresCol)).as[LabeledPoint].rdd
+    dataset.selectExpr(s"${$(labelCol)} as ${getDefault(labelCol)}",
+      s"${$(featuresCol)} as ${getDefault(featuresCol)}")
+      .as[LabeledPoint].rdd
   }
 }
 
