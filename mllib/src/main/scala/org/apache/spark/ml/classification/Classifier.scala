@@ -28,7 +28,7 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
+import org.apache.spark.sql.types.{DataType, DoubleType, Metadata, StructType}
 
 /**
  * (private[spark]) Params for classification.
@@ -40,8 +40,38 @@ private[spark] trait ClassifierParams
       schema: StructType,
       fitting: Boolean,
       featuresDataType: DataType): StructType = {
-    val parentSchema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
-    SchemaUtils.appendColumn(parentSchema, $(rawPredictionCol), new VectorUDT)
+    // TODO: Support casting Array[Double] and Array[Float] to Vector when FeaturesType = Vector
+    SchemaUtils.checkColumnType(schema, $(featuresCol), featuresDataType)
+    if (fitting) {
+      SchemaUtils.checkNumericType(schema, $(labelCol))
+    }
+    SchemaUtils.appendColumn(schema, $(predictionCol), DoubleType,
+      nullable = false, generatePredictionMetadata(schema))
+    SchemaUtils.appendColumn(schema, $(rawPredictionCol), new VectorUDT)
+  }
+
+  protected def generatePredictionMetadata(schema: StructType): Metadata = {
+    // The label column for base binary classifier of OneVsRest will not be retained during
+    // model transformation, so we should not handle label column metadata as well.
+    if (schema.fieldNames.contains($(labelCol))) {
+      // determine number of classes either from metadata if provided.
+      val labelSchema = schema($(labelCol))
+      MetadataUtils.getNumClasses(labelSchema) match {
+        case Some(numClasses) =>
+          // extract label metadata from label column if present, or create a nominal attribute
+          // to output the number of labels
+          val labelAttribute = Attribute.fromStructField(labelSchema) match {
+            case _: NumericAttribute | UnresolvedAttribute =>
+              NominalAttribute.defaultAttr.withName($(predictionCol)).withNumValues(numClasses)
+            case attr: Attribute => attr
+          }
+          labelAttribute.toMetadata()
+        case None =>
+          Metadata.empty
+      }
+    } else {
+      Metadata.empty
+    }
   }
 }
 
@@ -64,6 +94,14 @@ abstract class Classifier[
 
   /** @group setParam */
   def setRawPredictionCol(value: String): E = set(rawPredictionCol, value).asInstanceOf[E]
+
+  override def fit(dataset: Dataset[_]): M = {
+    // This handles a few items such as schema validation.
+    // Developers only need to implement train().
+    transformSchema(dataset.schema, logging = true)
+    copyValues(train(dataset).setParent(this))
+      .setPredictionMetadata(generatePredictionMetadata(dataset.schema))
+  }
 
   // TODO: defaultEvaluator (follow-up PR)
 
@@ -149,6 +187,17 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
   def numClasses: Int
 
   /**
+   * Metadata of prediction column which is extracted from label column if it exists,
+   * or Nominal attribute representing the number of classes in training dataset otherwise.
+   */
+  private[ml] var predictionMetadata: Metadata = Metadata.empty
+
+  private[ml] def setPredictionMetadata(metadata: Metadata): M = {
+    predictionMetadata = metadata
+    this.asInstanceOf[M]
+  }
+
+  /**
    * Transforms dataset by reading from [[featuresCol]], and appending new columns as specified by
    * parameters:
    *  - predicted labels as [[predictionCol]] of type [[Double]]
@@ -180,22 +229,7 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
         }
         predictUDF(col(getFeaturesCol))
       }
-      // The label column for base binary classifier of OneVsRest will not be retained during
-      // model transformation, so we should not handle label column metadata as well.
-      if (dataset.schema.fieldNames.contains($(labelCol))) {
-        // determine number of classes either from metadata if provided.
-        val labelSchema = dataset.schema($(labelCol))
-        // extract label metadata from label column if present, or create a nominal attribute
-        // to output the number of labels
-        val labelAttribute = Attribute.fromStructField(labelSchema) match {
-          case _: NumericAttribute | UnresolvedAttribute =>
-            NominalAttribute.defaultAttr.withName("label").withNumValues(numClasses)
-          case attr: Attribute => attr
-        }
-        outputData = outputData.withColumn(getPredictionCol, predUDF, labelAttribute.toMetadata)
-      } else {
-        outputData = outputData.withColumn(getPredictionCol, predUDF)
-      }
+      outputData = outputData.withColumn(getPredictionCol, predUDF, predictionMetadata)
       numColsOutput += 1
     }
 
