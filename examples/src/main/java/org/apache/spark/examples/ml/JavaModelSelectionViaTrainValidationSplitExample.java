@@ -32,7 +32,15 @@ import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
 
 /**
- * Java example for Model Selection via Train Validation Split.
+ * Java example demonstrating model selection using TrainValidationSplit.
+ *
+ * The example is based on {@link org.apache.spark.examples.ml.JavaSimpleParamsExample}
+ * using linear regression.
+ *
+ * Run with
+ * {{{
+ * bin/run-example ml.JavaModelSelectionViaTrainValidationSplitExample
+ * }}}
  */
 public class JavaModelSelectionViaTrainValidationSplitExample {
   public static void main(String[] args) {

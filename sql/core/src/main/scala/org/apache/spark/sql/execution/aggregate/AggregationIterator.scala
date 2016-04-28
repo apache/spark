@@ -39,7 +39,7 @@ abstract class AggregationIterator(
     aggregateAttributes: Seq[Attribute],
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
-    newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection))
+    newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection)
   extends Iterator[UnsafeRow] with Logging {
 
   ///////////////////////////////////////////////////////////////////////////
@@ -139,7 +139,7 @@ abstract class AggregationIterator(
       // no-op expressions which are ignored during projection code-generation.
       case i: ImperativeAggregate => Seq.fill(i.aggBufferAttributes.length)(NoOp)
     }
-    newMutableProjection(initExpressions, Nil)()
+    newMutableProjection(initExpressions, Nil)
   }
 
   // All imperative AggregateFunctions.
@@ -175,7 +175,7 @@ abstract class AggregationIterator(
       // This projection is used to merge buffer values for all expression-based aggregates.
       val aggregationBufferSchema = functions.flatMap(_.aggBufferAttributes)
       val updateProjection =
-        newMutableProjection(mergeExpressions, aggregationBufferSchema ++ inputAttributes)()
+        newMutableProjection(mergeExpressions, aggregationBufferSchema ++ inputAttributes)
 
       (currentBuffer: MutableRow, row: InternalRow) => {
         // Process all expression-based aggregate functions.
@@ -211,7 +211,7 @@ abstract class AggregationIterator(
         case agg: AggregateFunction => NoOp
       }
       val aggregateResult = new SpecificMutableRow(aggregateAttributes.map(_.dataType))
-      val expressionAggEvalProjection = newMutableProjection(evalExpressions, bufferAttributes)()
+      val expressionAggEvalProjection = newMutableProjection(evalExpressions, bufferAttributes)
       expressionAggEvalProjection.target(aggregateResult)
 
       val resultProjection =

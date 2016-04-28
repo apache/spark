@@ -30,22 +30,6 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
 
-/**
- * A package that implements
- * [[http://en.wikipedia.org/wiki/Gradient_boosting  Stochastic Gradient Boosting]]
- * for regression and binary classification.
- *
- * The implementation is based upon:
- *   J.H. Friedman.  "Stochastic Gradient Boosting."  1999.
- *
- * Notes on Gradient Boosting vs. TreeBoost:
- *  - This implementation is for Stochastic Gradient Boosting, not for TreeBoost.
- *  - Both algorithms learn tree ensembles by minimizing loss functions.
- *  - TreeBoost (Friedman, 1999) additionally modifies the outputs at tree leaf nodes
- *    based on the loss function, whereas the original gradient boosting method does not.
- *     - When the loss is SquaredError, these methods give the same result, but they could differ
- *       for other loss functions.
- */
 private[spark] object GradientBoostedTrees extends Logging {
 
   /**

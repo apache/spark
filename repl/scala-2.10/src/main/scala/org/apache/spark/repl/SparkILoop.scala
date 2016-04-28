@@ -43,7 +43,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.util.Utils
 
 /** The Scala interactive shell.  It provides a read-eval-print loop
@@ -129,7 +129,6 @@ class SparkILoop(
   // NOTE: Must be public for visibility
   @DeveloperApi
   var sparkContext: SparkContext = _
-  var sqlContext: SQLContext = _
 
   override def echoCommandMessage(msg: String) {
     intp.reporter printMessage msg
@@ -1022,24 +1021,20 @@ class SparkILoop(
     }
     sparkContext = new SparkContext(conf)
     logInfo("Created spark context..")
+    Signaling.cancelOnInterrupt(sparkContext)
     sparkContext
   }
 
   @DeveloperApi
-  def createSQLContext(): SQLContext = {
-    val name = "org.apache.spark.sql.hive.HiveContext"
-    val loader = Utils.getContextOrSparkClassLoader
-    try {
-      sqlContext = loader.loadClass(name).getConstructor(classOf[SparkContext])
-        .newInstance(sparkContext).asInstanceOf[SQLContext]
-      logInfo("Created sql context (with Hive support)..")
+  // TODO: don't duplicate this code
+  def createSparkSession(): SparkSession = {
+    if (SparkSession.hiveClassesArePresent) {
+      logInfo("Creating Spark session with Hive support")
+      SparkSession.withHiveSupport(sparkContext)
+    } else {
+      logInfo("Creating Spark session")
+      new SparkSession(sparkContext)
     }
-    catch {
-      case _: java.lang.ClassNotFoundException | _: java.lang.NoClassDefFoundError =>
-        sqlContext = new SQLContext(sparkContext)
-        logInfo("Created sql context..")
-    }
-    sqlContext
   }
 
   private def getMaster(): String = {

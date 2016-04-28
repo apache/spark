@@ -31,7 +31,7 @@ import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg.{BLAS, Vector}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
 
@@ -78,6 +78,20 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
   @Since("2.0.0")
   def getLink: String = $(link)
 
+  /**
+   * Param for link prediction (linear predictor) column name.
+   * Default is empty, which means we do not output link prediction.
+   * @group param
+   */
+  @Since("2.0.0")
+  final val linkPredictionCol: Param[String] = new Param[String](this, "linkPredictionCol",
+    "link prediction (linear predictor) column name")
+  setDefault(linkPredictionCol, "")
+
+  /** @group getParam */
+  @Since("2.0.0")
+  def getLinkPredictionCol: String = $(linkPredictionCol)
+
   import GeneralizedLinearRegression._
 
   @Since("2.0.0")
@@ -93,7 +107,12 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
         Family.fromName($(family)) -> Link.fromName($(link))), "Generalized Linear Regression " +
         s"with ${$(family)} family does not support ${$(link)} link function.")
     }
-    super.validateAndTransformSchema(schema, fitting, featuresDataType)
+    val newSchema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
+    if ($(linkPredictionCol).nonEmpty) {
+      SchemaUtils.appendColumn(newSchema, $(linkPredictionCol), DoubleType)
+    } else {
+      newSchema
+    }
   }
 }
 
@@ -165,7 +184,11 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
   setDefault(tol -> 1E-6)
 
   /**
-   * Sets the regularization parameter.
+   * Sets the regularization parameter for L2 regularization.
+   * The regularization term is
+   * {{{
+   *   0.5 * regParam * L2norm(coefficients)^2
+   * }}}
    * Default is 0.0.
    * @group setParam
    */
@@ -192,7 +215,14 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
   def setSolver(value: String): this.type = set(solver, value)
   setDefault(solver -> "irls")
 
-  override protected def train(dataset: DataFrame): GeneralizedLinearRegressionModel = {
+  /**
+   * Sets the link prediction (linear predictor) column name.
+   * @group setParam
+   */
+  @Since("2.0.0")
+  def setLinkPredictionCol(value: String): this.type = set(linkPredictionCol, value)
+
+  override protected def train(dataset: Dataset[_]): GeneralizedLinearRegressionModel = {
     val familyObj = Family.fromName($(family))
     val linkObj = if (isDefined(link)) {
       Link.fromName($(link))
@@ -233,7 +263,8 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
         predictionColName,
         model,
         wlsModel.diagInvAtWA.toArray,
-        1)
+        1,
+        getSolver)
       return model.setSummary(trainingSummary)
     }
 
@@ -253,7 +284,8 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
       predictionColName,
       model,
       irlsModel.diagInvAtWA.toArray,
-      irlsModel.numIterations)
+      irlsModel.numIterations,
+      getSolver)
 
     model.setSummary(trainingSummary)
   }
@@ -660,6 +692,13 @@ class GeneralizedLinearRegressionModel private[ml] (
   extends RegressionModel[Vector, GeneralizedLinearRegressionModel]
   with GeneralizedLinearRegressionBase with MLWritable {
 
+  /**
+   * Sets the link prediction (linear predictor) column name.
+   * @group setParam
+   */
+  @Since("2.0.0")
+  def setLinkPredictionCol(value: String): this.type = set(linkPredictionCol, value)
+
   import GeneralizedLinearRegression._
 
   lazy val familyObj = Family.fromName($(family))
@@ -671,8 +710,33 @@ class GeneralizedLinearRegressionModel private[ml] (
   lazy val familyAndLink = new FamilyAndLink(familyObj, linkObj)
 
   override protected def predict(features: Vector): Double = {
-    val eta = BLAS.dot(features, coefficients) + intercept
+    val eta = predictLink(features)
     familyAndLink.fitted(eta)
+  }
+
+  /**
+   * Calculate the link prediction (linear predictor) of the given instance.
+   */
+  private def predictLink(features: Vector): Double = {
+    BLAS.dot(features, coefficients) + intercept
+  }
+
+  override def transform(dataset: Dataset[_]): DataFrame = {
+    transformSchema(dataset.schema)
+    transformImpl(dataset)
+  }
+
+  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
+    val predictUDF = udf { (features: Vector) => predict(features) }
+    val predictLinkUDF = udf { (features: Vector) => predictLink(features) }
+    var output = dataset
+    if ($(predictionCol).nonEmpty) {
+      output = output.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
+    }
+    if ($(linkPredictionCol).nonEmpty) {
+      output = output.withColumn($(linkPredictionCol), predictLinkUDF(col($(featuresCol))))
+    }
+    output.toDF
   }
 
   private var trainingSummary: Option[GeneralizedLinearRegressionSummary] = None
@@ -772,11 +836,12 @@ object GeneralizedLinearRegressionModel extends MLReadable[GeneralizedLinearRegr
  * :: Experimental ::
  * Summarizing Generalized Linear regression Fits.
  *
- * @param predictions predictions outputted by the model's `transform` method
+ * @param predictions predictions output by the model's `transform` method
  * @param predictionCol field in "predictions" which gives the prediction value of each instance
  * @param model the model that should be summarized
  * @param diagInvAtWA diagonal of matrix (A^T * W * A)^-1 in the last iteration
  * @param numIterations number of iterations
+ * @param solver the solver algorithm used for model training
  */
 @Since("2.0.0")
 @Experimental
@@ -785,7 +850,8 @@ class GeneralizedLinearRegressionSummary private[regression] (
     @Since("2.0.0") val predictionCol: String,
     @Since("2.0.0") val model: GeneralizedLinearRegressionModel,
     private val diagInvAtWA: Array[Double],
-    @Since("2.0.0") val numIterations: Int) extends Serializable {
+    @Since("2.0.0") val numIterations: Int,
+    @Since("2.0.0") val solver: String) extends Serializable {
 
   import GeneralizedLinearRegression._
 
@@ -933,6 +999,9 @@ class GeneralizedLinearRegressionSummary private[regression] (
 
   /**
    * Standard error of estimated coefficients and intercept.
+   *
+   * If [[GeneralizedLinearRegression.fitIntercept]] is set to true,
+   * then the last element returned corresponds to the intercept.
    */
   @Since("2.0.0")
   lazy val coefficientStandardErrors: Array[Double] = {
@@ -941,6 +1010,9 @@ class GeneralizedLinearRegressionSummary private[regression] (
 
   /**
    * T-statistic of estimated coefficients and intercept.
+   *
+   * If [[GeneralizedLinearRegression.fitIntercept]] is set to true,
+   * then the last element returned corresponds to the intercept.
    */
   @Since("2.0.0")
   lazy val tValues: Array[Double] = {
@@ -954,6 +1026,9 @@ class GeneralizedLinearRegressionSummary private[regression] (
 
   /**
    * Two-sided p-value of estimated coefficients and intercept.
+   *
+   * If [[GeneralizedLinearRegression.fitIntercept]] is set to true,
+   * then the last element returned corresponds to the intercept.
    */
   @Since("2.0.0")
   lazy val pValues: Array[Double] = {

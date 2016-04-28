@@ -28,6 +28,11 @@ import org.apache.spark.sql.types._
  * is used) its result will not be deterministic (unless the input table is sorted and has
  * a single partition, and we use a single reducer to do the aggregation.).
  */
+@ExpressionDescription(
+  usage = """_FUNC_(expr) - Returns the first value of `child` for a group of rows.
+    _FUNC_(expr,isIgnoreNull=false) - Returns the first value of `child` for a group of rows.
+      If isIgnoreNull is true, returns only non-null values.
+    """)
 case class First(child: Expression, ignoreNullsExpr: Expression) extends DeclarativeAggregate {
 
   def this(child: Expression) = this(child, Literal.create(false, BooleanType))
