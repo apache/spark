@@ -54,12 +54,10 @@ private[sql] class TestUserClassUDT extends UserDefinedType[TestUserClass] {
 class UDTRegistrationSuite extends SparkFunSuite {
 
   test("register non-UserDefinedType") {
+    UDTRegistration.register(classOf[TestUserClass].getName,
+      "org.apache.spark.sql.NonUserDefinedType")
     intercept[SparkException] {
-      UDTRegistration.register(classOf[TestUserClass], classOf[NonUserDefinedType])
-    }
-    UDTRegistration.register(classOf[TestUserClass], "org.apache.spark.sql.NonUserDefinedType")
-    intercept[SparkException] {
-      UDTRegistration.getUDTFor(classOf[TestUserClass])
+      UDTRegistration.getUDTFor(classOf[TestUserClass].getName)
     }
   }
 
@@ -77,15 +75,15 @@ class UDTRegistrationSuite extends SparkFunSuite {
   }
 
   test("query registered user class") {
-    UDTRegistration.register(classOf[TestUserClass2], classOf[TestUserClassUDT])
-    assert(UDTRegistration.exists(classOf[TestUserClass2]))
+    UDTRegistration.register(classOf[TestUserClass2].getName, classOf[TestUserClassUDT].getName)
+    assert(UDTRegistration.exists(classOf[TestUserClass2].getName))
     assert(
       classOf[UserDefinedType[_]].isAssignableFrom((
-        UDTRegistration.getUDTFor(classOf[TestUserClass2]).get)))
+        UDTRegistration.getUDTFor(classOf[TestUserClass2].getName).get)))
   }
 
   test("query unregistered user class") {
-    assert(!UDTRegistration.exists(classOf[TestUserClass3]))
-    assert(!UDTRegistration.getUDTFor(classOf[TestUserClass3]).isDefined)
+    assert(!UDTRegistration.exists(classOf[TestUserClass3].getName))
+    assert(!UDTRegistration.getUDTFor(classOf[TestUserClass3].getName).isDefined)
   }
 }

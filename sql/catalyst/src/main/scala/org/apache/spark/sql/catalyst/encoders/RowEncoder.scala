@@ -60,7 +60,7 @@ object RowEncoder {
       val udtClass: Class[_] = if (annotation != null) {
         annotation.udt()
       } else {
-        UDTRegistration.getUDTFor(udt.userClass).getOrElse {
+        UDTRegistration.getUDTFor(udt.userClass.getName).getOrElse {
           throw new SparkException(s"${udt.userClass.getName} is not annotated with " +
             "SQLUserDefinedType nor registered with UDTRegistration.}")
         }
@@ -201,7 +201,7 @@ object RowEncoder {
       val udtClass: Class[_] = if (annotation != null) {
         annotation.udt()
       } else {
-        UDTRegistration.getUDTFor(udt.userClass).getOrElse {
+        UDTRegistration.getUDTFor(udt.userClass.getName).getOrElse {
           throw new SparkException(s"${udt.userClass.getName} is not annotated with " +
             "SQLUserDefinedType nor registered with UDTRegistration.}")
         }

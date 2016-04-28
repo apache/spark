@@ -49,48 +49,6 @@ object UDTRegistration extends Serializable with Logging {
   def exists(userClassName: String): Boolean = udtMap.contains(userClassName)
 
   /**
-   * Queries if a given user class is already registered or not.
-   * @param userClass Class object of user class
-   * @return boolean value indicates if the given user class is registered or not
-   */
-  def exists(userClass: Class[_]): Boolean = udtMap.contains(userClass.getName)
-
-  /**
-   * Registers an UserDefinedType to an user class. If the user class is already registered
-   * with another UserDefinedType, warning log message will be shown.
-   * @param userClass Class object of user class
-   * @param udtClass the Class object of UserDefinedType
-   */
-  def register(userClass: Class[_], udtClass: Class[_]): Unit =
-    register(userClass.getName, udtClass)
-
-  /**
-   * Registers an UserDefinedType to an user class. If the user class is already registered
-   * with another UserDefinedType, warning log message will be shown.
-   * @param userClass the name of user class
-   * @param udtClass the Class object of UserDefinedType
-   */
-  def register(userClass: String, udtClass: Class[_]): Unit = {
-    if (udtMap.contains(userClass)) {
-      logWarning(s"Cannot register UDT for ${userClass}, which is already registered.")
-    } else {
-      if (classOf[UserDefinedType[_]].isAssignableFrom(udtClass)) {
-        udtMap += ((userClass, udtClass.getName))
-      } else {
-        throw new SparkException(s"${udtClass.getName} is not an UserDefinedType.")
-      }
-    }
-  }
-
-  /**
-   * Registers an UserDefinedType to an user class. If the user class is already registered
-   * with another UserDefinedType, warning log message will be shown.
-   * @param userClass the Class object of user class
-   * @param udtClass the name of UserDefinedType class for the given userClass
-   */
-  def register(userClass: Class[_], udtClass: String): Unit = register(userClass.getName, udtClass)
-
-  /**
    * Registers an UserDefinedType to an user class. If the user class is already registered
    * with another UserDefinedType, warning log message will be shown.
    * @param userClass the name of user class
@@ -105,13 +63,6 @@ object UDTRegistration extends Serializable with Logging {
       udtMap += ((userClass, udtClass))
     }
   }
-
-  /**
-   * Returns the Class of UserDefinedType for the name of a given user class.
-   * @param userClass Class object of user class
-   * @return Option value of the Class object of UserDefinedType
-   */
-  def getUDTFor(userClass: Class[_]): Option[Class[_]] = getUDTFor(userClass.getName)
 
   /**
    * Returns the Class of UserDefinedType for the name of a given user class.
