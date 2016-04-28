@@ -249,11 +249,16 @@ private[ml] object DefaultParamsWriter {
     val jsonParams = paramMap.getOrElse(render(params.map { case ParamPair(p, v) =>
       p.name -> parse(p.jsonEncode(v))
     }.toList))
+    // If the instance has an "initialModel" param and the param is defined, then the initial model
+    // will be saved along with the instance.
+    val initialModelFlag =
+      instance.hasParam("initialModel") && instance.isDefined(instance.getParam("initialModel"))
     val basicMetadata = ("class" -> cls) ~
       ("timestamp" -> System.currentTimeMillis()) ~
       ("sparkVersion" -> sc.version) ~
       ("uid" -> uid) ~
-      ("paramMap" -> jsonParams)
+      ("paramMap" -> jsonParams) ~
+      ("initialModel" -> initialModelFlag)
     val metadata = extraMetadata match {
       case Some(jObject) =>
         basicMetadata ~ jObject

@@ -201,13 +201,10 @@ object KMeansModel extends MLReadable[KMeansModel] {
         val initialModelPath = new Path(path, "initialModel").toString
         val initialModel = instance.getInitialModel
         initialModel.save(initialModelPath)
-
-        // Save metadata and Params
-        DefaultParamsWriter.saveMetadata(instance, path, sc, Some("hasInitialModel" -> true))
-      } else {
-        // Save metadata and Params
-        DefaultParamsWriter.saveMetadata(instance, path, sc, Some("hasInitialModel" -> false))
       }
+
+      // Save metadata and Params
+      DefaultParamsWriter.saveMetadata(instance, path, sc)
 
       // Save model data: cluster centers
       val data = Data(instance.clusterCenters)
