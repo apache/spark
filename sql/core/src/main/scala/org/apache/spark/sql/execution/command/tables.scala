@@ -24,7 +24,8 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogTable, CatalogTableType, ExternalCatalog}
+import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, UnaryNode}
 import org.apache.spark.sql.types.{BooleanType, MetadataBuilder, StringType}
@@ -156,7 +157,7 @@ case class LoadData(
     path: String,
     isLocal: Boolean,
     isOverwrite: Boolean,
-    partition: Option[ExternalCatalog.TablePartitionSpec]) extends RunnableCommand {
+    partition: Option[TablePartitionSpec]) extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog

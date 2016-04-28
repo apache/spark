@@ -45,7 +45,7 @@ class SessionCatalog(
     functionResourceLoader: FunctionResourceLoader,
     functionRegistry: FunctionRegistry,
     conf: CatalystConf) extends Logging {
-  import ExternalCatalog._
+  import CatalogTypes.TablePartitionSpec
 
   def this(
       externalCatalog: ExternalCatalog,

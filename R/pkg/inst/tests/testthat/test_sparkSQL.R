@@ -822,9 +822,10 @@ test_that("select operators", {
   expect_is(df[[2]], "Column")
   expect_is(df[["age"]], "Column")
 
-  expect_is(df[, 1], "SparkDataFrame")
-  expect_equal(columns(df[, 1]), c("name"))
-  expect_equal(columns(df[, "age"]), c("age"))
+  expect_is(df[, 1, drop = F], "SparkDataFrame")
+  expect_equal(columns(df[, 1, drop = F]), c("name"))
+  expect_equal(columns(df[, "age", drop = F]), c("age"))
+
   df2 <- df[, c("age", "name")]
   expect_is(df2, "SparkDataFrame")
   expect_equal(columns(df2), c("age", "name"))
@@ -835,6 +836,13 @@ test_that("select operators", {
   df$age2 <- df$age * 2
   expect_equal(columns(df), c("name", "age", "age2"))
   expect_equal(count(where(df, df$age2 == df$age * 2)), 2)
+
+  # Test parameter drop
+  expect_equal(class(df[, 1]) == "SparkDataFrame", T)
+  expect_equal(class(df[, 1, drop = T]) == "Column", T)
+  expect_equal(class(df[, 1, drop = F]) == "SparkDataFrame", T)
+  expect_equal(class(df[df$age > 4, 2, drop = T]) == "Column", T)
+  expect_equal(class(df[df$age > 4, 2, drop = F]) == "SparkDataFrame", T)
 })
 
 test_that("select with column", {
@@ -889,13 +897,13 @@ test_that("subsetting", {
   expect_equal(columns(filtered), c("name", "age"))
   expect_equal(collect(filtered)$name, "Andy")
 
-  df2 <- df[df$age == 19, 1]
+  df2 <- df[df$age == 19, 1, drop = F]
   expect_is(df2, "SparkDataFrame")
   expect_equal(count(df2), 1)
   expect_equal(columns(df2), c("name"))
   expect_equal(collect(df2)$name, "Justin")
 
-  df3 <- df[df$age > 20, 2]
+  df3 <- df[df$age > 20, 2, drop = F]
   expect_equal(count(df3), 1)
   expect_equal(columns(df3), c("age"))
 
@@ -911,7 +919,7 @@ test_that("subsetting", {
   expect_equal(count(df6), 1)
   expect_equal(columns(df6), c("name", "age"))
 
-  df7 <- subset(df, select = "name")
+  df7 <- subset(df, select = "name", drop = F)
   expect_equal(count(df7), 3)
   expect_equal(columns(df7), c("name"))
 
@@ -1888,7 +1896,7 @@ test_that("attach() on a DataFrame", {
   stat2 <- summary(age)
   expect_equal(collect(stat2)[5, "age"], "30")
   detach("df")
-  stat3 <- summary(df[, "age"])
+  stat3 <- summary(df[, "age", drop = F])
   expect_equal(collect(stat3)[5, "age"], "30")
   expect_error(age)
 })
@@ -1928,7 +1936,7 @@ test_that("Method coltypes() to get and set R's data types of a DataFrame", {
   df1 <- select(df, cast(df$age, "integer"))
   coltypes(df) <- c("character", "integer")
   expect_equal(dtypes(df), list(c("name", "string"), c("age", "int")))
-  value <- collect(df[, 2])[[3, 1]]
+  value <- collect(df[, 2, drop = F])[[3, 1]]
   expect_equal(value, collect(df1)[[3, 1]])
   expect_equal(value, 22)
 

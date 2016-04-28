@@ -40,7 +40,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchPartitionException}
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.catalog.ExternalCatalog.TablePartitionSpec
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.util.{CircularBuffer, Utils}
@@ -375,7 +375,7 @@ private[hive] class HiveClientImpl(
   override def dropPartitions(
       db: String,
       table: String,
-      specs: Seq[ExternalCatalog.TablePartitionSpec],
+      specs: Seq[TablePartitionSpec],
       ignoreIfNotExists: Boolean): Unit = withHiveState {
     // TODO: figure out how to drop multiple partitions in one call
     val hiveTable = client.getTable(db, table, true /* throw exception */)
@@ -399,8 +399,8 @@ private[hive] class HiveClientImpl(
   override def renamePartitions(
       db: String,
       table: String,
-      specs: Seq[ExternalCatalog.TablePartitionSpec],
-      newSpecs: Seq[ExternalCatalog.TablePartitionSpec]): Unit = withHiveState {
+      specs: Seq[TablePartitionSpec],
+      newSpecs: Seq[TablePartitionSpec]): Unit = withHiveState {
     require(specs.size == newSpecs.size, "number of old and new partition specs differ")
     val catalogTable = getTable(db, table)
     val hiveTable = toHiveTable(catalogTable)
