@@ -17,6 +17,7 @@
 
 import itertools
 import numpy as np
+from abc import ABCMeta, abstractmethod
 
 from pyspark import SparkContext
 from pyspark import since, keyword_only
@@ -26,10 +27,12 @@ from pyspark.ml.param.shared import HasSeed
 from pyspark.ml.util import JavaMLWriter, JavaMLReader, MLReadable, MLWritable
 from pyspark.ml.wrapper import JavaParams
 from pyspark.sql.functions import rand
-from pyspark.mllib.common import inherit_doc, _py2java
+from pyspark.mllib.common import inherit_doc, _py2java, _java2py
 
-__all__ = ['ParamGridBuilder', 'CrossValidator', 'CrossValidatorModel', 'TrainValidationSplit',
-           'TrainValidationSplitModel']
+__all__ = ['ParamGridBuilder',
+           'CrossValidator', 'CrossValidatorModel',
+           'TrainValidationSplit', 'TrainValidationSplitModel',
+           'ValidatorParams']
 
 
 class ParamGridBuilder(object):
@@ -99,6 +102,8 @@ class ValidatorParams(HasSeed):
     Common params for TrainValidationSplit and CrossValidator.
     """
 
+    __metaclass__ = ABCMeta
+
     estimator = Param(Params._dummy(), "estimator", "estimator to be cross-validated")
     estimatorParamMaps = Param(Params._dummy(), "estimatorParamMaps", "estimator param maps")
     evaluator = Param(
@@ -141,6 +146,82 @@ class ValidatorParams(HasSeed):
         """
         return self.getOrDefault(self.evaluator)
 
+    def _transfer_param_map_to_java_impl(self, pyParamMap, java_obj):
+        """
+        Transfer a Python ParamMap to a Java ParamMap which belongs to an Java estimator of
+        ValidatorParams.
+        This utility method helps CrossValidator and TrainValidationSplit implementing their
+        _transfer_param_map_to_java().
+        """
+        estimator, epms, evaluator, seed = self.copy(pyParamMap)._to_java_impl()
+        java_params = []
+
+        paramMap = JavaParams._new_java_obj("org.apache.spark.ml.param.ParamMap")
+
+        if self.estimator in pyParamMap:
+            java_estimator_param = java_obj.getParam(self.estimator.name)
+            java_params.append(java_estimator_param.w(estimator))
+
+        if self.evaluator in pyParamMap:
+            java_evaluator_param = java_obj.getParam(self.evaluator.name)
+            java_params.append(java_evaluator_param.w(evaluator))
+
+        if self.estimatorParamMaps in pyParamMap:
+            java_epms_param = java_obj.getParam(self.estimatorParamMaps.name)
+            java_params.append(java_epms_param.w(epms))
+
+        if self.seed in pyParamMap:
+            java_seed_param = java_obj.getParam(self.seed.name)
+            java_params.append(java_seed_param.w(seed))
+
+        paramMap.put(java_params)
+        return paramMap
+
+    def _transfer_param_map_from_java_impl(self, javaParamMap, java_obj):
+        """
+        Transfer a Java ParamMap to a Python ParamMap which belongs to an Python estimator of
+        ValidatorParams.
+        This utility method helps CrossValidator and TrainValidationSplit implementing their
+        _transfer_param_map_from_java().
+        """
+        estimator, epms, evaluator, seed = self._from_java_impl(java_obj)
+        paramMap = dict()
+        for pair in javaParamMap.toList():
+            param = str(pair.param().name())
+
+            if self.hasParam(param) and param == self.estimator.name:
+                paramMap[self.estimator] = estimator
+
+            if self.hasParam(param) and param == self.estimatorParamMaps.name:
+                paramMap[self.estimatorParamMaps] = epms
+
+            if self.hasParam(param) and param == self.evaluator.name:
+                paramMap[self.evaluator] = evaluator
+
+            if self.hasParam(param) and param == self.seed.name:
+                paramMap[self.seed] = seed
+
+        return paramMap
+
+    def _transfer_param_map_to_java(self, pyParamMap):
+        _java_obj = self.copy(pyParamMap)._to_java()
+        paramMap = self._transfer_param_map_to_java_impl(pyParamMap, _java_obj)
+        return paramMap
+
+    def _transfer_param_map_from_java(self, javaParamMap):
+        _java_obj = self._to_java().copy(javaParamMap)
+        paramMap = self._transfer_param_map_from_java_impl(javaParamMap, _java_obj)
+        return paramMap
+
+    @classmethod
+    @abstractmethod
+    def _from_java(cls, java_stage):
+        raise NotImplementedError()
+
+    @abstractmethod
+    def _to_java(self):
+        raise NotImplementedError()
+
     @classmethod
     def _from_java_impl(cls, java_stage):
         """
@@ -150,9 +231,14 @@ class ValidatorParams(HasSeed):
         # Load information from java_stage to the instance.
         estimator = JavaParams._from_java(java_stage.getEstimator())
         evaluator = JavaParams._from_java(java_stage.getEvaluator())
-        epms = [estimator._transfer_param_map_from_java(epm)
-                for epm in java_stage.getEstimatorParamMaps()]
-        return estimator, epms, evaluator
+        seed = java_stage.getSeed()
+        if hasattr(estimator, "_transfer_param_map_from_java"):
+            epms = [estimator._transfer_param_map_from_java(epm)
+                    for epm in java_stage.getEstimatorParamMaps()]
+        else:
+            raise NotImplementedError(
+                "Method: _transfer_param_map_from_java is missing for estimator %s" % estimator.uid)
+        return estimator, epms, evaluator, seed
 
     def _to_java_impl(self):
         """
@@ -162,16 +248,60 @@ class ValidatorParams(HasSeed):
         gateway = SparkContext._gateway
         cls = SparkContext._jvm.org.apache.spark.ml.param.ParamMap
 
-        java_epms = gateway.new_array(cls, len(self.getEstimatorParamMaps()))
-        for idx, epm in enumerate(self.getEstimatorParamMaps()):
-            java_epms[idx] = self.getEstimator()._transfer_param_map_to_java(epm)
+        if hasattr(self.getEstimator(), "_transfer_param_map_to_java"):
+            java_epms = gateway.new_array(cls, len(self.getEstimatorParamMaps()))
+            for idx, epm in enumerate(self.getEstimatorParamMaps()):
+                java_epms[idx] = self.getEstimator()._transfer_param_map_to_java(epm)
+        else:
+            raise NotImplementedError(
+                "Method: _transfer_param_map_to_java is missing for estimator %s"
+                % self.getEstimator().uid)
 
         java_estimator = self.getEstimator()._to_java()
         java_evaluator = self.getEvaluator()._to_java()
-        return java_estimator, java_epms, java_evaluator
+        java_seed = self.getSeed()
+        return java_estimator, java_epms, java_evaluator, java_seed
 
 
-class CrossValidator(Estimator, ValidatorParams, MLReadable, MLWritable):
+class CrossValidatorParams(ValidatorParams):
+    numFolds = Param(Params._dummy(), "numFolds", "number of folds for cross validation",
+                     typeConverter=TypeConverters.toInt)
+
+    def setNumFolds(self, value):
+        """
+        Sets the value of :py:attr:`numFolds`.
+        """
+        self._set(numFolds=value)
+        return self
+
+    def getNumFolds(self):
+        """
+        Gets the value of numFolds or its default value.
+        """
+        return self.getOrDefault(self.numFolds)
+
+    def _transfer_param_map_to_java_impl(self, pyParamMap, java_obj):
+        paramMap = super(CrossValidatorParams, self)\
+            ._transfer_param_map_to_java_impl(pyParamMap, java_obj)
+
+        if self.numFolds in pyParamMap:
+            java_num_folds_param = java_obj.getParam(self.numFolds.name)
+            paramMap.put([java_num_folds_param.w(java_obj.getNumFolds())])
+
+        return paramMap
+
+    def _transfer_param_map_from_java_impl(self, javaParamMap, java_obj):
+        paramMap = super(CrossValidatorParams, self)\
+            ._transfer_param_map_from_java_impl(javaParamMap, java_obj)
+
+        java_num_folds_param = java_obj.getParam(self.numFolds.name)
+        if javaParamMap.contains(java_num_folds_param):
+            paramMap[self.numFolds] = java_obj.getNumFolds()
+
+        return paramMap
+
+
+class CrossValidator(Estimator, CrossValidatorParams, MLReadable, MLWritable):
     """
     K-fold cross validation.
 
@@ -196,9 +326,6 @@ class CrossValidator(Estimator, ValidatorParams, MLReadable, MLWritable):
     .. versionadded:: 1.4.0
     """
 
-    numFolds = Param(Params._dummy(), "numFolds", "number of folds for cross validation",
-                     typeConverter=TypeConverters.toInt)
-
     @keyword_only
     def __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,
                  seed=None):
@@ -222,21 +349,6 @@ class CrossValidator(Estimator, ValidatorParams, MLReadable, MLWritable):
         """
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
-
-    @since("1.4.0")
-    def setNumFolds(self, value):
-        """
-        Sets the value of :py:attr:`numFolds`.
-        """
-        self._set(numFolds=value)
-        return self
-
-    @since("1.4.0")
-    def getNumFolds(self):
-        """
-        Gets the value of numFolds or its default value.
-        """
-        return self.getOrDefault(self.numFolds)
 
     def _fit(self, dataset):
         est = self.getOrDefault(self.estimator)
@@ -311,9 +423,8 @@ class CrossValidator(Estimator, ValidatorParams, MLReadable, MLWritable):
         Used for ML persistence.
         """
 
-        estimator, epms, evaluator = super(CrossValidator, cls)._from_java_impl(java_stage)
+        estimator, epms, evaluator, seed = super(CrossValidator, cls)._from_java_impl(java_stage)
         numFolds = java_stage.getNumFolds()
-        seed = java_stage.getSeed()
         # Create a new instance of this stage.
         py_stage = cls(estimator=estimator, estimatorParamMaps=epms, evaluator=evaluator,
                        numFolds=numFolds, seed=seed)
@@ -327,19 +438,19 @@ class CrossValidator(Estimator, ValidatorParams, MLReadable, MLWritable):
         :return: Java object equivalent to this instance.
         """
 
-        estimator, epms, evaluator = super(CrossValidator, self)._to_java_impl()
+        estimator, epms, evaluator, seed = super(CrossValidator, self)._to_java_impl()
 
         _java_obj = JavaParams._new_java_obj("org.apache.spark.ml.tuning.CrossValidator", self.uid)
         _java_obj.setEstimatorParamMaps(epms)
         _java_obj.setEvaluator(evaluator)
         _java_obj.setEstimator(estimator)
-        _java_obj.setSeed(self.getSeed())
+        _java_obj.setSeed(seed)
         _java_obj.setNumFolds(self.getNumFolds())
 
         return _java_obj
 
 
-class CrossValidatorModel(Model, ValidatorParams, MLReadable, MLWritable):
+class CrossValidatorModel(Model, CrossValidatorParams, MLReadable, MLWritable):
     """
     Model from k-fold cross validation.
 
@@ -394,10 +505,16 @@ class CrossValidatorModel(Model, ValidatorParams, MLReadable, MLWritable):
 
         # Load information from java_stage to the instance.
         bestModel = JavaParams._from_java(java_stage.bestModel())
-        estimator, epms, evaluator = super(CrossValidatorModel, cls)._from_java_impl(java_stage)
+        estimator, epms, evaluator, seed =\
+            super(CrossValidatorModel, cls)._from_java_impl(java_stage)
+        numFolds = java_stage.getNumFolds()
         # Create a new instance of this stage.
         py_stage = cls(bestModel=bestModel)\
-            .setEstimator(estimator).setEstimatorParamMaps(epms).setEvaluator(evaluator)
+            .setEstimator(estimator)\
+            .setEstimatorParamMaps(epms)\
+            .setEvaluator(evaluator)\
+            .setSeed(seed)\
+            .setNumFolds(numFolds)
         py_stage._resetUid(java_stage.uid())
         return py_stage
 
@@ -414,15 +531,58 @@ class CrossValidatorModel(Model, ValidatorParams, MLReadable, MLWritable):
                                              self.uid,
                                              self.bestModel._to_java(),
                                              _py2java(sc, []))
-        estimator, epms, evaluator = super(CrossValidatorModel, self)._to_java_impl()
+        estimator, epms, evaluator, seed = super(CrossValidatorModel, self)._to_java_impl()
 
         _java_obj.set("evaluator", evaluator)
         _java_obj.set("estimator", estimator)
         _java_obj.set("estimatorParamMaps", epms)
+        _java_obj.set("seed", seed)
+        _java_obj.set("numFolds", self.getNumFolds())
         return _java_obj
 
 
-class TrainValidationSplit(Estimator, ValidatorParams, MLReadable, MLWritable):
+class TrainValidationSplitParams(ValidatorParams):
+    trainRatio = Param(
+        Params._dummy(),
+        "trainRatio",
+        "Param for ratio between train and validation data. Must be between 0 and 1.",
+        typeConverter=TypeConverters.toFloat)
+
+    def setTrainRatio(self, value):
+        """
+        Sets the value of :py:attr:`trainRatio`.
+        """
+        self._set(trainRatio=value)
+        return self
+
+    def getTrainRatio(self):
+        """
+        Gets the value of trainRatio or its default value.
+        """
+        return self.getOrDefault(self.trainRatio)
+
+    def _transfer_param_map_to_java_impl(self, pyParamMap, java_obj):
+        paramMap = super(TrainValidationSplitParams, self)\
+            ._transfer_param_map_to_java_impl(pyParamMap, java_obj)
+
+        if self.trainRatio in pyParamMap:
+            java_num_folds_param = java_obj.getParam(self.trainRatio.name)
+            paramMap.put([java_num_folds_param.w(java_obj.getTrainRatio())])
+
+        return paramMap
+
+    def _transfer_param_map_from_java_impl(self, javaParamMap, java_obj):
+        paramMap = super(TrainValidationSplitParams, self)\
+            ._transfer_param_map_from_java_impl(javaParamMap, java_obj)
+
+        java_num_folds_param = java_obj.getParam(self.trainRatio.name)
+        if javaParamMap.contains(java_num_folds_param):
+            paramMap[self.trainRatio] = java_obj.getTrainRatio()
+
+        return paramMap
+
+
+class TrainValidationSplit(Estimator, TrainValidationSplitParams, MLReadable, MLWritable):
     """
     Train-Validation-Split.
 
@@ -447,9 +607,6 @@ class TrainValidationSplit(Estimator, ValidatorParams, MLReadable, MLWritable):
     .. versionadded:: 2.0.0
     """
 
-    trainRatio = Param(Params._dummy(), "trainRatio", "Param for ratio between train and\
-     validation data. Must be between 0 and 1.", typeConverter=TypeConverters.toFloat)
-
     @keyword_only
     def __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, trainRatio=0.75,
                  seed=None):
@@ -473,21 +630,6 @@ class TrainValidationSplit(Estimator, ValidatorParams, MLReadable, MLWritable):
         """
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
-
-    @since("2.0.0")
-    def setTrainRatio(self, value):
-        """
-        Sets the value of :py:attr:`trainRatio`.
-        """
-        self._set(trainRatio=value)
-        return self
-
-    @since("2.0.0")
-    def getTrainRatio(self):
-        """
-        Gets the value of trainRatio or its default value.
-        """
-        return self.getOrDefault(self.trainRatio)
 
     def _fit(self, dataset):
         est = self.getOrDefault(self.estimator)
@@ -556,9 +698,9 @@ class TrainValidationSplit(Estimator, ValidatorParams, MLReadable, MLWritable):
         Used for ML persistence.
         """
 
-        estimator, epms, evaluator = super(TrainValidationSplit, cls)._from_java_impl(java_stage)
+        estimator, epms, evaluator, seed =\
+            super(TrainValidationSplit, cls)._from_java_impl(java_stage)
         trainRatio = java_stage.getTrainRatio()
-        seed = java_stage.getSeed()
         # Create a new instance of this stage.
         py_stage = cls(estimator=estimator, estimatorParamMaps=epms, evaluator=evaluator,
                        trainRatio=trainRatio, seed=seed)
@@ -572,7 +714,7 @@ class TrainValidationSplit(Estimator, ValidatorParams, MLReadable, MLWritable):
         :return: Java object equivalent to this instance.
         """
 
-        estimator, epms, evaluator = super(TrainValidationSplit, self)._to_java_impl()
+        estimator, epms, evaluator, seed = super(TrainValidationSplit, self)._to_java_impl()
 
         _java_obj = JavaParams._new_java_obj("org.apache.spark.ml.tuning.TrainValidationSplit",
                                              self.uid)
@@ -580,12 +722,12 @@ class TrainValidationSplit(Estimator, ValidatorParams, MLReadable, MLWritable):
         _java_obj.setEvaluator(evaluator)
         _java_obj.setEstimator(estimator)
         _java_obj.setTrainRatio(self.getTrainRatio())
-        _java_obj.setSeed(self.getSeed())
+        _java_obj.setSeed(seed)
 
         return _java_obj
 
 
-class TrainValidationSplitModel(Model, ValidatorParams, MLReadable, MLWritable):
+class TrainValidationSplitModel(Model, TrainValidationSplitParams, MLReadable, MLWritable):
     """
     Model from train validation split.
 
@@ -640,11 +782,16 @@ class TrainValidationSplitModel(Model, ValidatorParams, MLReadable, MLWritable):
 
         # Load information from java_stage to the instance.
         bestModel = JavaParams._from_java(java_stage.bestModel())
-        estimator, epms, evaluator = \
+        estimator, epms, evaluator, seed = \
             super(TrainValidationSplitModel, cls)._from_java_impl(java_stage)
+        trainRatio = java_stage.getTrainRatio()
         # Create a new instance of this stage.
         py_stage = cls(bestModel=bestModel)\
-            .setEstimator(estimator).setEstimatorParamMaps(epms).setEvaluator(evaluator)
+            .setEstimator(estimator)\
+            .setEstimatorParamMaps(epms)\
+            .setEvaluator(evaluator)\
+            .setSeed(seed)\
+            .setTrainRatio(trainRatio)
         py_stage._resetUid(java_stage.uid())
         return py_stage
 
@@ -662,11 +809,13 @@ class TrainValidationSplitModel(Model, ValidatorParams, MLReadable, MLWritable):
             self.uid,
             self.bestModel._to_java(),
             _py2java(sc, []))
-        estimator, epms, evaluator = super(TrainValidationSplitModel, self)._to_java_impl()
+        estimator, epms, evaluator, seed = super(TrainValidationSplitModel, self)._to_java_impl()
 
         _java_obj.set("evaluator", evaluator)
         _java_obj.set("estimator", estimator)
         _java_obj.set("estimatorParamMaps", epms)
+        _java_obj.set("seed", seed)
+        _java_obj.set("trainRatio", self.getTrainRatio())
         return _java_obj
 
 

@@ -44,10 +44,9 @@ import numpy as np
 
 from pyspark import keyword_only
 from pyspark.ml import Estimator, Model, Pipeline, PipelineModel, Transformer
-from pyspark.ml.classification import (
-    LogisticRegression, DecisionTreeClassifier, OneVsRest, OneVsRestModel)
+from pyspark.ml.classification import *
 from pyspark.ml.clustering import KMeans
-from pyspark.ml.evaluation import BinaryClassificationEvaluator, RegressionEvaluator
+from pyspark.ml.evaluation import *
 from pyspark.ml.feature import *
 from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.param.shared import HasMaxIter, HasInputCol, HasSeed
@@ -535,10 +534,12 @@ class CrossValidatorTests(PySparkTestCase):
         self.assertEqual(loadedCV.getEstimator().uid, cv.getEstimator().uid)
         self.assertEqual(loadedCV.getEvaluator().uid, cv.getEvaluator().uid)
         self.assertEqual(loadedCV.getEstimatorParamMaps(), cv.getEstimatorParamMaps())
+        self.assertEqual(loadedCV.getSeed(), cv.getSeed())
         cvModelPath = temp_path + "/cvModel"
         cvModel.save(cvModelPath)
         loadedModel = CrossValidatorModel.load(cvModelPath)
         self.assertEqual(loadedModel.bestModel.uid, cvModel.bestModel.uid)
+        self.assertEqual(loadedModel.getSeed(), cvModel.getSeed())
 
 
 class TrainValidationSplitTests(PySparkTestCase):
@@ -612,10 +613,12 @@ class TrainValidationSplitTests(PySparkTestCase):
         self.assertEqual(loadedTvs.getEstimator().uid, tvs.getEstimator().uid)
         self.assertEqual(loadedTvs.getEvaluator().uid, tvs.getEvaluator().uid)
         self.assertEqual(loadedTvs.getEstimatorParamMaps(), tvs.getEstimatorParamMaps())
+        self.assertEqual(loadedTvs.getSeed(), tvs.getSeed())
         tvsModelPath = temp_path + "/tvsModel"
         tvsModel.save(tvsModelPath)
         loadedModel = TrainValidationSplitModel.load(tvsModelPath)
         self.assertEqual(loadedModel.bestModel.uid, tvsModel.bestModel.uid)
+        self.assertEqual(loadedModel.getSeed(), tvsModel.getSeed())
 
 
 class PersistenceTest(PySparkTestCase):
@@ -657,12 +660,54 @@ class PersistenceTest(PySparkTestCase):
         except OSError:
             pass
 
+    def _compare_params(self, m1, m2, param):
+        """
+        Compare 2 ML params, assert they have the same param. The param must be a parameter of m1.
+        """
+        # Prevent key not found error in case of some param neither in paramMap and
+        # defaultParamMap.
+        if m1.isDefined(param):
+            paramValue1 = m1.getOrDefault(param)
+            paramValue2 = m2.getOrDefault(m2.getParam(param.name))
+            if isinstance(paramValue1, Params):
+                self._compare_pipelines(paramValue1, paramValue2)
+            elif isinstance(paramValue1, list):
+                self.assertEqual(len(paramValue1), len(paramValue2))
+                if len(paramValue1) != 0:
+                    if isinstance(paramValue1[0], dict):
+                        for epm1, epm2 in zip(paramValue1, paramValue2):
+                            self.assertEqual(len(epm1), len(epm2))
+                            for extraParam in epm1:
+                                self.assertIn(extraParam, epm2)
+                                if isinstance(epm1[extraParam], Params):
+                                    self._compare_pipelines(epm1[extraParam], epm2[extraParam])
+                                else:
+                                    self.assertEqual(epm1[extraParam], epm2[extraParam])
+                    else:
+                        raise RuntimeError(
+                            "_compare_params does not yet support type: %s" % type(m1))
+                else:
+                    pass  # for zero length array
+            else:
+                self.assertEqual(paramValue1, paramValue2)  # for general types param
+
+            # Assert parents are equal
+            self.assertEqual(param.parent, m2.getParam(param.name).parent)
+        else:
+            # Pass fow now, wait until the default value mismatch between Spark and PySpark fixed.
+            # If m1 is not defined param, then m2 should not, too.
+            # See SPARK-14931
+            pass
+
     def _compare_pipelines(self, m1, m2):
         """
         Compare 2 ML types, asserting that they are equivalent.
         This currently supports:
          - basic types
          - Pipeline, PipelineModel
+         - CrossValidator, CrossValidatorModel
+         - TrainValidationSplit, TrainValidationSplitModel
+         - OneVsRest, OneVsRestModel
         This checks:
          - uid
          - type
@@ -670,11 +715,11 @@ class PersistenceTest(PySparkTestCase):
         """
         self.assertEqual(m1.uid, m2.uid)
         self.assertEqual(type(m1), type(m2))
+
         if isinstance(m1, JavaParams):
             self.assertEqual(len(m1.params), len(m2.params))
             for p in m1.params:
-                self.assertEqual(m1.getOrDefault(p), m2.getOrDefault(p))
-                self.assertEqual(p.parent, m2.getParam(p.name).parent)
+                self._compare_params(m1, m2, p)
         elif isinstance(m1, Pipeline):
             self.assertEqual(len(m1.getStages()), len(m2.getStages()))
             for s1, s2 in zip(m1.getStages(), m2.getStages()):
@@ -683,6 +728,22 @@ class PersistenceTest(PySparkTestCase):
             self.assertEqual(len(m1.stages), len(m2.stages))
             for s1, s2 in zip(m1.stages, m2.stages):
                 self._compare_pipelines(s1, s2)
+        elif isinstance(m1, OneVsRestParams):
+            for p in m1.params:
+                self._compare_params(m1, m2, p)
+            if isinstance(m1, OneVsRestModel):
+                self.assertEqual(len(m1.models), len(m2.models))
+                for x, y in zip(m1.models, m2.models):
+                    self._compare_pipelines(x, y)
+        elif isinstance(m1, ValidatorParams):
+            for p in m1.params:
+                self._compare_params(m1, m2, p)
+            if isinstance(m1, CrossValidatorModel):
+                self._compare_pipelines(m1.bestModel, m2.bestModel)
+            elif isinstance(m1, TrainValidationSplitModel):
+                self._compare_pipelines(m1.bestModel, m2.bestModel)
+            else:
+                pass
         else:
             raise RuntimeError("_compare_pipelines does not yet support type: %s" % type(m1))
 
@@ -738,6 +799,70 @@ class PersistenceTest(PySparkTestCase):
             model_path = temp_path + "/pipeline-model"
             model.save(model_path)
             loaded_model = PipelineModel.load(model_path)
+            self._compare_pipelines(model, loaded_model)
+        finally:
+            try:
+                rmtree(temp_path)
+            except OSError:
+                pass
+
+    # TODO: Add OneVsRest as part of nested meta-algorithms.
+    def test_nested_meta_algorithms_persistence(self):
+        sqlContext = SQLContext(self.sc)
+        temp_path = tempfile.mkdtemp()
+        try:
+            df = sqlContext.createDataFrame([
+                Row(label=0.0, features=Vectors.dense(1.0, 0.8)),
+                Row(label=0.0, features=Vectors.dense(0.8, 0.8)),
+                Row(label=0.0, features=Vectors.dense(1.0, 1.2)),
+                Row(label=1.0, features=Vectors.sparse(2, [], [])),
+                Row(label=1.0, features=Vectors.sparse(2, [0], [0.1])),
+                Row(label=1.0, features=Vectors.sparse(2, [1], [0.1]))])
+
+            lr = LogisticRegression()
+
+            # Check the estimator of CrossValidator(TrainValidationSplit(LogisticRegression))
+            tvs_grid = ParamGridBuilder().addGrid(lr.maxIter, [1, 2]).build()
+            tvs_evaluator = BinaryClassificationEvaluator()
+            tvs = TrainValidationSplit(estimator=lr, estimatorParamMaps=tvs_grid,
+                                       evaluator=tvs_evaluator)
+
+            cv_grid = ParamGridBuilder().addGrid(tvs.trainRatio, [0.5, 0.7]).build()
+            cv_evaluator = BinaryClassificationEvaluator()
+            cv = CrossValidator(estimator=tvs, estimatorParamMaps=cv_grid, evaluator=cv_evaluator,
+                                numFolds=2)
+
+            model = cv.fit(df)
+
+            path = temp_path + "/nested-meta-algorithm-cv-tvs"
+            cv.save(path)
+            loaded = CrossValidator.load(path)
+            self._compare_pipelines(cv, loaded)
+
+            model_path = temp_path + "/nested-meta-model-cv-tvs"
+            model.save(model_path)
+            loaded_model = CrossValidatorModel.load(model_path)
+            self._compare_pipelines(model, loaded_model)
+
+            # Check the estimator of TrainValidationSplit(CrossValidator(LogisticRegression))
+            cv_grid = ParamGridBuilder().addGrid(lr.maxIter, [1, 2]).build()
+            cv_evaluator = BinaryClassificationEvaluator()
+            cv = CrossValidator(estimator=lr, estimatorParamMaps=cv_grid, evaluator=cv_evaluator)
+
+            tvs_grid = ParamGridBuilder().addGrid(cv.numFolds, [2, 3]).build()
+            tvs_evaluator = BinaryClassificationEvaluator()
+            tvs = TrainValidationSplit(
+                estimator=cv, estimatorParamMaps=tvs_grid, evaluator=tvs_evaluator)
+
+            model = tvs.fit(df)
+            path = temp_path + "/nested-meta-algorithm-tvs-cv"
+            tvs.save(path)
+            loaded = TrainValidationSplit.load(path)
+            self._compare_pipelines(tvs, loaded)
+
+            model_path = temp_path + "/nested-meta-model-tvs-cv"
+            model.save(model_path)
+            loaded_model = TrainValidationSplitModel.load(model_path)
             self._compare_pipelines(model, loaded_model)
         finally:
             try:
