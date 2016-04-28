@@ -464,8 +464,7 @@ class TreeClassifierParams(object):
         """
         Sets the value of :py:attr:`impurity`.
         """
-        self._set(impurity=value)
-        return self
+        return self._set(impurity=value)
 
     @since("1.6.0")
     def getImpurity(self):
@@ -826,8 +825,7 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
         """
         Sets the value of :py:attr:`lossType`.
         """
-        self._set(lossType=value)
-        return self
+        return self._set(lossType=value)
 
     @since("1.4.0")
     def getLossType(self):
@@ -956,8 +954,7 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, H
         """
         Sets the value of :py:attr:`smoothing`.
         """
-        self._set(smoothing=value)
-        return self
+        return self._set(smoothing=value)
 
     @since("1.5.0")
     def getSmoothing(self):
@@ -971,8 +968,7 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, H
         """
         Sets the value of :py:attr:`modelType`.
         """
-        self._set(modelType=value)
-        return self
+        return self._set(modelType=value)
 
     @since("1.5.0")
     def getModelType(self):
@@ -1098,8 +1094,7 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
         """
         Sets the value of :py:attr:`layers`.
         """
-        self._set(layers=value)
-        return self
+        return self._set(layers=value)
 
     @since("1.6.0")
     def getLayers(self):
@@ -1113,8 +1108,7 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
         """
         Sets the value of :py:attr:`blockSize`.
         """
-        self._set(blockSize=value)
-        return self
+        return self._set(blockSize=value)
 
     @since("1.6.0")
     def getBlockSize(self):
@@ -1162,8 +1156,7 @@ class OneVsRestParams(HasFeaturesCol, HasLabelCol, HasPredictionCol):
 
         .. note:: Only LogisticRegression and NaiveBayes are supported now.
         """
-        self._set(classifier=value)
-        return self
+        return self._set(classifier=value)
 
     @since("2.0.0")
     def getClassifier(self):
