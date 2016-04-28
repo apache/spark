@@ -27,8 +27,8 @@ else:
 
 from pyspark import since
 from pyspark.rdd import RDD, ignore_unicode_prefix
-from pyspark.sql.conf import RuntimeConfig
 from pyspark.sql.catalog import Catalog
+from pyspark.sql.conf import RuntimeConfig
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.readwriter import DataFrameReader
 from pyspark.sql.types import Row, DataType, StringType, StructType, _verify_type, \

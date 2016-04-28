@@ -142,7 +142,7 @@ class SQLContext(object):
 
         :return: :class:`UDFRegistration`
         """
-        return UDFRegistration(self.sparkSession)
+        return UDFRegistration(self)
 
     @since(1.4)
     def range(self, start, end=None, step=1, numPartitions=None):
@@ -301,7 +301,7 @@ class SQLContext(object):
 
         >>> sqlContext.registerDataFrameAsTable(df, "table1")
         """
-        self.sparkSession.registerDataFrameAsTable(df, tableName)
+        self.sparkSession.catalog.registerDataFrameAsTable(df, tableName)
 
     @since(1.6)
     def dropTempTable(self, tableName):
@@ -310,7 +310,7 @@ class SQLContext(object):
         >>> sqlContext.registerDataFrameAsTable(df, "table1")
         >>> sqlContext.dropTempTable("table1")
         """
-        self._ssql_ctx.dropTempTable(tableName)
+        self.sparkSession.catalog.dropTempTable(tableName)
 
     @since(1.3)
     def createExternalTable(self, tableName, path=None, source=None, schema=None, **options):
