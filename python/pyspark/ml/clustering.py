@@ -657,6 +657,15 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
     ...
     >>> model.topicsMatrix()
     DenseMatrix(2, 2, [0.496, 0.504, 0.504, 0.496], 0)
+    >>> lda_path = temp_path + "/lda"
+    >>> lda.save(lda_path)
+    >>> sameLDA = LDA.load(lda_path)
+    >>> distributed_model_path = temp_path + "/lda_distributed_model"
+    >>> model.save(distributed_model_path)
+    >>> sameModel = DistributedLDAModel.load(distributed_model_path)
+    >>> local_model_path = temp_path + "/lda_local_model"
+    >>> localModel.save(local_model_path)
+    >>> sameLocalModel = LocalLDAModel.load(local_model_path)
 
     .. versionadded:: 2.0.0
     """
