@@ -82,17 +82,13 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
    * @return output schema
    */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
-    SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
-    SchemaUtils.appendColumn(schema, $(predictionCol), IntegerType)
-  }
-
-  override def validateParams(): Unit = {
-    super.validateParams()
-    if (isSet(initialModel)) {
+    if (isDefined(initialModel)) {
       val kOfInitialModel = $(initialModel).parentModel.clusterCenters.length
       require(kOfInitialModel == $(k),
         s"${$(k)} cluster centers required but $kOfInitialModel found in the initial model.")
     }
+    SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
+    SchemaUtils.appendColumn(schema, $(predictionCol), IntegerType)
   }
 }
 
@@ -322,8 +318,11 @@ class KMeans @Since("1.5.0") (
       .setSeed($(seed))
       .setEpsilon($(tol))
 
-    if (isSet(initialModel)) {
-      require(rdd.first().size == $(initialModel).clusterCenters.head.size, "mismatched dimension")
+    if (isDefined(initialModel)) {
+      val dimOfData = rdd.first().size
+      val dimOfInitialModel = $(initialModel).clusterCenters.head.size
+      require(dimOfData == dimOfInitialModel,
+        s"mismatched dimension, $dimOfData in data while $dimOfInitialModel in the initial model.")
       algo.setInitialModel($(initialModel).parentModel)
     }
 
