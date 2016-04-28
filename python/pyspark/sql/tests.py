@@ -1752,7 +1752,7 @@ class HiveSparkSubmitTests(SparkSubmitTests):
     def test_invalid_join_method(self):
         df1 = self.sqlCtx.createDataFrame([("Alice", 5), ("Bob", 8)], ["name", "age"])
         df2 = self.sqlCtx.createDataFrame([("Alice", 80), ("Bob", 90)], ["name", "height"])
-        self.raises(AnalysisException, lambda: df1.join(df2, how="invalid-join-type"))
+        self.assertRaises(AnalysisException, lambda: df1.join(df2, how="invalid-join-type"))
 
         result = df1.join(df2, how="inner").select(df1.name, df2.height).collect()
         self.assertEqual(
