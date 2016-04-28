@@ -109,28 +109,6 @@ function(object, path, overwrite = FALSE) {
     invisible(callJMethod(writer, "save", path))
 })
 
-#' Load a fitted MLlib model from the input path.
-#'
-#' @param path Path of the model to read.
-#' @return a fitted MLlib model
-#' @rdname ml.load
-#' @name ml.load
-#' @export
-#' @examples
-#' \dontrun{
-#' path <- "path/to/model"
-#' model <- ml.load(path)
-#' }
-ml.load <- function(path) {
-    path <- suppressWarnings(normalizePath(path))
-    jobj <- callJStatic("org.apache.spark.ml.r.RWrappers", "load", path)
-    if (isInstanceOf(jobj, "org.apache.spark.ml.r.GeneralizedLinearRegressionWrapper")) {
-        return(new("GeneralizedLinearRegressionModel", jobj = jobj))
-    } else {
-        stop(paste("Unsupported model: ", jobj))
-    }
-}
-
 #' Get the summary of a generalized linear model
 #'
 #' Returns the summary of a model produced by glm(), similarly to R's summary().

@@ -71,7 +71,25 @@ test_that("glm and predict", {
            data = iris, family = poisson(link = identity)), iris))
   expect_true(all(abs(rVals - vals) < 1e-6), rVals - vals)
 
-  # Test stats::predict is working
+  # Test model save/load
+  modelPath <- tempfile(pattern = "GLM", fileext = ".tmp")
+  ml.save(model, modelPath)
+  expect_error(ml.save(model, modelPath))
+  ml.save(model, modelPath, overwrite = TRUE)
+  m2 <- ml.load(modelPath)
+  s2 <- summary(m2)
+  expect_equal(s$rCoefficients, s2$rCoefficients)
+  expect_equal(s$rFeatures, s2$rFeatures)
+  expect_equal(s$rDispersion, s2$rDispersion)
+  expect_equal(s$rDeviance, s2$rDeviance)
+  expect_equal(s$rNullDeviance, s2$rNullDeviance)
+  expect_equal(s$rAic, s2$rAic)
+  expect_equal(s$rDevianceResiduals, s2$rDevianceResiduals)
+  expect_equal(s$rResidualDegreeOfFreedomNull, s2$rResidualDegreeOfFreedomNull)
+
+  unlink(modelPath)
+
+# Test stats::predict is working
   x <- rnorm(15)
   y <- x + rnorm(15)
   expect_equal(length(predict(lm(y ~ x))), 15)
@@ -125,24 +143,6 @@ test_that("glm summary", {
   baseSummary <- summary(baseModel)
   expect_true(abs(baseSummary$deviance - 12.19313) < 1e-4)
 })
-
-  # Test model save/load
-  modelPath <- tempfile(pattern = "GLM", fileext = ".tmp")
-  ml.save(model, modelPath)
-  expect_error(ml.save(model, modelPath))
-  ml.save(model, modelPath, overwrite = TRUE)
-  m2 <- ml.load(modelPath)
-  s2 <- summary(m2)
-  expect_equal(s$rCoefficients, s2$rCoefficients)
-  expect_equal(s$rFeatures, s2$rFeatures)
-  expect_equal(s$rDispersion, s2$rDispersion)
-  expect_equal(s$rDeviance, s2$rDeviance)
-  expect_equal(s$rNullDeviance, s2$rNullDeviance)
-  expect_equal(s$rAic, s2$rAic)
-  expect_equal(s$rDevianceResiduals, s2$rDevianceResiduals)
-  expect_equal(s$rResidualDegreeOfFreedomNull, s2$rResidualDegreeOfFreedomNull)
-
-  unlink(modelPath)
 
 test_that("kmeans", {
   newIris <- iris
