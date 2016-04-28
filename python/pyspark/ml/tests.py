@@ -534,10 +534,12 @@ class CrossValidatorTests(PySparkTestCase):
         self.assertEqual(loadedCV.getEstimator().uid, cv.getEstimator().uid)
         self.assertEqual(loadedCV.getEvaluator().uid, cv.getEvaluator().uid)
         self.assertEqual(loadedCV.getEstimatorParamMaps(), cv.getEstimatorParamMaps())
+        self.assertEqual(loadedCV.getSeed(), cv.getSeed())
         cvModelPath = temp_path + "/cvModel"
         cvModel.save(cvModelPath)
         loadedModel = CrossValidatorModel.load(cvModelPath)
         self.assertEqual(loadedModel.bestModel.uid, cvModel.bestModel.uid)
+        self.assertEqual(loadedModel.getSeed(), cvModel.getSeed())
 
 
 class TrainValidationSplitTests(PySparkTestCase):
@@ -611,10 +613,12 @@ class TrainValidationSplitTests(PySparkTestCase):
         self.assertEqual(loadedTvs.getEstimator().uid, tvs.getEstimator().uid)
         self.assertEqual(loadedTvs.getEvaluator().uid, tvs.getEvaluator().uid)
         self.assertEqual(loadedTvs.getEstimatorParamMaps(), tvs.getEstimatorParamMaps())
+        self.assertEqual(loadedTvs.getSeed(), tvs.getSeed())
         tvsModelPath = temp_path + "/tvsModel"
         tvsModel.save(tvsModelPath)
         loadedModel = TrainValidationSplitModel.load(tvsModelPath)
         self.assertEqual(loadedModel.bestModel.uid, tvsModel.bestModel.uid)
+        self.assertEqual(loadedModel.getSeed(), tvsModel.getSeed())
 
 
 class PersistenceTest(PySparkTestCase):
@@ -658,17 +662,42 @@ class PersistenceTest(PySparkTestCase):
 
     def _compare_params(self, m1, m2, param):
         """
-        Compare 2 ML params, assert they have the same param.
+        Compare 2 ML params, assert they have the same param. The param must be a parameter of m1.
         """
         # Prevent key not found error in case of some param neither in paramMap and
         # defaultParamMap.
         if m1.isDefined(param):
-            self.assertEqual(m1.getOrDefault(param), m2.getOrDefault(param))
+            paramValue1 = m1.getOrDefault(param)
+            paramValue2 = m2.getOrDefault(m2.getParam(param.name))
+            if isinstance(paramValue1, Params):
+                self._compare_pipelines(paramValue1, paramValue2)
+            elif isinstance(paramValue1, list):
+                self.assertEqual(len(paramValue1), len(paramValue2))
+                if len(paramValue1) != 0:
+                    if isinstance(paramValue1[0], dict):
+                        for epm1, epm2 in zip(paramValue1, paramValue2):
+                            self.assertEqual(len(epm1), len(epm2))
+                            for extraParam in epm1:
+                                self.assertIn(extraParam, epm2)
+                                if isinstance(epm1[extraParam], Params):
+                                    self._compare_pipelines(epm1[extraParam], epm2[extraParam])
+                                else:
+                                    self.assertEqual(epm1[extraParam], epm2[extraParam])
+                    else:
+                        raise RuntimeError(
+                            "_compare_params does not yet support type: %s" % type(m1))
+                else:
+                    pass  # for zero length array
+            else:
+                self.assertEqual(paramValue1, paramValue2)  # for general types param
+
+            # Assert parents are equal
             self.assertEqual(param.parent, m2.getParam(param.name).parent)
         else:
-            pass  # fow now, wait until the default value mismatch between Spark and PySpark fixed.
+            # Pass fow now, wait until the default value mismatch between Spark and PySpark fixed.
             # If m1 is not defined param, then m2 should not, too.
-            # self.assertEqual(m2.isDefined(m2.getParam(param.name)), False)
+            # See SPARK-14931
+            pass
 
     def _compare_pipelines(self, m1, m2):
         """
@@ -691,69 +720,30 @@ class PersistenceTest(PySparkTestCase):
             self.assertEqual(len(m1.params), len(m2.params))
             for p in m1.params:
                 self._compare_params(m1, m2, p)
-
         elif isinstance(m1, Pipeline):
             self.assertEqual(len(m1.getStages()), len(m2.getStages()))
             for s1, s2 in zip(m1.getStages(), m2.getStages()):
                 self._compare_pipelines(s1, s2)
-
         elif isinstance(m1, PipelineModel):
             self.assertEqual(len(m1.stages), len(m2.stages))
             for s1, s2 in zip(m1.stages, m2.stages):
                 self._compare_pipelines(s1, s2)
-
         elif isinstance(m1, OneVsRestParams):
-            # Check the equality of classifiers (value and parent).
-            self._compare_pipelines(m1.getClassifier(), m2.getClassifier())
-            self.assertEqual(m1.classifier.parent, m2.classifier.parent)
-
-            # Check the equality of other params (value and parent).
             for p in m1.params:
-                if p.name != "classifier":
-                    self.assertEqual(m1.getOrDefault(p), m2.getOrDefault(p))
-                    self.assertEqual(p.parent, m2.getParam(p.name).parent)
-
-            # Check extra attributes of OneVsRestModel.
+                self._compare_params(m1, m2, p)
             if isinstance(m1, OneVsRestModel):
                 self.assertEqual(len(m1.models), len(m2.models))
                 for x, y in zip(m1.models, m2.models):
                     self._compare_pipelines(x, y)
-
         elif isinstance(m1, ValidatorParams):
-            # Check the equality of estimators (value and parent).
-            self._compare_pipelines(m1.getEstimator(), m2.getEstimator())
-            self.assertEqual(m1.estimator.parent, m2.estimator.parent)
-
-            # Check the equality of evaluators (value and parent).
-            self._compare_pipelines(m1.getEvaluator(), m2.getEvaluator())
-            self.assertEqual(m1.evaluator.parent, m2.evaluator.parent)
-
-            # Check the equality of estimator parameter maps (value and parent).
-            self.assertEqual(len(m1.getEstimatorParamMaps()), len(m2.getEstimatorParamMaps()))
-            for epm1, epm2 in zip(m1.getEstimatorParamMaps(), m2.getEstimatorParamMaps()):
-                self.assertEqual(len(epm1), len(epm2))
-                for param in epm1:
-                    self.assertIn(param, epm2)
-                    if isinstance(epm1[param], Params):
-                        self._compare_pipelines(epm1[param], epm2[param])
-                    else:
-                        self.assertEqual(epm1[param], epm2[param])
-            self.assertEqual(m1.estimatorParamMaps.parent, m2.estimatorParamMaps.parent)
-
-            # Check extra attributes/params.
-            if isinstance(m1, CrossValidator):
-                self.assertEqual(m1.getNumFolds(), m2.getNumFolds())
-                self.assertEqual(m1.numFolds.parent, m2.numFolds.parent)
-            elif isinstance(m1, CrossValidatorModel):
+            for p in m1.params:
+                self._compare_params(m1, m2, p)
+            if isinstance(m1, CrossValidatorModel):
                 self._compare_pipelines(m1.bestModel, m2.bestModel)
-            elif isinstance(m1, TrainValidationSplit):
-                self.assertEqual(m1.getTrainRatio(), m2.getTrainRatio())
-                self.assertEqual(m1.trainRatio.parent, m2.trainRatio.parent)
             elif isinstance(m1, TrainValidationSplitModel):
                 self._compare_pipelines(m1.bestModel, m2.bestModel)
             else:
-                raise RuntimeError("_compare_pipelines does not yet support type: %s" % type(m1))
-
+                pass
         else:
             raise RuntimeError("_compare_pipelines does not yet support type: %s" % type(m1))
 
