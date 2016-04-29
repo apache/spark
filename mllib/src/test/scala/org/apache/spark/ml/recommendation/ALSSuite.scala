@@ -489,7 +489,6 @@ class ALSSuite
     val sqlContext = this.sqlContext
     import sqlContext.implicits._
 
-    val test = Seq()
     val als = new ALS().setMaxIter(1).setRank(1)
     Seq(("user", IntegerType), ("item", IntegerType), ("rating", FloatType)).foreach {
       case (colName, sqlType) =>
