@@ -27,7 +27,7 @@ import org.scalatest.mock.MockitoSugar.mock
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.Pipeline.SharedReadWrite
 import org.apache.spark.ml.feature.{HashingTF, MinMaxScaler}
-import org.apache.spark.ml.param.{IntParam, ParamMap}
+import org.apache.spark.ml.param.{IntParam, ParamMap, ParamPair}
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
@@ -200,6 +200,13 @@ class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
        val pipeline = new Pipeline().setStages(Array(scaler))
        pipeline.fit(df)
     }
+  }
+
+  test("Pipeline.setStages should handle Java Arrays being non-covariant") {
+    val stages0 = Array(new UnWritableStage("b"))
+    val stages1 = Array(new WritableStage("a"))
+    val steps = stages0 ++ stages1
+    val p = new Pipeline().setStages(steps)
   }
 }
 

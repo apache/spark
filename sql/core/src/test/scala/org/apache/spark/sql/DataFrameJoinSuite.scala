@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.Join
-import org.apache.spark.sql.execution.joins.BroadcastHashJoin
+import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 
@@ -142,11 +142,11 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
 
     // equijoin - should be converted into broadcast join
     val plan1 = df1.join(broadcast(df2), "key").queryExecution.sparkPlan
-    assert(plan1.collect { case p: BroadcastHashJoin => p }.size === 1)
+    assert(plan1.collect { case p: BroadcastHashJoinExec => p }.size === 1)
 
     // no join key -- should not be a broadcast join
     val plan2 = df1.join(broadcast(df2)).queryExecution.sparkPlan
-    assert(plan2.collect { case p: BroadcastHashJoin => p }.size === 0)
+    assert(plan2.collect { case p: BroadcastHashJoinExec => p }.size === 0)
 
     // planner should not crash without a join
     broadcast(df1).queryExecution.sparkPlan

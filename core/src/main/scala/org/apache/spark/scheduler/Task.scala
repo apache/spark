@@ -23,7 +23,7 @@ import java.util.Properties
 
 import scala.collection.mutable.HashMap
 
-import org.apache.spark.{SparkEnv, TaskContext, TaskContextImpl}
+import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.memory.{MemoryMode, TaskMemoryManager}
 import org.apache.spark.metrics.MetricsSystem
@@ -46,14 +46,13 @@ import org.apache.spark.util.{ByteBufferInputStream, ByteBufferOutputStream, Uti
  * @param partitionId index of the number in the RDD
  * @param metrics a [[TaskMetrics]] that is created at driver side and sent to executor side.
  * @param localProperties copy of thread-local properties set by the user on the driver side.
- *
- * The default values for `metrics` and `localProperties` are used by tests only.
  */
 private[spark] abstract class Task[T](
     val stageId: Int,
     val stageAttemptId: Int,
     val partitionId: Int,
-    val metrics: TaskMetrics = new TaskMetrics,
+    // The default value is only used in tests.
+    val metrics: TaskMetrics = TaskMetrics.registered,
     @transient var localProperties: Properties = new Properties) extends Serializable {
 
   /**
@@ -154,11 +153,11 @@ private[spark] abstract class Task[T](
    * Collect the latest values of accumulators used in this task. If the task failed,
    * filter out the accumulators whose values should not be included on failures.
    */
-  def collectAccumulatorUpdates(taskFailed: Boolean = false): Seq[AccumulableInfo] = {
+  def collectAccumulatorUpdates(taskFailed: Boolean = false): Seq[NewAccumulator[_, _]] = {
     if (context != null) {
-      context.taskMetrics.accumulatorUpdates().filter { a => !taskFailed || a.countFailedValues }
+      context.taskMetrics.accumulators().filter { a => !taskFailed || a.countFailedValues }
     } else {
-      Seq.empty[AccumulableInfo]
+      Seq.empty
     }
   }
 

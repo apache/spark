@@ -123,23 +123,31 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("SPARK-14791: scalar subquery inside broadcast join") {
+    val df = sql("select a, sum(b) as s from l group by a having a > (select avg(a) from l)")
+    val expected = Row(3, 2.0, 3, 3.0) :: Row(6, null, 6, null) :: Nil
+    (1 to 10).foreach { _ =>
+      checkAnswer(r.join(df, $"c" === $"a"), expected)
+    }
+  }
+
   test("EXISTS predicate subquery") {
     checkAnswer(
-      sql("select * from l where exists(select * from r where l.a = r.c)"),
+      sql("select * from l where exists (select * from r where l.a = r.c)"),
       Row(2, 1.0) :: Row(2, 1.0) :: Row(3, 3.0) :: Row(6, null) :: Nil)
 
     checkAnswer(
-      sql("select * from l where exists(select * from r where l.a = r.c) and l.a <= 2"),
+      sql("select * from l where exists (select * from r where l.a = r.c) and l.a <= 2"),
       Row(2, 1.0) :: Row(2, 1.0) :: Nil)
   }
 
   test("NOT EXISTS predicate subquery") {
     checkAnswer(
-      sql("select * from l where not exists(select * from r where l.a = r.c)"),
+      sql("select * from l where not exists (select * from r where l.a = r.c)"),
       Row(1, 2.0) :: Row(1, 2.0) :: Row(null, null) :: Row(null, 5.0) :: Nil)
 
     checkAnswer(
-      sql("select * from l where not exists(select * from r where l.a = r.c and l.b < r.d)"),
+      sql("select * from l where not exists (select * from r where l.a = r.c and l.b < r.d)"),
       Row(1, 2.0) :: Row(1, 2.0) :: Row(3, 3.0) ::
       Row(null, null) :: Row(null, 5.0) :: Row(6, null) :: Nil)
   }
@@ -160,20 +168,20 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
 
   test("NOT IN predicate subquery") {
     checkAnswer(
-      sql("select * from l where a not in(select c from r)"),
+      sql("select * from l where a not in (select c from r)"),
       Nil)
 
     checkAnswer(
-      sql("select * from l where a not in(select c from r where c is not null)"),
+      sql("select * from l where a not in (select c from r where c is not null)"),
       Row(1, 2.0) :: Row(1, 2.0) :: Nil)
 
     checkAnswer(
-      sql("select * from l where a not in(select c from t where b < d)"),
+      sql("select * from l where a not in (select c from t where b < d)"),
       Row(1, 2.0) :: Row(1, 2.0) :: Row(3, 3.0) :: Nil)
 
     // Empty sub-query
     checkAnswer(
-      sql("select * from l where a not in(select c from r where c > 10 and b < d)"),
+      sql("select * from l where a not in (select c from r where c > 10 and b < d)"),
       Row(1, 2.0) :: Row(1, 2.0) :: Row(2, 1.0) :: Row(2, 1.0) ::
       Row(3, 3.0) :: Row(null, null) :: Row(null, 5.0) :: Row(6, null) :: Nil)
 
@@ -181,11 +189,18 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
 
   test("complex IN predicate subquery") {
     checkAnswer(
-      sql("select * from l where (a, b) not in(select c, d from r)"),
+      sql("select * from l where (a, b) not in (select c, d from r)"),
       Nil)
 
     checkAnswer(
-      sql("select * from l where (a, b) not in(select c, d from t) and (a + b) is not null"),
+      sql("select * from l where (a, b) not in (select c, d from t) and (a + b) is not null"),
       Row(1, 2.0) :: Row(1, 2.0) :: Row(2, 1.0) :: Row(2, 1.0) :: Row(3, 3.0) :: Nil)
+  }
+
+  test("same column in subquery and outer table") {
+    checkAnswer(
+      sql("select a from l l1 where a in (select a from l where a < 3 group by a)"),
+      Row(1) :: Row(1) :: Row(2) :: Row(2) :: Nil
+    )
   }
 }

@@ -239,16 +239,19 @@ class CodegenContext {
 
   /**
    * Update a column in MutableRow from ExprCode.
+   *
+   * @param isVectorized True if the underlying row is of type `ColumnarBatch.Row`, false otherwise
    */
   def updateColumn(
       row: String,
       dataType: DataType,
       ordinal: Int,
       ev: ExprCode,
-      nullable: Boolean): String = {
+      nullable: Boolean,
+      isVectorized: Boolean = false): String = {
     if (nullable) {
       // Can't call setNullAt on DecimalType, because we need to keep the offset
-      if (dataType.isInstanceOf[DecimalType]) {
+      if (!isVectorized && dataType.isInstanceOf[DecimalType]) {
         s"""
            if (!${ev.isNull}) {
              ${setColumn(row, dataType, ordinal, ev.value)};
@@ -267,6 +270,63 @@ class CodegenContext {
       }
     } else {
       s"""${setColumn(row, dataType, ordinal, ev.value)};"""
+    }
+  }
+
+  /**
+   * Returns the specialized code to set a given value in a column vector for a given `DataType`.
+   */
+  def setValue(batch: String, row: String, dataType: DataType, ordinal: Int,
+      value: String): String = {
+    val jt = javaType(dataType)
+    dataType match {
+      case _ if isPrimitiveType(jt) =>
+        s"$batch.column($ordinal).put${primitiveTypeName(jt)}($row, $value);"
+      case t: DecimalType => s"$batch.column($ordinal).putDecimal($row, $value, ${t.precision});"
+      case t: StringType => s"$batch.column($ordinal).putByteArray($row, $value.getBytes());"
+      case _ =>
+        throw new IllegalArgumentException(s"cannot generate code for unsupported type: $dataType")
+    }
+  }
+
+  /**
+   * Returns the specialized code to set a given value in a column vector for a given `DataType`
+   * that could potentially be nullable.
+   */
+  def updateColumn(
+      batch: String,
+      row: String,
+      dataType: DataType,
+      ordinal: Int,
+      ev: ExprCode,
+      nullable: Boolean): String = {
+    if (nullable) {
+      s"""
+         if (!${ev.isNull}) {
+           ${setValue(batch, row, dataType, ordinal, ev.value)}
+         } else {
+           $batch.column($ordinal).putNull($row);
+         }
+       """
+    } else {
+      s"""${setValue(batch, row, dataType, ordinal, ev.value)};"""
+    }
+  }
+
+  /**
+   * Returns the specialized code to access a value from a column vector for a given `DataType`.
+   */
+  def getValue(batch: String, row: String, dataType: DataType, ordinal: Int): String = {
+    val jt = javaType(dataType)
+    dataType match {
+      case _ if isPrimitiveType(jt) =>
+        s"$batch.column($ordinal).get${primitiveTypeName(jt)}($row)"
+      case t: DecimalType =>
+        s"$batch.column($ordinal).getDecimal($row, ${t.precision}, ${t.scale})"
+      case StringType =>
+        s"$batch.column($ordinal).getUTF8String($row)"
+      case _ =>
+        throw new IllegalArgumentException(s"cannot generate code for unsupported type: $dataType")
     }
   }
 

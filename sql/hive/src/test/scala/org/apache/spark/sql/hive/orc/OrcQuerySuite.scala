@@ -27,7 +27,7 @@ import org.scalatest.BeforeAndAfterAll
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
 import org.apache.spark.sql.internal.SQLConf
@@ -181,7 +181,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
   // Following codec is supported in hive-0.13.1, ignore it now
   ignore("Other compression options for writing to an ORC file - 0.13.1 and above") {
     val data = (1 to 100).map(i => (i, s"val_$i"))
-    val conf = sparkContext.hadoopConfiguration
+    val conf = sqlContext.sessionState.newHadoopConf()
 
     conf.set(ConfVars.HIVE_ORC_DEFAULT_COMPRESS.varname, "SNAPPY")
     withOrcFile(data) { file =>
@@ -406,7 +406,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
   test("SPARK-14070 Use ORC data source for SQL queries on ORC tables") {
     withTempPath { dir =>
       withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true",
-        HiveContext.CONVERT_METASTORE_ORC.key -> "true") {
+        HiveUtils.CONVERT_METASTORE_ORC.key -> "true") {
         val path = dir.getCanonicalPath
 
         withTable("dummy_orc") {

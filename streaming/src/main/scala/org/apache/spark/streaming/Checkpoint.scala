@@ -184,8 +184,7 @@ class CheckpointWriter(
   val executor = Executors.newFixedThreadPool(1)
   val compressionCodec = CompressionCodec.createCodec(conf)
   private var stopped = false
-  private var _fs: FileSystem = _
-
+  @volatile private[this] var fs: FileSystem = null
   @volatile private var latestCheckpointTime: Time = null
 
   class CheckpointWriteHandler(
@@ -195,6 +194,9 @@ class CheckpointWriter(
     def run() {
       if (latestCheckpointTime == null || latestCheckpointTime < checkpointTime) {
         latestCheckpointTime = checkpointTime
+      }
+      if (fs == null) {
+        fs = new Path(checkpointDir).getFileSystem(hadoopConf)
       }
       var attempts = 0
       val startTime = System.currentTimeMillis()
@@ -263,7 +265,7 @@ class CheckpointWriter(
           case ioe: IOException =>
             logWarning("Error in attempt " + attempts + " of writing checkpoint to "
               + checkpointFile, ioe)
-            reset()
+            fs = null
         }
       }
       logWarning("Could not write checkpoint for time " + checkpointTime + " to file "
@@ -296,15 +298,6 @@ class CheckpointWriter(
     logInfo("CheckpointWriter executor terminated ? " + terminated +
       ", waited for " + (endTime - startTime) + " ms.")
     stopped = true
-  }
-
-  private def fs = synchronized {
-    if (_fs == null) _fs = new Path(checkpointDir).getFileSystem(hadoopConf)
-    _fs
-  }
-
-  private def reset() = synchronized {
-    _fs = null
   }
 }
 

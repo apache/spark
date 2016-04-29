@@ -22,8 +22,8 @@ import scala.language.postfixOps
 
 import org.scalatest.concurrent.Eventually._
 
-import org.apache.spark.Accumulators
-import org.apache.spark.sql.execution.PhysicalRDD
+import org.apache.spark.AccumulatorContext
+import org.apache.spark.sql.execution.RDDScanExec
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.exchange.ShuffleExchange
 import org.apache.spark.sql.functions._
@@ -38,7 +38,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
   def rddIdOf(tableName: String): Int = {
     val plan = sqlContext.table(tableName).queryExecution.sparkPlan
     plan.collect {
-      case InMemoryColumnarTableScan(_, _, relation) =>
+      case InMemoryTableScanExec(_, _, relation) =>
         relation.cachedColumnBuffers.id
       case _ =>
         fail(s"Table $tableName is not cached\n" + plan)
@@ -167,7 +167,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     sqlContext.cacheTable("testData")
     assertResult(0, "Double InMemoryRelations found, cacheTable() is not idempotent") {
       sqlContext.table("testData").queryExecution.withCachedData.collect {
-        case r @ InMemoryRelation(_, _, _, _, _: InMemoryColumnarTableScan, _) => r
+        case r @ InMemoryRelation(_, _, _, _, _: InMemoryTableScanExec, _) => r
       }.size
     }
 
@@ -333,11 +333,11 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     sql("SELECT * FROM t1").count()
     sql("SELECT * FROM t2").count()
 
-    Accumulators.synchronized {
-      val accsSize = Accumulators.originals.size
+    AccumulatorContext.synchronized {
+      val accsSize = AccumulatorContext.numAccums
       sqlContext.uncacheTable("t1")
       sqlContext.uncacheTable("t2")
-      assert((accsSize - 2) == Accumulators.originals.size)
+      assert((accsSize - 2) == AccumulatorContext.numAccums)
     }
   }
 
@@ -351,8 +351,8 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
         |abc a join abc b on a.key=b.key
         |join abc c on a.key=c.key""".stripMargin).queryExecution.sparkPlan
 
-    assert(sparkPlan.collect { case e: InMemoryColumnarTableScan => e }.size === 3)
-    assert(sparkPlan.collect { case e: PhysicalRDD => e }.size === 0)
+    assert(sparkPlan.collect { case e: InMemoryTableScanExec => e }.size === 3)
+    assert(sparkPlan.collect { case e: RDDScanExec => e }.size === 0)
   }
 
   /**

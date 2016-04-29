@@ -42,7 +42,7 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -115,7 +115,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       val resultSet = statement.executeQuery("SET spark.sql.hive.version")
       resultSet.next()
       assert(resultSet.getString(1) === "spark.sql.hive.version")
-      assert(resultSet.getString(2) === HiveContext.hiveExecutionVersion)
+      assert(resultSet.getString(2) === HiveUtils.hiveExecutionVersion)
     }
   }
 
@@ -202,6 +202,25 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
     }
   }
 
+  test("SPARK-12143 regression: Binary type support") {
+    withJdbcStatement { statement =>
+      val queries = Seq(
+        "DROP TABLE IF EXISTS test_binary",
+        "CREATE TABLE test_binary(key INT, value STRING)",
+        s"LOAD DATA LOCAL INPATH '${TestData.smallKv}' OVERWRITE INTO TABLE test_binary")
+
+      queries.foreach(statement.execute)
+
+      val expected: Array[Byte] = "val_238".getBytes
+      assertResult(expected) {
+        val resultSet = statement.executeQuery(
+          "SELECT CAST(value as BINARY) FROM test_date LIMIT 1")
+        resultSet.next()
+        resultSet.getObject(1)
+      }
+    }
+  }
+
   test("test multiple session") {
     import org.apache.spark.sql.internal.SQLConf
     var defaultV1: String = null
@@ -224,7 +243,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
         val plan = statement.executeQuery("explain select * from test_table")
         plan.next()
         plan.next()
-        assert(plan.getString(1).contains("InMemoryColumnarTableScan"))
+        assert(plan.getString(1).contains("InMemoryTableScan"))
 
         val rs1 = statement.executeQuery("SELECT key FROM test_table ORDER BY KEY DESC")
         val buf1 = new collection.mutable.ArrayBuffer[Int]()
@@ -310,7 +329,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
         val plan = statement.executeQuery("explain select key from test_map ORDER BY key DESC")
         plan.next()
         plan.next()
-        assert(plan.getString(1).contains("InMemoryColumnarTableScan"))
+        assert(plan.getString(1).contains("InMemoryTableScan"))
 
         val rs = statement.executeQuery("SELECT key FROM test_map ORDER BY KEY DESC")
         val buf = new collection.mutable.ArrayBuffer[Int]()
@@ -624,7 +643,7 @@ class HiveThriftHttpServerSuite extends HiveThriftJdbcTest {
       val resultSet = statement.executeQuery("SET spark.sql.hive.version")
       resultSet.next()
       assert(resultSet.getString(1) === "spark.sql.hive.version")
-      assert(resultSet.getString(2) === HiveContext.hiveExecutionVersion)
+      assert(resultSet.getString(2) === HiveUtils.hiveExecutionVersion)
     }
   }
 }

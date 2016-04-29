@@ -24,7 +24,10 @@ export("setJobGroup",
        "clearJobGroup",
        "cancelJobGroup")
 
-exportClasses("DataFrame")
+# Export Utility methods
+export("setLogLevel")
+
+exportClasses("SparkDataFrame")
 
 exportMethods("arrange",
               "as.data.frame",
@@ -104,7 +107,8 @@ exportMethods("arrange",
               "write.jdbc",
               "write.json",
               "write.parquet",
-              "write.text")
+              "write.text",
+              "ml.save")
 
 exportClasses("Column")
 
@@ -169,6 +173,7 @@ exportMethods("%in%",
               "getItem",
               "greatest",
               "hex",
+              "histogram",
               "hour",
               "hypot",
               "ifelse",
@@ -290,13 +295,15 @@ export("as.DataFrame",
        "read.json",
        "read.parquet",
        "read.text",
+       "spark.lapply",
        "sql",
        "str",
        "tableToDF",
        "tableNames",
        "tables",
        "uncacheTable",
-       "print.summary.GeneralizedLinearRegressionModel")
+       "print.summary.GeneralizedLinearRegressionModel",
+       "ml.load")
 
 export("structField",
        "structField.jobj",

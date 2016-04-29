@@ -2097,7 +2097,7 @@ setMethod("conv", signature(x = "Column", fromBase = "numeric", toBase = "numeri
 #' expr
 #'
 #' Parses the expression string into the column that it represents, similar to
-#' DataFrame.selectExpr
+#' SparkDataFrame.selectExpr
 #'
 #' @family normal_funcs
 #' @rdname expr

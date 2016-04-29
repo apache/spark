@@ -42,6 +42,7 @@ from shutil import rmtree
 import tempfile
 import numpy as np
 
+from pyspark import keyword_only
 from pyspark.ml import Estimator, Model, Pipeline, PipelineModel, Transformer
 from pyspark.ml.classification import (
     LogisticRegression, DecisionTreeClassifier, OneVsRest, OneVsRestModel)
@@ -52,8 +53,6 @@ from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.param.shared import HasMaxIter, HasInputCol, HasSeed
 from pyspark.ml.regression import LinearRegression, DecisionTreeRegressor
 from pyspark.ml.tuning import *
-from pyspark.ml.util import keyword_only
-from pyspark.ml.util import MLWritable, MLWriter
 from pyspark.ml.wrapper import JavaParams
 from pyspark.mllib.linalg import Vectors, DenseVector, SparseVector
 from pyspark.sql import DataFrame, SQLContext, Row
@@ -467,6 +466,31 @@ class InducedErrorEstimator(Estimator, HasInducedError):
 
 class CrossValidatorTests(PySparkTestCase):
 
+    def test_copy(self):
+        sqlContext = SQLContext(self.sc)
+        dataset = sqlContext.createDataFrame([
+            (10, 10.0),
+            (50, 50.0),
+            (100, 100.0),
+            (500, 500.0)] * 10,
+            ["feature", "label"])
+
+        iee = InducedErrorEstimator()
+        evaluator = RegressionEvaluator(metricName="rmse")
+
+        grid = (ParamGridBuilder()
+                .addGrid(iee.inducedError, [100.0, 0.0, 10000.0])
+                .build())
+        cv = CrossValidator(estimator=iee, estimatorParamMaps=grid, evaluator=evaluator)
+        cvCopied = cv.copy()
+        self.assertEqual(cv.getEstimator().uid, cvCopied.getEstimator().uid)
+
+        cvModel = cv.fit(dataset)
+        cvModelCopied = cvModel.copy()
+        for index in range(len(cvModel.avgMetrics)):
+            self.assertTrue(abs(cvModel.avgMetrics[index] - cvModelCopied.avgMetrics[index])
+                            < 0.0001)
+
     def test_fit_minimize_metric(self):
         sqlContext = SQLContext(self.sc)
         dataset = sqlContext.createDataFrame([
@@ -540,6 +564,8 @@ class CrossValidatorTests(PySparkTestCase):
         cvModel.save(cvModelPath)
         loadedModel = CrossValidatorModel.load(cvModelPath)
         self.assertEqual(loadedModel.bestModel.uid, cvModel.bestModel.uid)
+        for index in range(len(loadedModel.avgMetrics)):
+            self.assertTrue(abs(loadedModel.avgMetrics[index] - cvModel.avgMetrics[index]) < 0.0001)
 
 
 class TrainValidationSplitTests(PySparkTestCase):
@@ -746,10 +772,6 @@ class PersistenceTest(PySparkTestCase):
             except OSError:
                 pass
 
-    def test_write_property(self):
-        lr = LinearRegression(maxIter=1)
-        self.assertTrue(isinstance(lr.write, MLWriter))
-
     def test_decisiontree_classifier(self):
         dt = DecisionTreeClassifier(maxDepth=1)
         path = tempfile.mkdtemp()
@@ -916,14 +938,12 @@ class HashingTFTest(PySparkTestCase):
         sqlContext = SQLContext(self.sc)
 
         df = sqlContext.createDataFrame([(0, ["a", "a", "b", "c", "c", "c"])], ["id", "words"])
-        n = 100
+        n = 10
         hashingTF = HashingTF()
         hashingTF.setInputCol("words").setOutputCol("features").setNumFeatures(n).setBinary(True)
         output = hashingTF.transform(df)
         features = output.select("features").first().features.toArray()
-        expected = Vectors.sparse(n, {(ord("a") % n): 1.0,
-                                      (ord("b") % n): 1.0,
-                                      (ord("c") % n): 1.0}).toArray()
+        expected = Vectors.dense([1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]).toArray()
         for i in range(0, n):
             self.assertAlmostEqual(features[i], expected[i], 14, "Error at " + str(i) +
                                    ": expected " + str(expected[i]) + ", got " + str(features[i]))

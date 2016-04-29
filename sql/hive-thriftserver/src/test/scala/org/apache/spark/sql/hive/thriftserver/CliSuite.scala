@@ -166,7 +166,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       "SHOW TABLES;"
         -> "hive_test",
       s"LOAD DATA LOCAL INPATH '$dataFilePath' OVERWRITE INTO TABLE hive_test;"
-        -> "OK",
+        -> "",
       "CACHE TABLE hive_test;"
         -> "",
       "SELECT COUNT(*) FROM hive_test;"
@@ -214,7 +214,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       "CREATE TABLE sourceTable (key INT, val STRING);"
         -> "",
       s"LOAD DATA LOCAL INPATH '$dataFilePath' OVERWRITE INTO TABLE sourceTable;"
-        -> "OK",
+        -> "",
       "INSERT INTO TABLE t1 SELECT key, val FROM sourceTable;"
         -> "",
       "SELECT count(key) FROM t1;"
@@ -230,7 +230,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     runCliWithin(timeout = 2.minute,
       errorResponses = Seq("AnalysisException"))(
       "select * from nonexistent_table;"
-        -> "Error in query: Table or View not found: nonexistent_table;"
+        -> "Error in query: Table or view not found: nonexistent_table;"
     )
   }
 
