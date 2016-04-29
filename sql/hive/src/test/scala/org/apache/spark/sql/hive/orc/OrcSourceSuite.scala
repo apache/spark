@@ -184,7 +184,9 @@ class OrcSourceSuite extends OrcSuite {
   test("SPARK-12218 Converting conjunctions into ORC SearchArguments") {
     // The `LessThan` should be converted while the `StringContains` shouldn't
     val schema = new StructType(
-      Array(StructField("_1", StringType, nullable = true)))
+      Array(
+        StructField("a", IntegerType, nullable = true),
+        StructField("b", StringType, nullable = true)))
     assertResult(
       """leaf-0 = (LESS_THAN a 10)
         |expr = leaf-0
