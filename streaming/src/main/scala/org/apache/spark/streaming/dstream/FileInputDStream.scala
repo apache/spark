@@ -195,8 +195,12 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
       )
       logDebug(s"Getting new files for time $currentTime, " +
         s"ignoring files older than $modTimeIgnoreThreshold")
+
       val newFileFilter = new PathFilter {
         def accept(path: Path): Boolean = isNewFile(path, currentTime, modTimeIgnoreThreshold)
+      }
+      val directoryFilter = new PathFilter {
+        override def accept(path: Path): Boolean = fs.getFileStatus(path).isDirectory
       }
       val directories = fs.globStatus(directoryPath, directoryFilter).map(_.getPath)
       val newFiles = directories.flatMap(dir =>
@@ -220,9 +224,6 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
     }
   }
 
-  private val directoryFilter = new PathFilter {
-    override def accept(path: Path): Boolean = fs.getFileStatus(path).isDirectory
-  }
   /**
    * Identify whether the given `path` is a new file for the batch of `currentTime`. For it to be
    * accepted, it has to pass the following criteria.
