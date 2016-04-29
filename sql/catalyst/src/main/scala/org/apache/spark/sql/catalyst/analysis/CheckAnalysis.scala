@@ -283,7 +283,16 @@ trait CheckAnalysis extends PredicateHelper {
                  |Failure when resolving conflicting references in Intersect:
                  |$plan
                  |Conflicting attributes: ${conflictingAttributes.mkString(",")}
-                 |""".stripMargin)
+               """.stripMargin)
+
+          case e: Except if !e.duplicateResolved =>
+            val conflictingAttributes = e.left.outputSet.intersect(e.right.outputSet)
+            failAnalysis(
+              s"""
+                 |Failure when resolving conflicting references in Except:
+                 |$plan
+                 |Conflicting attributes: ${conflictingAttributes.mkString(",")}
+               """.stripMargin)
 
           case o if !o.resolved =>
             failAnalysis(

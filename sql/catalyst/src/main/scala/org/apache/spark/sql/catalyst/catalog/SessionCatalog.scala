@@ -125,7 +125,7 @@ class SessionCatalog(
   }
 
   def getDefaultDBPath(db: String): String = {
-    System.getProperty("java.io.tmpdir") + File.separator + db + ".db"
+    new Path(new Path(conf.warehousePath), db + ".db").toString
   }
 
   // ----------------------------------------------------------------------------

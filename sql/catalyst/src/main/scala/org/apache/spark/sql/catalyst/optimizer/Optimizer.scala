@@ -65,6 +65,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       CombineUnions) ::
     Batch("Replace Operators", fixedPoint,
       ReplaceIntersectWithSemiJoin,
+      ReplaceExceptWithAntiJoin,
       ReplaceDistinctWithAggregate) ::
     Batch("Aggregate", fixedPoint,
       RemoveLiteralFromGroupExpressions) ::
@@ -232,17 +233,12 @@ object LimitPushDown extends Rule[LogicalPlan] {
 }
 
 /**
- * Pushes certain operations to both sides of a Union or Except operator.
+ * Pushes certain operations to both sides of a Union operator.
  * Operations that are safe to pushdown are listed as follows.
  * Union:
  * Right now, Union means UNION ALL, which does not de-duplicate rows. So, it is
  * safe to pushdown Filters and Projections through it. Once we add UNION DISTINCT,
  * we will not be able to pushdown Projections.
- *
- * Except:
- * It is not safe to pushdown Projections through it because we need to get the
- * intersect of rows by comparing the entire rows. It is fine to pushdown Filters
- * with deterministic condition.
  */
 object SetOperationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
@@ -310,17 +306,6 @@ object SetOperationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         Filter(pushToRight(deterministic, rewrites), child)
       }
       Filter(nondeterministic, Union(newFirstChild +: newOtherChildren))
-
-    // Push down filter through EXCEPT
-    case Filter(condition, Except(left, right)) =>
-      val (deterministic, nondeterministic) = partitionByDeterministic(condition)
-      val rewrites = buildRewrites(left, right)
-      Filter(nondeterministic,
-        Except(
-          Filter(deterministic, left),
-          Filter(pushToRight(deterministic, rewrites), right)
-        )
-      )
   }
 }
 
@@ -1007,16 +992,15 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
         filter
       }
 
-    case filter @ Filter(condition, child)
-      if child.isInstanceOf[Union] || child.isInstanceOf[Intersect] =>
-      // Union/Intersect could change the rows, so non-deterministic predicate can't be pushed down
+    case filter @ Filter(condition, union: Union) =>
+      // Union could change the rows, so non-deterministic predicate can't be pushed down
       val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { cond =>
         cond.deterministic
       }
       if (pushDown.nonEmpty) {
         val pushDownCond = pushDown.reduceLeft(And)
-        val output = child.output
-        val newGrandChildren = child.children.map { grandchild =>
+        val output = union.output
+        val newGrandChildren = union.children.map { grandchild =>
           val newCond = pushDownCond transform {
             case e if output.exists(_.semanticEquals(e)) =>
               grandchild.output(output.indexWhere(_.semanticEquals(e)))
@@ -1024,19 +1008,14 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
           assert(newCond.references.subsetOf(grandchild.outputSet))
           Filter(newCond, grandchild)
         }
-        val newChild = child.withNewChildren(newGrandChildren)
+        val newUnion = union.withNewChildren(newGrandChildren)
         if (stayUp.nonEmpty) {
-          Filter(stayUp.reduceLeft(And), newChild)
+          Filter(stayUp.reduceLeft(And), newUnion)
         } else {
-          newChild
+          newUnion
         }
       } else {
         filter
-      }
-
-    case filter @ Filter(condition, e @ Except(left, _)) =>
-      pushDownPredicate(filter, e.left) { predicate =>
-        e.copy(left = Filter(predicate, left))
       }
 
     // two filters should be combine together by other rules
@@ -1419,6 +1398,27 @@ object ReplaceIntersectWithSemiJoin extends Rule[LogicalPlan] {
       assert(left.output.size == right.output.size)
       val joinCond = left.output.zip(right.output).map { case (l, r) => EqualNullSafe(l, r) }
       Distinct(Join(left, right, LeftSemi, joinCond.reduceLeftOption(And)))
+  }
+}
+
+/**
+ * Replaces logical [[Except]] operator with a left-anti [[Join]] operator.
+ * {{{
+ *   SELECT a1, a2 FROM Tab1 EXCEPT SELECT b1, b2 FROM Tab2
+ *   ==>  SELECT DISTINCT a1, a2 FROM Tab1 LEFT ANTI JOIN Tab2 ON a1<=>b1 AND a2<=>b2
+ * }}}
+ *
+ * Note:
+ * 1. This rule is only applicable to EXCEPT DISTINCT. Do not use it for EXCEPT ALL.
+ * 2. This rule has to be done after de-duplicating the attributes; otherwise, the generated
+ *    join conditions will be incorrect.
+ */
+object ReplaceExceptWithAntiJoin extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case Except(left, right) =>
+      assert(left.output.size == right.output.size)
+      val joinCond = left.output.zip(right.output).map { case (l, r) => EqualNullSafe(l, r) }
+      Distinct(Join(left, right, LeftAnti, joinCond.reduceLeftOption(And)))
   }
 }
 

@@ -136,7 +136,8 @@ private[hive] class TestHiveSparkSession(
   }
 
   @transient
-  override lazy val sessionState: TestHiveSessionState = new TestHiveSessionState(self)
+  override lazy val sessionState: TestHiveSessionState =
+    new TestHiveSessionState(self, warehousePath)
 
   override def newSession(): TestHiveSparkSession = {
     new TestHiveSparkSession(
@@ -156,19 +157,8 @@ private[hive] class TestHiveSparkSession(
 
   sessionState.hiveconf.set("hive.plan.serialization.format", "javaXML")
 
-  // A snapshot of the entries in the starting SQLConf
-  // We save this because tests can mutate this singleton object if they want
-  // This snapshot is saved when we create this TestHiveSparkSession.
-  val initialSQLConf: SQLConf = {
-    val snapshot = new SQLConf
-    sessionState.conf.getAllConfs.foreach { case (k, v) => snapshot.setConfString(k, v) }
-    snapshot
-  }
-
-  val testTempDir = Utils.createTempDir()
-
   // For some hive test case which contain ${system:test.tmp.dir}
-  System.setProperty("test.tmp.dir", testTempDir.getCanonicalPath)
+  System.setProperty("test.tmp.dir", Utils.createTempDir().getCanonicalPath)
 
   /** The location of the compiled hive distribution */
   lazy val hiveHome = envVarToFile("HIVE_HOME")
@@ -521,8 +511,10 @@ private[hive] class TestHiveSharedState(
 }
 
 
-private[hive] class TestHiveSessionState(sparkSession: TestHiveSparkSession)
-  extends HiveSessionState(sparkSession) {
+private[hive] class TestHiveSessionState(
+    sparkSession: TestHiveSparkSession,
+    warehousePath: File)
+  extends HiveSessionState(sparkSession) { self =>
 
   override lazy val conf: SQLConf = {
     new SQLConf {
@@ -530,9 +522,8 @@ private[hive] class TestHiveSessionState(sparkSession: TestHiveSparkSession)
       override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
       override def clear(): Unit = {
         super.clear()
-        TestHiveContext.overrideConfs.map {
-          case (key, value) => setConfString(key, value)
-        }
+        TestHiveContext.overrideConfs.foreach { case (k, v) => setConfString(k, v) }
+        setConfString("hive.metastore.warehouse.dir", self.warehousePath.toURI.toString)
       }
     }
   }
