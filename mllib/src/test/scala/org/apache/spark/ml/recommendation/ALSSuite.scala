@@ -200,6 +200,7 @@ class ALSSuite
 
   /**
    * Generates an explicit feedback dataset for testing ALS.
+   *
    * @param numUsers number of users
    * @param numItems number of items
    * @param rank rank
@@ -240,6 +241,7 @@ class ALSSuite
 
   /**
    * Generates an implicit feedback dataset for testing ALS.
+   *
    * @param numUsers number of users
    * @param numItems number of items
    * @param rank rank
@@ -288,6 +290,7 @@ class ALSSuite
 
   /**
    * Generates random user/item factors, with i.i.d. values drawn from U(a, b).
+   *
    * @param size number of users/items
    * @param rank number of features
    * @param random random number generator
@@ -313,6 +316,7 @@ class ALSSuite
 
   /**
    * Test ALS using the given training/test splits and parameters.
+   *
    * @param training training dataset
    * @param test test dataset
    * @param rank rank of the matrix factorization
@@ -519,8 +523,7 @@ class ALSSuite
 class ALSStorageSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest with Logging {
 
-  test("storage level params") {
-    // test invalid param values
+  test("invalid storage params") {
     intercept[IllegalArgumentException] {
       new ALS().setIntermediateRDDStorageLevel("foo")
     }
@@ -530,7 +533,9 @@ class ALSStorageSuite
     intercept[IllegalArgumentException] {
       new ALS().setFinalRDDStorageLevel("foo")
     }
+  }
 
+  test("default and non-default storage params set correct RDD StorageLevels") {
     val sqlContext = this.sqlContext
     import sqlContext.implicits._
     val data = Seq(
