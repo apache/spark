@@ -167,14 +167,14 @@ public class HiveServer2 extends CompositeService {
    * Create an appropriate response object,
    * which has executor to execute the appropriate command based on the parsed options.
    */
-  static class ServerOptionsProcessor {
+  public static class ServerOptionsProcessor {
     private final Options options = new Options();
     private org.apache.commons.cli.CommandLine commandLine;
     private final String serverName;
     private final StringBuilder debugMessage = new StringBuilder();
 
     @SuppressWarnings("static-access")
-    ServerOptionsProcessor(String serverName) {
+    public ServerOptionsProcessor(String serverName) {
       this.serverName = serverName;
       // -hiveconf x=y
       options.addOption(OptionBuilder
@@ -187,7 +187,7 @@ public class HiveServer2 extends CompositeService {
       options.addOption(new Option("H", "help", false, "Print help information"));
     }
 
-    ServerOptionsProcessorResponse parse(String[] argv) {
+    public ServerOptionsProcessorResponse parse(String[] argv) {
       try {
         commandLine = new GnuParser().parse(options, argv);
         // Process --hiveconf
