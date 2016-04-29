@@ -97,7 +97,7 @@ private[sql] object Dataset {
  * the following creates a new Dataset by applying a filter on the existing one:
  * {{{
  *   val names = people.map(_.name)  // in Scala; names is a Dataset[String]
- *   Dataset<String> names = people.map((Person p) -> p.name, Encoders.STRING)  // in Java 8
+ *   Dataset<String> names = people.map((Person p) -> p.name, Encoders.STRING))  // in Java 8
  * }}}
  *
  * Dataset operations can also be untyped, through various domain-specific-language (DSL)
@@ -191,7 +191,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * An unresolved version of the internal encoder for the type of this [[Dataset]].  This one is
+   * An unresolved version of the internal encoder for the type of this [[Dataset]]. This one is
    * marked implicit so that we can use it when constructing new [[Dataset]] objects that have the
    * same object type (that will be possibly resolved to a different schema).
    */
@@ -329,7 +329,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Converts this strongly typed collection of data to generic Dataframe.  In contrast to the
+   * Converts this strongly typed collection of data to generic Dataframe. In contrast to the
    * strongly typed objects that Dataset operations work on, a Dataframe returns generic [[Row]]
    * objects that allow fields to be accessed by ordinal or name.
    *
@@ -342,13 +342,13 @@ class Dataset[T] private[sql](
 
   /**
    * :: Experimental ::
-   * Returns a new [[Dataset]] where each record has been mapped on to the specified type.  The
+   * Returns a new [[Dataset]] where each record has been mapped on to the specified type. The
    * method used to map columns depend on the type of `U`:
    *  - When `U` is a class, fields for the class will be mapped to columns of the same name
-   *    (case sensitivity is determined by `spark.sql.caseSensitive`)
+   *    (case sensitivity is determined by `spark.sql.caseSensitive`).
    *  - When `U` is a tuple, the columns will be be mapped by ordinal (i.e. the first column will
    *    be assigned to `_1`).
-   *  - When `U` is a primitive type (i.e. String, Int, etc). then the first column of the
+   *  - When `U` is a primitive type (i.e. String, Int, etc), then the first column of the
    *    [[DataFrame]] will be used.
    *
    * If the schema of the [[Dataset]] does not match the desired `U` type, you can use `select`
@@ -1002,7 +1002,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Internal helper function for building typed selects that return tuples.  For simplicity and
+   * Internal helper function for building typed selects that return tuples. For simplicity and
    * code reuse, we do this without the help of the type system and then use helper functions
    * that cast appropriately for the user facing interface.
    */
@@ -1125,7 +1125,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Groups the [[Dataset]] using the specified columns, so we can run aggregation on them.  See
+   * Groups the [[Dataset]] using the specified columns, so we can run aggregation on them. See
    * [[RelationalGroupedDataset]] for all the available aggregate functions.
    *
    * {{{
@@ -1237,7 +1237,7 @@ class Dataset[T] private[sql](
   /**
    * :: Experimental ::
    * (Java-specific)
-   * Reduces the elements of this Dataset using the specified binary function.  The given `func`
+   * Reduces the elements of this Dataset using the specified binary function. The given `func`
    * must be commutative and associative or the result may be non-deterministic.
    *
    * @group action
@@ -1553,7 +1553,7 @@ class Dataset[T] private[sql](
   /**
    * :: Experimental ::
    * (Scala-specific) Returns a new [[Dataset]] where each row has been expanded to zero or more
-   * rows by the provided function.  This is similar to a `LATERAL VIEW` in HiveQL. The columns of
+   * rows by the provided function. This is similar to a `LATERAL VIEW` in HiveQL. The columns of
    * the input row are implicitly joined with each row that is output by the function.
    *
    * The following example uses this function to count the number of books which contain
@@ -1596,7 +1596,7 @@ class Dataset[T] private[sql](
   /**
    * :: Experimental ::
    * (Scala-specific) Returns a new [[Dataset]] where a single column has been expanded to zero
-   * or more rows by the provided function.  This is similar to a `LATERAL VIEW` in HiveQL. All
+   * or more rows by the provided function. This is similar to a `LATERAL VIEW` in HiveQL. All
    * columns of the input row are implicitly joined with each value that is output by the function.
    *
    * {{{
@@ -1730,7 +1730,7 @@ class Dataset[T] private[sql](
   /**
    * Returns a new [[Dataset]] with a column dropped.
    * This version of drop accepts a Column rather than a name.
-   * This is a no-op if the Datasetdoesn't have a column
+   * This is a no-op if the Dataset doesn't have a column
    * with an equivalent expression.
    *
    * @group untypedrel
@@ -1969,7 +1969,7 @@ class Dataset[T] private[sql](
   /**
    * :: Experimental ::
    * (Java-specific)
-   * Returns a new [[Dataset]] that contains the result of applying `func` to each partition.
+   * Returns a new [[Dataset]] that contains the result of applying `f` to each partition.
    *
    * @group func
    * @since 1.6.0
@@ -2028,7 +2028,7 @@ class Dataset[T] private[sql](
   def foreach(func: ForeachFunction[T]): Unit = foreach(func.call(_))
 
   /**
-   * Applies a function f to each partition of this [[Dataset]].
+   * Applies a function `f` to each partition of this [[Dataset]].
    *
    * @group action
    * @since 1.6.0
@@ -2283,7 +2283,7 @@ class Dataset[T] private[sql](
   def javaRDD: JavaRDD[T] = toJavaRDD
 
   /**
-   * Registers this [[Dataset]] as a temporary table using the given name.  The lifetime of this
+   * Registers this [[Dataset]] as a temporary table using the given name. The lifetime of this
    * temporary table is tied to the [[SQLContext]] that was used to create this Dataset.
    *
    * @group basic
