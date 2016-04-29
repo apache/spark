@@ -163,6 +163,7 @@ abstract class NewAccumulator[IN, OUT] extends Serializable {
    * Developers should extend addImpl to customize the adding functionality.
    */
   final def add(v: IN): Unit = {
+    assertMetadataNotNull()
     addImpl(v)
     if (metadata.dataProperty) {
       val updateInfo = TaskContext.get().getRDDPartitionInfo()
@@ -192,6 +193,7 @@ abstract class NewAccumulator[IN, OUT] extends Serializable {
    * merge-in-place. Developers should extend mergeImpl to customize the adding functionality.
    */
   final private[spark] def merge(other: NewAccumulator[IN, OUT]): Unit = {
+    assertMetadataNotNull()
     // Handle data property accumulators
     if (metadata.dataProperty) {
       val term = other.pending

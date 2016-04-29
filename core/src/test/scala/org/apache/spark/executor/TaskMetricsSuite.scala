@@ -27,7 +27,7 @@ class TaskMetricsSuite extends SparkFunSuite {
   import StorageLevel._
 
   test("mutating values") {
-    val tm = new TaskMetrics
+    val tm = TaskMetrics.empty
     assert(tm.executorDeserializeTime == 0L)
     assert(tm.executorRunTime == 0L)
     assert(tm.resultSize == 0L)
@@ -71,7 +71,7 @@ class TaskMetricsSuite extends SparkFunSuite {
   }
 
   test("mutating shuffle read metrics values") {
-    val tm = new TaskMetrics
+    val tm = TaskMetrics.empty
     val sr = tm.shuffleReadMetrics
     // initial values
     assert(sr.remoteBlocksFetched == 0)
@@ -115,7 +115,7 @@ class TaskMetricsSuite extends SparkFunSuite {
   }
 
   test("mutating shuffle write metrics values") {
-    val tm = new TaskMetrics
+    val tm = TaskMetrics.empty
     val sw = tm.shuffleWriteMetrics
     // initial values
     assert(sw.bytesWritten == 0L)
@@ -139,7 +139,7 @@ class TaskMetricsSuite extends SparkFunSuite {
   }
 
   test("mutating input metrics values") {
-    val tm = new TaskMetrics
+    val tm = TaskMetrics.empty
     val in = tm.inputMetrics
     // initial values
     assert(in.bytesRead == 0L)
@@ -155,7 +155,7 @@ class TaskMetricsSuite extends SparkFunSuite {
   }
 
   test("mutating output metrics values") {
-    val tm = new TaskMetrics
+    val tm = TaskMetrics.empty
     val out = tm.outputMetrics
     // initial values
     assert(out.bytesWritten == 0L)
@@ -171,7 +171,7 @@ class TaskMetricsSuite extends SparkFunSuite {
   }
 
   test("merging multiple shuffle read metrics") {
-    val tm = new TaskMetrics
+    val tm = TaskMetrics.empty
     val sr1 = tm.createTempShuffleReadMetrics()
     val sr2 = tm.createTempShuffleReadMetrics()
     val sr3 = tm.createTempShuffleReadMetrics()
@@ -186,7 +186,7 @@ class TaskMetricsSuite extends SparkFunSuite {
     assert(tm.shuffleReadMetrics.fetchWaitTime === 6L)
 
     // SPARK-5701: calling merge without any shuffle deps does nothing
-    val tm2 = new TaskMetrics
+    val tm2 = TaskMetrics.empty
     tm2.mergeShuffleReadMetrics()
   }
 
