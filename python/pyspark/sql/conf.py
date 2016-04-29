@@ -43,37 +43,29 @@ class RuntimeConfig(object):
 
     @ignore_unicode_prefix
     @since(2.0)
-    def get(self, key):
+    def get(self, key, default=None):
         """Returns the value of Spark runtime configuration property for the given key,
         assuming it is set.
 
         >>> spark.setConf("bogo", "sipeo")
         >>> spark.conf.get("bogo")
         u'sipeo'
+        >>> spark.conf.get("bogo", "ta")
+        u'sipeo'
+        >>> spark.conf.get("definitely.not.set", u"ta")
+        u'ta'
         >>> spark.conf.get("definitely.not.set") # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
             ...
         Py4JJavaError: ...
         """
-        return self._jconf.get(key)
-
-    @ignore_unicode_prefix
-    @since(2.0)
-    def getOption(self, key):
-        """Returns the value of Spark runtime configuration property for the given key,
-        or None if it is not set.
-
-        >>> spark.setConf("bogo", "sipeo")
-        >>> spark.conf.getOption("bogo")
-        u'sipeo'
-        >>> spark.conf.getOption("definitely.not.set") is None
-        True
-        """
-        iter = self._jconf.getOption(key).iterator()
-        if iter.hasNext():
-            return iter.next()
+        if default is None:
+            return self._jconf.get(key)
         else:
-            return None
+            if self._jconf.contains(key):
+                return self._jconf.get(key)
+            else:
+                return default
 
     @ignore_unicode_prefix
     @since(2.0)

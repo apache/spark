@@ -86,4 +86,12 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
   def unset(key: String): Unit = {
     sqlConf.unsetConf(key)
   }
+
+  /**
+   * Returns whether a particular key is set.
+   */
+  protected[sql] def contains(key: String): Boolean = {
+    getOption(key).isDefined
+  }
+
 }
