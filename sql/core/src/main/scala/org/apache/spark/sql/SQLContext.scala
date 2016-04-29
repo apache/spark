@@ -134,13 +134,15 @@ class SQLContext private[sql](
    * @group config
    * @since 1.0.0
    */
-  def setConf(props: Properties): Unit = sparkSession.setConf(props)
+  def setConf(props: Properties): Unit = {
+    sessionState.conf.setConf(props)
+  }
 
   /**
    * Set the given Spark SQL configuration property.
    */
   private[sql] def setConf[T](entry: ConfigEntry[T], value: T): Unit = {
-    sparkSession.setConf(entry, value)
+    sessionState.conf.setConf(entry, value)
   }
 
   /**
@@ -149,7 +151,9 @@ class SQLContext private[sql](
    * @group config
    * @since 1.0.0
    */
-  def setConf(key: String, value: String): Unit = sparkSession.setConf(key, value)
+  def setConf(key: String, value: String): Unit = {
+    sparkSession.conf.set(key, value)
+  }
 
   /**
    * Return the value of Spark SQL configuration property for the given key.
@@ -157,13 +161,17 @@ class SQLContext private[sql](
    * @group config
    * @since 1.0.0
    */
-  def getConf(key: String): String = sparkSession.getConf(key)
+  def getConf(key: String): String = {
+    sparkSession.conf.get(key)
+  }
 
   /**
    * Return the value of Spark SQL configuration property for the given key. If the key is not set
    * yet, return `defaultValue` in [[ConfigEntry]].
    */
-  private[sql] def getConf[T](entry: ConfigEntry[T]): T = sparkSession.getConf(entry)
+  private[sql] def getConf[T](entry: ConfigEntry[T]): T = {
+    sparkSession.conf.get(entry)
+  }
 
   /**
    * Return the value of Spark SQL configuration property for the given key. If the key is not set
@@ -171,7 +179,7 @@ class SQLContext private[sql](
    * desired one.
    */
   private[sql] def getConf[T](entry: ConfigEntry[T], defaultValue: T): T = {
-    sparkSession.getConf(entry, defaultValue)
+    sparkSession.conf.get(entry, defaultValue)
   }
 
   /**
@@ -181,7 +189,9 @@ class SQLContext private[sql](
    * @group config
    * @since 1.0.0
    */
-  def getConf(key: String, defaultValue: String): String = sparkSession.getConf(key, defaultValue)
+  def getConf(key: String, defaultValue: String): String = {
+    sparkSession.conf.get(key, defaultValue)
+  }
 
   /**
    * Return all the configuration properties that have been set (i.e. not the default).
@@ -190,7 +200,9 @@ class SQLContext private[sql](
    * @group config
    * @since 1.0.0
    */
-  def getAllConfs: immutable.Map[String, String] = sparkSession.getAllConfs
+  def getAllConfs: immutable.Map[String, String] = {
+    sparkSession.conf.getAll
+  }
 
   protected[sql] def parseSql(sql: String): LogicalPlan = sparkSession.parseSql(sql)
 

@@ -139,13 +139,7 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
    *  - allow SQL11 keywords to be used as identifiers
    */
   def setDefaultOverrideConfs(): Unit = {
-    setConf(ConfVars.HIVE_SUPPORT_SQL11_RESERVED_KEYWORDS.varname, "false")
-  }
-
-  override def setConf(key: String, value: String): Unit = {
-    super.setConf(key, value)
-    metadataHive.runSqlHive(s"SET $key=$value")
-    hiveconf.set(key, value)
+    conf.setConfString(ConfVars.HIVE_SUPPORT_SQL11_RESERVED_KEYWORDS.varname, "false")
   }
 
   override def addJar(path: String): Unit = {

@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.sql.internal.SQLConf
+
 
 /**
  * Runtime configuration interface for Spark. To access this, use [[SparkSession.conf]].
@@ -65,6 +67,39 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
   @throws[NoSuchElementException]("if the key is not set")
   def get(key: String): String = {
     sqlConf.getConfString(key)
+  }
+
+  /**
+   * Returns the value of Spark runtime configuration property for the given key.
+   *
+   * @since 2.0.0
+   */
+  def get(key: String, default: String): String = {
+    sqlConf.getConfString(key, default)
+  }
+
+  /**
+   * Returns the value of Spark runtime configuration property for the given key.
+   */
+  @throws[NoSuchElementException]("if the key is not set")
+  protected[sql] def get[T](entry: ConfigEntry[T]): T = {
+    sqlConf.getConf(entry)
+  }
+
+  /**
+   * Returns the value of Spark runtime configuration property for the given key.
+   */
+  protected[sql] def get[T](entry: ConfigEntry[T], default: T): T = {
+    sqlConf.getConf(entry, default)
+  }
+
+  /**
+   * Returns all properties set in this conf.
+   *
+   * @since 2.0.0
+   */
+  def getAll: Map[String, String] = {
+    sqlConf.getAllConfs
   }
 
   /**
