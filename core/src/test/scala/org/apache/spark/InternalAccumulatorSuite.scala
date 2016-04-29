@@ -190,16 +190,16 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
     assert(AccumulatorContext.numAccums === numInternalAccums * 2)
     var cnt = 0
     val accumsRegistered = sc.cleaner match {
-      case Some(cleaner: SaveAccumContextCleaner) => {
+      case Some(cleaner: SaveAccumContextCleaner) =>
         for (id <- cleaner.accumsRegisteredForCleanup) {
           assert(AccumulatorContext.get(id) != None)
           cnt = cnt + 1
         }
-      }
       case _ => Seq.empty[Long]
     }
     // Make sure the same set of accumulators is registered for cleanup
     assert(cnt === numInternalAccums * 2)
+    assert(cnt == AccumulatorContext.numAccums)
   }
 
   /**

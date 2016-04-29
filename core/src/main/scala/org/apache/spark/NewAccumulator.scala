@@ -211,8 +211,6 @@ private[spark] object AccumulatorContext {
 
   def numAccums: Int = originals.size
 
-  def accumIds: Set[Long] = originals.keySet().asScala.toSet
-
   /**
    * Register an [[Accumulator]] created on the driver such that it can be used on the executors.
    *
