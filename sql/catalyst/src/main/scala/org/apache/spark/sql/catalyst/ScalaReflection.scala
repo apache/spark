@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
@@ -389,6 +390,15 @@ object ScalaReflection extends ScalaReflection {
           Nil,
           dataType = ObjectType(udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt()))
         Invoke(obj, "deserialize", ObjectType(udt.userClass), getPath :: Nil)
+
+      case t if UDTRegistration.exists(getClassNameFromType(t)) =>
+        val udt = UDTRegistration.getUDTFor(getClassNameFromType(t)).get.newInstance()
+          .asInstanceOf[UserDefinedType[_]]
+        val obj = NewInstance(
+          udt.getClass,
+          Nil,
+          dataType = ObjectType(udt.getClass))
+        Invoke(obj, "deserialize", ObjectType(udt.userClass), getPath :: Nil)
     }
   }
 
@@ -603,6 +613,15 @@ object ScalaReflection extends ScalaReflection {
             dataType = ObjectType(udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt()))
           Invoke(obj, "serialize", udt.sqlType, inputObject :: Nil)
 
+        case t if UDTRegistration.exists(getClassNameFromType(t)) =>
+          val udt = UDTRegistration.getUDTFor(getClassNameFromType(t)).get.newInstance()
+            .asInstanceOf[UserDefinedType[_]]
+          val obj = NewInstance(
+            udt.getClass,
+            Nil,
+            dataType = ObjectType(udt.getClass))
+          Invoke(obj, "serialize", udt.sqlType, inputObject :: Nil)
+
         case other =>
           throw new UnsupportedOperationException(
             s"No Encoder found for $tpe\n" + walkedTypePath.mkString("\n"))
@@ -670,6 +689,10 @@ object ScalaReflection extends ScalaReflection {
     tpe match {
       case t if t.typeSymbol.annotations.exists(_.tpe =:= typeOf[SQLUserDefinedType]) =>
         val udt = getClassFromType(t).getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance()
+        Schema(udt, nullable = true)
+      case t if UDTRegistration.exists(getClassNameFromType(t)) =>
+        val udt = UDTRegistration.getUDTFor(getClassNameFromType(t)).get.newInstance()
+          .asInstanceOf[UserDefinedType[_]]
         Schema(udt, nullable = true)
       case t if t <:< localTypeOf[Option[_]] =>
         val TypeRef(_, _, Seq(optType)) = t

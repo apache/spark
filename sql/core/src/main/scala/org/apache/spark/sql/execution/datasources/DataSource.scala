@@ -127,17 +127,16 @@ case class DataSource(
   }
 
   private def inferFileFormatSchema(format: FileFormat): StructType = {
-    val caseInsensitiveOptions = new CaseInsensitiveMap(options)
-    val allPaths = caseInsensitiveOptions.get("path")
-    val globbedPaths = allPaths.toSeq.flatMap { path =>
-      val hdfsPath = new Path(path)
-      val fs = hdfsPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
-      val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-      SparkHadoopUtil.get.globPathIfNecessary(qualified)
-    }.toArray
-
-    val fileCatalog: FileCatalog = new HDFSFileCatalog(sparkSession, options, globbedPaths, None)
     userSpecifiedSchema.orElse {
+      val caseInsensitiveOptions = new CaseInsensitiveMap(options)
+      val allPaths = caseInsensitiveOptions.get("path")
+      val globbedPaths = allPaths.toSeq.flatMap { path =>
+        val hdfsPath = new Path(path)
+        val fs = hdfsPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
+        val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+        SparkHadoopUtil.get.globPathIfNecessary(qualified)
+      }.toArray
+      val fileCatalog: FileCatalog = new HDFSFileCatalog(sparkSession, options, globbedPaths, None)
       format.inferSchema(
         sparkSession,
         caseInsensitiveOptions,

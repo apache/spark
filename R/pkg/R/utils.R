@@ -632,7 +632,7 @@ assignNewEnv <- function(data) {
 
   env <- new.env()
   for (i in 1:length(cols)) {
-    assign(x = cols[i], value = data[, cols[i]], envir = env)
+    assign(x = cols[i], value = data[, cols[i], drop = F], envir = env)
   }
   env
 }

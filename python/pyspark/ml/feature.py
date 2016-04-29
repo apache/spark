@@ -517,8 +517,12 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures, Java
     """
     .. note:: Experimental
 
-    Maps a sequence of terms to their term frequencies using the
-    hashing trick.
+    Maps a sequence of terms to their term frequencies using the hashing trick.
+    Currently we use Austin Appleby's MurmurHash 3 algorithm (MurmurHash3_x86_32)
+    to calculate the hash code value for the term object.
+    Since a simple modulo is used to transform the hash function to a column index,
+    it is advisable to use a power of two as the numFeatures parameter;
+    otherwise the features will not be mapped evenly to the columns.
 
     >>> df = sqlContext.createDataFrame([(["a", "b", "c"],)], ["words"])
     >>> hashingTF = HashingTF(numFeatures=10, inputCol="words", outputCol="features")
@@ -543,30 +547,22 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures, Java
                    "rather than integer counts. Default False.",
                    typeConverter=TypeConverters.toBoolean)
 
-    hashAlgorithm = Param(Params._dummy(), "hashAlgorithm", "The hash algorithm used when " +
-                          "mapping term to integer. Supported options: murmur3(default) " +
-                          "and native.", typeConverter=TypeConverters.toString)
-
     @keyword_only
-    def __init__(self, numFeatures=1 << 18, binary=False, inputCol=None, outputCol=None,
-                 hashAlgorithm="murmur3"):
+    def __init__(self, numFeatures=1 << 18, binary=False, inputCol=None, outputCol=None):
         """
-        __init__(self, numFeatures=1 << 18, binary=False, inputCol=None, outputCol=None, \
-                 hashAlgorithm="murmur3")
+        __init__(self, numFeatures=1 << 18, binary=False, inputCol=None, outputCol=None)
         """
         super(HashingTF, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.HashingTF", self.uid)
-        self._setDefault(numFeatures=1 << 18, binary=False, hashAlgorithm="murmur3")
+        self._setDefault(numFeatures=1 << 18, binary=False)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("1.3.0")
-    def setParams(self, numFeatures=1 << 18, binary=False, inputCol=None, outputCol=None,
-                  hashAlgorithm="murmur3"):
+    def setParams(self, numFeatures=1 << 18, binary=False, inputCol=None, outputCol=None):
         """
-        setParams(self, numFeatures=1 << 18, binary=False, inputCol=None, outputCol=None, \
-                  hashAlgorithm="murmur3")
+        setParams(self, numFeatures=1 << 18, binary=False, inputCol=None, outputCol=None)
         Sets params for this HashingTF.
         """
         kwargs = self.setParams._input_kwargs
@@ -586,21 +582,6 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures, Java
         Gets the value of binary or its default value.
         """
         return self.getOrDefault(self.binary)
-
-    @since("2.0.0")
-    def setHashAlgorithm(self, value):
-        """
-        Sets the value of :py:attr:`hashAlgorithm`.
-        """
-        self._set(hashAlgorithm=value)
-        return self
-
-    @since("2.0.0")
-    def getHashAlgorithm(self):
-        """
-        Gets the value of hashAlgorithm or its default value.
-        """
-        return self.getOrDefault(self.hashAlgorithm)
 
 
 @inherit_doc
