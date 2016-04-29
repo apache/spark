@@ -113,19 +113,29 @@ class RowMatrix @Since("1.0.0") (
   def computeGramianMatrix(): Matrix = computeGramianMatrix(null)
 
   /**
-   * @param dv vector of values to subtract from the columns before computing the Gramian
+   * @param dv array of values to subtract from the columns before computing the Gramian
    */
-  private[spark] def computeGramianMatrix(dv: Vector): Matrix = {
+  private[spark] def computeGramianMatrix(dv: Array[Double]): Matrix = {
     val n = numCols().toInt
     checkNumColumns(n)
     // Computes n*(n+1)/2, avoiding overflow in the multiplication.
     // This succeeds when n <= 65535, which is checked above
     val nt: Int = if (n % 2 == 0) ((n / 2) * (n + 1)) else (n * ((n + 1) / 2))
 
+    // Optionally compute dv * dv.t
+    val dvdvt =
+      if (dv == null) {
+        null
+      } else {
+        val dvdvtArray = new Array[Double](nt)
+        BLAS.spr(1.0, new DenseVector(dv), dvdvtArray, null, null)
+        dvdvtArray
+      }
+
     // Compute the upper triangular part of the gram matrix.
     val GU = rows.treeAggregate(new BDV[Double](nt))(
       seqOp = (U, v) => {
-        BLAS.spr(1.0, v, U.data, dv)
+        BLAS.spr(1.0, v, U.data, dv, dvdvt)
         U
       }, combOp = (U1, U2) => U1 += U2)
 
@@ -338,7 +348,7 @@ class RowMatrix @Since("1.0.0") (
     require(m > 1, s"RowMatrix.computeCovariance called on matrix with only $m rows." +
       "  Cannot compute the covariance of a RowMatrix with <= 1 row.")
 
-    computeGramianMatrix(summary.mean).map(_ / (m - 1.0))
+    computeGramianMatrix(summary.mean.toArray).map(_ / (m - 1.0))
   }
 
   /**

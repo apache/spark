@@ -242,18 +242,22 @@ private[spark] object BLAS extends Serializable with Logging {
    * @param U the upper triangular part of the matrix in a [[DenseVector]](column major)
    */
   def spr(alpha: Double, v: Vector, U: DenseVector): Unit = {
-    spr(alpha, v, U.values, null)
+    spr(alpha, v, U.values, null, null)
   }
 
   /**
-   * Adds alpha * v * v.t to a matrix in-place. This is the same as BLAS's ?SPR.
+   * Adds alpha * (v - dv) * (v - dv).t to a matrix in-place.
+   * This is like BLAS's ?SPR, but also allows for an optional vector to be subtracted from
+   * the input before computing ?SPR.
    *
    * @param alpha scaling factor
    * @param v vector argument
    * @param U the upper triangular part of the matrix packed in an array (column major)
-   * @param dv an optional vector of values to subtract from each value of v before computing
+   * @param dv an optional array of values to subtract from each value of v before computing
+   * @param dvdvt precomputed dv * dv.t; must be set if dv is not null
    */
-  def spr(alpha: Double, v: Vector, U: Array[Double], dv: Vector): Unit = {
+  def spr(alpha: Double, v: Vector, U: Array[Double],
+          dv: Array[Double], dvdvt: Array[Double]): Unit = {
     val n = v.size
     v match {
       case DenseVector(values) =>
@@ -272,39 +276,75 @@ private[spark] object BLAS extends Serializable with Logging {
           }
         NativeBLAS.dspr("U", n, alpha, shiftedValues, 1, U)
 
-      case sparse: SparseVector if dv != null =>
-        // Sparse case, but with shift; treat it as dense
-        val dense = sparse.toArray
+      case sv: SparseVector if dv != null =>
+        // Tricky case, because subtracting dv from a sparse vector makes it dense.
+        // Compute (sv - dv) * (sv - dv)' = sv*sv' - dv*sv' - sv*dv' + dv*dv'
+
+        // sv*sv' is easy to compute as in the case that follows:
+        sparseSPR(alpha, sv, U)
+
+        // dv*dv' is precomputed and can be added directly
         var i = 0
-        while (i < dense.length) {
-          dense(i) -= dv(i)
+        while (i < U.length) {
+          U(i) += alpha * dvdvt(i)
           i += 1
         }
-        NativeBLAS.dspr("U", n, alpha, dense, 1, U)
 
-      case SparseVector(size, indices, values) if dv == null =>
-        // Optimization for sparse case with no shift
+        // dv*sv' = (sv*dv')', and only the upper triangular half of each matters anyway,
+        // so these can actually be computed and subtracted in one pass
+        val indices = sv.indices
+        val values = sv.values
         val nnz = indices.length
-        var colStartIdx = 0
-        var prevCol = 0
-        var col = 0
         var j = 0
-        var i = 0
-        var av = 0.0
+        // Loop over (sparse) columns of dv*sv'
         while (j < nnz) {
-          col = indices(j)
-          // Skip empty columns.
-          colStartIdx += (col - prevCol) * (col + prevCol + 1) / 2
-          av = alpha * values(j)
-          i = 0
-          while (i <= j) {
-            U(colStartIdx + indices(i)) += av * values(i)
-            i += 1
+          val col = indices(j)
+          val av = alpha * values(j)
+          // Loop over (dense) rows of dv*sv'
+          var row = 0
+          while (row < dv.length) {
+            // Every value will be part of the upper-triangular part of either dv*sv' or sv*dv';
+            // "Transpose" the latter results and apply then as well to cover sv*dv' while we're
+            // at it:
+            val offset = if (row < col) (row + col * (col + 1) / 2) else (col + row * (row + 1) / 2)
+            val value = av * dv(row)
+            // Need to apply the updates along the diagonal twice since they are contributed by
+            // both dv*sv' and sv*dv'
+            U(offset) -= (if (row == col) 2 * value else value)
+            row += 1
           }
           j += 1
-          prevCol = col
         }
+
+      case sv: SparseVector if dv == null =>
+        sparseSPR(alpha, sv, U)
     }
+  }
+
+  private def sparseSPR(alpha: Double, sv: SparseVector, U: Array[Double]): Unit = {
+    val indices = sv.indices
+    val values = sv.values
+    val nnz = indices.length
+    var colStartIdx = 0
+    var prevCol = 0
+    var col = 0
+    var j = 0
+    var i = 0
+    var av = 0.0
+    while (j < nnz) {
+      col = indices(j)
+      // Skip empty columns.
+      colStartIdx += (col - prevCol) * (col + prevCol + 1) / 2
+      av = alpha * values(j)
+      i = 0
+      while (i <= j) {
+        U(colStartIdx + indices(i)) += av * values(i)
+        i += 1
+      }
+      j += 1
+      prevCol = col
+    }
+
   }
 
   /**
