@@ -178,7 +178,7 @@ case class ScriptTransformation(
             curLine = reader.readLine()
             if (!ioschema.schemaLess) {
               new GenericInternalRow(
-                prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"))
+                prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"), -1)
                   .map(CatalystTypeConverters.convertToCatalyst))
             } else {
               new GenericInternalRow(
