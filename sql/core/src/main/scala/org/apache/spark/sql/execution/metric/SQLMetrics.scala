@@ -32,7 +32,7 @@ class SQLMetric(val metricType: String, initValue: Long = 0L) extends NewAccumul
 
   override def copyAndReset(): SQLMetric = new SQLMetric(metricType, initValue)
 
-  override def merge(other: NewAccumulator[Long, Long]): Unit = other match {
+  override def mergeImpl(other: NewAccumulator[Long, Long]): Unit = other match {
     case o: SQLMetric => _value += o.localValue
     case _ => throw new UnsupportedOperationException(
       s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
@@ -40,7 +40,7 @@ class SQLMetric(val metricType: String, initValue: Long = 0L) extends NewAccumul
 
   override def isZero(): Boolean = _value == initValue
 
-  override def add(v: Long): Unit = _value += v
+  override def addImpl(v: Long): Unit = _value += v
 
   def +=(v: Long): Unit = _value += v
 

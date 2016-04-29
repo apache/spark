@@ -42,7 +42,7 @@ import org.apache.spark.util.Utils
  *                     reevaluation. Partial evaluation of a partition will not increment a data
  *                     property accumulator. Data property accumulators are currently experimental
  *                     and the behaviour may change in future versions.
-
+ *
  */
 private[spark] case class AccumulatorMetadata(
     id: Long,
