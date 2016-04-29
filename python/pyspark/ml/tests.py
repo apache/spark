@@ -959,41 +959,21 @@ class ALSTest(PySparkTestCase):
         df = sqlContext.createDataFrame(
             [(0, 0, 4.0), (0, 1, 2.0), (1, 1, 3.0), (1, 2, 4.0), (2, 1, 1.0), (2, 2, 5.0)],
             ["user", "item", "rating"])
-        als = ALS().setMaxIter(1)
-        # test default
+        als = ALS().setMaxIter(1).setRank(1)
+        # test default params
         als.fit(df)
-        item_factors = [(r[0], r[1]) for r in self.sc._jsc.getPersistentRDDs().items()
-                        if r[1].name() == "itemFactors"][0][1]
-        java_storage_level = item_factors.getStorageLevel()
-        self.assertEqual(java_storage_level.useDisk(), True)
-        self.assertEqual(java_storage_level.useMemory(), True)
-        self.assertEqual(java_storage_level.useOffHeap(), False)
-        self.assertEqual(java_storage_level.deserialized(), True)
-        self.assertEqual(java_storage_level.replication(), 1)
-        # set intermediate and final RDD storage level to non-default values
-        als.setIntermediateRDDStorageLevel("MEMORY_ONLY")
-        als.setFinalRDDStorageLevel("MEMORY_ONLY_2")
+        self.assertEqual(als.getIntermediateRDDStorageLevel(), "MEMORY_AND_DISK")
+        self.assertEqual(als._java_obj.getIntermediateRDDStorageLevel(), "MEMORY_AND_DISK")
+        self.assertEqual(als.getFinalRDDStorageLevel(), "MEMORY_AND_DISK")
+        self.assertEqual(als._java_obj.getFinalRDDStorageLevel(), "MEMORY_AND_DISK")
+        # test non-default params
+        als.setIntermediateRDDStorageLevel("MEMORY_ONLY_2")
+        als.setFinalRDDStorageLevel("DISK_ONLY")
         als.fit(df)
-        item_factors2 = [(r[0], r[1]) for r in self.sc._jsc.getPersistentRDDs().items()
-                         if r[1].name() == "itemFactors" and r[0] != item_factors.id()][0][1]
-        java_storage_level2 = item_factors2.getStorageLevel()
-        self.assertEqual(java_storage_level2.useDisk(), False)
-        self.assertEqual(java_storage_level2.useMemory(), True)
-        self.assertEqual(java_storage_level2.useOffHeap(), False)
-        self.assertEqual(java_storage_level2.deserialized(), True)
-        self.assertEqual(java_storage_level2.replication(), 2)
-
-    def test_invalid(self):
-        sqlContext = SQLContext(self.sc)
-        df = sqlContext.createDataFrame(
-            [(0, 0, 4.0), (0, 1, 2.0), (1, 1, 3.0), (1, 2, 4.0), (2, 1, 1.0), (2, 2, 5.0)],
-            ["user", "item", "rating"])
-        als = ALS().setIntermediateRDDStorageLevel("NONE")
-        self.assertRaises(IllegalArgumentException, lambda: als.fit(df))
-        als = ALS().setIntermediateRDDStorageLevel("foo")
-        self.assertRaises(IllegalArgumentException, lambda: als.fit(df))
-        als = ALS().setFinalRDDStorageLevel("foo")
-        self.assertRaises(IllegalArgumentException, lambda: als.fit(df))
+        self.assertEqual(als.getIntermediateRDDStorageLevel(), "MEMORY_ONLY_2")
+        self.assertEqual(als._java_obj.getIntermediateRDDStorageLevel(), "MEMORY_ONLY_2")
+        self.assertEqual(als.getFinalRDDStorageLevel(), "DISK_ONLY")
+        self.assertEqual(als._java_obj.getFinalRDDStorageLevel(), "DISK_ONLY")
 
 
 if __name__ == "__main__":
