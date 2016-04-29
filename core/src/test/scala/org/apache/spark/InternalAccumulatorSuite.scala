@@ -194,7 +194,7 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
     }
     // Make sure the same set of accumulators is registered for cleanup
     assert(accumsRegistered.size === numInternalAccums * 2)
-    assert(accumsRegistered.size === AccumulatorContext.numAccums)
+    assert(accumsRegistered.toSet.size === AccumulatorContext.numAccums)
     accumsRegistered.foreach(id => assert(AccumulatorContext.get(id) != None))
   }
 
