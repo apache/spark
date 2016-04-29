@@ -40,7 +40,7 @@ import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions.ExpressionInfo
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.execution.command.{CacheTableCommand, HiveNativeCommand}
+import org.apache.spark.sql.execution.command.CacheTableCommand
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.SQLConf
@@ -237,20 +237,20 @@ private[hive] class TestHiveSparkSession(
       "CREATE TABLE src1 (key INT, value STRING)".cmd,
       s"LOAD DATA LOCAL INPATH '${getHiveFile("data/files/kv3.txt")}' INTO TABLE src1".cmd),
     TestTable("srcpart", () => {
-      sessionState.runNativeSql(
+      sql(
         "CREATE TABLE srcpart (key INT, value STRING) PARTITIONED BY (ds STRING, hr STRING)")
       for (ds <- Seq("2008-04-08", "2008-04-09"); hr <- Seq("11", "12")) {
-        sessionState.runNativeSql(
+        sql(
           s"""LOAD DATA LOCAL INPATH '${getHiveFile("data/files/kv1.txt")}'
              |OVERWRITE INTO TABLE srcpart PARTITION (ds='$ds',hr='$hr')
            """.stripMargin)
       }
     }),
     TestTable("srcpart1", () => {
-      sessionState.runNativeSql(
+      sql(
         "CREATE TABLE srcpart1 (key INT, value STRING) PARTITIONED BY (ds STRING, hr INT)")
       for (ds <- Seq("2008-04-08", "2008-04-09"); hr <- 11 to 12) {
-        sessionState.runNativeSql(
+        sql(
           s"""LOAD DATA LOCAL INPATH '${getHiveFile("data/files/kv1.txt")}'
              |OVERWRITE INTO TABLE srcpart1 PARTITION (ds='$ds',hr='$hr')
            """.stripMargin)
@@ -261,7 +261,7 @@ private[hive] class TestHiveSparkSession(
       import org.apache.hadoop.mapred.{SequenceFileInputFormat, SequenceFileOutputFormat}
       import org.apache.thrift.protocol.TBinaryProtocol
 
-      sessionState.runNativeSql(
+      sql(
         s"""
          |CREATE TABLE src_thrift(fake INT)
          |ROW FORMAT SERDE '${classOf[ThriftDeserializer].getName}'
@@ -274,7 +274,7 @@ private[hive] class TestHiveSparkSession(
          |OUTPUTFORMAT '${classOf[SequenceFileOutputFormat[_, _]].getName}'
         """.stripMargin)
 
-      sessionState.runNativeSql(
+      sql(
         s"LOAD DATA LOCAL INPATH '${getHiveFile("data/files/complex.seq")}' INTO TABLE src_thrift")
     }),
     TestTable("serdeins",
@@ -436,20 +436,16 @@ private[hive] class TestHiveSparkSession(
       sessionState.hiveconf.set("fs.default.name", new File(".").toURI.toString)
       // It is important that we RESET first as broken hooks that might have been set could break
       // other sql exec here.
-      sessionState.executionHive.runSqlHive("RESET")
       sessionState.metadataHive.runSqlHive("RESET")
       // For some reason, RESET does not reset the following variables...
       // https://issues.apache.org/jira/browse/HIVE-9004
-      sessionState.runNativeSql("set hive.table.parameters.default=")
-      sessionState.runNativeSql("set datanucleus.cache.collections=true")
-      sessionState.runNativeSql("set datanucleus.cache.collections.lazy=true")
+      sessionState.metadataHive.runSqlHive("set hive.table.parameters.default=")
+      sessionState.metadataHive.runSqlHive("set datanucleus.cache.collections=true")
+      sessionState.metadataHive.runSqlHive("set datanucleus.cache.collections.lazy=true")
       // Lots of tests fail if we do not change the partition whitelist from the default.
-      sessionState.runNativeSql("set hive.metastore.partition.name.whitelist.pattern=.*")
+      sessionState.metadataHive.runSqlHive("set hive.metastore.partition.name.whitelist.pattern=.*")
 
       // In case a test changed any of these values, restore all the original ones here.
-      TestHiveContext.hiveClientConfigurations(
-        sessionState.hiveconf, warehousePath, scratchDirPath, metastoreTemporaryConf)
-          .foreach { case (k, v) => sessionState.metadataHive.runSqlHive(s"SET $k=$v") }
       sessionState.setDefaultOverrideConfs()
 
       sessionState.catalog.setCurrentDatabase("default")
@@ -477,7 +473,6 @@ private[hive] class TestHiveQueryExecution(
 
   override lazy val analyzed: LogicalPlan = {
     val describedTables = logical match {
-      case HiveNativeCommand(sparkSession.describedTable(tbl)) => tbl :: Nil
       case CacheTableCommand(tbl, _, _) => tbl :: Nil
       case _ => Nil
     }

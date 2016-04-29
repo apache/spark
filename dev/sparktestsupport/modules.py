@@ -93,18 +93,9 @@ class Module(object):
         return hash(self.name)
 
 
-tags = Module(
-    name="tags",
-    dependencies=[],
-    source_file_regexes=[
-        "common/tags/",
-    ]
-)
-
-
 catalyst = Module(
     name="catalyst",
-    dependencies=[tags],
+    dependencies=[],
     source_file_regexes=[
         "sql/catalyst/",
     ],
@@ -174,7 +165,7 @@ hivecontext_compatibility = Module(
 
 sketch = Module(
     name="sketch",
-    dependencies=[tags],
+    dependencies=[],
     source_file_regexes=[
         "common/sketch/",
     ],
@@ -186,7 +177,7 @@ sketch = Module(
 
 graphx = Module(
     name="graphx",
-    dependencies=[tags],
+    dependencies=[],
     source_file_regexes=[
         "graphx/",
     ],
@@ -198,7 +189,7 @@ graphx = Module(
 
 streaming = Module(
     name="streaming",
-    dependencies=[tags],
+    dependencies=[],
     source_file_regexes=[
         "streaming",
     ],
@@ -214,7 +205,7 @@ streaming = Module(
 # fail other PRs.
 streaming_kinesis_asl = Module(
     name="streaming-kinesis-asl",
-    dependencies=[tags],
+    dependencies=[],
     source_file_regexes=[
         "external/kinesis-asl/",
         "external/kinesis-asl-assembly/",
@@ -279,7 +270,7 @@ streaming_flume_assembly = Module(
 
 mllib_local = Module(
     name="mllib-local",
-    dependencies=[tags],
+    dependencies=[],
     source_file_regexes=[
         "mllib-local",
     ],

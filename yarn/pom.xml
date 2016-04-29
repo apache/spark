@@ -53,9 +53,7 @@
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-tags_${scala.binary.version}</artifactId>
-      <scope>test</scope>
-      <classifier>tests</classifier>
+      <artifactId>spark-test-tags_${scala.binary.version}</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>

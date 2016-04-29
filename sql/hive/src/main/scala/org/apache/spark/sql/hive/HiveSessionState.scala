@@ -154,23 +154,6 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
   }
 
   /**
-   * Execute a SQL statement by passing the query text directly to Hive.
-   */
-  override def runNativeSql(sql: String): Seq[String] = {
-    val command = sql.trim.toLowerCase
-    val functionOrMacroDDLPattern = Pattern.compile(
-      ".*(create|drop)\\s+(temporary\\s+)?(function|macro).+", Pattern.DOTALL)
-    if (functionOrMacroDDLPattern.matcher(command).matches()) {
-      executionHive.runSqlHive(sql)
-    } else if (command.startsWith("set")) {
-      metadataHive.runSqlHive(sql)
-      executionHive.runSqlHive(sql)
-    } else {
-      metadataHive.runSqlHive(sql)
-    }
-  }
-
-  /**
    * When true, enables an experimental feature where metastore tables that use the parquet SerDe
    * are automatically converted to use the Spark SQL parquet table scan, instead of the Hive
    * SerDe.
