@@ -428,12 +428,6 @@ case class AlterTableDropPartition(
 
 }
 
-case class AlterTableSetFileFormat(
-    tableName: TableIdentifier,
-    partitionSpec: Option[TablePartitionSpec],
-    fileFormat: Seq[String],
-    genericFormat: Option[String])(exception: ParseException)
-  extends UnsupportedCommand(exception) with Logging
 
 /**
  * A command that sets the location of a table or a partition.

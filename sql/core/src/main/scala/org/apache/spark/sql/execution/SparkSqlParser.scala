@@ -616,35 +616,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   }
 
   /**
-   * Create an [[AlterTableSetFileFormat]] command
-   *
-   * For example:
-   * {{{
-   *   ALTER TABLE table [PARTITION spec] SET FILEFORMAT file_format;
-   * }}}
-   */
-  override def visitSetTableFileFormat(
-      ctx: SetTableFileFormatContext): LogicalPlan = withOrigin(ctx) {
-    // AlterTableSetFileFormat currently takes both a GenericFileFormat and a
-    // TableFileFormatContext. This is a bit weird because it should only take one. It also should
-    // use a CatalogFileFormat instead of either a String or a Sequence of Strings. We will address
-    // this in a follow-up PR.
-    val (fileFormat, genericFormat) = ctx.fileFormat match {
-      case s: GenericFileFormatContext =>
-        (Seq.empty[String], Option(s.identifier.getText))
-      case s: TableFileFormatContext =>
-        val elements = Seq(s.inFmt, s.outFmt) ++ Option(s.serdeCls).toSeq
-        (elements.map(string), None)
-    }
-    AlterTableSetFileFormat(
-      visitTableIdentifier(ctx.tableIdentifier),
-      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec),
-      fileFormat,
-      genericFormat)(
-      parseException("ALTER TABLE SET FILEFORMAT", ctx))
-  }
-
-  /**
    * Create an [[AlterTableSetLocation]] command
    *
    * For example:

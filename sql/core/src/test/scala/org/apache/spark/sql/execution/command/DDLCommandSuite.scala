@@ -441,29 +441,6 @@ class DDLCommandSuite extends PlanTest {
     assertUnsupported("ALTER TABLE table_name UNARCHIVE PARTITION (dt='2008-08-08', country='us')")
   }
 
-  /*
-  test("alter table: set file format") {
-    val sql1 = "ALTER TABLE table_name SET FILEFORMAT INPUTFORMAT 'test' " +
-      "OUTPUTFORMAT 'test' SERDE 'test'"
-    val sql2 = "ALTER TABLE table_name PARTITION (dt='2008-08-08', country='us') " +
-      "SET FILEFORMAT PARQUET"
-    val parsed1 = parser.parsePlan(sql1)
-    val parsed2 = parser.parsePlan(sql2)
-    val tableIdent = TableIdentifier("table_name", None)
-    val expected1 = AlterTableSetFileFormat(
-      tableIdent,
-      None,
-      List("test", "test", "test"),
-      None)(sql1)
-    val expected2 = AlterTableSetFileFormat(
-      tableIdent,
-      Some(Map("dt" -> "2008-08-08", "country" -> "us")),
-      Seq(),
-      Some("PARQUET"))(sql2)
-    comparePlans(parsed1, expected1)
-    comparePlans(parsed2, expected2)
-  } */
-
   test("alter table: set file format (not allowed)") {
     assertUnsupported(
       "ALTER TABLE table_name SET FILEFORMAT INPUTFORMAT 'test' " +
