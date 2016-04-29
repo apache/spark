@@ -127,10 +127,10 @@ class SQLContext(object):
 
         >>> sqlContext.getConf("spark.sql.shuffle.partitions")
         u'200'
-        >>> sqlContext.getConf("spark.sql.shuffle.partitions", "10")
+        >>> sqlContext.getConf("spark.sql.shuffle.partitions", u"10")
         u'10'
-        >>> sqlContext.setConf("spark.sql.shuffle.partitions", "50")
-        >>> sqlContext.getConf("spark.sql.shuffle.partitions", "10")
+        >>> sqlContext.setConf("spark.sql.shuffle.partitions", u"50")
+        >>> sqlContext.getConf("spark.sql.shuffle.partitions", u"10")
         u'50'
         """
         return self.sparkSession.getConf(key, defaultValue)
@@ -142,7 +142,7 @@ class SQLContext(object):
 
         :return: :class:`UDFRegistration`
         """
-        return UDFRegistration(self.sparkSession)
+        return UDFRegistration(self)
 
     @since(1.4)
     def range(self, start, end=None, step=1, numPartitions=None):
@@ -195,7 +195,7 @@ class SQLContext(object):
         >>> sqlContext.sql("SELECT stringLengthInt('test')").collect()
         [Row(stringLengthInt(test)=4)]
         """
-        self.sparkSession.registerFunction(name, f, returnType)
+        self.sparkSession.catalog.registerFunction(name, f, returnType)
 
     # TODO(andrew): delete this once we refactor things to take in SparkSession
     def _inferSchema(self, rdd, samplingRatio=None):
@@ -301,7 +301,7 @@ class SQLContext(object):
 
         >>> sqlContext.registerDataFrameAsTable(df, "table1")
         """
-        self.sparkSession.registerDataFrameAsTable(df, tableName)
+        self.sparkSession.catalog.registerTable(df, tableName)
 
     @since(1.6)
     def dropTempTable(self, tableName):
@@ -310,7 +310,7 @@ class SQLContext(object):
         >>> sqlContext.registerDataFrameAsTable(df, "table1")
         >>> sqlContext.dropTempTable("table1")
         """
-        self._ssql_ctx.dropTempTable(tableName)
+        self.sparkSession.catalog.dropTempTable(tableName)
 
     @since(1.3)
     def createExternalTable(self, tableName, path=None, source=None, schema=None, **options):
@@ -327,7 +327,8 @@ class SQLContext(object):
 
         :return: :class:`DataFrame`
         """
-        return self.sparkSession.createExternalTable(tableName, path, source, schema, **options)
+        return self.sparkSession.catalog.createExternalTable(
+            tableName, path, source, schema, **options)
 
     @ignore_unicode_prefix
     @since(1.0)

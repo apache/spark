@@ -72,6 +72,15 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
    *
    * @since 2.0.0
    */
+  def get(key: String, default: String): String = {
+    sqlConf.getConfString(key, default)
+  }
+
+  /**
+   * Returns the value of Spark runtime configuration property for the given key.
+   *
+   * @since 2.0.0
+   */
   def getOption(key: String): Option[String] = {
     try Option(get(key)) catch {
       case _: NoSuchElementException => None
@@ -86,4 +95,12 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
   def unset(key: String): Unit = {
     sqlConf.unsetConf(key)
   }
+
+  /**
+   * Returns whether a particular key is set.
+   */
+  protected[sql] def contains(key: String): Boolean = {
+    sqlConf.contains(key)
+  }
+
 }
