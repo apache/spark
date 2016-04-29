@@ -33,12 +33,7 @@ class RuntimeConfig(object):
     @ignore_unicode_prefix
     @since(2.0)
     def set(self, key, value):
-        """Sets the given Spark runtime configuration property.
-
-        >>> spark.conf.set("garble", "marble")
-        >>> spark.getConf("garble")
-        u'marble'
-        """
+        """Sets the given Spark runtime configuration property."""
         self._jconf.set(key, value)
 
     @ignore_unicode_prefix
@@ -46,33 +41,16 @@ class RuntimeConfig(object):
     def get(self, key, default=None):
         """Returns the value of Spark runtime configuration property for the given key,
         assuming it is set.
-
-        >>> spark.setConf("bogo", "sipeo")
-        >>> spark.conf.get("bogo")
-        u'sipeo'
-        >>> spark.conf.get("bogota", u"colombia")
-        u'colombia'
         """
         if default is None:
             return self._jconf.get(key)
         else:
-            if self._jconf.contains(key):
-                return self._jconf.get(key)
-            else:
-                return default
+            return self._jconf.get(key, default)
 
     @ignore_unicode_prefix
     @since(2.0)
     def unset(self, key):
-        """Resets the configuration property for the given key.
-
-        >>> spark.setConf("armado", "larmado")
-        >>> spark.getConf("armado")
-        u'larmado'
-        >>> spark.conf.unset("armado")
-        >>> spark.getConf("armado", u"samado")
-        u'samado'
-        """
+        """Resets the configuration property for the given key."""
         self._jconf.unset(key)
 
 

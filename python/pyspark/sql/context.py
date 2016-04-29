@@ -127,10 +127,10 @@ class SQLContext(object):
 
         >>> sqlContext.getConf("spark.sql.shuffle.partitions")
         u'200'
-        >>> sqlContext.getConf("spark.sql.shuffle.partitions", "10")
+        >>> sqlContext.getConf("spark.sql.shuffle.partitions", u"10")
         u'10'
-        >>> sqlContext.setConf("spark.sql.shuffle.partitions", "50")
-        >>> sqlContext.getConf("spark.sql.shuffle.partitions", "10")
+        >>> sqlContext.setConf("spark.sql.shuffle.partitions", u"50")
+        >>> sqlContext.getConf("spark.sql.shuffle.partitions", u"10")
         u'50'
         """
         return self.sparkSession.getConf(key, defaultValue)
