@@ -12,6 +12,7 @@ export("print.jobj")
 
 # MLlib integration
 exportMethods("glm",
+              "spark.glm",
               "predict",
               "summary",
               "kmeans",

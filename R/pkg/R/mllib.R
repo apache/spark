@@ -17,6 +17,14 @@
 
 # mllib.R: Provides methods for MLlib integration
 
+# Integration with R's standard functions.
+# Most of MLlib's argorithms are provided in two flavours:
+# - a specialization of the default R methods (glm, kmeans, etc.). These methods try to respect
+#   the inputs and the outputs of R's method to the largest extent, but some small differences
+#   may exist.
+# - a set of methods that reflect the arguments of the other languages supported by Spark. These
+#   methods are prefixed with the `spark.` prefix: spark.glm, spark.kmeans, etc.
+
 #' @title S4 class that represents a generalized linear model
 #' @param jobj a Java object reference to the backing Scala GeneralizedLinearRegressionWrapper
 #' @export
@@ -38,6 +46,51 @@ setClass("AFTSurvivalRegressionModel", representation(jobj = "jobj"))
 setClass("KMeansModel", representation(jobj = "jobj"))
 
 #' Fits a generalized linear model
+#'
+#' Fits a generalized linear model.
+#'
+#' @param data Spark DataFrame for training.
+#' @param formula A symbolic description of the model to be fitted. Currently only a few formula
+#'                operators are supported, including '~', '.', ':', '+', and '-'.
+#' @param family A description of the error distribution and link function to be used in the model.
+#'               This can be a character string naming a family function, a family function or
+#'               the result of a call to a family function. Refer R family at
+#'               \url{https://stat.ethz.ch/R-manual/R-devel/library/stats/html/family.html}.
+#' @param epsilon Positive convergence tolerance of iterations.
+#' @param maxit Integer giving the maximal number of IRLS iterations.
+#' @return a fitted generalized linear model
+#' @rdname glm
+#' @export
+#' @examples
+#' \dontrun{
+#' sc <- sparkR.init()
+#' sqlContext <- sparkRSQL.init(sc)
+#' data(iris)
+#' df <- createDataFrame(sqlContext, iris)
+#' model <- spark.glm(df, Sepal_Length ~ Sepal_Width, family="gaussian")
+#' summary(model)
+#' }
+spark.glm <- function(dataframe, formula, family = gaussian, epsilon = 1e-06, maxit = 25) {
+    if (is.character(family)) {
+        family <- get(family, mode = "function", envir = parent.frame())
+    }
+    if (is.function(family)) {
+        family <- family()
+    }
+    if (is.null(family$family)) {
+        print(family)
+        stop("'family' not recognized")
+    }
+
+    formula <- paste(deparse(formula), collapse = "")
+
+    jobj <- callJStatic("org.apache.spark.ml.r.GeneralizedLinearRegressionWrapper",
+    "fit", formula, dataframe@sdf, family$family, family$link,
+    epsilon, as.integer(maxit))
+    return(new("GeneralizedLinearRegressionModel", jobj = jobj))
+}
+
+#' Fits a generalized linear model (R-compliant).
 #'
 #' Fits a generalized linear model, similarly to R's glm().
 #'
@@ -64,23 +117,7 @@ setClass("KMeansModel", representation(jobj = "jobj"))
 #' }
 setMethod("glm", signature(formula = "formula", family = "ANY", data = "SparkDataFrame"),
           function(formula, family = gaussian, data, epsilon = 1e-06, maxit = 25) {
-            if (is.character(family)) {
-              family <- get(family, mode = "function", envir = parent.frame())
-            }
-            if (is.function(family)) {
-              family <- family()
-            }
-            if (is.null(family$family)) {
-              print(family)
-              stop("'family' not recognized")
-            }
-
-            formula <- paste(deparse(formula), collapse = "")
-
-            jobj <- callJStatic("org.apache.spark.ml.r.GeneralizedLinearRegressionWrapper",
-                                "fit", formula, data@sdf, family$family, family$link,
-                                epsilon, as.integer(maxit))
-            return(new("GeneralizedLinearRegressionModel", jobj = jobj))
+            spark.glm(dataframe, formula, family, epsilon, maxit)
           })
 
 #' Get the summary of a generalized linear model
