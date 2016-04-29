@@ -84,8 +84,6 @@ broadcastElap <- elapsedSecs()
 # as number of partitions to create.
 numPartitions <- SparkR:::readInt(inputCon)
 
-# If true, working for RDD
-# If false, working for DataFrame
 isDataFrame <- as.logical(SparkR:::readInt(inputCon))
 
 # If isDataFrame, then read column names
