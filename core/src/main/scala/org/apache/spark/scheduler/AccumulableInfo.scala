@@ -45,7 +45,6 @@ case class AccumulableInfo private[spark] (
     value: Option[Any],
     private[spark] val internal: Boolean,
     private[spark] val countFailedValues: Boolean,
-    private[spark] val dataProperty: Boolean,
     // TODO: use this to identify internal task metrics instead of encoding it in the name
     private[spark] val metadata: Option[String] = None)
 
@@ -63,21 +62,18 @@ object AccumulableInfo {
       value: String,
       internal: Boolean): AccumulableInfo = {
     new AccumulableInfo(
-      id, Option(name), update, Option(value), internal, countFailedValues = false,
-      dataProperty = false)
+      id, Option(name), update, Option(value), internal, countFailedValues = false)
   }
 
   @deprecated("do not create AccumulableInfo", "2.0.0")
   def apply(id: Long, name: String, update: Option[String], value: String): AccumulableInfo = {
     new AccumulableInfo(
-      id, Option(name), update, Option(value), internal = false, countFailedValues = false,
-      dataProperty = false)
+      id, Option(name), update, Option(value), internal = false, countFailedValues = false)
   }
 
   @deprecated("do not create AccumulableInfo", "2.0.0")
   def apply(id: Long, name: String, value: String): AccumulableInfo = {
     new AccumulableInfo(
-      id, Option(name), None, Option(value), internal = false, countFailedValues = false,
-      dataProperty = false)
+      id, Option(name), None, Option(value), internal = false, countFailedValues = false)
   }
 }

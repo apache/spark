@@ -716,7 +716,7 @@ object ApplicationMaster extends Logging {
   private var master: ApplicationMaster = _
 
   def main(args: Array[String]): Unit = {
-    SignalLogger.register(log)
+    SignalUtils.registerLogger(log)
     val amArgs = new ApplicationMasterArguments(args)
     SparkHadoopUtil.get.runAsSparkUser { () =>
       master = new ApplicationMaster(amArgs, new YarnRMClient)

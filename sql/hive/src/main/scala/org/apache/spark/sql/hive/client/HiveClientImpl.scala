@@ -28,8 +28,7 @@ import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.{PartitionDropOptions, TableType => HiveTableType}
 import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, FieldSchema, Function => HiveFunction, FunctionType, PrincipalType, ResourceType, ResourceUri}
 import org.apache.hadoop.hive.ql.Driver
-import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition, Table => HiveTable}
-import org.apache.hadoop.hive.ql.metadata.{Hive, HiveException}
+import org.apache.hadoop.hive.ql.metadata.{Hive, HiveException, Partition => HivePartition, Table => HiveTable}
 import org.apache.hadoop.hive.ql.plan.AddPartitionDesc
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
@@ -41,6 +40,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchPartitionException}
 import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.util.{CircularBuffer, Utils}
@@ -317,10 +317,10 @@ private[hive] class HiveClientImpl(
       CatalogTable(
         identifier = TableIdentifier(h.getTableName, Option(h.getDbName)),
         tableType = h.getTableType match {
-          case HiveTableType.EXTERNAL_TABLE => CatalogTableType.EXTERNAL_TABLE
-          case HiveTableType.MANAGED_TABLE => CatalogTableType.MANAGED_TABLE
-          case HiveTableType.INDEX_TABLE => CatalogTableType.INDEX_TABLE
-          case HiveTableType.VIRTUAL_VIEW => CatalogTableType.VIRTUAL_VIEW
+          case HiveTableType.EXTERNAL_TABLE => CatalogTableType.EXTERNAL
+          case HiveTableType.MANAGED_TABLE => CatalogTableType.MANAGED
+          case HiveTableType.INDEX_TABLE => CatalogTableType.INDEX
+          case HiveTableType.VIRTUAL_VIEW => CatalogTableType.VIEW
         },
         schema = schema,
         partitionColumnNames = partCols.map(_.name),
@@ -340,14 +340,6 @@ private[hive] class HiveClientImpl(
         viewOriginalText = Option(h.getViewOriginalText),
         viewText = Option(h.getViewExpandedText))
     }
-  }
-
-  override def createView(view: CatalogTable): Unit = withHiveState {
-    client.createTable(toHiveViewTable(view))
-  }
-
-  override def alertView(view: CatalogTable): Unit = withHiveState {
-    client.alterTable(view.qualifiedName, toHiveViewTable(view))
   }
 
   override def createTable(table: CatalogTable, ignoreIfExists: Boolean): Unit = withHiveState {
@@ -383,7 +375,7 @@ private[hive] class HiveClientImpl(
   override def dropPartitions(
       db: String,
       table: String,
-      specs: Seq[ExternalCatalog.TablePartitionSpec],
+      specs: Seq[TablePartitionSpec],
       ignoreIfNotExists: Boolean): Unit = withHiveState {
     // TODO: figure out how to drop multiple partitions in one call
     val hiveTable = client.getTable(db, table, true /* throw exception */)
@@ -407,8 +399,8 @@ private[hive] class HiveClientImpl(
   override def renamePartitions(
       db: String,
       table: String,
-      specs: Seq[ExternalCatalog.TablePartitionSpec],
-      newSpecs: Seq[ExternalCatalog.TablePartitionSpec]): Unit = withHiveState {
+      specs: Seq[TablePartitionSpec],
+      newSpecs: Seq[TablePartitionSpec]): Unit = withHiveState {
     require(specs.size == newSpecs.size, "number of old and new partition specs differ")
     val catalogTable = getTable(db, table)
     val hiveTable = toHiveTable(catalogTable)
@@ -430,15 +422,24 @@ private[hive] class HiveClientImpl(
 
   override def getPartitionOption(
       table: CatalogTable,
-      spec: ExternalCatalog.TablePartitionSpec): Option[CatalogTablePartition] = withHiveState {
+      spec: TablePartitionSpec): Option[CatalogTablePartition] = withHiveState {
     val hiveTable = toHiveTable(table)
     val hivePartition = client.getPartition(hiveTable, spec.asJava, false)
     Option(hivePartition).map(fromHivePartition)
   }
 
-  override def getAllPartitions(table: CatalogTable): Seq[CatalogTablePartition] = withHiveState {
+  /**
+   * Returns the partitions for the given table that match the supplied partition spec.
+   * If no partition spec is specified, all partitions are returned.
+   */
+  override def getPartitions(
+      table: CatalogTable,
+      spec: Option[TablePartitionSpec]): Seq[CatalogTablePartition] = withHiveState {
     val hiveTable = toHiveTable(table)
-    shim.getAllPartitions(client, hiveTable).map(fromHivePartition)
+    spec match {
+      case None => shim.getAllPartitions(client, hiveTable).map(fromHivePartition)
+      case Some(s) => client.getPartitions(hiveTable, s.asJava).asScala.map(fromHivePartition)
+    }
   }
 
   override def getPartitionsByFilter(
@@ -695,13 +696,13 @@ private[hive] class HiveClientImpl(
     // Otherwise, Hive metastore will change the table to a MANAGED_TABLE.
     // (metastore/src/java/org/apache/hadoop/hive/metastore/ObjectStore.java#L1095-L1105)
     hiveTable.setTableType(table.tableType match {
-      case CatalogTableType.EXTERNAL_TABLE =>
+      case CatalogTableType.EXTERNAL =>
         hiveTable.setProperty("EXTERNAL", "TRUE")
         HiveTableType.EXTERNAL_TABLE
-      case CatalogTableType.MANAGED_TABLE =>
+      case CatalogTableType.MANAGED =>
         HiveTableType.MANAGED_TABLE
-      case CatalogTableType.INDEX_TABLE => HiveTableType.INDEX_TABLE
-      case CatalogTableType.VIRTUAL_VIEW => HiveTableType.VIRTUAL_VIEW
+      case CatalogTableType.INDEX => HiveTableType.INDEX_TABLE
+      case CatalogTableType.VIEW => HiveTableType.VIRTUAL_VIEW
     })
     // Note: In Hive the schema and partition columns must be disjoint sets
     val (partCols, schema) = table.schema.map(toHiveColumn).partition { c =>

@@ -291,7 +291,6 @@ private[spark] object JsonProtocol {
     ("Value" -> accumulableInfo.value.map { v => accumValueToJson(name, v) }) ~
     ("Internal" -> accumulableInfo.internal) ~
     ("Count Failed Values" -> accumulableInfo.countFailedValues) ~
-    ("DataProperty" -> accumulableInfo.dataProperty) ~
     ("Metadata" -> accumulableInfo.metadata)
   }
 
@@ -721,8 +720,7 @@ private[spark] object JsonProtocol {
     val countFailedValues = (json \ "Count Failed Values").extractOpt[Boolean].getOrElse(false)
     val dataProperty = (json \ "DataProperty").extractOpt[Boolean].getOrElse(false)
     val metadata = (json \ "Metadata").extractOpt[String]
-    new AccumulableInfo(id, name, update, value, internal, countFailedValues, dataProperty,
-      metadata)
+    new AccumulableInfo(id, name, update, value, internal, countFailedValues, metadata)
   }
 
   /**
@@ -843,7 +841,9 @@ private[spark] object JsonProtocol {
         // Fallback on getting accumulator updates from TaskMetrics, which was logged in Spark 1.x
         val accumUpdates = Utils.jsonOption(json \ "Accumulator Updates")
           .map(_.extract[List[JValue]].map(accumulableInfoFromJson))
-          .getOrElse(taskMetricsFromJson(json \ "Metrics").accumulatorUpdates())
+          .getOrElse(taskMetricsFromJson(json \ "Metrics").accumulators().map(acc => {
+            acc.toInfo(Some(acc.localValue), None)
+          }))
         ExceptionFailure(className, description, stackTrace, fullStackTrace, None, accumUpdates)
       case `taskResultLost` => TaskResultLost
       case `taskKilled` => TaskKilled

@@ -29,11 +29,11 @@ object LogisticRegressionWithElasticNetExample {
   def main(args: Array[String]): Unit = {
     val conf = new SparkConf().setAppName("LogisticRegressionWithElasticNetExample")
     val sc = new SparkContext(conf)
-    val sqlCtx = new SQLContext(sc)
+    val sqlContext = new SQLContext(sc)
 
     // $example on$
     // Load training data
-    val training = sqlCtx.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
+    val training = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
 
     val lr = new LogisticRegression()
       .setMaxIter(10)

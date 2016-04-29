@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.util.UUID
+import java.util.{Objects, UUID}
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
@@ -173,6 +173,11 @@ case class Alias(child: Expression, name: String)(
 
   override protected final def otherCopyArgs: Seq[AnyRef] = {
     exprId :: qualifier :: explicitMetadata :: isGenerated :: Nil
+  }
+
+  override def hashCode(): Int = {
+    val state = Seq(name, exprId, child, qualifier, explicitMetadata)
+    state.map(Objects.hashCode).foldLeft(0)((a, b) => 31 * a + b)
   }
 
   override def equals(other: Any): Boolean = other match {

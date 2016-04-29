@@ -26,8 +26,8 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.types.{LongType, StructType}
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
+import org.apache.spark.sql.types.{DecimalType, StringType, StructType}
 import org.apache.spark.unsafe.KVIterator
 
 case class TungstenAggregate(
@@ -38,7 +38,7 @@ case class TungstenAggregate(
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     child: SparkPlan)
-  extends UnaryNode with CodegenSupport {
+  extends UnaryExecNode with CodegenSupport {
 
   private[this] val aggregateBufferAttributes = {
     aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
@@ -51,9 +51,10 @@ case class TungstenAggregate(
       aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes)
 
   override private[sql] lazy val metrics = Map(
-    "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"),
-    "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
-    "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"))
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
+    "peakMemory" -> SQLMetrics.createSizeMetric(sparkContext, "peak memory"),
+    "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"),
+    "aggTime" -> SQLMetrics.createTimingMetric(sparkContext, "aggregate time"))
 
   override def output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
 
@@ -83,7 +84,7 @@ case class TungstenAggregate(
 
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
     val numOutputRows = longMetric("numOutputRows")
-    val dataSize = longMetric("dataSize")
+    val peakMemory = longMetric("peakMemory")
     val spillSize = longMetric("spillSize")
 
     child.execute().mapPartitions { iter =>
@@ -107,7 +108,7 @@ case class TungstenAggregate(
             iter,
             testFallbackStartsAt,
             numOutputRows,
-            dataSize,
+            peakMemory,
             spillSize)
         if (!hasInput && groupingExpressions.isEmpty) {
           numOutputRows += 1
@@ -212,10 +213,14 @@ case class TungstenAggregate(
        """.stripMargin)
 
     val numOutput = metricTerm(ctx, "numOutputRows")
+    val aggTime = metricTerm(ctx, "aggTime")
+    val beforeAgg = ctx.freshName("beforeAgg")
     s"""
        | while (!$initAgg) {
        |   $initAgg = true;
+       |   long $beforeAgg = System.nanoTime();
        |   $doAgg();
+       |   $aggTime.add((System.nanoTime() - $beforeAgg) / 1000000);
        |
        |   // output the result
        |   ${genResult.trim}
@@ -265,11 +270,7 @@ case class TungstenAggregate(
 
   // The name for Vectorized HashMap
   private var vectorizedHashMapTerm: String = _
-
-  // We currently only enable vectorized hashmap for long key/value types and partial aggregates
-  private val isVectorizedHashMapEnabled: Boolean = sqlContext.conf.columnarAggregateMapEnabled &&
-    (groupingKeySchema ++ bufferSchema).forall(_.dataType == LongType) &&
-    modes.forall(mode => mode == Partial || mode == PartialMerge)
+  private var isVectorizedHashMapEnabled: Boolean = _
 
   // The name for UnsafeRow HashMap
   private var hashMapTerm: String = _
@@ -307,15 +308,17 @@ case class TungstenAggregate(
    */
   def finishAggregate(
       hashMap: UnsafeFixedWidthAggregationMap,
-      sorter: UnsafeKVExternalSorter): KVIterator[UnsafeRow, UnsafeRow] = {
+      sorter: UnsafeKVExternalSorter,
+      peakMemory: SQLMetric,
+      spillSize: SQLMetric): KVIterator[UnsafeRow, UnsafeRow] = {
 
     // update peak execution memory
     val mapMemory = hashMap.getPeakMemoryUsedBytes
     val sorterMemory = Option(sorter).map(_.getPeakMemoryUsedBytes).getOrElse(0L)
-    val peakMemory = Math.max(mapMemory, sorterMemory)
+    val maxMemory = Math.max(mapMemory, sorterMemory)
     val metrics = TaskContext.get().taskMetrics()
-    metrics.incPeakExecutionMemory(peakMemory)
-    // TODO: update data size and spill size
+    peakMemory.add(maxMemory)
+    metrics.incPeakExecutionMemory(maxMemory)
 
     if (sorter == null) {
       // not spilled
@@ -369,6 +372,7 @@ case class TungstenAggregate(
 
           true
         } else {
+          spillSize.add(sorter.getSpillSize)
           false
         }
       }
@@ -443,14 +447,41 @@ case class TungstenAggregate(
     }
   }
 
+  /**
+   * Using the vectorized hash map in TungstenAggregate is currently supported for all primitive
+   * data types during partial aggregation. However, we currently only enable the hash map for a
+   * subset of cases that've been verified to show performance improvements on our benchmarks
+   * subject to an internal conf that sets an upper limit on the maximum length of the aggregate
+   * key/value schema.
+   *
+   * This list of supported use-cases should be expanded over time.
+   */
+  private def enableVectorizedHashMap(ctx: CodegenContext): Boolean = {
+    val schemaLength = (groupingKeySchema ++ bufferSchema).length
+    val isSupported =
+      (groupingKeySchema ++ bufferSchema).forall(f => ctx.isPrimitiveType(f.dataType) ||
+        f.dataType.isInstanceOf[DecimalType] || f.dataType.isInstanceOf[StringType]) &&
+        bufferSchema.nonEmpty && modes.forall(mode => mode == Partial || mode == PartialMerge)
+
+    // We do not support byte array based decimal type for aggregate values as
+    // ColumnVector.putDecimal for high-precision decimals doesn't currently support in-place
+    // updates. Due to this, appending the byte array in the vectorized hash map can turn out to be
+    // quite inefficient and can potentially OOM the executor.
+    val isNotByteArrayDecimalType = bufferSchema.map(_.dataType).filter(_.isInstanceOf[DecimalType])
+      .forall(!DecimalType.isByteArrayDecimalType(_))
+
+    isSupported  && isNotByteArrayDecimalType &&
+      schemaLength <= sqlContext.conf.vectorizedAggregateMapMaxColumns
+  }
+
   private def doProduceWithKeys(ctx: CodegenContext): String = {
     val initAgg = ctx.freshName("initAgg")
     ctx.addMutableState("boolean", initAgg, s"$initAgg = false;")
-
+    isVectorizedHashMapEnabled = enableVectorizedHashMap(ctx)
     vectorizedHashMapTerm = ctx.freshName("vectorizedHashMap")
     val vectorizedHashMapClassName = ctx.freshName("VectorizedHashMap")
-    val vectorizedHashMapGenerator = new VectorizedHashMapGenerator(ctx, vectorizedHashMapClassName,
-      groupingKeySchema, bufferSchema)
+    val vectorizedHashMapGenerator = new VectorizedHashMapGenerator(ctx, aggregateExpressions,
+      vectorizedHashMapClassName, groupingKeySchema, bufferSchema)
     // Create a name for iterator from vectorized HashMap
     val iterTermForVectorizedHashMap = ctx.freshName("vectorizedHashMapIter")
     if (isVectorizedHashMapEnabled) {
@@ -474,6 +505,8 @@ case class TungstenAggregate(
     ctx.addMutableState(classOf[KVIterator[UnsafeRow, UnsafeRow]].getName, iterTerm, "")
 
     val doAgg = ctx.freshName("doAggregateWithKeys")
+    val peakMemory = metricTerm(ctx, "peakMemory")
+    val spillSize = metricTerm(ctx, "spillSize")
     ctx.addNewFunction(doAgg,
       s"""
         ${if (isVectorizedHashMapEnabled) vectorizedHashMapGenerator.generate() else ""}
@@ -484,7 +517,7 @@ case class TungstenAggregate(
           ${if (isVectorizedHashMapEnabled) {
               s"$iterTermForVectorizedHashMap = $vectorizedHashMapTerm.rowIterator();"} else ""}
 
-          $iterTerm = $thisPlan.finishAggregate($hashMapTerm, $sorterTerm);
+          $iterTerm = $thisPlan.finishAggregate($hashMapTerm, $sorterTerm, $peakMemory, $spillSize);
         }
        """)
 
@@ -526,10 +559,14 @@ case class TungstenAggregate(
       } else None
     }
 
+    val aggTime = metricTerm(ctx, "aggTime")
+    val beforeAgg = ctx.freshName("beforeAgg")
     s"""
      if (!$initAgg) {
        $initAgg = true;
+       long $beforeAgg = System.nanoTime();
        $doAgg();
+       $aggTime.add((System.nanoTime() - $beforeAgg) / 1000000);
      }
 
      // output the result
@@ -617,7 +654,8 @@ case class TungstenAggregate(
           updateExpr.map(BindReferences.bindReference(_, inputAttr).genCode(ctx))
         val updateVectorizedRow = vectorizedRowEvals.zipWithIndex.map { case (ev, i) =>
           val dt = updateExpr(i).dataType
-          ctx.updateColumn(vectorizedRowBuffer, dt, i, ev, updateExpr(i).nullable)
+          ctx.updateColumn(vectorizedRowBuffer, dt, i, ev, updateExpr(i).nullable,
+            isVectorized = true)
         }
         Option(
           s"""

@@ -65,6 +65,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       CombineUnions) ::
     Batch("Replace Operators", fixedPoint,
       ReplaceIntersectWithSemiJoin,
+      ReplaceExceptWithAntiJoin,
       ReplaceDistinctWithAggregate) ::
     Batch("Aggregate", fixedPoint,
       RemoveLiteralFromGroupExpressions) ::
@@ -87,7 +88,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       CombineUnions,
       // Constant folding and strength reduction
       NullPropagation,
-      OptimizeIn,
+      OptimizeIn(conf),
       ConstantFolding,
       LikeSimplification,
       BooleanSimplification,
@@ -232,17 +233,12 @@ object LimitPushDown extends Rule[LogicalPlan] {
 }
 
 /**
- * Pushes certain operations to both sides of a Union or Except operator.
+ * Pushes certain operations to both sides of a Union operator.
  * Operations that are safe to pushdown are listed as follows.
  * Union:
  * Right now, Union means UNION ALL, which does not de-duplicate rows. So, it is
  * safe to pushdown Filters and Projections through it. Once we add UNION DISTINCT,
  * we will not be able to pushdown Projections.
- *
- * Except:
- * It is not safe to pushdown Projections through it because we need to get the
- * intersect of rows by comparing the entire rows. It is fine to pushdown Filters
- * with deterministic condition.
  */
 object SetOperationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
@@ -310,17 +306,6 @@ object SetOperationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         Filter(pushToRight(deterministic, rewrites), child)
       }
       Filter(nondeterministic, Union(newFirstChild +: newOtherChildren))
-
-    // Push down filter through EXCEPT
-    case Filter(condition, Except(left, right)) =>
-      val (deterministic, nondeterministic) = partitionByDeterministic(condition)
-      val rewrites = buildRewrites(left, right)
-      Filter(nondeterministic,
-        Except(
-          Filter(deterministic, left),
-          Filter(pushToRight(deterministic, rewrites), right)
-        )
-      )
   }
 }
 
@@ -682,10 +667,11 @@ object ConstantFolding extends Rule[LogicalPlan] {
  * Replaces [[In (value, seq[Literal])]] with optimized version[[InSet (value, HashSet[Literal])]]
  * which is much faster
  */
-object OptimizeIn extends Rule[LogicalPlan] {
+case class OptimizeIn(conf: CatalystConf) extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsDown {
-      case In(v, list) if !list.exists(!_.isInstanceOf[Literal]) && list.size > 10 =>
+      case In(v, list) if !list.exists(!_.isInstanceOf[Literal]) &&
+          list.size > conf.optimizerInSetConversionThreshold =>
         val hSet = list.map(e => e.eval(EmptyRow))
         InSet(v, HashSet() ++ hSet)
     }
@@ -958,6 +944,28 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
 
       project.copy(child = Filter(replaceAlias(condition, aliasMap), grandChild))
 
+    // Push [[Filter]] operators through [[Window]] operators. Parts of the predicate that can be
+    // pushed beneath must satisfy the following two conditions:
+    // 1. All the expressions are part of window partitioning key. The expressions can be compound.
+    // 2. Deterministic
+    case filter @ Filter(condition, w: Window)
+        if w.partitionSpec.forall(_.isInstanceOf[AttributeReference]) =>
+      val partitionAttrs = AttributeSet(w.partitionSpec.flatMap(_.references))
+      val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { cond =>
+        cond.references.subsetOf(partitionAttrs) && cond.deterministic &&
+          // This is for ensuring all the partitioning expressions have been converted to alias
+          // in Analyzer. Thus, we do not need to check if the expressions in conditions are
+          // the same as the expressions used in partitioning columns.
+          partitionAttrs.forall(_.isInstanceOf[Attribute])
+      }
+      if (pushDown.nonEmpty) {
+        val pushDownPredicate = pushDown.reduce(And)
+        val newWindow = w.copy(child = Filter(pushDownPredicate, w.child))
+        if (stayUp.isEmpty) newWindow else Filter(stayUp.reduce(And), newWindow)
+      } else {
+        filter
+      }
+
     case filter @ Filter(condition, aggregate: Aggregate) =>
       // Find all the aliased expressions in the aggregate list that don't include any actual
       // AggregateExpression, and create a map from the alias to the expression
@@ -984,16 +992,15 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
         filter
       }
 
-    case filter @ Filter(condition, child)
-      if child.isInstanceOf[Union] || child.isInstanceOf[Intersect] =>
-      // Union/Intersect could change the rows, so non-deterministic predicate can't be pushed down
+    case filter @ Filter(condition, union: Union) =>
+      // Union could change the rows, so non-deterministic predicate can't be pushed down
       val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { cond =>
         cond.deterministic
       }
       if (pushDown.nonEmpty) {
         val pushDownCond = pushDown.reduceLeft(And)
-        val output = child.output
-        val newGrandChildren = child.children.map { grandchild =>
+        val output = union.output
+        val newGrandChildren = union.children.map { grandchild =>
           val newCond = pushDownCond transform {
             case e if output.exists(_.semanticEquals(e)) =>
               grandchild.output(output.indexWhere(_.semanticEquals(e)))
@@ -1001,19 +1008,14 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
           assert(newCond.references.subsetOf(grandchild.outputSet))
           Filter(newCond, grandchild)
         }
-        val newChild = child.withNewChildren(newGrandChildren)
+        val newUnion = union.withNewChildren(newGrandChildren)
         if (stayUp.nonEmpty) {
-          Filter(stayUp.reduceLeft(And), newChild)
+          Filter(stayUp.reduceLeft(And), newUnion)
         } else {
-          newChild
+          newUnion
         }
       } else {
         filter
-      }
-
-    case filter @ Filter(condition, e @ Except(left, _)) =>
-      pushDownPredicate(filter, e.left) { predicate =>
-        e.copy(left = Filter(predicate, left))
       }
 
     // two filters should be combine together by other rules
@@ -1320,17 +1322,35 @@ object DecimalAggregates extends Rule[LogicalPlan] {
   /** Maximum number of decimal digits representable precisely in a Double */
   private val MAX_DOUBLE_DIGITS = 15
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-    case ae @ AggregateExpression(Sum(e @ DecimalType.Expression(prec, scale)), _, _, _)
-      if prec + 10 <= MAX_LONG_DIGITS =>
-      MakeDecimal(ae.copy(aggregateFunction = Sum(UnscaledValue(e))), prec + 10, scale)
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case q: LogicalPlan => q transformExpressionsDown {
+      case we @ WindowExpression(ae @ AggregateExpression(af, _, _, _), _) => af match {
+        case Sum(e @ DecimalType.Expression(prec, scale)) if prec + 10 <= MAX_LONG_DIGITS =>
+          MakeDecimal(we.copy(windowFunction = ae.copy(aggregateFunction = Sum(UnscaledValue(e)))),
+            prec + 10, scale)
 
-    case ae @ AggregateExpression(Average(e @ DecimalType.Expression(prec, scale)), _, _, _)
-      if prec + 4 <= MAX_DOUBLE_DIGITS =>
-      val newAggExpr = ae.copy(aggregateFunction = Average(UnscaledValue(e)))
-      Cast(
-        Divide(newAggExpr, Literal.create(math.pow(10.0, scale), DoubleType)),
-        DecimalType(prec + 4, scale + 4))
+        case Average(e @ DecimalType.Expression(prec, scale)) if prec + 4 <= MAX_DOUBLE_DIGITS =>
+          val newAggExpr =
+            we.copy(windowFunction = ae.copy(aggregateFunction = Average(UnscaledValue(e))))
+          Cast(
+            Divide(newAggExpr, Literal.create(math.pow(10.0, scale), DoubleType)),
+            DecimalType(prec + 4, scale + 4))
+
+        case _ => we
+      }
+      case ae @ AggregateExpression(af, _, _, _) => af match {
+        case Sum(e @ DecimalType.Expression(prec, scale)) if prec + 10 <= MAX_LONG_DIGITS =>
+          MakeDecimal(ae.copy(aggregateFunction = Sum(UnscaledValue(e))), prec + 10, scale)
+
+        case Average(e @ DecimalType.Expression(prec, scale)) if prec + 4 <= MAX_DOUBLE_DIGITS =>
+          val newAggExpr = ae.copy(aggregateFunction = Average(UnscaledValue(e)))
+          Cast(
+            Divide(newAggExpr, Literal.create(math.pow(10.0, scale), DoubleType)),
+            DecimalType(prec + 4, scale + 4))
+
+        case _ => ae
+      }
+    }
   }
 }
 
@@ -1378,6 +1398,27 @@ object ReplaceIntersectWithSemiJoin extends Rule[LogicalPlan] {
       assert(left.output.size == right.output.size)
       val joinCond = left.output.zip(right.output).map { case (l, r) => EqualNullSafe(l, r) }
       Distinct(Join(left, right, LeftSemi, joinCond.reduceLeftOption(And)))
+  }
+}
+
+/**
+ * Replaces logical [[Except]] operator with a left-anti [[Join]] operator.
+ * {{{
+ *   SELECT a1, a2 FROM Tab1 EXCEPT SELECT b1, b2 FROM Tab2
+ *   ==>  SELECT DISTINCT a1, a2 FROM Tab1 LEFT ANTI JOIN Tab2 ON a1<=>b1 AND a2<=>b2
+ * }}}
+ *
+ * Note:
+ * 1. This rule is only applicable to EXCEPT DISTINCT. Do not use it for EXCEPT ALL.
+ * 2. This rule has to be done after de-duplicating the attributes; otherwise, the generated
+ *    join conditions will be incorrect.
+ */
+object ReplaceExceptWithAntiJoin extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case Except(left, right) =>
+      assert(left.output.size == right.output.size)
+      val joinCond = left.output.zip(right.output).map { case (l, r) => EqualNullSafe(l, r) }
+      Distinct(Join(left, right, LeftAnti, joinCond.reduceLeftOption(And)))
   }
 }
 
@@ -1474,7 +1515,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
       case f @ Filter(cond, child) =>
         // Find all correlated predicates.
         val (correlated, local) = splitConjunctivePredicates(cond).partition { e =>
-          e.references.intersect(references).nonEmpty
+          (e.references -- child.outputSet).intersect(references).nonEmpty
         }
         // Rewrite the filter without the correlated predicates if any.
         correlated match {
@@ -1515,10 +1556,34 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
    */
   private def pullOutCorrelatedPredicates(
       in: InSubQuery,
-      query: LogicalPlan): (LogicalPlan, Seq[Expression]) = {
+      query: LogicalPlan): (LogicalPlan, LogicalPlan, Seq[Expression]) = {
     val (resolved, joinCondition) = pullOutCorrelatedPredicates(in.query, query)
-    val conditions = joinCondition ++ in.expressions.zip(resolved.output).map(EqualTo.tupled)
-    (resolved, conditions)
+    // Check whether there is some attributes have same exprId but come from different side
+    val outerAttributes = AttributeSet(in.expressions.flatMap(_.references))
+    if (outerAttributes.intersect(resolved.outputSet).nonEmpty) {
+      val aliases = mutable.Map[Attribute, Alias]()
+      val exprs = in.expressions.map { expr =>
+        expr transformUp {
+          case a: AttributeReference if resolved.outputSet.contains(a) =>
+            val alias = Alias(a, a.toString)()
+            val attr = alias.toAttribute
+            aliases += attr -> alias
+            attr
+        }
+      }
+      val newP = Project(query.output ++ aliases.values, query)
+      val projection = resolved.output.map {
+        case a if outerAttributes.contains(a) => Alias(a, a.toString)()
+        case a => a
+      }
+      val subquery = Project(projection, resolved)
+      val conditions = joinCondition ++ exprs.zip(subquery.output).map(EqualTo.tupled)
+      (newP, subquery, conditions)
+    } else {
+      val conditions =
+        joinCondition ++ in.expressions.zip(resolved.output).map(EqualTo.tupled)
+      (query, resolved, conditions)
+    }
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -1534,17 +1599,22 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
 
       // Filter the plan by applying left semi and left anti joins.
       withSubquery.foldLeft(newFilter) {
-        case (p, Exists(sub)) =>
+        case (p, Exists(sub, _)) =>
           val (resolved, conditions) = pullOutCorrelatedPredicates(sub, p)
           Join(p, resolved, LeftSemi, conditions.reduceOption(And))
-        case (p, Not(Exists(sub))) =>
+        case (p, Not(Exists(sub, _))) =>
           val (resolved, conditions) = pullOutCorrelatedPredicates(sub, p)
           Join(p, resolved, LeftAnti, conditions.reduceOption(And))
         case (p, in: InSubQuery) =>
-          val (resolved, conditions) = pullOutCorrelatedPredicates(in, p)
-          Join(p, resolved, LeftSemi, conditions.reduceOption(And))
+          val (newP, resolved, conditions) = pullOutCorrelatedPredicates(in, p)
+          if (newP fastEquals p) {
+            Join(p, resolved, LeftSemi, conditions.reduceOption(And))
+          } else {
+            Project(p.output,
+              Join(newP, resolved, LeftSemi, conditions.reduceOption(And)))
+          }
         case (p, Not(in: InSubQuery)) =>
-          val (resolved, conditions) = pullOutCorrelatedPredicates(in, p)
+          val (newP, resolved, conditions) = pullOutCorrelatedPredicates(in, p)
           // This is a NULL-aware (left) anti join (NAAJ).
           // Construct the condition. A NULL in one of the conditions is regarded as a positive
           // result; such a row will be filtered out by the Anti-Join operator.
@@ -1553,7 +1623,12 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
 
           // Note that will almost certainly be planned as a Broadcast Nested Loop join. Use EXISTS
           // if performance matters to you.
-          Join(p, resolved, LeftAnti, Option(Or(anyNull, condition)))
+          if (newP fastEquals p) {
+            Join(p, resolved, LeftAnti, Option(Or(anyNull, condition)))
+          } else {
+            Project(p.output,
+              Join(newP, resolved, LeftAnti, Option(Or(anyNull, condition))))
+          }
       }
   }
 }

@@ -20,7 +20,6 @@ package org.apache.spark
 import java.io.{ObjectInputStream, Serializable}
 
 import scala.collection.generic.Growable
-import scala.collection.mutable
 import scala.reflect.ClassTag
 
 import org.apache.spark.scheduler.AccumulableInfo
@@ -47,136 +46,49 @@ import org.apache.spark.util.Utils
  *                          for system and time metrics like serialization time or bytes spilled,
  *                          and false for things with absolute values like number of input rows.
  *                          This should be used for internal metrics only.
- * @param dataProperty if this [[Accumulable]] is for a data property. Data property
- *                     [[Accumulable]]s will only have values added once for each
- *                     RDD/Partition/Shuffle combination. This prevents double counting on
- *                     reevaluation. Partial evaluation of a partition will not increment a data
- *                     property [[Accumulable]]. Data property [[Accumulable]]s are currently
- *                     experimental and the behaviour may change in future versions.
  * @tparam R the full accumulated data (result type)
  * @tparam T partial data that can be added in
  */
-class Accumulable[R, T] private[spark] (
+class Accumulable[R, T] private (
     val id: Long,
     // SI-8813: This must explicitly be a private val, or else scala 2.11 doesn't compile
     @transient private val initialValue: R,
     param: AccumulableParam[R, T],
     val name: Option[String],
-    private[spark] val countFailedValues: Boolean,
-    private[spark] val dataProperty: Boolean)
+    private[spark] val countFailedValues: Boolean)
   extends Serializable {
 
   private[spark] def this(
       initialValue: R,
       param: AccumulableParam[R, T],
-      countFailedValues: Boolean,
-      dataProperty: Boolean) = {
-    this(Accumulators.newId(), initialValue, param, None, countFailedValues, dataProperty)
-  }
-
-  def this(
-      initialValue: R,
-      param: AccumulableParam[R, T],
       name: Option[String],
       countFailedValues: Boolean) = {
-    this(Accumulators.newId(), initialValue, param, name, countFailedValues,
-      false /* dataProperty */)
+    this(AccumulatorContext.newId(), initialValue, param, name, countFailedValues)
   }
 
-  def this(
-      initialValue: R,
-      param: AccumulableParam[R, T],
-      name: Option[String],
-      countFailedValues: Boolean,
-      dataProperty: Boolean) = {
-    this(Accumulators.newId(), initialValue, param, name, countFailedValues, dataProperty)
+  private[spark] def this(initialValue: R, param: AccumulableParam[R, T], name: Option[String]) = {
+    this(initialValue, param, name, false /* countFailedValues */)
   }
 
-  private[spark] def this(
-      initialValue: R,
-      param: AccumulableParam[R, T],
-      name: Option[String]) =
-    this(initialValue, param, name, false /* countFailed */)
+  def this(initialValue: R, param: AccumulableParam[R, T]) = this(initialValue, param, None)
 
-  def this(
-      initialValue: R,
-      param: AccumulableParam[R, T]) = {
-    this(initialValue, param, None)
-  }
-
-  @volatile @transient private var value_ : R = initialValue // Current value on driver
-
-  val zero = param.zero(initialValue) // Zero value to be passed to executors
-  private var deserialized = false
-
-  /**
-   * The following values are used for data property [[Accumulable]]s.
-   * Data property [[Accumulable]]s have only-once semantics. These semantics are implemented
-   * by keeping track of which RDD id, shuffle id, and partition id the current function is
-   * processing in. If a partition is fully processed the results for that partition/shuffle/rdd
-   * combination are sent back to the driver. The driver keeps track of which rdd/shuffle/partitions
-   * already have been applied, and only combines values into value_ if the rdd/shuffle/partition
-   * has not already been aggregated on the driver program
-   */
-  // For data property accumulators pending and processed updates.
-  // Pending and processed are keyed by (rdd id, shuffle id, partition id)
-  @transient private[spark] lazy val pending = new mutable.HashMap[(Int, Int, Int), R]()
-  // Completed contains the set of (rdd id, shuffle id, partition id) that have been
-  // fully processed on the worker side. This is used to determine if the updates should
-  // be sent back to the driver for a particular rdd/shuffle/partition combination.
-  @transient private[spark] lazy val completed = new mutable.HashSet[(Int, Int, Int)]()
-  // Processed is keyed by (rdd id, shuffle id) and the value is a bitset containing all partitions
-  // for the given key which have been merged into the value. This is used on the driver.
-  @transient private[spark] lazy val processed = new mutable.HashMap[(Int, Int), mutable.BitSet]()
-
-  Accumulators.register(this)
-
-  /**
-   * If this [[Accumulable]] is for a data property.
-   * Data property [[Accumulable]]s track pending updates and reconcile them on the driver to avoid
-   * applying duplicate updates for the same RDD and partition.
-   */
-  private[spark] def isDataProperty: Boolean = dataProperty
-
-  /**
-   * Return a copy of this [[Accumulable]].
-   *
-   * The copy will have the same ID as the original and will not be registered with
-   * [[Accumulators]] again. This method exists so that the caller can avoid passing the
-   * same mutable instance around.
-   */
-  private[spark] def copy(): Accumulable[R, T] = {
-    new Accumulable[R, T](id, initialValue, param, name, countFailedValues, dataProperty)
-  }
+  val zero = param.zero(initialValue)
+  private[spark] val newAcc = new LegacyAccumulatorWrapper(initialValue, param)
+  newAcc.metadata = AccumulatorMetadata(id, name, countFailedValues, false)
+  // Register the new accumulator in ctor, to follow the previous behaviour.
+  AccumulatorContext.register(newAcc)
 
   /**
    * Add more data to this accumulator / accumulable
    * @param term the data to add
    */
-  def += (term: T) { add(term) }
+  def += (term: T) { newAcc.add(term) }
 
   /**
    * Add more data to this accumulator / accumulable
    * @param term the data to add
    */
-  def add(term: T) {
-    value_ = param.addAccumulator(value_, term)
-    if (dataProperty) {
-      val updateInfo = TaskContext.get().getRDDPartitionInfo()
-      val base = pending.getOrElse(updateInfo, zero)
-      pending(updateInfo) = param.addAccumulator(base, term)
-    }
-  }
-
-  /**
-   * Mark a specific rdd/shuffle/partition as completely processed. This is a noop for
-   * non-data property accumuables.
-   */
-  private[spark] def markFullyProcessed(rddId: Int, shuffleWriteId: Int, partitionId: Int): Unit = {
-    if (dataProperty) {
-      completed += ((rddId, shuffleWriteId, partitionId))
-    }
-  }
+  def add(term: T) { newAcc.add(term) }
 
   /**
    * Merge two accumulable accumulated values together
@@ -184,7 +96,7 @@ class Accumulable[R, T] private[spark] (
    * Normally, a user will not want to use this version, but will instead call `+=`.
    * @param term the other `R` that will get merged with this
    */
-  def ++= (term: R) { value_ = param.addInPlace(value_, term)}
+  def ++= (term: R) { newAcc._value = param.addInPlace(newAcc._value, term) }
 
   /**
    * Merge two accumulable accumulated values together
@@ -192,44 +104,12 @@ class Accumulable[R, T] private[spark] (
    * Normally, a user will not want to use this version, but will instead call `add`.
    * @param term the other `R` that will get merged with this
    */
-  def merge(term: R) { value_ = param.addInPlace(value_, term)}
-
-  /**
-   * Merge in pending updates for ac data property accumulators or merge accumulated values for
-   * regular accumulators. This is only called on the driver when merging task results together.
-   */
-  private[spark] def internalMerge(term: Any) {
-    if (!dataProperty) {
-      merge(term.asInstanceOf[R])
-    } else {
-      mergePending(term.asInstanceOf[mutable.HashMap[(Int, Int, Int), R]])
-    }
-  }
-
-  /**
-   * Merge another Accumulable's pending updates, checks to make sure that each pending update has
-   * not already been processed before updating.
-   */
-  private[spark] def mergePending(term: mutable.HashMap[(Int, Int, Int), R]) = {
-    term.foreach { case ((rddId, shuffleWriteId, splitId), v) =>
-      val splits = processed.getOrElseUpdate((rddId, shuffleWriteId), new mutable.BitSet())
-      if (!splits.contains(splitId)) {
-        splits += splitId
-        value_ = param.addInPlace(value_, v)
-      }
-    }
-  }
+  def merge(term: R) { newAcc._value = param.addInPlace(newAcc._value, term) }
 
   /**
    * Access the accumulator's current value; only allowed on driver.
    */
-  def value: R = {
-    if (!deserialized) {
-      value_
-    } else {
-      throw new UnsupportedOperationException("Can't read accumulator value in task")
-    }
-  }
+  def value: R = newAcc.value
 
   /**
    * Get the current value of this accumulator from within a task.
@@ -240,32 +120,15 @@ class Accumulable[R, T] private[spark] (
    * The typical use of this method is to directly mutate the local value, eg., to add
    * an element to a Set.
    */
-  def localValue: R = value_
-
-  /**
-   * Get the updates for this accumulator that should be sent to the driver. For data property
-   * accumulators this consists of the pending updates, for regular accumulators this is the same as
-   * `localValue`.
-   */
-  private[spark] def updateValue: Any = {
-    if (dataProperty) {
-      pending.filter{case (k, v) => completed.contains(k)}
-    } else {
-      localValue
-    }
-  }
+  def localValue: R = newAcc.localValue
 
   /**
    * Set the accumulator's value; only allowed on driver and only for non-data property
    * accumulators.
    */
   def value_= (newValue: R) {
-    if (!deserialized) {
-      if (!dataProperty) {
-        value_ = newValue
-      } else {
-        throw new UnsupportedOperationException("Can't assign value to data property accumulator.")
-      }
+    if (newAcc.isAtDriverSide) {
+      newAcc._value = newValue
     } else {
       throw new UnsupportedOperationException("Can't assign accumulator value in task")
     }
@@ -274,7 +137,7 @@ class Accumulable[R, T] private[spark] (
   /**
    * Set the accumulator's value. For internal use only.
    */
-  def setValue(newValue: R): Unit = { value_ = newValue }
+  def setValue(newValue: R): Unit = { newAcc._value = newValue }
 
   /**
    * Set the accumulator's value. For internal use only.
@@ -286,25 +149,10 @@ class Accumulable[R, T] private[spark] (
    */
   private[spark] def toInfo(update: Option[Any], value: Option[Any]): AccumulableInfo = {
     val isInternal = name.exists(_.startsWith(InternalAccumulator.METRICS_PREFIX))
-    new AccumulableInfo(id, name, update, value, isInternal, countFailedValues, dataProperty)
+    new AccumulableInfo(id, name, update, value, isInternal, countFailedValues)
   }
 
-  // Called by Java when deserializing an object
-  private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
-    in.defaultReadObject()
-    value_ = zero
-    deserialized = true
-
-    // Automatically register the accumulator when it is deserialized with the task closure.
-    // This is for external accumulators and internal ones that do not represent task level
-    // metrics, e.g. internal SQL metrics, which are per-operator.
-    val taskContext = TaskContext.get()
-    if (taskContext != null) {
-      taskContext.registerAccumulator(this)
-    }
-  }
-
-  override def toString: String = if (value_ == null) "null" else value_.toString
+  override def toString: String = if (newAcc._value == null) "null" else newAcc._value.toString
 }
 
 /**

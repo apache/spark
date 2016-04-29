@@ -407,25 +407,31 @@ class Analyzer(
    * Replaces [[UnresolvedRelation]]s with concrete relations from the catalog.
    */
   object ResolveRelations extends Rule[LogicalPlan] {
-    private def getTable(u: UnresolvedRelation): LogicalPlan = {
+    private def lookupTableFromCatalog(u: UnresolvedRelation): LogicalPlan = {
       try {
         catalog.lookupRelation(u.tableIdentifier, u.alias)
       } catch {
         case _: NoSuchTableException =>
-          u.failAnalysis(s"Table or View not found: ${u.tableName}")
+          u.failAnalysis(s"Table or view not found: ${u.tableName}")
       }
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case i @ InsertIntoTable(u: UnresolvedRelation, _, _, _, _) =>
-        i.copy(table = EliminateSubqueryAliases(getTable(u)))
+        i.copy(table = EliminateSubqueryAliases(lookupTableFromCatalog(u)))
       case u: UnresolvedRelation =>
-        try {
-          getTable(u)
-        } catch {
-          case _: AnalysisException if u.tableIdentifier.database.isDefined =>
-            // delay the exception into CheckAnalysis, then it could be resolved as data source.
-            u
+        val table = u.tableIdentifier
+        if (table.database.isDefined && conf.runSQLonFile &&
+            (!catalog.databaseExists(table.database.get) || !catalog.tableExists(table))) {
+          // If the table does not exist, and the database part is specified, and we support
+          // running SQL directly on files, then let's just return the original UnresolvedRelation.
+          // It is possible we are matching a query like "select * from parquet.`/path/to/query`".
+          // The plan will get resolved later.
+          // Note that we are testing (!db_exists || !table_exists) because the catalog throws
+          // an exception from tableExists if the database does not exist.
+          u
+        } else {
+          lookupTableFromCatalog(u)
         }
     }
   }
@@ -523,6 +529,8 @@ class Analyzer(
       case j @ Join(left, right, _, _) if !j.duplicateResolved =>
         j.copy(right = dedupRight(left, right))
       case i @ Intersect(left, right) if !i.duplicateResolved =>
+        i.copy(right = dedupRight(left, right))
+      case i @ Except(left, right) if !i.duplicateResolved =>
         i.copy(right = dedupRight(left, right))
 
       // When resolve `SortOrder`s in Sort based on child, don't report errors as
@@ -832,9 +840,9 @@ class Analyzer(
                     s"its class is ${other.getClass.getCanonicalName}, which is not a generator.")
               }
             }
-          case u @ UnresolvedFunction(name, children, isDistinct) =>
+          case u @ UnresolvedFunction(funcId, children, isDistinct) =>
             withPosition(u) {
-              catalog.lookupFunction(name, children) match {
+              catalog.lookupFunction(funcId, children) match {
                 // DISTINCT is not meaningful for a Max or a Min.
                 case max: Max if isDistinct =>
                   AggregateExpression(max, Complete, isDistinct = false)
@@ -862,28 +870,68 @@ class Analyzer(
   object ResolveSubquery extends Rule[LogicalPlan] with PredicateHelper {
 
     /**
-     * Resolve the correlated predicates in the [[Filter]] clauses (e.g. WHERE or HAVING) of a
+     * Resolve the correlated predicates in the clauses (e.g. WHERE or HAVING) of a
      * sub-query by using the plan the predicates should be correlated to.
      */
-    private def resolveCorrelatedPredicates(q: LogicalPlan, p: LogicalPlan): LogicalPlan = {
-      q transformUp {
-        case f @ Filter(cond, child) if child.resolved && !f.resolved =>
-          val newCond = resolveExpression(cond, p, throws = false)
-          if (!cond.fastEquals(newCond)) {
-            Filter(newCond, child)
-          } else {
-            f
-          }
+    private def resolveCorrelatedSubquery(
+        sub: LogicalPlan, outer: LogicalPlan,
+        aliases: scala.collection.mutable.Map[Attribute, Alias]): LogicalPlan = {
+      // First resolve as much of the sub-query as possible
+      val analyzed = execute(sub)
+      if (analyzed.resolved) {
+        analyzed
+      } else {
+        // Only resolve the lowest plan that is not resolved by outer plan, otherwise it could be
+        // resolved by itself
+        val resolvedByOuter = analyzed transformDown {
+          case q: LogicalPlan if q.childrenResolved && !q.resolved =>
+            q transformExpressions {
+              case u @ UnresolvedAttribute(nameParts) =>
+                withPosition(u) {
+                  try {
+                    val outerAttrOpt = outer.resolve(nameParts, resolver)
+                    if (outerAttrOpt.isDefined) {
+                      val outerAttr = outerAttrOpt.get
+                      if (q.inputSet.contains(outerAttr)) {
+                        // Got a conflict, create an alias for the attribute come from outer table
+                        val alias = Alias(outerAttr, outerAttr.toString)()
+                        val attr = alias.toAttribute
+                        aliases += attr -> alias
+                        attr
+                      } else {
+                        outerAttr
+                      }
+                    } else {
+                      u
+                    }
+                  } catch {
+                    case a: AnalysisException => u
+                  }
+                }
+            }
+        }
+        if (resolvedByOuter fastEquals analyzed) {
+          analyzed
+        } else {
+          resolveCorrelatedSubquery(resolvedByOuter, outer, aliases)
+        }
       }
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case q: LogicalPlan if q.childrenResolved =>
-        q transformExpressions {
+      // Only a few unary node (Project/Filter/Aggregate/Having) could have subquery
+      case q: UnaryNode if q.childrenResolved =>
+        val aliases = scala.collection.mutable.Map[Attribute, Alias]()
+        val newPlan = q transformExpressions {
           case e: SubqueryExpression if !e.query.resolved =>
-            // First resolve as much of the sub-query as possible. After that we use the children of
-            // this plan to resolve the remaining correlated predicates.
-            e.withNewPlan(q.children.foldLeft(execute(e.query))(resolveCorrelatedPredicates))
+            e.withNewPlan(resolveCorrelatedSubquery(e.query, q.child, aliases))
+        }
+        if (aliases.nonEmpty) {
+          val projs = q.child.output ++ aliases.values
+          Project(q.child.output,
+            newPlan.withNewChildren(Seq(Project(projs, q.child))))
+        } else {
+          newPlan
         }
     }
   }

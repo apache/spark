@@ -52,7 +52,7 @@ trait CheckAnalysis extends PredicateHelper {
       case p if p.analyzed => // Skip already analyzed sub-plans
 
       case u: UnresolvedRelation =>
-        u.failAnalysis(s"Table or View not found: ${u.tableIdentifier}")
+        u.failAnalysis(s"Table or view not found: ${u.tableIdentifier}")
 
       case operator: LogicalPlan =>
         operator transformExpressionsUp {
@@ -113,16 +113,21 @@ trait CheckAnalysis extends PredicateHelper {
           case f @ Filter(condition, child) =>
             // Make sure that no correlated reference is below Aggregates, Outer Joins and on the
             // right hand side of Unions.
-            lazy val attributes = child.outputSet
+            lazy val outerAttributes = child.outputSet
             def failOnCorrelatedReference(
-                p: LogicalPlan,
-                message: String): Unit = p.transformAllExpressions {
-              case e: NamedExpression if attributes.contains(e) =>
-                failAnalysis(s"Accessing outer query column is not allowed in $message: $e")
+                plan: LogicalPlan,
+                message: String): Unit = plan foreach {
+              case p =>
+                lazy val inputs = p.inputSet
+                p.transformExpressions {
+                  case e: AttributeReference
+                    if !inputs.contains(e) && outerAttributes.contains(e) =>
+                    failAnalysis(s"Accessing outer query column is not allowed in $message: $e")
+                }
             }
             def checkForCorrelatedReferences(p: PredicateSubquery): Unit = p.query.foreach {
               case a @ Aggregate(_, _, source) =>
-                failOnCorrelatedReference(source, "an AGGREATE")
+                failOnCorrelatedReference(source, "an AGGREGATE")
               case j @ Join(left, _, RightOuter, _) =>
                 failOnCorrelatedReference(left, "a RIGHT OUTER JOIN")
               case j @ Join(_, right, jt, _) if jt != Inner =>
@@ -278,7 +283,16 @@ trait CheckAnalysis extends PredicateHelper {
                  |Failure when resolving conflicting references in Intersect:
                  |$plan
                  |Conflicting attributes: ${conflictingAttributes.mkString(",")}
-                 |""".stripMargin)
+               """.stripMargin)
+
+          case e: Except if !e.duplicateResolved =>
+            val conflictingAttributes = e.left.outputSet.intersect(e.right.outputSet)
+            failAnalysis(
+              s"""
+                 |Failure when resolving conflicting references in Except:
+                 |$plan
+                 |Conflicting attributes: ${conflictingAttributes.mkString(",")}
+               """.stripMargin)
 
           case o if !o.resolved =>
             failAnalysis(

@@ -31,17 +31,21 @@ class SimpleScanSource extends RelationProvider {
   override def createRelation(
       sqlContext: SQLContext,
       parameters: Map[String, String]): BaseRelation = {
-    SimpleScan(parameters("from").toInt, parameters("TO").toInt)(sqlContext)
+    SimpleScan(parameters("from").toInt, parameters("TO").toInt)(sqlContext.sparkSession)
   }
 }
 
-case class SimpleScan(from: Int, to: Int)(@transient val sqlContext: SQLContext)
+case class SimpleScan(from: Int, to: Int)(@transient val sparkSession: SparkSession)
   extends BaseRelation with TableScan {
+
+  override def sqlContext: SQLContext = sparkSession.wrapped
 
   override def schema: StructType =
     StructType(StructField("i", IntegerType, nullable = false) :: Nil)
 
-  override def buildScan(): RDD[Row] = sqlContext.sparkContext.parallelize(from to to).map(Row(_))
+  override def buildScan(): RDD[Row] = {
+    sparkSession.sparkContext.parallelize(from to to).map(Row(_))
+  }
 }
 
 class AllDataTypesScanSource extends SchemaRelationProvider {
@@ -53,23 +57,27 @@ class AllDataTypesScanSource extends SchemaRelationProvider {
     parameters("option_with_underscores")
     parameters("option.with.dots")
 
-    AllDataTypesScan(parameters("from").toInt, parameters("TO").toInt, schema)(sqlContext)
+    AllDataTypesScan(
+      parameters("from").toInt,
+      parameters("TO").toInt, schema)(sqlContext.sparkSession)
   }
 }
 
 case class AllDataTypesScan(
     from: Int,
     to: Int,
-    userSpecifiedSchema: StructType)(@transient val sqlContext: SQLContext)
+    userSpecifiedSchema: StructType)(@transient val sparkSession: SparkSession)
   extends BaseRelation
   with TableScan {
+
+  override def sqlContext: SQLContext = sparkSession.wrapped
 
   override def schema: StructType = userSpecifiedSchema
 
   override def needConversion: Boolean = true
 
   override def buildScan(): RDD[Row] = {
-    sqlContext.sparkContext.parallelize(from to to).map { i =>
+    sparkSession.sparkContext.parallelize(from to to).map { i =>
       Row(
         s"str_$i",
         s"str_$i".getBytes(StandardCharsets.UTF_8),

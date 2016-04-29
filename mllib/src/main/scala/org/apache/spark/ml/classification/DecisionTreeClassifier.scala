@@ -32,7 +32,7 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeModel}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.Dataset
 
 
 /**
@@ -44,7 +44,7 @@ import org.apache.spark.sql.{DataFrame, Dataset}
  */
 @Since("1.4.0")
 @Experimental
-final class DecisionTreeClassifier @Since("1.4.0") (
+class DecisionTreeClassifier @Since("1.4.0") (
     @Since("1.4.0") override val uid: String)
   extends ProbabilisticClassifier[Vector, DecisionTreeClassifier, DecisionTreeClassificationModel]
   with DecisionTreeClassifierParams with DefaultParamsWritable {
@@ -85,14 +85,8 @@ final class DecisionTreeClassifier @Since("1.4.0") (
   override protected def train(dataset: Dataset[_]): DecisionTreeClassificationModel = {
     val categoricalFeatures: Map[Int, Int] =
       MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
-    val numClasses: Int = MetadataUtils.getNumClasses(dataset.schema($(labelCol))) match {
-      case Some(n: Int) => n
-      case None => throw new IllegalArgumentException("DecisionTreeClassifier was given input" +
-        s" with invalid label column ${$(labelCol)}, without the number of classes" +
-        " specified. See StringIndexer.")
-        // TODO: Automatically index labels: SPARK-7126
-    }
-    val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
+    val numClasses: Int = getNumClasses(dataset)
+    val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset, numClasses)
     val strategy = getOldStrategy(categoricalFeatures, numClasses)
     val trees = RandomForest.run(oldDataset, strategy, numTrees = 1, featureSubsetStrategy = "all",
       seed = $(seed), parentUID = Some(uid))
@@ -138,7 +132,7 @@ object DecisionTreeClassifier extends DefaultParamsReadable[DecisionTreeClassifi
  */
 @Since("1.4.0")
 @Experimental
-final class DecisionTreeClassificationModel private[ml] (
+class DecisionTreeClassificationModel private[ml] (
     @Since("1.4.0")override val uid: String,
     @Since("1.4.0")override val rootNode: Node,
     @Since("1.6.0")override val numFeatures: Int,

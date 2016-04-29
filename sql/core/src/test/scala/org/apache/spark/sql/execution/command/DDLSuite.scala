@@ -26,7 +26,8 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTablePartition, SessionCatalog}
-import org.apache.spark.sql.catalyst.catalog.ExternalCatalog.TablePartitionSpec
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 
 class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
@@ -69,7 +70,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   private def createTable(catalog: SessionCatalog, name: TableIdentifier): Unit = {
     catalog.createTable(CatalogTable(
       identifier = name,
-      tableType = CatalogTableType.EXTERNAL_TABLE,
+      tableType = CatalogTableType.EXTERNAL,
       storage = CatalogStorageFormat(None, None, None, None, Map()),
       schema = Seq()), ignoreIfExists = false)
   }
@@ -83,91 +84,100 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   }
 
   test("Create/Drop Database") {
-    val catalog = sqlContext.sessionState.catalog
+    withSQLConf(
+        SQLConf.WAREHOUSE_PATH.key -> (System.getProperty("java.io.tmpdir") + File.separator)) {
+      val catalog = sqlContext.sessionState.catalog
 
-    val databaseNames = Seq("db1", "`database`")
+      val databaseNames = Seq("db1", "`database`")
 
-    databaseNames.foreach { dbName =>
-      try {
-        val dbNameWithoutBackTicks = cleanIdentifier(dbName)
+      databaseNames.foreach { dbName =>
+        try {
+          val dbNameWithoutBackTicks = cleanIdentifier(dbName)
 
-        sql(s"CREATE DATABASE $dbName")
-        val db1 = catalog.getDatabaseMetadata(dbNameWithoutBackTicks)
-        assert(db1 == CatalogDatabase(
-          dbNameWithoutBackTicks,
-          "",
-          System.getProperty("java.io.tmpdir") + File.separator + s"$dbNameWithoutBackTicks.db",
-          Map.empty))
-        sql(s"DROP DATABASE $dbName CASCADE")
-        assert(!catalog.databaseExists(dbNameWithoutBackTicks))
-      } finally {
-        catalog.reset()
+          sql(s"CREATE DATABASE $dbName")
+          val db1 = catalog.getDatabaseMetadata(dbNameWithoutBackTicks)
+          assert(db1 == CatalogDatabase(
+            dbNameWithoutBackTicks,
+            "",
+            System.getProperty("java.io.tmpdir") + File.separator + s"$dbNameWithoutBackTicks.db",
+            Map.empty))
+          sql(s"DROP DATABASE $dbName CASCADE")
+          assert(!catalog.databaseExists(dbNameWithoutBackTicks))
+        } finally {
+          catalog.reset()
+        }
       }
     }
   }
 
   test("Create Database - database already exists") {
-    val catalog = sqlContext.sessionState.catalog
-    val databaseNames = Seq("db1", "`database`")
+    withSQLConf(
+      SQLConf.WAREHOUSE_PATH.key -> (System.getProperty("java.io.tmpdir") + File.separator)) {
+      val catalog = sqlContext.sessionState.catalog
+      val databaseNames = Seq("db1", "`database`")
 
-    databaseNames.foreach { dbName =>
-      try {
-        val dbNameWithoutBackTicks = cleanIdentifier(dbName)
-        sql(s"CREATE DATABASE $dbName")
-        val db1 = catalog.getDatabaseMetadata(dbNameWithoutBackTicks)
-        assert(db1 == CatalogDatabase(
-          dbNameWithoutBackTicks,
-          "",
-          System.getProperty("java.io.tmpdir") + File.separator + s"$dbNameWithoutBackTicks.db",
-          Map.empty))
-
-        val message = intercept[AnalysisException] {
+      databaseNames.foreach { dbName =>
+        try {
+          val dbNameWithoutBackTicks = cleanIdentifier(dbName)
           sql(s"CREATE DATABASE $dbName")
-        }.getMessage
-        assert(message.contains(s"Database '$dbNameWithoutBackTicks' already exists."))
-      } finally {
-        catalog.reset()
+          val db1 = catalog.getDatabaseMetadata(dbNameWithoutBackTicks)
+          assert(db1 == CatalogDatabase(
+            dbNameWithoutBackTicks,
+            "",
+            System.getProperty("java.io.tmpdir") + File.separator + s"$dbNameWithoutBackTicks.db",
+            Map.empty))
+
+          val message = intercept[AnalysisException] {
+            sql(s"CREATE DATABASE $dbName")
+          }.getMessage
+          assert(message.contains(s"Database '$dbNameWithoutBackTicks' already exists."))
+        } finally {
+          catalog.reset()
+        }
       }
     }
   }
 
   test("Alter/Describe Database") {
-    val catalog = sqlContext.sessionState.catalog
-    val databaseNames = Seq("db1", "`database`")
+    withSQLConf(
+      SQLConf.WAREHOUSE_PATH.key -> (System.getProperty("java.io.tmpdir") + File.separator)) {
+      val catalog = sqlContext.sessionState.catalog
+      val databaseNames = Seq("db1", "`database`")
 
-    databaseNames.foreach { dbName =>
-      try {
-        val dbNameWithoutBackTicks = cleanIdentifier(dbName)
-        val location =
-          System.getProperty("java.io.tmpdir") + File.separator + s"$dbNameWithoutBackTicks.db"
-        sql(s"CREATE DATABASE $dbName")
+      databaseNames.foreach { dbName =>
+        try {
+          val dbNameWithoutBackTicks = cleanIdentifier(dbName)
+          val location =
+            System.getProperty("java.io.tmpdir") + File.separator + s"$dbNameWithoutBackTicks.db"
+          sql(s"CREATE DATABASE $dbName")
 
-        checkAnswer(
-          sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
-          Row("Database Name", dbNameWithoutBackTicks) ::
-            Row("Description", "") ::
-            Row("Location", location) ::
-            Row("Properties", "") :: Nil)
+          checkAnswer(
+            sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
+            Row("Database Name", dbNameWithoutBackTicks) ::
+              Row("Description", "") ::
+              Row("Location", location) ::
+              Row("Properties", "") :: Nil)
 
-        sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')")
+          sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')")
 
-        checkAnswer(
-          sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
-          Row("Database Name", dbNameWithoutBackTicks) ::
-            Row("Description", "") ::
-            Row("Location", location) ::
-            Row("Properties", "((a,a), (b,b), (c,c))") :: Nil)
+          checkAnswer(
+            sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
+            Row("Database Name", dbNameWithoutBackTicks) ::
+              Row("Description", "") ::
+              Row("Location", location) ::
+              Row("Properties", "((a,a), (b,b), (c,c))") :: Nil)
 
-        sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('d'='d')")
+          sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('d'='d')")
 
-        checkAnswer(
-          sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
-          Row("Database Name", dbNameWithoutBackTicks) ::
-            Row("Description", "") ::
-            Row("Location", location) ::
-            Row("Properties", "((a,a), (b,b), (c,c), (d,d))") :: Nil)
-      } finally {
-        catalog.reset()
+          checkAnswer(
+            sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
+            Row("Database Name", dbNameWithoutBackTicks) ::
+              Row("Description", "") ::
+              Row("Location", location) ::
+              Row("Properties", "((a,a), (b,b), (c,c), (d,d))") :: Nil)
+        } finally {
+          catalog.reset()
+        }
       }
     }
   }
@@ -716,4 +726,55 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
+  test("describe function") {
+    checkAnswer(
+      sql("DESCRIBE FUNCTION log"),
+      Row("Class: org.apache.spark.sql.catalyst.expressions.Logarithm") ::
+        Row("Function: log") ::
+        Row("Usage: log(b, x) - Returns the logarithm of x with base b.") :: Nil
+    )
+    // predicate operator
+    checkAnswer(
+      sql("DESCRIBE FUNCTION or"),
+      Row("Class: org.apache.spark.sql.catalyst.expressions.Or") ::
+        Row("Function: or") ::
+        Row("Usage: a or b - Logical OR.") :: Nil
+    )
+    checkAnswer(
+      sql("DESCRIBE FUNCTION !"),
+      Row("Class: org.apache.spark.sql.catalyst.expressions.Not") ::
+        Row("Function: !") ::
+        Row("Usage: ! a - Logical not") :: Nil
+    )
+    // arithmetic operators
+    checkAnswer(
+      sql("DESCRIBE FUNCTION +"),
+      Row("Class: org.apache.spark.sql.catalyst.expressions.Add") ::
+        Row("Function: +") ::
+        Row("Usage: a + b - Returns a+b.") :: Nil
+    )
+    // comparison operators
+    checkAnswer(
+      sql("DESCRIBE FUNCTION <"),
+      Row("Class: org.apache.spark.sql.catalyst.expressions.LessThan") ::
+        Row("Function: <") ::
+        Row("Usage: a < b - Returns TRUE if a is less than b.") :: Nil
+    )
+    // STRING
+    checkAnswer(
+      sql("DESCRIBE FUNCTION 'concat'"),
+      Row("Class: org.apache.spark.sql.catalyst.expressions.Concat") ::
+        Row("Function: concat") ::
+        Row("Usage: concat(str1, str2, ..., strN) " +
+          "- Returns the concatenation of str1, str2, ..., strN") :: Nil
+    )
+    // extended mode
+    checkAnswer(
+      sql("DESCRIBE FUNCTION EXTENDED ^"),
+      Row("Class: org.apache.spark.sql.catalyst.expressions.BitwiseXor") ::
+        Row("Extended Usage:\n> SELECT 3 ^ 5; 2") ::
+        Row("Function: ^") ::
+        Row("Usage: a ^ b - Bitwise exclusive OR.") :: Nil
+    )
+  }
 }

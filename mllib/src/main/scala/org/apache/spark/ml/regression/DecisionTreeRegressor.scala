@@ -45,7 +45,7 @@ import org.apache.spark.sql.functions._
  */
 @Since("1.4.0")
 @Experimental
-final class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
+class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends Predictor[Vector, DecisionTreeRegressor, DecisionTreeRegressionModel]
   with DecisionTreeRegressorParams with DefaultParamsWritable {
 
@@ -129,7 +129,7 @@ object DecisionTreeRegressor extends DefaultParamsReadable[DecisionTreeRegressor
  */
 @Since("1.4.0")
 @Experimental
-final class DecisionTreeRegressionModel private[ml] (
+class DecisionTreeRegressionModel private[ml] (
     override val uid: String,
     override val rootNode: Node,
     override val numFeatures: Int)

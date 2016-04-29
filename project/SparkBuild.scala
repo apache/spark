@@ -18,6 +18,7 @@
 import java.io._
 import java.nio.file.Files
 
+import scala.io.Source
 import scala.util.Properties
 import scala.collection.JavaConverters._
 import scala.collection.mutable.Stack
@@ -29,6 +30,8 @@ import sbtunidoc.Plugin.UnidocKeys.unidocGenjavadocVersion
 import com.simplytyped.Antlr4Plugin._
 import com.typesafe.sbt.pom.{PomBuild, SbtPomKeys}
 import com.typesafe.tools.mima.plugin.MimaKeys
+import org.scalastyle.sbt.ScalastylePlugin._
+import org.scalastyle.sbt.Tasks
 
 import spray.revolver.RevolverPlugin._
 
@@ -36,8 +39,8 @@ object BuildCommons {
 
   private val buildLocation = file(".").getAbsoluteFile.getParentFile
 
-  val sqlProjects@Seq(catalyst, sql, hive, hiveThriftServer) = Seq(
-    "catalyst", "sql", "hive", "hive-thriftserver"
+  val sqlProjects@Seq(catalyst, sql, hive, hiveThriftServer, hiveCompatibility) = Seq(
+    "catalyst", "sql", "hive", "hive-thriftserver", "hivecontext-compatibility"
   ).map(ProjectRef(buildLocation, _))
 
   val streamingProjects@Seq(
@@ -144,10 +147,93 @@ object SparkBuild extends PomBuild {
 
   lazy val sparkGenjavadocSettings: Seq[sbt.Def.Setting[_]] = Seq(
     libraryDependencies += compilerPlugin(
-      "org.spark-project" %% "genjavadoc-plugin" % unidocGenjavadocVersion.value cross CrossVersion.full),
-    scalacOptions <+= target.map(t => "-P:genjavadoc:out=" + (t / "java")))
+      "com.typesafe.genjavadoc" %% "genjavadoc-plugin" % unidocGenjavadocVersion.value cross CrossVersion.full),
+    scalacOptions ++= Seq(
+      "-P:genjavadoc:out=" + (target.value / "java"),
+      "-P:genjavadoc:strictVisibility=true" // hide package private types
+    )
+  )
 
-  lazy val sharedSettings = sparkGenjavadocSettings ++ Seq (
+  lazy val scalaStyleRules = Project("scalaStyleRules", file("scalastyle"))
+    .settings(
+      libraryDependencies += "org.scalastyle" %% "scalastyle" % "0.8.0"
+    )
+
+  lazy val scalaStyleOnCompile = taskKey[Unit]("scalaStyleOnCompile")
+
+  lazy val scalaStyleOnTest = taskKey[Unit]("scalaStyleOnTest")
+
+  // We special case the 'println' lint rule to only be a warning on compile, because adding
+  // printlns for debugging is a common use case and is easy to remember to remove.
+  val scalaStyleOnCompileConfig: String = {
+    val in = "scalastyle-config.xml"
+    val out = "scalastyle-on-compile.generated.xml"
+    val replacements = Map(
+      """customId="println" level="error"""" -> """customId="println" level="warn""""
+    )
+    var contents = Source.fromFile(in).getLines.mkString("\n")
+    for ((k, v) <- replacements) {
+      require(contents.contains(k), s"Could not rewrite '$k' in original scalastyle config.")
+      contents = contents.replace(k, v)
+    }
+    new PrintWriter(out) {
+      write(contents)
+      close()
+    }
+    out
+  }
+
+  // Return a cached scalastyle task for a given configuration (usually Compile or Test)
+  private def cachedScalaStyle(config: Configuration) = Def.task {
+    val logger = streams.value.log
+    // We need a different cache dir per Configuration, otherwise they collide
+    val cacheDir = target.value / s"scalastyle-cache-${config.name}"
+    val cachedFun = FileFunction.cached(cacheDir, FilesInfo.lastModified, FilesInfo.exists) {
+      (inFiles: Set[File]) => {
+        val args: Seq[String] = Seq.empty
+        val scalaSourceV = Seq(file(scalaSource.in(config).value.getAbsolutePath))
+        val configV = (baseDirectory in ThisBuild).value / scalaStyleOnCompileConfig
+        val configUrlV = scalastyleConfigUrl.in(config).value
+        val streamsV = streams.in(config).value
+        val failOnErrorV = true
+        val scalastyleTargetV = scalastyleTarget.in(config).value
+        val configRefreshHoursV = scalastyleConfigRefreshHours.in(config).value
+        val targetV = target.in(config).value
+        val configCacheFileV = scalastyleConfigUrlCacheFile.in(config).value
+
+        logger.info(s"Running scalastyle on ${name.value} in ${config.name}")
+        Tasks.doScalastyle(args, configV, configUrlV, failOnErrorV, scalaSourceV, scalastyleTargetV,
+          streamsV, configRefreshHoursV, targetV, configCacheFileV)
+
+        Set.empty
+      }
+    }
+
+    cachedFun(findFiles(scalaSource.in(config).value))
+  }
+
+  private def findFiles(file: File): Set[File] = file.isDirectory match {
+    case true => file.listFiles().toSet.flatMap(findFiles) + file
+    case false => Set(file)
+  }
+
+  def enableScalaStyle: Seq[sbt.Def.Setting[_]] = Seq(
+    scalaStyleOnCompile := cachedScalaStyle(Compile).value,
+    scalaStyleOnTest := cachedScalaStyle(Test).value,
+    logLevel in scalaStyleOnCompile := Level.Warn,
+    logLevel in scalaStyleOnTest := Level.Warn,
+    (compile in Compile) := {
+      scalaStyleOnCompile.value
+      (compile in Compile).value
+    },
+    (compile in Test) := {
+      scalaStyleOnTest.value
+      (compile in Test).value
+    }
+  )
+
+  lazy val sharedSettings = sparkGenjavadocSettings ++
+      (if (sys.env.contains("NOLINT_ON_COMPILE")) Nil else enableScalaStyle) ++ Seq(
     exportJars in Compile := true,
     exportJars in Test := false,
     javaHome := sys.env.get("JAVA_HOME")
@@ -155,7 +241,7 @@ object SparkBuild extends PomBuild {
       .map(file),
     incOptions := incOptions.value.withNameHashing(true),
     publishMavenStyle := true,
-    unidocGenjavadocVersion := "0.9-spark0",
+    unidocGenjavadocVersion := "0.10",
 
     // Override SBT's default resolvers:
     resolvers := Seq(
@@ -253,7 +339,7 @@ object SparkBuild extends PomBuild {
 
   val mimaProjects = allProjects.filterNot { x =>
     Seq(
-      spark, hive, hiveThriftServer, catalyst, repl, networkCommon, networkShuffle, networkYarn,
+      spark, hive, hiveThriftServer, hiveCompatibility, catalyst, repl, networkCommon, networkShuffle, networkYarn,
       unsafe, testTags, sketch, mllibLocal
     ).contains(x)
   }

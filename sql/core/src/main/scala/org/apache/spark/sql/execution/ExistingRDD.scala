@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
+import org.apache.spark.sql.{AnalysisException, Row, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions._
@@ -31,7 +31,7 @@ import org.apache.spark.sql.execution.datasources.parquet.{DefaultSource => Parq
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.BaseRelation
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types.{DataType, StructType}
 
 object RDDConversions {
   def productToRowRdd[A <: Product](data: RDD[A], outputTypes: Seq[DataType]): RDD[InternalRow] = {
@@ -75,15 +75,15 @@ object RDDConversions {
 /** Logical plan node for scanning data from an RDD. */
 private[sql] case class LogicalRDD(
     output: Seq[Attribute],
-    rdd: RDD[InternalRow])(sqlContext: SQLContext)
+    rdd: RDD[InternalRow])(session: SparkSession)
   extends LogicalPlan with MultiInstanceRelation {
 
   override def children: Seq[LogicalPlan] = Nil
 
-  override protected final def otherCopyArgs: Seq[AnyRef] = sqlContext :: Nil
+  override protected final def otherCopyArgs: Seq[AnyRef] = session :: Nil
 
   override def newInstance(): LogicalRDD.this.type =
-    LogicalRDD(output.map(_.newInstance()), rdd)(sqlContext).asInstanceOf[this.type]
+    LogicalRDD(output.map(_.newInstance()), rdd)(session).asInstanceOf[this.type]
 
   override def sameResult(plan: LogicalPlan): Boolean = plan match {
     case LogicalRDD(_, otherRDD) => rdd.id == otherRDD.id
@@ -95,18 +95,18 @@ private[sql] case class LogicalRDD(
   @transient override lazy val statistics: Statistics = Statistics(
     // TODO: Instead of returning a default value here, find a way to return a meaningful size
     // estimate for RDDs. See PR 1238 for more discussions.
-    sizeInBytes = BigInt(sqlContext.conf.defaultSizeInBytes)
+    sizeInBytes = BigInt(session.sessionState.conf.defaultSizeInBytes)
   )
 }
 
 /** Physical plan node for scanning data from an RDD. */
-private[sql] case class PhysicalRDD(
+private[sql] case class RDDScanExec(
     output: Seq[Attribute],
     rdd: RDD[InternalRow],
-    override val nodeName: String) extends LeafNode {
+    override val nodeName: String) extends LeafExecNode {
 
   private[sql] override lazy val metrics = Map(
-    "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
@@ -124,7 +124,7 @@ private[sql] case class PhysicalRDD(
   }
 }
 
-private[sql] trait DataSourceScan extends LeafNode {
+private[sql] trait DataSourceScanExec extends LeafExecNode {
   val rdd: RDD[InternalRow]
   val relation: BaseRelation
 
@@ -132,22 +132,22 @@ private[sql] trait DataSourceScan extends LeafNode {
 
   // Ignore rdd when checking results
   override def sameResult(plan: SparkPlan): Boolean = plan match {
-    case other: DataSourceScan => relation == other.relation && metadata == other.metadata
+    case other: DataSourceScanExec => relation == other.relation && metadata == other.metadata
     case _ => false
   }
 }
 
 /** Physical plan node for scanning data from a relation. */
-private[sql] case class RowDataSourceScan(
+private[sql] case class RowDataSourceScanExec(
     output: Seq[Attribute],
     rdd: RDD[InternalRow],
     @transient relation: BaseRelation,
     override val outputPartitioning: Partitioning,
     override val metadata: Map[String, String] = Map.empty)
-  extends DataSourceScan with CodegenSupport {
+  extends DataSourceScanExec with CodegenSupport {
 
   private[sql] override lazy val metrics =
-    Map("numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
+    Map("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   val outputUnsafeRows = relation match {
     case r: HadoopFsRelation if r.fileFormat.isInstanceOf[ParquetSource] =>
@@ -207,16 +207,16 @@ private[sql] case class RowDataSourceScan(
 }
 
 /** Physical plan node for scanning data from a batched relation. */
-private[sql] case class BatchedDataSourceScan(
+private[sql] case class BatchedDataSourceScanExec(
     output: Seq[Attribute],
     rdd: RDD[InternalRow],
     @transient relation: BaseRelation,
     override val outputPartitioning: Partitioning,
     override val metadata: Map[String, String] = Map.empty)
-  extends DataSourceScan with CodegenSupport {
+  extends DataSourceScanExec with CodegenSupport {
 
   private[sql] override lazy val metrics =
-    Map("numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"),
+    Map("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
       "scanTime" -> SQLMetrics.createTimingMetric(sparkContext, "scan time"))
 
   protected override def doExecute(): RDD[InternalRow] = {
@@ -316,7 +316,7 @@ private[sql] case class BatchedDataSourceScan(
   }
 }
 
-private[sql] object DataSourceScan {
+private[sql] object DataSourceScanExec {
   // Metadata keys
   val INPUT_PATHS = "InputPaths"
   val PUSHED_FILTERS = "PushedFilters"
@@ -325,11 +325,12 @@ private[sql] object DataSourceScan {
       output: Seq[Attribute],
       rdd: RDD[InternalRow],
       relation: BaseRelation,
-      metadata: Map[String, String] = Map.empty): DataSourceScan = {
+      metadata: Map[String, String] = Map.empty): DataSourceScanExec = {
     val outputPartitioning = {
       val bucketSpec = relation match {
         // TODO: this should be closer to bucket planning.
-        case r: HadoopFsRelation if r.sqlContext.conf.bucketingEnabled => r.bucketSpec
+        case r: HadoopFsRelation
+          if r.sparkSession.sessionState.conf.bucketingEnabled => r.bucketSpec
         case _ => None
       }
 
@@ -348,10 +349,11 @@ private[sql] object DataSourceScan {
     }
 
     relation match {
-      case r: HadoopFsRelation if r.fileFormat.supportBatch(r.sqlContext, relation.schema) =>
-        BatchedDataSourceScan(output, rdd, relation, outputPartitioning, metadata)
+      case r: HadoopFsRelation
+        if r.fileFormat.supportBatch(r.sparkSession, StructType.fromAttributes(output)) =>
+        BatchedDataSourceScanExec(output, rdd, relation, outputPartitioning, metadata)
       case _ =>
-        RowDataSourceScan(output, rdd, relation, outputPartitioning, metadata)
+        RowDataSourceScanExec(output, rdd, relation, outputPartitioning, metadata)
     }
   }
 }

@@ -23,7 +23,8 @@ import org.apache.spark.sql.internal.SharedState
 
 
 /**
- * A class that holds all state shared across sessions in a given [[HiveContext]].
+ * A class that holds all state shared across sessions in a given
+ * [[org.apache.spark.sql.SparkSession]] backed by Hive.
  */
 private[hive] class HiveSharedState(override val sparkContext: SparkContext)
   extends SharedState(sparkContext) {
@@ -31,18 +32,11 @@ private[hive] class HiveSharedState(override val sparkContext: SparkContext)
   // TODO: just share the IsolatedClientLoader instead of the client instances themselves
 
   /**
-   * A Hive client used for execution.
-   */
-  val executionHive: HiveClientImpl = {
-    HiveContext.newClientForExecution(sparkContext.conf, sparkContext.hadoopConfiguration)
-  }
-
-  /**
    * A Hive client used to interact with the metastore.
    */
   // This needs to be a lazy val at here because TestHiveSharedState is overriding it.
   lazy val metadataHive: HiveClient = {
-    HiveContext.newClientForMetadata(sparkContext.conf, sparkContext.hadoopConfiguration)
+    HiveUtils.newClientForMetadata(sparkContext.conf, sparkContext.hadoopConfiguration)
   }
 
   /**
