@@ -28,7 +28,7 @@ sqlContext <- sparkRSQL.init(sc)
 test_that("formula of spark.glm", {
   training <- suppressWarnings(createDataFrame(sqlContext, iris))
   # dot minus and intercept vs native glm
-  model <- spark.glm(data, Sepal_Width ~ . - Species + 0)
+  model <- spark.glm(training, Sepal_Width ~ . - Species + 0)
   vals <- collect(select(predict(model, training), "prediction"))
   rVals <- predict(glm(Sepal.Width ~ . - Species + 0, data = iris), iris)
   expect_true(all(abs(rVals - vals) < 1e-6), rVals - vals)

@@ -49,7 +49,7 @@ setClass("KMeansModel", representation(jobj = "jobj"))
 #'
 #' Fits a generalized linear model.
 #'
-#' @param data Spark DataFrame for training.
+#' @param data SparkDataFrame for training.
 #' @param formula A symbolic description of the model to be fitted. Currently only a few formula
 #'                operators are supported, including '~', '.', ':', '+', and '-'.
 #' @param family A description of the error distribution and link function to be used in the model.
@@ -90,7 +90,7 @@ setMethod(
         jobj <- callJStatic("org.apache.spark.ml.r.GeneralizedLinearRegressionWrapper",
         "fit", formula, data@sdf, family$family, family$link,
         epsilon, as.integer(maxit))
-        new("GeneralizedLinearRegressionModel", jobj = jobj)
+        return(new("GeneralizedLinearRegressionModel", jobj = jobj))
 })
 
 #' Fits a generalized linear model (R-compliant).
@@ -120,7 +120,7 @@ setMethod(
 #' }
 setMethod("glm", signature(formula = "formula", family = "ANY", data = "SparkDataFrame"),
           function(formula, family = gaussian, data, epsilon = 1e-06, maxit = 25) {
-            spark.glm(dataframe, formula, family, epsilon, maxit)
+            spark.glm(data, formula, family, epsilon, maxit)
           })
 
 #' Get the summary of a generalized linear model
