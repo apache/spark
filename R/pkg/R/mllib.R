@@ -99,9 +99,9 @@ setMethod("glm", signature(formula = "formula", family = "ANY", data = "SparkDat
 setMethod("summary", signature(object = "GeneralizedLinearRegressionModel"),
           function(object, ...) {
             jobj <- object@jobj
+            is.loaded <- callJMethod(jobj, "isLoaded")
             features <- callJMethod(jobj, "rFeatures")
             coefficients <- callJMethod(jobj, "rCoefficients")
-            deviance.resid <- callJMethod(jobj, "rDevianceResiduals")
             dispersion <- callJMethod(jobj, "rDispersion")
             null.deviance <- callJMethod(jobj, "rNullDeviance")
             deviance <- callJMethod(jobj, "rDeviance")
@@ -110,15 +110,18 @@ setMethod("summary", signature(object = "GeneralizedLinearRegressionModel"),
             aic <- callJMethod(jobj, "rAic")
             iter <- callJMethod(jobj, "rNumIterations")
             family <- callJMethod(jobj, "rFamily")
-
-            deviance.resid <- dataFrame(deviance.resid)
+            deviance.resid <- if (is.loaded) {
+              NULL
+            } else {
+              dataFrame(callJMethod(jobj, "rDevianceResiduals"))
+            }
             coefficients <- matrix(coefficients, ncol = 4)
             colnames(coefficients) <- c("Estimate", "Std. Error", "t value", "Pr(>|t|)")
             rownames(coefficients) <- unlist(features)
             ans <- list(deviance.resid = deviance.resid, coefficients = coefficients,
                         dispersion = dispersion, null.deviance = null.deviance,
                         deviance = deviance, df.null = df.null, df.residual = df.residual,
-                        aic = aic, iter = iter, family = family)
+                        aic = aic, iter = iter, family = family, is.loaded = is.loaded)
             class(ans) <- "summary.GeneralizedLinearRegressionModel"
             return(ans)
           })
@@ -129,12 +132,16 @@ setMethod("summary", signature(object = "GeneralizedLinearRegressionModel"),
 #' @name print.summary.GeneralizedLinearRegressionModel
 #' @export
 print.summary.GeneralizedLinearRegressionModel <- function(x, ...) {
-  x$deviance.resid <- setNames(unlist(approxQuantile(x$deviance.resid, "devianceResiduals",
+  if (x$is.loaded) {
+    cat("\nSaved-loaded model does not support output 'Deviance Residuals'.\n")
+  } else {
+    x$deviance.resid <- setNames(unlist(approxQuantile(x$deviance.resid, "devianceResiduals",
     c(0.0, 0.25, 0.5, 0.75, 1.0), 0.01)), c("Min", "1Q", "Median", "3Q", "Max"))
-  x$deviance.resid <- zapsmall(x$deviance.resid, 5L)
-  cat("\nDeviance Residuals: \n")
-  cat("(Note: These are approximate quantiles with relative error <= 0.01)\n")
-  print.default(x$deviance.resid, digits = 5L, na.print = "", print.gap = 2L)
+    x$deviance.resid <- zapsmall(x$deviance.resid, 5L)
+    cat("\nDeviance Residuals: \n")
+    cat("(Note: These are approximate quantiles with relative error <= 0.01)\n")
+    print.default(x$deviance.resid, digits = 5L, na.print = "", print.gap = 2L)
+  }
 
   cat("\nCoefficients:\n")
   print.default(x$coefficients, digits = 5L, na.print = "", print.gap = 2L)
@@ -246,6 +253,7 @@ setMethod("kmeans", signature(x = "SparkDataFrame"),
 #' Get fitted result from a k-means model
 #'
 #' Get fitted result from a k-means model, similarly to R's fitted().
+#' Note: A saved-loaded model does not support this method.
 #'
 #' @param object A fitted k-means model
 #' @return SparkDataFrame containing fitted values
@@ -260,7 +268,13 @@ setMethod("kmeans", signature(x = "SparkDataFrame"),
 setMethod("fitted", signature(object = "KMeansModel"),
           function(object, method = c("centers", "classes"), ...) {
             method <- match.arg(method)
-            return(dataFrame(callJMethod(object@jobj, "fitted", method)))
+            jobj <- object@jobj
+            is.loaded <- callJMethod(jobj, "isLoaded")
+            if (is.loaded) {
+              stop(paste("Saved-loaded k-means model does not support 'fitted' method"))
+            } else {
+              return(dataFrame(callJMethod(jobj, "fitted", method)))
+            }
           })
 
 #' Get the summary of a k-means model
@@ -280,15 +294,21 @@ setMethod("fitted", signature(object = "KMeansModel"),
 setMethod("summary", signature(object = "KMeansModel"),
           function(object, ...) {
             jobj <- object@jobj
+            is.loaded <- callJMethod(jobj, "isLoaded")
             features <- callJMethod(jobj, "features")
             coefficients <- callJMethod(jobj, "coefficients")
-            cluster <- callJMethod(jobj, "cluster")
             k <- callJMethod(jobj, "k")
             size <- callJMethod(jobj, "size")
             coefficients <- t(matrix(coefficients, ncol = k))
             colnames(coefficients) <- unlist(features)
             rownames(coefficients) <- 1:k
-            return(list(coefficients = coefficients, size = size, cluster = dataFrame(cluster)))
+            cluster <- if (is.loaded) {
+              NULL
+            } else {
+              dataFrame(callJMethod(jobj, "cluster"))
+            }
+            return(list(coefficients = coefficients, size = size,
+                   cluster = cluster, is.loaded = is.loaded))
           })
 
 #' Make predictions from a k-means model
@@ -389,6 +409,56 @@ setMethod("ml.save", signature(object = "AFTSurvivalRegressionModel", path = "ch
             invisible(callJMethod(writer, "save", path))
           })
 
+#' Save the generalized linear model to the input path.
+#'
+#' @param object A fitted generalized linear model
+#' @param path The directory where the model is saved
+#' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
+#'                  which means throw exception if the output path exists.
+#'
+#' @rdname ml.save
+#' @name ml.save
+#' @export
+#' @examples
+#' \dontrun{
+#' model <- glm(y ~ x, trainingData)
+#' path <- "path/to/model"
+#' ml.save(model, path)
+#' }
+setMethod("ml.save", signature(object = "GeneralizedLinearRegressionModel", path = "character"),
+          function(object, path, overwrite = FALSE) {
+            writer <- callJMethod(object@jobj, "write")
+            if (overwrite) {
+              writer <- callJMethod(writer, "overwrite")
+            }
+            invisible(callJMethod(writer, "save", path))
+          })
+
+#' Save the k-means model to the input path.
+#'
+#' @param object A fitted k-means model
+#' @param path The directory where the model is saved
+#' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
+#'                  which means throw exception if the output path exists.
+#'
+#' @rdname ml.save
+#' @name ml.save
+#' @export
+#' @examples
+#' \dontrun{
+#' model <- kmeans(x, centers = 2, algorithm="random")
+#' path <- "path/to/model"
+#' ml.save(model, path)
+#' }
+setMethod("ml.save", signature(object = "KMeansModel", path = "character"),
+          function(object, path, overwrite = FALSE) {
+            writer <- callJMethod(object@jobj, "write")
+            if (overwrite) {
+              writer <- callJMethod(writer, "overwrite")
+            }
+            invisible(callJMethod(writer, "save", path))
+          })
+
 #' Load a fitted MLlib model from the input path.
 #'
 #' @param path Path of the model to read.
@@ -408,6 +478,10 @@ ml.load <- function(path) {
     return(new("NaiveBayesModel", jobj = jobj))
   } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.AFTSurvivalRegressionWrapper")) {
     return(new("AFTSurvivalRegressionModel", jobj = jobj))
+  } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.GeneralizedLinearRegressionWrapper")) {
+      return(new("GeneralizedLinearRegressionModel", jobj = jobj))
+  } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.KMeansWrapper")) {
+      return(new("KMeansModel", jobj = jobj))
   } else {
     stop(paste("Unsupported model: ", jobj))
   }

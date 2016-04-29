@@ -562,6 +562,7 @@ class LinearRegressionSummary private[regression] (
     val predictionCol: String,
     val labelCol: String,
     val featuresCol: String,
+    @deprecated("The model field is deprecated and will be removed in 2.1.0.", "2.0.0")
     val model: LinearRegressionModel,
     private val diagInvAtWA: Array[Double]) extends Serializable {
 

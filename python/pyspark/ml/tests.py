@@ -46,7 +46,7 @@ from pyspark import keyword_only
 from pyspark.ml import Estimator, Model, Pipeline, PipelineModel, Transformer
 from pyspark.ml.classification import (
     LogisticRegression, DecisionTreeClassifier, OneVsRest, OneVsRestModel)
-from pyspark.ml.clustering import KMeans
+from pyspark.ml.clustering import *
 from pyspark.ml.evaluation import BinaryClassificationEvaluator, RegressionEvaluator
 from pyspark.ml.feature import *
 from pyspark.ml.param import Param, Params, TypeConverters
@@ -803,6 +803,61 @@ class PersistenceTest(PySparkTestCase):
         self.assertEqual(dt._defaultParamMap[dt.maxDepth], dt2._defaultParamMap[dt2.maxDepth],
                          "Loaded DecisionTreeRegressor instance default params did not match " +
                          "original defaults")
+        try:
+            rmtree(path)
+        except OSError:
+            pass
+
+
+class LDATest(PySparkTestCase):
+
+    def _compare(self, m1, m2):
+        """
+        Temp method for comparing instances.
+        TODO: Replace with generic implementation once SPARK-14706 is merged.
+        """
+        self.assertEqual(m1.uid, m2.uid)
+        self.assertEqual(type(m1), type(m2))
+        self.assertEqual(len(m1.params), len(m2.params))
+        for p in m1.params:
+            if m1.isDefined(p):
+                self.assertEqual(m1.getOrDefault(p), m2.getOrDefault(p))
+                self.assertEqual(p.parent, m2.getParam(p.name).parent)
+        if isinstance(m1, LDAModel):
+            self.assertEqual(m1.vocabSize(), m2.vocabSize())
+            self.assertEqual(m1.topicsMatrix(), m2.topicsMatrix())
+
+    def test_persistence(self):
+        # Test save/load for LDA, LocalLDAModel, DistributedLDAModel.
+        sqlContext = SQLContext(self.sc)
+        df = sqlContext.createDataFrame([
+            [1, Vectors.dense([0.0, 1.0])],
+            [2, Vectors.sparse(2, {0: 1.0})],
+        ], ["id", "features"])
+        # Fit model
+        lda = LDA(k=2, seed=1, optimizer="em")
+        distributedModel = lda.fit(df)
+        self.assertTrue(distributedModel.isDistributed())
+        localModel = distributedModel.toLocal()
+        self.assertFalse(localModel.isDistributed())
+        # Define paths
+        path = tempfile.mkdtemp()
+        lda_path = path + "/lda"
+        dist_model_path = path + "/distLDAModel"
+        local_model_path = path + "/localLDAModel"
+        # Test LDA
+        lda.save(lda_path)
+        lda2 = LDA.load(lda_path)
+        self._compare(lda, lda2)
+        # Test DistributedLDAModel
+        distributedModel.save(dist_model_path)
+        distributedModel2 = DistributedLDAModel.load(dist_model_path)
+        self._compare(distributedModel, distributedModel2)
+        # Test LocalLDAModel
+        localModel.save(local_model_path)
+        localModel2 = LocalLDAModel.load(local_model_path)
+        self._compare(localModel, localModel2)
+        # Clean up
         try:
             rmtree(path)
         except OSError:
