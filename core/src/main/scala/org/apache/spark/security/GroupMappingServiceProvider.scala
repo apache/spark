@@ -29,10 +29,10 @@ package org.apache.spark.security
 trait GroupMappingServiceProvider {
 
   /**
-  * Get the groups the user belongs to.
-  * @param userName User's Name
-  * @return set of groups that the user belongs to. Empty in case of an invalid user.
-  */
+   * Get the groups the user belongs to.
+   * @param userName User's Name
+   * @return set of groups that the user belongs to. Empty in case of an invalid user.
+   */
   def getGroups(userName : String) : Set[String]
 
 }

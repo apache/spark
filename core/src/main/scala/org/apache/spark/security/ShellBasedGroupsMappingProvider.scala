@@ -25,29 +25,21 @@ import org.apache.spark.util.Utils
  * environments. This implementation uses the Unix Shell based id command to fetch the user groups
  * for the specified user. It does not cache the user groups as the invocations are expected
  * to be infrequent.
-*/
+ */
 
 private[spark] class ShellBasedGroupsMappingProvider extends GroupMappingServiceProvider
   with Logging {
 
   override def getGroups(username: String): Set[String] = {
     val userGroups = getUnixGroups(username)
-    logInfo("User: " + username + " Groups: " + userGroups.mkString(","))
+    logDebug("User: " + username + " Groups: " + userGroups.mkString(","))
     userGroups
   }
 
+  // shells out a "bash -c id -Gn username" to get user groups
   private def getUnixGroups(username: String): Set[String] = {
-    logDebug("getUnixGroupsFromSparkUtil got username=" + username)
     val cmdSeq = Seq("bash", "-c", "id -Gn " + username)
-    var result: String = null
-    try {
-      result = Utils.executeAndGetOutput(cmdSeq)
-      // we need to get rid of the trailing "\n" from the result of command execution
-      result = result.stripLineEnd
-      logDebug("Usergroups from executeAndGetOutput= " + result)
-    } catch {
-      case e: Exception => logError("Unable to get groups for user=" + username + e.getMessage)
-    }
-    result.split(" ").toSet
+    // we need to get rid of the trailing "\n" from the result of command execution
+    Utils.executeAndGetOutput(cmdSeq).stripLineEnd.split(" ").toSet
   }
 }

@@ -321,9 +321,9 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
   }
 
   /**
-  * Admin acls groups should be set before the view or modify acls groups. If you modify the admin
-  * acls groups you should also set the view and modify acls groups again to pick up the changes.
-  */
+   * Admin acls groups should be set before the view or modify acls groups. If you modify the admin
+   * acls groups you should also set the view and modify acls groups again to pick up the changes.
+   */
   def setViewAclsGroups(allowedUserGroups: String) {
     viewAclsGroups = (adminAclsGroups ++ stringToSet(allowedUserGroups));
     logInfo("Changing view acls groups to: " + viewAclsGroups.mkString(","))
@@ -358,9 +358,9 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
   }
 
   /**
-  * Admin acls groups should be set before the view or modify acls groups. If you modify the admin
-  * acls groups you should also set the view and modify acls groups again to pick up the changes.
-  */
+   * Admin acls groups should be set before the view or modify acls groups. If you modify the admin
+   * acls groups you should also set the view and modify acls groups again to pick up the changes.
+   */
   def setModifyAclsGroups(allowedUserGroups: String) {
     modifyAclsGroups = (adminAclsGroups ++ stringToSet(allowedUserGroups));
     logInfo("Changing modify acls groups to: " + modifyAclsGroups.mkString(","))
@@ -395,9 +395,9 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
   }
 
   /**
-  * Admin acls groups should be set before the view or modify acls groups. If you modify the admin
-  * acls groups you should also set the view and modify acls groups again to pick up the changes.
-  */
+   * Admin acls groups should be set before the view or modify acls groups. If you modify the admin
+   * acls groups you should also set the view and modify acls groups again to pick up the changes.
+   */
   def setAdminAclsGroups(adminUserGroups: String) {
     adminAclsGroups = stringToSet(adminUserGroups)
     logInfo("Changing admin acls groups to: " + adminAclsGroups.mkString(","))
@@ -476,7 +476,7 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
       return true
     }
     val currentUserGroups = Utils.getCurrentUserGroups(sparkConf, user)
-    logDebug("userGroups=" + currentUserGroups)
+    logDebug("userGroups=" + currentUserGroups.mkString(","))
     viewAclsGroups.exists(currentUserGroups.contains(_))
   }
 
