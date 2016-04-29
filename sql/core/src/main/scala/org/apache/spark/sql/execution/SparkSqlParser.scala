@@ -746,9 +746,18 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     BucketSpec(
       ctx.INTEGER_VALUE.getText.toInt,
       visitIdentifierList(ctx.identifierList),
-      Option(ctx.orderedIdentifierList).toSeq
+      Option(ctx.orderedIdentifierList)
+        .toSeq
         .flatMap(_.orderedIdentifier.asScala)
-        .map(_.identifier.getText))
+        .map { orderedIdCtx =>
+          Option(orderedIdCtx.ordering).map(_.getText).foreach { dir =>
+            if (dir.toLowerCase != "asc") {
+              throw parseException("Only ASC ordering is supported for sorting columns", ctx)
+            }
+          }
+
+          orderedIdCtx.identifier.getText
+        })
   }
 
   /**
