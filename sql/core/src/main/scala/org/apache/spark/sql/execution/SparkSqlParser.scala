@@ -762,9 +762,12 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
         .toSeq
         .flatMap(_.orderedIdentifier.asScala)
         .map { orderedIdCtx =>
-          if (orderedIdCtx.ordering.getText.toLowerCase != "asc") {
-            throw parseException("Only ASC ordering is supported for sorting columns", ctx)
+          Option(orderedIdCtx.ordering).map(_.getText).foreach { dir =>
+            if (dir.toLowerCase != "asc") {
+              throw parseException("Only ASC ordering is supported for sorting columns", ctx)
+            }
           }
+
           orderedIdCtx.identifier.getText
         })
   }
