@@ -55,7 +55,7 @@ class Analyzer(
     catalog: SessionCatalog,
     conf: CatalystConf,
     maxIterations: Int)
-  extends RuleExecutor[LogicalPlan] with CheckAnalysis { self =>
+  extends RuleExecutor[LogicalPlan] with CheckAnalysis {
 
   def this(catalog: SessionCatalog, conf: CatalystConf) = {
     this(catalog, conf, conf.optimizerMaxIterations)
@@ -95,7 +95,6 @@ class Analyzer(
       ResolveFunctions ::
       ResolveAliases ::
       ResolveSubquery ::
-      PullOutCorrelatedPredicates ::
       ResolveWindowOrder ::
       ResolveWindowFrame ::
       ResolveNaturalAndUsingJoin ::
@@ -443,7 +442,7 @@ class Analyzer(
    */
   object ResolveReferences extends Rule[LogicalPlan] {
     /**
-     * Generate a new logical plan for th e right child with different expression IDs
+     * Generate a new logical plan for the right child with different expression IDs
      * for all conflicting attributes.
      */
     private def dedupRight (left: LogicalPlan, right: LogicalPlan): LogicalPlan = {
@@ -862,7 +861,7 @@ class Analyzer(
   }
 
   /**
-   * This rule resolves sub-queries inside expressions.
+   * This rule resolves and rewrites subqueries inside expressions.
    *
    * Note: CTEs are handled in CTESubstitution.
    */
@@ -872,7 +871,7 @@ class Analyzer(
      * resolved outer references are wrapped in an [[OuterReference]]
      */
     private def resolveOuterReferences(plan: LogicalPlan, outer: LogicalPlan): LogicalPlan = {
-      plan resolveOperators {
+      plan transformDown {
         case q: LogicalPlan if q.childrenResolved && !q.resolved =>
           q transformExpressions {
             case u @ UnresolvedAttribute(nameParts) =>
@@ -890,52 +889,6 @@ class Analyzer(
       }
     }
 
-    /**
-     * Resolve the subqueries in a single LogicalPlan using the given outer plans. This method
-     * alternates between applying the regular analyzer on the subquery and applying the
-     * resolveOuterReferences rule.
-     */
-    private def resolveSubQueries(
-        plan: LogicalPlan,
-        outerPlans: Seq[LogicalPlan]): LogicalPlan = plan transformExpressions {
-      case e: SubqueryExpression if !e.query.resolved =>
-        var previous: LogicalPlan = null
-        var current = e.query
-        do {
-          previous = current
-          // Try to resolve the subquery plan using the regular analyzer.
-          current = execute(current)
-
-          // Use the outer references to resolve the subquery plan if it isn't resolved yet.
-          val i = outerPlans.iterator
-          while (!current.resolved && i.hasNext) {
-            current = resolveOuterReferences(current, i.next())
-          }
-        } while (!current.resolved && !current.fastEquals(previous))
-        e.withNewPlan(current)
-    }
-
-    /**
-     * Resolve a subquery using the outer plan. This rule creates a dedicated analyzer which can
-     * also resolve outer plan references.
-     */
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      // In case of HAVING (a filter after an aggregate) we use both the aggregate and its child for
-      // resolution.
-      case f @ Filter(_, a: Aggregate) if f.childrenResolved =>
-        resolveSubQueries(f, Seq(a, a.child))
-      // Only a few unary nodes (Project/Filter/Aggregate) can contain subqueries.
-      case q: UnaryNode if q.childrenResolved =>
-        resolveSubQueries(q, Seq(q.child))
-    }
-  }
-
-  /**
-   * This rule pulls out correlated predicates out of a subquery and finalize the resolution of
-   * subqueries. The rule transforms [[Exists]] and [[ListQuery]] expressions into
-   * [[PredicateSubquery]] expressions.
-   */
-  object PullOutCorrelatedPredicates extends Rule[LogicalPlan] {
     /**
      * Pull out all (outer) correlated predicates from a given subquery. This method removes the
      * correlated predicates from subquery [[Filter]]s and adds the references of these predicates
@@ -1023,6 +976,9 @@ class Analyzer(
         case s: SetOperation =>
           failOnOuterReferenceInSubTree(s.right, "an INTERSECT/EXCEPT")
           s
+        case e: Expand =>
+          failOnOuterReferenceInSubTree(e, "an EXPAND")
+          e
         case p =>
           failOnOuterReference(p)
           p
@@ -1031,17 +987,18 @@ class Analyzer(
     }
 
     /**
-     * Rewrite the subquery is a safe way by preventing that the subquery and the outer use the same
+     * Rewrite the subquery in a safe way by preventing that the subquery and the outer use the same
      * attributes.
      */
     private def rewriteSubQuery(
         sub: LogicalPlan,
-        outer: LogicalPlan): (LogicalPlan, Seq[Expression]) = {
+        outer: Seq[LogicalPlan]): (LogicalPlan, Seq[Expression]) = {
       // Pull out the tagged predicates and rewrite the subquery in the process.
       val (basePlan, baseConditions) = pullOutCorrelatedPredicates(sub)
 
       // Make sure the inner and the outer query attributes do not collide.
-      val duplicates = basePlan.outputSet.intersect(outer.outputSet)
+      val outputSet = outer.map(_.outputSet).reduce(_ ++ _)
+      val duplicates = basePlan.outputSet.intersect(outputSet)
       val (plan, deDuplicatedConditions) = if (duplicates.nonEmpty) {
         val aliasMap = AttributeMap(duplicates.map { dup =>
           dup -> Alias(dup, dup.toString)()
@@ -1067,33 +1024,83 @@ class Analyzer(
     }
 
     /**
-     * Rewrite a LogicalPlan containing [[ScalarSubquery]], [[ListQuery]] or [[Exists]] expressions.
+     * Resolve and rewrite a subquery. The subquery is resolved using its outer plans. This method
+     * will resolve the subquery by alternating between the regular analyzer and by applying the
+     * resolveOuterReferences rule.
+     *
+     * All correlated conditions are pulled out of the subquery as soon as the subquery is resolved.
      */
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case q: UnaryNode if q.childrenResolved =>
-        q transformExpressions {
-          case ScalarSubquery(sub, None, exprId) if sub.resolved && sub.output.nonEmpty =>
-            val (rewrite, conditions) = rewriteSubQuery(sub, q.child)
-            ScalarSubquery(rewrite, Some(conditions), exprId)
-          case Exists(sub, exprId) if sub.resolved =>
-            val (rewrite, conditions) = rewriteSubQuery(sub, q.child)
-            PredicateSubquery(rewrite, conditions, nullAware = false, exprId)
-          case In(e, Seq(ListQuery(sub, exprId))) if sub.resolved && e.resolved =>
-            val (rewrite, conditions) = rewriteSubQuery(sub, q.child)
-            // Get the left hand side expressions.
-            val expressions = e match {
-              case CreateStruct(exprs) => exprs
-              case expr => Seq(expr)
-            }
-            // Make sure the number of arguments are equal.
-            if (expressions.size != sub.output.size) {
-              failAnalysis(s"The number of fields in the value (${expressions.size}) does not " +
-                s"match with the number of columns in the subquery (${sub.output.size})")
-            }
+    private def resolveSubQuery(
+        e: SubqueryExpression,
+        plans: Seq[LogicalPlan],
+        requiredColumns: Int = 0)(
+        f: (LogicalPlan, Seq[Expression]) => SubqueryExpression): SubqueryExpression = {
+      // Step 1: Resolve the outer expressions.
+      var previous: LogicalPlan = null
+      var current = e.query
+      do {
+        // Try to resolve the subquery plan using the regular analyzer.
+        previous = current
+        current = execute(current)
+
+        // Use the outer references to resolve the subquery plan if it isn't resolved yet.
+        val i = plans.iterator
+        val afterResolve = current
+        while (!current.resolved && current.fastEquals(afterResolve) && i.hasNext) {
+          current = resolveOuterReferences(current, i.next())
+        }
+      } while (!current.resolved && !current.fastEquals(previous))
+
+      // Step 2: Pull out the predicates if the plan is resolved.
+      if (current.resolved) {
+        // Make sure the resolved query has the required number of output columns. This is only
+        // needed for IN expressions.
+        if (requiredColumns > 0 && requiredColumns != current.output.size) {
+          failAnalysis(s"The number of fields in the value ($requiredColumns) does not " +
+            s"match with the number of columns in the subquery (${current.output.size})")
+        }
+        // Pullout predicates and construct a new plan.
+        f.tupled(rewriteSubQuery(current, plans))
+      } else {
+        e.withNewPlan(current)
+      }
+    }
+
+    /**
+     * Resolve and rewrite all subqueries in a LogicalPlan. This method transforms IN and EXISTS
+     * expressions into PredicateSubquery expression once the are resolved.
+     */
+    private def resolveSubQueries(plan: LogicalPlan, plans: Seq[LogicalPlan]): LogicalPlan = {
+      plan transformExpressions {
+        case s @ ScalarSubquery(sub, _, exprId) if !sub.resolved =>
+          resolveSubQuery(s, plans)(ScalarSubquery(_, _, exprId))
+        case e @ Exists(sub, exprId) =>
+          resolveSubQuery(e, plans)(PredicateSubquery(_, _, nullAware = false, exprId))
+        case In(e, Seq(l @ ListQuery(_, exprId))) if e.resolved =>
+          // Get the left hand side expressions.
+          val expressions = e match {
+            case CreateStruct(exprs) => exprs
+            case expr => Seq(expr)
+          }
+          resolveSubQuery(l, plans, expressions.size) { (rewrite, conditions) =>
             // Construct the IN conditions.
             val inConditions = expressions.zip(rewrite.output).map(EqualTo.tupled)
             PredicateSubquery(rewrite, inConditions ++ conditions, nullAware = true, exprId)
+          }
       }
+    }
+
+    /**
+     * Resolve and rewrite all subqueries in an operator tree..
+     */
+    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      // In case of HAVING (a filter after an aggregate) we use both the aggregate and
+      // its child for resolution.
+      case f @ Filter(_, a: Aggregate) if f.childrenResolved =>
+        resolveSubQueries(f, Seq(a, a.child))
+      // Only a few unary nodes (Project/Filter/Aggregate) can contain subqueries.
+      case q: UnaryNode if q.childrenResolved =>
+        resolveSubQueries(q, q.children)
     }
   }
 
@@ -1147,12 +1154,24 @@ class Analyzer(
 
           // If resolution was successful and we see the filter has an aggregate in it, add it to
           // the original aggregate operator.
-          if (resolvedOperator.resolved && containsAggregate(resolvedAggregateFilter)) {
-            val aggExprsWithHaving = resolvedAggregateFilter +: originalAggExprs
+          if (resolvedOperator.resolved) {
+            // Try to replace all aggregate expressions in the filter by an alias.
+            val aggregateExpressions = ArrayBuffer.empty[NamedExpression]
+            val transformedAggregateFilter = resolvedAggregateFilter.transform {
+              case ae: AggregateExpression =>
+                val alias = Alias(ae, ae.toString)()
+                aggregateExpressions += alias
+                alias.toAttribute
+            }
 
-            Project(aggregate.output,
-              Filter(resolvedAggregateFilter.toAttribute,
-                aggregate.copy(aggregateExpressions = aggExprsWithHaving)))
+            // Push the aggregate expressions into the aggregate (if any).
+            if (aggregateExpressions.nonEmpty) {
+              Project(aggregate.output,
+                Filter(transformedAggregateFilter,
+                  aggregate.copy(aggregateExpressions = originalAggExprs ++ aggregateExpressions)))
+            } else {
+              filter
+            }
           } else {
             filter
           }
@@ -1997,3 +2016,4 @@ object TimeWindowing extends Rule[LogicalPlan] {
       }
   }
 }
+

@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete, Count}
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
@@ -499,7 +500,7 @@ class AnalysisErrorSuite extends AnalysisTest {
   test("Correlated Scalar Subquery") {
     val a = AttributeReference("a", IntegerType)()
     val b = AttributeReference("b", IntegerType)()
-    val sub = Project(Seq(b), Filter(EqualTo(OuterReference(a), b), LocalRelation(b)))
+    val sub = Project(Seq(b), Filter(EqualTo(UnresolvedAttribute("a"), b), LocalRelation(b)))
     val plan = Project(Seq(a, Alias(ScalarSubquery(sub), "b")()), LocalRelation(a))
     assertAnalysisError(plan, "Correlated scalar subqueries are not supported." :: Nil)
   }

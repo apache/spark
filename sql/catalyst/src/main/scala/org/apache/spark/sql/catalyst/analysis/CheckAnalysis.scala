@@ -60,6 +60,9 @@ trait CheckAnalysis extends PredicateHelper {
             val from = operator.inputSet.map(_.name).mkString(", ")
             a.failAnalysis(s"cannot resolve '${a.sql}' given input columns: [$from]")
 
+          case ScalarSubquery(_, conditions, _) if conditions.nonEmpty =>
+            failAnalysis("Correlated scalar subqueries are not supported.")
+
           case e: Expression if e.checkInputDataTypes().isFailure =>
             e.checkInputDataTypes() match {
               case TypeCheckResult.TypeCheckFailure(message) =>
@@ -101,9 +104,6 @@ trait CheckAnalysis extends PredicateHelper {
                 failAnalysis(s"Window specification $s is not valid because $m")
               case None => w
             }
-
-          case ScalarSubquery(_, Some(conditions), _) if conditions.nonEmpty =>
-            failAnalysis("Correlated scalar subqueries are not supported.")
         }
 
         operator match {
