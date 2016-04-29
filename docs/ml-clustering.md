@@ -231,5 +231,3 @@ Refer to the [Python docs](api/python/pyspark.ml.html#pyspark.ml.clustering.Gaus
 {% include_example python/ml/gaussian_mixture_example.py %}
 </div>
 </div>
-
-
