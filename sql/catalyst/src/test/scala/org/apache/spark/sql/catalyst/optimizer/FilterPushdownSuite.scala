@@ -710,40 +710,6 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("intersect") {
-    val testRelation2 = LocalRelation('d.int, 'e.int, 'f.int)
-
-    val originalQuery = Intersect(testRelation, testRelation2)
-      .where('a === 2L && 'b + Rand(10).as("rnd") === 3)
-
-    val optimized = Optimize.execute(originalQuery.analyze)
-
-    val correctAnswer = Intersect(
-      testRelation.where('a === 2L),
-      testRelation2.where('d === 2L))
-      .where('b + Rand(10).as("rnd") === 3)
-      .analyze
-
-    comparePlans(optimized, correctAnswer)
-  }
-
-  test("except") {
-    val testRelation2 = LocalRelation('d.int, 'e.int, 'f.int)
-
-    val originalQuery = Except(testRelation, testRelation2)
-      .where('a === 2L && 'b + Rand(10).as("rnd") === 3)
-
-    val optimized = Optimize.execute(originalQuery.analyze)
-
-    val correctAnswer = Except(
-      testRelation.where('a === 2L),
-      testRelation2)
-      .where('b + Rand(10).as("rnd") === 3)
-      .analyze
-
-    comparePlans(optimized, correctAnswer)
-  }
-
   test("expand") {
     val agg = testRelation
       .groupBy(Cube(Seq('a, 'b)))('a, 'b, sum('c))
