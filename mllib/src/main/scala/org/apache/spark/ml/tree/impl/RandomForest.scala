@@ -108,8 +108,8 @@ private[spark] object RandomForest extends Logging {
         instrumentation.logNumFeatures(metadata.numFeatures)
         instrumentation.logNumClasses(metadata.numClasses)
       case None =>
-        log.info("numFeatures: " + metadata.numFeatures)
-        log.info("numClasses: " + metadata.numClasses)
+        logInfo("numFeatures: " + metadata.numFeatures)
+        logInfo("numClasses: " + metadata.numClasses)
     }
 
     // Find the splits and the corresponding bins (interval between the splits) using a sample
