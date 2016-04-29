@@ -343,7 +343,7 @@ public final class UnsafeArrayData extends ArrayData {
    * null elements into the data region and memory copy will crash as the data size doesn't match.
    */
   public int[] toIntArrayUnchecked() {
-    int[] result = new int[numElements];
+    final int[] result = new int[numElements];
     Platform.copyMemory(baseObject, baseOffset + 4 + 4L * numElements,
       result, Platform.INT_ARRAY_OFFSET, 4L * numElements);
     return result;
@@ -355,17 +355,22 @@ public final class UnsafeArrayData extends ArrayData {
    * null elements into the data region and memory copy will crash as the data size doesn't match.
    */
   public double[] toDoubleArrayUnchecked() {
-    double[] result = new double[numElements];
+    final double[] result = new double[numElements];
     Platform.copyMemory(baseObject, baseOffset + 4 + 4L * numElements,
       result, Platform.DOUBLE_ARRAY_OFFSET, 8L * numElements);
     return result;
   }
 
   public static UnsafeArrayData fromPrimitiveArray(int[] arr) {
-    int offsetRegionSize = 4 * arr.length;
-    int valueRegionSize = 4 * arr.length;
-    int totalSize = 4 + offsetRegionSize + valueRegionSize;
-    byte[] data = new byte[totalSize];
+    if (arr.length > (Integer.MAX_VALUE - 4) / 8) {
+      throw new UnsupportedOperationException("Cannot convert this array to unsafe format as " +
+        "it's too big.");
+    }
+
+    final int offsetRegionSize = 4 * arr.length;
+    final int valueRegionSize = 4 * arr.length;
+    final int totalSize = 4 + offsetRegionSize + valueRegionSize;
+    final byte[] data = new byte[totalSize];
 
     Platform.putInt(data, Platform.BYTE_ARRAY_OFFSET, arr.length);
 
@@ -386,10 +391,15 @@ public final class UnsafeArrayData extends ArrayData {
   }
 
   public static UnsafeArrayData fromPrimitiveArray(double[] arr) {
-    int offsetRegionSize = 4 * arr.length;
-    int valueRegionSize = 8 * arr.length;
-    int totalSize = 4 + offsetRegionSize + valueRegionSize;
-    byte[] data = new byte[totalSize];
+    if (arr.length > (Integer.MAX_VALUE - 4) / 12) {
+      throw new UnsupportedOperationException("Cannot convert this array to unsafe format as " +
+        "it's too big.");
+    }
+
+    final int offsetRegionSize = 4 * arr.length;
+    final int valueRegionSize = 8 * arr.length;
+    final int totalSize = 4 + offsetRegionSize + valueRegionSize;
+    final byte[] data = new byte[totalSize];
 
     Platform.putInt(data, Platform.BYTE_ARRAY_OFFSET, arr.length);
 
