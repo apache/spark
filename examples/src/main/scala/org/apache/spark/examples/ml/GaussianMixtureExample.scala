@@ -64,7 +64,7 @@ object GaussianMixtureExample {
     // Shows the result
     val summary: GaussianMixtureSummary = model.summary
     println("Size of (number of data points in) each cluster: ")
-    println(summary.clusterSizes)
+    println(summary.clusterSizes.foreach(println))
 
     println("Cluster centers of the transformed data:")
     summary.cluster.show()
