@@ -312,11 +312,16 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
   test("should support all NumericType labels") {
     val formula = new RFormula().setFormula("label ~ features")
       .setLabelCol("x")
-      .setFeaturesCol("z")
+      .setFeaturesCol("y")
     val dfs = MLTestingUtils.genRegressionDFWithNumericLabelCol(spark)
     val expected = formula.fit(dfs(DoubleType))
     val actuals = dfs.keys.filter(_ != DoubleType).map(t => formula.fit(dfs(t)))
     actuals.foreach { actual =>
+      assert(expected.pipelineModel.stages.length === actual.pipelineModel.stages.length)
+      expected.pipelineModel.stages.zip(actual.pipelineModel.stages).foreach {
+        case (exTransformer, acTransformer) =>
+          assert(exTransformer.params === acTransformer.params)
+      }
       assert(expected.resolvedFormula.label === actual.resolvedFormula.label)
       assert(expected.resolvedFormula.terms === actual.resolvedFormula.terms)
       assert(expected.resolvedFormula.hasIntercept === actual.resolvedFormula.hasIntercept)

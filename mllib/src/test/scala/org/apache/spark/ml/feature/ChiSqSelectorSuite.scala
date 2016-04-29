@@ -85,7 +85,7 @@ class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext
   test("should support all NumericType labels and not support other types") {
     val css = new ChiSqSelector()
     MLTestingUtils.checkNumericTypes[ChiSqSelectorModel, ChiSqSelector](
-      css, sqlContext) { (expected, actual) =>
+      css, spark) { (expected, actual) =>
         assert(expected.selectedFeatures === actual.selectedFeatures)
       }
   }
