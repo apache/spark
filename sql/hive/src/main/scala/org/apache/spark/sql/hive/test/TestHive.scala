@@ -564,7 +564,6 @@ private[hive] object TestHiveContext {
     val hiveConf = new HiveConf(hadoopConf, classOf[HiveConf])
     HiveUtils.newClientForMetadata(
       conf,
-      hiveConf,
       hadoopConf,
       hiveClientConfigurations(hiveConf, warehousePath, scratchDirPath, metastoreTemporaryConf))
   }
