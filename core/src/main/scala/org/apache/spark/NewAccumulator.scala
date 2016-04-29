@@ -19,6 +19,7 @@ package org.apache.spark
 
 import java.{lang => jl}
 import java.io.ObjectInputStream
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import javax.annotation.concurrent.GuardedBy
 
@@ -198,8 +199,7 @@ private[spark] object AccumulatorContext {
    * once the RDDs and user-code that reference them are cleaned up.
    * TODO: Don't use a global map; these should be tied to a SparkContext (SPARK-13051).
    */
-  @GuardedBy("AccumulatorContext")
-  private val originals = new java.util.HashMap[Long, jl.ref.WeakReference[NewAccumulator[_, _]]]
+  private val originals = new ConcurrentHashMap[Long, jl.ref.WeakReference[NewAccumulator[_, _]]]
 
   private[this] val nextId = new AtomicLong(0L)
 
@@ -209,9 +209,7 @@ private[spark] object AccumulatorContext {
    */
   def newId(): Long = nextId.getAndIncrement
 
-  def numAccums: Int = synchronized(originals.size)
-
-  def accumIds: Set[Long] = synchronized(originals.keySet().asScala.toSet)
+  def numAccums: Int = originals.size
 
   /**
    * Register an [[Accumulator]] created on the driver such that it can be used on the executors.
@@ -224,23 +222,21 @@ private[spark] object AccumulatorContext {
    * If an [[Accumulator]] with the same ID was already registered, this does nothing instead
    * of overwriting it. We will never register same accumulator twice, this is just a sanity check.
    */
-  def register(a: NewAccumulator[_, _]): Unit = synchronized {
-    if (!originals.containsKey(a.id)) {
-      originals.put(a.id, new jl.ref.WeakReference[NewAccumulator[_, _]](a))
-    }
+  def register(a: NewAccumulator[_, _]): Unit = {
+    originals.putIfAbsent(a.id, new jl.ref.WeakReference[NewAccumulator[_, _]](a))
   }
 
   /**
    * Unregister the [[Accumulator]] with the given ID, if any.
    */
-  def remove(id: Long): Unit = synchronized {
+  def remove(id: Long): Unit = {
     originals.remove(id)
   }
 
   /**
    * Return the [[Accumulator]] registered with the given ID, if any.
    */
-  def get(id: Long): Option[NewAccumulator[_, _]] = synchronized {
+  def get(id: Long): Option[NewAccumulator[_, _]] = {
     Option(originals.get(id)).map { ref =>
       // Since we are storing weak references, we must check whether the underlying data is valid.
       val acc = ref.get
@@ -254,7 +250,7 @@ private[spark] object AccumulatorContext {
   /**
    * Clear all registered [[Accumulator]]s. For testing only.
    */
-  def clear(): Unit = synchronized {
+  def clear(): Unit = {
     originals.clear()
   }
 }
