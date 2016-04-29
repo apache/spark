@@ -146,7 +146,7 @@ class ExpressionParserSuite extends PlanTest {
   test("in sub-query") {
     assertEqual(
       "a in (select b from c)",
-      InSubQuery('a, table("c").select('b)))
+      In('a, Seq(ListQuery(table("c").select('b)))))
   }
 
   test("like expressions") {
