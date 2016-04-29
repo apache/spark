@@ -83,6 +83,32 @@ setMethod("glm", signature(formula = "formula", family = "ANY", data = "SparkDat
             return(new("GeneralizedLinearRegressionModel", jobj = jobj))
           })
 
+#' Save the GeneralizedLinearRegression model to the input path.
+#'
+#' @param object A fitted GLM model
+#' @param path The directory where the model is saved
+#' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
+#'                  which means throw exception if the output path exists.
+#'
+#' @rdname ml.save
+#' @name ml.save
+#' @export
+#' @examples
+#' \dontrun{
+#' df <- createDataFrame(sqlContext, infert)
+#' model <- glm(education ~ ., df)
+#' path <- "path/to/model"
+#' ml.save(model, path)
+#' }
+setMethod("ml.save", signature(object = "GeneralizedLinearRegressionModel", path = "character"),
+function(object, path, overwrite = FALSE) {
+    writer <- callJMethod(object@jobj, "write")
+    if (overwrite) {
+        writer <- callJMethod(writer, "overwrite")
+    }
+    invisible(callJMethod(writer, "save", path))
+})
+
 #' Get the summary of a generalized linear model
 #'
 #' Returns the summary of a model produced by glm(), similarly to R's summary().
@@ -406,6 +432,8 @@ ml.load <- function(path) {
   jobj <- callJStatic("org.apache.spark.ml.r.RWrappers", "load", path)
   if (isInstanceOf(jobj, "org.apache.spark.ml.r.NaiveBayesWrapper")) {
     return(new("NaiveBayesModel", jobj = jobj))
+  } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.GeneralizedLinearRegressionWrapper")) {
+    return(new("GeneralizedLinearRegressionModel", jobj = jobj))
   } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.AFTSurvivalRegressionWrapper")) {
     return(new("AFTSurvivalRegressionModel", jobj = jobj))
   } else {
