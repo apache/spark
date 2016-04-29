@@ -50,14 +50,8 @@ class RuntimeConfig(object):
         >>> spark.setConf("bogo", "sipeo")
         >>> spark.conf.get("bogo")
         u'sipeo'
-        >>> spark.conf.get("bogo", "ta")
-        u'sipeo'
-        >>> spark.conf.get("definitely.not.set", u"ta")
-        u'ta'
-        >>> spark.conf.get("definitely.not.set") # doctest: +IGNORE_EXCEPTION_DETAIL
-        Traceback (most recent call last):
-            ...
-        Py4JJavaError: ...
+        >>> spark.conf.get("bogota", u"colombia")
+        u'colombia'
         """
         if default is None:
             return self._jconf.get(key)
@@ -76,10 +70,8 @@ class RuntimeConfig(object):
         >>> spark.getConf("armado")
         u'larmado'
         >>> spark.conf.unset("armado")
-        >>> spark.getConf("armado") # doctest: +IGNORE_EXCEPTION_DETAIL
-        Traceback (most recent call last):
-            ...
-        Py4JJavaError: ...
+        >>> spark.getConf("armado", u"samado")
+        u'samado'
         """
         self._jconf.unset(key)
 

@@ -45,7 +45,7 @@ if sys.version_info[:2] <= (2, 6):
 else:
     import unittest
 
-from pyspark.sql import SQLContext, HiveContext, Column, Row
+from pyspark.sql import SparkSession, SQLContext, HiveContext, Column, Row
 from pyspark.sql.types import *
 from pyspark.sql.types import UserDefinedType, _infer_type
 from pyspark.tests import ReusedPySparkTestCase
@@ -199,7 +199,8 @@ class SQLTests(ReusedPySparkTestCase):
         ReusedPySparkTestCase.setUpClass()
         cls.tempdir = tempfile.NamedTemporaryFile(delete=False)
         os.unlink(cls.tempdir.name)
-        cls.sqlCtx = SQLContext(cls.sc)
+        cls.sparkSession = SparkSession(cls.sc)
+        cls.sqlCtx = cls.sparkSession._wrapped
         cls.testData = [Row(key=i, value=str(i)) for i in range(100)]
         rdd = cls.sc.parallelize(cls.testData, 2)
         cls.df = rdd.toDF()
@@ -1393,6 +1394,18 @@ class SQLTests(ReusedPySparkTestCase):
         df = rdd.map(lambda row: row.key).toDF(IntegerType())
         self.assertEqual(df.schema.simpleString(), "struct<value:int>")
         self.assertEqual(df.collect(), [Row(key=i) for i in range(100)])
+
+    def test_conf(self):
+        self.sparkSession.setConf("bogo", "sipeo")
+        self.assertEqual(self.sparkSession.conf.get("bogo"), "sipeo")
+        self.sparkSession.setConf("bogo", "ta")
+        self.assertEqual(self.sparkSession.conf.get("bogo"), "ta")
+        self.assertEqual(self.sparkSession.conf.get("bogo", "not.read"), "ta")
+        self.assertEqual(self.sparkSession.conf.get("not.set", "ta"), "ta")
+        self.assertRaisesRegexp(
+            Exception, "not.set", lambda: self.sparkSession.conf.get("not.set"))
+        self.sparkSession.conf.unset("bogo")
+        self.assertEqual(self.sparkSession.conf.get("bogo", "colombia"), "colombia")
 
 
 class HiveContextSQLTests(ReusedPySparkTestCase):
