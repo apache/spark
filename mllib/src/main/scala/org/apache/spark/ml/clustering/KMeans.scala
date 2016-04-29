@@ -196,8 +196,8 @@ object KMeansModel extends MLReadable[KMeansModel] {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
 
       val dataPath = new Path(path, "data").toString
-      val data = sqlContext.read.parquet(dataPath)
-      val clusterCenters = data.as[Data].collect().sortBy(_.clusterIdx).map(_.clusterCenter)
+      val data: Dataset[Data] = sqlContext.read.parquet(dataPath).as[Data]
+      val clusterCenters = data.collect().sortBy(_.clusterIdx).map(_.clusterCenter)
       val model = new KMeansModel(metadata.uid, new MLlibKMeansModel(clusterCenters))
 
       DefaultParamsReader.getAndSetParams(model, metadata)
