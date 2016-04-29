@@ -80,23 +80,6 @@ private[spark] object SchemaUtils {
    * @param colName new column name. If this column name is an empty string "", this method returns
    *                the input schema unchanged. This allows users to disable output columns.
    * @param dataType new column data type
-   * @return new schema with the input column appended
-   */
-  def appendColumn(
-      schema: StructType,
-      colName: String,
-      dataType: DataType,
-      nullable: Boolean = false): StructType = {
-    if (colName.isEmpty) return schema
-    appendColumn(schema, StructField(colName, dataType, nullable))
-  }
-
-  /**
-   * Appends a new column to the input schema. This fails if the given output column already exists.
-   * @param schema input schema
-   * @param colName new column name. If this column name is an empty string "", this method returns
-   *                the input schema unchanged. This allows users to disable output columns.
-   * @param dataType new column data type
    * @param nullable Indicates if values of this field can be `null` values.
    * @param metadata The metadata of this field. The metadata should be preserved during
    *                 transformation if the content of the column is not modified.
@@ -106,9 +89,8 @@ private[spark] object SchemaUtils {
       schema: StructType,
       colName: String,
       dataType: DataType,
-      nullable: Boolean,
-      metadata: Metadata
-      ): StructType = {
+      nullable: Boolean = false,
+      metadata: Metadata = Metadata.empty): StructType = {
     if (colName.isEmpty) return schema
     appendColumn(schema, StructField(colName, dataType, nullable, metadata))
   }

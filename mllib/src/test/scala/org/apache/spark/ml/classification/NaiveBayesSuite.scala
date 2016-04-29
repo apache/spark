@@ -199,25 +199,26 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
   test("copy label column metadata to prediction column") {
     val data = sc.parallelize(Seq((Vectors.dense(0.0), "a"), (Vectors.dense(1.0), "b"),
       (Vectors.dense(2.0), "c"), (Vectors.dense(3.0), "a"), (Vectors.dense(4.0), "a")), 2)
-    var df = sqlContext.createDataFrame(data).toDF("features", "label")
+    val df1 = sqlContext.createDataFrame(data).toDF("features", "label")
 
     val indexer = new StringIndexer()
       .setInputCol("label")
       .setOutputCol("labelIndex")
-      .fit(df)
-    df = indexer.transform(df)
+      .fit(df1)
+    val df2 = indexer.transform(df1)
 
     val naiveBayes = new NaiveBayes().setLabelCol("labelIndex")
-    val naiveBayesModel = naiveBayes.fit(df)
-    df = naiveBayesModel.transform(df)
+    val naiveBayesModel = naiveBayes.fit(df2)
+    val df3 = naiveBayesModel.transform(df2)
 
-    val schema = df.schema
+    val schema = df3.schema
     val labelAttr = Attribute.fromStructField(schema(naiveBayesModel.getLabelCol))
       .asInstanceOf[NominalAttribute]
     val predictionAttr = Attribute.fromStructField(schema(naiveBayesModel.getPredictionCol))
       .asInstanceOf[NominalAttribute]
     assert(labelAttr.attrType === predictionAttr.attrType)
     assert(labelAttr.values.get === predictionAttr.values.get)
+    assert(predictionAttr.name.get === naiveBayesModel.getPredictionCol)
   }
 }
 

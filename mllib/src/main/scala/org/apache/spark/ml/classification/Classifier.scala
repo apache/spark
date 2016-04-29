@@ -50,11 +50,11 @@ private[spark] trait ClassifierParams
     SchemaUtils.appendColumn(newSchema, $(rawPredictionCol), new VectorUDT)
   }
 
-  protected def generatePredictionMetadata(schema: StructType): Metadata = {
+  private[classification] def generatePredictionMetadata(schema: StructType): Metadata = {
     // The label column for base binary classifier of OneVsRest will not be retained during
     // model transformation, so we should not handle label column metadata as well.
     if (schema.fieldNames.contains($(labelCol))) {
-      // determine number of classes either from metadata if provided.
+      // determine number of classes from metadata if provided.
       val labelSchema = schema($(labelCol))
       MetadataUtils.getNumClasses(labelSchema) match {
         case Some(numClasses) =>
@@ -62,15 +62,16 @@ private[spark] trait ClassifierParams
           // to output the number of labels
           val labelAttribute = Attribute.fromStructField(labelSchema) match {
             case _: NumericAttribute | UnresolvedAttribute =>
-              NominalAttribute.defaultAttr.withName($(predictionCol)).withNumValues(numClasses)
-            case attr: Attribute => attr
+              NominalAttribute.defaultAttr.withName(getPredictionCol).withNumValues(numClasses)
+            case attr: Attribute =>
+              attr.withName(getPredictionCol)
           }
           labelAttribute.toMetadata()
         case None =>
-          Metadata.empty
+          NominalAttribute.defaultAttr.withName(getPredictionCol).toMetadata()
       }
     } else {
-      Metadata.empty
+      NominalAttribute.defaultAttr.withName(getPredictionCol).toMetadata()
     }
   }
 }
