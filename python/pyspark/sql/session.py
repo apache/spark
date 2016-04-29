@@ -180,6 +180,7 @@ class SparkSession(object):
 
         :return: :class:`UDFRegistration`
         """
+        from pyspark.sql.context import UDFRegistration
         return UDFRegistration(self._wrapped)
 
     @since(2.0)
