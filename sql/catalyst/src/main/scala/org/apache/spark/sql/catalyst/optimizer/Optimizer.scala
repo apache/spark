@@ -159,10 +159,15 @@ object EliminateSerialization extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case d @ DeserializeToObject(_, _, s: SerializeFromObject)
         if d.outputObjectType == s.inputObjectType =>
-      // Adds an extra Project here, to preserve the output expr id of `DeserializeToObject`.
-      val objAttr = Alias(s.child.output.head, "obj")(exprId = d.output.head.exprId)
-      Project(objAttr :: Nil, s.child)
-
+      // A workaround for SPARK-14803. Remove this after it is fixed.
+      if (d.outputObjectType.isInstanceOf[ObjectType] &&
+          d.outputObjectType.asInstanceOf[ObjectType].cls == classOf[org.apache.spark.sql.Row]) {
+        s.child
+      } else {
+        // Adds an extra Project here, to preserve the output expr id of `DeserializeToObject`.
+        val objAttr = Alias(s.child.output.head, "obj")(exprId = d.output.head.exprId)
+        Project(objAttr :: Nil, s.child)
+      }
     case a @ AppendColumns(_, _, _, s: SerializeFromObject)
         if a.deserializer.dataType == s.inputObjectType =>
       AppendColumnsWithObject(a.func, s.serializer, a.serializer, s.child)

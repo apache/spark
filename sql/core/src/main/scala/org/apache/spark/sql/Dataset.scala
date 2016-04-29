@@ -31,6 +31,7 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.function._
 import org.apache.spark.api.python.PythonRDD
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis._
@@ -1978,6 +1979,23 @@ class Dataset[T] private[sql](
   def mapPartitions[U](f: MapPartitionsFunction[T, U], encoder: Encoder[U]): Dataset[U] = {
     val func: (Iterator[T]) => Iterator[U] = x => f.call(x.asJava).asScala
     mapPartitions(func)(encoder)
+  }
+
+  /**
+   * Returns a new [[DataFrame]] that contains the result of applying a serialized R function
+   * `func` to each partition.
+   *
+   * @group func
+   */
+  private[sql] def mapPartitionsInR(
+      func: Array[Byte],
+      packageNames: Array[Byte],
+      broadcastVars: Array[Broadcast[Object]],
+      schema: StructType): DataFrame = {
+    val rowEncoder = encoder.asInstanceOf[ExpressionEncoder[Row]]
+    Dataset.ofRows(
+      sparkSession,
+      MapPartitionsInR(func, packageNames, broadcastVars, schema, rowEncoder, logicalPlan))
   }
 
   /**
