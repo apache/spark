@@ -17,14 +17,21 @@
 
 package org.apache.spark.ml.r
 
+import org.apache.hadoop.fs.Path
+import org.json4s._
+import org.json4s.DefaultFormats
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods._
+
 import org.apache.spark.ml.{Pipeline, PipelineModel}
 import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.clustering.{KMeans, KMeansModel}
 import org.apache.spark.ml.feature.VectorAssembler
+import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 
 private[r] class KMeansWrapper private (
-    pipeline: PipelineModel) {
+    val pipeline: PipelineModel) extends MLWritable {
 
   private val kMeansModel: KMeansModel = pipeline.stages(1).asInstanceOf[KMeansModel]
 
@@ -56,9 +63,11 @@ private[r] class KMeansWrapper private (
     pipeline.transform(dataset).drop(kMeansModel.getFeaturesCol)
   }
 
+  override def write: MLWriter = new KMeansWrapper.KMeansWrapperWriter(this)
+
 }
 
-private[r] object KMeansWrapper {
+private[r] object KMeansWrapper extends MLReadable[KMeansWrapper] {
 
   def fit(
       data: DataFrame,
@@ -81,5 +90,38 @@ private[r] object KMeansWrapper {
       .fit(data)
 
     new KMeansWrapper(pipeline)
+  }
+
+  override def read: MLReader[KMeansWrapper] = new KMeansWrapperReader
+
+  override def load(path: String): KMeansWrapper = super.load(path)
+
+  class KMeansWrapperWriter(instance: KMeansWrapper) extends MLWriter {
+
+    override protected def saveImpl(path: String): Unit = {
+      val rMetadataPath = new Path(path, "rMetadata").toString
+      val pipelinePath = new Path(path, "pipeline").toString
+
+      val rMetadata = ("class" -> instance.getClass.getName)
+      val rMetadataJson: String = compact(render(rMetadata))
+      sc.parallelize(Seq(rMetadataJson), 1).saveAsTextFile(rMetadataPath)
+
+      instance.pipeline.save(pipelinePath)
+    }
+  }
+
+  class KMeansWrapperReader extends MLReader[KMeansWrapper] {
+
+    override def load(path: String): KMeansWrapper = {
+      implicit val format = DefaultFormats
+      val rMetadataPath = new Path(path, "rMetadata").toString
+      val pipelinePath = new Path(path, "pipeline").toString
+
+      val rMetadataStr = sc.textFile(rMetadataPath, 1).first()
+      val rMetadata = parse(rMetadataStr)
+
+      val pipeline = PipelineModel.load(pipelinePath)
+      new KMeansWrapper(pipeline)
+    }
   }
 }
