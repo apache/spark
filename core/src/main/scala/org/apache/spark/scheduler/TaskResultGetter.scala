@@ -135,8 +135,9 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
               logError(
                 "Could not deserialize TaskEndReason: ClassNotFound with classloader " + loader)
             case ex: Exception => // No-op
+          } finally {
+            scheduler.handleFailedTask(taskSetManager, tid, taskState, reason)
           }
-          scheduler.handleFailedTask(taskSetManager, tid, taskState, reason)
         }
       })
     } catch {
