@@ -42,9 +42,11 @@ class RuntimeConfig(object):
         """Returns the value of Spark runtime configuration property for the given key,
         assuming it is set.
         """
+        self._checkType(key, "key")
         if default is None:
             return self._jconf.get(key)
         else:
+            self._checkType(default, "default")
             return self._jconf.get(key, default)
 
     @ignore_unicode_prefix
@@ -52,6 +54,12 @@ class RuntimeConfig(object):
     def unset(self, key):
         """Resets the configuration property for the given key."""
         self._jconf.unset(key)
+
+    def _checkType(self, obj, identifier):
+        """Assert that an object is of type str."""
+        if not isinstance(obj, str) and not isinstance(obj, unicode):
+            raise TypeError("expected %s '%s' to be a string (was '%s')" %
+                            (identifier, obj, type(obj).__name__))
 
 
 def _test():

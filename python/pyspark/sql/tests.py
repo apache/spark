@@ -1429,7 +1429,7 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEquals(sorted(databases), ["default", "some_db"])
 
     def test_list_tables(self):
-        from catalog import Table
+        from pyspark.sql.catalog import Table
         spark = self.sparkSession
         spark.catalog._reset()
         spark.sql("CREATE DATABASE some_db")
@@ -1474,7 +1474,7 @@ class SQLTests(ReusedPySparkTestCase):
             lambda: spark.catalog.listTables("does_not_exist"))
 
     def test_list_functions(self):
-        from catalog import Function
+        from pyspark.sql.catalog import Function
         spark = self.sparkSession
         spark.catalog._reset()
         spark.sql("CREATE DATABASE some_db")
@@ -1511,7 +1511,7 @@ class SQLTests(ReusedPySparkTestCase):
             lambda: spark.catalog.listFunctions("does_not_exist"))
 
     def test_list_columns(self):
-        from catalog import Column
+        from pyspark.sql.catalog import Column
         spark = self.sparkSession
         spark.catalog._reset()
         spark.sql("CREATE DATABASE some_db")
