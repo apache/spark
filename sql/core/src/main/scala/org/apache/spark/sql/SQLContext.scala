@@ -674,15 +674,6 @@ class SQLContext private[sql](
   def sql(sqlText: String): DataFrame = sparkSession.sql(sqlText)
 
   /**
-   * Executes a SQL query without parsing it, but instead passing it directly to an underlying
-   * system to process. This is currently only used for Hive DDLs and will be removed as soon
-   * as Spark can parse all supported Hive DDLs itself.
-   */
-  private[sql] def runNativeSql(sqlText: String): Seq[Row] = {
-    sparkSession.runNativeSql(sqlText)
-  }
-
-  /**
    * Returns the specified table as a [[DataFrame]].
    *
    * @group ddl_ops

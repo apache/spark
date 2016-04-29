@@ -334,10 +334,10 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     sql("SELECT * FROM t2").count()
 
     AccumulatorContext.synchronized {
-      val accsSize = AccumulatorContext.originals.size
+      val accsSize = AccumulatorContext.numAccums
       sqlContext.uncacheTable("t1")
       sqlContext.uncacheTable("t2")
-      assert((accsSize - 2) == AccumulatorContext.originals.size)
+      assert((accsSize - 2) == AccumulatorContext.numAccums)
     }
   }
 

@@ -192,9 +192,4 @@ private[sql] class SessionState(sparkSession: SparkSession) {
   def analyze(tableName: String): Unit = {
     AnalyzeTable(tableName).run(sparkSession)
   }
-
-  def runNativeSql(sql: String): Seq[String] = {
-    throw new AnalysisException("Unsupported query: " + sql)
-  }
-
 }
