@@ -39,8 +39,17 @@ else:
     import unittest
 
 from shutil import rmtree
+from itertools import chain, imap
 import tempfile
 import numpy as np
+import inspect
+
+import pyspark.ml.feature
+import pyspark.ml.classification
+import pyspark.ml.clustering
+import pyspark.ml.pipeline
+import pyspark.ml.recommendation
+import pyspark.ml.regression
 
 from pyspark import keyword_only
 from pyspark.ml import Estimator, Model, Pipeline, PipelineModel, Transformer
@@ -54,6 +63,7 @@ from pyspark.ml.param.shared import HasMaxIter, HasInputCol, HasSeed
 from pyspark.ml.regression import LinearRegression, DecisionTreeRegressor
 from pyspark.ml.tuning import *
 from pyspark.ml.wrapper import JavaParams
+from pyspark.mllib.common import _java2py
 from pyspark.mllib.linalg import Vectors, DenseVector, SparseVector
 from pyspark.sql import DataFrame, SQLContext, Row
 from pyspark.sql.functions import rand
@@ -1002,6 +1012,44 @@ class HashingTFTest(PySparkTestCase):
         for i in range(0, n):
             self.assertAlmostEqual(features[i], expected[i], 14, "Error at " + str(i) +
                                    ": expected " + str(expected[i]) + ", got " + str(features[i]))
+
+
+class DefaultValuesTests(PySparkTestCase):
+
+    def check_params(self, py_stage):
+        if not hasattr(py_stage, "_to_java"):
+            return
+        java_stage = py_stage._to_java()
+        if java_stage is None:
+            return
+        for p in py_stage.params:
+            java_param = java_stage.getParam(p.name)
+            py_has_default = py_stage.hasDefault(p)
+            java_has_default = java_stage.hasDefault(java_param)
+            self.assertEqual(py_has_default, java_has_default,
+                             "Default value mismatch of param %s for Params %s"
+                             % (p.name, str(py_stage)))
+            if py_has_default:
+                if p.name == "seed":
+                    return  # Random seeds between Spark and PySpark are different
+                java_default =\
+                    _java2py(self.sc, java_stage.clear(java_param).getOrDefault(java_param))
+                py_stage._clear(p)
+                py_default = py_stage.getOrDefault(p)
+                self.assertEqual(java_default, py_default,
+                                 "Java default %s != python default %s of param %s for Params %s"
+                                 % (str(java_default), str(py_default), p.name, str(py_stage)))
+
+    def test_java_params(self):
+        modules = [pyspark.ml.feature, pyspark.ml.classification, pyspark.ml.clustering,
+                   pyspark.ml.pipeline, pyspark.ml.recommendation, pyspark.ml.regression]
+        clss = map(lambda x: x[1],
+                   filter(lambda x: (not x[0].endswith('Model')) and issubclass(x[1], JavaParams),
+                          chain.from_iterable(imap(
+                              lambda m: inspect.getmembers(m, inspect.isclass), modules))))
+        for cls in clss:
+            if not inspect.isabstract(cls):
+                self.check_params(cls())
 
 
 if __name__ == "__main__":
