@@ -154,8 +154,9 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
 
     val lookupTable = Option(ctx.db) match {
       case None => table
-      case Some(db) if table.database.isDefined =>
-        throw new ParseException("Duplicates the declaration for database", ctx)
+      case Some(db) if table.database.exists(_ != db) =>
+        throw parseException("Conflicting databases specified in SHOW COLUMNS command: " +
+          s"'$db' != '${table.database.get}'", ctx)
       case Some(db) => TableIdentifier(table.identifier, Some(db.getText))
     }
     ShowColumnsCommand(lookupTable)

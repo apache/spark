@@ -609,20 +609,20 @@ class DDLCommandSuite extends PlanTest {
     val sql1 = "SHOW COLUMNS FROM t1"
     val sql2 = "SHOW COLUMNS IN db1.t1"
     val sql3 = "SHOW COLUMNS FROM t1 IN db1"
-    val sql4 = "SHOW COLUMNS FROM db1.t1 IN db2"
+    val sql4 = "SHOW COLUMNS FROM db1.t1 IN db1"
+    val sql5 = "SHOW COLUMNS FROM db1.t1 IN db2"
 
     val parsed1 = parser.parsePlan(sql1)
     val expected1 = ShowColumnsCommand(TableIdentifier("t1", None))
     val parsed2 = parser.parsePlan(sql2)
     val expected2 = ShowColumnsCommand(TableIdentifier("t1", Some("db1")))
     val parsed3 = parser.parsePlan(sql3)
+    val parsed4 = parser.parsePlan(sql3)
     comparePlans(parsed1, expected1)
     comparePlans(parsed2, expected2)
     comparePlans(parsed3, expected2)
-    val message = intercept[ParseException] {
-      parser.parsePlan(sql4)
-    }.getMessage
-    assert(message.contains("Duplicates the declaration for database"))
+    comparePlans(parsed4, expected2)
+    assertUnsupported(sql5)
   }
 
   test("show partitions") {
