@@ -376,14 +376,10 @@ class HDFSFileCatalog(
         HadoopFsRelation.shouldFilterOut(name)
       }
 
-      val (dirs, files) = statuses.partition(_.isDirectory)
+      val (_, files) = statuses.partition(_.isDirectory)
 
       // It uses [[LinkedHashSet]] since the order of files can affect the results. (SPARK-11500)
-      if (dirs.isEmpty) {
-        mutable.LinkedHashSet(files: _*)
-      } else {
-        mutable.LinkedHashSet(files: _*) ++ listLeafFiles(dirs.map(_.getPath))
-      }
+      mutable.LinkedHashSet(files: _*)
     }
   }
 
