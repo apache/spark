@@ -755,6 +755,13 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
     }.toSeq
   }
 
+  /**
+   * Return whether a given key is set in this [[SQLConf]].
+   */
+  def contains(key: String): Boolean = {
+    settings.containsKey(key)
+  }
+
   private def setConfWithCheck(key: String, value: String): Unit = {
     if (key.startsWith("spark.") && !key.startsWith("spark.sql.")) {
       logWarning(s"Attempt to set non-Spark SQL config in SQLConf: key = $key, value = $value")

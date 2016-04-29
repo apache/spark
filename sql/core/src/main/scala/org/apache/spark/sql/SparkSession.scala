@@ -577,7 +577,7 @@ class SparkSession private(
    * Registers the given [[DataFrame]] as a temporary table in the catalog.
    * Temporary tables exist only during the lifetime of this instance of [[SparkSession]].
    */
-  protected[sql] def registerDataFrameAsTable(df: DataFrame, tableName: String): Unit = {
+  protected[sql] def registerTable(df: DataFrame, tableName: String): Unit = {
     sessionState.catalog.createTempTable(
       sessionState.sqlParser.parseTableIdentifier(tableName).table,
       df.logicalPlan,
