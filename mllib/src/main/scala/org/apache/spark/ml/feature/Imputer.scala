@@ -42,7 +42,7 @@ private[feature] trait ImputerParams extends Params with HasInputCol with HasOut
    * @group param
    */
   final val strategy: Param[String] = new Param(this, "strategy", "strategy for imputation. " +
-    "If mean, then replace missing values using the mean value of the feature." +
+    "If mean, then replace missing values using the mean value of the feature. " +
     "If median, then replace missing values using the median value of the feature.",
     ParamValidators.inArray[String](Imputer.supportedStrategyNames.toArray))
 
@@ -183,8 +183,7 @@ class ImputerModel private[ml](
 @Since("2.0.0")
 object ImputerModel extends MLReadable[ImputerModel] {
 
-  private[ImputerModel]
-  class ImputerModelWriter(instance: ImputerModel) extends MLWriter {
+  private[ImputerModel] class ImputerModelWriter(instance: ImputerModel) extends MLWriter {
 
     private case class Data(surrogate: Double)
 

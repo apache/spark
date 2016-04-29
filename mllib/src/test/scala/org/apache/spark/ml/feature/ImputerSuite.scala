@@ -35,7 +35,7 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
     Seq("mean", "median").foreach { strategy =>
       val imputer = new Imputer().setInputCol("value").setOutputCol("out").setStrategy(strategy)
       val model = imputer.fit(df)
-      model.transform(df).select("exp_" + strategy, "out").collect().foreach {
+      model.transform(df).select("expected_" + strategy, "out").collect().foreach {
        case Row(exp: Double, out: Double) =>
           assert(exp ~== out absTol 1e-5, s"Imputed values differ. Expected: $exp, actual: $out")
       }
@@ -53,7 +53,7 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
       val imputer = new Imputer().setInputCol("value").setOutputCol("out").setStrategy(strategy)
         .setMissingValue(-1.0)
       val model = imputer.fit(df)
-      model.transform(df).select("exp_" + strategy, "out").collect().foreach {
+      model.transform(df).select("expected_" + strategy, "out").collect().foreach {
         case Row(exp: Double, out: Double) =>
           assert((exp.isNaN && out.isNaN) || (exp ~== out absTol 1e-5),
             s"Imputed values differ. Expected: $exp, actual: $out")
@@ -75,7 +75,7 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
         .setMissingValue(-1)
       val model = imputer.fit(df)
       val result = model.transform(df)
-      model.transform(df).select("exp_" + strategy, "out").collect().foreach {
+      model.transform(df).select("expected_" + strategy, "out").collect().foreach {
         case Row(exp: Float, out: Float) =>
           assert(exp == out, s"Imputed values differ. Expected: $exp, actual: $out")
       }
@@ -95,7 +95,7 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
       val imputer = new Imputer().setInputCol("nullable_value").setOutputCol("out")
         .setStrategy(strategy)
       val model = imputer.fit(df2)
-      model.transform(df2).select("exp_" + strategy, "out").collect().foreach {
+      model.transform(df2).select("expected_" + strategy, "out").collect().foreach {
         case Row(exp: Double, out: Double) =>
           assert(exp ~== out absTol 1e-5, s"Imputed values differ. Expected: $exp, actual: $out")
       }
