@@ -342,6 +342,12 @@ class DecisionTreeClassifierSuite
       }
   }
 
+  test("Fitting without numClasses in metadata") {
+    val df: DataFrame = sqlContext.createDataFrame(TreeTests.featureImportanceData(sc))
+    val dt = new DecisionTreeClassifier().setMaxDepth(1)
+    dt.fit(df)
+  }
+
   /////////////////////////////////////////////////////////////////////////////
   // Tests of model save/load
   /////////////////////////////////////////////////////////////////////////////

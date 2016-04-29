@@ -33,10 +33,17 @@ package object config {
     .toSequence
     .createOptional
 
-  private[spark] val ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS =
+  private[spark] val AM_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS =
     ConfigBuilder("spark.yarn.am.attemptFailuresValidityInterval")
       .doc("Interval after which AM failures will be considered independent and " +
         "not accumulate towards the attempt count.")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createOptional
+
+  private[spark] val EXECUTOR_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS =
+    ConfigBuilder("spark.yarn.executor.failuresValidityInterval")
+      .doc("Interval after which Executor failures will be considered independent and not " +
+        "accumulate towards the attempt count.")
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
 
