@@ -659,6 +659,7 @@ class TrainValidationSplitTests(SparkSessionTestCase):
         self.assertEqual(loadedLrModel.uid, lrModel.uid)
         self.assertEqual(loadedLrModel.intercept, lrModel.intercept)
 
+
     def test_copy(self):
         sqlContext = SQLContext(self.sc)
         dataset = sqlContext.createDataFrame([
