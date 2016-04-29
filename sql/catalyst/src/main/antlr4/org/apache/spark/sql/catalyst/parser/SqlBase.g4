@@ -78,9 +78,10 @@ statement
     | ALTER TABLE tableIdentifier
         from=partitionSpec RENAME TO to=partitionSpec                  #renameTablePartition
     | ALTER TABLE tableIdentifier
-        DROP (IF EXISTS)? partitionSpec (',' partitionSpec)* PURGE?    #dropTablePartitions
+        DROP (IF EXISTS)? partitionRangeSpec (',' partitionRangeSpec)*
+        PURGE?                                                         #dropTablePartitions
     | ALTER VIEW tableIdentifier
-        DROP (IF EXISTS)? partitionSpec (',' partitionSpec)*           #dropTablePartitions
+        DROP (IF EXISTS)? partitionRangeSpec (',' partitionRangeSpec)* #dropTablePartitions
     | ALTER TABLE tableIdentifier partitionSpec?
         SET FILEFORMAT fileFormat                                      #setTableFileFormat
     | ALTER TABLE tableIdentifier partitionSpec? SET locationSpec      #setTableLocation
@@ -220,6 +221,14 @@ partitionSpec
 
 partitionVal
     : identifier (EQ constant)?
+    ;
+
+partitionRangeSpec
+    : PARTITION '(' partitionRangeVal (',' partitionRangeVal)* ')'
+    ;
+
+partitionRangeVal
+    : identifier comparisonOperator constant
     ;
 
 describeFuncName
