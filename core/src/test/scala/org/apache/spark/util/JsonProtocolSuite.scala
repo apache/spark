@@ -798,7 +798,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       countFailedValues: Boolean = false,
       metadata: Option[String] = None): AccumulableInfo =
     new AccumulableInfo(id, Some(s"Accumulable$id"), Some(s"delta$id"), Some(s"val$id"),
-      internal, countFailedValues, false, metadata)
+      internal, countFailedValues, metadata)
 
   /**
    * Creates a TaskMetrics object describing a task that read data from Hadoop (if hasHadoopInput is

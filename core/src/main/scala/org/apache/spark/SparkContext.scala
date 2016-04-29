@@ -1219,8 +1219,23 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Create an [[org.apache.spark.Accumulator]] variable of a given type, which tasks can "add"
    * values to using the `+=` method. Only the driver can access the accumulator's `value`.
    */
-  def accumulator[T](initialValue: T)(implicit param: AccumulatorParam[T]): Accumulator[T] = {
-    val acc = new Accumulator(initialValue, param)
+  def accumulator[T](initialValue: T)(implicit param: AccumulatorParam[T]): Accumulator[T] =
+  {
+    accumulator(initialValue, dataProperty = false)
+  }
+
+  /**
+   * Create an [[org.apache.spark.Accumulator]] variable of a given type, which tasks can "add"
+   * values to using the `+=` method. Only the driver can access the accumulator's `value`.
+   *
+   * @param dataProperty If the accumulator should avoid re-counting multiple evaluations on the
+   *                     same RDD/partition. This adds some additional overhead for tracking and
+   *                     is an experimental feature.
+   */
+  def accumulator[T](initialValue: T, dataProperty: Boolean)(implicit param: AccumulatorParam[T])
+      : Accumulator[T] =
+  {
+    val acc = new Accumulator(initialValue, param, name = None, dataProperty = dataProperty)
     cleaner.foreach(_.registerAccumulatorForCleanup(acc.newAcc))
     acc
   }
@@ -1232,7 +1247,21 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   def accumulator[T](initialValue: T, name: String)(implicit param: AccumulatorParam[T])
     : Accumulator[T] = {
-    val acc = new Accumulator(initialValue, param, Some(name))
+    accumulator(initialValue, name, dataProperty = false)
+  }
+
+  /**
+   * Create an [[org.apache.spark.Accumulator]] variable of a given type, with a name for display
+   * in the Spark UI. Tasks can "add" values to the accumulator using the `+=` method. Only the
+   * driver can access the accumulator's `value`.
+   *
+   * @param dataProperty If the accumulator should avoid re-counting multiple evaluations on the
+   *                     same RDD/partition. This adds some additional overhead for tracking and is
+   *                     an experimental feature.
+   */
+  def accumulator[T](initialValue: T, name: String, dataProperty: Boolean)
+    (implicit param: AccumulatorParam[T]) : Accumulator[T] = {
+    val acc = new Accumulator(initialValue, param, Some(name), dataProperty = dataProperty)
     cleaner.foreach(_.registerAccumulatorForCleanup(acc.newAcc))
     acc
   }
@@ -1279,27 +1308,27 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /**
-   * Register the given accumulator.  Note that accumulators must be registered before use, or it
+   * Register the given accumulator. Note that accumulators must be registered before use, or it
    * will throw exception.
    */
-  def register(acc: NewAccumulator[_, _]): Unit = {
-    acc.register(this)
+  def register(acc: NewAccumulator[_, _], dataProperty: Boolean): Unit = {
+    acc.register(this, dataProperty = dataProperty)
   }
 
   /**
-   * Register the given accumulator with given name.  Note that accumulators must be registered
+   * Register the given accumulator with given name. Note that accumulators must be registered
    * before use, or it will throw exception.
    */
-  def register(acc: NewAccumulator[_, _], name: String): Unit = {
-    acc.register(this, name = Some(name))
+  def register(acc: NewAccumulator[_, _], dataProperty: Boolean, name: String): Unit = {
+    acc.register(this, name = Some(name), dataProperty = dataProperty)
   }
 
   /**
    * Create and register a long accumulator, which starts with 0 and accumulates inputs by `+=`.
    */
-  def longAccumulator: LongAccumulator = {
+  def longAccumulator(): LongAccumulator = {
     val acc = new LongAccumulator
-    register(acc)
+    register(acc, dataProperty = false)
     acc
   }
 
@@ -1308,7 +1337,25 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   def longAccumulator(name: String): LongAccumulator = {
     val acc = new LongAccumulator
-    register(acc, name)
+    register(acc, dataProperty = false, name)
+    acc
+  }
+
+  /**
+   * Create and register a long accumulator, which starts with 0 and accumulates inputs by `+=`.
+   */
+  def dataPropertyLongAccumulator(): LongAccumulator = {
+    val acc = new LongAccumulator
+    register(acc, dataProperty = true)
+    acc
+  }
+
+  /**
+   * Create and register a long accumulator, which starts with 0 and accumulates inputs by `+=`.
+   */
+  def dataPropertyLongAccumulator(name: String): LongAccumulator = {
+    val acc = new LongAccumulator
+    register(acc, dataProperty = true, name)
     acc
   }
 
@@ -1317,7 +1364,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   def doubleAccumulator: DoubleAccumulator = {
     val acc = new DoubleAccumulator
-    register(acc)
+    register(acc, dataProperty = false)
     acc
   }
 
@@ -1326,7 +1373,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   def doubleAccumulator(name: String): DoubleAccumulator = {
     val acc = new DoubleAccumulator
-    register(acc, name)
+    register(acc, dataProperty = false, name)
     acc
   }
 
@@ -1337,7 +1384,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   def averageAccumulator: AverageAccumulator = {
     val acc = new AverageAccumulator
-    register(acc)
+    register(acc, dataProperty = false)
     acc
   }
 
@@ -1348,7 +1395,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   def averageAccumulator(name: String): AverageAccumulator = {
     val acc = new AverageAccumulator
-    register(acc, name)
+    register(acc, dataProperty = false, name)
     acc
   }
 
@@ -1358,7 +1405,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   def listAccumulator[T]: ListAccumulator[T] = {
     val acc = new ListAccumulator[T]
-    register(acc)
+    register(acc, dataProperty = false)
     acc
   }
 
@@ -1368,7 +1415,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   def listAccumulator[T](name: String): ListAccumulator[T] = {
     val acc = new ListAccumulator[T]
-    register(acc, name)
+    register(acc, dataProperty = false, name)
     acc
   }
 

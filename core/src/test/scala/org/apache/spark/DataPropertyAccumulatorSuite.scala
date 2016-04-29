@@ -312,6 +312,17 @@ class DataPropertyAccumulatorSuite extends SparkFunSuite with Matchers with Loca
     acc.value should be (210)
   }
 
+  test("async jobs same rdd with data property accumulator, new API") {
+    sc = new SparkContext("local[2]", "test")
+    val acc = sc.dataPropertyLongAccumulator()
+    val a = sc.parallelize(1 to 20, 10)
+    val b = a.map{x => acc.add(x)}
+    val futures = List(b, b).map(_.countAsync)
+    futures.foreach(_.onComplete{_ => acc.value should be (210)})
+    futures.foreach{_.get()}
+    acc.value should be (210)
+  }
+
   test("async jobs shared parent with data property accumulators") {
     // We want to ensure that two data property jobs with a shared parent
     // work with data property accumulators.
@@ -355,7 +366,7 @@ class DataPropertyAccumulatorSuite extends SparkFunSuite with Matchers with Loca
     System.gc()
     assert(ref.get.isEmpty)
 
-    Accumulators.remove(accId)
-    assert(!Accumulators.originals.get(accId).isDefined)
+    AccumulatorContext.remove(accId)
+    assert(!AccumulatorContext.get(accId).isDefined)
   }
 }

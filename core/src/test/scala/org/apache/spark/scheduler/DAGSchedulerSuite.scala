@@ -355,14 +355,11 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
 
   test("equals and hashCode AccumulableInfo") {
     val accInfo1 = new AccumulableInfo(
-      1, Some("a1"), Some("delta1"), Some("val1"), internal = true, countFailedValues = false,
-      dataProperty = false)
+      1, Some("a1"), Some("delta1"), Some("val1"), internal = true, countFailedValues = false)
     val accInfo2 = new AccumulableInfo(
-      1, Some("a1"), Some("delta1"), Some("val1"), internal = false, countFailedValues = false,
-      dataProperty = false)
+      1, Some("a1"), Some("delta1"), Some("val1"), internal = false, countFailedValues = false)
     val accInfo3 = new AccumulableInfo(
-      1, Some("a1"), Some("delta1"), Some("val1"), internal = false, countFailedValues = false,
-      dataProperty = false)
+      1, Some("a1"), Some("delta1"), Some("val1"), internal = false, countFailedValues = false)
     assert(accInfo1 !== accInfo2)
     assert(accInfo2 === accInfo3)
     assert(accInfo2.hashCode() === accInfo3.hashCode())
