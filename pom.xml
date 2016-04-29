@@ -284,8 +284,14 @@
     <dependencies>
       <dependency>
         <groupId>org.apache.spark</groupId>
-        <artifactId>spark-test-tags_${scala.binary.version}</artifactId>
+        <artifactId>spark-tags_${scala.binary.version}</artifactId>
         <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.spark</groupId>
+        <artifactId>spark-tags_${scala.binary.version}</artifactId>
+        <version>${project.version}</version>
+        <classifier>tests</classifier>
         <scope>test</scope>
       </dependency>
       <dependency>

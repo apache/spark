@@ -1581,6 +1581,24 @@ test_that("mutate(), transform(), rename() and names()", {
   expect_equal(columns(newDF)[3], "newAge")
   expect_equal(first(filter(newDF, df$name != "Michael"))$newAge, 32)
 
+  newDF <- mutate(df, age = df$age + 2, newAge = df$age + 3)
+  expect_equal(length(columns(newDF)), 3)
+  expect_equal(columns(newDF)[3], "newAge")
+  expect_equal(first(filter(newDF, df$name != "Michael"))$newAge, 33)
+  expect_equal(first(filter(newDF, df$name != "Michael"))$age, 32)
+
+  newDF <- mutate(df, age = df$age + 2, newAge = df$age + 3,
+                  age = df$age + 4, newAge = df$age + 5)
+  expect_equal(length(columns(newDF)), 3)
+  expect_equal(columns(newDF)[3], "newAge")
+  expect_equal(first(filter(newDF, df$name != "Michael"))$newAge, 35)
+  expect_equal(first(filter(newDF, df$name != "Michael"))$age, 34)
+
+  newDF <- mutate(df, df$age + 3)
+  expect_equal(length(columns(newDF)), 3)
+  expect_equal(columns(newDF)[[3]], "df$age + 3")
+  expect_equal(first(filter(newDF, df$name != "Michael"))[[3]], 33)
+
   newDF2 <- rename(df, newerAge = df$age)
   expect_equal(length(columns(newDF2)), 2)
   expect_equal(columns(newDF2)[1], "newerAge")
