@@ -700,10 +700,6 @@ object MimaExcludes {
         ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.executor.ShuffleReadMetrics.localBlocksFetched"),
         ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.ShuffleReadMetrics.remoteBlocksFetched"),
         ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.ShuffleReadMetrics.localBlocksFetched")
-      ) ++ Seq(
-        // [SPARK-14613] Add @Since into the matrix and vector classes in spark-mllib-local
-        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.annotation.package$"),
-        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.annotation.package")
       )
     case v if v.startsWith("1.6") =>
       Seq(
