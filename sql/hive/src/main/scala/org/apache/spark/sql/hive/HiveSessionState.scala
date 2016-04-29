@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.hive
 
-import java.util.regex.Pattern
-
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
@@ -26,7 +24,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.Analyzer
 import org.apache.spark.sql.execution.SparkPlanner
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.hive.client.{HiveClient, HiveClientImpl}
+import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.SessionState
 
 
@@ -43,11 +41,6 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
   }
 
   /**
-   * A Hive client used for execution.
-   */
-  lazy val executionHive: HiveClientImpl = sharedState.executionHive.newSession()
-
-  /**
    * A Hive client used for interacting with the metastore.
    */
   lazy val metadataHive: HiveClient = sharedState.metadataHive.newSession()
@@ -61,9 +54,20 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
    *    set in the SQLConf *as well as* in the HiveConf.
    */
   lazy val hiveconf: HiveConf = {
-    val c = executionHive.conf
-    conf.setConf(c.getAllProperties)
-    c
+    val initialConf = new HiveConf(
+      sparkSession.sparkContext.hadoopConfiguration,
+      classOf[org.apache.hadoop.hive.ql.session.SessionState])
+
+    // HiveConf is a Hadoop Configuration, which has a field of classLoader and
+    // the initial value will be the current thread's context class loader
+    // (i.e. initClassLoader at here).
+    // We call initialConf.setClassLoader(initClassLoader) at here to make
+    // this action explicit.
+    initialConf.setClassLoader(sparkSession.sharedState.jarClassLoader)
+    sparkSession.sparkContext.conf.getAll.foreach { case (k, v) =>
+      initialConf.set(k, v)
+    }
+    initialConf
   }
 
   setDefaultOverrideConfs()
@@ -78,8 +82,7 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
       sparkSession,
       functionResourceLoader,
       functionRegistry,
-      conf,
-      hiveconf)
+      conf)
   }
 
   /**
@@ -141,16 +144,13 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
 
   override def setConf(key: String, value: String): Unit = {
     super.setConf(key, value)
-    executionHive.runSqlHive(s"SET $key=$value")
     metadataHive.runSqlHive(s"SET $key=$value")
     hiveconf.set(key, value)
   }
 
   override def addJar(path: String): Unit = {
-    super.addJar(path)
-    executionHive.addJar(path)
     metadataHive.addJar(path)
-    Thread.currentThread().setContextClassLoader(executionHive.clientLoader.classLoader)
+    super.addJar(path)
   }
 
   /**

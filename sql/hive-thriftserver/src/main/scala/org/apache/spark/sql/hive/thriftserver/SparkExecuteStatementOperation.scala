@@ -35,7 +35,7 @@ import org.apache.hive.service.cli.session.HiveSession
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Row => SparkRow, SQLContext}
 import org.apache.spark.sql.execution.command.SetCommand
-import org.apache.spark.sql.hive.{HiveSessionState, HiveUtils}
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{Utils => SparkUtils}
@@ -195,9 +195,8 @@ private[hive] class SparkExecuteStatementOperation(
     statementId = UUID.randomUUID().toString
     logInfo(s"Running query '$statement' with $statementId")
     setState(OperationState.RUNNING)
-    val sessionState = sqlContext.sessionState.asInstanceOf[HiveSessionState]
     // Always use the latest class loader provided by executionHive's state.
-    val executionHiveClassLoader = sessionState.executionHive.state.getConf.getClassLoader
+    val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader
     Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
 
     HiveThriftServer2.listener.onStatementStart(

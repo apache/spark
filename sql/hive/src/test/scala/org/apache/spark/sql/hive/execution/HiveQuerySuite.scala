@@ -1070,51 +1070,6 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     assert(getConf(testKey, "0") == "")
   }
 
-  test("SET commands semantics for a HiveContext") {
-    // Adapted from its SQL counterpart.
-    val testKey = "spark.sql.key.usedfortestonly"
-    val testVal = "test.val.0"
-    val nonexistentKey = "nonexistent"
-    def collectResults(df: DataFrame): Set[Any] =
-      df.collect().map {
-        case Row(key: String, value: String) => key -> value
-        case Row(key: String, defaultValue: String, doc: String) => (key, defaultValue, doc)
-      }.toSet
-    conf.clear()
-
-    val expectedConfs = conf.getAllDefinedConfs.toSet
-    assertResult(expectedConfs)(collectResults(sql("SET -v")))
-
-    // "SET" itself returns all config variables currently specified in SQLConf.
-    // TODO: Should we be listing the default here always? probably...
-    assert(sql("SET").collect().size === TestHiveContext.overrideConfs.size)
-
-    val defaults = collectResults(sql("SET"))
-    assertResult(Set(testKey -> testVal)) {
-      collectResults(sql(s"SET $testKey=$testVal"))
-    }
-
-    assert(sessionState.hiveconf.get(testKey, "") === testVal)
-    assertResult(defaults ++ Set(testKey -> testVal))(collectResults(sql("SET")))
-
-    sql(s"SET ${testKey + testKey}=${testVal + testVal}")
-    assert(sessionState.hiveconf.get(testKey + testKey, "") == testVal + testVal)
-    assertResult(defaults ++ Set(testKey -> testVal, (testKey + testKey) -> (testVal + testVal))) {
-      collectResults(sql("SET"))
-    }
-
-    // "SET key"
-    assertResult(Set(testKey -> testVal)) {
-      collectResults(sql(s"SET $testKey"))
-    }
-
-    assertResult(Set(nonexistentKey -> "<undefined>")) {
-      collectResults(sql(s"SET $nonexistentKey"))
-    }
-
-    conf.clear()
-  }
-
   test("current_database with multiple sessions") {
     sql("create database a")
     sql("use a")
