@@ -288,28 +288,7 @@ public class SessionManager extends CompositeService {
     if (session == null) {
       throw new HiveSQLException("Session does not exist!");
     }
-    try {
-      session.close();
-    } finally {
-      // Shutdown HiveServer2 if it has been deregistered from ZooKeeper and has no active sessions
-      if (!(hiveServer2 == null) && (hiveConf.getBoolVar(ConfVars.HIVE_SERVER2_SUPPORT_DYNAMIC_SERVICE_DISCOVERY))
-          && (!hiveServer2.isRegisteredWithZooKeeper())) {
-        // Asynchronously shutdown this instance of HiveServer2,
-        // if there are no active client sessions
-        if (getOpenSessionCount() == 0) {
-          LOG.info("This instance of HiveServer2 has been removed from the list of server "
-              + "instances available for dynamic service discovery. "
-              + "The last client session has ended - will shutdown now.");
-          Thread shutdownThread = new Thread() {
-            @Override
-            public void run() {
-              hiveServer2.stop();
-            }
-          };
-          shutdownThread.start();
-        }
-      }
-    }
+    session.close();
   }
 
   public HiveSession getSession(SessionHandle sessionHandle) throws HiveSQLException {
