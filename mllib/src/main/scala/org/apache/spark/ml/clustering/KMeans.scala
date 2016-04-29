@@ -193,6 +193,10 @@ object KMeansModel extends MLReadable[KMeansModel] {
     private val className = classOf[KMeansModel].getName
 
     override def load(path: String): KMeansModel = {
+      // Import implicits for Dataset Encoder
+      val sqlContext = super.sqlContext
+      import sqlContext.implicits._
+
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
 
       val dataPath = new Path(path, "data").toString
