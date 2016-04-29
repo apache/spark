@@ -178,6 +178,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
    */
   @Since("2.0.0")
   def setMaxIter(value: Int): this.type = set(maxIter, value)
+  setDefault(maxIter -> 25)
 
   /**
    * Sets the convergence tolerance of iterations.

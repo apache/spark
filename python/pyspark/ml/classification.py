@@ -114,7 +114,7 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         super(LogisticRegression, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.LogisticRegression", self.uid)
-        self._setDefault(maxIter=100, regParam=0.0, tol=1E-6, threshold=0.5)
+        self._setDefault(maxIter=100, regParam=0.0, tol=1E-6, threshold=0.5, weightCol="")
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
         self._checkThresholdConsistency()
@@ -1069,12 +1069,12 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
                  maxIter=100, tol=1e-4, seed=None, layers=None, blockSize=128):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                 maxIter=100, tol=1e-4, seed=None, layers=[1, 1], blockSize=128)
+                 maxIter=100, tol=1e-4, seed=None, layers=None, blockSize=128)
         """
         super(MultilayerPerceptronClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.MultilayerPerceptronClassifier", self.uid)
-        self._setDefault(maxIter=100, tol=1E-4, layers=[1, 1], blockSize=128)
+        self._setDefault(maxIter=100, tol=1E-4, blockSize=128)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
@@ -1084,7 +1084,7 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
                   maxIter=100, tol=1e-4, seed=None, layers=None, blockSize=128):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                  maxIter=100, tol=1e-4, seed=None, layers=[1, 1], blockSize=128)
+                  maxIter=100, tol=1e-4, seed=None, layers=None, blockSize=128)
         Sets params for MultilayerPerceptronClassifier.
         """
         kwargs = self.setParams._input_kwargs
