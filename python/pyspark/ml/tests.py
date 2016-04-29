@@ -197,6 +197,15 @@ class PipelineTests(PySparkTestCase):
         self.assertEqual(5, transformer3.dataset_index)
         self.assertEqual(6, dataset.index)
 
+    def test_identity_pipeline(self):
+        dataset = MockDataset()
+
+        def doTransform(pipeline):
+            pipeline_model = pipeline.fit(dataset)
+            return pipeline_model.transform(dataset)
+        self.assertEqual(dataset.index, doTransform(Pipeline()).index)
+        self.assertEqual(dataset.index, doTransform(Pipeline(stages=None)).index)
+
 
 class TestParams(HasMaxIter, HasInputCol, HasSeed):
     """

@@ -57,9 +57,8 @@ class Pipeline(Estimator, MLReadable, MLWritable):
         """
         __init__(self, stages=None)
         """
-        if stages is None:
-            stages = []
         super(Pipeline, self).__init__()
+        self._setDefault(stages=[])
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
@@ -79,8 +78,7 @@ class Pipeline(Estimator, MLReadable, MLWritable):
         """
         Get pipeline stages.
         """
-        if self.stages in self._paramMap:
-            return self._paramMap[self.stages]
+        return self.getOrDefault(self.stages)
 
     @keyword_only
     @since("1.3.0")
@@ -89,9 +87,9 @@ class Pipeline(Estimator, MLReadable, MLWritable):
         setParams(self, stages=None)
         Sets params for Pipeline.
         """
-        if stages is None:
-            stages = []
         kwargs = self.setParams._input_kwargs
+        if stages is None:
+            kwargs['stages'] = []
         return self._set(**kwargs)
 
     def _fit(self, dataset):
