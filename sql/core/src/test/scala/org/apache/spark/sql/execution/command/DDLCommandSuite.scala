@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types._
+
 
 // TODO: merge this with DDLSuite (SPARK-14441)
 class DDLCommandSuite extends PlanTest {
@@ -504,58 +504,6 @@ class DDLCommandSuite extends PlanTest {
     assertUnsupported("ALTER TABLE table_name SKEWED BY (key) ON (1,5,6) STORED AS DIRECTORIES")
   }
 
-  /*
-  test("alter table: change column name/type/position/comment") {
-    val sql1 = "ALTER TABLE table_name CHANGE col_old_name col_new_name INT"
-    val sql2 =
-      """
-       |ALTER TABLE table_name CHANGE COLUMN col_old_name col_new_name INT
-       |COMMENT 'col_comment' FIRST CASCADE
-      """.stripMargin
-    val sql3 =
-      """
-       |ALTER TABLE table_name CHANGE COLUMN col_old_name col_new_name INT
-       |COMMENT 'col_comment' AFTER column_name RESTRICT
-      """.stripMargin
-    val parsed1 = parser.parsePlan(sql1)
-    val parsed2 = parser.parsePlan(sql2)
-    val parsed3 = parser.parsePlan(sql3)
-    val tableIdent = TableIdentifier("table_name", None)
-    val expected1 = AlterTableChangeCol(
-      tableName = tableIdent,
-      partitionSpec = None,
-      oldColName = "col_old_name",
-      newColName = "col_new_name",
-      dataType = IntegerType,
-      comment = None,
-      afterColName = None,
-      restrict = false,
-      cascade = false)(sql1)
-    val expected2 = AlterTableChangeCol(
-      tableName = tableIdent,
-      partitionSpec = None,
-      oldColName = "col_old_name",
-      newColName = "col_new_name",
-      dataType = IntegerType,
-      comment = Some("col_comment"),
-      afterColName = None,
-      restrict = false,
-      cascade = true)(sql2)
-    val expected3 = AlterTableChangeCol(
-      tableName = tableIdent,
-      partitionSpec = None,
-      oldColName = "col_old_name",
-      newColName = "col_new_name",
-      dataType = IntegerType,
-      comment = Some("col_comment"),
-      afterColName = Some("column_name"),
-      restrict = true,
-      cascade = false)(sql3)
-    comparePlans(parsed1, expected1)
-    comparePlans(parsed2, expected2)
-    comparePlans(parsed3, expected3)
-  } */
-
   test("alter table: change column name/type/position/comment (not allowed)") {
     assertUnsupported("ALTER TABLE table_name CHANGE col_old_name col_new_name INT")
     assertUnsupported(
@@ -568,44 +516,6 @@ class DDLCommandSuite extends PlanTest {
        |COMMENT 'col_comment' AFTER column_name RESTRICT
       """.stripMargin)
   }
-
-  /*
-  test("alter table: add/replace columns") {
-    val sql1 =
-      """
-       |ALTER TABLE table_name PARTITION (dt='2008-08-08', country='us')
-       |ADD COLUMNS (new_col1 INT COMMENT 'test_comment', new_col2 LONG
-       |COMMENT 'test_comment2') CASCADE
-      """.stripMargin
-    val sql2 =
-      """
-       |ALTER TABLE table_name REPLACE COLUMNS (new_col1 INT
-       |COMMENT 'test_comment', new_col2 LONG COMMENT 'test_comment2') RESTRICT
-      """.stripMargin
-    val parsed1 = parser.parsePlan(sql1)
-    val parsed2 = parser.parsePlan(sql2)
-    val meta1 = new MetadataBuilder().putString("comment", "test_comment").build()
-    val meta2 = new MetadataBuilder().putString("comment", "test_comment2").build()
-    val tableIdent = TableIdentifier("table_name", None)
-    val expected1 = AlterTableAddCol(
-      tableIdent,
-      Some(Map("dt" -> "2008-08-08", "country" -> "us")),
-      StructType(Seq(
-        StructField("new_col1", IntegerType, nullable = true, meta1),
-        StructField("new_col2", LongType, nullable = true, meta2))),
-      restrict = false,
-      cascade = true)(sql1)
-    val expected2 = AlterTableReplaceCol(
-      tableIdent,
-      None,
-      StructType(Seq(
-        StructField("new_col1", IntegerType, nullable = true, meta1),
-        StructField("new_col2", LongType, nullable = true, meta2))),
-      restrict = true,
-      cascade = false)(sql2)
-    comparePlans(parsed1, expected1)
-    comparePlans(parsed2, expected2)
-  } */
 
   test("alter table: add/replace columns (not allowed)") {
     assertUnsupported(

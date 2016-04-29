@@ -30,29 +30,8 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.types._
 
 
-
 // Note: The definition of these commands are based on the ones described in
 // https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DDL
-
-/**
- * A DDL command that is not supported right now. Since we have already implemented
- * the parsing rules for some commands that are not allowed, we use this as the base class
- * of those commands.
- */
-abstract class UnsupportedCommand(exception: ParseException) extends RunnableCommand {
-
-  // Throws the ParseException when we create this command.
-  throw exception
-
-  override def run(sparkSession: SparkSession): Seq[Row] = {
-    Seq.empty[Row]
-  }
-
-  override val output: Seq[Attribute] = {
-    Seq(AttributeReference("result", StringType, nullable = false)())
-  }
-
-}
 
 /**
  * A command for users to create a new database.
@@ -478,34 +457,6 @@ case class AlterTableSetLocation(
   }
 
 }
-
-case class AlterTableChangeCol(
-    tableName: TableIdentifier,
-    partitionSpec: Option[TablePartitionSpec],
-    oldColName: String,
-    newColName: String,
-    dataType: DataType,
-    comment: Option[String],
-    afterColName: Option[String],
-    restrict: Boolean,
-    cascade: Boolean)(exception: ParseException)
-  extends UnsupportedCommand(exception) with Logging
-
-case class AlterTableAddCol(
-    tableName: TableIdentifier,
-    partitionSpec: Option[TablePartitionSpec],
-    columns: StructType,
-    restrict: Boolean,
-    cascade: Boolean)(exception: ParseException)
-  extends UnsupportedCommand(exception) with Logging
-
-case class AlterTableReplaceCol(
-    tableName: TableIdentifier,
-    partitionSpec: Option[TablePartitionSpec],
-    columns: StructType,
-    restrict: Boolean,
-    cascade: Boolean)(exception: ParseException)
-  extends UnsupportedCommand(exception) with Logging
 
 
 private[sql] object DDLUtils {
