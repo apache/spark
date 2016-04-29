@@ -1444,14 +1444,30 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEquals(tables, tablesDefault)
         self.assertEquals(len(tables), 2)
         self.assertEquals(len(tablesSomeDb), 2)
-        self.assertEquals(tables[0], Table(name="tab1", database="default", description=None,
-                                           tableType="MANAGED", isTemporary=False))
-        self.assertEquals(tables[1], Table(name="temp_tab", database=None, description=None,
-                                           tableType="TEMPORARY", isTemporary=True))
-        self.assertEquals(tablesSomeDb[0], Table(name="tab2", database="some_db", description=None,
-                                           tableType="MANAGED", isTemporary=False))
-        self.assertEquals(tablesSomeDb[1], Table(name="temp_tab", database=None, description=None,
-                                           tableType="TEMPORARY", isTemporary=True))
+        self.assertEquals(tables[0], Table(
+            name="tab1",
+            database="default",
+            description=None,
+            tableType="MANAGED",
+            isTemporary=False))
+        self.assertEquals(tables[1], Table(
+            name="temp_tab",
+            database=None,
+            description=None,
+            tableType="TEMPORARY",
+            isTemporary=True))
+        self.assertEquals(tablesSomeDb[0], Table(
+            name="tab2",
+            database="some_db",
+            description=None,
+            tableType="MANAGED",
+            isTemporary=False))
+        self.assertEquals(tablesSomeDb[1], Table(
+            name="temp_tab",
+            database=None,
+            description=None,
+            tableType="TEMPORARY",
+            isTemporary=True))
         self.assertRaisesRegexp(
             AnalysisException,
             "does_not_exist",
@@ -1505,16 +1521,36 @@ class SQLTests(ReusedPySparkTestCase):
         columnsDefault = sorted(spark.catalog.listColumns("tab1", "default"), key=lambda c: c.name)
         self.assertEquals(columns, columnsDefault)
         self.assertEquals(len(columns), 2)
-        self.assertEquals(columns[0], Column(name="age", description=None, dataType="int",
-                                             nullable=True, isPartition=False, isBucket=False))
-        self.assertEquals(columns[1], Column(name="name", description=None, dataType="string",
-                                             nullable=True, isPartition=False, isBucket=False))
+        self.assertEquals(columns[0], Column(
+            name="age",
+            description=None,
+            dataType="int",
+            nullable=True,
+            isPartition=False,
+            isBucket=False))
+        self.assertEquals(columns[1], Column(
+            name="name",
+            description=None,
+            dataType="string",
+            nullable=True,
+            isPartition=False,
+            isBucket=False))
         columns2 = sorted(spark.catalog.listColumns("tab2", "some_db"), key=lambda c: c.name)
         self.assertEquals(len(columns2), 2)
-        self.assertEquals(columns2[0], Column(name="nickname", description=None, dataType="string",
-                                             nullable=True, isPartition=False, isBucket=False))
-        self.assertEquals(columns2[1], Column(name="tolerance", description=None, dataType="float",
-                                             nullable=True, isPartition=False, isBucket=False))
+        self.assertEquals(columns2[0], Column(
+            name="nickname",
+            description=None,
+            dataType="string",
+            nullable=True,
+            isPartition=False,
+            isBucket=False))
+        self.assertEquals(columns2[1], Column(
+            name="tolerance",
+            description=None,
+            dataType="float",
+            nullable=True,
+            isPartition=False,
+            isBucket=False))
         self.assertRaisesRegexp(
             AnalysisException,
             "tab2",
