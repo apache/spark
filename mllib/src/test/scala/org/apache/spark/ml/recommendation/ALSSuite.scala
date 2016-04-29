@@ -515,7 +515,7 @@ class ALSSuite
     assert(getFactors(model.itemFactors) === getFactors(model2.itemFactors))
   }
 
-  test("StorageLevel param") {
+  test("storage level params") {
     // test invalid param values
     intercept[IllegalArgumentException] {
       new ALS().setIntermediateRDDStorageLevel("foo")
@@ -526,41 +526,54 @@ class ALSSuite
     intercept[IllegalArgumentException] {
       new ALS().setFinalRDDStorageLevel("foo")
     }
-    // test StorageLevels
+
     val sqlContext = this.sqlContext
     import sqlContext.implicits._
     val (ratings, _) = genExplicitTestData(numUsers = 2, numItems = 2, rank = 1)
     val data = ratings.toDF
     val als = new ALS().setMaxIter(1)
+
+    // add listener to check intermediate RDD default storage levels
+    val defaultListener = new IntermediateRDDStorageListener
+    sc.addSparkListener(defaultListener)
     als.fit(data)
-    val factorRDD = sc.getPersistentRDDs.collect {
-      case (id, rdd) if rdd.name == "userFactors" => rdd
-    }.head
-    assert(factorRDD.getStorageLevel == StorageLevel.MEMORY_AND_DISK)
-    val listener = new RDDStorageListener
-    sc.addSparkListener(listener)
+    // check final factor RDD default storage levels
+    val defaultFactorRDDs = sc.getPersistentRDDs.collect {
+      case (id, rdd) if rdd.name == "userFactors" || rdd.name == "itemFactors" =>
+        rdd.name -> (id, rdd.getStorageLevel)
+    }.toMap
+    defaultFactorRDDs.foreach { case (_, (id, level)) =>
+      assert(level == StorageLevel.MEMORY_AND_DISK)
+    }
+    defaultListener.storageLevels.foreach(level => assert(level == StorageLevel.MEMORY_AND_DISK))
+
+    // add listener to check intermediate RDD non-default storage levels
+    val nonDefaultListener = new IntermediateRDDStorageListener
+    sc.addSparkListener(nonDefaultListener)
     als
       .setFinalRDDStorageLevel("MEMORY_ONLY")
       .setIntermediateRDDStorageLevel("DISK_ONLY")
       .fit(data)
-    val level = sc.getRDDStorageInfo { rdd =>
-      rdd.name == "userFactors" && rdd.id != factorRDD.id
-    }.head.storageLevel
-    assert(level == StorageLevel.MEMORY_ONLY)
-    listener.infos.foreach(level => assert(level == StorageLevel.DISK_ONLY))
+    // check final factor RDD non-default storage levels
+    val levels = sc.getRDDStorageInfo { rdd =>
+      (rdd.name == "userFactors" && rdd.id != defaultFactorRDDs("userFactors")._1) ||
+        (rdd.name == "itemFactors" && rdd.id != defaultFactorRDDs("itemFactors")._1)
+    }.map(_.storageLevel)
+    levels.foreach(level => assert(level == StorageLevel.MEMORY_ONLY))
+    nonDefaultListener.storageLevels.foreach(level => assert(level == StorageLevel.DISK_ONLY))
   }
 }
 
-private class RDDStorageListener extends SparkListener {
+private class IntermediateRDDStorageListener extends SparkListener {
 
-  var infos: Seq[StorageLevel] = Seq()
+  val storageLevels: mutable.ArrayBuffer[StorageLevel] = mutable.ArrayBuffer()
 
   override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = {
-    val info = stageCompleted.stageInfo.rddInfos.collect {
+    val stageLevels = stageCompleted.stageInfo.rddInfos.collect {
       case info if info.name.contains("Blocks") || info.name.contains("Factors-") =>
         info.storageLevel
     }
-    infos = info
+    storageLevels ++= stageLevels
   }
 
 }
