@@ -31,6 +31,7 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.function._
 import org.apache.spark.api.python.PythonRDD
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis._
@@ -1981,6 +1982,23 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * Returns a new [[DataFrame]] that contains the result of applying a serialized R function
+   * `func` to each partition.
+   *
+   * @group func
+   */
+  private[sql] def mapPartitionsInR(
+      func: Array[Byte],
+      packageNames: Array[Byte],
+      broadcastVars: Array[Broadcast[Object]],
+      schema: StructType): DataFrame = {
+    val rowEncoder = encoder.asInstanceOf[ExpressionEncoder[Row]]
+    Dataset.ofRows(
+      sparkSession,
+      MapPartitionsInR(func, packageNames, broadcastVars, schema, rowEncoder, logicalPlan))
+  }
+
+  /**
    * :: Experimental ::
    * (Scala-specific)
    * Returns a new [[Dataset]] by first applying a function to all elements of this [[Dataset]],
@@ -2290,7 +2308,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def registerTempTable(tableName: String): Unit = {
-    sparkSession.registerDataFrameAsTable(toDF(), tableName)
+    sparkSession.registerTable(toDF(), tableName)
   }
 
   /**

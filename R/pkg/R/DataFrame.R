@@ -21,6 +21,7 @@
 NULL
 
 setOldClass("jobj")
+setOldClass("structType")
 
 #' @title S4 class that represents a SparkDataFrame
 #' @description DataFrames can be created using functions like \link{createDataFrame},
@@ -1125,6 +1126,66 @@ setMethod("summarize",
             agg(x, ...)
           })
 
+#' dapply
+#'
+#' Apply a function to each partition of a DataFrame.
+#'
+#' @param x A SparkDataFrame
+#' @param func A function to be applied to each partition of the SparkDataFrame.
+#'             func should have only one parameter, to which a data.frame corresponds
+#'             to each partition will be passed.
+#'             The output of func should be a data.frame.
+#' @param schema The schema of the resulting DataFrame after the function is applied.
+#'               It must match the output of func.
+#' @family SparkDataFrame functions
+#' @rdname dapply
+#' @name dapply
+#' @export
+#' @examples
+#' \dontrun{
+#'   df <- createDataFrame (sqlContext, iris)
+#'   df1 <- dapply(df, function(x) { x }, schema(df))
+#'   collect(df1)
+#'
+#'   # filter and add a column
+#'   df <- createDataFrame (
+#'           sqlContext, 
+#'           list(list(1L, 1, "1"), list(2L, 2, "2"), list(3L, 3, "3")),
+#'           c("a", "b", "c"))
+#'   schema <- structType(structField("a", "integer"), structField("b", "double"),
+#'                      structField("c", "string"), structField("d", "integer"))
+#'   df1 <- dapply(
+#'            df,
+#'            function(x) {
+#'              y <- x[x[1] > 1, ]
+#'              y <- cbind(y, y[1] + 1L)
+#'            },
+#'            schema)
+#'   collect(df1)
+#'   # the result
+#'   #       a b c d
+#'   #     1 2 2 2 3
+#'   #     2 3 3 3 4
+#' }
+setMethod("dapply",
+          signature(x = "SparkDataFrame", func = "function", schema = "structType"),
+          function(x, func, schema) {
+            packageNamesArr <- serialize(.sparkREnv[[".packages"]],
+                                         connection = NULL)
+
+            broadcastArr <- lapply(ls(.broadcastNames),
+                                   function(name) { get(name, .broadcastNames) })
+
+            sdf <- callJStatic(
+                     "org.apache.spark.sql.api.r.SQLUtils",
+                     "dapply",
+                     x@sdf,
+                     serialize(cleanClosure(func), connection = NULL),
+                     packageNamesArr,
+                     broadcastArr,
+                     schema$jobj)
+            dataFrame(sdf)
+          })
 
 ############################## RDD Map Functions ##################################
 # All of the following functions mirror the existing RDD map functions,           #
