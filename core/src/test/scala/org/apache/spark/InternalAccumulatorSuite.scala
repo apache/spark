@@ -188,13 +188,18 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
     val numInternalAccums = TaskMetrics.empty.internalAccums.length
     // We ran 2 stages, so we should have 2 sets of internal accumulators, 1 for each stage
     assert(AccumulatorContext.numAccums === numInternalAccums * 2)
+    val cnt = 0
     val accumsRegistered = sc.cleaner match {
-      case Some(cleaner: SaveAccumContextCleaner) => cleaner.accumsRegisteredForCleanup
+      case Some(cleaner: SaveAccumContextCleaner) => {
+        for (id <- cleaner.accumsRegisteredForCleanup) {
+          assert(AccumulatorContext.get(id) != None)
+          cnt = cnt + 1
+        }
+      }
       case _ => Seq.empty[Long]
     }
     // Make sure the same set of accumulators is registered for cleanup
-    assert(accumsRegistered.size === numInternalAccums * 2)
-    assert(accumsRegistered.toSet === AccumulatorContext.accumIds)
+    assert(cnt === numInternalAccums * 2)
   }
 
   /**
