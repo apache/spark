@@ -178,7 +178,7 @@ private[spark] object HiveUtils extends Logging {
   /**
    * Configurations needed to create a [[HiveClient]].
    */
-  private[hive] def hiveClientConfigurations(hiveconf: Configuration): Map[String, String] = {
+  private[hive] def hiveClientConfigurations(hadoopConf: Configuration): Map[String, String] = {
     // Hive 0.14.0 introduces timeout operations in HiveConf, and changes default values of a bunch
     // of time `ConfVar`s by adding time suffixes (`s`, `ms`, and `d` etc.).  This breaks backwards-
     // compatibility when users are trying to connecting to a Hive metastore of lower version,
@@ -227,7 +227,7 @@ private[spark] object HiveUtils extends Logging {
       ConfVars.SPARK_RPC_CLIENT_CONNECT_TIMEOUT -> TimeUnit.MILLISECONDS,
       ConfVars.SPARK_RPC_CLIENT_HANDSHAKE_TIMEOUT -> TimeUnit.MILLISECONDS
     ).map { case (confVar, unit) =>
-      confVar.varname -> hiveconf.getTimeVar(confVar, unit).toString
+      confVar.varname -> HiveConf.getTimeVar(hadoopConf, confVar, unit).toString
     }.toMap
   }
 
@@ -264,8 +264,7 @@ private[spark] object HiveUtils extends Logging {
   protected[hive] def newClientForMetadata(
       conf: SparkConf,
       hadoopConf: Configuration): HiveClient = {
-    val hiveConf = new HiveConf(hadoopConf, classOf[HiveConf])
-    val configurations = hiveClientConfigurations(hiveConf)
+    val configurations = hiveClientConfigurations(hadoopConf)
     newClientForMetadata(conf, hadoopConf, configurations)
   }
 

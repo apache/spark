@@ -111,7 +111,8 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
   test("SPARK-4203:random partition directory order") {
     sql("CREATE TABLE tmp_table (key int, value string)")
     val tmpDir = Utils.createTempDir()
-    val stagingDir = new HiveConf().getVar(HiveConf.ConfVars.STAGINGDIR)
+    // The default value of hive.exec.stagingdir.
+    val stagingDir = ".hive-staging"
 
     sql(
       s"""
