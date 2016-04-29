@@ -301,7 +301,7 @@ class SQLContext(object):
 
         >>> sqlContext.registerDataFrameAsTable(df, "table1")
         """
-        self.sparkSession.catalog.registerDataFrameAsTable(df, tableName)
+        self.sparkSession.catalog.registerTable(df, tableName)
 
     @since(1.6)
     def dropTempTable(self, tableName):

@@ -2290,7 +2290,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def registerTempTable(tableName: String): Unit = {
-    sparkSession.registerDataFrameAsTable(toDF(), tableName)
+    sparkSession.registerTable(toDF(), tableName)
   }
 
   /**

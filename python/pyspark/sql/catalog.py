@@ -275,16 +275,16 @@ class Catalog(object):
         self._jcatalog.dropTempTable(tableName)
 
     @since(2.0)
-    def registerDataFrameAsTable(self, df, tableName):
+    def registerTable(self, df, tableName):
         """Registers the given :class:`DataFrame` as a temporary table in the catalog.
 
         >>> df = spark.createDataFrame([(2, 1), (3, 1)])
-        >>> spark.catalog.registerDataFrameAsTable(df, "my_cool_table")
+        >>> spark.catalog.registerTable(df, "my_cool_table")
         >>> spark.table("my_cool_table").collect()
         [Row(_1=2, _2=1), Row(_1=3, _2=1)]
         """
         if isinstance(df, DataFrame):
-            self._jsparkSession.registerDataFrameAsTable(df._jdf, tableName)
+            self._jsparkSession.registerTable(df._jdf, tableName)
         else:
             raise ValueError("Can only register DataFrame as table")
 
