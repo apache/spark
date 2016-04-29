@@ -514,6 +514,10 @@ class ALSSuite
     assert(getFactors(model.userFactors) === getFactors(model2.userFactors))
     assert(getFactors(model.itemFactors) === getFactors(model2.itemFactors))
   }
+}
+
+class ALSStorageSuite
+  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest with Logging {
 
   test("storage level params") {
     // test invalid param values
@@ -529,14 +533,17 @@ class ALSSuite
 
     val sqlContext = this.sqlContext
     import sqlContext.implicits._
-    val (ratings, _) = genExplicitTestData(numUsers = 2, numItems = 2, rank = 1)
-    val data = ratings.toDF
-    val als = new ALS().setMaxIter(1)
-
+    val data = Seq(
+      (0, 0, 1.0),
+      (0, 1, 2.0),
+      (1, 2, 3.0),
+      (1, 0, 2.0)
+    ).toDF("user", "item", "rating")
+    val als = new ALS().setMaxIter(1).setRank(1)
     // add listener to check intermediate RDD default storage levels
     val defaultListener = new IntermediateRDDStorageListener
     sc.addSparkListener(defaultListener)
-    als.fit(data)
+    val model = als.fit(data)
     // check final factor RDD default storage levels
     val defaultFactorRDDs = sc.getPersistentRDDs.collect {
       case (id, rdd) if rdd.name == "userFactors" || rdd.name == "itemFactors" =>
@@ -550,15 +557,16 @@ class ALSSuite
     // add listener to check intermediate RDD non-default storage levels
     val nonDefaultListener = new IntermediateRDDStorageListener
     sc.addSparkListener(nonDefaultListener)
-    als
+    val nonDefaultModel = als
       .setFinalRDDStorageLevel("MEMORY_ONLY")
       .setIntermediateRDDStorageLevel("DISK_ONLY")
       .fit(data)
     // check final factor RDD non-default storage levels
-    val levels = sc.getRDDStorageInfo { rdd =>
-      (rdd.name == "userFactors" && rdd.id != defaultFactorRDDs("userFactors")._1) ||
-        (rdd.name == "itemFactors" && rdd.id != defaultFactorRDDs("itemFactors")._1)
-    }.map(_.storageLevel)
+    val levels = sc.getPersistentRDDs.collect {
+      case (id, rdd) if rdd.name == "userFactors" && rdd.id != defaultFactorRDDs("userFactors")._1
+        || rdd.name == "itemFactors" && rdd.id != defaultFactorRDDs("itemFactors")._1 =>
+        rdd.getStorageLevel
+    }
     levels.foreach(level => assert(level == StorageLevel.MEMORY_ONLY))
     nonDefaultListener.storageLevels.foreach(level => assert(level == StorageLevel.DISK_ONLY))
   }
