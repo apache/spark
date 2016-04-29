@@ -44,10 +44,6 @@ class SparkSqlParser(conf: SQLConf) extends AbstractSqlParser {
   protected override def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
     super.parse(substitutor.substitute(command))(toResult)
   }
-
-  protected override def nativeCommand(sqlText: String): LogicalPlan = {
-    HiveNativeCommand(substitutor.substitute(sqlText))
-  }
 }
 
 /**
@@ -55,14 +51,6 @@ class SparkSqlParser(conf: SQLConf) extends AbstractSqlParser {
  */
 class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   import org.apache.spark.sql.catalyst.parser.ParserUtils._
-
-  /**
-   * Pass a command to Hive using a [[HiveNativeCommand]].
-   */
-  override def visitExecuteNativeCommand(
-      ctx: ExecuteNativeCommandContext): LogicalPlan = withOrigin(ctx) {
-    HiveNativeCommand(command(ctx))
-  }
 
   /**
    * Create a [[SetCommand]] logical plan.
