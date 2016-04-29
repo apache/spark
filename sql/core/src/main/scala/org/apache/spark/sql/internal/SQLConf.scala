@@ -755,6 +755,13 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
     }.toSeq
   }
 
+  /**
+   * Return whether a given key is set in this [[SQLConf]].
+   */
+  def contains(key: String): Boolean = {
+    settings.containsKey(key)
+  }
+
   private def setConfWithCheck(key: String, value: String): Unit = {
     settings.put(key, value)
   }
