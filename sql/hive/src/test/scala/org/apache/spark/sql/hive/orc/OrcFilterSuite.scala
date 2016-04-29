@@ -97,7 +97,10 @@ class OrcFilterSuite extends QueryTest with OrcTest {
 
     val (_, selectedFilters) =
       DataSourceStrategy.selectFilters(maybeRelation.get, maybeAnalyzedPredicate.toSeq)
-    assert(selectedFilters.nonEmpty, "Filter is pushed down")
+    assert(selectedFilters.nonEmpty, "No filter is pushed down")
+
+    val maybeFilter = OrcFilters.createFilter(query.schema, selectedFilters.toArray)
+    assert(maybeFilter.isEmpty, s"Could generate filter predicate for $selectedFilters")
   }
 
   test("filter pushdown - integer") {
