@@ -1177,6 +1177,10 @@ setGeneric("window", function(x, ...) { standardGeneric("window") })
 #' @export
 setGeneric("year", function(x) { standardGeneric("year") })
 
+#' @rdname spark.glm
+#' @export
+setGeneric("spark.glm", function(data, formula, ...) { standardGeneric("spark.glm") })
+
 #' @rdname glm
 #' @export
 setGeneric("glm")

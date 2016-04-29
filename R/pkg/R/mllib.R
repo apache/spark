@@ -59,7 +59,7 @@ setClass("KMeansModel", representation(jobj = "jobj"))
 #' @param epsilon Positive convergence tolerance of iterations.
 #' @param maxit Integer giving the maximal number of IRLS iterations.
 #' @return a fitted generalized linear model
-#' @rdname glm
+#' @rdname spark.glm
 #' @export
 #' @examples
 #' \dontrun{
@@ -70,25 +70,28 @@ setClass("KMeansModel", representation(jobj = "jobj"))
 #' model <- spark.glm(df, Sepal_Length ~ Sepal_Width, family="gaussian")
 #' summary(model)
 #' }
-spark.glm <- function(dataframe, formula, family = gaussian, epsilon = 1e-06, maxit = 25) {
-    if (is.character(family)) {
-        family <- get(family, mode = "function", envir = parent.frame())
-    }
-    if (is.function(family)) {
-        family <- family()
-    }
-    if (is.null(family$family)) {
-        print(family)
-        stop("'family' not recognized")
-    }
+setMethod(
+    "spark.glm",
+    signature(data = "SparkDataFrame", formula = "formula"),
+    function(data, formula, family = gaussian, epsilon = 1e-06, maxit = 25) {
+        if (is.character(family)) {
+            family <- get(family, mode = "function", envir = parent.frame())
+        }
+        if (is.function(family)) {
+            family <- family()
+        }
+        if (is.null(family$family)) {
+            print(family)
+            stop("'family' not recognized")
+        }
 
-    formula <- paste(deparse(formula), collapse = "")
+        formula <- paste(deparse(formula), collapse = "")
 
-    jobj <- callJStatic("org.apache.spark.ml.r.GeneralizedLinearRegressionWrapper",
-    "fit", formula, dataframe@sdf, family$family, family$link,
-    epsilon, as.integer(maxit))
-    return(new("GeneralizedLinearRegressionModel", jobj = jobj))
-}
+        jobj <- callJStatic("org.apache.spark.ml.r.GeneralizedLinearRegressionWrapper",
+        "fit", formula, data@sdf, family$family, family$link,
+        epsilon, as.integer(maxit))
+        new("GeneralizedLinearRegressionModel", jobj = jobj)
+})
 
 #' Fits a generalized linear model (R-compliant).
 #'

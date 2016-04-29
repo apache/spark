@@ -25,6 +25,33 @@ sc <- sparkR.init()
 
 sqlContext <- sparkRSQL.init(sc)
 
+test_that("formula of spark.glm", {
+  training <- suppressWarnings(createDataFrame(sqlContext, iris))
+  # dot minus and intercept vs native glm
+  model <- spark.glm(data, Sepal_Width ~ . - Species + 0)
+  vals <- collect(select(predict(model, training), "prediction"))
+  rVals <- predict(glm(Sepal.Width ~ . - Species + 0, data = iris), iris)
+  expect_true(all(abs(rVals - vals) < 1e-6), rVals - vals)
+
+  # feature interaction vs native glm
+  model <- glm(Sepal_Width ~ Species:Sepal_Length, data = training)
+  vals <- collect(select(predict(model, training), "prediction"))
+  rVals <- predict(glm(Sepal.Width ~ Species:Sepal.Length, data = iris), iris)
+  expect_true(all(abs(rVals - vals) < 1e-6), rVals - vals)
+
+  # glm should work with long formula
+  training <- suppressWarnings(createDataFrame(sqlContext, iris))
+  training$LongLongLongLongLongName <- training$Sepal_Width
+  training$VeryLongLongLongLonLongName <- training$Sepal_Length
+  training$AnotherLongLongLongLongName <- training$Species
+  model <- glm(LongLongLongLongLongName ~ VeryLongLongLongLonLongName + AnotherLongLongLongLongName,
+  data = training)
+  vals <- collect(select(predict(model, training), "prediction"))
+  rVals <- predict(glm(Sepal.Width ~ Sepal.Length + Species, data = iris), iris)
+  expect_true(all(abs(rVals - vals) < 1e-6), rVals - vals)
+})
+
+
 test_that("formula of glm", {
   training <- suppressWarnings(createDataFrame(sqlContext, iris))
   # dot minus and intercept vs native glm
