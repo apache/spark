@@ -19,6 +19,7 @@ package org.apache.spark
 
 import java.{lang => jl}
 import java.io.ObjectInputStream
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import javax.annotation.concurrent.GuardedBy
 
@@ -198,9 +199,7 @@ private[spark] object AccumulatorContext {
    * once the RDDs and user-code that reference them are cleaned up.
    * TODO: Don't use a global map; these should be tied to a SparkContext (SPARK-13051).
    */
-  @GuardedBy("AccumulatorContext")
-  private val originals =
-    new java.util.concurrent.ConcurrentHashMap[Long, jl.ref.WeakReference[NewAccumulator[_, _]]]
+  private val originals = new ConcurrentHashMap[Long, jl.ref.WeakReference[NewAccumulator[_, _]]]
 
   private[this] val nextId = new AtomicLong(0L)
 
