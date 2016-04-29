@@ -51,6 +51,8 @@ case class CreateDataSourceTableCommand(
     userSpecifiedSchema: Option[StructType],
     provider: String,
     options: Map[String, String],
+    partitionColumns: Array[String],
+    bucketSpec: Option[BucketSpec],
     ignoreIfExists: Boolean,
     managedIfNoPath: Boolean)
   extends RunnableCommand {
@@ -103,8 +105,8 @@ case class CreateDataSourceTableCommand(
       sparkSession = sparkSession,
       tableIdent = tableIdent,
       userSpecifiedSchema = userSpecifiedSchema,
-      partitionColumns = Array.empty[String],
-      bucketSpec = None,
+      partitionColumns = partitionColumns,
+      bucketSpec = bucketSpec,
       provider = provider,
       options = optionsWithPath,
       isExternal = isExternal)

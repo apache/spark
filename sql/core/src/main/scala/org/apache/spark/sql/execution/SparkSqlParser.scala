@@ -182,6 +182,14 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   }
 
   /**
+   * Creates a [[ShowCreateTableCommand]]
+   */
+  override def visitShowCreateTable(ctx: ShowCreateTableContext): LogicalPlan = withOrigin(ctx) {
+    val table = visitTableIdentifier(ctx.tableIdentifier())
+    ShowCreateTableCommand(table)
+  }
+
+  /**
    * Create a [[RefreshTable]] logical plan.
    */
   override def visitRefreshTable(ctx: RefreshTableContext): LogicalPlan = withOrigin(ctx) {
@@ -287,6 +295,10 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     }
     val options = Option(ctx.tablePropertyList).map(visitTablePropertyList).getOrElse(Map.empty)
     val provider = ctx.tableProvider.qualifiedName.getText
+    val partitionColumnNames =
+      Option(ctx.partitionColumnNames)
+        .map(visitIdentifierList(_).toArray)
+        .getOrElse(Array.empty[String])
     val bucketSpec = Option(ctx.bucketSpec()).map(visitBucketSpec)
 
     if (ctx.query != null) {
@@ -302,16 +314,20 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
         SaveMode.ErrorIfExists
       }
 
-      val partitionColumnNames =
-        Option(ctx.partitionColumnNames)
-          .map(visitIdentifierList(_).toArray)
-          .getOrElse(Array.empty[String])
-
       CreateTableUsingAsSelect(
         table, provider, temp, partitionColumnNames, bucketSpec, mode, options, query)
     } else {
       val struct = Option(ctx.colTypeList()).map(createStructType)
-      CreateTableUsing(table, struct, provider, temp, options, ifNotExists, managedIfNoPath = true)
+      CreateTableUsing(
+        table,
+        struct,
+        provider,
+        temp,
+        options,
+        partitionColumnNames,
+        bucketSpec,
+        ifNotExists,
+        managedIfNoPath = true)
     }
   }
 

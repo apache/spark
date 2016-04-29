@@ -26,9 +26,12 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, UnaryNode}
+import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.types.{BooleanType, MetadataBuilder, StringType, StructType}
 import org.apache.spark.util.Utils
 
@@ -558,8 +561,8 @@ case class ShowPartitionsCommand(
      * 2. If it is a datasource table.
      * 3. If it is a view or index table.
      */
-    if (tab.tableType == CatalogTableType.VIEW ||
-      tab.tableType == CatalogTableType.INDEX) {
+    if (tab.tableType == VIEW ||
+      tab.tableType == INDEX) {
       throw new AnalysisException(
         s"SHOW PARTITIONS is not allowed on a view or index table: ${tab.qualifiedName}")
     }
@@ -593,5 +596,135 @@ case class ShowPartitionsCommand(
     }
 
     partNames.map(Row(_))
+  }
+}
+
+case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableCommand {
+  override val output: Seq[Attribute] = Seq(
+    AttributeReference("createtab_stmt", StringType, nullable = false)()
+  )
+
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
+
+    if (catalog.isTemporaryTable(table)) {
+      throw new AnalysisException(
+        s"SHOW CREATE TABLE cannot be applied to temporary table")
+    }
+
+    require(catalog.tableExists(table), s"Table $table doesn't exist")
+    val tableMetadata = catalog.getTableMetadata(table)
+
+    val stmt = if (tableMetadata.properties.contains("spark.sql.sources.provider")) {
+      showCreateDataSourceTable(tableMetadata)
+    } else {
+      throw new UnsupportedOperationException(
+        "SHOW CREATE TABLE only supports Spark SQL data source tables.")
+    }
+
+    Seq(Row(stmt))
+  }
+
+  private def showCreateDataSourceTable(metadata: CatalogTable): String = {
+    val builder = StringBuilder.newBuilder
+
+    builder ++= s"CREATE TABLE ${table.quotedString} "
+    showDataSourceTableDataCols(metadata, builder)
+    showDataSourceTableOptions(metadata, builder)
+    showDataSourceTableNonDataColumns(metadata, builder)
+
+    builder.toString()
+  }
+
+  private def showDataSourceTableDataCols(metadata: CatalogTable, builder: StringBuilder): Unit = {
+    val props = metadata.properties
+    val schemaParts = for {
+      numParts <- props.get("spark.sql.sources.schema.numParts").toSeq
+      index <- 0 until numParts.toInt
+    } yield props.getOrElse(
+      s"spark.sql.sources.schema.part.$index",
+      throw new AnalysisException(
+        s"Corrupted schema in catalog: $numParts parts expected, but part $index is missing."
+      )
+    )
+
+    if (schemaParts.nonEmpty) {
+      val fields = DataType.fromJson(schemaParts.mkString).asInstanceOf[StructType].fields
+      val colTypeList = fields.map(f => s"${quoteIdentifier(f.name)} ${f.dataType.sql}")
+      builder ++= colTypeList.mkString("(", ", ", ")")
+    }
+
+    builder ++= "\n"
+  }
+
+  private def showDataSourceTableOptions(metadata: CatalogTable, builder: StringBuilder): Unit = {
+    val props = metadata.properties
+
+    builder ++= s"USING ${props("spark.sql.sources.provider")}\n"
+
+    val dataSourceOptions = metadata.storage.serdeProperties.filterNot {
+      case (key, value) =>
+        // If it's a managed table, omit PATH option. Spark SQL always creates external table
+        // when the table creation DDL contains the PATH option.
+        key.toLowerCase == "path" && metadata.tableType == MANAGED
+    }.map {
+      case (key, value) => s"${quoteIdentifier(key)} '${escapeSingleQuotedString(value)}'"
+    }
+
+    if (dataSourceOptions.nonEmpty) {
+      builder ++= "OPTIONS (\n"
+      builder ++= dataSourceOptions.mkString("  ", ",\n  ", "\n")
+      builder ++= ")\n"
+    }
+  }
+
+  private def showDataSourceTableNonDataColumns(
+      metadata: CatalogTable, builder: StringBuilder): Unit = {
+    val props = metadata.properties
+
+    def getColumnNamesByType(colType: String, typeName: String): Seq[String] = {
+      (for {
+        numCols <- props.get(s"spark.sql.sources.schema.num${colType.capitalize}Cols").toSeq
+        index <- 0 until numCols.toInt
+      } yield props.getOrElse(
+        s"spark.sql.sources.schema.${colType}Col.$index",
+        throw new AnalysisException(
+          s"Corrupted $typeName in catalog: $numCols parts expected, but part $index is missing."
+        )
+      )).map(quoteIdentifier)
+    }
+
+    val partCols = getColumnNamesByType("part", "partitioning columns")
+    if (partCols.nonEmpty) {
+      builder ++= s"PARTITIONED BY ${partCols.mkString("(", ", ", ")")}\n"
+    }
+
+    val bucketCols = getColumnNamesByType("bucket", "bucketing columns")
+    if (bucketCols.nonEmpty) {
+      builder ++= s"CLUSTERED BY ${bucketCols.mkString("(", ", ", ")")}\n"
+
+      val sortCols = getColumnNamesByType("sort", "sorting columns")
+      if (sortCols.nonEmpty) {
+        builder ++= s"SORTED BY ${sortCols.mkString("(", ", ", ")")}\n"
+      }
+
+      val numBuckets = props.getOrElse(
+        "spark.sql.sources.schema.numBuckets",
+        throw new AnalysisException("Corrupted bucket spec in catalog: missing bucket number")
+      )
+
+      builder ++= s"INTO $numBuckets BUCKETS\n"
+    }
+  }
+
+  private def escapeSingleQuotedString(str: String): String = {
+    val builder = StringBuilder.newBuilder
+
+    str.foreach {
+      case '\'' => builder ++= s"\\\'"
+      case ch => builder += ch
+    }
+
+    builder.toString()
   }
 }
