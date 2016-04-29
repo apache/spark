@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.internal
 
+import java.io.File
 import java.util.Properties
 
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.sql._
@@ -64,9 +66,6 @@ private[sql] class SessionState(sparkSession: SparkSession) {
     }
     hadoopConf
   }
-
-  // Automatically extract `spark.sql.*` entries and put it in our SQLConf
-  setConf(SQLContext.getSQLProperties(sparkSession.sparkContext.getConf))
 
   lazy val experimentalMethods = new ExperimentalMethods
 
@@ -150,6 +149,12 @@ private[sql] class SessionState(sparkSession: SparkSession) {
     new ContinuousQueryManager(sparkSession)
   }
 
+  private val jarClassLoader: NonClosableMutableURLClassLoader =
+    sparkSession.sharedState.jarClassLoader
+
+  // Automatically extract `spark.sql.*` entries and put it in our SQLConf
+  // We need to call it after all of vals have been initialized.
+  setConf(SQLContext.getSQLProperties(sparkSession.sparkContext.getConf))
 
   // ------------------------------------------------------
   //  Helper methods, partially leftover from pre-2.0 days
@@ -180,6 +185,17 @@ private[sql] class SessionState(sparkSession: SparkSession) {
 
   def addJar(path: String): Unit = {
     sparkSession.sparkContext.addJar(path)
+
+    val uri = new Path(path).toUri
+    val jarURL = if (uri.getScheme == null) {
+      // `path` is a local file path without a URL scheme
+      new File(path).toURI.toURL
+    } else {
+      // `path` is a URL with a scheme
+      uri.toURL
+    }
+    jarClassLoader.addURL(jarURL)
+    Thread.currentThread().setContextClassLoader(jarClassLoader)
   }
 
   /**
