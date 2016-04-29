@@ -96,7 +96,6 @@
     <dependency>
       <groupId>net.sf.jpam</groupId>
       <artifactId>jpam</artifactId>
-      <version>${jpam.version}</version>
     </dependency>
   </dependencies>
   <build>

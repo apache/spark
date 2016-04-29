@@ -180,7 +180,7 @@
     <libthrift.version>0.9.2</libthrift.version>
     <antlr4.version>4.5.2-1</antlr4.version>
     <jpam.version>1.1</jpam.version>
-    
+
     <test.java.home>${java.home}</test.java.home>
     <test.exclude.tags></test.exclude.tags>
 
@@ -1099,6 +1099,10 @@
           </exclusion>
           <exclusion>
             <groupId>${hive.group}</groupId>
+            <artifactId>hive-service</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>${hive.group}</groupId>
             <artifactId>hive-shims</artifactId>
           </exclusion>
           <exclusion>
@@ -1148,6 +1152,10 @@
           <exclusion>
             <groupId>${hive.group}</groupId>
             <artifactId>hive-serde</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>${hive.group}</groupId>
+            <artifactId>hive-service</artifactId>
           </exclusion>
           <exclusion>
             <groupId>${hive.group}</groupId>
@@ -1341,6 +1349,10 @@
           </exclusion>
           <exclusion>
             <groupId>${hive.group}</groupId>
+            <artifactId>hive-service</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>${hive.group}</groupId>
             <artifactId>hive-shims</artifactId>
           </exclusion>
           <exclusion>
@@ -1484,6 +1496,19 @@
           <exclusion>
             <groupId>org.codehaus.groovy</groupId>
             <artifactId>groovy-all</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+
+      <dependency>
+        <groupId>net.sf.jpam</groupId>
+        <artifactId>jpam</artifactId>
+        <scope>${hive.deps.scope}</scope>
+        <version>${jpam.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>javax.servlet</groupId>
+            <artifactId>servlet-api</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
