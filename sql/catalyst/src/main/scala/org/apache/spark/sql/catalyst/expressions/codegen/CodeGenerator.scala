@@ -588,6 +588,25 @@ class CodegenContext {
   }
 
   /**
+   * Perform a function which generates a sequence of ExprCodes with a given mapping between
+   * expressions and common expressions, instead of using the mapping in current context.
+   */
+  def withSubExprEliminationExprs(
+      newSubExprEliminationExprs: Map[Expression, SubExprEliminationState])(
+      f: => Seq[ExprCode]): Seq[ExprCode] = {
+    val oldsubExprEliminationExprs = subExprEliminationExprs
+    subExprEliminationExprs.clear
+    newSubExprEliminationExprs.foreach(subExprEliminationExprs += _)
+
+    val genCodes = f
+
+    // Restore previous subExprEliminationExprs
+    subExprEliminationExprs.clear
+    oldsubExprEliminationExprs.foreach(subExprEliminationExprs += _)
+    genCodes
+  }
+
+  /**
    * Checks and sets up the state and codegen for subexpression elimination. This finds the
    * common subexpressions, generates the code snippets that evaluate those expressions and
    * populates the mapping of common subexpressions to the generated code snippets. The generated
