@@ -611,7 +611,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     }
     AlterTableDropPartition(
       visitTableIdentifier(ctx.tableIdentifier),
-      ctx.partitionSpec.asScala.map(visitNonOptionalPartitionSpec),
+      ctx.partitionRangeSpec.asScala.map(visitPartitionRangeSpec),
       ctx.EXISTS != null)
   }
 
