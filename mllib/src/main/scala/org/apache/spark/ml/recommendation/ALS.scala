@@ -154,37 +154,37 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
   def getNonnegative: Boolean = $(nonnegative)
 
   /**
-   * Param for StorageLevel for intermediate RDDs. Pass in a string representation of
+   * Param for StorageLevel for intermediate datasets. Pass in a string representation of
    * [[StorageLevel]]. Cannot be "NONE".
    * Default: "MEMORY_AND_DISK".
    *
    * @group expertParam
    */
-  val intermediateRDDStorageLevel = new Param[String](this, "intermediateRDDStorageLevel",
-    "StorageLevel for intermediate RDDs. Cannot be 'NONE'. Default: 'MEMORY_AND_DISK'.",
+  val intermediateStorageLevel = new Param[String](this, "intermediateStorageLevel",
+    "StorageLevel for intermediate datasets. Cannot be 'NONE'. Default: 'MEMORY_AND_DISK'.",
     (s: String) => Try(StorageLevel.fromString(s)).isSuccess && s != "NONE")
 
   /** @group expertGetParam */
-  def getIntermediateRDDStorageLevel: String = $(intermediateRDDStorageLevel)
+  def getIntermediateStorageLevel: String = $(intermediateStorageLevel)
 
   /**
-   * Param for StorageLevel for ALS model factor RDDs. Pass in a string representation of
+   * Param for StorageLevel for ALS model factors. Pass in a string representation of
    * [[StorageLevel]].
    * Default: "MEMORY_AND_DISK".
    *
    * @group expertParam
    */
-  val finalRDDStorageLevel = new Param[String](this, "finalRDDStorageLevel",
-    "StorageLevel for ALS model factor RDDs. Default: 'MEMORY_AND_DISK'.",
+  val finalStorageLevel = new Param[String](this, "finalStorageLevel",
+    "StorageLevel for ALS model factors. Default: 'MEMORY_AND_DISK'.",
     (s: String) => Try(StorageLevel.fromString(s)).isSuccess)
 
   /** @group expertGetParam */
-  def getFinalRDDStorageLevel: String = $(finalRDDStorageLevel)
+  def getFinalStorageLevel: String = $(finalStorageLevel)
 
   setDefault(rank -> 10, maxIter -> 10, regParam -> 0.1, numUserBlocks -> 10, numItemBlocks -> 10,
     implicitPrefs -> false, alpha -> 1.0, userCol -> "user", itemCol -> "item",
     ratingCol -> "rating", nonnegative -> false, checkpointInterval -> 10,
-    intermediateRDDStorageLevel -> "MEMORY_AND_DISK", finalRDDStorageLevel -> "MEMORY_AND_DISK")
+    intermediateStorageLevel -> "MEMORY_AND_DISK", finalStorageLevel -> "MEMORY_AND_DISK")
 
   /**
    * Validates and transforms the input schema.
@@ -406,14 +406,14 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
 
   /** @group expertSetParam */
   @Since("2.0.0")
-  def setIntermediateRDDStorageLevel(value: String): this.type = {
-    set(intermediateRDDStorageLevel, value)
+  def setIntermediateStorageLevel(value: String): this.type = {
+    set(intermediateStorageLevel, value)
   }
 
   /** @group expertSetParam */
   @Since("2.0.0")
-  def setFinalRDDStorageLevel(value: String): this.type = {
-    set(finalRDDStorageLevel, value)
+  def setFinalStorageLevel(value: String): this.type = {
+    set(finalStorageLevel, value)
   }
 
   /**
@@ -446,8 +446,8 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
       numUserBlocks = $(numUserBlocks), numItemBlocks = $(numItemBlocks),
       maxIter = $(maxIter), regParam = $(regParam), implicitPrefs = $(implicitPrefs),
       alpha = $(alpha), nonnegative = $(nonnegative),
-      intermediateRDDStorageLevel = StorageLevel.fromString($(intermediateRDDStorageLevel)),
-      finalRDDStorageLevel = StorageLevel.fromString($(finalRDDStorageLevel)),
+      intermediateRDDStorageLevel = StorageLevel.fromString($(intermediateStorageLevel)),
+      finalRDDStorageLevel = StorageLevel.fromString($(finalStorageLevel)),
       checkpointInterval = $(checkpointInterval), seed = $(seed))
     val userDF = userFactors.toDF("id", "features")
     val itemDF = itemFactors.toDF("id", "features")

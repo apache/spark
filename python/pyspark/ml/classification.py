@@ -214,16 +214,6 @@ class LogisticRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
 
     @property
-    @since("1.4.0")
-    def weights(self):
-        """
-        Model weights.
-        """
-
-        warnings.warn("weights is deprecated. Use coefficients instead.")
-        return self._call_java("weights")
-
-    @property
     @since("1.6.0")
     def coefficients(self):
         """

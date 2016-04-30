@@ -44,8 +44,10 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ExecutionListenerManager
 
 /**
- * The entry point for working with structured data (rows and columns) in Spark.  Allows the
- * creation of [[DataFrame]] objects as well as the execution of SQL queries.
+ * The entry point for working with structured data (rows and columns) in Spark, in Spark 1.x.
+ *
+ * As of Spark 2.0, this is replaced by [[SparkSession]]. However, we are keeping the class here
+ * for backward compatibility.
  *
  * @groupname basic Basic Operations
  * @groupname ddl_ops Persistent Catalog DDL
@@ -163,23 +165,6 @@ class SQLContext private[sql](
    */
   def getConf(key: String): String = {
     sparkSession.conf.get(key)
-  }
-
-  /**
-   * Return the value of Spark SQL configuration property for the given key. If the key is not set
-   * yet, return `defaultValue` in [[ConfigEntry]].
-   */
-  private[sql] def getConf[T](entry: ConfigEntry[T]): T = {
-    sparkSession.conf.get(entry)
-  }
-
-  /**
-   * Return the value of Spark SQL configuration property for the given key. If the key is not set
-   * yet, return `defaultValue`. This is useful when `defaultValue` in ConfigEntry is not the
-   * desired one.
-   */
-  private[sql] def getConf[T](entry: ConfigEntry[T], defaultValue: T): T = {
-    sparkSession.conf.get(entry, defaultValue)
   }
 
   /**
