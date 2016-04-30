@@ -68,7 +68,8 @@ class SessionCatalog(
   // the corresponding item in the current database.
   protected var currentDb = {
     val defaultName = "default"
-    val defaultDbDefinition = CatalogDatabase(defaultName, "default database", "", Map())
+    val defaultDbDefinition =
+      CatalogDatabase(defaultName, "default database", conf.warehousePath, Map())
     // Initialize default database if it doesn't already exist
     createDatabase(defaultDbDefinition, ignoreIfExists = true)
     defaultName
