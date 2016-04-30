@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.command
 
 import java.io.File
 
+import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
@@ -92,6 +93,29 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     catalog.createPartitions(tableName, Seq(part), ignoreIfExists = false)
   }
 
+  test("the qualified path of a database is stored in the catalog") {
+    val catalog = sqlContext.sessionState.catalog
+
+    val path = System.getProperty("java.io.tmpdir")
+    // The generated temp path is not qualified.
+    assert(!path.startsWith("file:/"))
+    sql(s"CREATE DATABASE db1 LOCATION '$path'")
+    val pathInCatalog = new Path(catalog.getDatabaseMetadata("db1").locationUri).toUri
+    assert("file" === pathInCatalog.getScheme)
+    assert(path === pathInCatalog.getPath)
+
+    withSQLConf(
+      SQLConf.WAREHOUSE_PATH.key -> (System.getProperty("java.io.tmpdir"))) {
+      sql(s"CREATE DATABASE db2")
+      val pathInCatalog = new Path(catalog.getDatabaseMetadata("db2").locationUri).toUri
+      assert("file" === pathInCatalog.getScheme)
+      assert(s"${sqlContext.conf.warehousePath}/db2.db" === pathInCatalog.getPath)
+    }
+
+    sql("DROP DATABASE db1")
+    sql("DROP DATABASE db2")
+  }
+
   test("Create/Drop Database") {
     withSQLConf(
         SQLConf.WAREHOUSE_PATH.key -> (System.getProperty("java.io.tmpdir") + File.separator)) {
@@ -106,13 +130,12 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
           sql(s"CREATE DATABASE $dbName")
           val db1 = catalog.getDatabaseMetadata(dbNameWithoutBackTicks)
           val expectedLocation =
-            catalog.makeQualifiedPath(
-              System.getProperty("java.io.tmpdir") + File.separator +
-                s"$dbNameWithoutBackTicks.db")
+            "file:" + System.getProperty("java.io.tmpdir") +
+              File.separator + s"$dbNameWithoutBackTicks.db"
           assert(db1 == CatalogDatabase(
             dbNameWithoutBackTicks,
             "",
-            expectedLocation.toString,
+            expectedLocation,
             Map.empty))
           sql(s"DROP DATABASE $dbName CASCADE")
           assert(!catalog.databaseExists(dbNameWithoutBackTicks))
@@ -135,13 +158,12 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
           sql(s"CREATE DATABASE $dbName")
           val db1 = catalog.getDatabaseMetadata(dbNameWithoutBackTicks)
           val expectedLocation =
-            catalog.makeQualifiedPath(
-              System.getProperty("java.io.tmpdir") + File.separator +
-                s"$dbNameWithoutBackTicks.db")
+            "file:" + System.getProperty("java.io.tmpdir") +
+              File.separator + s"$dbNameWithoutBackTicks.db"
           assert(db1 == CatalogDatabase(
             dbNameWithoutBackTicks,
             "",
-            expectedLocation.toString,
+            expectedLocation,
             Map.empty))
 
           val message = intercept[AnalysisException] {
@@ -165,9 +187,8 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         try {
           val dbNameWithoutBackTicks = cleanIdentifier(dbName)
           val location =
-            catalog.makeQualifiedPath(
-              System.getProperty("java.io.tmpdir") + File.separator +
-                s"$dbNameWithoutBackTicks.db").toString
+            "file:" + System.getProperty("java.io.tmpdir") +
+              File.separator + s"$dbNameWithoutBackTicks.db"
 
           sql(s"CREATE DATABASE $dbName")
 
@@ -236,7 +257,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     createTable(catalog, tableIdent1)
     val expectedTableIdent = tableIdent1.copy(database = Some("default"))
     val expectedLocation =
-      catalog.makeQualifiedPath(catalog.defaultTablePath(expectedTableIdent)).toString
+      catalog.getDatabaseMetadata("default").locationUri + "/tab1"
     val expectedStorage =
       CatalogStorageFormat(
         locationUri = Some(expectedLocation),
@@ -260,7 +281,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     val tableIdent1 = TableIdentifier("tab1", Some("dbx"))
     createTable(catalog, tableIdent1)
     val expectedLocation =
-      catalog.makeQualifiedPath(catalog.defaultTablePath(tableIdent1)).toString
+      catalog.getDatabaseMetadata("dbx").locationUri + "/tab1"
     val expectedStorage =
       CatalogStorageFormat(
         locationUri = Some(expectedLocation),

@@ -302,7 +302,7 @@ object SetWarehouseLocationTest extends Logging {
       val tableMetadata =
         catalog.getTableMetadata(TableIdentifier("testLocation", Some("default")))
       val expectedLocation =
-        catalog.makeQualifiedPath(warehouseLocation.toString + "/testlocation").toString
+        "file:/" + warehouseLocation.toString + "/testlocation"
       val actualLocation = tableMetadata.storage.locationUri.get
       if (actualLocation != expectedLocation) {
         throw new Exception(
@@ -318,9 +318,7 @@ object SetWarehouseLocationTest extends Logging {
       val tableMetadata =
         catalog.getTableMetadata(TableIdentifier("testLocation", Some("testLocationDB")))
       val expectedLocation =
-        catalog
-          .makeQualifiedPath(warehouseLocation.toString + "/testlocationdb.db/testlocation")
-          .toString
+        "file:/" + warehouseLocation.toString + "/testlocationdb.db/testlocation"
       val actualLocation = tableMetadata.storage.locationUri.get
       if (actualLocation != expectedLocation) {
         throw new Exception(

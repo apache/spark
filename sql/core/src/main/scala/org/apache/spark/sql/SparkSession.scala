@@ -75,9 +75,6 @@ class SparkSession private(
       defaultWarehousePath)
     sparkContext.conf.set(SQLConf.WAREHOUSE_PATH.key, warehousePath)
     sparkContext.conf.set("hive.metastore.warehouse.dir", warehousePath)
-    // scalastyle:off println
-    println(s"Setting warehouse location to $warehousePath")
-    // scalastyle:on println
     logInfo(s"Setting warehouse location to $warehousePath")
   }
 

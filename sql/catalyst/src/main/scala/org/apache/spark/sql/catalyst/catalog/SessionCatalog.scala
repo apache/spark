@@ -90,14 +90,16 @@ class SessionCatalog(
     if (conf.caseSensitiveAnalysis) name else name.toLowerCase
   }
 
-  private[sql] def makeQualifiedPath(path: String): Path = {
+  /**
+   * This method is used to make the given path qualified before we
+   * store this path in the underlying external catalog. So, when a path
+   * does not contain a scheme, this path will not be changed after the default
+   * FileSystem is changed.
+   */
+  private def makeQualifiedPath(path: String): Path = {
     val hadoopPath = new Path(path)
-    makeQualifiedPath(hadoopPath)
-  }
-
-  private  def makeQualifiedPath(path: Path): Path = {
-    val fs = path.getFileSystem(hadoopConf)
-    fs.makeQualified(path)
+    val fs = hadoopPath.getFileSystem(hadoopConf)
+    fs.makeQualified(hadoopPath)
   }
 
   // ----------------------------------------------------------------------------
