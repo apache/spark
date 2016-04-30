@@ -327,5 +327,9 @@ object FPGrowth {
     def javaItems: java.util.List[Item] = {
       items.toList.asJava
     }
+
+    override def toString: String = {
+      s"${items.mkString("{", ",", "}")}: $freq"
+    }
   }
 }

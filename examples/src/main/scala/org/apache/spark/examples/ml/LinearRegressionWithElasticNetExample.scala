@@ -29,11 +29,11 @@ object LinearRegressionWithElasticNetExample {
   def main(args: Array[String]): Unit = {
     val conf = new SparkConf().setAppName("LinearRegressionWithElasticNetExample")
     val sc = new SparkContext(conf)
-    val sqlCtx = new SQLContext(sc)
+    val sqlContext = new SQLContext(sc)
 
     // $example on$
     // Load training data
-    val training = sqlCtx.read.format("libsvm")
+    val training = sqlContext.read.format("libsvm")
       .load("data/mllib/sample_linear_regression_data.txt")
 
     val lr = new LinearRegression()

@@ -24,7 +24,8 @@ along with if you launch Spark's interactive shell -- either `bin/spark-shell` f
 
 <div data-lang="scala"  markdown="1">
 
-Spark {{site.SPARK_VERSION}} uses Scala {{site.SCALA_BINARY_VERSION}}. To write
+Spark {{site.SPARK_VERSION}} is built and distributed to work with Scala {{site.SCALA_BINARY_VERSION}} 
+by default. (Spark can be built to work with other versions of Scala, too.) To write
 applications in Scala, you will need to use a compatible Scala version (e.g. {{site.SCALA_BINARY_VERSION}}.X).
 
 To write a Spark application, you need to add a Maven dependency on Spark. Spark is available through Maven Central at:

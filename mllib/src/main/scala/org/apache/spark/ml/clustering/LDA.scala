@@ -355,15 +355,15 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
  * :: Experimental ::
  * Model fitted by [[LDA]].
  *
- * @param vocabSize  Vocabulary size (number of terms or terms in the vocabulary)
+ * @param vocabSize  Vocabulary size (number of terms or words in the vocabulary)
  * @param sparkSession  Used to construct local DataFrames for returning query results
  */
 @Since("1.6.0")
 @Experimental
-sealed abstract class LDAModel protected[ml] (
+sealed abstract class LDAModel private[ml] (
     @Since("1.6.0") override val uid: String,
     @Since("1.6.0") val vocabSize: Int,
-    @Since("1.6.0") @transient protected[ml] val sparkSession: SparkSession)
+    @Since("1.6.0") @transient private[ml] val sparkSession: SparkSession)
   extends Model[LDAModel] with LDAParams with Logging with MLWritable {
 
   // NOTE to developers:
@@ -512,7 +512,7 @@ sealed abstract class LDAModel protected[ml] (
  */
 @Since("1.6.0")
 @Experimental
-class LocalLDAModel protected[ml] (
+class LocalLDAModel private[ml] (
     uid: String,
     vocabSize: Int,
     @Since("1.6.0") override protected val oldLocalModel: OldLocalLDAModel,
@@ -604,7 +604,7 @@ object LocalLDAModel extends MLReadable[LocalLDAModel] {
  */
 @Since("1.6.0")
 @Experimental
-class DistributedLDAModel protected[ml] (
+class DistributedLDAModel private[ml] (
     uid: String,
     vocabSize: Int,
     private val oldDistributedModel: OldDistributedLDAModel,
@@ -745,9 +745,8 @@ object DistributedLDAModel extends MLReadable[DistributedLDAModel] {
  *  - "topic": multinomial distribution over terms representing some concept
  *  - "document": one piece of text, corresponding to one row in the input data
  *
- * References:
- *  - Original LDA paper (journal version):
- *    Blei, Ng, and Jordan.  "Latent Dirichlet Allocation."  JMLR, 2003.
+ * Original LDA paper (journal version):
+ *  Blei, Ng, and Jordan.  "Latent Dirichlet Allocation."  JMLR, 2003.
  *
  * Input data (featuresCol):
  *  LDA is given a collection of documents as input data, via the featuresCol parameter.

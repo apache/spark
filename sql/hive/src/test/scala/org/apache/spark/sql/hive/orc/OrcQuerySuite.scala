@@ -172,7 +172,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
   // Hive supports zlib, snappy and none for Hive 1.2.1.
   test("Compression options for writing to an ORC file (SNAPPY, ZLIB and NONE)") {
     val data = (1 to 100).map(i => (i, s"val_$i"))
-    val conf = sqlContext.sessionState.hadoopConf
+    val conf = sqlContext.sessionState.newHadoopConf()
 
     withOrcFile(data) { file =>
       val expectedCompressionKind =

@@ -112,8 +112,16 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * Create a plan for a DESCRIBE FUNCTION command.
    */
   override def visitDescribeFunction(ctx: DescribeFunctionContext): LogicalPlan = withOrigin(ctx) {
-    val functionName = ctx.qualifiedName().identifier().asScala.map(_.getText).mkString(".")
-    DescribeFunction(functionName, ctx.EXTENDED != null)
+    import ctx._
+    val functionName =
+      if (describeFuncName.STRING() != null) {
+        string(describeFuncName.STRING())
+      } else if (describeFuncName.qualifiedName() != null) {
+        describeFuncName.qualifiedName().identifier().asScala.map(_.getText).mkString(".")
+      } else {
+        describeFuncName.getText
+      }
+    DescribeFunction(functionName, EXTENDED != null)
   }
 
   /**
@@ -948,7 +956,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
           GreaterThanOrEqual(e, expression(ctx.lower)),
           LessThanOrEqual(e, expression(ctx.upper))))
       case SqlBaseParser.IN if ctx.query != null =>
-        invertIfNotDefined(InSubQuery(e, plan(ctx.query)))
+        invertIfNotDefined(In(e, Seq(ListQuery(plan(ctx.query)))))
       case SqlBaseParser.IN =>
         invertIfNotDefined(In(e, ctx.expression.asScala.map(expression)))
       case SqlBaseParser.LIKE =>

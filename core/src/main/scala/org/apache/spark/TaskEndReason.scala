@@ -19,10 +19,7 @@ package org.apache.spark
 
 import java.io.{ObjectInputStream, ObjectOutputStream}
 
-import scala.util.Try
-
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.storage.BlockManagerId
@@ -120,17 +117,9 @@ case class ExceptionFailure(
     stackTrace: Array[StackTraceElement],
     fullStackTrace: String,
     private val exceptionWrapper: Option[ThrowableSerializationWrapper],
-    accumUpdates: Seq[AccumulableInfo] = Seq.empty[AccumulableInfo])
+    accumUpdates: Seq[AccumulableInfo] = Seq.empty,
+    private[spark] var accums: Seq[NewAccumulator[_, _]] = Nil)
   extends TaskFailedReason {
-
-  @deprecated("use accumUpdates instead", "2.0.0")
-  val metrics: Option[TaskMetrics] = {
-    if (accumUpdates.nonEmpty) {
-      Try(TaskMetrics.fromAccumulatorUpdates(accumUpdates)).toOption
-    } else {
-      None
-    }
-  }
 
   /**
    * `preserveCause` is used to keep the exception itself so it is available to the
@@ -147,6 +136,11 @@ case class ExceptionFailure(
 
   private[spark] def this(e: Throwable, accumUpdates: Seq[AccumulableInfo]) {
     this(e, accumUpdates, preserveCause = true)
+  }
+
+  private[spark] def withAccums(accums: Seq[NewAccumulator[_, _]]): ExceptionFailure = {
+    this.accums = accums
+    this
   }
 
   def exception: Option[Throwable] = exceptionWrapper.flatMap(w => Option(w.exception))

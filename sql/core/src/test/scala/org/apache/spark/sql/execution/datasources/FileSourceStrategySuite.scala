@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources
 import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{BlockLocation, FileStatus, RawLocalFileSystem}
 import org.apache.hadoop.mapreduce.Job
 
@@ -291,56 +292,50 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
   }
 
   test("Locality support for FileScanRDD - one file per partition") {
-    withHadoopConf(
-      "fs.file.impl" -> classOf[LocalityTestFileSystem].getName,
-      "fs.file.impl.disable.cache" -> "true"
-    ) {
-      withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> "10") {
-        val table =
-          createTable(files = Seq(
-            "file1" -> 10,
-            "file2" -> 10
-          ))
+    withSQLConf(
+        SQLConf.FILES_MAX_PARTITION_BYTES.key -> "10",
+        "fs.file.impl" -> classOf[LocalityTestFileSystem].getName,
+        "fs.file.impl.disable.cache" -> "true") {
+      val table =
+        createTable(files = Seq(
+          "file1" -> 10,
+          "file2" -> 10
+        ))
 
-        checkScan(table) { partitions =>
-          val Seq(p1, p2) = partitions
-          assert(p1.files.length == 1)
-          assert(p1.files.flatMap(_.locations).length == 1)
-          assert(p2.files.length == 1)
-          assert(p2.files.flatMap(_.locations).length == 1)
+      checkScan(table) { partitions =>
+        val Seq(p1, p2) = partitions
+        assert(p1.files.length == 1)
+        assert(p1.files.flatMap(_.locations).length == 1)
+        assert(p2.files.length == 1)
+        assert(p2.files.flatMap(_.locations).length == 1)
 
-          val fileScanRDD = getFileScanRDD(table)
-          assert(partitions.flatMap(fileScanRDD.preferredLocations).length == 2)
-        }
+        val fileScanRDD = getFileScanRDD(table)
+        assert(partitions.flatMap(fileScanRDD.preferredLocations).length == 2)
       }
     }
   }
 
   test("Locality support for FileScanRDD - large file") {
-    withHadoopConf(
-      "fs.file.impl" -> classOf[LocalityTestFileSystem].getName,
-      "fs.file.impl.disable.cache" -> "true"
-    ) {
-      withSQLConf(
+    withSQLConf(
         SQLConf.FILES_MAX_PARTITION_BYTES.key -> "10",
-        SQLConf.FILES_OPEN_COST_IN_BYTES.key -> "0"
-      ) {
-        val table =
-          createTable(files = Seq(
-            "file1" -> 15,
-            "file2" -> 5
-          ))
+        SQLConf.FILES_OPEN_COST_IN_BYTES.key -> "0",
+        "fs.file.impl" -> classOf[LocalityTestFileSystem].getName,
+        "fs.file.impl.disable.cache" -> "true") {
+      val table =
+        createTable(files = Seq(
+          "file1" -> 15,
+          "file2" -> 5
+        ))
 
-        checkScan(table) { partitions =>
-          val Seq(p1, p2) = partitions
-          assert(p1.files.length == 1)
-          assert(p1.files.flatMap(_.locations).length == 1)
-          assert(p2.files.length == 2)
-          assert(p2.files.flatMap(_.locations).length == 2)
+      checkScan(table) { partitions =>
+        val Seq(p1, p2) = partitions
+        assert(p1.files.length == 1)
+        assert(p1.files.flatMap(_.locations).length == 1)
+        assert(p2.files.length == 2)
+        assert(p2.files.flatMap(_.locations).length == 2)
 
-          val fileScanRDD = getFileScanRDD(table)
-          assert(partitions.flatMap(fileScanRDD.preferredLocations).length == 3)
-        }
+        val fileScanRDD = getFileScanRDD(table)
+        assert(partitions.flatMap(fileScanRDD.preferredLocations).length == 3)
       }
     }
   }
@@ -476,7 +471,8 @@ class TestFileFormat extends FileFormat {
       partitionSchema: StructType,
       requiredSchema: StructType,
       filters: Seq[Filter],
-      options: Map[String, String]): PartitionedFile => Iterator[InternalRow] = {
+      options: Map[String, String],
+      hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
 
     // Record the arguments so they can be checked in the test case.
     LastArguments.partitionSchema = partitionSchema

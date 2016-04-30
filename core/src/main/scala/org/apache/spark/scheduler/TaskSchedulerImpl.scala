@@ -135,6 +135,8 @@ private[spark] class TaskSchedulerImpl(
           new FIFOSchedulableBuilder(rootPool)
         case SchedulingMode.FAIR =>
           new FairSchedulableBuilder(rootPool, conf)
+        case _ =>
+          throw new IllegalArgumentException(s"Unsupported spark.scheduler.mode: $schedulingMode")
       }
     }
     schedulableBuilder.buildPools()
@@ -382,13 +384,19 @@ private[spark] class TaskSchedulerImpl(
    */
   override def executorHeartbeatReceived(
       execId: String,
-      accumUpdates: Array[(Long, Seq[AccumulableInfo])],
+      accumUpdates: Array[(Long, Seq[NewAccumulator[_, _]])],
       blockManagerId: BlockManagerId): Boolean = {
     // (taskId, stageId, stageAttemptId, accumUpdates)
     val accumUpdatesWithTaskIds: Array[(Long, Int, Int, Seq[AccumulableInfo])] = synchronized {
       accumUpdates.flatMap { case (id, updates) =>
+        // We should call `acc.value` here as we are at driver side now.  However, the RPC framework
+        // optimizes local message delivery so that messages do not need to de serialized and
+        // deserialized.  This brings trouble to the accumulator framework, which depends on
+        // serialization to set the `atDriverSide` flag.  Here we call `acc.localValue` instead to
+        // be more robust about this issue.
+        val accInfos = updates.map(acc => acc.toInfo(Some(acc.localValue), None))
         taskIdToTaskSetManager.get(id).map { taskSetMgr =>
-          (id, taskSetMgr.stageId, taskSetMgr.taskSet.stageAttemptId, updates)
+          (id, taskSetMgr.stageId, taskSetMgr.taskSet.stageAttemptId, accInfos)
         }
       }
     }

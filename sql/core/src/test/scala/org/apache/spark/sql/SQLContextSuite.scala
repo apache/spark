@@ -85,27 +85,4 @@ class SQLContextSuite extends SparkFunSuite with SharedSparkContext {
     assert(sqlContext.getConf("spark.sql.with.or.without.you") == "my love")
   }
 
-  test("Hadoop conf interaction between SQLContext and SparkContext") {
-    val mySpecialKey = "mai.special.key"
-    val mySpecialValue = "msv"
-    try {
-      sc.hadoopConfiguration.set(mySpecialKey, mySpecialValue)
-      val sqlContext = SQLContext.getOrCreate(sc)
-      val sessionState = sqlContext.sessionState
-      assert(sessionState.hadoopConf.get(mySpecialKey) === mySpecialValue)
-      assert(sqlContext.runtimeConf.getHadoop(mySpecialKey) === mySpecialValue)
-      // mutating hadoop conf in SQL doesn't mutate the underlying one
-      sessionState.hadoopConf.set(mySpecialKey, "no no no")
-      assert(sessionState.hadoopConf.get(mySpecialKey) === "no no no")
-      assert(sqlContext.runtimeConf.getHadoop(mySpecialKey) === "no no no")
-      assert(sc.hadoopConfiguration.get(mySpecialKey) === mySpecialValue)
-      sqlContext.runtimeConf.setHadoop(mySpecialKey, "yes yes yes")
-      assert(sessionState.hadoopConf.get(mySpecialKey) === "yes yes yes")
-      assert(sqlContext.runtimeConf.getHadoop(mySpecialKey) === "yes yes yes")
-      assert(sc.hadoopConfiguration.get(mySpecialKey) === mySpecialValue)
-    } finally {
-      sc.hadoopConfiguration.unset(mySpecialKey)
-    }
-  }
-
 }

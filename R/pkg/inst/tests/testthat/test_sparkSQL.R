@@ -822,9 +822,10 @@ test_that("select operators", {
   expect_is(df[[2]], "Column")
   expect_is(df[["age"]], "Column")
 
-  expect_is(df[, 1], "SparkDataFrame")
-  expect_equal(columns(df[, 1]), c("name"))
-  expect_equal(columns(df[, "age"]), c("age"))
+  expect_is(df[, 1, drop = F], "SparkDataFrame")
+  expect_equal(columns(df[, 1, drop = F]), c("name"))
+  expect_equal(columns(df[, "age", drop = F]), c("age"))
+
   df2 <- df[, c("age", "name")]
   expect_is(df2, "SparkDataFrame")
   expect_equal(columns(df2), c("age", "name"))
@@ -835,6 +836,13 @@ test_that("select operators", {
   df$age2 <- df$age * 2
   expect_equal(columns(df), c("name", "age", "age2"))
   expect_equal(count(where(df, df$age2 == df$age * 2)), 2)
+
+  # Test parameter drop
+  expect_equal(class(df[, 1]) == "SparkDataFrame", T)
+  expect_equal(class(df[, 1, drop = T]) == "Column", T)
+  expect_equal(class(df[, 1, drop = F]) == "SparkDataFrame", T)
+  expect_equal(class(df[df$age > 4, 2, drop = T]) == "Column", T)
+  expect_equal(class(df[df$age > 4, 2, drop = F]) == "SparkDataFrame", T)
 })
 
 test_that("select with column", {
@@ -889,13 +897,13 @@ test_that("subsetting", {
   expect_equal(columns(filtered), c("name", "age"))
   expect_equal(collect(filtered)$name, "Andy")
 
-  df2 <- df[df$age == 19, 1]
+  df2 <- df[df$age == 19, 1, drop = F]
   expect_is(df2, "SparkDataFrame")
   expect_equal(count(df2), 1)
   expect_equal(columns(df2), c("name"))
   expect_equal(collect(df2)$name, "Justin")
 
-  df3 <- df[df$age > 20, 2]
+  df3 <- df[df$age > 20, 2, drop = F]
   expect_equal(count(df3), 1)
   expect_equal(columns(df3), c("age"))
 
@@ -911,7 +919,7 @@ test_that("subsetting", {
   expect_equal(count(df6), 1)
   expect_equal(columns(df6), c("name", "age"))
 
-  df7 <- subset(df, select = "name")
+  df7 <- subset(df, select = "name", drop = F)
   expect_equal(count(df7), 3)
   expect_equal(columns(df7), c("name"))
 
@@ -1573,6 +1581,24 @@ test_that("mutate(), transform(), rename() and names()", {
   expect_equal(columns(newDF)[3], "newAge")
   expect_equal(first(filter(newDF, df$name != "Michael"))$newAge, 32)
 
+  newDF <- mutate(df, age = df$age + 2, newAge = df$age + 3)
+  expect_equal(length(columns(newDF)), 3)
+  expect_equal(columns(newDF)[3], "newAge")
+  expect_equal(first(filter(newDF, df$name != "Michael"))$newAge, 33)
+  expect_equal(first(filter(newDF, df$name != "Michael"))$age, 32)
+
+  newDF <- mutate(df, age = df$age + 2, newAge = df$age + 3,
+                  age = df$age + 4, newAge = df$age + 5)
+  expect_equal(length(columns(newDF)), 3)
+  expect_equal(columns(newDF)[3], "newAge")
+  expect_equal(first(filter(newDF, df$name != "Michael"))$newAge, 35)
+  expect_equal(first(filter(newDF, df$name != "Michael"))$age, 34)
+
+  newDF <- mutate(df, df$age + 3)
+  expect_equal(length(columns(newDF)), 3)
+  expect_equal(columns(newDF)[[3]], "df$age + 3")
+  expect_equal(first(filter(newDF, df$name != "Michael"))[[3]], 33)
+
   newDF2 <- rename(df, newerAge = df$age)
   expect_equal(length(columns(newDF2)), 2)
   expect_equal(columns(newDF2)[1], "newerAge")
@@ -1888,7 +1914,7 @@ test_that("attach() on a DataFrame", {
   stat2 <- summary(age)
   expect_equal(collect(stat2)[5, "age"], "30")
   detach("df")
-  stat3 <- summary(df[, "age"])
+  stat3 <- summary(df[, "age", drop = F])
   expect_equal(collect(stat3)[5, "age"], "30")
   expect_error(age)
 })
@@ -1928,7 +1954,7 @@ test_that("Method coltypes() to get and set R's data types of a DataFrame", {
   df1 <- select(df, cast(df$age, "integer"))
   coltypes(df) <- c("character", "integer")
   expect_equal(dtypes(df), list(c("name", "string"), c("age", "int")))
-  value <- collect(df[, 2])[[3, 1]]
+  value <- collect(df[, 2, drop = F])[[3, 1]]
   expect_equal(value, collect(df1)[[3, 1]])
   expect_equal(value, 22)
 
@@ -1970,6 +1996,91 @@ test_that("Method str()", {
 
   # Test utils:::str
   expect_equal(capture.output(utils:::str(iris)), capture.output(str(iris)))
+})
+
+test_that("Histogram", {
+
+  # Basic histogram test with colname
+  expect_equal(
+    all(histogram(irisDF, "Petal_Width", 8) ==
+        data.frame(bins = seq(0, 7),
+                   counts = c(48, 2, 7, 21, 24, 19, 15, 14),
+                   centroids = seq(0, 7) * 0.3 + 0.25)),
+        TRUE)
+
+  # Basic histogram test with Column
+  expect_equal(
+    all(histogram(irisDF, irisDF$Petal_Width, 8) ==
+          data.frame(bins = seq(0, 7),
+                     counts = c(48, 2, 7, 21, 24, 19, 15, 14),
+                     centroids = seq(0, 7) * 0.3 + 0.25)),
+    TRUE)
+
+  # Basic histogram test with derived column
+  expect_equal(
+    all(round(histogram(irisDF, irisDF$Petal_Width + 1, 8), 2) ==
+          data.frame(bins = seq(0, 7),
+                     counts = c(48, 2, 7, 21, 24, 19, 15, 14),
+                     centroids = seq(0, 7) * 0.3 + 1.25)),
+    TRUE)
+
+  # Missing nbins
+  expect_equal(length(histogram(irisDF, "Petal_Width")$counts), 10)
+
+  # Wrong colname
+  expect_error(histogram(irisDF, "xxx"),
+               "Specified colname does not belong to the given SparkDataFrame.")
+
+  # Invalid nbins
+  expect_error(histogram(irisDF, "Petal_Width", nbins = 0),
+               "The number of bins must be a positive integer number greater than 1.")
+
+  # Test against R's hist
+  expect_equal(all(hist(iris$Sepal.Width)$counts ==
+                   histogram(irisDF, "Sepal_Width", 12)$counts), T)
+
+  # Test when there are zero counts
+  df <- as.DataFrame(sqlContext, data.frame(x = c(1, 2, 3, 4, 100)))
+  expect_equal(histogram(df, "x")$counts, c(4, 0, 0, 0, 0, 0, 0, 0, 0, 1))
+})
+
+test_that("dapply() on a DataFrame", {
+  df <- createDataFrame (
+          sqlContext,
+          list(list(1L, 1, "1"), list(2L, 2, "2"), list(3L, 3, "3")),
+          c("a", "b", "c"))
+  ldf <- collect(df)
+  df1 <- dapply(df, function(x) { x }, schema(df))
+  result <- collect(df1)
+  expect_identical(ldf, result)
+
+
+  # Filter and add a column
+  schema <- structType(structField("a", "integer"), structField("b", "double"),
+                       structField("c", "string"), structField("d", "integer"))
+  df1 <- dapply(
+           df,
+           function(x) {
+             y <- x[x$a > 1, ]
+             y <- cbind(y, y$a + 1L)
+           },
+           schema)
+  result <- collect(df1)
+  expected <- ldf[ldf$a > 1, ]
+  expected$d <- expected$a + 1L
+  rownames(expected) <- NULL
+  expect_identical(expected, result)
+
+  # Remove the added column
+  df2 <- dapply(
+           df1,
+           function(x) {
+             x[, c("a", "b", "c")]
+           },
+           schema(df))
+  result <- collect(df2)
+  expected <- expected[, c("a", "b", "c")]
+  expect_identical(expected, result)
 })
 
 unlink(parquetPath)
