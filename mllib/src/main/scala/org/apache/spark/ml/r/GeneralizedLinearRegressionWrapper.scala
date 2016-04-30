@@ -22,7 +22,6 @@ import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Pipeline, PipelineModel}
 import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.feature.RFormula
@@ -61,26 +60,9 @@ private[r] class GeneralizedLinearRegressionWrapper private (
 }
 
 private[r] object GeneralizedLinearRegressionWrapper
-  extends MLReadable[GeneralizedLinearRegressionWrapper] with Logging {
+  extends MLReadable[GeneralizedLinearRegressionWrapper] {
 
   def fit(
-      formula: String,
-      data: DataFrame,
-      family: String,
-      link: String,
-      epsilon: Double,
-      maxit: Int): GeneralizedLinearRegressionWrapper = {
-    try {
-      fit0(formula, data, family, link, epsilon, maxit)
-    } catch {
-      case e: Exception =>
-        logError("Fitting failed", e)
-        throw e
-    }
-  }
-
-
-  private def fit0(
       formula: String,
       data: DataFrame,
       family: String,
