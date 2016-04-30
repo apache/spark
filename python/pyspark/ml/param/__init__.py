@@ -26,6 +26,8 @@ import copy
 import numpy as np
 import warnings
 
+from py4j.java_gateway import JavaObject
+
 from pyspark import since
 from pyspark.ml.util import Identifiable
 from pyspark.mllib.linalg import DenseVector, Vector
@@ -38,22 +40,15 @@ class Param(object):
     """
     A param with self-contained documentation.
 
-    Note: `expectedType` is deprecated and will be removed in 2.1. Use typeConverter instead,
-          as a keyword argument.
-
     .. versionadded:: 1.3.0
     """
 
-    def __init__(self, parent, name, doc, expectedType=None, typeConverter=None):
+    def __init__(self, parent, name, doc, typeConverter=None):
         if not isinstance(parent, Identifiable):
             raise TypeError("Parent must be an Identifiable but got type %s." % type(parent))
         self.parent = parent.uid
         self.name = str(name)
         self.doc = str(doc)
-        self.expectedType = expectedType
-        if expectedType is not None:
-            warnings.warn("expectedType is deprecated and will be removed in 2.1. " +
-                          "Use typeConverter instead, as a keyword argument.")
         self.typeConverter = TypeConverters.identity if typeConverter is None else typeConverter
 
     def _copy_new_parent(self, parent):
@@ -389,8 +384,8 @@ class Params(Identifiable):
         if extra is None:
             extra = dict()
         that = copy.copy(self)
-        that._paramMap = self.extractParamMap(extra)
-        return that
+        that._paramMap = {}
+        return self._copyValues(that, extra)
 
     def _shouldOwn(self, param):
         """
@@ -439,12 +434,26 @@ class Params(Identifiable):
             self._paramMap[p] = value
         return self
 
+    def _clear(self, param):
+        """
+        Clears a param from the param map if it has been explicitly set.
+        """
+        if self.isSet(param):
+            del self._paramMap[param]
+
     def _setDefault(self, **kwargs):
         """
         Sets default params.
         """
         for param, value in kwargs.items():
-            self._defaultParamMap[getattr(self, param)] = value
+            p = getattr(self, param)
+            if value is not None and not isinstance(value, JavaObject):
+                try:
+                    value = p.typeConverter(value)
+                except TypeError as e:
+                    raise TypeError('Invalid default param value given for param "%s". %s'
+                                    % (p.name, e))
+            self._defaultParamMap[p] = value
         return self
 
     def _copyValues(self, to, extra=None):
@@ -469,10 +478,11 @@ class Params(Identifiable):
         Changes the uid of this instance. This updates both
         the stored uid and the parent uid of params and param maps.
         This is used by persistence (loading).
-        :param newUid: new uid to use
+        :param newUid: new uid to use, which is converted to unicode
         :return: same instance, but with the uid and Param.parent values
                  updated, including within param maps
         """
+        newUid = unicode(newUid)
         self.uid = newUid
         newDefaultParamMap = dict()
         newParamMap = dict()

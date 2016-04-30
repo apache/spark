@@ -26,7 +26,8 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTablePartition, SessionCatalog}
-import org.apache.spark.sql.catalyst.catalog.ExternalCatalog.TablePartitionSpec
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 
 class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
@@ -58,6 +59,10 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     assert(e.getMessage.toLowerCase.contains("operation not allowed"))
   }
 
+  private def maybeWrapException[T](expectException: Boolean)(body: => T): Unit = {
+    if (expectException) intercept[AnalysisException] { body } else body
+  }
+
   private def createDatabase(catalog: SessionCatalog, name: String): Unit = {
     catalog.createDatabase(CatalogDatabase(name, "", "", Map()), ignoreIfExists = false)
   }
@@ -65,7 +70,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   private def createTable(catalog: SessionCatalog, name: TableIdentifier): Unit = {
     catalog.createTable(CatalogTable(
       identifier = name,
-      tableType = CatalogTableType.EXTERNAL_TABLE,
+      tableType = CatalogTableType.EXTERNAL,
       storage = CatalogStorageFormat(None, None, None, None, Map()),
       schema = Seq()), ignoreIfExists = false)
   }
@@ -79,91 +84,100 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   }
 
   test("Create/Drop Database") {
-    val catalog = sqlContext.sessionState.catalog
+    withSQLConf(
+        SQLConf.WAREHOUSE_PATH.key -> (System.getProperty("java.io.tmpdir") + File.separator)) {
+      val catalog = sqlContext.sessionState.catalog
 
-    val databaseNames = Seq("db1", "`database`")
+      val databaseNames = Seq("db1", "`database`")
 
-    databaseNames.foreach { dbName =>
-      try {
-        val dbNameWithoutBackTicks = cleanIdentifier(dbName)
+      databaseNames.foreach { dbName =>
+        try {
+          val dbNameWithoutBackTicks = cleanIdentifier(dbName)
 
-        sql(s"CREATE DATABASE $dbName")
-        val db1 = catalog.getDatabaseMetadata(dbNameWithoutBackTicks)
-        assert(db1 == CatalogDatabase(
-          dbNameWithoutBackTicks,
-          "",
-          System.getProperty("java.io.tmpdir") + File.separator + s"$dbNameWithoutBackTicks.db",
-          Map.empty))
-        sql(s"DROP DATABASE $dbName CASCADE")
-        assert(!catalog.databaseExists(dbNameWithoutBackTicks))
-      } finally {
-        catalog.reset()
+          sql(s"CREATE DATABASE $dbName")
+          val db1 = catalog.getDatabaseMetadata(dbNameWithoutBackTicks)
+          assert(db1 == CatalogDatabase(
+            dbNameWithoutBackTicks,
+            "",
+            System.getProperty("java.io.tmpdir") + File.separator + s"$dbNameWithoutBackTicks.db",
+            Map.empty))
+          sql(s"DROP DATABASE $dbName CASCADE")
+          assert(!catalog.databaseExists(dbNameWithoutBackTicks))
+        } finally {
+          catalog.reset()
+        }
       }
     }
   }
 
   test("Create Database - database already exists") {
-    val catalog = sqlContext.sessionState.catalog
-    val databaseNames = Seq("db1", "`database`")
+    withSQLConf(
+      SQLConf.WAREHOUSE_PATH.key -> (System.getProperty("java.io.tmpdir") + File.separator)) {
+      val catalog = sqlContext.sessionState.catalog
+      val databaseNames = Seq("db1", "`database`")
 
-    databaseNames.foreach { dbName =>
-      try {
-        val dbNameWithoutBackTicks = cleanIdentifier(dbName)
-        sql(s"CREATE DATABASE $dbName")
-        val db1 = catalog.getDatabaseMetadata(dbNameWithoutBackTicks)
-        assert(db1 == CatalogDatabase(
-          dbNameWithoutBackTicks,
-          "",
-          System.getProperty("java.io.tmpdir") + File.separator + s"$dbNameWithoutBackTicks.db",
-          Map.empty))
-
-        val message = intercept[AnalysisException] {
+      databaseNames.foreach { dbName =>
+        try {
+          val dbNameWithoutBackTicks = cleanIdentifier(dbName)
           sql(s"CREATE DATABASE $dbName")
-        }.getMessage
-        assert(message.contains(s"Database '$dbNameWithoutBackTicks' already exists."))
-      } finally {
-        catalog.reset()
+          val db1 = catalog.getDatabaseMetadata(dbNameWithoutBackTicks)
+          assert(db1 == CatalogDatabase(
+            dbNameWithoutBackTicks,
+            "",
+            System.getProperty("java.io.tmpdir") + File.separator + s"$dbNameWithoutBackTicks.db",
+            Map.empty))
+
+          val message = intercept[AnalysisException] {
+            sql(s"CREATE DATABASE $dbName")
+          }.getMessage
+          assert(message.contains(s"Database '$dbNameWithoutBackTicks' already exists."))
+        } finally {
+          catalog.reset()
+        }
       }
     }
   }
 
   test("Alter/Describe Database") {
-    val catalog = sqlContext.sessionState.catalog
-    val databaseNames = Seq("db1", "`database`")
+    withSQLConf(
+      SQLConf.WAREHOUSE_PATH.key -> (System.getProperty("java.io.tmpdir") + File.separator)) {
+      val catalog = sqlContext.sessionState.catalog
+      val databaseNames = Seq("db1", "`database`")
 
-    databaseNames.foreach { dbName =>
-      try {
-        val dbNameWithoutBackTicks = cleanIdentifier(dbName)
-        val location =
-          System.getProperty("java.io.tmpdir") + File.separator + s"$dbNameWithoutBackTicks.db"
-        sql(s"CREATE DATABASE $dbName")
+      databaseNames.foreach { dbName =>
+        try {
+          val dbNameWithoutBackTicks = cleanIdentifier(dbName)
+          val location =
+            System.getProperty("java.io.tmpdir") + File.separator + s"$dbNameWithoutBackTicks.db"
+          sql(s"CREATE DATABASE $dbName")
 
-        checkAnswer(
-          sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
-          Row("Database Name", dbNameWithoutBackTicks) ::
-            Row("Description", "") ::
-            Row("Location", location) ::
-            Row("Properties", "") :: Nil)
+          checkAnswer(
+            sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
+            Row("Database Name", dbNameWithoutBackTicks) ::
+              Row("Description", "") ::
+              Row("Location", location) ::
+              Row("Properties", "") :: Nil)
 
-        sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')")
+          sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('a'='a', 'b'='b', 'c'='c')")
 
-        checkAnswer(
-          sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
-          Row("Database Name", dbNameWithoutBackTicks) ::
-            Row("Description", "") ::
-            Row("Location", location) ::
-            Row("Properties", "((a,a), (b,b), (c,c))") :: Nil)
+          checkAnswer(
+            sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
+            Row("Database Name", dbNameWithoutBackTicks) ::
+              Row("Description", "") ::
+              Row("Location", location) ::
+              Row("Properties", "((a,a), (b,b), (c,c))") :: Nil)
 
-        sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('d'='d')")
+          sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('d'='d')")
 
-        checkAnswer(
-          sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
-          Row("Database Name", dbNameWithoutBackTicks) ::
-            Row("Description", "") ::
-            Row("Location", location) ::
-            Row("Properties", "((a,a), (b,b), (c,c), (d,d))") :: Nil)
-      } finally {
-        catalog.reset()
+          checkAnswer(
+            sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
+            Row("Database Name", dbNameWithoutBackTicks) ::
+              Row("Description", "") ::
+              Row("Location", location) ::
+              Row("Properties", "((a,a), (b,b), (c,c), (d,d))") :: Nil)
+        } finally {
+          catalog.reset()
+        }
       }
     }
   }
@@ -320,7 +334,61 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     assertUnsupported("ALTER TABLE dbx.tab1 NOT STORED AS DIRECTORIES")
   }
 
-  // TODO: ADD a testcase for Drop Database in Restric when we can create tables in SQLContext
+  test("alter table: add partition") {
+    testAddPartitions(isDatasourceTable = false)
+  }
+
+  test("alter table: add partition (datasource table)") {
+    testAddPartitions(isDatasourceTable = true)
+  }
+
+  test("alter table: add partition is not supported for views") {
+    assertUnsupported("ALTER VIEW dbx.tab1 ADD IF NOT EXISTS PARTITION (b='2')")
+  }
+
+  test("alter table: drop partition") {
+    testDropPartitions(isDatasourceTable = false)
+  }
+
+  test("alter table: drop partition (datasource table)") {
+    testDropPartitions(isDatasourceTable = true)
+  }
+
+  test("alter table: drop partition is not supported for views") {
+    assertUnsupported("ALTER VIEW dbx.tab1 DROP IF EXISTS PARTITION (b='2')")
+  }
+
+  test("alter table: rename partition") {
+    val catalog = sqlContext.sessionState.catalog
+    val tableIdent = TableIdentifier("tab1", Some("dbx"))
+    val part1 = Map("a" -> "1")
+    val part2 = Map("b" -> "2")
+    val part3 = Map("c" -> "3")
+    createDatabase(catalog, "dbx")
+    createTable(catalog, tableIdent)
+    createTablePartition(catalog, part1, tableIdent)
+    createTablePartition(catalog, part2, tableIdent)
+    createTablePartition(catalog, part3, tableIdent)
+    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
+      Set(part1, part2, part3))
+    sql("ALTER TABLE dbx.tab1 PARTITION (a='1') RENAME TO PARTITION (a='100')")
+    sql("ALTER TABLE dbx.tab1 PARTITION (b='2') RENAME TO PARTITION (b='200')")
+    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
+      Set(Map("a" -> "100"), Map("b" -> "200"), part3))
+    // rename without explicitly specifying database
+    catalog.setCurrentDatabase("dbx")
+    sql("ALTER TABLE tab1 PARTITION (a='100') RENAME TO PARTITION (a='10')")
+    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
+      Set(Map("a" -> "10"), Map("b" -> "200"), part3))
+    // table to alter does not exist
+    intercept[AnalysisException] {
+      sql("ALTER TABLE does_not_exist PARTITION (c='3') RENAME TO PARTITION (c='333')")
+    }
+    // partition to rename does not exist
+    intercept[AnalysisException] {
+      sql("ALTER TABLE tab1 PARTITION (x='300') RENAME TO PARTITION (x='333')")
+    }
+  }
 
   test("show tables") {
     withTempTable("show1a", "show2b") {
@@ -487,10 +555,6 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         assert(storageFormat.locationUri === Some(expected))
       }
     }
-    // Optionally expect AnalysisException
-    def maybeWrapException[T](expectException: Boolean)(body: => T): Unit = {
-      if (expectException) intercept[AnalysisException] { body } else body
-    }
     // set table location
     sql("ALTER TABLE dbx.tab1 SET LOCATION '/path/to/your/lovely/heart'")
     verifyLocation("/path/to/your/lovely/heart")
@@ -564,4 +628,153 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
+  private def testAddPartitions(isDatasourceTable: Boolean): Unit = {
+    val catalog = sqlContext.sessionState.catalog
+    val tableIdent = TableIdentifier("tab1", Some("dbx"))
+    val part1 = Map("a" -> "1")
+    val part2 = Map("b" -> "2")
+    val part3 = Map("c" -> "3")
+    val part4 = Map("d" -> "4")
+    createDatabase(catalog, "dbx")
+    createTable(catalog, tableIdent)
+    createTablePartition(catalog, part1, tableIdent)
+    if (isDatasourceTable) {
+      convertToDatasourceTable(catalog, tableIdent)
+    }
+    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1))
+    maybeWrapException(isDatasourceTable) {
+      sql("ALTER TABLE dbx.tab1 ADD IF NOT EXISTS " +
+        "PARTITION (b='2') LOCATION 'paris' PARTITION (c='3')")
+    }
+    if (!isDatasourceTable) {
+      assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1, part2, part3))
+      assert(catalog.getPartition(tableIdent, part1).storage.locationUri.isEmpty)
+      assert(catalog.getPartition(tableIdent, part2).storage.locationUri == Some("paris"))
+      assert(catalog.getPartition(tableIdent, part3).storage.locationUri.isEmpty)
+    }
+    // add partitions without explicitly specifying database
+    catalog.setCurrentDatabase("dbx")
+    maybeWrapException(isDatasourceTable) {
+      sql("ALTER TABLE tab1 ADD IF NOT EXISTS PARTITION (d='4')")
+    }
+    if (!isDatasourceTable) {
+      assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
+        Set(part1, part2, part3, part4))
+    }
+    // table to alter does not exist
+    intercept[AnalysisException] {
+      sql("ALTER TABLE does_not_exist ADD IF NOT EXISTS PARTITION (d='4')")
+    }
+    // partition to add already exists
+    intercept[AnalysisException] {
+      sql("ALTER TABLE tab1 ADD PARTITION (d='4')")
+    }
+    maybeWrapException(isDatasourceTable) {
+      sql("ALTER TABLE tab1 ADD IF NOT EXISTS PARTITION (d='4')")
+    }
+    if (!isDatasourceTable) {
+      assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
+        Set(part1, part2, part3, part4))
+    }
+  }
+
+  private def testDropPartitions(isDatasourceTable: Boolean): Unit = {
+    val catalog = sqlContext.sessionState.catalog
+    val tableIdent = TableIdentifier("tab1", Some("dbx"))
+    val part1 = Map("a" -> "1")
+    val part2 = Map("b" -> "2")
+    val part3 = Map("c" -> "3")
+    val part4 = Map("d" -> "4")
+    createDatabase(catalog, "dbx")
+    createTable(catalog, tableIdent)
+    createTablePartition(catalog, part1, tableIdent)
+    createTablePartition(catalog, part2, tableIdent)
+    createTablePartition(catalog, part3, tableIdent)
+    createTablePartition(catalog, part4, tableIdent)
+    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
+      Set(part1, part2, part3, part4))
+    if (isDatasourceTable) {
+      convertToDatasourceTable(catalog, tableIdent)
+    }
+    maybeWrapException(isDatasourceTable) {
+      sql("ALTER TABLE dbx.tab1 DROP IF EXISTS PARTITION (d='4'), PARTITION (c='3')")
+    }
+    if (!isDatasourceTable) {
+      assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1, part2))
+    }
+    // drop partitions without explicitly specifying database
+    catalog.setCurrentDatabase("dbx")
+    maybeWrapException(isDatasourceTable) {
+      sql("ALTER TABLE tab1 DROP IF EXISTS PARTITION (b='2')")
+    }
+    if (!isDatasourceTable) {
+      assert(catalog.listPartitions(tableIdent).map(_.spec) == Seq(part1))
+    }
+    // table to alter does not exist
+    intercept[AnalysisException] {
+      sql("ALTER TABLE does_not_exist DROP IF EXISTS PARTITION (b='2')")
+    }
+    // partition to drop does not exist
+    intercept[AnalysisException] {
+      sql("ALTER TABLE tab1 DROP PARTITION (x='300')")
+    }
+    maybeWrapException(isDatasourceTable) {
+      sql("ALTER TABLE tab1 DROP IF EXISTS PARTITION (x='300')")
+    }
+    if (!isDatasourceTable) {
+      assert(catalog.listPartitions(tableIdent).map(_.spec) == Seq(part1))
+    }
+  }
+
+  test("describe function") {
+    checkAnswer(
+      sql("DESCRIBE FUNCTION log"),
+      Row("Class: org.apache.spark.sql.catalyst.expressions.Logarithm") ::
+        Row("Function: log") ::
+        Row("Usage: log(b, x) - Returns the logarithm of x with base b.") :: Nil
+    )
+    // predicate operator
+    checkAnswer(
+      sql("DESCRIBE FUNCTION or"),
+      Row("Class: org.apache.spark.sql.catalyst.expressions.Or") ::
+        Row("Function: or") ::
+        Row("Usage: a or b - Logical OR.") :: Nil
+    )
+    checkAnswer(
+      sql("DESCRIBE FUNCTION !"),
+      Row("Class: org.apache.spark.sql.catalyst.expressions.Not") ::
+        Row("Function: !") ::
+        Row("Usage: ! a - Logical not") :: Nil
+    )
+    // arithmetic operators
+    checkAnswer(
+      sql("DESCRIBE FUNCTION +"),
+      Row("Class: org.apache.spark.sql.catalyst.expressions.Add") ::
+        Row("Function: +") ::
+        Row("Usage: a + b - Returns a+b.") :: Nil
+    )
+    // comparison operators
+    checkAnswer(
+      sql("DESCRIBE FUNCTION <"),
+      Row("Class: org.apache.spark.sql.catalyst.expressions.LessThan") ::
+        Row("Function: <") ::
+        Row("Usage: a < b - Returns TRUE if a is less than b.") :: Nil
+    )
+    // STRING
+    checkAnswer(
+      sql("DESCRIBE FUNCTION 'concat'"),
+      Row("Class: org.apache.spark.sql.catalyst.expressions.Concat") ::
+        Row("Function: concat") ::
+        Row("Usage: concat(str1, str2, ..., strN) " +
+          "- Returns the concatenation of str1, str2, ..., strN") :: Nil
+    )
+    // extended mode
+    checkAnswer(
+      sql("DESCRIBE FUNCTION EXTENDED ^"),
+      Row("Class: org.apache.spark.sql.catalyst.expressions.BitwiseXor") ::
+        Row("Extended Usage:\n> SELECT 3 ^ 5; 2") ::
+        Row("Function: ^") ::
+        Row("Usage: a ^ b - Bitwise exclusive OR.") :: Nil
+    )
+  }
 }

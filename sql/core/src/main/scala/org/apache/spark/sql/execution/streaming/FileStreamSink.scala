@@ -22,8 +22,8 @@ import java.util.UUID
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame, SQLContext}
-import org.apache.spark.sql.sources.FileFormat
+import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.execution.datasources.FileFormat
 
 object FileStreamSink {
   // The name of the subdirectory that is used to store metadata about which files are valid.
@@ -38,43 +38,47 @@ object FileStreamSink {
  * in the log.
  */
 class FileStreamSink(
-    sqlContext: SQLContext,
+    sparkSession: SparkSession,
     path: String,
     fileFormat: FileFormat) extends Sink with Logging {
 
   private val basePath = new Path(path)
   private val logPath = new Path(basePath, FileStreamSink.metadataDir)
-  private val fileLog = new HDFSMetadataLog[Seq[String]](sqlContext, logPath.toUri.toString)
+  private val fileLog = new FileStreamSinkLog(sparkSession, logPath.toUri.toString)
+  private val fs = basePath.getFileSystem(sparkSession.sessionState.newHadoopConf())
 
   override def addBatch(batchId: Long, data: DataFrame): Unit = {
-    if (fileLog.get(batchId).isDefined) {
+    if (batchId <= fileLog.getLatest().map(_._1).getOrElse(-1L)) {
       logInfo(s"Skipping already committed batch $batchId")
     } else {
-      val files = writeFiles(data)
+      val files = fs.listStatus(writeFiles(data)).map { f =>
+        SinkFileStatus(
+          path = f.getPath.toUri.toString,
+          size = f.getLen,
+          isDir = f.isDirectory,
+          modificationTime = f.getModificationTime,
+          blockReplication = f.getReplication,
+          blockSize = f.getBlockSize,
+          action = FileStreamSinkLog.ADD_ACTION)
+      }
       if (fileLog.add(batchId, files)) {
         logInfo(s"Committed batch $batchId")
       } else {
-        logWarning(s"Race while writing batch $batchId")
+        throw new IllegalStateException(s"Race while writing batch $batchId")
       }
     }
   }
 
   /** Writes the [[DataFrame]] to a UUID-named dir, returning the list of files paths. */
-  private def writeFiles(data: DataFrame): Seq[String] = {
-    val ctx = sqlContext
-    val outputDir = path
-    val format = fileFormat
-    val schema = data.schema
-
+  private def writeFiles(data: DataFrame): Array[Path] = {
     val file = new Path(basePath, UUID.randomUUID().toString).toUri.toString
     data.write.parquet(file)
-    sqlContext.read
+    sparkSession.read
         .schema(data.schema)
         .parquet(file)
         .inputFiles
         .map(new Path(_))
         .filterNot(_.getName.startsWith("_"))
-        .map(_.toUri.toString)
   }
 
   override def toString: String = s"FileSink[$path]"

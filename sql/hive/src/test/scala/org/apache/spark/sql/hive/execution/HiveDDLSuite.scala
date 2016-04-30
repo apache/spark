@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive.execution
 
+import java.io.File
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, SaveMode}
@@ -34,7 +36,7 @@ class HiveDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     val expectedTablePath =
       hiveContext.sessionState.catalog.hiveDefaultTableFilePath(tableIdentifier)
     val filesystemPath = new Path(expectedTablePath)
-    val fs = filesystemPath.getFileSystem(sparkContext.hadoopConfiguration)
+    val fs = filesystemPath.getFileSystem(hiveContext.sessionState.newHadoopConf())
     fs.exists(filesystemPath)
   }
 
@@ -71,7 +73,7 @@ class HiveDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           hiveContext.sessionState.catalog
             .getTableMetadata(TableIdentifier(tabName, Some("default")))
         // It is a managed table, although it uses external in SQL
-        assert(hiveTable.tableType == CatalogTableType.MANAGED_TABLE)
+        assert(hiveTable.tableType == CatalogTableType.MANAGED)
 
         assert(tmpDir.listFiles.nonEmpty)
         sql(s"DROP TABLE $tabName")
@@ -100,12 +102,93 @@ class HiveDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           hiveContext.sessionState.catalog
             .getTableMetadata(TableIdentifier(tabName, Some("default")))
         // This data source table is external table
-        assert(hiveTable.tableType == CatalogTableType.EXTERNAL_TABLE)
+        assert(hiveTable.tableType == CatalogTableType.EXTERNAL)
 
         assert(tmpDir.listFiles.nonEmpty)
         sql(s"DROP TABLE $tabName")
         // The data are not deleted since the table type is EXTERNAL
         assert(tmpDir.listFiles.nonEmpty)
+      }
+    }
+  }
+
+  test("create table and view with comment") {
+    val catalog = hiveContext.sessionState.catalog
+    val tabName = "tab1"
+    withTable(tabName) {
+      sql(s"CREATE TABLE $tabName(c1 int) COMMENT 'BLABLA'")
+      val viewName = "view1"
+      withView(viewName) {
+        sql(s"CREATE VIEW $viewName COMMENT 'no comment' AS SELECT * FROM $tabName")
+        val tableMetadata = catalog.getTableMetadata(TableIdentifier(tabName, Some("default")))
+        val viewMetadata = catalog.getTableMetadata(TableIdentifier(viewName, Some("default")))
+        assert(tableMetadata.properties.get("comment") == Option("BLABLA"))
+        assert(viewMetadata.properties.get("comment") == Option("no comment"))
+      }
+    }
+  }
+
+  test("add/drop partitions - external table") {
+    val catalog = hiveContext.sessionState.catalog
+    withTempDir { tmpDir =>
+      val basePath = tmpDir.getCanonicalPath
+      val partitionPath_1stCol_part1 = new File(basePath + "/ds=2008-04-08")
+      val partitionPath_1stCol_part2 = new File(basePath + "/ds=2008-04-09")
+      val partitionPath_part1 = new File(basePath + "/ds=2008-04-08/hr=11")
+      val partitionPath_part2 = new File(basePath + "/ds=2008-04-09/hr=11")
+      val partitionPath_part3 = new File(basePath + "/ds=2008-04-08/hr=12")
+      val partitionPath_part4 = new File(basePath + "/ds=2008-04-09/hr=12")
+      val dirSet =
+        tmpDir :: partitionPath_1stCol_part1 :: partitionPath_1stCol_part2 ::
+          partitionPath_part1 :: partitionPath_part2 :: partitionPath_part3 ::
+          partitionPath_part4 :: Nil
+
+      val externalTab = "extTable_with_partitions"
+      withTable(externalTab) {
+        assert(tmpDir.listFiles.isEmpty)
+        sql(
+          s"""
+             |CREATE EXTERNAL TABLE $externalTab (key INT, value STRING)
+             |PARTITIONED BY (ds STRING, hr STRING)
+             |LOCATION '$basePath'
+          """.stripMargin)
+
+        // Before data insertion, all the directory are empty
+        assert(dirSet.forall(dir => dir.listFiles == null || dir.listFiles.isEmpty))
+
+        for (ds <- Seq("2008-04-08", "2008-04-09"); hr <- Seq("11", "12")) {
+          sql(
+            s"""
+               |INSERT OVERWRITE TABLE $externalTab
+               |partition (ds='$ds',hr='$hr')
+               |SELECT 1, 'a'
+             """.stripMargin)
+        }
+
+        val hiveTable = catalog.getTableMetadata(TableIdentifier(externalTab, Some("default")))
+        assert(hiveTable.tableType == CatalogTableType.EXTERNAL)
+        // After data insertion, all the directory are not empty
+        assert(dirSet.forall(dir => dir.listFiles.nonEmpty))
+
+        sql(
+          s"""
+             |ALTER TABLE $externalTab DROP PARTITION (ds='2008-04-08'),
+             |PARTITION (ds='2008-04-09', hr='12')
+          """.stripMargin)
+        assert(catalog.listPartitions(TableIdentifier(externalTab)).map(_.spec).toSet ==
+          Set(Map("ds" -> "2008-04-09", "hr" -> "11")))
+        // drop partition will not delete the data of external table
+        assert(dirSet.forall(dir => dir.listFiles.nonEmpty))
+
+        sql(s"ALTER TABLE $externalTab ADD PARTITION (ds='2008-04-08', hr='12')")
+        assert(catalog.listPartitions(TableIdentifier(externalTab)).map(_.spec).toSet ==
+          Set(Map("ds" -> "2008-04-08", "hr" -> "12"), Map("ds" -> "2008-04-09", "hr" -> "11")))
+        // add partition will not delete the data
+        assert(dirSet.forall(dir => dir.listFiles.nonEmpty))
+
+        sql(s"DROP TABLE $externalTab")
+        // drop table will not delete the data of external table
+        assert(dirSet.forall(dir => dir.listFiles.nonEmpty))
       }
     }
   }
@@ -127,6 +210,118 @@ class HiveDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
         assert(tableDirectoryExists(TableIdentifier(tabName)))
         sql(s"DROP VIEW IF EXISTS $viewName")
+      }
+    }
+  }
+
+  test("alter views - rename") {
+    val tabName = "tab1"
+    withTable(tabName) {
+      sqlContext.range(10).write.saveAsTable(tabName)
+      val oldViewName = "view1"
+      val newViewName = "view2"
+      withView(oldViewName, newViewName) {
+        val catalog = hiveContext.sessionState.catalog
+        sql(s"CREATE VIEW $oldViewName AS SELECT * FROM $tabName")
+
+        assert(catalog.tableExists(TableIdentifier(oldViewName)))
+        assert(!catalog.tableExists(TableIdentifier(newViewName)))
+        sql(s"ALTER VIEW $oldViewName RENAME TO $newViewName")
+        assert(!catalog.tableExists(TableIdentifier(oldViewName)))
+        assert(catalog.tableExists(TableIdentifier(newViewName)))
+      }
+    }
+  }
+
+  test("alter views - set/unset tblproperties") {
+    val tabName = "tab1"
+    withTable(tabName) {
+      sqlContext.range(10).write.saveAsTable(tabName)
+      val viewName = "view1"
+      withView(viewName) {
+        val catalog = hiveContext.sessionState.catalog
+        sql(s"CREATE VIEW $viewName AS SELECT * FROM $tabName")
+
+        assert(catalog.getTableMetadata(TableIdentifier(viewName))
+          .properties.filter(_._1 != "transient_lastDdlTime") == Map())
+        sql(s"ALTER VIEW $viewName SET TBLPROPERTIES ('p' = 'an')")
+        assert(catalog.getTableMetadata(TableIdentifier(viewName))
+          .properties.filter(_._1 != "transient_lastDdlTime") == Map("p" -> "an"))
+
+        // no exception or message will be issued if we set it again
+        sql(s"ALTER VIEW $viewName SET TBLPROPERTIES ('p' = 'an')")
+        assert(catalog.getTableMetadata(TableIdentifier(viewName))
+          .properties.filter(_._1 != "transient_lastDdlTime") == Map("p" -> "an"))
+
+        // the value will be updated if we set the same key to a different value
+        sql(s"ALTER VIEW $viewName SET TBLPROPERTIES ('p' = 'b')")
+        assert(catalog.getTableMetadata(TableIdentifier(viewName))
+          .properties.filter(_._1 != "transient_lastDdlTime") == Map("p" -> "b"))
+
+        sql(s"ALTER VIEW $viewName UNSET TBLPROPERTIES ('p')")
+        assert(catalog.getTableMetadata(TableIdentifier(viewName))
+          .properties.filter(_._1 != "transient_lastDdlTime") == Map())
+
+        val message = intercept[AnalysisException] {
+          sql(s"ALTER VIEW $viewName UNSET TBLPROPERTIES ('p')")
+        }.getMessage
+        assert(message.contains(
+          "attempted to unset non-existent property 'p' in table '`view1`'"))
+      }
+    }
+  }
+
+  test("alter views and alter table - misuse") {
+    val tabName = "tab1"
+    withTable(tabName) {
+      sqlContext.range(10).write.saveAsTable(tabName)
+      val oldViewName = "view1"
+      val newViewName = "view2"
+      withView(oldViewName, newViewName) {
+        val catalog = hiveContext.sessionState.catalog
+        sql(s"CREATE VIEW $oldViewName AS SELECT * FROM $tabName")
+
+        assert(catalog.tableExists(TableIdentifier(tabName)))
+        assert(catalog.tableExists(TableIdentifier(oldViewName)))
+
+        var message = intercept[AnalysisException] {
+          sql(s"ALTER VIEW $tabName RENAME TO $newViewName")
+        }.getMessage
+        assert(message.contains(
+          "Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead"))
+
+        message = intercept[AnalysisException] {
+          sql(s"ALTER VIEW $tabName SET TBLPROPERTIES ('p' = 'an')")
+        }.getMessage
+        assert(message.contains(
+          "Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead"))
+
+        message = intercept[AnalysisException] {
+          sql(s"ALTER VIEW $tabName UNSET TBLPROPERTIES ('p')")
+        }.getMessage
+        assert(message.contains(
+          "Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead"))
+
+        message = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $oldViewName RENAME TO $newViewName")
+        }.getMessage
+        assert(message.contains(
+          "Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead"))
+
+        message = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $oldViewName SET TBLPROPERTIES ('p' = 'an')")
+        }.getMessage
+        assert(message.contains(
+          "Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead"))
+
+        message = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $oldViewName UNSET TBLPROPERTIES ('p')")
+        }.getMessage
+        assert(message.contains(
+          "Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead"))
+
+        assert(catalog.tableExists(TableIdentifier(tabName)))
+        assert(catalog.tableExists(TableIdentifier(oldViewName)))
       }
     }
   }

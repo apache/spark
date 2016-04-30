@@ -179,6 +179,7 @@ object FunctionRegistry {
     expression[Atan]("atan"),
     expression[Atan2]("atan2"),
     expression[Bin]("bin"),
+    expression[BRound]("bround"),
     expression[Cbrt]("cbrt"),
     expression[Ceil]("ceil"),
     expression[Ceil]("ceiling"),
@@ -328,6 +329,7 @@ object FunctionRegistry {
     expression[SortArray]("sort_array"),
 
     // misc functions
+    expression[AssertTrue]("assert_true"),
     expression[Crc32]("crc32"),
     expression[Md5]("md5"),
     expression[Murmur3Hash]("hash"),
@@ -337,6 +339,7 @@ object FunctionRegistry {
     expression[SparkPartitionID]("spark_partition_id"),
     expression[InputFileName]("input_file_name"),
     expression[MonotonicallyIncreasingID]("monotonically_increasing_id"),
+    expression[CurrentDatabase]("current_database"),
 
     // grouping sets
     expression[Cube]("cube"),
@@ -360,6 +363,7 @@ object FunctionRegistry {
     expression[Not]("not"),
     expression[Or]("or"),
 
+    // comparison operators
     expression[EqualNullSafe]("<=>"),
     expression[EqualTo]("="),
     expression[EqualTo]("=="),
@@ -384,7 +388,7 @@ object FunctionRegistry {
   }
 
   /** See usage above. */
-  def expression[T <: Expression](name: String)
+  private def expression[T <: Expression](name: String)
       (implicit tag: ClassTag[T]): (String, (ExpressionInfo, FunctionBuilder)) = {
 
     // See if we can find a constructor that accepts Seq[Expression]

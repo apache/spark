@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.util.StringUtils
  * All public methods should be synchronized for thread-safety.
  */
 class InMemoryCatalog extends ExternalCatalog {
-  import ExternalCatalog._
+  import CatalogTypes.TablePartitionSpec
 
   private class TableDesc(var table: CatalogTable) {
     val partitions = new mutable.HashMap[TablePartitionSpec, CatalogTablePartition]
@@ -62,7 +62,7 @@ class InMemoryCatalog extends ExternalCatalog {
   private def requireTableExists(db: String, table: String): Unit = {
     if (!tableExists(db, table)) {
       throw new AnalysisException(
-        s"Table or View not found: '$table' does not exist in database '$db'")
+        s"Table or view not found: '$table' does not exist in database '$db'")
     }
   }
 
@@ -205,6 +205,27 @@ class InMemoryCatalog extends ExternalCatalog {
     StringUtils.filterPattern(listTables(db), pattern)
   }
 
+  override def loadTable(
+      db: String,
+      table: String,
+      loadPath: String,
+      isOverwrite: Boolean,
+      holdDDLTime: Boolean): Unit = {
+    throw new AnalysisException("loadTable is not implemented for InMemoryCatalog.")
+  }
+
+  override def loadPartition(
+      db: String,
+      table: String,
+      loadPath: String,
+      partition: TablePartitionSpec,
+      isOverwrite: Boolean,
+      holdDDLTime: Boolean,
+      inheritTableSpecs: Boolean,
+      isSkewedStoreAsSubdir: Boolean): Unit = {
+    throw new AnalysisException("loadPartition is not implemented for InMemoryCatalog.")
+  }
+
   // --------------------------------------------------------------------------
   // Partitions
   // --------------------------------------------------------------------------
@@ -279,8 +300,13 @@ class InMemoryCatalog extends ExternalCatalog {
 
   override def listPartitions(
       db: String,
-      table: String): Seq[CatalogTablePartition] = synchronized {
+      table: String,
+      partialSpec: Option[TablePartitionSpec] = None): Seq[CatalogTablePartition] = synchronized {
     requireTableExists(db, table)
+    if (partialSpec.nonEmpty) {
+      throw new AnalysisException("listPartition does not support partition spec in " +
+        "InMemoryCatalog.")
+    }
     catalog(db).tables(table).partitions.values.toSeq
   }
 

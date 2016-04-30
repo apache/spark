@@ -59,7 +59,7 @@ import org.apache.spark.util.Utils
  * @param bucketSpec An optional specification for bucketing (hash-partitioning) of the data.
  */
 case class DataSource(
-    sqlContext: SQLContext,
+    sparkSession: SparkSession,
     className: String,
     paths: Seq[String] = Nil,
     userSpecifiedSchema: Option[StructType] = None,
@@ -67,7 +67,10 @@ case class DataSource(
     bucketSpec: Option[BucketSpec] = None,
     options: Map[String, String] = Map.empty) extends Logging {
 
+  case class SourceInfo(name: String, schema: StructType)
+
   lazy val providingClass: Class[_] = lookupDataSource(className)
+  lazy val sourceInfo = sourceSchema()
 
   /** A map to maintain backward compatibility in case we move data sources around. */
   private val backwardCompatibilityMap = Map(
@@ -123,52 +126,73 @@ case class DataSource(
     }
   }
 
-  /** Returns a source that can be used to continually read data. */
-  def createSource(): Source = {
+  private def inferFileFormatSchema(format: FileFormat): StructType = {
+    userSpecifiedSchema.orElse {
+      val caseInsensitiveOptions = new CaseInsensitiveMap(options)
+      val allPaths = caseInsensitiveOptions.get("path")
+      val globbedPaths = allPaths.toSeq.flatMap { path =>
+        val hdfsPath = new Path(path)
+        val fs = hdfsPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
+        val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+        SparkHadoopUtil.get.globPathIfNecessary(qualified)
+      }.toArray
+      val fileCatalog: FileCatalog = new HDFSFileCatalog(sparkSession, options, globbedPaths, None)
+      format.inferSchema(
+        sparkSession,
+        caseInsensitiveOptions,
+        fileCatalog.allFiles())
+    }.getOrElse {
+      throw new AnalysisException("Unable to infer schema. It must be specified manually.")
+    }
+  }
+
+  /** Returns the name and schema of the source that can be used to continually read data. */
+  private def sourceSchema(): SourceInfo = {
     providingClass.newInstance() match {
       case s: StreamSourceProvider =>
-        s.createSource(sqlContext, userSpecifiedSchema, className, options)
+        val (name, schema) = s.sourceSchema(
+          sparkSession.wrapped, userSpecifiedSchema, className, options)
+        SourceInfo(name, schema)
 
       case format: FileFormat =>
         val caseInsensitiveOptions = new CaseInsensitiveMap(options)
         val path = caseInsensitiveOptions.getOrElse("path", {
           throw new IllegalArgumentException("'path' is not specified")
         })
-        val metadataPath = caseInsensitiveOptions.getOrElse("metadataPath", s"$path/_metadata")
+        SourceInfo(s"FileSource[$path]", inferFileFormatSchema(format))
 
-        val allPaths = caseInsensitiveOptions.get("path")
-        val globbedPaths = allPaths.toSeq.flatMap { path =>
-          val hdfsPath = new Path(path)
-          val fs = hdfsPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
-          val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-          SparkHadoopUtil.get.globPathIfNecessary(qualified)
-        }.toArray
+      case _ =>
+        throw new UnsupportedOperationException(
+          s"Data source $className does not support streamed reading")
+    }
+  }
 
-        val fileCatalog: FileCatalog = new HDFSFileCatalog(sqlContext, options, globbedPaths, None)
-        val dataSchema = userSpecifiedSchema.orElse {
-          format.inferSchema(
-            sqlContext,
-            caseInsensitiveOptions,
-            fileCatalog.allFiles())
-        }.getOrElse {
-          throw new AnalysisException("Unable to infer schema.  It must be specified manually.")
-        }
+  /** Returns a source that can be used to continually read data. */
+  def createSource(metadataPath: String): Source = {
+    providingClass.newInstance() match {
+      case s: StreamSourceProvider =>
+        s.createSource(sparkSession.wrapped, metadataPath, userSpecifiedSchema, className, options)
+
+      case format: FileFormat =>
+        val caseInsensitiveOptions = new CaseInsensitiveMap(options)
+        val path = caseInsensitiveOptions.getOrElse("path", {
+          throw new IllegalArgumentException("'path' is not specified")
+        })
 
         def dataFrameBuilder(files: Array[String]): DataFrame = {
-          Dataset.ofRows(
-            sqlContext,
-            LogicalRelation(
-              DataSource(
-                sqlContext,
-                paths = files,
-                userSpecifiedSchema = Some(dataSchema),
-                className = className,
-                options =
-                  new CaseInsensitiveMap(options.filterKeys(_ != "path"))).resolveRelation()))
+          val newOptions = options.filterKeys(_ != "path") + ("basePath" -> path)
+          val newDataSource =
+            DataSource(
+              sparkSession,
+              paths = files,
+              userSpecifiedSchema = Some(sourceInfo.schema),
+              className = className,
+              options = new CaseInsensitiveMap(newOptions))
+          Dataset.ofRows(sparkSession, LogicalRelation(newDataSource.resolveRelation()))
         }
 
         new FileStreamSource(
-          sqlContext, metadataPath, path, Some(dataSchema), className, dataFrameBuilder)
+          sparkSession, metadataPath, path, sourceInfo.schema, dataFrameBuilder)
       case _ =>
         throw new UnsupportedOperationException(
           s"Data source $className does not support streamed reading")
@@ -178,14 +202,14 @@ case class DataSource(
   /** Returns a sink that can be used to continually write data. */
   def createSink(): Sink = {
     providingClass.newInstance() match {
-      case s: StreamSinkProvider => s.createSink(sqlContext, options, partitionColumns)
+      case s: StreamSinkProvider => s.createSink(sparkSession.wrapped, options, partitionColumns)
       case format: FileFormat =>
         val caseInsensitiveOptions = new CaseInsensitiveMap(options)
         val path = caseInsensitiveOptions.getOrElse("path", {
           throw new IllegalArgumentException("'path' is not specified")
         })
 
-        new FileStreamSink(sqlContext, path, format)
+        new FileStreamSink(sparkSession, path, format)
       case _ =>
         throw new UnsupportedOperationException(
           s"Data source $className does not support streamed writing")
@@ -201,7 +225,7 @@ case class DataSource(
       case Seq(singlePath) =>
         try {
           val hdfsPath = new Path(singlePath)
-          val fs = hdfsPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
+          val fs = hdfsPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
           val metadataPath = new Path(hdfsPath, FileStreamSink.metadataDir)
           val res = fs.exists(metadataPath)
           res
@@ -220,9 +244,9 @@ case class DataSource(
     val relation = (providingClass.newInstance(), userSpecifiedSchema) match {
       // TODO: Throw when too much is given.
       case (dataSource: SchemaRelationProvider, Some(schema)) =>
-        dataSource.createRelation(sqlContext, caseInsensitiveOptions, schema)
+        dataSource.createRelation(sparkSession.wrapped, caseInsensitiveOptions, schema)
       case (dataSource: RelationProvider, None) =>
-        dataSource.createRelation(sqlContext, caseInsensitiveOptions)
+        dataSource.createRelation(sparkSession.wrapped, caseInsensitiveOptions)
       case (_: SchemaRelationProvider, None) =>
         throw new AnalysisException(s"A schema needs to be specified when using $className.")
       case (_: RelationProvider, Some(_)) =>
@@ -233,11 +257,10 @@ case class DataSource(
       case (format: FileFormat, _)
           if hasMetadata(caseInsensitiveOptions.get("path").toSeq ++ paths) =>
         val basePath = new Path((caseInsensitiveOptions.get("path").toSeq ++ paths).head)
-        val fileCatalog =
-          new StreamFileCatalog(sqlContext, basePath)
+        val fileCatalog = new StreamFileCatalog(sparkSession, basePath)
         val dataSchema = userSpecifiedSchema.orElse {
           format.inferSchema(
-            sqlContext,
+            sparkSession,
             caseInsensitiveOptions,
             fileCatalog.allFiles())
         }.getOrElse {
@@ -247,7 +270,7 @@ case class DataSource(
         }
 
         HadoopFsRelation(
-          sqlContext,
+          sparkSession,
           fileCatalog,
           partitionSchema = fileCatalog.partitionSpec().partitionColumns,
           dataSchema = dataSchema,
@@ -260,7 +283,7 @@ case class DataSource(
         val allPaths = caseInsensitiveOptions.get("path") ++ paths
         val globbedPaths = allPaths.flatMap { path =>
           val hdfsPath = new Path(path)
-          val fs = hdfsPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
+          val fs = hdfsPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
           val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
           val globPath = SparkHadoopUtil.get.globPathIfNecessary(qualified)
 
@@ -287,23 +310,33 @@ case class DataSource(
         }
 
         val fileCatalog: FileCatalog =
-          new HDFSFileCatalog(sqlContext, options, globbedPaths, partitionSchema)
-        val dataSchema = userSpecifiedSchema.orElse {
+          new HDFSFileCatalog(sparkSession, options, globbedPaths, partitionSchema)
+
+        val dataSchema = userSpecifiedSchema.map { schema =>
+          val equality =
+            if (sparkSession.sessionState.conf.caseSensitiveAnalysis) {
+              org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
+            } else {
+              org.apache.spark.sql.catalyst.analysis.caseInsensitiveResolution
+            }
+
+          StructType(schema.filterNot(f => partitionColumns.exists(equality(_, f.name))))
+        }.orElse {
           format.inferSchema(
-            sqlContext,
+            sparkSession,
             caseInsensitiveOptions,
             fileCatalog.allFiles())
         }.getOrElse {
           throw new AnalysisException(
             s"Unable to infer schema for $format at ${allPaths.take(2).mkString(",")}. " +
-            "It must be specified manually")
+              "It must be specified manually")
         }
 
         val enrichedOptions =
-          format.prepareRead(sqlContext, caseInsensitiveOptions, fileCatalog.allFiles())
+          format.prepareRead(sparkSession, caseInsensitiveOptions, fileCatalog.allFiles())
 
         HadoopFsRelation(
-          sqlContext,
+          sparkSession,
           fileCatalog,
           partitionSchema = fileCatalog.partitionSpec().partitionColumns,
           dataSchema = dataSchema.asNullable,
@@ -329,7 +362,7 @@ case class DataSource(
 
     providingClass.newInstance() match {
       case dataSource: CreatableRelationProvider =>
-        dataSource.createRelation(sqlContext, mode, options, data)
+        dataSource.createRelation(sparkSession.wrapped, mode, options, data)
       case format: FileFormat =>
         // Don't glob path for the write path.  The contracts here are:
         //  1. Only one output path can be specified on the write path;
@@ -340,11 +373,11 @@ case class DataSource(
           val path = new Path(caseInsensitiveOptions.getOrElse("path", {
             throw new IllegalArgumentException("'path' is not specified")
           }))
-          val fs = path.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
+          val fs = path.getFileSystem(sparkSession.sessionState.newHadoopConf())
           path.makeQualified(fs.getUri, fs.getWorkingDirectory)
         }
 
-        val caseSensitive = sqlContext.conf.caseSensitiveAnalysis
+        val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
         PartitioningUtils.validatePartitionColumnDataTypes(
           data.schema, partitionColumns, caseSensitive)
 
@@ -387,7 +420,7 @@ case class DataSource(
             options,
             data.logicalPlan,
             mode)
-        sqlContext.executePlan(plan).toRdd
+        sparkSession.executePlan(plan).toRdd
 
       case _ =>
         sys.error(s"${providingClass.getCanonicalName} does not allow create table as select.")

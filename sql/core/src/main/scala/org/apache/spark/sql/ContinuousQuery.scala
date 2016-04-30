@@ -35,10 +35,10 @@ trait ContinuousQuery {
   def name: String
 
   /**
-   * Returns the SQLContext associated with `this` query
+   * Returns the [[SparkSession]] associated with `this`.
    * @since 2.0.0
    */
-  def sqlContext: SQLContext
+  def sparkSession: SparkSession
 
   /**
    * Whether the query is currently active or not
@@ -56,7 +56,7 @@ trait ContinuousQuery {
    * Returns current status of all the sources.
    * @since 2.0.0
    */
-   def sourceStatuses: Array[SourceStatus]
+  def sourceStatuses: Array[SourceStatus]
 
   /** Returns current status of the sink. */
   def sinkStatus: SinkStatus
@@ -77,7 +77,7 @@ trait ContinuousQuery {
 
   /**
    * Waits for the termination of `this` query, either by `query.stop()` or by an exception.
-   * If the query has terminated with an exception, then the exception will be throw.
+   * If the query has terminated with an exception, then the exception will be thrown.
    * Otherwise, it returns whether the query has terminated or not within the `timeoutMs`
    * milliseconds.
    *

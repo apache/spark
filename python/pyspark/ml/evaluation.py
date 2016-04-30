@@ -17,11 +17,10 @@
 
 from abc import abstractmethod, ABCMeta
 
-from pyspark import since
-from pyspark.ml.wrapper import JavaWrapper
-from pyspark.ml.param import Param, Params
+from pyspark import since, keyword_only
+from pyspark.ml.wrapper import JavaParams
+from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.param.shared import HasLabelCol, HasPredictionCol, HasRawPredictionCol
-from pyspark.ml.util import keyword_only
 from pyspark.mllib.common import inherit_doc
 
 __all__ = ['Evaluator', 'BinaryClassificationEvaluator', 'RegressionEvaluator',
@@ -81,7 +80,7 @@ class Evaluator(Params):
 
 
 @inherit_doc
-class JavaEvaluator(Evaluator, JavaWrapper):
+class JavaEvaluator(JavaParams, Evaluator):
     """
     Base class for :py:class:`Evaluator`s that wrap Java/Scala
     implementations.
@@ -125,7 +124,8 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
     """
 
     metricName = Param(Params._dummy(), "metricName",
-                       "metric name in evaluation (areaUnderROC|areaUnderPR)")
+                       "metric name in evaluation (areaUnderROC|areaUnderPR)",
+                       typeConverter=TypeConverters.toString)
 
     @keyword_only
     def __init__(self, rawPredictionCol="rawPrediction", labelCol="label",
@@ -147,7 +147,7 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
         """
         Sets the value of :py:attr:`metricName`.
         """
-        self._paramMap[self.metricName] = value
+        self._set(metricName=value)
         return self
 
     @since("1.4.0")
@@ -194,7 +194,8 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol):
     # when we evaluate a metric that is needed to minimize (e.g., `"rmse"`, `"mse"`, `"mae"`),
     # we take and output the negative of this metric.
     metricName = Param(Params._dummy(), "metricName",
-                       "metric name in evaluation (mse|rmse|r2|mae)")
+                       "metric name in evaluation (mse|rmse|r2|mae)",
+                       typeConverter=TypeConverters.toString)
 
     @keyword_only
     def __init__(self, predictionCol="prediction", labelCol="label",
@@ -216,7 +217,7 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol):
         """
         Sets the value of :py:attr:`metricName`.
         """
-        self._paramMap[self.metricName] = value
+        self._set(metricName=value)
         return self
 
     @since("1.4.0")
@@ -260,7 +261,8 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
     """
     metricName = Param(Params._dummy(), "metricName",
                        "metric name in evaluation "
-                       "(f1|precision|recall|weightedPrecision|weightedRecall)")
+                       "(f1|precision|recall|weightedPrecision|weightedRecall)",
+                       typeConverter=TypeConverters.toString)
 
     @keyword_only
     def __init__(self, predictionCol="prediction", labelCol="label",
@@ -282,7 +284,7 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
         """
         Sets the value of :py:attr:`metricName`.
         """
-        self._paramMap[self.metricName] = value
+        self._set(metricName=value)
         return self
 
     @since("1.5.0")
