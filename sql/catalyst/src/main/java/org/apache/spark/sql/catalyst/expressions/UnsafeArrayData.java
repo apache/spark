@@ -338,7 +338,7 @@ public final class UnsafeArrayData extends ArrayData {
   }
 
   public static UnsafeArrayData fromPrimitiveArray(int[] arr) {
-    int limit = (Integer.MAX_VALUE - 4) / 8
+    int limit = (Integer.MAX_VALUE - 4) / 8;
     if (arr.length > limit) {
       throw new UnsupportedOperationException("Cannot convert this array to unsafe format as " +
         "its length (" + arr.length + ") exceeds " + limit + ".");
@@ -368,7 +368,7 @@ public final class UnsafeArrayData extends ArrayData {
   }
 
   public static UnsafeArrayData fromPrimitiveArray(double[] arr) {
-    int limit = (Integer.MAX_VALUE - 4) / 12
+    int limit = (Integer.MAX_VALUE - 4) / 12;
     if (arr.length > limit) {
       throw new UnsupportedOperationException("Cannot convert this array to unsafe format as " +
         "its length (" + arr.length + ") exceeds " + limit + ".");
