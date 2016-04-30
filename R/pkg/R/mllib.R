@@ -279,7 +279,7 @@ setMethod("summary", signature(object = "NaiveBayesModel"),
 #' @export
 #' @examples
 #' \dontrun{
-#' model <- kmeans(x, centers = 2, initializationMode="random")
+#' model <- spark.kmeans(data, k = 2, initializationMode="random")
 #' }
 setMethod("spark.kmeans", signature(data = "SparkDataFrame"),
           function(data, k, maxIter = 10, initializationMode = c("random", "k-means||")) {
@@ -328,7 +328,7 @@ setMethod("fitted", signature(object = "KMeansModel"),
 #' @export
 #' @examples
 #' \dontrun{
-#' model <- kmeans(trainingData, 2)
+#' model <- spark.kmeans(trainingData, 2)
 #' summary(model)
 #' }
 setMethod("summary", signature(object = "KMeansModel"),
@@ -362,7 +362,7 @@ setMethod("summary", signature(object = "KMeansModel"),
 #' @export
 #' @examples
 #' \dontrun{
-#' model <- kmeans(trainingData, 2)
+#' model <- spark.kmeans(trainingData, 2)
 #' predicted <- predict(model, testData)
 #' showDF(predicted)
 #' }
@@ -434,7 +434,7 @@ setMethod("ml.save", signature(object = "NaiveBayesModel", path = "character"),
 #' @export
 #' @examples
 #' \dontrun{
-#' model <- survreg(Surv(futime, fustat) ~ ecog_ps + rx, trainingData)
+#' model <- spark.survreg(trainingData, Surv(futime, fustat) ~ ecog_ps + rx)
 #' path <- "path/to/model"
 #' ml.save(model, path)
 #' }
@@ -484,7 +484,7 @@ setMethod("ml.save", signature(object = "GeneralizedLinearRegressionModel", path
 #' @export
 #' @examples
 #' \dontrun{
-#' model <- kmeans(x, centers = 2, algorithm="random")
+#' model <- spark.kmeans(x, k = 2, initializationMode="random")
 #' path <- "path/to/model"
 #' ml.save(model, path)
 #' }
@@ -562,7 +562,7 @@ setMethod("spark.survreg", signature(data = "SparkDataFrame", formula = "formula
 #' @export
 #' @examples
 #' \dontrun{
-#' model <- survreg(Surv(futime, fustat) ~ ecog_ps + rx, trainingData)
+#' model <- spark.survreg(trainingData, Surv(futime, fustat) ~ ecog_ps + rx)
 #' summary(model)
 #' }
 setMethod("summary", signature(object = "AFTSurvivalRegressionModel"),
@@ -587,7 +587,7 @@ setMethod("summary", signature(object = "AFTSurvivalRegressionModel"),
 #' @export
 #' @examples
 #' \dontrun{
-#' model <- survreg(Surv(futime, fustat) ~ ecog_ps + rx, trainingData)
+#' model <- spark.survreg(trainingData, Surv(futime, fustat) ~ ecog_ps + rx)
 #' predicted <- predict(model, testData)
 #' showDF(predicted)
 #' }
