@@ -292,7 +292,7 @@ private[sql] object InferSchema {
             newFields += fields2(f2Idx)
             f2Idx += 1
           }
-          StructType(newFields.toSeq)
+          StructType(newFields)
 
         case (ArrayType(elementType1, containsNull1), ArrayType(elementType2, containsNull2)) =>
           ArrayType(compatibleType(elementType1, elementType2), containsNull1 || containsNull2)
