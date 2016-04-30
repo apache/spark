@@ -307,7 +307,7 @@ setMethod("spark.kmeans", signature(data = "SparkDataFrame", formula = "formula"
 #' @export
 #' @examples
 #' \dontrun{
-#' model <- spark.kmeans(trainingData, 2)
+#' model <- spark.kmeans(trainingData, ~ ., 2)
 #' fitted.model <- fitted(model)
 #' showDF(fitted.model)
 #'}
@@ -334,7 +334,7 @@ setMethod("fitted", signature(object = "KMeansModel"),
 #' @export
 #' @examples
 #' \dontrun{
-#' model <- spark.kmeans(trainingData, 2)
+#' model <- spark.kmeans(trainingData, ~ ., 2)
 #' summary(model)
 #' }
 setMethod("summary", signature(object = "KMeansModel"),
@@ -368,7 +368,7 @@ setMethod("summary", signature(object = "KMeansModel"),
 #' @export
 #' @examples
 #' \dontrun{
-#' model <- spark.kmeans(trainingData, 2)
+#' model <- spark.kmeans(trainingData, ~ ., 2)
 #' predicted <- predict(model, testData)
 #' showDF(predicted)
 #' }
@@ -415,7 +415,7 @@ setMethod("spark.naiveBayes", signature(data = "SparkDataFrame", formula = "form
 #' @examples
 #' \dontrun{
 #' df <- createDataFrame(sqlContext, infert)
-#' model <- spark.naiveBayes(education ~ ., df, laplace = 0)
+#' model <- spark.naiveBayes(df, education ~ ., laplace = 0)
 #' path <- "path/to/model"
 #' write.ml(model, path)
 #' }
@@ -490,7 +490,7 @@ setMethod("write.ml", signature(object = "GeneralizedLinearRegressionModel", pat
 #' @export
 #' @examples
 #' \dontrun{
-#' model <- spark.kmeans(x, k = 2, initializationMode="random")
+#' model <- spark.kmeans(trainingData, ~ ., centers = 2)
 #' path <- "path/to/model"
 #' write.ml(model, path)
 #' }
@@ -546,7 +546,7 @@ read.ml <- function(path) {
 #' @examples
 #' \dontrun{
 #' df <- createDataFrame(sqlContext, ovarian)
-#' model <- spark.survreg(Surv(df, futime, fustat) ~ ecog_ps + rx)
+#' model <- spark.survreg(df, Surv(futime, fustat) ~ ecog_ps + rx)
 #' }
 setMethod("spark.survreg", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, ...) {
