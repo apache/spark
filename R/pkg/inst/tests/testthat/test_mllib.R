@@ -284,6 +284,42 @@ test_that("glm save/load", {
   unlink(modelPath)
 })
 
+test_that("spark.kmeans", {
+  newIris <- iris
+  newIris$Species <- NULL
+  training <- suppressWarnings(createDataFrame(sqlContext, newIris))
+
+  take(training, 1)
+
+  model <- spark.kmeans(training, k = 2)
+  sample <- take(select(predict(model, training), "prediction"), 1)
+  expect_equal(typeof(sample$prediction), "integer")
+  expect_equal(sample$prediction, 1)
+
+  # Test fitted works on KMeans
+  fitted.model <- fitted(model)
+  expect_equal(sort(collect(distinct(select(fitted.model, "prediction")))$prediction), c(0, 1))
+
+  # Test summary works on KMeans
+  summary.model <- summary(model)
+  cluster <- summary.model$cluster
+  expect_equal(sort(collect(distinct(select(cluster, "prediction")))$prediction), c(0, 1))
+
+  # Test model save/load
+  modelPath <- tempfile(pattern = "kmeans", fileext = ".tmp")
+  ml.save(model, modelPath)
+  expect_error(ml.save(model, modelPath))
+  ml.save(model, modelPath, overwrite = TRUE)
+  model2 <- ml.load(modelPath)
+  summary2 <- summary(model2)
+  expect_equal(sort(unlist(summary.model$size)), sort(unlist(summary2$size)))
+  expect_equal(summary.model$coefficients, summary2$coefficients)
+  expect_true(!summary.model$is.loaded)
+  expect_true(summary2$is.loaded)
+
+  unlink(modelPath)
+})
+
 test_that("kmeans", {
   newIris <- iris
   newIris$Species <- NULL
