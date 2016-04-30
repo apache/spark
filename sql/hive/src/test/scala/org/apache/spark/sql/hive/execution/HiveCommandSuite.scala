@@ -18,8 +18,8 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
-import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
-import org.apache.spark.sql.hive.test.{TestHive, TestHiveSingleton}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, NoSuchTableException}
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 
 class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
@@ -63,8 +63,8 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     sql("CREATE VIEW parquet_view1 as select * from parquet_tab4")
     sql(
        """
-         |create table tab_complex (col1 map <int, string>,
-         |col2 struct <f1: int, f2: String>, col3 map<int, struct<f3: int, f4: string>>)
+         |CREATE TABLE tab_complex (col1 map <int, string>,
+         |col2 struct <f1:int, f2:String >, col3 map<int, struct<f3: int, f4: string>>)
        """.stripMargin)
   }
 
@@ -159,23 +159,22 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
   }
 
   test("describe table - negative tests") {
-    val message1 = intercept[AnalysisException] {
-      sql("DESCRIBE badtable")
+    val message1 = intercept[NoSuchTableException] {
+      sql("DESCRIBE bad_table")
     }.getMessage
-    assert(message1.contains("Table or View badtable not found"))
+    assert(message1.contains("Table or View bad_table not found"))
     val message2 = intercept[AnalysisException] {
       sql("DESCRIBE parquet_tab2 PARTITION (day=31)")
     }.getMessage
-    assert(message2.contains("Non-partitioned column(s) [day] are specified"))
+    assert(message2.contains("table is not partitioned but partition spec exists: {day=31}"))
     val message3 = intercept[AnalysisException] {
       sql("DESCRIBE parquet_tab4 PARTITION (Year=2000, month='10')")
     }.getMessage
-    assert(message3.contains("partition to describe 'Map(year -> 2000, month -> 10)'" +
-      " does not exist in table"))
+    assert(message3.contains("Partition not found in table parquet_tab4 database default"))
     val message4 = intercept[AnalysisException] {
       sql("DESCRIBE parquet_tab2 invalidCol")
     }.getMessage
-    assert(message4.contains("Error in getting fields from serde.Invalid Field invalidCol"))
+    assert(message4.contains("Column name/path: invalidCol does not exist"))
   }
 
   test("describe column - nested") {

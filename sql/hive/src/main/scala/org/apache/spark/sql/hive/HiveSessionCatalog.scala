@@ -29,8 +29,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.catalog.{FunctionResourceLoader, SessionCatalog}
-import org.apache.spark.sql.catalyst.catalog.ExternalCatalog._
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, ExpressionInfo}
+import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
@@ -64,26 +63,6 @@ private[sql] class HiveSessionCatalog(
       // If an alias was specified by the lookup, wrap the plan in a subquery so that
       // attributes are properly qualified with this alias.
       alias.map(a => SubqueryAlias(a, tableWithQualifiers)).getOrElse(tableWithQualifiers)
-    }
-  }
-
-  /**
-   * Describes a table by returning various metadata pertaining to table/partitions/columns.
-   */
-  override def describeTable(
-      table: TableIdentifier,
-      partSpec: Option[TablePartitionSpec],
-      colPath: Option[String],
-      isExtended: Boolean,
-      output: Seq[Attribute]): Seq[(String, String, String)] = {
-    val relation = lookupRelation(table)
-    relation match {
-      case r: MetastoreRelation =>
-        val db = table.database.getOrElse(currentDb)
-        val tableName = formatTableName(table.table)
-        client.describeTable(db, tableName, partSpec, colPath, isExtended, output)
-      case o: LogicalPlan =>
-        super.describeTable(table, partSpec, colPath, isExtended, output)
     }
   }
 

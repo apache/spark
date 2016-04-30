@@ -321,23 +321,6 @@ class SessionCatalog(
   }
 
   /**
-   * Describes a table by returning various metadata pertaining to table/partitions/columns.
-   */
-  def describeTable(
-      table: TableIdentifier,
-      partSpec: Option[TablePartitionSpec],
-      colPath: Option[String],
-      isExtended: Boolean,
-      output: Seq[Attribute]): Seq[(String, String, String)] = {
-    val relation = lookupRelation(table)
-    relation.schema.fields.map { field =>
-      val cmtKey = "comment"
-      val comment = if (field.metadata.contains(cmtKey)) field.metadata.getString(cmtKey) else ""
-      (field.name, field.dataType.simpleString, comment)
-    }
-  }
-
-  /**
    * Return whether a table with the specified name exists.
    *
    * Note: If a database is explicitly specified, then this will return whether the table
