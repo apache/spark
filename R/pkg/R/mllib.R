@@ -412,11 +412,33 @@ setMethod("predict", signature(object = "KMeansModel"),
 #'}
 setMethod("naiveBayes", signature(formula = "formula", data = "SparkDataFrame"),
           function(formula, data, laplace = 0, ...) {
-            formula <- paste(deparse(formula), collapse = "")
-            jobj <- callJStatic("org.apache.spark.ml.r.NaiveBayesWrapper", "fit",
-                                 formula, data@sdf, laplace)
-            return(new("NaiveBayesModel", jobj = jobj))
+            return(spark.naiveBayes(data, formula, laplace))
           })
+
+#' Fit a Bernoulli naive Bayes model
+#'
+#' Fit a Bernoulli naive Bayes model on a Spark DataFrame (only categorical data is supported).
+#'
+#' @param data SparkDataFrame for training
+#' @param object A symbolic description of the model to be fitted. Currently only a few formula
+#'               operators are supported, including '~', '.', ':', '+', and '-'.
+#' @param laplace Smoothing parameter
+#' @return a fitted naive Bayes model
+#' @rdname naiveBayes
+#' @seealso e1071: \url{https://cran.r-project.org/web/packages/e1071/}
+#' @export
+#' @examples
+#' \dontrun{
+#' df <- createDataFrame(sqlContext, infert)
+#' model <- naiveBayes(df, education ~ ., laplace = 0)
+#'}
+setMethod("spark.naiveBayes", signature(data = "SparkDataFrame", formula = "formula"),
+    function(data, formula, laplace = 0, ...) {
+        formula <- paste(deparse(formula), collapse = "")
+        jobj <- callJStatic("org.apache.spark.ml.r.NaiveBayesWrapper", "fit",
+          formula, data@sdf, laplace)
+        return(new("NaiveBayesModel", jobj = jobj))
+    })
 
 #' Save the Bernoulli naive Bayes model to the input path.
 #'
@@ -549,6 +571,31 @@ ml.load <- function(path) {
 
 #' Fit an accelerated failure time (AFT) survival regression model.
 #'
+#' Fit an accelerated failure time (AFT) survival regression model on a Spark DataFrame.
+#'
+#' @param data SparkDataFrame for training.
+#' @param formula A symbolic description of the model to be fitted. Currently only a few formula
+#'                operators are supported, including '~', ':', '+', and '-'.
+#'                Note that operator '.' is not supported currently.
+#' @return a fitted AFT survival regression model
+#' @rdname spark.survreg
+#' @seealso survival: \url{https://cran.r-project.org/web/packages/survival/}
+#' @export
+#' @examples
+#' \dontrun{
+#' df <- createDataFrame(sqlContext, ovarian)
+#' model <- spark.survreg(Surv(df, futime, fustat) ~ ecog_ps + rx)
+#' }
+setMethod("spark.survreg", signature(data = "SparkDataFrame", formula = "formula"),
+          function(data, formula, ...) {
+            formula <- paste(deparse(formula), collapse = "")
+            jobj <- callJStatic("org.apache.spark.ml.r.AFTSurvivalRegressionWrapper",
+                                "fit", formula, data@sdf)
+            return(new("AFTSurvivalRegressionModel", jobj = jobj))
+          })
+
+#' Fit an accelerated failure time (AFT) survival regression model.
+#'
 #' Fit an accelerated failure time (AFT) survival regression model, similarly to R's survreg().
 #'
 #' @param formula A symbolic description of the model to be fitted. Currently only a few formula
@@ -565,12 +612,9 @@ ml.load <- function(path) {
 #' model <- survreg(Surv(futime, fustat) ~ ecog_ps + rx, df)
 #' }
 setMethod("survreg", signature(formula = "formula", data = "SparkDataFrame"),
-          function(formula, data, ...) {
-            formula <- paste(deparse(formula), collapse = "")
-            jobj <- callJStatic("org.apache.spark.ml.r.AFTSurvivalRegressionWrapper",
-                                "fit", formula, data@sdf)
-            return(new("AFTSurvivalRegressionModel", jobj = jobj))
-          })
+    function(formula, data, ...) {
+      return(spark.survreg(data, formula))
+    })
 
 #' Get the summary of an AFT survival regression model
 #'
