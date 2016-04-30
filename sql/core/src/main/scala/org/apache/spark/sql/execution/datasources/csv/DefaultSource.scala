@@ -68,7 +68,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
 
     val parsedRdd = tokenRdd(sqlContext, csvOptions, header, paths)
     val schema = if (csvOptions.inferSchemaFlag) {
-      InferSchema.infer(parsedRdd, header, csvOptions.nullValue, csvOptions.dateFormat)
+      CSVInferSchema.infer(parsedRdd, header, csvOptions.nullValue, csvOptions.dateFormat)
     } else {
       // By default fields are assumed to be StringType
       val schemaFields = header.map { fieldName =>
