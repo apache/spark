@@ -26,9 +26,9 @@ import org.apache.hadoop.hive.metastore.api.FieldSchema
 import org.apache.hadoop.hive.ql.metadata.{Partition, Table => HiveTable}
 import org.apache.hadoop.hive.ql.plan.TableDesc
 
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable, CatalogTablePartition, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{AttributeMap, AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.parser.DataTypeParser
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
@@ -37,13 +37,13 @@ import org.apache.spark.sql.hive.client.HiveClient
 
 
 private[hive] case class MetastoreRelation(
-  databaseName: String,
-  tableName: String,
-  alias: Option[String])
-  (val table: CatalogTable,
-    @transient private val client: HiveClient,
-    @transient private val sqlContext: SQLContext)
-  extends LeafNode with MultiInstanceRelation with FileRelation {
+    databaseName: String,
+    tableName: String,
+    alias: Option[String])
+    (val catalogTable: CatalogTable,
+     @transient private val client: HiveClient,
+     @transient private val sparkSession: SparkSession)
+  extends LeafNode with MultiInstanceRelation with FileRelation with CatalogRelation {
 
   override def equals(other: Any): Boolean = other match {
     case relation: MetastoreRelation =>
@@ -58,7 +58,7 @@ private[hive] case class MetastoreRelation(
     Objects.hashCode(databaseName, tableName, alias, output)
   }
 
-  override protected def otherCopyArgs: Seq[AnyRef] = table :: sqlContext :: Nil
+  override protected def otherCopyArgs: Seq[AnyRef] = catalogTable :: sparkSession :: Nil
 
   private def toHiveColumn(c: CatalogColumn): FieldSchema = {
     new FieldSchema(c.name, c.dataType, c.comment.orNull)
@@ -69,40 +69,40 @@ private[hive] case class MetastoreRelation(
     // We start by constructing an API table as Hive performs several important transformations
     // internally when converting an API table to a QL table.
     val tTable = new org.apache.hadoop.hive.metastore.api.Table()
-    tTable.setTableName(table.identifier.table)
-    tTable.setDbName(table.database)
+    tTable.setTableName(catalogTable.identifier.table)
+    tTable.setDbName(catalogTable.database)
 
     val tableParameters = new java.util.HashMap[String, String]()
     tTable.setParameters(tableParameters)
-    table.properties.foreach { case (k, v) => tableParameters.put(k, v) }
+    catalogTable.properties.foreach { case (k, v) => tableParameters.put(k, v) }
 
-    tTable.setTableType(table.tableType match {
-      case CatalogTableType.EXTERNAL_TABLE => HiveTableType.EXTERNAL_TABLE.toString
-      case CatalogTableType.MANAGED_TABLE => HiveTableType.MANAGED_TABLE.toString
-      case CatalogTableType.INDEX_TABLE => HiveTableType.INDEX_TABLE.toString
-      case CatalogTableType.VIRTUAL_VIEW => HiveTableType.VIRTUAL_VIEW.toString
+    tTable.setTableType(catalogTable.tableType match {
+      case CatalogTableType.EXTERNAL => HiveTableType.EXTERNAL_TABLE.toString
+      case CatalogTableType.MANAGED => HiveTableType.MANAGED_TABLE.toString
+      case CatalogTableType.INDEX => HiveTableType.INDEX_TABLE.toString
+      case CatalogTableType.VIEW => HiveTableType.VIRTUAL_VIEW.toString
     })
 
     val sd = new org.apache.hadoop.hive.metastore.api.StorageDescriptor()
     tTable.setSd(sd)
 
     // Note: In Hive the schema and partition columns must be disjoint sets
-    val (partCols, schema) = table.schema.map(toHiveColumn).partition { c =>
-      table.partitionColumnNames.contains(c.getName)
+    val (partCols, schema) = catalogTable.schema.map(toHiveColumn).partition { c =>
+      catalogTable.partitionColumnNames.contains(c.getName)
     }
     sd.setCols(schema.asJava)
     tTable.setPartitionKeys(partCols.asJava)
 
-    table.storage.locationUri.foreach(sd.setLocation)
-    table.storage.inputFormat.foreach(sd.setInputFormat)
-    table.storage.outputFormat.foreach(sd.setOutputFormat)
+    catalogTable.storage.locationUri.foreach(sd.setLocation)
+    catalogTable.storage.inputFormat.foreach(sd.setInputFormat)
+    catalogTable.storage.outputFormat.foreach(sd.setOutputFormat)
 
     val serdeInfo = new org.apache.hadoop.hive.metastore.api.SerDeInfo
-    table.storage.serde.foreach(serdeInfo.setSerializationLib)
+    catalogTable.storage.serde.foreach(serdeInfo.setSerializationLib)
     sd.setSerdeInfo(serdeInfo)
 
     val serdeParameters = new java.util.HashMap[String, String]()
-    table.storage.serdeProperties.foreach { case (k, v) => serdeParameters.put(k, v) }
+    catalogTable.storage.serdeProperties.foreach { case (k, v) => serdeParameters.put(k, v) }
     serdeInfo.setParameters(serdeParameters)
 
     new HiveTable(tTable)
@@ -124,17 +124,17 @@ private[hive] case class MetastoreRelation(
         // if the size is still less than zero, we use default size
         Option(totalSize).map(_.toLong).filter(_ > 0)
           .getOrElse(Option(rawDataSize).map(_.toLong).filter(_ > 0)
-            .getOrElse(sqlContext.conf.defaultSizeInBytes)))
+            .getOrElse(sparkSession.sessionState.conf.defaultSizeInBytes)))
     }
   )
 
   // When metastore partition pruning is turned off, we cache the list of all partitions to
   // mimic the behavior of Spark < 1.5
-  private lazy val allPartitions: Seq[CatalogTablePartition] = client.getAllPartitions(table)
+  private lazy val allPartitions: Seq[CatalogTablePartition] = client.getPartitions(catalogTable)
 
   def getHiveQlPartitions(predicates: Seq[Expression] = Nil): Seq[Partition] = {
-    val rawPartitions = if (sqlContext.conf.metastorePartitionPruning) {
-      client.getPartitionsByFilter(table, predicates)
+    val rawPartitions = if (sparkSession.sessionState.conf.metastorePartitionPruning) {
+      client.getPartitionsByFilter(catalogTable, predicates)
     } else {
       allPartitions
     }
@@ -147,7 +147,7 @@ private[hive] case class MetastoreRelation(
 
       val sd = new org.apache.hadoop.hive.metastore.api.StorageDescriptor()
       tPartition.setSd(sd)
-      sd.setCols(table.schema.map(toHiveColumn).asJava)
+      sd.setCols(catalogTable.schema.map(toHiveColumn).asJava)
       p.storage.locationUri.foreach(sd.setLocation)
       p.storage.inputFormat.foreach(sd.setInputFormat)
       p.storage.outputFormat.foreach(sd.setOutputFormat)
@@ -158,7 +158,7 @@ private[hive] case class MetastoreRelation(
       p.storage.serde.foreach(serdeInfo.setSerializationLib)
 
       val serdeParameters = new java.util.HashMap[String, String]()
-      table.storage.serdeProperties.foreach { case (k, v) => serdeParameters.put(k, v) }
+      catalogTable.storage.serdeProperties.foreach { case (k, v) => serdeParameters.put(k, v) }
       p.storage.serdeProperties.foreach { case (k, v) => serdeParameters.put(k, v) }
       serdeInfo.setParameters(serdeParameters)
 
@@ -195,12 +195,12 @@ private[hive] case class MetastoreRelation(
   }
 
   /** PartitionKey attributes */
-  val partitionKeys = table.partitionColumns.map(_.toAttribute)
+  val partitionKeys = catalogTable.partitionColumns.map(_.toAttribute)
 
   /** Non-partitionKey attributes */
   // TODO: just make this hold the schema itself, not just non-partition columns
-  val attributes = table.schema
-    .filter { c => !table.partitionColumnNames.contains(c.name) }
+  val attributes = catalogTable.schema
+    .filter { c => !catalogTable.partitionColumnNames.contains(c.name) }
     .map(_.toAttribute)
 
   val output = attributes ++ partitionKeys
@@ -213,19 +213,19 @@ private[hive] case class MetastoreRelation(
 
   override def inputFiles: Array[String] = {
     val partLocations = client
-      .getPartitionsByFilter(table, Nil)
+      .getPartitionsByFilter(catalogTable, Nil)
       .flatMap(_.storage.locationUri)
       .toArray
     if (partLocations.nonEmpty) {
       partLocations
     } else {
       Array(
-        table.storage.locationUri.getOrElse(
-          sys.error(s"Could not get the location of ${table.qualifiedName}.")))
+        catalogTable.storage.locationUri.getOrElse(
+          sys.error(s"Could not get the location of ${catalogTable.qualifiedName}.")))
     }
   }
 
   override def newInstance(): MetastoreRelation = {
-    MetastoreRelation(databaseName, tableName, alias)(table, client, sqlContext)
+    MetastoreRelation(databaseName, tableName, alias)(catalogTable, client, sparkSession)
   }
 }

@@ -37,7 +37,6 @@ import org.apache.spark.sql.catalyst.analysis.{Append, OutputMode}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.util.Utils
 
@@ -67,12 +66,6 @@ import org.apache.spark.util.Utils
  */
 trait StreamTest extends QueryTest with Timeouts {
 
-  implicit class RichSource(s: Source) {
-    def toDF(): DataFrame = Dataset.ofRows(sqlContext, StreamingExecutionRelation(s))
-
-    def toDS[A: Encoder](): Dataset[A] = Dataset(sqlContext, StreamingExecutionRelation(s))
-  }
-
   /** How long to wait for an active stream to catch up when checking a result. */
   val streamingTimeout = 10.seconds
 
@@ -93,22 +86,21 @@ trait StreamTest extends QueryTest with Timeouts {
       AddDataMemory(source, data)
   }
 
-  /** A trait that can be extended when testing other sources. */
+  /** A trait that can be extended when testing a source. */
   trait AddData extends StreamAction {
-    def source: Source
-
     /**
-     * Called to trigger adding the data.  Should return the offset that will denote when this
-     * new data has been processed.
+     * Called to adding the data to a source. It should find the source to add data to from
+     * the active query, and then return the source object the data was added, as well as the
+     * offset of added data.
      */
-    def addData(): Offset
+    def addData(query: Option[StreamExecution]): (Source, Offset)
   }
 
   case class AddDataMemory[A](source: MemoryStream[A], data: Seq[A]) extends AddData {
     override def toString: String = s"AddData to $source: ${data.mkString(",")}"
 
-    override def addData(): Offset = {
-      source.addData(data)
+    override def addData(query: Option[StreamExecution]): (Source, Offset) = {
+      (source, source.addData(data))
     }
   }
 
@@ -199,7 +191,7 @@ trait StreamTest extends QueryTest with Timeouts {
     var currentPlan: LogicalPlan = stream.logicalPlan
     var currentStream: StreamExecution = null
     var lastStream: StreamExecution = null
-    val awaiting = new mutable.HashMap[Source, Offset]()
+    val awaiting = new mutable.HashMap[Int, Offset]() // source index -> offset to wait for
     val sink = new MemorySink(stream.schema)
 
     @volatile
@@ -372,15 +364,53 @@ trait StreamTest extends QueryTest with Timeouts {
             verify({ a.run(); true }, s"Assert failed: ${a.message}")
 
           case a: AddData =>
-            awaiting.put(a.source, a.addData())
+            try {
+              // Add data and get the source where it was added, and the expected offset of the
+              // added data.
+              val queryToUse = Option(currentStream).orElse(Option(lastStream))
+              val (source, offset) = a.addData(queryToUse)
+
+              def findSourceIndex(plan: LogicalPlan): Option[Int] = {
+                plan
+                  .collect { case StreamingExecutionRelation(s, _) => s }
+                  .zipWithIndex
+                  .find(_._1 == source)
+                  .map(_._2)
+              }
+
+              // Try to find the index of the source to which data was added. Either get the index
+              // from the current active query or the original input logical plan.
+              val sourceIndex =
+                queryToUse.flatMap { query =>
+                  findSourceIndex(query.logicalPlan)
+                }.orElse {
+                  findSourceIndex(stream.logicalPlan)
+                }.getOrElse {
+                  throw new IllegalArgumentException(
+                    "Could find index of the source to which data was added")
+                }
+
+              // Store the expected offset of added data to wait for it later
+              awaiting.put(sourceIndex, offset)
+            } catch {
+              case NonFatal(e) =>
+                failTest("Error adding data", e)
+            }
 
           case CheckAnswerRows(expectedAnswer, lastOnly) =>
             verify(currentStream != null, "stream not running")
+            // Get the map of source index to the current source objects
+            val indexToSource = currentStream
+              .logicalPlan
+              .collect { case StreamingExecutionRelation(s, _) => s }
+              .zipWithIndex
+              .map(_.swap)
+              .toMap
 
-            // Block until all data added has been processed
-            awaiting.foreach { case (source, offset) =>
+            // Block until all data added has been processed for all the source
+            awaiting.foreach { case (sourceIndex, offset) =>
               failAfter(streamingTimeout) {
-                currentStream.awaitOffset(source, offset)
+                currentStream.awaitOffset(indexToSource(sourceIndex), offset)
               }
             }
 

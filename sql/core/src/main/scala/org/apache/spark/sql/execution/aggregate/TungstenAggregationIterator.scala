@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeRowJoiner
 import org.apache.spark.sql.execution.{UnsafeFixedWidthAggregationMap, UnsafeKVExternalSorter}
-import org.apache.spark.sql.execution.metric.LongSQLMetric
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.KVIterator
 
@@ -86,9 +86,9 @@ class TungstenAggregationIterator(
     originalInputAttributes: Seq[Attribute],
     inputIter: Iterator[InternalRow],
     testFallbackStartsAt: Option[(Int, Int)],
-    numOutputRows: LongSQLMetric,
-    dataSize: LongSQLMetric,
-    spillSize: LongSQLMetric)
+    numOutputRows: SQLMetric,
+    peakMemory: SQLMetric,
+    spillSize: SQLMetric)
   extends AggregationIterator(
     groupingExpressions,
     originalInputAttributes,
@@ -415,11 +415,11 @@ class TungstenAggregationIterator(
       if (!hasNext) {
         val mapMemory = hashMap.getPeakMemoryUsedBytes
         val sorterMemory = Option(externalSorter).map(_.getPeakMemoryUsedBytes).getOrElse(0L)
-        val peakMemory = Math.max(mapMemory, sorterMemory)
+        val maxMemory = Math.max(mapMemory, sorterMemory)
         val metrics = TaskContext.get().taskMetrics()
-        dataSize += peakMemory
+        peakMemory += maxMemory
         spillSize += metrics.memoryBytesSpilled - spillSizeBefore
-        metrics.incPeakExecutionMemory(peakMemory)
+        metrics.incPeakExecutionMemory(maxMemory)
       }
       numOutputRows += 1
       res

@@ -126,13 +126,38 @@ test_that("glm summary", {
   expect_true(abs(baseSummary$deviance - 12.19313) < 1e-4)
 })
 
+test_that("glm save/load", {
+  training <- suppressWarnings(createDataFrame(sqlContext, iris))
+  m <- glm(Sepal_Width ~ Sepal_Length + Species, data = training)
+  s <- summary(m)
+
+  modelPath <- tempfile(pattern = "glm", fileext = ".tmp")
+  ml.save(m, modelPath)
+  expect_error(ml.save(m, modelPath))
+  ml.save(m, modelPath, overwrite = TRUE)
+  m2 <- ml.load(modelPath)
+  s2 <- summary(m2)
+
+  expect_equal(s$coefficients, s2$coefficients)
+  expect_equal(rownames(s$coefficients), rownames(s2$coefficients))
+  expect_equal(s$dispersion, s2$dispersion)
+  expect_equal(s$null.deviance, s2$null.deviance)
+  expect_equal(s$deviance, s2$deviance)
+  expect_equal(s$df.null, s2$df.null)
+  expect_equal(s$df.residual, s2$df.residual)
+  expect_equal(s$aic, s2$aic)
+  expect_equal(s$iter, s2$iter)
+  expect_true(!s$is.loaded)
+  expect_true(s2$is.loaded)
+
+  unlink(modelPath)
+})
+
 test_that("kmeans", {
   newIris <- iris
   newIris$Species <- NULL
   training <- suppressWarnings(createDataFrame(sqlContext, newIris))
 
-  # Cache the DataFrame here to work around the bug SPARK-13178.
-  cache(training)
   take(training, 1)
 
   model <- kmeans(x = training, centers = 2)
@@ -152,6 +177,20 @@ test_that("kmeans", {
   summary.model <- summary(model)
   cluster <- summary.model$cluster
   expect_equal(sort(collect(distinct(select(cluster, "prediction")))$prediction), c(0, 1))
+
+  # Test model save/load
+  modelPath <- tempfile(pattern = "kmeans", fileext = ".tmp")
+  ml.save(model, modelPath)
+  expect_error(ml.save(model, modelPath))
+  ml.save(model, modelPath, overwrite = TRUE)
+  model2 <- ml.load(modelPath)
+  summary2 <- summary(model2)
+  expect_equal(sort(unlist(summary.model$size)), sort(unlist(summary2$size)))
+  expect_equal(summary.model$coefficients, summary2$coefficients)
+  expect_true(!summary.model$is.loaded)
+  expect_true(summary2$is.loaded)
+
+  unlink(modelPath)
 })
 
 test_that("naiveBayes", {
@@ -206,6 +245,18 @@ test_that("naiveBayes", {
                                "Yes", "Yes", "Yes", "Yes", "Yes", "Yes", "Yes", "Yes", "No", "No",
                                "Yes", "Yes", "No", "No"))
 
+  # Test model save/load
+  modelPath <- tempfile(pattern = "naiveBayes", fileext = ".tmp")
+  ml.save(m, modelPath)
+  expect_error(ml.save(m, modelPath))
+  ml.save(m, modelPath, overwrite = TRUE)
+  m2 <- ml.load(modelPath)
+  s2 <- summary(m2)
+  expect_equal(s$apriori, s2$apriori)
+  expect_equal(s$tables, s2$tables)
+
+  unlink(modelPath)
+
   # Test e1071::naiveBayes
   if (requireNamespace("e1071", quietly = TRUE)) {
     expect_that(m <- e1071::naiveBayes(Survived ~ ., data = t1), not(throws_error()))
@@ -250,6 +301,19 @@ test_that("survreg", {
   p <- collect(select(predict(model, df), "prediction"))
   expect_equal(p$prediction, c(3.724591, 2.545368, 3.079035, 3.079035,
                2.390146, 2.891269, 2.891269), tolerance = 1e-4)
+
+  # Test model save/load
+  modelPath <- tempfile(pattern = "survreg", fileext = ".tmp")
+  ml.save(model, modelPath)
+  expect_error(ml.save(model, modelPath))
+  ml.save(model, modelPath, overwrite = TRUE)
+  model2 <- ml.load(modelPath)
+  stats2 <- summary(model2)
+  coefs2 <- as.vector(stats2$coefficients[, 1])
+  expect_equal(coefs, coefs2)
+  expect_equal(rownames(stats$coefficients), rownames(stats2$coefficients))
+
+  unlink(modelPath)
 
   # Test survival::survreg
   if (requireNamespace("survival", quietly = TRUE)) {

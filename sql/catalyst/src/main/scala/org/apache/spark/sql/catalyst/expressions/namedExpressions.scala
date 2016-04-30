@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.util.UUID
+import java.util.{Objects, UUID}
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
@@ -175,6 +175,11 @@ case class Alias(child: Expression, name: String)(
     exprId :: qualifier :: explicitMetadata :: isGenerated :: Nil
   }
 
+  override def hashCode(): Int = {
+    val state = Seq(name, exprId, child, qualifier, explicitMetadata)
+    state.map(Objects.hashCode).foldLeft(0)((a, b) => 31 * a + b)
+  }
+
   override def equals(other: Any): Boolean = other match {
     case a: Alias =>
       name == a.name && exprId == a.exprId && child == a.child && qualifier == a.qualifier &&
@@ -330,6 +335,16 @@ case class PrettyAttribute(
   override def qualifier: Option[String] = throw new UnsupportedOperationException
   override def exprId: ExprId = throw new UnsupportedOperationException
   override def nullable: Boolean = true
+}
+
+/**
+ * A place holder used to hold a reference that has been resolved to a field outside of the current
+ * plan. This is used for correlated subqueries.
+ */
+case class OuterReference(e: NamedExpression) extends LeafExpression with Unevaluable {
+  override def dataType: DataType = e.dataType
+  override def nullable: Boolean = e.nullable
+  override def prettyName: String = "outer"
 }
 
 object VirtualColumn {

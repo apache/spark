@@ -24,7 +24,7 @@ import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.execution.{SparkPlan, SparkPlanTest, UnaryNode}
+import org.apache.spark.sql.execution.{SparkPlan, SparkPlanTest, UnaryExecNode}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.types.StringType
 
@@ -58,7 +58,7 @@ class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton {
         output = Seq(AttributeReference("a", StringType)()),
         child = child,
         ioschema = noSerdeIOSchema
-      )(hiveContext.sessionState.hiveconf),
+      ),
       rowsDf.collect())
   }
 
@@ -72,7 +72,7 @@ class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton {
         output = Seq(AttributeReference("a", StringType)()),
         child = child,
         ioschema = serdeIOSchema
-      )(hiveContext.sessionState.hiveconf),
+      ),
       rowsDf.collect())
   }
 
@@ -87,7 +87,7 @@ class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton {
           output = Seq(AttributeReference("a", StringType)()),
           child = ExceptionInjectingOperator(child),
           ioschema = noSerdeIOSchema
-        )(hiveContext.sessionState.hiveconf),
+        ),
         rowsDf.collect())
     }
     assert(e.getMessage().contains("intentional exception"))
@@ -104,14 +104,14 @@ class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton {
           output = Seq(AttributeReference("a", StringType)()),
           child = ExceptionInjectingOperator(child),
           ioschema = serdeIOSchema
-        )(hiveContext.sessionState.hiveconf),
+        ),
         rowsDf.collect())
     }
     assert(e.getMessage().contains("intentional exception"))
   }
 }
 
-private case class ExceptionInjectingOperator(child: SparkPlan) extends UnaryNode {
+private case class ExceptionInjectingOperator(child: SparkPlan) extends UnaryExecNode {
   override protected def doExecute(): RDD[InternalRow] = {
     child.execute().map { x =>
       assert(TaskContext.get() != null) // Make sure that TaskContext is defined.

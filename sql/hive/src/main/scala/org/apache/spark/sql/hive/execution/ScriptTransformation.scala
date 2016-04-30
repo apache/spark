@@ -26,7 +26,6 @@ import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.exec.{RecordReader, RecordWriter}
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.AbstractSerDe
@@ -58,17 +57,14 @@ case class ScriptTransformation(
     script: String,
     output: Seq[Attribute],
     child: SparkPlan,
-    ioschema: HiveScriptIOSchema)(@transient private val hiveconf: HiveConf)
-  extends UnaryNode {
-
-  override protected def otherCopyArgs: Seq[HiveConf] = hiveconf :: Nil
+    ioschema: HiveScriptIOSchema)
+  extends UnaryExecNode {
 
   override def producedAttributes: AttributeSet = outputSet -- inputSet
 
-  private val serializedHiveConf = new SerializableConfiguration(hiveconf)
-
   protected override def doExecute(): RDD[InternalRow] = {
-    def processIterator(inputIterator: Iterator[InternalRow]): Iterator[InternalRow] = {
+    def processIterator(inputIterator: Iterator[InternalRow], hadoopConf: Configuration)
+      : Iterator[InternalRow] = {
       val cmd = List("/bin/bash", "-c", script)
       val builder = new ProcessBuilder(cmd.asJava)
 
@@ -76,7 +72,6 @@ case class ScriptTransformation(
       val inputStream = proc.getInputStream
       val outputStream = proc.getOutputStream
       val errorStream = proc.getErrorStream
-      val localHiveConf = serializedHiveConf.value
 
       // In order to avoid deadlocks, we need to consume the error output of the child process.
       // To avoid issues caused by large error output, we use a circular buffer to limit the amount
@@ -107,7 +102,7 @@ case class ScriptTransformation(
         proc,
         stderrBuffer,
         TaskContext.get(),
-        localHiveConf
+        hadoopConf
       )
 
       // This nullability is a performance optimization in order to avoid an Option.foreach() call
@@ -122,7 +117,7 @@ case class ScriptTransformation(
         val scriptOutputStream = new DataInputStream(inputStream)
 
         @Nullable val scriptOutputReader =
-          ioschema.recordReader(scriptOutputStream, localHiveConf).orNull
+          ioschema.recordReader(scriptOutputStream, hadoopConf).orNull
 
         var scriptOutputWritable: Writable = null
         val reusedWritableObject: Writable = if (null != outputSerde) {
@@ -214,10 +209,13 @@ case class ScriptTransformation(
       outputIterator
     }
 
+    val broadcastedHadoopConf =
+      new SerializableConfiguration(sqlContext.sessionState.newHadoopConf())
+
     child.execute().mapPartitions { iter =>
       if (iter.hasNext) {
         val proj = UnsafeProjection.create(schema)
-        processIterator(iter).map(proj)
+        processIterator(iter, broadcastedHadoopConf.value).map(proj)
       } else {
         // If the input iterator has no rows then do not launch the external script.
         Iterator.empty
@@ -312,6 +310,22 @@ private class ScriptTransformationWriterThread(
   }
 }
 
+private[hive]
+object HiveScriptIOSchema {
+  def apply(input: ScriptInputOutputSchema): HiveScriptIOSchema = {
+    HiveScriptIOSchema(
+      input.inputRowFormat,
+      input.outputRowFormat,
+      input.inputSerdeClass,
+      input.outputSerdeClass,
+      input.inputSerdeProps,
+      input.outputSerdeProps,
+      input.recordReaderClass,
+      input.recordWriterClass,
+      input.schemaLess)
+  }
+}
+
 /**
  * The wrapper class of Hive input and output schema properties
  */
@@ -325,7 +339,8 @@ case class HiveScriptIOSchema (
     outputSerdeProps: Seq[(String, String)],
     recordReaderClass: Option[String],
     recordWriterClass: Option[String],
-    schemaLess: Boolean) extends ScriptInputOutputSchema with HiveInspectors {
+    schemaLess: Boolean)
+  extends HiveInspectors {
 
   private val defaultFormat = Map(
     ("TOK_TABLEROWFORMATFIELD", "\t"),
@@ -400,54 +415,6 @@ case class HiveScriptIOSchema (
       val instance = Utils.classForName(klass).newInstance().asInstanceOf[RecordWriter]
       instance.initialize(outputStream, conf)
       instance
-    }
-  }
-
-  def inputRowFormatSQL: Option[String] =
-    getRowFormatSQL(inputRowFormat, inputSerdeClass, inputSerdeProps)
-
-  def outputRowFormatSQL: Option[String] =
-    getRowFormatSQL(outputRowFormat, outputSerdeClass, outputSerdeProps)
-
-  /**
-   * Get the row format specification
-   * Note:
-   * 1. Changes are needed when readerClause and writerClause are supported.
-   * 2. Changes are needed when "ESCAPED BY" is supported.
-   */
-  private def getRowFormatSQL(
-      rowFormat: Seq[(String, String)],
-      serdeClass: Option[String],
-      serdeProps: Seq[(String, String)]): Option[String] = {
-    if (schemaLess) return Some("")
-
-    val rowFormatDelimited =
-      rowFormat.map {
-        case ("TOK_TABLEROWFORMATFIELD", value) =>
-          "FIELDS TERMINATED BY " + value
-        case ("TOK_TABLEROWFORMATCOLLITEMS", value) =>
-          "COLLECTION ITEMS TERMINATED BY " + value
-        case ("TOK_TABLEROWFORMATMAPKEYS", value) =>
-          "MAP KEYS TERMINATED BY " + value
-        case ("TOK_TABLEROWFORMATLINES", value) =>
-          "LINES TERMINATED BY " + value
-        case ("TOK_TABLEROWFORMATNULL", value) =>
-          "NULL DEFINED AS " + value
-        case o => return None
-      }
-
-    val serdeClassSQL = serdeClass.map("'" + _ + "'").getOrElse("")
-    val serdePropsSQL =
-      if (serdeClass.nonEmpty) {
-        val props = serdeProps.map{p => s"'${p._1}' = '${p._2}'"}.mkString(", ")
-        if (props.nonEmpty) " WITH SERDEPROPERTIES(" + props + ")" else ""
-      } else {
-        ""
-      }
-    if (rowFormat.nonEmpty) {
-      Some("ROW FORMAT DELIMITED " + rowFormatDelimited.mkString(" "))
-    } else {
-      Some("ROW FORMAT SERDE " + serdeClassSQL + serdePropsSQL)
     }
   }
 }

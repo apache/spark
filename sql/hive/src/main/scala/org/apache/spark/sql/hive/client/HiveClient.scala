@@ -21,6 +21,7 @@ import java.io.PrintStream
 
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Expression
 
 
@@ -75,12 +76,6 @@ private[hive] trait HiveClient {
   /** Returns the metadata for the specified table or None if it doesn't exist. */
   def getTableOption(dbName: String, tableName: String): Option[CatalogTable]
 
-  /** Creates a view with the given metadata. */
-  def createView(view: CatalogTable): Unit
-
-  /** Updates the given view with new metadata. */
-  def alertView(view: CatalogTable): Unit
-
   /** Creates a table with the given metadata. */
   def createTable(table: CatalogTable, ignoreIfExists: Boolean): Unit
 
@@ -125,7 +120,7 @@ private[hive] trait HiveClient {
   def dropPartitions(
       db: String,
       table: String,
-      specs: Seq[ExternalCatalog.TablePartitionSpec],
+      specs: Seq[TablePartitionSpec],
       ignoreIfNotExists: Boolean): Unit
 
   /**
@@ -134,8 +129,8 @@ private[hive] trait HiveClient {
   def renamePartitions(
       db: String,
       table: String,
-      specs: Seq[ExternalCatalog.TablePartitionSpec],
-      newSpecs: Seq[ExternalCatalog.TablePartitionSpec]): Unit
+      specs: Seq[TablePartitionSpec],
+      newSpecs: Seq[TablePartitionSpec]): Unit
 
   /**
    * Alter one or more table partitions whose specs match the ones specified in `newParts`,
@@ -150,7 +145,7 @@ private[hive] trait HiveClient {
   final def getPartition(
       dbName: String,
       tableName: String,
-      spec: ExternalCatalog.TablePartitionSpec): CatalogTablePartition = {
+      spec: TablePartitionSpec): CatalogTablePartition = {
     getPartitionOption(dbName, tableName, spec).getOrElse {
       throw new NoSuchPartitionException(dbName, tableName, spec)
     }
@@ -160,22 +155,33 @@ private[hive] trait HiveClient {
   final def getPartitionOption(
       db: String,
       table: String,
-      spec: ExternalCatalog.TablePartitionSpec): Option[CatalogTablePartition] = {
+      spec: TablePartitionSpec): Option[CatalogTablePartition] = {
     getPartitionOption(getTable(db, table), spec)
   }
 
   /** Returns the specified partition or None if it does not exist. */
   def getPartitionOption(
       table: CatalogTable,
-      spec: ExternalCatalog.TablePartitionSpec): Option[CatalogTablePartition]
+      spec: TablePartitionSpec): Option[CatalogTablePartition]
 
-  /** Returns all partitions for the given table. */
-  final def getAllPartitions(db: String, table: String): Seq[CatalogTablePartition] = {
-    getAllPartitions(getTable(db, table))
+  /**
+   * Returns the partitions for the given table that match the supplied partition spec.
+   * If no partition spec is specified, all partitions are returned.
+   */
+  final def getPartitions(
+      db: String,
+      table: String,
+      partialSpec: Option[TablePartitionSpec]): Seq[CatalogTablePartition] = {
+    getPartitions(getTable(db, table), partialSpec)
   }
 
-  /** Returns all partitions for the given table. */
-  def getAllPartitions(table: CatalogTable): Seq[CatalogTablePartition]
+  /**
+   * Returns the partitions for the given table that match the supplied partition spec.
+   * If no partition spec is specified, all partitions are returned.
+   */
+  def getPartitions(
+      table: CatalogTable,
+      partialSpec: Option[TablePartitionSpec] = None): Seq[CatalogTablePartition]
 
   /** Returns partitions filtered by predicates for the given table. */
   def getPartitionsByFilter(
