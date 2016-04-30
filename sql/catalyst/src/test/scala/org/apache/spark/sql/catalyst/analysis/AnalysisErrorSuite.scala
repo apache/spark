@@ -331,13 +331,14 @@ class AnalysisErrorSuite extends AnalysisTest {
   errorTest(
     "generator nested in expressions",
     listRelation.select(Explode('list) + 1),
-    "Generators are not supported when it's nested in expressions" :: Nil
+    "Generators are not supported when it's nested in expressions, but got: (explode(list) + 1)"
+      :: Nil
   )
 
   errorTest(
     "generator appears in operator which is not Project",
     listRelation.sortBy(Explode('list).asc),
-    "Generators are not supported outside the SELECT clause" :: Nil
+    "Generators are not supported outside the SELECT clause, but got: 'Sort" :: Nil
   )
 
   errorTest(

@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, _}
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
-import org.apache.spark.sql.catalyst.util.usePrettyExpression
+import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.types._
 
 /**
@@ -180,17 +180,27 @@ class Analyzer(
       case _ => false
     }
 
+    private def trimAlias(expr: NamedExpression): Expression = expr match {
+      case UnresolvedAlias(child, _) => child
+      case Alias(child, _) => child
+      case MultiAlias(child, _) => child
+      case _ => expr
+    }
+
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case Project(projectList, _) if projectList.exists(hasNestedGenerator) =>
-        throw new AnalysisException("Generators are not supported when it's nested in expressions.")
+        val nestedGenerator = projectList.find(hasNestedGenerator).get
+        throw new AnalysisException("Generators are not supported when it's nested in " +
+          "expressions, but got: " + toPrettySQL(trimAlias(nestedGenerator)))
 
       case Project(projectList, _) if projectList.count(hasGenerator) > 1 =>
         val generators = projectList.flatMap(_.find(_.isInstanceOf[Generator]))
         throw new AnalysisException("Only one generator allowed per select clause but found " +
-          generators.size + ": " + generators.map(g => usePrettyExpression(g).sql).mkString(", "))
+          generators.size + ": " + generators.map(toPrettySQL).mkString(", "))
 
       case p if !p.isInstanceOf[Project] && p.expressions.exists(hasGenerator) =>
-        throw new AnalysisException("Generators are not supported outside the SELECT clause")
+        throw new AnalysisException("Generators are not supported outside the SELECT clause, but " +
+          "got: " + p.simpleString)
     }
   }
 
@@ -207,8 +217,8 @@ class Analyzer(
               case e if !e.resolved => u
               case g: Generator => MultiAlias(g, Nil)
               case c @ Cast(ne: NamedExpression, _) => Alias(c, ne.name)()
-              case e: ExtractValue => Alias(e, usePrettyExpression(e).sql)()
-              case e => Alias(e, optionalAliasName.getOrElse(usePrettyExpression(e).sql))()
+              case e: ExtractValue => Alias(e, toPrettySQL(e))()
+              case e => Alias(e, optionalAliasName.getOrElse(toPrettySQL(e)))()
             }
           }
       }.asInstanceOf[Seq[NamedExpression]]
