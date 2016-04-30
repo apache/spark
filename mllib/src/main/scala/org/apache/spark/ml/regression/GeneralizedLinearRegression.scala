@@ -909,7 +909,7 @@ class GeneralizedLinearRegressionSummary private[regression] (
     numInstances
   }
 
-  private lazy val weightCol: Column = {
+  private def weightCol: Column = {
     if (!model.isDefined(model.weightCol) || model.getWeightCol.isEmpty) {
       lit(1.0)
     } else {
@@ -922,14 +922,16 @@ class GeneralizedLinearRegressionSummary private[regression] (
       val r = math.sqrt(math.max(family.deviance(y, mu, weight), 0.0))
       if (y > mu) r else -1.0 * r
     }
+    val w = weightCol
     predictions.select(
-      drUDF(col(model.getLabelCol), col(predictionCol), weightCol).as("devianceResiduals"))
+      drUDF(col(model.getLabelCol), col(predictionCol), w).as("devianceResiduals"))
   }
 
   private[regression] lazy val pearsonResiduals: DataFrame = {
     val prUDF = udf { mu: Double => family.variance(mu) }
+    val w = weightCol
     predictions.select(col(model.getLabelCol).minus(col(predictionCol))
-      .multiply(sqrt(weightCol)).divide(sqrt(prUDF(col(predictionCol)))).as("pearsonResiduals"))
+      .multiply(sqrt(w)).divide(sqrt(prUDF(col(predictionCol)))).as("pearsonResiduals"))
   }
 
   private[regression] lazy val workingResiduals: DataFrame = {
@@ -970,14 +972,14 @@ class GeneralizedLinearRegressionSummary private[regression] (
    */
   @Since("2.0.0")
   lazy val nullDeviance: Double = {
+    val w = weightCol
     val wtdmu: Double = if (model.getFitIntercept) {
-      val agg =
-        predictions.agg(sum(weightCol.multiply(col(model.getLabelCol))), sum(weightCol)).first()
+      val agg = predictions.agg(sum(w.multiply(col(model.getLabelCol))), sum(w)).first()
       agg.getDouble(0) / agg.getDouble(1)
     } else {
       link.unlink(0.0)
     }
-    predictions.select(col(model.getLabelCol), weightCol).rdd.map {
+    predictions.select(col(model.getLabelCol), w).rdd.map {
       case Row(y: Double, weight: Double) =>
         family.deviance(y, wtdmu, weight)
     }.sum()
@@ -988,7 +990,8 @@ class GeneralizedLinearRegressionSummary private[regression] (
    */
   @Since("2.0.0")
   lazy val deviance: Double = {
-    predictions.select(col(model.getLabelCol), col(predictionCol), weightCol).rdd.map {
+    val w = weightCol
+    predictions.select(col(model.getLabelCol), col(predictionCol), w).rdd.map {
       case Row(label: Double, pred: Double, weight: Double) =>
         family.deviance(label, pred, weight)
     }.sum()
@@ -1012,8 +1015,9 @@ class GeneralizedLinearRegressionSummary private[regression] (
   /** Akaike's "An Information Criterion"(AIC) for the fitted model. */
   @Since("2.0.0")
   lazy val aic: Double = {
-    val weightSum = predictions.select(weightCol).agg(sum(weightCol)).first().getDouble(0)
-    val t = predictions.select(col(model.getLabelCol), col(predictionCol), weightCol).rdd.map {
+    val w = weightCol
+    val weightSum = predictions.select(w).agg(sum(w)).first().getDouble(0)
+    val t = predictions.select(col(model.getLabelCol), col(predictionCol), w).rdd.map {
       case Row(label: Double, pred: Double, weight: Double) =>
         (label, pred, weight)
     }
