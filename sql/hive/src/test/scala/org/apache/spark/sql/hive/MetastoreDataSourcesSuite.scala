@@ -26,7 +26,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
-import org.apache.spark.sql.catalyst.parser.DataTypeParser
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -922,7 +922,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       // As a proxy for verifying that the table was stored in Hive compatible format,
       // we verify that each column of the table is of native type StringType.
       assert(sharedState.externalCatalog.getTable("default", "not_skip_hive_metadata").schema
-        .forall(column => DataTypeParser.parse(column.dataType) == StringType))
+        .forall(column => CatalystSqlParser.parseDataType(column.dataType) == StringType))
 
       CreateDataSourceTableUtils.createDataSourceTable(
         sparkSession = sqlContext.sparkSession,
@@ -937,7 +937,101 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       // As a proxy for verifying that the table was stored in SparkSQL format,
       // we verify that the table has a column type as array of StringType.
       assert(sharedState.externalCatalog.getTable("default", "skip_hive_metadata")
-        .schema.forall { c => DataTypeParser.parse(c.dataType) == ArrayType(StringType) })
+        .schema.forall { c =>
+          CatalystSqlParser.parseDataType(c.dataType) == ArrayType(StringType) })
+    }
+  }
+
+  test("CTAS: persisted partitioned data source table") {
+    withTempDir { dir =>
+      withTable("t") {
+        val path = dir.getCanonicalPath
+
+        sql(
+          s"""CREATE TABLE t USING PARQUET
+             |OPTIONS (PATH '$path')
+             |PARTITIONED BY (a)
+             |AS SELECT 1 AS a, 2 AS b
+           """.stripMargin
+        )
+
+        val metastoreTable = sharedState.externalCatalog.getTable("default", "t")
+        assert(metastoreTable.properties("spark.sql.sources.schema.numPartCols").toInt === 1)
+        assert(!metastoreTable.properties.contains("spark.sql.sources.schema.numBuckets"))
+        assert(!metastoreTable.properties.contains("spark.sql.sources.schema.numBucketCols"))
+        assert(!metastoreTable.properties.contains("spark.sql.sources.schema.numSortCols"))
+
+        checkAnswer(table("t"), Row(2, 1))
+      }
+    }
+  }
+
+  test("CTAS: persisted bucketed data source table") {
+    withTempDir { dir =>
+      withTable("t") {
+        val path = dir.getCanonicalPath
+
+        sql(
+          s"""CREATE TABLE t USING PARQUET
+             |OPTIONS (PATH '$path')
+             |CLUSTERED BY (a) SORTED BY (b) INTO 2 BUCKETS
+             |AS SELECT 1 AS a, 2 AS b
+           """.stripMargin
+        )
+
+        val metastoreTable = sharedState.externalCatalog.getTable("default", "t")
+        assert(!metastoreTable.properties.contains("spark.sql.sources.schema.numPartCols"))
+        assert(metastoreTable.properties("spark.sql.sources.schema.numBuckets").toInt === 2)
+        assert(metastoreTable.properties("spark.sql.sources.schema.numBucketCols").toInt === 1)
+        assert(metastoreTable.properties("spark.sql.sources.schema.numSortCols").toInt === 1)
+
+        checkAnswer(table("t"), Row(1, 2))
+      }
+
+      withTable("t") {
+        val path = dir.getCanonicalPath
+
+        sql(
+          s"""CREATE TABLE t USING PARQUET
+             |OPTIONS (PATH '$path')
+             |CLUSTERED BY (a) INTO 2 BUCKETS
+             |AS SELECT 1 AS a, 2 AS b
+           """.stripMargin
+        )
+
+        val metastoreTable = sharedState.externalCatalog.getTable("default", "t")
+        assert(!metastoreTable.properties.contains("spark.sql.sources.schema.numPartCols"))
+        assert(metastoreTable.properties("spark.sql.sources.schema.numBuckets").toInt === 2)
+        assert(metastoreTable.properties("spark.sql.sources.schema.numBucketCols").toInt === 1)
+        assert(!metastoreTable.properties.contains("spark.sql.sources.schema.numSortCols"))
+
+        checkAnswer(table("t"), Row(1, 2))
+      }
+    }
+  }
+
+  test("CTAS: persisted partitioned bucketed data source table") {
+    withTempDir { dir =>
+      withTable("t") {
+        val path = dir.getCanonicalPath
+
+        sql(
+          s"""CREATE TABLE t USING PARQUET
+             |OPTIONS (PATH '$path')
+             |PARTITIONED BY (a)
+             |CLUSTERED BY (b) SORTED BY (c) INTO 2 BUCKETS
+             |AS SELECT 1 AS a, 2 AS b, 3 AS c
+           """.stripMargin
+        )
+
+        val metastoreTable = sharedState.externalCatalog.getTable("default", "t")
+        assert(metastoreTable.properties("spark.sql.sources.schema.numPartCols").toInt === 1)
+        assert(metastoreTable.properties("spark.sql.sources.schema.numBuckets").toInt === 2)
+        assert(metastoreTable.properties("spark.sql.sources.schema.numBucketCols").toInt === 1)
+        assert(metastoreTable.properties("spark.sql.sources.schema.numSortCols").toInt === 1)
+
+        checkAnswer(table("t"), Row(2, 3, 1))
+      }
     }
   }
 }

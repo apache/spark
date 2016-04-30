@@ -206,6 +206,7 @@ object LogisticRegressionModel extends Loader[LogisticRegressionModel] {
  * Using [[LogisticRegressionWithLBFGS]] is recommended over this.
  */
 @Since("0.8.0")
+@deprecated("Use ml.classification.LogisticRegression or LogisticRegressionWithLBFGS", "2.0.0")
 class LogisticRegressionWithSGD private[mllib] (
     private var stepSize: Double,
     private var numIterations: Int,
@@ -240,6 +241,7 @@ class LogisticRegressionWithSGD private[mllib] (
  * NOTE: Labels used in Logistic Regression should be {0, 1}
  */
 @Since("0.8.0")
+@deprecated("Use ml.classification.LogisticRegression or LogisticRegressionWithLBFGS", "2.0.0")
 object LogisticRegressionWithSGD {
   // NOTE(shivaram): We use multiple train methods instead of default arguments to support
   // Java programs.

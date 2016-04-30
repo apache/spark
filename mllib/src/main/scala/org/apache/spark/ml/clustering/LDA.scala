@@ -355,7 +355,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
  * :: Experimental ::
  * Model fitted by [[LDA]].
  *
- * @param vocabSize  Vocabulary size (number of terms or terms in the vocabulary)
+ * @param vocabSize  Vocabulary size (number of terms or words in the vocabulary)
  * @param sparkSession  Used to construct local DataFrames for returning query results
  */
 @Since("1.6.0")
@@ -745,9 +745,8 @@ object DistributedLDAModel extends MLReadable[DistributedLDAModel] {
  *  - "topic": multinomial distribution over terms representing some concept
  *  - "document": one piece of text, corresponding to one row in the input data
  *
- * References:
- *  - Original LDA paper (journal version):
- *    Blei, Ng, and Jordan.  "Latent Dirichlet Allocation."  JMLR, 2003.
+ * Original LDA paper (journal version):
+ *  Blei, Ng, and Jordan.  "Latent Dirichlet Allocation."  JMLR, 2003.
  *
  * Input data (featuresCol):
  *  LDA is given a collection of documents as input data, via the featuresCol parameter.

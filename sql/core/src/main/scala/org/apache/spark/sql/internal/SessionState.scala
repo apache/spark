@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.internal
 
+import java.io.File
 import java.util.Properties
 
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.sql._
@@ -64,9 +66,6 @@ private[sql] class SessionState(sparkSession: SparkSession) {
     }
     hadoopConf
   }
-
-  // Automatically extract `spark.sql.*` entries and put it in our SQLConf
-  setConf(SQLContext.getSQLProperties(sparkSession.sparkContext.getConf))
 
   lazy val experimentalMethods = new ExperimentalMethods
 
@@ -150,6 +149,14 @@ private[sql] class SessionState(sparkSession: SparkSession) {
     new ContinuousQueryManager(sparkSession)
   }
 
+  private val jarClassLoader: NonClosableMutableURLClassLoader =
+    sparkSession.sharedState.jarClassLoader
+
+  // Automatically extract all entries and put it in our SQLConf
+  // We need to call it after all of vals have been initialized.
+  sparkSession.sparkContext.getConf.getAll.foreach { case (k, v) =>
+    conf.setConfString(k, v)
+  }
 
   // ------------------------------------------------------
   //  Helper methods, partially leftover from pre-2.0 days
@@ -165,21 +172,19 @@ private[sql] class SessionState(sparkSession: SparkSession) {
     catalog.invalidateTable(sqlParser.parseTableIdentifier(tableName))
   }
 
-  final def setConf(properties: Properties): Unit = {
-    properties.asScala.foreach { case (k, v) => setConf(k, v) }
-  }
-
-  final def setConf[T](entry: ConfigEntry[T], value: T): Unit = {
-    conf.setConf(entry, value)
-    setConf(entry.key, entry.stringConverter(value))
-  }
-
-  def setConf(key: String, value: String): Unit = {
-    conf.setConfString(key, value)
-  }
-
   def addJar(path: String): Unit = {
     sparkSession.sparkContext.addJar(path)
+
+    val uri = new Path(path).toUri
+    val jarURL = if (uri.getScheme == null) {
+      // `path` is a local file path without a URL scheme
+      new File(path).toURI.toURL
+    } else {
+      // `path` is a URL with a scheme
+      uri.toURL
+    }
+    jarClassLoader.addURL(jarURL)
+    Thread.currentThread().setContextClassLoader(jarClassLoader)
   }
 
   /**
@@ -192,9 +197,4 @@ private[sql] class SessionState(sparkSession: SparkSession) {
   def analyze(tableName: String): Unit = {
     AnalyzeTable(tableName).run(sparkSession)
   }
-
-  def runNativeSql(sql: String): Seq[String] = {
-    throw new AnalysisException("Unsupported query: " + sql)
-  }
-
 }

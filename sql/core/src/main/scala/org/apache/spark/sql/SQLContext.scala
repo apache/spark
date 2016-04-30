@@ -44,8 +44,10 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ExecutionListenerManager
 
 /**
- * The entry point for working with structured data (rows and columns) in Spark.  Allows the
- * creation of [[DataFrame]] objects as well as the execution of SQL queries.
+ * The entry point for working with structured data (rows and columns) in Spark, in Spark 1.x.
+ *
+ * As of Spark 2.0, this is replaced by [[SparkSession]]. However, we are keeping the class here
+ * for backward compatibility.
  *
  * @groupname basic Basic Operations
  * @groupname ddl_ops Persistent Catalog DDL
@@ -134,13 +136,15 @@ class SQLContext private[sql](
    * @group config
    * @since 1.0.0
    */
-  def setConf(props: Properties): Unit = sparkSession.setConf(props)
+  def setConf(props: Properties): Unit = {
+    sessionState.conf.setConf(props)
+  }
 
   /**
    * Set the given Spark SQL configuration property.
    */
   private[sql] def setConf[T](entry: ConfigEntry[T], value: T): Unit = {
-    sparkSession.setConf(entry, value)
+    sessionState.conf.setConf(entry, value)
   }
 
   /**
@@ -149,7 +153,9 @@ class SQLContext private[sql](
    * @group config
    * @since 1.0.0
    */
-  def setConf(key: String, value: String): Unit = sparkSession.setConf(key, value)
+  def setConf(key: String, value: String): Unit = {
+    sparkSession.conf.set(key, value)
+  }
 
   /**
    * Return the value of Spark SQL configuration property for the given key.
@@ -157,21 +163,8 @@ class SQLContext private[sql](
    * @group config
    * @since 1.0.0
    */
-  def getConf(key: String): String = sparkSession.getConf(key)
-
-  /**
-   * Return the value of Spark SQL configuration property for the given key. If the key is not set
-   * yet, return `defaultValue` in [[ConfigEntry]].
-   */
-  private[sql] def getConf[T](entry: ConfigEntry[T]): T = sparkSession.getConf(entry)
-
-  /**
-   * Return the value of Spark SQL configuration property for the given key. If the key is not set
-   * yet, return `defaultValue`. This is useful when `defaultValue` in ConfigEntry is not the
-   * desired one.
-   */
-  private[sql] def getConf[T](entry: ConfigEntry[T], defaultValue: T): T = {
-    sparkSession.getConf(entry, defaultValue)
+  def getConf(key: String): String = {
+    sparkSession.conf.get(key)
   }
 
   /**
@@ -181,7 +174,9 @@ class SQLContext private[sql](
    * @group config
    * @since 1.0.0
    */
-  def getConf(key: String, defaultValue: String): String = sparkSession.getConf(key, defaultValue)
+  def getConf(key: String, defaultValue: String): String = {
+    sparkSession.conf.get(key, defaultValue)
+  }
 
   /**
    * Return all the configuration properties that have been set (i.e. not the default).
@@ -190,7 +185,9 @@ class SQLContext private[sql](
    * @group config
    * @since 1.0.0
    */
-  def getAllConfs: immutable.Map[String, String] = sparkSession.getAllConfs
+  def getAllConfs: immutable.Map[String, String] = {
+    sparkSession.conf.getAll
+  }
 
   protected[sql] def parseSql(sql: String): LogicalPlan = sparkSession.parseSql(sql)
 
@@ -600,7 +597,7 @@ class SQLContext private[sql](
    * only during the lifetime of this instance of SQLContext.
    */
   private[sql] def registerDataFrameAsTable(df: DataFrame, tableName: String): Unit = {
-    sparkSession.registerDataFrameAsTable(df, tableName)
+    sparkSession.registerTable(df, tableName)
   }
 
   /**
@@ -672,15 +669,6 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def sql(sqlText: String): DataFrame = sparkSession.sql(sqlText)
-
-  /**
-   * Executes a SQL query without parsing it, but instead passing it directly to an underlying
-   * system to process. This is currently only used for Hive DDLs and will be removed as soon
-   * as Spark can parse all supported Hive DDLs itself.
-   */
-  private[sql] def runNativeSql(sqlText: String): Seq[Row] = {
-    sparkSession.runNativeSql(sqlText)
-  }
 
   /**
    * Returns the specified table as a [[DataFrame]].
