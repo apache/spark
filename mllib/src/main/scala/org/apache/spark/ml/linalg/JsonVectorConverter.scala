@@ -21,12 +21,12 @@ import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods.{compact, parse => parseJson, render}
 
-private[ml] object VectorEncoder {
+private[ml] object JsonVectorConverter {
 
   /**
    * Parses the JSON representation of a vector into a [[Vector]].
    */
-  def jsonDecode(json: String): Vector = {
+  def fromJson(json: String): Vector = {
     implicit val formats = DefaultFormats
     val jValue = parseJson(json)
     (jValue \ "type").extract[Int] match {
@@ -46,7 +46,7 @@ private[ml] object VectorEncoder {
   /**
    * Coverts the vector to a JSON string.
    */
-  def jsonEncode(v: Vector): String = {
+  def toJson(v: Vector): String = {
     v match {
       case SparseVector(size, indices, values) =>
         val jValue = ("type" -> 0) ~

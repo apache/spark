@@ -21,9 +21,9 @@ import org.json4s.jackson.JsonMethods.parse
 
 import org.apache.spark.SparkFunSuite
 
-class VectorEncoderSuite extends SparkFunSuite {
+class JsonVectorConverterSuite extends SparkFunSuite {
 
-  test("jsonEncode/jsonDecode") {
+  test("toJson/fromJson") {
     val sv0 = Vectors.sparse(0, Array.empty, Array.empty)
     val sv1 = Vectors.sparse(1, Array.empty, Array.empty)
     val sv2 = Vectors.sparse(2, Array(1), Array(2.0))
@@ -31,9 +31,9 @@ class VectorEncoderSuite extends SparkFunSuite {
     val dv1 = Vectors.dense(1.0)
     val dv2 = Vectors.dense(0.0, 2.0)
     for (v <- Seq(sv0, sv1, sv2, dv0, dv1, dv2)) {
-      val json = VectorEncoder.jsonEncode(v)
+      val json = JsonVectorConverter.toJson(v)
       parse(json) // `json` should be a valid JSON string
-      val u = VectorEncoder.jsonDecode(json)
+      val u = JsonVectorConverter.fromJson(json)
       assert(u.getClass === v.getClass, "toJson/fromJson should preserve vector types.")
       assert(u === v, "toJson/fromJson should preserve vector values.")
     }
