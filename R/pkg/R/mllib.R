@@ -125,7 +125,7 @@ setMethod("glm", signature(formula = "formula", family = "ANY", data = "SparkDat
 
 #' Get the summary of a generalized linear model
 #'
-#' Returns the summary of a model produced by glm(), similarly to R's summary().
+#' Returns the summary of a model produced by glm() or spark.glm(), similarly to R's summary().
 #'
 #' @param object A fitted generalized linear model
 #' @return coefficients the model's coefficients, intercept
@@ -199,7 +199,8 @@ print.summary.GeneralizedLinearRegressionModel <- function(x, ...) {
 
 #' Make predictions from a generalized linear model
 #'
-#' Makes predictions from a generalized linear model produced by glm(), similarly to R's predict().
+#' Makes predictions from a generalized linear model produced by glm() or spark.glm(),
+#' similarly to R's predict().
 #'
 #' @param object A fitted generalized linear model
 #' @param newData SparkDataFrame for testing
@@ -219,7 +220,8 @@ setMethod("predict", signature(object = "GeneralizedLinearRegressionModel"),
 
 #' Make predictions from a naive Bayes model
 #'
-#' Makes predictions from a model produced by naiveBayes(), similarly to R package e1071's predict.
+#' Makes predictions from a model produced by spark.naiveBayes(),
+#' similarly to R package e1071's predict.
 #'
 #' @param object A fitted naive Bayes model
 #' @param newData SparkDataFrame for testing
@@ -239,7 +241,8 @@ setMethod("predict", signature(object = "NaiveBayesModel"),
 
 #' Get the summary of a naive Bayes model
 #'
-#' Returns the summary of a naive Bayes model produced by naiveBayes(), similarly to R's summary().
+#' Returns the summary of a naive Bayes model produced by spark.naiveBayes(),
+#' similarly to R's summary().
 #'
 #' @param object A fitted MLlib model
 #' @return a list containing 'apriori', the label distribution, and 'tables', conditional
@@ -271,22 +274,25 @@ setMethod("summary", signature(object = "NaiveBayesModel"),
 #' Fit a k-means model, similarly to R's kmeans().
 #'
 #' @param data SparkDataFrame for training
+#' @param formula A symbolic description of the model to be fitted. Currently only a few formula
+#'                operators are supported, including '~', '.', ':', '+', and '-'.
+#'                Note that the response variable of formula is empty in spark.kmeans.
 #' @param k Number of centers
 #' @param maxIter Maximum iteration number
-#' @param initializationMode Algorithm choosen to fit the model
+#' @param initMode The initialization algorithm choosen to fit the model
 #' @return A fitted k-means model
 #' @rdname spark.kmeans
 #' @export
 #' @examples
 #' \dontrun{
-#' model <- spark.kmeans(data, k = 2, initializationMode="random")
+#' model <- spark.kmeans(data, ~ ., k=2, initMode="random")
 #' }
-setMethod("spark.kmeans", signature(data = "SparkDataFrame"),
-          function(data, k, maxIter = 10, initializationMode = c("random", "k-means||")) {
-            columnNames <- as.array(colnames(data))
-            initializationMode <- match.arg(initializationMode)
-            jobj <- callJStatic("org.apache.spark.ml.r.KMeansWrapper", "fit", data@sdf,
-                                k, maxIter, initializationMode, columnNames)
+setMethod("spark.kmeans", signature(data = "SparkDataFrame", formula = "formula"),
+          function(data, formula, k, maxIter = 10, initMode = c("random", "k-means||")) {
+            formula <- paste(deparse(formula), collapse = "")
+            initMode <- match.arg(initMode)
+            jobj <- callJStatic("org.apache.spark.ml.r.KMeansWrapper", "fit", data@sdf, formula,
+                                as.integer(k), as.integer(maxIter), initMode)
             return(new("KMeansModel", jobj = jobj))
          })
 
@@ -301,7 +307,7 @@ setMethod("spark.kmeans", signature(data = "SparkDataFrame"),
 #' @export
 #' @examples
 #' \dontrun{
-#' model <- spark.kmeans(trainingData, 2)
+#' model <- spark.kmeans(trainingData, ~ ., 2)
 #' fitted.model <- fitted(model)
 #' showDF(fitted.model)
 #'}
@@ -319,7 +325,7 @@ setMethod("fitted", signature(object = "KMeansModel"),
 
 #' Get the summary of a k-means model
 #'
-#' Returns the summary of a k-means model produced by kmeans(),
+#' Returns the summary of a k-means model produced by spark.kmeans(),
 #' similarly to R's summary().
 #'
 #' @param object a fitted k-means model
@@ -328,7 +334,7 @@ setMethod("fitted", signature(object = "KMeansModel"),
 #' @export
 #' @examples
 #' \dontrun{
-#' model <- spark.kmeans(trainingData, 2)
+#' model <- spark.kmeans(trainingData, ~ ., 2)
 #' summary(model)
 #' }
 setMethod("summary", signature(object = "KMeansModel"),
@@ -353,7 +359,7 @@ setMethod("summary", signature(object = "KMeansModel"),
 
 #' Make predictions from a k-means model
 #'
-#' Make predictions from a model produced by kmeans().
+#' Make predictions from a model produced by spark.kmeans().
 #'
 #' @param object A fitted k-means model
 #' @param newData SparkDataFrame for testing
@@ -362,7 +368,7 @@ setMethod("summary", signature(object = "KMeansModel"),
 #' @export
 #' @examples
 #' \dontrun{
-#' model <- spark.kmeans(trainingData, 2)
+#' model <- spark.kmeans(trainingData, ~ ., 2)
 #' predicted <- predict(model, testData)
 #' showDF(predicted)
 #' }
@@ -376,7 +382,7 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' Fit a Bernoulli naive Bayes model on a Spark DataFrame (only categorical data is supported).
 #'
 #' @param data SparkDataFrame for training
-#' @param object A symbolic description of the model to be fitted. Currently only a few formula
+#' @param formula A symbolic description of the model to be fitted. Currently only a few formula
 #'               operators are supported, including '~', '.', ':', '+', and '-'.
 #' @param laplace Smoothing parameter
 #' @return a fitted naive Bayes model
@@ -409,7 +415,7 @@ setMethod("spark.naiveBayes", signature(data = "SparkDataFrame", formula = "form
 #' @examples
 #' \dontrun{
 #' df <- createDataFrame(sqlContext, infert)
-#' model <- spark.naiveBayes(education ~ ., df, laplace = 0)
+#' model <- spark.naiveBayes(df, education ~ ., laplace = 0)
 #' path <- "path/to/model"
 #' write.ml(model, path)
 #' }
@@ -484,7 +490,7 @@ setMethod("write.ml", signature(object = "GeneralizedLinearRegressionModel", pat
 #' @export
 #' @examples
 #' \dontrun{
-#' model <- spark.kmeans(x, k = 2, initializationMode="random")
+#' model <- spark.kmeans(trainingData, ~ ., k = 2)
 #' path <- "path/to/model"
 #' write.ml(model, path)
 #' }
@@ -540,7 +546,7 @@ read.ml <- function(path) {
 #' @examples
 #' \dontrun{
 #' df <- createDataFrame(sqlContext, ovarian)
-#' model <- spark.survreg(Surv(df, futime, fustat) ~ ecog_ps + rx)
+#' model <- spark.survreg(df, Surv(futime, fustat) ~ ecog_ps + rx)
 #' }
 setMethod("spark.survreg", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, ...) {
@@ -553,7 +559,7 @@ setMethod("spark.survreg", signature(data = "SparkDataFrame", formula = "formula
 
 #' Get the summary of an AFT survival regression model
 #'
-#' Returns the summary of an AFT survival regression model produced by survreg(),
+#' Returns the summary of an AFT survival regression model produced by spark.survreg(),
 #' similarly to R's summary().
 #'
 #' @param object a fitted AFT survival regression model
@@ -578,7 +584,8 @@ setMethod("summary", signature(object = "AFTSurvivalRegressionModel"),
 
 #' Make predictions from an AFT survival regression model
 #'
-#' Make predictions from a model produced by survreg(), similarly to R package survival's predict.
+#' Make predictions from a model produced by spark.survreg(),
+#' similarly to R package survival's predict.
 #'
 #' @param object A fitted AFT survival regression model
 #' @param newData SparkDataFrame for testing

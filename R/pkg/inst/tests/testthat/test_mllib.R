@@ -132,7 +132,7 @@ test_that("spark.glm save/load", {
   m <- spark.glm(training, Sepal_Width ~ Sepal_Length + Species)
   s <- summary(m)
 
-  modelPath <- tempfile(pattern = "glm", fileext = ".tmp")
+  modelPath <- tempfile(pattern = "spark-glm", fileext = ".tmp")
   write.ml(m, modelPath)
   expect_error(write.ml(m, modelPath))
   write.ml(m, modelPath, overwrite = TRUE)
@@ -291,7 +291,7 @@ test_that("spark.kmeans", {
 
   take(training, 1)
 
-  model <- spark.kmeans(data = training, k = 2)
+  model <- spark.kmeans(data = training, ~ ., k = 2)
   sample <- take(select(predict(model, training), "prediction"), 1)
   expect_equal(typeof(sample$prediction), "integer")
   expect_equal(sample$prediction, 1)
@@ -310,7 +310,7 @@ test_that("spark.kmeans", {
   expect_equal(sort(collect(distinct(select(cluster, "prediction")))$prediction), c(0, 1))
 
   # Test model save/load
-  modelPath <- tempfile(pattern = "kmeans", fileext = ".tmp")
+  modelPath <- tempfile(pattern = "spark-kmeans", fileext = ".tmp")
   write.ml(model, modelPath)
   expect_error(write.ml(model, modelPath))
   write.ml(model, modelPath, overwrite = TRUE)
@@ -324,7 +324,7 @@ test_that("spark.kmeans", {
   unlink(modelPath)
 })
 
-test_that("naiveBayes", {
+test_that("spark.naiveBayes", {
   # R code to reproduce the result.
   # We do not support instance weights yet. So we ignore the frequencies.
   #
@@ -377,7 +377,7 @@ test_that("naiveBayes", {
                                "Yes", "Yes", "No", "No"))
 
   # Test model save/load
-  modelPath <- tempfile(pattern = "naiveBayes", fileext = ".tmp")
+  modelPath <- tempfile(pattern = "spark-naiveBayes", fileext = ".tmp")
   write.ml(m, modelPath)
   expect_error(write.ml(m, modelPath))
   write.ml(m, modelPath, overwrite = TRUE)
@@ -434,7 +434,7 @@ test_that("spark.survreg", {
                2.390146, 2.891269, 2.891269), tolerance = 1e-4)
 
   # Test model save/load
-  modelPath <- tempfile(pattern = "survreg", fileext = ".tmp")
+  modelPath <- tempfile(pattern = "spark-survreg", fileext = ".tmp")
   write.ml(model, modelPath)
   expect_error(write.ml(model, modelPath))
   write.ml(model, modelPath, overwrite = TRUE)
