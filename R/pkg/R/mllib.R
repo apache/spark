@@ -278,21 +278,21 @@ setMethod("summary", signature(object = "NaiveBayesModel"),
 #'                operators are supported, including '~', '.', ':', '+', and '-'.
 #'                Note that the response variable of formula is empty in spark.kmeans.
 #' @param k Number of centers
-#' @param max.iter Maximum iteration number
-#' @param init.mode The initialization algorithm choosen to fit the model
+#' @param maxIter Maximum iteration number
+#' @param initMode The initialization algorithm choosen to fit the model
 #' @return A fitted k-means model
 #' @rdname spark.kmeans
 #' @export
 #' @examples
 #' \dontrun{
-#' model <- spark.kmeans(data, ~ ., k=2, init.mode="random")
+#' model <- spark.kmeans(data, ~ ., k=2, initMode="random")
 #' }
 setMethod("spark.kmeans", signature(data = "SparkDataFrame", formula = "formula"),
-          function(data, formula, k, max.iter = 10, init.mode = c("random", "k-means||")) {
+          function(data, formula, k, maxIter = 10, initMode = c("random", "k-means||")) {
             formula <- paste(deparse(formula), collapse = "")
-            init.mode <- match.arg(init.mode)
+            initMode <- match.arg(initMode)
             jobj <- callJStatic("org.apache.spark.ml.r.KMeansWrapper", "fit", data@sdf, formula,
-                                as.integer(k), as.integer(max.iter), init.mode)
+                                as.integer(k), as.integer(maxIter), initMode)
             return(new("KMeansModel", jobj = jobj))
          })
 
