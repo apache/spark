@@ -421,7 +421,7 @@ test_that("spark.survreg", {
   data <- list(list(4, 1, 0, 0), list(3, 1, 2, 0), list(1, 1, 1, 0),
           list(1, 0, 1, 0), list(2, 1, 1, 1), list(2, 1, 0, 1), list(3, 0, 0, 1))
   df <- createDataFrame(sqlContext, data, c("time", "status", "x", "sex"))
-  model <- survreg(df, Surv(time, status) ~ x + sex)
+  model <- spark.survreg(df, Surv(time, status) ~ x + sex)
   stats <- summary(model)
   coefs <- as.vector(stats$coefficients[, 1])
   rCoefs <- c(1.3149571, -0.1903409, -0.2532618, -1.1599800)
