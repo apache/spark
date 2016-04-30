@@ -635,13 +635,9 @@ class CodegenContext {
       val effectiveCode =
         s"""
            |  ${code.code.trim}
-           |  $isNull = ${code.isNull};
-           |  $value = ${code.value};
+           |  boolean $isNull = ${code.isNull};
+           |  ${javaType(expr.dataType)} $value = ${code.value};
            """.stripMargin
-
-      addMutableState("boolean", isNull, s"$isNull = false;")
-      addMutableState(javaType(expr.dataType), value,
-        s"$value = ${defaultValue(expr.dataType)};")
 
       val state = SubExprEliminationState(isNull, value)
       e.foreach(subExprEliminationExprs.put(_, state))
