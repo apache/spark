@@ -26,6 +26,19 @@ import org.apache.spark.scheduler._
 
 
 class DataPropertyAccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContext {
+  test("two partition old and new") {
+    sc = new SparkContext("local[2]", "test")
+    val legacyAcc: Accumulator[Int] = sc.accumulator(0, "l2", dataProperty = true)
+    val newAcc = sc.dataPropertyLongAccumulator("n2")
+
+    val a = sc.parallelize(1 to 20, 2)
+    val b = a.map{x => legacyAcc += x; newAcc.add(x); x}
+    b.cache()
+    b.count()
+    legacyAcc.value should be (210)
+    newAcc.value should be (210)
+  }
+
   test("single partition") {
     sc = new SparkContext("local[2]", "test")
     val acc : Accumulator[Int] = sc.accumulator(0, dataProperty = true)

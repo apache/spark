@@ -57,7 +57,7 @@ private[spark] case class AccumulatorMetadata(
  */
 abstract class NewAccumulator[IN, OUT] extends Serializable {
   private[spark] var metadata: AccumulatorMetadata = _
-  private[this] var atDriverSide = true
+  private[NewAccumulator] var atDriverSide = true
 
   /**
    * The following values are used for data property [[NewAccumulator]]s.
@@ -70,12 +70,12 @@ abstract class NewAccumulator[IN, OUT] extends Serializable {
    */
   // For data property accumulators pending and processed updates.
   // Pending and processed are keyed by (rdd id, shuffle id, partition id)
-  @transient private[spark] lazy val pending =
+  private[NewAccumulator] lazy val pending =
     new mutable.HashMap[(Int, Int, Int), NewAccumulator[IN, OUT]]()
   // Completed contains the set of (rdd id, shuffle id, partition id) that have been
   // fully processed on the worker side. This is used to determine if the updates should
   // be sent back to the driver for a particular rdd/shuffle/partition combination.
-  @transient private[spark] lazy val completed = new mutable.HashSet[(Int, Int, Int)]()
+  private[NewAccumulator] lazy val completed = new mutable.HashSet[(Int, Int, Int)]()
   // Processed is keyed by (rdd id, shuffle id) and the value is a bitset containing all partitions
   // for the given key which have been merged into the value. This is used on the driver.
   @transient private[spark] lazy val processed = new mutable.HashMap[(Int, Int), mutable.BitSet]()
@@ -168,7 +168,9 @@ abstract class NewAccumulator[IN, OUT] extends Serializable {
     if (metadata.dataProperty) {
       val updateInfo = TaskContext.get().getRDDPartitionInfo()
       val base = pending.getOrElse(updateInfo, copyAndReset())
+      base.atDriverSide = false
       base.addImpl(v)
+      pending(updateInfo) = base
     }
   }
 
@@ -196,7 +198,7 @@ abstract class NewAccumulator[IN, OUT] extends Serializable {
     assertMetadataNotNull()
     // Handle data property accumulators
     if (metadata.dataProperty) {
-      val term = other.pending
+      val term = other.pending.filter{case (k, v) => other.completed.contains(k)}
       term.foreach { case ((rddId, shuffleWriteId, splitId), v) =>
         val splits = processed.getOrElseUpdate((rddId, shuffleWriteId), new mutable.BitSet())
         if (!splits.contains(splitId)) {
@@ -356,8 +358,6 @@ class LongAccumulator extends NewAccumulator[jl.Long, jl.Long] {
 
   override def addImpl(v: jl.Long): Unit = _sum += v
 
-  def add(v: Long): Unit = _sum += v
-
   def sum: Long = _sum
 
   override def mergeImpl(other: NewAccumulator[jl.Long, jl.Long]): Unit = other match {
@@ -380,8 +380,6 @@ class DoubleAccumulator extends NewAccumulator[jl.Double, jl.Double] {
   override def copyAndReset(): DoubleAccumulator = new DoubleAccumulator
 
   override def addImpl(v: jl.Double): Unit = _sum += v
-
-  def add(v: Double): Unit = _sum += v
 
   def sum: Double = _sum
 
@@ -407,11 +405,6 @@ class AverageAccumulator extends NewAccumulator[jl.Double, jl.Double] {
 
   override def addImpl(v: jl.Double): Unit = {
     _sum += v
-    _count += 1
-  }
-
-  def add(d: Double): Unit = {
-    _sum += d
     _count += 1
   }
 
