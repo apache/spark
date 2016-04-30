@@ -436,7 +436,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       case p: LogicalPlan if !p.childrenResolved => p
       case p: LogicalPlan if p.resolved => p
 
-      case CreateViewCommand(table, child, allowExisting, replace, sql)
+      case CreateViewCommand(table, child, allowExisting, replace, temporary, sql)
         if !sessionState.conf.nativeView =>
         HiveNativeCommand(sql)
 

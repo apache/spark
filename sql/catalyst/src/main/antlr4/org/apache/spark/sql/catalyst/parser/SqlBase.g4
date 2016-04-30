@@ -94,7 +94,7 @@ statement
     | DROP TABLE (IF EXISTS)? tableIdentifier PURGE?
         (FOR METADATA? REPLICATION '(' STRING ')')?                    #dropTable
     | DROP VIEW (IF EXISTS)? tableIdentifier                           #dropTable
-    | CREATE (OR REPLACE)? VIEW (IF NOT EXISTS)? tableIdentifier
+    | CREATE (OR REPLACE)? TEMPORARY? VIEW (IF NOT EXISTS)? tableIdentifier
         identifierCommentList? (COMMENT STRING)?
         (PARTITIONED ON identifierList)?
         (TBLPROPERTIES tablePropertyList)? AS query                    #createView

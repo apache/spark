@@ -37,6 +37,10 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
  *                already exists, throws analysis exception.
  * @param replace if true, and if the view already exists, updates it; if false, and if the view
  *                already exists, throws analysis exception.
+ * @param temporary if true, the view is created as a temporary view. Temporary views are dropped
+  *                 at the end of current Spark session. It fails if a persistent table with same
+  *                 table name exists. If fails if the table name contains database prefix like
+  *                 "database.tablename".
  * @param sql the original sql
  */
 case class CreateViewCommand(
@@ -44,6 +48,7 @@ case class CreateViewCommand(
     child: LogicalPlan,
     allowExisting: Boolean,
     replace: Boolean,
+    temporary: Boolean,
     sql: String)
   extends RunnableCommand {
 
@@ -62,6 +67,13 @@ case class CreateViewCommand(
       "It is not allowed to define a view with both IF NOT EXISTS and OR REPLACE.")
   }
 
+  // Temporary view names should NOT contain database prefix like "database.table"
+  if (temporary && tableIdentifier.database.isDefined) {
+    val database = tableIdentifier.database.get
+    throw new AnalysisException(
+      s"It is not allowed to add database prefix ${database} for the TEMPORARY view name.")
+  }
+
   override def run(sparkSession: SparkSession): Seq[Row] = {
     // If the plan cannot be analyzed, throw an exception and don't proceed.
     val qe = sparkSession.executePlan(child)
@@ -71,24 +83,62 @@ case class CreateViewCommand(
     require(tableDesc.schema == Nil || tableDesc.schema.length == analyzedPlan.output.length)
     val sessionState = sparkSession.sessionState
 
-    if (sessionState.catalog.tableExists(tableIdentifier)) {
-      if (allowExisting) {
-        // Handles `CREATE VIEW IF NOT EXISTS v0 AS SELECT ...`. Does nothing when the target view
-        // already exists.
-      } else if (replace) {
-        // Handles `CREATE OR REPLACE VIEW v0 AS SELECT ...`
-        sessionState.catalog.alterTable(prepareTable(sparkSession, analyzedPlan))
+    def createTable(): Unit = {
+      if (temporary) {
+        // Creates a temp view
+        sessionState.catalog.createTempTable(tableIdentifier.table, analyzedPlan,
+          overrideIfExists = false)
       } else {
-        // Handles `CREATE VIEW v0 AS SELECT ...`. Throws exception when the target view already
-        // exists.
+        sessionState.catalog.createTable(
+          prepareTable(sparkSession, analyzedPlan), ignoreIfExists = false)
+      }
+    }
+
+    def replaceTable(): Unit = {
+      if (temporary) {
+        // Replaces the temp view if it exists
+        sessionState.catalog.createTempTable(tableIdentifier.table, analyzedPlan,
+          overrideIfExists = true)
+      } else {
+        sessionState.catalog.alterTable(prepareTable(sparkSession, analyzedPlan))
+      }
+    }
+
+    // Ensures the new view has same type (temporary or persistent) when replacing a existing table.
+    def assertSameTableType(): Unit = {
+      val sameType = temporary == sessionState.catalog.isTemporaryTable(tableIdentifier)
+      if (!sameType) {
+        def tableType(temporary: Boolean): String = {
+          if (temporary) "temporary" else "not temporary"
+        }
+
+        throw new AnalysisException(s"View $tableIdentifier already exists with a different " +
+          s"type, which is ${tableType(!temporary)}. Please choose a new view name " +
+          s"to avoid the name conflict, or change the view type to ${tableType(!temporary)}.")
+      }
+    }
+
+    if (sessionState.catalog.tableExists(tableIdentifier)) {
+
+      // The new view and the existing table are both temporary or both persistent.
+      assertSameTableType()
+
+      if (allowExisting) {
+        // Handles `CREATE [TEMPORARY] VIEW IF NOT EXISTS v0 AS SELECT ...`. Does nothing when the
+        // target view already exists.
+      } else if (replace) {
+        // Handles `CREATE OR REPLACE [TEMPORARY] VIEW v0 AS SELECT ...`
+        replaceTable()
+      } else {
+        // Handles `CREATE [TEMPORARY] VIEW v0 AS SELECT ...`. Throws exception when the target
+        // view already exists.
         throw new AnalysisException(s"View $tableIdentifier already exists. " +
           "If you want to update the view definition, please use ALTER VIEW AS or " +
           "CREATE OR REPLACE VIEW AS")
       }
     } else {
-      // Create the view if it doesn't exist.
-      sessionState.catalog.createTable(
-        prepareTable(sparkSession, analyzedPlan), ignoreIfExists = false)
+      // Create a table view if the table name doesn't exist.
+      createTable()
     }
 
     Seq.empty[Row]
