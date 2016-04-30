@@ -271,12 +271,13 @@ private[sql] object InferSchema {
           while (f1Idx < fields1.length && f2Idx < fields2.length) {
             val f1Name = fields1(f1Idx).name
             val f2Name = fields2(f2Idx).name
-            if (f1Name == f2Name) {
+            val comp = f1Name.compareTo(f2Name)
+            if (comp == 0) {
               val dataType = compatibleType(fields1(f1Idx).dataType, fields2(f2Idx).dataType)
               newFields.add(StructField(f1Name, dataType, nullable = true))
               f1Idx += 1
               f2Idx += 1
-            } else if (f1Name < f2Name) {
+            } else if (comp < 0) { // f1Name < f2Name
               newFields.add(fields1(f1Idx))
               f1Idx += 1
             } else { // f1Name > f2Name
