@@ -191,7 +191,8 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
    */
   def registerKryoClasses(classes: Array[Class[_]]): SparkConf = {
     val allClassNames = new LinkedHashSet[String]()
-    allClassNames ++= get("spark.kryo.classesToRegister", "").split(',').filter(!_.isEmpty)
+    allClassNames ++= get("spark.kryo.classesToRegister", "").split(',').map(_.trim)
+      .filter(!_.isEmpty)
     allClassNames ++= classes.map(_.getName)
 
     set("spark.kryo.classesToRegister", allClassNames.mkString(","))

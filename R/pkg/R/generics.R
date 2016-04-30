@@ -106,6 +106,10 @@ setGeneric("getJRDD", function(rdd, ...) { standardGeneric("getJRDD") })
 # @export
 setGeneric("glom", function(x) { standardGeneric("glom") })
 
+# @rdname histogram
+# @export
+setGeneric("histogram", function(df, col, nbins=10) { standardGeneric("histogram") })
+
 # @rdname keyBy
 # @export
 setGeneric("keyBy", function(x, func) { standardGeneric("keyBy") })
@@ -441,6 +445,10 @@ setGeneric("covar_samp", function(col1, col2) {standardGeneric("covar_samp") })
 #' @rdname statfunctions
 #' @export
 setGeneric("covar_pop", function(col1, col2) {standardGeneric("covar_pop") })
+
+#' @rdname dapply
+#' @export
+setGeneric("dapply", function(x, func, schema) { standardGeneric("dapply") })
 
 #' @rdname summary
 #' @export
@@ -1200,3 +1208,7 @@ setGeneric("naiveBayes", function(formula, data, ...) { standardGeneric("naiveBa
 #' @rdname survreg
 #' @export
 setGeneric("survreg", function(formula, data, ...) { standardGeneric("survreg") })
+
+#' @rdname ml.save
+#' @export
+setGeneric("ml.save", function(object, path, ...) { standardGeneric("ml.save") })

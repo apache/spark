@@ -21,13 +21,13 @@ import java.nio.charset.StandardCharsets
 import java.sql.Timestamp
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
+import org.apache.spark.sql.{AnalysisException, Row, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.execution.command.{DescribeTableCommand, ExecutedCommandExec, HiveNativeCommand}
+import org.apache.spark.sql.execution.command.{DescribeTableCommand, ExecutedCommandExec}
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReuseExchange}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BinaryType, DateType, DecimalType, TimestampType, _}
@@ -39,39 +39,41 @@ import org.apache.spark.sql.types.{BinaryType, DateType, DecimalType, TimestampT
  * While this is not a public class, we should avoid changing the function names for the sake of
  * changing them, because a lot of developers use the feature for debugging.
  */
-class QueryExecution(val sqlContext: SQLContext, val logical: LogicalPlan) {
+class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
 
   // TODO: Move the planner an optimizer into here from SessionState.
-  protected def planner = sqlContext.sessionState.planner
+  protected def planner = sparkSession.sessionState.planner
 
-  def assertAnalyzed(): Unit = try sqlContext.sessionState.analyzer.checkAnalysis(analyzed) catch {
-    case e: AnalysisException =>
-      val ae = new AnalysisException(e.message, e.line, e.startPosition, Some(analyzed))
-      ae.setStackTrace(e.getStackTrace)
-      throw ae
+  def assertAnalyzed(): Unit = {
+    try sparkSession.sessionState.analyzer.checkAnalysis(analyzed) catch {
+      case e: AnalysisException =>
+        val ae = new AnalysisException(e.message, e.line, e.startPosition, Some(analyzed))
+        ae.setStackTrace(e.getStackTrace)
+        throw ae
+    }
   }
 
   def assertSupported(): Unit = {
-    if (sqlContext.conf.getConf(SQLConf.UNSUPPORTED_OPERATION_CHECK_ENABLED)) {
+    if (sparkSession.sessionState.conf.getConf(SQLConf.UNSUPPORTED_OPERATION_CHECK_ENABLED)) {
       UnsupportedOperationChecker.checkForBatch(analyzed)
     }
   }
 
   lazy val analyzed: LogicalPlan = {
-    SQLContext.setActive(sqlContext)
-    sqlContext.sessionState.analyzer.execute(logical)
+    SQLContext.setActive(sparkSession.wrapped)
+    sparkSession.sessionState.analyzer.execute(logical)
   }
 
   lazy val withCachedData: LogicalPlan = {
     assertAnalyzed()
     assertSupported()
-    sqlContext.cacheManager.useCachedData(analyzed)
+    sparkSession.cacheManager.useCachedData(analyzed)
   }
 
-  lazy val optimizedPlan: LogicalPlan = sqlContext.sessionState.optimizer.execute(withCachedData)
+  lazy val optimizedPlan: LogicalPlan = sparkSession.sessionState.optimizer.execute(withCachedData)
 
   lazy val sparkPlan: SparkPlan = {
-    SQLContext.setActive(sqlContext)
+    SQLContext.setActive(sparkSession.wrapped)
     planner.plan(ReturnAnswer(optimizedPlan)).next()
   }
 
@@ -93,10 +95,10 @@ class QueryExecution(val sqlContext: SQLContext, val logical: LogicalPlan) {
   /** A sequence of rules that will be applied in order to the physical plan before execution. */
   protected def preparations: Seq[Rule[SparkPlan]] = Seq(
     python.ExtractPythonUDFs,
-    PlanSubqueries(sqlContext),
-    EnsureRequirements(sqlContext.conf),
-    CollapseCodegenStages(sqlContext.conf),
-    ReuseExchange(sqlContext.conf))
+    PlanSubqueries(sparkSession),
+    EnsureRequirements(sparkSession.sessionState.conf),
+    CollapseCodegenStages(sparkSession.sessionState.conf),
+    ReuseExchange(sparkSession.sessionState.conf))
 
   protected def stringOrError[A](f: => A): String =
     try f.toString catch { case e: Throwable => e.toString }
@@ -110,7 +112,7 @@ class QueryExecution(val sqlContext: SQLContext, val logical: LogicalPlan) {
     case ExecutedCommandExec(desc: DescribeTableCommand) =>
       // If it is a describe command for a Hive table, we want to have the output format
       // be similar with Hive.
-      desc.run(sqlContext).map {
+      desc.run(sparkSession).map {
         case Row(name: String, dataType: String, comment) =>
           Seq(name, dataType,
             Option(comment.asInstanceOf[String]).getOrElse(""))
@@ -197,12 +199,10 @@ class QueryExecution(val sqlContext: SQLContext, val logical: LogicalPlan) {
     }
   }
 
-  def simpleString: String = logical match {
-    case _: HiveNativeCommand => "<Native command: executed by Hive>"
-    case _ =>
-      s"""== Physical Plan ==
-         |${stringOrError(executedPlan)}
-        """.stripMargin.trim
+  def simpleString: String = {
+    s"""== Physical Plan ==
+       |${stringOrError(executedPlan)}
+      """.stripMargin.trim
   }
 
   override def toString: String = {

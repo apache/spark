@@ -65,4 +65,27 @@ class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest with Predicat
           .load(file.getCanonicalPath))
     }
   }
+
+  test("test hadoop conf option propagation") {
+    withTempPath { file =>
+      // Test write side
+      val df = sqlContext.range(10).selectExpr("cast(id as string)")
+      df.write
+        .option("some-random-write-option", "hahah-WRITE")
+        .option("some-null-value-option", null)  // test null robustness
+        .option("dataSchema", df.schema.json)
+        .format(dataSourceName).save(file.getAbsolutePath)
+      assert(SimpleTextRelation.lastHadoopConf.get.get("some-random-write-option") == "hahah-WRITE")
+
+      // Test read side
+      val df1 = sqlContext.read
+        .option("some-random-read-option", "hahah-READ")
+        .option("some-null-value-option", null)  // test null robustness
+        .option("dataSchema", df.schema.json)
+        .format(dataSourceName)
+        .load(file.getAbsolutePath)
+      df1.count()
+      assert(SimpleTextRelation.lastHadoopConf.get.get("some-random-read-option") == "hahah-READ")
+    }
+  }
 }

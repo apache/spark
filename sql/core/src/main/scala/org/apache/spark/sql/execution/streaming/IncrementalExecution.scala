@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.analysis.OutputMode
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -28,20 +28,21 @@ import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SparkPlanner, 
  * plan incrementally. Possibly preserving state in between each execution.
  */
 class IncrementalExecution(
-    ctx: SQLContext,
+    sparkSession: SparkSession,
     logicalPlan: LogicalPlan,
     outputMode: OutputMode,
     checkpointLocation: String,
-    currentBatchId: Long) extends QueryExecution(ctx, logicalPlan) {
+    currentBatchId: Long)
+  extends QueryExecution(sparkSession, logicalPlan) {
 
   // TODO: make this always part of planning.
-  val stateStrategy = sqlContext.sessionState.planner.StatefulAggregationStrategy :: Nil
+  val stateStrategy = sparkSession.sessionState.planner.StatefulAggregationStrategy :: Nil
 
   // Modified planner with stateful operations.
   override def planner: SparkPlanner =
     new SparkPlanner(
-      sqlContext.sparkContext,
-      sqlContext.conf,
+      sparkSession.sparkContext,
+      sparkSession.sessionState.conf,
       stateStrategy)
 
   /**

@@ -811,10 +811,10 @@ sealed trait LogisticRegressionSummary extends Serializable {
 @Experimental
 @Since("1.5.0")
 class BinaryLogisticRegressionTrainingSummary private[classification] (
-    @Since("1.5.0") predictions: DataFrame,
-    @Since("1.5.0") probabilityCol: String,
-    @Since("1.5.0") labelCol: String,
-    @Since("1.6.0") featuresCol: String,
+    predictions: DataFrame,
+    probabilityCol: String,
+    labelCol: String,
+    featuresCol: String,
     @Since("1.5.0") val objectiveHistory: Array[Double])
   extends BinaryLogisticRegressionSummary(predictions, probabilityCol, labelCol, featuresCol)
   with LogisticRegressionTrainingSummary {
@@ -840,8 +840,8 @@ class BinaryLogisticRegressionSummary private[classification] (
     @Since("1.6.0") override val featuresCol: String) extends LogisticRegressionSummary {
 
 
-  private val sqlContext = predictions.sqlContext
-  import sqlContext.implicits._
+  private val sparkSession = predictions.sparkSession
+  import sparkSession.implicits._
 
   /**
    * Returns a BinaryClassificationMetrics object.

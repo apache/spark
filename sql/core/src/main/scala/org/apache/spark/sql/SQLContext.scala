@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.command.ShowTablesCommand
 import org.apache.spark.sql.execution.ui.{SQLListener, SQLTab}
 import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf}
 import org.apache.spark.sql.sources.BaseRelation
@@ -58,7 +59,7 @@ import org.apache.spark.sql.util.ExecutionListenerManager
  * @since 1.0.0
  */
 class SQLContext private[sql](
-    @transient private val sparkSession: SparkSession,
+    val sparkSession: SparkSession,
     val isRootContext: Boolean)
   extends Logging with Serializable {
 
@@ -103,7 +104,8 @@ class SQLContext private[sql](
 
   protected[sql] def sessionState: SessionState = sparkSession.sessionState
   protected[sql] def sharedState: SharedState = sparkSession.sharedState
-  protected[sql] def conf: SQLConf = sparkSession.conf
+  protected[sql] def conf: SQLConf = sessionState.conf
+  protected[sql] def runtimeConf: RuntimeConfig = sparkSession.conf
   protected[sql] def cacheManager: CacheManager = sparkSession.cacheManager
   protected[sql] def listener: SQLListener = sparkSession.listener
   protected[sql] def externalCatalog: ExternalCatalog = sparkSession.externalCatalog
@@ -257,7 +259,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def isCached(tableName: String): Boolean = {
-    sparkSession.isCached(tableName)
+    sparkSession.catalog.isCached(tableName)
   }
 
   /**
@@ -266,7 +268,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   private[sql] def isCached(qName: Dataset[_]): Boolean = {
-    sparkSession.isCached(qName)
+    sparkSession.cacheManager.lookupCachedData(qName).nonEmpty
   }
 
   /**
@@ -275,7 +277,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def cacheTable(tableName: String): Unit = {
-    sparkSession.cacheTable(tableName)
+    sparkSession.catalog.cacheTable(tableName)
   }
 
   /**
@@ -284,7 +286,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def uncacheTable(tableName: String): Unit = {
-    sparkSession.uncacheTable(tableName)
+    sparkSession.catalog.uncacheTable(tableName)
   }
 
   /**
@@ -292,7 +294,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def clearCache(): Unit = {
-    sparkSession.clearCache()
+    sparkSession.catalog.clearCache()
   }
 
   // scalastyle:off
@@ -506,7 +508,7 @@ class SQLContext private[sql](
    */
   @Experimental
   def createExternalTable(tableName: String, path: String): DataFrame = {
-    sparkSession.createExternalTable(tableName, path)
+    sparkSession.catalog.createExternalTable(tableName, path)
   }
 
   /**
@@ -522,7 +524,7 @@ class SQLContext private[sql](
       tableName: String,
       path: String,
       source: String): DataFrame = {
-    sparkSession.createExternalTable(tableName, path, source)
+    sparkSession.catalog.createExternalTable(tableName, path, source)
   }
 
   /**
@@ -538,7 +540,7 @@ class SQLContext private[sql](
       tableName: String,
       source: String,
       options: java.util.Map[String, String]): DataFrame = {
-    sparkSession.createExternalTable(tableName, source, options)
+    sparkSession.catalog.createExternalTable(tableName, source, options)
   }
 
   /**
@@ -555,7 +557,7 @@ class SQLContext private[sql](
       tableName: String,
       source: String,
       options: Map[String, String]): DataFrame = {
-    sparkSession.createExternalTable(tableName, source, options)
+    sparkSession.catalog.createExternalTable(tableName, source, options)
   }
 
   /**
@@ -572,7 +574,7 @@ class SQLContext private[sql](
       source: String,
       schema: StructType,
       options: java.util.Map[String, String]): DataFrame = {
-    sparkSession.createExternalTable(tableName, source, schema, options)
+    sparkSession.catalog.createExternalTable(tableName, source, schema, options)
   }
 
   /**
@@ -590,7 +592,7 @@ class SQLContext private[sql](
       source: String,
       schema: StructType,
       options: Map[String, String]): DataFrame = {
-    sparkSession.createExternalTable(tableName, source, schema, options)
+    sparkSession.catalog.createExternalTable(tableName, source, schema, options)
   }
 
   /**
@@ -598,7 +600,7 @@ class SQLContext private[sql](
    * only during the lifetime of this instance of SQLContext.
    */
   private[sql] def registerDataFrameAsTable(df: DataFrame, tableName: String): Unit = {
-    sparkSession.registerDataFrameAsTable(df, tableName)
+    sparkSession.registerTable(df, tableName)
   }
 
   /**
@@ -610,7 +612,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def dropTempTable(tableName: String): Unit = {
-    sparkSession.dropTempTable(tableName)
+    sparkSession.catalog.dropTempTable(tableName)
   }
 
   /**
@@ -672,15 +674,6 @@ class SQLContext private[sql](
   def sql(sqlText: String): DataFrame = sparkSession.sql(sqlText)
 
   /**
-   * Executes a SQL query without parsing it, but instead passing it directly to an underlying
-   * system to process. This is currently only used for Hive DDLs and will be removed as soon
-   * as Spark can parse all supported Hive DDLs itself.
-   */
-  private[sql] def runNativeSql(sqlText: String): Seq[Row] = {
-    sparkSession.runNativeSql(sqlText)
-  }
-
-  /**
    * Returns the specified table as a [[DataFrame]].
    *
    * @group ddl_ops
@@ -699,7 +692,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def tables(): DataFrame = {
-    sparkSession.tables()
+    Dataset.ofRows(sparkSession, ShowTablesCommand(None, None))
   }
 
   /**
@@ -711,7 +704,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def tables(databaseName: String): DataFrame = {
-    sparkSession.tables(databaseName)
+    Dataset.ofRows(sparkSession, ShowTablesCommand(Some(databaseName), None))
   }
 
   /**
@@ -729,7 +722,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def tableNames(): Array[String] = {
-    sparkSession.tableNames()
+    sparkSession.catalog.listTables().collect().map(_.name)
   }
 
   /**
@@ -739,7 +732,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def tableNames(databaseName: String): Array[String] = {
-    sparkSession.tableNames(databaseName)
+    sparkSession.catalog.listTables(databaseName).collect().map(_.name)
   }
 
   /**
