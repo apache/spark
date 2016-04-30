@@ -22,7 +22,7 @@ import javax.annotation.Nullable
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.catalyst.parser.DataTypeParser
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
 
 
@@ -189,7 +189,7 @@ case class SimpleCatalogRelation(
     (cols ++ catalogTable.partitionColumns).map { f =>
       AttributeReference(
         f.name,
-        DataTypeParser.parse(f.dataType),
+        CatalystSqlParser.parseDataType(f.dataType),
         // Since data can be dumped in randomly with no validation, everything is nullable.
         nullable = true
       )(qualifier = Some(alias.getOrElse(metadata.identifier.table)))

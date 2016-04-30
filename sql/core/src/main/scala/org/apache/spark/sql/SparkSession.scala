@@ -109,6 +109,18 @@ class SparkSession private(
   protected[sql] def externalCatalog: ExternalCatalog = sharedState.externalCatalog
 
   /**
+   * Runtime configuration interface for Spark.
+   *
+   * This is the interface through which the user can get and set all Spark and Hadoop
+   * configurations that are relevant to Spark SQL. When getting the value of a config,
+   * this defaults to the value set in the underlying [[SparkContext]], if any.
+   *
+   * @group config
+   * @since 2.0.0
+   */
+  @transient lazy val conf: RuntimeConfig = new RuntimeConfig(sessionState.conf)
+
+  /**
    * :: Experimental ::
    * An interface to register custom [[org.apache.spark.sql.util.QueryExecutionListener]]s
    * that listen for execution metrics.
@@ -184,89 +196,6 @@ class SparkSession private(
    */
   def newSession(): SparkSession = {
     new SparkSession(sparkContext, Some(sharedState))
-  }
-
-
-  /* -------------------------------------------------- *
-   |  Methods for accessing or mutating configurations  |
-   * -------------------------------------------------- */
-
-  /**
-   * Runtime configuration interface for Spark.
-   *
-   * This is the interface through which the user can get and set all Spark and Hadoop
-   * configurations that are relevant to Spark SQL. When getting the value of a config,
-   * this defaults to the value set in the underlying [[SparkContext]], if any.
-   *
-   * @group config
-   * @since 2.0.0
-   */
-  @transient lazy val conf: RuntimeConfig = new RuntimeConfig(sessionState.conf)
-
-  /**
-   * Set Spark SQL configuration properties.
-   *
-   * @group config
-   * @since 2.0.0
-   */
-  def setConf(props: Properties): Unit = sessionState.setConf(props)
-
-  /**
-   * Set the given Spark SQL configuration property.
-   *
-   * @group config
-   * @since 2.0.0
-   */
-  def setConf(key: String, value: String): Unit = sessionState.setConf(key, value)
-
-  /**
-   * Return the value of Spark SQL configuration property for the given key.
-   *
-   * @group config
-   * @since 2.0.0
-   */
-  def getConf(key: String): String = sessionState.conf.getConfString(key)
-
-  /**
-   * Return the value of Spark SQL configuration property for the given key. If the key is not set
-   * yet, return `defaultValue`.
-   *
-   * @group config
-   * @since 2.0.0
-   */
-  def getConf(key: String, defaultValue: String): String = {
-    sessionState.conf.getConfString(key, defaultValue)
-  }
-
-  /**
-   * Return all the configuration properties that have been set (i.e. not the default).
-   * This creates a new copy of the config properties in the form of a Map.
-   *
-   * @group config
-   * @since 2.0.0
-   */
-  def getAllConfs: immutable.Map[String, String] = sessionState.conf.getAllConfs
-
-  /**
-   * Set the given Spark SQL configuration property.
-   */
-  protected[sql] def setConf[T](entry: ConfigEntry[T], value: T): Unit = {
-    sessionState.setConf(entry, value)
-  }
-
-  /**
-   * Return the value of Spark SQL configuration property for the given key. If the key is not set
-   * yet, return `defaultValue` in [[ConfigEntry]].
-   */
-  protected[sql] def getConf[T](entry: ConfigEntry[T]): T = sessionState.conf.getConf(entry)
-
-  /**
-   * Return the value of Spark SQL configuration property for the given key. If the key is not set
-   * yet, return `defaultValue`. This is useful when `defaultValue` in ConfigEntry is not the
-   * desired one.
-   */
-  protected[sql] def getConf[T](entry: ConfigEntry[T], defaultValue: T): T = {
-    sessionState.conf.getConf(entry, defaultValue)
   }
 
 
