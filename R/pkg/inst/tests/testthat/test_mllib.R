@@ -25,6 +25,137 @@ sc <- sparkR.init()
 
 sqlContext <- sparkRSQL.init(sc)
 
+test_that("formula of spark.glm", {
+  training <- suppressWarnings(createDataFrame(sqlContext, iris))
+  # directly calling the spark API
+  # dot minus and intercept vs native glm
+  model <- spark.glm(training, Sepal_Width ~ . - Species + 0)
+  vals <- collect(select(predict(model, training), "prediction"))
+  rVals <- predict(glm(Sepal.Width ~ . - Species + 0, data = iris), iris)
+  expect_true(all(abs(rVals - vals) < 1e-6), rVals - vals)
+
+  # feature interaction vs native glm
+  model <- spark.glm(training, Sepal_Width ~ Species:Sepal_Length)
+  vals <- collect(select(predict(model, training), "prediction"))
+  rVals <- predict(glm(Sepal.Width ~ Species:Sepal.Length, data = iris), iris)
+  expect_true(all(abs(rVals - vals) < 1e-6), rVals - vals)
+
+  # glm should work with long formula
+  training <- suppressWarnings(createDataFrame(sqlContext, iris))
+  training$LongLongLongLongLongName <- training$Sepal_Width
+  training$VeryLongLongLongLonLongName <- training$Sepal_Length
+  training$AnotherLongLongLongLongName <- training$Species
+  model <- spark.glm(training, LongLongLongLongLongName ~ VeryLongLongLongLonLongName +
+    AnotherLongLongLongLongName)
+  vals <- collect(select(predict(model, training), "prediction"))
+  rVals <- predict(glm(Sepal.Width ~ Sepal.Length + Species, data = iris), iris)
+  expect_true(all(abs(rVals - vals) < 1e-6), rVals - vals)
+})
+
+test_that("spark.glm and predict", {
+  training <- suppressWarnings(createDataFrame(sqlContext, iris))
+  # gaussian family
+  model <- spark.glm(training, Sepal_Width ~ Sepal_Length + Species)
+  prediction <- predict(model, training)
+  expect_equal(typeof(take(select(prediction, "prediction"), 1)$prediction), "double")
+  vals <- collect(select(prediction, "prediction"))
+  rVals <- predict(glm(Sepal.Width ~ Sepal.Length + Species, data = iris), iris)
+  expect_true(all(abs(rVals - vals) < 1e-6), rVals - vals)
+
+  # poisson family
+  model <- spark.glm(training, Sepal_Width ~ Sepal_Length + Species,
+  family = poisson(link = identity))
+  prediction <- predict(model, training)
+  expect_equal(typeof(take(select(prediction, "prediction"), 1)$prediction), "double")
+  vals <- collect(select(prediction, "prediction"))
+  rVals <- suppressWarnings(predict(glm(Sepal.Width ~ Sepal.Length + Species,
+  data = iris, family = poisson(link = identity)), iris))
+  expect_true(all(abs(rVals - vals) < 1e-6), rVals - vals)
+
+  # Test stats::predict is working
+  x <- rnorm(15)
+  y <- x + rnorm(15)
+  expect_equal(length(predict(lm(y ~ x))), 15)
+})
+
+test_that("spark.glm summary", {
+  # gaussian family
+  training <- suppressWarnings(createDataFrame(sqlContext, iris))
+  stats <- summary(spark.glm(training, Sepal_Width ~ Sepal_Length + Species))
+
+  rStats <- summary(glm(Sepal.Width ~ Sepal.Length + Species, data = iris))
+
+  coefs <- unlist(stats$coefficients)
+  rCoefs <- unlist(rStats$coefficients)
+  expect_true(all(abs(rCoefs - coefs) < 1e-4))
+  expect_true(all(
+    rownames(stats$coefficients) ==
+    c("(Intercept)", "Sepal_Length", "Species_versicolor", "Species_virginica")))
+  expect_equal(stats$dispersion, rStats$dispersion)
+  expect_equal(stats$null.deviance, rStats$null.deviance)
+  expect_equal(stats$deviance, rStats$deviance)
+  expect_equal(stats$df.null, rStats$df.null)
+  expect_equal(stats$df.residual, rStats$df.residual)
+  expect_equal(stats$aic, rStats$aic)
+
+  # binomial family
+  df <- suppressWarnings(createDataFrame(sqlContext, iris))
+  training <- df[df$Species %in% c("versicolor", "virginica"), ]
+  stats <- summary(spark.glm(training, Species ~ Sepal_Length + Sepal_Width,
+    family = binomial(link = "logit")))
+
+  rTraining <- iris[iris$Species %in% c("versicolor", "virginica"), ]
+  rStats <- summary(glm(Species ~ Sepal.Length + Sepal.Width, data = rTraining,
+  family = binomial(link = "logit")))
+
+  coefs <- unlist(stats$coefficients)
+  rCoefs <- unlist(rStats$coefficients)
+  expect_true(all(abs(rCoefs - coefs) < 1e-4))
+  expect_true(all(
+    rownames(stats$coefficients) ==
+    c("(Intercept)", "Sepal_Length", "Sepal_Width")))
+  expect_equal(stats$dispersion, rStats$dispersion)
+  expect_equal(stats$null.deviance, rStats$null.deviance)
+  expect_equal(stats$deviance, rStats$deviance)
+  expect_equal(stats$df.null, rStats$df.null)
+  expect_equal(stats$df.residual, rStats$df.residual)
+  expect_equal(stats$aic, rStats$aic)
+
+  # Test summary works on base GLM models
+  baseModel <- stats::glm(Sepal.Width ~ Sepal.Length + Species, data = iris)
+  baseSummary <- summary(baseModel)
+  expect_true(abs(baseSummary$deviance - 12.19313) < 1e-4)
+})
+
+test_that("spark.glm save/load", {
+  training <- suppressWarnings(createDataFrame(sqlContext, iris))
+  m <- spark.glm(training, Sepal_Width ~ Sepal_Length + Species)
+  s <- summary(m)
+
+  modelPath <- tempfile(pattern = "glm", fileext = ".tmp")
+  ml.save(m, modelPath)
+  expect_error(ml.save(m, modelPath))
+  ml.save(m, modelPath, overwrite = TRUE)
+  m2 <- ml.load(modelPath)
+  s2 <- summary(m2)
+
+  expect_equal(s$coefficients, s2$coefficients)
+  expect_equal(rownames(s$coefficients), rownames(s2$coefficients))
+  expect_equal(s$dispersion, s2$dispersion)
+  expect_equal(s$null.deviance, s2$null.deviance)
+  expect_equal(s$deviance, s2$deviance)
+  expect_equal(s$df.null, s2$df.null)
+  expect_equal(s$df.residual, s2$df.residual)
+  expect_equal(s$aic, s2$aic)
+  expect_equal(s$iter, s2$iter)
+  expect_true(!s$is.loaded)
+  expect_true(s2$is.loaded)
+
+  unlink(modelPath)
+})
+
+
+
 test_that("formula of glm", {
   training <- suppressWarnings(createDataFrame(sqlContext, iris))
   # dot minus and intercept vs native glm
@@ -153,14 +284,14 @@ test_that("glm save/load", {
   unlink(modelPath)
 })
 
-test_that("kmeans", {
+test_that("spark.kmeans", {
   newIris <- iris
   newIris$Species <- NULL
   training <- suppressWarnings(createDataFrame(sqlContext, newIris))
 
   take(training, 1)
 
-  model <- kmeans(x = training, centers = 2)
+  model <- spark.kmeans(data = training, k = 2)
   sample <- take(select(predict(model, training), "prediction"), 1)
   expect_equal(typeof(sample$prediction), "integer")
   expect_equal(sample$prediction, 1)
@@ -235,7 +366,7 @@ test_that("naiveBayes", {
   t <- as.data.frame(Titanic)
   t1 <- t[t$Freq > 0, -5]
   df <- suppressWarnings(createDataFrame(sqlContext, t1))
-  m <- naiveBayes(Survived ~ ., data = df)
+  m <- spark.naiveBayes(df, Survived ~ .)
   s <- summary(m)
   expect_equal(as.double(s$apriori[1, "Yes"]), 0.5833333, tolerance = 1e-6)
   expect_equal(sum(s$apriori), 1)
@@ -264,7 +395,7 @@ test_that("naiveBayes", {
   }
 })
 
-test_that("survreg", {
+test_that("spark.survreg", {
   # R code to reproduce the result.
   #
   #' rData <- list(time = c(4, 3, 1, 1, 2, 2, 3), status = c(1, 1, 1, 0, 1, 1, 0),
@@ -290,7 +421,7 @@ test_that("survreg", {
   data <- list(list(4, 1, 0, 0), list(3, 1, 2, 0), list(1, 1, 1, 0),
           list(1, 0, 1, 0), list(2, 1, 1, 1), list(2, 1, 0, 1), list(3, 0, 0, 1))
   df <- createDataFrame(sqlContext, data, c("time", "status", "x", "sex"))
-  model <- survreg(Surv(time, status) ~ x + sex, df)
+  model <- spark.survreg(df, Surv(time, status) ~ x + sex)
   stats <- summary(model)
   coefs <- as.vector(stats$coefficients[, 1])
   rCoefs <- c(1.3149571, -0.1903409, -0.2532618, -1.1599800)
