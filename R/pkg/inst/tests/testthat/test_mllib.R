@@ -133,10 +133,10 @@ test_that("spark.glm save/load", {
   s <- summary(m)
 
   modelPath <- tempfile(pattern = "glm", fileext = ".tmp")
-  ml.save(m, modelPath)
-  expect_error(ml.save(m, modelPath))
-  ml.save(m, modelPath, overwrite = TRUE)
-  m2 <- ml.load(modelPath)
+  write.ml(m, modelPath)
+  expect_error(write.ml(m, modelPath))
+  write.ml(m, modelPath, overwrite = TRUE)
+  m2 <- read.ml(modelPath)
   s2 <- summary(m2)
 
   expect_equal(s$coefficients, s2$coefficients)
@@ -263,10 +263,10 @@ test_that("glm save/load", {
   s <- summary(m)
 
   modelPath <- tempfile(pattern = "glm", fileext = ".tmp")
-  ml.save(m, modelPath)
-  expect_error(ml.save(m, modelPath))
-  ml.save(m, modelPath, overwrite = TRUE)
-  m2 <- ml.load(modelPath)
+  write.ml(m, modelPath)
+  expect_error(write.ml(m, modelPath))
+  write.ml(m, modelPath, overwrite = TRUE)
+  m2 <- read.ml(modelPath)
   s2 <- summary(m2)
 
   expect_equal(s$coefficients, s2$coefficients)
@@ -311,10 +311,10 @@ test_that("spark.kmeans", {
 
   # Test model save/load
   modelPath <- tempfile(pattern = "kmeans", fileext = ".tmp")
-  ml.save(model, modelPath)
-  expect_error(ml.save(model, modelPath))
-  ml.save(model, modelPath, overwrite = TRUE)
-  model2 <- ml.load(modelPath)
+  write.ml(model, modelPath)
+  expect_error(write.ml(model, modelPath))
+  write.ml(model, modelPath, overwrite = TRUE)
+  model2 <- read.ml(modelPath)
   summary2 <- summary(model2)
   expect_equal(sort(unlist(summary.model$size)), sort(unlist(summary2$size)))
   expect_equal(summary.model$coefficients, summary2$coefficients)
@@ -378,10 +378,10 @@ test_that("naiveBayes", {
 
   # Test model save/load
   modelPath <- tempfile(pattern = "naiveBayes", fileext = ".tmp")
-  ml.save(m, modelPath)
-  expect_error(ml.save(m, modelPath))
-  ml.save(m, modelPath, overwrite = TRUE)
-  m2 <- ml.load(modelPath)
+  write.ml(m, modelPath)
+  expect_error(write.ml(m, modelPath))
+  write.ml(m, modelPath, overwrite = TRUE)
+  m2 <- read.ml(modelPath)
   s2 <- summary(m2)
   expect_equal(s$apriori, s2$apriori)
   expect_equal(s$tables, s2$tables)
@@ -435,10 +435,10 @@ test_that("spark.survreg", {
 
   # Test model save/load
   modelPath <- tempfile(pattern = "survreg", fileext = ".tmp")
-  ml.save(model, modelPath)
-  expect_error(ml.save(model, modelPath))
-  ml.save(model, modelPath, overwrite = TRUE)
-  model2 <- ml.load(modelPath)
+  write.ml(model, modelPath)
+  expect_error(write.ml(model, modelPath))
+  write.ml(model, modelPath, overwrite = TRUE)
+  model2 <- read.ml(modelPath)
   stats2 <- summary(model2)
   coefs2 <- as.vector(stats2$coefficients[, 1])
   expect_equal(coefs, coefs2)
