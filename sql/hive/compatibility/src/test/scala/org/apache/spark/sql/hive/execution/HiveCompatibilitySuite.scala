@@ -503,7 +503,10 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     // We have converted the useful parts of these tests to tests
     // in org.apache.spark.sql.hive.execution.SQLQuerySuite.
     "drop_database_removes_partition_dirs",
-    "drop_table_removes_partition_dirs"
+    "drop_table_removes_partition_dirs",
+
+    // We do not support alter table drop partition on multiple partitions in a single command
+    "drop_multi_partitions"
   )
 
   /**
@@ -610,7 +613,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "disable_file_format_check",
     "distinct_stats",
     "drop_function",
-    "drop_multi_partitions",
     "drop_table",
     "drop_table2",
     "drop_view",

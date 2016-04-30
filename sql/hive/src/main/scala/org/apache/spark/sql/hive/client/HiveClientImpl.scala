@@ -396,9 +396,11 @@ private[hive] class HiveClientImpl(
           s"'$s' corresponds to multiple partitions in table '$table' database '$db'. " +
             "Each command can drop one and only one partition.")
       }
-      val dropOptions = new PartitionDropOptions
-      dropOptions.ifExists = ignoreIfNotExists
-      client.dropPartition(db, table, matchingParts.head.getValues, dropOptions)
+      matchingParts.foreach { hivePartition =>
+        val dropOptions = new PartitionDropOptions
+        dropOptions.ifExists = ignoreIfNotExists
+        client.dropPartition(db, table, hivePartition.getValues, dropOptions)
+      }
     }
   }
 

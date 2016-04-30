@@ -170,19 +170,42 @@ class HiveDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         // After data insertion, all the directory are not empty
         assert(dirSet.forall(dir => dir.listFiles.nonEmpty))
 
-        sql(
-          s"""
-             |ALTER TABLE $externalTab DROP PARTITION (ds='2008-04-08'),
-             |PARTITION (ds='2008-04-09', hr='12')
-          """.stripMargin)
+        var message = intercept[AnalysisException] {
+          sql(
+            s"""
+               |ALTER TABLE $externalTab DROP PARTITION (ds='2008-04-08'),
+               |PARTITION (ds='2008-04-09', hr='12')
+             """.stripMargin)
+        }
+        assert(message.getMessage.contains(
+          "When using hive metastore, each command only can drop one and only one partition"))
+
+        message = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $externalTab DROP PARTITION (ds='2008-04-08')")
+        }
+        assert(message.getMessage.contains(
+          "'Map(ds -> 2008-04-08)' corresponds to multiple partitions in table " +
+            "'exttable_with_partitions' database 'default'. Each command can drop " +
+            "one and only one partition.;"))
+
+        // no partition is dropped
         assert(catalog.listPartitions(TableIdentifier(externalTab)).map(_.spec).toSet ==
-          Set(Map("ds" -> "2008-04-09", "hr" -> "11")))
+          Set(Map("ds" -> "2008-04-08", "hr" -> "11"), Map("ds" -> "2008-04-08", "hr" -> "12"),
+            Map("ds" -> "2008-04-09", "hr" -> "11"), Map("ds" -> "2008-04-09", "hr" -> "12")))
+        // drop partition will not delete the data of external table
+        assert(dirSet.forall(dir => dir.listFiles.nonEmpty))
+
+        sql(s"ALTER TABLE $externalTab DROP PARTITION (ds='2008-04-08', hr='12')")
+        assert(catalog.listPartitions(TableIdentifier(externalTab)).map(_.spec).toSet ==
+          Set(Map("ds" -> "2008-04-08", "hr" -> "11"), Map("ds" -> "2008-04-09", "hr" -> "11"),
+            Map("ds" -> "2008-04-09", "hr" -> "12")))
         // drop partition will not delete the data of external table
         assert(dirSet.forall(dir => dir.listFiles.nonEmpty))
 
         sql(s"ALTER TABLE $externalTab ADD PARTITION (ds='2008-04-08', hr='12')")
         assert(catalog.listPartitions(TableIdentifier(externalTab)).map(_.spec).toSet ==
-          Set(Map("ds" -> "2008-04-08", "hr" -> "12"), Map("ds" -> "2008-04-09", "hr" -> "11")))
+          Set(Map("ds" -> "2008-04-08", "hr" -> "11"), Map("ds" -> "2008-04-08", "hr" -> "12"),
+            Map("ds" -> "2008-04-09", "hr" -> "11"), Map("ds" -> "2008-04-09", "hr" -> "12")))
         // add partition will not delete the data
         assert(dirSet.forall(dir => dir.listFiles.nonEmpty))
 
