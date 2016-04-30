@@ -106,14 +106,6 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
   //  Helper methods, partially leftover from pre-2.0 days
   // ------------------------------------------------------
 
-  /**
-   * Overrides default Hive configurations to avoid breaking changes to Spark SQL users.
-   *  - allow SQL11 keywords to be used as identifiers
-   */
-  def setDefaultOverrideConfs(): Unit = {
-    conf.setConfString(ConfVars.HIVE_SUPPORT_SQL11_RESERVED_KEYWORDS.varname, "false")
-  }
-
   override def addJar(path: String): Unit = {
     metadataHive.addJar(path)
     super.addJar(path)
