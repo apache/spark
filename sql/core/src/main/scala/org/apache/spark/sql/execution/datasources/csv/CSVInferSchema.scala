@@ -44,7 +44,7 @@ private[csv] object CSVInferSchema {
       options: CSVOptions): StructType = {
     val startType: Array[DataType] = Array.fill[DataType](header.length)(NullType)
     val rootTypes: Array[DataType] =
-      tokenRdd.aggregate(startType)(inferRowType(nullValue, dateFormat, options), mergeRowTypes)
+      tokenRdd.aggregate(startType)(inferRowType(options), mergeRowTypes)
 
     val structFields = header.zip(rootTypes).map { case (thisHeader, rootType) =>
       val dType = rootType match {
@@ -57,7 +57,7 @@ private[csv] object CSVInferSchema {
     StructType(structFields)
   }
 
-  private def inferRowType(nullValue: String, dateFormat: SimpleDateFormat, options: CSVOptions)
+  private def inferRowType(SimpleDateFormat, options: CSVOptions)
       (rowSoFar: Array[DataType], next: Array[String]): Array[DataType] = {
     var i = 0
     while (i < math.min(rowSoFar.length, next.length)) {  // May have columns on right missing.
