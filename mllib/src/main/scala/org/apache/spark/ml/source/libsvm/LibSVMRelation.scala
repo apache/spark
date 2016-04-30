@@ -181,20 +181,20 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       partitionSchema: StructType,
       requiredSchema: StructType,
       filters: Seq[Filter],
-      options: Map[String, String]): (PartitionedFile) => Iterator[InternalRow] = {
+      options: Map[String, String],
+      hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
     verifySchema(dataSchema)
     val numFeatures = options("numFeatures").toInt
     assert(numFeatures > 0)
 
     val sparse = options.getOrElse("vectorType", "sparse") == "sparse"
 
-    val broadcastedConf = sparkSession.sparkContext.broadcast(
-      new SerializableConfiguration(
-        new Configuration(sparkSession.sparkContext.hadoopConfiguration)))
+    val broadcastedHadoopConf =
+      sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
     (file: PartitionedFile) => {
       val points =
-        new HadoopFileLinesReader(file, broadcastedConf.value.value)
+        new HadoopFileLinesReader(file, broadcastedHadoopConf.value.value)
           .map(_.toString.trim)
           .filterNot(line => line.isEmpty || line.startsWith("#"))
           .map { line =>

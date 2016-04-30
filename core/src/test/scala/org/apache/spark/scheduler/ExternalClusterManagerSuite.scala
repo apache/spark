@@ -17,12 +17,11 @@
 
 package org.apache.spark.scheduler
 
-import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.{LocalSparkContext, NewAccumulator, SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.storage.BlockManagerId
 
-class ExternalClusterManagerSuite extends SparkFunSuite with LocalSparkContext
-{
+class ExternalClusterManagerSuite extends SparkFunSuite with LocalSparkContext {
   test("launch of backend and scheduler") {
     val conf = new SparkConf().setMaster("myclusterManager").
         setAppName("testcm").set("spark.driver.allowMultipleContexts", "true")
@@ -68,6 +67,6 @@ private class DummyTaskScheduler extends TaskScheduler {
   override def applicationAttemptId(): Option[String] = None
   def executorHeartbeatReceived(
       execId: String,
-      accumUpdates: Array[(Long, Seq[AccumulableInfo])],
+      accumUpdates: Array[(Long, Seq[NewAccumulator[_, _]])],
       blockManagerId: BlockManagerId): Boolean = true
 }

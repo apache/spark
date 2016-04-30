@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.hive
 
-import java.util.regex.Pattern
-
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
@@ -26,7 +24,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.Analyzer
 import org.apache.spark.sql.execution.SparkPlanner
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.hive.client.{HiveClient, HiveClientImpl}
+import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.SessionState
 
 
@@ -43,28 +41,9 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
   }
 
   /**
-   * A Hive client used for execution.
-   */
-  lazy val executionHive: HiveClientImpl = sharedState.executionHive.newSession()
-
-  /**
    * A Hive client used for interacting with the metastore.
    */
   lazy val metadataHive: HiveClient = sharedState.metadataHive.newSession()
-
-  /**
-   * SQLConf and HiveConf contracts:
-   *
-   * 1. create a new o.a.h.hive.ql.session.SessionState for each HiveContext
-   * 2. when the Hive session is first initialized, params in HiveConf will get picked up by the
-   *    SQLConf.  Additionally, any properties set by set() or a SET command inside sql() will be
-   *    set in the SQLConf *as well as* in the HiveConf.
-   */
-  lazy val hiveconf: HiveConf = {
-    val c = executionHive.conf
-    conf.setConf(c.getAllProperties)
-    c
-  }
 
   setDefaultOverrideConfs()
 
@@ -78,8 +57,7 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
       sparkSession,
       functionResourceLoader,
       functionRegistry,
-      conf,
-      hiveconf)
+      conf)
   }
 
   /**
@@ -107,7 +85,6 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
     new SparkPlanner(sparkSession.sparkContext, conf, experimentalMethods.extraStrategies)
       with HiveStrategies {
       override val sparkSession: SparkSession = self.sparkSession
-      override val hiveconf: HiveConf = self.hiveconf
 
       override def strategies: Seq[Strategy] = {
         experimentalMethods.extraStrategies ++ Seq(
@@ -120,12 +97,8 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
           DataSinks,
           Scripts,
           Aggregation,
-          ExistenceJoin,
-          EquiJoinSelection,
-          BasicOperators,
-          BroadcastNestedLoop,
-          CartesianProduct,
-          DefaultJoin
+          JoinSelection,
+          BasicOperators
         )
       }
     }
@@ -146,33 +119,12 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
 
   override def setConf(key: String, value: String): Unit = {
     super.setConf(key, value)
-    executionHive.runSqlHive(s"SET $key=$value")
     metadataHive.runSqlHive(s"SET $key=$value")
-    hiveconf.set(key, value)
   }
 
   override def addJar(path: String): Unit = {
-    super.addJar(path)
-    executionHive.addJar(path)
     metadataHive.addJar(path)
-    Thread.currentThread().setContextClassLoader(executionHive.clientLoader.classLoader)
-  }
-
-  /**
-   * Execute a SQL statement by passing the query text directly to Hive.
-   */
-  override def runNativeSql(sql: String): Seq[String] = {
-    val command = sql.trim.toLowerCase
-    val functionOrMacroDDLPattern = Pattern.compile(
-      ".*(create|drop)\\s+(temporary\\s+)?(function|macro).+", Pattern.DOTALL)
-    if (functionOrMacroDDLPattern.matcher(command).matches()) {
-      executionHive.runSqlHive(sql)
-    } else if (command.startsWith("set")) {
-      metadataHive.runSqlHive(sql)
-      executionHive.runSqlHive(sql)
-    } else {
-      metadataHive.runSqlHive(sql)
-    }
+    super.addJar(path)
   }
 
   /**

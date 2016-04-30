@@ -24,7 +24,8 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogTable, CatalogTableType, ExternalCatalog}
+import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, UnaryNode}
 import org.apache.spark.sql.types.{BooleanType, MetadataBuilder, StringType}
@@ -73,7 +74,7 @@ case class CreateTableLike(
 
     val tableToCreate = catalog.getTableMetadata(sourceTable).copy(
       identifier = targetTable,
-      tableType = CatalogTableType.MANAGED_TABLE,
+      tableType = CatalogTableType.MANAGED,
       createTime = System.currentTimeMillis,
       lastAccessTime = -1).withNewStorage(locationUri = None)
 
@@ -156,7 +157,7 @@ case class LoadData(
     path: String,
     isLocal: Boolean,
     isOverwrite: Boolean,
-    partition: Option[ExternalCatalog.TablePartitionSpec]) extends RunnableCommand {
+    partition: Option[TablePartitionSpec]) extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
@@ -210,7 +211,7 @@ case class LoadData(
           // Follow Hive's behavior:
           // If no schema or authority is provided with non-local inpath,
           // we will use hadoop configuration "fs.default.name".
-          val defaultFSConf = sparkSession.sessionState.hadoopConf.get("fs.default.name")
+          val defaultFSConf = sparkSession.sessionState.newHadoopConf().get("fs.default.name")
           val defaultFS = if (defaultFSConf == null) {
             new URI("")
           } else {

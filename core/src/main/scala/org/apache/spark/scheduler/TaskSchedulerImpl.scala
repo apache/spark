@@ -135,6 +135,8 @@ private[spark] class TaskSchedulerImpl(
           new FIFOSchedulableBuilder(rootPool)
         case SchedulingMode.FAIR =>
           new FairSchedulableBuilder(rootPool, conf)
+        case _ =>
+          throw new IllegalArgumentException(s"Unsupported spark.scheduler.mode: $schedulingMode")
       }
     }
     schedulableBuilder.buildPools()
@@ -382,13 +384,14 @@ private[spark] class TaskSchedulerImpl(
    */
   override def executorHeartbeatReceived(
       execId: String,
-      accumUpdates: Array[(Long, Seq[AccumulableInfo])],
+      accumUpdates: Array[(Long, Seq[NewAccumulator[_, _]])],
       blockManagerId: BlockManagerId): Boolean = {
     // (taskId, stageId, stageAttemptId, accumUpdates)
     val accumUpdatesWithTaskIds: Array[(Long, Int, Int, Seq[AccumulableInfo])] = synchronized {
       accumUpdates.flatMap { case (id, updates) =>
         taskIdToTaskSetManager.get(id).map { taskSetMgr =>
-          (id, taskSetMgr.stageId, taskSetMgr.taskSet.stageAttemptId, updates)
+          (id, taskSetMgr.stageId, taskSetMgr.taskSet.stageAttemptId,
+            updates.map(acc => acc.toInfo(Some(acc.value), None)))
         }
       }
     }

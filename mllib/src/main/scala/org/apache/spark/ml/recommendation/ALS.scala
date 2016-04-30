@@ -395,6 +395,10 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
       .map { row =>
         Rating(row.getInt(0), row.getInt(1), row.getFloat(2))
       }
+    val instrLog = Instrumentation.create(this, ratings)
+    instrLog.logParams(rank, numUserBlocks, numItemBlocks, implicitPrefs, alpha,
+                       userCol, itemCol, ratingCol, predictionCol, maxIter,
+                       regParam, nonnegative, checkpointInterval, seed)
     val (userFactors, itemFactors) = ALS.train(ratings, rank = $(rank),
       numUserBlocks = $(numUserBlocks), numItemBlocks = $(numItemBlocks),
       maxIter = $(maxIter), regParam = $(regParam), implicitPrefs = $(implicitPrefs),
@@ -403,6 +407,7 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
     val userDF = userFactors.toDF("id", "features")
     val itemDF = itemFactors.toDF("id", "features")
     val model = new ALSModel(uid, $(rank), userDF, itemDF).setParent(this)
+    instrLog.logSuccess(model)
     copyValues(model)
   }
 

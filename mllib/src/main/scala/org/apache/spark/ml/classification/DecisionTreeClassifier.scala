@@ -44,7 +44,7 @@ import org.apache.spark.sql.Dataset
  */
 @Since("1.4.0")
 @Experimental
-final class DecisionTreeClassifier @Since("1.4.0") (
+class DecisionTreeClassifier @Since("1.4.0") (
     @Since("1.4.0") override val uid: String)
   extends ProbabilisticClassifier[Vector, DecisionTreeClassifier, DecisionTreeClassificationModel]
   with DecisionTreeClassifierParams with DefaultParamsWritable {
@@ -85,26 +85,33 @@ final class DecisionTreeClassifier @Since("1.4.0") (
   override protected def train(dataset: Dataset[_]): DecisionTreeClassificationModel = {
     val categoricalFeatures: Map[Int, Int] =
       MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
-    val numClasses: Int = MetadataUtils.getNumClasses(dataset.schema($(labelCol))) match {
-      case Some(n: Int) => n
-      case None => throw new IllegalArgumentException("DecisionTreeClassifier was given input" +
-        s" with invalid label column ${$(labelCol)}, without the number of classes" +
-        " specified. See StringIndexer.")
-        // TODO: Automatically index labels: SPARK-7126
-    }
-    val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
+    val numClasses: Int = getNumClasses(dataset)
+    val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset, numClasses)
     val strategy = getOldStrategy(categoricalFeatures, numClasses)
+
+    val instr = Instrumentation.create(this, oldDataset)
+    instr.logParams(params: _*)
+
     val trees = RandomForest.run(oldDataset, strategy, numTrees = 1, featureSubsetStrategy = "all",
-      seed = $(seed), parentUID = Some(uid))
-    trees.head.asInstanceOf[DecisionTreeClassificationModel]
+      seed = $(seed), instr = Some(instr), parentUID = Some(uid))
+
+    val m = trees.head.asInstanceOf[DecisionTreeClassificationModel]
+    instr.logSuccess(m)
+    m
   }
 
   /** (private[ml]) Train a decision tree on an RDD */
   private[ml] def train(data: RDD[LabeledPoint],
       oldStrategy: OldStrategy): DecisionTreeClassificationModel = {
+    val instr = Instrumentation.create(this, data)
+    instr.logParams(params: _*)
+
     val trees = RandomForest.run(data, oldStrategy, numTrees = 1, featureSubsetStrategy = "all",
-      seed = 0L, parentUID = Some(uid))
-    trees.head.asInstanceOf[DecisionTreeClassificationModel]
+      seed = 0L, instr = Some(instr), parentUID = Some(uid))
+
+    val m = trees.head.asInstanceOf[DecisionTreeClassificationModel]
+    instr.logSuccess(m)
+    m
   }
 
   /** (private[ml]) Create a Strategy instance to use with the old API. */
@@ -138,7 +145,7 @@ object DecisionTreeClassifier extends DefaultParamsReadable[DecisionTreeClassifi
  */
 @Since("1.4.0")
 @Experimental
-final class DecisionTreeClassificationModel private[ml] (
+class DecisionTreeClassificationModel private[ml] (
     @Since("1.4.0")override val uid: String,
     @Since("1.4.0")override val rootNode: Node,
     @Since("1.6.0")override val numFeatures: Int,

@@ -183,7 +183,7 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
   test("test executor id to summary") {
     val conf = new SparkConf()
     val listener = new JobProgressListener(conf)
-    val taskMetrics = new TaskMetrics()
+    val taskMetrics = TaskMetrics.empty
     val shuffleReadMetrics = taskMetrics.createTempShuffleReadMetrics()
     assert(listener.stageIdToData.size === 0)
 
@@ -230,7 +230,7 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
   test("test task success vs failure counting for different task end reasons") {
     val conf = new SparkConf()
     val listener = new JobProgressListener(conf)
-    val metrics = new TaskMetrics()
+    val metrics = TaskMetrics.empty
     val taskInfo = new TaskInfo(1234L, 0, 3, 0L, "exe-1", "host1", TaskLocality.NODE_LOCAL, false)
     taskInfo.finishTime = 1
     val task = new ShuffleMapTask(0)
@@ -269,7 +269,7 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
     val execId = "exe-1"
 
     def makeTaskMetrics(base: Int): TaskMetrics = {
-      val taskMetrics = new TaskMetrics
+      val taskMetrics = TaskMetrics.empty
       val shuffleReadMetrics = taskMetrics.createTempShuffleReadMetrics()
       val shuffleWriteMetrics = taskMetrics.shuffleWriteMetrics
       val inputMetrics = taskMetrics.inputMetrics
@@ -300,9 +300,9 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
     listener.onTaskStart(SparkListenerTaskStart(1, 0, makeTaskInfo(1237L)))
 
     listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate(execId, Array(
-      (1234L, 0, 0, makeTaskMetrics(0).accumulatorUpdates()),
-      (1235L, 0, 0, makeTaskMetrics(100).accumulatorUpdates()),
-      (1236L, 1, 0, makeTaskMetrics(200).accumulatorUpdates()))))
+      (1234L, 0, 0, makeTaskMetrics(0).accumulators().map(AccumulatorSuite.makeInfo)),
+      (1235L, 0, 0, makeTaskMetrics(100).accumulators().map(AccumulatorSuite.makeInfo)),
+      (1236L, 1, 0, makeTaskMetrics(200).accumulators().map(AccumulatorSuite.makeInfo)))))
 
     var stage0Data = listener.stageIdToData.get((0, 0)).get
     var stage1Data = listener.stageIdToData.get((1, 0)).get

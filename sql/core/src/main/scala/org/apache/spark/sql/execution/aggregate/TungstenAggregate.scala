@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.metric.{LongSQLMetricValue, SQLMetrics}
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.types.{DecimalType, StringType, StructType}
 import org.apache.spark.unsafe.KVIterator
 
@@ -51,7 +51,7 @@ case class TungstenAggregate(
       aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes)
 
   override private[sql] lazy val metrics = Map(
-    "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"),
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "peakMemory" -> SQLMetrics.createSizeMetric(sparkContext, "peak memory"),
     "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"),
     "aggTime" -> SQLMetrics.createTimingMetric(sparkContext, "aggregate time"))
@@ -309,8 +309,8 @@ case class TungstenAggregate(
   def finishAggregate(
       hashMap: UnsafeFixedWidthAggregationMap,
       sorter: UnsafeKVExternalSorter,
-      peakMemory: LongSQLMetricValue,
-      spillSize: LongSQLMetricValue): KVIterator[UnsafeRow, UnsafeRow] = {
+      peakMemory: SQLMetric,
+      spillSize: SQLMetric): KVIterator[UnsafeRow, UnsafeRow] = {
 
     // update peak execution memory
     val mapMemory = hashMap.getPeakMemoryUsedBytes
@@ -447,16 +447,37 @@ case class TungstenAggregate(
     }
   }
 
+  /**
+   * Using the vectorized hash map in TungstenAggregate is currently supported for all primitive
+   * data types during partial aggregation. However, we currently only enable the hash map for a
+   * subset of cases that've been verified to show performance improvements on our benchmarks
+   * subject to an internal conf that sets an upper limit on the maximum length of the aggregate
+   * key/value schema.
+   *
+   * This list of supported use-cases should be expanded over time.
+   */
+  private def enableVectorizedHashMap(ctx: CodegenContext): Boolean = {
+    val schemaLength = (groupingKeySchema ++ bufferSchema).length
+    val isSupported =
+      (groupingKeySchema ++ bufferSchema).forall(f => ctx.isPrimitiveType(f.dataType) ||
+        f.dataType.isInstanceOf[DecimalType] || f.dataType.isInstanceOf[StringType]) &&
+        bufferSchema.nonEmpty && modes.forall(mode => mode == Partial || mode == PartialMerge)
+
+    // We do not support byte array based decimal type for aggregate values as
+    // ColumnVector.putDecimal for high-precision decimals doesn't currently support in-place
+    // updates. Due to this, appending the byte array in the vectorized hash map can turn out to be
+    // quite inefficient and can potentially OOM the executor.
+    val isNotByteArrayDecimalType = bufferSchema.map(_.dataType).filter(_.isInstanceOf[DecimalType])
+      .forall(!DecimalType.isByteArrayDecimalType(_))
+
+    isSupported  && isNotByteArrayDecimalType &&
+      schemaLength <= sqlContext.conf.vectorizedAggregateMapMaxColumns
+  }
+
   private def doProduceWithKeys(ctx: CodegenContext): String = {
     val initAgg = ctx.freshName("initAgg")
     ctx.addMutableState("boolean", initAgg, s"$initAgg = false;")
-
-    // Enable vectorized hash map for all primitive data types during partial aggregation
-    isVectorizedHashMapEnabled = sqlContext.conf.columnarAggregateMapEnabled &&
-      (groupingKeySchema ++ bufferSchema).forall(f => ctx.isPrimitiveType(f.dataType) ||
-        f.dataType.isInstanceOf[DecimalType] || f.dataType.isInstanceOf[StringType]) &&
-      bufferSchema.forall(!_.dataType.isInstanceOf[StringType]) && bufferSchema.nonEmpty &&
-      modes.forall(mode => mode == Partial || mode == PartialMerge)
+    isVectorizedHashMapEnabled = enableVectorizedHashMap(ctx)
     vectorizedHashMapTerm = ctx.freshName("vectorizedHashMap")
     val vectorizedHashMapClassName = ctx.freshName("VectorizedHashMap")
     val vectorizedHashMapGenerator = new VectorizedHashMapGenerator(ctx, aggregateExpressions,

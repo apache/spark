@@ -1191,6 +1191,14 @@ for more details on the API.
 
 {% include_example java/org/apache/spark/examples/ml/JavaVectorSlicerExample.java %}
 </div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [VectorSlicer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.VectorSlicer)
+for more details on the API.
+
+{% include_example python/ml/vector_slicer_example.py %}
+</div>
 </div>
 
 ## RFormula

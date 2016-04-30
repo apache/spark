@@ -398,6 +398,66 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       Row(4, "d") :: Nil)
     checkAnswer(lowerCaseData.except(lowerCaseData), Nil)
     checkAnswer(upperCaseData.except(upperCaseData), Nil)
+
+    // check null equality
+    checkAnswer(
+      nullInts.except(nullInts.filter("0 = 1")),
+      nullInts)
+    checkAnswer(
+      nullInts.except(nullInts),
+      Nil)
+
+    // check if values are de-duplicated
+    checkAnswer(
+      allNulls.except(allNulls.filter("0 = 1")),
+      Row(null) :: Nil)
+    checkAnswer(
+      allNulls.except(allNulls),
+      Nil)
+
+    // check if values are de-duplicated
+    val df = Seq(("id1", 1), ("id1", 1), ("id", 1), ("id1", 2)).toDF("id", "value")
+    checkAnswer(
+      df.except(df.filter("0 = 1")),
+      Row("id1", 1) ::
+      Row("id", 1) ::
+      Row("id1", 2) :: Nil)
+
+    // check if the empty set on the left side works
+    checkAnswer(
+      allNulls.filter("0 = 1").except(allNulls),
+      Nil)
+  }
+
+  test("except distinct - SQL compliance") {
+    val df_left = Seq(1, 2, 2, 3, 3, 4).toDF("id")
+    val df_right = Seq(1, 3).toDF("id")
+
+    checkAnswer(
+      df_left.except(df_right),
+      Row(2) :: Row(4) :: Nil
+    )
+  }
+
+  test("except - nullability") {
+    val nonNullableInts = Seq(Tuple1(11), Tuple1(3)).toDF()
+    assert(nonNullableInts.schema.forall(!_.nullable))
+
+    val df1 = nonNullableInts.except(nullInts)
+    checkAnswer(df1, Row(11) :: Nil)
+    assert(df1.schema.forall(!_.nullable))
+
+    val df2 = nullInts.except(nonNullableInts)
+    checkAnswer(df2, Row(1) :: Row(2) :: Row(null) :: Nil)
+    assert(df2.schema.forall(_.nullable))
+
+    val df3 = nullInts.except(nullInts)
+    checkAnswer(df3, Nil)
+    assert(df3.schema.forall(_.nullable))
+
+    val df4 = nonNullableInts.except(nonNullableInts)
+    checkAnswer(df4, Nil)
+    assert(df4.schema.forall(!_.nullable))
   }
 
   test("intersect") {
@@ -433,23 +493,23 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
   test("intersect - nullability") {
     val nonNullableInts = Seq(Tuple1(1), Tuple1(3)).toDF()
-    assert(nonNullableInts.schema.forall(_.nullable == false))
+    assert(nonNullableInts.schema.forall(!_.nullable))
 
     val df1 = nonNullableInts.intersect(nullInts)
     checkAnswer(df1, Row(1) :: Row(3) :: Nil)
-    assert(df1.schema.forall(_.nullable == false))
+    assert(df1.schema.forall(!_.nullable))
 
     val df2 = nullInts.intersect(nonNullableInts)
     checkAnswer(df2, Row(1) :: Row(3) :: Nil)
-    assert(df2.schema.forall(_.nullable == false))
+    assert(df2.schema.forall(!_.nullable))
 
     val df3 = nullInts.intersect(nullInts)
     checkAnswer(df3, Row(1) :: Row(2) :: Row(3) :: Row(null) :: Nil)
-    assert(df3.schema.forall(_.nullable == true))
+    assert(df3.schema.forall(_.nullable))
 
     val df4 = nonNullableInts.intersect(nonNullableInts)
     checkAnswer(df4, Row(1) :: Row(3) :: Nil)
-    assert(df4.schema.forall(_.nullable == false))
+    assert(df4.schema.forall(!_.nullable))
   }
 
   test("udf") {
