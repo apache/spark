@@ -19,7 +19,6 @@ package org.apache.spark.ml.feature
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
@@ -43,7 +42,7 @@ private[feature] trait ImputerParams extends Params with HasInputCol with HasOut
    * @group param
    */
   final val strategy: Param[String] = new Param(this, "strategy", "strategy for imputation. " +
-    "If mean, then replace missing values using the mean value of the feature." +
+    "If mean, then replace missing values using the mean value of the feature. " +
     "If median, then replace missing values using the median value of the feature.",
     ParamValidators.inArray[String](Imputer.supportedStrategyNames.toArray))
 
@@ -74,10 +73,12 @@ private[feature] trait ImputerParams extends Params with HasInputCol with HasOut
 
 /**
  * :: Experimental ::
- * Imputation estimator for completing missing values, either using the mean("mean") or the
- * median("median") of the column in which the missing values are located.
+ * Imputation estimator for completing missing values, either using the mean or the
+ * median of the column in which the missing values are located. InputCol should be
+ * of DoubleType or FloatType.
  *
- * Note that all the null values will be imputed as well.
+ * Note that the mean/median value is computed after filtering out missing values.
+ * All Null values in the input column are treated as missing, and so are also imputed.
  */
 @Experimental
 class Imputer @Since("2.0.0")(override val uid: String)
@@ -182,8 +183,7 @@ class ImputerModel private[ml](
 @Since("2.0.0")
 object ImputerModel extends MLReadable[ImputerModel] {
 
-  private[ImputerModel]
-  class ImputerModelWriter(instance: ImputerModel) extends MLWriter {
+  private[ImputerModel] class ImputerModelWriter(instance: ImputerModel) extends MLWriter {
 
     private case class Data(surrogate: Double)
 

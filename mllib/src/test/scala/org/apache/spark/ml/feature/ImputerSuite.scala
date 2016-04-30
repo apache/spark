@@ -31,32 +31,13 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
       (2, 3.0, 3.0, 3.0),
       (3, 4.0, 4.0, 4.0),
       (4, Double.NaN, 2.25, 1.0)
-    )).toDF("id", "value", "exp_mean", "exp_median")
+    )).toDF("id", "value", "expected_mean", "expected_median")
     Seq("mean", "median").foreach { strategy =>
       val imputer = new Imputer().setInputCol("value").setOutputCol("out").setStrategy(strategy)
       val model = imputer.fit(df)
-      model.transform(df).select("exp_" + strategy, "out").collect().foreach {
+      model.transform(df).select("expected_" + strategy, "out").collect().foreach {
        case Row(exp: Double, out: Double) =>
           assert(exp ~== out absTol 1e-5, s"Imputed values differ. Expected: $exp, actual: $out")
-      }
-    }
-  }
-
-  test("Imputer for Double with missing Value -1.0") {
-    val df = sqlContext.createDataFrame( Seq(
-      (0, 1.0, 1.0, 1.0),
-      (1, 1.0, 1.0, 1.0),
-      (2, 3.0, 3.0, 3.0),
-      (3, 4.0, 4.0, 4.0),
-      (4, -1.0, 2.25, 1.0)
-    )).toDF("id", "value", "exp_mean", "exp_median")
-    Seq("mean", "median").foreach { strategy =>
-      val imputer = new Imputer().setInputCol("value").setOutputCol("out").setStrategy(strategy)
-        .setMissingValue(-1.0)
-      val model = imputer.fit(df)
-      model.transform(df).select("exp_" + strategy, "out").collect().foreach {
-        case Row(exp: Double, out: Double) =>
-          assert(exp ~== out absTol 1e-5, s"Impute($strategy) error. Expected: $exp, actual: $out")
       }
     }
   }
@@ -67,12 +48,12 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
       (1, 3.0, 3.0, 3.0),
       (2, Double.NaN, Double.NaN, Double.NaN),
       (3, -1.0, 2.0, 3.0)
-    )).toDF("id", "value", "exp_mean", "exp_median")
+    )).toDF("id", "value", "expected_mean", "expected_median")
     Seq("mean", "median").foreach { strategy =>
       val imputer = new Imputer().setInputCol("value").setOutputCol("out").setStrategy(strategy)
         .setMissingValue(-1.0)
       val model = imputer.fit(df)
-      model.transform(df).select("exp_" + strategy, "out").collect().foreach {
+      model.transform(df).select("expected_" + strategy, "out").collect().foreach {
         case Row(exp: Double, out: Double) =>
           assert((exp.isNaN && out.isNaN) || (exp ~== out absTol 1e-5),
             s"Imputed values differ. Expected: $exp, actual: $out")
@@ -87,14 +68,14 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
       (2, 10.0F, 10.0F, 10.0F),
       (3, 10.0F, 10.0F, 10.0F),
       (4, -1.0F, 6.0F, 3.0F)
-    )).toDF("id", "value", "exp_mean", "exp_median")
+    )).toDF("id", "value", "expected_mean", "expected_median")
 
     Seq("mean", "median").foreach { strategy =>
       val imputer = new Imputer().setInputCol("value").setOutputCol("out").setStrategy(strategy)
         .setMissingValue(-1)
       val model = imputer.fit(df)
       val result = model.transform(df)
-      model.transform(df).select("exp_" + strategy, "out").collect().foreach {
+      model.transform(df).select("expected_" + strategy, "out").collect().foreach {
         case Row(exp: Float, out: Float) =>
           assert(exp == out, s"Imputed values differ. Expected: $exp, actual: $out")
       }
@@ -108,13 +89,13 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
       (2, 10.0, 10.0, 10.0),
       (3, Double.NaN, 8.0, 10.0),
       (4, -1.0, 8.0, 10.0)
-    )).toDF("id", "value", "exp_mean", "exp_median")
+    )).toDF("id", "value", "expected_mean", "expected_median")
     val df2 = df.selectExpr("*", "IF(value=-1.0, null, value) as nullable_value")
     Seq("mean", "median").foreach { strategy =>
       val imputer = new Imputer().setInputCol("nullable_value").setOutputCol("out")
         .setStrategy(strategy)
       val model = imputer.fit(df2)
-      model.transform(df2).select("exp_" + strategy, "out").collect().foreach {
+      model.transform(df2).select("expected_" + strategy, "out").collect().foreach {
         case Row(exp: Double, out: Double) =>
           assert(exp ~== out absTol 1e-5, s"Imputed values differ. Expected: $exp, actual: $out")
       }
