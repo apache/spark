@@ -147,7 +147,8 @@ class SessionCatalog(
   }
 
   def getDefaultDBPath(db: String): String = {
-    new Path(new Path(conf.warehousePath), db + ".db").toString
+    val database = if (conf.caseSensitiveAnalysis) db else db.toLowerCase
+    new Path(new Path(conf.warehousePath), database + ".db").toString
   }
 
   // ----------------------------------------------------------------------------
