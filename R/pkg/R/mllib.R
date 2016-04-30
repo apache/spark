@@ -271,22 +271,25 @@ setMethod("summary", signature(object = "NaiveBayesModel"),
 #' Fit a k-means model, similarly to R's kmeans().
 #'
 #' @param data SparkDataFrame for training
-#' @param k Number of centers
-#' @param maxIter Maximum iteration number
-#' @param initializationMode Algorithm choosen to fit the model
+#' @param formula A symbolic description of the model to be fitted. Currently only a few formula
+#'                operators are supported, including '~', '.', ':', '+', and '-'.
+#'                Note that the response variable of formula is empty in spark.kmeans.
+#' @param centers Number of centers
+#' @param iter.max Maximum iteration number
+#' @param algorithm The initialization algorithm choosen to fit the model
 #' @return A fitted k-means model
 #' @rdname spark.kmeans
 #' @export
 #' @examples
 #' \dontrun{
-#' model <- spark.kmeans(data, k = 2, initializationMode="random")
+#' model <- spark.kmeans(data, ~ ., centers = 2, algorithm="random")
 #' }
-setMethod("spark.kmeans", signature(data = "SparkDataFrame"),
-          function(data, k, maxIter = 10, initializationMode = c("random", "k-means||")) {
-            columnNames <- as.array(colnames(data))
-            initializationMode <- match.arg(initializationMode)
-            jobj <- callJStatic("org.apache.spark.ml.r.KMeansWrapper", "fit", data@sdf,
-                                k, maxIter, initializationMode, columnNames)
+setMethod("spark.kmeans", signature(data = "SparkDataFrame", formula = "formula"),
+          function(data, formula, centers, iter.max = 10, algorithm = c("random", "k-means||")) {
+            formula <- paste(deparse(formula), collapse = "")
+            algorithm <- match.arg(algorithm)
+            jobj <- callJStatic("org.apache.spark.ml.r.KMeansWrapper", "fit", data@sdf, formula,
+                                as.integer(centers), as.integer(iter.max), algorithm)
             return(new("KMeansModel", jobj = jobj))
          })
 
@@ -376,7 +379,7 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' Fit a Bernoulli naive Bayes model on a Spark DataFrame (only categorical data is supported).
 #'
 #' @param data SparkDataFrame for training
-#' @param object A symbolic description of the model to be fitted. Currently only a few formula
+#' @param formula A symbolic description of the model to be fitted. Currently only a few formula
 #'               operators are supported, including '~', '.', ':', '+', and '-'.
 #' @param laplace Smoothing parameter
 #' @return a fitted naive Bayes model

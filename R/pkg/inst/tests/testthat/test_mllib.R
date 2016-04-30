@@ -291,7 +291,7 @@ test_that("spark.kmeans", {
 
   take(training, 1)
 
-  model <- spark.kmeans(data = training, k = 2)
+  model <- spark.kmeans(data = training, ~ ., centers = 2)
   sample <- take(select(predict(model, training), "prediction"), 1)
   expect_equal(typeof(sample$prediction), "integer")
   expect_equal(sample$prediction, 1)

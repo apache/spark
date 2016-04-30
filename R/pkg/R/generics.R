@@ -1199,7 +1199,7 @@ setGeneric("rbind", signature = "...")
 
 #' @rdname spark.kmeans
 #' @export
-setGeneric("spark.kmeans", function(data, k, ...) { standardGeneric("spark.kmeans") })
+setGeneric("spark.kmeans", function(data, formula, ...) { standardGeneric("spark.kmeans") })
 
 #' @rdname fitted
 #' @export
