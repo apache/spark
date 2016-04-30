@@ -19,8 +19,6 @@ package org.apache.spark.sql.execution.datasources.json
 
 import java.util.Comparator
 
-import scala.collection.mutable
-
 import com.fasterxml.jackson.core._
 
 import org.apache.spark.rdd.RDD
@@ -237,6 +235,8 @@ private[sql] object InferSchema {
     case (ty1, ty2) => compatibleType(ty1, ty2)
   }
 
+  private[this] val emptyStructFieldArray = Array.empty[StructField]
+
   /**
    * Returns the most general data type for two given data types.
    */
@@ -263,7 +263,7 @@ private[sql] object InferSchema {
           // Both fields1 and fields2 should be sorted by name, since inferField performs sorting.
           // Therefore, we can take advantage of the fact that we're merging sorted lists and skip
           // building a hash map or performing additional sorting.
-          val newFields = new mutable.ArrayBuffer[StructField]()
+          val newFields = new java.util.ArrayList[StructField]()
 
           var f1Idx = 0
           var f2Idx = 0
@@ -273,26 +273,26 @@ private[sql] object InferSchema {
             val f2Name = fields2(f2Idx).name
             if (f1Name == f2Name) {
               val dataType = compatibleType(fields1(f1Idx).dataType, fields2(f2Idx).dataType)
-              newFields += StructField(f1Name, dataType, nullable = true)
+              newFields.add(StructField(f1Name, dataType, nullable = true))
               f1Idx += 1
               f2Idx += 1
             } else if (f1Name < f2Name) {
-              newFields += fields1(f1Idx)
+              newFields.add(fields1(f1Idx))
               f1Idx += 1
             } else { // f1Name > f2Name
-              newFields += fields2(f2Idx)
+              newFields.add(fields2(f2Idx))
               f2Idx += 1
             }
           }
           while (f1Idx < fields1.length) {
-            newFields += fields1(f1Idx)
+            newFields.add(fields1(f1Idx))
             f1Idx += 1
           }
           while (f2Idx < fields2.length) {
-            newFields += fields2(f2Idx)
+            newFields.add(fields2(f2Idx))
             f2Idx += 1
           }
-          StructType(newFields)
+          StructType(newFields.toArray(emptyStructFieldArray))
 
         case (ArrayType(elementType1, containsNull1), ArrayType(elementType2, containsNull2)) =>
           ArrayType(compatibleType(elementType1, elementType2), containsNull1 || containsNull2)
