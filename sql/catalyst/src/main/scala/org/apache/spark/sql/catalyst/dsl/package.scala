@@ -175,6 +175,15 @@ package object dsl {
       Invoke(function, "apply", returnType, argument :: Nil)
     }
 
+    def windowSpec(
+        partitionSpec: Seq[Expression],
+        orderSpec: Seq[SortOrder],
+        frame: WindowFrame): WindowSpecDefinition =
+      WindowSpecDefinition(partitionSpec, orderSpec, frame)
+
+    def windowExpr(windowFunc: Expression, windowSpec: WindowSpecDefinition): WindowExpression =
+      WindowExpression(windowFunc, windowSpec)
+
     implicit class DslSymbol(sym: Symbol) extends ImplicitAttribute { def s: String = sym.name }
     // TODO more implicit class for literal?
     implicit class DslString(val s: String) extends ImplicitOperators {
@@ -244,6 +253,10 @@ package object dsl {
         AttributeReference(s, structType, nullable = true)()
       def struct(attrs: AttributeReference*): AttributeReference =
         struct(StructType.fromAttributes(attrs))
+
+      /** Creates a new AttributeReference of object type */
+      def obj(cls: Class[_]): AttributeReference =
+        AttributeReference(s, ObjectType(cls), nullable = true)()
 
       /** Create a function. */
       def function(exprs: Expression*): UnresolvedFunction =

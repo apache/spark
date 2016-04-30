@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.SortOrder
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.aggregate
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, CartesianProduct, SortMergeJoin}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, CartesianProductExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSQLContext, TestSQLContext}
@@ -69,7 +69,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("describe functions") {
-    checkExistence(sql("describe function extended upper"), true,
+    checkKeywordsExist(sql("describe function extended upper"),
       "Function: upper",
       "Class: org.apache.spark.sql.catalyst.expressions.Upper",
       "Usage: upper(str) - Returns str with all characters changed to uppercase",
@@ -77,22 +77,20 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       "> SELECT upper('SparkSql');",
       "'SPARKSQL'")
 
-    checkExistence(sql("describe functioN Upper"), true,
+    checkKeywordsExist(sql("describe functioN Upper"),
       "Function: upper",
       "Class: org.apache.spark.sql.catalyst.expressions.Upper",
       "Usage: upper(str) - Returns str with all characters changed to uppercase")
 
-    checkExistence(sql("describe functioN Upper"), false,
-      "Extended Usage")
+    checkKeywordsNotExist(sql("describe functioN Upper"), "Extended Usage")
 
-    checkExistence(sql("describe functioN abcadf"), true,
-      "Function: abcadf not found.")
+    checkKeywordsExist(sql("describe functioN abcadf"), "Function: abcadf not found.")
   }
 
   test("SPARK-14415: All functions should have own descriptions") {
     for (f <- sqlContext.sessionState.functionRegistry.listFunction()) {
       if (!Seq("cube", "grouping", "grouping_id", "rollup", "window").contains(f)) {
-        checkExistence(sql(s"describe function `$f`"), false, "To be added.")
+        checkKeywordsNotExist(sql(s"describe function `$f`"), "To be added.")
       }
     }
   }
@@ -756,36 +754,43 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("inner join where, one match per row") {
-    checkAnswer(
-      sql("SELECT * FROM upperCaseData JOIN lowerCaseData WHERE n = N"),
-      Seq(
-        Row(1, "A", 1, "a"),
-        Row(2, "B", 2, "b"),
-        Row(3, "C", 3, "c"),
-        Row(4, "D", 4, "d")))
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      checkAnswer(
+        sql("SELECT * FROM uppercasedata JOIN lowercasedata WHERE n = N"),
+        Seq(
+          Row(1, "A", 1, "a"),
+          Row(2, "B", 2, "b"),
+          Row(3, "C", 3, "c"),
+          Row(4, "D", 4, "d")))
+    }
   }
 
   test("inner join ON, one match per row") {
-    checkAnswer(
-      sql("SELECT * FROM upperCaseData JOIN lowerCaseData ON n = N"),
-      Seq(
-        Row(1, "A", 1, "a"),
-        Row(2, "B", 2, "b"),
-        Row(3, "C", 3, "c"),
-        Row(4, "D", 4, "d")))
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      checkAnswer(
+        sql("SELECT * FROM uppercasedata JOIN lowercasedata ON n = N"),
+        Seq(
+          Row(1, "A", 1, "a"),
+          Row(2, "B", 2, "b"),
+          Row(3, "C", 3, "c"),
+          Row(4, "D", 4, "d")))
+    }
   }
 
   test("inner join, where, multiple matches") {
-    checkAnswer(
-      sql("""
-        |SELECT * FROM
-        |  (SELECT * FROM testData2 WHERE a = 1) x JOIN
-        |  (SELECT * FROM testData2 WHERE a = 1) y
-        |WHERE x.a = y.a""".stripMargin),
-      Row(1, 1, 1, 1) ::
-      Row(1, 1, 1, 2) ::
-      Row(1, 2, 1, 1) ::
-      Row(1, 2, 1, 2) :: Nil)
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      checkAnswer(
+        sql(
+          """
+          |SELECT * FROM
+          |  (SELECT * FROM testdata2 WHERE a = 1) x JOIN
+          |  (SELECT * FROM testdata2 WHERE a = 1) y
+          |WHERE x.a = y.a""".stripMargin),
+        Row(1, 1, 1, 1) ::
+        Row(1, 1, 1, 2) ::
+        Row(1, 2, 1, 1) ::
+        Row(1, 2, 1, 2) :: Nil)
+    }
   }
 
   test("inner join, no matches") {
@@ -827,25 +832,29 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("left outer join") {
-    checkAnswer(
-      sql("SELECT * FROM upperCaseData LEFT OUTER JOIN lowerCaseData ON n = N"),
-      Row(1, "A", 1, "a") ::
-      Row(2, "B", 2, "b") ::
-      Row(3, "C", 3, "c") ::
-      Row(4, "D", 4, "d") ::
-      Row(5, "E", null, null) ::
-      Row(6, "F", null, null) :: Nil)
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      checkAnswer(
+        sql("SELECT * FROM uppercasedata LEFT OUTER JOIN lowercasedata ON n = N"),
+        Row(1, "A", 1, "a") ::
+          Row(2, "B", 2, "b") ::
+          Row(3, "C", 3, "c") ::
+          Row(4, "D", 4, "d") ::
+          Row(5, "E", null, null) ::
+          Row(6, "F", null, null) :: Nil)
+    }
   }
 
   test("right outer join") {
-    checkAnswer(
-      sql("SELECT * FROM lowerCaseData RIGHT OUTER JOIN upperCaseData ON n = N"),
-      Row(1, "a", 1, "A") ::
-      Row(2, "b", 2, "B") ::
-      Row(3, "c", 3, "C") ::
-      Row(4, "d", 4, "D") ::
-      Row(null, null, 5, "E") ::
-      Row(null, null, 6, "F") :: Nil)
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      checkAnswer(
+        sql("SELECT * FROM lowercasedata RIGHT OUTER JOIN uppercasedata ON n = N"),
+        Row(1, "a", 1, "A") ::
+          Row(2, "b", 2, "B") ::
+          Row(3, "c", 3, "C") ::
+          Row(4, "d", 4, "D") ::
+          Row(null, null, 5, "E") ::
+          Row(null, null, 6, "F") :: Nil)
+    }
   }
 
   test("full outer join") {
@@ -868,12 +877,12 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   test("SPARK-11111 null-safe join should not use cartesian product") {
     val df = sql("select count(*) from testData a join testData b on (a.key <=> b.key)")
     val cp = df.queryExecution.sparkPlan.collect {
-      case cp: CartesianProduct => cp
+      case cp: CartesianProductExec => cp
     }
     assert(cp.isEmpty, "should not use CartesianProduct for null-safe join")
     val smj = df.queryExecution.sparkPlan.collect {
-      case smj: SortMergeJoin => smj
-      case j: BroadcastHashJoin => j
+      case smj: SortMergeJoinExec => smj
+      case j: BroadcastHashJoinExec => j
     }
     assert(smj.size > 0, "should use SortMergeJoin or BroadcastHashJoin")
     checkAnswer(df, Row(100) :: Nil)
@@ -1827,12 +1836,12 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     val e1 = intercept[AnalysisException] {
       sql("select * from in_valid_table")
     }
-    assert(e1.message.contains("Table or View not found"))
+    assert(e1.message.contains("Table or view not found"))
 
     val e2 = intercept[AnalysisException] {
       sql("select * from no_db.no_table").show()
     }
-    assert(e2.message.contains("Table or View not found"))
+    assert(e2.message.contains("Table or view not found"))
 
     val e3 = intercept[AnalysisException] {
       sql("select * from json.invalid_file")

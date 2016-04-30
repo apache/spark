@@ -34,7 +34,7 @@ private[spark] abstract class SparkFunSuite
   protected override def afterAll(): Unit = {
     try {
       // Avoid leaking map entries in tests that use accumulators without SparkContext
-      Accumulators.clear()
+      AccumulatorContext.clear()
     } finally {
       super.afterAll()
     }

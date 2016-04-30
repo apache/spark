@@ -43,7 +43,7 @@ setClass("KMeansModel", representation(jobj = "jobj"))
 #'
 #' @param formula A symbolic description of the model to be fitted. Currently only a few formula
 #'                operators are supported, including '~', '.', ':', '+', and '-'.
-#' @param data DataFrame for training.
+#' @param data SparkDataFrame for training.
 #' @param family A description of the error distribution and link function to be used in the model.
 #'               This can be a character string naming a family function, a family function or
 #'               the result of a call to a family function. Refer R family at
@@ -62,7 +62,7 @@ setClass("KMeansModel", representation(jobj = "jobj"))
 #' model <- glm(Sepal_Length ~ Sepal_Width, df, family="gaussian")
 #' summary(model)
 #' }
-setMethod("glm", signature(formula = "formula", family = "ANY", data = "DataFrame"),
+setMethod("glm", signature(formula = "formula", family = "ANY", data = "SparkDataFrame"),
           function(formula, family = gaussian, data, epsilon = 1e-06, maxit = 25) {
             if (is.character(family)) {
               family <- get(family, mode = "function", envir = parent.frame())
@@ -99,9 +99,9 @@ setMethod("glm", signature(formula = "formula", family = "ANY", data = "DataFram
 setMethod("summary", signature(object = "GeneralizedLinearRegressionModel"),
           function(object, ...) {
             jobj <- object@jobj
+            is.loaded <- callJMethod(jobj, "isLoaded")
             features <- callJMethod(jobj, "rFeatures")
             coefficients <- callJMethod(jobj, "rCoefficients")
-            deviance.resid <- callJMethod(jobj, "rDevianceResiduals")
             dispersion <- callJMethod(jobj, "rDispersion")
             null.deviance <- callJMethod(jobj, "rNullDeviance")
             deviance <- callJMethod(jobj, "rDeviance")
@@ -110,15 +110,18 @@ setMethod("summary", signature(object = "GeneralizedLinearRegressionModel"),
             aic <- callJMethod(jobj, "rAic")
             iter <- callJMethod(jobj, "rNumIterations")
             family <- callJMethod(jobj, "rFamily")
-
-            deviance.resid <- dataFrame(deviance.resid)
+            deviance.resid <- if (is.loaded) {
+              NULL
+            } else {
+              dataFrame(callJMethod(jobj, "rDevianceResiduals"))
+            }
             coefficients <- matrix(coefficients, ncol = 4)
             colnames(coefficients) <- c("Estimate", "Std. Error", "t value", "Pr(>|t|)")
             rownames(coefficients) <- unlist(features)
             ans <- list(deviance.resid = deviance.resid, coefficients = coefficients,
                         dispersion = dispersion, null.deviance = null.deviance,
                         deviance = deviance, df.null = df.null, df.residual = df.residual,
-                        aic = aic, iter = iter, family = family)
+                        aic = aic, iter = iter, family = family, is.loaded = is.loaded)
             class(ans) <- "summary.GeneralizedLinearRegressionModel"
             return(ans)
           })
@@ -129,12 +132,16 @@ setMethod("summary", signature(object = "GeneralizedLinearRegressionModel"),
 #' @name print.summary.GeneralizedLinearRegressionModel
 #' @export
 print.summary.GeneralizedLinearRegressionModel <- function(x, ...) {
-  x$deviance.resid <- setNames(unlist(approxQuantile(x$deviance.resid, "devianceResiduals",
+  if (x$is.loaded) {
+    cat("\nSaved-loaded model does not support output 'Deviance Residuals'.\n")
+  } else {
+    x$deviance.resid <- setNames(unlist(approxQuantile(x$deviance.resid, "devianceResiduals",
     c(0.0, 0.25, 0.5, 0.75, 1.0), 0.01)), c("Min", "1Q", "Median", "3Q", "Max"))
-  x$deviance.resid <- zapsmall(x$deviance.resid, 5L)
-  cat("\nDeviance Residuals: \n")
-  cat("(Note: These are approximate quantiles with relative error <= 0.01)\n")
-  print.default(x$deviance.resid, digits = 5L, na.print = "", print.gap = 2L)
+    x$deviance.resid <- zapsmall(x$deviance.resid, 5L)
+    cat("\nDeviance Residuals: \n")
+    cat("(Note: These are approximate quantiles with relative error <= 0.01)\n")
+    print.default(x$deviance.resid, digits = 5L, na.print = "", print.gap = 2L)
+  }
 
   cat("\nCoefficients:\n")
   print.default(x$coefficients, digits = 5L, na.print = "", print.gap = 2L)
@@ -155,8 +162,8 @@ print.summary.GeneralizedLinearRegressionModel <- function(x, ...) {
 #' Makes predictions from a generalized linear model produced by glm(), similarly to R's predict().
 #'
 #' @param object A fitted generalized linear model
-#' @param newData DataFrame for testing
-#' @return DataFrame containing predicted labels in a column named "prediction"
+#' @param newData SparkDataFrame for testing
+#' @return SparkDataFrame containing predicted labels in a column named "prediction"
 #' @rdname predict
 #' @export
 #' @examples
@@ -175,8 +182,8 @@ setMethod("predict", signature(object = "GeneralizedLinearRegressionModel"),
 #' Makes predictions from a model produced by naiveBayes(), similarly to R package e1071's predict.
 #'
 #' @param object A fitted naive Bayes model
-#' @param newData DataFrame for testing
-#' @return DataFrame containing predicted labels in a column named "prediction"
+#' @param newData SparkDataFrame for testing
+#' @return SparkDataFrame containing predicted labels in a column named "prediction"
 #' @rdname predict
 #' @export
 #' @examples
@@ -223,7 +230,7 @@ setMethod("summary", signature(object = "NaiveBayesModel"),
 #'
 #' Fit a k-means model, similarly to R's kmeans().
 #'
-#' @param x DataFrame for training
+#' @param x SparkDataFrame for training
 #' @param centers Number of centers
 #' @param iter.max Maximum iteration number
 #' @param algorithm Algorithm choosen to fit the model
@@ -234,7 +241,7 @@ setMethod("summary", signature(object = "NaiveBayesModel"),
 #' \dontrun{
 #' model <- kmeans(x, centers = 2, algorithm="random")
 #' }
-setMethod("kmeans", signature(x = "DataFrame"),
+setMethod("kmeans", signature(x = "SparkDataFrame"),
           function(x, centers, iter.max = 10, algorithm = c("random", "k-means||")) {
             columnNames <- as.array(colnames(x))
             algorithm <- match.arg(algorithm)
@@ -246,9 +253,10 @@ setMethod("kmeans", signature(x = "DataFrame"),
 #' Get fitted result from a k-means model
 #'
 #' Get fitted result from a k-means model, similarly to R's fitted().
+#' Note: A saved-loaded model does not support this method.
 #'
 #' @param object A fitted k-means model
-#' @return DataFrame containing fitted values
+#' @return SparkDataFrame containing fitted values
 #' @rdname fitted
 #' @export
 #' @examples
@@ -260,7 +268,13 @@ setMethod("kmeans", signature(x = "DataFrame"),
 setMethod("fitted", signature(object = "KMeansModel"),
           function(object, method = c("centers", "classes"), ...) {
             method <- match.arg(method)
-            return(dataFrame(callJMethod(object@jobj, "fitted", method)))
+            jobj <- object@jobj
+            is.loaded <- callJMethod(jobj, "isLoaded")
+            if (is.loaded) {
+              stop(paste("Saved-loaded k-means model does not support 'fitted' method"))
+            } else {
+              return(dataFrame(callJMethod(jobj, "fitted", method)))
+            }
           })
 
 #' Get the summary of a k-means model
@@ -280,15 +294,21 @@ setMethod("fitted", signature(object = "KMeansModel"),
 setMethod("summary", signature(object = "KMeansModel"),
           function(object, ...) {
             jobj <- object@jobj
+            is.loaded <- callJMethod(jobj, "isLoaded")
             features <- callJMethod(jobj, "features")
             coefficients <- callJMethod(jobj, "coefficients")
-            cluster <- callJMethod(jobj, "cluster")
             k <- callJMethod(jobj, "k")
             size <- callJMethod(jobj, "size")
             coefficients <- t(matrix(coefficients, ncol = k))
             colnames(coefficients) <- unlist(features)
             rownames(coefficients) <- 1:k
-            return(list(coefficients = coefficients, size = size, cluster = dataFrame(cluster)))
+            cluster <- if (is.loaded) {
+              NULL
+            } else {
+              dataFrame(callJMethod(jobj, "cluster"))
+            }
+            return(list(coefficients = coefficients, size = size,
+                   cluster = cluster, is.loaded = is.loaded))
           })
 
 #' Make predictions from a k-means model
@@ -296,8 +316,8 @@ setMethod("summary", signature(object = "KMeansModel"),
 #' Make predictions from a model produced by kmeans().
 #'
 #' @param object A fitted k-means model
-#' @param newData DataFrame for testing
-#' @return DataFrame containing predicted labels in a column named "prediction"
+#' @param newData SparkDataFrame for testing
+#' @return SparkDataFrame containing predicted labels in a column named "prediction"
 #' @rdname predict
 #' @export
 #' @examples
@@ -314,12 +334,12 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' Fit a Bernoulli naive Bayes model
 #'
 #' Fit a Bernoulli naive Bayes model, similarly to R package e1071's naiveBayes() while only
-#' categorical features are supported. The input should be a DataFrame of observations instead of a
-#' contingency table.
+#' categorical features are supported. The input should be a SparkDataFrame of observations instead
+#' of a contingency table.
 #'
 #' @param object A symbolic description of the model to be fitted. Currently only a few formula
 #'               operators are supported, including '~', '.', ':', '+', and '-'.
-#' @param data DataFrame for training
+#' @param data SparkDataFrame for training
 #' @param laplace Smoothing parameter
 #' @return a fitted naive Bayes model
 #' @rdname naiveBayes
@@ -330,13 +350,142 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' df <- createDataFrame(sqlContext, infert)
 #' model <- naiveBayes(education ~ ., df, laplace = 0)
 #'}
-setMethod("naiveBayes", signature(formula = "formula", data = "DataFrame"),
+setMethod("naiveBayes", signature(formula = "formula", data = "SparkDataFrame"),
           function(formula, data, laplace = 0, ...) {
             formula <- paste(deparse(formula), collapse = "")
             jobj <- callJStatic("org.apache.spark.ml.r.NaiveBayesWrapper", "fit",
                                  formula, data@sdf, laplace)
             return(new("NaiveBayesModel", jobj = jobj))
           })
+
+#' Save the Bernoulli naive Bayes model to the input path.
+#'
+#' @param object A fitted Bernoulli naive Bayes model
+#' @param path The directory where the model is saved
+#' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
+#'                  which means throw exception if the output path exists.
+#'
+#' @rdname ml.save
+#' @name ml.save
+#' @export
+#' @examples
+#' \dontrun{
+#' df <- createDataFrame(sqlContext, infert)
+#' model <- naiveBayes(education ~ ., df, laplace = 0)
+#' path <- "path/to/model"
+#' ml.save(model, path)
+#' }
+setMethod("ml.save", signature(object = "NaiveBayesModel", path = "character"),
+          function(object, path, overwrite = FALSE) {
+            writer <- callJMethod(object@jobj, "write")
+            if (overwrite) {
+              writer <- callJMethod(writer, "overwrite")
+            }
+            invisible(callJMethod(writer, "save", path))
+          })
+
+#' Save the AFT survival regression model to the input path.
+#'
+#' @param object A fitted AFT survival regression model
+#' @param path The directory where the model is saved
+#' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
+#'                  which means throw exception if the output path exists.
+#'
+#' @rdname ml.save
+#' @name ml.save
+#' @export
+#' @examples
+#' \dontrun{
+#' model <- survreg(Surv(futime, fustat) ~ ecog_ps + rx, trainingData)
+#' path <- "path/to/model"
+#' ml.save(model, path)
+#' }
+setMethod("ml.save", signature(object = "AFTSurvivalRegressionModel", path = "character"),
+          function(object, path, overwrite = FALSE) {
+            writer <- callJMethod(object@jobj, "write")
+            if (overwrite) {
+              writer <- callJMethod(writer, "overwrite")
+            }
+            invisible(callJMethod(writer, "save", path))
+          })
+
+#' Save the generalized linear model to the input path.
+#'
+#' @param object A fitted generalized linear model
+#' @param path The directory where the model is saved
+#' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
+#'                  which means throw exception if the output path exists.
+#'
+#' @rdname ml.save
+#' @name ml.save
+#' @export
+#' @examples
+#' \dontrun{
+#' model <- glm(y ~ x, trainingData)
+#' path <- "path/to/model"
+#' ml.save(model, path)
+#' }
+setMethod("ml.save", signature(object = "GeneralizedLinearRegressionModel", path = "character"),
+          function(object, path, overwrite = FALSE) {
+            writer <- callJMethod(object@jobj, "write")
+            if (overwrite) {
+              writer <- callJMethod(writer, "overwrite")
+            }
+            invisible(callJMethod(writer, "save", path))
+          })
+
+#' Save the k-means model to the input path.
+#'
+#' @param object A fitted k-means model
+#' @param path The directory where the model is saved
+#' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
+#'                  which means throw exception if the output path exists.
+#'
+#' @rdname ml.save
+#' @name ml.save
+#' @export
+#' @examples
+#' \dontrun{
+#' model <- kmeans(x, centers = 2, algorithm="random")
+#' path <- "path/to/model"
+#' ml.save(model, path)
+#' }
+setMethod("ml.save", signature(object = "KMeansModel", path = "character"),
+          function(object, path, overwrite = FALSE) {
+            writer <- callJMethod(object@jobj, "write")
+            if (overwrite) {
+              writer <- callJMethod(writer, "overwrite")
+            }
+            invisible(callJMethod(writer, "save", path))
+          })
+
+#' Load a fitted MLlib model from the input path.
+#'
+#' @param path Path of the model to read.
+#' @return a fitted MLlib model
+#' @rdname ml.load
+#' @name ml.load
+#' @export
+#' @examples
+#' \dontrun{
+#' path <- "path/to/model"
+#' model <- ml.load(path)
+#' }
+ml.load <- function(path) {
+  path <- suppressWarnings(normalizePath(path))
+  jobj <- callJStatic("org.apache.spark.ml.r.RWrappers", "load", path)
+  if (isInstanceOf(jobj, "org.apache.spark.ml.r.NaiveBayesWrapper")) {
+    return(new("NaiveBayesModel", jobj = jobj))
+  } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.AFTSurvivalRegressionWrapper")) {
+    return(new("AFTSurvivalRegressionModel", jobj = jobj))
+  } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.GeneralizedLinearRegressionWrapper")) {
+      return(new("GeneralizedLinearRegressionModel", jobj = jobj))
+  } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.KMeansWrapper")) {
+      return(new("KMeansModel", jobj = jobj))
+  } else {
+    stop(paste("Unsupported model: ", jobj))
+  }
+}
 
 #' Fit an accelerated failure time (AFT) survival regression model.
 #'
@@ -345,7 +494,7 @@ setMethod("naiveBayes", signature(formula = "formula", data = "DataFrame"),
 #' @param formula A symbolic description of the model to be fitted. Currently only a few formula
 #'                operators are supported, including '~', ':', '+', and '-'.
 #'                Note that operator '.' is not supported currently.
-#' @param data DataFrame for training.
+#' @param data SparkDataFrame for training.
 #' @return a fitted AFT survival regression model
 #' @rdname survreg
 #' @seealso survival: \url{https://cran.r-project.org/web/packages/survival/}
@@ -355,7 +504,7 @@ setMethod("naiveBayes", signature(formula = "formula", data = "DataFrame"),
 #' df <- createDataFrame(sqlContext, ovarian)
 #' model <- survreg(Surv(futime, fustat) ~ ecog_ps + rx, df)
 #' }
-setMethod("survreg", signature(formula = "formula", data = "DataFrame"),
+setMethod("survreg", signature(formula = "formula", data = "SparkDataFrame"),
           function(formula, data, ...) {
             formula <- paste(deparse(formula), collapse = "")
             jobj <- callJStatic("org.apache.spark.ml.r.AFTSurvivalRegressionWrapper",
@@ -393,8 +542,8 @@ setMethod("summary", signature(object = "AFTSurvivalRegressionModel"),
 #' Make predictions from a model produced by survreg(), similarly to R package survival's predict.
 #'
 #' @param object A fitted AFT survival regression model
-#' @param newData DataFrame for testing
-#' @return DataFrame containing predicted labels in a column named "prediction"
+#' @param newData SparkDataFrame for testing
+#' @return SparkDataFrame containing predicted labels in a column named "prediction"
 #' @rdname predict
 #' @export
 #' @examples

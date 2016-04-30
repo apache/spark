@@ -24,7 +24,8 @@ along with if you launch Spark's interactive shell -- either `bin/spark-shell` f
 
 <div data-lang="scala"  markdown="1">
 
-Spark {{site.SPARK_VERSION}} uses Scala {{site.SCALA_BINARY_VERSION}}. To write
+Spark {{site.SPARK_VERSION}} is built and distributed to work with Scala {{site.SCALA_BINARY_VERSION}} 
+by default. (Spark can be built to work with other versions of Scala, too.) To write
 applications in Scala, you will need to use a compatible Scala version (e.g. {{site.SCALA_BINARY_VERSION}}.X).
 
 To write a Spark application, you need to add a Maven dependency on Spark. Spark is available through Maven Central at:
@@ -1328,12 +1329,18 @@ value of the broadcast variable (e.g. if the variable is shipped to a new node l
 Accumulators are variables that are only "added" to through an associative and commutative operation and can
 therefore be efficiently supported in parallel. They can be used to implement counters (as in
 MapReduce) or sums. Spark natively supports accumulators of numeric types, and programmers
-can add support for new types. If accumulators are created with a name, they will be
+can add support for new types.
+
+If accumulators are created with a name, they will be
 displayed in Spark's UI. This can be useful for understanding the progress of
 running stages (NOTE: this is not yet supported in Python).
 
+<p style="text-align: center;">
+  <img src="img/spark-webui-accumulators.png" title="Accumulators in the Spark UI" alt="Accumulators in the Spark UI" />
+</p>
+
 An accumulator is created from an initial value `v` by calling `SparkContext.accumulator(v)`. Tasks
-running on the cluster can then add to it using the `add` method or the `+=` operator (in Scala and Python).
+running on a cluster can then add to it using the `add` method or the `+=` operator (in Scala and Python).
 However, they cannot read its value.
 Only the driver program can read the accumulator's value, using its `value` method.
 
@@ -1345,7 +1352,7 @@ The code below shows an accumulator being used to add up the elements of an arra
 
 {% highlight scala %}
 scala> val accum = sc.accumulator(0, "My Accumulator")
-accum: spark.Accumulator[Int] = 0
+accum: org.apache.spark.Accumulator[Int] = 0
 
 scala> sc.parallelize(Array(1, 2, 3, 4)).foreach(x => accum += x)
 ...
@@ -1466,11 +1473,11 @@ Accumulators do not change the lazy evaluation model of Spark. If they are being
 
 <div class="codetabs">
 
-<div data-lang="scala"  markdown="1">
+<div data-lang="scala" markdown="1">
 {% highlight scala %}
 val accum = sc.accumulator(0)
-data.map { x => accum += x; f(x) }
-// Here, accum is still 0 because no actions have caused the <code>map</code> to be computed.
+data.map { x => accum += x; x }
+// Here, accum is still 0 because no actions have caused the map operation to be computed.
 {% endhighlight %}
 </div>
 

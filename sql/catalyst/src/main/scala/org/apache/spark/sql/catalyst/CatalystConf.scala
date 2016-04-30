@@ -29,6 +29,12 @@ trait CatalystConf {
   def groupByOrdinal: Boolean
 
   def optimizerMaxIterations: Int
+  def optimizerInSetConversionThreshold: Int
+  def maxCaseBranchesForCodegen: Int
+
+  def runSQLonFile: Boolean
+
+  def warehousePath: String
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two
@@ -45,6 +51,9 @@ case class SimpleCatalystConf(
     caseSensitiveAnalysis: Boolean,
     orderByOrdinal: Boolean = true,
     groupByOrdinal: Boolean = true,
-    optimizerMaxIterations: Int = 100)
-  extends CatalystConf {
-}
+    optimizerMaxIterations: Int = 100,
+    optimizerInSetConversionThreshold: Int = 10,
+    maxCaseBranchesForCodegen: Int = 20,
+    runSQLonFile: Boolean = true,
+    warehousePath: String = "/user/hive/warehouse")
+  extends CatalystConf

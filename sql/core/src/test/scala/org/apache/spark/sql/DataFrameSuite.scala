@@ -29,7 +29,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Union}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.aggregate.TungstenAggregate
-import org.apache.spark.sql.execution.exchange.{BroadcastExchange, ReusedExchange, ShuffleExchange}
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchange}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSQLContext}
@@ -398,6 +398,66 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       Row(4, "d") :: Nil)
     checkAnswer(lowerCaseData.except(lowerCaseData), Nil)
     checkAnswer(upperCaseData.except(upperCaseData), Nil)
+
+    // check null equality
+    checkAnswer(
+      nullInts.except(nullInts.filter("0 = 1")),
+      nullInts)
+    checkAnswer(
+      nullInts.except(nullInts),
+      Nil)
+
+    // check if values are de-duplicated
+    checkAnswer(
+      allNulls.except(allNulls.filter("0 = 1")),
+      Row(null) :: Nil)
+    checkAnswer(
+      allNulls.except(allNulls),
+      Nil)
+
+    // check if values are de-duplicated
+    val df = Seq(("id1", 1), ("id1", 1), ("id", 1), ("id1", 2)).toDF("id", "value")
+    checkAnswer(
+      df.except(df.filter("0 = 1")),
+      Row("id1", 1) ::
+      Row("id", 1) ::
+      Row("id1", 2) :: Nil)
+
+    // check if the empty set on the left side works
+    checkAnswer(
+      allNulls.filter("0 = 1").except(allNulls),
+      Nil)
+  }
+
+  test("except distinct - SQL compliance") {
+    val df_left = Seq(1, 2, 2, 3, 3, 4).toDF("id")
+    val df_right = Seq(1, 3).toDF("id")
+
+    checkAnswer(
+      df_left.except(df_right),
+      Row(2) :: Row(4) :: Nil
+    )
+  }
+
+  test("except - nullability") {
+    val nonNullableInts = Seq(Tuple1(11), Tuple1(3)).toDF()
+    assert(nonNullableInts.schema.forall(!_.nullable))
+
+    val df1 = nonNullableInts.except(nullInts)
+    checkAnswer(df1, Row(11) :: Nil)
+    assert(df1.schema.forall(!_.nullable))
+
+    val df2 = nullInts.except(nonNullableInts)
+    checkAnswer(df2, Row(1) :: Row(2) :: Row(null) :: Nil)
+    assert(df2.schema.forall(_.nullable))
+
+    val df3 = nullInts.except(nullInts)
+    checkAnswer(df3, Nil)
+    assert(df3.schema.forall(_.nullable))
+
+    val df4 = nonNullableInts.except(nonNullableInts)
+    checkAnswer(df4, Nil)
+    assert(df4.schema.forall(!_.nullable))
   }
 
   test("intersect") {
@@ -433,23 +493,23 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
   test("intersect - nullability") {
     val nonNullableInts = Seq(Tuple1(1), Tuple1(3)).toDF()
-    assert(nonNullableInts.schema.forall(_.nullable == false))
+    assert(nonNullableInts.schema.forall(!_.nullable))
 
     val df1 = nonNullableInts.intersect(nullInts)
     checkAnswer(df1, Row(1) :: Row(3) :: Nil)
-    assert(df1.schema.forall(_.nullable == false))
+    assert(df1.schema.forall(!_.nullable))
 
     val df2 = nullInts.intersect(nonNullableInts)
     checkAnswer(df2, Row(1) :: Row(3) :: Nil)
-    assert(df2.schema.forall(_.nullable == false))
+    assert(df2.schema.forall(!_.nullable))
 
     val df3 = nullInts.intersect(nullInts)
     checkAnswer(df3, Row(1) :: Row(2) :: Row(3) :: Row(null) :: Nil)
-    assert(df3.schema.forall(_.nullable == true))
+    assert(df3.schema.forall(_.nullable))
 
     val df4 = nonNullableInts.intersect(nonNullableInts)
     checkAnswer(df4, Row(1) :: Row(3) :: Nil)
-    assert(df4.schema.forall(_.nullable == false))
+    assert(df4.schema.forall(!_.nullable))
   }
 
   test("udf") {
@@ -464,8 +524,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
   test("callUDF in SQLContext") {
     val df = Seq(("id1", 1), ("id2", 4), ("id3", 5)).toDF("id", "value")
-    val sqlctx = df.sqlContext
-    sqlctx.udf.register("simpleUDF", (v: Int) => v * v)
+    df.sparkSession.udf.register("simpleUDF", (v: Int) => v * v)
     checkAnswer(
       df.select($"id", callUDF("simpleUDF", $"value")),
       Row("id1", 1) :: Row("id2", 16) :: Row("id3", 25) :: Nil)
@@ -618,7 +677,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("apply on query results (SPARK-5462)") {
-    val df = testData.sqlContext.sql("select key from testData")
+    val df = testData.sparkSession.sql("select key from testData")
     checkAnswer(df.select(df("key")), testData.select('key).collect().toSeq)
   }
 
@@ -975,7 +1034,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       assert(e2.getMessage.contains("Inserting into an RDD-based table is not allowed."))
 
       // error case: insert into an OneRowRelation
-      Dataset.ofRows(sqlContext, OneRowRelation).registerTempTable("one_row")
+      Dataset.ofRows(sqlContext.sparkSession, OneRowRelation).registerTempTable("one_row")
       val e3 = intercept[AnalysisException] {
         insertion.write.insertInto("one_row")
       }
@@ -1355,16 +1414,18 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       checkAnswer(join, df)
       assert(
         join.queryExecution.executedPlan.collect { case e: ShuffleExchange => true }.size === 1)
-      assert(join.queryExecution.executedPlan.collect { case e: ReusedExchange => true }.size === 1)
+      assert(
+        join.queryExecution.executedPlan.collect { case e: ReusedExchangeExec => true }.size === 1)
       val broadcasted = broadcast(join)
       val join2 = join.join(broadcasted, "id").join(broadcasted, "id")
       checkAnswer(join2, df)
       assert(
         join2.queryExecution.executedPlan.collect { case e: ShuffleExchange => true }.size === 1)
       assert(
-        join2.queryExecution.executedPlan.collect { case e: BroadcastExchange => true }.size === 1)
+        join2.queryExecution.executedPlan
+          .collect { case e: BroadcastExchangeExec => true }.size === 1)
       assert(
-        join2.queryExecution.executedPlan.collect { case e: ReusedExchange => true }.size === 4)
+        join2.queryExecution.executedPlan.collect { case e: ReusedExchangeExec => true }.size === 4)
     }
   }
 
