@@ -50,7 +50,7 @@ class ContinuousQueryListenerSuite extends StreamTest with SharedSQLContext with
     val input = MemoryStream[Int]
     withListenerAdded(listener) {
       testStream(input.toDS)(
-        StartStream,
+        StartStream(),
         Assert("Incorrect query status in onQueryStarted") {
           val status = listener.startStatus
           assert(status != null)
@@ -104,7 +104,7 @@ class ContinuousQueryListenerSuite extends StreamTest with SharedSQLContext with
     def isListenerActive(listener: QueryStatusCollector): Boolean = {
       listener.reset()
       testStream(MemoryStream[Int].toDS)(
-        StartStream,
+        StartStream(),
         StopStream
       )
       listener.startStatus != null
@@ -135,7 +135,7 @@ class ContinuousQueryListenerSuite extends StreamTest with SharedSQLContext with
         listener.reset()
         require(listener.startStatus === null)
         testStream(MemoryStream[Int].toDS)(
-          StartStream,
+          StartStream(),
           Assert(listener.startStatus !== null, "onQueryStarted not called before query returned"),
           StopStream,
           Assert { listener.checkAsyncErrors() }
