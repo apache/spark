@@ -55,7 +55,7 @@ case class HiveTableScanExec(
     "Partition pruning predicates only supported for partitioned tables.")
 
   private[sql] override lazy val metrics = Map(
-    "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   override def producedAttributes: AttributeSet = outputSet ++
     AttributeSet(partitionPruningPred.flatMap(_.references))
@@ -73,7 +73,7 @@ case class HiveTableScanExec(
     BindReferences.bindReference(pred, relation.partitionKeys)
   }
 
-  // Create a local copy of hiveconf,so that scan specific modifications should not impact
+  // Create a local copy of hadoopConf,so that scan specific modifications should not impact
   // other queries
   @transient
   private[this] val hadoopConf = sparkSession.sessionState.newHadoopConf()

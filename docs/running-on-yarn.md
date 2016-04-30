@@ -372,6 +372,14 @@ If you need a reference to the proper location to put log files in the YARN so t
   </td>
 </tr>
 <tr>
+  <td><code>spark.yarn.executor.failuresValidityInterval</code></td>
+  <td>(none)</td>
+  <td>
+  Defines the validity interval for executor failure tracking.
+  Executor failures which are older than the validity interval will be ignored.
+  </td>
+</tr>
+<tr>
   <td><code>spark.yarn.submit.waitAppCompletion</code></td>
   <td><code>true</code></td>
   <td>

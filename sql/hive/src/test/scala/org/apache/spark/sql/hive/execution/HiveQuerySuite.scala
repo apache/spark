@@ -73,13 +73,6 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     assert(e.getMessage.toLowerCase.contains("operation not allowed"))
   }
 
-  test("SPARK-4908: concurrent hive native commands") {
-    (1 to 100).par.map { _ =>
-      sql("USE default")
-      sql("SHOW DATABASES")
-    }
-  }
-
   // Testing the Broadcast based join for cartesian join (cross join)
   // We assume that the Broadcast Join Threshold will works since the src is a small table
   private val spark_10484_1 = """
@@ -777,29 +770,6 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     assert(sql("select array(key, *) from src limit 5").collect().size == 5)
   }
 
-  test("Query Hive native command execution result") {
-    val databaseName = "test_native_commands"
-
-    assertResult(0) {
-      sql(s"DROP DATABASE IF EXISTS $databaseName").count()
-    }
-
-    assertResult(0) {
-      sql(s"CREATE DATABASE $databaseName").count()
-    }
-
-    assert(
-      sql("SHOW DATABASES")
-        .select('result)
-        .collect()
-        .map(_.getString(0))
-        .contains(databaseName))
-
-    assert(isExplanation(sql(s"EXPLAIN SELECT key, COUNT(*) FROM src GROUP BY key")))
-
-    TestHive.reset()
-  }
-
   test("Exactly once semantics for DDL and command statements") {
     val tableName = "test_exactly_once"
     val q0 = sql(s"CREATE TABLE $tableName(key INT, value STRING)")
@@ -847,40 +817,6 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       sql("DESCRIBE default.test_describe_commands1")
         .select('col_name, 'data_type, 'comment)
         .collect()
-    }
-
-    // Describe a column is a native command
-    assertResult(Array(Array("value", "string", "from deserializer"))) {
-      sql("DESCRIBE test_describe_commands1 value")
-        .select('result)
-        .collect()
-        .map(_.getString(0).split("\t").map(_.trim))
-    }
-
-    // Describe a column is a native command
-    assertResult(Array(Array("value", "string", "from deserializer"))) {
-      sql("DESCRIBE default.test_describe_commands1 value")
-        .select('result)
-        .collect()
-        .map(_.getString(0).split("\t").map(_.trim))
-    }
-
-    // Describe a partition is a native command
-    assertResult(
-      Array(
-        Array("key", "int"),
-        Array("value", "string"),
-        Array("dt", "string"),
-        Array(""),
-        Array("# Partition Information"),
-        Array("# col_name", "data_type", "comment"),
-        Array(""),
-        Array("dt", "string"))
-    ) {
-      sql("DESCRIBE test_describe_commands1 PARTITION (dt='2008-06-08')")
-        .select('result)
-        .collect()
-        .map(_.getString(0).replaceAll("None", "").trim.split("\t").map(_.trim))
     }
 
     // Describe a registered temporary table.
@@ -1132,51 +1068,6 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
     sql(s"set $testKey=")
     assert(getConf(testKey, "0") == "")
-  }
-
-  test("SET commands semantics for a HiveContext") {
-    // Adapted from its SQL counterpart.
-    val testKey = "spark.sql.key.usedfortestonly"
-    val testVal = "test.val.0"
-    val nonexistentKey = "nonexistent"
-    def collectResults(df: DataFrame): Set[Any] =
-      df.collect().map {
-        case Row(key: String, value: String) => key -> value
-        case Row(key: String, defaultValue: String, doc: String) => (key, defaultValue, doc)
-      }.toSet
-    conf.clear()
-
-    val expectedConfs = conf.getAllDefinedConfs.toSet
-    assertResult(expectedConfs)(collectResults(sql("SET -v")))
-
-    // "SET" itself returns all config variables currently specified in SQLConf.
-    // TODO: Should we be listing the default here always? probably...
-    assert(sql("SET").collect().size === TestHiveContext.overrideConfs.size)
-
-    val defaults = collectResults(sql("SET"))
-    assertResult(Set(testKey -> testVal)) {
-      collectResults(sql(s"SET $testKey=$testVal"))
-    }
-
-    assert(sessionState.hiveconf.get(testKey, "") === testVal)
-    assertResult(defaults ++ Set(testKey -> testVal))(collectResults(sql("SET")))
-
-    sql(s"SET ${testKey + testKey}=${testVal + testVal}")
-    assert(sessionState.hiveconf.get(testKey + testKey, "") == testVal + testVal)
-    assertResult(defaults ++ Set(testKey -> testVal, (testKey + testKey) -> (testVal + testVal))) {
-      collectResults(sql("SET"))
-    }
-
-    // "SET key"
-    assertResult(Set(testKey -> testVal)) {
-      collectResults(sql(s"SET $testKey"))
-    }
-
-    assertResult(Set(nonexistentKey -> "<undefined>")) {
-      collectResults(sql(s"SET $nonexistentKey"))
-    }
-
-    conf.clear()
   }
 
   test("current_database with multiple sessions") {
