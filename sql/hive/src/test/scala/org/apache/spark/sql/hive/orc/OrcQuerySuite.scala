@@ -170,8 +170,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
   // Hive supports zlib, snappy and none for Hive 1.2.1.
   test("Compression options for writing to an ORC file (SNAPPY, ZLIB and NONE)") {
     withTempPath { file =>
-      sqlContext.range(0, 10)
-        .write
+      sqlContext.range(0, 10).write
         .option("orc.compress", "ZLIB")
         .orc(file.getCanonicalPath)
       val expectedCompressionKind =
@@ -180,8 +179,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
     }
 
     withTempPath { file =>
-      sqlContext.range(0, 10)
-        .write
+      sqlContext.range(0, 10).write
         .option("orc.compress", "SNAPPY")
         .orc(file.getCanonicalPath)
       val expectedCompressionKind =
@@ -190,8 +188,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
     }
 
     withTempPath { file =>
-      sqlContext.range(0, 10)
-        .write
+      sqlContext.range(0, 10).write
         .option("orc.compress", "NONE")
         .orc(file.getCanonicalPath)
       val expectedCompressionKind =
@@ -203,8 +200,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
   // Following codec is not supported in Hive 1.2.1, ignore it now
   ignore("LZO compression options for writing to an ORC file not supported in Hive 1.2.1") {
     withTempPath { file =>
-      sqlContext.range(0, 10)
-        .write
+      sqlContext.range(0, 10).write
         .option("orc.compress", "LZO")
         .orc(file.getCanonicalPath)
       val expectedCompressionKind =
