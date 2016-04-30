@@ -47,7 +47,7 @@ setClass("KMeansModel", representation(jobj = "jobj"))
 
 #' Fits a generalized linear model
 #'
-#' Fits a generalized linear model.
+#' Fits a generalized linear model against a Spark DataFrame.
 #'
 #' @param data SparkDataFrame for training.
 #' @param formula A symbolic description of the model to be fitted. Currently only a few formula
@@ -270,6 +270,30 @@ setMethod("summary", signature(object = "NaiveBayesModel"),
 #'
 #' Fit a k-means model, similarly to R's kmeans().
 #'
+#' @param data SparkDataFrame for training
+#' @param k Number of centers
+#' @param maxIter Maximum iteration number
+#' @param initializationMode Algorithm choosen to fit the model
+#' @return A fitted k-means model
+#' @rdname spark.kmeans
+#' @export
+#' @examples
+#' \dontrun{
+#' model <- kmeans(x, centers = 2, initializationMode="random")
+#' }
+setMethod("spark.kmeans", signature(data = "SparkDataFrame"),
+          function(data, k, maxIter = 10, initializationMode = c("random", "k-means||")) {
+            columnNames <- as.array(colnames(data))
+            initializationMode <- match.arg(initializationMode)
+            jobj <- callJStatic("org.apache.spark.ml.r.KMeansWrapper", "fit", data@sdf,
+                                k, maxIter, initializationMode, columnNames)
+            return(new("KMeansModel", jobj = jobj))
+         })
+
+#' Fit a k-means model
+#'
+#' Fit a k-means model, similarly to R's kmeans().
+#'
 #' @param x SparkDataFrame for training
 #' @param centers Number of centers
 #' @param iter.max Maximum iteration number
@@ -282,13 +306,9 @@ setMethod("summary", signature(object = "NaiveBayesModel"),
 #' model <- kmeans(x, centers = 2, algorithm="random")
 #' }
 setMethod("kmeans", signature(x = "SparkDataFrame"),
-          function(x, centers, iter.max = 10, algorithm = c("random", "k-means||")) {
-            columnNames <- as.array(colnames(x))
-            algorithm <- match.arg(algorithm)
-            jobj <- callJStatic("org.apache.spark.ml.r.KMeansWrapper", "fit", x@sdf,
-                                centers, iter.max, algorithm, columnNames)
-            return(new("KMeansModel", jobj = jobj))
-         })
+    function(x, centers, iter.max = 10, algorithm = c("random", "k-means||")) {
+        return(spark.kmeans(x, centers, iter.max, algorithm))
+    })
 
 #' Get fitted result from a k-means model
 #'
