@@ -78,13 +78,10 @@ private[sql] object InferSchema {
     }
   }
 
-  private def sortFieldsInPlace(fields: Array[StructField]): Unit = {
-    // Note: other code relies on this sorting for correctness, so don't remove it!
-    java.util.Arrays.sort(fields, new Comparator[StructField] {
-      override def compare(o1: StructField, o2: StructField): Int = {
-        o1.name.compare(o2.name)
-      }
-    })
+  private[this] val structFieldComparator = new Comparator[StructField] {
+    override def compare(o1: StructField, o2: StructField): Int = {
+      o1.name.compare(o2.name)
+    }
   }
 
   /**
@@ -119,7 +116,7 @@ private[sql] object InferSchema {
         }
         val fields: Array[StructField] = builder.result()
         // Note: other code relies on this sorting for correctness, so don't remove it!
-        sortFieldsInPlace(fields)
+        java.util.Arrays.sort(fields, structFieldComparator)
         StructType(fields)
 
       case START_ARRAY =>
@@ -207,7 +204,7 @@ private[sql] object InferSchema {
       val newFields: Array[StructField] =
         StructField(columnNameOfCorruptRecords, StringType, nullable = true) +: struct.fields
       // Note: other code relies on this sorting for correctness, so don't remove it!
-      sortFieldsInPlace(newFields)
+      java.util.Arrays.sort(newFields, structFieldComparator)
       StructType(newFields)
     } else {
       // Otherwise, just return this struct.
