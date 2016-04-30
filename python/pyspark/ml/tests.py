@@ -44,8 +44,7 @@ import numpy as np
 
 from pyspark import keyword_only
 from pyspark.ml import Estimator, Model, Pipeline, PipelineModel, Transformer
-from pyspark.ml.classification import (
-    LogisticRegression, DecisionTreeClassifier, OneVsRest, OneVsRestModel)
+from pyspark.ml.classification import *
 from pyspark.ml.clustering import *
 from pyspark.ml.evaluation import BinaryClassificationEvaluator, RegressionEvaluator
 from pyspark.ml.feature import *
@@ -540,6 +539,8 @@ class CrossValidatorTests(PySparkTestCase):
         self.assertEqual(1.0, bestModelMetric, "Best model has R-squared of 1")
 
     def test_save_load(self):
+        # This tests saving and loading the trained model only.
+        # Save/load for CrossValidator will be added later: SPARK-13786
         temp_path = tempfile.mkdtemp()
         sqlContext = SQLContext(self.sc)
         dataset = sqlContext.createDataFrame(
@@ -554,18 +555,13 @@ class CrossValidatorTests(PySparkTestCase):
         evaluator = BinaryClassificationEvaluator()
         cv = CrossValidator(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator)
         cvModel = cv.fit(dataset)
-        cvPath = temp_path + "/cv"
-        cv.save(cvPath)
-        loadedCV = CrossValidator.load(cvPath)
-        self.assertEqual(loadedCV.getEstimator().uid, cv.getEstimator().uid)
-        self.assertEqual(loadedCV.getEvaluator().uid, cv.getEvaluator().uid)
-        self.assertEqual(loadedCV.getEstimatorParamMaps(), cv.getEstimatorParamMaps())
+        lrModel = cvModel.bestModel
+
         cvModelPath = temp_path + "/cvModel"
-        cvModel.save(cvModelPath)
-        loadedModel = CrossValidatorModel.load(cvModelPath)
-        self.assertEqual(loadedModel.bestModel.uid, cvModel.bestModel.uid)
-        for index in range(len(loadedModel.avgMetrics)):
-            self.assertTrue(abs(loadedModel.avgMetrics[index] - cvModel.avgMetrics[index]) < 0.0001)
+        lrModel.save(cvModelPath)
+        loadedLrModel = LogisticRegressionModel.load(cvModelPath)
+        self.assertEqual(loadedLrModel.uid, lrModel.uid)
+        self.assertEqual(loadedLrModel.intercept, lrModel.intercept)
 
 
 class TrainValidationSplitTests(PySparkTestCase):
@@ -619,6 +615,8 @@ class TrainValidationSplitTests(PySparkTestCase):
         self.assertEqual(1.0, bestModelMetric, "Best model has R-squared of 1")
 
     def test_save_load(self):
+        # This tests saving and loading the trained model only.
+        # Save/load for TrainValidationSplit will be added later: SPARK-13786
         temp_path = tempfile.mkdtemp()
         sqlContext = SQLContext(self.sc)
         dataset = sqlContext.createDataFrame(
@@ -633,16 +631,13 @@ class TrainValidationSplitTests(PySparkTestCase):
         evaluator = BinaryClassificationEvaluator()
         tvs = TrainValidationSplit(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator)
         tvsModel = tvs.fit(dataset)
-        tvsPath = temp_path + "/tvs"
-        tvs.save(tvsPath)
-        loadedTvs = TrainValidationSplit.load(tvsPath)
-        self.assertEqual(loadedTvs.getEstimator().uid, tvs.getEstimator().uid)
-        self.assertEqual(loadedTvs.getEvaluator().uid, tvs.getEvaluator().uid)
-        self.assertEqual(loadedTvs.getEstimatorParamMaps(), tvs.getEstimatorParamMaps())
+        lrModel = tvsModel.bestModel
+
         tvsModelPath = temp_path + "/tvsModel"
-        tvsModel.save(tvsModelPath)
-        loadedModel = TrainValidationSplitModel.load(tvsModelPath)
-        self.assertEqual(loadedModel.bestModel.uid, tvsModel.bestModel.uid)
+        lrModel.save(tvsModelPath)
+        loadedLrModel = LogisticRegressionModel.load(tvsModelPath)
+        self.assertEqual(loadedLrModel.uid, lrModel.uid)
+        self.assertEqual(loadedLrModel.intercept, lrModel.intercept)
 
 
 class PersistenceTest(PySparkTestCase):
