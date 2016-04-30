@@ -81,6 +81,8 @@ class Analyzer(
       CTESubstitution,
       WindowsSubstitution,
       EliminateUnions),
+    Batch("Pre-check", fixedPoint,
+      ValidateGenerator),
     Batch("Resolution", fixedPoint,
       ResolveRelations ::
       ResolveReferences ::
@@ -162,6 +164,33 @@ class Analyzer(
               WindowExpression(c, windowSpecDefinition)
           }
         }
+    }
+  }
+
+  object ValidateGenerator extends Rule[LogicalPlan] {
+    private def hasGenerator(expr: Expression): Boolean = {
+      expr.find(_.isInstanceOf[Generator]).isDefined
+    }
+
+    private def hasNestedGenerator(expr: NamedExpression): Boolean = expr match {
+      case UnresolvedAlias(_: Generator, _) => false
+      case Alias(_: Generator, _) => false
+      case MultiAlias(_: Generator, _) => false
+      case other if hasGenerator(other) => true
+      case _ => false
+    }
+
+    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      case Project(projectList, _) if projectList.exists(hasNestedGenerator) =>
+        throw new AnalysisException("Generators are not supported when it's nested in expressions.")
+
+      case Project(projectList, _) if projectList.count(hasGenerator) > 1 =>
+        val generators = projectList.flatMap(_.find(_.isInstanceOf[Generator]))
+        throw new AnalysisException("Only one generator allowed per select clause but found " +
+          generators.size + ": " + generators.map(g => usePrettyExpression(g).sql).mkString(", "))
+
+      case p if !p.isInstanceOf[Project] && p.expressions.exists(hasGenerator) =>
+        throw new AnalysisException("Generators are not supported outside the SELECT clause")
     }
   }
 
@@ -1271,11 +1300,9 @@ class Analyzer(
 
         val newProjectList = projectList.flatMap {
           case AliasedGenerator(generator, names) if generator.childrenResolved =>
-            if (resolvedGenerator != null) {
-              failAnalysis(
-                s"Only one generator allowed per select but ${resolvedGenerator.nodeName} and " +
-                s"and ${generator.nodeName} found.")
-            }
+            // It's a sanity check, this should not happen as the `ValidateGenerator` rule will
+            // throw exception earlier.
+            assert(resolvedGenerator == null, "More than one generator found in SELECT.")
 
             resolvedGenerator =
               Generate(
