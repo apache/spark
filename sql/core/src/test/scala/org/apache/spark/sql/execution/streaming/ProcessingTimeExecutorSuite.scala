@@ -21,17 +21,39 @@ import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.ProcessingTime
-import org.apache.spark.util.ManualClock
+import org.apache.spark.util.{Clock, ManualClock, SystemClock}
 
 class ProcessingTimeExecutorSuite extends SparkFunSuite {
 
   test("nextBatchTime") {
     val processingTimeExecutor = ProcessingTimeExecutor(ProcessingTime(100))
+    assert(processingTimeExecutor.nextBatchTime(0) === 100)
     assert(processingTimeExecutor.nextBatchTime(1) === 100)
     assert(processingTimeExecutor.nextBatchTime(99) === 100)
-    assert(processingTimeExecutor.nextBatchTime(100) === 100)
+    assert(processingTimeExecutor.nextBatchTime(100) === 200)
     assert(processingTimeExecutor.nextBatchTime(101) === 200)
     assert(processingTimeExecutor.nextBatchTime(150) === 200)
+  }
+
+  private def testNextBatchTimeAgainstClock(clock: Clock) {
+    val IntervalMS = 100
+    val processingTimeExecutor = ProcessingTimeExecutor(ProcessingTime(IntervalMS), clock)
+
+    val ITERATION = 10
+    var nextBatchTime: Long = 0
+    for (it <- 1 to ITERATION)
+      nextBatchTime = processingTimeExecutor.nextBatchTime(nextBatchTime)
+
+    // nextBatchTime should be 1000
+    assert(nextBatchTime === IntervalMS * ITERATION)
+  }
+
+  test("nextBatchTime against SystemClock") {
+    testNextBatchTimeAgainstClock(new SystemClock)
+  }
+
+  test("nextBatchTime against ManualClock") {
+    testNextBatchTimeAgainstClock(new ManualClock)
   }
 
   private def testBatchTermination(intervalMs: Long): Unit = {
