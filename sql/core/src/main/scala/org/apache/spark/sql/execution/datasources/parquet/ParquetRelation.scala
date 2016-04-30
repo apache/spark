@@ -143,10 +143,9 @@ private[sql] class DefaultSource
       parameters
           .get(ParquetRelation.MERGE_SCHEMA)
           .map(_.toBoolean)
-          .getOrElse(sparkSession.getConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED))
+          .getOrElse(sparkSession.conf.get(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED))
 
-    val mergeRespectSummaries =
-      sparkSession.getConf(SQLConf.PARQUET_SCHEMA_RESPECT_SUMMARIES)
+    val mergeRespectSummaries = sparkSession.conf.get(SQLConf.PARQUET_SCHEMA_RESPECT_SUMMARIES)
 
     val filesByType = splitFiles(files)
 
@@ -281,22 +280,23 @@ private[sql] class DefaultSource
     // Sets flags for `CatalystSchemaConverter`
     hadoopConf.setBoolean(
       SQLConf.PARQUET_BINARY_AS_STRING.key,
-      sparkSession.getConf(SQLConf.PARQUET_BINARY_AS_STRING))
+      sparkSession.conf.get(SQLConf.PARQUET_BINARY_AS_STRING))
     hadoopConf.setBoolean(
       SQLConf.PARQUET_INT96_AS_TIMESTAMP.key,
-      sparkSession.getConf(SQLConf.PARQUET_INT96_AS_TIMESTAMP))
+      sparkSession.conf.get(SQLConf.PARQUET_INT96_AS_TIMESTAMP))
 
     // Try to push down filters when filter push-down is enabled.
-    val pushed = if (sparkSession.getConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key).toBoolean) {
-      filters
-        // Collects all converted Parquet filter predicates. Notice that not all predicates can be
-        // converted (`ParquetFilters.createFilter` returns an `Option`). That's why a `flatMap`
-        // is used here.
-        .flatMap(ParquetFilters.createFilter(requiredSchema, _))
-        .reduceOption(FilterApi.and)
-    } else {
-      None
-    }
+    val pushed =
+      if (sparkSession.conf.get(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key).toBoolean) {
+        filters
+          // Collects all converted Parquet filter predicates. Notice that not all predicates can be
+          // converted (`ParquetFilters.createFilter` returns an `Option`). That's why a `flatMap`
+          // is used here.
+          .flatMap(ParquetFilters.createFilter(requiredSchema, _))
+          .reduceOption(FilterApi.and)
+      } else {
+        None
+      }
 
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))

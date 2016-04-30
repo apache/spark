@@ -44,19 +44,21 @@ import numpy as np
 
 from pyspark import keyword_only
 from pyspark.ml import Estimator, Model, Pipeline, PipelineModel, Transformer
-from pyspark.ml.classification import (
-    LogisticRegression, DecisionTreeClassifier, OneVsRest, OneVsRestModel)
+from pyspark.ml.classification import *
 from pyspark.ml.clustering import *
 from pyspark.ml.evaluation import BinaryClassificationEvaluator, RegressionEvaluator
 from pyspark.ml.feature import *
 from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.param.shared import HasMaxIter, HasInputCol, HasSeed
+from pyspark.ml.recommendation import ALS
 from pyspark.ml.regression import LinearRegression, DecisionTreeRegressor
 from pyspark.ml.tuning import *
 from pyspark.ml.wrapper import JavaParams
 from pyspark.mllib.linalg import Vectors, DenseVector, SparseVector
 from pyspark.sql import DataFrame, SQLContext, Row
 from pyspark.sql.functions import rand
+from pyspark.sql.utils import IllegalArgumentException
+from pyspark.storagelevel import *
 from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
 
 
@@ -540,6 +542,8 @@ class CrossValidatorTests(PySparkTestCase):
         self.assertEqual(1.0, bestModelMetric, "Best model has R-squared of 1")
 
     def test_save_load(self):
+        # This tests saving and loading the trained model only.
+        # Save/load for CrossValidator will be added later: SPARK-13786
         temp_path = tempfile.mkdtemp()
         sqlContext = SQLContext(self.sc)
         dataset = sqlContext.createDataFrame(
@@ -554,18 +558,13 @@ class CrossValidatorTests(PySparkTestCase):
         evaluator = BinaryClassificationEvaluator()
         cv = CrossValidator(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator)
         cvModel = cv.fit(dataset)
-        cvPath = temp_path + "/cv"
-        cv.save(cvPath)
-        loadedCV = CrossValidator.load(cvPath)
-        self.assertEqual(loadedCV.getEstimator().uid, cv.getEstimator().uid)
-        self.assertEqual(loadedCV.getEvaluator().uid, cv.getEvaluator().uid)
-        self.assertEqual(loadedCV.getEstimatorParamMaps(), cv.getEstimatorParamMaps())
+        lrModel = cvModel.bestModel
+
         cvModelPath = temp_path + "/cvModel"
-        cvModel.save(cvModelPath)
-        loadedModel = CrossValidatorModel.load(cvModelPath)
-        self.assertEqual(loadedModel.bestModel.uid, cvModel.bestModel.uid)
-        for index in range(len(loadedModel.avgMetrics)):
-            self.assertTrue(abs(loadedModel.avgMetrics[index] - cvModel.avgMetrics[index]) < 0.0001)
+        lrModel.save(cvModelPath)
+        loadedLrModel = LogisticRegressionModel.load(cvModelPath)
+        self.assertEqual(loadedLrModel.uid, lrModel.uid)
+        self.assertEqual(loadedLrModel.intercept, lrModel.intercept)
 
 
 class TrainValidationSplitTests(PySparkTestCase):
@@ -619,6 +618,8 @@ class TrainValidationSplitTests(PySparkTestCase):
         self.assertEqual(1.0, bestModelMetric, "Best model has R-squared of 1")
 
     def test_save_load(self):
+        # This tests saving and loading the trained model only.
+        # Save/load for TrainValidationSplit will be added later: SPARK-13786
         temp_path = tempfile.mkdtemp()
         sqlContext = SQLContext(self.sc)
         dataset = sqlContext.createDataFrame(
@@ -633,16 +634,13 @@ class TrainValidationSplitTests(PySparkTestCase):
         evaluator = BinaryClassificationEvaluator()
         tvs = TrainValidationSplit(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator)
         tvsModel = tvs.fit(dataset)
-        tvsPath = temp_path + "/tvs"
-        tvs.save(tvsPath)
-        loadedTvs = TrainValidationSplit.load(tvsPath)
-        self.assertEqual(loadedTvs.getEstimator().uid, tvs.getEstimator().uid)
-        self.assertEqual(loadedTvs.getEvaluator().uid, tvs.getEvaluator().uid)
-        self.assertEqual(loadedTvs.getEstimatorParamMaps(), tvs.getEstimatorParamMaps())
+        lrModel = tvsModel.bestModel
+
         tvsModelPath = temp_path + "/tvsModel"
-        tvsModel.save(tvsModelPath)
-        loadedModel = TrainValidationSplitModel.load(tvsModelPath)
-        self.assertEqual(loadedModel.bestModel.uid, tvsModel.bestModel.uid)
+        lrModel.save(tvsModelPath)
+        loadedLrModel = LogisticRegressionModel.load(tvsModelPath)
+        self.assertEqual(loadedLrModel.uid, lrModel.uid)
+        self.assertEqual(loadedLrModel.intercept, lrModel.intercept)
 
 
 class PersistenceTest(PySparkTestCase):
@@ -1002,6 +1000,30 @@ class HashingTFTest(PySparkTestCase):
         for i in range(0, n):
             self.assertAlmostEqual(features[i], expected[i], 14, "Error at " + str(i) +
                                    ": expected " + str(expected[i]) + ", got " + str(features[i]))
+
+
+class ALSTest(PySparkTestCase):
+
+    def test_storage_levels(self):
+        sqlContext = SQLContext(self.sc)
+        df = sqlContext.createDataFrame(
+            [(0, 0, 4.0), (0, 1, 2.0), (1, 1, 3.0), (1, 2, 4.0), (2, 1, 1.0), (2, 2, 5.0)],
+            ["user", "item", "rating"])
+        als = ALS().setMaxIter(1).setRank(1)
+        # test default params
+        als.fit(df)
+        self.assertEqual(als.getIntermediateRDDStorageLevel(), "MEMORY_AND_DISK")
+        self.assertEqual(als._java_obj.getIntermediateRDDStorageLevel(), "MEMORY_AND_DISK")
+        self.assertEqual(als.getFinalRDDStorageLevel(), "MEMORY_AND_DISK")
+        self.assertEqual(als._java_obj.getFinalRDDStorageLevel(), "MEMORY_AND_DISK")
+        # test non-default params
+        als.setIntermediateRDDStorageLevel("MEMORY_ONLY_2")
+        als.setFinalRDDStorageLevel("DISK_ONLY")
+        als.fit(df)
+        self.assertEqual(als.getIntermediateRDDStorageLevel(), "MEMORY_ONLY_2")
+        self.assertEqual(als._java_obj.getIntermediateRDDStorageLevel(), "MEMORY_ONLY_2")
+        self.assertEqual(als.getFinalRDDStorageLevel(), "DISK_ONLY")
+        self.assertEqual(als._java_obj.getFinalRDDStorageLevel(), "DISK_ONLY")
 
 
 if __name__ == "__main__":

@@ -119,21 +119,35 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
     nonnegative = Param(Params._dummy(), "nonnegative",
                         "whether to use nonnegative constraint for least squares",
                         typeConverter=TypeConverters.toBoolean)
+    intermediateRDDStorageLevel = Param(Params._dummy(), "intermediateRDDStorageLevel",
+                                        "StorageLevel for intermediate RDDs. Cannot be 'NONE'. " +
+                                        "Default: 'MEMORY_AND_DISK'.",
+                                        typeConverter=TypeConverters.toString)
+    finalRDDStorageLevel = Param(Params._dummy(), "finalRDDStorageLevel",
+                                 "StorageLevel for ALS model factor RDDs. " +
+                                 "Default: 'MEMORY_AND_DISK'.",
+                                 typeConverter=TypeConverters.toString)
 
     @keyword_only
     def __init__(self, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10,
                  implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", seed=None,
-                 ratingCol="rating", nonnegative=False, checkpointInterval=10):
+                 ratingCol="rating", nonnegative=False, checkpointInterval=10,
+                 intermediateRDDStorageLevel="MEMORY_AND_DISK",
+                 finalRDDStorageLevel="MEMORY_AND_DISK"):
         """
         __init__(self, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10, \
                  implicitPrefs=false, alpha=1.0, userCol="user", itemCol="item", seed=None, \
-                 ratingCol="rating", nonnegative=false, checkpointInterval=10)
+                 ratingCol="rating", nonnegative=false, checkpointInterval=10, \
+                 intermediateRDDStorageLevel="MEMORY_AND_DISK", \
+                 finalRDDStorageLevel="MEMORY_AND_DISK")
         """
         super(ALS, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.recommendation.ALS", self.uid)
         self._setDefault(rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10,
                          implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", seed=None,
-                         ratingCol="rating", nonnegative=False, checkpointInterval=10)
+                         ratingCol="rating", nonnegative=False, checkpointInterval=10,
+                         intermediateRDDStorageLevel="MEMORY_AND_DISK",
+                         finalRDDStorageLevel="MEMORY_AND_DISK")
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
@@ -141,11 +155,15 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
     @since("1.4.0")
     def setParams(self, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10,
                   implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", seed=None,
-                  ratingCol="rating", nonnegative=False, checkpointInterval=10):
+                  ratingCol="rating", nonnegative=False, checkpointInterval=10,
+                  intermediateRDDStorageLevel="MEMORY_AND_DISK",
+                  finalRDDStorageLevel="MEMORY_AND_DISK"):
         """
         setParams(self, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10, \
                  implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", seed=None, \
-                 ratingCol="rating", nonnegative=False, checkpointInterval=10)
+                 ratingCol="rating", nonnegative=False, checkpointInterval=10, \
+                 intermediateRDDStorageLevel="MEMORY_AND_DISK", \
+                 finalRDDStorageLevel="MEMORY_AND_DISK")
         Sets params for ALS.
         """
         kwargs = self.setParams._input_kwargs
@@ -296,6 +314,36 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         Gets the value of nonnegative or its default value.
         """
         return self.getOrDefault(self.nonnegative)
+
+    @since("2.0.0")
+    def setIntermediateRDDStorageLevel(self, value):
+        """
+        Sets the value of :py:attr:`intermediateRDDStorageLevel`.
+        """
+        self._set(intermediateRDDStorageLevel=value)
+        return self
+
+    @since("2.0.0")
+    def getIntermediateRDDStorageLevel(self):
+        """
+        Gets the value of intermediateRDDStorageLevel or its default value.
+        """
+        return self.getOrDefault(self.intermediateRDDStorageLevel)
+
+    @since("2.0.0")
+    def setFinalRDDStorageLevel(self, value):
+        """
+        Sets the value of :py:attr:`finalRDDStorageLevel`.
+        """
+        self._set(finalRDDStorageLevel=value)
+        return self
+
+    @since("2.0.0")
+    def getFinalRDDStorageLevel(self):
+        """
+        Gets the value of finalRDDStorageLevel or its default value.
+        """
+        return self.getOrDefault(self.finalRDDStorageLevel)
 
 
 class ALSModel(JavaModel, JavaMLWritable, JavaMLReadable):
