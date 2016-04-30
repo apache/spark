@@ -84,16 +84,17 @@ sealed class Metadata private[types] (private[types] val map: Map[String, Any])
 
   override def equals(obj: Any): Boolean = {
     obj match {
-      case that: Metadata =>
+      case that: Metadata if map.size == that.map.size =>
         map.keysIterator.forall { key =>
           that.map.get(key) match {
             case Some(otherValue) =>
               val ourValue = map.get(key).get
               (ourValue, otherValue) match {
-                case (v0: Array[AnyRef], v1: Array[AnyRef]) =>
-                  java.util.Arrays.equals(v0, v1)
-                case (v0, v1) =>
-                  v0 == v1
+                case (v0: Array[Long], v1: Array[Long]) => java.util.Arrays.equals(v0, v1)
+                case (v0: Array[Double], v1: Array[Double]) => java.util.Arrays.equals(v0, v1)
+                case (v0: Array[Boolean], v1: Array[Boolean]) => java.util.Arrays.equals(v0, v1)
+                case (v0: Array[AnyRef], v1: Array[AnyRef]) => java.util.Arrays.equals(v0, v1)
+                case (v0, v1) => v0 == v1
               }
             case None => false
           }
