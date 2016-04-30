@@ -403,17 +403,17 @@ setMethod("spark.naiveBayes", signature(data = "SparkDataFrame", formula = "form
 #' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
 #'                  which means throw exception if the output path exists.
 #'
-#' @rdname ml.save
-#' @name ml.save
+#' @rdname write.ml
+#' @name write.ml
 #' @export
 #' @examples
 #' \dontrun{
 #' df <- createDataFrame(sqlContext, infert)
 #' model <- spark.naiveBayes(education ~ ., df, laplace = 0)
 #' path <- "path/to/model"
-#' ml.save(model, path)
+#' write.ml(model, path)
 #' }
-setMethod("ml.save", signature(object = "NaiveBayesModel", path = "character"),
+setMethod("write.ml", signature(object = "NaiveBayesModel", path = "character"),
           function(object, path, overwrite = FALSE) {
             writer <- callJMethod(object@jobj, "write")
             if (overwrite) {
@@ -429,16 +429,16 @@ setMethod("ml.save", signature(object = "NaiveBayesModel", path = "character"),
 #' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
 #'                  which means throw exception if the output path exists.
 #'
-#' @rdname ml.save
-#' @name ml.save
+#' @rdname write.ml
+#' @name write.ml
 #' @export
 #' @examples
 #' \dontrun{
 #' model <- spark.survreg(trainingData, Surv(futime, fustat) ~ ecog_ps + rx)
 #' path <- "path/to/model"
-#' ml.save(model, path)
+#' write.ml(model, path)
 #' }
-setMethod("ml.save", signature(object = "AFTSurvivalRegressionModel", path = "character"),
+setMethod("write.ml", signature(object = "AFTSurvivalRegressionModel", path = "character"),
           function(object, path, overwrite = FALSE) {
             writer <- callJMethod(object@jobj, "write")
             if (overwrite) {
@@ -454,16 +454,16 @@ setMethod("ml.save", signature(object = "AFTSurvivalRegressionModel", path = "ch
 #' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
 #'                  which means throw exception if the output path exists.
 #'
-#' @rdname ml.save
-#' @name ml.save
+#' @rdname write.ml
+#' @name write.ml
 #' @export
 #' @examples
 #' \dontrun{
 #' model <- glm(y ~ x, trainingData)
 #' path <- "path/to/model"
-#' ml.save(model, path)
+#' write.ml(model, path)
 #' }
-setMethod("ml.save", signature(object = "GeneralizedLinearRegressionModel", path = "character"),
+setMethod("write.ml", signature(object = "GeneralizedLinearRegressionModel", path = "character"),
           function(object, path, overwrite = FALSE) {
             writer <- callJMethod(object@jobj, "write")
             if (overwrite) {
@@ -479,16 +479,16 @@ setMethod("ml.save", signature(object = "GeneralizedLinearRegressionModel", path
 #' @param overwrite Overwrites or not if the output path already exists. Default is FALSE
 #'                  which means throw exception if the output path exists.
 #'
-#' @rdname ml.save
-#' @name ml.save
+#' @rdname write.ml
+#' @name write.ml
 #' @export
 #' @examples
 #' \dontrun{
 #' model <- spark.kmeans(x, k = 2, initializationMode="random")
 #' path <- "path/to/model"
-#' ml.save(model, path)
+#' write.ml(model, path)
 #' }
-setMethod("ml.save", signature(object = "KMeansModel", path = "character"),
+setMethod("write.ml", signature(object = "KMeansModel", path = "character"),
           function(object, path, overwrite = FALSE) {
             writer <- callJMethod(object@jobj, "write")
             if (overwrite) {
@@ -501,15 +501,15 @@ setMethod("ml.save", signature(object = "KMeansModel", path = "character"),
 #'
 #' @param path Path of the model to read.
 #' @return a fitted MLlib model
-#' @rdname ml.load
-#' @name ml.load
+#' @rdname read.ml
+#' @name read.ml
 #' @export
 #' @examples
 #' \dontrun{
 #' path <- "path/to/model"
-#' model <- ml.load(path)
+#' model <- read.ml(path)
 #' }
-ml.load <- function(path) {
+read.ml <- function(path) {
   path <- suppressWarnings(normalizePath(path))
   jobj <- callJStatic("org.apache.spark.ml.r.RWrappers", "load", path)
   if (isInstanceOf(jobj, "org.apache.spark.ml.r.NaiveBayesWrapper")) {

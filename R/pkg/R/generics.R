@@ -1213,6 +1213,6 @@ setGeneric("spark.naiveBayes", function(data, formula, ...) { standardGeneric("s
 #' @export
 setGeneric("spark.survreg", function(data, formula, ...) { standardGeneric("spark.survreg") })
 
-#' @rdname ml.save
+#' @rdname write.ml
 #' @export
-setGeneric("ml.save", function(object, path, ...) { standardGeneric("ml.save") })
+setGeneric("write.ml", function(object, path, ...) { standardGeneric("write.ml") })
