@@ -20,8 +20,6 @@ package org.apache.spark.sql.hive
 import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
 
-import org.apache.hadoop.fs.Path
-import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.exec.{UDAF, UDF}
 import org.apache.hadoop.hive.ql.exec.{FunctionRegistry => HiveFunctionRegistry}
 import org.apache.hadoop.hive.ql.udf.generic.{AbstractGenericUDAFResolver, GenericUDF, GenericUDTF}
@@ -46,8 +44,7 @@ private[sql] class HiveSessionCatalog(
     sparkSession: SparkSession,
     functionResourceLoader: FunctionResourceLoader,
     functionRegistry: FunctionRegistry,
-    conf: SQLConf,
-    hiveconf: HiveConf)
+    conf: SQLConf)
   extends SessionCatalog(externalCatalog, functionResourceLoader, functionRegistry, conf) {
 
   override def setCurrentDatabase(db: String): Unit = {
@@ -72,11 +69,6 @@ private[sql] class HiveSessionCatalog(
   // ----------------------------------------------------------------
   // | Methods and fields for interacting with HiveMetastoreCatalog |
   // ----------------------------------------------------------------
-
-  override def getDefaultDBPath(db: String): String = {
-    val defaultPath = hiveconf.getVar(HiveConf.ConfVars.METASTOREWAREHOUSE)
-    new Path(new Path(defaultPath), db + ".db").toString
-  }
 
   // Catalog for handling data source tables. TODO: This really doesn't belong here since it is
   // essentially a cache for metastore tables. However, it relies on a lot of session-specific

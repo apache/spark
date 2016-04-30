@@ -85,7 +85,8 @@ class JsonProtocolSuite extends SparkFunSuite {
       // Use custom accum ID for determinism
       val accumUpdates =
         makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = true, hasOutput = true)
-          .accumulatorUpdates().zipWithIndex.map { case (a, i) => a.copy(id = i) }
+          .accumulators().map(AccumulatorSuite.makeInfo)
+          .zipWithIndex.map { case (a, i) => a.copy(id = i) }
       SparkListenerExecutorMetricsUpdate("exec3", Seq((1L, 2, 3, accumUpdates)))
     }
 
@@ -385,7 +386,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     // "Task Metrics" field, if it exists.
     val tm = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, hasHadoopInput = true, hasOutput = true)
     val tmJson = JsonProtocol.taskMetricsToJson(tm)
-    val accumUpdates = tm.accumulatorUpdates()
+    val accumUpdates = tm.accumulators().map(AccumulatorSuite.makeInfo)
     val exception = new SparkException("sentimental")
     val exceptionFailure = new ExceptionFailure(exception, accumUpdates)
     val exceptionFailureJson = JsonProtocol.taskEndReasonToJson(exceptionFailure)
@@ -813,7 +814,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       hasHadoopInput: Boolean,
       hasOutput: Boolean,
       hasRecords: Boolean = true) = {
-    val t = new TaskMetrics
+    val t = TaskMetrics.empty
     t.setExecutorDeserializeTime(a)
     t.setExecutorRunTime(b)
     t.setResultSize(c)

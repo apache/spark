@@ -29,9 +29,9 @@ import org.apache.spark.sql.internal.SQLConf
 class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHiveSingleton {
   /**
    * Set the staging directory (and hence path to ignore Parquet files under)
-   * to that set by [[HiveConf.ConfVars.STAGINGDIR]].
+   * to the default value of hive.exec.stagingdir.
    */
-  private val stagingDir = new HiveConf().getVar(HiveConf.ConfVars.STAGINGDIR)
+  private val stagingDir = ".hive-staging"
 
   override protected def logParquetSchema(path: String): Unit = {
     val schema = readParquetSchema(path, { path =>

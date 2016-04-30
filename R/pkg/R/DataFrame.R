@@ -21,6 +21,7 @@
 NULL
 
 setOldClass("jobj")
+setOldClass("structType")
 
 #' @title S4 class that represents a SparkDataFrame
 #' @description DataFrames can be created using functions like \link{createDataFrame},
@@ -1125,6 +1126,66 @@ setMethod("summarize",
             agg(x, ...)
           })
 
+#' dapply
+#'
+#' Apply a function to each partition of a DataFrame.
+#'
+#' @param x A SparkDataFrame
+#' @param func A function to be applied to each partition of the SparkDataFrame.
+#'             func should have only one parameter, to which a data.frame corresponds
+#'             to each partition will be passed.
+#'             The output of func should be a data.frame.
+#' @param schema The schema of the resulting DataFrame after the function is applied.
+#'               It must match the output of func.
+#' @family SparkDataFrame functions
+#' @rdname dapply
+#' @name dapply
+#' @export
+#' @examples
+#' \dontrun{
+#'   df <- createDataFrame (sqlContext, iris)
+#'   df1 <- dapply(df, function(x) { x }, schema(df))
+#'   collect(df1)
+#'
+#'   # filter and add a column
+#'   df <- createDataFrame (
+#'           sqlContext, 
+#'           list(list(1L, 1, "1"), list(2L, 2, "2"), list(3L, 3, "3")),
+#'           c("a", "b", "c"))
+#'   schema <- structType(structField("a", "integer"), structField("b", "double"),
+#'                      structField("c", "string"), structField("d", "integer"))
+#'   df1 <- dapply(
+#'            df,
+#'            function(x) {
+#'              y <- x[x[1] > 1, ]
+#'              y <- cbind(y, y[1] + 1L)
+#'            },
+#'            schema)
+#'   collect(df1)
+#'   # the result
+#'   #       a b c d
+#'   #     1 2 2 2 3
+#'   #     2 3 3 3 4
+#' }
+setMethod("dapply",
+          signature(x = "SparkDataFrame", func = "function", schema = "structType"),
+          function(x, func, schema) {
+            packageNamesArr <- serialize(.sparkREnv[[".packages"]],
+                                         connection = NULL)
+
+            broadcastArr <- lapply(ls(.broadcastNames),
+                                   function(name) { get(name, .broadcastNames) })
+
+            sdf <- callJStatic(
+                     "org.apache.spark.sql.api.r.SQLUtils",
+                     "dapply",
+                     x@sdf,
+                     serialize(cleanClosure(func), connection = NULL),
+                     packageNamesArr,
+                     broadcastArr,
+                     schema$jobj)
+            dataFrame(sdf)
+          })
 
 ############################## RDD Map Functions ##################################
 # All of the following functions mirror the existing RDD map functions,           #
@@ -1237,29 +1298,38 @@ setMethod("[[", signature(x = "SparkDataFrame", i = "numericOrcharacter"),
 
 #' @rdname subset
 #' @name [
-setMethod("[", signature(x = "SparkDataFrame", i = "missing"),
-          function(x, i, j, ...) {
-            if (is.numeric(j)) {
-              cols <- columns(x)
-              j <- cols[j]
-            }
-            if (length(j) > 1) {
-              j <- as.list(j)
-            }
-            select(x, j)
-          })
-
-#' @rdname subset
-#' @name [
-setMethod("[", signature(x = "SparkDataFrame", i = "Column"),
-          function(x, i, j, ...) {
-            # It could handle i as "character" but it seems confusing and not required
-            # https://stat.ethz.ch/R-manual/R-devel/library/base/html/Extract.data.frame.html
-            filtered <- filter(x, i)
-            if (!missing(j)) {
-              filtered[, j, ...]
+setMethod("[", signature(x = "SparkDataFrame"),
+          function(x, i, j, ..., drop = F) {
+            # Perform filtering first if needed
+            filtered <- if (missing(i)) {
+              x
             } else {
+              if (class(i) != "Column") {
+                stop(paste0("Expressions other than filtering predicates are not supported ",
+                      "in the first parameter of extract operator [ or subset() method."))
+              }
+              filter(x, i)
+            }
+
+            # If something is to be projected, then do so on the filtered SparkDataFrame
+            if (missing(j)) {
               filtered
+            } else {
+              if (is.numeric(j)) {
+                cols <- columns(filtered)
+                j <- cols[j]
+              }
+              if (length(j) > 1) {
+                j <- as.list(j)
+              }
+              selected <- select(filtered, j)
+
+              # Acknowledge parameter drop. Return a Column or SparkDataFrame accordingly
+              if (ncol(selected) == 1 & drop == T) {
+                getColumn(selected, names(selected))
+              } else {
+                selected
+              }
             }
           })
 
@@ -1268,10 +1338,10 @@ setMethod("[", signature(x = "SparkDataFrame", i = "Column"),
 #' Return subsets of SparkDataFrame according to given conditions
 #' @param x A SparkDataFrame
 #' @param subset (Optional) A logical expression to filter on rows
-#' @param select expression for the single Column or a list of columns to select from the
-#' SparkDataFrame
-#' @return A new SparkDataFrame containing only the rows that meet the condition with selected
-#' columns
+#' @param select expression for the single Column or a list of columns to select from the SparkDataFrame
+#' @param drop if TRUE, a Column will be returned if the resulting dataset has only one column.
+#' Otherwise, a SparkDataFrame will always be returned.
+#' @return A new SparkDataFrame containing only the rows that meet the condition with selected columns
 #' @export
 #' @family SparkDataFrame functions
 #' @rdname subset
@@ -1293,12 +1363,8 @@ setMethod("[", signature(x = "SparkDataFrame", i = "Column"),
 #'   subset(df, select = c(1,2))
 #' }
 setMethod("subset", signature(x = "SparkDataFrame"),
-          function(x, subset, select, ...) {
-            if (missing(subset)) {
-              x[, select, ...]
-            } else {
-              x[subset, select, ...]
-            }
+          function(x, subset, select, drop = F, ...) {
+            x[subset, select, drop = drop]
           })
 
 #' Select
@@ -1426,11 +1492,11 @@ setMethod("withColumn",
 
 #' Mutate
 #'
-#' Return a new SparkDataFrame with the specified columns added.
+#' Return a new SparkDataFrame with the specified columns added or replaced.
 #'
 #' @param .data A SparkDataFrame
 #' @param col a named argument of the form name = col
-#' @return A new SparkDataFrame with the new columns added.
+#' @return A new SparkDataFrame with the new columns added or replaced.
 #' @family SparkDataFrame functions
 #' @rdname mutate
 #' @name mutate
@@ -1445,23 +1511,65 @@ setMethod("withColumn",
 #' newDF <- mutate(df, newCol = df$col1 * 5, newCol2 = df$col1 * 2)
 #' names(newDF) # Will contain newCol, newCol2
 #' newDF2 <- transform(df, newCol = df$col1 / 5, newCol2 = df$col1 * 2)
+#'
+#' df <- createDataFrame(sqlContext, 
+#'                       list(list("Andy", 30L), list("Justin", 19L)), c("name", "age"))
+#' # Replace the "age" column
+#' df1 <- mutate(df, age = df$age + 1L)
 #' }
 setMethod("mutate",
           signature(.data = "SparkDataFrame"),
           function(.data, ...) {
             x <- .data
             cols <- list(...)
-            stopifnot(length(cols) > 0)
-            stopifnot(class(cols[[1]]) == "Column")
+            if (length(cols) <= 0) {
+              return(x)
+            }
+
+            lapply(cols, function(col) {
+              stopifnot(class(col) == "Column")
+            })
+
+            # Check if there is any duplicated column name in the DataFrame
+            dfCols <- columns(x)
+            if (length(unique(dfCols)) != length(dfCols)) {
+              stop("Error: found duplicated column name in the DataFrame")
+            }
+
+            # TODO: simplify the implementation of this method after SPARK-12225 is resolved.
+
+            # For named arguments, use the names for arguments as the column names
+            # For unnamed arguments, use the argument symbols as the column names
+            args <- sapply(substitute(list(...))[-1], deparse)
             ns <- names(cols)
             if (!is.null(ns)) {
-              for (n in ns) {
-                if (n != "") {
-                  cols[[n]] <- alias(cols[[n]], n)
+              lapply(seq_along(args), function(i) {
+                if (ns[[i]] != "") {
+                  args[[i]] <<- ns[[i]]
                 }
-              }
+              })
             }
-            do.call(select, c(x, x$"*", cols))
+            ns <- args
+
+            # The last column of the same name in the specific columns takes effect
+            deDupCols <- list()
+            for (i in 1:length(cols)) {
+              deDupCols[[ns[[i]]]] <- alias(cols[[i]], ns[[i]])
+            }
+
+            # Construct the column list for projection
+            colList <- lapply(dfCols, function(col) {
+              if (!is.null(deDupCols[[col]])) {
+                # Replace existing column
+                tmpCol <- deDupCols[[col]]
+                deDupCols[[col]] <<- NULL
+                tmpCol
+              } else {
+                col(col)
+              }
+            })
+
+            do.call(select, c(x, colList, deDupCols))
           })
 
 #' @export
@@ -2520,7 +2628,7 @@ setMethod("histogram",
               }
 
               # Filter NA values in the target column and remove all other columns
-              df <- na.omit(df[, colname])
+              df <- na.omit(df[, colname, drop = F])
               getColumn(df, colname)
 
             } else if (class(col) == "Column") {
@@ -2552,8 +2660,7 @@ setMethod("histogram",
               col
             }
 
-            # At this point, df only has one column: the one to compute the histogram from
-            stats <- collect(describe(df[, colname]))
+            stats <- collect(describe(df[, colname, drop = F]))
             min <- as.numeric(stats[4, 2])
             max <- as.numeric(stats[5, 2])
 

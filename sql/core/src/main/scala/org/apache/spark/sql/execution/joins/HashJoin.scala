@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.execution.{RowIterator, SparkPlan}
-import org.apache.spark.sql.execution.metric.LongSQLMetric
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.{IntegralType, LongType}
 
 trait HashJoin {
@@ -201,7 +201,7 @@ trait HashJoin {
   protected def join(
       streamedIter: Iterator[InternalRow],
       hashed: HashedRelation,
-      numOutputRows: LongSQLMetric): Iterator[InternalRow] = {
+      numOutputRows: SQLMetric): Iterator[InternalRow] = {
 
     val joinedIter = joinType match {
       case Inner =>

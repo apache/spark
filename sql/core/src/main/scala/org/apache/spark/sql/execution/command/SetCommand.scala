@@ -56,7 +56,7 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
               "determining the number of reducers is not supported."
           throw new IllegalArgumentException(msg)
         } else {
-          sparkSession.setConf(SQLConf.SHUFFLE_PARTITIONS.key, value)
+          sparkSession.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, value)
           Seq(Row(SQLConf.SHUFFLE_PARTITIONS.key, value))
         }
       }
@@ -65,7 +65,7 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
     // Configures a single property.
     case Some((key, Some(value))) =>
       val runFunc = (sparkSession: SparkSession) => {
-        sparkSession.setConf(key, value)
+        sparkSession.conf.set(key, value)
         Seq(Row(key, value))
       }
       (keyValueOutput, runFunc)
@@ -74,7 +74,7 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
     // Queries all key-value pairs that are set in the SQLConf of the sparkSession.
     case None =>
       val runFunc = (sparkSession: SparkSession) => {
-        sparkSession.getAllConfs.map { case (k, v) => Row(k, v) }.toSeq
+        sparkSession.conf.getAll.map { case (k, v) => Row(k, v) }.toSeq
       }
       (keyValueOutput, runFunc)
 
@@ -107,10 +107,7 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
     // Queries a single property.
     case Some((key, None)) =>
       val runFunc = (sparkSession: SparkSession) => {
-        val value =
-          try sparkSession.getConf(key) catch {
-            case _: NoSuchElementException => "<undefined>"
-          }
+        val value = sparkSession.conf.getOption(key).getOrElse("<undefined>")
         Seq(Row(key, value))
       }
       (keyValueOutput, runFunc)

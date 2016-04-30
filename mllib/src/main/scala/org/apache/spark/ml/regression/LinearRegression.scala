@@ -389,9 +389,6 @@ class LinearRegressionModel private[ml] (
 
   private var trainingSummary: Option[LinearRegressionTrainingSummary] = None
 
-  @deprecated("Use coefficients instead.", "1.6.0")
-  def weights: Vector = coefficients
-
   override val numFeatures: Int = coefficients.size
 
   /**
@@ -562,6 +559,7 @@ class LinearRegressionSummary private[regression] (
     val predictionCol: String,
     val labelCol: String,
     val featuresCol: String,
+    @deprecated("The model field is deprecated and will be removed in 2.1.0.", "2.0.0")
     val model: LinearRegressionModel,
     private val diagInvAtWA: Array[Double]) extends Serializable {
 
