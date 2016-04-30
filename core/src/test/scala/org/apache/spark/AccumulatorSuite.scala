@@ -191,7 +191,7 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
     assert(ref.get.isEmpty)
 
     AccumulatorContext.remove(accId)
-    assert(!AccumulatorContext.originals.containsKey(accId))
+    assert(!AccumulatorContext.get(accId).isDefined)
   }
 
   test("get accum") {

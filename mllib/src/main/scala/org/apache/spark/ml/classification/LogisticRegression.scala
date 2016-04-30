@@ -480,9 +480,6 @@ class LogisticRegressionModel private[spark] (
   extends ProbabilisticClassificationModel[Vector, LogisticRegressionModel]
   with LogisticRegressionParams with MLWritable {
 
-  @deprecated("Use coefficients instead.", "1.6.0")
-  def weights: Vector = coefficients
-
   @Since("1.5.0")
   override def setThreshold(value: Double): this.type = super.setThreshold(value)
 
@@ -811,10 +808,10 @@ sealed trait LogisticRegressionSummary extends Serializable {
 @Experimental
 @Since("1.5.0")
 class BinaryLogisticRegressionTrainingSummary private[classification] (
-    @Since("1.5.0") predictions: DataFrame,
-    @Since("1.5.0") probabilityCol: String,
-    @Since("1.5.0") labelCol: String,
-    @Since("1.6.0") featuresCol: String,
+    predictions: DataFrame,
+    probabilityCol: String,
+    labelCol: String,
+    featuresCol: String,
     @Since("1.5.0") val objectiveHistory: Array[Double])
   extends BinaryLogisticRegressionSummary(predictions, probabilityCol, labelCol, featuresCol)
   with LogisticRegressionTrainingSummary {

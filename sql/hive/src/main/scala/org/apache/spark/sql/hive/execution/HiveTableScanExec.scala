@@ -73,7 +73,7 @@ case class HiveTableScanExec(
     BindReferences.bindReference(pred, relation.partitionKeys)
   }
 
-  // Create a local copy of hiveconf,so that scan specific modifications should not impact
+  // Create a local copy of hadoopConf,so that scan specific modifications should not impact
   // other queries
   @transient
   private[this] val hadoopConf = sparkSession.sessionState.newHadoopConf()

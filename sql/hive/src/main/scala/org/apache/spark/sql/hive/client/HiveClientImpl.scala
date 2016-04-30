@@ -56,9 +56,17 @@ import org.apache.spark.util.{CircularBuffer, Utils}
  * the 'native', execution version of Hive.  Therefore, any places where hive breaks compatibility
  * must use reflection after matching on `version`.
  *
+ * Every HiveClientImpl creates an internal HiveConf object. This object is using the given
+ * `hadoopConf` as the base. All options set in the `sparkConf` will be applied to the HiveConf
+ * object and overrides any exiting options. Then, options in extraConfig will be applied
+ * to the HiveConf object and overrides any existing options.
+ *
  * @param version the version of hive used when pick function calls that are not compatible.
- * @param config  a collection of configuration options that will be added to the hive conf before
- *                opening the hive client.
+ * @param sparkConf all configuration options set in SparkConf.
+ * @param hadoopConf the base Configuration object used by the HiveConf created inside
+ *                   this HiveClientImpl.
+ * @param extraConfig a collection of configuration options that will be added to the
+ *                hive conf before opening the hive client.
  * @param initClassLoader the classloader used when creating the `state` field of
  *                        this [[HiveClientImpl]].
  */
@@ -66,7 +74,7 @@ private[hive] class HiveClientImpl(
     override val version: HiveVersion,
     sparkConf: SparkConf,
     hadoopConf: Configuration,
-    config: Map[String, String],
+    extraConfig: Map[String, String],
     initClassLoader: ClassLoader,
     val clientLoader: IsolatedClientLoader)
   extends HiveClient
@@ -129,22 +137,32 @@ private[hive] class HiveClientImpl(
         // so we should keep `conf` and reuse the existing instance of `CliSessionState`.
         originalState
       } else {
-        val initialConf = new HiveConf(hadoopConf, classOf[SessionState])
+        val hiveConf = new HiveConf(hadoopConf, classOf[SessionState])
         // HiveConf is a Hadoop Configuration, which has a field of classLoader and
         // the initial value will be the current thread's context class loader
         // (i.e. initClassLoader at here).
         // We call initialConf.setClassLoader(initClassLoader) at here to make
         // this action explicit.
-        initialConf.setClassLoader(initClassLoader)
-        config.foreach { case (k, v) =>
+        hiveConf.setClassLoader(initClassLoader)
+        // First, we set all spark confs to this hiveConf.
+        sparkConf.getAll.foreach { case (k, v) =>
           if (k.toLowerCase.contains("password")) {
-            logDebug(s"Hive Config: $k=xxx")
+            logDebug(s"Applying Spark config to Hive Conf: $k=xxx")
           } else {
-            logDebug(s"Hive Config: $k=$v")
+            logDebug(s"Applying Spark config to Hive Conf: $k=$v")
           }
-          initialConf.set(k, v)
+          hiveConf.set(k, v)
         }
-        val state = new SessionState(initialConf)
+        // Second, we set all entries in config to this hiveConf.
+        extraConfig.foreach { case (k, v) =>
+          if (k.toLowerCase.contains("password")) {
+            logDebug(s"Applying extra config to HiveConf: $k=xxx")
+          } else {
+            logDebug(s"Applying extra config to HiveConf: $k=$v")
+          }
+          hiveConf.set(k, v)
+        }
+        val state = new SessionState(hiveConf)
         if (clientLoader.cachedHive != null) {
           Hive.set(clientLoader.cachedHive.asInstanceOf[Hive])
         }
@@ -159,10 +177,13 @@ private[hive] class HiveClientImpl(
     ret
   }
 
+  // Log the default warehouse location.
+  logInfo(
+    s"Default warehouse location for Hive client " +
+      s"(version ${version.fullVersion}) is ${conf.get("hive.metastore.warehouse.dir")}")
+
   /** Returns the configuration for the current session. */
-  // TODO: We should not use it because HiveSessionState has a hiveconf
-  // for the current Session.
-  def conf: HiveConf = SessionState.get().getConf
+  def conf: HiveConf = state.getConf
 
   override def getConf(key: String, defaultValue: String): String = {
     conf.get(key, defaultValue)
@@ -212,7 +233,7 @@ private[hive] class HiveClientImpl(
     false
   }
 
-  def client: Hive = {
+  private def client: Hive = {
     if (clientLoader.cachedHive != null) {
       clientLoader.cachedHive.asInstanceOf[Hive]
     } else {

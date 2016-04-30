@@ -147,8 +147,12 @@ object SparkBuild extends PomBuild {
 
   lazy val sparkGenjavadocSettings: Seq[sbt.Def.Setting[_]] = Seq(
     libraryDependencies += compilerPlugin(
-      "org.spark-project" %% "genjavadoc-plugin" % unidocGenjavadocVersion.value cross CrossVersion.full),
-    scalacOptions <+= target.map(t => "-P:genjavadoc:out=" + (t / "java")))
+      "com.typesafe.genjavadoc" %% "genjavadoc-plugin" % unidocGenjavadocVersion.value cross CrossVersion.full),
+    scalacOptions ++= Seq(
+      "-P:genjavadoc:out=" + (target.value / "java"),
+      "-P:genjavadoc:strictVisibility=true" // hide package private types
+    )
+  )
 
   lazy val scalaStyleRules = Project("scalaStyleRules", file("scalastyle"))
     .settings(
@@ -237,7 +241,7 @@ object SparkBuild extends PomBuild {
       .map(file),
     incOptions := incOptions.value.withNameHashing(true),
     publishMavenStyle := true,
-    unidocGenjavadocVersion := "0.9-spark0",
+    unidocGenjavadocVersion := "0.10",
 
     // Override SBT's default resolvers:
     resolvers := Seq(
