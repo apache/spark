@@ -1030,6 +1030,10 @@ class ALSTest(PySparkTestCase):
 
 
 class DefaultValuesTests(PySparkTestCase):
+    """
+    Test :py:class:`JavaParams` classes to see if their default Param values match
+    those in their Scala counterparts.
+    """
 
     def check_params(self, py_stage):
         if not hasattr(py_stage, "_to_java"):
