@@ -31,7 +31,7 @@ import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg.{BLAS, Vector}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Dataset, Row}
+import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
 
@@ -101,9 +101,6 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
       schema: StructType,
       fitting: Boolean,
       featuresDataType: DataType): StructType = {
-    if ($(solver) == "irls") {
-      setDefault(maxIter -> 25)
-    }
     if (isDefined(link)) {
       require(supportedFamilyAndLinkPairs.contains(
         Family.fromName($(family)) -> Link.fromName($(link))), "Generalized Linear Regression " +
@@ -171,8 +168,8 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
   def setFitIntercept(value: Boolean): this.type = set(fitIntercept, value)
 
   /**
-   * Sets the maximum number of iterations.
-   * Default is 25 if the solver algorithm is "irls".
+   * Sets the maximum number of iterations (applicable for solver "irls").
+   * Default is 25.
    *
    * @group setParam
    */
@@ -214,7 +211,6 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
    */
   @Since("2.0.0")
   def setWeightCol(value: String): this.type = set(weightCol, value)
-  setDefault(weightCol -> "")
 
   /**
    * Sets the solver algorithm used for optimization.
@@ -253,7 +249,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
       throw new SparkException(msg)
     }
 
-    val w = if ($(weightCol).isEmpty) lit(1.0) else col($(weightCol))
+    val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
     val instances: RDD[Instance] =
       dataset.select(col($(labelCol)).cast(DoubleType), w, col($(featuresCol))).rdd.map {
         case Row(label: Double, weight: Double, features: Vector) =>
@@ -913,21 +909,27 @@ class GeneralizedLinearRegressionSummary private[regression] (
     numInstances
   }
 
+  private lazy val weightCol: Column = {
+    if (!model.isDefined(model.weightCol) || model.getWeightCol.isEmpty) {
+      lit(1.0)
+    } else {
+      col(model.getWeightCol)
+    }
+  }
+
   private[regression] lazy val devianceResiduals: DataFrame = {
     val drUDF = udf { (y: Double, mu: Double, weight: Double) =>
       val r = math.sqrt(math.max(family.deviance(y, mu, weight), 0.0))
       if (y > mu) r else -1.0 * r
     }
-    val w = if (model.getWeightCol.isEmpty) lit(1.0) else col(model.getWeightCol)
     predictions.select(
-      drUDF(col(model.getLabelCol), col(predictionCol), w).as("devianceResiduals"))
+      drUDF(col(model.getLabelCol), col(predictionCol), weightCol).as("devianceResiduals"))
   }
 
   private[regression] lazy val pearsonResiduals: DataFrame = {
     val prUDF = udf { mu: Double => family.variance(mu) }
-    val w = if (model.getWeightCol.isEmpty) lit(1.0) else col(model.getWeightCol)
     predictions.select(col(model.getLabelCol).minus(col(predictionCol))
-      .multiply(sqrt(w)).divide(sqrt(prUDF(col(predictionCol)))).as("pearsonResiduals"))
+      .multiply(sqrt(weightCol)).divide(sqrt(prUDF(col(predictionCol)))).as("pearsonResiduals"))
   }
 
   private[regression] lazy val workingResiduals: DataFrame = {
@@ -968,14 +970,14 @@ class GeneralizedLinearRegressionSummary private[regression] (
    */
   @Since("2.0.0")
   lazy val nullDeviance: Double = {
-    val w = if (model.getWeightCol.isEmpty) lit(1.0) else col(model.getWeightCol)
     val wtdmu: Double = if (model.getFitIntercept) {
-      val agg = predictions.agg(sum(w.multiply(col(model.getLabelCol))), sum(w)).first()
+      val agg =
+        predictions.agg(sum(weightCol.multiply(col(model.getLabelCol))), sum(weightCol)).first()
       agg.getDouble(0) / agg.getDouble(1)
     } else {
       link.unlink(0.0)
     }
-    predictions.select(col(model.getLabelCol), w).rdd.map {
+    predictions.select(col(model.getLabelCol), weightCol).rdd.map {
       case Row(y: Double, weight: Double) =>
         family.deviance(y, wtdmu, weight)
     }.sum()
@@ -986,8 +988,7 @@ class GeneralizedLinearRegressionSummary private[regression] (
    */
   @Since("2.0.0")
   lazy val deviance: Double = {
-    val w = if (model.getWeightCol.isEmpty) lit(1.0) else col(model.getWeightCol)
-    predictions.select(col(model.getLabelCol), col(predictionCol), w).rdd.map {
+    predictions.select(col(model.getLabelCol), col(predictionCol), weightCol).rdd.map {
       case Row(label: Double, pred: Double, weight: Double) =>
         family.deviance(label, pred, weight)
     }.sum()
@@ -1011,9 +1012,8 @@ class GeneralizedLinearRegressionSummary private[regression] (
   /** Akaike's "An Information Criterion"(AIC) for the fitted model. */
   @Since("2.0.0")
   lazy val aic: Double = {
-    val w = if (model.getWeightCol.isEmpty) lit(1.0) else col(model.getWeightCol)
-    val weightSum = predictions.select(w).agg(sum(w)).first().getDouble(0)
-    val t = predictions.select(col(model.getLabelCol), col(predictionCol), w).rdd.map {
+    val weightSum = predictions.select(weightCol).agg(sum(weightCol)).first().getDouble(0)
+    val t = predictions.select(col(model.getLabelCol), col(predictionCol), weightCol).rdd.map {
       case Row(label: Double, pred: Double, weight: Double) =>
         (label, pred, weight)
     }

@@ -44,13 +44,6 @@ import tempfile
 import numpy as np
 import inspect
 
-import pyspark.ml.feature
-import pyspark.ml.classification
-import pyspark.ml.clustering
-import pyspark.ml.pipeline
-import pyspark.ml.recommendation
-import pyspark.ml.regression
-
 from pyspark import keyword_only
 from pyspark.ml import Estimator, Model, Pipeline, PipelineModel, Transformer
 from pyspark.ml.classification import *
@@ -1063,6 +1056,12 @@ class DefaultValuesTests(PySparkTestCase):
                                  % (str(java_default), str(py_default), p.name, str(py_stage)))
 
     def test_java_params(self):
+        import pyspark.ml.feature
+        import pyspark.ml.classification
+        import pyspark.ml.clustering
+        import pyspark.ml.pipeline
+        import pyspark.ml.recommendation
+        import pyspark.ml.regression
         modules = [pyspark.ml.feature, pyspark.ml.classification, pyspark.ml.clustering,
                    pyspark.ml.pipeline, pyspark.ml.recommendation, pyspark.ml.regression]
         clss = map(lambda x: x[1],
