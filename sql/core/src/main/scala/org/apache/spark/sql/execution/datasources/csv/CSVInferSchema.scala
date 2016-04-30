@@ -95,7 +95,7 @@ private[csv] object CSVInferSchema {
     }
   }
 
-  def tryParseInteger(field: String, options: CSVOptions): DataType = {
+  private def tryParseInteger(field: String, options: CSVOptions): DataType = {
     if ((allCatch opt field.toInt).isDefined) {
       IntegerType
     } else {
@@ -103,7 +103,7 @@ private[csv] object CSVInferSchema {
     }
   }
 
-  def tryParseLong(field: String, options: CSVOptions): DataType = {
+  private def tryParseLong(field: String, options: CSVOptions): DataType = {
     if ((allCatch opt field.toLong).isDefined) {
       LongType
     } else {
@@ -111,7 +111,7 @@ private[csv] object CSVInferSchema {
     }
   }
 
-  def tryParseDouble(field: String, options: CSVOptions): DataType = {
+  private def tryParseDouble(field: String, options: CSVOptions): DataType = {
     if ((allCatch opt field.toDouble).isDefined) {
       DoubleType
     } else {
@@ -119,7 +119,7 @@ private[csv] object CSVInferSchema {
     }
   }
 
-  def tryParseTimestamp(field: String, options: CSVOptions): DataType = {
+  private def tryParseTimestamp(field: String, options: CSVOptions): DataType = {
     if (options.dateFormat != null) {
       // This case infers a custom `dataFormat` is set.
       if ((allCatch opt options.dateFormat.parse(field)).isDefined) {
@@ -137,7 +137,7 @@ private[csv] object CSVInferSchema {
     }
   }
 
-  def tryParseBoolean(field: String, options: CSVOptions): DataType = {
+  private def tryParseBoolean(field: String, options: CSVOptions): DataType = {
     if ((allCatch opt field.toBoolean).isDefined) {
       BooleanType
     } else {
@@ -148,7 +148,7 @@ private[csv] object CSVInferSchema {
   // Defining a function to return the StringType constant is necessary in order to work around
   // a Scala compiler issue which leads to runtime incompatibilities with certain Spark versions;
   // see issue #128 for more details.
-  def stringType(): DataType = {
+  private def stringType(): DataType = {
     StringType
   }
 
