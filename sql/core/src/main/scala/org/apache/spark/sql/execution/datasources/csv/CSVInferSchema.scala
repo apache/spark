@@ -57,7 +57,7 @@ private[csv] object CSVInferSchema {
     StructType(structFields)
   }
 
-  private def inferRowType(SimpleDateFormat, options: CSVOptions)
+  private def inferRowType(options: CSVOptions)
       (rowSoFar: Array[DataType], next: Array[String]): Array[DataType] = {
     var i = 0
     while (i < math.min(rowSoFar.length, next.length)) {  // May have columns on right missing.
