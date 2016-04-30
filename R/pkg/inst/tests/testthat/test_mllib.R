@@ -291,43 +291,7 @@ test_that("spark.kmeans", {
 
   take(training, 1)
 
-  model <- spark.kmeans(training, k = 2)
-  sample <- take(select(predict(model, training), "prediction"), 1)
-  expect_equal(typeof(sample$prediction), "integer")
-  expect_equal(sample$prediction, 1)
-
-  # Test fitted works on KMeans
-  fitted.model <- fitted(model)
-  expect_equal(sort(collect(distinct(select(fitted.model, "prediction")))$prediction), c(0, 1))
-
-  # Test summary works on KMeans
-  summary.model <- summary(model)
-  cluster <- summary.model$cluster
-  expect_equal(sort(collect(distinct(select(cluster, "prediction")))$prediction), c(0, 1))
-
-  # Test model save/load
-  modelPath <- tempfile(pattern = "kmeans", fileext = ".tmp")
-  ml.save(model, modelPath)
-  expect_error(ml.save(model, modelPath))
-  ml.save(model, modelPath, overwrite = TRUE)
-  model2 <- ml.load(modelPath)
-  summary2 <- summary(model2)
-  expect_equal(sort(unlist(summary.model$size)), sort(unlist(summary2$size)))
-  expect_equal(summary.model$coefficients, summary2$coefficients)
-  expect_true(!summary.model$is.loaded)
-  expect_true(summary2$is.loaded)
-
-  unlink(modelPath)
-})
-
-test_that("kmeans", {
-  newIris <- iris
-  newIris$Species <- NULL
-  training <- suppressWarnings(createDataFrame(sqlContext, newIris))
-
-  take(training, 1)
-
-  model <- kmeans(x = training, centers = 2)
+  model <- spark.kmeans(data = training, k = 2)
   sample <- take(select(predict(model, training), "prediction"), 1)
   expect_equal(typeof(sample$prediction), "integer")
   expect_equal(sample$prediction, 1)
@@ -359,35 +323,6 @@ test_that("kmeans", {
 
   unlink(modelPath)
 })
-
-test_that("spark.naiveBayes", {
-  # See the naiveBayes test for more explanation about this test.
-  t <- as.data.frame(Titanic)
-  t1 <- t[t$Freq > 0, -5]
-  df <- suppressWarnings(createDataFrame(sqlContext, t1))
-  m <- spark.naiveBayes(df, Survived ~ .)
-  s <- summary(m)
-  expect_equal(as.double(s$apriori[1, "Yes"]), 0.5833333, tolerance = 1e-6)
-  expect_equal(sum(s$apriori), 1)
-  expect_equal(as.double(s$tables["Yes", "Age_Adult"]), 0.5714286, tolerance = 1e-6)
-  p <- collect(select(predict(m, df), "prediction"))
-  expect_equal(p$prediction, c("Yes", "Yes", "Yes", "Yes", "No", "No", "Yes", "Yes", "No", "No",
-  "Yes", "Yes", "Yes", "Yes", "Yes", "Yes", "Yes", "Yes", "No", "No",
-  "Yes", "Yes", "No", "No"))
-
-  # Test model save/load
-  modelPath <- tempfile(pattern = "naiveBayes", fileext = ".tmp")
-  ml.save(m, modelPath)
-  expect_error(ml.save(m, modelPath))
-  ml.save(m, modelPath, overwrite = TRUE)
-  m2 <- ml.load(modelPath)
-  s2 <- summary(m2)
-  expect_equal(s$apriori, s2$apriori)
-  expect_equal(s$tables, s2$tables)
-
-  unlink(modelPath)
-})
-
 
 test_that("naiveBayes", {
   # R code to reproduce the result.
@@ -431,7 +366,7 @@ test_that("naiveBayes", {
   t <- as.data.frame(Titanic)
   t1 <- t[t$Freq > 0, -5]
   df <- suppressWarnings(createDataFrame(sqlContext, t1))
-  m <- naiveBayes(Survived ~ ., data = df)
+  m <- spark.naiveBayes(df, Survived ~ .)
   s <- summary(m)
   expect_equal(as.double(s$apriori[1, "Yes"]), 0.5833333, tolerance = 1e-6)
   expect_equal(sum(s$apriori), 1)
@@ -461,38 +396,6 @@ test_that("naiveBayes", {
 })
 
 test_that("spark.survreg", {
-  # See the survreg test for more explanation on this data.
-  data <- list(list(4, 1, 0, 0), list(3, 1, 2, 0), list(1, 1, 1, 0),
-  list(1, 0, 1, 0), list(2, 1, 1, 1), list(2, 1, 0, 1), list(3, 0, 0, 1))
-  df <- createDataFrame(sqlContext, data, c("time", "status", "x", "sex"))
-  model <- spark.survreg(df, Surv(time, status) ~ x + sex)
-  stats <- summary(model)
-  coefs <- as.vector(stats$coefficients[, 1])
-  rCoefs <- c(1.3149571, -0.1903409, -0.2532618, -1.1599800)
-  expect_equal(coefs, rCoefs, tolerance = 1e-4)
-  expect_true(all(
-  rownames(stats$coefficients) ==
-  c("(Intercept)", "x", "sex", "Log(scale)")))
-  p <- collect(select(predict(model, df), "prediction"))
-  expect_equal(p$prediction, c(3.724591, 2.545368, 3.079035, 3.079035,
-  2.390146, 2.891269, 2.891269), tolerance = 1e-4)
-
-  # Test model save/load
-  modelPath <- tempfile(pattern = "survreg", fileext = ".tmp")
-  ml.save(model, modelPath)
-  expect_error(ml.save(model, modelPath))
-  ml.save(model, modelPath, overwrite = TRUE)
-  model2 <- ml.load(modelPath)
-  stats2 <- summary(model2)
-  coefs2 <- as.vector(stats2$coefficients[, 1])
-  expect_equal(coefs, coefs2)
-  expect_equal(rownames(stats$coefficients), rownames(stats2$coefficients))
-
-  unlink(modelPath)
-})
-
-
-test_that("survreg", {
   # R code to reproduce the result.
   #
   #' rData <- list(time = c(4, 3, 1, 1, 2, 2, 3), status = c(1, 1, 1, 0, 1, 1, 0),
@@ -518,7 +421,7 @@ test_that("survreg", {
   data <- list(list(4, 1, 0, 0), list(3, 1, 2, 0), list(1, 1, 1, 0),
           list(1, 0, 1, 0), list(2, 1, 1, 1), list(2, 1, 0, 1), list(3, 0, 0, 1))
   df <- createDataFrame(sqlContext, data, c("time", "status", "x", "sex"))
-  model <- survreg(Surv(time, status) ~ x + sex, df)
+  model <- survreg(df, Surv(time, status) ~ x + sex)
   stats <- summary(model)
   coefs <- as.vector(stats$coefficients[, 1])
   rCoefs <- c(1.3149571, -0.1903409, -0.2532618, -1.1599800)

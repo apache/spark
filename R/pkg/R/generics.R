@@ -1193,33 +1193,21 @@ setGeneric("predict", function(object, ...) { standardGeneric("predict") })
 #' @export
 setGeneric("rbind", signature = "...")
 
-#' @rdname spark.glm
+#' @rdname spark.kmeans
 #' @export
 setGeneric("spark.kmeans", function(data, k, ...) { standardGeneric("spark.kmeans") })
-
-#' @rdname kmeans
-#' @export
-setGeneric("kmeans")
 
 #' @rdname fitted
 #' @export
 setGeneric("fitted")
 
-#' @rdname naiveBayes
+#' @rdname spark.naiveBayes
 #' @export
 setGeneric("spark.naiveBayes", function(data, formula, ...) { standardGeneric("spark.naiveBayes") })
 
-#' @rdname naiveBayes
-#' @export
-setGeneric("naiveBayes", function(formula, data, ...) { standardGeneric("naiveBayes") })
-
-#' @rdname survreg
+#' @rdname spark.survreg
 #' @export
 setGeneric("spark.survreg", function(data, formula, ...) { standardGeneric("spark.survreg") })
-
-#' @rdname survreg
-#' @export
-setGeneric("survreg", function(formula, data, ...) { standardGeneric("survreg") })
 
 #' @rdname ml.save
 #' @export

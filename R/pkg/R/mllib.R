@@ -19,7 +19,7 @@
 
 # Integration with R's standard functions.
 # Most of MLlib's argorithms are provided in two flavours:
-# - a specialization of the default R methods (glm, kmeans, etc.). These methods try to respect
+# - a specialization of the default R methods (glm). These methods try to respect
 #   the inputs and the outputs of R's method to the largest extent, but some small differences
 #   may exist.
 # - a set of methods that reflect the arguments of the other languages supported by Spark. These
@@ -228,7 +228,7 @@ setMethod("predict", signature(object = "GeneralizedLinearRegressionModel"),
 #' @export
 #' @examples
 #' \dontrun{
-#' model <- naiveBayes(y ~ x, trainingData)
+#' model <- spark.naiveBayes(trainingData, y ~ x)
 #' predicted <- predict(model, testData)
 #' showDF(predicted)
 #'}
@@ -248,7 +248,7 @@ setMethod("predict", signature(object = "NaiveBayesModel"),
 #' @export
 #' @examples
 #' \dontrun{
-#' model <- naiveBayes(y ~ x, trainingData)
+#' model <- spark.naiveBayes(trainingData, y ~ x)
 #' summary(model)
 #'}
 setMethod("summary", signature(object = "NaiveBayesModel"),
@@ -290,26 +290,6 @@ setMethod("spark.kmeans", signature(data = "SparkDataFrame"),
             return(new("KMeansModel", jobj = jobj))
          })
 
-#' Fit a k-means model
-#'
-#' Fit a k-means model, similarly to R's kmeans().
-#'
-#' @param x SparkDataFrame for training
-#' @param centers Number of centers
-#' @param iter.max Maximum iteration number
-#' @param algorithm Algorithm choosen to fit the model
-#' @return A fitted k-means model
-#' @rdname kmeans
-#' @export
-#' @examples
-#' \dontrun{
-#' model <- kmeans(x, centers = 2, algorithm="random")
-#' }
-setMethod("kmeans", signature(x = "SparkDataFrame"),
-    function(x, centers, iter.max = 10, algorithm = c("random", "k-means||")) {
-        return(spark.kmeans(x, centers, iter.max, algorithm))
-    })
-
 #' Get fitted result from a k-means model
 #'
 #' Get fitted result from a k-means model, similarly to R's fitted().
@@ -321,7 +301,7 @@ setMethod("kmeans", signature(x = "SparkDataFrame"),
 #' @export
 #' @examples
 #' \dontrun{
-#' model <- kmeans(trainingData, 2)
+#' model <- spark.kmeans(trainingData, 2)
 #' fitted.model <- fitted(model)
 #' showDF(fitted.model)
 #'}
@@ -393,30 +373,6 @@ setMethod("predict", signature(object = "KMeansModel"),
 
 #' Fit a Bernoulli naive Bayes model
 #'
-#' Fit a Bernoulli naive Bayes model, similarly to R package e1071's naiveBayes() while only
-#' categorical features are supported. The input should be a SparkDataFrame of observations instead
-#' of a contingency table.
-#'
-#' @param object A symbolic description of the model to be fitted. Currently only a few formula
-#'               operators are supported, including '~', '.', ':', '+', and '-'.
-#' @param data SparkDataFrame for training
-#' @param laplace Smoothing parameter
-#' @return a fitted naive Bayes model
-#' @rdname naiveBayes
-#' @seealso e1071: \url{https://cran.r-project.org/web/packages/e1071/}
-#' @export
-#' @examples
-#' \dontrun{
-#' df <- createDataFrame(sqlContext, infert)
-#' model <- naiveBayes(education ~ ., df, laplace = 0)
-#'}
-setMethod("naiveBayes", signature(formula = "formula", data = "SparkDataFrame"),
-          function(formula, data, laplace = 0, ...) {
-            return(spark.naiveBayes(data, formula, laplace))
-          })
-
-#' Fit a Bernoulli naive Bayes model
-#'
 #' Fit a Bernoulli naive Bayes model on a Spark DataFrame (only categorical data is supported).
 #'
 #' @param data SparkDataFrame for training
@@ -424,13 +380,13 @@ setMethod("naiveBayes", signature(formula = "formula", data = "SparkDataFrame"),
 #'               operators are supported, including '~', '.', ':', '+', and '-'.
 #' @param laplace Smoothing parameter
 #' @return a fitted naive Bayes model
-#' @rdname naiveBayes
+#' @rdname spark.naiveBayes
 #' @seealso e1071: \url{https://cran.r-project.org/web/packages/e1071/}
 #' @export
 #' @examples
 #' \dontrun{
 #' df <- createDataFrame(sqlContext, infert)
-#' model <- naiveBayes(df, education ~ ., laplace = 0)
+#' model <- spark.naiveBayes(df, education ~ ., laplace = 0)
 #'}
 setMethod("spark.naiveBayes", signature(data = "SparkDataFrame", formula = "formula"),
     function(data, formula, laplace = 0, ...) {
@@ -453,7 +409,7 @@ setMethod("spark.naiveBayes", signature(data = "SparkDataFrame", formula = "form
 #' @examples
 #' \dontrun{
 #' df <- createDataFrame(sqlContext, infert)
-#' model <- naiveBayes(education ~ ., df, laplace = 0)
+#' model <- spark.naiveBayes(education ~ ., df, laplace = 0)
 #' path <- "path/to/model"
 #' ml.save(model, path)
 #' }
@@ -594,27 +550,6 @@ setMethod("spark.survreg", signature(data = "SparkDataFrame", formula = "formula
             return(new("AFTSurvivalRegressionModel", jobj = jobj))
           })
 
-#' Fit an accelerated failure time (AFT) survival regression model.
-#'
-#' Fit an accelerated failure time (AFT) survival regression model, similarly to R's survreg().
-#'
-#' @param formula A symbolic description of the model to be fitted. Currently only a few formula
-#'                operators are supported, including '~', ':', '+', and '-'.
-#'                Note that operator '.' is not supported currently.
-#' @param data SparkDataFrame for training.
-#' @return a fitted AFT survival regression model
-#' @rdname survreg
-#' @seealso survival: \url{https://cran.r-project.org/web/packages/survival/}
-#' @export
-#' @examples
-#' \dontrun{
-#' df <- createDataFrame(sqlContext, ovarian)
-#' model <- survreg(Surv(futime, fustat) ~ ecog_ps + rx, df)
-#' }
-setMethod("survreg", signature(formula = "formula", data = "SparkDataFrame"),
-    function(formula, data, ...) {
-      return(spark.survreg(data, formula))
-    })
 
 #' Get the summary of an AFT survival regression model
 #'
