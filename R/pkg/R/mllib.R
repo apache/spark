@@ -125,7 +125,7 @@ setMethod("glm", signature(formula = "formula", family = "ANY", data = "SparkDat
 
 #' Get the summary of a generalized linear model
 #'
-#' Returns the summary of a model produced by glm(), similarly to R's summary().
+#' Returns the summary of a model produced by glm() or spark.glm(), similarly to R's summary().
 #'
 #' @param object A fitted generalized linear model
 #' @return coefficients the model's coefficients, intercept
@@ -199,7 +199,8 @@ print.summary.GeneralizedLinearRegressionModel <- function(x, ...) {
 
 #' Make predictions from a generalized linear model
 #'
-#' Makes predictions from a generalized linear model produced by glm(), similarly to R's predict().
+#' Makes predictions from a generalized linear model produced by glm() or spark.glm(),
+#' similarly to R's predict().
 #'
 #' @param object A fitted generalized linear model
 #' @param newData SparkDataFrame for testing
@@ -219,7 +220,8 @@ setMethod("predict", signature(object = "GeneralizedLinearRegressionModel"),
 
 #' Make predictions from a naive Bayes model
 #'
-#' Makes predictions from a model produced by naiveBayes(), similarly to R package e1071's predict.
+#' Makes predictions from a model produced by spark.naiveBayes(),
+#' similarly to R package e1071's predict.
 #'
 #' @param object A fitted naive Bayes model
 #' @param newData SparkDataFrame for testing
@@ -239,7 +241,8 @@ setMethod("predict", signature(object = "NaiveBayesModel"),
 
 #' Get the summary of a naive Bayes model
 #'
-#' Returns the summary of a naive Bayes model produced by naiveBayes(), similarly to R's summary().
+#' Returns the summary of a naive Bayes model produced by spark.naiveBayes(),
+#' similarly to R's summary().
 #'
 #' @param object A fitted MLlib model
 #' @return a list containing 'apriori', the label distribution, and 'tables', conditional
@@ -322,7 +325,7 @@ setMethod("fitted", signature(object = "KMeansModel"),
 
 #' Get the summary of a k-means model
 #'
-#' Returns the summary of a k-means model produced by kmeans(),
+#' Returns the summary of a k-means model produced by spark.kmeans(),
 #' similarly to R's summary().
 #'
 #' @param object a fitted k-means model
@@ -356,7 +359,7 @@ setMethod("summary", signature(object = "KMeansModel"),
 
 #' Make predictions from a k-means model
 #'
-#' Make predictions from a model produced by kmeans().
+#' Make predictions from a model produced by spark.kmeans().
 #'
 #' @param object A fitted k-means model
 #' @param newData SparkDataFrame for testing
@@ -556,7 +559,7 @@ setMethod("spark.survreg", signature(data = "SparkDataFrame", formula = "formula
 
 #' Get the summary of an AFT survival regression model
 #'
-#' Returns the summary of an AFT survival regression model produced by survreg(),
+#' Returns the summary of an AFT survival regression model produced by spark.survreg(),
 #' similarly to R's summary().
 #'
 #' @param object a fitted AFT survival regression model
@@ -581,7 +584,8 @@ setMethod("summary", signature(object = "AFTSurvivalRegressionModel"),
 
 #' Make predictions from an AFT survival regression model
 #'
-#' Make predictions from a model produced by survreg(), similarly to R package survival's predict.
+#' Make predictions from a model produced by spark.survreg(),
+#' similarly to R package survival's predict.
 #'
 #' @param object A fitted AFT survival regression model
 #' @param newData SparkDataFrame for testing
