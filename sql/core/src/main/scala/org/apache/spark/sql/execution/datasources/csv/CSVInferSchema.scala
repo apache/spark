@@ -180,31 +180,31 @@ private[csv] object CSVTypeCast {
       params: CSVOptions = CSVOptions()): Any = {
 
     castType match {
-      case _: ByteType => if (datum == params.byteNullValue && nullable) null else datum.toByte
-      case _: ShortType => if (datum == params.shortNullValue && nullable) null else datum.toShort
-      case _: IntegerType => if (datum == params.integerNullValue && nullable) null else datum.toInt
-      case _: LongType => if (datum == params.longNullValue && nullable) null else datum.toLong
+      case _: ByteType => if (datum == params.nullValue && nullable) null else datum.toByte
+      case _: ShortType => if (datum == params.nullValue && nullable) null else datum.toShort
+      case _: IntegerType => if (datum == params.nullValue && nullable) null else datum.toInt
+      case _: LongType => if (datum == params.nullValue && nullable) null else datum.toLong
       case _: FloatType =>
-        if (datum == params.floatNullValue && nullable) {
+        if (datum == params.nullValue && nullable) {
           null
-        } else if (datum == params.floatNaNValue) {
+        } else if (datum == params.nanValue) {
           Float.NaN
-        } else if (datum == params.floatNegativeInf) {
+        } else if (datum == params.negativeInf) {
           Float.NegativeInfinity
-        } else if (datum == params.floatPositiveInf) {
+        } else if (datum == params.positiveInf) {
           Float.PositiveInfinity
         } else {
           Try(datum.toFloat)
             .getOrElse(NumberFormat.getInstance(Locale.getDefault).parse(datum).floatValue())
         }
       case _: DoubleType =>
-        if (datum == params.doubleNullValue && nullable) {
+        if (datum == params.nullValue && nullable) {
           null
-        } else if (datum == params.doubleNaNValue) {
+        } else if (datum == params.nanValue) {
           Double.NaN
-        } else if (datum == params.doubleNegativeInf) {
+        } else if (datum == params.negativeInf) {
           Double.NegativeInfinity
-        } else if (datum == params.doublePositiveInf) {
+        } else if (datum == params.positiveInf) {
           Double.PositiveInfinity
         } else {
           Try(datum.toDouble)
@@ -212,7 +212,7 @@ private[csv] object CSVTypeCast {
         }
       case _: BooleanType => datum.toBoolean
       case dt: DecimalType =>
-        if (datum == params.decimalNullValue && nullable) {
+        if (datum == params.nullValue && nullable) {
           null
         } else {
           val value = new BigDecimal(datum.replaceAll(",", ""))

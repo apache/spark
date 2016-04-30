@@ -500,16 +500,10 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       .options(Map(
         "header" -> "true",
         "mode" -> "DROPMALFORMED",
-        "integerNullValue" -> "--",
-        "longNullValue" -> "++",
-        "floatNullValue" -> "null",
-        "doubleNullValue" -> "NULL",
-        "floatNaNValue" -> "FNAN",
-        "doubleNaNValue" -> "DNAN",
-        "floatNegativeInf" -> "-FINF",
-        "floatPositiveInf" -> "FINF",
-        "doublePositiveInf" -> "DINF",
-        "doubleNegativeInf" -> "-DINF"))
+        "nullValue" -> "--",
+        "nanValue" -> "NAN",
+        "negativeInf" -> "-INF",
+        "positiveInf" -> "INF"))
       .load(testFile(numbersFile))
 
     assert(numbers.count() == 8)

@@ -89,29 +89,11 @@ private[sql] class CSVOptions(@transient private val parameters: Map[String, Str
 
   val nullValue = parameters.getOrElse("nullValue", "")
 
-  val integerNullValue = parameters.getOrElse("integerNullValue", nullValue)
+  val nanValue = parameters.getOrElse("nanValue", "NaN")
 
-  val byteNullValue = parameters.getOrElse("byteNullValue", nullValue)
+  val positiveInf = parameters.getOrElse("positiveInf", "Inf")
+  val negativeInf = parameters.getOrElse("negativeInf", "-Inf")
 
-  val shortNullValue = parameters.getOrElse("shortNullValue", nullValue)
-
-  val longNullValue = parameters.getOrElse("longNullValue", nullValue)
-
-  val floatNullValue = parameters.getOrElse("floatNullValue", nullValue)
-
-  val doubleNullValue = parameters.getOrElse("doubleNullValue", nullValue)
-
-  val decimalNullValue = parameters.getOrElse("decimalNullValue", nullValue)
-
-  val floatNaNValue = parameters.getOrElse("floatNaNValue", "NaN")
-
-  val doubleNaNValue = parameters.getOrElse("doubleNaNValue", "NaN")
-
-  val floatNegativeInf = parameters.getOrElse("floatNegativeInf", "-Inf")
-  val floatPositiveInf = parameters.getOrElse("floatPositiveInf", "Inf")
-
-  val doubleNegativeInf = parameters.getOrElse("doubleNegativeInf", "-Inf")
-  val doublePositiveInf = parameters.getOrElse("doublePositiveInf", "Inf")
 
   val compressionCodec: Option[String] = {
     val name = parameters.get("compression").orElse(parameters.get("codec"))

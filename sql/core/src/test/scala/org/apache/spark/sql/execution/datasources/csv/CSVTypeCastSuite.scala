@@ -114,7 +114,7 @@ class CSVTypeCastSuite extends SparkFunSuite {
 
   test("Float NaN values are parsed correctly") {
     val floatVal: Float = CSVTypeCast.castTo(
-      "nn", FloatType, nullable = true, CSVOptions("floatNaNValue", "nn")).asInstanceOf[Float]
+      "nn", FloatType, nullable = true, CSVOptions("nanValue", "nn")).asInstanceOf[Float]
 
     // Java implements the IEEE-754 floating point standard which guarantees that any comparison
     // against NaN will return false (except != which returns true)
@@ -123,32 +123,32 @@ class CSVTypeCastSuite extends SparkFunSuite {
 
   test("Double NaN values are parsed correctly") {
     val doubleVal: Double = CSVTypeCast.castTo(
-      "-", DoubleType, nullable = true, CSVOptions("doubleNaNValue", "-")).asInstanceOf[Double]
+      "-", DoubleType, nullable = true, CSVOptions("nanValue", "-")).asInstanceOf[Double]
 
     assert(doubleVal.isNaN)
   }
 
   test("Float infinite values can be parsed") {
     val floatVal1 = CSVTypeCast.castTo(
-      "max", FloatType, nullable = true, CSVOptions("floatNegativeInf", "max")).asInstanceOf[Float]
+      "max", FloatType, nullable = true, CSVOptions("negativeInf", "max")).asInstanceOf[Float]
 
     assert(floatVal1 == Float.NegativeInfinity)
 
     val floatVal2 = CSVTypeCast.castTo(
-      "max", FloatType, nullable = true, CSVOptions("floatPositiveInf", "max")).asInstanceOf[Float]
+      "max", FloatType, nullable = true, CSVOptions("positiveInf", "max")).asInstanceOf[Float]
 
     assert(floatVal2 == Float.PositiveInfinity)
   }
 
   test("Double infinite values can be parsed") {
     val doubleVal1 = CSVTypeCast.castTo(
-      "max", DoubleType, nullable = true, CSVOptions("doubleNegativeInf", "max")
+      "max", DoubleType, nullable = true, CSVOptions("negativeInf", "max")
     ).asInstanceOf[Double]
 
     assert(doubleVal1 == Double.NegativeInfinity)
 
     val doubleVal2 = CSVTypeCast.castTo(
-      "max", DoubleType, nullable = true, CSVOptions("doublePositiveInf", "max")
+      "max", DoubleType, nullable = true, CSVOptions("positiveInf", "max")
     ).asInstanceOf[Double]
 
     assert(doubleVal2 == Double.PositiveInfinity)
@@ -156,18 +156,18 @@ class CSVTypeCastSuite extends SparkFunSuite {
 
   test("Type-specific null values are used for casting") {
     assertNull(
-      CSVTypeCast.castTo("-", ByteType, nullable = true, CSVOptions("byteNullValue", "-")))
+      CSVTypeCast.castTo("-", ByteType, nullable = true, CSVOptions("nullValue", "-")))
     assertNull(
-      CSVTypeCast.castTo("-", ShortType, nullable = true, CSVOptions("shortNullValue", "-")))
+      CSVTypeCast.castTo("-", ShortType, nullable = true, CSVOptions("nullValue", "-")))
     assertNull(
-      CSVTypeCast.castTo("-", IntegerType, nullable = true, CSVOptions("integerNullValue", "-")))
+      CSVTypeCast.castTo("-", IntegerType, nullable = true, CSVOptions("nullValue", "-")))
     assertNull(
-      CSVTypeCast.castTo("-", LongType, nullable = true, CSVOptions("longNullValue", "-")))
+      CSVTypeCast.castTo("-", LongType, nullable = true, CSVOptions("nullValue", "-")))
     assertNull(
-      CSVTypeCast.castTo("-", FloatType, nullable = true, CSVOptions("floatNullValue", "-")))
+      CSVTypeCast.castTo("-", FloatType, nullable = true, CSVOptions("nullValue", "-")))
     assertNull(
-      CSVTypeCast.castTo("-", DoubleType, nullable = true, CSVOptions("doubleNullValue", "-")))
+      CSVTypeCast.castTo("-", DoubleType, nullable = true, CSVOptions("nullValue", "-")))
     assertNull(
-      CSVTypeCast.castTo("-", DecimalType.DoubleDecimal, true, CSVOptions("decimalNullValue", "-")))
+      CSVTypeCast.castTo("-", DecimalType.DoubleDecimal, true, CSVOptions("nullValue", "-")))
   }
 }
