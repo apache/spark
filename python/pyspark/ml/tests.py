@@ -1012,18 +1012,18 @@ class ALSTest(PySparkTestCase):
         als = ALS().setMaxIter(1).setRank(1)
         # test default params
         als.fit(df)
-        self.assertEqual(als.getIntermediateRDDStorageLevel(), "MEMORY_AND_DISK")
-        self.assertEqual(als._java_obj.getIntermediateRDDStorageLevel(), "MEMORY_AND_DISK")
-        self.assertEqual(als.getFinalRDDStorageLevel(), "MEMORY_AND_DISK")
-        self.assertEqual(als._java_obj.getFinalRDDStorageLevel(), "MEMORY_AND_DISK")
+        self.assertEqual(als.getIntermediateStorageLevel(), "MEMORY_AND_DISK")
+        self.assertEqual(als._java_obj.getIntermediateStorageLevel(), "MEMORY_AND_DISK")
+        self.assertEqual(als.getFinalStorageLevel(), "MEMORY_AND_DISK")
+        self.assertEqual(als._java_obj.getFinalStorageLevel(), "MEMORY_AND_DISK")
         # test non-default params
-        als.setIntermediateRDDStorageLevel("MEMORY_ONLY_2")
-        als.setFinalRDDStorageLevel("DISK_ONLY")
+        als.setIntermediateStorageLevel("MEMORY_ONLY_2")
+        als.setFinalStorageLevel("DISK_ONLY")
         als.fit(df)
-        self.assertEqual(als.getIntermediateRDDStorageLevel(), "MEMORY_ONLY_2")
-        self.assertEqual(als._java_obj.getIntermediateRDDStorageLevel(), "MEMORY_ONLY_2")
-        self.assertEqual(als.getFinalRDDStorageLevel(), "DISK_ONLY")
-        self.assertEqual(als._java_obj.getFinalRDDStorageLevel(), "DISK_ONLY")
+        self.assertEqual(als.getIntermediateStorageLevel(), "MEMORY_ONLY_2")
+        self.assertEqual(als._java_obj.getIntermediateStorageLevel(), "MEMORY_ONLY_2")
+        self.assertEqual(als.getFinalStorageLevel(), "DISK_ONLY")
+        self.assertEqual(als._java_obj.getFinalStorageLevel(), "DISK_ONLY")
 
 
 if __name__ == "__main__":

@@ -525,13 +525,13 @@ class ALSStorageSuite
 
   test("invalid storage params") {
     intercept[IllegalArgumentException] {
-      new ALS().setIntermediateRDDStorageLevel("foo")
+      new ALS().setIntermediateStorageLevel("foo")
     }
     intercept[IllegalArgumentException] {
-      new ALS().setIntermediateRDDStorageLevel("NONE")
+      new ALS().setIntermediateStorageLevel("NONE")
     }
     intercept[IllegalArgumentException] {
-      new ALS().setFinalRDDStorageLevel("foo")
+      new ALS().setFinalStorageLevel("foo")
     }
   }
 
@@ -563,8 +563,8 @@ class ALSStorageSuite
     val nonDefaultListener = new IntermediateRDDStorageListener
     sc.addSparkListener(nonDefaultListener)
     val nonDefaultModel = als
-      .setFinalRDDStorageLevel("MEMORY_ONLY")
-      .setIntermediateRDDStorageLevel("DISK_ONLY")
+      .setFinalStorageLevel("MEMORY_ONLY")
+      .setIntermediateStorageLevel("DISK_ONLY")
       .fit(data)
     // check final factor RDD non-default storage levels
     val levels = sc.getPersistentRDDs.collect {
@@ -617,7 +617,7 @@ object ALSSuite {
     "alpha" -> 0.9,
     "nonnegative" -> true,
     "checkpointInterval" -> 20,
-    "intermediateRDDStorageLevel" -> "MEMORY_ONLY",
-    "finalRDDStorageLevel" -> "MEMORY_AND_DISK_SER"
+    "intermediateStorageLevel" -> "MEMORY_ONLY",
+    "finalStorageLevel" -> "MEMORY_AND_DISK_SER"
   )
 }
