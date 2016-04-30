@@ -617,7 +617,7 @@ object ALSSuite {
     "alpha" -> 0.9,
     "nonnegative" -> true,
     "checkpointInterval" -> 20,
-    "intermediateRDDStorageLevel" -> "MEMORY_ONLY",
-    "finalRDDStorageLevel" -> "MEMORY_AND_DISK_SER"
+    "intermediateStorageLevel" -> "MEMORY_ONLY",
+    "finalStorageLevel" -> "MEMORY_AND_DISK_SER"
   )
 }
