@@ -416,7 +416,7 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
     ev.isNull = "false"
     eval1.code + eval2.code + s"""
         boolean ${ev.value} = (${eval1.isNull} && ${eval2.isNull}) ||
-           (!${eval1.isNull} && $equalCode);
+           (!${eval1.isNull} && !${eval2.isNull} && $equalCode);
       """
   }
 }
