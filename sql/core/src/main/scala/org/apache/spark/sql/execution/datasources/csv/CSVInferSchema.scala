@@ -46,7 +46,7 @@ private[csv] object CSVInferSchema {
     val dateFormat = options.dateFormat
     val startType: Array[DataType] = Array.fill[DataType](header.length)(NullType)
     val rootTypes: Array[DataType] =
-      tokenRdd.aggregate(startType)(inferRowType(nullValue, dateFormat), mergeRowTypes)
+      tokenRdd.aggregate(startType)(inferRowType(nullValue, dateFormat, options), mergeRowTypes)
 
     val structFields = header.zip(rootTypes).map { case (thisHeader, rootType) =>
       val dType = rootType match {
@@ -59,11 +59,11 @@ private[csv] object CSVInferSchema {
     StructType(structFields)
   }
 
-  private def inferRowType(nullValue: String, dateFormat: SimpleDateFormat)
+  private def inferRowType(nullValue: String, dateFormat: SimpleDateFormat, options: CSVOptions)
       (rowSoFar: Array[DataType], next: Array[String]): Array[DataType] = {
     var i = 0
     while (i < math.min(rowSoFar.length, next.length)) {  // May have columns on right missing.
-      rowSoFar(i) = inferField(rowSoFar(i), next(i), nullValue, dateFormat)
+      rowSoFar(i) = inferField(rowSoFar(i), next(i), options)
       i+=1
     }
     rowSoFar
@@ -79,78 +79,79 @@ private[csv] object CSVInferSchema {
    * Infer type of string field. Given known type Double, and a string "1", there is no
    * point checking if it is an Int, as the final type must be Double or higher.
    */
-  def inferField(typeSoFar: DataType,
-      field: String,
-      nullValue: String = "",
-      dateFormat: SimpleDateFormat = null): DataType = {
-    def tryParseInteger(field: String): DataType = if ((allCatch opt field.toInt).isDefined) {
-      IntegerType
-    } else {
-      tryParseLong(field)
-    }
-
-    def tryParseLong(field: String): DataType = if ((allCatch opt field.toLong).isDefined) {
-      LongType
-    } else {
-      tryParseDouble(field)
-    }
-
-    def tryParseDouble(field: String): DataType = {
-      if ((allCatch opt field.toDouble).isDefined) {
-        DoubleType
-      } else {
-        tryParseTimestamp(field)
-      }
-    }
-
-    def tryParseTimestamp(field: String): DataType = {
-      if (dateFormat != null) {
-        // This case infers a custom `dataFormat` is set.
-        if ((allCatch opt dateFormat.parse(field)).isDefined) {
-          TimestampType
-        } else {
-          tryParseBoolean(field)
-        }
-      } else {
-        // We keep this for backwords competibility.
-        if ((allCatch opt DateTimeUtils.stringToTime(field)).isDefined) {
-          TimestampType
-        } else {
-          tryParseBoolean(field)
-        }
-      }
-    }
-
-    def tryParseBoolean(field: String): DataType = {
-      if ((allCatch opt field.toBoolean).isDefined) {
-        BooleanType
-      } else {
-        stringType()
-      }
-    }
-
-    // Defining a function to return the StringType constant is necessary in order to work around
-    // a Scala compiler issue which leads to runtime incompatibilities with certain Spark versions;
-    // see issue #128 for more details.
-    def stringType(): DataType = {
-      StringType
-    }
-
-    if (field == null || field.isEmpty || field == nullValue) {
+  def inferField(typeSoFar: DataType, field: String, options: CSVOptions): DataType = {
+    if (field == null || field.isEmpty || field == options.nullValue) {
       typeSoFar
     } else {
       typeSoFar match {
-        case NullType => tryParseInteger(field)
-        case IntegerType => tryParseInteger(field)
-        case LongType => tryParseLong(field)
-        case DoubleType => tryParseDouble(field)
-        case TimestampType => tryParseTimestamp(field)
-        case BooleanType => tryParseBoolean(field)
+        case NullType => tryParseInteger(field, options)
+        case IntegerType => tryParseInteger(field, options)
+        case LongType => tryParseLong(field, options)
+        case DoubleType => tryParseDouble(field, options)
+        case TimestampType => tryParseTimestamp(field, options)
+        case BooleanType => tryParseBoolean(field, options)
         case StringType => StringType
         case other: DataType =>
           throw new UnsupportedOperationException(s"Unexpected data type $other")
       }
     }
+  }
+
+  def tryParseInteger(field: String, options: CSVOptions): DataType = {
+    if ((allCatch opt field.toInt).isDefined) {
+      IntegerType
+    } else {
+      tryParseLong(field, options)
+    }
+  }
+
+  def tryParseLong(field: String, options: CSVOptions): DataType = {
+    if ((allCatch opt field.toLong).isDefined) {
+      LongType
+    } else {
+      tryParseDouble(field, options)
+    }
+  }
+
+  def tryParseDouble(field: String, options: CSVOptions): DataType = {
+    if ((allCatch opt field.toDouble).isDefined) {
+      DoubleType
+    } else {
+      tryParseTimestamp(field, options)
+    }
+  }
+
+  def tryParseTimestamp(field: String, options: CSVOptions): DataType = {
+    if (options.dateFormat != null) {
+      // This case infers a custom `dataFormat` is set.
+      if ((allCatch opt options.dateFormat.parse(field)).isDefined) {
+        TimestampType
+      } else {
+        tryParseBoolean(field, options)
+      }
+    } else {
+      // We keep this for backwords competibility.
+      if ((allCatch opt DateTimeUtils.stringToTime(field)).isDefined) {
+        TimestampType
+      } else {
+        tryParseBoolean(field, options)
+      }
+    }
+  }
+
+  def tryParseBoolean(field: String, options: CSVOptions): DataType = {
+    if ((allCatch opt field.toBoolean).isDefined) {
+      BooleanType
+    } else {
+      stringType()
+    }
+  }
+
+  // Defining a function to return the StringType constant is necessary in order to work around
+  // a Scala compiler issue which leads to runtime incompatibilities with certain Spark versions;
+  // see issue #128 for more details.
+  def stringType(): DataType = {
+    StringType
   }
 
   private val numericPrecedence: IndexedSeq[DataType] = HiveTypeCoercion.numericPrecedence

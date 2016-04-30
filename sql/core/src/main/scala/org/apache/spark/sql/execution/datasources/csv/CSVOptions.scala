@@ -92,7 +92,7 @@ private[sql] class CSVOptions(@transient private val parameters: Map[String, Str
   }
 
   // Share date format object as it is expensive to parse date pattern.
-  val dateFormat = {
+  val dateFormat: SimpleDateFormat = {
     val dateFormat = parameters.get("dateFormat")
     dateFormat.map(new SimpleDateFormat(_)).orNull
   }
