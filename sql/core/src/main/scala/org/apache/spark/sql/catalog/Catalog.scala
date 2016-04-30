@@ -176,9 +176,9 @@ abstract class Catalog {
 
   /**
    * Drops the temporary table with the given table name in the catalog.
-   * If the table has been cached/persisted before, it's also unpersisted.
+   * If the table has been cached before, then it will also be uncached.
    *
-   * @param tableName the name of the table to be unregistered.
+   * @param tableName the name of the table to be dropped.
    * @since 2.0.0
    */
   def dropTempTable(tableName: String): Unit
