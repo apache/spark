@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.datasources.{BucketSpec, DataSource, HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.HiveSerDe
 import org.apache.spark.sql.sources.InsertableRelation
 import org.apache.spark.sql.types._
@@ -84,7 +84,7 @@ case class CreateDataSourceTableCommand(
 
     var isExternal = true
     val optionsWithPath =
-      if (!options.contains("path") && managedIfNoPath) {
+      if (!new CaseInsensitiveMap(options).contains("path") && managedIfNoPath) {
         isExternal = false
         options + ("path" -> sessionState.catalog.defaultTablePath(tableIdent))
       } else {
@@ -157,7 +157,7 @@ case class CreateDataSourceTableAsSelectCommand(
     var createMetastoreTable = false
     var isExternal = true
     val optionsWithPath =
-      if (!options.contains("path")) {
+      if (!new CaseInsensitiveMap(options).contains("path")) {
         isExternal = false
         options + ("path" -> sessionState.catalog.defaultTablePath(tableIdent))
       } else {
