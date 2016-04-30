@@ -39,7 +39,7 @@ class HiveDDLCommandSuite extends PlanTest {
     parser.parsePlan(sql).collect {
       case CreateTable(desc, allowExisting) => (desc, allowExisting)
       case CreateTableAsSelectLogicalPlan(desc, _, allowExisting) => (desc, allowExisting)
-      case CreateViewCommand(desc, _, allowExisting, _, _) => (desc, allowExisting)
+      case CreateViewCommand(desc, _, allowExisting, _, _, _) => (desc, allowExisting)
     }.head
   }
 
