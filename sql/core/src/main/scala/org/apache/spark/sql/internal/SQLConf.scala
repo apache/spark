@@ -763,9 +763,6 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   }
 
   private def setConfWithCheck(key: String, value: String): Unit = {
-    if (key.startsWith("spark.") && !key.startsWith("spark.sql.")) {
-      logWarning(s"Attempt to set non-Spark SQL config in SQLConf: key = $key, value = $value")
-    }
     settings.put(key, value)
   }
 
