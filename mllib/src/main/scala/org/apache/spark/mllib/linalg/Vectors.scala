@@ -237,20 +237,11 @@ class VectorUDT extends UserDefinedType[Vector] {
         tpe match {
           case 0 =>
             val size = row.getInt(1)
-            val indices = row.getArray(2) match {
-              case u: UnsafeArrayData => u.toIntArrayUnchecked
-              case a => a.toIntArray()
-            }
-            val values = row.getArray(3) match {
-              case u: UnsafeArrayData => u.toDoubleArrayUnchecked
-              case a => a.toDoubleArray()
-            }
+            val indices = row.getArray(2).toIntArray()
+            val values = row.getArray(3).toDoubleArray()
             new SparseVector(size, indices, values)
           case 1 =>
-            val values = row.getArray(3) match {
-              case u: UnsafeArrayData => u.toDoubleArrayUnchecked
-              case a => a.toDoubleArray()
-            }
+            val values = row.getArray(3).toDoubleArray()
             new DenseVector(values)
         }
     }

@@ -337,30 +337,6 @@ public final class UnsafeArrayData extends ArrayData {
     return arrayCopy;
   }
 
-  /**
-   * A faster version of `toIntArray`, which use memory copy instead of iterating all elements.
-   * Note that, this method is dangerous if this array contains null elements.  We don't write
-   * null elements into the data region and memory copy will crash as the data size doesn't match.
-   */
-  public int[] toIntArrayUnchecked() {
-    final int[] result = new int[numElements];
-    Platform.copyMemory(baseObject, baseOffset + 4 + 4L * numElements,
-      result, Platform.INT_ARRAY_OFFSET, 4L * numElements);
-    return result;
-  }
-
-  /**
-   * A faster version of `toDoubleArray`, which use memory copy instead of iterating all elements.
-   * Note that, this method is dangerous if this array contains null elements.  We don't write
-   * null elements into the data region and memory copy will crash as the data size doesn't match.
-   */
-  public double[] toDoubleArrayUnchecked() {
-    final double[] result = new double[numElements];
-    Platform.copyMemory(baseObject, baseOffset + 4 + 4L * numElements,
-      result, Platform.DOUBLE_ARRAY_OFFSET, 8L * numElements);
-    return result;
-  }
-
   public static UnsafeArrayData fromPrimitiveArray(int[] arr) {
     if (arr.length > (Integer.MAX_VALUE - 4) / 8) {
       throw new UnsupportedOperationException("Cannot convert this array to unsafe format as " +
