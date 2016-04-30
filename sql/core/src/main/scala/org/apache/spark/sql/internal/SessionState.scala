@@ -99,7 +99,8 @@ private[sql] class SessionState(sparkSession: SparkSession) {
     sparkSession.externalCatalog,
     functionResourceLoader,
     functionRegistry,
-    conf)
+    conf,
+    newHadoopConf())
 
   /**
    * Interface exposed to the user for registering user-defined functions.

@@ -21,6 +21,7 @@ import java.io.File
 
 import scala.collection.mutable
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
@@ -44,14 +45,21 @@ class SessionCatalog(
     externalCatalog: ExternalCatalog,
     functionResourceLoader: FunctionResourceLoader,
     functionRegistry: FunctionRegistry,
-    conf: CatalystConf) extends Logging {
+    conf: CatalystConf,
+    hadoopConf: Configuration) extends Logging {
   import CatalogTypes.TablePartitionSpec
 
+  // For testing only.
   def this(
       externalCatalog: ExternalCatalog,
       functionRegistry: FunctionRegistry,
       conf: CatalystConf) {
-    this(externalCatalog, DummyFunctionResourceLoader, functionRegistry, conf)
+    this(
+      externalCatalog,
+      DummyFunctionResourceLoader,
+      functionRegistry,
+      conf,
+      new Configuration())
   }
 
   // For testing only.
@@ -82,6 +90,16 @@ class SessionCatalog(
     if (conf.caseSensitiveAnalysis) name else name.toLowerCase
   }
 
+  private[sql] def makeQualifiedPath(path: String): Path = {
+    val hadoopPath = new Path(path)
+    makeQualifiedPath(hadoopPath)
+  }
+
+  private  def makeQualifiedPath(path: Path): Path = {
+    val fs = path.getFileSystem(hadoopConf)
+    fs.makeQualified(path)
+  }
+
   // ----------------------------------------------------------------------------
   // Databases
   // ----------------------------------------------------------------------------
@@ -89,7 +107,10 @@ class SessionCatalog(
   // ----------------------------------------------------------------------------
 
   def createDatabase(dbDefinition: CatalogDatabase, ignoreIfExists: Boolean): Unit = {
-    externalCatalog.createDatabase(dbDefinition, ignoreIfExists)
+    val qualifiedPath = makeQualifiedPath(dbDefinition.locationUri).toString
+    externalCatalog.createDatabase(
+      dbDefinition.copy(locationUri = qualifiedPath),
+      ignoreIfExists)
   }
 
   def dropDatabase(db: String, ignoreIfNotExists: Boolean, cascade: Boolean): Unit = {
