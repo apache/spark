@@ -41,9 +41,9 @@ private[csv] object CSVInferSchema {
   def infer(
       tokenRdd: RDD[Array[String]],
       header: Array[String],
-      nullValue: String = "",
-      dateFormat: SimpleDateFormat = null): StructType = {
-
+      options: CSVOptions): StructType = {
+    val nullValue = options.nullValue
+    val dateFormat = options.dateFormat
     val startType: Array[DataType] = Array.fill[DataType](header.length)(NullType)
     val rootTypes: Array[DataType] =
       tokenRdd.aggregate(startType)(inferRowType(nullValue, dateFormat), mergeRowTypes)
