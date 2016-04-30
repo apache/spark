@@ -198,7 +198,11 @@ class Analyzer(
         throw new AnalysisException("Only one generator allowed per select clause but found " +
           generators.size + ": " + generators.map(toPrettySQL).mkString(", "))
 
-      case p if !p.isInstanceOf[Project] && p.expressions.exists(hasGenerator) =>
+      // These are the only 2 operators that can contain generators.
+      case p: Project => p
+      case g: Generate => g
+
+      case p if p.expressions.exists(hasGenerator) =>
         throw new AnalysisException("Generators are not supported outside the SELECT clause, but " +
           "got: " + p.simpleString)
     }
