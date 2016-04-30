@@ -119,10 +119,10 @@ class CatalystQlDataTypeParserSuite extends SparkFunSuite {
 
   // DataType parser accepts certain reserved keywords.
   checkDataType(
-    "Struct<TABLE: string, CASE:boolean>",
+    "Struct<TABLE: string, DATE:boolean>",
     StructType(
       StructField("TABLE", StringType, true) ::
-        StructField("CASE", BooleanType, true) :: Nil)
+        StructField("DATE", BooleanType, true) :: Nil)
   )
 
   // Define struct columns without ':'
