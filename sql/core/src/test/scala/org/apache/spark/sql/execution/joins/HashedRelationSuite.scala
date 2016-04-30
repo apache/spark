@@ -78,6 +78,16 @@ class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
     // This depends on that the order of items in BytesToBytesMap.iterator() is exactly the same
     // as they are inserted
     assert(java.util.Arrays.equals(os2.toByteArray, os.toByteArray))
+
+    // Spark-14521
+    val ser = new KryoSerializer((new SparkConf)
+      .set("spark.kryo.referenceTracking", "false")).newInstance()
+    val hashed3 = ser.deserialize[UnsafeHashedRelation](ser.serialize(hashed))
+    val os3 = new ByteArrayOutputStream()
+    val out3 = new ObjectOutputStream(os3)
+    hashed3.writeExternal(out3)
+    out3.flush()
+    assert(java.util.Arrays.equals(os.toByteArray, os3.toByteArray))
   }
 
   test("test serialization empty hash map") {
