@@ -277,22 +277,22 @@ setMethod("summary", signature(object = "NaiveBayesModel"),
 #' @param formula A symbolic description of the model to be fitted. Currently only a few formula
 #'                operators are supported, including '~', '.', ':', '+', and '-'.
 #'                Note that the response variable of formula is empty in spark.kmeans.
-#' @param centers Number of centers
-#' @param iter.max Maximum iteration number
-#' @param algorithm The initialization algorithm choosen to fit the model
+#' @param k Number of centers
+#' @param max.iter Maximum iteration number
+#' @param init.mode The initialization algorithm choosen to fit the model
 #' @return A fitted k-means model
 #' @rdname spark.kmeans
 #' @export
 #' @examples
 #' \dontrun{
-#' model <- spark.kmeans(data, ~ ., centers = 2, algorithm="random")
+#' model <- spark.kmeans(data, ~ ., k=2, init.mode="random")
 #' }
 setMethod("spark.kmeans", signature(data = "SparkDataFrame", formula = "formula"),
-          function(data, formula, centers, iter.max = 10, algorithm = c("random", "k-means||")) {
+          function(data, formula, k, max.iter = 10, init.mode = c("random", "k-means||")) {
             formula <- paste(deparse(formula), collapse = "")
-            algorithm <- match.arg(algorithm)
+            init.mode <- match.arg(init.mode)
             jobj <- callJStatic("org.apache.spark.ml.r.KMeansWrapper", "fit", data@sdf, formula,
-                                as.integer(centers), as.integer(iter.max), algorithm)
+                                as.integer(k), as.integer(max.iter), init.mode)
             return(new("KMeansModel", jobj = jobj))
          })
 
@@ -490,7 +490,7 @@ setMethod("write.ml", signature(object = "GeneralizedLinearRegressionModel", pat
 #' @export
 #' @examples
 #' \dontrun{
-#' model <- spark.kmeans(trainingData, ~ ., centers = 2)
+#' model <- spark.kmeans(trainingData, ~ ., k = 2)
 #' path <- "path/to/model"
 #' write.ml(model, path)
 #' }
