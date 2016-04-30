@@ -50,12 +50,15 @@ from pyspark.ml.evaluation import BinaryClassificationEvaluator, RegressionEvalu
 from pyspark.ml.feature import *
 from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.param.shared import HasMaxIter, HasInputCol, HasSeed
+from pyspark.ml.recommendation import ALS
 from pyspark.ml.regression import LinearRegression, DecisionTreeRegressor
 from pyspark.ml.tuning import *
 from pyspark.ml.wrapper import JavaParams
 from pyspark.mllib.linalg import Vectors, DenseVector, SparseVector
 from pyspark.sql import DataFrame, SQLContext, Row
 from pyspark.sql.functions import rand
+from pyspark.sql.utils import IllegalArgumentException
+from pyspark.storagelevel import *
 from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
 
 
@@ -997,6 +1000,30 @@ class HashingTFTest(PySparkTestCase):
         for i in range(0, n):
             self.assertAlmostEqual(features[i], expected[i], 14, "Error at " + str(i) +
                                    ": expected " + str(expected[i]) + ", got " + str(features[i]))
+
+
+class ALSTest(PySparkTestCase):
+
+    def test_storage_levels(self):
+        sqlContext = SQLContext(self.sc)
+        df = sqlContext.createDataFrame(
+            [(0, 0, 4.0), (0, 1, 2.0), (1, 1, 3.0), (1, 2, 4.0), (2, 1, 1.0), (2, 2, 5.0)],
+            ["user", "item", "rating"])
+        als = ALS().setMaxIter(1).setRank(1)
+        # test default params
+        als.fit(df)
+        self.assertEqual(als.getIntermediateRDDStorageLevel(), "MEMORY_AND_DISK")
+        self.assertEqual(als._java_obj.getIntermediateRDDStorageLevel(), "MEMORY_AND_DISK")
+        self.assertEqual(als.getFinalRDDStorageLevel(), "MEMORY_AND_DISK")
+        self.assertEqual(als._java_obj.getFinalRDDStorageLevel(), "MEMORY_AND_DISK")
+        # test non-default params
+        als.setIntermediateRDDStorageLevel("MEMORY_ONLY_2")
+        als.setFinalRDDStorageLevel("DISK_ONLY")
+        als.fit(df)
+        self.assertEqual(als.getIntermediateRDDStorageLevel(), "MEMORY_ONLY_2")
+        self.assertEqual(als._java_obj.getIntermediateRDDStorageLevel(), "MEMORY_ONLY_2")
+        self.assertEqual(als.getFinalRDDStorageLevel(), "DISK_ONLY")
+        self.assertEqual(als._java_obj.getFinalRDDStorageLevel(), "DISK_ONLY")
 
 
 if __name__ == "__main__":
