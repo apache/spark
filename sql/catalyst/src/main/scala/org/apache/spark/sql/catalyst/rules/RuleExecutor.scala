@@ -87,7 +87,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
             RuleExecutor.timeMap.addAndGet(rule.ruleName, runTime)
 
             if (!result.fastEquals(plan)) {
-              logTrace(
+              logInfo(
                 s"""
                   |=== Applying Rule ${rule.ruleName} ===
                   |${sideBySide(plan.treeString, result.treeString).mkString("\n")}
