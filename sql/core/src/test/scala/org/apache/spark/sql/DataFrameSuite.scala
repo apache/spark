@@ -66,21 +66,6 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       Row(1, 1) :: Nil)
   }
 
-  ignore("invalid plan toString, debug mode") {
-    // Turn on debug mode so we can see invalid query plans.
-    import org.apache.spark.sql.execution.debug._
-
-    withSQLConf(SQLConf.DATAFRAME_EAGER_ANALYSIS.key -> "true") {
-      sqlContext.debug()
-
-      val badPlan = testData.select('badColumn)
-
-      assert(badPlan.toString contains badPlan.queryExecution.toString,
-        "toString on bad query plans should include the query execution but was:\n" +
-          badPlan.toString)
-    }
-  }
-
   test("access complex data") {
     assert(complexData.filter(complexData("a").getItem(0) === 2).count() == 1)
     assert(complexData.filter(complexData("m").getItem("1") === 1).count() == 1)
