@@ -432,9 +432,6 @@ private[hive] class TestHiveSparkSession(
       // Lots of tests fail if we do not change the partition whitelist from the default.
       sessionState.metadataHive.runSqlHive("set hive.metastore.partition.name.whitelist.pattern=.*")
 
-      // In case a test changed any of these values, restore all the original ones here.
-      sessionState.setDefaultOverrideConfs()
-
       sessionState.catalog.setCurrentDatabase("default")
     } catch {
       case e: Exception =>

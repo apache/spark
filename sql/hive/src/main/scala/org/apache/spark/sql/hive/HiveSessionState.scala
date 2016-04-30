@@ -44,8 +44,6 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
    */
   lazy val metadataHive: HiveClient = sharedState.metadataHive.newSession()
 
-  setDefaultOverrideConfs()
-
   /**
    * Internal catalog for managing table and database states.
    */
