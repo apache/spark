@@ -85,7 +85,8 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       tableType = CatalogTableType.EXTERNAL,
       storage = storage,
       schema = partitionColumnNames.map { c => CatalogColumn(name = c, dataType = "string") },
-      partitionColumnNames = partitionColumnNames), ignoreIfExists = false)
+      partitionColumnNames = partitionColumnNames,
+      createTime = 0L), ignoreIfExists = false)
   }
 
   private def createTablePartition(
