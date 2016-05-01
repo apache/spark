@@ -60,9 +60,6 @@ trait CheckAnalysis extends PredicateHelper {
             val from = operator.inputSet.map(_.name).mkString(", ")
             a.failAnalysis(s"cannot resolve '${a.sql}' given input columns: [$from]")
 
-          case ScalarSubquery(_, conditions, _) if conditions.nonEmpty =>
-            failAnalysis("Correlated scalar subqueries are not supported.")
-
           case e: Expression if e.checkInputDataTypes().isFailure =>
             e.checkInputDataTypes() match {
               case TypeCheckResult.TypeCheckFailure(message) =>
@@ -115,7 +112,7 @@ trait CheckAnalysis extends PredicateHelper {
           case f @ Filter(condition, child) =>
             splitConjunctivePredicates(condition).foreach {
               case _: PredicateSubquery | Not(_: PredicateSubquery) =>
-              case e if PredicateSubquery.hasPredicateSubquery(e) =>
+              case e if SubqueryExpression.hasPredicateSubquery(e) =>
                 failAnalysis(s"Predicate sub-queries cannot be used in nested conditions: $e")
               case e =>
             }
@@ -219,7 +216,13 @@ trait CheckAnalysis extends PredicateHelper {
                 | but one table has '${firstError.output.length}' columns and another table has
                 | '${s.children.head.output.length}' columns""".stripMargin)
 
-          case p if p.expressions.exists(PredicateSubquery.hasPredicateSubquery) =>
+          case p if p.expressions.exists(SubqueryExpression.hasCorrelatedScalarSubquery) =>
+            p match {
+              case _: Filter | _: Aggregate | _: Project => // Ok
+              case other => failAnalysis(
+                s"Correlated scalar sub-queries can only be used in a Filter/Aggregate/Project: $p")
+            }
+          case p if p.expressions.exists(SubqueryExpression.hasPredicateSubquery) =>
             failAnalysis(s"Predicate sub-queries can only be used in a Filter: $p")
 
           case _ => // Fallbacks to the following checks
