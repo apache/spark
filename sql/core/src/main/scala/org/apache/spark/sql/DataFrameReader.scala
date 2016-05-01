@@ -394,7 +394,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * through the entire data once, specify the schema explicitly using [[schema]].
    *
    * You can set the following CSV-specific options to deal with CSV files:
-   * <li>delimiter` (default `,`): sets the single character as a delimiter for each
+   * <li>`delimiter` (default `,`): sets the single character as a delimiter for each
    * field and value.</li>
    * <li>`charset` (default `UTF-8`): decodes the CSV files by the given encoding
    * type.</li>
