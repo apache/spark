@@ -582,15 +582,22 @@ class LinearRegressionSummary private[regression] (
    */
   @Since("1.5.0")
   val predictionCol: String = {
-    if (model.isDefined(model.predictionCol) && model.getPredictionCol != "") {
-      model.getPredictionCol
+    if (privateModel.isDefined(privateModel.predictionCol) && privateModel.getPredictionCol != "") {
+      privateModel.getPredictionCol
     } else {
       "prediction_" + java.util.UUID.randomUUID().toString
     }
   }
 
+  /**
+   * Private copy of model to ensure Params are not modified outside this class.
+   * Coefficients is not a deep copy, but that is acceptable.
+   *
+   * NOTE: [[predictionCol]] must be set correctly before the value of [[model]] is set,
+   *       and [[modelCopy]] must be set before [[predictions]] is set!
+   */
   protected val modelCopy: LinearRegressionModel =
-    model.copy(ParamMap.empty).setPredictionCol(predictionCol)
+    privateModel.copy(ParamMap.empty).setPredictionCol(predictionCol)
 
   /** predictions output by the model's `transform` method. */
   @Since("1.5.0") @transient val predictions: DataFrame = modelCopy.transform(dataset)
