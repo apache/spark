@@ -203,4 +203,10 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       Row(1) :: Row(1) :: Row(2) :: Row(2) :: Nil
     )
   }
+
+  test("having with function in subquery") {
+    checkAnswer(
+      sql("select a from l group by 1 having exists (select 1 from r where d < min(b))"),
+      Row(null) :: Row(1) :: Row(3) :: Nil)
+  }
 }

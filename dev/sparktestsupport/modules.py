@@ -334,6 +334,9 @@ pyspark_sql = Module(
     python_test_goals=[
         "pyspark.sql.types",
         "pyspark.sql.context",
+        "pyspark.sql.session",
+        "pyspark.sql.conf",
+        "pyspark.sql.catalog",
         "pyspark.sql.column",
         "pyspark.sql.dataframe",
         "pyspark.sql.group",

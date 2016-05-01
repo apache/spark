@@ -34,16 +34,16 @@ import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.CATALOG_IMPLEMENTATION
-import org.apache.spark.sql.{RuntimeConfig, SparkSession, SQLContext}
+import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions.ExpressionInfo
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.execution.command.{CacheTableCommand, HiveNativeCommand}
+import org.apache.spark.sql.execution.command.CacheTableCommand
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.client.HiveClient
-import org.apache.spark.sql.internal.{RuntimeConfigImpl, SQLConf}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 
 // SPARK-3729: Test key required to check for initialization errors with config.
@@ -136,7 +136,8 @@ private[hive] class TestHiveSparkSession(
   }
 
   @transient
-  override lazy val sessionState: TestHiveSessionState = new TestHiveSessionState(self)
+  override lazy val sessionState: TestHiveSessionState =
+    new TestHiveSessionState(self, warehousePath)
 
   override def newSession(): TestHiveSparkSession = {
     new TestHiveSparkSession(
@@ -152,23 +153,9 @@ private[hive] class TestHiveSparkSession(
   // By clearing the port we force Spark to pick a new one.  This allows us to rerun tests
   // without restarting the JVM.
   System.clearProperty("spark.hostPort")
-  CommandProcessorFactory.clean(sessionState.hiveconf)
-
-  sessionState.hiveconf.set("hive.plan.serialization.format", "javaXML")
-
-  // A snapshot of the entries in the starting SQLConf
-  // We save this because tests can mutate this singleton object if they want
-  // This snapshot is saved when we create this TestHiveSparkSession.
-  val initialSQLConf: SQLConf = {
-    val snapshot = new SQLConf
-    sessionState.conf.getAllConfs.foreach { case (k, v) => snapshot.setConfString(k, v) }
-    snapshot
-  }
-
-  val testTempDir = Utils.createTempDir()
 
   // For some hive test case which contain ${system:test.tmp.dir}
-  System.setProperty("test.tmp.dir", testTempDir.getCanonicalPath)
+  System.setProperty("test.tmp.dir", Utils.createTempDir().getCanonicalPath)
 
   /** The location of the compiled hive distribution */
   lazy val hiveHome = envVarToFile("HIVE_HOME")
@@ -237,20 +224,20 @@ private[hive] class TestHiveSparkSession(
       "CREATE TABLE src1 (key INT, value STRING)".cmd,
       s"LOAD DATA LOCAL INPATH '${getHiveFile("data/files/kv3.txt")}' INTO TABLE src1".cmd),
     TestTable("srcpart", () => {
-      sessionState.runNativeSql(
+      sql(
         "CREATE TABLE srcpart (key INT, value STRING) PARTITIONED BY (ds STRING, hr STRING)")
       for (ds <- Seq("2008-04-08", "2008-04-09"); hr <- Seq("11", "12")) {
-        sessionState.runNativeSql(
+        sql(
           s"""LOAD DATA LOCAL INPATH '${getHiveFile("data/files/kv1.txt")}'
              |OVERWRITE INTO TABLE srcpart PARTITION (ds='$ds',hr='$hr')
            """.stripMargin)
       }
     }),
     TestTable("srcpart1", () => {
-      sessionState.runNativeSql(
+      sql(
         "CREATE TABLE srcpart1 (key INT, value STRING) PARTITIONED BY (ds STRING, hr INT)")
       for (ds <- Seq("2008-04-08", "2008-04-09"); hr <- 11 to 12) {
-        sessionState.runNativeSql(
+        sql(
           s"""LOAD DATA LOCAL INPATH '${getHiveFile("data/files/kv1.txt")}'
              |OVERWRITE INTO TABLE srcpart1 PARTITION (ds='$ds',hr='$hr')
            """.stripMargin)
@@ -261,7 +248,7 @@ private[hive] class TestHiveSparkSession(
       import org.apache.hadoop.mapred.{SequenceFileInputFormat, SequenceFileOutputFormat}
       import org.apache.thrift.protocol.TBinaryProtocol
 
-      sessionState.runNativeSql(
+      sql(
         s"""
          |CREATE TABLE src_thrift(fake INT)
          |ROW FORMAT SERDE '${classOf[ThriftDeserializer].getName}'
@@ -274,7 +261,7 @@ private[hive] class TestHiveSparkSession(
          |OUTPUTFORMAT '${classOf[SequenceFileOutputFormat[_, _]].getName}'
         """.stripMargin)
 
-      sessionState.runNativeSql(
+      sql(
         s"LOAD DATA LOCAL INPATH '${getHiveFile("data/files/complex.seq")}' INTO TABLE src_thrift")
     }),
     TestTable("serdeins",
@@ -433,24 +420,17 @@ private[hive] class TestHiveSparkSession(
         foreach { udfName => FunctionRegistry.unregisterTemporaryUDF(udfName) }
 
       // Some tests corrupt this value on purpose, which breaks the RESET call below.
-      sessionState.hiveconf.set("fs.default.name", new File(".").toURI.toString)
+      sessionState.conf.setConfString("fs.default.name", new File(".").toURI.toString)
       // It is important that we RESET first as broken hooks that might have been set could break
       // other sql exec here.
-      sessionState.executionHive.runSqlHive("RESET")
       sessionState.metadataHive.runSqlHive("RESET")
       // For some reason, RESET does not reset the following variables...
       // https://issues.apache.org/jira/browse/HIVE-9004
-      sessionState.runNativeSql("set hive.table.parameters.default=")
-      sessionState.runNativeSql("set datanucleus.cache.collections=true")
-      sessionState.runNativeSql("set datanucleus.cache.collections.lazy=true")
+      sessionState.metadataHive.runSqlHive("set hive.table.parameters.default=")
+      sessionState.metadataHive.runSqlHive("set datanucleus.cache.collections=true")
+      sessionState.metadataHive.runSqlHive("set datanucleus.cache.collections.lazy=true")
       // Lots of tests fail if we do not change the partition whitelist from the default.
-      sessionState.runNativeSql("set hive.metastore.partition.name.whitelist.pattern=.*")
-
-      // In case a test changed any of these values, restore all the original ones here.
-      TestHiveContext.hiveClientConfigurations(
-        sessionState.hiveconf, warehousePath, scratchDirPath, metastoreTemporaryConf)
-          .foreach { case (k, v) => sessionState.metadataHive.runSqlHive(s"SET $k=$v") }
-      sessionState.setDefaultOverrideConfs()
+      sessionState.metadataHive.runSqlHive("set hive.metastore.partition.name.whitelist.pattern=.*")
 
       sessionState.catalog.setCurrentDatabase("default")
     } catch {
@@ -477,7 +457,6 @@ private[hive] class TestHiveQueryExecution(
 
   override lazy val analyzed: LogicalPlan = {
     val describedTables = logical match {
-      case HiveNativeCommand(sparkSession.describedTable(tbl)) => tbl :: Nil
       case CacheTableCommand(tbl, _, _) => tbl :: Nil
       case _ => Nil
     }
@@ -526,8 +505,10 @@ private[hive] class TestHiveSharedState(
 }
 
 
-private[hive] class TestHiveSessionState(sparkSession: TestHiveSparkSession)
-  extends HiveSessionState(sparkSession) {
+private[hive] class TestHiveSessionState(
+    sparkSession: TestHiveSparkSession,
+    warehousePath: File)
+  extends HiveSessionState(sparkSession) { self =>
 
   override lazy val conf: SQLConf = {
     new SQLConf {
@@ -535,9 +516,8 @@ private[hive] class TestHiveSessionState(sparkSession: TestHiveSparkSession)
       override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
       override def clear(): Unit = {
         super.clear()
-        TestHiveContext.overrideConfs.map {
-          case (key, value) => setConfString(key, value)
-        }
+        TestHiveContext.overrideConfs.foreach { case (k, v) => setConfString(k, v) }
+        setConfString("hive.metastore.warehouse.dir", self.warehousePath.toURI.toString)
       }
     }
   }
@@ -578,23 +558,21 @@ private[hive] object TestHiveContext {
       warehousePath: File,
       scratchDirPath: File,
       metastoreTemporaryConf: Map[String, String]): HiveClient = {
-    val hiveConf = new HiveConf(hadoopConf, classOf[HiveConf])
     HiveUtils.newClientForMetadata(
       conf,
-      hiveConf,
       hadoopConf,
-      hiveClientConfigurations(hiveConf, warehousePath, scratchDirPath, metastoreTemporaryConf))
+      hiveClientConfigurations(hadoopConf, warehousePath, scratchDirPath, metastoreTemporaryConf))
   }
 
   /**
    * Configurations needed to create a [[HiveClient]].
    */
   def hiveClientConfigurations(
-      hiveconf: HiveConf,
+      hadoopConf: Configuration,
       warehousePath: File,
       scratchDirPath: File,
       metastoreTemporaryConf: Map[String, String]): Map[String, String] = {
-    HiveUtils.hiveClientConfigurations(hiveconf) ++ metastoreTemporaryConf ++ Map(
+    HiveUtils.hiveClientConfigurations(hadoopConf) ++ metastoreTemporaryConf ++ Map(
       ConfVars.METASTOREWAREHOUSE.varname -> warehousePath.toURI.toString,
       ConfVars.METASTORE_INTEGER_JDO_PUSHDOWN.varname -> "true",
       ConfVars.SCRATCHDIR.varname -> scratchDirPath.toURI.toString,
