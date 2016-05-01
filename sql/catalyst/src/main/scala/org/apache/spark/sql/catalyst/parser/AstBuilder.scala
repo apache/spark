@@ -248,6 +248,26 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   }
 
   /**
+   * Create a partition range specification map.
+   * Note, we do not support partition range yet. Thus, only support the partition spec specified
+   * in the following format: partition_column=val
+   */
+  override def visitPartitionRangeSpec(
+      ctx: PartitionRangeSpecContext): Map[String, String] = withOrigin(ctx) {
+    ctx.partitionRangeVal.asScala.map { pVal =>
+      val operator = pVal.comparisonOperator().getChild(0).asInstanceOf[TerminalNode]
+      if (operator.getSymbol.getType != SqlBaseParser.EQ) {
+        throw new ParseException(
+          s"Unsupported comparison operator in partition spec: '${operator.getSymbol.getText}'",
+          ctx)
+      }
+      val name = pVal.identifier.getText.toLowerCase
+      val value = Option(pVal.constant).map(visitStringConstant).orNull.map(identity)
+      name -> value
+    }.toMap
+  }
+
+  /**
    * Convert a constant of any type into a string. This is typically used in DDL commands, and its
    * main purpose is to prevent slight differences due to back to back conversions i.e.:
    * String -> Literal -> String.

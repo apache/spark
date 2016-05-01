@@ -284,9 +284,12 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     catalog.dropPartitions(
       "db2", "tbl2", Seq(part1.spec), ignoreIfNotExists = false)
     assert(catalogPartitionsEqual(catalog, "db2", "tbl2", Seq(part2)))
+
     resetState()
     val catalog2 = newBasicCatalog()
     assert(catalogPartitionsEqual(catalog2, "db2", "tbl2", Seq(part1, part2)))
+    // Although we disallow users to drop multiple partitions in DDL command for preserving
+    // command atomicity, we still can drop multiple partitions using internal ExternalCatalog APIs
     catalog2.dropPartitions(
       "db2", "tbl2", Seq(part1.spec, part2.spec), ignoreIfNotExists = false)
     assert(catalog2.listPartitions("db2", "tbl2").isEmpty)
@@ -511,6 +514,12 @@ abstract class CatalogTestUtils {
   lazy val part1 = CatalogTablePartition(Map("a" -> "1", "b" -> "2"), storageFormat)
   lazy val part2 = CatalogTablePartition(Map("a" -> "3", "b" -> "4"), storageFormat)
   lazy val part3 = CatalogTablePartition(Map("a" -> "5", "b" -> "6"), storageFormat)
+  lazy val partWithMixedOrder = CatalogTablePartition(Map("b" -> "6", "a" -> "6"), storageFormat)
+  lazy val partWithLessColumns = CatalogTablePartition(Map("a" -> "1"), storageFormat)
+  lazy val partWithMoreColumns =
+    CatalogTablePartition(Map("a" -> "5", "b" -> "6", "c" -> "7"), storageFormat)
+  lazy val partWithUnknownColumns =
+    CatalogTablePartition(Map("a" -> "5", "unknown" -> "6"), storageFormat)
   lazy val funcClass = "org.apache.spark.myFunc"
 
   /**

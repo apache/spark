@@ -405,15 +405,25 @@ class DDLCommandSuite extends PlanTest {
        |ALTER TABLE table_name DROP PARTITION
        |(dt='2008-08-08', country='us'), PARTITION (dt='2009-09-09', country='uk') PURGE
       """.stripMargin
+    val sql3_table =
+      """
+        |ALTER TABLE table_name DROP PARTITION (dt='2009-09-09', country<'uk')
+      """.stripMargin
+
     val sql1_view = sql1_table.replace("TABLE", "VIEW")
     // Note: ALTER VIEW DROP PARTITION does not support PURGE
     val sql2_view = sql2_table.replace("TABLE", "VIEW").replace("PURGE", "")
 
     val parsed1_table = parser.parsePlan(sql1_table)
-    val e = intercept[ParseException] {
+    var e = intercept[ParseException] {
       parser.parsePlan(sql2_table)
     }
     assert(e.getMessage.contains("Operation not allowed"))
+
+    e = intercept[ParseException] {
+      parser.parsePlan(sql3_table)
+    }
+    assert(e.getMessage.contains("Unsupported comparison operator in partition spec: '<'"))
 
     intercept[ParseException] {
       parser.parsePlan(sql1_view)

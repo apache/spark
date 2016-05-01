@@ -437,6 +437,12 @@ class SessionCatalog(
       tableName: TableIdentifier,
       parts: Seq[CatalogTablePartition],
       ignoreIfExists: Boolean): Unit = {
+    val tableMetadata = getTableMetadata(tableName)
+    // Verify if each part exactly matches the partition spec of the table definition
+    parts.foreach { p =>
+      requireExactMatchedPartitionSpec(
+        p.spec.keys.toSeq, tableMetadata.partitionColumnNames, tableName)
+    }
     val db = tableName.database.getOrElse(currentDb)
     val table = formatTableName(tableName.table)
     externalCatalog.createPartitions(db, table, parts, ignoreIfExists)
@@ -448,11 +454,19 @@ class SessionCatalog(
    */
   def dropPartitions(
       tableName: TableIdentifier,
-      parts: Seq[TablePartitionSpec],
+      specs: Seq[TablePartitionSpec],
       ignoreIfNotExists: Boolean): Unit = {
+    val tableMetadata = getTableMetadata(tableName)
+    // Verify if each part exactly matches the partition spec of the table definition
+    // Here, we disallow users to drop multiple partition using one spec for atomicity.
+    // For example, the partial spec a=1 could contains multiple partitions a=1/b=1 and a=1/b=2
+    specs.foreach { s =>
+      requireExactMatchedPartitionSpec(
+        s.keys.toSeq, tableMetadata.partitionColumnNames, tableName)
+    }
     val db = tableName.database.getOrElse(currentDb)
     val table = formatTableName(tableName.table)
-    externalCatalog.dropPartitions(db, table, parts, ignoreIfNotExists)
+    externalCatalog.dropPartitions(db, table, specs, ignoreIfNotExists)
   }
 
   /**
@@ -465,6 +479,11 @@ class SessionCatalog(
       tableName: TableIdentifier,
       specs: Seq[TablePartitionSpec],
       newSpecs: Seq[TablePartitionSpec]): Unit = {
+    val tableMetadata = getTableMetadata(tableName)
+    // Verify if old and new specs exactly match the partition spec of the table definition
+    Seq(specs, newSpecs).flatten.foreach { s =>
+      requireExactMatchedPartitionSpec(s.keys.toSeq, tableMetadata.partitionColumnNames, tableName)
+    }
     val db = tableName.database.getOrElse(currentDb)
     val table = formatTableName(tableName.table)
     externalCatalog.renamePartitions(db, table, specs, newSpecs)
@@ -480,6 +499,12 @@ class SessionCatalog(
    * this becomes a no-op.
    */
   def alterPartitions(tableName: TableIdentifier, parts: Seq[CatalogTablePartition]): Unit = {
+    val tableMetadata = getTableMetadata(tableName)
+    // Verify if each part exactly matches the partition spec of the table definition
+    parts.foreach { p =>
+      requireExactMatchedPartitionSpec(
+        p.spec.keys.toSeq, tableMetadata.partitionColumnNames, tableName)
+    }
     val db = tableName.database.getOrElse(currentDb)
     val table = formatTableName(tableName.table)
     externalCatalog.alterPartitions(db, table, parts)
@@ -490,6 +515,9 @@ class SessionCatalog(
    * If no database is specified, assume the table is in the current database.
    */
   def getPartition(tableName: TableIdentifier, spec: TablePartitionSpec): CatalogTablePartition = {
+    val tableMetadata = getTableMetadata(tableName)
+    // Verify if the input spec exactly matches the partition spec of the table definition
+    requireExactMatchedPartitionSpec(spec.keys.toSeq, tableMetadata.partitionColumnNames, tableName)
     val db = tableName.database.getOrElse(currentDb)
     val table = formatTableName(tableName.table)
     externalCatalog.getPartition(db, table, spec)
@@ -508,6 +536,21 @@ class SessionCatalog(
     val db = tableName.database.getOrElse(currentDb)
     val table = formatTableName(tableName.table)
     externalCatalog.listPartitions(db, table, partialSpec)
+  }
+
+  /**
+   * Verify if the input partition spec exactly matches the existing defined partition spec
+   * The columns must be the same but the orders could be different.
+   */
+  private def requireExactMatchedPartitionSpec(
+      input: Seq[String],
+      defined: Seq[String],
+      tableName: TableIdentifier): Unit = {
+    if (input.sorted != defined.sorted) {
+      throw new AnalysisException(
+        s"Partition spec is invalid. The spec (${input.mkString(", ")}) must match " +
+          s"the partition spec (${defined.mkString(", ")}) defined in table '$tableName'")
+    }
   }
 
   // ----------------------------------------------------------------------------

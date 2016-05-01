@@ -398,7 +398,7 @@ private[hive] class HiveClientImpl(
       table: String,
       specs: Seq[TablePartitionSpec],
       ignoreIfNotExists: Boolean): Unit = withHiveState {
-    // TODO: figure out how to drop multiple partitions in one call
+    // TODO: figure out how to drop multiple partitions in one call without breaking atomicity
     val hiveTable = client.getTable(db, table, true /* throw exception */)
     specs.foreach { s =>
       // The provided spec here can be a partial spec, i.e. it will match all partitions

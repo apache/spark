@@ -26,5 +26,4 @@ class InMemoryCatalogSuite extends ExternalCatalogSuite {
     override val tableOutputFormat: String = "org.apache.park.SequenceFileOutputFormat"
     override def newEmptyCatalog(): ExternalCatalog = new InMemoryCatalog
   }
-
 }
