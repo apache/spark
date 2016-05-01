@@ -214,9 +214,9 @@ private[joins] class UnsafeHashedRelation(
   }
 
   private def read(
-                    readInt: () => Int,
-                    readLong: () => Long,
-                    readBuffer: (Array[Byte], Int, Int) => Unit): Unit = {
+      readInt: () => Int,
+      readLong: () => Long,
+      readBuffer: (Array[Byte], Int, Int) => Unit): Unit = {
     numFields = readInt()
     resultRow = new UnsafeRow(numFields)
     val nKeys = readLong()
