@@ -29,6 +29,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{CATALOG_IMPLEMENTATION, ConfigEntry}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalog.Catalog
@@ -40,7 +41,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, 
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.ui.SQLListener
-import org.apache.spark.sql.internal.{CatalogImpl, SessionState, SharedState}
+import org.apache.spark.sql.internal.{CatalogImpl, SessionState, SharedState, SQLConf}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.{DataType, LongType, StructType}
 import org.apache.spark.sql.util.ExecutionListenerManager
@@ -53,7 +54,7 @@ import org.apache.spark.util.Utils
 class SparkSession private(
     @transient val sparkContext: SparkContext,
     @transient private val existingSharedState: Option[SharedState])
-  extends Serializable { self =>
+  extends Serializable with Logging { self =>
 
   def this(sc: SparkContext) {
     this(sc, None)
@@ -63,6 +64,19 @@ class SparkSession private(
   /* ----------------------- *
    |  Session-related state  |
    * ----------------------- */
+
+  {
+    val defaultWarehousePath =
+      SQLConf.WAREHOUSE_PATH
+        .defaultValueString
+        .replace("${system:user.dir}", System.getProperty("user.dir"))
+    val warehousePath = sparkContext.conf.get(
+      SQLConf.WAREHOUSE_PATH.key,
+      defaultWarehousePath)
+    sparkContext.conf.set(SQLConf.WAREHOUSE_PATH.key, warehousePath)
+    sparkContext.conf.set("hive.metastore.warehouse.dir", warehousePath)
+    logInfo(s"Setting warehouse location to $warehousePath")
+  }
 
   /**
    * State shared across sessions, including the [[SparkContext]], cached data, listener,

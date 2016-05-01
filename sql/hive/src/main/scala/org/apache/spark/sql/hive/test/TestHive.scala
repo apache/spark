@@ -115,6 +115,12 @@ private[hive] class TestHiveSparkSession(
     @transient private val existingSharedState: Option[TestHiveSharedState])
   extends SparkSession(sc) with Logging { self =>
 
+  // TODO: We need to set the temp warehouse path to sc's conf.
+  // Right now, In SparkSession, we will set the warehouse path to the default one
+  // instead of the temp one. Then, we override the setting in TestHiveSharedState
+  // when we creating metadataHive. This flow is not easy to follow and can introduce
+  // confusion when a developer is debugging an issue. We need to refactor this part
+  // to just set the temp warehouse path in sc's conf.
   def this(sc: SparkContext) {
     this(
       sc,
@@ -573,6 +579,8 @@ private[hive] object TestHiveContext {
       scratchDirPath: File,
       metastoreTemporaryConf: Map[String, String]): Map[String, String] = {
     HiveUtils.hiveClientConfigurations(hadoopConf) ++ metastoreTemporaryConf ++ Map(
+      // Override WAREHOUSE_PATH and METASTOREWAREHOUSE to use the given path.
+      SQLConf.WAREHOUSE_PATH.key -> warehousePath.toURI.toString,
       ConfVars.METASTOREWAREHOUSE.varname -> warehousePath.toURI.toString,
       ConfVars.METASTORE_INTEGER_JDO_PUSHDOWN.varname -> "true",
       ConfVars.SCRATCHDIR.varname -> scratchDirPath.toURI.toString,
