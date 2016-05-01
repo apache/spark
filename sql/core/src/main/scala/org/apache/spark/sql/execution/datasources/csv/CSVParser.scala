@@ -65,10 +65,8 @@ private[sql] class LineCsvWriter(params: CSVOptions, headers: Seq[String]) exten
   private val format = writerSettings.getFormat
 
   format.setDelimiter(params.delimiter)
-  format.setLineSeparator(params.rowSeparator)
   format.setQuote(params.quote)
   format.setQuoteEscape(params.escape)
-  format.setComment(params.comment)
 
   writerSettings.setNullValue(params.nullValue)
   writerSettings.setEmptyValue(params.nullValue)
