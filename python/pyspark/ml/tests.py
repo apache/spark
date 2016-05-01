@@ -39,7 +39,6 @@ else:
     import unittest
 
 from shutil import rmtree
-from itertools import chain, imap
 import tempfile
 import numpy as np
 import inspect
@@ -1068,13 +1067,11 @@ class DefaultValuesTests(PySparkTestCase):
         import pyspark.ml.regression
         modules = [pyspark.ml.feature, pyspark.ml.classification, pyspark.ml.clustering,
                    pyspark.ml.pipeline, pyspark.ml.recommendation, pyspark.ml.regression]
-        clss = map(lambda x: x[1],
-                   filter(lambda x: (not x[0].endswith('Model')) and issubclass(x[1], JavaParams),
-                          chain.from_iterable(imap(
-                              lambda m: inspect.getmembers(m, inspect.isclass), modules))))
-        for cls in clss:
-            if not inspect.isabstract(cls):
-                self.check_params(cls())
+        for module in modules:
+            for name, cls in inspect.getmembers(module, inspect.isclass):
+                if not name.endswith('Model') and issubclass(cls, JavaParams)\
+                        and not inspect.isabstract(cls):
+                    self.check_params(cls())
 
 
 if __name__ == "__main__":
