@@ -164,9 +164,8 @@ abstract class NewAccumulator[IN, OUT] extends Serializable {
    * Developers should extend addImpl to customize the adding functionality.
    */
   final def add(v: IN): Unit = {
-    assertMetadataNotNull()
     addImpl(v)
-    if (metadata.dataProperty) {
+    if (metadata != null && metadata.dataProperty) {
       val updateInfo = TaskContext.get().getRDDPartitionInfo()
       val base = pending.getOrElse(updateInfo, copyAndReset())
       base.atDriverSide = false
