@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.util.StringUtils
  * All public methods should be synchronized for thread-safety.
  */
 class InMemoryCatalog extends ExternalCatalog {
-  import ExternalCatalog._
+  import CatalogTypes.TablePartitionSpec
 
   private class TableDesc(var table: CatalogTable) {
     val partitions = new mutable.HashMap[TablePartitionSpec, CatalogTablePartition]
@@ -300,8 +300,13 @@ class InMemoryCatalog extends ExternalCatalog {
 
   override def listPartitions(
       db: String,
-      table: String): Seq[CatalogTablePartition] = synchronized {
+      table: String,
+      partialSpec: Option[TablePartitionSpec] = None): Seq[CatalogTablePartition] = synchronized {
     requireTableExists(db, table)
+    if (partialSpec.nonEmpty) {
+      throw new AnalysisException("listPartition does not support partition spec in " +
+        "InMemoryCatalog.")
+    }
     catalog(db).tables(table).partitions.values.toSeq
   }
 

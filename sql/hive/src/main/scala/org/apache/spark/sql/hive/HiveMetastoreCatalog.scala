@@ -18,24 +18,22 @@
 package org.apache.spark.sql.hive
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable
 
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 import org.apache.hadoop.fs.{FileStatus, Path}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, SaveMode, SQLContext}
+import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.execution.command.{CreateTableAsSelectLogicalPlan, CreateViewCommand, HiveNativeCommand}
+import org.apache.spark.sql.execution.command.{CreateTableAsSelectLogicalPlan, CreateViewCommand}
 import org.apache.spark.sql.execution.datasources.{Partition => _, _}
 import org.apache.spark.sql.execution.datasources.parquet.{DefaultSource => ParquetDefaultSource, ParquetRelation}
 import org.apache.spark.sql.hive.orc.{DefaultSource => OrcDefaultSource}
-import org.apache.spark.sql.internal.HiveSerDe
 import org.apache.spark.sql.types._
 
 
@@ -45,16 +43,15 @@ import org.apache.spark.sql.types._
  * This is still used for things like creating data source tables, but in the future will be
  * cleaned up to integrate more nicely with [[HiveExternalCatalog]].
  */
-private[hive] class HiveMetastoreCatalog(hive: SQLContext) extends Logging {
-  private val conf = hive.conf
-  private val sessionState = hive.sessionState.asInstanceOf[HiveSessionState]
-  private val client = hive.sharedState.asInstanceOf[HiveSharedState].metadataHive
-  private val hiveconf = sessionState.hiveconf
+private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Logging {
+  private val conf = sparkSession.conf
+  private val sessionState = sparkSession.sessionState.asInstanceOf[HiveSessionState]
+  private val client = sparkSession.sharedState.asInstanceOf[HiveSharedState].metadataHive
 
   /** A fully qualified identifier for a table (i.e., database.tableName) */
   case class QualifiedTableName(database: String, name: String)
 
-  private def getCurrentDatabase: String = hive.sessionState.catalog.getCurrentDatabase
+  private def getCurrentDatabase: String = sessionState.catalog.getCurrentDatabase
 
   def getQualifiedTableName(tableIdent: TableIdentifier): QualifiedTableName = {
     QualifiedTableName(
@@ -124,7 +121,7 @@ private[hive] class HiveMetastoreCatalog(hive: SQLContext) extends Logging {
         val options = table.storage.serdeProperties
         val dataSource =
           DataSource(
-            hive,
+            sparkSession,
             userSpecifiedSchema = userSpecifiedSchema,
             partitionColumns = partitionColumns,
             bucketSpec = bucketSpec,
@@ -174,17 +171,17 @@ private[hive] class HiveMetastoreCatalog(hive: SQLContext) extends Logging {
       // Then, if alias is specified, wrap the table with a Subquery using the alias.
       // Otherwise, wrap the table with a Subquery using the table name.
       alias.map(a => SubqueryAlias(a, qualifiedTable)).getOrElse(qualifiedTable)
-    } else if (table.tableType == CatalogTableType.VIRTUAL_VIEW) {
+    } else if (table.tableType == CatalogTableType.VIEW) {
       val viewText = table.viewText.getOrElse(sys.error("Invalid view without text."))
       alias match {
         // because hive use things like `_c0` to build the expanded text
         // currently we cannot support view from "create view v1(c1) as ..."
-        case None => SubqueryAlias(table.identifier.table, hive.parseSql(viewText))
-        case Some(aliasText) => SubqueryAlias(aliasText, hive.parseSql(viewText))
+        case None => SubqueryAlias(table.identifier.table, sparkSession.parseSql(viewText))
+        case Some(aliasText) => SubqueryAlias(aliasText, sparkSession.parseSql(viewText))
       }
     } else {
       MetastoreRelation(
-        qualifiedTableName.database, qualifiedTableName.name, alias)(table, client, hive)
+        qualifiedTableName.database, qualifiedTableName.name, alias)(table, client, sparkSession)
     }
   }
 
@@ -275,19 +272,20 @@ private[hive] class HiveMetastoreCatalog(hive: SQLContext) extends Logging {
 
       val hadoopFsRelation = cached.getOrElse {
         val paths = new Path(metastoreRelation.catalogTable.storage.locationUri.get) :: Nil
-        val fileCatalog = new MetaStoreFileCatalog(hive, paths, partitionSpec)
+        val fileCatalog = new MetaStoreFileCatalog(sparkSession, paths, partitionSpec)
 
         val inferredSchema = if (fileType.equals("parquet")) {
-          val inferredSchema = defaultSource.inferSchema(hive, options, fileCatalog.allFiles())
+          val inferredSchema =
+            defaultSource.inferSchema(sparkSession, options, fileCatalog.allFiles())
           inferredSchema.map { inferred =>
             ParquetRelation.mergeMetastoreParquetSchema(metastoreSchema, inferred)
           }.getOrElse(metastoreSchema)
         } else {
-          defaultSource.inferSchema(hive, options, fileCatalog.allFiles()).get
+          defaultSource.inferSchema(sparkSession, options, fileCatalog.allFiles()).get
         }
 
         val relation = HadoopFsRelation(
-          sqlContext = hive,
+          sparkSession = sparkSession,
           location = fileCatalog,
           partitionSchema = partitionSchema,
           dataSchema = inferredSchema,
@@ -314,7 +312,7 @@ private[hive] class HiveMetastoreCatalog(hive: SQLContext) extends Logging {
         val created =
           LogicalRelation(
             DataSource(
-              sqlContext = hive,
+              sparkSession = sparkSession,
               paths = paths,
               userSpecifiedSchema = Some(metastoreRelation.schema),
               bucketSpec = bucketSpec,
@@ -436,9 +434,6 @@ private[hive] class HiveMetastoreCatalog(hive: SQLContext) extends Logging {
       case p: LogicalPlan if !p.childrenResolved => p
       case p: LogicalPlan if p.resolved => p
 
-      case CreateViewCommand(table, child, allowExisting, replace, sql) if !conf.nativeView =>
-        HiveNativeCommand(sql)
-
       case p @ CreateTableAsSelectLogicalPlan(table, child, allowExisting) =>
         val schema = if (table.schema.nonEmpty) {
           table.schema
@@ -462,7 +457,7 @@ private[hive] class HiveMetastoreCatalog(hive: SQLContext) extends Logging {
           val mode = if (allowExisting) SaveMode.Ignore else SaveMode.ErrorIfExists
           CreateTableUsingAsSelect(
             TableIdentifier(desc.identifier.table),
-            conf.defaultDataSourceName,
+            sessionState.conf.defaultDataSourceName,
             temporary = false,
             Array.empty[String],
             bucketSpec = None,
@@ -538,13 +533,17 @@ private[hive] class HiveMetastoreCatalog(hive: SQLContext) extends Logging {
  * the information from the metastore.
  */
 private[hive] class MetaStoreFileCatalog(
-    ctx: SQLContext,
+    sparkSession: SparkSession,
     paths: Seq[Path],
     partitionSpecFromHive: PartitionSpec)
-  extends HDFSFileCatalog(ctx, Map.empty, paths, Some(partitionSpecFromHive.partitionColumns)) {
+  extends HDFSFileCatalog(
+    sparkSession,
+    Map.empty,
+    paths,
+    Some(partitionSpecFromHive.partitionColumns)) {
 
   override def getStatus(path: Path): Array[FileStatus] = {
-    val fs = path.getFileSystem(ctx.sessionState.hadoopConf)
+    val fs = path.getFileSystem(sparkSession.sessionState.newHadoopConf())
     fs.listStatus(path)
   }
 

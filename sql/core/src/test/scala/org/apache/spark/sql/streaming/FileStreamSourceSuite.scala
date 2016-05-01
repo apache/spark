@@ -204,7 +204,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
         createFileStreamSourceAndGetSchema(
           format = Some("parquet"), path = Some(new File(src, "1").getCanonicalPath), schema = None)
       }
-      assert("Unable to infer schema.  It must be specified manually.;" === e.getMessage)
+      assert("Unable to infer schema. It must be specified manually.;" === e.getMessage)
     }
   }
 
@@ -235,7 +235,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
         createFileStreamSourceAndGetSchema(
           format = Some("json"), path = Some(src.getCanonicalPath), schema = None)
       }
-      assert("Unable to infer schema.  It must be specified manually.;" === e.getMessage)
+      assert("Unable to infer schema. It must be specified manually.;" === e.getMessage)
     }
   }
 

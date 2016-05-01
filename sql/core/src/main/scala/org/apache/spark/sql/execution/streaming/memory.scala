@@ -58,11 +58,11 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
   def schema: StructType = encoder.schema
 
   def toDS()(implicit sqlContext: SQLContext): Dataset[A] = {
-    Dataset(sqlContext, logicalPlan)
+    Dataset(sqlContext.sparkSession, logicalPlan)
   }
 
   def toDF()(implicit sqlContext: SQLContext): DataFrame = {
-    Dataset.ofRows(sqlContext, logicalPlan)
+    Dataset.ofRows(sqlContext.sparkSession, logicalPlan)
   }
 
   def addData(data: A*): Offset = {
@@ -91,7 +91,7 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
   }
 
   /**
-   * Returns the next batch of data that is available after `start`, if any is available.
+   * Returns the data that is between the offsets (`start`, `end`].
    */
   override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
     val startOrdinal =

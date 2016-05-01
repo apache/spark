@@ -74,15 +74,15 @@ case class CreateTempTableUsing(
       s"Temporary table '$tableIdent' should not have specified a database")
   }
 
-  def run(sqlContext: SQLContext): Seq[Row] = {
+  def run(sparkSession: SparkSession): Seq[Row] = {
     val dataSource = DataSource(
-      sqlContext,
+      sparkSession,
       userSpecifiedSchema = userSpecifiedSchema,
       className = provider,
       options = options)
-    sqlContext.sessionState.catalog.createTempTable(
+    sparkSession.sessionState.catalog.createTempTable(
       tableIdent.table,
-      Dataset.ofRows(sqlContext, LogicalRelation(dataSource.resolveRelation())).logicalPlan,
+      Dataset.ofRows(sparkSession, LogicalRelation(dataSource.resolveRelation())).logicalPlan,
       overrideIfExists = true)
 
     Seq.empty[Row]
@@ -102,18 +102,18 @@ case class CreateTempTableUsingAsSelect(
       s"Temporary table '$tableIdent' should not have specified a database")
   }
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    val df = Dataset.ofRows(sqlContext, query)
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val df = Dataset.ofRows(sparkSession, query)
     val dataSource = DataSource(
-      sqlContext,
+      sparkSession,
       className = provider,
       partitionColumns = partitionColumns,
       bucketSpec = None,
       options = options)
     val result = dataSource.write(mode, df)
-    sqlContext.sessionState.catalog.createTempTable(
+    sparkSession.sessionState.catalog.createTempTable(
       tableIdent.table,
-      Dataset.ofRows(sqlContext, LogicalRelation(result)).logicalPlan,
+      Dataset.ofRows(sparkSession, LogicalRelation(result)).logicalPlan,
       overrideIfExists = true)
 
     Seq.empty[Row]
@@ -123,23 +123,23 @@ case class CreateTempTableUsingAsSelect(
 case class RefreshTable(tableIdent: TableIdentifier)
   extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
+  override def run(sparkSession: SparkSession): Seq[Row] = {
     // Refresh the given table's metadata first.
-    sqlContext.sessionState.catalog.refreshTable(tableIdent)
+    sparkSession.sessionState.catalog.refreshTable(tableIdent)
 
     // If this table is cached as a InMemoryColumnarRelation, drop the original
     // cached version and make the new version cached lazily.
-    val logicalPlan = sqlContext.sessionState.catalog.lookupRelation(tableIdent)
+    val logicalPlan = sparkSession.sessionState.catalog.lookupRelation(tableIdent)
     // Use lookupCachedData directly since RefreshTable also takes databaseName.
-    val isCached = sqlContext.cacheManager.lookupCachedData(logicalPlan).nonEmpty
+    val isCached = sparkSession.cacheManager.lookupCachedData(logicalPlan).nonEmpty
     if (isCached) {
       // Create a data frame to represent the table.
       // TODO: Use uncacheTable once it supports database name.
-      val df = Dataset.ofRows(sqlContext, logicalPlan)
+      val df = Dataset.ofRows(sparkSession, logicalPlan)
       // Uncache the logicalPlan.
-      sqlContext.cacheManager.tryUncacheQuery(df, blocking = true)
+      sparkSession.cacheManager.tryUncacheQuery(df, blocking = true)
       // Cache it again.
-      sqlContext.cacheManager.cacheQuery(df, Some(tableIdent.table))
+      sparkSession.cacheManager.cacheQuery(df, Some(tableIdent.table))
     }
 
     Seq.empty[Row]

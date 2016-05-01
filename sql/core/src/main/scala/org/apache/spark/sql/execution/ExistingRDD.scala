@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
+import org.apache.spark.sql.{AnalysisException, Row, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions._
@@ -75,15 +75,15 @@ object RDDConversions {
 /** Logical plan node for scanning data from an RDD. */
 private[sql] case class LogicalRDD(
     output: Seq[Attribute],
-    rdd: RDD[InternalRow])(sqlContext: SQLContext)
+    rdd: RDD[InternalRow])(session: SparkSession)
   extends LogicalPlan with MultiInstanceRelation {
 
   override def children: Seq[LogicalPlan] = Nil
 
-  override protected final def otherCopyArgs: Seq[AnyRef] = sqlContext :: Nil
+  override protected final def otherCopyArgs: Seq[AnyRef] = session :: Nil
 
   override def newInstance(): LogicalRDD.this.type =
-    LogicalRDD(output.map(_.newInstance()), rdd)(sqlContext).asInstanceOf[this.type]
+    LogicalRDD(output.map(_.newInstance()), rdd)(session).asInstanceOf[this.type]
 
   override def sameResult(plan: LogicalPlan): Boolean = plan match {
     case LogicalRDD(_, otherRDD) => rdd.id == otherRDD.id
@@ -95,7 +95,7 @@ private[sql] case class LogicalRDD(
   @transient override lazy val statistics: Statistics = Statistics(
     // TODO: Instead of returning a default value here, find a way to return a meaningful size
     // estimate for RDDs. See PR 1238 for more discussions.
-    sizeInBytes = BigInt(sqlContext.conf.defaultSizeInBytes)
+    sizeInBytes = BigInt(session.sessionState.conf.defaultSizeInBytes)
   )
 }
 
@@ -106,7 +106,7 @@ private[sql] case class RDDScanExec(
     override val nodeName: String) extends LeafExecNode {
 
   private[sql] override lazy val metrics = Map(
-    "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
@@ -147,7 +147,7 @@ private[sql] case class RowDataSourceScanExec(
   extends DataSourceScanExec with CodegenSupport {
 
   private[sql] override lazy val metrics =
-    Map("numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
+    Map("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   val outputUnsafeRows = relation match {
     case r: HadoopFsRelation if r.fileFormat.isInstanceOf[ParquetSource] =>
@@ -216,7 +216,7 @@ private[sql] case class BatchedDataSourceScanExec(
   extends DataSourceScanExec with CodegenSupport {
 
   private[sql] override lazy val metrics =
-    Map("numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"),
+    Map("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
       "scanTime" -> SQLMetrics.createTimingMetric(sparkContext, "scan time"))
 
   protected override def doExecute(): RDD[InternalRow] = {
@@ -329,7 +329,8 @@ private[sql] object DataSourceScanExec {
     val outputPartitioning = {
       val bucketSpec = relation match {
         // TODO: this should be closer to bucket planning.
-        case r: HadoopFsRelation if r.sqlContext.conf.bucketingEnabled => r.bucketSpec
+        case r: HadoopFsRelation
+          if r.sparkSession.sessionState.conf.bucketingEnabled => r.bucketSpec
         case _ => None
       }
 
@@ -349,7 +350,7 @@ private[sql] object DataSourceScanExec {
 
     relation match {
       case r: HadoopFsRelation
-        if r.fileFormat.supportBatch(r.sqlContext, StructType.fromAttributes(output)) =>
+        if r.fileFormat.supportBatch(r.sparkSession, StructType.fromAttributes(output)) =>
         BatchedDataSourceScanExec(output, rdd, relation, outputPartitioning, metadata)
       case _ =>
         RowDataSourceScanExec(output, rdd, relation, outputPartitioning, metadata)

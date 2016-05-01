@@ -68,11 +68,11 @@ package object debug {
   }
 
   /**
-   * Augments [[SQLContext]] with debug methods.
+   * Augments [[SparkSession]] with debug methods.
    */
-  implicit class DebugSQLContext(sqlContext: SQLContext) {
+  implicit class DebugSQLContext(sparkSession: SparkSession) {
     def debug(): Unit = {
-      sqlContext.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, false)
+      sparkSession.conf.set(SQLConf.DATAFRAME_EAGER_ANALYSIS.key, false)
     }
   }
 

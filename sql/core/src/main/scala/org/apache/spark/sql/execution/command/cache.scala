@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql.{Dataset, Row, SQLContext}
+import org.apache.spark.sql.{Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
@@ -28,15 +28,15 @@ case class CacheTableCommand(
   isLazy: Boolean)
   extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
+  override def run(sparkSession: SparkSession): Seq[Row] = {
     plan.foreach { logicalPlan =>
-      sqlContext.registerDataFrameAsTable(Dataset.ofRows(sqlContext, logicalPlan), tableName)
+      sparkSession.registerTable(Dataset.ofRows(sparkSession, logicalPlan), tableName)
     }
-    sqlContext.cacheTable(tableName)
+    sparkSession.catalog.cacheTable(tableName)
 
     if (!isLazy) {
       // Performs eager caching
-      sqlContext.table(tableName).count()
+      sparkSession.table(tableName).count()
     }
 
     Seq.empty[Row]
@@ -48,8 +48,8 @@ case class CacheTableCommand(
 
 case class UncacheTableCommand(tableName: String) extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.table(tableName).unpersist(blocking = false)
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    sparkSession.table(tableName).unpersist(blocking = false)
     Seq.empty[Row]
   }
 
@@ -61,8 +61,8 @@ case class UncacheTableCommand(tableName: String) extends RunnableCommand {
  */
 case object ClearCacheCommand extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.clearCache()
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    sparkSession.catalog.clearCache()
     Seq.empty[Row]
   }
 

@@ -60,13 +60,7 @@ private[hive] object SparkSQLEnv extends Logging {
       sessionState.metadataHive.setOut(new PrintStream(System.out, true, "UTF-8"))
       sessionState.metadataHive.setInfo(new PrintStream(System.err, true, "UTF-8"))
       sessionState.metadataHive.setError(new PrintStream(System.err, true, "UTF-8"))
-
       sqlContext.setConf("spark.sql.hive.version", HiveUtils.hiveExecutionVersion)
-
-      if (log.isDebugEnabled) {
-        sessionState.hiveconf.getAllProperties.asScala.toSeq.sorted
-          .foreach { case (k, v) => logDebug(s"HiveConf var: $k=$v") }
-      }
     }
   }
 

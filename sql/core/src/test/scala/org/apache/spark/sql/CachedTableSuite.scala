@@ -22,7 +22,7 @@ import scala.language.postfixOps
 
 import org.scalatest.concurrent.Eventually._
 
-import org.apache.spark.Accumulators
+import org.apache.spark.AccumulatorContext
 import org.apache.spark.sql.execution.RDDScanExec
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.exchange.ShuffleExchange
@@ -333,12 +333,19 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     sql("SELECT * FROM t1").count()
     sql("SELECT * FROM t2").count()
 
-    Accumulators.synchronized {
-      val accsSize = Accumulators.originals.size
-      sqlContext.uncacheTable("t1")
-      sqlContext.uncacheTable("t2")
-      assert((accsSize - 2) == Accumulators.originals.size)
-    }
+    val accId1 = sqlContext.table("t1").queryExecution.withCachedData.collect {
+      case i: InMemoryRelation => i.batchStats.id
+    }.head
+
+    val accId2 = sqlContext.table("t1").queryExecution.withCachedData.collect {
+      case i: InMemoryRelation => i.batchStats.id
+    }.head
+
+    sqlContext.uncacheTable("t1")
+    sqlContext.uncacheTable("t2")
+
+    assert(AccumulatorContext.get(accId1).isEmpty)
+    assert(AccumulatorContext.get(accId2).isEmpty)
   }
 
   test("SPARK-10327 Cache Table is not working while subquery has alias in its project list") {

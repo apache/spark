@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.internal
 
-import org.apache.spark.sql.{QueryTest, SQLContext}
+import org.apache.spark.sql.{QueryTest, SparkSession, SQLContext}
 import org.apache.spark.sql.test.{SharedSQLContext, TestSQLContext}
 
 class SQLConfSuite extends QueryTest with SharedSQLContext {
@@ -125,4 +125,18 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
 
     sqlContext.conf.clear()
   }
+
+  test("SparkSession can access configs set in SparkConf") {
+    try {
+      sparkContext.conf.set("spark.to.be.or.not.to.be", "my love")
+      sparkContext.conf.set("spark.sql.with.or.without.you", "my love")
+      val spark = new SparkSession(sparkContext)
+      assert(spark.conf.get("spark.to.be.or.not.to.be") == "my love")
+      assert(spark.conf.get("spark.sql.with.or.without.you") == "my love")
+    } finally {
+      sparkContext.conf.remove("spark.to.be.or.not.to.be")
+      sparkContext.conf.remove("spark.sql.with.or.without.you")
+    }
+  }
+
 }

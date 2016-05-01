@@ -20,13 +20,12 @@ package org.apache.spark.sql.hive
 import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
 
-import org.apache.hadoop.fs.Path
-import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.ql.exec.{UDAF, UDF}
 import org.apache.hadoop.hive.ql.exec.{FunctionRegistry => HiveFunctionRegistry}
 import org.apache.hadoop.hive.ql.udf.generic.{AbstractGenericUDAFResolver, GenericUDF, GenericUDTF}
 
-import org.apache.spark.sql.{AnalysisException, SQLContext}
+import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
@@ -43,12 +42,17 @@ import org.apache.spark.util.Utils
 private[sql] class HiveSessionCatalog(
     externalCatalog: HiveExternalCatalog,
     client: HiveClient,
-    context: SQLContext,
+    sparkSession: SparkSession,
     functionResourceLoader: FunctionResourceLoader,
     functionRegistry: FunctionRegistry,
     conf: SQLConf,
-    hiveconf: HiveConf)
-  extends SessionCatalog(externalCatalog, functionResourceLoader, functionRegistry, conf) {
+    hadoopConf: Configuration)
+  extends SessionCatalog(
+    externalCatalog,
+    functionResourceLoader,
+    functionRegistry,
+    conf,
+    hadoopConf) {
 
   override def setCurrentDatabase(db: String): Unit = {
     super.setCurrentDatabase(db)
@@ -73,16 +77,11 @@ private[sql] class HiveSessionCatalog(
   // | Methods and fields for interacting with HiveMetastoreCatalog |
   // ----------------------------------------------------------------
 
-  override def getDefaultDBPath(db: String): String = {
-    val defaultPath = hiveconf.getVar(HiveConf.ConfVars.METASTOREWAREHOUSE)
-    new Path(new Path(defaultPath), db + ".db").toString
-  }
-
   // Catalog for handling data source tables. TODO: This really doesn't belong here since it is
   // essentially a cache for metastore tables. However, it relies on a lot of session-specific
   // things so it would be a lot of work to split its functionality between HiveSessionCatalog
   // and HiveCatalog. We should still do it at some point...
-  private val metastoreCatalog = new HiveMetastoreCatalog(context)
+  private val metastoreCatalog = new HiveMetastoreCatalog(sparkSession)
 
   val ParquetConversions: Rule[LogicalPlan] = metastoreCatalog.ParquetConversions
   val OrcConversions: Rule[LogicalPlan] = metastoreCatalog.OrcConversions

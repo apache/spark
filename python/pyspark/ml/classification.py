@@ -214,16 +214,6 @@ class LogisticRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
 
     @property
-    @since("1.4.0")
-    def weights(self):
-        """
-        Model weights.
-        """
-
-        warnings.warn("weights is deprecated. Use coefficients instead.")
-        return self._call_java("weights")
-
-    @property
     @since("1.6.0")
     def coefficients(self):
         """
@@ -1066,7 +1056,7 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
 
     layers = Param(Params._dummy(), "layers", "Sizes of layers from input layer to output layer " +
                    "E.g., Array(780, 100, 10) means 780 inputs, one hidden layer with 100 " +
-                   "neurons and output layer of 10 neurons, default is [1, 1].",
+                   "neurons and output layer of 10 neurons.",
                    typeConverter=TypeConverters.toListInt)
     blockSize = Param(Params._dummy(), "blockSize", "Block size for stacking input data in " +
                       "matrices. Data is stacked within partitions. If block size is more than " +
@@ -1079,12 +1069,12 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
                  maxIter=100, tol=1e-4, seed=None, layers=None, blockSize=128):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                 maxIter=100, tol=1e-4, seed=None, layers=[1, 1], blockSize=128)
+                 maxIter=100, tol=1e-4, seed=None, layers=None, blockSize=128)
         """
         super(MultilayerPerceptronClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.MultilayerPerceptronClassifier", self.uid)
-        self._setDefault(maxIter=100, tol=1E-4, layers=[1, 1], blockSize=128)
+        self._setDefault(maxIter=100, tol=1E-4, blockSize=128)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
@@ -1094,14 +1084,11 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
                   maxIter=100, tol=1e-4, seed=None, layers=None, blockSize=128):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                  maxIter=100, tol=1e-4, seed=None, layers=[1, 1], blockSize=128)
+                  maxIter=100, tol=1e-4, seed=None, layers=None, blockSize=128)
         Sets params for MultilayerPerceptronClassifier.
         """
         kwargs = self.setParams._input_kwargs
-        if layers is None:
-            return self._set(**kwargs).setLayers([1, 1])
-        else:
-            return self._set(**kwargs)
+        return self._set(**kwargs)
 
     def _create_model(self, java_model):
         return MultilayerPerceptronClassificationModel(java_model)
