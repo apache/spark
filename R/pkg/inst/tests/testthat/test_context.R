@@ -26,7 +26,7 @@ test_that("Check masked functions", {
   maskedBySparkR <- masked[funcSparkROrEmpty]
   namesOfMasked <- c("describe", "cov", "filter", "lag", "na.omit", "predict", "sd", "var",
                      "colnames", "colnames<-", "intersect", "rank", "rbind", "sample", "subset",
-                     "summary", "transform", "drop", "window")
+                     "summary", "transform", "drop", "window", "as.data.frame")
   expect_equal(length(maskedBySparkR), length(namesOfMasked))
   expect_equal(sort(maskedBySparkR), sort(namesOfMasked))
   # above are those reported as masked when `library(SparkR)`
@@ -90,6 +90,11 @@ test_that("job group functions can be called", {
   clearJobGroup(sc)
 })
 
+test_that("utility function can be called", {
+  sc <- sparkR.init()
+  setLogLevel(sc, "ERROR")
+})
+
 test_that("getClientModeSparkSubmitOpts() returns spark-submit args from whitelist", {
   e <- new.env()
   e[["spark.driver.memory"]] <- "512m"
@@ -135,4 +140,10 @@ test_that("sparkJars sparkPackages as comma-separated strings", {
   f <- dir()[[1]]
   expect_that(processSparkJars(f), not(gives_warning()))
   expect_match(processSparkJars(f), f)
+})
+
+test_that("spark.lapply should perform simple transforms", {
+  sc <- sparkR.init()
+  doubled <- spark.lapply(sc, 1:10, function(x) { 2 * x })
+  expect_equal(doubled, as.list(2 * 1:10))
 })

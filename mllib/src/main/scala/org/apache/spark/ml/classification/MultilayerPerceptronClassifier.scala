@@ -29,7 +29,7 @@ import org.apache.spark.ml.param.shared.{HasMaxIter, HasSeed, HasStepSize, HasTo
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.Dataset
 
 /** Params for Multilayer Perceptron. */
 private[ml] trait MultilayerPerceptronParams extends PredictorParams
@@ -37,8 +37,8 @@ private[ml] trait MultilayerPerceptronParams extends PredictorParams
   /**
    * Layer sizes including input size and output size.
    * Default: Array(1, 1)
-    *
-    * @group param
+   *
+   * @group param
    */
   final val layers: IntArrayParam = new IntArrayParam(this, "layers",
     "Sizes of layers from input layer to output layer" +
@@ -56,8 +56,8 @@ private[ml] trait MultilayerPerceptronParams extends PredictorParams
    * a partition then it is adjusted to the size of this data.
    * Recommended size is between 10 and 1000.
    * Default: 128
-    *
-    * @group expertParam
+   *
+   * @group expertParam
    */
   final val blockSize: IntParam = new IntParam(this, "blockSize",
     "Block size for stacking input data in matrices. Data is stacked within partitions." +
@@ -71,7 +71,7 @@ private[ml] trait MultilayerPerceptronParams extends PredictorParams
   /**
    * Allows setting the solver: minibatch gradient descent (gd) or l-bfgs.
    * l-bfgs is the default one.
- *
+   *
    * @group expertParam
    */
   final val solver: Param[String] = new Param[String](this, "solver",
@@ -84,8 +84,8 @@ private[ml] trait MultilayerPerceptronParams extends PredictorParams
 
   /**
    * Model weights. Can be returned either after training or after explicit setting
-    *
-    * @group expertParam
+   *
+   * @group expertParam
    */
   final val weights: Param[Vector] = new Param[Vector](this, "weights",
     " Sets the weights of the model ")
@@ -156,8 +156,8 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
   /**
    * Set the maximum number of iterations.
    * Default is 100.
-    *
-    * @group setParam
+   *
+   * @group setParam
    */
   @Since("1.5.0")
   def setMaxIter(value: Int): this.type = set(maxIter, value)
@@ -166,24 +166,24 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
    * Set the convergence tolerance of iterations.
    * Smaller value will lead to higher accuracy with the cost of more iterations.
    * Default is 1E-4.
-    *
-    * @group setParam
+   *
+   * @group setParam
    */
   @Since("1.5.0")
   def setTol(value: Double): this.type = set(tol, value)
 
   /**
    * Set the seed for weights initialization if weights are not set
-    *
-    * @group setParam
+   *
+   * @group setParam
    */
   @Since("1.5.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
   /**
    * Sets the model weights.
-    *
-    * @group expertParam
+   *
+   * @group expertParam
    */
   @Since("2.0.0")
   def setWeights(value: Vector): this.type = set(weights, value)
@@ -232,8 +232,8 @@ object MultilayerPerceptronClassifier
  * :: Experimental ::
  * Classification model based on the Multilayer Perceptron.
  * Each layer has sigmoid activation function, output layer has softmax.
-  *
-  * @param uid uid
+ *
+ * @param uid uid
  * @param layers array of layer sizes including input and output layers
  * @param weights vector of initial weights for the model that consists of the weights of layers
  * @return prediction model

@@ -123,9 +123,9 @@ private[flume] class PollingFlumeTestUtils {
     val latch = new CountDownLatch(batchCount * channels.size)
     sinks.foreach(_.countdownWhenBatchReceived(latch))
 
-    channels.foreach(channel => {
+    channels.foreach { channel =>
       executorCompletion.submit(new TxnSubmitter(channel))
-    })
+    }
 
     for (i <- 0 until channels.size) {
       executorCompletion.take()

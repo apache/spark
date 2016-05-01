@@ -22,6 +22,7 @@ import array
 import sys
 if sys.version > '3':
     xrange = range
+    basestring = str
 
 try:
     import xmlrunner
@@ -41,21 +42,23 @@ from shutil import rmtree
 import tempfile
 import numpy as np
 
+from pyspark import keyword_only
 from pyspark.ml import Estimator, Model, Pipeline, PipelineModel, Transformer
-from pyspark.ml.classification import LogisticRegression, DecisionTreeClassifier
-from pyspark.ml.clustering import KMeans
+from pyspark.ml.classification import *
+from pyspark.ml.clustering import *
 from pyspark.ml.evaluation import BinaryClassificationEvaluator, RegressionEvaluator
 from pyspark.ml.feature import *
 from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.param.shared import HasMaxIter, HasInputCol, HasSeed
+from pyspark.ml.recommendation import ALS
 from pyspark.ml.regression import LinearRegression, DecisionTreeRegressor
 from pyspark.ml.tuning import *
-from pyspark.ml.util import keyword_only
-from pyspark.ml.util import MLWritable, MLWriter
-from pyspark.ml.wrapper import JavaWrapper
+from pyspark.ml.wrapper import JavaParams
 from pyspark.mllib.linalg import Vectors, DenseVector, SparseVector
 from pyspark.sql import DataFrame, SQLContext, Row
 from pyspark.sql.functions import rand
+from pyspark.sql.utils import IllegalArgumentException
+from pyspark.storagelevel import *
 from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
 
 
@@ -339,6 +342,11 @@ class ParamTests(PySparkTestCase):
         params = param_store.params  # should not invoke the property 'test_property'
         self.assertEqual(len(params), 1)
 
+    def test_word2vec_param(self):
+        model = Word2Vec().setWindowSize(6)
+        # Check windowSize is set properly
+        self.assertEqual(model.getWindowSize(), 6)
+
 
 class FeatureTests(PySparkTestCase):
 
@@ -398,6 +406,8 @@ class FeatureTests(PySparkTestCase):
         self.assertEqual(stopWordRemover.getInputCol(), "input")
         transformedDF = stopWordRemover.transform(dataset)
         self.assertEqual(transformedDF.head().output, ["panda"])
+        self.assertEqual(type(stopWordRemover.getStopWords()), list)
+        self.assertTrue(isinstance(stopWordRemover.getStopWords()[0], basestring))
         # Custom
         stopwords = ["panda"]
         stopWordRemover.setStopWords(stopwords)
@@ -405,6 +415,22 @@ class FeatureTests(PySparkTestCase):
         self.assertEqual(stopWordRemover.getStopWords(), stopwords)
         transformedDF = stopWordRemover.transform(dataset)
         self.assertEqual(transformedDF.head().output, ["a"])
+
+    def test_count_vectorizer_with_binary(self):
+        sqlContext = SQLContext(self.sc)
+        dataset = sqlContext.createDataFrame([
+            (0, "a a a b b c".split(' '), SparseVector(3, {0: 1.0, 1: 1.0, 2: 1.0}),),
+            (1, "a a".split(' '), SparseVector(3, {0: 1.0}),),
+            (2, "a b".split(' '), SparseVector(3, {0: 1.0, 1: 1.0}),),
+            (3, "c".split(' '), SparseVector(3, {2: 1.0}),)], ["id", "words", "expected"])
+        cv = CountVectorizer(binary=True, inputCol="words", outputCol="features")
+        model = cv.fit(dataset)
+
+        transformedList = model.transform(dataset).select("features", "expected").collect()
+
+        for r in transformedList:
+            feature, expected = r
+            self.assertEqual(feature, expected)
 
 
 class HasInducedError(Params):
@@ -441,6 +467,31 @@ class InducedErrorEstimator(Estimator, HasInducedError):
 
 
 class CrossValidatorTests(PySparkTestCase):
+
+    def test_copy(self):
+        sqlContext = SQLContext(self.sc)
+        dataset = sqlContext.createDataFrame([
+            (10, 10.0),
+            (50, 50.0),
+            (100, 100.0),
+            (500, 500.0)] * 10,
+            ["feature", "label"])
+
+        iee = InducedErrorEstimator()
+        evaluator = RegressionEvaluator(metricName="rmse")
+
+        grid = (ParamGridBuilder()
+                .addGrid(iee.inducedError, [100.0, 0.0, 10000.0])
+                .build())
+        cv = CrossValidator(estimator=iee, estimatorParamMaps=grid, evaluator=evaluator)
+        cvCopied = cv.copy()
+        self.assertEqual(cv.getEstimator().uid, cvCopied.getEstimator().uid)
+
+        cvModel = cv.fit(dataset)
+        cvModelCopied = cvModel.copy()
+        for index in range(len(cvModel.avgMetrics)):
+            self.assertTrue(abs(cvModel.avgMetrics[index] - cvModelCopied.avgMetrics[index])
+                            < 0.0001)
 
     def test_fit_minimize_metric(self):
         sqlContext = SQLContext(self.sc)
@@ -491,6 +542,8 @@ class CrossValidatorTests(PySparkTestCase):
         self.assertEqual(1.0, bestModelMetric, "Best model has R-squared of 1")
 
     def test_save_load(self):
+        # This tests saving and loading the trained model only.
+        # Save/load for CrossValidator will be added later: SPARK-13786
         temp_path = tempfile.mkdtemp()
         sqlContext = SQLContext(self.sc)
         dataset = sqlContext.createDataFrame(
@@ -505,16 +558,13 @@ class CrossValidatorTests(PySparkTestCase):
         evaluator = BinaryClassificationEvaluator()
         cv = CrossValidator(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator)
         cvModel = cv.fit(dataset)
-        cvPath = temp_path + "/cv"
-        cv.save(cvPath)
-        loadedCV = CrossValidator.load(cvPath)
-        self.assertEqual(loadedCV.getEstimator().uid, cv.getEstimator().uid)
-        self.assertEqual(loadedCV.getEvaluator().uid, cv.getEvaluator().uid)
-        self.assertEqual(loadedCV.getEstimatorParamMaps(), cv.getEstimatorParamMaps())
+        lrModel = cvModel.bestModel
+
         cvModelPath = temp_path + "/cvModel"
-        cvModel.save(cvModelPath)
-        loadedModel = CrossValidatorModel.load(cvModelPath)
-        self.assertEqual(loadedModel.bestModel.uid, cvModel.bestModel.uid)
+        lrModel.save(cvModelPath)
+        loadedLrModel = LogisticRegressionModel.load(cvModelPath)
+        self.assertEqual(loadedLrModel.uid, lrModel.uid)
+        self.assertEqual(loadedLrModel.intercept, lrModel.intercept)
 
 
 class TrainValidationSplitTests(PySparkTestCase):
@@ -568,6 +618,8 @@ class TrainValidationSplitTests(PySparkTestCase):
         self.assertEqual(1.0, bestModelMetric, "Best model has R-squared of 1")
 
     def test_save_load(self):
+        # This tests saving and loading the trained model only.
+        # Save/load for TrainValidationSplit will be added later: SPARK-13786
         temp_path = tempfile.mkdtemp()
         sqlContext = SQLContext(self.sc)
         dataset = sqlContext.createDataFrame(
@@ -582,16 +634,13 @@ class TrainValidationSplitTests(PySparkTestCase):
         evaluator = BinaryClassificationEvaluator()
         tvs = TrainValidationSplit(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator)
         tvsModel = tvs.fit(dataset)
-        tvsPath = temp_path + "/tvs"
-        tvs.save(tvsPath)
-        loadedTvs = TrainValidationSplit.load(tvsPath)
-        self.assertEqual(loadedTvs.getEstimator().uid, tvs.getEstimator().uid)
-        self.assertEqual(loadedTvs.getEvaluator().uid, tvs.getEvaluator().uid)
-        self.assertEqual(loadedTvs.getEstimatorParamMaps(), tvs.getEstimatorParamMaps())
+        lrModel = tvsModel.bestModel
+
         tvsModelPath = temp_path + "/tvsModel"
-        tvsModel.save(tvsModelPath)
-        loadedModel = TrainValidationSplitModel.load(tvsModelPath)
-        self.assertEqual(loadedModel.bestModel.uid, tvsModel.bestModel.uid)
+        lrModel.save(tvsModelPath)
+        loadedLrModel = LogisticRegressionModel.load(tvsModelPath)
+        self.assertEqual(loadedLrModel.uid, lrModel.uid)
+        self.assertEqual(loadedLrModel.intercept, lrModel.intercept)
 
 
 class PersistenceTest(PySparkTestCase):
@@ -602,6 +651,8 @@ class PersistenceTest(PySparkTestCase):
         lr_path = path + "/lr"
         lr.save(lr_path)
         lr2 = LinearRegression.load(lr_path)
+        self.assertEqual(lr.uid, lr2.uid)
+        self.assertEqual(type(lr.uid), type(lr2.uid))
         self.assertEqual(lr2.uid, lr2.maxIter.parent,
                          "Loaded LinearRegression instance uid (%s) did not match Param's uid (%s)"
                          % (lr2.uid, lr2.maxIter.parent))
@@ -644,7 +695,7 @@ class PersistenceTest(PySparkTestCase):
         """
         self.assertEqual(m1.uid, m2.uid)
         self.assertEqual(type(m1), type(m2))
-        if isinstance(m1, JavaWrapper):
+        if isinstance(m1, JavaParams):
             self.assertEqual(len(m1.params), len(m2.params))
             for p in m1.params:
                 self.assertEqual(m1.getOrDefault(p), m2.getOrDefault(p))
@@ -719,10 +770,6 @@ class PersistenceTest(PySparkTestCase):
             except OSError:
                 pass
 
-    def test_write_property(self):
-        lr = LinearRegression(maxIter=1)
-        self.assertTrue(isinstance(lr.write, MLWriter))
-
     def test_decisiontree_classifier(self):
         dt = DecisionTreeClassifier(maxDepth=1)
         path = tempfile.mkdtemp()
@@ -754,6 +801,61 @@ class PersistenceTest(PySparkTestCase):
         self.assertEqual(dt._defaultParamMap[dt.maxDepth], dt2._defaultParamMap[dt2.maxDepth],
                          "Loaded DecisionTreeRegressor instance default params did not match " +
                          "original defaults")
+        try:
+            rmtree(path)
+        except OSError:
+            pass
+
+
+class LDATest(PySparkTestCase):
+
+    def _compare(self, m1, m2):
+        """
+        Temp method for comparing instances.
+        TODO: Replace with generic implementation once SPARK-14706 is merged.
+        """
+        self.assertEqual(m1.uid, m2.uid)
+        self.assertEqual(type(m1), type(m2))
+        self.assertEqual(len(m1.params), len(m2.params))
+        for p in m1.params:
+            if m1.isDefined(p):
+                self.assertEqual(m1.getOrDefault(p), m2.getOrDefault(p))
+                self.assertEqual(p.parent, m2.getParam(p.name).parent)
+        if isinstance(m1, LDAModel):
+            self.assertEqual(m1.vocabSize(), m2.vocabSize())
+            self.assertEqual(m1.topicsMatrix(), m2.topicsMatrix())
+
+    def test_persistence(self):
+        # Test save/load for LDA, LocalLDAModel, DistributedLDAModel.
+        sqlContext = SQLContext(self.sc)
+        df = sqlContext.createDataFrame([
+            [1, Vectors.dense([0.0, 1.0])],
+            [2, Vectors.sparse(2, {0: 1.0})],
+        ], ["id", "features"])
+        # Fit model
+        lda = LDA(k=2, seed=1, optimizer="em")
+        distributedModel = lda.fit(df)
+        self.assertTrue(distributedModel.isDistributed())
+        localModel = distributedModel.toLocal()
+        self.assertFalse(localModel.isDistributed())
+        # Define paths
+        path = tempfile.mkdtemp()
+        lda_path = path + "/lda"
+        dist_model_path = path + "/distLDAModel"
+        local_model_path = path + "/localLDAModel"
+        # Test LDA
+        lda.save(lda_path)
+        lda2 = LDA.load(lda_path)
+        self._compare(lda, lda2)
+        # Test DistributedLDAModel
+        distributedModel.save(dist_model_path)
+        distributedModel2 = DistributedLDAModel.load(dist_model_path)
+        self._compare(distributedModel, distributedModel2)
+        # Test LocalLDAModel
+        localModel.save(local_model_path)
+        localModel2 = LocalLDAModel.load(local_model_path)
+        self._compare(localModel, localModel2)
+        # Clean up
         try:
             rmtree(path)
         except OSError:
@@ -829,6 +931,99 @@ class TrainingSummaryTest(PySparkTestCase):
         # one check is enough to verify a summary is returned, Scala version runs full test
         sameSummary = model.evaluate(df)
         self.assertAlmostEqual(sameSummary.areaUnderROC, s.areaUnderROC)
+
+
+class OneVsRestTests(PySparkTestCase):
+
+    def test_copy(self):
+        sqlContext = SQLContext(self.sc)
+        df = sqlContext.createDataFrame([(0.0, Vectors.dense(1.0, 0.8)),
+                                         (1.0, Vectors.sparse(2, [], [])),
+                                         (2.0, Vectors.dense(0.5, 0.5))],
+                                        ["label", "features"])
+        lr = LogisticRegression(maxIter=5, regParam=0.01)
+        ovr = OneVsRest(classifier=lr)
+        ovr1 = ovr.copy({lr.maxIter: 10})
+        self.assertEqual(ovr.getClassifier().getMaxIter(), 5)
+        self.assertEqual(ovr1.getClassifier().getMaxIter(), 10)
+        model = ovr.fit(df)
+        model1 = model.copy({model.predictionCol: "indexed"})
+        self.assertEqual(model1.getPredictionCol(), "indexed")
+
+    def test_output_columns(self):
+        sqlContext = SQLContext(self.sc)
+        df = sqlContext.createDataFrame([(0.0, Vectors.dense(1.0, 0.8)),
+                                         (1.0, Vectors.sparse(2, [], [])),
+                                         (2.0, Vectors.dense(0.5, 0.5))],
+                                        ["label", "features"])
+        lr = LogisticRegression(maxIter=5, regParam=0.01)
+        ovr = OneVsRest(classifier=lr)
+        model = ovr.fit(df)
+        output = model.transform(df)
+        self.assertEqual(output.columns, ["label", "features", "prediction"])
+
+    def test_save_load(self):
+        temp_path = tempfile.mkdtemp()
+        sqlContext = SQLContext(self.sc)
+        df = sqlContext.createDataFrame([(0.0, Vectors.dense(1.0, 0.8)),
+                                         (1.0, Vectors.sparse(2, [], [])),
+                                         (2.0, Vectors.dense(0.5, 0.5))],
+                                        ["label", "features"])
+        lr = LogisticRegression(maxIter=5, regParam=0.01)
+        ovr = OneVsRest(classifier=lr)
+        model = ovr.fit(df)
+        ovrPath = temp_path + "/ovr"
+        ovr.save(ovrPath)
+        loadedOvr = OneVsRest.load(ovrPath)
+        self.assertEqual(loadedOvr.getFeaturesCol(), ovr.getFeaturesCol())
+        self.assertEqual(loadedOvr.getLabelCol(), ovr.getLabelCol())
+        self.assertEqual(loadedOvr.getClassifier().uid, ovr.getClassifier().uid)
+        modelPath = temp_path + "/ovrModel"
+        model.save(modelPath)
+        loadedModel = OneVsRestModel.load(modelPath)
+        for m, n in zip(model.models, loadedModel.models):
+            self.assertEqual(m.uid, n.uid)
+
+
+class HashingTFTest(PySparkTestCase):
+
+    def test_apply_binary_term_freqs(self):
+        sqlContext = SQLContext(self.sc)
+
+        df = sqlContext.createDataFrame([(0, ["a", "a", "b", "c", "c", "c"])], ["id", "words"])
+        n = 10
+        hashingTF = HashingTF()
+        hashingTF.setInputCol("words").setOutputCol("features").setNumFeatures(n).setBinary(True)
+        output = hashingTF.transform(df)
+        features = output.select("features").first().features.toArray()
+        expected = Vectors.dense([1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]).toArray()
+        for i in range(0, n):
+            self.assertAlmostEqual(features[i], expected[i], 14, "Error at " + str(i) +
+                                   ": expected " + str(expected[i]) + ", got " + str(features[i]))
+
+
+class ALSTest(PySparkTestCase):
+
+    def test_storage_levels(self):
+        sqlContext = SQLContext(self.sc)
+        df = sqlContext.createDataFrame(
+            [(0, 0, 4.0), (0, 1, 2.0), (1, 1, 3.0), (1, 2, 4.0), (2, 1, 1.0), (2, 2, 5.0)],
+            ["user", "item", "rating"])
+        als = ALS().setMaxIter(1).setRank(1)
+        # test default params
+        als.fit(df)
+        self.assertEqual(als.getIntermediateStorageLevel(), "MEMORY_AND_DISK")
+        self.assertEqual(als._java_obj.getIntermediateStorageLevel(), "MEMORY_AND_DISK")
+        self.assertEqual(als.getFinalStorageLevel(), "MEMORY_AND_DISK")
+        self.assertEqual(als._java_obj.getFinalStorageLevel(), "MEMORY_AND_DISK")
+        # test non-default params
+        als.setIntermediateStorageLevel("MEMORY_ONLY_2")
+        als.setFinalStorageLevel("DISK_ONLY")
+        als.fit(df)
+        self.assertEqual(als.getIntermediateStorageLevel(), "MEMORY_ONLY_2")
+        self.assertEqual(als._java_obj.getIntermediateStorageLevel(), "MEMORY_ONLY_2")
+        self.assertEqual(als.getFinalStorageLevel(), "DISK_ONLY")
+        self.assertEqual(als._java_obj.getFinalStorageLevel(), "DISK_ONLY")
 
 
 if __name__ == "__main__":

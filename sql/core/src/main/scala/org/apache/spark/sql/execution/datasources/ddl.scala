@@ -19,36 +19,12 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.command.RunnableCommand
 import org.apache.spark.sql.types._
 
-/**
- * Returned for the "DESCRIBE [EXTENDED] [dbName.]tableName" command.
- *
- * @param table The table to be described.
- * @param isExtended True if "DESCRIBE EXTENDED" is used. Otherwise, false.
- *                   It is effective only when the table is a Hive table.
- */
-case class DescribeCommand(
-    table: TableIdentifier,
-    isExtended: Boolean)
-  extends LogicalPlan with logical.Command {
-
-  override def children: Seq[LogicalPlan] = Seq.empty
-
-  override val output: Seq[Attribute] = Seq(
-    // Column names are based on Hive.
-    AttributeReference("col_name", StringType, nullable = false,
-      new MetadataBuilder().putString("comment", "name of the column").build())(),
-    AttributeReference("data_type", StringType, nullable = false,
-      new MetadataBuilder().putString("comment", "data type of the column").build())(),
-    AttributeReference("comment", StringType, nullable = true,
-      new MetadataBuilder().putString("comment", "comment of the column").build())()
-  )
-}
 
 /**
  * Used to represent the operation of create table using a data source.
@@ -98,15 +74,15 @@ case class CreateTempTableUsing(
       s"Temporary table '$tableIdent' should not have specified a database")
   }
 
-  def run(sqlContext: SQLContext): Seq[Row] = {
+  def run(sparkSession: SparkSession): Seq[Row] = {
     val dataSource = DataSource(
-      sqlContext,
+      sparkSession,
       userSpecifiedSchema = userSpecifiedSchema,
       className = provider,
       options = options)
-    sqlContext.sessionState.catalog.createTempTable(
+    sparkSession.sessionState.catalog.createTempTable(
       tableIdent.table,
-      Dataset.ofRows(sqlContext, LogicalRelation(dataSource.resolveRelation())).logicalPlan,
+      Dataset.ofRows(sparkSession, LogicalRelation(dataSource.resolveRelation())).logicalPlan,
       overrideIfExists = true)
 
     Seq.empty[Row]
@@ -126,18 +102,18 @@ case class CreateTempTableUsingAsSelect(
       s"Temporary table '$tableIdent' should not have specified a database")
   }
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    val df = Dataset.ofRows(sqlContext, query)
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val df = Dataset.ofRows(sparkSession, query)
     val dataSource = DataSource(
-      sqlContext,
+      sparkSession,
       className = provider,
       partitionColumns = partitionColumns,
       bucketSpec = None,
       options = options)
     val result = dataSource.write(mode, df)
-    sqlContext.sessionState.catalog.createTempTable(
+    sparkSession.sessionState.catalog.createTempTable(
       tableIdent.table,
-      Dataset.ofRows(sqlContext, LogicalRelation(result)).logicalPlan,
+      Dataset.ofRows(sparkSession, LogicalRelation(result)).logicalPlan,
       overrideIfExists = true)
 
     Seq.empty[Row]
@@ -147,23 +123,23 @@ case class CreateTempTableUsingAsSelect(
 case class RefreshTable(tableIdent: TableIdentifier)
   extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
+  override def run(sparkSession: SparkSession): Seq[Row] = {
     // Refresh the given table's metadata first.
-    sqlContext.sessionState.catalog.refreshTable(tableIdent)
+    sparkSession.sessionState.catalog.refreshTable(tableIdent)
 
     // If this table is cached as a InMemoryColumnarRelation, drop the original
     // cached version and make the new version cached lazily.
-    val logicalPlan = sqlContext.sessionState.catalog.lookupRelation(tableIdent)
+    val logicalPlan = sparkSession.sessionState.catalog.lookupRelation(tableIdent)
     // Use lookupCachedData directly since RefreshTable also takes databaseName.
-    val isCached = sqlContext.cacheManager.lookupCachedData(logicalPlan).nonEmpty
+    val isCached = sparkSession.cacheManager.lookupCachedData(logicalPlan).nonEmpty
     if (isCached) {
       // Create a data frame to represent the table.
       // TODO: Use uncacheTable once it supports database name.
-      val df = Dataset.ofRows(sqlContext, logicalPlan)
+      val df = Dataset.ofRows(sparkSession, logicalPlan)
       // Uncache the logicalPlan.
-      sqlContext.cacheManager.tryUncacheQuery(df, blocking = true)
+      sparkSession.cacheManager.tryUncacheQuery(df, blocking = true)
       // Cache it again.
-      sqlContext.cacheManager.cacheQuery(df, Some(tableIdent.table))
+      sparkSession.cacheManager.cacheQuery(df, Some(tableIdent.table))
     }
 
     Seq.empty[Row]

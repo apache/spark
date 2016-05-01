@@ -33,7 +33,9 @@ import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
+import org.apache.spark.scheduler.{SparkListener, SparkListenerStageCompleted}
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.storage.StorageLevel
 
 class ALSSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest with Logging {
@@ -198,6 +200,7 @@ class ALSSuite
 
   /**
    * Generates an explicit feedback dataset for testing ALS.
+   *
    * @param numUsers number of users
    * @param numItems number of items
    * @param rank rank
@@ -238,6 +241,7 @@ class ALSSuite
 
   /**
    * Generates an implicit feedback dataset for testing ALS.
+   *
    * @param numUsers number of users
    * @param numItems number of items
    * @param rank rank
@@ -286,6 +290,7 @@ class ALSSuite
 
   /**
    * Generates random user/item factors, with i.i.d. values drawn from U(a, b).
+   *
    * @param size number of users/items
    * @param rank number of features
    * @param random random number generator
@@ -311,6 +316,7 @@ class ALSSuite
 
   /**
    * Test ALS using the given training/test splits and parameters.
+   *
    * @param training training dataset
    * @param test test dataset
    * @param rank rank of the matrix factorization
@@ -514,6 +520,77 @@ class ALSSuite
   }
 }
 
+class ALSStorageSuite
+  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest with Logging {
+
+  test("invalid storage params") {
+    intercept[IllegalArgumentException] {
+      new ALS().setIntermediateStorageLevel("foo")
+    }
+    intercept[IllegalArgumentException] {
+      new ALS().setIntermediateStorageLevel("NONE")
+    }
+    intercept[IllegalArgumentException] {
+      new ALS().setFinalStorageLevel("foo")
+    }
+  }
+
+  test("default and non-default storage params set correct RDD StorageLevels") {
+    val sqlContext = this.sqlContext
+    import sqlContext.implicits._
+    val data = Seq(
+      (0, 0, 1.0),
+      (0, 1, 2.0),
+      (1, 2, 3.0),
+      (1, 0, 2.0)
+    ).toDF("user", "item", "rating")
+    val als = new ALS().setMaxIter(1).setRank(1)
+    // add listener to check intermediate RDD default storage levels
+    val defaultListener = new IntermediateRDDStorageListener
+    sc.addSparkListener(defaultListener)
+    val model = als.fit(data)
+    // check final factor RDD default storage levels
+    val defaultFactorRDDs = sc.getPersistentRDDs.collect {
+      case (id, rdd) if rdd.name == "userFactors" || rdd.name == "itemFactors" =>
+        rdd.name -> (id, rdd.getStorageLevel)
+    }.toMap
+    defaultFactorRDDs.foreach { case (_, (id, level)) =>
+      assert(level == StorageLevel.MEMORY_AND_DISK)
+    }
+    defaultListener.storageLevels.foreach(level => assert(level == StorageLevel.MEMORY_AND_DISK))
+
+    // add listener to check intermediate RDD non-default storage levels
+    val nonDefaultListener = new IntermediateRDDStorageListener
+    sc.addSparkListener(nonDefaultListener)
+    val nonDefaultModel = als
+      .setFinalStorageLevel("MEMORY_ONLY")
+      .setIntermediateStorageLevel("DISK_ONLY")
+      .fit(data)
+    // check final factor RDD non-default storage levels
+    val levels = sc.getPersistentRDDs.collect {
+      case (id, rdd) if rdd.name == "userFactors" && rdd.id != defaultFactorRDDs("userFactors")._1
+        || rdd.name == "itemFactors" && rdd.id != defaultFactorRDDs("itemFactors")._1 =>
+        rdd.getStorageLevel
+    }
+    levels.foreach(level => assert(level == StorageLevel.MEMORY_ONLY))
+    nonDefaultListener.storageLevels.foreach(level => assert(level == StorageLevel.DISK_ONLY))
+  }
+}
+
+private class IntermediateRDDStorageListener extends SparkListener {
+
+  val storageLevels: mutable.ArrayBuffer[StorageLevel] = mutable.ArrayBuffer()
+
+  override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = {
+    val stageLevels = stageCompleted.stageInfo.rddInfos.collect {
+      case info if info.name.contains("Blocks") || info.name.contains("Factors-") =>
+        info.storageLevel
+    }
+    storageLevels ++= stageLevels
+  }
+
+}
+
 object ALSSuite {
 
   /**
@@ -539,6 +616,8 @@ object ALSSuite {
     "implicitPrefs" -> true,
     "alpha" -> 0.9,
     "nonnegative" -> true,
-    "checkpointInterval" -> 20
+    "checkpointInterval" -> 20,
+    "intermediateStorageLevel" -> "MEMORY_ONLY",
+    "finalStorageLevel" -> "MEMORY_AND_DISK_SER"
   )
 }

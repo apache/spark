@@ -56,7 +56,9 @@ private[python] class Word2VecModelWrapper(model: Word2VecModel) {
   }
 
   def getVectors: JMap[String, JList[Float]] = {
-    model.getVectors.map({case (k, v) => (k, v.toList.asJava)}).asJava
+    model.getVectors.map { case (k, v) =>
+      (k, v.toList.asJava)
+    }.asJava
   }
 
   def save(sc: SparkContext, path: String): Unit = model.save(sc, path)

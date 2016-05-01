@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Range, SubqueryAlias}
 /**
  * Tests for [[SessionCatalog]] that assume that [[InMemoryCatalog]] is correctly implemented.
  *
- * Note: many of the methods here are very similar to the ones in [[CatalogTestCases]].
+ * Note: many of the methods here are very similar to the ones in [[ExternalCatalogSuite]].
  * This is because [[SessionCatalog]] and [[ExternalCatalog]] share many similar method
  * signatures but do not extend a common parent. This is largely by design but
  * unfortunately leads to very similar test code in two places.
@@ -372,25 +372,25 @@ class SessionCatalogSuite extends SparkFunSuite {
     sessionCatalog.setCurrentDatabase("db2")
     // If we explicitly specify the database, we'll look up the relation in that database
     assert(sessionCatalog.lookupRelation(TableIdentifier("tbl1", Some("db2")))
-      == SubqueryAlias("tbl1", CatalogRelation("db2", metastoreTable1)))
+      == SubqueryAlias("tbl1", SimpleCatalogRelation("db2", metastoreTable1)))
     // Otherwise, we'll first look up a temporary table with the same name
     assert(sessionCatalog.lookupRelation(TableIdentifier("tbl1"))
       == SubqueryAlias("tbl1", tempTable1))
     // Then, if that does not exist, look up the relation in the current database
     sessionCatalog.dropTable(TableIdentifier("tbl1"), ignoreIfNotExists = false)
     assert(sessionCatalog.lookupRelation(TableIdentifier("tbl1"))
-      == SubqueryAlias("tbl1", CatalogRelation("db2", metastoreTable1)))
+      == SubqueryAlias("tbl1", SimpleCatalogRelation("db2", metastoreTable1)))
   }
 
   test("lookup table relation with alias") {
     val catalog = new SessionCatalog(newBasicCatalog())
     val alias = "monster"
     val tableMetadata = catalog.getTableMetadata(TableIdentifier("tbl1", Some("db2")))
-    val relation = SubqueryAlias("tbl1", CatalogRelation("db2", tableMetadata))
+    val relation = SubqueryAlias("tbl1", SimpleCatalogRelation("db2", tableMetadata))
     val relationWithAlias =
       SubqueryAlias(alias,
         SubqueryAlias("tbl1",
-          CatalogRelation("db2", tableMetadata, Some(alias))))
+          SimpleCatalogRelation("db2", tableMetadata, Some(alias))))
     assert(catalog.lookupRelation(
       TableIdentifier("tbl1", Some("db2")), alias = None) == relation)
     assert(catalog.lookupRelation(
@@ -705,11 +705,11 @@ class SessionCatalogSuite extends SparkFunSuite {
     catalog.createTempFunction("temp1", info1, tempFunc1, ignoreIfExists = false)
     catalog.createTempFunction("temp2", info2, tempFunc2, ignoreIfExists = false)
     val arguments = Seq(Literal(1), Literal(2), Literal(3))
-    assert(catalog.lookupFunction("temp1", arguments) === Literal(1))
-    assert(catalog.lookupFunction("temp2", arguments) === Literal(3))
+    assert(catalog.lookupFunction(FunctionIdentifier("temp1"), arguments) === Literal(1))
+    assert(catalog.lookupFunction(FunctionIdentifier("temp2"), arguments) === Literal(3))
     // Temporary function does not exist.
     intercept[AnalysisException] {
-      catalog.lookupFunction("temp3", arguments)
+      catalog.lookupFunction(FunctionIdentifier("temp3"), arguments)
     }
     val tempFunc3 = (e: Seq[Expression]) => Literal(e.size)
     val info3 = new ExpressionInfo("tempFunc3", "temp1")
@@ -719,7 +719,8 @@ class SessionCatalogSuite extends SparkFunSuite {
     }
     // Temporary function is overridden
     catalog.createTempFunction("temp1", info3, tempFunc3, ignoreIfExists = true)
-    assert(catalog.lookupFunction("temp1", arguments) === Literal(arguments.length))
+    assert(
+      catalog.lookupFunction(FunctionIdentifier("temp1"), arguments) === Literal(arguments.length))
   }
 
   test("drop function") {
@@ -755,10 +756,10 @@ class SessionCatalogSuite extends SparkFunSuite {
     val tempFunc = (e: Seq[Expression]) => e.head
     catalog.createTempFunction("func1", info, tempFunc, ignoreIfExists = false)
     val arguments = Seq(Literal(1), Literal(2), Literal(3))
-    assert(catalog.lookupFunction("func1", arguments) === Literal(1))
+    assert(catalog.lookupFunction(FunctionIdentifier("func1"), arguments) === Literal(1))
     catalog.dropTempFunction("func1", ignoreIfNotExists = false)
     intercept[AnalysisException] {
-      catalog.lookupFunction("func1", arguments)
+      catalog.lookupFunction(FunctionIdentifier("func1"), arguments)
     }
     intercept[AnalysisException] {
       catalog.dropTempFunction("func1", ignoreIfNotExists = false)
@@ -792,10 +793,11 @@ class SessionCatalogSuite extends SparkFunSuite {
     val info1 = new ExpressionInfo("tempFunc1", "func1")
     val tempFunc1 = (e: Seq[Expression]) => e.head
     catalog.createTempFunction("func1", info1, tempFunc1, ignoreIfExists = false)
-    assert(catalog.lookupFunction("func1", Seq(Literal(1), Literal(2), Literal(3))) == Literal(1))
+    assert(catalog.lookupFunction(
+      FunctionIdentifier("func1"), Seq(Literal(1), Literal(2), Literal(3))) == Literal(1))
     catalog.dropTempFunction("func1", ignoreIfNotExists = false)
     intercept[AnalysisException] {
-      catalog.lookupFunction("func1", Seq(Literal(1), Literal(2), Literal(3)))
+      catalog.lookupFunction(FunctionIdentifier("func1"), Seq(Literal(1), Literal(2), Literal(3)))
     }
   }
 

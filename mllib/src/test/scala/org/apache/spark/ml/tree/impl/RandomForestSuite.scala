@@ -322,7 +322,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
       numClasses = 2, categoricalFeaturesInfo = Map(0 -> 3), maxBins = 3)
 
     val model = RandomForest.run(input, strategy, numTrees = 1, featureSubsetStrategy = "all",
-      seed = 42).head
+      seed = 42, instr = None).head
     model.rootNode match {
       case n: InternalNode => n.split match {
         case s: CategoricalSplit =>
@@ -345,9 +345,9 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
       new OldStrategy(OldAlgo.Classification, Entropy, 3, 2, 100, maxMemoryInMB = 0)
 
     val tree1 = RandomForest.run(rdd, strategy1, numTrees = 1, featureSubsetStrategy = "all",
-      seed = 42).head
+      seed = 42, instr = None).head
     val tree2 = RandomForest.run(rdd, strategy2, numTrees = 1, featureSubsetStrategy = "all",
-      seed = 42).head
+      seed = 42, instr = None).head
 
     def getChildren(rootNode: Node): Array[InternalNode] = rootNode match {
       case n: InternalNode =>
@@ -440,7 +440,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val invalidStrategies = Array("-.1", "-.10", "-0.10", ".0", "0.0", "1.1", "0")
     for (invalidStrategy <- invalidStrategies) {
-      intercept[MatchError]{
+      intercept[IllegalArgumentException]{
         val metadata =
           DecisionTreeMetadata.buildMetadata(rdd, strategy, numTrees = 1, invalidStrategy)
       }
@@ -463,7 +463,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
       checkFeatureSubsetStrategy(numTrees = 2, strategy, expected)
     }
     for (invalidStrategy <- invalidStrategies) {
-      intercept[MatchError]{
+      intercept[IllegalArgumentException]{
         val metadata =
           DecisionTreeMetadata.buildMetadata(rdd, strategy, numTrees = 2, invalidStrategy)
       }

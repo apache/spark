@@ -173,7 +173,7 @@ df.show()
 {% highlight r %}
 sqlContext <- SQLContext(sc)
 
-df <- jsonFile(sqlContext, "examples/src/main/resources/people.json")
+df <- read.json(sqlContext, "examples/src/main/resources/people.json")
 
 # Displays the content of the DataFrame to stdout
 showDF(df)
@@ -366,7 +366,7 @@ In addition to simple column references and expressions, DataFrames also have a 
 sqlContext <- sparkRSQL.init(sc)
 
 # Create the DataFrame
-df <- jsonFile(sqlContext, "examples/src/main/resources/people.json")
+df <- read.json(sqlContext, "examples/src/main/resources/people.json")
 
 # Show the content of the DataFrame
 showDF(df)
@@ -889,8 +889,8 @@ df.select("name", "favorite_color").write.save("namesAndFavColors.parquet")
 <div data-lang="r"  markdown="1">
 
 {% highlight r %}
-df <- loadDF(sqlContext, "people.parquet")
-saveDF(select(df, "name", "age"), "namesAndAges.parquet")
+df <- read.df(sqlContext, "examples/src/main/resources/users.parquet")
+write.df(select(df, "name", "favorite_color"), "namesAndFavColors.parquet")
 {% endhighlight %}
 
 </div>
@@ -939,8 +939,8 @@ df.select("name", "age").write.save("namesAndAges.parquet", format="parquet")
 
 {% highlight r %}
 
-df <- loadDF(sqlContext, "people.json", "json")
-saveDF(select(df, "name", "age"), "namesAndAges.parquet", "parquet")
+df <- read.df(sqlContext, "examples/src/main/resources/people.json", "json")
+write.df(select(df, "name", "age"), "namesAndAges.parquet", "parquet")
 
 {% endhighlight %}
 
@@ -1138,17 +1138,18 @@ for teenName in teenNames.collect():
 schemaPeople # The DataFrame from the previous example.
 
 # DataFrames can be saved as Parquet files, maintaining the schema information.
-saveAsParquetFile(schemaPeople, "people.parquet")
+write.parquet(schemaPeople, "people.parquet")
 
 # Read in the Parquet file created above. Parquet files are self-describing so the schema is preserved.
 # The result of loading a parquet file is also a DataFrame.
-parquetFile <- parquetFile(sqlContext, "people.parquet")
+parquetFile <- read.parquet(sqlContext, "people.parquet")
 
 # Parquet files can also be registered as tables and then used in SQL statements.
-registerTempTable(parquetFile, "parquetFile");
+registerTempTable(parquetFile, "parquetFile")
 teenagers <- sql(sqlContext, "SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19")
-teenNames <- map(teenagers, function(p) { paste("Name:", p$name)})
-for (teenName in collect(teenNames)) {
+schema <- structType(structField("name", "string"))
+teenNames <- dapply(df, function(p) { cbind(paste("Name:", p$name)) }, schema)
+for (teenName in collect(teenNames)$name) {
   cat(teenName, "\n")
 }
 {% endhighlight %}
@@ -1318,14 +1319,14 @@ df3.printSchema()
 # sqlContext from the previous example is used in this example.
 
 # Create a simple DataFrame, stored into a partition directory
-saveDF(df1, "data/test_table/key=1", "parquet", "overwrite")
+write.df(df1, "data/test_table/key=1", "parquet", "overwrite")
 
 # Create another DataFrame in a new partition directory,
 # adding a new column and dropping an existing column
-saveDF(df2, "data/test_table/key=2", "parquet", "overwrite")
+write.df(df2, "data/test_table/key=2", "parquet", "overwrite")
 
 # Read the partitioned table
-df3 <- loadDF(sqlContext, "data/test_table", "parquet", mergeSchema="true")
+df3 <- read.df(sqlContext, "data/test_table", "parquet", mergeSchema="true")
 printSchema(df3)
 
 # The final schema consists of all 3 columns in the Parquet files together
@@ -1612,7 +1613,7 @@ sqlContext <- sparkRSQL.init(sc)
 # The path can be either a single text file or a directory storing text files.
 path <- "examples/src/main/resources/people.json"
 # Create a DataFrame from the file(s) pointed to by path
-people <- jsonFile(sqlContext, path)
+people <- read.json(sqlContext, path)
 
 # The inferred schema can be visualized using the printSchema() method.
 printSchema(people)
@@ -1651,7 +1652,7 @@ SELECT * FROM jsonTable
 Spark SQL also supports reading and writing data stored in [Apache Hive](http://hive.apache.org/).
 However, since Hive has a large number of dependencies, it is not included in the default Spark assembly.
 Hive support is enabled by adding the `-Phive` and `-Phive-thriftserver` flags to Spark's build.
-This command builds a new assembly jar that includes Hive. Note that this Hive assembly jar must also be present
+This command builds a new assembly directory that includes Hive. Note that this Hive assembly directory must also be present
 on all of the worker nodes, as they will need access to the Hive serialization and deserialization libraries
 (SerDes) in order to access data stored in Hive.
 
@@ -1770,7 +1771,7 @@ The following options can be used to configure the version of Hive that is used 
       property can be one of three options:
       <ol>
         <li><code>builtin</code></li>
-        Use Hive 1.2.1, which is bundled with the Spark assembly jar when <code>-Phive</code> is
+        Use Hive 1.2.1, which is bundled with the Spark assembly when <code>-Phive</code> is
         enabled. When this option is chosen, <code>spark.sql.hive.metastore.version</code> must be
         either <code>1.2.1</code> or not defined.
         <li><code>maven</code></li>

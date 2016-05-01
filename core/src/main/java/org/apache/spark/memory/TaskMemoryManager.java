@@ -114,7 +114,7 @@ public class TaskMemoryManager {
   /**
    * The amount of memory that is acquired but not used.
    */
-  private long acquiredButNotUsed = 0L;
+  private volatile long acquiredButNotUsed = 0L;
 
   /**
    * Construct a new TaskMemoryManager.
@@ -407,5 +407,12 @@ public class TaskMemoryManager {
    */
   public long getMemoryConsumptionForThisTask() {
     return memoryManager.getExecutionMemoryUsageForTask(taskAttemptId);
+  }
+
+  /**
+   * Returns Tungsten memory mode
+   */
+  public MemoryMode getTungstenMemoryMode(){
+    return tungstenMemoryMode;
   }
 }
