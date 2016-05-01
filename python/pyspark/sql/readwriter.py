@@ -289,14 +289,14 @@ class DataFrameReader(object):
                 quoted values where the delimiter can be part of the value.
             * ``escape`` (default ``\``): sets the single character used for escaping quotes \
                 inside an already quoted value.
-            * ``comment`` (default ````): sets the single character used for skipping lines \
-                beginning with this character. By default, it is disabled.
+            * ``comment`` (default empty string): sets the single character used for skipping \
+                lines beginning with this character. By default, it is disabled.
             * ``header`` (default ``false``): uses the first line as names of columns.
             * ``ignoreLeadingWhiteSpace`` (default ``false``): defines whether or not leading \
                 whitespaces from values being read should be skipped.
             * ``ignoreTrailingWhiteSpace`` (default ``false``): defines whether or not trailing \
                 whitespaces from values being read should be skipped.
-            * ``nullValue`` (default ````): sets the string representation of a null value.
+            * ``nullValue`` (default empty string): sets the string representation of a null value.
             * ``nanValue`` (default ``NaN``): sets the string representation of a non-number \
                 value.
             * ``positiveInf`` (default ``Inf``): sets the string representation of a positive \
@@ -710,7 +710,7 @@ class DataFrameWriter(object):
             * ``escape`` (default ``\``): sets the single character used for escaping quotes \
                 inside an already quoted value.
             * ``header`` (default ``false``): writes the names of columns as the first line.
-            * ``nullValue`` (default ````): sets the string representation of a null value.
+            * ``nullValue`` (default empty string): sets the string representation of a null value.
 
         >>> df.write.csv(os.path.join(tempfile.mkdtemp(), 'data'))
         """

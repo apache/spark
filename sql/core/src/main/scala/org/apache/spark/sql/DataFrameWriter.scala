@@ -613,8 +613,8 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * <li>`escape` (default `\`): sets the single character used for escaping quotes inside
    * an already quoted value.</li>
    * <li>`header` (default `false`): writes the names of columns as the first line.</li>
-   * <li>`nullValue` (default ``): sets the string representation of a null value.</li>
-   * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
+   * <li>`nullValue` (default empty string): sets the string representation of a null value.</li>
+   * <li>compression` (default `null`): compression codec to use when saving to file. This can be
    * one of the known case-insensitive shorten names (`none`, `bzip2`, `gzip`, `lz4`,
    * `snappy` and `deflate`). </li>
    *
