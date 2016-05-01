@@ -42,7 +42,7 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
     }
   }
 
-  test("Imputer for Double with missing Value -1.0 and contains NaN") {
+  test("Imputer should handle NaNs when computing surrogate value, if missingValue is not NaN") {
     val df = sqlContext.createDataFrame( Seq(
       (0, 1.0, 1.0, 1.0),
       (1, 3.0, 3.0, 3.0),
@@ -82,7 +82,7 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
     }
   }
 
-  test("Imputer should impute null") {
+  test("Imputer should impute null as well as 'missingValue'") {
     val df = sqlContext.createDataFrame( Seq(
       (0, 4.0, 4.0, 4.0),
       (1, 10.0, 10.0, 10.0),

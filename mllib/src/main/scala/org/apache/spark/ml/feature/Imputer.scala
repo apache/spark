@@ -73,9 +73,9 @@ private[feature] trait ImputerParams extends Params with HasInputCol with HasOut
 
 /**
  * :: Experimental ::
- * Imputation estimator for completing missing values, either using the mean or the
- * median of the column in which the missing values are located. InputCol should be
- * of DoubleType or FloatType.
+ * Imputation estimator for completing missing values, either using the mean or the median
+ * of the column in which the missing values are located. The input column should be of
+ * DoubleType or FloatType.
  *
  * Note that the mean/median value is computed after filtering out missing values.
  * All Null values in the input column are treated as missing, and so are also imputed.
