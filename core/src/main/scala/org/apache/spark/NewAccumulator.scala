@@ -192,7 +192,7 @@ abstract class NewAccumulator[IN, OUT] extends Serializable {
 
   /**
    * Merges another same-type accumulator into this one and update its state, i.e. this should be
-   * merge-in-place. Developers should extend mergeImpl to customize the adding functionality.
+   * merge-in-place. Developers should extend mergeImpl to customize the merge functionality.
    */
   final private[spark] def merge(other: NewAccumulator[IN, OUT]): Unit = {
     assertMetadataNotNull()
@@ -213,7 +213,7 @@ abstract class NewAccumulator[IN, OUT] extends Serializable {
 
   /**
    * Merges another same-type accumulator into this one and update its state, i.e. this should be
-   * merge-in-place. Developers should extend mergeImpl to customize the adding functionality.
+   * merge-in-place. Developers should extend mergeImpl to customize the merge functionality.
    */
   protected def mergeImpl(other: NewAccumulator[IN, OUT]): Unit
 
