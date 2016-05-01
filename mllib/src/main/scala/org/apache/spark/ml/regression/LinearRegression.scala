@@ -24,7 +24,7 @@ import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS, 
 import breeze.stats.distributions.StudentsT
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.Instance
@@ -38,7 +38,7 @@ import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS._
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Dataset, Row}
+import org.apache.spark.sql.{DataFrame, Dataset, Row, SQLContext}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.DoubleType
 import org.apache.spark.storage.StorageLevel
@@ -159,6 +159,9 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
   setDefault(solver -> "auto")
 
   override protected def train(dataset: Dataset[_]): LinearRegressionModel = {
+    val sqlContext = dataset.sqlContext
+    import sqlContext.implicits._
+
     // Extract the number of features before deciding optimization solver.
     val numFeatures = dataset.select(col($(featuresCol))).limit(1).rdd.map {
       case Row(features: Vector) => features.size
@@ -171,11 +174,9 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
         "solver is used.'")
       // For low dimensional data, WeightedLeastSquares is more efficiently since the
       // training algorithm only requires one pass through the data. (SPARK-10668)
-      val instances: RDD[Instance] = dataset.select(
-        col($(labelCol)).cast(DoubleType), w, col($(featuresCol))).rdd.map {
-          case Row(label: Double, weight: Double, features: Vector) =>
-            Instance(label, weight, features)
-      }
+      val instances: RDD[Instance] =
+        dataset.select(col($(labelCol)).cast(DoubleType).as("label"),
+          w.as("weight"), col($(featuresCol)).as("features")).as[Instance].rdd
 
       val optimizer = new WeightedLeastSquares($(fitIntercept), $(regParam),
         $(standardization), true)
@@ -199,10 +200,8 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     }
 
     val instances: RDD[Instance] =
-      dataset.select(col($(labelCol)), w, col($(featuresCol))).rdd.map {
-        case Row(label: Double, weight: Double, features: Vector) =>
-          Instance(label, weight, features)
-      }
+      dataset.select(col($(labelCol)).cast(DoubleType).as("label"),
+        w.as("weight"), col($(featuresCol)).as("features")).as[Instance].rdd
 
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
@@ -563,12 +562,15 @@ class LinearRegressionSummary private[regression] (
     val model: LinearRegressionModel,
     private val diagInvAtWA: Array[Double]) extends Serializable {
 
-  @transient private val metrics = new RegressionMetrics(
-    predictions
-      .select(col(predictionCol), col(labelCol).cast(DoubleType))
-      .rdd
-      .map { case Row(pred: Double, label: Double) => (pred, label) },
-    !model.getFitIntercept)
+  @transient private val metrics = {
+    val sc = SparkContext.getOrCreate()
+    val sqlContext = SQLContext.getOrCreate(sc)
+    import sqlContext.implicits._
+
+    new RegressionMetrics(
+      predictions.select(col(predictionCol), col(labelCol).cast(DoubleType))
+        .as[(Double, Double)].rdd, !model.getFitIntercept)
+  }
 
   /**
    * Returns the explained variance regression score.
