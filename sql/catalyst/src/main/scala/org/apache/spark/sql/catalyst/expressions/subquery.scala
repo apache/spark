@@ -105,6 +105,13 @@ object PredicateSubquery {
       case _ => false
     }.isDefined
   }
+  def hasNullAwarePredicate(e: Expression): Boolean = {
+    e.find(_.isInstanceOf[Not]).isDefined &&
+      e.find {
+        case p: PredicateSubquery if p.nullable => true
+        case _ => false
+      }.isDefined
+  }
 }
 
 /**

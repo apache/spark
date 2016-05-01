@@ -43,6 +43,8 @@ trait HashJoin {
         left.output ++ right.output.map(_.withNullability(true))
       case RightOuter =>
         left.output.map(_.withNullability(true)) ++ right.output
+      case j: LeftSemiPlus =>
+        left.output ++ Seq(j.exists)
       case LeftExistence(_) =>
         left.output
       case x =>
@@ -110,15 +112,14 @@ trait HashJoin {
     (r: InternalRow) => true
   }
 
-  protected def createResultProjection(): (InternalRow) => InternalRow = {
-    if (joinType == LeftSemi) {
+  protected def createResultProjection(): (InternalRow) => InternalRow = joinType match {
+    case LeftExistence(_) =>
       UnsafeProjection.create(output, output)
-    } else {
+    case _ =>
       // Always put the stream side on left to simplify implementation
       // both of left and right side could be null
       UnsafeProjection.create(
         output, (streamedPlan.output ++ buildPlan.output).map(_.withNullability(true)))
-    }
   }
 
   private def innerJoin(
@@ -184,6 +185,23 @@ trait HashJoin {
     }
   }
 
+  private def semiPlusJoin(
+      streamIter: Iterator[InternalRow],
+      hashedRelation: HashedRelation): Iterator[InternalRow] = {
+    val joinKeys = streamSideKeyGenerator()
+    val result = new GenericMutableRow(Array[Any](null))
+    val joinedRow = new JoinedRow
+    streamIter.map { current =>
+      val key = joinKeys(current)
+      lazy val buildIter = hashedRelation.get(key)
+      val exists = !key.anyNull && buildIter != null && (condition.isEmpty || buildIter.exists {
+        (row: InternalRow) => boundCondition(joinedRow(current, row))
+      })
+      result.setBoolean(0, exists)
+      joinedRow(current, result)
+    }
+  }
+
   private def antiJoin(
       streamIter: Iterator[InternalRow],
       hashedRelation: HashedRelation): Iterator[InternalRow] = {
@@ -212,6 +230,8 @@ trait HashJoin {
         semiJoin(streamedIter, hashed)
       case LeftAnti =>
         antiJoin(streamedIter, hashed)
+      case j: LeftSemiPlus =>
+        semiPlusJoin(streamedIter, hashed)
       case x =>
         throw new IllegalArgumentException(
           s"BroadcastHashJoin should not take $x as the JoinType")

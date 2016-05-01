@@ -71,6 +71,10 @@ case class BroadcastHashJoinExec(
     }
   }
 
+  override def supportCodegen: Boolean = {
+    !joinType.isInstanceOf[LeftSemiPlus]
+  }
+
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
     streamedPlan.asInstanceOf[CodegenSupport].inputRDDs()
   }

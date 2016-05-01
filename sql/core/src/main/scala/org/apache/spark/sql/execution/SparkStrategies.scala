@@ -118,6 +118,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
     private def canBuildRight(joinType: JoinType): Boolean = joinType match {
       case Inner | LeftOuter | LeftSemi | LeftAnti => true
+      case j: LeftSemiPlus => true
       case _ => false
     }
 
