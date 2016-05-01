@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.plans.{Inner, RightOuter, UsingJoin}
+import org.apache.spark.sql.catalyst.plans.UsingJoin
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
 
@@ -101,6 +101,27 @@ trait CheckAnalysis extends PredicateHelper {
                 failAnalysis(s"Window specification $s is not valid because $m")
               case None => w
             }
+
+          case s @ ScalarSubquery(query, conditions, _) if conditions.nonEmpty =>
+            // Make sure correlated scalar subqueries contain one row for every outer row by
+            // enforcing that they are aggregates which contain exactly one aggregate expressions.
+            // The analyzer has already checked that subquery contained only one output column, and
+            // added all the grouping expressions to the aggregate.
+            def checkAggregate(a: Aggregate): Unit = {
+              val aggregates = a.expressions.flatMap(_.collect {
+                case a: AggregateExpression => a
+              })
+              if (aggregates.isEmpty) {
+                failAnalysis("The output of a correlated scalar subquery must be aggregated")
+              }
+            }
+
+            query match {
+              case a: Aggregate => checkAggregate(a)
+              case Project(_, a: Aggregate) => checkAggregate(a)
+              case fail => failAnalysis(s"Correlated scalar subqueries must be Aggregated: $fail")
+            }
+            s
         }
 
         operator match {

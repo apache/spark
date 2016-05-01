@@ -235,4 +235,17 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       sql("select a, (select sum(d) from r where a = c) sum_d from l l1 group by 1, 2"),
       Row(1, null) :: Row(2, 6.0) :: Row(3, 2.0) :: Row(null, null) :: Row(6, null) :: Nil)
   }
+
+  test("non-aggregated correlated scalar subquery") {
+    val msg1 = intercept[AnalysisException] {
+      sql("select a, (select b from l l2 where l2.a = l1.a) sum_b from l l1")
+    }
+    assert(msg1.getMessage.contains("Correlated scalar subqueries must be Aggregated"))
+
+    val msg2 = intercept[AnalysisException] {
+      sql("select a, (select b from l l2 where l2.a = l1.a group by 1) sum_b from l l1")
+    }
+    assert(msg2.getMessage.contains(
+      "The output of a correlated scalar subquery must be aggregated"))
+  }
 }
