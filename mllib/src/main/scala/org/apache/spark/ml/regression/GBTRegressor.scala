@@ -188,7 +188,7 @@ class GBTRegressionModel private[ml](
 
   // We use two vals with options rather than lazy vals since we want the codeGen to be
   // eagerly evaluated.
-  val (treePredictors, codeGenPredictors) = if (useCodeGen) {
+  private val (treePredictors, codeGenPredictors) = if (useCodeGen) {
     (None, Some(_trees.map(_.codeGenPredictor())))
   } else {
     (Some(_trees.map(_.predictor())), None)
@@ -201,7 +201,6 @@ class GBTRegressionModel private[ml](
     }
     dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
   }
-
 
   override protected def predict(features: Vector): Double = {
     // TODO: When we add a generic Boosting class, handle transform there?  SPARK-7129
