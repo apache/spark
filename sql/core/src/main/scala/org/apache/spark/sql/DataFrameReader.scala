@@ -402,9 +402,9 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * the delimiter can be part of the value.</li>
    * <li>`escape` (default `\`): sets the single character used for escaping quotes inside
    * an already quoted value.</li>
-   * <li>`comment` (default empty string): sets the single character used for skipping lines beginning
-   * with this character. By default, it is disabled.</li>
-   * <li>header` (default `false`): uses the first line as names of columns.</li>
+   * <li>`comment` (default empty string): sets the single character used for skipping lines
+   * beginning with this character. By default, it is disabled.</li>
+   * <li>`header` (default `false`): uses the first line as names of columns.</li>
    * <li>`ignoreLeadingWhiteSpace` (default `false`): defines whether or not leading whitespaces
    * from values being read should be skipped.</li>
    * <li>`ignoreTrailingWhiteSpace` (default `fDataFraalse`): defines whether or not trailing
