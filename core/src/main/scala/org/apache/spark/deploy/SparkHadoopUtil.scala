@@ -286,7 +286,7 @@ class SparkHadoopUtil extends Logging {
     val now = System.currentTimeMillis()
 
     val renewalInterval =
-      sparkConf.getLong("spark.yarn.token.renewal.interval", (24 hours).toMillis)
+      sparkConf.getTimeAsMs("spark.yarn.token.renewal.interval", (24 hours).toMillis.toString)
 
     credentials.getAllTokens.asScala
       .filter(_.getKind == DelegationTokenIdentifier.HDFS_DELEGATION_KIND)
