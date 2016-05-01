@@ -30,7 +30,7 @@ class StreamFileCatalog(sparkSession: SparkSession, path: Path) extends FileCata
   val metadataDirectory = new Path(path, FileStreamSink.metadataDir)
   logInfo(s"Reading streaming file log from $metadataDirectory")
   val metadataLog = new FileStreamSinkLog(sparkSession, metadataDirectory.toUri.toString)
-  val fs = path.getFileSystem(sparkSession.sessionState.hadoopConf)
+  val fs = path.getFileSystem(sparkSession.sessionState.newHadoopConf())
 
   override def paths: Seq[Path] = path :: Nil
 

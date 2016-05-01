@@ -18,6 +18,8 @@
 package org.apache.spark.sql.execution.datasources.csv
 
 import java.math.BigDecimal
+import java.sql.{Date, Timestamp}
+import java.text.SimpleDateFormat
 import java.util.Locale
 
 import org.apache.spark.SparkFunSuite
@@ -87,6 +89,15 @@ class CSVTypeCastSuite extends SparkFunSuite {
     assert(CSVTypeCast.castTo("1.00", FloatType) == 1.0)
     assert(CSVTypeCast.castTo("1.00", DoubleType) == 1.0)
     assert(CSVTypeCast.castTo("true", BooleanType) == true)
+
+    val dateFormat = new SimpleDateFormat("dd/MM/yyyy hh:mm")
+    val customTimestamp = "31/01/2015 00:00"
+    val expectedTime = dateFormat.parse("31/01/2015 00:00").getTime
+    assert(CSVTypeCast.castTo(customTimestamp, TimestampType, dateFormat = dateFormat)
+      == expectedTime * 1000L)
+    assert(CSVTypeCast.castTo(customTimestamp, DateType, dateFormat = dateFormat) ==
+      DateTimeUtils.millisToDays(expectedTime))
+
     val timestamp = "2015-01-01 00:00:00"
     assert(CSVTypeCast.castTo(timestamp, TimestampType) ==
       DateTimeUtils.stringToTime(timestamp).getTime  * 1000L)

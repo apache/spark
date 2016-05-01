@@ -202,6 +202,25 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
     }
   }
 
+  test("SPARK-12143 regression: Binary type support") {
+    withJdbcStatement { statement =>
+      val queries = Seq(
+        "DROP TABLE IF EXISTS test_binary",
+        "CREATE TABLE test_binary(key INT, value STRING)",
+        s"LOAD DATA LOCAL INPATH '${TestData.smallKv}' OVERWRITE INTO TABLE test_binary")
+
+      queries.foreach(statement.execute)
+
+      val expected: Array[Byte] = "val_238".getBytes
+      assertResult(expected) {
+        val resultSet = statement.executeQuery(
+          "SELECT CAST(value as BINARY) FROM test_date LIMIT 1")
+        resultSet.next()
+        resultSet.getObject(1)
+      }
+    }
+  }
+
   test("test multiple session") {
     import org.apache.spark.sql.internal.SQLConf
     var defaultV1: String = null

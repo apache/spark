@@ -1495,15 +1495,11 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-4699 case sensitivity SQL query") {
-    val orig = sqlContext.getConf(SQLConf.CASE_SENSITIVE)
-    try {
-      sqlContext.setConf(SQLConf.CASE_SENSITIVE, false)
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       val data = TestData(1, "val_1") :: TestData(2, "val_2") :: Nil
       val rdd = sparkContext.parallelize((0 to 1).map(i => data(i)))
       rdd.toDF().registerTempTable("testTable1")
       checkAnswer(sql("SELECT VALUE FROM TESTTABLE1 where KEY = 1"), Row("val_1"))
-    } finally {
-      sqlContext.setConf(SQLConf.CASE_SENSITIVE, orig)
     }
   }
 

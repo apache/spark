@@ -52,7 +52,7 @@ case class CreateViewCommand(
 
   override def output: Seq[Attribute] = Seq.empty[Attribute]
 
-  require(tableDesc.tableType == CatalogTableType.VIRTUAL_VIEW)
+  require(tableDesc.tableType == CatalogTableType.VIEW)
   require(tableDesc.viewText.isDefined)
 
   private val tableIdentifier = tableDesc.identifier

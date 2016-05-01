@@ -24,9 +24,6 @@ import scala.annotation.varargs
 import scala.collection.JavaConverters._
 
 import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, Vector => BV}
-import org.json4s.DefaultFormats
-import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods.{compact, parse => parseJson, render}
 
 /**
  * Represents a numeric vector, whose index type is Int and value type is Double.
@@ -153,11 +150,6 @@ sealed trait Vector extends Serializable {
    * Returns -1 if vector has length 0.
    */
   def argmax: Int
-
-  /**
-   * Converts the vector to a JSON string.
-   */
-  def toJson: String
 }
 
 /**
@@ -231,26 +223,6 @@ object Vectors {
    */
   def zeros(size: Int): Vector = {
     new DenseVector(new Array[Double](size))
-  }
-
-  /**
-   * Parses the JSON representation of a vector into a [[Vector]].
-   */
-  def fromJson(json: String): Vector = {
-    implicit val formats = DefaultFormats
-    val jValue = parseJson(json)
-    (jValue \ "type").extract[Int] match {
-      case 0 => // sparse
-        val size = (jValue \ "size").extract[Int]
-        val indices = (jValue \ "indices").extract[Seq[Int]].toArray
-        val values = (jValue \ "values").extract[Seq[Double]].toArray
-        sparse(size, indices, values)
-      case 1 => // dense
-        val values = (jValue \ "values").extract[Seq[Double]].toArray
-        dense(values)
-      case _ =>
-        throw new IllegalArgumentException(s"Cannot parse $json into a vector.")
-    }
   }
 
   /**
@@ -541,11 +513,6 @@ class DenseVector (val values: Array[Double]) extends Vector {
       maxIdx
     }
   }
-
-  override def toJson: String = {
-    val jValue = ("type" -> 1) ~ ("values" -> values.toSeq)
-    compact(render(jValue))
-  }
 }
 
 object DenseVector {
@@ -723,14 +690,6 @@ class SparseVector (
       i_v
     }.unzip
     new SparseVector(selectedIndices.length, sliceInds.toArray, sliceVals.toArray)
-  }
-
-  override def toJson: String = {
-    val jValue = ("type" -> 0) ~
-      ("size" -> size) ~
-      ("indices" -> indices.toSeq) ~
-      ("values" -> values.toSeq)
-    compact(render(jValue))
   }
 }
 

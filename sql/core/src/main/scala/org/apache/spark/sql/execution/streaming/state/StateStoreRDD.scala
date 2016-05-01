@@ -46,7 +46,7 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
 
   // A Hadoop Configuration can be about 10 KB, which is pretty big, so broadcast it
   private val confBroadcast = dataRDD.context.broadcast(
-    new SerializableConfiguration(sessionState.hadoopConf))
+    new SerializableConfiguration(sessionState.newHadoopConf()))
 
   override protected def getPartitions: Array[Partition] = dataRDD.partitions
 

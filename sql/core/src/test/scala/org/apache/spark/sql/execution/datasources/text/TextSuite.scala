@@ -87,28 +87,22 @@ class TextSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-13543 Write the output as uncompressed via option()") {
-    val clonedConf = new Configuration(hadoopConfiguration)
-    hadoopConfiguration.set("mapreduce.output.fileoutputformat.compress", "true")
-    hadoopConfiguration
-      .set("mapreduce.output.fileoutputformat.compress.type", CompressionType.BLOCK.toString)
-    hadoopConfiguration
-      .set("mapreduce.output.fileoutputformat.compress.codec", classOf[GzipCodec].getName)
-    hadoopConfiguration.set("mapreduce.map.output.compress", "true")
-    hadoopConfiguration.set("mapreduce.map.output.compress.codec", classOf[GzipCodec].getName)
+    val extraOptions = Map[String, String](
+      "mapreduce.output.fileoutputformat.compress" -> "true",
+      "mapreduce.output.fileoutputformat.compress.type" -> CompressionType.BLOCK.toString,
+      "mapreduce.map.output.compress" -> "true",
+      "mapreduce.output.fileoutputformat.compress.codec" -> classOf[GzipCodec].getName,
+      "mapreduce.map.output.compress.codec" -> classOf[GzipCodec].getName
+    )
     withTempDir { dir =>
-      try {
-        val testDf = sqlContext.read.text(testFile)
-        val tempDir = Utils.createTempDir()
-        val tempDirPath = tempDir.getAbsolutePath
-        testDf.write.option("compression", "none").mode(SaveMode.Overwrite).text(tempDirPath)
-        val compressedFiles = new File(tempDirPath).listFiles()
-        assert(compressedFiles.exists(!_.getName.endsWith(".txt.gz")))
-        verifyFrame(sqlContext.read.text(tempDirPath).toDF())
-      } finally {
-        // Hadoop 1 doesn't have `Configuration.unset`
-        hadoopConfiguration.clear()
-        clonedConf.asScala.foreach(entry => hadoopConfiguration.set(entry.getKey, entry.getValue))
-      }
+      val testDf = sqlContext.read.text(testFile)
+      val tempDir = Utils.createTempDir()
+      val tempDirPath = tempDir.getAbsolutePath
+      testDf.write.option("compression", "none")
+        .options(extraOptions).mode(SaveMode.Overwrite).text(tempDirPath)
+      val compressedFiles = new File(tempDirPath).listFiles()
+      assert(compressedFiles.exists(!_.getName.endsWith(".txt.gz")))
+      verifyFrame(sqlContext.read.options(extraOptions).text(tempDirPath).toDF())
     }
   }
 

@@ -56,80 +56,16 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
               "determining the number of reducers is not supported."
           throw new IllegalArgumentException(msg)
         } else {
-          sparkSession.setConf(SQLConf.SHUFFLE_PARTITIONS.key, value)
+          sparkSession.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, value)
           Seq(Row(SQLConf.SHUFFLE_PARTITIONS.key, value))
         }
-      }
-      (keyValueOutput, runFunc)
-
-    case Some((SQLConf.Deprecated.EXTERNAL_SORT, Some(value))) =>
-      val runFunc = (sparkSession: SparkSession) => {
-        logWarning(
-          s"Property ${SQLConf.Deprecated.EXTERNAL_SORT} is deprecated and will be ignored. " +
-            s"External sort will continue to be used.")
-        Seq(Row(SQLConf.Deprecated.EXTERNAL_SORT, "true"))
-      }
-      (keyValueOutput, runFunc)
-
-    case Some((SQLConf.Deprecated.USE_SQL_AGGREGATE2, Some(value))) =>
-      val runFunc = (sparkSession: SparkSession) => {
-        logWarning(
-          s"Property ${SQLConf.Deprecated.USE_SQL_AGGREGATE2} is deprecated and " +
-            s"will be ignored. ${SQLConf.Deprecated.USE_SQL_AGGREGATE2} will " +
-            s"continue to be true.")
-        Seq(Row(SQLConf.Deprecated.USE_SQL_AGGREGATE2, "true"))
-      }
-      (keyValueOutput, runFunc)
-
-    case Some((SQLConf.Deprecated.TUNGSTEN_ENABLED, Some(value))) =>
-      val runFunc = (sparkSession: SparkSession) => {
-        logWarning(
-          s"Property ${SQLConf.Deprecated.TUNGSTEN_ENABLED} is deprecated and " +
-            s"will be ignored. Tungsten will continue to be used.")
-        Seq(Row(SQLConf.Deprecated.TUNGSTEN_ENABLED, "true"))
-      }
-      (keyValueOutput, runFunc)
-
-    case Some((SQLConf.Deprecated.CODEGEN_ENABLED, Some(value))) =>
-      val runFunc = (sparkSession: SparkSession) => {
-        logWarning(
-          s"Property ${SQLConf.Deprecated.CODEGEN_ENABLED} is deprecated and " +
-            s"will be ignored. Codegen will continue to be used.")
-        Seq(Row(SQLConf.Deprecated.CODEGEN_ENABLED, "true"))
-      }
-      (keyValueOutput, runFunc)
-
-    case Some((SQLConf.Deprecated.UNSAFE_ENABLED, Some(value))) =>
-      val runFunc = (sparkSession: SparkSession) => {
-        logWarning(
-          s"Property ${SQLConf.Deprecated.UNSAFE_ENABLED} is deprecated and " +
-            s"will be ignored. Unsafe mode will continue to be used.")
-        Seq(Row(SQLConf.Deprecated.UNSAFE_ENABLED, "true"))
-      }
-      (keyValueOutput, runFunc)
-
-    case Some((SQLConf.Deprecated.SORTMERGE_JOIN, Some(value))) =>
-      val runFunc = (sparkSession: SparkSession) => {
-        logWarning(
-          s"Property ${SQLConf.Deprecated.SORTMERGE_JOIN} is deprecated and " +
-            s"will be ignored. Sort merge join will continue to be used.")
-        Seq(Row(SQLConf.Deprecated.SORTMERGE_JOIN, "true"))
-      }
-      (keyValueOutput, runFunc)
-
-    case Some((SQLConf.Deprecated.PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED, Some(value))) =>
-      val runFunc = (sparkSession: SparkSession) => {
-        logWarning(
-          s"Property ${SQLConf.Deprecated.PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED} is " +
-            s"deprecated and will be ignored. Vectorized parquet reader will be used instead.")
-        Seq(Row(SQLConf.PARQUET_VECTORIZED_READER_ENABLED, "true"))
       }
       (keyValueOutput, runFunc)
 
     // Configures a single property.
     case Some((key, Some(value))) =>
       val runFunc = (sparkSession: SparkSession) => {
-        sparkSession.setConf(key, value)
+        sparkSession.conf.set(key, value)
         Seq(Row(key, value))
       }
       (keyValueOutput, runFunc)
@@ -138,7 +74,7 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
     // Queries all key-value pairs that are set in the SQLConf of the sparkSession.
     case None =>
       val runFunc = (sparkSession: SparkSession) => {
-        sparkSession.getAllConfs.map { case (k, v) => Row(k, v) }.toSeq
+        sparkSession.conf.getAll.map { case (k, v) => Row(k, v) }.toSeq
       }
       (keyValueOutput, runFunc)
 
@@ -171,10 +107,7 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
     // Queries a single property.
     case Some((key, None)) =>
       val runFunc = (sparkSession: SparkSession) => {
-        val value =
-          try sparkSession.getConf(key) catch {
-            case _: NoSuchElementException => "<undefined>"
-          }
+        val value = sparkSession.conf.getOption(key).getOrElse("<undefined>")
         Seq(Row(key, value))
       }
       (keyValueOutput, runFunc)
