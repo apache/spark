@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
 import org.apache.spark.sql._
@@ -44,33 +43,6 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
    * A Hive client used for interacting with the metastore.
    */
   lazy val metadataHive: HiveClient = sharedState.metadataHive.newSession()
-
-  /**
-   * SQLConf and HiveConf contracts:
-   *
-   * 1. create a new o.a.h.hive.ql.session.SessionState for each HiveContext
-   * 2. when the Hive session is first initialized, params in HiveConf will get picked up by the
-   *    SQLConf.  Additionally, any properties set by set() or a SET command inside sql() will be
-   *    set in the SQLConf *as well as* in the HiveConf.
-   */
-  lazy val hiveconf: HiveConf = {
-    val initialConf = new HiveConf(
-      sparkSession.sparkContext.hadoopConfiguration,
-      classOf[org.apache.hadoop.hive.ql.session.SessionState])
-
-    // HiveConf is a Hadoop Configuration, which has a field of classLoader and
-    // the initial value will be the current thread's context class loader
-    // (i.e. initClassLoader at here).
-    // We call initialConf.setClassLoader(initClassLoader) at here to make
-    // this action explicit.
-    initialConf.setClassLoader(sparkSession.sharedState.jarClassLoader)
-    sparkSession.sparkContext.conf.getAll.foreach { case (k, v) =>
-      initialConf.set(k, v)
-    }
-    initialConf
-  }
-
-  setDefaultOverrideConfs()
 
   /**
    * Internal catalog for managing table and database states.
@@ -133,20 +105,6 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
   // ------------------------------------------------------
   //  Helper methods, partially leftover from pre-2.0 days
   // ------------------------------------------------------
-
-  /**
-   * Overrides default Hive configurations to avoid breaking changes to Spark SQL users.
-   *  - allow SQL11 keywords to be used as identifiers
-   */
-  def setDefaultOverrideConfs(): Unit = {
-    setConf(ConfVars.HIVE_SUPPORT_SQL11_RESERVED_KEYWORDS.varname, "false")
-  }
-
-  override def setConf(key: String, value: String): Unit = {
-    super.setConf(key, value)
-    metadataHive.runSqlHive(s"SET $key=$value")
-    hiveconf.set(key, value)
-  }
 
   override def addJar(path: String): Unit = {
     metadataHive.addJar(path)

@@ -153,9 +153,6 @@ private[hive] class TestHiveSparkSession(
   // By clearing the port we force Spark to pick a new one.  This allows us to rerun tests
   // without restarting the JVM.
   System.clearProperty("spark.hostPort")
-  CommandProcessorFactory.clean(sessionState.hiveconf)
-
-  sessionState.hiveconf.set("hive.plan.serialization.format", "javaXML")
 
   // For some hive test case which contain ${system:test.tmp.dir}
   System.setProperty("test.tmp.dir", Utils.createTempDir().getCanonicalPath)
@@ -423,7 +420,7 @@ private[hive] class TestHiveSparkSession(
         foreach { udfName => FunctionRegistry.unregisterTemporaryUDF(udfName) }
 
       // Some tests corrupt this value on purpose, which breaks the RESET call below.
-      sessionState.hiveconf.set("fs.default.name", new File(".").toURI.toString)
+      sessionState.conf.setConfString("fs.default.name", new File(".").toURI.toString)
       // It is important that we RESET first as broken hooks that might have been set could break
       // other sql exec here.
       sessionState.metadataHive.runSqlHive("RESET")
@@ -434,9 +431,6 @@ private[hive] class TestHiveSparkSession(
       sessionState.metadataHive.runSqlHive("set datanucleus.cache.collections.lazy=true")
       // Lots of tests fail if we do not change the partition whitelist from the default.
       sessionState.metadataHive.runSqlHive("set hive.metastore.partition.name.whitelist.pattern=.*")
-
-      // In case a test changed any of these values, restore all the original ones here.
-      sessionState.setDefaultOverrideConfs()
 
       sessionState.catalog.setCurrentDatabase("default")
     } catch {
@@ -564,23 +558,21 @@ private[hive] object TestHiveContext {
       warehousePath: File,
       scratchDirPath: File,
       metastoreTemporaryConf: Map[String, String]): HiveClient = {
-    val hiveConf = new HiveConf(hadoopConf, classOf[HiveConf])
     HiveUtils.newClientForMetadata(
       conf,
-      hiveConf,
       hadoopConf,
-      hiveClientConfigurations(hiveConf, warehousePath, scratchDirPath, metastoreTemporaryConf))
+      hiveClientConfigurations(hadoopConf, warehousePath, scratchDirPath, metastoreTemporaryConf))
   }
 
   /**
    * Configurations needed to create a [[HiveClient]].
    */
   def hiveClientConfigurations(
-      hiveconf: HiveConf,
+      hadoopConf: Configuration,
       warehousePath: File,
       scratchDirPath: File,
       metastoreTemporaryConf: Map[String, String]): Map[String, String] = {
-    HiveUtils.hiveClientConfigurations(hiveconf) ++ metastoreTemporaryConf ++ Map(
+    HiveUtils.hiveClientConfigurations(hadoopConf) ++ metastoreTemporaryConf ++ Map(
       ConfVars.METASTOREWAREHOUSE.varname -> warehousePath.toURI.toString,
       ConfVars.METASTORE_INTEGER_JDO_PUSHDOWN.varname -> "true",
       ConfVars.SCRATCHDIR.varname -> scratchDirPath.toURI.toString,

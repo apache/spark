@@ -134,35 +134,6 @@ class SparkSession(object):
             self._conf = RuntimeConfig(self._jsparkSession.conf())
         return self._conf
 
-    @since(2.0)
-    def setConf(self, key, value):
-        """
-        Sets the given Spark SQL configuration property.
-        """
-        self._jsparkSession.setConf(key, value)
-
-    @ignore_unicode_prefix
-    @since(2.0)
-    def getConf(self, key, defaultValue=None):
-        """Returns the value of Spark SQL configuration property for the given key.
-
-        If the key is not set and defaultValue is not None, return
-        defaultValue. If the key is not set and defaultValue is None, return
-        the system default value.
-
-        >>> spark.getConf("spark.sql.shuffle.partitions")
-        u'200'
-        >>> spark.getConf("spark.sql.shuffle.partitions", "10")
-        u'10'
-        >>> spark.setConf("spark.sql.shuffle.partitions", "50")
-        >>> spark.getConf("spark.sql.shuffle.partitions", "10")
-        u'50'
-        """
-        if defaultValue is not None:
-            return self._jsparkSession.getConf(key, defaultValue)
-        else:
-            return self._jsparkSession.getConf(key)
-
     @property
     @since(2.0)
     def catalog(self):
@@ -443,7 +414,7 @@ class SparkSession(object):
 
         :return: :class:`DataFrame`
 
-        >>> spark.catalog.registerDataFrameAsTable(df, "table1")
+        >>> spark.catalog.registerTable(df, "table1")
         >>> df2 = spark.sql("SELECT field1 AS f1, field2 as f2 from table1")
         >>> df2.collect()
         [Row(f1=1, f2=u'row1'), Row(f1=2, f2=u'row2'), Row(f1=3, f2=u'row3')]
@@ -456,7 +427,7 @@ class SparkSession(object):
 
         :return: :class:`DataFrame`
 
-        >>> spark.catalog.registerDataFrameAsTable(df, "table1")
+        >>> spark.catalog.registerTable(df, "table1")
         >>> df2 = spark.table("table1")
         >>> sorted(df.collect()) == sorted(df2.collect())
         True

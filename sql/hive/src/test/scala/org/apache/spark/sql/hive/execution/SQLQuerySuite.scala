@@ -24,6 +24,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, FunctionRegistry}
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.{HiveUtils, MetastoreRelation}
@@ -1487,5 +1488,21 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       !fs.exists(path),
       "Once a managed table has been dropped, " +
         "dirs of this table should also have been deleted.")
+  }
+
+  test("SPARK-14981: DESC not supported for sorting columns") {
+    withTable("t") {
+      val cause = intercept[ParseException] {
+        sql(
+          """CREATE TABLE t USING PARQUET
+            |OPTIONS (PATH '/path/to/file')
+            |CLUSTERED BY (a) SORTED BY (b DESC) INTO 2 BUCKETS
+            |AS SELECT 1 AS a, 2 AS b
+          """.stripMargin
+        )
+      }
+
+      assert(cause.getMessage.contains("Only ASC ordering is supported for sorting columns"))
+    }
   }
 }

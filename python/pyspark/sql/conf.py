@@ -33,63 +33,33 @@ class RuntimeConfig(object):
     @ignore_unicode_prefix
     @since(2.0)
     def set(self, key, value):
-        """Sets the given Spark runtime configuration property.
-
-        >>> spark.conf.set("garble", "marble")
-        >>> spark.getConf("garble")
-        u'marble'
-        """
+        """Sets the given Spark runtime configuration property."""
         self._jconf.set(key, value)
 
     @ignore_unicode_prefix
     @since(2.0)
-    def get(self, key):
+    def get(self, key, default=None):
         """Returns the value of Spark runtime configuration property for the given key,
         assuming it is set.
-
-        >>> spark.setConf("bogo", "sipeo")
-        >>> spark.conf.get("bogo")
-        u'sipeo'
-        >>> spark.conf.get("definitely.not.set") # doctest: +IGNORE_EXCEPTION_DETAIL
-        Traceback (most recent call last):
-            ...
-        Py4JJavaError: ...
         """
-        return self._jconf.get(key)
-
-    @ignore_unicode_prefix
-    @since(2.0)
-    def getOption(self, key):
-        """Returns the value of Spark runtime configuration property for the given key,
-        or None if it is not set.
-
-        >>> spark.setConf("bogo", "sipeo")
-        >>> spark.conf.getOption("bogo")
-        u'sipeo'
-        >>> spark.conf.getOption("definitely.not.set") is None
-        True
-        """
-        iter = self._jconf.getOption(key).iterator()
-        if iter.hasNext():
-            return iter.next()
+        self._checkType(key, "key")
+        if default is None:
+            return self._jconf.get(key)
         else:
-            return None
+            self._checkType(default, "default")
+            return self._jconf.get(key, default)
 
     @ignore_unicode_prefix
     @since(2.0)
     def unset(self, key):
-        """Resets the configuration property for the given key.
-
-        >>> spark.setConf("armado", "larmado")
-        >>> spark.getConf("armado")
-        u'larmado'
-        >>> spark.conf.unset("armado")
-        >>> spark.getConf("armado") # doctest: +IGNORE_EXCEPTION_DETAIL
-        Traceback (most recent call last):
-            ...
-        Py4JJavaError: ...
-        """
+        """Resets the configuration property for the given key."""
         self._jconf.unset(key)
+
+    def _checkType(self, obj, identifier):
+        """Assert that an object is of type str."""
+        if not isinstance(obj, str) and not isinstance(obj, unicode):
+            raise TypeError("expected %s '%s' to be a string (was '%s')" %
+                            (identifier, obj, type(obj).__name__))
 
 
 def _test():

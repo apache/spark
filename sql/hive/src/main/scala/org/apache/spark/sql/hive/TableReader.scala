@@ -105,7 +105,7 @@ class HadoopTableReader(
     // Create local references to member variables, so that the entire `this` object won't be
     // serialized in the closure below.
     val tableDesc = relation.tableDesc
-    val broadcastedHiveConf = _broadcastedHadoopConf
+    val broadcastedHadoopConf = _broadcastedHadoopConf
 
     val tablePath = hiveTable.getPath
     val inputPathStr = applyFilterIfNeeded(tablePath, filterOpt)
@@ -119,7 +119,7 @@ class HadoopTableReader(
     val mutableRow = new SpecificMutableRow(attributes.map(_.dataType))
 
     val deserializedHadoopRDD = hadoopRDD.mapPartitions { iter =>
-      val hconf = broadcastedHiveConf.value.value
+      val hconf = broadcastedHadoopConf.value.value
       val deserializer = deserializerClass.newInstance()
       deserializer.initialize(hconf, tableDesc.getProperties)
       HadoopTableReader.fillObject(iter, deserializer, attrsWithIndex, mutableRow, deserializer)
