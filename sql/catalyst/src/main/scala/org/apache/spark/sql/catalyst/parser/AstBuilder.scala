@@ -258,7 +258,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       val operator = pVal.comparisonOperator().getChild(0).asInstanceOf[TerminalNode]
       if (operator.getSymbol.getType != SqlBaseParser.EQ) {
         throw new ParseException(
-          s"Unsupported comparison operator in partition spec: '${operator.getSymbol.getType}'",
+          s"Unsupported comparison operator in partition spec: '${operator.getSymbol.getText}'",
           ctx)
       }
       val name = pVal.identifier.getText.toLowerCase

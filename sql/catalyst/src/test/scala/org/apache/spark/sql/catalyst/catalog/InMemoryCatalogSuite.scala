@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
-import org.apache.spark.sql.AnalysisException
-
 
 /** Test suite for the [[InMemoryCatalog]]. */
 class InMemoryCatalogSuite extends ExternalCatalogSuite {
@@ -27,14 +25,5 @@ class InMemoryCatalogSuite extends ExternalCatalogSuite {
     override val tableInputFormat: String = "org.apache.park.SequenceFileInputFormat"
     override val tableOutputFormat: String = "org.apache.park.SequenceFileOutputFormat"
     override def newEmptyCatalog(): ExternalCatalog = new InMemoryCatalog
-  }
-
-  test("drop multi partitions") {
-    import utils._
-    val catalog = newBasicCatalog()
-    assert(catalogPartitionsEqual(catalog, "db2", "tbl2", Seq(part1, part2)))
-    catalog.dropPartitions(
-      "db2", "tbl2", Seq(part1.spec, part2.spec), ignoreIfNotExists = false)
-    assert(catalog.listPartitions("db2", "tbl2").isEmpty)
   }
 }

@@ -20,7 +20,6 @@ package org.apache.spark.sql.hive
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.hive.client.HiveClient
 
@@ -42,17 +41,5 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
   }
 
   protected override def resetState(): Unit = client.reset()
-
-  test("drop multi partitions") {
-    import utils._
-    val catalog = newBasicCatalog()
-    assert(catalogPartitionsEqual(catalog, "db2", "tbl2", Seq(part1, part2)))
-    val e = intercept[AnalysisException] {
-      catalog.dropPartitions(
-        "db2", "tbl2", Seq(part1.spec, part2.spec), ignoreIfNotExists = false)
-    }
-    assert(e.getMessage.contains(
-      "When using hive metastore, each command only can drop one and only one partition"))
-  }
 
 }

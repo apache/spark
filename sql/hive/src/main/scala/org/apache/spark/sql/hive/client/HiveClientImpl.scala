@@ -379,10 +379,6 @@ private[hive] class HiveClientImpl(
       ignoreIfNotExists: Boolean): Unit = withHiveState {
     // TODO: figure out how to drop multiple partitions in one call without breaking atomicity
     val hiveTable = client.getTable(db, table, true /* throw exception */)
-    if (specs.size > 1) {
-      throw new AnalysisException(
-        s"When using hive metastore, each command only can drop one and only one partition.")
-    }
     specs.foreach { s =>
       // The provided spec here can be a partial spec, i.e. it will match all partitions
       // whose specs are supersets of this partial spec. E.g. If a table has partitions
@@ -391,10 +387,6 @@ private[hive] class HiveClientImpl(
       if (matchingParts.isEmpty && !ignoreIfNotExists) {
         throw new AnalysisException(
           s"partition to drop '$s' does not exist in table '$table' database '$db'")
-      } else if (matchingParts.size > 1) {
-        throw new AnalysisException(
-          s"'$s' corresponds to multiple partitions in table '$table' database '$db'. " +
-            "Each command can drop one and only one partition.")
       }
       matchingParts.foreach { hivePartition =>
         val dropOptions = new PartitionDropOptions

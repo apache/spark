@@ -178,15 +178,21 @@ class HiveDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
              """.stripMargin)
         }
         assert(message.getMessage.contains(
-          "When using hive metastore, each command only can drop one and only one partition"))
+          "Alter Table Drop Partition is not allowed to drop more than one partitions"))
 
         message = intercept[AnalysisException] {
           sql(s"ALTER TABLE $externalTab DROP PARTITION (ds='2008-04-08')")
         }
         assert(message.getMessage.contains(
-          "'Map(ds -> 2008-04-08)' corresponds to multiple partitions in table " +
-            "'exttable_with_partitions' database 'default'. Each command can drop " +
-            "one and only one partition.;"))
+          "Partition spec is invalid. The spec (ds) must match the partition spec (ds, hr) " +
+            "defined in table '`extTable_with_partitions`'"))
+
+        message = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $externalTab DROP PARTITION (ds='2008-04-09', unknownCol='12')")
+        }
+        assert(message.getMessage.contains(
+          "Partition spec is invalid. The spec (ds, unknowncol) must match the partition spec " +
+            "(ds, hr) defined in table '`extTable_with_partitions`'"))
 
         // no partition is dropped
         assert(catalog.listPartitions(TableIdentifier(externalTab)).map(_.spec).toSet ==
