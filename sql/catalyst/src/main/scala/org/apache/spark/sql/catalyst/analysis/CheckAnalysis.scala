@@ -60,9 +60,6 @@ trait CheckAnalysis extends PredicateHelper {
             val from = operator.inputSet.map(_.name).mkString(", ")
             a.failAnalysis(s"cannot resolve '${a.sql}' given input columns: [$from]")
 
-          case ScalarSubquery(_, conditions, _) if conditions.nonEmpty =>
-            failAnalysis("Correlated scalar subqueries are not supported.")
-
           case e: Expression if e.checkInputDataTypes().isFailure =>
             e.checkInputDataTypes() match {
               case TypeCheckResult.TypeCheckFailure(message) =>
@@ -218,6 +215,13 @@ trait CheckAnalysis extends PredicateHelper {
                 |Unions can only be performed on tables with the same number of columns,
                 | but one table has '${firstError.output.length}' columns and another table has
                 | '${s.children.head.output.length}' columns""".stripMargin)
+
+          case p if p.expressions.exists(ScalarSubquery.hasCorrelatedScalarSubquery) =>
+            p match {
+              case _: Filter | _: Aggregate | _: Project => // Ok
+              case other => failAnalysis(
+                s"Correlated scalar sub-queries can only be used in a Filter/Aggregate/Project: $p")
+            }
 
           case p if p.expressions.exists(PredicateSubquery.hasPredicateSubquery) =>
             failAnalysis(s"Predicate sub-queries can only be used in a Filter: $p")

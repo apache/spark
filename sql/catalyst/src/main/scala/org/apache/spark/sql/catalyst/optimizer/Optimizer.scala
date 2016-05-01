@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.annotation.tailrec
 import scala.collection.immutable.HashSet
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.{CatalystConf, SimpleCatalystConf}
 import org.apache.spark.sql.catalyst.analysis.{CleanupAliases, DistinctAggregationRewriter, EliminateSubqueryAliases, EmptyFunctionRegistry}
@@ -100,7 +101,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       SimplifyCasts,
       SimplifyCaseConversionExpressions,
       EliminateSerialization,
-      RewritePredicateSubquery) ::
+      RewritePredicateSubquery,
+      RewriteCorrelatedScalarSubquery) ::
     Batch("Decimal Optimizations", fixedPoint,
       DecimalAggregates) ::
     Batch("Typed Filter Optimization", fixedPoint,
@@ -1530,6 +1532,77 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           // Note that will almost certainly be planned as a Broadcast Nested Loop join. Use EXISTS
           // if performance matters to you.
           Join(p, sub, LeftAnti, Option(Or(anyNull, condition)))
+      }
+  }
+}
+
+/**
+ * This rule rewrites correlated [[ScalarSubquery]] expressions into LEFT OUTER joins.
+ */
+object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
+  /**
+   * Extract all correlated scalar subqueries from an expression. The subqueries are collected using
+   * the given collector. The expression is rewritten and returned.
+   */
+  private def extractCorrelatedScalarSubqueries[E <: Expression](
+      expression: E,
+      subqueries: ArrayBuffer[ScalarSubquery]): E = {
+    val newExpression = expression transform {
+      case s: ScalarSubquery if s.children.nonEmpty =>
+        subqueries += s
+        s.query.output.head
+    }
+    newExpression.asInstanceOf[E]
+  }
+
+  /**
+   * Construct a new child plan by left joining the given subqueries to a base plan.
+   */
+  private def constructLeftJoins(
+      child: LogicalPlan,
+      subqueries: ArrayBuffer[ScalarSubquery]): LogicalPlan = {
+    subqueries.foldLeft(child) {
+      case (currentChild, ScalarSubquery(query, conditions, _)) =>
+        Project(
+          currentChild.output :+ query.output.head,
+          Join(currentChild, query, LeftOuter, conditions.reduceOption(And)))
+    }
+  }
+
+  /**
+   * Rewrite [[Filter]], [[Project]] and [[Aggregate]] plans containing correlated scalar
+   * subqueries.
+   */
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case a @ Aggregate(grouping, expressions, child) =>
+      val subqueries = ArrayBuffer.empty[ScalarSubquery]
+      val newExpressions = expressions.map(extractCorrelatedScalarSubqueries(_, subqueries))
+      if (subqueries.nonEmpty) {
+        // We currently only allow correlated subqueries in an aggregate if they are part of the
+        // grouping expressions. As a result we need to replace all the scalar subqueries in the
+        // grouping expressions by their result.
+        val newGrouping = grouping.map { e =>
+          subqueries.find(_.semanticEquals(e)).map(_.query.output.head).getOrElse(e)
+        }
+        Aggregate(newGrouping, newExpressions, constructLeftJoins(child, subqueries))
+      } else {
+        a
+      }
+    case p @ Project(expressions, child) =>
+      val subqueries = ArrayBuffer.empty[ScalarSubquery]
+      val newExpressions = expressions.map(extractCorrelatedScalarSubqueries(_, subqueries))
+      if (subqueries.nonEmpty) {
+        Project(newExpressions, constructLeftJoins(child, subqueries))
+      } else {
+        p
+      }
+    case f @ Filter(condition, child) =>
+      val subqueries = ArrayBuffer.empty[ScalarSubquery]
+      val newCondition = extractCorrelatedScalarSubqueries(condition, subqueries)
+      if (subqueries.nonEmpty) {
+        Project(f.output, Filter(newCondition, constructLeftJoins(child, subqueries)))
+      } else {
+        f
       }
   }
 }
