@@ -283,8 +283,10 @@ class DataFrameReader(object):
         :param paths: string, or list of strings, for input path(s).
 
         You can set the following CSV-specific options to deal with CSV files:
-            * ``sep`` or ``delimiter`` (default ``,``): sets the single character as a delimiter \
+            * ``delimiter`` (default ``,``): sets the single character as a delimiter \
                 for each field and value.
+            * ``charset`` (default ``UTF-8``): decodes the CSV files by the given \
+                encoding type.
             * ``quote`` (default ``"``): sets the single character used for escaping \
                 quoted values where the delimiter can be part of the value.
             * ``escape`` (default ``\``): sets the single character used for escaping quotes \
@@ -701,16 +703,17 @@ class DataFrameWriter(object):
                             snappy and deflate).
 
         You can set the following CSV-specific options to deal with CSV files:
-            * ``sep`` or ``delimiter`` (default ``,``): sets the single character as a delimiter \
+            * ``delimiter`` (default ``,``): sets the single character as a delimiter \
                 for each field and value.
-            * ``encoding`` or ``charset`` (default ``UTF-8``): decodes the CSV files by the given \
-                encoding type.
             * ``quote`` (default ``"``): sets the single character used for escaping \
                 quoted values where the delimiter can be part of the value.
             * ``escape`` (default ``\``): sets the single character used for escaping quotes \
                 inside an already quoted value.
             * ``header`` (default ``false``): writes the names of columns as the first line.
             * ``nullValue`` (default empty string): sets the string representation of a null value.
+            * ``compression``: compression codec to use when saving to file. This can be one of \
+                the known case-insensitive shorten names (none, bzip2, gzip, lz4, snappy and \
+                deflate).
 
         >>> df.write.csv(os.path.join(tempfile.mkdtemp(), 'data'))
         """
