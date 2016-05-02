@@ -42,7 +42,7 @@ class SQLMetric(val metricType: String, initValue: Long = 0L) extends NewAccumul
 
   override def addImpl(v: Long): Unit = _value += v
 
-  def +=(v: Long): Unit = _value += v
+  def +=(v: Long): Unit = add(v)
 
   override def localValue: Long = _value
 
