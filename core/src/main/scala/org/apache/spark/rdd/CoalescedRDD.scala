@@ -169,38 +169,41 @@ private class DefaultPartitionCoalescer(val balanceSlack: Double = 0.10)
 
   var noLocality = true  // if true if no preferredLocations exists for parent RDD
 
-  // contains all the partitions from the previous RDD that don't have preferred locations
-  val partsWithoutLocs = ArrayBuffer[Partition]()
-  // contains all the partitions from the previous RDD that have preferred locations along with
-  val partsWithLocs = getAllPrefLocs(prev)
+  class PartitionLocations(prev: RDD[_]) {
+
+    // contains all the partitions from the previous RDD that don't have preferred locations
+    val partsWithoutLocs = ArrayBuffer[Partition]()
+    // contains all the partitions from the previous RDD that have preferred locations
+    val partsWithLocs:Array[(String, Partition)] = getAllPrefLocs(prev)
+
+    // has side affect of filling in partitions without locations as well
+    def getAllPrefLocs(prev: RDD[_]): Array[(String, Partition)] = {
+      val partsWithLocs = mutable.LinkedHashMap[Partition, Seq[String]]()
+      // first get the locations for each partition, only do this once since it can be expensive
+      prev.partitions.foreach(p => {
+          val locs = currPrefLocs(p, prev)
+          if (locs.size > 0) {
+            partsWithLocs.put(p, locs)
+          } else {
+            partsWithoutLocs += p
+          }
+        } 
+      )
+      // convert it into an array of host to partition
+      val allLocs = (0 to 2).map(x =>
+        partsWithLocs.toArray.flatMap(parts => {
+          val p = parts._1
+          val locs = parts._2
+          if (locs.size > x) Some((locs(x), p)) else None
+        } )
+      )
+      allLocs.reduceLeft((x, y) => x ++ y)
+    }
+  }
 
   // gets the *current* preferred locations from the DAGScheduler (as opposed to the static ones)
   def currPrefLocs(part: Partition, prev: RDD[_]): Seq[String] = {
     prev.context.getPreferredLocs(prev, part.index).map(tl => tl.host)
-  }
-
-  // has side affect of filling in partitions without locations as well
-  def getAllPrefLocs(prev: RDD[_]): Array[(String, Partition)] = {
-    val partsWithLocs = mutable.LinkedHashMap[Partition, Seq[String]]()
-    // first get the locations for each partition, only do this once since it can be expensive
-    prev.partitions.foreach(p => {
-        val locs = currPrefLocs(p)
-        if (locs.size > 0) {
-          partsWithLocs.put(p, locs)
-        } else {
-          partsWithoutLocs += p
-        }
-      } 
-    )
-    // convert it into an array of host to partition
-    val allLocs = (0 to 2).map(x =>
-      partsWithLocs.toArray.flatMap(parts => {
-        val p = parts._1
-        val locs = parts._2
-        if (locs.size > x) Some((locs(x), p)) else None
-      } )
-    )
-    allLocs.reduceLeft((x, y) => x ++ y)
   }
 
   /**
@@ -229,9 +232,9 @@ private class DefaultPartitionCoalescer(val balanceSlack: Double = 0.10)
    * locations (2 * n log(n))
    * @param targetLen
    */
-  def setupGroups(targetLen: Int, prev: RDD[_]) {
+  def setupGroups(targetLen: Int, partitionLocs: PartitionLocations) {
     // deal with empty case, just create targetLen partition groups with no preferred location
-    if (partsWithLocs.isEmpty) {
+    if (partitionLocs.partsWithLocs.isEmpty) {
       (1 to targetLen).foreach(x => groupArr += new PartitionGroup())
       return
     }
@@ -245,9 +248,9 @@ private class DefaultPartitionCoalescer(val balanceSlack: Double = 0.10)
     // rotate through until either targetLen unique/distinct preferred locations have been created
     // OR (we have went through either all partitions OR we've rotated expectedCoupons2 - in which case we
     // have likely seen all preferred locations)
-    val numPartsToLookAt = math.min(expectedCoupons2, partsWithLocs.length)
+    val numPartsToLookAt = math.min(expectedCoupons2, partitionLocs.partsWithLocs.length)
     while (numCreated < targetLen && tries < numPartsToLookAt) {
-      val (nxt_replica, nxt_part) = partsWithLocs(tries)
+      val (nxt_replica, nxt_part) = partitionLocs.partsWithLocs(tries)
       tries += 1
       if (!groupHash.contains(nxt_replica)) {
         val pgroup = new PartitionGroup(Some(nxt_replica))
@@ -260,14 +263,14 @@ private class DefaultPartitionCoalescer(val balanceSlack: Double = 0.10)
     tries = 0
     // if we don't have enough partition groups, create duplicates
     while (numCreated < targetLen) {  
-      var (nxt_replica, nxt_part) = partsWithLocs(tries)
+      var (nxt_replica, nxt_part) = partitionLocs.partsWithLocs(tries)
       tries += 1
       val pgroup = new PartitionGroup(Some(nxt_replica))
       groupArr += pgroup
       groupHash.getOrElseUpdate(nxt_replica, ArrayBuffer()) += pgroup
       addPartToPGroup(nxt_part, pgroup)
       numCreated += 1
-      if (tries >= partsWithLocs.length) tries = 0
+      if (tries >= partitionLocs.partsWithLocs.length) tries = 0
     }
   }
 
@@ -281,9 +284,10 @@ private class DefaultPartitionCoalescer(val balanceSlack: Double = 0.10)
    *                     imbalance in favor of locality
    * @return partition group (bin to be put in)
    */
-  def pickBin(p: Partition, prev: RDD[_], balanceSlack: Double): PartitionGroup = {
+  def pickBin(p: Partition, prev: RDD[_], balanceSlack: Double, 
+      partitionLocs: PartitionLocations): PartitionGroup = {
     val slack = (balanceSlack * prev.partitions.length).toInt
-    val preflocs = partsWithLocs.filter(_._2 == p).map(_._1).toSeq
+    val preflocs = partitionLocs.partsWithLocs.filter(_._2 == p).map(_._1).toSeq
     // least loaded pref locs
     val pref = preflocs.map(getLeastGroupHash(_)).sortWith(compare) // least loaded pref locs
     val prefPart = if (pref == Nil) None else pref.head
@@ -313,7 +317,8 @@ private class DefaultPartitionCoalescer(val balanceSlack: Double = 0.10)
     }
   }
 
-  def throwBalls(maxPartitions: Int, prev: RDD[_], balanceSlack: Double) {
+  def throwBalls(maxPartitions: Int, prev: RDD[_], 
+      balanceSlack: Double, partitionLocs: PartitionLocations) {
     if (noLocality) {  // no preferredLocations in parent RDD, no randomization needed
       if (maxPartitions > groupArr.size) { // just return prev.partitions
         for ((p, i) <- prev.partitions.zipWithIndex) {
@@ -334,12 +339,12 @@ private class DefaultPartitionCoalescer(val balanceSlack: Double = 0.10)
       if (groupArr.size > initialHash.size) {
         // we don't have a partition assigned to every group yet so first try to fill them
         // with the partitions with preferred locations
-        val partIter = partsWithLocs.iterator
+        val partIter = partitionLocs.partsWithLocs.iterator
         while (partIter.hasNext && initialHash.size < groupArr.size) {
           var (nxt_replica, nxt_part) = partIter.next()
           if (!initialHash.contains(nxt_part)) {
-            groupArr.find(pg => pg.size == 0).map(firstEmpty => {
-              firstEmpty.arr += nxt_part
+            groupArr.find(pg => pg.numPartitions == 0).map(firstEmpty => {
+              firstEmpty.partitions += nxt_part
               initialHash += nxt_part
             })
           }
@@ -348,12 +353,12 @@ private class DefaultPartitionCoalescer(val balanceSlack: Double = 0.10)
 
       // if we didn't get one partitions per group from partitions with preferred locations
       // use partitions without preferred locations
-      val partNoLocIter = partsWithoutLocs.iterator
+      val partNoLocIter = partitionLocs.partsWithoutLocs.iterator
       while (partNoLocIter.hasNext && initialHash.size < groupArr.size) {
         var nxt_part = partNoLocIter.next()
         if (!initialHash.contains(nxt_part)) {
-          groupArr.find(pg => pg.size == 0).map(firstEmpty => {
-            firstEmpty.arr += nxt_part
+          groupArr.find(pg => pg.numPartitions == 0).map(firstEmpty => {
+            firstEmpty.partitions += nxt_part
             initialHash += nxt_part
           })
         }
@@ -361,7 +366,7 @@ private class DefaultPartitionCoalescer(val balanceSlack: Double = 0.10)
 
       // finally pick bin for the rest
       for (p <- prev.partitions if (!initialHash.contains(p))) { // throw every partition into group
-        pickBin(p, prev, balanceSlack).partitions += p
+        pickBin(p, prev, balanceSlack, partitionLocs).partitions += p
       }
     }
   }
@@ -375,8 +380,9 @@ private class DefaultPartitionCoalescer(val balanceSlack: Double = 0.10)
     * @return array of partition groups
    */
   def coalesce(maxPartitions: Int, prev: RDD[_]): Array[PartitionGroup] = {
-    setupGroups(math.min(prev.partitions.length, maxPartitions), prev)   // setup the groups (bins)
-    throwBalls(maxPartitions, prev, balanceSlack) // assign partitions (balls) to each group (bins)
+    val partitionLocs = new PartitionLocations(prev)
+    setupGroups(math.min(prev.partitions.length, maxPartitions), partitionLocs)   // setup the groups (bins)
+    throwBalls(maxPartitions, prev, balanceSlack, partitionLocs) // assign partitions (balls) to each group (bins)
     getPartitions
   }
 }
