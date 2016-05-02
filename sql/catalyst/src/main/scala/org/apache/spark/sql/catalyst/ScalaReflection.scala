@@ -509,6 +509,10 @@ object ScalaReflection extends ScalaReflection {
                 serializerFor(unwrapped, optType, newPath))
           }
 
+        case t if t <:< localTypeOf[Seq[_]] =>
+          val TypeRef(_, _, Seq(elementType)) = t
+          toCatalystArray(inputObject, elementType)
+
         case t if definedByConstructorParams(t) =>
           val params = getConstructorParameters(t)
           val nonNullOutput = CreateNamedStruct(params.flatMap { case (fieldName, fieldType) =>
@@ -521,10 +525,6 @@ object ScalaReflection extends ScalaReflection {
           expressions.If(IsNull(inputObject), nullOutput, nonNullOutput)
 
         case t if t <:< localTypeOf[Array[_]] =>
-          val TypeRef(_, _, Seq(elementType)) = t
-          toCatalystArray(inputObject, elementType)
-
-        case t if t <:< localTypeOf[Seq[_]] =>
           val TypeRef(_, _, Seq(elementType)) = t
           toCatalystArray(inputObject, elementType)
 

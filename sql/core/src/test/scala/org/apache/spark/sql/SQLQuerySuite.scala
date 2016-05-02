@@ -2473,4 +2473,11 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
           Row("r3c1x", "r3c2", "t1r3c3", "r3c2", "t1r3c3") :: Nil)
     }
   }
+
+  test("SPARK-15062") {
+    val dfComplicated = sparkContext.parallelize(
+      List((Map("1" -> "a"), List("b", "c")), (Map("2" -> "b"), List("d", "e")))).toDF
+    checkAnswer(dfComplicated, Row(Map("1" -> "a"), List("b", "c")) ::
+      Row(Map("2" -> "b"), List("d", "e")) :: Nil)
+  }
 }
