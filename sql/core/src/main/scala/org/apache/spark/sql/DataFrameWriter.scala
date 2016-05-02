@@ -284,7 +284,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
         new Path(userSpecified).toUri.toString
       }.orElse {
         val checkpointConfig: Option[String] =
-          df.sparkSession.conf.getOption(SQLConf.CHECKPOINT_LOCATION)
+          df.sparkSession.conf.get(SQLConf.CHECKPOINT_LOCATION)
 
         checkpointConfig.map { location =>
           new Path(location, queryName).toUri.toString
