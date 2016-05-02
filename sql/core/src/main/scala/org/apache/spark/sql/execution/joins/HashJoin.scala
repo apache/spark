@@ -43,7 +43,7 @@ trait HashJoin {
         left.output ++ right.output.map(_.withNullability(true))
       case RightOuter =>
         left.output.map(_.withNullability(true)) ++ right.output
-      case j: LeftSemiPlus =>
+      case j: ExistenceJoin =>
         left.output ++ Seq(j.exists)
       case LeftExistence(_) =>
         left.output
@@ -185,7 +185,7 @@ trait HashJoin {
     }
   }
 
-  private def semiPlusJoin(
+  private def existenceJoin(
       streamIter: Iterator[InternalRow],
       hashedRelation: HashedRelation): Iterator[InternalRow] = {
     val joinKeys = streamSideKeyGenerator()
@@ -230,8 +230,8 @@ trait HashJoin {
         semiJoin(streamedIter, hashed)
       case LeftAnti =>
         antiJoin(streamedIter, hashed)
-      case j: LeftSemiPlus =>
-        semiPlusJoin(streamedIter, hashed)
+      case j: ExistenceJoin =>
+        existenceJoin(streamedIter, hashed)
       case x =>
         throw new IllegalArgumentException(
           s"BroadcastHashJoin should not take $x as the JoinType")

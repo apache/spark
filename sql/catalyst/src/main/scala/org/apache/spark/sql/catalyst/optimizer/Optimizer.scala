@@ -109,7 +109,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
     Batch("OptimizeCodegen", Once,
       OptimizeCodegen(conf)) ::
     Batch("RewriteSubquery", Once,
-      RewritePredicateSubquery) :: Nil
+      RewritePredicateSubquery,
+      CollapseProject) :: Nil
   }
 
   /**
@@ -1548,12 +1549,11 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           Join(p, sub, LeftAnti, Option(Or(anyNull, condition)))
         case (p, predicate) =>
           var joined = p
-          val hasNot = predicate.find(_.isInstanceOf[Not]).isDefined
           val replaced = predicate transformUp {
             case PredicateSubquery(sub, conditions, nullAware, _) =>
               // TODO: support null-aware join
               val exists = AttributeReference("exists", BooleanType, false)()
-              joined = Join(joined, sub, LeftSemiPlus(exists), conditions.reduceLeftOption(And))
+              joined = Join(joined, sub, ExistenceJoin(exists), conditions.reduceLeftOption(And))
               exists
           }
           Project(p.output, Filter(replaced, joined))

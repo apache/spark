@@ -92,7 +92,7 @@ case class PredicateSubquery(
   extends SubqueryExpression with Predicate with Unevaluable {
   override lazy val resolved = childrenResolved && query.resolved
   override lazy val references: AttributeSet = super.references -- query.outputSet
-  override def nullable: Boolean = false
+  override def nullable: Boolean = nullAware
   override def plan: LogicalPlan = SubqueryAlias(toString, query)
   override def withNewPlan(plan: LogicalPlan): PredicateSubquery = copy(query = plan)
   override def toString: String = s"predicate-subquery#${exprId.id} $conditionString"
@@ -105,10 +105,17 @@ object PredicateSubquery {
       case _ => false
     }.isDefined
   }
-  def hasNullAwarePredicate(e: Expression): Boolean = {
+
+  /**
+   * Returns whether there are Not() and any null-aware predicate subquery in the expression.
+   *
+   * If there is no Not in the expression, we could turn the null-aware predicate into
+   * not-null-aware predicate.
+   */
+  def hasNotAndNullAwarePredicate(e: Expression): Boolean = {
     e.find(_.isInstanceOf[Not]).isDefined &&
       e.find {
-        case p: PredicateSubquery if p.nullable => true
+        case p: PredicateSubquery if p.nullAware => true
         case _ => false
       }.isDefined
   }

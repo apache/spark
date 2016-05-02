@@ -53,7 +53,7 @@ case class SortMergeJoinExec(
         left.output.map(_.withNullability(true)) ++ right.output
       case FullOuter =>
         (left.output ++ right.output).map(_.withNullability(true))
-      case j: LeftSemiPlus =>
+      case j: ExistenceJoin =>
         left.output ++ Seq(j.exists)
       case LeftExistence(_) =>
         left.output
@@ -271,7 +271,7 @@ case class SortMergeJoinExec(
             override def getRow: InternalRow = currentLeftRow
           }.toScala
 
-        case j: LeftSemiPlus =>
+        case j: ExistenceJoin =>
           new RowIterator {
             private[this] var currentLeftRow: InternalRow = _
             private[this] val result: MutableRow = new GenericMutableRow(Array[Any](null))

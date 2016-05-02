@@ -72,7 +72,7 @@ case class BroadcastNestedLoopJoinExec(
         left.output.map(_.withNullability(true)) ++ right.output
       case FullOuter =>
         left.output.map(_.withNullability(true)) ++ right.output.map(_.withNullability(true))
-      case j: LeftSemiPlus =>
+      case j: ExistenceJoin =>
         left.output ++ Seq(j.exists)
       case LeftExistence(_) =>
         left.output
@@ -203,12 +203,12 @@ case class BroadcastNestedLoopJoinExec(
     streamed.execute().mapPartitionsInternal { streamedIter =>
       val buildRows = relation.value
       val joinedRow = new JoinedRow
-      val exists = joinType.asInstanceOf[LeftSemiPlus].exists
+      val exists = joinType.asInstanceOf[ExistenceJoin].exists
 
       if (condition.isDefined) {
         val resultRow = new GenericMutableRow(Array[Any](null))
         if (exists.nullable) {
-          sys.error("not supported")
+          sys.error("Null-aware join is not supported")
         } else {
           streamedIter.map { row =>
             val result = buildRows.exists(r => boundCondition(joinedRow(row, r)))
@@ -273,7 +273,7 @@ case class BroadcastNestedLoopJoinExec(
           i += 1
         }
         return sparkContext.makeRDD(buf)
-      case j: LeftSemiPlus =>
+      case j: ExistenceJoin =>
         val buf: CompactBuffer[InternalRow] = new CompactBuffer()
         var i = 0
         val rel = relation.value
@@ -283,24 +283,34 @@ case class BroadcastNestedLoopJoinExec(
           i += 1
         }
         return sparkContext.makeRDD(buf)
+      case LeftAnti =>
+        val notMatched: CompactBuffer[InternalRow] = new CompactBuffer()
+        var i = 0
+        val rel = relation.value
+        while (i < rel.length) {
+          if (!matchedBroadcastRows.get(i)) {
+            notMatched += rel(i).copy()
+          }
+          i += 1
+        }
+        return sparkContext.makeRDD(notMatched)
       case o =>
     }
 
     val notMatchedBroadcastRows: Seq[InternalRow] = {
+      val nulls = new GenericMutableRow(streamed.output.size)
       val buf: CompactBuffer[InternalRow] = new CompactBuffer()
+      val joinedRow = new JoinedRow
+      joinedRow.withLeft(nulls)
       var i = 0
       val buildRows = relation.value
       while (i < buildRows.length) {
         if (!matchedBroadcastRows.get(i)) {
-          buf += buildRows(i).copy()
+          buf += joinedRow.withRight(buildRows(i)).copy()
         }
         i += 1
       }
       buf
-    }
-
-    if (joinType == LeftAnti) {
-      return sparkContext.makeRDD(notMatchedBroadcastRows)
     }
 
     val matchedStreamRows = streamRdd.mapPartitionsInternal { streamedIter =>
@@ -346,7 +356,7 @@ case class BroadcastNestedLoopJoinExec(
         leftExistenceJoin(broadcastedRelation, exists = true)
       case (LeftAnti, BuildRight) =>
         leftExistenceJoin(broadcastedRelation, exists = false)
-      case (j: LeftSemiPlus, BuildRight) =>
+      case (j: ExistenceJoin, BuildRight) =>
         leftSemiPlusJoin(broadcastedRelation)
       case _ =>
         /**

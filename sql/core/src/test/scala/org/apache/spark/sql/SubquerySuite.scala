@@ -152,6 +152,19 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       Row(null, null) :: Row(null, 5.0) :: Row(6, null) :: Nil)
   }
 
+  test("EXISTS predicate subquery within OR") {
+    checkAnswer(
+      sql("select * from l where exists (select * from r where l.a = r.c)" +
+        " or exists (select * from r where l.a = r.c)"),
+      Row(2, 1.0) :: Row(2, 1.0) :: Row(3, 3.0) :: Row(6, null) :: Nil)
+
+    checkAnswer(
+      sql("select * from l where not exists (select * from r where l.a = r.c and l.b < r.d)" +
+        " or not exists (select * from r where l.a = r.c)"),
+      Row(1, 2.0) :: Row(1, 2.0) :: Row(3, 3.0) ::
+        Row(null, null) :: Row(null, 5.0) :: Row(6, null) :: Nil)
+  }
+
   test("IN predicate subquery") {
     checkAnswer(
       sql("select * from l where l.a in (select c from r)"),
@@ -185,6 +198,18 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       Row(1, 2.0) :: Row(1, 2.0) :: Row(2, 1.0) :: Row(2, 1.0) ::
       Row(3, 3.0) :: Row(null, null) :: Row(null, 5.0) :: Row(6, null) :: Nil)
 
+  }
+
+  test("IN predicate subquery within OR") {
+    checkAnswer(
+      sql("select * from l where l.a in (select c from r)" +
+        " or l.a in (select c from r where l.b < r.d)"),
+      Row(2, 1.0) :: Row(2, 1.0) :: Row(3, 3.0) :: Row(6, null) :: Nil)
+
+    intercept[AnalysisException] {
+      sql("select * from l where a not in (select c from r)" +
+        " or a not in (select c from r where c is not null)")
+    }
   }
 
   test("complex IN predicate subquery") {

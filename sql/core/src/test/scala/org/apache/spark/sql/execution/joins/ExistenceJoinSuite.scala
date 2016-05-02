@@ -90,7 +90,7 @@ class ExistenceJoinSuite extends SparkPlanTest with SharedSQLContext {
     }
 
     val existsAttr = AttributeReference("exists", BooleanType, false)()
-    val leftSemiPlus = LeftSemiPlus(existsAttr)
+    val leftSemiPlus = ExistenceJoin(existsAttr)
     def createLeftSemiPlusJoin(join: SparkPlan): SparkPlan = {
       val output = join.output.dropRight(1)
       val condition = if (joinType == LeftSemi) {

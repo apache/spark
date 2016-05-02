@@ -70,8 +70,10 @@ case object LeftAnti extends JoinType {
   override def sql: String = "LEFT ANTI"
 }
 
-case class LeftSemiPlus(exists: Attribute) extends JoinType {
+case class ExistenceJoin(exists: Attribute) extends JoinType {
   override def sql: String = {
+    // This join type is only used in the end of optimizer and physical plans, we will not
+    // generate SQL for this join type
     throw new UnsupportedOperationException
   }
 }
@@ -91,7 +93,7 @@ case class UsingJoin(tpe: JoinType, usingColumns: Seq[UnresolvedAttribute]) exte
 object LeftExistence {
   def unapply(joinType: JoinType): Option[JoinType] = joinType match {
     case LeftSemi | LeftAnti => Some(joinType)
-    case j: LeftSemiPlus => Some(joinType)
+    case j: ExistenceJoin => Some(joinType)
     case _ => None
   }
 }
