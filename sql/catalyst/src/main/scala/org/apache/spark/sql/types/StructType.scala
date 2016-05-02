@@ -25,7 +25,8 @@ import org.json4s.JsonDSL._
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, InterpretedOrdering}
-import org.apache.spark.sql.catalyst.util.{DataTypeParser, LegacyTypeStringParser}
+import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, LegacyTypeStringParser}
+import org.apache.spark.sql.catalyst.util.quoteIdentifier
 
 /**
  * :: DeveloperApi ::
@@ -40,6 +41,7 @@ import org.apache.spark.sql.catalyst.util.{DataTypeParser, LegacyTypeStringParse
  * Example:
  * {{{
  * import org.apache.spark.sql._
+ * import org.apache.spark.sql.types._
  *
  * val struct =
  *   StructType(
@@ -167,7 +169,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    * }}}
    */
   def add(name: String, dataType: String): StructType = {
-    add(name, DataTypeParser.parse(dataType), nullable = true, Metadata.empty)
+    add(name, CatalystSqlParser.parseDataType(dataType), nullable = true, Metadata.empty)
   }
 
   /**
@@ -182,7 +184,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    * }}}
    */
   def add(name: String, dataType: String, nullable: Boolean): StructType = {
-    add(name, DataTypeParser.parse(dataType), nullable, Metadata.empty)
+    add(name, CatalystSqlParser.parseDataType(dataType), nullable, Metadata.empty)
   }
 
   /**
@@ -200,12 +202,13 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
       dataType: String,
       nullable: Boolean,
       metadata: Metadata): StructType = {
-    add(name, DataTypeParser.parse(dataType), nullable, metadata)
+    add(name, CatalystSqlParser.parseDataType(dataType), nullable, metadata)
   }
 
   /**
-   * Extracts a [[StructField]] of the given name. If the [[StructType]] object does not
-   * have a name matching the given name, `null` will be returned.
+   * Extracts the [[StructField]] with the given name.
+   *
+   * @throws IllegalArgumentException if a field with the given name does not exist
    */
   def apply(name: String): StructField = {
     nameToField.getOrElse(name,
@@ -214,7 +217,9 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
 
   /**
    * Returns a [[StructType]] containing [[StructField]]s of the given names, preserving the
-   * original order of fields. Those names which do not have matching fields will be ignored.
+   * original order of fields.
+   *
+   * @throws IllegalArgumentException if a field cannot be found for any of the given names
    */
   def apply(names: Set[String]): StructType = {
     val nonExistFields = names -- fieldNamesSet
@@ -227,7 +232,9 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   }
 
   /**
-   * Returns index of a given field
+   * Returns the index of a given field.
+   *
+   * @throws IllegalArgumentException if a field with the given name does not exist
    */
   def fieldIndex(name: String): Int = {
     nameToIndex.getOrElse(name,
@@ -279,7 +286,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   }
 
   override def sql: String = {
-    val fieldTypes = fields.map(f => s"`${f.name}`: ${f.dataType.sql}")
+    val fieldTypes = fields.map(f => s"${quoteIdentifier(f.name)}: ${f.dataType.sql}")
     s"STRUCT<${fieldTypes.mkString(", ")}>"
   }
 
@@ -291,7 +298,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     builder.append("struct<")
     builder.append(fieldTypes.mkString(", "))
     if (fields.length > 2) {
-      if (fields.length - fieldTypes.size == 1) {
+      if (fields.length - fieldTypes.length == 1) {
         builder.append(" ... 1 more field")
       } else {
         builder.append(" ... " + (fields.length - 2) + " more fields")
@@ -334,6 +341,8 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
 
 object StructType extends AbstractDataType {
 
+  private[sql] val metadataKeyForOptionalField = "_OPTIONAL_"
+
   override private[sql] def defaultConcreteType: DataType = new StructType
 
   override private[sql] def acceptsType(other: DataType): Boolean = {
@@ -359,6 +368,18 @@ object StructType extends AbstractDataType {
   protected[sql] def fromAttributes(attributes: Seq[Attribute]): StructType =
     StructType(attributes.map(a => StructField(a.name, a.dataType, a.nullable, a.metadata)))
 
+  def removeMetadata(key: String, dt: DataType): DataType =
+    dt match {
+      case StructType(fields) =>
+        val newFields = fields.map { f =>
+          val mb = new MetadataBuilder()
+          f.copy(dataType = removeMetadata(key, f.dataType),
+            metadata = mb.withMetadata(f.metadata).remove(key).build())
+        }
+        StructType(newFields)
+      case _ => dt
+    }
+
   private[sql] def merge(left: DataType, right: DataType): DataType =
     (left, right) match {
       case (ArrayType(leftElementType, leftContainsNull),
@@ -376,24 +397,32 @@ object StructType extends AbstractDataType {
 
       case (StructType(leftFields), StructType(rightFields)) =>
         val newFields = ArrayBuffer.empty[StructField]
+        // This metadata will record the fields that only exist in one of two StructTypes
+        val optionalMeta = new MetadataBuilder()
 
         val rightMapped = fieldsMap(rightFields)
         leftFields.foreach {
           case leftField @ StructField(leftName, leftType, leftNullable, _) =>
             rightMapped.get(leftName)
               .map { case rightField @ StructField(_, rightType, rightNullable, _) =>
-              leftField.copy(
-                dataType = merge(leftType, rightType),
-                nullable = leftNullable || rightNullable)
-            }
-              .orElse(Some(leftField))
+                leftField.copy(
+                  dataType = merge(leftType, rightType),
+                  nullable = leftNullable || rightNullable)
+              }
+              .orElse {
+                optionalMeta.putBoolean(metadataKeyForOptionalField, true)
+                Some(leftField.copy(metadata = optionalMeta.build()))
+              }
               .foreach(newFields += _)
         }
 
         val leftMapped = fieldsMap(leftFields)
         rightFields
           .filterNot(f => leftMapped.get(f.name).nonEmpty)
-          .foreach(newFields += _)
+          .foreach { f =>
+            optionalMeta.putBoolean(metadataKeyForOptionalField, true)
+            newFields += f.copy(metadata = optionalMeta.build())
+          }
 
         StructType(newFields)
 
@@ -402,13 +431,13 @@ object StructType extends AbstractDataType {
         if ((leftPrecision == rightPrecision) && (leftScale == rightScale)) {
           DecimalType(leftPrecision, leftScale)
         } else if ((leftPrecision != rightPrecision) && (leftScale != rightScale)) {
-          throw new SparkException("Failed to merge Decimal Tpes with incompatible " +
+          throw new SparkException("Failed to merge decimal types with incompatible " +
             s"precision $leftPrecision and $rightPrecision & scale $leftScale and $rightScale")
         } else if (leftPrecision != rightPrecision) {
-          throw new SparkException("Failed to merge Decimal Tpes with incompatible " +
+          throw new SparkException("Failed to merge decimal types with incompatible " +
             s"precision $leftPrecision and $rightPrecision")
         } else {
-          throw new SparkException("Failed to merge Decimal Tpes with incompatible " +
+          throw new SparkException("Failed to merge decimal types with incompatible " +
             s"scala $leftScale and $rightScale")
         }
 

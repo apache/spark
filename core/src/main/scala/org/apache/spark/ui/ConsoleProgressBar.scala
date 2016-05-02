@@ -20,6 +20,7 @@ package org.apache.spark.ui
 import java.util.{Timer, TimerTask}
 
 import org.apache.spark._
+import org.apache.spark.internal.Logging
 
 /**
  * ConsoleProgressBar shows the progress of stages in the next line of the console. It poll the
@@ -28,7 +29,7 @@ import org.apache.spark._
  * of them will be combined together, showed in one line.
  */
 private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
-  // Carrige return
+  // Carriage return
   val CR = '\r'
   // Update period of progress bar, in milliseconds
   val UPDATE_PERIOD = 200L
@@ -63,7 +64,7 @@ private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
       return
     }
     val stageIds = sc.statusTracker.getActiveStageIds()
-    val stages = stageIds.map(sc.statusTracker.getStageInfo).flatten.filter(_.numTasks() > 1)
+    val stages = stageIds.flatMap(sc.statusTracker.getStageInfo).filter(_.numTasks() > 1)
       .filter(now - _.submissionTime() > FIRST_DELAY).sortBy(_.stageId())
     if (stages.length > 0) {
       show(now, stages.take(3))  // display at most 3 stages in same time

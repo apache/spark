@@ -20,8 +20,6 @@ Decision Tree Classification Example.
 """
 from __future__ import print_function
 
-import sys
-
 # $example on$
 from pyspark import SparkContext, SQLContext
 from pyspark.ml import Pipeline

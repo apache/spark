@@ -90,7 +90,7 @@ private[streaming] class MapWithStateDStreamImpl[
 }
 
 /**
- * A DStream that allows per-key state to be maintains, and arbitrary records to be generated
+ * A DStream that allows per-key state to be maintained, and arbitrary records to be generated
  * based on updates to the state. This is the main DStream that implements the `mapWithState`
  * operation on DStreams.
  *

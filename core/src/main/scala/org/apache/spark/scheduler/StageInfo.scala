@@ -20,6 +20,7 @@ package org.apache.spark.scheduler
 import scala.collection.mutable.HashMap
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.RDDInfo
 
 /**
@@ -35,6 +36,7 @@ class StageInfo(
     val rddInfos: Seq[RDDInfo],
     val parentIds: Seq[Int],
     val details: String,
+    val taskMetrics: TaskMetrics = null,
     private[spark] val taskLocalityPreferences: Seq[Seq[TaskLocation]] = Seq.empty) {
   /** When this stage was submitted from the DAGScheduler to a TaskScheduler. */
   var submissionTime: Option[Long] = None
@@ -42,7 +44,11 @@ class StageInfo(
   var completionTime: Option[Long] = None
   /** If the stage failed, the reason why. */
   var failureReason: Option[String] = None
-  /** Terminal values of accumulables updated during this stage. */
+
+  /**
+   * Terminal values of accumulables updated during this stage, including all the user-defined
+   * accumulators.
+   */
   val accumulables = HashMap[Long, AccumulableInfo]()
 
   def stageFailed(reason: String) {
@@ -75,6 +81,7 @@ private[spark] object StageInfo {
       stage: Stage,
       attemptId: Int,
       numTasks: Option[Int] = None,
+      taskMetrics: TaskMetrics = null,
       taskLocalityPreferences: Seq[Seq[TaskLocation]] = Seq.empty
     ): StageInfo = {
     val ancestorRddInfos = stage.rdd.getNarrowAncestors.map(RDDInfo.fromRdd)
@@ -87,6 +94,7 @@ private[spark] object StageInfo {
       rddInfos,
       stage.parents.map(_.id),
       stage.details,
+      taskMetrics,
       taskLocalityPreferences)
   }
 }

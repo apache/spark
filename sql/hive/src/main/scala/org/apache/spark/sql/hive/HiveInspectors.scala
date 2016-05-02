@@ -320,7 +320,10 @@ private[hive] trait HiveInspectors {
       case hvoi: HiveCharObjectInspector =>
         UTF8String.fromString(hvoi.getPrimitiveJavaObject(data).getValue)
       case x: StringObjectInspector if x.preferWritable() =>
-        UTF8String.fromString(x.getPrimitiveWritableObject(data).toString)
+        // Text is in UTF-8 already. No need to convert again via fromString. Copy bytes
+        val wObj = x.getPrimitiveWritableObject(data)
+        val result = wObj.copyBytes()
+        UTF8String.fromBytes(result, 0, result.length)
       case x: StringObjectInspector =>
         UTF8String.fromString(x.getPrimitiveJavaObject(data))
       case x: IntObjectInspector if x.preferWritable() => x.get(data)
@@ -383,7 +386,7 @@ private[hive] trait HiveInspectors {
       (o: Any) =>
         if (o != null) {
           val s = o.asInstanceOf[UTF8String].toString
-          new HiveVarchar(s, s.size)
+          new HiveVarchar(s, s.length)
         } else {
           null
         }
@@ -392,7 +395,7 @@ private[hive] trait HiveInspectors {
       (o: Any) =>
         if (o != null) {
           val s = o.asInstanceOf[UTF8String].toString
-          new HiveChar(s, s.size)
+          new HiveChar(s, s.length)
         } else {
           null
         }
@@ -447,9 +450,7 @@ private[hive] trait HiveInspectors {
         if (o != null) {
           val array = o.asInstanceOf[ArrayData]
           val values = new java.util.ArrayList[Any](array.numElements())
-          array.foreach(elementType, (_, e) => {
-            values.add(wrapper(e))
-          })
+          array.foreach(elementType, (_, e) => values.add(wrapper(e)))
           values
         } else {
           null
@@ -465,9 +466,8 @@ private[hive] trait HiveInspectors {
         if (o != null) {
           val map = o.asInstanceOf[MapData]
           val jmap = new java.util.HashMap[Any, Any](map.numElements())
-          map.foreach(mt.keyType, mt.valueType, (k, v) => {
-            jmap.put(keyWrapper(k), valueWrapper(v))
-          })
+          map.foreach(mt.keyType, mt.valueType, (k, v) =>
+            jmap.put(keyWrapper(k), valueWrapper(v)))
           jmap
         } else {
           null
@@ -584,9 +584,9 @@ private[hive] trait HiveInspectors {
     case x: ListObjectInspector =>
       val list = new java.util.ArrayList[Object]
       val tpe = dataType.asInstanceOf[ArrayType].elementType
-      a.asInstanceOf[ArrayData].foreach(tpe, (_, e) => {
+      a.asInstanceOf[ArrayData].foreach(tpe, (_, e) =>
         list.add(wrap(e, x.getListElementObjectInspector, tpe))
-      })
+      )
       list
     case x: MapObjectInspector =>
       val keyType = dataType.asInstanceOf[MapType].keyType
@@ -596,10 +596,10 @@ private[hive] trait HiveInspectors {
       // Some UDFs seem to assume we pass in a HashMap.
       val hashMap = new java.util.HashMap[Any, Any](map.numElements())
 
-      map.foreach(keyType, valueType, (k, v) => {
+      map.foreach(keyType, valueType, (k, v) =>
         hashMap.put(wrap(k, x.getMapKeyObjectInspector, keyType),
           wrap(v, x.getMapValueObjectInspector, valueType))
-      })
+      )
 
       hashMap
   }
@@ -701,9 +701,8 @@ private[hive] trait HiveInspectors {
         ObjectInspectorFactory.getStandardConstantListObjectInspector(listObjectInspector, null)
       } else {
         val list = new java.util.ArrayList[Object]()
-        value.asInstanceOf[ArrayData].foreach(dt, (_, e) => {
-          list.add(wrap(e, listObjectInspector, dt))
-        })
+        value.asInstanceOf[ArrayData].foreach(dt, (_, e) =>
+          list.add(wrap(e, listObjectInspector, dt)))
         ObjectInspectorFactory.getStandardConstantListObjectInspector(listObjectInspector, list)
       }
     case Literal(value, MapType(keyType, valueType, _)) =>
@@ -715,9 +714,8 @@ private[hive] trait HiveInspectors {
         val map = value.asInstanceOf[MapData]
         val jmap = new java.util.HashMap[Any, Any](map.numElements())
 
-        map.foreach(keyType, valueType, (k, v) => {
-          jmap.put(wrap(k, keyOI, keyType), wrap(v, valueOI, valueType))
-        })
+        map.foreach(keyType, valueType, (k, v) =>
+          jmap.put(wrap(k, keyOI, keyType), wrap(v, valueOI, valueType)))
 
         ObjectInspectorFactory.getStandardConstantMapObjectInspector(keyOI, valueOI, jmap)
       }

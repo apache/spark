@@ -17,16 +17,22 @@
 
 package org.apache.spark
 
-import scala.collection.{mutable, Map}
+import java.util.concurrent.atomic.AtomicLong
+import javax.annotation.concurrent.GuardedBy
+
+import scala.collection.mutable
 import scala.ref.WeakReference
+
+import org.apache.spark.internal.Logging
+import org.apache.spark.storage.{BlockId, BlockStatus}
 
 
 /**
  * A simpler value of [[Accumulable]] where the result type being accumulated is the same
  * as the types of elements being merged, i.e. variables that are only "added" to through an
- * associative operation and can therefore be efficiently supported in parallel. They can be used
- * to implement counters (as in MapReduce) or sums. Spark natively supports accumulators of numeric
- * value types, and programmers can add support for new types.
+ * associative and commutative operation and can therefore be efficiently supported in parallel.
+ * They can be used to implement counters (as in MapReduce) or sums. Spark natively supports
+ * accumulators of numeric value types, and programmers can add support for new types.
  *
  * An accumulator is created from an initial value `v` by calling [[SparkContext#accumulator]].
  * Tasks running on the cluster can then add to it using the [[Accumulable#+=]] operator.
@@ -49,70 +55,17 @@ import scala.ref.WeakReference
  *
  * @param initialValue initial value of accumulator
  * @param param helper object defining how to add elements of type `T`
+ * @param name human-readable name associated with this accumulator
+ * @param countFailedValues whether to accumulate values from failed tasks
  * @tparam T result type
  */
 class Accumulator[T] private[spark] (
-    @transient private[spark] val initialValue: T,
+    // SI-8813: This must explicitly be a private val, or else scala 2.11 doesn't compile
+    @transient private val initialValue: T,
     param: AccumulatorParam[T],
-    name: Option[String],
-    internal: Boolean)
-  extends Accumulable[T, T](initialValue, param, name, internal) {
-
-  def this(initialValue: T, param: AccumulatorParam[T], name: Option[String]) = {
-    this(initialValue, param, name, false)
-  }
-
-  def this(initialValue: T, param: AccumulatorParam[T]) = {
-    this(initialValue, param, None, false)
-  }
-}
-
-
-// TODO: The multi-thread support in accumulators is kind of lame; check
-// if there's a more intuitive way of doing it right
-private[spark] object Accumulators extends Logging {
-  /**
-   * This global map holds the original accumulator objects that are created on the driver.
-   * It keeps weak references to these objects so that accumulators can be garbage-collected
-   * once the RDDs and user-code that reference them are cleaned up.
-   */
-  val originals = mutable.Map[Long, WeakReference[Accumulable[_, _]]]()
-
-  private var lastId: Long = 0
-
-  def newId(): Long = synchronized {
-    lastId += 1
-    lastId
-  }
-
-  def register(a: Accumulable[_, _]): Unit = synchronized {
-    originals(a.id) = new WeakReference[Accumulable[_, _]](a)
-  }
-
-  def remove(accId: Long) {
-    synchronized {
-      originals.remove(accId)
-    }
-  }
-
-  // Add values to the original accumulators with some given IDs
-  def add(values: Map[Long, Any]): Unit = synchronized {
-    for ((id, value) <- values) {
-      if (originals.contains(id)) {
-        // Since we are now storing weak references, we must check whether the underlying data
-        // is valid.
-        originals(id).get match {
-          case Some(accum) => accum.asInstanceOf[Accumulable[Any, Any]] ++= value
-          case None =>
-            throw new IllegalAccessError("Attempted to access garbage collected Accumulator.")
-        }
-      } else {
-        logWarning(s"Ignoring accumulator update for unknown accumulator id $id")
-      }
-    }
-  }
-
-}
+    name: Option[String] = None,
+    countFailedValues: Boolean = false)
+  extends Accumulable[T, T](initialValue, param, name, countFailedValues)
 
 
 /**
@@ -156,5 +109,23 @@ object AccumulatorParam {
     def zero(initialValue: Float): Float = 0f
   }
 
-  // TODO: Add AccumulatorParams for other types, e.g. lists and strings
+  // Note: when merging values, this param just adopts the newer value. This is used only
+  // internally for things that shouldn't really be accumulated across tasks, like input
+  // read method, which should be the same across all tasks in the same stage.
+  private[spark] object StringAccumulatorParam extends AccumulatorParam[String] {
+    def addInPlace(t1: String, t2: String): String = t2
+    def zero(initialValue: String): String = ""
+  }
+
+  // Note: this is expensive as it makes a copy of the list every time the caller adds an item.
+  // A better way to use this is to first accumulate the values yourself then them all at once.
+  private[spark] class ListAccumulatorParam[T] extends AccumulatorParam[Seq[T]] {
+    def addInPlace(t1: Seq[T], t2: Seq[T]): Seq[T] = t1 ++ t2
+    def zero(initialValue: Seq[T]): Seq[T] = Seq.empty[T]
+  }
+
+  // For the internal metric that records what blocks are updated in a particular task
+  private[spark] object UpdatedBlockStatusesAccumulatorParam
+    extends ListAccumulatorParam[(BlockId, BlockStatus)]
+
 }

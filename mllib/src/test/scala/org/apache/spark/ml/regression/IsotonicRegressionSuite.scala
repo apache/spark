@@ -46,7 +46,7 @@ class IsotonicRegressionSuite
 
     val predictions = model
       .transform(dataset)
-      .select("prediction").map { case Row(pred) =>
+      .select("prediction").rdd.map { case Row(pred) =>
         pred
       }.collect()
 
@@ -66,7 +66,7 @@ class IsotonicRegressionSuite
 
     val predictions = model
       .transform(features)
-      .select("prediction").map {
+      .select("prediction").rdd.map {
         case Row(pred) => pred
       }.collect()
 
@@ -160,7 +160,7 @@ class IsotonicRegressionSuite
 
     val predictions = model
       .transform(features)
-      .select("prediction").map {
+      .select("prediction").rdd.map {
       case Row(pred) => pred
     }.collect()
 
@@ -179,6 +179,15 @@ class IsotonicRegressionSuite
     val ir = new IsotonicRegression()
     testEstimatorAndModelReadWrite(ir, dataset, IsotonicRegressionSuite.allParamSettings,
       checkModelData)
+  }
+
+  test("should support all NumericType labels and not support other types") {
+    val ir = new IsotonicRegression()
+    MLTestingUtils.checkNumericTypes[IsotonicRegressionModel, IsotonicRegression](
+      ir, isClassification = false, sqlContext) { (expected, actual) =>
+        assert(expected.boundaries === actual.boundaries)
+        assert(expected.predictions === actual.predictions)
+      }
   }
 }
 

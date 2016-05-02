@@ -24,6 +24,7 @@ import com.google.common.annotations.VisibleForTesting;
 
 import org.apache.spark.TaskContext;
 import org.apache.spark.memory.TaskMemoryManager;
+import org.apache.spark.serializer.SerializerManager;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.sql.catalyst.expressions.codegen.BaseOrdering;
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering;
@@ -52,14 +53,16 @@ public final class UnsafeKVExternalSorter {
       StructType keySchema,
       StructType valueSchema,
       BlockManager blockManager,
+      SerializerManager serializerManager,
       long pageSizeBytes) throws IOException {
-    this(keySchema, valueSchema, blockManager, pageSizeBytes, null);
+    this(keySchema, valueSchema, blockManager, serializerManager, pageSizeBytes, null);
   }
 
   public UnsafeKVExternalSorter(
       StructType keySchema,
       StructType valueSchema,
       BlockManager blockManager,
+      SerializerManager serializerManager,
       long pageSizeBytes,
       @Nullable BytesToBytesMap map) throws IOException {
     this.keySchema = keySchema;
@@ -77,17 +80,20 @@ public final class UnsafeKVExternalSorter {
       sorter = UnsafeExternalSorter.create(
         taskMemoryManager,
         blockManager,
+        serializerManager,
         taskContext,
         recordComparator,
         prefixComparator,
         /* initialSize */ 4096,
-        pageSizeBytes);
+        pageSizeBytes,
+        keySchema.length() == 1 && SortPrefixUtils.canSortFullyWithPrefix(keySchema.apply(0)));
     } else {
       // During spilling, the array in map will not be used, so we can borrow that and use it
       // as the underline array for in-memory sorter (it's always large enough).
       // Since we will not grow the array, it's fine to pass `null` as consumer.
       final UnsafeInMemorySorter inMemSorter = new UnsafeInMemorySorter(
-        null, taskMemoryManager, recordComparator, prefixComparator, map.getArray());
+        null, taskMemoryManager, recordComparator, prefixComparator, map.getArray(),
+        false /* TODO(ekl) we can only radix sort if the BytesToBytes load factor is <= 0.5 */);
 
       // We cannot use the destructive iterator here because we are reusing the existing memory
       // pages in BytesToBytesMap to hold records during sorting.
@@ -97,8 +103,8 @@ public final class UnsafeKVExternalSorter {
       UnsafeRow row = new UnsafeRow(numKeyFields);
       while (iter.hasNext()) {
         final BytesToBytesMap.Location loc = iter.next();
-        final Object baseObject = loc.getKeyAddress().getBaseObject();
-        final long baseOffset = loc.getKeyAddress().getBaseOffset();
+        final Object baseObject = loc.getKeyBase();
+        final long baseOffset = loc.getKeyOffset();
 
         // Get encoded memory address
         // baseObject + baseOffset point to the beginning of the key data in the map, but that
@@ -116,6 +122,7 @@ public final class UnsafeKVExternalSorter {
       sorter = UnsafeExternalSorter.createWithExistingInMemorySorter(
         taskMemoryManager,
         blockManager,
+        serializerManager,
         taskContext,
         new KVComparator(ordering, keySchema.length()),
         prefixComparator,
@@ -170,6 +177,13 @@ public final class UnsafeKVExternalSorter {
   }
 
   /**
+   * Return the total number of bytes that has been spilled into disk so far.
+   */
+  public long getSpillSize() {
+    return sorter.getSpillSize();
+  }
+
+  /**
    * Return the peak memory used so far, in bytes.
    */
   public long getPeakMemoryUsedBytes() {
@@ -198,7 +212,7 @@ public final class UnsafeKVExternalSorter {
     private final UnsafeRow row2;
     private final int numKeyFields;
 
-    public KVComparator(BaseOrdering ordering, int numKeyFields) {
+    KVComparator(BaseOrdering ordering, int numKeyFields) {
       this.numKeyFields = numKeyFields;
       this.row1 = new UnsafeRow(numKeyFields);
       this.row2 = new UnsafeRow(numKeyFields);
@@ -267,5 +281,5 @@ public final class UnsafeKVExternalSorter {
     public void close() {
       cleanupResources();
     }
-  };
+  }
 }

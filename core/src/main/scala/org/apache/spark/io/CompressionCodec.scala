@@ -149,12 +149,7 @@ class LZFCompressionCodec(conf: SparkConf) extends CompressionCodec {
  */
 @DeveloperApi
 class SnappyCompressionCodec(conf: SparkConf) extends CompressionCodec {
-
-  try {
-    Snappy.getNativeLibraryVersion
-  } catch {
-    case e: Error => throw new IllegalArgumentException(e)
-  }
+  val version = SnappyCompressionCodec.version
 
   override def compressedOutputStream(s: OutputStream): OutputStream = {
     val blockSize = conf.getSizeAsBytes("spark.io.compression.snappy.blockSize", "32k").toInt
@@ -162,6 +157,19 @@ class SnappyCompressionCodec(conf: SparkConf) extends CompressionCodec {
   }
 
   override def compressedInputStream(s: InputStream): InputStream = new SnappyInputStream(s)
+}
+
+/**
+ * Object guards against memory leak bug in snappy-java library:
+ * (https://github.com/xerial/snappy-java/issues/131).
+ * Before a new version of the library, we only call the method once and cache the result.
+ */
+private final object SnappyCompressionCodec {
+  private lazy val version: String = try {
+    Snappy.getNativeLibraryVersion
+  } catch {
+    case e: Error => throw new IllegalArgumentException(e)
+  }
 }
 
 /**

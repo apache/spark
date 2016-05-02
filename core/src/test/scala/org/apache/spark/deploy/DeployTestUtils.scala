@@ -69,7 +69,7 @@ private[deploy] object DeployTestUtils {
       "publicAddress",
       new File("sparkHome"),
       new File("workDir"),
-      "akka://worker",
+      "spark://worker",
       new SparkConf,
       Seq("localDir"),
       ExecutorState.RUNNING)
@@ -84,7 +84,7 @@ private[deploy] object DeployTestUtils {
       new File("sparkHome"),
       createDriverDesc(),
       null,
-      "akka://worker",
+      "spark://worker",
       new SecurityManager(conf))
   }
 }

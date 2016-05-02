@@ -17,42 +17,60 @@
 
 package org.apache.spark
 
-
-// This is moved to its own file because many more things will be added to it in SPARK-10620.
+/**
+ * A collection of fields and methods concerned with internal accumulators that represent
+ * task level metrics.
+ */
 private[spark] object InternalAccumulator {
-  val PEAK_EXECUTION_MEMORY = "peakExecutionMemory"
-  val TEST_ACCUMULATOR = "testAccumulator"
+  // Prefixes used in names of internal task level metrics
+  val METRICS_PREFIX = "internal.metrics."
+  val SHUFFLE_READ_METRICS_PREFIX = METRICS_PREFIX + "shuffle.read."
+  val SHUFFLE_WRITE_METRICS_PREFIX = METRICS_PREFIX + "shuffle.write."
+  val OUTPUT_METRICS_PREFIX = METRICS_PREFIX + "output."
+  val INPUT_METRICS_PREFIX = METRICS_PREFIX + "input."
 
-  // For testing only.
-  // This needs to be a def since we don't want to reuse the same accumulator across stages.
-  private def maybeTestAccumulator: Option[Accumulator[Long]] = {
-    if (sys.props.contains("spark.testing")) {
-      Some(new Accumulator(
-        0L, AccumulatorParam.LongAccumulatorParam, Some(TEST_ACCUMULATOR), internal = true))
-    } else {
-      None
-    }
+  // Names of internal task level metrics
+  val EXECUTOR_DESERIALIZE_TIME = METRICS_PREFIX + "executorDeserializeTime"
+  val EXECUTOR_RUN_TIME = METRICS_PREFIX + "executorRunTime"
+  val RESULT_SIZE = METRICS_PREFIX + "resultSize"
+  val JVM_GC_TIME = METRICS_PREFIX + "jvmGCTime"
+  val RESULT_SERIALIZATION_TIME = METRICS_PREFIX + "resultSerializationTime"
+  val MEMORY_BYTES_SPILLED = METRICS_PREFIX + "memoryBytesSpilled"
+  val DISK_BYTES_SPILLED = METRICS_PREFIX + "diskBytesSpilled"
+  val PEAK_EXECUTION_MEMORY = METRICS_PREFIX + "peakExecutionMemory"
+  val UPDATED_BLOCK_STATUSES = METRICS_PREFIX + "updatedBlockStatuses"
+  val TEST_ACCUM = METRICS_PREFIX + "testAccumulator"
+
+  // scalastyle:off
+
+  // Names of shuffle read metrics
+  object shuffleRead {
+    val REMOTE_BLOCKS_FETCHED = SHUFFLE_READ_METRICS_PREFIX + "remoteBlocksFetched"
+    val LOCAL_BLOCKS_FETCHED = SHUFFLE_READ_METRICS_PREFIX + "localBlocksFetched"
+    val REMOTE_BYTES_READ = SHUFFLE_READ_METRICS_PREFIX + "remoteBytesRead"
+    val LOCAL_BYTES_READ = SHUFFLE_READ_METRICS_PREFIX + "localBytesRead"
+    val FETCH_WAIT_TIME = SHUFFLE_READ_METRICS_PREFIX + "fetchWaitTime"
+    val RECORDS_READ = SHUFFLE_READ_METRICS_PREFIX + "recordsRead"
   }
 
-  /**
-   * Accumulators for tracking internal metrics.
-   *
-   * These accumulators are created with the stage such that all tasks in the stage will
-   * add to the same set of accumulators. We do this to report the distribution of accumulator
-   * values across all tasks within each stage.
-   */
-  def create(sc: SparkContext): Seq[Accumulator[Long]] = {
-    val internalAccumulators = Seq(
-      // Execution memory refers to the memory used by internal data structures created
-      // during shuffles, aggregations and joins. The value of this accumulator should be
-      // approximately the sum of the peak sizes across all such data structures created
-      // in this task. For SQL jobs, this only tracks all unsafe operators and ExternalSort.
-      new Accumulator(
-        0L, AccumulatorParam.LongAccumulatorParam, Some(PEAK_EXECUTION_MEMORY), internal = true)
-    ) ++ maybeTestAccumulator.toSeq
-    internalAccumulators.foreach { accumulator =>
-      sc.cleaner.foreach(_.registerAccumulatorForCleanup(accumulator))
-    }
-    internalAccumulators
+  // Names of shuffle write metrics
+  object shuffleWrite {
+    val BYTES_WRITTEN = SHUFFLE_WRITE_METRICS_PREFIX + "bytesWritten"
+    val RECORDS_WRITTEN = SHUFFLE_WRITE_METRICS_PREFIX + "recordsWritten"
+    val WRITE_TIME = SHUFFLE_WRITE_METRICS_PREFIX + "writeTime"
   }
+
+  // Names of output metrics
+  object output {
+    val BYTES_WRITTEN = OUTPUT_METRICS_PREFIX + "bytesWritten"
+    val RECORDS_WRITTEN = OUTPUT_METRICS_PREFIX + "recordsWritten"
+  }
+
+  // Names of input metrics
+  object input {
+    val BYTES_READ = INPUT_METRICS_PREFIX + "bytesRead"
+    val RECORDS_READ = INPUT_METRICS_PREFIX + "recordsRead"
+  }
+
+  // scalastyle:on
 }

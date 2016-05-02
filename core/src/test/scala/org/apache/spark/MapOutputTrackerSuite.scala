@@ -22,7 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.mockito.Matchers.{any, isA}
 import org.mockito.Mockito._
 
-import org.apache.spark.rpc.{RpcAddress, RpcCallContext, RpcEndpointRef, RpcEnv}
+import org.apache.spark.rpc.{RpcAddress, RpcCallContext, RpcEnv}
 import org.apache.spark.scheduler.{CompressedMapStatus, MapStatus}
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.{BlockManagerId, ShuffleBlockId}
@@ -154,9 +154,9 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     slaveRpcEnv.shutdown()
   }
 
-  test("remote fetch below akka frame size") {
+  test("remote fetch below max RPC message size") {
     val newConf = new SparkConf
-    newConf.set("spark.akka.frameSize", "1")
+    newConf.set("spark.rpc.message.maxSize", "1")
     newConf.set("spark.rpc.askTimeout", "1") // Fail fast
 
     val masterTracker = new MapOutputTrackerMaster(conf)
@@ -164,7 +164,7 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     val masterEndpoint = new MapOutputTrackerMasterEndpoint(rpcEnv, masterTracker, newConf)
     rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME, masterEndpoint)
 
-    // Frame size should be ~123B, and no exception should be thrown
+    // Message size should be ~123B, and no exception should be thrown
     masterTracker.registerShuffle(10, 1)
     masterTracker.registerMapOutput(10, 0, MapStatus(
       BlockManagerId("88", "mph", 1000), Array.fill[Long](10)(0)))
@@ -179,9 +179,9 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     rpcEnv.shutdown()
   }
 
-  test("remote fetch exceeds akka frame size") {
+  test("remote fetch exceeds max RPC message size") {
     val newConf = new SparkConf
-    newConf.set("spark.akka.frameSize", "1")
+    newConf.set("spark.rpc.message.maxSize", "1")
     newConf.set("spark.rpc.askTimeout", "1") // Fail fast
 
     val masterTracker = new MapOutputTrackerMaster(conf)
@@ -189,7 +189,7 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     val masterEndpoint = new MapOutputTrackerMasterEndpoint(rpcEnv, masterTracker, newConf)
     rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME, masterEndpoint)
 
-    // Frame size should be ~1.1MB, and MapOutputTrackerMasterEndpoint should throw exception.
+    // Message size should be ~1.1MB, and MapOutputTrackerMasterEndpoint should throw exception.
     // Note that the size is hand-selected here because map output statuses are compressed before
     // being sent.
     masterTracker.registerShuffle(20, 100)

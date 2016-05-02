@@ -18,6 +18,7 @@
 package org.apache.spark.streaming
 
 import java.io.{InputStream, NotSerializableException}
+import java.util.Properties
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 
 import scala.collection.Map
@@ -25,7 +26,7 @@ import scala.collection.mutable.Queue
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
-import akka.actor.{Props, SupervisorStrategy}
+import org.apache.commons.lang.SerializationUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{BytesWritable, LongWritable, Text}
@@ -36,15 +37,17 @@ import org.apache.spark._
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.input.FixedLengthBinaryInputFormat
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
+import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.SerializationDebugger
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContextState._
 import org.apache.spark.streaming.dstream._
-import org.apache.spark.streaming.receiver.{ActorReceiverSupervisor, ActorSupervisorStrategy, Receiver}
-import org.apache.spark.streaming.scheduler.{JobScheduler, StreamingListener}
+import org.apache.spark.streaming.receiver.Receiver
+import org.apache.spark.streaming.scheduler.{ExecutorAllocationManager, JobScheduler, StreamingListener}
 import org.apache.spark.streaming.ui.{StreamingJobProgressListener, StreamingTab}
-import org.apache.spark.util.{AsynchronousListenerBus, CallSite, ShutdownHookManager, ThreadUtils, Utils}
+import org.apache.spark.util.{CallSite, ShutdownHookManager, ThreadUtils, Utils}
 
 /**
  * Main entry point for Spark Streaming functionality. It provides methods used to create
@@ -105,7 +108,7 @@ class StreamingContext private[streaming] (
    *                   HDFS compatible filesystems
    */
   def this(path: String, hadoopConf: Configuration) =
-    this(null, CheckpointReader.read(path, new SparkConf(), hadoopConf).get, null)
+    this(null, CheckpointReader.read(path, new SparkConf(), hadoopConf).orNull, null)
 
   /**
    * Recreate a StreamingContext from a checkpoint file.
@@ -121,17 +124,14 @@ class StreamingContext private[streaming] (
   def this(path: String, sparkContext: SparkContext) = {
     this(
       sparkContext,
-      CheckpointReader.read(path, sparkContext.conf, sparkContext.hadoopConfiguration).get,
+      CheckpointReader.read(path, sparkContext.conf, sparkContext.hadoopConfiguration).orNull,
       null)
   }
 
+  require(_sc != null || _cp != null,
+    "Spark Streaming cannot be initialized with both SparkContext and checkpoint as null")
 
-  if (_sc == null && _cp == null) {
-    throw new Exception("Spark Streaming cannot be initialized with " +
-      "both SparkContext and checkpoint as null")
-  }
-
-  private[streaming] val isCheckpointPresent = (_cp != null)
+  private[streaming] val isCheckpointPresent: Boolean = _cp != null
 
   private[streaming] val sc: SparkContext = {
     if (_sc != null) {
@@ -200,6 +200,10 @@ class StreamingContext private[streaming] (
 
   private val startSite = new AtomicReference[CallSite](null)
 
+  // Copy of thread-local properties from SparkContext. These properties will be set in all tasks
+  // submitted by this StreamingContext after start.
+  private[streaming] val savedProperties = new AtomicReference[Properties](new Properties)
+
   private[streaming] def getStartSite(): CallSite = startSite.get()
 
   private var shutdownHookRef: AnyRef = _
@@ -212,8 +216,8 @@ class StreamingContext private[streaming] (
   def sparkContext: SparkContext = sc
 
   /**
-   * Set each DStreams in this context to remember RDDs it generated in the last given duration.
-   * DStreams remember RDDs only for a limited duration of time and releases them for garbage
+   * Set each DStream in this context to remember RDDs it generated in the last given duration.
+   * DStreams remember RDDs only for a limited duration of time and release them for garbage
    * collection. This method allows the developer to specify how long to remember the RDDs (
    * if the developer wishes to query old data outside the DStream computation).
    * @param duration Minimum duration that each DStream should remember its RDDs
@@ -271,20 +275,6 @@ class StreamingContext private[streaming] (
 
   /**
    * Create an input stream with any arbitrary user implemented receiver.
-   * Find more details at: http://spark.apache.org/docs/latest/streaming-custom-receivers.html
-   * @param receiver Custom implementation of Receiver
-   *
-   * @deprecated As of 1.0.0 replaced by `receiverStream`.
-   */
-  @deprecated("Use receiverStream", "1.0.0")
-  def networkStream[T: ClassTag](receiver: Receiver[T]): ReceiverInputDStream[T] = {
-    withNamedScope("network stream") {
-      receiverStream(receiver)
-    }
-  }
-
-  /**
-   * Create an input stream with any arbitrary user implemented receiver.
    * Find more details at http://spark.apache.org/docs/latest/streaming-custom-receivers.html
    * @param receiver Custom implementation of Receiver
    */
@@ -295,34 +285,14 @@ class StreamingContext private[streaming] (
   }
 
   /**
-   * Create an input stream with any arbitrary user implemented actor receiver.
-   * Find more details at: http://spark.apache.org/docs/latest/streaming-custom-receivers.html
-   * @param props Props object defining creation of the actor
-   * @param name Name of the actor
-   * @param storageLevel RDD storage level (default: StorageLevel.MEMORY_AND_DISK_SER_2)
-   *
-   * @note An important point to note:
-   *       Since Actor may exist outside the spark framework, It is thus user's responsibility
-   *       to ensure the type safety, i.e parametrized type of data received and actorStream
-   *       should be same.
-   */
-  def actorStream[T: ClassTag](
-      props: Props,
-      name: String,
-      storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2,
-      supervisorStrategy: SupervisorStrategy = ActorSupervisorStrategy.defaultStrategy
-    ): ReceiverInputDStream[T] = withNamedScope("actor stream") {
-    receiverStream(new ActorReceiverSupervisor[T](props, name, storageLevel, supervisorStrategy))
-  }
-
-  /**
-   * Create a input stream from TCP source hostname:port. Data is received using
+   * Creates an input stream from TCP source hostname:port. Data is received using
    * a TCP socket and the receive bytes is interpreted as UTF8 encoded `\n` delimited
    * lines.
    * @param hostname      Hostname to connect to for receiving data
    * @param port          Port to connect to for receiving data
    * @param storageLevel  Storage level to use for storing the received objects
    *                      (default: StorageLevel.MEMORY_AND_DISK_SER_2)
+   * @see [[socketStream]]
    */
   def socketTextStream(
       hostname: String,
@@ -333,8 +303,8 @@ class StreamingContext private[streaming] (
   }
 
   /**
-   * Create a input stream from TCP source hostname:port. Data is received using
-   * a TCP socket and the receive bytes it interepreted as object using the given
+   * Creates an input stream from TCP source hostname:port. Data is received using
+   * a TCP socket and the receive bytes it interpreted as object using the given
    * converter.
    * @param hostname      Hostname to connect to for receiving data
    * @param port          Port to connect to for receiving data
@@ -480,7 +450,7 @@ class StreamingContext private[streaming] (
    * NOTE: Arbitrary RDDs can be added to `queueStream`, there is no way to recover data of
    * those RDDs, so `queueStream` doesn't support checkpointing.
    *
-   * @param queue      Queue of RDDs
+   * @param queue      Queue of RDDs. Modifications to this data structure must be synchronized.
    * @param oneAtATime Whether only one RDD should be consumed from the queue in every interval
    * @tparam T         Type of objects in the RDD
    */
@@ -498,7 +468,7 @@ class StreamingContext private[streaming] (
    * NOTE: Arbitrary RDDs can be added to `queueStream`, there is no way to recover data of
    * those RDDs, so `queueStream` doesn't support checkpointing.
    *
-   * @param queue      Queue of RDDs
+   * @param queue      Queue of RDDs. Modifications to this data structure must be synchronized.
    * @param oneAtATime Whether only one RDD should be consumed from the queue in every interval
    * @param defaultRDD Default RDD is returned by the DStream when the queue is empty.
    *                   Set as null if no RDD should be returned when empty
@@ -530,9 +500,10 @@ class StreamingContext private[streaming] (
     new TransformedDStream[T](dstreams, sparkContext.clean(transformFunc))
   }
 
-  /** Add a [[org.apache.spark.streaming.scheduler.StreamingListener]] object for
-    * receiving system events related to streaming.
-    */
+  /**
+   * Add a [[org.apache.spark.streaming.scheduler.StreamingListener]] object for
+   * receiving system events related to streaming.
+   */
   def addStreamingListener(streamingListener: StreamingListener) {
     scheduler.listenerBus.addListener(streamingListener)
   }
@@ -562,11 +533,12 @@ class StreamingContext private[streaming] (
       }
     }
 
-    if (Utils.isDynamicAllocationEnabled(sc.conf)) {
+    if (Utils.isDynamicAllocationEnabled(sc.conf) ||
+        ExecutorAllocationManager.isDynamicAllocationEnabled(conf)) {
       logWarning("Dynamic Allocation is enabled for this application. " +
         "Enabling Dynamic allocation for Spark Streaming applications can cause data loss if " +
         "Write Ahead Log is not enabled for non-replayable sources like Flume. " +
-        "See the programming guide for details on how to enable the Write Ahead Log")
+        "See the programming guide for details on how to enable the Write Ahead Log.")
     }
   }
 
@@ -607,6 +579,8 @@ class StreamingContext private[streaming] (
               sparkContext.setCallSite(startSite.get)
               sparkContext.clearJobGroup()
               sparkContext.setLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, "false")
+              savedProperties.set(SerializationUtils.clone(
+                sparkContext.localProperties.get()).asInstanceOf[Properties])
               scheduler.start()
             }
             state = StreamingContextState.ACTIVE
@@ -640,18 +614,6 @@ class StreamingContext private[streaming] (
    */
   def awaitTermination() {
     waiter.waitForStopOrError()
-  }
-
-  /**
-   * Wait for the execution to stop. Any exceptions that occurs during the execution
-   * will be thrown in this thread.
-   * @param timeout time to wait in milliseconds
-   *
-   * @deprecated As of 1.3.0, replaced by `awaitTerminationOrTimeout(Long)`.
-   */
-  @deprecated("Use awaitTerminationOrTimeout(Long) instead", "1.3.0")
-  def awaitTermination(timeout: Long) {
-    waiter.waitForStopOrError(timeout)
   }
 
   /**
@@ -694,9 +656,9 @@ class StreamingContext private[streaming] (
    */
   def stop(stopSparkContext: Boolean, stopGracefully: Boolean): Unit = {
     var shutdownHookRefToRemove: AnyRef = null
-    if (AsynchronousListenerBus.withinListenerThread.value) {
-      throw new SparkException("Cannot stop StreamingContext within listener thread of" +
-        " AsynchronousListenerBus")
+    if (LiveListenerBus.withinListenerThread.value) {
+      throw new SparkException(
+        s"Cannot stop StreamingContext within listener thread of ${LiveListenerBus.name}")
     }
     synchronized {
       // The state should always be Stopped after calling `stop()`, even if we haven't started yet
@@ -714,12 +676,20 @@ class StreamingContext private[streaming] (
           // interrupted. See SPARK-12001 for more details. Because the body of this case can be
           // executed twice in the case of a partial stop, all methods called here need to be
           // idempotent.
-          scheduler.stop(stopGracefully)
+          Utils.tryLogNonFatalError {
+            scheduler.stop(stopGracefully)
+          }
           // Removing the streamingSource to de-register the metrics on stop()
-          env.metricsSystem.removeSource(streamingSource)
-          uiTab.foreach(_.detach())
+          Utils.tryLogNonFatalError {
+            env.metricsSystem.removeSource(streamingSource)
+          }
+          Utils.tryLogNonFatalError {
+            uiTab.foreach(_.detach())
+          }
           StreamingContext.setActiveContext(null)
-          waiter.notifyStop()
+          Utils.tryLogNonFatalError {
+            waiter.notifyStop()
+          }
           if (shutdownHookRef != null) {
             shutdownHookRefToRemove = shutdownHookRef
             shutdownHookRef = null
@@ -788,18 +758,6 @@ object StreamingContext extends Logging {
     ACTIVATION_LOCK.synchronized {
       Option(activeContext.get())
     }
-  }
-
-  /**
-   * @deprecated As of 1.3.0, replaced by implicit functions in the DStream companion object.
-   *             This is kept here only for backward compatibility.
-   */
-  @deprecated("Replaced by implicit functions in the DStream companion object. This is " +
-    "kept here only for backward compatibility.", "1.3.0")
-  def toPairDStreamFunctions[K, V](stream: DStream[(K, V)])
-      (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K] = null)
-    : PairDStreamFunctions[K, V] = {
-    DStream.toPairDStreamFunctions(stream)(kt, vt, ord)
   }
 
   /**
@@ -910,7 +868,7 @@ private class StreamingContextPythonHelper {
    */
   def tryRecoverFromCheckpoint(checkpointPath: String): Option[StreamingContext] = {
     val checkpointOption = CheckpointReader.read(
-      checkpointPath, new SparkConf(), SparkHadoopUtil.get.conf, false)
+      checkpointPath, new SparkConf(), SparkHadoopUtil.get.conf, ignoreReadError = false)
     checkpointOption.map(new StreamingContext(null, _, null))
   }
 }

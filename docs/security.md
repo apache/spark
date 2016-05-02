@@ -27,8 +27,7 @@ If your applications are using event logging, the directory where the event logs
 
 ## Encryption
 
-Spark supports SSL for Akka and HTTP protocols. SASL encryption is supported for the block transfer
-service.
+Spark supports SSL for HTTP protocols. SASL encryption is supported for the block transfer service.
 
 Encryption is not yet supported for data stored by Spark in temporary local storage, such as shuffle
 files, cached data, and other application files. If encrypting this data is desired, a workaround is
@@ -47,10 +46,6 @@ component-specific configuration namespaces used to override the default setting
   <tr>
     <th>Config Namespace</th>
     <th>Component</th>
-  </tr>
-  <tr>
-    <td><code>spark.ssl.akka</code></td>
-    <td>Akka communication channels</td>
   </tr>
   <tr>
     <td><code>spark.ssl.fs</code></td>
@@ -137,7 +132,7 @@ configure those ports.
     <td>7077</td>
     <td>Submit job to cluster /<br> Join cluster</td>
     <td><code>SPARK_MASTER_PORT</code></td>
-    <td>Akka-based. Set to "0" to choose a port randomly. Standalone mode only.</td>
+    <td>Set to "0" to choose a port randomly. Standalone mode only.</td>
   </tr>
   <tr>
     <td>Standalone Master</td>
@@ -145,7 +140,7 @@ configure those ports.
     <td>(random)</td>
     <td>Schedule executors</td>
     <td><code>SPARK_WORKER_PORT</code></td>
-    <td>Akka-based. Set to "0" to choose a port randomly. Standalone mode only.</td>
+    <td>Set to "0" to choose a port randomly. Standalone mode only.</td>
   </tr>
 </table>
 
@@ -178,24 +173,7 @@ configure those ports.
     <td>(random)</td>
     <td>Connect to application /<br> Notify executor state changes</td>
     <td><code>spark.driver.port</code></td>
-    <td>Akka-based. Set to "0" to choose a port randomly.</td>
-  </tr>
-  <tr>
-    <td>Driver</td>
-    <td>Executor</td>
-    <td>(random)</td>
-    <td>Schedule tasks</td>
-    <td><code>spark.executor.port</code></td>
-    <td>Akka-based. Set to "0" to choose a port randomly. Only used if Akka RPC backend is
-    configured.</td>
-  </tr>
-  <tr>
-    <td>Executor</td>
-    <td>Driver</td>
-    <td>(random)</td>
-    <td>File server for files and jars</td>
-    <td><code>spark.fileserver.port</code></td>
-    <td>Jetty-based. Only used if Akka RPC backend is configured.</td>
+    <td>Set to "0" to choose a port randomly.</td>
   </tr>
   <tr>
     <td>Executor / Driver</td>

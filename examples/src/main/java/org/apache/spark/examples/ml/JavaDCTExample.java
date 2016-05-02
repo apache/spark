@@ -19,6 +19,7 @@ package org.apache.spark.examples.ml;
 
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.SQLContext;
 
 // $example on$
@@ -28,7 +29,6 @@ import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.feature.DCT;
 import org.apache.spark.mllib.linalg.VectorUDT;
 import org.apache.spark.mllib.linalg.Vectors;
-import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.types.Metadata;
@@ -51,12 +51,12 @@ public class JavaDCTExample {
     StructType schema = new StructType(new StructField[]{
       new StructField("features", new VectorUDT(), false, Metadata.empty()),
     });
-    DataFrame df = jsql.createDataFrame(data, schema);
+    Dataset<Row> df = jsql.createDataFrame(data, schema);
     DCT dct = new DCT()
       .setInputCol("features")
       .setOutputCol("featuresDCT")
       .setInverse(false);
-    DataFrame dctDf = dct.transform(df);
+    Dataset<Row> dctDf = dct.transform(df);
     dctDf.select("featuresDCT").show(3);
     // $example off$
     jsc.stop();

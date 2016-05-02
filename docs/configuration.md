@@ -173,7 +173,7 @@ of the most common options to set are:
     stored on disk. This should be on a fast, local disk in your system. It can also be a
     comma-separated list of multiple directories on different disks.
 
-    NOTE: In Spark 1.0 and later this will be overriden by SPARK_LOCAL_DIRS (Standalone, Mesos) or
+    NOTE: In Spark 1.0 and later this will be overridden by SPARK_LOCAL_DIRS (Standalone, Mesos) or
     LOCAL_DIRS (YARN) environment variables set by the cluster manager.
   </td>
 </tr>
@@ -225,11 +225,14 @@ Apart from these, the following properties are also available, and may be useful
   <td>(none)</td>
   <td>
     A string of extra JVM options to pass to the driver. For instance, GC settings or other logging.
+    Note that it is illegal to set maximum heap size (-Xmx) settings with this option. Maximum heap
+    size settings can be set with <code>spark.driver.memory</code> in the cluster mode and through
+    the <code>--driver-memory</code> command line option in the client mode.
 
     <br /><em>Note:</em> In client mode, this config must not be set through the <code>SparkConf</code>
     directly in your application, because the driver JVM has already started at that point.
     Instead, please set this through the <code>--driver-java-options</code> command line option or in
-    your default properties file.</td>
+    your default properties file.
   </td>
 </tr>
 <tr>
@@ -249,7 +252,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>false</td>
   <td>
     (Experimental) Whether to give user-added jars precedence over Spark's own jars when loading
-    classes in the the driver. This feature can be used to mitigate conflicts between Spark's
+    classes in the driver. This feature can be used to mitigate conflicts between Spark's
     dependencies and user dependencies. It is currently an experimental feature.
 
     This is used in cluster mode only.
@@ -269,9 +272,9 @@ Apart from these, the following properties are also available, and may be useful
   <td>(none)</td>
   <td>
     A string of extra JVM options to pass to executors. For instance, GC settings or other logging.
-    Note that it is illegal to set Spark properties or heap size settings with this option. Spark
-    properties should be set using a SparkConf object or the spark-defaults.conf file used with the
-    spark-submit script. Heap size settings can be set with spark.executor.memory.
+    Note that it is illegal to set Spark properties or maximum heap size (-Xmx) settings with this
+    option. Spark properties should be set using a SparkConf object or the spark-defaults.conf file
+    used with the spark-submit script. Maximum heap size settings can be set with spark.executor.memory.
   </td>
 </tr>
 <tr>
@@ -373,7 +376,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Reuse Python worker or not. If yes, it will use a fixed number of Python workers,
     does not need to fork() a Python process for every tasks. It will be very useful
-    if there is large broadcast, then the broadcast will not be needed to transfered
+    if there is large broadcast, then the broadcast will not be needed to transferred
     from JVM to Python worker for every task.
   </td>
 </tr>
@@ -389,6 +392,16 @@ Apart from these, the following properties are also available, and may be useful
     Maximum size of map outputs to fetch simultaneously from each reduce task. Since
     each output requires us to create a buffer to receive it, this represents a fixed memory
     overhead per reduce task, so keep it small unless you have a large amount of memory.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.reducer.maxReqsInFlight</code></td>
+  <td>Int.MaxValue</td>
+  <td>
+    This configuration limits the number of remote requests to fetch blocks at any given point.
+    When the number of hosts in the cluster increase, it might lead to very large number
+    of in-bound connections to one or more nodes, causing the workers to fail under load.
+    By allowing it to limit the number of fetch requests, this scenario can be mitigated.
   </td>
 </tr>
 <tr>
@@ -440,15 +453,6 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     (Netty only) How long to wait between retries of fetches. The maximum delay caused by retrying
     is 15 seconds by default, calculated as <code>maxRetries * retryWait</code>.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.shuffle.manager</code></td>
-  <td>sort</td>
-  <td>
-    Implementation to use for shuffling data. There are two implementations available:
-    <code>sort</code> and <code>hash</code>.
-    Sort-based shuffle is more memory-efficient and is the default option starting in 1.2.
   </td>
 </tr>
 <tr>
@@ -574,6 +578,13 @@ Apart from these, the following properties are also available, and may be useful
     How many finished batches the Spark UI and status APIs remember before garbage collecting.
   </td>
 </tr>
+<tr>
+  <td><code>spark.ui.retainedDeadExecutors</code></td>
+  <td>100</td>
+  <td>
+    How many dead executors the Spark UI and status APIs remember before garbage collecting.
+  </td>
+</tr>
 </table>
 
 #### Compression and Serialization
@@ -584,13 +595,6 @@ Apart from these, the following properties are also available, and may be useful
   <td>true</td>
   <td>
     Whether to compress broadcast variables before sending them. Generally a good idea.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.closure.serializer</code></td>
-  <td>org.apache.spark.serializer.<br />JavaSerializer</td>
-  <td>
-    Serializer class to use for closures. Currently only the Java serializer is supported.
   </td>
 </tr>
 <tr>
@@ -687,10 +691,10 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.rdd.compress</code></td>
   <td>false</td>
   <td>
-    Whether to compress serialized RDD partitions (e.g. for 
-    <code>StorageLevel.MEMORY_ONLY_SER</code> in Java 
-    and Scala or <code>StorageLevel.MEMORY_ONLY</code> in Python). 
-    Can save substantial space at the cost of some extra CPU time. 
+    Whether to compress serialized RDD partitions (e.g. for
+    <code>StorageLevel.MEMORY_ONLY_SER</code> in Java
+    and Scala or <code>StorageLevel.MEMORY_ONLY</code> in Python).
+    Can save substantial space at the cost of some extra CPU time.
   </td>
 </tr>
 <tr>
@@ -759,7 +763,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.memory.offHeap.size</code></td>
   <td>0</td>
   <td>
-    The absolute amount of memory which can be used for off-heap allocation.
+    The absolute amount of memory in bytes which can be used for off-heap allocation.
     This setting has no impact on heap memory usage, so if your executors' total memory consumption must fit within some hard limit then be sure to shrink your JVM heap size accordingly.
     This must be set to a positive value when <code>spark.memory.offHeap.enabled=true</code>.
   </td>
@@ -825,13 +829,18 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.executor.cores</code></td>
-  <td>1 in YARN mode, all the available cores on the worker in standalone mode.</td>
   <td>
-    The number of cores to use on each executor. For YARN and standalone mode only.
+    1 in YARN mode, all the available cores on the worker in
+    standalone and Mesos coarse-grained modes.
+  </td>
+  <td>
+    The number of cores to use on each executor.
 
-    In standalone mode, setting this parameter allows an application to run multiple executors on
-    the same worker, provided that there are enough cores on that worker. Otherwise, only one
-    executor per application will run on each worker.
+    In standalone and Mesos coarse-grained modes, setting this
+    parameter allows an application to run multiple executors on the
+    same worker, provided that there are enough cores on that
+    worker. Otherwise, only one executor per application will run on
+    each worker.
   </td>
 </tr>
 <tr>
@@ -914,82 +923,18 @@ Apart from these, the following properties are also available, and may be useful
     mapping has high overhead for blocks close to or below the page size of the operating system.
   </td>
 </tr>
-<tr>
-  <td><code>spark.externalBlockStore.blockManager</code></td>
-  <td>org.apache.spark.storage.TachyonBlockManager</td>
-  <td>
-    Implementation of external block manager (file system) that store RDDs. The file system's URL is set by
-    <code>spark.externalBlockStore.url</code>.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.externalBlockStore.baseDir</code></td>
-  <td>System.getProperty("java.io.tmpdir")</td>
-  <td>
-    Directories of the external block store that store RDDs. The file system's URL is set by
-   <code>spark.externalBlockStore.url</code> It can also be a comma-separated list of multiple
-    directories on Tachyon file system.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.externalBlockStore.url</code></td>
-  <td>tachyon://localhost:19998 for Tachyon</td>
-  <td>
-    The URL of the underlying external blocker file system in the external block store.
-  </td>
-</tr>
 </table>
 
 #### Networking
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
-  <td><code>spark.akka.frameSize</code></td>
+  <td><code>spark.rpc.message.maxSize</code></td>
   <td>128</td>
   <td>
     Maximum message size (in MB) to allow in "control plane" communication; generally only applies to map
     output size information sent between executors and the driver. Increase this if you are running
-    jobs with many thousands of map and reduce tasks and see messages about the frame size.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.akka.heartbeat.interval</code></td>
-  <td>1000s</td>
-  <td>
-    This is set to a larger value to disable the transport failure detector that comes built in to
-    Akka. It can be enabled again, if you plan to use this feature (Not recommended). A larger
-    interval value reduces network overhead and a smaller value ( ~ 1 s) might be more
-    informative for Akka's failure detector. Tune this in combination of <code>spark.akka.heartbeat.pauses</code>
-    if you need to. A likely positive use case for using failure detector would be: a sensistive
-    failure detector can help evict rogue executors quickly. However this is usually not the case
-    as GC pauses and network lags are expected in a real Spark cluster. Apart from that enabling
-    this leads to a lot of exchanges of heart beats between nodes leading to flooding the network
-    with those.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.akka.heartbeat.pauses</code></td>
-  <td>6000s</td>
-  <td>
-     This is set to a larger value to disable the transport failure detector that comes built in to Akka.
-     It can be enabled again, if you plan to use this feature (Not recommended). Acceptable heart
-     beat pause for Akka. This can be used to control sensitivity to GC pauses. Tune
-     this along with <code>spark.akka.heartbeat.interval</code> if you need to.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.akka.threads</code></td>
-  <td>4</td>
-  <td>
-    Number of actor threads to use for communication. Can be useful to increase on large clusters
-    when the driver has a lot of CPU cores.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.akka.timeout</code></td>
-  <td>100s</td>
-  <td>
-    Communication timeout between Spark nodes.
+    jobs with many thousands of map and reduce tasks and see messages about the RPC message size.
   </td>
 </tr>
 <tr>
@@ -1016,27 +961,11 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.executor.port</code></td>
-  <td>(random)</td>
-  <td>
-    Port for the executor to listen on. This is used for communicating with the driver.
-    This is only relevant when using the Akka RPC backend.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.fileserver.port</code></td>
-  <td>(random)</td>
-  <td>
-    Port for the driver's HTTP file server to listen on.
-    This is only relevant when using the Akka RPC backend.
-  </td>
-</tr>
-<tr>
   <td><code>spark.network.timeout</code></td>
   <td>120s</td>
   <td>
     Default timeout for all network interactions. This config will be used in place of
-    <code>spark.core.connection.ack.wait.timeout</code>, <code>spark.akka.timeout</code>,
+    <code>spark.core.connection.ack.wait.timeout</code>,
     <code>spark.storage.blockManagerSlaveTimeoutMs</code>,
     <code>spark.shuffle.io.connectionTimeout</code>, <code>spark.rpc.askTimeout</code> or
     <code>spark.rpc.lookupTimeout</code> if they are not configured.
@@ -1225,8 +1154,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>false</td>
   <td>
     Whether to use dynamic resource allocation, which scales the number of executors registered
-    with this application up and down based on the workload. Note that this is currently only
-    available on YARN mode. For more detail, see the description
+    with this application up and down based on the workload. 
+    For more detail, see the description
     <a href="job-scheduling.html#dynamic-resource-allocation">here</a>.
     <br><br>
     This requires <code>spark.shuffle.service.enabled</code> to be set.
@@ -1314,7 +1243,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Comma separated list of users/administrators that have view and modify access to all Spark jobs.
     This can be used if you run on a shared cluster and have a set of administrators or devs who
-    help debug when things work. Putting a "*" in the list means any user can have the priviledge
+    help debug when things work. Putting a "*" in the list means any user can have the privilege
     of admin.
   </td>
 </tr>
@@ -1418,8 +1347,7 @@ Apart from these, the following properties are also available, and may be useful
 
             <p>Use <code>spark.ssl.YYY.XXX</code> settings to overwrite the global configuration for
             particular protocol denoted by <code>YYY</code>. Currently <code>YYY</code> can be
-            either <code>akka</code> for Akka based connections or <code>fs</code> for file
-            server.</p>
+            only <code>fs</code> for file server.</p>
         </td>
     </tr>
     <tr>
@@ -1517,6 +1445,14 @@ Apart from these, the following properties are also available, and may be useful
     maximum receiving rate of receivers. This rate is upper bounded by the values
     <code>spark.streaming.receiver.maxRate</code> and <code>spark.streaming.kafka.maxRatePerPartition</code>
     if they are set (see below).
+  </td>
+</tr>
+<tr>
+  <td><code>spark.streaming.backpressure.initialRate</code></td>
+  <td>not set</td>
+  <td>
+    This is the initial maximum receiving rate at which each receiver will receive data for the
+    first batch when the backpressure mechanism is enabled.
   </td>
 </tr>
 <tr>
@@ -1642,6 +1578,29 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 </table>
 
+#### Deploy
+
+<table class="table">
+  <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+  <tr>
+    <td><code>spark.deploy.recoveryMode</code></td>
+    <td>NONE</td>
+    <td>The recovery mode setting to recover submitted Spark jobs with cluster mode when it failed and relaunches.
+    This is only applicable for cluster mode when running with Standalone or Mesos.</td>
+  </tr>
+  <tr>
+    <td><code>spark.deploy.zookeeper.url</code></td>
+    <td>None</td>
+    <td>When `spark.deploy.recoveryMode` is set to ZOOKEEPER, this configuration is used to set the zookeeper URL to connect to.</td>
+  </tr>
+  <tr>
+    <td><code>spark.deploy.zookeeper.dir</code></td>
+    <td>None</td>
+    <td>When `spark.deploy.recoveryMode` is set to ZOOKEEPER, this configuration is used to set the zookeeper directory to store recovery state.</td>
+  </tr>
+</table>
+
+
 #### Cluster Managers
 Each cluster manager in Spark has additional configuration options. Configurations
 can be found on the pages for each mode:
@@ -1673,7 +1632,7 @@ The following variables can be set in `spark-env.sh`:
   </tr>
   <tr>
     <td><code>PYSPARK_PYTHON</code></td>
-    <td>Python binary executable to use for PySpark in both driver and workers (default is <code>python</code>).</td>
+    <td>Python binary executable to use for PySpark in both driver and workers (default is <code>python2.7</code> if available, otherwise <code>python</code>).</td>
   </tr>
   <tr>
     <td><code>PYSPARK_DRIVER_PYTHON</code></td>
@@ -1700,6 +1659,8 @@ to use on each machine and maximum memory.
 Since `spark-env.sh` is a shell script, some of these can be set programmatically -- for example, you might
 compute `SPARK_LOCAL_IP` by looking up the IP of a specific network interface.
 
+Note: When running Spark on YARN in `cluster` mode, environment variables need to be set using the `spark.yarn.appMasterEnv.[EnvironmentVariableName]` property in your `conf/spark-defaults.conf` file.  Environment variables that are set in `spark-env.sh` will not be reflected in the YARN Application Master process in `cluster` mode.  See the [YARN-related Spark Properties](running-on-yarn.html#spark-properties) for more information.
+
 # Configuring Logging
 
 Spark uses [log4j](http://logging.apache.org/log4j/) for logging. You can configure it by adding a
@@ -1709,7 +1670,7 @@ Spark uses [log4j](http://logging.apache.org/log4j/) for logging. You can config
 # Overriding configuration directory
 
 To specify a different configuration directory other than the default "SPARK_HOME/conf",
-you can set SPARK_CONF_DIR. Spark will use the the configuration files (spark-defaults.conf, spark-env.sh, log4j.properties, etc)
+you can set SPARK_CONF_DIR. Spark will use the configuration files (spark-defaults.conf, spark-env.sh, log4j.properties, etc)
 from this directory.
 
 # Inheriting Hadoop Cluster Configuration

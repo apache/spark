@@ -18,19 +18,21 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.io._
+import java.nio.charset.StandardCharsets
 import java.sql.Timestamp
 import java.util.Date
 
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.{Await, Promise}
+import scala.concurrent.Promise
 import scala.concurrent.duration._
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.{Logging, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
  * A test suite for the `spark-sql` CLI tool.  Note that all test cases share the same temporary
@@ -67,7 +69,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
    *                       with one of these strings is found, fail the test immediately.
    *                       The default value is `Seq("Error:")`
    *
-   * @param queriesAndExpectedAnswers one or more tupes of query + answer
+   * @param queriesAndExpectedAnswers one or more tuples of query + answer
    */
   def runCliWithin(
       timeout: FiniteDuration,
@@ -121,7 +123,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
 
     val process = new ProcessBuilder(command: _*).start()
 
-    val stdinWriter = new OutputStreamWriter(process.getOutputStream)
+    val stdinWriter = new OutputStreamWriter(process.getOutputStream, StandardCharsets.UTF_8)
     stdinWriter.write(queriesString)
     stdinWriter.flush()
     stdinWriter.close()
@@ -130,7 +132,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     new ProcessOutputCapturer(process.getErrorStream, captureOutput("stderr")).start()
 
     try {
-      Await.result(foundAllExpectedAnswers.future, timeout)
+      ThreadUtils.awaitResult(foundAllExpectedAnswers.future, timeout)
     } catch { case cause: Throwable =>
       val message =
         s"""
@@ -160,41 +162,38 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
 
     runCliWithin(3.minute)(
       "CREATE TABLE hive_test(key INT, val STRING);"
-        -> "OK",
+        -> "",
       "SHOW TABLES;"
         -> "hive_test",
       s"LOAD DATA LOCAL INPATH '$dataFilePath' OVERWRITE INTO TABLE hive_test;"
-        -> "OK",
+        -> "",
       "CACHE TABLE hive_test;"
         -> "",
       "SELECT COUNT(*) FROM hive_test;"
         -> "5",
       "DROP TABLE hive_test;"
-        -> "OK"
+        -> ""
     )
   }
 
   test("Single command with -e") {
-    runCliWithin(2.minute, Seq("-e", "SHOW DATABASES;"))("" -> "OK")
+    runCliWithin(2.minute, Seq("-e", "SHOW DATABASES;"))("" -> "")
   }
 
   test("Single command with --database") {
     runCliWithin(2.minute)(
       "CREATE DATABASE hive_test_db;"
-        -> "OK",
+        -> "",
       "USE hive_test_db;"
-        -> "OK",
+        -> "",
       "CREATE TABLE hive_test(key INT, val STRING);"
-        -> "OK",
+        -> "",
       "SHOW TABLES;"
         -> "hive_test"
     )
 
     runCliWithin(2.minute, Seq("--database", "hive_test_db", "-e", "SHOW TABLES;"))(
-      ""
-        -> "OK",
-      ""
-        -> "hive_test"
+      "" -> "hive_test"
     )
   }
 
@@ -211,19 +210,19 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       """CREATE TABLE t1(key string, val string)
         |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe';
       """.stripMargin
-        -> "OK",
+        -> "",
       "CREATE TABLE sourceTable (key INT, val STRING);"
-        -> "OK",
+        -> "",
       s"LOAD DATA LOCAL INPATH '$dataFilePath' OVERWRITE INTO TABLE sourceTable;"
-        -> "OK",
+        -> "",
       "INSERT INTO TABLE t1 SELECT key, val FROM sourceTable;"
         -> "",
       "SELECT count(key) FROM t1;"
         -> "5",
       "DROP TABLE t1;"
-        -> "OK",
+        -> "",
       "DROP TABLE sourceTable;"
-        -> "OK"
+        -> ""
     )
   }
 
@@ -231,7 +230,12 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     runCliWithin(timeout = 2.minute,
       errorResponses = Seq("AnalysisException"))(
       "select * from nonexistent_table;"
-        -> "Error in query: Table not found: nonexistent_table;"
+        -> "Error in query: Table or view not found: nonexistent_table;"
     )
+  }
+
+  test("SPARK-11624 Spark SQL CLI should set sessionState only once") {
+    runCliWithin(2.minute, Seq("-e", "!echo \"This is a test for Spark-11624\";"))(
+      "" -> "This is a test for Spark-11624")
   }
 }

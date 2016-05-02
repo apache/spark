@@ -39,11 +39,11 @@ case class ScalaUDF(
     dataType: DataType,
     children: Seq[Expression],
     inputTypes: Seq[DataType] = Nil)
-  extends Expression with ImplicitCastInputTypes {
+  extends Expression with ImplicitCastInputTypes with NonSQLExpression {
 
   override def nullable: Boolean = true
 
-  override def toString: String = s"UDF(${children.mkString(",")})"
+  override def toString: String = s"UDF(${children.mkString(", ")})"
 
   // scalastyle:off line.size.limit
 
@@ -973,7 +973,7 @@ case class ScalaUDF(
 
   // scalastyle:on line.size.limit
 
-  // Generate codes used to convert the arguments to Scala type for user-defined funtions
+  // Generate codes used to convert the arguments to Scala type for user-defined functions
   private[this] def genCodeForConverter(ctx: CodegenContext, index: Int): String = {
     val converterClassName = classOf[Any => Any].getName
     val typeConvertersClassName = CatalystTypeConverters.getClass.getName + ".MODULE$"
@@ -989,9 +989,9 @@ case class ScalaUDF(
     converterTerm
   }
 
-  override def genCode(
+  override def doGenCode(
       ctx: CodegenContext,
-      ev: ExprCode): String = {
+      ev: ExprCode): ExprCode = {
 
     ctx.references += this
 
@@ -1024,7 +1024,7 @@ case class ScalaUDF(
         s"[$funcExpressionIdx]).userDefinedFunc());")
 
     // codegen for children expressions
-    val evals = children.map(_.gen(ctx))
+    val evals = children.map(_.genCode(ctx))
 
     // Generate the codes for expressions and calling user-defined function
     // We need to get the boxedType of dataType's javaType here. Because for the dataType
@@ -1042,7 +1042,7 @@ case class ScalaUDF(
       s"(${ctx.boxedType(dataType)})${catalystConverterTerm}" +
         s".apply($funcTerm.apply(${funcArguments.mkString(", ")}));"
 
-    s"""
+    ev.copy(code = s"""
       $evalCode
       ${converters.mkString("\n")}
       $callFunc
@@ -1051,8 +1051,7 @@ case class ScalaUDF(
       ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
       if (!${ev.isNull}) {
         ${ev.value} = $resultTerm;
-      }
-    """
+      }""")
   }
 
   private[this] val converter = CatalystTypeConverters.createToCatalystConverter(dataType)

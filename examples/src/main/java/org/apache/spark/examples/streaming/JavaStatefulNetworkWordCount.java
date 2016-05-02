@@ -18,6 +18,7 @@
 package org.apache.spark.examples.streaming;
 
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.List;
 import java.util.regex.Pattern;
 
@@ -49,7 +50,7 @@ import org.apache.spark.streaming.api.java.*;
 public class JavaStatefulNetworkWordCount {
   private static final Pattern SPACE = Pattern.compile(" ");
 
-  public static void main(String[] args) {
+  public static void main(String[] args) throws Exception {
     if (args.length < 2) {
       System.err.println("Usage: JavaStatefulNetworkWordCount <hostname> <port>");
       System.exit(1);
@@ -73,8 +74,8 @@ public class JavaStatefulNetworkWordCount {
 
     JavaDStream<String> words = lines.flatMap(new FlatMapFunction<String, String>() {
       @Override
-      public Iterable<String> call(String x) {
-        return Arrays.asList(SPACE.split(x));
+      public Iterator<String> call(String x) {
+        return Arrays.asList(SPACE.split(x)).iterator();
       }
     });
 
@@ -90,7 +91,8 @@ public class JavaStatefulNetworkWordCount {
     Function3<String, Optional<Integer>, State<Integer>, Tuple2<String, Integer>> mappingFunc =
         new Function3<String, Optional<Integer>, State<Integer>, Tuple2<String, Integer>>() {
           @Override
-          public Tuple2<String, Integer> call(String word, Optional<Integer> one, State<Integer> state) {
+          public Tuple2<String, Integer> call(String word, Optional<Integer> one,
+              State<Integer> state) {
             int sum = one.orElse(0) + (state.exists() ? state.get() : 0);
             Tuple2<String, Integer> output = new Tuple2<>(word, sum);
             state.update(sum);

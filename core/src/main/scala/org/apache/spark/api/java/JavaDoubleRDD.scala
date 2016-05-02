@@ -66,7 +66,7 @@ class JavaDoubleRDD(val srdd: RDD[scala.Double])
    */
   def unpersist(blocking: Boolean): JavaDoubleRDD = fromRDD(srdd.unpersist(blocking))
 
-  // first() has to be overriden here in order for its return type to be Double instead of Object.
+  // first() has to be overridden here in order for its return type to be Double instead of Object.
   override def first(): JDouble = srdd.first()
 
   // Transformations (return a new RDD)
@@ -230,7 +230,7 @@ class JavaDoubleRDD(val srdd: RDD[scala.Double])
    * If the RDD contains infinity, NaN throws an exception
    * If the elements in RDD do not vary (max == min) always returns a single bucket.
    */
-  def histogram(bucketCount: Int): Pair[Array[scala.Double], Array[Long]] = {
+  def histogram(bucketCount: Int): (Array[scala.Double], Array[Long]) = {
     val result = srdd.histogram(bucketCount)
     (result._1, result._2)
   }

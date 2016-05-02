@@ -21,18 +21,16 @@ import java.io.File
 import java.security.NoSuchAlgorithmException
 import javax.net.ssl.SSLContext
 
-import scala.collection.JavaConverters._
-
-import com.typesafe.config.{Config, ConfigFactory, ConfigValueFactory}
 import org.eclipse.jetty.util.ssl.SslContextFactory
+
+import org.apache.spark.internal.Logging
 
 /**
  * SSLOptions class is a common container for SSL configuration options. It offers methods to
  * generate specific objects to configure SSL for different communication protocols.
  *
  * SSLOptions is intended to provide the maximum common set of SSL settings, which are supported
- * by the protocol, which it can generate the configuration for. Since Akka doesn't support client
- * authentication with SSL, SSLOptions cannot support it either.
+ * by the protocol, which it can generate the configuration for.
  *
  * @param enabled             enables or disables SSL; if it is set to false, the rest of the
  *                            settings are disregarded
@@ -88,43 +86,6 @@ private[spark] case class SSLOptions(
     }
   }
 
-  /**
-   * Creates an Akka configuration object which contains all the SSL settings represented by this
-   * object. It can be used then to compose the ultimate Akka configuration.
-   */
-  def createAkkaConfig: Option[Config] = {
-    if (enabled) {
-      if (keyStoreType.isDefined) {
-        logWarning("Akka configuration does not support key store type.");
-      }
-      if (trustStoreType.isDefined) {
-        logWarning("Akka configuration does not support trust store type.");
-      }
-
-      Some(ConfigFactory.empty()
-        .withValue("akka.remote.netty.tcp.security.key-store",
-          ConfigValueFactory.fromAnyRef(keyStore.map(_.getAbsolutePath).getOrElse("")))
-        .withValue("akka.remote.netty.tcp.security.key-store-password",
-          ConfigValueFactory.fromAnyRef(keyStorePassword.getOrElse("")))
-        .withValue("akka.remote.netty.tcp.security.trust-store",
-          ConfigValueFactory.fromAnyRef(trustStore.map(_.getAbsolutePath).getOrElse("")))
-        .withValue("akka.remote.netty.tcp.security.trust-store-password",
-          ConfigValueFactory.fromAnyRef(trustStorePassword.getOrElse("")))
-        .withValue("akka.remote.netty.tcp.security.key-password",
-          ConfigValueFactory.fromAnyRef(keyPassword.getOrElse("")))
-        .withValue("akka.remote.netty.tcp.security.random-number-generator",
-          ConfigValueFactory.fromAnyRef(""))
-        .withValue("akka.remote.netty.tcp.security.protocol",
-          ConfigValueFactory.fromAnyRef(protocol.getOrElse("")))
-        .withValue("akka.remote.netty.tcp.security.enabled-algorithms",
-          ConfigValueFactory.fromIterable(supportedAlgorithms.asJava))
-        .withValue("akka.remote.netty.tcp.enable-ssl",
-          ConfigValueFactory.fromAnyRef(true)))
-    } else {
-      None
-    }
-  }
-
   /*
    * The supportedAlgorithms set is a subset of the enabledAlgorithms that
    * are supported by the current Java security provider for this protocol.
@@ -171,34 +132,35 @@ private[spark] case class SSLOptions(
 
 private[spark] object SSLOptions extends Logging {
 
-  /** Resolves SSLOptions settings from a given Spark configuration object at a given namespace.
-    *
-    * The following settings are allowed:
-    * $ - `[ns].enabled` - `true` or `false`, to enable or disable SSL respectively
-    * $ - `[ns].keyStore` - a path to the key-store file; can be relative to the current directory
-    * $ - `[ns].keyStorePassword` - a password to the key-store file
-    * $ - `[ns].keyPassword` - a password to the private key
-    * $ - `[ns].keyStoreType` - the type of the key-store
-    * $ - `[ns].needClientAuth` - whether SSL needs client authentication
-    * $ - `[ns].trustStore` - a path to the trust-store file; can be relative to the current
-    *                         directory
-    * $ - `[ns].trustStorePassword` - a password to the trust-store file
-    * $ - `[ns].trustStoreType` - the type of trust-store
-    * $ - `[ns].protocol` - a protocol name supported by a particular Java version
-    * $ - `[ns].enabledAlgorithms` - a comma separated list of ciphers
-    *
-    * For a list of protocols and ciphers supported by particular Java versions, you may go to
-    * [[https://blogs.oracle.com/java-platform-group/entry/diagnosing_tls_ssl_and_https Oracle
-    * blog page]].
-    *
-    * You can optionally specify the default configuration. If you do, for each setting which is
-    * missing in SparkConf, the corresponding setting is used from the default configuration.
-    *
-    * @param conf Spark configuration object where the settings are collected from
-    * @param ns the namespace name
-    * @param defaults the default configuration
-    * @return [[org.apache.spark.SSLOptions]] object
-    */
+  /**
+   * Resolves SSLOptions settings from a given Spark configuration object at a given namespace.
+   *
+   * The following settings are allowed:
+   * $ - `[ns].enabled` - `true` or `false`, to enable or disable SSL respectively
+   * $ - `[ns].keyStore` - a path to the key-store file; can be relative to the current directory
+   * $ - `[ns].keyStorePassword` - a password to the key-store file
+   * $ - `[ns].keyPassword` - a password to the private key
+   * $ - `[ns].keyStoreType` - the type of the key-store
+   * $ - `[ns].needClientAuth` - whether SSL needs client authentication
+   * $ - `[ns].trustStore` - a path to the trust-store file; can be relative to the current
+   *                         directory
+   * $ - `[ns].trustStorePassword` - a password to the trust-store file
+   * $ - `[ns].trustStoreType` - the type of trust-store
+   * $ - `[ns].protocol` - a protocol name supported by a particular Java version
+   * $ - `[ns].enabledAlgorithms` - a comma separated list of ciphers
+   *
+   * For a list of protocols and ciphers supported by particular Java versions, you may go to
+   * [[https://blogs.oracle.com/java-platform-group/entry/diagnosing_tls_ssl_and_https Oracle
+   * blog page]].
+   *
+   * You can optionally specify the default configuration. If you do, for each setting which is
+   * missing in SparkConf, the corresponding setting is used from the default configuration.
+   *
+   * @param conf Spark configuration object where the settings are collected from
+   * @param ns the namespace name
+   * @param defaults the default configuration
+   * @return [[org.apache.spark.SSLOptions]] object
+   */
   def parse(conf: SparkConf, ns: String, defaults: Option[SSLOptions] = None): SSLOptions = {
     val enabled = conf.getBoolean(s"$ns.enabled", defaultValue = defaults.exists(_.enabled))
 

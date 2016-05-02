@@ -17,13 +17,15 @@
 
 package org.apache.spark.executor
 
+import org.apache.spark.LongAccumulator
 import org.apache.spark.annotation.DeveloperApi
 
 
 /**
  * :: DeveloperApi ::
- * Method by which input data was read.  Network means that the data was read over the network
+ * Method by which input data was read. Network means that the data was read over the network
  * from a remote block manager (which may have stored the data on-disk or in-memory).
+ * Operations are not thread-safe.
  */
 @DeveloperApi
 object DataReadMethod extends Enumeration with Serializable {
@@ -34,44 +36,24 @@ object DataReadMethod extends Enumeration with Serializable {
 
 /**
  * :: DeveloperApi ::
- * Metrics about reading input data.
+ * A collection of accumulators that represents metrics about reading data from external systems.
  */
 @DeveloperApi
-case class InputMetrics(readMethod: DataReadMethod.Value) {
+class InputMetrics private[spark] () extends Serializable {
+  private[executor] val _bytesRead = new LongAccumulator
+  private[executor] val _recordsRead = new LongAccumulator
 
   /**
-   * This is volatile so that it is visible to the updater thread.
+   * Total number of bytes read.
    */
-  @volatile @transient var bytesReadCallback: Option[() => Long] = None
+  def bytesRead: Long = _bytesRead.sum
 
   /**
-   * Total bytes read.
+   * Total number of records read.
    */
-  private var _bytesRead: Long = _
-  def bytesRead: Long = _bytesRead
-  def incBytesRead(bytes: Long): Unit = _bytesRead += bytes
+  def recordsRead: Long = _recordsRead.sum
 
-  /**
-   * Total records read.
-   */
-  private var _recordsRead: Long = _
-  def recordsRead: Long = _recordsRead
-  def incRecordsRead(records: Long): Unit = _recordsRead += records
-
-  /**
-   * Invoke the bytesReadCallback and mutate bytesRead.
-   */
-  def updateBytesRead() {
-    bytesReadCallback.foreach { c =>
-      _bytesRead = c()
-    }
-  }
-
-  /**
-   * Register a function that can be called to get up-to-date information on how many bytes the task
-   * has read from an input source.
-   */
-  def setBytesReadCallback(f: Option[() => Long]) {
-    bytesReadCallback = f
-  }
+  private[spark] def incBytesRead(v: Long): Unit = _bytesRead.add(v)
+  private[spark] def incRecordsRead(v: Long): Unit = _recordsRead.add(v)
+  private[spark] def setBytesRead(v: Long): Unit = _bytesRead.setValue(v)
 }

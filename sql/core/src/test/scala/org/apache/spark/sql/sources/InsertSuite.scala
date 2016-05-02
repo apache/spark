@@ -174,7 +174,7 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
       """.stripMargin)
     }.getMessage
     assert(
-      message.contains("Cannot insert overwrite into table that is also being read from."),
+      message.contains("Cannot overwrite a path that is also being read from."),
       "INSERT OVERWRITE to a table while querying it should not be allowed.")
   }
 

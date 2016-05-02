@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
+import scala.annotation.tailrec
+
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.NoOp
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
@@ -66,6 +68,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
       this.$values = new Object[${schema.length}];
       $allFields
       final InternalRow $output = new $rowClass($values);
+      this.$values = null;
     """
 
     ExprCode(code, "false", output)
@@ -120,6 +123,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
     ExprCode(code, "false", output)
   }
 
+  @tailrec
   private def convertToSafe(
       ctx: CodegenContext,
       input: String,
@@ -138,7 +142,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
     val expressionCodes = expressions.zipWithIndex.map {
       case (NoOp, _) => ""
       case (e, i) =>
-        val evaluationCode = e.gen(ctx)
+        val evaluationCode = e.genCode(ctx)
         val converter = convertToSafe(ctx, evaluationCode.value, e.dataType)
         evaluationCode.code +
           s"""

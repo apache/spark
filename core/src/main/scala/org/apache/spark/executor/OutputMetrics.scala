@@ -17,12 +17,14 @@
 
 package org.apache.spark.executor
 
+import org.apache.spark.LongAccumulator
 import org.apache.spark.annotation.DeveloperApi
 
 
 /**
  * :: DeveloperApi ::
  * Method by which output data was written.
+ * Operations are not thread-safe.
  */
 @DeveloperApi
 object DataWriteMethod extends Enumeration with Serializable {
@@ -33,21 +35,23 @@ object DataWriteMethod extends Enumeration with Serializable {
 
 /**
  * :: DeveloperApi ::
- * Metrics about writing output data.
+ * A collection of accumulators that represents metrics about writing data to external systems.
  */
 @DeveloperApi
-case class OutputMetrics(writeMethod: DataWriteMethod.Value) {
-  /**
-   * Total bytes written
-   */
-  private var _bytesWritten: Long = _
-  def bytesWritten: Long = _bytesWritten
-  private[spark] def setBytesWritten(value : Long): Unit = _bytesWritten = value
+class OutputMetrics private[spark] () extends Serializable {
+  private[executor] val _bytesWritten = new LongAccumulator
+  private[executor] val _recordsWritten = new LongAccumulator
 
   /**
-   * Total records written
+   * Total number of bytes written.
    */
-  private var _recordsWritten: Long = 0L
-  def recordsWritten: Long = _recordsWritten
-  private[spark] def setRecordsWritten(value: Long): Unit = _recordsWritten = value
+  def bytesWritten: Long = _bytesWritten.sum
+
+  /**
+   * Total number of records written.
+   */
+  def recordsWritten: Long = _recordsWritten.sum
+
+  private[spark] def setBytesWritten(v: Long): Unit = _bytesWritten.setValue(v)
+  private[spark] def setRecordsWritten(v: Long): Unit = _recordsWritten.setValue(v)
 }

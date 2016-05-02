@@ -17,6 +17,8 @@
 
 package org.apache.spark.memory
 
+import java.util.Properties
+
 import org.apache.spark.{SparkEnv, TaskContext, TaskContextImpl}
 
 /**
@@ -31,7 +33,7 @@ object MemoryTestingUtils {
       taskAttemptId = 0,
       attemptNumber = 0,
       taskMemoryManager = taskMemoryManager,
-      metricsSystem = env.metricsSystem,
-      internalAccumulators = Seq.empty)
+      localProperties = new Properties,
+      metricsSystem = env.metricsSystem)
   }
 }

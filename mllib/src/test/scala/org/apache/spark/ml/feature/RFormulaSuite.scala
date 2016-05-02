@@ -20,10 +20,12 @@ package org.apache.spark.ml.feature
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.param.ParamsSuite
+import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.sql.Row
 
-class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext {
+class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
   test("params") {
     ParamsSuite.checkParams(new RFormula())
   }
@@ -86,6 +88,24 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(resultSchema.length == 3)
     assert(!resultSchema.exists(_.name == "label"))
     assert(resultSchema.toString == model.transform(original).schema.toString)
+  }
+
+  test("allow empty label") {
+    val original = sqlContext.createDataFrame(
+      Seq((1, 2.0, 3.0), (4, 5.0, 6.0), (7, 8.0, 9.0))
+    ).toDF("id", "a", "b")
+    val formula = new RFormula().setFormula("~ a + b")
+    val model = formula.fit(original)
+    val result = model.transform(original)
+    val resultSchema = model.transformSchema(original.schema)
+    val expected = sqlContext.createDataFrame(
+      Seq(
+        (1, 2.0, 3.0, Vectors.dense(2.0, 3.0)),
+        (4, 5.0, 6.0, Vectors.dense(5.0, 6.0)),
+        (7, 8.0, 9.0, Vectors.dense(8.0, 9.0)))
+      ).toDF("id", "a", "b", "features")
+    assert(result.schema.toString == resultSchema.toString)
+    assert(result.collect() === expected.collect())
   }
 
   test("encodes string terms") {
@@ -251,5 +271,42 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext {
         new NumericAttribute(Some("a_foo:b_zq"), Some(3)),
         new NumericAttribute(Some("a_foo:b_zz"), Some(4))))
     assert(attrs === expectedAttrs)
+  }
+
+  test("read/write: RFormula") {
+    val rFormula = new RFormula()
+      .setFormula("id ~ a:b")
+      .setFeaturesCol("myFeatures")
+      .setLabelCol("myLabels")
+
+    testDefaultReadWrite(rFormula)
+  }
+
+  test("read/write: RFormulaModel") {
+    def checkModelData(model: RFormulaModel, model2: RFormulaModel): Unit = {
+      assert(model.uid === model2.uid)
+
+      assert(model.resolvedFormula.label === model2.resolvedFormula.label)
+      assert(model.resolvedFormula.terms === model2.resolvedFormula.terms)
+      assert(model.resolvedFormula.hasIntercept === model2.resolvedFormula.hasIntercept)
+
+      assert(model.pipelineModel.uid === model2.pipelineModel.uid)
+
+      model.pipelineModel.stages.zip(model2.pipelineModel.stages).foreach {
+        case (transformer1, transformer2) =>
+          assert(transformer1.uid === transformer2.uid)
+          assert(transformer1.params === transformer2.params)
+      }
+    }
+
+    val dataset = sqlContext.createDataFrame(
+      Seq((1, "foo", "zq"), (2, "bar", "zq"), (3, "bar", "zz"))
+    ).toDF("id", "a", "b")
+
+    val rFormula = new RFormula().setFormula("id ~ a:b")
+
+    val model = rFormula.fit(dataset)
+    val newModel = testDefaultReadWrite(model)
+    checkModelData(model, newModel)
   }
 }

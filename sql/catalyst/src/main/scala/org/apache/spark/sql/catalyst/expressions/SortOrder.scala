@@ -57,7 +57,8 @@ case class SortOrder(child: Expression, direction: SortDirection)
   override def dataType: DataType = child.dataType
   override def nullable: Boolean = child.nullable
 
-  override def toString: String = s"$child ${if (direction == Ascending) "ASC" else "DESC"}"
+  override def toString: String = s"$child ${direction.sql}"
+  override def sql: String = child.sql + " " + direction.sql
 
   def isAscending: Boolean = direction == Ascending
 }
@@ -69,8 +70,8 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
 
   override def eval(input: InternalRow): Any = throw new UnsupportedOperationException
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
-    val childCode = child.child.gen(ctx)
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val childCode = child.child.genCode(ctx)
     val input = childCode.value
     val BinaryPrefixCmp = classOf[BinaryPrefixComparator].getName
     val DoublePrefixCmp = classOf[DoublePrefixComparator].getName
@@ -83,8 +84,7 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
       case DateType | TimestampType =>
         (Long.MinValue, s"(long) $input")
       case FloatType | DoubleType =>
-        (DoublePrefixComparator.computePrefix(Double.NegativeInfinity),
-          s"$DoublePrefixCmp.computePrefix((double)$input)")
+        (0L, s"$DoublePrefixCmp.computePrefix((double)$input)")
       case StringType => (0L, s"$input.getPrefix()")
       case BinaryType => (0L, s"$BinaryPrefixCmp.computePrefix($input)")
       case dt: DecimalType if dt.precision - dt.scale <= Decimal.MAX_LONG_DIGITS =>
@@ -103,14 +103,14 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
       case _ => (0L, "0L")
     }
 
-    childCode.code +
-    s"""
-      |long ${ev.value} = ${nullValue}L;
-      |boolean ${ev.isNull} = false;
-      |if (!${childCode.isNull}) {
-      |  ${ev.value} = $prefixCode;
-      |}
-    """.stripMargin
+    ev.copy(code = childCode.code +
+      s"""
+         |long ${ev.value} = ${nullValue}L;
+         |boolean ${ev.isNull} = false;
+         |if (!${childCode.isNull}) {
+         |  ${ev.value} = $prefixCode;
+         |}
+      """.stripMargin)
   }
 
   override def dataType: DataType = LongType

@@ -18,7 +18,8 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.UnresolvedException
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedException}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{DeclarativeAggregate, NoOp}
 import org.apache.spark.sql.types._
 
@@ -30,6 +31,7 @@ sealed trait WindowSpec
 
 /**
  * The specification for a window function.
+ *
  * @param partitionSpec It defines the way that input rows are partitioned.
  * @param orderSpec It defines the ordering of rows in a partition.
  * @param frameSpecification It defines the window frame in a partition.
@@ -75,6 +77,22 @@ case class WindowSpecDefinition(
   override def nullable: Boolean = true
   override def foldable: Boolean = false
   override def dataType: DataType = throw new UnsupportedOperationException
+
+  override def sql: String = {
+    val partition = if (partitionSpec.isEmpty) {
+      ""
+    } else {
+      "PARTITION BY " + partitionSpec.map(_.sql).mkString(", ")
+    }
+
+    val order = if (orderSpec.isEmpty) {
+      ""
+    } else {
+      "ORDER BY " + orderSpec.map(_.sql).mkString(", ")
+    }
+
+    s"($partition $order ${frameSpecification.toString})"
+  }
 }
 
 /**
@@ -278,6 +296,7 @@ case class WindowExpression(
   override def nullable: Boolean = windowFunction.nullable
 
   override def toString: String = s"$windowFunction $windowSpec"
+  override def sql: String = windowFunction.sql + " OVER " + windowSpec.sql
 }
 
 /**
@@ -432,7 +451,11 @@ abstract class RowNumberLike extends AggregateWindowFunction {
  * A [[SizeBasedWindowFunction]] needs the size of the current window for its calculation.
  */
 trait SizeBasedWindowFunction extends AggregateWindowFunction {
-  protected def n: AttributeReference = SizeBasedWindowFunction.n
+  // It's made a val so that the attribute created on driver side is serialized to executor side.
+  // Otherwise, if it's defined as a function, when it's called on executor side, it actually
+  // returns the singleton value instantiated on executor side, which has different expression ID
+  // from the one created on driver side.
+  val n: AttributeReference = SizeBasedWindowFunction.n
 }
 
 object SizeBasedWindowFunction {
@@ -451,6 +474,7 @@ object SizeBasedWindowFunction {
      the window partition.""")
 case class RowNumber() extends RowNumberLike {
   override val evaluateExpression = rowNumber
+  override def sql: String = "ROW_NUMBER()"
 }
 
 /**
@@ -470,6 +494,7 @@ case class CumeDist() extends RowNumberLike with SizeBasedWindowFunction {
   // return the same value for equal values in the partition.
   override val frame = SpecifiedWindowFrame(RangeFrame, UnboundedPreceding, CurrentRow)
   override val evaluateExpression = Divide(Cast(rowNumber, DoubleType), Cast(n, DoubleType))
+  override def sql: String = "CUME_DIST()"
 }
 
 /**
@@ -499,12 +524,25 @@ case class CumeDist() extends RowNumberLike with SizeBasedWindowFunction {
 case class NTile(buckets: Expression) extends RowNumberLike with SizeBasedWindowFunction {
   def this() = this(Literal(1))
 
+  override def children: Seq[Expression] = Seq(buckets)
+
   // Validate buckets. Note that this could be relaxed, the bucket value only needs to constant
   // for each partition.
-  buckets.eval() match {
-    case b: Int if b > 0 => // Ok
-    case x => throw new AnalysisException(
-      "Buckets expression must be a foldable positive integer expression: $x")
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (!buckets.foldable) {
+      return TypeCheckFailure(s"Buckets expression must be foldable, but got $buckets")
+    }
+
+    if (buckets.dataType != IntegerType) {
+      return TypeCheckFailure(s"Buckets expression must be integer type, but got $buckets")
+    }
+
+    val i = buckets.eval().asInstanceOf[Int]
+    if (i > 0) {
+      TypeCheckSuccess
+    } else {
+      TypeCheckFailure(s"Buckets expression must be positive, but got: $i")
+    }
   }
 
   private val bucket = AttributeReference("bucket", IntegerType, nullable = false)()
@@ -556,8 +594,8 @@ abstract class RankLike extends AggregateWindowFunction {
   override def inputTypes: Seq[AbstractDataType] = children.map(_ => AnyDataType)
 
   /** Store the values of the window 'order' expressions. */
-  protected val orderAttrs = children.map{ expr =>
-    AttributeReference(expr.prettyString, expr.dataType)()
+  protected val orderAttrs = children.map { expr =>
+    AttributeReference(expr.sql, expr.dataType)()
   }
 
   /** Predicate that detects if the order attributes have changed. */
@@ -608,6 +646,7 @@ abstract class RankLike extends AggregateWindowFunction {
 case class Rank(children: Seq[Expression]) extends RankLike {
   def this() = this(Nil)
   override def withOrder(order: Seq[Expression]): Rank = Rank(order)
+  override def sql: String = "RANK()"
 }
 
 /**
@@ -632,11 +671,12 @@ case class DenseRank(children: Seq[Expression]) extends RankLike {
   override val updateExpressions = increaseRank +: children
   override val aggBufferAttributes = rank +: orderAttrs
   override val initialValues = zero +: orderInit
+  override def sql: String = "DENSE_RANK()"
 }
 
 /**
  * The PercentRank function computes the percentage ranking of a value in a group of values. The
- * result the rank of the minus one divided by the total number of rows in the partitiion minus one:
+ * result the rank of the minus one divided by the total number of rows in the partition minus one:
  * (r - 1) / (n - 1). If a partition only contains one row, the function will return 0.
  *
  * The PercentRank function is similar to the CumeDist function, but it uses rank values instead of
@@ -658,4 +698,5 @@ case class PercentRank(children: Seq[Expression]) extends RankLike with SizeBase
   override val evaluateExpression = If(GreaterThan(n, one),
       Divide(Cast(Subtract(rank, one), DoubleType), Cast(Subtract(n, one), DoubleType)),
       Literal(0.0d))
+  override def sql: String = "PERCENT_RANK()"
 }

@@ -65,19 +65,20 @@ class KafkaStreamSuite extends SparkFunSuite with Eventually with BeforeAndAfter
 
     val stream = KafkaUtils.createStream[String, String, StringDecoder, StringDecoder](
       ssc, kafkaParams, Map(topic -> 1), StorageLevel.MEMORY_ONLY)
-    val result = new mutable.HashMap[String, Long]() with mutable.SynchronizedMap[String, Long]
+    val result = new mutable.HashMap[String, Long]()
     stream.map(_._2).countByValue().foreachRDD { r =>
-      val ret = r.collect()
-      ret.toMap.foreach { kv =>
-        val count = result.getOrElseUpdate(kv._1, 0) + kv._2
-        result.put(kv._1, count)
+      r.collect().foreach { kv =>
+        result.synchronized {
+          val count = result.getOrElseUpdate(kv._1, 0) + kv._2
+          result.put(kv._1, count)
+        }
       }
     }
 
     ssc.start()
 
     eventually(timeout(10000 milliseconds), interval(100 milliseconds)) {
-      assert(sent === result)
+      assert(result.synchronized { sent === result })
     }
   }
 }

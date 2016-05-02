@@ -17,40 +17,45 @@
 
 package org.apache.spark.executor
 
+import org.apache.spark.LongAccumulator
 import org.apache.spark.annotation.DeveloperApi
 
 
 /**
  * :: DeveloperApi ::
- * Metrics pertaining to shuffle data written in a given task.
+ * A collection of accumulators that represent metrics about writing shuffle data.
+ * Operations are not thread-safe.
  */
 @DeveloperApi
-class ShuffleWriteMetrics extends Serializable {
+class ShuffleWriteMetrics private[spark] () extends Serializable {
+  private[executor] val _bytesWritten = new LongAccumulator
+  private[executor] val _recordsWritten = new LongAccumulator
+  private[executor] val _writeTime = new LongAccumulator
 
   /**
-   * Number of bytes written for the shuffle by this task
+   * Number of bytes written for the shuffle by this task.
    */
-  @volatile private var _bytesWritten: Long = _
-  def bytesWritten: Long = _bytesWritten
-  private[spark] def incBytesWritten(value: Long) = _bytesWritten += value
-  private[spark] def decBytesWritten(value: Long) = _bytesWritten -= value
+  def bytesWritten: Long = _bytesWritten.sum
 
   /**
-   * Time the task spent blocking on writes to disk or buffer cache, in nanoseconds
+   * Total number of records written to the shuffle by this task.
    */
-  @volatile private var _writeTime: Long = _
-  def writeTime: Long = _writeTime
-  private[spark] def incWriteTime(value: Long) = _writeTime += value
-  private[spark] def decWriteTime(value: Long) = _writeTime -= value
+  def recordsWritten: Long = _recordsWritten.sum
 
   /**
-   * Total number of records written to the shuffle by this task
+   * Time the task spent blocking on writes to disk or buffer cache, in nanoseconds.
    */
-  @volatile private var _recordsWritten: Long = _
-  def recordsWritten: Long = _recordsWritten
-  private[spark] def incRecordsWritten(value: Long) = _recordsWritten += value
-  private[spark] def decRecordsWritten(value: Long) = _recordsWritten -= value
-  private[spark] def setRecordsWritten(value: Long) = _recordsWritten = value
+  def writeTime: Long = _writeTime.sum
+
+  private[spark] def incBytesWritten(v: Long): Unit = _bytesWritten.add(v)
+  private[spark] def incRecordsWritten(v: Long): Unit = _recordsWritten.add(v)
+  private[spark] def incWriteTime(v: Long): Unit = _writeTime.add(v)
+  private[spark] def decBytesWritten(v: Long): Unit = {
+    _bytesWritten.setValue(bytesWritten - v)
+  }
+  private[spark] def decRecordsWritten(v: Long): Unit = {
+    _recordsWritten.setValue(recordsWritten - v)
+  }
 
   // Legacy methods for backward compatibility.
   // TODO: remove these once we make this class private.
