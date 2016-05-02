@@ -166,7 +166,10 @@ class DataFrameReader(object):
             return self._df(self._jreader.stream())
 
     @since(1.4)
-    def json(self, path, schema=None):
+    def json(self, path, schema=None, primitivesAsString=None, prefersDecimal=None,
+             allowComments=None, allowUnquotedFieldNames=None, allowSingleQuotes=None,
+             allowNumericLeadingZero=None, allowBackslashEscapingAnyCharacter=None,
+             mode=None, columnNameOfCorruptRecord=None):
         """
         Loads a JSON file (one object per line) or an RDD of Strings storing JSON objects
         (one object per record) and returns the result as a :class`DataFrame`.
@@ -177,31 +180,36 @@ class DataFrameReader(object):
         :param path: string represents path to the JSON dataset,
                      or RDD of Strings storing JSON objects.
         :param schema: an optional :class:`StructType` for the input schema.
+        :param primitivesAsString: infers all primitive values as a string type. If None is set, \
+                                   it uses the default value, ``false``.
+        :param prefersDecimal: infers all floating-point values as a decimal type. If the values \
+                               do not fit in decimal, then it infers them as doubles. If None is \
+                               set, it uses the default value, ``false``.
+        :param allowComments: ignores Java/C++ style comment in JSON records. If None is set, \
+                              it uses the default value, ``false``.
+        :param allowUnquotedFieldNames: allows unquoted JSON field names. If None is set, \
+                                        it uses the default value, ``false``.
+        :param allowSingleQuotes: allows single quotes in addition to double quotes. If None is \
+                                        set, it uses the default value, ``true``.
+        :param allowNumericLeadingZero: allows leading zeros in numbers (e.g. 00012). If None is \
+                                        set, it uses the default value, ``false``.
+        :param allowBackslashEscapingAnyCharacter: allows accepting quoting of all character \
+                                                   using backslash quoting mechanism. If None is \
+                                                   set, it uses the default value, ``false``.
+        :param mode: allows a mode for dealing with corrupt records during parsing. If None is \
+                     set, it uses the default value, ``PERMISSIVE``.
 
-        You can set the following JSON-specific options to deal with non-standard JSON files:
-            * ``primitivesAsString`` (default ``false``): infers all primitive values as a string \
-                type
-            * `prefersDecimal` (default `false`): infers all floating-point values as a decimal \
-                type. If the values do not fit in decimal, then it infers them as doubles.
-            * ``allowComments`` (default ``false``): ignores Java/C++ style comment in JSON records
-            * ``allowUnquotedFieldNames`` (default ``false``): allows unquoted JSON field names
-            * ``allowSingleQuotes`` (default ``true``): allows single quotes in addition to double \
-                quotes
-            * ``allowNumericLeadingZeros`` (default ``false``): allows leading zeros in numbers \
-                (e.g. 00012)
-            * ``allowBackslashEscapingAnyCharacter`` (default ``false``): allows accepting quoting \
-                of all character using backslash quoting mechanism
-            *  ``mode`` (default ``PERMISSIVE``): allows a mode for dealing with corrupt records \
-                during parsing.
                 *  ``PERMISSIVE`` : sets other fields to ``null`` when it meets a corrupted \
                   record and puts the malformed string into a new field configured by \
                  ``columnNameOfCorruptRecord``. When a schema is set by user, it sets \
                  ``null`` for extra fields.
                 *  ``DROPMALFORMED`` : ignores the whole corrupted records.
                 *  ``FAILFAST`` : throws an exception when it meets corrupted records.
-            *  ``columnNameOfCorruptRecord`` (default ``_corrupt_record``): allows renaming the \
-                 new field having malformed string created by ``PERMISSIVE`` mode. \
-                 This overrides ``spark.sql.columnNameOfCorruptRecord``.
+
+        :param columnNameOfCorruptRecord: allows renaming the new field having malformed string \
+                                          created by ``PERMISSIVE`` mode. This overrides \
+                                          ``spark.sql.columnNameOfCorruptRecord``. If None is set, \
+                                          it uses the default value ``_corrupt_record``.
 
         >>> df1 = sqlContext.read.json('python/test_support/sql/people.json')
         >>> df1.dtypes
@@ -214,6 +222,24 @@ class DataFrameReader(object):
         """
         if schema is not None:
             self.schema(schema)
+        if primitivesAsString is not None:
+            self.option("primitivesAsString", primitivesAsString)
+        if prefersDecimal is not None:
+            self.option("prefersDecimal", prefersDecimal)
+        if allowComments is not None:
+            self.option("allowComments", allowComments)
+        if allowUnquotedFieldNames is not None:
+            self.option("allowUnquotedFieldNames", allowUnquotedFieldNames)
+        if allowSingleQuotes is not None:
+            self.option("allowSingleQuotes", allowSingleQuotes)
+        if allowNumericLeadingZero is not None:
+            self.option("allowNumericLeadingZero", allowNumericLeadingZero)
+        if allowBackslashEscapingAnyCharacter is not None:
+            self.option("allowBackslashEscapingAnyCharacter", allowBackslashEscapingAnyCharacter)
+        if mode is not None:
+            self.option("mode", mode)
+        if columnNameOfCorruptRecord is not None:
+            self.option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
         if isinstance(path, basestring):
             return self._df(self._jreader.json(path))
         elif type(path) == list:
