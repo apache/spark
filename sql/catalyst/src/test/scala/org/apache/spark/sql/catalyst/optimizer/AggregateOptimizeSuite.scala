@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.catalyst.SimpleCatalystConf
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, EmptyFunctionRegistry}
+import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.Literal
@@ -25,10 +28,14 @@ import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
 class AggregateOptimizeSuite extends PlanTest {
+  val conf = new SimpleCatalystConf(caseSensitiveAnalysis = false)
+  val catalog = new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, conf)
+  val analyzer = new Analyzer(catalog, conf)
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches = Batch("Aggregate", FixedPoint(100),
-      RemoveLiteralFromGroupExpressions) :: Nil
+      RemoveLiteralFromGroupExpressions,
+      RemoveRepetitionFromGroupExpressions) :: Nil
   }
 
   test("remove literals in grouping expression") {
@@ -39,6 +46,17 @@ class AggregateOptimizeSuite extends PlanTest {
     val optimized = Optimize.execute(query)
 
     val correctAnswer = input.groupBy('a)(sum('b))
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("remove repetition in grouping expression") {
+    val input = LocalRelation('a.int, 'b.int, 'c.int)
+
+    val query = input.groupBy('a + 1, 'b + 2, Literal(1) + 'A, Literal(2) + 'B)(sum('c))
+    val optimized = Optimize.execute(analyzer.execute(query))
+
+    val correctAnswer = analyzer.execute(input.groupBy('a + 1, 'b + 2)(sum('c)))
 
     comparePlans(optimized, correctAnswer)
   }
