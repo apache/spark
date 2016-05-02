@@ -60,8 +60,6 @@ case class BroadcastNestedLoopJoinExec(
         output, (streamed.output ++ broadcast.output).map(_.withNullability(true)))
   }
 
-  override def outputPartitioning: Partitioning = streamed.outputPartitioning
-
   override def output: Seq[Attribute] = {
     joinType match {
       case Inner =>

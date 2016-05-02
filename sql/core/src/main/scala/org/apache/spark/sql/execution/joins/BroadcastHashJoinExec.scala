@@ -48,8 +48,6 @@ case class BroadcastHashJoinExec(
   override private[sql] lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
-  override def outputPartitioning: Partitioning = streamedPlan.outputPartitioning
-
   override def requiredChildDistribution: Seq[Distribution] = {
     val mode = HashedRelationBroadcastMode(buildKeys)
     buildSide match {
