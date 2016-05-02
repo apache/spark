@@ -722,7 +722,7 @@ object SparkSession {
      * Enables Hive support, including connectivity to a persistent Hive metastore, support for
      * Hive serdes, and Hive user-defined functions.
      *
-     * @return 2.0.0
+     * @since 2.0.0
      */
     def enableHiveSupport(): Builder = synchronized {
       if (hiveClassesArePresent) {
