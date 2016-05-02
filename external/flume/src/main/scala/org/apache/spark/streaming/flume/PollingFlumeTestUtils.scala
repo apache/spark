@@ -116,7 +116,7 @@ private[flume] class PollingFlumeTestUtils {
   /**
    * Send data and wait until all data has been received
    */
-  def sendDatAndEnsureAllDataHasBeenReceived(): Unit = {
+  def sendDataAndEnsureAllDataHasBeenReceived(): Unit = {
     val executor = Executors.newCachedThreadPool()
     val executorCompletion = new ExecutorCompletionService[Void](executor)
 
