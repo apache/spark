@@ -184,8 +184,10 @@ private[sql] object PartitioningUtils {
         return (None, None)
       }
 
-      if (basePaths.contains(currentPath)) {
+      if (basePaths.contains(currentPath) ||
+        basePaths.exists(_.toString.startsWith(currentPath.toString))) {
         // If the currentPath is one of base paths. We should stop.
+        // If the currentPath is the basis of one of base paths. We should stop.
         finished = true
       } else {
         // Let's say currentPath is a path of "/table/a=1/", currentPath.getName will give us a=1.
