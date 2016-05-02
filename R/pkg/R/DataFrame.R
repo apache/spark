@@ -1228,7 +1228,7 @@ setMethod("dapply",
 #'   1
 #'   1
 #'   9
-#'
+#'}
 setMethod("gapply",
           signature(x = "SparkDataFrame", func = "function", schema = "structType",
                    col = "character"),
