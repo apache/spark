@@ -45,11 +45,11 @@ class StopWordsRemover(override val uid: String)
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /**
-   * the stop words set to be filtered out
+   * The words to be filtered out.
    * @group param
    */
-  val stopWords: StringArrayParam = new StringArrayParam(this, "stopWords", "stop words")
-  setDefault(stopWords -> StopWordsRemover.loadStopWords("english"))
+  val stopWords: StringArrayParam =
+    new StringArrayParam(this, "stopWords", "the words to be filtered out")
 
   /** @group setParam */
   def setStopWords(value: Array[String]): this.type = set(stopWords, value)
@@ -58,12 +58,12 @@ class StopWordsRemover(override val uid: String)
   def getStopWords: Array[String] = $(stopWords)
 
   /**
-   * whether to do a case sensitive comparison over the stop words
+   * Whether to do a case sensitive comparison over the stop words.
    * Default: false
    * @group param
    */
   val caseSensitive: BooleanParam = new BooleanParam(this, "caseSensitive",
-    "whether to do case-sensitive comparison during filtering")
+    "whether to do a case-sensitive comparison over the stop stop words")
 
   /** @group setParam */
   def setCaseSensitive(value: Boolean): this.type = set(caseSensitive, value)
@@ -71,24 +71,23 @@ class StopWordsRemover(override val uid: String)
   /** @group getParam */
   def getCaseSensitive: Boolean = $(caseSensitive)
 
-  setDefault(stopWords -> Array.empty[String], caseSensitive -> false)
+  setDefault(stopWords -> StopWordsRemover.loadStopWords("english"), caseSensitive -> false)
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema)
-    val stopWordsSet = $(stopWords).toSet
     val t = if ($(caseSensitive)) {
+      val stopWordsSet = $(stopWords).toSet
       udf { terms: Seq[String] =>
         terms.filter(s => !stopWordsSet.contains(s))
       }
     } else {
       val toLower = (s: String) => if (s != null) s.toLowerCase else s
-      val lowerStopWords = stopWordsSet.map(toLower(_))
+      val lowerStopWords = $(stopWords).map(toLower(_)).toSet
       udf { terms: Seq[String] =>
         terms.filter(s => !lowerStopWords.contains(toLower(s)))
       }
     }
-
     val metadata = outputSchema($(outputCol)).metadata
     dataset.select(col("*"), t(col($(inputCol))).as($(outputCol), metadata))
   }
@@ -118,8 +117,10 @@ object StopWordsRemover extends DefaultParamsReadable[StopWordsRemover] {
    * italian, norwegian, portuguese, russian, spanish, swedish, turkish
    * @see [[http://anoncvs.postgresql.org/cvsweb.cgi/pgsql/src/backend/snowball/stopwords/]]
    */
+  @Since("2.0.0")
   def loadStopWords(language: String): Array[String] = {
-    require(supportedLanguages.contains(language), s"$language is not in language list")
+    require(supportedLanguages.contains(language),
+      s"$language is not in the supported language list: ${supportedLanguages.mkString(", ")}.")
     val is = getClass.getResourceAsStream(s"/org/apache/spark/ml/feature/stopwords/$language.txt")
     scala.io.Source.fromInputStream(is)(scala.io.Codec.UTF8).getLines().toArray
   }
