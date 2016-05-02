@@ -754,7 +754,7 @@ class DataFrameWriter(object):
         if header is not None:
             self.option("header", header)
         if nullValue is not None:
-            self.option("nullValue", header)
+            self.option("nullValue", nullValue)
         self._jwrite.csv(path)
 
     @since(1.5)
