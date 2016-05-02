@@ -21,9 +21,6 @@ import java.{lang => jl}
 import java.io.ObjectInputStream
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
-import javax.annotation.concurrent.GuardedBy
-
-import scala.collection.JavaConverters._
 
 import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.util.Utils
@@ -39,7 +36,7 @@ private[spark] case class AccumulatorMetadata(
  * The base class for accumulators, that can accumulate inputs of type `IN`, and produce output of
  * type `OUT`.
  */
-abstract class NewAccumulator[IN, OUT] extends Serializable {
+abstract class AccumulatorV2[IN, OUT] extends Serializable {
   private[spark] var metadata: AccumulatorMetadata = _
   private[this] var atDriverSide = true
 
@@ -95,7 +92,7 @@ abstract class NewAccumulator[IN, OUT] extends Serializable {
   }
 
   /**
-   * Creates an [[AccumulableInfo]] representation of this [[NewAccumulator]] with the provided
+   * Creates an [[AccumulableInfo]] representation of this [[AccumulatorV2]] with the provided
    * values.
    */
   private[spark] def toInfo(update: Option[Any], value: Option[Any]): AccumulableInfo = {
@@ -106,16 +103,16 @@ abstract class NewAccumulator[IN, OUT] extends Serializable {
   final private[spark] def isAtDriverSide: Boolean = atDriverSide
 
   /**
-   * Tells if this accumulator is zero value or not. e.g. for a counter accumulator, 0 is zero
+   * Returns if this accumulator is zero value or not. e.g. for a counter accumulator, 0 is zero
    * value; for a list accumulator, Nil is zero value.
    */
-  def isZero(): Boolean
+  def isZero: Boolean
 
   /**
    * Creates a new copy of this accumulator, which is zero value. i.e. call `isZero` on the copy
    * must return true.
    */
-  def copyAndReset(): NewAccumulator[IN, OUT]
+  def copyAndReset(): AccumulatorV2[IN, OUT]
 
   /**
    * Takes the inputs and accumulates. e.g. it can be a simple `+=` for counter accumulator.
@@ -126,7 +123,7 @@ abstract class NewAccumulator[IN, OUT] extends Serializable {
    * Merges another same-type accumulator into this one and update its state, i.e. this should be
    * merge-in-place.
    */
-  def merge(other: NewAccumulator[IN, OUT]): Unit
+  def merge(other: AccumulatorV2[IN, OUT]): Unit
 
   /**
    * Access this accumulator's current value; only allowed on driver.
@@ -155,7 +152,7 @@ abstract class NewAccumulator[IN, OUT] extends Serializable {
           "Accumulator must be registered before send to executor")
       }
       val copy = copyAndReset()
-      assert(copy.isZero(), "copyAndReset must return a zero value copy")
+      assert(copy.isZero, "copyAndReset must return a zero value copy")
       copy.metadata = metadata
       copy
     } else {
@@ -191,6 +188,9 @@ abstract class NewAccumulator[IN, OUT] extends Serializable {
 }
 
 
+/**
+ * An internal class used to track accumulators by Spark itself.
+ */
 private[spark] object AccumulatorContext {
 
   /**
@@ -199,20 +199,21 @@ private[spark] object AccumulatorContext {
    * once the RDDs and user-code that reference them are cleaned up.
    * TODO: Don't use a global map; these should be tied to a SparkContext (SPARK-13051).
    */
-  private val originals = new ConcurrentHashMap[Long, jl.ref.WeakReference[NewAccumulator[_, _]]]
+  private val originals = new ConcurrentHashMap[Long, jl.ref.WeakReference[AccumulatorV2[_, _]]]
 
   private[this] val nextId = new AtomicLong(0L)
 
   /**
-   * Return a globally unique ID for a new [[Accumulator]].
+   * Returns a globally unique ID for a new [[Accumulator]].
    * Note: Once you copy the [[Accumulator]] the ID is no longer unique.
    */
   def newId(): Long = nextId.getAndIncrement
 
+  /** Returns the number of accumulators registered. Used in testing. */
   def numAccums: Int = originals.size
 
   /**
-   * Register an [[Accumulator]] created on the driver such that it can be used on the executors.
+   * Registers an [[Accumulator]] created on the driver such that it can be used on the executors.
    *
    * All accumulators registered here can later be used as a container for accumulating partial
    * values across multiple tasks. This is what [[org.apache.spark.scheduler.DAGScheduler]] does.
@@ -222,21 +223,21 @@ private[spark] object AccumulatorContext {
    * If an [[Accumulator]] with the same ID was already registered, this does nothing instead
    * of overwriting it. We will never register same accumulator twice, this is just a sanity check.
    */
-  def register(a: NewAccumulator[_, _]): Unit = {
-    originals.putIfAbsent(a.id, new jl.ref.WeakReference[NewAccumulator[_, _]](a))
+  def register(a: AccumulatorV2[_, _]): Unit = {
+    originals.putIfAbsent(a.id, new jl.ref.WeakReference[AccumulatorV2[_, _]](a))
   }
 
   /**
-   * Unregister the [[Accumulator]] with the given ID, if any.
+   * Unregisters the [[Accumulator]] with the given ID, if any.
    */
   def remove(id: Long): Unit = {
     originals.remove(id)
   }
 
   /**
-   * Return the [[Accumulator]] registered with the given ID, if any.
+   * Returns the [[Accumulator]] registered with the given ID, if any.
    */
-  def get(id: Long): Option[NewAccumulator[_, _]] = {
+  def get(id: Long): Option[AccumulatorV2[_, _]] = {
     Option(originals.get(id)).map { ref =>
       // Since we are storing weak references, we must check whether the underlying data is valid.
       val acc = ref.get
@@ -248,7 +249,7 @@ private[spark] object AccumulatorContext {
   }
 
   /**
-   * Clear all registered [[Accumulator]]s. For testing only.
+   * Clears all registered [[Accumulator]]s. For testing only.
    */
   def clear(): Unit = {
     originals.clear()
@@ -256,10 +257,10 @@ private[spark] object AccumulatorContext {
 }
 
 
-class LongAccumulator extends NewAccumulator[jl.Long, jl.Long] {
+class LongAccumulator extends AccumulatorV2[jl.Long, jl.Long] {
   private[this] var _sum = 0L
 
-  override def isZero(): Boolean = _sum == 0
+  override def isZero: Boolean = _sum == 0
 
   override def copyAndReset(): LongAccumulator = new LongAccumulator
 
@@ -269,7 +270,7 @@ class LongAccumulator extends NewAccumulator[jl.Long, jl.Long] {
 
   def sum: Long = _sum
 
-  override def merge(other: NewAccumulator[jl.Long, jl.Long]): Unit = other match {
+  override def merge(other: AccumulatorV2[jl.Long, jl.Long]): Unit = other match {
     case o: LongAccumulator => _sum += o.sum
     case _ => throw new UnsupportedOperationException(
       s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
@@ -281,10 +282,10 @@ class LongAccumulator extends NewAccumulator[jl.Long, jl.Long] {
 }
 
 
-class DoubleAccumulator extends NewAccumulator[jl.Double, jl.Double] {
+class DoubleAccumulator extends AccumulatorV2[jl.Double, jl.Double] {
   private[this] var _sum = 0.0
 
-  override def isZero(): Boolean = _sum == 0.0
+  override def isZero: Boolean = _sum == 0.0
 
   override def copyAndReset(): DoubleAccumulator = new DoubleAccumulator
 
@@ -294,7 +295,7 @@ class DoubleAccumulator extends NewAccumulator[jl.Double, jl.Double] {
 
   def sum: Double = _sum
 
-  override def merge(other: NewAccumulator[jl.Double, jl.Double]): Unit = other match {
+  override def merge(other: AccumulatorV2[jl.Double, jl.Double]): Unit = other match {
     case o: DoubleAccumulator => _sum += o.sum
     case _ => throw new UnsupportedOperationException(
       s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
@@ -306,11 +307,11 @@ class DoubleAccumulator extends NewAccumulator[jl.Double, jl.Double] {
 }
 
 
-class AverageAccumulator extends NewAccumulator[jl.Double, jl.Double] {
+class AverageAccumulator extends AccumulatorV2[jl.Double, jl.Double] {
   private[this] var _sum = 0.0
   private[this] var _count = 0L
 
-  override def isZero(): Boolean = _sum == 0.0 && _count == 0
+  override def isZero: Boolean = _sum == 0.0 && _count == 0
 
   override def copyAndReset(): AverageAccumulator = new AverageAccumulator
 
@@ -324,7 +325,7 @@ class AverageAccumulator extends NewAccumulator[jl.Double, jl.Double] {
     _count += 1
   }
 
-  override def merge(other: NewAccumulator[jl.Double, jl.Double]): Unit = other match {
+  override def merge(other: AccumulatorV2[jl.Double, jl.Double]): Unit = other match {
     case o: AverageAccumulator =>
       _sum += o.sum
       _count += o.count
@@ -344,16 +345,16 @@ class AverageAccumulator extends NewAccumulator[jl.Double, jl.Double] {
 }
 
 
-class ListAccumulator[T] extends NewAccumulator[T, java.util.List[T]] {
+class ListAccumulator[T] extends AccumulatorV2[T, java.util.List[T]] {
   private[this] val _list: java.util.List[T] = new java.util.ArrayList[T]
 
-  override def isZero(): Boolean = _list.isEmpty
+  override def isZero: Boolean = _list.isEmpty
 
   override def copyAndReset(): ListAccumulator[T] = new ListAccumulator
 
   override def add(v: T): Unit = _list.add(v)
 
-  override def merge(other: NewAccumulator[T, java.util.List[T]]): Unit = other match {
+  override def merge(other: AccumulatorV2[T, java.util.List[T]]): Unit = other match {
     case o: ListAccumulator[T] => _list.addAll(o.localValue)
     case _ => throw new UnsupportedOperationException(
       s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
@@ -370,10 +371,10 @@ class ListAccumulator[T] extends NewAccumulator[T, java.util.List[T]] {
 
 class LegacyAccumulatorWrapper[R, T](
     initialValue: R,
-    param: org.apache.spark.AccumulableParam[R, T]) extends NewAccumulator[T, R] {
+    param: org.apache.spark.AccumulableParam[R, T]) extends AccumulatorV2[T, R] {
   private[spark] var _value = initialValue  // Current value on driver
 
-  override def isZero(): Boolean = _value == param.zero(initialValue)
+  override def isZero: Boolean = _value == param.zero(initialValue)
 
   override def copyAndReset(): LegacyAccumulatorWrapper[R, T] = {
     val acc = new LegacyAccumulatorWrapper(initialValue, param)
@@ -383,7 +384,7 @@ class LegacyAccumulatorWrapper[R, T](
 
   override def add(v: T): Unit = _value = param.addAccumulator(_value, v)
 
-  override def merge(other: NewAccumulator[T, R]): Unit = other match {
+  override def merge(other: AccumulatorV2[T, R]): Unit = other match {
     case o: LegacyAccumulatorWrapper[R, T] => _value = param.addInPlace(_value, o.localValue)
     case _ => throw new UnsupportedOperationException(
       s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")

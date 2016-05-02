@@ -2617,6 +2617,7 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol, Ja
         """
         super(ChiSqSelector, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.ChiSqSelector", self.uid)
+        self._setDefault(numTopFeatures=50)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
