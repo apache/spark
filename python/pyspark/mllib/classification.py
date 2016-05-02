@@ -16,6 +16,7 @@
 #
 
 from math import exp
+import warnings
 
 import numpy
 from numpy import array
@@ -266,6 +267,8 @@ class LogisticRegressionModel(LinearClassificationModel):
 class LogisticRegressionWithSGD(object):
     """
     .. versionadded:: 0.9.0
+    .. note:: Deprecated in 2.0.0. Use ml.classification.LogisticRegression or
+            LogisticRegressionWithLBFGS.
     """
     @classmethod
     @since('0.9.0')
@@ -312,6 +315,10 @@ class LogisticRegressionWithSGD(object):
           A condition which decides iteration termination.
           (default: 0.001)
         """
+        warnings.warn(
+            "Deprecated in 2.0.0. Use ml.classification.LogisticRegression or "
+            "LogisticRegressionWithLBFGS.")
+
         def train(rdd, i):
             return callMLlibFunc("trainLogisticRegressionModelWithSGD", rdd, int(iterations),
                                  float(step), float(miniBatchFraction), i, float(regParam), regType,

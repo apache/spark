@@ -17,11 +17,19 @@
 
 package org.apache.spark.sql.hive.execution
 
+import java.io.IOException
+import java.net.URI
+import java.text.SimpleDateFormat
 import java.util
+import java.util.{Date, Random}
 
 import scala.collection.JavaConverters._
 
-import org.apache.hadoop.hive.ql.{Context, ErrorMsg}
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.hive.common.FileUtils
+import org.apache.hadoop.hive.ql.exec.TaskRunner
+import org.apache.hadoop.hive.ql.ErrorMsg
 import org.apache.hadoop.mapred.{FileOutputFormat, JobConf}
 
 import org.apache.spark.rdd.RDD
@@ -45,6 +53,61 @@ case class InsertIntoHiveTable(
   @transient private val client = sessionState.metadataHive
 
   def output: Seq[Attribute] = Seq.empty
+
+  val stagingDir = sessionState.conf.getConfString("hive.exec.stagingdir", ".hive-staging")
+
+  private def executionId: String = {
+    val rand: Random = new Random
+    val format: SimpleDateFormat = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss_SSS")
+    val executionId: String = "hive_" + format.format(new Date) + "_" + Math.abs(rand.nextLong)
+    return executionId
+  }
+
+  private def getStagingDir(inputPath: Path, hadoopConf: Configuration): Path = {
+    val inputPathUri: URI = inputPath.toUri
+    val inputPathName: String = inputPathUri.getPath
+    val fs: FileSystem = inputPath.getFileSystem(hadoopConf)
+    val stagingPathName: String =
+      if (inputPathName.indexOf(stagingDir) == -1) {
+        new Path(inputPathName, stagingDir).toString
+      } else {
+        inputPathName.substring(0, inputPathName.indexOf(stagingDir) + stagingDir.length)
+      }
+    val dir: Path =
+      fs.makeQualified(
+        new Path(stagingPathName + "_" + executionId + "-" + TaskRunner.getTaskRunnerID))
+    logDebug("Created staging dir = " + dir + " for path = " + inputPath)
+    try {
+      if (!FileUtils.mkdir(fs, dir, true, hadoopConf)) {
+        throw new IllegalStateException("Cannot create staging directory  '" + dir.toString + "'")
+      }
+      fs.deleteOnExit(dir)
+    }
+    catch {
+      case e: IOException =>
+        throw new RuntimeException(
+          "Cannot create staging directory '" + dir.toString + "': " + e.getMessage, e)
+
+    }
+    return dir
+  }
+
+  private def getExternalScratchDir(extURI: URI, hadoopConf: Configuration): Path = {
+    getStagingDir(new Path(extURI.getScheme, extURI.getAuthority, extURI.getPath), hadoopConf)
+  }
+
+  def getExternalTmpPath(path: Path, hadoopConf: Configuration): Path = {
+    val extURI: URI = path.toUri
+    if (extURI.getScheme == "viewfs") {
+      getExtTmpPathRelTo(path.getParent, hadoopConf)
+    } else {
+      new Path(getExternalScratchDir(extURI, hadoopConf), "-ext-10000")
+    }
+  }
+
+  def getExtTmpPathRelTo(path: Path, hadoopConf: Configuration): Path = {
+    new Path(getStagingDir(path, hadoopConf), "-ext-10000") // Hive uses 10000
+  }
 
   private def saveAsHiveFile(
       rdd: RDD[InternalRow],
@@ -81,7 +144,7 @@ case class InsertIntoHiveTable(
     val tableDesc = table.tableDesc
     val tableLocation = table.hiveQlTable.getDataLocation
     val hadoopConf = sessionState.newHadoopConf()
-    val tmpLocation = new Context(hadoopConf).getExternalTmpPath(tableLocation)
+    val tmpLocation = getExternalTmpPath(tableLocation, hadoopConf)
     val fileSinkConf = new FileSinkDesc(tmpLocation.toString, tableDesc, false)
     val isCompressed =
       sessionState.conf.getConfString("hive.exec.compress.output", "false").toBoolean

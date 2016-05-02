@@ -32,13 +32,6 @@ private[hive] class HiveSharedState(override val sparkContext: SparkContext)
   // TODO: just share the IsolatedClientLoader instead of the client instances themselves
 
   /**
-   * A Hive client used for execution.
-   */
-  val executionHive: HiveClientImpl = {
-    HiveUtils.newClientForExecution(sparkContext.conf, sparkContext.hadoopConfiguration)
-  }
-
-  /**
    * A Hive client used to interact with the metastore.
    */
   // This needs to be a lazy val at here because TestHiveSharedState is overriding it.

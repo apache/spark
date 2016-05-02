@@ -25,7 +25,7 @@ import org.json4s.JsonDSL._
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, InterpretedOrdering}
-import org.apache.spark.sql.catalyst.parser.{DataTypeParser, LegacyTypeStringParser}
+import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, LegacyTypeStringParser}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 
 /**
@@ -169,7 +169,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    * }}}
    */
   def add(name: String, dataType: String): StructType = {
-    add(name, DataTypeParser.parse(dataType), nullable = true, Metadata.empty)
+    add(name, CatalystSqlParser.parseDataType(dataType), nullable = true, Metadata.empty)
   }
 
   /**
@@ -184,7 +184,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    * }}}
    */
   def add(name: String, dataType: String, nullable: Boolean): StructType = {
-    add(name, DataTypeParser.parse(dataType), nullable, Metadata.empty)
+    add(name, CatalystSqlParser.parseDataType(dataType), nullable, Metadata.empty)
   }
 
   /**
@@ -202,7 +202,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
       dataType: String,
       nullable: Boolean,
       metadata: Metadata): StructType = {
-    add(name, DataTypeParser.parse(dataType), nullable, metadata)
+    add(name, CatalystSqlParser.parseDataType(dataType), nullable, metadata)
   }
 
   /**

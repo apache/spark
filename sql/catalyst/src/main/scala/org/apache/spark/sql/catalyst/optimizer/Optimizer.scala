@@ -19,12 +19,11 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.annotation.tailrec
 import scala.collection.immutable.HashSet
-import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.{CatalystConf, SimpleCatalystConf}
 import org.apache.spark.sql.catalyst.analysis.{CleanupAliases, DistinctAggregationRewriter, EliminateSubqueryAliases, EmptyFunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
-import org.apache.spark.sql.catalyst.expressions.{InSubQuery, _}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.planning.{ExtractFiltersAndInnerJoins, Unions}
@@ -48,7 +47,6 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
     // However, because we also use the analyzer to canonicalized queries (for view definition),
     // we do not eliminate subqueries or compute current time in the analyzer.
     Batch("Finish Analysis", Once,
-      RewritePredicateSubquery,
       EliminateSubqueryAliases,
       ComputeCurrentTime,
       GetCurrentDatabase(sessionCatalog),
@@ -63,11 +61,15 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
     //   since the other rules might make two separate Unions operators adjacent.
     Batch("Union", Once,
       CombineUnions) ::
+    Batch("Subquery", Once,
+      OptimizeSubqueries) ::
     Batch("Replace Operators", fixedPoint,
       ReplaceIntersectWithSemiJoin,
+      ReplaceExceptWithAntiJoin,
       ReplaceDistinctWithAggregate) ::
     Batch("Aggregate", fixedPoint,
-      RemoveLiteralFromGroupExpressions) ::
+      RemoveLiteralFromGroupExpressions,
+      RemoveRepetitionFromGroupExpressions) ::
     Batch("Operator Optimizations", fixedPoint,
       // Operator push down
       SetOperationPushDown,
@@ -105,10 +107,11 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       EmbedSerializerInFilter) ::
     Batch("LocalRelation", fixedPoint,
       ConvertToLocalRelation) ::
-    Batch("Subquery", Once,
-      OptimizeSubqueries) ::
     Batch("OptimizeCodegen", Once,
-      OptimizeCodegen(conf)) :: Nil
+      OptimizeCodegen(conf)) ::
+    Batch("RewriteSubquery", Once,
+      RewritePredicateSubquery,
+      CollapseProject) :: Nil
   }
 
   /**
@@ -116,8 +119,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
    */
   object OptimizeSubqueries extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-      case subquery: SubqueryExpression =>
-        subquery.withNewPlan(Optimizer.this.execute(subquery.query))
+      case s: SubqueryExpression =>
+        s.withNewPlan(Optimizer.this.execute(s.query))
     }
   }
 }
@@ -158,10 +161,15 @@ object EliminateSerialization extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case d @ DeserializeToObject(_, _, s: SerializeFromObject)
         if d.outputObjectType == s.inputObjectType =>
-      // Adds an extra Project here, to preserve the output expr id of `DeserializeToObject`.
-      val objAttr = Alias(s.child.output.head, "obj")(exprId = d.output.head.exprId)
-      Project(objAttr :: Nil, s.child)
-
+      // A workaround for SPARK-14803. Remove this after it is fixed.
+      if (d.outputObjectType.isInstanceOf[ObjectType] &&
+          d.outputObjectType.asInstanceOf[ObjectType].cls == classOf[org.apache.spark.sql.Row]) {
+        s.child
+      } else {
+        // Adds an extra Project here, to preserve the output expr id of `DeserializeToObject`.
+        val objAttr = Alias(s.child.output.head, "obj")(exprId = d.output.head.exprId)
+        Project(objAttr :: Nil, s.child)
+      }
     case a @ AppendColumns(_, _, _, s: SerializeFromObject)
         if a.deserializer.dataType == s.inputObjectType =>
       AppendColumnsWithObject(a.func, s.serializer, a.serializer, s.child)
@@ -232,17 +240,12 @@ object LimitPushDown extends Rule[LogicalPlan] {
 }
 
 /**
- * Pushes certain operations to both sides of a Union or Except operator.
+ * Pushes certain operations to both sides of a Union operator.
  * Operations that are safe to pushdown are listed as follows.
  * Union:
  * Right now, Union means UNION ALL, which does not de-duplicate rows. So, it is
  * safe to pushdown Filters and Projections through it. Once we add UNION DISTINCT,
  * we will not be able to pushdown Projections.
- *
- * Except:
- * It is not safe to pushdown Projections through it because we need to get the
- * intersect of rows by comparing the entire rows. It is fine to pushdown Filters
- * with deterministic condition.
  */
 object SetOperationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
@@ -310,17 +313,6 @@ object SetOperationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         Filter(pushToRight(deterministic, rewrites), child)
       }
       Filter(nondeterministic, Union(newFirstChild +: newOtherChildren))
-
-    // Push down filter through EXCEPT
-    case Filter(condition, Except(left, right)) =>
-      val (deterministic, nondeterministic) = partitionByDeterministic(condition)
-      val rewrites = buildRewrites(left, right)
-      Filter(nondeterministic,
-        Except(
-          Filter(deterministic, left),
-          Filter(pushToRight(deterministic, rewrites), right)
-        )
-      )
   }
 }
 
@@ -646,7 +638,8 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan] with PredicateHelpe
       // Only consider constraints that can be pushed down completely to either the left or the
       // right child
       val constraints = join.constraints.filter { c =>
-        c.references.subsetOf(left.outputSet) || c.references.subsetOf(right.outputSet)}
+        c.references.subsetOf(left.outputSet) || c.references.subsetOf(right.outputSet)
+      }
       // Remove those constraints that are already enforced by either the left or the right child
       val additionalConstraints = constraints -- (left.constraints ++ right.constraints)
       val newConditionOpt = conditionOpt match {
@@ -1007,16 +1000,15 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
         filter
       }
 
-    case filter @ Filter(condition, child)
-      if child.isInstanceOf[Union] || child.isInstanceOf[Intersect] =>
-      // Union/Intersect could change the rows, so non-deterministic predicate can't be pushed down
+    case filter @ Filter(condition, union: Union) =>
+      // Union could change the rows, so non-deterministic predicate can't be pushed down
       val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { cond =>
         cond.deterministic
       }
       if (pushDown.nonEmpty) {
         val pushDownCond = pushDown.reduceLeft(And)
-        val output = child.output
-        val newGrandChildren = child.children.map { grandchild =>
+        val output = union.output
+        val newGrandChildren = union.children.map { grandchild =>
           val newCond = pushDownCond transform {
             case e if output.exists(_.semanticEquals(e)) =>
               grandchild.output(output.indexWhere(_.semanticEquals(e)))
@@ -1024,19 +1016,14 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
           assert(newCond.references.subsetOf(grandchild.outputSet))
           Filter(newCond, grandchild)
         }
-        val newChild = child.withNewChildren(newGrandChildren)
+        val newUnion = union.withNewChildren(newGrandChildren)
         if (stayUp.nonEmpty) {
-          Filter(stayUp.reduceLeft(And), newChild)
+          Filter(stayUp.reduceLeft(And), newUnion)
         } else {
-          newChild
+          newUnion
         }
       } else {
         filter
-      }
-
-    case filter @ Filter(condition, e @ Except(left, _)) =>
-      pushDownPredicate(filter, e.left) { predicate =>
-        e.copy(left = Filter(predicate, left))
       }
 
     // two filters should be combine together by other rules
@@ -1093,7 +1080,14 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
   def createOrderedJoin(input: Seq[LogicalPlan], conditions: Seq[Expression]): LogicalPlan = {
     assert(input.size >= 2)
     if (input.size == 2) {
-      Join(input(0), input(1), Inner, conditions.reduceLeftOption(And))
+      val (joinConditions, others) = conditions.partition(
+        e => !PredicateSubquery.hasPredicateSubquery(e))
+      val join = Join(input(0), input(1), Inner, joinConditions.reduceLeftOption(And))
+      if (others.nonEmpty) {
+        Filter(others.reduceLeft(And), join)
+      } else {
+        join
+      }
     } else {
       val left :: rest = input.toList
       // find out the first join that have at least one join condition
@@ -1106,7 +1100,8 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
       val right = conditionalJoin.getOrElse(rest.head)
 
       val joinedRefs = left.outputSet ++ right.outputSet
-      val (joinConditions, others) = conditions.partition(_.references.subsetOf(joinedRefs))
+      val (joinConditions, others) = conditions.partition(
+        e => e.references.subsetOf(joinedRefs) && !PredicateSubquery.hasPredicateSubquery(e))
       val joined = Join(left, right, Inner, joinConditions.reduceLeftOption(And))
 
       // should not have reference to same logical plan
@@ -1139,7 +1134,7 @@ object OuterJoinElimination extends Rule[LogicalPlan] with PredicateHelper {
    * Returns whether the expression returns null or false when all inputs are nulls.
    */
   private def canFilterOutNull(e: Expression): Boolean = {
-    if (!e.deterministic) return false
+    if (!e.deterministic || PredicateSubquery.hasPredicateSubquery(e)) return false
     val attributes = e.references.toSeq
     val emptyRow = new GenericInternalRow(attributes.length)
     val v = BindReferences.bindReference(e, attributes).eval(emptyRow)
@@ -1216,9 +1211,16 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
             reduceLeftOption(And).map(Filter(_, left)).getOrElse(left)
           val newRight = rightFilterConditions.
             reduceLeftOption(And).map(Filter(_, right)).getOrElse(right)
-          val newJoinCond = (commonFilterCondition ++ joinCondition).reduceLeftOption(And)
+          val (newJoinConditions, others) =
+            commonFilterCondition.partition(e => !PredicateSubquery.hasPredicateSubquery(e))
+          val newJoinCond = (newJoinConditions ++ joinCondition).reduceLeftOption(And)
 
-          Join(newLeft, newRight, Inner, newJoinCond)
+          val join = Join(newLeft, newRight, Inner, newJoinCond)
+          if (others.nonEmpty) {
+            Filter(others.reduceLeft(And), join)
+          } else {
+            join
+          }
         case RightOuter =>
           // push down the right side only `where` condition
           val newLeft = left
@@ -1423,6 +1425,27 @@ object ReplaceIntersectWithSemiJoin extends Rule[LogicalPlan] {
 }
 
 /**
+ * Replaces logical [[Except]] operator with a left-anti [[Join]] operator.
+ * {{{
+ *   SELECT a1, a2 FROM Tab1 EXCEPT SELECT b1, b2 FROM Tab2
+ *   ==>  SELECT DISTINCT a1, a2 FROM Tab1 LEFT ANTI JOIN Tab2 ON a1<=>b1 AND a2<=>b2
+ * }}}
+ *
+ * Note:
+ * 1. This rule is only applicable to EXCEPT DISTINCT. Do not use it for EXCEPT ALL.
+ * 2. This rule has to be done after de-duplicating the attributes; otherwise, the generated
+ *    join conditions will be incorrect.
+ */
+object ReplaceExceptWithAntiJoin extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case Except(left, right) =>
+      assert(left.output.size == right.output.size)
+      val joinCond = left.output.zip(right.output).map { case (l, r) => EqualNullSafe(l, r) }
+      Distinct(Join(left, right, LeftAnti, joinCond.reduceLeftOption(And)))
+  }
+}
+
+/**
  * Removes literals from group expressions in [[Aggregate]], as they have no effect to the result
  * but only makes the grouping key bigger.
  */
@@ -1430,6 +1453,18 @@ object RemoveLiteralFromGroupExpressions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case a @ Aggregate(grouping, _, _) =>
       val newGrouping = grouping.filter(!_.foldable)
+      a.copy(groupingExpressions = newGrouping)
+  }
+}
+
+/**
+ * Removes repetition from group expressions in [[Aggregate]], as they have no effect to the result
+ * but only makes the grouping key bigger.
+ */
+object RemoveRepetitionFromGroupExpressions extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case a @ Aggregate(grouping, _, _) =>
+      val newGrouping = ExpressionSet(grouping).toSeq
       a.copy(groupingExpressions = newGrouping)
   }
 }
@@ -1498,94 +1533,6 @@ object EmbedSerializerInFilter extends Rule[LogicalPlan] {
  *    condition.
  */
 object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
-  /**
-   * Pull out all correlated predicates from a given sub-query. This method removes the correlated
-   * predicates from sub-query [[Filter]]s and adds the references of these predicates to
-   * all intermediate [[Project]] clauses (if they are missing) in order to be able to evaluate the
-   * predicates in the join condition.
-   *
-   * This method returns the rewritten sub-query and the combined (AND) extracted predicate.
-   */
-  private def pullOutCorrelatedPredicates(
-      subquery: LogicalPlan,
-      query: LogicalPlan): (LogicalPlan, Seq[Expression]) = {
-    val references = query.outputSet
-    val predicateMap = mutable.Map.empty[LogicalPlan, Seq[Expression]]
-    val transformed = subquery transformUp {
-      case f @ Filter(cond, child) =>
-        // Find all correlated predicates.
-        val (correlated, local) = splitConjunctivePredicates(cond).partition { e =>
-          (e.references -- child.outputSet).intersect(references).nonEmpty
-        }
-        // Rewrite the filter without the correlated predicates if any.
-        correlated match {
-          case Nil => f
-          case xs if local.nonEmpty =>
-            val newFilter = Filter(local.reduce(And), child)
-            predicateMap += newFilter -> correlated
-            newFilter
-          case xs =>
-            predicateMap += child -> correlated
-            child
-        }
-      case p @ Project(expressions, child) =>
-        // Find all pulled out predicates defined in the Project's subtree.
-        val localPredicates = p.collect(predicateMap).flatten
-
-        // Determine which correlated predicate references are missing from this project.
-        val localPredicateReferences = localPredicates
-          .map(_.references)
-          .reduceOption(_ ++ _)
-          .getOrElse(AttributeSet.empty)
-        val missingReferences = localPredicateReferences -- p.references -- query.outputSet
-
-        // Create a new project if we need to add missing references.
-        if (missingReferences.nonEmpty) {
-          Project(expressions ++ missingReferences, child)
-        } else {
-          p
-        }
-    }
-    (transformed, predicateMap.values.flatten.toSeq)
-  }
-
-  /**
-   * Prepare an [[InSubQuery]] by rewriting it (in case of correlated predicates) and by
-   * constructing the required join condition. Both the rewritten subquery and the constructed
-   * join condition are returned.
-   */
-  private def pullOutCorrelatedPredicates(
-      in: InSubQuery,
-      query: LogicalPlan): (LogicalPlan, LogicalPlan, Seq[Expression]) = {
-    val (resolved, joinCondition) = pullOutCorrelatedPredicates(in.query, query)
-    // Check whether there is some attributes have same exprId but come from different side
-    val outerAttributes = AttributeSet(in.expressions.flatMap(_.references))
-    if (outerAttributes.intersect(resolved.outputSet).nonEmpty) {
-      val aliases = mutable.Map[Attribute, Alias]()
-      val exprs = in.expressions.map { expr =>
-        expr transformUp {
-          case a: AttributeReference if resolved.outputSet.contains(a) =>
-            val alias = Alias(a, a.toString)()
-            val attr = alias.toAttribute
-            aliases += attr -> alias
-            attr
-        }
-      }
-      val newP = Project(query.output ++ aliases.values, query)
-      val projection = resolved.output.map {
-        case a if outerAttributes.contains(a) => Alias(a, a.toString)()
-        case a => a
-      }
-      val subquery = Project(projection, resolved)
-      val conditions = joinCondition ++ exprs.zip(subquery.output).map(EqualTo.tupled)
-      (newP, subquery, conditions)
-    } else {
-      val conditions =
-        joinCondition ++ in.expressions.zip(resolved.output).map(EqualTo.tupled)
-      (query, resolved, conditions)
-    }
-  }
-
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case f @ Filter(condition, child) =>
       val (withSubquery, withoutSubquery) =
@@ -1599,22 +1546,11 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
 
       // Filter the plan by applying left semi and left anti joins.
       withSubquery.foldLeft(newFilter) {
-        case (p, Exists(sub, _)) =>
-          val (resolved, conditions) = pullOutCorrelatedPredicates(sub, p)
-          Join(p, resolved, LeftSemi, conditions.reduceOption(And))
-        case (p, Not(Exists(sub, _))) =>
-          val (resolved, conditions) = pullOutCorrelatedPredicates(sub, p)
-          Join(p, resolved, LeftAnti, conditions.reduceOption(And))
-        case (p, in: InSubQuery) =>
-          val (newP, resolved, conditions) = pullOutCorrelatedPredicates(in, p)
-          if (newP fastEquals p) {
-            Join(p, resolved, LeftSemi, conditions.reduceOption(And))
-          } else {
-            Project(p.output,
-              Join(newP, resolved, LeftSemi, conditions.reduceOption(And)))
-          }
-        case (p, Not(in: InSubQuery)) =>
-          val (newP, resolved, conditions) = pullOutCorrelatedPredicates(in, p)
+        case (p, PredicateSubquery(sub, conditions, _, _)) =>
+          Join(p, sub, LeftSemi, conditions.reduceOption(And))
+        case (p, Not(PredicateSubquery(sub, conditions, false, _))) =>
+          Join(p, sub, LeftAnti, conditions.reduceOption(And))
+        case (p, Not(PredicateSubquery(sub, conditions, true, _))) =>
           // This is a NULL-aware (left) anti join (NAAJ).
           // Construct the condition. A NULL in one of the conditions is regarded as a positive
           // result; such a row will be filtered out by the Anti-Join operator.
@@ -1623,12 +1559,17 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
 
           // Note that will almost certainly be planned as a Broadcast Nested Loop join. Use EXISTS
           // if performance matters to you.
-          if (newP fastEquals p) {
-            Join(p, resolved, LeftAnti, Option(Or(anyNull, condition)))
-          } else {
-            Project(p.output,
-              Join(newP, resolved, LeftAnti, Option(Or(anyNull, condition))))
+          Join(p, sub, LeftAnti, Option(Or(anyNull, condition)))
+        case (p, predicate) =>
+          var joined = p
+          val replaced = predicate transformUp {
+            case PredicateSubquery(sub, conditions, nullAware, _) =>
+              // TODO: support null-aware join
+              val exists = AttributeReference("exists", BooleanType, false)()
+              joined = Join(joined, sub, ExistenceJoin(exists), conditions.reduceLeftOption(And))
+              exists
           }
+          Project(p.output, Filter(replaced, joined))
       }
   }
 }
