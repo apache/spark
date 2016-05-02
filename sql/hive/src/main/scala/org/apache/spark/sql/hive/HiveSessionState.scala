@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
 import org.apache.spark.sql._
@@ -45,8 +44,6 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
    */
   lazy val metadataHive: HiveClient = sharedState.metadataHive.newSession()
 
-  setDefaultOverrideConfs()
-
   /**
    * Internal catalog for managing table and database states.
    */
@@ -57,7 +54,8 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
       sparkSession,
       functionResourceLoader,
       functionRegistry,
-      conf)
+      conf,
+      newHadoopConf())
   }
 
   /**
@@ -108,19 +106,6 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
   // ------------------------------------------------------
   //  Helper methods, partially leftover from pre-2.0 days
   // ------------------------------------------------------
-
-  /**
-   * Overrides default Hive configurations to avoid breaking changes to Spark SQL users.
-   *  - allow SQL11 keywords to be used as identifiers
-   */
-  def setDefaultOverrideConfs(): Unit = {
-    setConf(ConfVars.HIVE_SUPPORT_SQL11_RESERVED_KEYWORDS.varname, "false")
-  }
-
-  override def setConf(key: String, value: String): Unit = {
-    super.setConf(key, value)
-    metadataHive.runSqlHive(s"SET $key=$value")
-  }
 
   override def addJar(path: String): Unit = {
     metadataHive.addJar(path)

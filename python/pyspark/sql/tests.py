@@ -1397,9 +1397,9 @@ class SQLTests(ReusedPySparkTestCase):
 
     def test_conf(self):
         spark = self.sparkSession
-        spark.setConf("bogo", "sipeo")
+        spark.conf.set("bogo", "sipeo")
         self.assertEqual(self.sparkSession.conf.get("bogo"), "sipeo")
-        spark.setConf("bogo", "ta")
+        spark.conf.set("bogo", "ta")
         self.assertEqual(spark.conf.get("bogo"), "ta")
         self.assertEqual(spark.conf.get("bogo", "not.read"), "ta")
         self.assertEqual(spark.conf.get("not.set", "ta"), "ta")

@@ -114,7 +114,7 @@ class SQLContext(object):
     def setConf(self, key, value):
         """Sets the given Spark SQL configuration property.
         """
-        self.sparkSession.setConf(key, value)
+        self.sparkSession.conf.set(key, value)
 
     @ignore_unicode_prefix
     @since(1.3)
@@ -133,7 +133,7 @@ class SQLContext(object):
         >>> sqlContext.getConf("spark.sql.shuffle.partitions", u"10")
         u'50'
         """
-        return self.sparkSession.getConf(key, defaultValue)
+        return self.sparkSession.conf.get(key, defaultValue)
 
     @property
     @since("1.3.1")
