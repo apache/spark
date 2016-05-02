@@ -109,9 +109,13 @@ private[spark] class CoarseMesosSchedulerBackend(
   private val slaveOfferConstraints =
     parseConstraintString(sc.conf.get("spark.mesos.constraints", ""))
 
-  // reject offers with mismatched constraints in seconds
+  // Reject offers with mismatched constraints in seconds
   private val rejectOfferDurationForUnmetConstraints =
     getRejectOfferDurationForUnmetConstraints(sc)
+
+  // Reject offers when we reached the maximum number of cores for this framework
+  private val rejectOfferDurationForReachedMaxCores =
+    getRejectOfferDurationForReachedMaxCores(sc)
 
   // A client for talking to the external shuffle service
   private val mesosExternalShuffleClient: Option[MesosExternalShuffleClient] = {
@@ -273,25 +277,25 @@ private[spark] class CoarseMesosSchedulerBackend(
         matchesAttributeRequirements(slaveOfferConstraints, offerAttributes)
       }
 
-      declineUnmatchedOffers(d, unmatchedOffers)
+      unmatchedOffers.foreach { offer =>
+        declineOffer(d, offer, "unmet constraints", rejectOfferDurationForUnmetConstraints)
+      }
+
       handleMatchedOffers(d, matchedOffers)
     }
   }
 
-  private def declineUnmatchedOffers(d: SchedulerDriver, offers: Buffer[Offer]): Unit = {
-    for (offer <- offers) {
-      val id = offer.getId.getValue
-      val offerAttributes = toAttributeMap(offer.getAttributesList)
-      val mem = getResource(offer.getResourcesList, "mem")
-      val cpus = getResource(offer.getResourcesList, "cpus")
-      val filters = Filters.newBuilder()
-        .setRefuseSeconds(rejectOfferDurationForUnmetConstraints).build()
+  private def declineOffer(d: SchedulerDriver, offer: Offer, reason: String, refuseSeconds: Long) {
+    val id = offer.getId.getValue
+    val offerAttributes = toAttributeMap(offer.getAttributesList)
+    val mem = getResource(offer.getResourcesList, "mem")
+    val cpus = getResource(offer.getResourcesList, "cpus")
 
-      logDebug(s"Declining offer: $id with attributes: $offerAttributes mem: $mem cpu: $cpus"
-        + s" for $rejectOfferDurationForUnmetConstraints seconds")
+    logDebug(s"Declining offer ($reason): $id with attributes: $offerAttributes mem: $mem"
+      + s" cpu: $cpus for $rejectOfferDurationForUnmetConstraints seconds")
 
-      d.declineOffer(offer.getId, filters)
-    }
+    val filters = Filters.newBuilder().setRefuseSeconds(refuseSeconds).build()
+    d.declineOffer(offer.getId, filters)
   }
 
   /**
@@ -326,7 +330,9 @@ private[spark] class CoarseMesosSchedulerBackend(
         d.launchTasks(
           Collections.singleton(offer.getId),
           offerTasks.asJava)
-      } else { // decline
+      } else if (totalCoresAcquired >= maxCores) {
+        declineOffer(d, offer, "reached max cores", rejectOfferDurationForReachedMaxCores)
+      } else {
         logDebug(s"Declining offer: $id with attributes: $offerAttributes " +
           s"mem: $offerMem cpu: $offerCpus")
 
