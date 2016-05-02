@@ -726,9 +726,9 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   }
 
   /**
-    * Return the value of an optional Spark SQL configuration property for the given key. If the key
-    * is not set yet, returns None.
-    */
+   * Return the value of an optional Spark SQL configuration property for the given key. If the key
+   * is not set yet, returns None.
+   */
   def getOptionalConf[T](entry: OptionalConfigEntry[T]): Option[T] = {
     Option(settings.get(entry.key)).map(entry.rawValueConverter)
   }
