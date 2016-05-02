@@ -17,10 +17,13 @@
 
 package org.apache.spark.ml.classification;
 
+import java.io.File;
+import java.io.IOException;
 import java.io.Serializable;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.apache.spark.util.Utils;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -58,7 +61,7 @@ public class JavaRandomForestClassifierSuite implements Serializable {
   }
 
   @Test
-  public void runDT() {
+  public void runDT() throws IOException {
     int nPoints = 20;
     double A = 2.0;
     double B = -1.5;
@@ -114,18 +117,14 @@ public class JavaRandomForestClassifierSuite implements Serializable {
     model.treeWeights();
     Vector importances = model.featureImportances();
 
-    /*
-    // TODO: Add test once save/load are implemented.  SPARK-6725
     File tempDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "spark");
-    String path = tempDir.toURI().toString();
+    String path = tempDir.toURI().toString() + "/JavaRandomForestClassifierSuite";
     try {
-      model3.save(sc.sc(), path);
-      RandomForestClassificationModel sameModel =
-          RandomForestClassificationModel.load(sc.sc(), path);
-      TreeTests.checkEqual(model3, sameModel);
+      model.save(path);
+      RandomForestClassificationModel sameModel = RandomForestClassificationModel.load(path);
+      TreeTests.checkEqual(model, sameModel);
     } finally {
       Utils.deleteRecursively(tempDir);
     }
-    */
   }
 }

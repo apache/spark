@@ -17,10 +17,13 @@
 
 package org.apache.spark.ml.classification;
 
+import java.io.File;
+import java.io.IOException;
 import java.io.Serializable;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.apache.spark.util.Utils;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -56,7 +59,7 @@ public class JavaGBTClassifierSuite implements Serializable {
   }
 
   @Test
-  public void runDT() {
+  public void runDT() throws IOException {
     int nPoints = 20;
     double A = 2.0;
     double B = -1.5;
@@ -91,17 +94,14 @@ public class JavaGBTClassifierSuite implements Serializable {
     model.trees();
     model.treeWeights();
 
-    /*
-    // TODO: Add test once save/load are implemented.  SPARK-6725
     File tempDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "spark");
-    String path = tempDir.toURI().toString();
+    String path = tempDir.toURI().toString() + "/JavaGBTClassifierSuite";
     try {
-      model3.save(sc.sc(), path);
-      GBTClassificationModel sameModel = GBTClassificationModel.load(sc.sc(), path);
-      TreeTests.checkEqual(model3, sameModel);
+      model.save(path);
+      GBTClassificationModel sameModel = GBTClassificationModel.load(path);
+      TreeTests.checkEqual(model, sameModel);
     } finally {
       Utils.deleteRecursively(tempDir);
     }
-    */
   }
 }
