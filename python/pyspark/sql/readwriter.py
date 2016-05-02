@@ -286,31 +286,44 @@ class DataFrameReader(object):
         :param paths: string, or list of strings, for input path(s).
         :param schema: an optional :class:`StructType` for the input schema.
         :param sep: sets the single character as a separator for each field and value.
-        :param encoding: decodes the CSV files by the given encoding type.
+                    If None is set, it uses the default value, ``,``.
+        :param encoding: decodes the CSV files by the given encoding type. If None is set, \
+                         it uses the default value, ``UTF-8``.
         :param quote: sets the single character used for escaping quoted values where the \
-                      separator can be part of the value.
+                      separator can be part of the value. If None is set, it uses the default \
+                      value, ``"``.
         :param escape: sets the single character used for escaping quotes inside an already \
-                       quoted value.
+                       quoted value. If None is set, it uses the default value, ``\``.
         :param comment: sets the single character used for skipping lines beginning with this \
-                        character. By default, it is disabled.
-        :param header: uses the first line as names of columns.
+                        character. By default (None), it is disabled.
+        :param header: uses the first line as names of columns. If None is set, it uses the \
+                       default value, ``false``.
         :param ignoreLeadingWhiteSpace: defines whether or not leading whitespaces from values \
-                                        being read should be skipped.
+                                        being read should be skipped. If None is set, it uses \
+                                        the default value, ``false``.
         :param ignoreTrailingWhiteSpace: defines whether or not trailing whitespaces from values \
-                                         being read should be skipped.
-        :param nullValue: sets the string representation of a null value.
-        :param nanValue: sets the string representation of a non-number value.
-        :param positiveInf: sets the string representation of a positive infinity value.
-        :param negativeInf: sets the string representation of a negative infinity value.
+                                         being read should be skipped. If None is set, it uses \
+                                         the default value, ``false``.
+        :param nullValue: sets the string representation of a null value. If None is set, it uses \
+                          the default value, empty string.
+        :param nanValue: sets the string representation of a non-number value. If None is set, it \
+                         uses the default value, ``NaN``.
+        :param positiveInf: sets the string representation of a positive infinity value. If None \
+                            is set, it uses the default value, ``Inf``.
+        :param negativeInf: sets the string representation of a negative infinity value. If None \
+                            is set, it uses the default value, ``Inf``.
         :param dateFormat: sets the string that indicates a date format. Custom date formats \
                            follow the formats at ``java.text.SimpleDateFormat``. This \
                            applies to both date type and timestamp type. By default, it is None \
                            which means trying to parse times and date by \
                            ``java.sql.Timestamp.valueOf()`` and ``java.sql.Date.valueOf()``.
-        :param maxColumns: defines a hard limit of how many columns a record can have.
+        :param maxColumns: defines a hard limit of how many columns a record can have. If None is \
+                           set, it uses the default value, ``20480``.
         :param maxCharsPerColumn: defines the maximum number of characters allowed for any given \
-                                  value being read.
-        :param mode: allows a mode for dealing with corrupt records during parsing.
+                                  value being read. If None is set, it uses the default value, \
+                                  ``1000000``.
+        :param mode: allows a mode for dealing with corrupt records during parsing. If None is \
+                    set, it uses the default value, ``PERMISSIVE``.
 
                 * ``PERMISSIVE`` : sets other fields to ``null`` when it meets a corrupted record. \
                     When a schema is set by user, it sets ``null`` for extra fields.
@@ -729,13 +742,17 @@ class DataFrameWriter(object):
             * ``ignore``: Silently ignore this operation if data already exists.
             * ``error`` (default case): Throw an exception if data already exists.
 
-        :param sep: sets the single character as a separator for each field and value.
+        :param sep: sets the single character as a separator for each field and value. If None is \
+                    set, it uses the default value, ``,``.
         :param quote: sets the single character used for escaping quoted values where the \
-                      separator can be part of the value.
+                      separator can be part of the value. If None is set, it uses the default \
+                      value, ``"``.
         :param escape: sets the single character used for escaping quotes inside an already \
-                       quoted value.
-        :param header: writes the names of columns as the first line.
-        :param nullValue: sets the string representation of a null value.
+                       quoted value. If None is set, it uses the default value, ``\``
+        :param header: writes the names of columns as the first line. If None is set, it uses \
+                       the default value, ``false``.
+        :param nullValue: sets the string representation of a null value. If None is set, it uses \
+                          the default value, empty string.
         :param compression: compression codec to use when saving to file. This can be one of the
                             known case-insensitive shorten names (none, bzip2, gzip, lz4,
                             snappy and deflate).
