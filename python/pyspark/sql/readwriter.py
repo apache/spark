@@ -348,7 +348,7 @@ class DataFrameReader(object):
                                   value being read. If None is set, it uses the default value, \
                                   ``1000000``.
         :param mode: allows a mode for dealing with corrupt records during parsing. If None is \
-                    set, it uses the default value, ``PERMISSIVE``.
+                     set, it uses the default value, ``PERMISSIVE``.
 
                 * ``PERMISSIVE`` : sets other fields to ``null`` when it meets a corrupted record. \
                     When a schema is set by user, it sets ``null`` for extra fields.
