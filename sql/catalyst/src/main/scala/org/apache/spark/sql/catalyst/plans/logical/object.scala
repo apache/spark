@@ -120,50 +120,40 @@ case class MapPartitions(
     outputObjAttr: Attribute,
     child: LogicalPlan) extends UnaryNode with ObjectConsumer with ObjectProducer
 
-/** Factory for constructing new `MapGroupsR` nodes. */
-object MapGroupsR {
+object MapPartitionsInR {
   def apply(
-       func: Array[Byte],
-       packageNames: Array[Byte],
-       broadcastVars: Array[Broadcast[Object]],
-       schema: StructType,
-       encoder: Expression,
-       keyEncoder: Expression,
-       rowEncoder: ExpressionEncoder[Row],
-       groupingAttributes: Seq[Attribute],
-       dataAttributes: Seq[Attribute],
-       child: LogicalPlan): LogicalPlan = {
-
-     val mapped = MapGroupsR(
-       func,
-       packageNames,
-       broadcastVars,
-       rowEncoder.schema,
-       schema,
-       UnresolvedDeserializer(keyEncoder, groupingAttributes),
-       UnresolvedDeserializer(encoder, dataAttributes),
-       groupingAttributes,
-       dataAttributes,
-       CatalystSerde.generateObjAttrForRow(RowEncoder(schema)),
-       child)
-     CatalystSerde.serialize(mapped, RowEncoder(schema))
+      func: Array[Byte],
+      packageNames: Array[Byte],
+      broadcastVars: Array[Broadcast[Object]],
+      schema: StructType,
+      encoder: ExpressionEncoder[Row],
+      child: LogicalPlan): LogicalPlan = {
+    val deserialized = CatalystSerde.deserialize(child, encoder)
+    val mapped = MapPartitionsInR(
+      func,
+      packageNames,
+      broadcastVars,
+      encoder.schema,
+      schema,
+      CatalystSerde.generateObjAttrForRow(RowEncoder(schema)),
+      deserialized)
+    CatalystSerde.serialize(mapped, RowEncoder(schema))
   }
 }
 
-case class MapGroupsR(
+/**
+ * A relation produced by applying a serialized R function `func` to each partition of the `child`.
+ *
+ */
+case class MapPartitionsInR(
     func: Array[Byte],
     packageNames: Array[Byte],
     broadcastVars: Array[Broadcast[Object]],
     inputSchema: StructType,
     outputSchema: StructType,
-    keyDeserializer: Expression,
-    valueDeserializer: Expression,
-    groupingAttributes: Seq[Attribute],
-    dataAttributes: Seq[Attribute],
     outputObjAttr: Attribute,
-    child: LogicalPlan) extends UnaryNode with ObjectProducer{
-
-    override lazy val schema = outputSchema
+    child: LogicalPlan) extends UnaryNode with ObjectConsumer with ObjectProducer {
+  override lazy val schema = outputSchema
 }
 
 object MapElements {
@@ -266,43 +256,51 @@ case class MapGroups(
     outputObjAttr: Attribute,
     child: LogicalPlan) extends UnaryNode with ObjectProducer
 
-
-object MapPartitionsInR {
+/** Factory for constructing new `MapGroupsR` nodes. */
+object MapGroupsR {
   def apply(
-      func: Array[Byte],
-      packageNames: Array[Byte],
-      broadcastVars: Array[Broadcast[Object]],
-      schema: StructType,
-      encoder: ExpressionEncoder[Row],
-      child: LogicalPlan): LogicalPlan = {
-    val deserialized = CatalystSerde.deserialize(child, encoder)
-    val mapped = MapPartitionsInR(
-      func,
-      packageNames,
-      broadcastVars,
-      encoder.schema,
-      schema,
-      CatalystSerde.generateObjAttrForRow(RowEncoder(schema)),
-      deserialized)
-    CatalystSerde.serialize(mapped, RowEncoder(schema))
+       func: Array[Byte],
+       packageNames: Array[Byte],
+       broadcastVars: Array[Broadcast[Object]],
+       schema: StructType,
+       encoder: Expression,
+       keyEncoder: Expression,
+       rowEncoder: ExpressionEncoder[Row],
+       groupingAttributes: Seq[Attribute],
+       dataAttributes: Seq[Attribute],
+       child: LogicalPlan): LogicalPlan = {
+
+     val mapped = MapGroupsR(
+       func,
+       packageNames,
+       broadcastVars,
+       rowEncoder.schema,
+       schema,
+       UnresolvedDeserializer(keyEncoder, groupingAttributes),
+       UnresolvedDeserializer(encoder, dataAttributes),
+       groupingAttributes,
+       dataAttributes,
+       CatalystSerde.generateObjAttrForRow(RowEncoder(schema)),
+       child)
+     CatalystSerde.serialize(mapped, RowEncoder(schema))
   }
 }
 
-/**
- * A relation produced by applying a serialized R function `func` to each partition of the `child`.
- *
- */
-case class MapPartitionsInR(
+case class MapGroupsR(
     func: Array[Byte],
     packageNames: Array[Byte],
     broadcastVars: Array[Broadcast[Object]],
     inputSchema: StructType,
     outputSchema: StructType,
+    keyDeserializer: Expression,
+    valueDeserializer: Expression,
+    groupingAttributes: Seq[Attribute],
+    dataAttributes: Seq[Attribute],
     outputObjAttr: Attribute,
-    child: LogicalPlan) extends UnaryNode with ObjectConsumer with ObjectProducer {
-  override lazy val schema = outputSchema
-}
+    child: LogicalPlan) extends UnaryNode with ObjectProducer{
 
+    override lazy val schema = outputSchema
+}
 
 /** Factory for constructing new `CoGroup` nodes. */
 object CoGroup {
