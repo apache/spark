@@ -19,7 +19,8 @@ package org.apache.spark.sql.catalyst.catalog
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, SimpleCatalystConf, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.SimpleFunctionRegistry
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{Range, SubqueryAlias}
 
@@ -156,6 +157,13 @@ class SessionCatalogSuite extends SparkFunSuite {
     catalog.createDatabase(newDb("deebo"), ignoreIfExists = false)
     catalog.setCurrentDatabase("deebo")
     assert(catalog.getCurrentDatabase == "deebo")
+  }
+
+  test("default database location") {
+    val expectedPath = "file:/user/andrew/spark-warehouse"
+    val conf = SimpleCatalystConf(caseSensitiveAnalysis = false, warehousePath = expectedPath)
+    val catalog = new SessionCatalog(newEmptyCatalog(), new SimpleFunctionRegistry, conf)
+    assert(catalog.getDatabaseMetadata("default").locationUri == expectedPath)
   }
 
   // --------------------------------------------------------------------------
