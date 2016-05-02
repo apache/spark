@@ -754,11 +754,11 @@ private[spark] object JsonProtocol {
     if (json == JNothing) {
       return metrics
     }
-    metrics.setExecutorDeserializeTime((json \ "Executor Deserialize Time").extract[Long])
-    metrics.setExecutorRunTime((json \ "Executor Run Time").extract[Long])
-    metrics.setResultSize((json \ "Result Size").extract[Long])
-    metrics.setJvmGCTime((json \ "JVM GC Time").extract[Long])
-    metrics.setResultSerializationTime((json \ "Result Serialization Time").extract[Long])
+    metrics.incExecutorDeserializeTime((json \ "Executor Deserialize Time").extract[Long])
+    metrics.incExecutorRunTime((json \ "Executor Run Time").extract[Long])
+    metrics.incResultSize((json \ "Result Size").extract[Long])
+    metrics.incJvmGCTime((json \ "JVM GC Time").extract[Long])
+    metrics.incResultSerializationTime((json \ "Result Serialization Time").extract[Long])
     metrics.incMemoryBytesSpilled((json \ "Memory Bytes Spilled").extract[Long])
     metrics.incDiskBytesSpilled((json \ "Disk Bytes Spilled").extract[Long])
 
@@ -800,7 +800,7 @@ private[spark] object JsonProtocol {
 
     // Updated blocks
     Utils.jsonOption(json \ "Updated Blocks").foreach { blocksJson =>
-      metrics.setUpdatedBlockStatuses(blocksJson.extract[List[JValue]].map { blockJson =>
+      metrics.incUpdatedBlockStatuses(blocksJson.extract[List[JValue]].map { blockJson =>
         val id = BlockId((blockJson \ "Block ID").extract[String])
         val status = blockStatusFromJson(blockJson \ "Status")
         (id, status)

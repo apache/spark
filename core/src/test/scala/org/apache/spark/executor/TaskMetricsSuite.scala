@@ -38,16 +38,16 @@ class TaskMetricsSuite extends SparkFunSuite {
     assert(tm.peakExecutionMemory == 0L)
     assert(tm.updatedBlockStatuses.isEmpty)
     // set or increment values
-    tm.setExecutorDeserializeTime(100L)
-    tm.setExecutorDeserializeTime(1L) // overwrite
-    tm.setExecutorRunTime(200L)
-    tm.setExecutorRunTime(2L)
-    tm.setResultSize(300L)
-    tm.setResultSize(3L)
-    tm.setJvmGCTime(400L)
-    tm.setJvmGCTime(4L)
-    tm.setResultSerializationTime(500L)
-    tm.setResultSerializationTime(5L)
+    tm.incExecutorDeserializeTime(100L)
+    tm.incExecutorDeserializeTime(1L) // overwrite
+    tm.incExecutorRunTime(200L)
+    tm.incExecutorRunTime(2L)
+    tm.incResultSize(300L)
+    tm.incResultSize(3L)
+    tm.incJvmGCTime(400L)
+    tm.incJvmGCTime(4L)
+    tm.incResultSerializationTime(500L)
+    tm.incResultSerializationTime(5L)
     tm.incMemoryBytesSpilled(600L)
     tm.incMemoryBytesSpilled(6L) // add
     tm.incDiskBytesSpilled(700L)
