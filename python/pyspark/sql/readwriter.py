@@ -283,23 +283,23 @@ class DataFrameReader(object):
 
     @ignore_unicode_prefix
     @since(1.6)
-    def text(self, paths):
+    def text(self, path):
         """Loads a text file and returns a [[DataFrame]] with a single string column named "value".
 
         Each line in the text file is a new row in the resulting DataFrame.
 
-        :param paths: string, or list of strings, for input path(s).
+        :param path: string, or list of strings, for input path(s).
 
         >>> df = sqlContext.read.text('python/test_support/sql/text-test.txt')
         >>> df.collect()
         [Row(value=u'hello'), Row(value=u'this')]
         """
-        if isinstance(paths, basestring):
-            paths = [paths]
-        return self._df(self._jreader.text(self._sqlContext._sc._jvm.PythonUtils.toSeq(paths)))
+        if isinstance(path, basestring):
+            path = [path]
+        return self._df(self._jreader.text(self._sqlContext._sc._jvm.PythonUtils.toSeq(path)))
 
     @since(2.0)
-    def csv(self, paths, schema=None, sep=None, encoding=None, quote=None, escape=None,
+    def csv(self, path, schema=None, sep=None, encoding=None, quote=None, escape=None,
             comment=None, header=None, ignoreLeadingWhiteSpace=None, ignoreTrailingWhiteSpace=None,
             nullValue=None, nanValue=None, positiveInf=None, negativeInf=None, dateFormat=None,
             maxColumns=None, maxCharsPerColumn=None, mode=None):
@@ -308,7 +308,7 @@ class DataFrameReader(object):
         This function goes through the input once to determine the input schema. To avoid going
         through the entire data once, specify the schema explicitly using [[schema]].
 
-        :param paths: string, or list of strings, for input path(s).
+        :param path: string, or list of strings, for input path(s).
         :param schema: an optional :class:`StructType` for the input schema.
         :param sep: sets the single character as a separator for each field and value. \
                     If None is set, it uses the default value, ``,``.
@@ -393,9 +393,9 @@ class DataFrameReader(object):
             self.option("maxCharsPerColumn", maxCharsPerColumn)
         if mode is not None:
             self.option("mode", mode)
-        if isinstance(paths, basestring):
-            paths = [paths]
-        return self._df(self._jreader.csv(self._sqlContext._sc._jvm.PythonUtils.toSeq(paths)))
+        if isinstance(path, basestring):
+            path = [path]
+        return self._df(self._jreader.csv(self._sqlContext._sc._jvm.PythonUtils.toSeq(path)))
 
     @since(1.5)
     def orc(self, path):
@@ -739,10 +739,10 @@ class DataFrameWriter(object):
         self._jwrite.parquet(path)
 
     @since(1.6)
-    def text(self, path, compression=None):
+    def text(self, paths, compression=None):
         """Saves the content of the DataFrame in a text file at the specified path.
 
-        :param path: the path in any Hadoop supported file system
+        :param paths: the path in any Hadoop supported file system
         :param compression: compression codec to use when saving to file. This can be one of the
                             known case-insensitive shorten names (none, bzip2, gzip, lz4,
                             snappy and deflate).
@@ -752,7 +752,7 @@ class DataFrameWriter(object):
         """
         if compression is not None:
             self.option("compression", compression)
-        self._jwrite.text(path)
+        self._jwrite.text(paths)
 
     @since(2.0)
     def csv(self, path, mode=None, compression=None, sep=None, quote=None, escape=None,
@@ -767,6 +767,9 @@ class DataFrameWriter(object):
             * ``ignore``: Silently ignore this operation if data already exists.
             * ``error`` (default case): Throw an exception if data already exists.
 
+        :param compression: compression codec to use when saving to file. This can be one of the
+                            known case-insensitive shorten names (none, bzip2, gzip, lz4,
+                            snappy and deflate).
         :param sep: sets the single character as a separator for each field and value. If None is \
                     set, it uses the default value, ``,``.
         :param quote: sets the single character used for escaping quoted values where the \
@@ -778,9 +781,6 @@ class DataFrameWriter(object):
                        the default value, ``false``.
         :param nullValue: sets the string representation of a null value. If None is set, it uses \
                           the default value, empty string.
-        :param compression: compression codec to use when saving to file. This can be one of the
-                            known case-insensitive shorten names (none, bzip2, gzip, lz4,
-                            snappy and deflate).
 
         >>> df.write.csv(os.path.join(tempfile.mkdtemp(), 'data'))
         """
