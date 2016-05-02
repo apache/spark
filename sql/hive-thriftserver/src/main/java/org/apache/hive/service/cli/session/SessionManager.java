@@ -151,7 +151,7 @@ public class SessionManager extends CompositeService {
   }
 
   private void startTimeoutChecker() {
-    final long interval = Math.max(checkInterval, 3000l);  // minimum 3 seconds
+    final long interval = Math.max(checkInterval, 3000L);  // minimum 3 seconds
     Runnable timeoutChecker = new Runnable() {
       @Override
       public void run() {
