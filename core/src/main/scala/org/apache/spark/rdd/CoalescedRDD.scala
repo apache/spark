@@ -174,7 +174,7 @@ private class DefaultPartitionCoalescer(val balanceSlack: Double = 0.10)
     // contains all the partitions from the previous RDD that don't have preferred locations
     val partsWithoutLocs = ArrayBuffer[Partition]()
     // contains all the partitions from the previous RDD that have preferred locations
-    val partsWithLocs:Array[(String, Partition)] = getAllPrefLocs(prev)
+    val partsWithLocs: Array[(String, Partition)] = getAllPrefLocs(prev)
 
     // has side affect of filling in partitions without locations as well
     def getAllPrefLocs(prev: RDD[_]): Array[(String, Partition)] = {
@@ -187,7 +187,7 @@ private class DefaultPartitionCoalescer(val balanceSlack: Double = 0.10)
           } else {
             partsWithoutLocs += p
           }
-        } 
+        }
       )
       // convert it into an array of host to partition
       val allLocs = (0 to 2).map(x =>
@@ -227,8 +227,8 @@ private class DefaultPartitionCoalescer(val balanceSlack: Double = 0.10)
 
   /**
    * Initializes targetLen partition groups. If there are preferred locations, each group
-   * is assigned a preferredLocation. This uses coupon collector to estimate how many 
-   * preferredLocations it must rotate through until it has seen most of the preferred 
+   * is assigned a preferredLocation. This uses coupon collector to estimate how many
+   * preferredLocations it must rotate through until it has seen most of the preferred
    * locations (2 * n log(n))
    * @param targetLen
    */
@@ -246,8 +246,8 @@ private class DefaultPartitionCoalescer(val balanceSlack: Double = 0.10)
     var tries = 0
 
     // rotate through until either targetLen unique/distinct preferred locations have been created
-    // OR (we have went through either all partitions OR we've rotated expectedCoupons2 - in which case we
-    // have likely seen all preferred locations)
+    // OR (we have went through either all partitions OR we've rotated expectedCoupons2 - in 
+    // which case we have likely seen all preferred locations)
     val numPartsToLookAt = math.min(expectedCoupons2, partitionLocs.partsWithLocs.length)
     while (numCreated < targetLen && tries < numPartsToLookAt) {
       val (nxt_replica, nxt_part) = partitionLocs.partsWithLocs(tries)
@@ -262,7 +262,7 @@ private class DefaultPartitionCoalescer(val balanceSlack: Double = 0.10)
     }
     tries = 0
     // if we don't have enough partition groups, create duplicates
-    while (numCreated < targetLen) {  
+    while (numCreated < targetLen) {
       var (nxt_replica, nxt_part) = partitionLocs.partsWithLocs(tries)
       tries += 1
       val pgroup = new PartitionGroup(Some(nxt_replica))
@@ -284,7 +284,7 @@ private class DefaultPartitionCoalescer(val balanceSlack: Double = 0.10)
    *                     imbalance in favor of locality
    * @return partition group (bin to be put in)
    */
-  def pickBin(p: Partition, prev: RDD[_], balanceSlack: Double, 
+  def pickBin(p: Partition, prev: RDD[_], balanceSlack: Double,
       partitionLocs: PartitionLocations): PartitionGroup = {
     val slack = (balanceSlack * prev.partitions.length).toInt
     val preflocs = partitionLocs.partsWithLocs.filter(_._2 == p).map(_._1).toSeq
@@ -317,7 +317,7 @@ private class DefaultPartitionCoalescer(val balanceSlack: Double = 0.10)
     }
   }
 
-  def throwBalls(maxPartitions: Int, prev: RDD[_], 
+  def throwBalls(maxPartitions: Int, prev: RDD[_],
       balanceSlack: Double, partitionLocs: PartitionLocations) {
     if (noLocality) {  // no preferredLocations in parent RDD, no randomization needed
       if (maxPartitions > groupArr.size) { // just return prev.partitions
@@ -381,8 +381,10 @@ private class DefaultPartitionCoalescer(val balanceSlack: Double = 0.10)
    */
   def coalesce(maxPartitions: Int, prev: RDD[_]): Array[PartitionGroup] = {
     val partitionLocs = new PartitionLocations(prev)
-    setupGroups(math.min(prev.partitions.length, maxPartitions), partitionLocs)   // setup the groups (bins)
-    throwBalls(maxPartitions, prev, balanceSlack, partitionLocs) // assign partitions (balls) to each group (bins)
+    // setup the groups (bins)
+    setupGroups(math.min(prev.partitions.length, maxPartitions), partitionLocs)
+    // assign partitions (balls) to each group (bins)
+    throwBalls(maxPartitions, prev, balanceSlack, partitionLocs) 
     getPartitions
   }
 }
