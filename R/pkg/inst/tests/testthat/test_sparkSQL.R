@@ -2092,7 +2092,7 @@ test_that("gapply() on a DataFrame", {
   df1 <- gapply(df, function(x) { x }, schema(df), "a")
   actual <- collect(df1)
   expect_identical(actual, expected)
-  
+
   # Add a boolean column
   schema <- structType(structField("a", "integer"), structField("b", "double"),
                        structField("c", "string"), structField("d", "double"),
@@ -2106,7 +2106,7 @@ test_that("gapply() on a DataFrame", {
   actual <- collect(df2)$e
   expected <- c(FALSE, FALSE, TRUE)
   expect_identical(actual, expected)
-  
+
   # remove columns
   schema <- structType(structField("a", "integer"))
   df3 <- gapply(
