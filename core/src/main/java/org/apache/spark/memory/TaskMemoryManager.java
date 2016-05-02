@@ -389,12 +389,6 @@ public class TaskMemoryManager {
       consumers.clear();
     }
 
-    for (MemoryBlock page : pageTable) {
-      if (page != null) {
-        memoryManager.tungstenMemoryAllocator().free(page);
-      }
-    }
-    Arrays.fill(pageTable, null);
 
     // release the memory that is not used by any consumer.
     memoryManager.releaseExecutionMemory(acquiredButNotUsed, taskAttemptId, tungstenMemoryMode);
