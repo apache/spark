@@ -348,6 +348,7 @@ private[hive] class HiveClientImpl(
         sortColumnNames = Seq(), // TODO: populate this
         bucketColumnNames = h.getBucketCols.asScala,
         numBuckets = h.getNumBuckets,
+        owner = h.getOwner,
         createTime = h.getTTable.getCreateTime.toLong * 1000,
         lastAccessTime = h.getLastAccessTime.toLong * 1000,
         storage = CatalogStorageFormat(

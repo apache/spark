@@ -19,16 +19,17 @@ package org.apache.spark.sql.execution.command
 
 import java.io.File
 import java.net.URI
+import java.util.Date
 
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogRelation, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, UnaryNode}
-import org.apache.spark.sql.types.{BooleanType, MetadataBuilder, StringType}
+import org.apache.spark.sql.types.{BooleanType, MetadataBuilder, StringType, StructType}
 import org.apache.spark.util.Utils
 
 case class CreateTableAsSelectLogicalPlan(
@@ -270,10 +271,10 @@ case class LoadData(
 /**
  * Command that looks like
  * {{{
- *   DESCRIBE (EXTENDED) table_name;
+ *   DESCRIBE [EXTENDED|FORMATTED] table_name;
  * }}}
  */
-case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean)
+case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isFormatted: Boolean)
   extends RunnableCommand {
 
   override val output: Seq[Attribute] = Seq(
@@ -290,28 +291,83 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean)
     val result = new ArrayBuffer[Row]
     sparkSession.sessionState.catalog.lookupRelation(table) match {
       case catalogRelation: CatalogRelation =>
-        catalogRelation.catalogTable.schema.foreach { column =>
-          result += Row(column.name, column.dataType, column.comment.orNull)
-        }
-
-        if (catalogRelation.catalogTable.partitionColumns.nonEmpty) {
-          result += Row("# Partition Information", "", "")
-          result += Row(s"# ${output(0).name}", output(1).name, output(2).name)
-
-          catalogRelation.catalogTable.partitionColumns.foreach { col =>
-            result += Row(col.name, col.dataType, col.comment.orNull)
-          }
+        if (isExtended) {
+          describeExtended(catalogRelation, result)
+        } else if (isFormatted) {
+          describeFormatted(catalogRelation, result)
+        } else {
+          describe(catalogRelation, result)
         }
 
       case relation =>
-        relation.schema.fields.foreach { field =>
-          val comment =
-            if (field.metadata.contains("comment")) field.metadata.getString("comment") else ""
-          result += Row(field.name, field.dataType.simpleString, comment)
-        }
+        describeSchema(relation.schema, result)
     }
 
     result
+  }
+
+  private def describe(relation: CatalogRelation, buffer: ArrayBuffer[Row]): Unit = {
+    describeSchema(relation.catalogTable.schema, buffer)
+
+    if (relation.catalogTable.partitionColumns.nonEmpty) {
+      buffer += Row("# Partition Information", "", "")
+      buffer += Row(s"# ${output(0).name}", output(1).name, output(2).name)
+
+      describeSchema(relation.catalogTable.partitionColumns, buffer)
+    }
+  }
+
+  private def describeExtended(relation: CatalogRelation, buffer: ArrayBuffer[Row]): Unit = {
+    describeSchema(relation.catalogTable.schema, buffer)
+    buffer += Row("", "", "")
+    buffer += Row("# Detailed Table Information", relation.catalogTable.toString, "")
+  }
+
+  private def describeFormatted(relation: CatalogRelation, buffer: ArrayBuffer[Row]): Unit = {
+    val table = relation.catalogTable
+    describeSchema(table.schema, buffer)
+
+    buffer += Row("", "", "")
+    buffer += Row("# Detailed Table Information", "", "")
+    buffer += Row("Database:", table.database, "")
+    buffer += Row("Owner:", table.owner, "")
+    buffer += Row("Create Time:", new Date(table.createTime).toString, "")
+    buffer += Row("Last Access Time:", new Date(table.lastAccessTime).toString, "")
+    buffer += Row("Location:", table.storage.locationUri.getOrElse(""), "")
+    buffer += Row("Table Type:", table.tableType.name, "")
+
+    buffer += Row("Table Parameters:", "", "")
+    table.properties.foreach { case (key, value) =>
+      buffer += Row(s"  $key", value, "")
+    }
+
+    buffer += Row("", "", "")
+    buffer += Row("# Storage Information", "", "")
+    table.storage.serde.foreach(serdeLib => buffer += Row("SerDe Library:", serdeLib, ""))
+    table.storage.inputFormat.foreach(format => buffer += Row("InputFormat:", format, ""))
+    table.storage.outputFormat.foreach(format => buffer += Row("OutputFormat:", format, ""))
+    buffer += Row("Num Buckets:", table.numBuckets.toString, "")
+    buffer += Row("Bucket Columns:", table.bucketColumnNames.mkString("[", ", ", "]"), "")
+    buffer += Row("Sort Columns:", table.sortColumnNames.mkString("[", ", ", "]"), "")
+
+    buffer += Row("Storage Desc Parameters:", "", "")
+    table.storage.serdeProperties.foreach { case (key, value) =>
+      buffer += Row(s"  $key", value, "")
+    }
+  }
+
+  private def describeSchema(schema: StructType, buffer: ArrayBuffer[Row]): Unit = {
+    schema.foreach { column =>
+      val comment =
+        if (column.metadata.contains("comment")) column.metadata.getString("comment") else ""
+      buffer += Row(column.name, column.dataType.sql, comment)
+    }
+  }
+
+  private def describeSchema(schema: Seq[CatalogColumn], buffer: ArrayBuffer[Row]): Unit = {
+    schema.foreach { column =>
+      buffer += Row(column.name, column.dataType, column.comment.getOrElse(""))
+    }
   }
 }
 
