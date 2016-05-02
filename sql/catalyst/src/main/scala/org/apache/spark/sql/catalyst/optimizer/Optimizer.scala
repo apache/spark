@@ -1447,7 +1447,7 @@ object RemoveLiteralFromGroupExpressions extends Rule[LogicalPlan] {
 object RemoveRepetitionFromGroupExpressions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case a @ Aggregate(grouping, _, _) =>
-      val newGrouping = grouping.distinct
+      val newGrouping = ExpressionSet(grouping).toSeq
       a.copy(groupingExpressions = newGrouping)
   }
 }
