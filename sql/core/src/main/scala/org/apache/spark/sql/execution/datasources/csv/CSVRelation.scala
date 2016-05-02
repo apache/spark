@@ -59,7 +59,10 @@ class DefaultSource extends FileFormat with DataSourceRegister {
     val csvOptions = new CSVOptions(options)
 
     // TODO: Move filtering.
-    val paths = files.filterNot(_.getPath.getName startsWith "_").map(_.getPath.toString)
+    val paths = files.filterNot { status =>
+      val name = status.getPath.getName
+      name.startsWith("_") || name.startsWith(".")
+    }.map(_.getPath.toString)
     val rdd = createBaseRdd(sparkSession, csvOptions, paths)
     val schema = if (csvOptions.inferSchemaFlag) {
       CSVInferSchema.infer(rdd, csvOptions)
