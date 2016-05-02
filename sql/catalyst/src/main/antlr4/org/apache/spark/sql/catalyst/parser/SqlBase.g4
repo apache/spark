@@ -922,7 +922,7 @@ TINYINT_LITERAL
     ;
 
 BYTELENGTH_LITERAL
-    : DIGIT+ ('b' | 'B' | 'k' | 'K' | 'm' | 'M' | 'g' | 'G')
+    : DIGIT+ ('B' | 'K' | 'M' | 'G')
     ;
 
 INTEGER_VALUE

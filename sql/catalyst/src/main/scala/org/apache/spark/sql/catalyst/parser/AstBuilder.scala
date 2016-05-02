@@ -657,11 +657,16 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
 
       case SqlBaseParser.BYTELENGTH_LITERAL =>
         throw new ParseException(
-          "TABLESAMPLE(BUCKET byteLengthLiteral) is not supported", ctx)
+          "TABLESAMPLE(byteLengthLiteral) is not supported", ctx)
 
       case SqlBaseParser.BUCKET if ctx.ON != null =>
-        throw new ParseException(
-          "TABLESAMPLE(BUCKET x OUT OF y ON colname/rand()) is not supported", ctx)
+        if (ctx.identifier != null) {
+          throw new ParseException(
+            "TABLESAMPLE(BUCKET x OUT OF y ON colname) is not supported", ctx)
+        } else {
+          throw new ParseException(
+            "TABLESAMPLE(BUCKET x OUT OF y ON function) is not supported", ctx)
+        }
 
       case SqlBaseParser.BUCKET =>
         sample(ctx.numerator.getText.toDouble / ctx.denominator.getText.toDouble)
