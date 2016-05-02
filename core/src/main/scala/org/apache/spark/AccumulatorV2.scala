@@ -23,7 +23,6 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import javax.annotation.concurrent.GuardedBy
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.spark.scheduler.AccumulableInfo
@@ -56,13 +55,13 @@ private[spark] case class AccumulatorMetadata(
  * The base class for accumulators, that can accumulate inputs of type `IN`, and produce output of
  * type `OUT`.
  */
-abstract class NewAccumulator[IN, OUT] extends Serializable {
+abstract class AccumulatorV2[IN, OUT] extends Serializable {
   private[spark] var metadata: AccumulatorMetadata = _
-  private[NewAccumulator] var atDriverSide = true
+  private[AccumulatorV2] var atDriverSide = true
 
   /**
-   * The following values are used for data property [[NewAccumulator]]s.
-   * Data property [[NewAccumulator]]s have only-once semantics. These semantics are implemented
+   * The following values are used for data property [[AccumulatorV2]]s.
+   * Data property [[AccumulatorV2]]s have only-once semantics. These semantics are implemented
    * by keeping track of which RDD id, shuffle id, and partition id the current function is
    * processing in. If a partition is fully processed the results for that partition/shuffle/rdd
    * combination are sent back to the driver. The driver keeps track of which rdd/shuffle/partitions
@@ -71,12 +70,12 @@ abstract class NewAccumulator[IN, OUT] extends Serializable {
    */
   // For data property accumulators pending and processed updates.
   // Pending and processed are keyed by (rdd id, shuffle id, partition id)
-  private[NewAccumulator] lazy val pending =
-    new mutable.HashMap[(Int, Int, Int), NewAccumulator[IN, OUT]]()
+  private[AccumulatorV2] lazy val pending =
+    new mutable.HashMap[(Int, Int, Int), AccumulatorV2[IN, OUT]]()
   // Completed contains the set of (rdd id, shuffle id, partition id) that have been
   // fully processed on the worker side. This is used to determine if the updates should
   // be sent back to the driver for a particular rdd/shuffle/partition combination.
-  private[NewAccumulator] lazy val completed = new mutable.HashSet[(Int, Int, Int)]()
+  private[AccumulatorV2] lazy val completed = new mutable.HashSet[(Int, Int, Int)]()
   // Processed is keyed by (rdd id, shuffle id) and the value is a bitset containing all partitions
   // for the given key which have been merged into the value. This is used on the driver.
   @transient private[spark] lazy val processed = new mutable.HashMap[(Int, Int), mutable.BitSet]()
@@ -137,7 +136,7 @@ abstract class NewAccumulator[IN, OUT] extends Serializable {
   }
 
   /**
-   * Creates an [[AccumulableInfo]] representation of this [[NewAccumulator]] with the provided
+   * Creates an [[AccumulableInfo]] representation of this [[AccumulatorV2]] with the provided
    * values.
    */
   private[spark] def toInfo(update: Option[Any], value: Option[Any]): AccumulableInfo = {
@@ -148,22 +147,31 @@ abstract class NewAccumulator[IN, OUT] extends Serializable {
   final private[spark] def isAtDriverSide: Boolean = atDriverSide
 
   /**
-   * Tells if this accumulator is zero value or not. e.g. for a counter accumulator, 0 is zero
+   * Returns if this accumulator is zero value or not. e.g. for a counter accumulator, 0 is zero
    * value; for a list accumulator, Nil is zero value.
    */
-  def isZero(): Boolean
+  def isZero: Boolean
 
   /**
    * Creates a new copy of this accumulator, which is zero value. i.e. call `isZero` on the copy
    * must return true.
    */
-  def copyAndReset(): NewAccumulator[IN, OUT]
+  def copyAndReset(): AccumulatorV2[IN, OUT]
 
   /**
    * Takes the inputs and accumulates. e.g. it can be a simple `+=` for counter accumulator.
    * Developers should extend addImpl to customize the adding functionality.
    */
-  final def add(v: IN): Unit = {
+  final lazy val add: (IN => Unit) = {
+    if (metadata != null && metadata.dataProperty) {
+      dataPropertyAdd _
+    } else {
+      addImpl _
+    }
+  }
+
+  private def dataPropertyAdd(v: IN): Unit = {
+    // Add first for localValue & AccumulatorInfo
     addImpl(v)
     if (metadata != null && metadata.dataProperty) {
       val updateInfo = TaskContext.get().getRDDPartitionInfo()
@@ -194,11 +202,18 @@ abstract class NewAccumulator[IN, OUT] extends Serializable {
    * Merges another same-type accumulator into this one and update its state, i.e. this should be
    * merge-in-place. Developers should extend mergeImpl to customize the merge functionality.
    */
-  final private[spark] def merge(other: NewAccumulator[IN, OUT]): Unit = {
+  final private[spark] lazy val merge: (AccumulatorV2[IN, OUT] => Unit) = {
     assertMetadataNotNull()
     // Handle data property accumulators
     if (metadata.dataProperty) {
-      val term = other.pending.filter{case (k, v) => other.completed.contains(k)}
+      dataPropertyMerge _
+    } else {
+      mergeImpl _
+    }
+  }
+
+  final private[spark] def dataPropertyMerge(other: AccumulatorV2[IN, OUT]) = {
+        val term = other.pending.filter{case (k, v) => other.completed.contains(k)}
       term.foreach { case ((rddId, shuffleWriteId, splitId), v) =>
         val splits = processed.getOrElseUpdate((rddId, shuffleWriteId), new mutable.BitSet())
         if (!splits.contains(splitId)) {
@@ -206,16 +221,14 @@ abstract class NewAccumulator[IN, OUT] extends Serializable {
           mergeImpl(v)
         }
       }
-    } else {
-      mergeImpl(other)
-    }
   }
+
 
   /**
    * Merges another same-type accumulator into this one and update its state, i.e. this should be
    * merge-in-place. Developers should extend mergeImpl to customize the merge functionality.
    */
-  protected def mergeImpl(other: NewAccumulator[IN, OUT]): Unit
+  protected def mergeImpl(other: AccumulatorV2[IN, OUT]): Unit
 
   /**
    * Access this accumulator's current value; only allowed on driver.
@@ -244,7 +257,7 @@ abstract class NewAccumulator[IN, OUT] extends Serializable {
           "Accumulator must be registered before send to executor")
       }
       val copy = copyAndReset()
-      assert(copy.isZero(), "copyAndReset must return a zero value copy")
+      assert(copy.isZero, "copyAndReset must return a zero value copy")
       copy.metadata = metadata
       copy
     } else {
@@ -280,6 +293,9 @@ abstract class NewAccumulator[IN, OUT] extends Serializable {
 }
 
 
+/**
+ * An internal class used to track accumulators by Spark itself.
+ */
 private[spark] object AccumulatorContext {
 
   /**
@@ -288,20 +304,21 @@ private[spark] object AccumulatorContext {
    * once the RDDs and user-code that reference them are cleaned up.
    * TODO: Don't use a global map; these should be tied to a SparkContext (SPARK-13051).
    */
-  private val originals = new ConcurrentHashMap[Long, jl.ref.WeakReference[NewAccumulator[_, _]]]
+  private val originals = new ConcurrentHashMap[Long, jl.ref.WeakReference[AccumulatorV2[_, _]]]
 
   private[this] val nextId = new AtomicLong(0L)
 
   /**
-   * Return a globally unique ID for a new [[Accumulator]].
+   * Returns a globally unique ID for a new [[Accumulator]].
    * Note: Once you copy the [[Accumulator]] the ID is no longer unique.
    */
   def newId(): Long = nextId.getAndIncrement
 
+  /** Returns the number of accumulators registered. Used in testing. */
   def numAccums: Int = originals.size
 
   /**
-   * Register an [[Accumulator]] created on the driver such that it can be used on the executors.
+   * Registers an [[Accumulator]] created on the driver such that it can be used on the executors.
    *
    * All accumulators registered here can later be used as a container for accumulating partial
    * values across multiple tasks. This is what [[org.apache.spark.scheduler.DAGScheduler]] does.
@@ -311,21 +328,21 @@ private[spark] object AccumulatorContext {
    * If an [[Accumulator]] with the same ID was already registered, this does nothing instead
    * of overwriting it. We will never register same accumulator twice, this is just a sanity check.
    */
-  def register(a: NewAccumulator[_, _]): Unit = {
-    originals.putIfAbsent(a.id, new jl.ref.WeakReference[NewAccumulator[_, _]](a))
+  def register(a: AccumulatorV2[_, _]): Unit = {
+    originals.putIfAbsent(a.id, new jl.ref.WeakReference[AccumulatorV2[_, _]](a))
   }
 
   /**
-   * Unregister the [[Accumulator]] with the given ID, if any.
+   * Unregisters the [[Accumulator]] with the given ID, if any.
    */
   def remove(id: Long): Unit = {
     originals.remove(id)
   }
 
   /**
-   * Return the [[Accumulator]] registered with the given ID, if any.
+   * Returns the [[Accumulator]] registered with the given ID, if any.
    */
-  def get(id: Long): Option[NewAccumulator[_, _]] = {
+  def get(id: Long): Option[AccumulatorV2[_, _]] = {
     Option(originals.get(id)).map { ref =>
       // Since we are storing weak references, we must check whether the underlying data is valid.
       val acc = ref.get
@@ -337,17 +354,17 @@ private[spark] object AccumulatorContext {
   }
 
   /**
-   * Clear all registered [[Accumulator]]s. For testing only.
+   * Clears all registered [[Accumulator]]s. For testing only.
    */
   def clear(): Unit = {
     originals.clear()
   }
 }
 
-class LongAccumulator extends NewAccumulator[jl.Long, jl.Long] {
+class LongAccumulator extends AccumulatorV2[jl.Long, jl.Long] {
   private[this] var _sum = 0L
 
-  override def isZero(): Boolean = _sum == 0
+  override def isZero: Boolean = _sum == 0
 
   override def copyAndReset(): LongAccumulator = new LongAccumulator
 
@@ -355,7 +372,7 @@ class LongAccumulator extends NewAccumulator[jl.Long, jl.Long] {
 
   def sum: Long = _sum
 
-  override def mergeImpl(other: NewAccumulator[jl.Long, jl.Long]): Unit = other match {
+  override def mergeImpl(other: AccumulatorV2[jl.Long, jl.Long]): Unit = other match {
     case o: LongAccumulator => _sum += o.sum
     case _ => throw new UnsupportedOperationException(
       s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
@@ -367,10 +384,10 @@ class LongAccumulator extends NewAccumulator[jl.Long, jl.Long] {
 }
 
 
-class DoubleAccumulator extends NewAccumulator[jl.Double, jl.Double] {
+class DoubleAccumulator extends AccumulatorV2[jl.Double, jl.Double] {
   private[this] var _sum = 0.0
 
-  override def isZero(): Boolean = _sum == 0.0
+  override def isZero: Boolean = _sum == 0.0
 
   override def copyAndReset(): DoubleAccumulator = new DoubleAccumulator
 
@@ -378,7 +395,7 @@ class DoubleAccumulator extends NewAccumulator[jl.Double, jl.Double] {
 
   def sum: Double = _sum
 
-  override def mergeImpl(other: NewAccumulator[jl.Double, jl.Double]): Unit = other match {
+  override def mergeImpl(other: AccumulatorV2[jl.Double, jl.Double]): Unit = other match {
     case o: DoubleAccumulator => _sum += o.sum
     case _ => throw new UnsupportedOperationException(
       s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
@@ -390,20 +407,20 @@ class DoubleAccumulator extends NewAccumulator[jl.Double, jl.Double] {
 }
 
 
-class AverageAccumulator extends NewAccumulator[jl.Double, jl.Double] {
+class AverageAccumulator extends AccumulatorV2[jl.Double, jl.Double] {
   private[this] var _sum = 0.0
   private[this] var _count = 0L
 
-  override def isZero(): Boolean = _sum == 0.0 && _count == 0
+  override def isZero: Boolean = _sum == 0.0 && _count == 0
 
   override def copyAndReset(): AverageAccumulator = new AverageAccumulator
 
-  override def addImpl(v: jl.Double): Unit = {
-    _sum += v
+  override def addImpl(d: jl.Double): Unit = {
+    _sum += d
     _count += 1
   }
 
-  override def mergeImpl(other: NewAccumulator[jl.Double, jl.Double]): Unit = other match {
+  override def mergeImpl(other: AccumulatorV2[jl.Double, jl.Double]): Unit = other match {
     case o: AverageAccumulator =>
       _sum += o.sum
       _count += o.count
@@ -423,16 +440,16 @@ class AverageAccumulator extends NewAccumulator[jl.Double, jl.Double] {
 }
 
 
-class ListAccumulator[T] extends NewAccumulator[T, java.util.List[T]] {
+class ListAccumulator[T] extends AccumulatorV2[T, java.util.List[T]] {
   private[this] val _list: java.util.List[T] = new java.util.ArrayList[T]
 
-  override def isZero(): Boolean = _list.isEmpty
+  override def isZero: Boolean = _list.isEmpty
 
   override def copyAndReset(): ListAccumulator[T] = new ListAccumulator
 
   override def addImpl(v: T): Unit = _list.add(v)
 
-  override def mergeImpl(other: NewAccumulator[T, java.util.List[T]]): Unit = other match {
+  override def mergeImpl(other: AccumulatorV2[T, java.util.List[T]]): Unit = other match {
     case o: ListAccumulator[T] => _list.addAll(o.localValue)
     case _ => throw new UnsupportedOperationException(
       s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
@@ -449,10 +466,10 @@ class ListAccumulator[T] extends NewAccumulator[T, java.util.List[T]] {
 
 class LegacyAccumulatorWrapper[R, T](
     initialValue: R,
-    param: org.apache.spark.AccumulableParam[R, T]) extends NewAccumulator[T, R] {
+    param: org.apache.spark.AccumulableParam[R, T]) extends AccumulatorV2[T, R] {
   private[spark] var _value = initialValue  // Current value on driver
 
-  override def isZero(): Boolean = _value == param.zero(initialValue)
+  override def isZero: Boolean = _value == param.zero(initialValue)
 
   override def copyAndReset(): LegacyAccumulatorWrapper[R, T] = {
     val acc = new LegacyAccumulatorWrapper(initialValue, param)
@@ -462,7 +479,7 @@ class LegacyAccumulatorWrapper[R, T](
 
   override def addImpl(v: T): Unit = _value = param.addAccumulator(_value, v)
 
-  override def mergeImpl(other: NewAccumulator[T, R]): Unit = other match {
+  override def mergeImpl(other: AccumulatorV2[T, R]): Unit = other match {
     case o: LegacyAccumulatorWrapper[R, T] => _value = param.addInPlace(_value, o.localValue)
     case _ => throw new UnsupportedOperationException(
       s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
