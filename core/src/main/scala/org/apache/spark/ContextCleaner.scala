@@ -144,7 +144,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
     registerForCleanup(rdd, CleanRDD(rdd.id))
   }
 
-  def registerAccumulatorForCleanup(a: NewAccumulator[_, _]): Unit = {
+  def registerAccumulatorForCleanup(a: AccumulatorV2[_, _]): Unit = {
     registerForCleanup(a, CleanAccum(a.id))
   }
 

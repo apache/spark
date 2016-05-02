@@ -118,7 +118,7 @@ case class ExceptionFailure(
     fullStackTrace: String,
     private val exceptionWrapper: Option[ThrowableSerializationWrapper],
     accumUpdates: Seq[AccumulableInfo] = Seq.empty,
-    private[spark] var accums: Seq[NewAccumulator[_, _]] = Nil)
+    private[spark] var accums: Seq[AccumulatorV2[_, _]] = Nil)
   extends TaskFailedReason {
 
   /**
@@ -138,7 +138,7 @@ case class ExceptionFailure(
     this(e, accumUpdates, preserveCause = true)
   }
 
-  private[spark] def withAccums(accums: Seq[NewAccumulator[_, _]]): ExceptionFailure = {
+  private[spark] def withAccums(accums: Seq[AccumulatorV2[_, _]]): ExceptionFailure = {
     this.accums = accums
     this
   }
