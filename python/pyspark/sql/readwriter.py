@@ -739,10 +739,10 @@ class DataFrameWriter(object):
         self._jwrite.parquet(path)
 
     @since(1.6)
-    def text(self, paths, compression=None):
+    def text(self, path, compression=None):
         """Saves the content of the DataFrame in a text file at the specified path.
 
-        :param paths: the path in any Hadoop supported file system
+        :param path: the path in any Hadoop supported file system
         :param compression: compression codec to use when saving to file. This can be one of the
                             known case-insensitive shorten names (none, bzip2, gzip, lz4,
                             snappy and deflate).
@@ -752,7 +752,7 @@ class DataFrameWriter(object):
         """
         if compression is not None:
             self.option("compression", compression)
-        self._jwrite.text(paths)
+        self._jwrite.text(path)
 
     @since(2.0)
     def csv(self, path, mode=None, compression=None, sep=None, quote=None, escape=None,
