@@ -77,31 +77,11 @@ class ShuffleReadMetrics private[spark] () extends Serializable {
    */
   def totalBlocksFetched: Long = remoteBlocksFetched + localBlocksFetched
 
-  private[spark] def incRemoteBlocksFetched(v: Long): Unit = _remoteBlocksFetched.add(v)
-  private[spark] def incLocalBlocksFetched(v: Long): Unit = _localBlocksFetched.add(v)
-  private[spark] def incRemoteBytesRead(v: Long): Unit = _remoteBytesRead.add(v)
-  private[spark] def incLocalBytesRead(v: Long): Unit = _localBytesRead.add(v)
-  private[spark] def incFetchWaitTime(v: Long): Unit = _fetchWaitTime.add(v)
-  private[spark] def incRecordsRead(v: Long): Unit = _recordsRead.add(v)
-
-  private[spark] def setRemoteBlocksFetched(v: Int): Unit = _remoteBlocksFetched.setValue(v)
-  private[spark] def setLocalBlocksFetched(v: Int): Unit = _localBlocksFetched.setValue(v)
-  private[spark] def setRemoteBytesRead(v: Long): Unit = _remoteBytesRead.setValue(v)
-  private[spark] def setLocalBytesRead(v: Long): Unit = _localBytesRead.setValue(v)
-  private[spark] def setFetchWaitTime(v: Long): Unit = _fetchWaitTime.setValue(v)
-  private[spark] def setRecordsRead(v: Long): Unit = _recordsRead.setValue(v)
-
   /**
    * Resets the value of the current metrics (`this`) and and merges all the independent
    * [[TempShuffleReadMetrics]] into `this`.
    */
-  private[spark] def setMergeValues(metrics: Seq[TempShuffleReadMetrics]): Unit = {
-    _remoteBlocksFetched.setValue(0)
-    _localBlocksFetched.setValue(0)
-    _remoteBytesRead.setValue(0)
-    _localBytesRead.setValue(0)
-    _fetchWaitTime.setValue(0)
-    _recordsRead.setValue(0)
+  private[spark] def mergeWithTempMetrics(metrics: Seq[TempShuffleReadMetrics]): Unit = {
     metrics.foreach { metric =>
       _remoteBlocksFetched.add(metric.remoteBlocksFetched)
       _localBlocksFetched.add(metric.localBlocksFetched)

@@ -102,19 +102,20 @@ class TaskMetrics private[spark] () extends Serializable {
 
   // Setters and increment-ers
   private[spark] def setExecutorDeserializeTime(v: Long): Unit =
-    _executorDeserializeTime.setValue(v)
-  private[spark] def setExecutorRunTime(v: Long): Unit = _executorRunTime.setValue(v)
-  private[spark] def setResultSize(v: Long): Unit = _resultSize.setValue(v)
-  private[spark] def setJvmGCTime(v: Long): Unit = _jvmGCTime.setValue(v)
+    _executorDeserializeTime.add(v)
+  private[spark] def setExecutorRunTime(v: Long): Unit = _executorRunTime.add(v)
+  private[spark] def setResultSize(v: Long): Unit = _resultSize.add(v)
+  private[spark] def setJvmGCTime(v: Long): Unit = _jvmGCTime.add(v)
   private[spark] def setResultSerializationTime(v: Long): Unit =
-    _resultSerializationTime.setValue(v)
+    _resultSerializationTime.add(v)
   private[spark] def incMemoryBytesSpilled(v: Long): Unit = _memoryBytesSpilled.add(v)
   private[spark] def incDiskBytesSpilled(v: Long): Unit = _diskBytesSpilled.add(v)
   private[spark] def incPeakExecutionMemory(v: Long): Unit = _peakExecutionMemory.add(v)
   private[spark] def incUpdatedBlockStatuses(v: (BlockId, BlockStatus)): Unit =
     _updatedBlockStatuses.add(v)
-  private[spark] def setUpdatedBlockStatuses(v: Seq[(BlockId, BlockStatus)]): Unit =
-    _updatedBlockStatuses.setValue(v)
+  private[spark] def setUpdatedBlockStatuses(v: Seq[(BlockId, BlockStatus)]): Unit = {
+    v.foreach(incUpdatedBlockStatuses)
+  }
 
   /**
    * Metrics related to reading data from a [[org.apache.spark.rdd.HadoopRDD]] or from persisted
@@ -167,7 +168,7 @@ class TaskMetrics private[spark] () extends Serializable {
    */
   private[spark] def mergeShuffleReadMetrics(): Unit = synchronized {
     if (tempShuffleReadMetrics.nonEmpty) {
-      shuffleReadMetrics.setMergeValues(tempShuffleReadMetrics)
+      shuffleReadMetrics.mergeWithTempMetrics(tempShuffleReadMetrics)
     }
   }
 
@@ -261,7 +262,7 @@ private[spark] object TaskMetrics extends Logging {
         tm.setUpdatedBlockStatuses(value.asInstanceOf[Seq[(BlockId, BlockStatus)]])
       } else {
         tm.nameToAccums.get(name).foreach(
-          _.asInstanceOf[LongAccumulator].setValue(value.asInstanceOf[Long])
+          _.asInstanceOf[LongAccumulator].add(value.asInstanceOf[Long])
         )
       }
     }

@@ -282,8 +282,8 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
       taskMetrics.setExecutorRunTime(base + 4)
       taskMetrics.incDiskBytesSpilled(base + 5)
       taskMetrics.incMemoryBytesSpilled(base + 6)
-      inputMetrics.setBytesRead(base + 7)
-      outputMetrics.setBytesWritten(base + 8)
+      inputMetrics.incBytesRead(base + 7)
+      outputMetrics.incBytesWritten(base + 8)
       taskMetrics
     }
 

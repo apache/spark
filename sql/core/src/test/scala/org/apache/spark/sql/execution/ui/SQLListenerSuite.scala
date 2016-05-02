@@ -76,7 +76,7 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
     when(metrics.accumulators()).thenReturn(accumulatorUpdates.map { case (id, update) =>
       val acc = new LongAccumulator
       acc.metadata = AccumulatorMetadata(id, Some(""), true)
-      acc.setValue(update)
+      acc.add(update)
       acc
     }.toSeq)
     metrics

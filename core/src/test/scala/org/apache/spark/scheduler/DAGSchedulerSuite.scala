@@ -270,14 +270,16 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
       accumId: Long,
       taskSet: TaskSet,
       results: Seq[(TaskEndReason, Any)]) {
-    assert(taskSet.tasks.size >= results.size)
+    assert(taskSet.tasks.length >= results.size)
     for ((result, i) <- results.zipWithIndex) {
-      if (i < taskSet.tasks.size) {
+      if (i < taskSet.tasks.length) {
+        val acc = AccumulatorSuite.createLongAccum("", id = accumId)
+        acc.add(1)
         runEvent(makeCompletionEvent(
           taskSet.tasks(i),
           result._1,
           result._2,
-          Seq(AccumulatorSuite.createLongAccum("", initValue = 1, id = accumId))))
+          Seq(acc)))
       }
     }
   }
@@ -1632,13 +1634,13 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     assert(AccumulatorContext.get(acc3.id).isDefined)
     val accUpdate1 = new LongAccumulator
     accUpdate1.metadata = acc1.metadata
-    accUpdate1.setValue(15)
+    accUpdate1.add(15)
     val accUpdate2 = new LongAccumulator
     accUpdate2.metadata = acc2.metadata
-    accUpdate2.setValue(13)
+    accUpdate2.add(13)
     val accUpdate3 = new LongAccumulator
     accUpdate3.metadata = acc3.metadata
-    accUpdate3.setValue(18)
+    accUpdate3.add(18)
     val accumUpdates = Seq(accUpdate1, accUpdate2, accUpdate3)
     val accumInfo = accumUpdates.map(AccumulatorSuite.makeInfo)
     val exceptionFailure = new ExceptionFailure(

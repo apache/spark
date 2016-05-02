@@ -150,7 +150,7 @@ class NewHadoopRDD[K, V](
       // previous partitions (SPARK-13071).
       def updateBytesRead(): Unit = {
         getBytesReadCallback.foreach { getBytesRead =>
-          inputMetrics.setBytesRead(existingBytesRead + getBytesRead())
+          inputMetrics.incBytesRead(existingBytesRead + getBytesRead() - - inputMetrics.bytesRead)
         }
       }
 
@@ -170,7 +170,6 @@ class NewHadoopRDD[K, V](
       context.addTaskCompletionListener(context => close())
       var havePair = false
       var finished = false
-      var recordsSinceMetricsUpdate = 0
 
       override def hasNext: Boolean = {
         if (!finished && !havePair) {

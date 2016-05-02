@@ -152,8 +152,8 @@ private[spark] class DiskBlockObjectWriter(
     // truncating the file to its initial position.
     try {
       if (initialized) {
-        writeMetrics.decBytesWritten(reportedPosition - initialPosition)
-        writeMetrics.decRecordsWritten(numRecordsWritten)
+        writeMetrics.incBytesWritten(-(reportedPosition - initialPosition))
+        writeMetrics.incRecordsWritten(-numRecordsWritten)
         objOut.flush()
         bs.flush()
         close()

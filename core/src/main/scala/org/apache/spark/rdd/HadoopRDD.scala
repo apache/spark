@@ -236,7 +236,7 @@ class HadoopRDD[K, V](
       // previous partitions (SPARK-13071).
       def updateBytesRead(): Unit = {
         getBytesReadCallback.foreach { getBytesRead =>
-          inputMetrics.setBytesRead(existingBytesRead + getBytesRead())
+          inputMetrics.incBytesRead(existingBytesRead + getBytesRead() - inputMetrics.bytesRead)
         }
       }
 

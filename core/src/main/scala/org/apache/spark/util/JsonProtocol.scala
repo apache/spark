@@ -787,8 +787,8 @@ private[spark] object JsonProtocol {
     // Output metrics
     Utils.jsonOption(json \ "Output Metrics").foreach { outJson =>
       val outputMetrics = metrics.outputMetrics
-      outputMetrics.setBytesWritten((outJson \ "Bytes Written").extract[Long])
-      outputMetrics.setRecordsWritten((outJson \ "Records Written").extractOpt[Long].getOrElse(0L))
+      outputMetrics.incBytesWritten((outJson \ "Bytes Written").extract[Long])
+      outputMetrics.incRecordsWritten((outJson \ "Records Written").extractOpt[Long].getOrElse(0L))
     }
 
     // Input metrics

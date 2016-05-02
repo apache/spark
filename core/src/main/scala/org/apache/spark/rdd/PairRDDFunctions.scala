@@ -1114,8 +1114,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       }(finallyBlock = writer.close(hadoopContext))
       committer.commitTask(hadoopContext)
       outputMetricsAndBytesWrittenCallback.foreach { case (om, callback) =>
-        om.setBytesWritten(callback())
-        om.setRecordsWritten(recordsWritten)
+        om.incBytesWritten(callback() - om.bytesWritten)
+        om.incRecordsWritten(recordsWritten - om.recordsWritten)
       }
       1
     } : Int
@@ -1201,8 +1201,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       }(finallyBlock = writer.close())
       writer.commit()
       outputMetricsAndBytesWrittenCallback.foreach { case (om, callback) =>
-        om.setBytesWritten(callback())
-        om.setRecordsWritten(recordsWritten)
+        om.incBytesWritten(callback() - om.bytesWritten)
+        om.incRecordsWritten(recordsWritten - om.recordsWritten)
       }
     }
 
@@ -1227,8 +1227,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       recordsWritten: Long): Unit = {
     if (recordsWritten % PairRDDFunctions.RECORDS_BETWEEN_BYTES_WRITTEN_METRIC_UPDATES == 0) {
       outputMetricsAndBytesWrittenCallback.foreach { case (om, callback) =>
-        om.setBytesWritten(callback())
-        om.setRecordsWritten(recordsWritten)
+        om.incBytesWritten(callback() - om.bytesWritten)
+        om.incRecordsWritten(recordsWritten - om.recordsWritten)
       }
     }
   }
