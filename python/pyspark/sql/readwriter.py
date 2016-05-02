@@ -283,7 +283,7 @@ class DataFrameReader(object):
         This function goes through the input once to determine the input schema. To avoid going
         through the entire data once, specify the schema explicitly using [[schema]].
 
-        :param paths: string, or list of strings, for input path(s)
+        :param paths: string, or list of strings, for input path(s).
         :param schema: an optional :class:`StructType` for the input schema.
         :param sep: sets the single character as a separator for each field and value.
         :param encoding: decodes the CSV files by the given encoding type.
