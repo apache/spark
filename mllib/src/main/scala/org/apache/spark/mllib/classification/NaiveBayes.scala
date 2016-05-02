@@ -24,8 +24,9 @@ import scala.collection.JavaConverters._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.{Logging, SparkContext, SparkException}
+import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.annotation.Since
+import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.{BLAS, DenseMatrix, DenseVector, SparseVector, Vector}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.{Loader, Saveable}
@@ -325,6 +326,8 @@ class NaiveBayes private (
   /** Set the smoothing parameter. Default: 1.0. */
   @Since("0.9.0")
   def setLambda(lambda: Double): NaiveBayes = {
+    require(lambda >= 0,
+      s"Smoothing parameter must be nonnegative but got ${lambda}")
     this.lambda = lambda
     this
   }

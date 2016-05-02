@@ -24,8 +24,9 @@ import java.util.concurrent.RejectedExecutionException
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.{Logging, SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.internal.Logging
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.streaming.scheduler.JobGenerator
 import org.apache.spark.util.Utils
@@ -183,8 +184,7 @@ class CheckpointWriter(
   val executor = Executors.newFixedThreadPool(1)
   val compressionCodec = CompressionCodec.createCodec(conf)
   private var stopped = false
-  private var _fs: FileSystem = _
-
+  @volatile private[this] var fs: FileSystem = null
   @volatile private var latestCheckpointTime: Time = null
 
   class CheckpointWriteHandler(
@@ -194,6 +194,9 @@ class CheckpointWriter(
     def run() {
       if (latestCheckpointTime == null || latestCheckpointTime < checkpointTime) {
         latestCheckpointTime = checkpointTime
+      }
+      if (fs == null) {
+        fs = new Path(checkpointDir).getFileSystem(hadoopConf)
       }
       var attempts = 0
       val startTime = System.currentTimeMillis()
@@ -246,10 +249,10 @@ class CheckpointWriter(
           // Delete old checkpoint files
           val allCheckpointFiles = Checkpoint.getCheckpointFiles(checkpointDir, Some(fs))
           if (allCheckpointFiles.size > 10) {
-            allCheckpointFiles.take(allCheckpointFiles.size - 10).foreach(file => {
+            allCheckpointFiles.take(allCheckpointFiles.size - 10).foreach { file =>
               logInfo("Deleting " + file)
               fs.delete(file, true)
-            })
+            }
           }
 
           // All done, print success
@@ -262,7 +265,7 @@ class CheckpointWriter(
           case ioe: IOException =>
             logWarning("Error in attempt " + attempts + " of writing checkpoint to "
               + checkpointFile, ioe)
-            reset()
+            fs = null
         }
       }
       logWarning("Could not write checkpoint for time " + checkpointTime + " to file "
@@ -296,15 +299,6 @@ class CheckpointWriter(
       ", waited for " + (endTime - startTime) + " ms.")
     stopped = true
   }
-
-  private def fs = synchronized {
-    if (_fs == null) _fs = new Path(checkpointDir).getFileSystem(hadoopConf)
-    _fs
-  }
-
-  private def reset() = synchronized {
-    _fs = null
-  }
 }
 
 
@@ -333,8 +327,7 @@ object CheckpointReader extends Logging {
       ignoreReadError: Boolean = false): Option[Checkpoint] = {
     val checkpointPath = new Path(checkpointDir)
 
-    // TODO(rxin): Why is this a def?!
-    def fs: FileSystem = checkpointPath.getFileSystem(hadoopConf)
+    val fs = checkpointPath.getFileSystem(hadoopConf)
 
     // Try to find the checkpoint files
     val checkpointFiles = Checkpoint.getCheckpointFiles(checkpointDir, Some(fs)).reverse
@@ -345,7 +338,7 @@ object CheckpointReader extends Logging {
     // Try to read the checkpoint files in the order
     logInfo("Checkpoint files found: " + checkpointFiles.mkString(","))
     var readError: Exception = null
-    checkpointFiles.foreach(file => {
+    checkpointFiles.foreach { file =>
       logInfo("Attempting to load checkpoint from file " + file)
       try {
         val fis = fs.open(file)
@@ -358,7 +351,7 @@ object CheckpointReader extends Logging {
           readError = e
           logWarning("Error reading checkpoint from file " + file, e)
       }
-    })
+    }
 
     // If none of checkpoint files could be read, then throw exception
     if (!ignoreReadError) {

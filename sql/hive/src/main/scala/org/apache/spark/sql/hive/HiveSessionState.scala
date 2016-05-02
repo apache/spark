@@ -17,72 +17,77 @@
 
 package org.apache.spark.sql.hive
 
+import org.apache.hadoop.hive.conf.HiveConf.ConfVars
+
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry, OverrideCatalog}
-import org.apache.spark.sql.catalyst.parser.ParserInterface
-import org.apache.spark.sql.execution.{python, SparkPlanner}
+import org.apache.spark.sql.catalyst.analysis.Analyzer
+import org.apache.spark.sql.execution.SparkPlanner
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.internal.{SessionState, SQLConf}
+import org.apache.spark.sql.hive.client.HiveClient
+import org.apache.spark.sql.internal.SessionState
 
 
 /**
- * A class that holds all session-specific state in a given [[HiveContext]].
+ * A class that holds all session-specific state in a given [[SparkSession]] backed by Hive.
  */
-private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx) {
+private[hive] class HiveSessionState(sparkSession: SparkSession)
+  extends SessionState(sparkSession) {
 
-  override lazy val conf: SQLConf = new SQLConf {
-    override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
+  self =>
+
+  private lazy val sharedState: HiveSharedState = {
+    sparkSession.sharedState.asInstanceOf[HiveSharedState]
   }
 
   /**
-   * A metadata catalog that points to the Hive metastore.
+   * A Hive client used for interacting with the metastore.
    */
-  override lazy val catalog = new HiveMetastoreCatalog(ctx.metadataHive, ctx) with OverrideCatalog
+  lazy val metadataHive: HiveClient = sharedState.metadataHive.newSession()
 
   /**
-   * Internal catalog for managing functions registered by the user.
-   * Note that HiveUDFs will be overridden by functions registered in this context.
+   * Internal catalog for managing table and database states.
    */
-  override lazy val functionRegistry: FunctionRegistry = {
-    new HiveFunctionRegistry(FunctionRegistry.builtin.copy(), ctx.executionHive)
+  override lazy val catalog = {
+    new HiveSessionCatalog(
+      sharedState.externalCatalog,
+      metadataHive,
+      sparkSession,
+      functionResourceLoader,
+      functionRegistry,
+      conf,
+      newHadoopConf())
   }
 
   /**
    * An analyzer that uses the Hive metastore.
    */
   override lazy val analyzer: Analyzer = {
-    new Analyzer(catalog, functionRegistry, conf) {
+    new Analyzer(catalog, conf) {
       override val extendedResolutionRules =
         catalog.ParquetConversions ::
+        catalog.OrcConversions ::
         catalog.CreateTables ::
         catalog.PreInsertionCasts ::
-        python.ExtractPythonUDFs ::
         PreInsertCastAndRename ::
         DataSourceAnalysis ::
-        (if (conf.runSQLOnFile) new ResolveDataSource(ctx) :: Nil else Nil)
+        (if (conf.runSQLonFile) new ResolveDataSource(sparkSession) :: Nil else Nil)
 
-      override val extendedCheckRules = Seq(PreWriteCheck(catalog))
+      override val extendedCheckRules = Seq(PreWriteCheck(conf, catalog))
     }
   }
 
   /**
-   * Parser for HiveQl query texts.
-   */
-  override lazy val sqlParser: ParserInterface = new HiveQl(conf)
-
-  /**
    * Planner that takes into account Hive-specific strategies.
    */
-  override lazy val planner: SparkPlanner = {
-    new SparkPlanner(ctx.sparkContext, conf, experimentalMethods) with HiveStrategies {
-      override val hiveContext = ctx
+  override def planner: SparkPlanner = {
+    new SparkPlanner(sparkSession.sparkContext, conf, experimentalMethods.extraStrategies)
+      with HiveStrategies {
+      override val sparkSession: SparkSession = self.sparkSession
 
       override def strategies: Seq[Strategy] = {
         experimentalMethods.extraStrategies ++ Seq(
           FileSourceStrategy,
           DataSourceStrategy,
-          HiveCommandStrategy(ctx),
-          HiveDDLStrategy,
           DDLStrategy,
           SpecialLimits,
           InMemoryScans,
@@ -90,15 +95,78 @@ private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx)
           DataSinks,
           Scripts,
           Aggregation,
-          LeftSemiJoin,
-          EquiJoinSelection,
-          BasicOperators,
-          BroadcastNestedLoop,
-          CartesianProduct,
-          DefaultJoin
+          JoinSelection,
+          BasicOperators
         )
       }
     }
+  }
+
+
+  // ------------------------------------------------------
+  //  Helper methods, partially leftover from pre-2.0 days
+  // ------------------------------------------------------
+
+  override def addJar(path: String): Unit = {
+    metadataHive.addJar(path)
+    super.addJar(path)
+  }
+
+  /**
+   * When true, enables an experimental feature where metastore tables that use the parquet SerDe
+   * are automatically converted to use the Spark SQL parquet table scan, instead of the Hive
+   * SerDe.
+   */
+  def convertMetastoreParquet: Boolean = {
+    conf.getConf(HiveUtils.CONVERT_METASTORE_PARQUET)
+  }
+
+  /**
+   * When true, also tries to merge possibly different but compatible Parquet schemas in different
+   * Parquet data files.
+   *
+   * This configuration is only effective when "spark.sql.hive.convertMetastoreParquet" is true.
+   */
+  def convertMetastoreParquetWithSchemaMerging: Boolean = {
+    conf.getConf(HiveUtils.CONVERT_METASTORE_PARQUET_WITH_SCHEMA_MERGING)
+  }
+
+  /**
+   * When true, enables an experimental feature where metastore tables that use the Orc SerDe
+   * are automatically converted to use the Spark SQL ORC table scan, instead of the Hive
+   * SerDe.
+   */
+  def convertMetastoreOrc: Boolean = {
+    conf.getConf(HiveUtils.CONVERT_METASTORE_ORC)
+  }
+
+  /**
+   * When true, a table created by a Hive CTAS statement (no USING clause) will be
+   * converted to a data source table, using the data source set by spark.sql.sources.default.
+   * The table in CTAS statement will be converted when it meets any of the following conditions:
+   *   - The CTAS does not specify any of a SerDe (ROW FORMAT SERDE), a File Format (STORED AS), or
+   *     a Storage Hanlder (STORED BY), and the value of hive.default.fileformat in hive-site.xml
+   *     is either TextFile or SequenceFile.
+   *   - The CTAS statement specifies TextFile (STORED AS TEXTFILE) as the file format and no SerDe
+   *     is specified (no ROW FORMAT SERDE clause).
+   *   - The CTAS statement specifies SequenceFile (STORED AS SEQUENCEFILE) as the file format
+   *     and no SerDe is specified (no ROW FORMAT SERDE clause).
+   */
+  def convertCTAS: Boolean = {
+    conf.getConf(HiveUtils.CONVERT_CTAS)
+  }
+
+  /**
+   * When true, Hive Thrift server will execute SQL queries asynchronously using a thread pool."
+   */
+  def hiveThriftServerAsync: Boolean = {
+    conf.getConf(HiveUtils.HIVE_THRIFT_SERVER_ASYNC)
+  }
+
+  // TODO: why do we get this from SparkConf but not SQLConf?
+  def hiveThriftServerSingleSession: Boolean = {
+    sparkSession.sparkContext.conf.getBoolean(
+      "spark.sql.hive.thriftServer.singleSession", defaultValue = false)
   }
 
 }

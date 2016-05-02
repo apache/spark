@@ -38,7 +38,11 @@ class ApplicationAttemptInfo private[spark](
     val lastUpdated: Date,
     val duration: Long,
     val sparkUser: String,
-    val completed: Boolean = false)
+    val completed: Boolean = false) {
+    def getStartTimeEpoch: Long = startTime.getTime
+    def getEndTimeEpoch: Long = endTime.getTime
+    def getLastUpdatedEpoch: Long = lastUpdated.getTime
+}
 
 class ExecutorStageSummary private[spark](
     val taskTime : Long,
@@ -168,10 +172,10 @@ class TaskMetrics private[spark](
     val resultSerializationTime: Long,
     val memoryBytesSpilled: Long,
     val diskBytesSpilled: Long,
-    val inputMetrics: Option[InputMetrics],
-    val outputMetrics: Option[OutputMetrics],
-    val shuffleReadMetrics: Option[ShuffleReadMetrics],
-    val shuffleWriteMetrics: Option[ShuffleWriteMetrics])
+    val inputMetrics: InputMetrics,
+    val outputMetrics: OutputMetrics,
+    val shuffleReadMetrics: ShuffleReadMetrics,
+    val shuffleWriteMetrics: ShuffleWriteMetrics)
 
 class InputMetrics private[spark](
     val bytesRead: Long,
@@ -182,11 +186,11 @@ class OutputMetrics private[spark](
     val recordsWritten: Long)
 
 class ShuffleReadMetrics private[spark](
-    val remoteBlocksFetched: Int,
-    val localBlocksFetched: Int,
+    val remoteBlocksFetched: Long,
+    val localBlocksFetched: Long,
     val fetchWaitTime: Long,
     val remoteBytesRead: Long,
-    val totalBlocksFetched: Int,
+    val localBytesRead: Long,
     val recordsRead: Long)
 
 class ShuffleWriteMetrics private[spark](
@@ -205,10 +209,10 @@ class TaskMetricDistributions private[spark](
     val memoryBytesSpilled: IndexedSeq[Double],
     val diskBytesSpilled: IndexedSeq[Double],
 
-    val inputMetrics: Option[InputMetricDistributions],
-    val outputMetrics: Option[OutputMetricDistributions],
-    val shuffleReadMetrics: Option[ShuffleReadMetricDistributions],
-    val shuffleWriteMetrics: Option[ShuffleWriteMetricDistributions])
+    val inputMetrics: InputMetricDistributions,
+    val outputMetrics: OutputMetricDistributions,
+    val shuffleReadMetrics: ShuffleReadMetricDistributions,
+    val shuffleWriteMetrics: ShuffleWriteMetricDistributions)
 
 class InputMetricDistributions private[spark](
     val bytesRead: IndexedSeq[Double],
@@ -237,3 +241,6 @@ class AccumulableInfo private[spark](
     val name: String,
     val update: Option[String],
     val value: String)
+
+class VersionInfo private[spark](
+  val spark: String)

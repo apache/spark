@@ -60,7 +60,7 @@ class DataFrame(object):
         people = sqlContext.read.parquet("...")
         department = sqlContext.read.parquet("...")
 
-        people.filter(people.age > 30).join(department, people.deptId == department.id)) \
+        people.filter(people.age > 30).join(department, people.deptId == department.id)\
           .groupBy(department.name, "gender").agg({"salary": "avg", "age": "max"})
 
     .. note:: Experimental
@@ -197,6 +197,18 @@ class DataFrame(object):
         """
         return self._jdf.isLocal()
 
+    @property
+    @since(2.0)
+    def isStreaming(self):
+        """Returns true if this :class:`Dataset` contains one or more sources that continuously
+        return data as it arrives. A :class:`Dataset` that reads data from a streaming source
+        must be executed as a :class:`ContinuousQuery` using the :func:`startStream` method in
+        :class:`DataFrameWriter`.  Methods that return a single answer, (e.g., :func:`count` or
+        :func:`collect`) will throw an :class:`AnalysisException` when there is a streaming
+        source present.
+        """
+        return self._jdf.isStreaming()
+
     @since(1.3)
     def show(self, n=20, truncate=True):
         """Prints the first ``n`` rows to the console.
@@ -239,6 +251,20 @@ class DataFrame(object):
         with SCCallSiteSync(self._sc) as css:
             port = self._jdf.collectToPython()
         return list(_load_from_socket(port, BatchedSerializer(PickleSerializer())))
+
+    @ignore_unicode_prefix
+    @since(2.0)
+    def toLocalIterator(self):
+        """
+        Returns an iterator that contains all of the rows in this :class:`DataFrame`.
+        The iterator will consume as much memory as the largest partition in this DataFrame.
+
+        >>> list(df.toLocalIterator())
+        [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
+        """
+        with SCCallSiteSync(self._sc) as css:
+            port = self._jdf.toPythonIterator()
+        return _load_from_socket(port, BatchedSerializer(PickleSerializer()))
 
     @ignore_unicode_prefix
     @since(1.3)
@@ -312,9 +338,11 @@ class DataFrame(object):
         return self
 
     @since(1.3)
-    def unpersist(self, blocking=True):
+    def unpersist(self, blocking=False):
         """Marks the :class:`DataFrame` as non-persistent, and remove all blocks for it from
         memory and disk.
+
+        .. note:: `blocking` default has changed to False to match Scala in 2.0.
         """
         self.is_cached = False
         self._jdf.unpersist(blocking)
@@ -360,7 +388,7 @@ class DataFrame(object):
 
         >>> df.repartition(10).rdd.getNumPartitions()
         10
-        >>> data = df.unionAll(df).repartition("age")
+        >>> data = df.union(df).repartition("age")
         >>> data.show()
         +---+-----+
         |age| name|
@@ -911,14 +939,24 @@ class DataFrame(object):
         """
         return self.groupBy().agg(*exprs)
 
+    @since(2.0)
+    def union(self, other):
+        """ Return a new :class:`DataFrame` containing union of rows in this
+        frame and another frame.
+
+        This is equivalent to `UNION ALL` in SQL. To do a SQL-style set union
+        (that does deduplication of elements), use this function followed by a distinct.
+        """
+        return DataFrame(self._jdf.union(other._jdf), self.sql_ctx)
+
     @since(1.3)
     def unionAll(self, other):
         """ Return a new :class:`DataFrame` containing union of rows in this
         frame and another frame.
 
-        This is equivalent to `UNION ALL` in SQL.
+        .. note:: Deprecated in 2.0, use union instead.
         """
-        return DataFrame(self._jdf.unionAll(other._jdf), self.sql_ctx)
+        return self.union(other)
 
     @since(1.3)
     def intersect(self, other):

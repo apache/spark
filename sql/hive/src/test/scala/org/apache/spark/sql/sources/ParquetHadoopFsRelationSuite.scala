@@ -126,18 +126,18 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
   test("SPARK-8604: Parquet data source should write summary file while doing appending") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
-      val df = sqlContext.range(0, 5)
+      val df = sqlContext.range(0, 5).toDF()
       df.write.mode(SaveMode.Overwrite).parquet(path)
 
       val summaryPath = new Path(path, "_metadata")
       val commonSummaryPath = new Path(path, "_common_metadata")
 
-      val fs = summaryPath.getFileSystem(hadoopConfiguration)
+      val fs = summaryPath.getFileSystem(sqlContext.sessionState.newHadoopConf())
       fs.delete(summaryPath, true)
       fs.delete(commonSummaryPath, true)
 
       df.write.mode(SaveMode.Append).parquet(path)
-      checkAnswer(sqlContext.read.parquet(path), df.unionAll(df))
+      checkAnswer(sqlContext.read.parquet(path), df.union(df))
 
       assert(fs.exists(summaryPath))
       assert(fs.exists(commonSummaryPath))
@@ -152,8 +152,8 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
       val df = sqlContext.read.parquet(path).filter('a === 0).select('b)
       val physicalPlan = df.queryExecution.sparkPlan
 
-      assert(physicalPlan.collect { case p: execution.Project => p }.length === 1)
-      assert(physicalPlan.collect { case p: execution.Filter => p }.length === 1)
+      assert(physicalPlan.collect { case p: execution.ProjectExec => p }.length === 1)
+      assert(physicalPlan.collect { case p: execution.FilterExec => p }.length === 1)
     }
   }
 

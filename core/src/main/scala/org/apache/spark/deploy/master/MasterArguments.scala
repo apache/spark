@@ -78,7 +78,7 @@ private[master] class MasterArguments(args: Array[String], conf: SparkConf) {
     case ("--help") :: tail =>
       printUsageAndExit(0)
 
-    case Nil => {}
+    case Nil => // No-op
 
     case _ =>
       printUsageAndExit(1)

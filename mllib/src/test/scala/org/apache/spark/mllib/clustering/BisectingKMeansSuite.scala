@@ -21,6 +21,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.util.Utils
 
 class BisectingKMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
 
@@ -177,6 +178,23 @@ class BisectingKMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
         assert(node.size === 4)
         assert(node.center ~== Vectors.dense(10, -10) relTol 1e-12)
       }
+    }
+  }
+
+  test("BisectingKMeans model save/load") {
+    val tempDir = Utils.createTempDir()
+    val path = tempDir.toURI.toString
+
+    val points = (1 until 8).map(i => Vectors.dense(i))
+    val data = sc.parallelize(points, 2)
+    val model = new BisectingKMeans().run(data)
+    try {
+      model.save(sc, path)
+      val sameModel = BisectingKMeansModel.load(sc, path)
+      assert(model.k === sameModel.k)
+      model.clusterCenters.zip(sameModel.clusterCenters).foreach(c => c._1 === c._2)
+    } finally {
+      Utils.deleteRecursively(tempDir)
     }
   }
 }

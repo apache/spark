@@ -22,7 +22,7 @@ import java.net.Socket
 
 import py4j.GatewayServer
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
 /**
@@ -32,6 +32,8 @@ import org.apache.spark.util.Utils
  * This process is launched (via SparkSubmit) by the PySpark driver (see java_gateway.py).
  */
 private[spark] object PythonGatewayServer extends Logging {
+  initializeLogIfNecessary(true)
+
   def main(args: Array[String]): Unit = Utils.tryOrExit {
     // Start a GatewayServer on an ephemeral port
     val gatewayServer: GatewayServer = new GatewayServer(null, 0)

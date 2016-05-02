@@ -33,7 +33,7 @@ import com.amazonaws.services.dynamodbv2.document.DynamoDB
 import com.amazonaws.services.kinesis.AmazonKinesisClient
 import com.amazonaws.services.kinesis.model._
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 
 /**
  * Shared utility methods for performing Kinesis tests that actually transfer data.

@@ -20,6 +20,8 @@ package org.apache.spark
 // scalastyle:off
 import org.scalatest.{BeforeAndAfterAll, FunSuite, Outcome}
 
+import org.apache.spark.internal.Logging
+
 /**
  * Base abstract class for all unit tests in Spark for handling common functionality.
  */
@@ -32,7 +34,7 @@ private[spark] abstract class SparkFunSuite
   protected override def afterAll(): Unit = {
     try {
       // Avoid leaking map entries in tests that use accumulators without SparkContext
-      Accumulators.clear()
+      AccumulatorContext.clear()
     } finally {
       super.afterAll()
     }

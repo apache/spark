@@ -19,10 +19,10 @@ package org.apache.spark.mllib.fpm
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
-import org.apache.spark.Logging
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
+import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.fpm.AssociationRules.Rule
 import org.apache.spark.mllib.fpm.FPGrowth.FreqItemset
 import org.apache.spark.rdd.RDD
@@ -50,7 +50,8 @@ class AssociationRules private[fpm] (
    */
   @Since("1.5.0")
   def setMinConfidence(minConfidence: Double): this.type = {
-    require(minConfidence >= 0.0 && minConfidence <= 1.0)
+    require(minConfidence >= 0.0 && minConfidence <= 1.0,
+      s"Minimal confidence must be in range [0, 1] but got ${minConfidence}")
     this.minConfidence = minConfidence
     this
   }

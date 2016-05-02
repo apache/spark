@@ -33,7 +33,7 @@ public class ExecutorShuffleInfo implements Encodable {
   public final String[] localDirs;
   /** Number of subdirectories created within each localDir. */
   public final int subDirsPerLocalDir;
-  /** Shuffle manager (SortShuffleManager or HashShuffleManager) that the executor is using. */
+  /** Shuffle manager (SortShuffleManager) that the executor is using. */
   public final String shuffleManager;
 
   @JsonCreator

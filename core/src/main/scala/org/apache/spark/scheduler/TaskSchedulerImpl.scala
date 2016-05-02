@@ -30,6 +30,7 @@ import scala.util.Random
 
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
+import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.scheduler.TaskLocality.TaskLocality
 import org.apache.spark.storage.BlockManagerId
@@ -89,6 +90,8 @@ private[spark] class TaskSchedulerImpl(
   // Number of tasks running on each executor
   private val executorIdToTaskCount = new HashMap[String, Int]
 
+  def runningTasksByExecutors(): Map[String, Int] = executorIdToTaskCount.toMap
+
   // The set of executors we have on each host; this is used to compute hostsAlive, which
   // in turn is used to decide when we can attain data locality on a given host
   protected val executorsByHost = new HashMap[String, HashSet[String]]
@@ -132,6 +135,8 @@ private[spark] class TaskSchedulerImpl(
           new FIFOSchedulableBuilder(rootPool)
         case SchedulingMode.FAIR =>
           new FairSchedulableBuilder(rootPool, conf)
+        case _ =>
+          throw new IllegalArgumentException(s"Unsupported spark.scheduler.mode: $schedulingMode")
       }
     }
     schedulableBuilder.buildPools()
@@ -379,13 +384,19 @@ private[spark] class TaskSchedulerImpl(
    */
   override def executorHeartbeatReceived(
       execId: String,
-      accumUpdates: Array[(Long, Seq[AccumulableInfo])],
+      accumUpdates: Array[(Long, Seq[NewAccumulator[_, _]])],
       blockManagerId: BlockManagerId): Boolean = {
     // (taskId, stageId, stageAttemptId, accumUpdates)
     val accumUpdatesWithTaskIds: Array[(Long, Int, Int, Seq[AccumulableInfo])] = synchronized {
       accumUpdates.flatMap { case (id, updates) =>
+        // We should call `acc.value` here as we are at driver side now.  However, the RPC framework
+        // optimizes local message delivery so that messages do not need to de serialized and
+        // deserialized.  This brings trouble to the accumulator framework, which depends on
+        // serialization to set the `atDriverSide` flag.  Here we call `acc.localValue` instead to
+        // be more robust about this issue.
+        val accInfos = updates.map(acc => acc.toInfo(Some(acc.localValue), None))
         taskIdToTaskSetManager.get(id).map { taskSetMgr =>
-          (id, taskSetMgr.stageId, taskSetMgr.taskSet.stageAttemptId, updates)
+          (id, taskSetMgr.stageId, taskSetMgr.taskSet.stageAttemptId, accInfos)
         }
       }
     }
@@ -568,6 +579,11 @@ private[spark] class TaskSchedulerImpl(
       return
     }
     while (!backend.isReady) {
+      // Might take a while for backend to be ready if it is waiting on resources.
+      if (sc.stopped.get) {
+        // For example: the master removes the application for some reason
+        throw new IllegalStateException("Spark context stopped while waiting for backend")
+      }
       synchronized {
         this.wait(100)
       }

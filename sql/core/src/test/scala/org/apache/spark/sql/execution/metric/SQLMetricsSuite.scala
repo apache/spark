@@ -37,8 +37,8 @@ import org.apache.spark.util.{JsonProtocol, Utils}
 class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
   import testImplicits._
 
-  test("LongSQLMetric should not box Long") {
-    val l = SQLMetrics.createLongMetric(sparkContext, "long")
+  test("SQLMetric should not box Long") {
+    val l = SQLMetrics.createMetric(sparkContext, "long")
     val f = () => {
       l += 1L
       l.add(1L)
@@ -128,8 +128,8 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     // Assume the execution plan is
     // WholeStageCodegen(nodeId = 0, Range(nodeId = 2) -> Filter(nodeId = 1))
     // TODO: update metrics in generated operators
-    val df = sqlContext.range(10).filter('id < 5)
-    testSparkPlanMetrics(df, 1, Map.empty)
+    val ds = sqlContext.range(10).filter('id < 5)
+    testSparkPlanMetrics(ds.toDF(), 1, Map.empty)
   }
 
   test("TungstenAggregate metrics") {
@@ -157,8 +157,8 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
   test("Sort metrics") {
     // Assume the execution plan is
     // WholeStageCodegen(nodeId = 0, Range(nodeId = 2) -> Sort(nodeId = 1))
-    val df = sqlContext.range(10).sort('id)
-    testSparkPlanMetrics(df, 2, Map.empty)
+    val ds = sqlContext.range(10).sort('id)
+    testSparkPlanMetrics(ds.toDF(), 2, Map.empty)
   }
 
   test("SortMergeJoin metrics") {
@@ -255,36 +255,10 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
     val df2 = Seq((1, "1"), (2, "2"), (3, "3"), (4, "4")).toDF("key2", "value")
     // Assume the execution plan is
-    // ... -> BroadcastLeftSemiJoinHash(nodeId = 0)
+    // ... -> BroadcastHashJoin(nodeId = 0)
     val df = df1.join(broadcast(df2), $"key" === $"key2", "leftsemi")
     testSparkPlanMetrics(df, 2, Map(
-      0L -> ("BroadcastLeftSemiJoinHash", Map(
-        "number of output rows" -> 2L)))
-    )
-  }
-
-  test("LeftSemiJoinHash metrics") {
-    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
-      val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
-      val df2 = Seq((1, "1"), (2, "2"), (3, "3"), (4, "4")).toDF("key2", "value")
-      // Assume the execution plan is
-      // ... -> LeftSemiJoinHash(nodeId = 0)
-      val df = df1.join(df2, $"key" === $"key2", "leftsemi")
-      testSparkPlanMetrics(df, 1, Map(
-        0L -> ("LeftSemiJoinHash", Map(
-          "number of output rows" -> 2L)))
-      )
-    }
-  }
-
-  test("LeftSemiJoinBNL metrics") {
-    val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
-    val df2 = Seq((1, "1"), (2, "2"), (3, "3"), (4, "4")).toDF("key2", "value")
-    // Assume the execution plan is
-    // ... -> LeftSemiJoinBNL(nodeId = 0)
-    val df = df1.join(df2, $"key" < $"key2", "leftsemi")
-    testSparkPlanMetrics(df, 2, Map(
-      0L -> ("LeftSemiJoinBNL", Map(
+      0L -> ("BroadcastHashJoin", Map(
         "number of output rows" -> 2L)))
     )
   }
@@ -321,17 +295,17 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       val metricValues = sqlContext.listener.getExecutionMetrics(executionId)
       // Because "save" will create a new DataFrame internally, we cannot get the real metric id.
       // However, we still can check the value.
-      assert(metricValues.values.toSeq === Seq("2"))
+      assert(metricValues.values.toSeq.exists(_ === "2"))
     }
   }
 
   test("metrics can be loaded by history server") {
-    val metric = new LongSQLMetric("zanzibar", LongSQLMetricParam)
+    val metric = SQLMetrics.createMetric(sparkContext, "zanzibar")
     metric += 10L
     val metricInfo = metric.toInfo(Some(metric.localValue), None)
     metricInfo.update match {
-      case Some(v: LongSQLMetricValue) => assert(v.value === 10L)
-      case Some(v) => fail(s"metric value was not a LongSQLMetricValue: ${v.getClass.getName}")
+      case Some(v: Long) => assert(v === 10L)
+      case Some(v) => fail(s"metric value was not a Long: ${v.getClass.getName}")
       case _ => fail("metric update is missing")
     }
     assert(metricInfo.metadata === Some(SQLMetrics.ACCUM_IDENTIFIER))

@@ -37,9 +37,9 @@ import org.apache.hadoop.hive.ql.processors.{AddResourceProcessor, CommandProces
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.thrift.transport.TSocket
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.util.ShutdownHookManager
 
 /**
@@ -82,7 +82,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 
     val cliConf = new HiveConf(classOf[SessionState])
     // Override the location of the metastore since this is only used for local execution.
-    HiveContext.newTemporaryConfiguration(useInMemoryDerby = false).foreach {
+    HiveUtils.newTemporaryConfiguration(useInMemoryDerby = false).foreach {
       case (key, value) => cliConf.set(key, value)
     }
     val sessionState = new CliSessionState(cliConf)
@@ -150,7 +150,8 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     }
 
     if (sessionState.database != null) {
-      SparkSQLEnv.hiveContext.runSqlHive(s"USE ${sessionState.database}")
+      SparkSQLEnv.sqlContext.sessionState.catalog.setCurrentDatabase(
+        s"${sessionState.database}")
     }
 
     // Execute -i init files (always in silent mode)

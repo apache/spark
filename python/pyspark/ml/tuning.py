@@ -18,12 +18,14 @@
 import itertools
 import numpy as np
 
-from pyspark import since
+from pyspark import SparkContext
+from pyspark import since, keyword_only
 from pyspark.ml import Estimator, Model
-from pyspark.ml.param import Params, Param
+from pyspark.ml.param import Params, Param, TypeConverters
 from pyspark.ml.param.shared import HasSeed
-from pyspark.ml.util import keyword_only
+from pyspark.ml.wrapper import JavaParams
 from pyspark.sql.functions import rand
+from pyspark.mllib.common import inherit_doc, _py2java
 
 __all__ = ['ParamGridBuilder', 'CrossValidator', 'CrossValidatorModel', 'TrainValidationSplit',
            'TrainValidationSplitModel']
@@ -91,7 +93,55 @@ class ParamGridBuilder(object):
         return [dict(zip(keys, prod)) for prod in itertools.product(*grid_values)]
 
 
-class CrossValidator(Estimator, HasSeed):
+class ValidatorParams(HasSeed):
+    """
+    Common params for TrainValidationSplit and CrossValidator.
+    """
+
+    estimator = Param(Params._dummy(), "estimator", "estimator to be cross-validated")
+    estimatorParamMaps = Param(Params._dummy(), "estimatorParamMaps", "estimator param maps")
+    evaluator = Param(
+        Params._dummy(), "evaluator",
+        "evaluator used to select hyper-parameters that maximize the validator metric")
+
+    def setEstimator(self, value):
+        """
+        Sets the value of :py:attr:`estimator`.
+        """
+        return self._set(estimator=value)
+
+    def getEstimator(self):
+        """
+        Gets the value of estimator or its default value.
+        """
+        return self.getOrDefault(self.estimator)
+
+    def setEstimatorParamMaps(self, value):
+        """
+        Sets the value of :py:attr:`estimatorParamMaps`.
+        """
+        return self._set(estimatorParamMaps=value)
+
+    def getEstimatorParamMaps(self):
+        """
+        Gets the value of estimatorParamMaps or its default value.
+        """
+        return self.getOrDefault(self.estimatorParamMaps)
+
+    def setEvaluator(self, value):
+        """
+        Sets the value of :py:attr:`evaluator`.
+        """
+        return self._set(evaluator=value)
+
+    def getEvaluator(self):
+        """
+        Gets the value of evaluator or its default value.
+        """
+        return self.getOrDefault(self.evaluator)
+
+
+class CrossValidator(Estimator, ValidatorParams):
     """
     K-fold cross validation.
 
@@ -116,12 +166,8 @@ class CrossValidator(Estimator, HasSeed):
     .. versionadded:: 1.4.0
     """
 
-    estimator = Param(Params._dummy(), "estimator", "estimator to be cross-validated")
-    estimatorParamMaps = Param(Params._dummy(), "estimatorParamMaps", "estimator param maps")
-    evaluator = Param(
-        Params._dummy(), "evaluator",
-        "evaluator used to select hyper-parameters that maximize the cross-validated metric")
-    numFolds = Param(Params._dummy(), "numFolds", "number of folds for cross validation")
+    numFolds = Param(Params._dummy(), "numFolds", "number of folds for cross validation",
+                     typeConverter=TypeConverters.toInt)
 
     @keyword_only
     def __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,
@@ -148,56 +194,11 @@ class CrossValidator(Estimator, HasSeed):
         return self._set(**kwargs)
 
     @since("1.4.0")
-    def setEstimator(self, value):
-        """
-        Sets the value of :py:attr:`estimator`.
-        """
-        self._paramMap[self.estimator] = value
-        return self
-
-    @since("1.4.0")
-    def getEstimator(self):
-        """
-        Gets the value of estimator or its default value.
-        """
-        return self.getOrDefault(self.estimator)
-
-    @since("1.4.0")
-    def setEstimatorParamMaps(self, value):
-        """
-        Sets the value of :py:attr:`estimatorParamMaps`.
-        """
-        self._paramMap[self.estimatorParamMaps] = value
-        return self
-
-    @since("1.4.0")
-    def getEstimatorParamMaps(self):
-        """
-        Gets the value of estimatorParamMaps or its default value.
-        """
-        return self.getOrDefault(self.estimatorParamMaps)
-
-    @since("1.4.0")
-    def setEvaluator(self, value):
-        """
-        Sets the value of :py:attr:`evaluator`.
-        """
-        self._paramMap[self.evaluator] = value
-        return self
-
-    @since("1.4.0")
-    def getEvaluator(self):
-        """
-        Gets the value of evaluator or its default value.
-        """
-        return self.getOrDefault(self.evaluator)
-
-    @since("1.4.0")
     def setNumFolds(self, value):
         """
         Sets the value of :py:attr:`numFolds`.
         """
-        self._paramMap[self.numFolds] = value
+        self._set(numFolds=value)
         return self
 
     @since("1.4.0")
@@ -217,7 +218,7 @@ class CrossValidator(Estimator, HasSeed):
         h = 1.0 / nFolds
         randCol = self.uid + "_rand"
         df = dataset.select("*", rand(seed).alias(randCol))
-        metrics = np.zeros(numModels)
+        metrics = [0.0] * numModels
         for i in range(nFolds):
             validateLB = i * h
             validateUB = (i + 1) * h
@@ -235,7 +236,7 @@ class CrossValidator(Estimator, HasSeed):
         else:
             bestIndex = np.argmin(metrics)
         bestModel = est.fit(dataset, epm[bestIndex])
-        return CrossValidatorModel(bestModel)
+        return self._copyValues(CrossValidatorModel(bestModel, metrics))
 
     @since("1.4.0")
     def copy(self, extra=None):
@@ -258,17 +259,18 @@ class CrossValidator(Estimator, HasSeed):
         return newCV
 
 
-class CrossValidatorModel(Model):
+class CrossValidatorModel(Model, ValidatorParams):
     """
     Model from k-fold cross validation.
 
     .. versionadded:: 1.4.0
     """
 
-    def __init__(self, bestModel):
+    def __init__(self, bestModel, avgMetrics=[]):
         super(CrossValidatorModel, self).__init__()
         #: best model from cross validation
         self.bestModel = bestModel
+        self.avgMetrics = avgMetrics
 
     def _transform(self, dataset):
         return self.bestModel.transform(dataset)
@@ -286,10 +288,12 @@ class CrossValidatorModel(Model):
         """
         if extra is None:
             extra = dict()
-        return CrossValidatorModel(self.bestModel.copy(extra))
+        bestModel = self.bestModel.copy(extra)
+        avgMetrics = self.avgMetrics
+        return CrossValidatorModel(bestModel, avgMetrics)
 
 
-class TrainValidationSplit(Estimator, HasSeed):
+class TrainValidationSplit(Estimator, ValidatorParams):
     """
     Train-Validation-Split.
 
@@ -314,13 +318,8 @@ class TrainValidationSplit(Estimator, HasSeed):
     .. versionadded:: 2.0.0
     """
 
-    estimator = Param(Params._dummy(), "estimator", "estimator to be tested")
-    estimatorParamMaps = Param(Params._dummy(), "estimatorParamMaps", "estimator param maps")
-    evaluator = Param(
-        Params._dummy(), "evaluator",
-        "evaluator used to select hyper-parameters that maximize the validated metric")
     trainRatio = Param(Params._dummy(), "trainRatio", "Param for ratio between train and\
-     validation data. Must be between 0 and 1.")
+     validation data. Must be between 0 and 1.", typeConverter=TypeConverters.toFloat)
 
     @keyword_only
     def __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, trainRatio=0.75,
@@ -347,56 +346,11 @@ class TrainValidationSplit(Estimator, HasSeed):
         return self._set(**kwargs)
 
     @since("2.0.0")
-    def setEstimator(self, value):
-        """
-        Sets the value of :py:attr:`estimator`.
-        """
-        self._paramMap[self.estimator] = value
-        return self
-
-    @since("2.0.0")
-    def getEstimator(self):
-        """
-        Gets the value of estimator or its default value.
-        """
-        return self.getOrDefault(self.estimator)
-
-    @since("2.0.0")
-    def setEstimatorParamMaps(self, value):
-        """
-        Sets the value of :py:attr:`estimatorParamMaps`.
-        """
-        self._paramMap[self.estimatorParamMaps] = value
-        return self
-
-    @since("2.0.0")
-    def getEstimatorParamMaps(self):
-        """
-        Gets the value of estimatorParamMaps or its default value.
-        """
-        return self.getOrDefault(self.estimatorParamMaps)
-
-    @since("2.0.0")
-    def setEvaluator(self, value):
-        """
-        Sets the value of :py:attr:`evaluator`.
-        """
-        self._paramMap[self.evaluator] = value
-        return self
-
-    @since("2.0.0")
-    def getEvaluator(self):
-        """
-        Gets the value of evaluator or its default value.
-        """
-        return self.getOrDefault(self.evaluator)
-
-    @since("2.0.0")
     def setTrainRatio(self, value):
         """
         Sets the value of :py:attr:`trainRatio`.
         """
-        self._paramMap[self.trainRatio] = value
+        self._set(trainRatio=value)
         return self
 
     @since("2.0.0")
@@ -428,7 +382,7 @@ class TrainValidationSplit(Estimator, HasSeed):
         else:
             bestIndex = np.argmin(metrics)
         bestModel = est.fit(dataset, epm[bestIndex])
-        return TrainValidationSplitModel(bestModel)
+        return self._copyValues(TrainValidationSplitModel(bestModel))
 
     @since("2.0.0")
     def copy(self, extra=None):
@@ -451,9 +405,11 @@ class TrainValidationSplit(Estimator, HasSeed):
         return newTVS
 
 
-class TrainValidationSplitModel(Model):
+class TrainValidationSplitModel(Model, ValidatorParams):
     """
     Model from train validation split.
+
+    .. versionadded:: 2.0.0
     """
 
     def __init__(self, bestModel):
@@ -479,19 +435,21 @@ class TrainValidationSplitModel(Model):
             extra = dict()
         return TrainValidationSplitModel(self.bestModel.copy(extra))
 
+
 if __name__ == "__main__":
     import doctest
+
     from pyspark.context import SparkContext
     from pyspark.sql import SQLContext
     globs = globals().copy()
+
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:
     sc = SparkContext("local[2]", "ml.tuning tests")
     sqlContext = SQLContext(sc)
     globs['sc'] = sc
     globs['sqlContext'] = sqlContext
-    (failure_count, test_count) = doctest.testmod(
-        globs=globs, optionflags=doctest.ELLIPSIS)
+    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     sc.stop()
     if failure_count:
         exit(-1)
