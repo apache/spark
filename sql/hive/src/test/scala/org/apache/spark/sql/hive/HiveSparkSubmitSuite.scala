@@ -291,7 +291,7 @@ object SetWarehouseLocationTest extends Logging {
     conf.set("hive.metastore.warehouse.dir", hiveWarehouseLocation.toString)
 
     val sc = new SparkContext(conf)
-    val sparkSession = SparkSession.withHiveSupport(sc)
+    val sparkSession = SparkSession.builder.enableHiveSupport().getOrCreate()
     val catalog = sparkSession.sessionState.catalog
 
     sparkSession.sql("drop table if exists testLocation")

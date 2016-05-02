@@ -34,7 +34,7 @@ object Main {
     // scalastyle:off println
     println("Running regression test for SPARK-8489.")
     val sc = new SparkContext("local", "testing")
-    val sparkSession = SparkSession.withHiveSupport(sc)
+    val sparkSession = SparkSession.builder.enableHiveSupport().getOrCreate()
     // This line should not throw scala.reflect.internal.MissingRequirementError.
     // See SPARK-8470 for more detail.
     val df = sparkSession.createDataFrame(Seq(MyCoolClass("1", "2", "3")))

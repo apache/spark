@@ -1023,7 +1023,7 @@ class SparkILoop(
     val builder = SparkSession.builder.config(conf)
     val sparkSession = if (SparkSession.hiveClassesArePresent) {
       logInfo("Creating Spark session with Hive support")
-      builder.enableHiveSupport().getOrCreate()
+      SparkSession.builder.enableHiveSupport().getOrCreate()
     } else {
       logInfo("Creating Spark session")
       builder.getOrCreate()
