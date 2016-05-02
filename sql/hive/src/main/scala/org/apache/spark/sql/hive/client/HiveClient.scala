@@ -21,6 +21,7 @@ import java.io.PrintStream
 
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Expression
 
 
@@ -53,9 +54,6 @@ private[hive] trait HiveClient {
   /** Returns the names of tables in the given database that matches the given pattern. */
   def listTables(dbName: String, pattern: String): Seq[String]
 
-  /** Returns the name of the active database. */
-  def currentDatabase: String
-
   /** Sets the name of current database. */
   def setCurrentDatabase(databaseName: String): Unit
 
@@ -78,12 +76,6 @@ private[hive] trait HiveClient {
   /** Returns the metadata for the specified table or None if it doesn't exist. */
   def getTableOption(dbName: String, tableName: String): Option[CatalogTable]
 
-  /** Creates a view with the given metadata. */
-  def createView(view: CatalogTable): Unit
-
-  /** Updates the given view with new metadata. */
-  def alertView(view: CatalogTable): Unit
-
   /** Creates a table with the given metadata. */
   def createTable(table: CatalogTable, ignoreIfExists: Boolean): Unit
 
@@ -91,7 +83,7 @@ private[hive] trait HiveClient {
   def dropTable(dbName: String, tableName: String, ignoreIfNotExists: Boolean): Unit
 
   /** Alter a table whose name matches the one specified in `table`, assuming it exists. */
-  final def alterTable(table: CatalogTable): Unit = alterTable(table.name, table)
+  final def alterTable(table: CatalogTable): Unit = alterTable(table.identifier.table, table)
 
   /** Updates the given table with new metadata, optionally renaming the table. */
   def alterTable(tableName: String, table: CatalogTable): Unit
@@ -123,16 +115,13 @@ private[hive] trait HiveClient {
       ignoreIfExists: Boolean): Unit
 
   /**
-   * Drop one or many partitions in the given table.
-   *
-   * Note: Unfortunately, Hive does not currently provide a way to ignore this call if the
-   * partitions do not already exist. The seemingly relevant flag `ifExists` in
-   * [[org.apache.hadoop.hive.metastore.PartitionDropOptions]] is not read anywhere.
+   * Drop one or many partitions in the given table, assuming they exist.
    */
   def dropPartitions(
       db: String,
       table: String,
-      specs: Seq[Catalog.TablePartitionSpec]): Unit
+      specs: Seq[TablePartitionSpec],
+      ignoreIfNotExists: Boolean): Unit
 
   /**
    * Rename one or many existing table partitions, assuming they exist.
@@ -140,8 +129,8 @@ private[hive] trait HiveClient {
   def renamePartitions(
       db: String,
       table: String,
-      specs: Seq[Catalog.TablePartitionSpec],
-      newSpecs: Seq[Catalog.TablePartitionSpec]): Unit
+      specs: Seq[TablePartitionSpec],
+      newSpecs: Seq[TablePartitionSpec]): Unit
 
   /**
    * Alter one or more table partitions whose specs match the ones specified in `newParts`,
@@ -156,7 +145,7 @@ private[hive] trait HiveClient {
   final def getPartition(
       dbName: String,
       tableName: String,
-      spec: Catalog.TablePartitionSpec): CatalogTablePartition = {
+      spec: TablePartitionSpec): CatalogTablePartition = {
     getPartitionOption(dbName, tableName, spec).getOrElse {
       throw new NoSuchPartitionException(dbName, tableName, spec)
     }
@@ -166,22 +155,33 @@ private[hive] trait HiveClient {
   final def getPartitionOption(
       db: String,
       table: String,
-      spec: Catalog.TablePartitionSpec): Option[CatalogTablePartition] = {
+      spec: TablePartitionSpec): Option[CatalogTablePartition] = {
     getPartitionOption(getTable(db, table), spec)
   }
 
   /** Returns the specified partition or None if it does not exist. */
   def getPartitionOption(
       table: CatalogTable,
-      spec: Catalog.TablePartitionSpec): Option[CatalogTablePartition]
+      spec: TablePartitionSpec): Option[CatalogTablePartition]
 
-  /** Returns all partitions for the given table. */
-  final def getAllPartitions(db: String, table: String): Seq[CatalogTablePartition] = {
-    getAllPartitions(getTable(db, table))
+  /**
+   * Returns the partitions for the given table that match the supplied partition spec.
+   * If no partition spec is specified, all partitions are returned.
+   */
+  final def getPartitions(
+      db: String,
+      table: String,
+      partialSpec: Option[TablePartitionSpec]): Seq[CatalogTablePartition] = {
+    getPartitions(getTable(db, table), partialSpec)
   }
 
-  /** Returns all partitions for the given table. */
-  def getAllPartitions(table: CatalogTable): Seq[CatalogTablePartition]
+  /**
+   * Returns the partitions for the given table that match the supplied partition spec.
+   * If no partition spec is specified, all partitions are returned.
+   */
+  def getPartitions(
+      table: CatalogTable,
+      partialSpec: Option[TablePartitionSpec] = None): Seq[CatalogTablePartition]
 
   /** Returns partitions filtered by predicates for the given table. */
   def getPartitionsByFilter(
@@ -234,6 +234,11 @@ private[hive] trait HiveClient {
 
   /** Return an existing function in the database, or None if it doesn't exist. */
   def getFunctionOption(db: String, name: String): Option[CatalogFunction]
+
+  /** Return whether a function exists in the specified database. */
+  final def functionExists(db: String, name: String): Boolean = {
+    getFunctionOption(db, name).isDefined
+  }
 
   /** Return the names of all functions that match the given pattern in the database. */
   def listFunctions(db: String, pattern: String): Seq[String]

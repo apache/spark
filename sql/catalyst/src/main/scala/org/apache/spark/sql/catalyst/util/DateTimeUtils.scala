@@ -22,6 +22,8 @@ import java.text.{DateFormat, SimpleDateFormat}
 import java.util.{Calendar, TimeZone}
 import javax.xml.bind.DatatypeConverter
 
+import scala.annotation.tailrec
+
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -74,7 +76,7 @@ object DateTimeUtils {
   }
 
   // `SimpleDateFormat` is not thread-safe.
-  private val threadLocalTimestampFormat = new ThreadLocal[DateFormat] {
+  val threadLocalTimestampFormat = new ThreadLocal[DateFormat] {
     override def initialValue(): SimpleDateFormat = {
       new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
     }
@@ -117,6 +119,7 @@ object DateTimeUtils {
     }
   }
 
+  @tailrec
   def stringToTime(s: String): java.util.Date = {
     val indexOfGMT = s.indexOf("GMT")
     if (indexOfGMT != -1) {

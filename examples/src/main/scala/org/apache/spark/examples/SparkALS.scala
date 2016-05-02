@@ -58,7 +58,7 @@ object SparkALS {
   }
 
   def update(i: Int, m: RealVector, us: Array[RealVector], R: RealMatrix) : RealVector = {
-    val U = us.size
+    val U = us.length
     val F = us(0).getDimension
     var XtX: RealMatrix = new Array2DRowRealMatrix(F, F)
     var Xty: RealVector = new ArrayRealVector(F)

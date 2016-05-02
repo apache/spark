@@ -33,10 +33,12 @@ import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.Span
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.sql.catalyst.analysis.{Append, OutputMode}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.util.Utils
 
 /**
  * A framework for implementing tests for streaming queries and sources.
@@ -64,14 +66,10 @@ import org.apache.spark.sql.execution.streaming._
  */
 trait StreamTest extends QueryTest with Timeouts {
 
-  implicit class RichSource(s: Source) {
-    def toDF(): DataFrame = new DataFrame(sqlContext, StreamingRelation(s))
-
-    def toDS[A: Encoder](): Dataset[A] = new Dataset(sqlContext, StreamingRelation(s))
-  }
-
   /** How long to wait for an active stream to catch up when checking a result. */
   val streamingTimeout = 10.seconds
+
+  val outputMode: OutputMode = Append
 
   /** A trait for actions that can be performed while testing a streaming DataFrame. */
   trait StreamAction
@@ -80,7 +78,7 @@ trait StreamTest extends QueryTest with Timeouts {
   trait StreamMustBeRunning
 
   /**
-   * Adds the given data to the stream.  Subsuquent check answers will block until this data has
+   * Adds the given data to the stream. Subsequent check answers will block until this data has
    * been processed.
    */
   object AddData {
@@ -88,45 +86,57 @@ trait StreamTest extends QueryTest with Timeouts {
       AddDataMemory(source, data)
   }
 
-  /** A trait that can be extended when testing other sources. */
+  /** A trait that can be extended when testing a source. */
   trait AddData extends StreamAction {
-    def source: Source
-
     /**
-     * Called to trigger adding the data.  Should return the offset that will denote when this
-     * new data has been processed.
+     * Called to adding the data to a source. It should find the source to add data to from
+     * the active query, and then return the source object the data was added, as well as the
+     * offset of added data.
      */
-    def addData(): Offset
+    def addData(query: Option[StreamExecution]): (Source, Offset)
   }
 
   case class AddDataMemory[A](source: MemoryStream[A], data: Seq[A]) extends AddData {
     override def toString: String = s"AddData to $source: ${data.mkString(",")}"
 
-    override def addData(): Offset = {
-      source.addData(data)
+    override def addData(query: Option[StreamExecution]): (Source, Offset) = {
+      (source, source.addData(data))
     }
   }
 
   /**
    * Checks to make sure that the current data stored in the sink matches the `expectedAnswer`.
-   * This operation automatically blocks untill all added data has been processed.
+   * This operation automatically blocks until all added data has been processed.
    */
   object CheckAnswer {
     def apply[A : Encoder](data: A*): CheckAnswerRows = {
       val encoder = encoderFor[A]
       val toExternalRow = RowEncoder(encoder.schema)
-      CheckAnswerRows(data.map(d => toExternalRow.fromRow(encoder.toRow(d))))
+      CheckAnswerRows(data.map(d => toExternalRow.fromRow(encoder.toRow(d))), false)
     }
 
-    def apply(rows: Row*): CheckAnswerRows = CheckAnswerRows(rows)
+    def apply(rows: Row*): CheckAnswerRows = CheckAnswerRows(rows, false)
   }
 
-  case class CheckAnswerRows(expectedAnswer: Seq[Row])
+  /**
+   * Checks to make sure that the current data stored in the sink matches the `expectedAnswer`.
+   * This operation automatically blocks until all added data has been processed.
+   */
+  object CheckLastBatch {
+    def apply[A : Encoder](data: A*): CheckAnswerRows = {
+      val encoder = encoderFor[A]
+      val toExternalRow = RowEncoder(encoder.schema)
+      CheckAnswerRows(data.map(d => toExternalRow.fromRow(encoder.toRow(d))), true)
+    }
+
+    def apply(rows: Row*): CheckAnswerRows = CheckAnswerRows(rows, true)
+  }
+
+  case class CheckAnswerRows(expectedAnswer: Seq[Row], lastOnly: Boolean)
       extends StreamAction with StreamMustBeRunning {
-    override def toString: String = s"CheckAnswer: ${expectedAnswer.mkString(",")}"
+    override def toString: String = s"$operatorName: ${expectedAnswer.mkString(",")}"
+    private def operatorName = if (lastOnly) "CheckLastBatch" else "CheckAnswer"
   }
-
-  case class DropBatches(num: Int) extends StreamAction
 
   /** Stops the stream.  It must currently be running. */
   case object StopStream extends StreamAction with StreamMustBeRunning
@@ -168,10 +178,6 @@ trait StreamTest extends QueryTest with Timeouts {
     }
   }
 
-  /** A helper for running actions on a Streaming Dataset. See `checkAnswer(DataFrame)`. */
-  def testStream(stream: Dataset[_])(actions: StreamAction*): Unit =
-    testStream(stream.toDF())(actions: _*)
-
   /**
    * Executes the specified actions on the given streaming DataFrame and provides helpful
    * error messages in the case of failures or incorrect answers.
@@ -179,12 +185,13 @@ trait StreamTest extends QueryTest with Timeouts {
    * Note that if the stream is not explicitly started before an action that requires it to be
    * running then it will be automatically started before performing any other actions.
    */
-  def testStream(stream: DataFrame)(actions: StreamAction*): Unit = {
+  def testStream(_stream: Dataset[_])(actions: StreamAction*): Unit = {
+    val stream = _stream.toDF()
     var pos = 0
     var currentPlan: LogicalPlan = stream.logicalPlan
     var currentStream: StreamExecution = null
     var lastStream: StreamExecution = null
-    val awaiting = new mutable.HashMap[Source, Offset]()
+    val awaiting = new mutable.HashMap[Int, Offset]() // source index -> offset to wait for
     val sink = new MemorySink(stream.schema)
 
     @volatile
@@ -205,7 +212,7 @@ trait StreamTest extends QueryTest with Timeouts {
     }.mkString("\n")
 
     def currentOffsets =
-      if (currentStream != null) currentStream.streamProgress.toString else "not started"
+      if (currentStream != null) currentStream.committedOffsets.toString else "not started"
 
     def threadState =
       if (currentStream != null && currentStream.microBatchThread.isAlive) "alive" else "dead"
@@ -216,6 +223,7 @@ trait StreamTest extends QueryTest with Timeouts {
          |$testActions
          |
          |== Stream ==
+         |Output Mode: $outputMode
          |Stream state: $currentOffsets
          |Thread state: $threadState
          |${if (streamDeathCause != null) stackTraceToString(streamDeathCause) else ""}
@@ -223,16 +231,14 @@ trait StreamTest extends QueryTest with Timeouts {
          |== Sink ==
          |${sink.toDebugString}
          |
+         |
          |== Plan ==
          |${if (currentStream != null) currentStream.lastExecution else ""}
          """.stripMargin
 
     def verify(condition: => Boolean, message: String): Unit = {
-      try {
-        Assertions.assert(condition)
-      } catch {
-        case NonFatal(e) =>
-          failTest(message, e)
+      if (!condition) {
+        failTest(message)
       }
     }
 
@@ -269,6 +275,7 @@ trait StreamTest extends QueryTest with Timeouts {
     }
 
     val testThread = Thread.currentThread()
+    val metadataRoot = Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
 
     try {
       startedTest.foreach { action =>
@@ -279,7 +286,12 @@ trait StreamTest extends QueryTest with Timeouts {
             currentStream =
               sqlContext
                 .streams
-                .startQuery(StreamExecution.nextName, stream, sink)
+                .startQuery(
+                  StreamExecution.nextName,
+                  metadataRoot,
+                  stream,
+                  sink,
+                  outputMode = outputMode)
                 .asInstanceOf[StreamExecution]
             currentStream.microBatchThread.setUncaughtExceptionHandler(
               new UncaughtExceptionHandler {
@@ -310,10 +322,6 @@ trait StreamTest extends QueryTest with Timeouts {
               lastStream = currentStream
               currentStream = null
             }
-
-          case DropBatches(num) =>
-            verify(currentStream == null, "dropping batches while running leads to corruption")
-            sink.dropBatches(num)
 
           case ef: ExpectFailure[_] =>
             verify(currentStream != null, "can not expect failure when stream is not running")
@@ -356,24 +364,62 @@ trait StreamTest extends QueryTest with Timeouts {
             verify({ a.run(); true }, s"Assert failed: ${a.message}")
 
           case a: AddData =>
-            awaiting.put(a.source, a.addData())
+            try {
+              // Add data and get the source where it was added, and the expected offset of the
+              // added data.
+              val queryToUse = Option(currentStream).orElse(Option(lastStream))
+              val (source, offset) = a.addData(queryToUse)
 
-          case CheckAnswerRows(expectedAnswer) =>
+              def findSourceIndex(plan: LogicalPlan): Option[Int] = {
+                plan
+                  .collect { case StreamingExecutionRelation(s, _) => s }
+                  .zipWithIndex
+                  .find(_._1 == source)
+                  .map(_._2)
+              }
+
+              // Try to find the index of the source to which data was added. Either get the index
+              // from the current active query or the original input logical plan.
+              val sourceIndex =
+                queryToUse.flatMap { query =>
+                  findSourceIndex(query.logicalPlan)
+                }.orElse {
+                  findSourceIndex(stream.logicalPlan)
+                }.getOrElse {
+                  throw new IllegalArgumentException(
+                    "Could find index of the source to which data was added")
+                }
+
+              // Store the expected offset of added data to wait for it later
+              awaiting.put(sourceIndex, offset)
+            } catch {
+              case NonFatal(e) =>
+                failTest("Error adding data", e)
+            }
+
+          case CheckAnswerRows(expectedAnswer, lastOnly) =>
             verify(currentStream != null, "stream not running")
+            // Get the map of source index to the current source objects
+            val indexToSource = currentStream
+              .logicalPlan
+              .collect { case StreamingExecutionRelation(s, _) => s }
+              .zipWithIndex
+              .map(_.swap)
+              .toMap
 
-            // Block until all data added has been processed
-            awaiting.foreach { case (source, offset) =>
+            // Block until all data added has been processed for all the source
+            awaiting.foreach { case (sourceIndex, offset) =>
               failAfter(streamingTimeout) {
-                currentStream.awaitOffset(source, offset)
+                currentStream.awaitOffset(indexToSource(sourceIndex), offset)
               }
             }
 
-            val allData = try sink.allData catch {
+            val sparkAnswer = try if (lastOnly) sink.lastBatch else sink.allData catch {
               case e: Exception =>
                 failTest("Exception while getting data from sink", e)
             }
 
-            QueryTest.sameRows(expectedAnswer, allData).foreach {
+            QueryTest.sameRows(expectedAnswer, sparkAnswer).foreach {
               error => failTest(error)
             }
         }

@@ -22,14 +22,14 @@ import java.io.{File, FileOutputStream, InputStream, IOException}
 import scala.collection.JavaConverters._
 import scala.collection.Map
 
-import org.apache.spark.Logging
 import org.apache.spark.SecurityManager
 import org.apache.spark.deploy.Command
+import org.apache.spark.internal.Logging
 import org.apache.spark.launcher.WorkerCommandBuilder
 import org.apache.spark.util.Utils
 
 /**
- ** Utilities for running commands with the spark classpath.
+ * Utilities for running commands with the spark classpath.
  */
 private[deploy]
 object CommandUtils extends Logging {

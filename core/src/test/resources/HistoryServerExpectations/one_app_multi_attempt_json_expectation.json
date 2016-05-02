@@ -8,7 +8,10 @@
     "lastUpdated" : "",
     "duration" : 34935,
     "sparkUser" : "irashid",
-    "completed" : true
+    "completed" : true,
+    "startTimeEpoch" : 1426633910242,
+    "endTimeEpoch" : 1426633945177,
+    "lastUpdatedEpoch" : 0
   }, {
     "attemptId" : "1",
     "startTime" : "2015-03-16T19:25:10.242GMT",
@@ -16,6 +19,9 @@
     "lastUpdated" : "",
     "duration" : 34935,
     "sparkUser" : "irashid",
-    "completed" : true
+    "completed" : true,
+    "startTimeEpoch" : 1426533910242,
+    "endTimeEpoch" : 1426533945177,
+    "lastUpdatedEpoch" : 0
   } ]
 }

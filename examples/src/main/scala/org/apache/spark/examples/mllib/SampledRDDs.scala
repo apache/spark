@@ -21,7 +21,6 @@ package org.apache.spark.examples.mllib
 import scopt.OptionParser
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.util.MLUtils
 
 /**
@@ -79,7 +78,7 @@ object SampledRDDs {
     val sampledRDD = examples.sample(withReplacement = true, fraction = fraction)
     println(s"  RDD.sample(): sample has ${sampledRDD.count()} examples")
     val sampledArray = examples.takeSample(withReplacement = true, num = expectedSampleSize)
-    println(s"  RDD.takeSample(): sample has ${sampledArray.size} examples")
+    println(s"  RDD.takeSample(): sample has ${sampledArray.length} examples")
 
     println()
 

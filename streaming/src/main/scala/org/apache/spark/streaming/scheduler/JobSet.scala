@@ -18,14 +18,13 @@
 package org.apache.spark.streaming.scheduler
 
 import scala.collection.mutable.HashSet
-import scala.util.Failure
 
 import org.apache.spark.streaming.Time
-import org.apache.spark.util.Utils
 
-/** Class representing a set of Jobs
-  * belong to the same batch.
-  */
+/**
+ * Class representing a set of Jobs
+ * belong to the same batch.
+ */
 private[streaming]
 case class JobSet(
     time: Time,

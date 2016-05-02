@@ -29,7 +29,6 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.{JavaPairRDD, JavaRDD, JavaSparkContext}
 import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2}
 import org.apache.spark.api.java.function.{Function0 => JFunction0}
@@ -518,9 +517,10 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
     ssc.remember(duration)
   }
 
-  /** Add a [[org.apache.spark.streaming.scheduler.StreamingListener]] object for
-    * receiving system events related to streaming.
-    */
+  /**
+   * Add a [[org.apache.spark.streaming.scheduler.StreamingListener]] object for
+   * receiving system events related to streaming.
+   */
   def addStreamingListener(streamingListener: StreamingListener) {
     ssc.addStreamingListener(streamingListener)
   }
@@ -531,7 +531,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    * Return the current state of the context. The context can be in three possible states -
    * <ul>
    *   <li>
-   *   StreamingContextState.INTIALIZED - The context has been created, but not been started yet.
+   *   StreamingContextState.INITIALIZED - The context has been created, but not been started yet.
    *   Input DStreams, transformations and output operations can be created on the context.
    *   </li>
    *   <li>
@@ -558,6 +558,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    * Wait for the execution to stop. Any exceptions that occurs during the execution
    * will be thrown in this thread.
    */
+  @throws[InterruptedException]
   def awaitTermination(): Unit = {
     ssc.awaitTermination()
   }
@@ -570,6 +571,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
    * @return `true` if it's stopped; or throw the reported error during the execution; or `false`
    *         if the waiting time elapsed before returning from the method.
    */
+  @throws[InterruptedException]
   def awaitTerminationOrTimeout(timeout: Long): Boolean = {
     ssc.awaitTerminationOrTimeout(timeout)
   }

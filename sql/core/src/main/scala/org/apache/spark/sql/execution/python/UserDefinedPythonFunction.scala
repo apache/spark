@@ -17,9 +17,7 @@
 
 package org.apache.spark.sql.execution.python
 
-import org.apache.spark.Accumulator
-import org.apache.spark.api.python.PythonBroadcast
-import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.api.python.PythonFunction
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.types.DataType
@@ -29,18 +27,11 @@ import org.apache.spark.sql.types.DataType
  */
 case class UserDefinedPythonFunction(
     name: String,
-    command: Array[Byte],
-    envVars: java.util.Map[String, String],
-    pythonIncludes: java.util.List[String],
-    pythonExec: String,
-    pythonVer: String,
-    broadcastVars: java.util.List[Broadcast[PythonBroadcast]],
-    accumulator: Accumulator[java.util.List[Array[Byte]]],
+    func: PythonFunction,
     dataType: DataType) {
 
   def builder(e: Seq[Expression]): PythonUDF = {
-    PythonUDF(name, command, envVars, pythonIncludes, pythonExec, pythonVer, broadcastVars,
-      accumulator, dataType, e)
+    PythonUDF(name, func, dataType, e)
   }
 
   /** Returns a [[Column]] that will evaluate to calling this UDF with the given input. */

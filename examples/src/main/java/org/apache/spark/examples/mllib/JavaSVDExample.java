@@ -40,15 +40,16 @@ public class JavaSVDExample {
   public static void main(String[] args) {
     SparkConf conf = new SparkConf().setAppName("SVD Example");
     SparkContext sc = new SparkContext(conf);
+    JavaSparkContext jsc = JavaSparkContext.fromSparkContext(sc);
 
     // $example on$
     double[][] array = {{1.12, 2.05, 3.12}, {5.56, 6.28, 8.94}, {10.2, 8.0, 20.5}};
-    LinkedList<Vector> rowsList = new LinkedList<Vector>();
+    LinkedList<Vector> rowsList = new LinkedList<>();
     for (int i = 0; i < array.length; i++) {
       Vector currentRow = Vectors.dense(array[i]);
       rowsList.add(currentRow);
     }
-    JavaRDD<Vector> rows = JavaSparkContext.fromSparkContext(sc).parallelize(rowsList);
+    JavaRDD<Vector> rows = jsc.parallelize(rowsList);
 
     // Create a RowMatrix from JavaRDD<Vector>.
     RowMatrix mat = new RowMatrix(rows.rdd());
@@ -66,5 +67,7 @@ public class JavaSVDExample {
     }
     System.out.println("Singular values are: " + s);
     System.out.println("V factor is:\n" + V);
+
+    jsc.stop();
   }
 }

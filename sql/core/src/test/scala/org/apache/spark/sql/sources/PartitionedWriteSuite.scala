@@ -44,7 +44,7 @@ class PartitionedWriteSuite extends QueryTest with SharedSQLContext {
     path.delete()
 
     val base = sqlContext.range(100)
-    val df = base.unionAll(base).select($"id", lit(1).as("data"))
+    val df = base.union(base).select($"id", lit(1).as("data"))
     df.write.partitionBy("id").save(path.getCanonicalPath)
 
     checkAnswer(

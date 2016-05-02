@@ -27,7 +27,6 @@ import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.pmml.PMMLExportable
 import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.util.{DataValidators, Loader, Saveable}
-import org.apache.spark.mllib.util.MLUtils.appendBias
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.storage.StorageLevel
@@ -207,6 +206,7 @@ object LogisticRegressionModel extends Loader[LogisticRegressionModel] {
  * Using [[LogisticRegressionWithLBFGS]] is recommended over this.
  */
 @Since("0.8.0")
+@deprecated("Use ml.classification.LogisticRegression or LogisticRegressionWithLBFGS", "2.0.0")
 class LogisticRegressionWithSGD private[mllib] (
     private var stepSize: Double,
     private var numIterations: Int,
@@ -241,6 +241,7 @@ class LogisticRegressionWithSGD private[mllib] (
  * NOTE: Labels used in Logistic Regression should be {0, 1}
  */
 @Since("0.8.0")
+@deprecated("Use ml.classification.LogisticRegression or LogisticRegressionWithLBFGS", "2.0.0")
 object LogisticRegressionWithSGD {
   // NOTE(shivaram): We use multiple train methods instead of default arguments to support
   // Java programs.
@@ -408,6 +409,10 @@ class LogisticRegressionWithLBFGS
    * defaults to the mllib implementation. If more than two classes
    * or feature scaling is disabled, always uses mllib implementation.
    * Uses user provided weights.
+   *
+   * In the ml LogisticRegression implementation, the number of corrections
+   * used in the LBFGS update can not be configured. So `optimizer.setNumCorrections()`
+   * will have no effect if we fall into that route.
    */
   override def run(input: RDD[LabeledPoint], initialWeights: Vector): LogisticRegressionModel = {
     run(input, initialWeights, userSuppliedWeights = true)
@@ -415,7 +420,7 @@ class LogisticRegressionWithLBFGS
 
   private def run(input: RDD[LabeledPoint], initialWeights: Vector, userSuppliedWeights: Boolean):
       LogisticRegressionModel = {
-    // ml's Logisitic regression only supports binary classifcation currently.
+    // ml's Logistic regression only supports binary classification currently.
     if (numOfLinearPredictor == 1) {
       def runWithMlLogisitcRegression(elasticNetParam: Double) = {
         // Prepare the ml LogisticRegression based on our settings

@@ -24,7 +24,8 @@ import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.StringUtils
 
-import org.apache.spark.{Logging, Partition, SparkContext, TaskContext}
+import org.apache.spark.{Partition, SparkContext, TaskContext}
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecificMutableRow
@@ -212,14 +213,14 @@ private[sql] object JDBCRDD extends Logging {
         // We can't compile Or filter unless both sub-filters are compiled successfully.
         // It applies too for the following And filter.
         // If we can make sure compileFilter supports all filters, we can remove this check.
-        val or = Seq(f1, f2).map(compileFilter(_)).flatten
+        val or = Seq(f1, f2).flatMap(compileFilter(_))
         if (or.size == 2) {
           or.map(p => s"($p)").mkString(" OR ")
         } else {
           null
         }
       case And(f1, f2) =>
-        val and = Seq(f1, f2).map(compileFilter(_)).flatten
+        val and = Seq(f1, f2).flatMap(compileFilter(_))
         if (and.size == 2) {
           and.map(p => s"($p)").mkString(" AND ")
         } else {
@@ -304,7 +305,7 @@ private[sql] class JDBCRDD(
    * `filters`, but as a WHERE clause suitable for injection into a SQL query.
    */
   private val filterWhereClause: String =
-    filters.map(JDBCRDD.compileFilter).flatten.mkString(" AND ")
+    filters.flatMap(JDBCRDD.compileFilter).mkString(" AND ")
 
   /**
    * A WHERE clause representing both `filters`, if any, and the current partition.

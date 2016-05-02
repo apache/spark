@@ -76,7 +76,7 @@ class BasicOperationsSuite extends TestSuiteBase {
     assert(numInputPartitions === 2, "Number of input partitions has been changed from 2")
     val input = Seq(1 to 4, 5 to 8, 9 to 12)
     val output = Seq(Seq(3, 7), Seq(11, 15), Seq(19, 23))
-    val operation = (r: DStream[Int]) => r.mapPartitions(x => Iterator(x.reduce(_ + _)))
+    val operation = (r: DStream[Int]) => r.mapPartitions(x => Iterator(x.sum))
     testOperation(input, operation, output, true)
   }
 
@@ -538,10 +538,9 @@ class BasicOperationsSuite extends TestSuiteBase {
         val stateObj = state.getOrElse(new StateObject)
         values.sum match {
           case 0 => stateObj.expireCounter += 1 // no new values
-          case n => { // has new values, increment and reset expireCounter
+          case n => // has new values, increment and reset expireCounter
             stateObj.counter += n
             stateObj.expireCounter = 0
-          }
         }
         stateObj.expireCounter match {
           case 2 => None // seen twice with no new values, give it the boot

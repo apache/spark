@@ -50,6 +50,8 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T
 
   def wrapRDD(in: RDD[T]): R
 
+  // This is just unfortunate we made a mistake in naming -- should be scalaLongToJavaLong.
+  // Don't fix this for now as it would break binary compatibility.
   implicit def scalaIntToJavaLong(in: DStream[Long]): JavaDStream[jl.Long] = {
     in.map(jl.Long.valueOf)
   }

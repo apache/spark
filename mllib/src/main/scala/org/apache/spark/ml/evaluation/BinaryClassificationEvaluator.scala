@@ -23,7 +23,8 @@ import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable, SchemaUtils}
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{Dataset, Row}
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.DoubleType
 
 /**
@@ -63,29 +64,21 @@ class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override va
   @Since("1.5.0")
   def setRawPredictionCol(value: String): this.type = set(rawPredictionCol, value)
 
-  /**
-   * @group setParam
-   * @deprecated use [[setRawPredictionCol()]] instead
-   */
-  @deprecated("use setRawPredictionCol instead", "1.5.0")
-  @Since("1.2.0")
-  def setScoreCol(value: String): this.type = set(rawPredictionCol, value)
-
   /** @group setParam */
   @Since("1.2.0")
   def setLabelCol(value: String): this.type = set(labelCol, value)
 
   setDefault(metricName -> "areaUnderROC")
 
-  @Since("1.2.0")
-  override def evaluate(dataset: DataFrame): Double = {
+  @Since("2.0.0")
+  override def evaluate(dataset: Dataset[_]): Double = {
     val schema = dataset.schema
     SchemaUtils.checkColumnTypes(schema, $(rawPredictionCol), Seq(DoubleType, new VectorUDT))
-    SchemaUtils.checkColumnType(schema, $(labelCol), DoubleType)
+    SchemaUtils.checkNumericType(schema, $(labelCol))
 
     // TODO: When dataset metadata has been implemented, check rawPredictionCol vector length = 2.
-    val scoreAndLabels = dataset.select($(rawPredictionCol), $(labelCol))
-      .map {
+    val scoreAndLabels =
+      dataset.select(col($(rawPredictionCol)), col($(labelCol)).cast(DoubleType)).rdd.map {
         case Row(rawPrediction: Vector, label: Double) => (rawPrediction(1), label)
         case Row(rawPrediction: Double, label: Double) => (rawPrediction, label)
       }

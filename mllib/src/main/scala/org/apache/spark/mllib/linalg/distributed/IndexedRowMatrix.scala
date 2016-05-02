@@ -120,9 +120,9 @@ class IndexedRowMatrix @Since("1.0.0") (
       val rowIndex = row.index
       row.vector match {
         case SparseVector(size, indices, values) =>
-          Iterator.tabulate(indices.size)(i => MatrixEntry(rowIndex, indices(i), values(i)))
+          Iterator.tabulate(indices.length)(i => MatrixEntry(rowIndex, indices(i), values(i)))
         case DenseVector(values) =>
-          Iterator.tabulate(values.size)(i => MatrixEntry(rowIndex, i, values(i)))
+          Iterator.tabulate(values.length)(i => MatrixEntry(rowIndex, i, values(i)))
       }
     }
     new CoordinateMatrix(entries, numRows(), numCols())
@@ -188,7 +188,8 @@ class IndexedRowMatrix @Since("1.0.0") (
   }
 
   /**
-   * Computes the Gramian matrix `A^T A`.
+   * Computes the Gramian matrix `A^T A`. Note that this cannot be
+   * computed on matrices with more than 65535 columns.
    */
   @Since("1.0.0")
   def computeGramianMatrix(): Matrix = {

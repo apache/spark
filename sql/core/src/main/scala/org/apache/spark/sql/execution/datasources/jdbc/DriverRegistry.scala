@@ -21,7 +21,7 @@ import java.sql.{Driver, DriverManager}
 
 import scala.collection.mutable
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
 /**

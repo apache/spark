@@ -1,8 +1,9 @@
 [ {
   "id" : "<driver>",
   "hostPort" : "localhost:57971",
-  "rddBlocks" : 8,
-  "memoryUsed" : 28000128,
+  "isActive" : true,
+  "rddBlocks" : 0,
+  "memoryUsed" : 0,
   "diskUsed" : 0,
   "totalCores" : 0,
   "maxTasks" : 0,

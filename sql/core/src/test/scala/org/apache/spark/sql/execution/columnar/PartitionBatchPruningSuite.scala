@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.columnar
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.test.SQLTestData._
 
@@ -133,7 +133,7 @@ class PartitionBatchPruningSuite
       }
 
       val (readPartitions, readBatches) = df.queryExecution.sparkPlan.collect {
-        case in: InMemoryColumnarTableScan => (in.readPartitions.value, in.readBatches.value)
+        case in: InMemoryTableScanExec => (in.readPartitions.value, in.readBatches.value)
       }.head
 
       assert(readBatches === expectedReadBatches, s"Wrong number of read batches: $queryExecution")

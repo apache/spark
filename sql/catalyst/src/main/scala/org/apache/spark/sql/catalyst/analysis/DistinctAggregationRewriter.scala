@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, Complete}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, LogicalPlan}
@@ -97,16 +96,13 @@ import org.apache.spark.sql.types.IntegerType
  * This rule duplicates the input data by two or more times (# distinct groups + an optional
  * non-distinct group). This will put quite a bit of memory pressure of the used aggregate and
  * exchange operators. Keeping the number of distinct groups as low a possible should be priority,
- * we could improve this in the current rule by applying more advanced expression cannocalization
+ * we could improve this in the current rule by applying more advanced expression canonicalization
  * techniques.
  */
-case class DistinctAggregationRewriter(conf: CatalystConf) extends Rule[LogicalPlan] {
+object DistinctAggregationRewriter extends Rule[LogicalPlan] {
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case p if !p.resolved => p
-    // We need to wait until this Aggregate operator is resolved.
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case a: Aggregate => rewrite(a)
-    case p => p
   }
 
   def rewrite(a: Aggregate): Aggregate = {
