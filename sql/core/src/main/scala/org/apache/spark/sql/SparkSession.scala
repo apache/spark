@@ -735,7 +735,8 @@ object SparkSession {
     }
 
     /**
-     * Create a
+     * Gets an existing [[SparkSession]] or, if there is no existing one, creates a new one
+     * based on the options set in this builder.
      *
      * @since 2.0.0
      */
