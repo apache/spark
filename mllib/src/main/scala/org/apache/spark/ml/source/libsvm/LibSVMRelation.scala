@@ -29,7 +29,7 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.sql.{DataFrame, DataFrameReader, Row, SQLContext}
+import org.apache.spark.sql.{DataFrame, DataFrameReader, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, JoinedRow}
@@ -85,12 +85,12 @@ private[libsvm] class LibSVMOutputWriter(
  * optionally specify options, for example:
  * {{{
  *   // Scala
- *   val df = sqlContext.read.format("libsvm")
+ *   val df = spark.read.format("libsvm")
  *     .option("numFeatures", "780")
  *     .load("data/mllib/sample_libsvm_data.txt")
  *
  *   // Java
- *   DataFrame df = sqlContext.read().format("libsvm")
+ *   DataFrame df = spark.read().format("libsvm")
  *     .option("numFeatures, "780")
  *     .load("data/mllib/sample_libsvm_data.txt");
  * }}}
@@ -123,7 +123,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
   }
 
   override def inferSchema(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
     Some(
@@ -133,7 +133,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
   }
 
   override def prepareRead(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Map[String, String] = {
     def computeNumFeatures(): Int = {
@@ -146,7 +146,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
         throw new IOException("Multiple input paths are not supported for libsvm data.")
       }
 
-      val sc = sqlContext.sparkContext
+      val sc = sparkSession.sparkContext
       val parsed = MLUtils.parseLibSVMFile(sc, path, sc.defaultParallelism)
       MLUtils.computeNumFeatures(parsed)
     }
@@ -159,7 +159,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
   }
 
   override def prepareWrite(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
@@ -176,25 +176,25 @@ class DefaultSource extends FileFormat with DataSourceRegister {
   }
 
   override def buildReader(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       dataSchema: StructType,
       partitionSchema: StructType,
       requiredSchema: StructType,
       filters: Seq[Filter],
-      options: Map[String, String]): (PartitionedFile) => Iterator[InternalRow] = {
+      options: Map[String, String],
+      hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
     verifySchema(dataSchema)
     val numFeatures = options("numFeatures").toInt
     assert(numFeatures > 0)
 
     val sparse = options.getOrElse("vectorType", "sparse") == "sparse"
 
-    val broadcastedConf = sqlContext.sparkContext.broadcast(
-      new SerializableConfiguration(new Configuration(sqlContext.sparkContext.hadoopConfiguration))
-    )
+    val broadcastedHadoopConf =
+      sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
     (file: PartitionedFile) => {
       val points =
-        new HadoopFileLinesReader(file, broadcastedConf.value.value)
+        new HadoopFileLinesReader(file, broadcastedHadoopConf.value.value)
           .map(_.toString.trim)
           .filterNot(line => line.isEmpty || line.startsWith("#"))
           .map { line =>
@@ -202,7 +202,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
             LabeledPoint(label, Vectors.sparse(numFeatures, indices, values))
           }
 
-      val converter = RowEncoder(requiredSchema)
+      val converter = RowEncoder(dataSchema)
 
       val unsafeRowIterator = points.map { pt =>
         val features = if (sparse) pt.features.toSparse else pt.features.toDense
@@ -213,9 +213,12 @@ class DefaultSource extends FileFormat with DataSourceRegister {
         AttributeReference(f.name, f.dataType, f.nullable, f.metadata)()
 
       // Appends partition values
-      val fullOutput = (requiredSchema ++ partitionSchema).map(toAttribute)
+      val fullOutput = (dataSchema ++ partitionSchema).map(toAttribute)
+      val requiredOutput = fullOutput.filter { a =>
+        requiredSchema.fieldNames.contains(a.name) || partitionSchema.fieldNames.contains(a.name)
+      }
       val joinedRow = new JoinedRow()
-      val appendPartitionColumns = GenerateUnsafeProjection.generate(fullOutput, fullOutput)
+      val appendPartitionColumns = GenerateUnsafeProjection.generate(requiredOutput, fullOutput)
 
       unsafeRowIterator.map { dataRow =>
         appendPartitionColumns(joinedRow(dataRow, file.partitionValues))

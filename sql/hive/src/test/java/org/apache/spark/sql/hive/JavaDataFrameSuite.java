@@ -36,7 +36,7 @@ import org.apache.spark.sql.hive.aggregate.MyDoubleSum;
 
 public class JavaDataFrameSuite {
   private transient JavaSparkContext sc;
-  private transient HiveContext hc;
+  private transient SQLContext hc;
 
   Dataset<Row> df;
 

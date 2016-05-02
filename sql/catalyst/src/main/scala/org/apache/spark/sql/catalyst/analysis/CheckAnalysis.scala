@@ -52,13 +52,16 @@ trait CheckAnalysis extends PredicateHelper {
       case p if p.analyzed => // Skip already analyzed sub-plans
 
       case u: UnresolvedRelation =>
-        u.failAnalysis(s"Table or View not found: ${u.tableIdentifier}")
+        u.failAnalysis(s"Table or view not found: ${u.tableIdentifier}")
 
       case operator: LogicalPlan =>
         operator transformExpressionsUp {
           case a: Attribute if !a.resolved =>
             val from = operator.inputSet.map(_.name).mkString(", ")
             a.failAnalysis(s"cannot resolve '${a.sql}' given input columns: [$from]")
+
+          case ScalarSubquery(_, conditions, _) if conditions.nonEmpty =>
+            failAnalysis("Correlated scalar subqueries are not supported.")
 
           case e: Expression if e.checkInputDataTypes().isFailure =>
             e.checkInputDataTypes() match {
@@ -101,7 +104,6 @@ trait CheckAnalysis extends PredicateHelper {
                 failAnalysis(s"Window specification $s is not valid because $m")
               case None => w
             }
-
         }
 
         operator match {
@@ -111,33 +113,8 @@ trait CheckAnalysis extends PredicateHelper {
                 s"of type ${f.condition.dataType.simpleString} is not a boolean.")
 
           case f @ Filter(condition, child) =>
-            // Make sure that no correlated reference is below Aggregates, Outer Joins and on the
-            // right hand side of Unions.
-            lazy val attributes = child.outputSet
-            def failOnCorrelatedReference(
-                p: LogicalPlan,
-                message: String): Unit = p.transformAllExpressions {
-              case e: NamedExpression if attributes.contains(e) =>
-                failAnalysis(s"Accessing outer query column is not allowed in $message: $e")
-            }
-            def checkForCorrelatedReferences(p: PredicateSubquery): Unit = p.query.foreach {
-              case a @ Aggregate(_, _, source) =>
-                failOnCorrelatedReference(source, "an AGGREATE")
-              case j @ Join(left, _, RightOuter, _) =>
-                failOnCorrelatedReference(left, "a RIGHT OUTER JOIN")
-              case j @ Join(_, right, jt, _) if jt != Inner =>
-                failOnCorrelatedReference(right, "a LEFT (OUTER) JOIN")
-              case Union(_ :: xs) =>
-                xs.foreach(failOnCorrelatedReference(_, "a UNION"))
-              case s: SetOperation =>
-                failOnCorrelatedReference(s.right, "an INTERSECT/EXCEPT")
-              case _ =>
-            }
             splitConjunctivePredicates(condition).foreach {
-              case p: PredicateSubquery =>
-                checkForCorrelatedReferences(p)
-              case Not(p: PredicateSubquery) =>
-                checkForCorrelatedReferences(p)
+              case _: PredicateSubquery | Not(_: PredicateSubquery) =>
               case e if PredicateSubquery.hasPredicateSubquery(e) =>
                 failAnalysis(s"Predicate sub-queries cannot be used in nested conditions: $e")
               case e =>
@@ -278,7 +255,16 @@ trait CheckAnalysis extends PredicateHelper {
                  |Failure when resolving conflicting references in Intersect:
                  |$plan
                  |Conflicting attributes: ${conflictingAttributes.mkString(",")}
-                 |""".stripMargin)
+               """.stripMargin)
+
+          case e: Except if !e.duplicateResolved =>
+            val conflictingAttributes = e.left.outputSet.intersect(e.right.outputSet)
+            failAnalysis(
+              s"""
+                 |Failure when resolving conflicting references in Except:
+                 |$plan
+                 |Conflicting attributes: ${conflictingAttributes.mkString(",")}
+               """.stripMargin)
 
           case o if !o.resolved =>
             failAnalysis(

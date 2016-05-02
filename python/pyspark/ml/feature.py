@@ -517,18 +517,22 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures, Java
     """
     .. note:: Experimental
 
-    Maps a sequence of terms to their term frequencies using the
-    hashing trick.
+    Maps a sequence of terms to their term frequencies using the hashing trick.
+    Currently we use Austin Appleby's MurmurHash 3 algorithm (MurmurHash3_x86_32)
+    to calculate the hash code value for the term object.
+    Since a simple modulo is used to transform the hash function to a column index,
+    it is advisable to use a power of two as the numFeatures parameter;
+    otherwise the features will not be mapped evenly to the columns.
 
     >>> df = sqlContext.createDataFrame([(["a", "b", "c"],)], ["words"])
     >>> hashingTF = HashingTF(numFeatures=10, inputCol="words", outputCol="features")
     >>> hashingTF.transform(df).head().features
-    SparseVector(10, {7: 1.0, 8: 1.0, 9: 1.0})
+    SparseVector(10, {0: 1.0, 1: 1.0, 2: 1.0})
     >>> hashingTF.setParams(outputCol="freqs").transform(df).head().freqs
-    SparseVector(10, {7: 1.0, 8: 1.0, 9: 1.0})
+    SparseVector(10, {0: 1.0, 1: 1.0, 2: 1.0})
     >>> params = {hashingTF.numFeatures: 5, hashingTF.outputCol: "vector"}
     >>> hashingTF.transform(df, params).head().vector
-    SparseVector(5, {2: 1.0, 3: 1.0, 4: 1.0})
+    SparseVector(5, {0: 1.0, 1: 1.0, 2: 1.0})
     >>> hashingTFPath = temp_path + "/hashing-tf"
     >>> hashingTF.save(hashingTFPath)
     >>> loadedHashingTF = HashingTF.load(hashingTFPath)
@@ -546,7 +550,7 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures, Java
     @keyword_only
     def __init__(self, numFeatures=1 << 18, binary=False, inputCol=None, outputCol=None):
         """
-        __init__(self, numFeatures=1 << 18, inputCol=None, outputCol=None)
+        __init__(self, numFeatures=1 << 18, binary=False, inputCol=None, outputCol=None)
         """
         super(HashingTF, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.HashingTF", self.uid)
@@ -556,9 +560,9 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures, Java
 
     @keyword_only
     @since("1.3.0")
-    def setParams(self, numFeatures=1 << 18, inputCol=None, outputCol=None):
+    def setParams(self, numFeatures=1 << 18, binary=False, inputCol=None, outputCol=None):
         """
-        setParams(self, numFeatures=1 << 18, inputCol=None, outputCol=None)
+        setParams(self, numFeatures=1 << 18, binary=False, inputCol=None, outputCol=None)
         Sets params for this HashingTF.
         """
         kwargs = self.setParams._input_kwargs
@@ -2182,13 +2186,14 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
     |   c|[-0.3794820010662...|
     +----+--------------------+
     ...
-    >>> model.findSynonyms("a", 2).show()
-    +----+-------------------+
-    |word|         similarity|
-    +----+-------------------+
-    |   b| 0.2505344027513247|
-    |   c|-0.6980510075367647|
-    +----+-------------------+
+    >>> from pyspark.sql.functions import format_number as fmt
+    >>> model.findSynonyms("a", 2).select("word", fmt("similarity", 5).alias("similarity")).show()
+    +----+----------+
+    |word|similarity|
+    +----+----------+
+    |   b|   0.25053|
+    |   c|  -0.69805|
+    +----+----------+
     ...
     >>> model.transform(doc).head().model
     DenseVector([0.5524, -0.4995, -0.3599, 0.0241, 0.3461])
@@ -2612,6 +2617,7 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol, Ja
         """
         super(ChiSqSelector, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.ChiSqSelector", self.uid)
+        self._setDefault(numTopFeatures=50)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 

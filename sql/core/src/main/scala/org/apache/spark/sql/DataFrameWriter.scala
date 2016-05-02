@@ -237,7 +237,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   def save(): Unit = {
     assertNotBucketed()
     val dataSource = DataSource(
-      df.sqlContext,
+      df.sparkSession,
       className = source,
       partitionColumns = partitioningColumns.getOrElse(Nil),
       bucketSpec = getBucketSpec,
@@ -284,9 +284,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
         new Path(userSpecified).toUri.toString
       }.orElse {
         val checkpointConfig: Option[String] =
-          df.sqlContext.conf.getConf(
-            SQLConf.CHECKPOINT_LOCATION,
-            None)
+          df.sparkSession.conf.get(SQLConf.CHECKPOINT_LOCATION, None)
 
         checkpointConfig.map { location =>
           new Path(location, queryName).toUri.toString
@@ -297,7 +295,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
 
       // If offsets have already been created, we trying to resume a query.
       val checkpointPath = new Path(checkpointLocation, "offsets")
-      val fs = checkpointPath.getFileSystem(df.sqlContext.sparkContext.hadoopConfiguration)
+      val fs = checkpointPath.getFileSystem(df.sparkSession.sessionState.newHadoopConf())
       if (fs.exists(checkpointPath)) {
         throw new AnalysisException(
           s"Unable to resume query written to memory sink. Delete $checkpointPath to start over.")
@@ -306,9 +304,9 @@ final class DataFrameWriter private[sql](df: DataFrame) {
       }
 
       val sink = new MemorySink(df.schema)
-      val resultDf = Dataset.ofRows(df.sqlContext, new MemoryPlan(sink))
+      val resultDf = Dataset.ofRows(df.sparkSession, new MemoryPlan(sink))
       resultDf.registerTempTable(queryName)
-      val continuousQuery = df.sqlContext.sessionState.continuousQueryManager.startQuery(
+      val continuousQuery = df.sparkSession.sessionState.continuousQueryManager.startQuery(
         queryName,
         checkpointLocation,
         df,
@@ -318,16 +316,16 @@ final class DataFrameWriter private[sql](df: DataFrame) {
     } else {
       val dataSource =
         DataSource(
-          df.sqlContext,
+          df.sparkSession,
           className = source,
           options = extraOptions.toMap,
           partitionColumns = normalizedParCols.getOrElse(Nil))
 
       val queryName = extraOptions.getOrElse("queryName", StreamExecution.nextName)
       val checkpointLocation = extraOptions.getOrElse("checkpointLocation", {
-        new Path(df.sqlContext.conf.checkpointLocation, queryName).toUri.toString
+        new Path(df.sparkSession.sessionState.conf.checkpointLocation, queryName).toUri.toString
       })
-      df.sqlContext.sessionState.continuousQueryManager.startQuery(
+      df.sparkSession.sessionState.continuousQueryManager.startQuery(
         queryName,
         checkpointLocation,
         df,
@@ -345,7 +343,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 1.4.0
    */
   def insertInto(tableName: String): Unit = {
-    insertInto(df.sqlContext.sessionState.sqlParser.parseTableIdentifier(tableName))
+    insertInto(df.sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName))
   }
 
   private def insertInto(tableIdent: TableIdentifier): Unit = {
@@ -363,7 +361,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
       Project(inputDataCols ++ inputPartCols, df.logicalPlan)
     }.getOrElse(df.logicalPlan)
 
-    df.sqlContext.executePlan(
+    df.sparkSession.executePlan(
       InsertIntoTable(
         UnresolvedRelation(tableIdent),
         partitions.getOrElse(Map.empty[String, Option[String]]),
@@ -413,7 +411,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    */
   private def normalize(columnName: String, columnType: String): String = {
     val validColumnNames = df.logicalPlan.output.map(_.name)
-    validColumnNames.find(df.sqlContext.sessionState.analyzer.resolver(_, columnName))
+    validColumnNames.find(df.sparkSession.sessionState.analyzer.resolver(_, columnName))
       .getOrElse(throw new AnalysisException(s"$columnType column $columnName not found in " +
         s"existing columns (${validColumnNames.mkString(", ")})"))
   }
@@ -444,11 +442,11 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 1.4.0
    */
   def saveAsTable(tableName: String): Unit = {
-    saveAsTable(df.sqlContext.sessionState.sqlParser.parseTableIdentifier(tableName))
+    saveAsTable(df.sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName))
   }
 
   private def saveAsTable(tableIdent: TableIdentifier): Unit = {
-    val tableExists = df.sqlContext.sessionState.catalog.tableExists(tableIdent)
+    val tableExists = df.sparkSession.sessionState.catalog.tableExists(tableIdent)
 
     (tableExists, mode) match {
       case (true, SaveMode.Ignore) =>
@@ -468,7 +466,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
             mode,
             extraOptions.toMap,
             df.logicalPlan)
-        df.sqlContext.executePlan(cmd).toRdd
+        df.sparkSession.executePlan(cmd).toRdd
     }
   }
 
@@ -608,6 +606,14 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * }}}
    *
    * You can set the following CSV-specific option(s) for writing CSV files:
+   * <li>`sep` (default `,`): sets the single character as a separator for each
+   * field and value.</li>
+   * <li>`quote` (default `"`): sets the single character used for escaping quoted values where
+   * the separator can be part of the value.</li>
+   * <li>`escape` (default `\`): sets the single character used for escaping quotes inside
+   * an already quoted value.</li>
+   * <li>`header` (default `false`): writes the names of columns as the first line.</li>
+   * <li>`nullValue` (default empty string): sets the string representation of a null value.</li>
    * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
    * one of the known case-insensitive shorten names (`none`, `bzip2`, `gzip`, `lz4`,
    * `snappy` and `deflate`). </li>
@@ -620,7 +626,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   // Builder pattern config options
   ///////////////////////////////////////////////////////////////////////////////////////
 
-  private var source: String = df.sqlContext.conf.defaultDataSourceName
+  private var source: String = df.sparkSession.sessionState.conf.defaultDataSourceName
 
   private var mode: SaveMode = SaveMode.ErrorIfExists
 

@@ -29,18 +29,19 @@ import scala.util.control.NonFatal
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{CATALOG_IMPLEMENTATION, ConfigEntry}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalog.Catalog
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Range}
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.command.ShowTablesCommand
-import org.apache.spark.sql.execution.datasources.{CreateTableUsing, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.ui.SQLListener
-import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf}
+import org.apache.spark.sql.internal.{CatalogImpl, SessionState, SharedState, SQLConf}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.{DataType, LongType, StructType}
 import org.apache.spark.sql.util.ExecutionListenerManager
@@ -52,7 +53,8 @@ import org.apache.spark.util.Utils
  */
 class SparkSession private(
     @transient val sparkContext: SparkContext,
-    @transient private val existingSharedState: Option[SharedState]) { self =>
+    @transient private val existingSharedState: Option[SharedState])
+  extends Serializable with Logging { self =>
 
   def this(sc: SparkContext) {
     this(sc, None)
@@ -62,6 +64,19 @@ class SparkSession private(
   /* ----------------------- *
    |  Session-related state  |
    * ----------------------- */
+
+  {
+    val defaultWarehousePath =
+      SQLConf.WAREHOUSE_PATH
+        .defaultValueString
+        .replace("${system:user.dir}", System.getProperty("user.dir"))
+    val warehousePath = sparkContext.conf.get(
+      SQLConf.WAREHOUSE_PATH.key,
+      defaultWarehousePath)
+    sparkContext.conf.set(SQLConf.WAREHOUSE_PATH.key, warehousePath)
+    sparkContext.conf.set("hive.metastore.warehouse.dir", warehousePath)
+    logInfo(s"Setting warehouse location to $warehousePath")
+  }
 
   /**
    * State shared across sessions, including the [[SparkContext]], cached data, listener,
@@ -76,14 +91,14 @@ class SparkSession private(
   }
 
   /**
-   * State isolated across sessions, including SQL configurations, temporary tables,
-   * registered functions, and everything else that accepts a [[SQLConf]].
+   * State isolated across sessions, including SQL configurations, temporary tables, registered
+   * functions, and everything else that accepts a [[org.apache.spark.sql.internal.SQLConf]].
    */
   @transient
   protected[sql] lazy val sessionState: SessionState = {
-    SparkSession.reflect[SessionState, SQLContext](
+    SparkSession.reflect[SessionState, SparkSession](
       SparkSession.sessionStateClassName(sparkContext.conf),
-      new SQLContext(self, isRootContext = false))
+      self)
   }
 
   /**
@@ -103,10 +118,21 @@ class SparkSession private(
     _wrapped = sqlContext
   }
 
-  protected[sql] def conf: SQLConf = sessionState.conf
   protected[sql] def cacheManager: CacheManager = sharedState.cacheManager
   protected[sql] def listener: SQLListener = sharedState.listener
   protected[sql] def externalCatalog: ExternalCatalog = sharedState.externalCatalog
+
+  /**
+   * Runtime configuration interface for Spark.
+   *
+   * This is the interface through which the user can get and set all Spark and Hadoop
+   * configurations that are relevant to Spark SQL. When getting the value of a config,
+   * this defaults to the value set in the underlying [[SparkContext]], if any.
+   *
+   * @group config
+   * @since 2.0.0
+   */
+  @transient lazy val conf: RuntimeConfig = new RuntimeConfig(sessionState.conf)
 
   /**
    * :: Experimental ::
@@ -187,130 +213,6 @@ class SparkSession private(
   }
 
 
-  /* -------------------------------------------------- *
-   |  Methods for accessing or mutating configurations  |
-   * -------------------------------------------------- */
-
-  /**
-   * Set Spark SQL configuration properties.
-   *
-   * @group config
-   * @since 2.0.0
-   */
-  def setConf(props: Properties): Unit = sessionState.setConf(props)
-
-  /**
-   * Set the given Spark SQL configuration property.
-   *
-   * @group config
-   * @since 2.0.0
-   */
-  def setConf(key: String, value: String): Unit = sessionState.setConf(key, value)
-
-  /**
-   * Return the value of Spark SQL configuration property for the given key.
-   *
-   * @group config
-   * @since 2.0.0
-   */
-  def getConf(key: String): String = conf.getConfString(key)
-
-  /**
-   * Return the value of Spark SQL configuration property for the given key. If the key is not set
-   * yet, return `defaultValue`.
-   *
-   * @group config
-   * @since 2.0.0
-   */
-  def getConf(key: String, defaultValue: String): String = conf.getConfString(key, defaultValue)
-
-  /**
-   * Return all the configuration properties that have been set (i.e. not the default).
-   * This creates a new copy of the config properties in the form of a Map.
-   *
-   * @group config
-   * @since 2.0.0
-   */
-  def getAllConfs: immutable.Map[String, String] = conf.getAllConfs
-
-  /**
-   * Set the given Spark SQL configuration property.
-   */
-  protected[sql] def setConf[T](entry: ConfigEntry[T], value: T): Unit = {
-    sessionState.setConf(entry, value)
-  }
-
-  /**
-   * Return the value of Spark SQL configuration property for the given key. If the key is not set
-   * yet, return `defaultValue` in [[ConfigEntry]].
-   */
-  protected[sql] def getConf[T](entry: ConfigEntry[T]): T = conf.getConf(entry)
-
-  /**
-   * Return the value of Spark SQL configuration property for the given key. If the key is not set
-   * yet, return `defaultValue`. This is useful when `defaultValue` in ConfigEntry is not the
-   * desired one.
-   */
-  protected[sql] def getConf[T](entry: ConfigEntry[T], defaultValue: T): T = {
-    conf.getConf(entry, defaultValue)
-  }
-
-
-  /* ------------------------------------- *
-   |  Methods related to cache management  |
-   * ------------------------------------- */
-
-  /**
-   * Returns true if the table is currently cached in-memory.
-   *
-   * @group cachemgmt
-   * @since 2.0.0
-   */
-  def isCached(tableName: String): Boolean = {
-    cacheManager.lookupCachedData(table(tableName)).nonEmpty
-  }
-
-  /**
-   * Caches the specified table in-memory.
-   *
-   * @group cachemgmt
-   * @since 2.0.0
-   */
-  def cacheTable(tableName: String): Unit = {
-    cacheManager.cacheQuery(table(tableName), Some(tableName))
-  }
-
-  /**
-   * Removes the specified table from the in-memory cache.
-   *
-   * @group cachemgmt
-   * @since 2.0.0
-   */
-  def uncacheTable(tableName: String): Unit = {
-    cacheManager.uncacheQuery(table(tableName))
-  }
-
-  /**
-   * Removes all cached tables from the in-memory cache.
-   *
-   * @group cachemgmt
-   * @since 2.0.0
-   */
-  def clearCache(): Unit = {
-    cacheManager.clearCache()
-  }
-
-  /**
-   * Returns true if the [[Dataset]] is currently cached in-memory.
-   *
-   * @group cachemgmt
-   * @since 2.0.0
-   */
-  protected[sql] def isCached(qName: Dataset[_]): Boolean = {
-    cacheManager.lookupCachedData(qName).nonEmpty
-  }
-
-
   /* --------------------------------- *
    |  Methods for creating DataFrames  |
    * --------------------------------- */
@@ -341,7 +243,7 @@ class SparkSession private(
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
     val attributeSeq = schema.toAttributes
     val rowRDD = RDDConversions.productToRowRdd(rdd, schema.map(_.dataType))
-    Dataset.ofRows(wrapped, LogicalRDD(attributeSeq, rowRDD)(wrapped))
+    Dataset.ofRows(self, LogicalRDD(attributeSeq, rowRDD)(self))
   }
 
   /**
@@ -356,7 +258,7 @@ class SparkSession private(
     SQLContext.setActive(wrapped)
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
     val attributeSeq = schema.toAttributes
-    Dataset.ofRows(wrapped, LocalRelation.fromProduct(attributeSeq, data))
+    Dataset.ofRows(self, LocalRelation.fromProduct(attributeSeq, data))
   }
 
   /**
@@ -421,7 +323,7 @@ class SparkSession private(
    */
   @DeveloperApi
   def createDataFrame(rows: java.util.List[Row], schema: StructType): DataFrame = {
-    Dataset.ofRows(wrapped, LocalRelation.fromExternalRows(schema.toAttributes, rows.asScala))
+    Dataset.ofRows(self, LocalRelation.fromExternalRows(schema.toAttributes, rows.asScala))
   }
 
   /**
@@ -441,7 +343,7 @@ class SparkSession private(
       val localBeanInfo = Introspector.getBeanInfo(Utils.classForName(className))
       SQLContext.beansToRows(iter, localBeanInfo, attributeSeq)
     }
-    Dataset.ofRows(wrapped, LogicalRDD(attributeSeq, rowRdd)(wrapped))
+    Dataset.ofRows(self, LogicalRDD(attributeSeq, rowRdd)(self))
   }
 
   /**
@@ -469,7 +371,7 @@ class SparkSession private(
     val attrSeq = getSchema(beanClass)
     val beanInfo = Introspector.getBeanInfo(beanClass)
     val rows = SQLContext.beansToRows(data.asScala.iterator, beanInfo, attrSeq)
-    Dataset.ofRows(wrapped, LocalRelation(attrSeq, rows.toSeq))
+    Dataset.ofRows(self, LocalRelation(attrSeq, rows.toSeq))
   }
 
   /**
@@ -479,7 +381,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   def baseRelationToDataFrame(baseRelation: BaseRelation): DataFrame = {
-    Dataset.ofRows(wrapped, LogicalRelation(baseRelation))
+    Dataset.ofRows(self, LogicalRelation(baseRelation))
   }
 
   def createDataset[T : Encoder](data: Seq[T]): Dataset[T] = {
@@ -487,15 +389,15 @@ class SparkSession private(
     val attributes = enc.schema.toAttributes
     val encoded = data.map(d => enc.toRow(d).copy())
     val plan = new LocalRelation(attributes, encoded)
-    Dataset[T](wrapped, plan)
+    Dataset[T](self, plan)
   }
 
   def createDataset[T : Encoder](data: RDD[T]): Dataset[T] = {
     val enc = encoderFor[T]
     val attributes = enc.schema.toAttributes
     val encoded = data.map(d => enc.toRow(d))
-    val plan = LogicalRDD(attributes, encoded)(wrapped)
-    Dataset[T](wrapped, plan)
+    val plan = LogicalRDD(attributes, encoded)(self)
+    Dataset[T](self, plan)
   }
 
   def createDataset[T : Encoder](data: java.util.List[T]): Dataset[T] = {
@@ -550,7 +452,7 @@ class SparkSession private(
    */
   @Experimental
   def range(start: Long, end: Long, step: Long, numPartitions: Int): Dataset[java.lang.Long] = {
-    new Dataset(wrapped, Range(start, end, step, numPartitions), Encoders.LONG)
+    new Dataset(self, Range(start, end, step, numPartitions), Encoders.LONG)
   }
 
   /**
@@ -562,8 +464,8 @@ class SparkSession private(
       schema: StructType): DataFrame = {
     // TODO: use MutableProjection when rowRDD is another DataFrame and the applied
     // schema differs from the existing schema on any field data type.
-    val logicalPlan = LogicalRDD(schema.toAttributes, catalystRows)(wrapped)
-    Dataset.ofRows(wrapped, logicalPlan)
+    val logicalPlan = LogicalRDD(schema.toAttributes, catalystRows)(self)
+    Dataset.ofRows(self, logicalPlan)
   }
 
   /**
@@ -582,144 +484,23 @@ class SparkSession private(
     } else {
       rowRDD.map{r: Row => InternalRow.fromSeq(r.toSeq)}
     }
-    val logicalPlan = LogicalRDD(schema.toAttributes, catalystRows)(wrapped)
-    Dataset.ofRows(wrapped, logicalPlan)
+    val logicalPlan = LogicalRDD(schema.toAttributes, catalystRows)(self)
+    Dataset.ofRows(self, logicalPlan)
   }
 
 
-  /* --------------------------- *
-   |  Methods related to tables  |
-   * --------------------------- */
+  /* ------------------------ *
+   |  Catalog-related methods |
+   * ----------------- ------ */
 
   /**
-   * :: Experimental ::
-   * Creates an external table from the given path and returns the corresponding DataFrame.
-   * It will use the default data source configured by spark.sql.sources.default.
+   * Interface through which the user may create, drop, alter or query underlying
+   * databases, tables, functions etc.
    *
    * @group ddl_ops
    * @since 2.0.0
    */
-  @Experimental
-  def createExternalTable(tableName: String, path: String): DataFrame = {
-    val dataSourceName = conf.defaultDataSourceName
-    createExternalTable(tableName, path, dataSourceName)
-  }
-
-  /**
-   * :: Experimental ::
-   * Creates an external table from the given path based on a data source
-   * and returns the corresponding DataFrame.
-   *
-   * @group ddl_ops
-   * @since 2.0.0
-   */
-  @Experimental
-  def createExternalTable(tableName: String, path: String, source: String): DataFrame = {
-    createExternalTable(tableName, source, Map("path" -> path))
-  }
-
-  /**
-   * :: Experimental ::
-   * Creates an external table from the given path based on a data source and a set of options.
-   * Then, returns the corresponding DataFrame.
-   *
-   * @group ddl_ops
-   * @since 2.0.0
-   */
-  @Experimental
-  def createExternalTable(
-      tableName: String,
-      source: String,
-      options: java.util.Map[String, String]): DataFrame = {
-    createExternalTable(tableName, source, options.asScala.toMap)
-  }
-
-  /**
-   * :: Experimental ::
-   * (Scala-specific)
-   * Creates an external table from the given path based on a data source and a set of options.
-   * Then, returns the corresponding DataFrame.
-   *
-   * @group ddl_ops
-   * @since 2.0.0
-   */
-  @Experimental
-  def createExternalTable(
-      tableName: String,
-      source: String,
-      options: Map[String, String]): DataFrame = {
-    val tableIdent = sessionState.sqlParser.parseTableIdentifier(tableName)
-    val cmd =
-      CreateTableUsing(
-        tableIdent,
-        userSpecifiedSchema = None,
-        source,
-        temporary = false,
-        options,
-        allowExisting = false,
-        managedIfNoPath = false)
-    executePlan(cmd).toRdd
-    table(tableIdent)
-  }
-
-  /**
-   * :: Experimental ::
-   * Create an external table from the given path based on a data source, a schema and
-   * a set of options. Then, returns the corresponding DataFrame.
-   *
-   * @group ddl_ops
-   * @since 2.0.0
-   */
-  @Experimental
-  def createExternalTable(
-      tableName: String,
-      source: String,
-      schema: StructType,
-      options: java.util.Map[String, String]): DataFrame = {
-    createExternalTable(tableName, source, schema, options.asScala.toMap)
-  }
-
-  /**
-   * :: Experimental ::
-   * (Scala-specific)
-   * Create an external table from the given path based on a data source, a schema and
-   * a set of options. Then, returns the corresponding DataFrame.
-   *
-   * @group ddl_ops
-   * @since 2.0.0
-   */
-  @Experimental
-  def createExternalTable(
-      tableName: String,
-      source: String,
-      schema: StructType,
-      options: Map[String, String]): DataFrame = {
-    val tableIdent = sessionState.sqlParser.parseTableIdentifier(tableName)
-    val cmd =
-      CreateTableUsing(
-        tableIdent,
-        userSpecifiedSchema = Some(schema),
-        source,
-        temporary = false,
-        options,
-        allowExisting = false,
-        managedIfNoPath = false)
-    executePlan(cmd).toRdd
-    table(tableIdent)
-  }
-
-  /**
-   * Drops the temporary table with the given table name in the catalog.
-   * If the table has been cached/persisted before, it's also unpersisted.
-   *
-   * @param tableName the name of the table to be unregistered.
-   * @group ddl_ops
-   * @since 2.0.0
-   */
-  def dropTempTable(tableName: String): Unit = {
-    cacheManager.tryUncacheQuery(table(tableName))
-    sessionState.catalog.dropTable(TableIdentifier(tableName), ignoreIfNotExists = true)
-  }
+  @transient lazy val catalog: Catalog = new CatalogImpl(self)
 
   /**
    * Returns the specified table as a [[DataFrame]].
@@ -731,59 +512,15 @@ class SparkSession private(
     table(sessionState.sqlParser.parseTableIdentifier(tableName))
   }
 
-  private def table(tableIdent: TableIdentifier): DataFrame = {
-    Dataset.ofRows(wrapped, sessionState.catalog.lookupRelation(tableIdent))
-  }
-
-  /**
-   * Returns a [[DataFrame]] containing names of existing tables in the current database.
-   * The returned DataFrame has two columns, tableName and isTemporary (a Boolean
-   * indicating if a table is a temporary one or not).
-   *
-   * @group ddl_ops
-   * @since 2.0.0
-   */
-  def tables(): DataFrame = {
-    Dataset.ofRows(wrapped, ShowTablesCommand(None, None))
-  }
-
-  /**
-   * Returns a [[DataFrame]] containing names of existing tables in the given database.
-   * The returned DataFrame has two columns, tableName and isTemporary (a Boolean
-   * indicating if a table is a temporary one or not).
-   *
-   * @group ddl_ops
-   * @since 2.0.0
-   */
-  def tables(databaseName: String): DataFrame = {
-    Dataset.ofRows(wrapped, ShowTablesCommand(Some(databaseName), None))
-  }
-
-  /**
-   * Returns the names of tables in the current database as an array.
-   *
-   * @group ddl_ops
-   * @since 2.0.0
-   */
-  def tableNames(): Array[String] = {
-    tableNames(sessionState.catalog.getCurrentDatabase)
-  }
-
-  /**
-   * Returns the names of tables in the given database as an array.
-   *
-   * @group ddl_ops
-   * @since 2.0.0
-   */
-  def tableNames(databaseName: String): Array[String] = {
-    sessionState.catalog.listTables(databaseName).map(_.table).toArray
+  protected[sql] def table(tableIdent: TableIdentifier): DataFrame = {
+    Dataset.ofRows(self, sessionState.catalog.lookupRelation(tableIdent))
   }
 
   /**
    * Registers the given [[DataFrame]] as a temporary table in the catalog.
    * Temporary tables exist only during the lifetime of this instance of [[SparkSession]].
    */
-  protected[sql] def registerDataFrameAsTable(df: DataFrame, tableName: String): Unit = {
+  protected[sql] def registerTable(df: DataFrame, tableName: String): Unit = {
     sessionState.catalog.createTempTable(
       sessionState.sqlParser.parseTableIdentifier(tableName).table,
       df.logicalPlan,
@@ -803,7 +540,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   def sql(sqlText: String): DataFrame = {
-    Dataset.ofRows(wrapped, parseSql(sqlText))
+    Dataset.ofRows(self, parseSql(sqlText))
   }
 
   /**
@@ -818,7 +555,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   @Experimental
-  def read: DataFrameReader = new DataFrameReader(wrapped)
+  def read: DataFrameReader = new DataFrameReader(self)
 
 
   // scalastyle:off
@@ -855,15 +592,6 @@ class SparkSession private(
   }
 
   /**
-   * Executes a SQL query without parsing it, but instead passing it directly to an underlying
-   * system to process. This is currently only used for Hive DDLs and will be removed as soon
-   * as Spark can parse all supported Hive DDLs itself.
-   */
-  protected[sql] def runNativeSql(sqlText: String): Seq[Row] = {
-    sessionState.runNativeSql(sqlText).map { r => Row(r) }
-  }
-
-  /**
    * Parses the data type in our internal string representation. The data type string should
    * have the same format as the one generated by `toString` in scala.
    * It is only used by PySpark.
@@ -889,7 +617,7 @@ class SparkSession private(
       rdd: RDD[Array[Any]],
       schema: StructType): DataFrame = {
     val rowRdd = rdd.map(r => python.EvaluatePython.fromJava(r, schema).asInstanceOf[InternalRow])
-    Dataset.ofRows(wrapped, LogicalRDD(schema.toAttributes, rowRdd)(wrapped))
+    Dataset.ofRows(self, LogicalRDD(schema.toAttributes, rowRdd)(self))
   }
 
   /**
@@ -905,18 +633,21 @@ class SparkSession private(
 }
 
 
-private object SparkSession {
+object SparkSession {
+
+  private val HIVE_SHARED_STATE_CLASS_NAME = "org.apache.spark.sql.hive.HiveSharedState"
+  private val HIVE_SESSION_STATE_CLASS_NAME = "org.apache.spark.sql.hive.HiveSessionState"
 
   private def sharedStateClassName(conf: SparkConf): String = {
     conf.get(CATALOG_IMPLEMENTATION) match {
-      case "hive" => "org.apache.spark.sql.hive.HiveSharedState"
+      case "hive" => HIVE_SHARED_STATE_CLASS_NAME
       case "in-memory" => classOf[SharedState].getCanonicalName
     }
   }
 
   private def sessionStateClassName(conf: SparkConf): String = {
     conf.get(CATALOG_IMPLEMENTATION) match {
-      case "hive" => "org.apache.spark.sql.hive.HiveSessionState"
+      case "hive" => HIVE_SESSION_STATE_CLASS_NAME
       case "in-memory" => classOf[SessionState].getCanonicalName
     }
   }
@@ -935,6 +666,33 @@ private object SparkSession {
     } catch {
       case NonFatal(e) =>
         throw new IllegalArgumentException(s"Error while instantiating '$className':", e)
+    }
+  }
+
+  /**
+   * Return true if Hive classes can be loaded, otherwise false.
+   */
+  private[spark] def hiveClassesArePresent: Boolean = {
+    try {
+      Utils.classForName(HIVE_SESSION_STATE_CLASS_NAME)
+      Utils.classForName(HIVE_SHARED_STATE_CLASS_NAME)
+      Utils.classForName("org.apache.hadoop.hive.conf.HiveConf")
+      true
+    } catch {
+      case _: ClassNotFoundException | _: NoClassDefFoundError => false
+    }
+  }
+
+  /**
+   * Create a new [[SparkSession]] with a catalog backed by Hive.
+   */
+  def withHiveSupport(sc: SparkContext): SparkSession = {
+    if (hiveClassesArePresent) {
+      sc.conf.set(CATALOG_IMPLEMENTATION.key, "hive")
+      new SparkSession(sc)
+    } else {
+      throw new IllegalArgumentException(
+        "Unable to instantiate SparkSession with Hive support because Hive classes are not found.")
     }
   }
 

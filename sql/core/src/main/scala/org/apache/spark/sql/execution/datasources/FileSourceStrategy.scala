@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.{DataSourceScan, SparkPlan}
+import org.apache.spark.sql.execution.{DataSourceScanExec, SparkPlan}
 
 /**
  * A strategy for planning scans over collections of files that might be partitioned or bucketed
@@ -74,14 +74,14 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
       }
 
       val partitionColumns =
-        l.resolve(files.partitionSchema, files.sqlContext.sessionState.analyzer.resolver)
+        l.resolve(files.partitionSchema, files.sparkSession.sessionState.analyzer.resolver)
       val partitionSet = AttributeSet(partitionColumns)
       val partitionKeyFilters =
         ExpressionSet(normalizedFilters.filter(_.references.subsetOf(partitionSet)))
       logInfo(s"Pruning directories with: ${partitionKeyFilters.mkString(",")}")
 
       val dataColumns =
-        l.resolve(files.dataSchema, files.sqlContext.sessionState.analyzer.resolver)
+        l.resolve(files.dataSchema, files.sparkSession.sessionState.analyzer.resolver)
 
       // Partition keys are not available in the statistics of the files.
       val dataFilters = normalizedFilters.filter(_.references.intersect(partitionSet).isEmpty)
@@ -107,15 +107,16 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
       logInfo(s"Pushed Filters: ${pushedDownFilters.mkString(",")}")
 
       val readFile = files.fileFormat.buildReader(
-        sqlContext = files.sqlContext,
+        sparkSession = files.sparkSession,
         dataSchema = files.dataSchema,
         partitionSchema = files.partitionSchema,
         requiredSchema = prunedDataSchema,
         filters = pushedDownFilters,
-        options = files.options)
+        options = files.options,
+        hadoopConf = files.sparkSession.sessionState.newHadoopConfWithOptions(files.options))
 
       val plannedPartitions = files.bucketSpec match {
-        case Some(bucketing) if files.sqlContext.conf.bucketingEnabled =>
+        case Some(bucketing) if files.sparkSession.sessionState.conf.bucketingEnabled =>
           logInfo(s"Planning with ${bucketing.numBuckets} buckets")
           val bucketed =
             selectedPartitions.flatMap { p =>
@@ -134,8 +135,13 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
           }
 
         case _ =>
-          val maxSplitBytes = files.sqlContext.conf.filesMaxPartitionBytes
-          val openCostInBytes = files.sqlContext.conf.filesOpenCostInBytes
+          val defaultMaxSplitBytes = files.sparkSession.sessionState.conf.filesMaxPartitionBytes
+          val openCostInBytes = files.sparkSession.sessionState.conf.filesOpenCostInBytes
+          val defaultParallelism = files.sparkSession.sparkContext.defaultParallelism
+          val totalBytes = selectedPartitions.flatMap(_.files.map(_.getLen + openCostInBytes)).sum
+          val bytesPerCore = totalBytes / defaultParallelism
+          val maxSplitBytes = Math.min(defaultMaxSplitBytes,
+            Math.max(openCostInBytes, bytesPerCore))
           logInfo(s"Planning scan with bin packing, max size: $maxSplitBytes bytes, " +
             s"open cost is considered as scanning $openCostInBytes bytes.")
 
@@ -187,10 +193,10 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
       }
 
       val scan =
-        DataSourceScan.create(
+        DataSourceScanExec.create(
           readDataColumns ++ partitionColumns,
           new FileScanRDD(
-            files.sqlContext,
+            files.sparkSession,
             readFile,
             plannedPartitions),
           files,
@@ -200,11 +206,11 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
             "ReadSchema" -> prunedDataSchema.simpleString))
 
       val afterScanFilter = afterScanFilters.toSeq.reduceOption(expressions.And)
-      val withFilter = afterScanFilter.map(execution.Filter(_, scan)).getOrElse(scan)
+      val withFilter = afterScanFilter.map(execution.FilterExec(_, scan)).getOrElse(scan)
       val withProjections = if (projects == withFilter.output) {
         withFilter
       } else {
-        execution.Project(projects, withFilter)
+        execution.ProjectExec(projects, withFilter)
       }
 
       withProjections :: Nil

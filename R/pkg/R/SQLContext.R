@@ -34,7 +34,7 @@ getInternalType <- function(x) {
          Date = "date",
          POSIXlt = "timestamp",
          POSIXct = "timestamp",
-         stop(paste("Unsupported type for DataFrame:", class(x))))
+         stop(paste("Unsupported type for SparkDataFrame:", class(x))))
 }
 
 #' infer the SQL type
@@ -70,14 +70,14 @@ infer_type <- function(x) {
   }
 }
 
-#' Create a DataFrame
+#' Create a SparkDataFrame
 #'
-#' Converts R data.frame or list into DataFrame.
+#' Converts R data.frame or list into SparkDataFrame.
 #'
 #' @param sqlContext A SQLContext
 #' @param data An RDD or list or data.frame
 #' @param schema a list of column names or named list (StructType), optional
-#' @return an DataFrame
+#' @return a SparkDataFrame
 #' @rdname createDataFrame
 #' @export
 #' @examples
@@ -173,11 +173,11 @@ as.DataFrame <- function(sqlContext, data, schema = NULL, samplingRatio = 1.0) {
 
 #' toDF
 #'
-#' Converts an RDD to a DataFrame by infer the types.
+#' Converts an RDD to a SparkDataFrame by infer the types.
 #'
 #' @param x An RDD
 #'
-#' @rdname DataFrame
+#' @rdname SparkDataFrame
 #' @noRd
 #' @examples
 #'\dontrun{
@@ -200,14 +200,14 @@ setMethod("toDF", signature(x = "RDD"),
             createDataFrame(sqlContext, x, ...)
           })
 
-#' Create a DataFrame from a JSON file.
+#' Create a SparkDataFrame from a JSON file.
 #'
-#' Loads a JSON file (one object per line), returning the result as a DataFrame
+#' Loads a JSON file (one object per line), returning the result as a SparkDataFrame
 #' It goes through the entire dataset once to determine the schema.
 #'
 #' @param sqlContext SQLContext to use
 #' @param path Path of file to read. A vector of multiple paths is allowed.
-#' @return DataFrame
+#' @return SparkDataFrame
 #' @rdname read.json
 #' @name read.json
 #' @export
@@ -238,13 +238,13 @@ jsonFile <- function(sqlContext, path) {
 
 #' JSON RDD
 #'
-#' Loads an RDD storing one JSON object per string as a DataFrame.
+#' Loads an RDD storing one JSON object per string as a SparkDataFrame.
 #'
 #' @param sqlContext SQLContext to use
 #' @param rdd An RDD of JSON string
 #' @param schema A StructType object to use as schema
 #' @param samplingRatio The ratio of simpling used to infer the schema
-#' @return A DataFrame
+#' @return A SparkDataFrame
 #' @noRd
 #' @examples
 #'\dontrun{
@@ -268,13 +268,13 @@ jsonRDD <- function(sqlContext, rdd, schema = NULL, samplingRatio = 1.0) {
   }
 }
 
-#' Create a DataFrame from a Parquet file.
+#' Create a SparkDataFrame from a Parquet file.
 #'
-#' Loads a Parquet file, returning the result as a DataFrame.
+#' Loads a Parquet file, returning the result as a SparkDataFrame.
 #'
 #' @param sqlContext SQLContext to use
 #' @param path Path of file to read. A vector of multiple paths is allowed.
-#' @return DataFrame
+#' @return SparkDataFrame
 #' @rdname read.parquet
 #' @name read.parquet
 #' @export
@@ -295,14 +295,14 @@ parquetFile <- function(sqlContext, ...) {
   read.parquet(sqlContext, unlist(list(...)))
 }
 
-#' Create a DataFrame from a text file.
+#' Create a SparkDataFrame from a text file.
 #'
-#' Loads a text file and returns a DataFrame with a single string column named "value".
-#' Each line in the text file is a new row in the resulting DataFrame.
+#' Loads a text file and returns a SparkDataFrame with a single string column named "value".
+#' Each line in the text file is a new row in the resulting SparkDataFrame.
 #'
 #' @param sqlContext SQLContext to use
 #' @param path Path of file to read. A vector of multiple paths is allowed.
-#' @return DataFrame
+#' @return SparkDataFrame
 #' @rdname read.text
 #' @name read.text
 #' @export
@@ -323,11 +323,11 @@ read.text <- function(sqlContext, path) {
 
 #' SQL Query
 #'
-#' Executes a SQL query using Spark, returning the result as a DataFrame.
+#' Executes a SQL query using Spark, returning the result as a SparkDataFrame.
 #'
 #' @param sqlContext SQLContext to use
 #' @param sqlQuery A character vector containing the SQL query
-#' @return DataFrame
+#' @return SparkDataFrame
 #' @export
 #' @examples
 #'\dontrun{
@@ -344,14 +344,14 @@ sql <- function(sqlContext, sqlQuery) {
  dataFrame(sdf)
 }
 
-#' Create a DataFrame from a SparkSQL Table
+#' Create a SparkDataFrame from a SparkSQL Table
 #'
-#' Returns the specified Table as a DataFrame.  The Table must have already been registered
+#' Returns the specified Table as a SparkDataFrame.  The Table must have already been registered
 #' in the SQLContext.
 #'
 #' @param sqlContext SQLContext to use
-#' @param tableName The SparkSQL Table to convert to a DataFrame.
-#' @return DataFrame
+#' @param tableName The SparkSQL Table to convert to a SparkDataFrame.
+#' @return SparkDataFrame
 #' @rdname tableToDF
 #' @name tableToDF
 #' @export
@@ -372,11 +372,11 @@ tableToDF <- function(sqlContext, tableName) {
 
 #' Tables
 #'
-#' Returns a DataFrame containing names of tables in the given database.
+#' Returns a SparkDataFrame containing names of tables in the given database.
 #'
 #' @param sqlContext SQLContext to use
 #' @param databaseName name of the database
-#' @return a DataFrame
+#' @return a SparkDataFrame
 #' @export
 #' @examples
 #'\dontrun{
@@ -425,7 +425,7 @@ tableNames <- function(sqlContext, databaseName = NULL) {
 #'
 #' @param sqlContext SQLContext to use
 #' @param tableName The name of the table being cached
-#' @return DataFrame
+#' @return SparkDataFrame
 #' @export
 #' @examples
 #'\dontrun{
@@ -447,7 +447,7 @@ cacheTable <- function(sqlContext, tableName) {
 #'
 #' @param sqlContext SQLContext to use
 #' @param tableName The name of the table being uncached
-#' @return DataFrame
+#' @return SparkDataFrame
 #' @export
 #' @examples
 #'\dontrun{
@@ -500,9 +500,9 @@ dropTempTable <- function(sqlContext, tableName) {
   callJMethod(sqlContext, "dropTempTable", tableName)
 }
 
-#' Load an DataFrame
+#' Load a SparkDataFrame
 #'
-#' Returns the dataset in a data source as a DataFrame
+#' Returns the dataset in a data source as a SparkDataFrame
 #'
 #' The data source is specified by the `source` and a set of options(...).
 #' If `source` is not specified, the default data source configured by
@@ -512,7 +512,7 @@ dropTempTable <- function(sqlContext, tableName) {
 #' @param path The path of files to load
 #' @param source The name of external data source
 #' @param schema The data schema defined in structType
-#' @return DataFrame
+#' @return SparkDataFrame
 #' @rdname read.df
 #' @name read.df
 #' @export
@@ -556,7 +556,7 @@ loadDF <- function(sqlContext, path = NULL, source = NULL, schema = NULL, ...) {
 #' Create an external table
 #'
 #' Creates an external table based on the dataset in a data source,
-#' Returns the DataFrame associated with the external table.
+#' Returns a SparkDataFrame associated with the external table.
 #'
 #' The data source is specified by the `source` and a set of options(...).
 #' If `source` is not specified, the default data source configured by
@@ -566,7 +566,7 @@ loadDF <- function(sqlContext, path = NULL, source = NULL, schema = NULL, ...) {
 #' @param tableName A name of the table
 #' @param path The path of files to load
 #' @param source the name of external data source
-#' @return DataFrame
+#' @return SparkDataFrame
 #' @export
 #' @examples
 #'\dontrun{
@@ -584,7 +584,7 @@ createExternalTable <- function(sqlContext, tableName, path = NULL, source = NUL
   dataFrame(sdf)
 }
 
-#' Create a DataFrame representing the database table accessible via JDBC URL
+#' Create a SparkDataFrame representing the database table accessible via JDBC URL
 #'
 #' Additional JDBC database connection properties can be set (...)
 #'
@@ -605,7 +605,7 @@ createExternalTable <- function(sqlContext, tableName, path = NULL, source = NUL
 #'                      clause expressions used to split the column `partitionColumn` evenly.
 #'                      This defaults to SparkContext.defaultParallelism when unset.
 #' @param predicates a list of conditions in the where clause; each one defines one partition
-#' @return DataFrame
+#' @return SparkDataFrame
 #' @rdname read.jdbc
 #' @name read.jdbc
 #' @export

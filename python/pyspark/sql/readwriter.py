@@ -33,10 +33,13 @@ __all__ = ["DataFrameReader", "DataFrameWriter"]
 
 def to_str(value):
     """
-    A wrapper over str(), but convert bool values to lower case string
+    A wrapper over str(), but converts bool values to lower case strings.
+    If None is given, just returns None, instead of converting it to string "None".
     """
     if isinstance(value, bool):
         return str(value).lower()
+    elif value is None:
+        return value
     else:
         return str(value)
 
@@ -279,6 +282,45 @@ class DataFrameReader(object):
 
         :param paths: string, or list of strings, for input path(s).
 
+        You can set the following CSV-specific options to deal with CSV files:
+            * ``sep`` (default ``,``): sets the single character as a separator \
+                for each field and value.
+            * ``charset`` (default ``UTF-8``): decodes the CSV files by the given \
+                encoding type.
+            * ``quote`` (default ``"``): sets the single character used for escaping \
+                quoted values where the separator can be part of the value.
+            * ``escape`` (default ``\``): sets the single character used for escaping quotes \
+                inside an already quoted value.
+            * ``comment`` (default empty string): sets the single character used for skipping \
+                lines beginning with this character. By default, it is disabled.
+            * ``header`` (default ``false``): uses the first line as names of columns.
+            * ``ignoreLeadingWhiteSpace`` (default ``false``): defines whether or not leading \
+                whitespaces from values being read should be skipped.
+            * ``ignoreTrailingWhiteSpace`` (default ``false``): defines whether or not trailing \
+                whitespaces from values being read should be skipped.
+            * ``nullValue`` (default empty string): sets the string representation of a null value.
+            * ``nanValue`` (default ``NaN``): sets the string representation of a non-number \
+                value.
+            * ``positiveInf`` (default ``Inf``): sets the string representation of a positive \
+                infinity value.
+            * ``negativeInf`` (default ``-Inf``): sets the string representation of a negative \
+                infinity value.
+            * ``dateFormat`` (default ``None``): sets the string that indicates a date format. \
+                Custom date formats follow the formats at ``java.text.SimpleDateFormat``. This \
+                applies to both date type and timestamp type. By default, it is None which means \
+                trying to parse times and date by ``java.sql.Timestamp.valueOf()`` and \
+                ``java.sql.Date.valueOf()``.
+            * ``maxColumns`` (default ``20480``): defines a hard limit of how many columns \
+                a record can have.
+            * ``maxCharsPerColumn`` (default ``1000000``): defines the maximum number of \
+                characters allowed for any given value being read.
+            * ``mode`` (default ``PERMISSIVE``): allows a mode for dealing with corrupt records \
+                during parsing.
+                * ``PERMISSIVE`` : sets other fields to ``null`` when it meets a corrupted record. \
+                    When a schema is set by user, it sets ``null`` for extra fields.
+                * ``DROPMALFORMED`` : ignores the whole corrupted records.
+                * ``FAILFAST`` : throws an exception when it meets corrupted records.
+
         >>> df = sqlContext.read.csv('python/test_support/sql/ages.csv')
         >>> df.dtypes
         [('C0', 'string'), ('C1', 'string')]
@@ -362,7 +404,7 @@ class DataFrameWriter(object):
 
     def _cq(self, jcq):
         from pyspark.sql.streaming import ContinuousQuery
-        return ContinuousQuery(jcq, self._sqlContext)
+        return ContinuousQuery(jcq)
 
     @since(1.4)
     def mode(self, saveMode):
@@ -398,7 +440,7 @@ class DataFrameWriter(object):
     def option(self, key, value):
         """Adds an output option for the underlying data source.
         """
-        self._jwrite = self._jwrite.option(key, value)
+        self._jwrite = self._jwrite.option(key, to_str(value))
         return self
 
     @since(1.4)
@@ -406,7 +448,7 @@ class DataFrameWriter(object):
         """Adds output options for the underlying data source.
         """
         for k in options:
-            self._jwrite = self._jwrite.option(k, options[k])
+            self._jwrite = self._jwrite.option(k, to_str(options[k]))
         return self
 
     @since(1.4)
@@ -660,6 +702,19 @@ class DataFrameWriter(object):
                             known case-insensitive shorten names (none, bzip2, gzip, lz4,
                             snappy and deflate).
 
+        You can set the following CSV-specific options to deal with CSV files:
+            * ``sep`` (default ``,``): sets the single character as a separator \
+                for each field and value.
+            * ``quote`` (default ``"``): sets the single character used for escaping \
+                quoted values where the separator can be part of the value.
+            * ``escape`` (default ``\``): sets the single character used for escaping quotes \
+                inside an already quoted value.
+            * ``header`` (default ``false``): writes the names of columns as the first line.
+            * ``nullValue`` (default empty string): sets the string representation of a null value.
+            * ``compression``: compression codec to use when saving to file. This can be one of \
+                the known case-insensitive shorten names (none, bzip2, gzip, lz4, snappy and \
+                deflate).
+
         >>> df.write.csv(os.path.join(tempfile.mkdtemp(), 'data'))
         """
         self.mode(mode)
@@ -740,7 +795,7 @@ def _test():
     globs['os'] = os
     globs['sc'] = sc
     globs['sqlContext'] = SQLContext(sc)
-    globs['hiveContext'] = HiveContext(sc)
+    globs['hiveContext'] = HiveContext._createForTesting(sc)
     globs['df'] = globs['sqlContext'].read.parquet('python/test_support/sql/parquet_partitioned')
     globs['sdf'] =\
         globs['sqlContext'].read.format('text').stream('python/test_support/sql/streaming')

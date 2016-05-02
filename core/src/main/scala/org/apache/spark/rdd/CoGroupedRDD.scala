@@ -58,10 +58,10 @@ private[spark] case class NarrowCoGroupSplitDep(
  *                   narrowDeps should always be equal to the number of parents.
  */
 private[spark] class CoGroupPartition(
-    idx: Int, val narrowDeps: Array[Option[NarrowCoGroupSplitDep]])
+    override val index: Int, val narrowDeps: Array[Option[NarrowCoGroupSplitDep]])
   extends Partition with Serializable {
-  override val index: Int = idx
-  override def hashCode(): Int = idx
+  override def hashCode(): Int = index
+  override def equals(other: Any): Boolean = super.equals(other)
 }
 
 /**
