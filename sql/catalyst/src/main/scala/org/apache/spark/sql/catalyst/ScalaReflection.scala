@@ -509,6 +509,9 @@ object ScalaReflection extends ScalaReflection {
                 serializerFor(unwrapped, optType, newPath))
           }
 
+        // Since List[_] also belongs to localTypeOf[Product], we put this case before
+        // "case t if definedByConstructorParams(t)" to make sure it will match to the
+        // case "localTypeOf[Seq[_]]"
         case t if t <:< localTypeOf[Seq[_]] =>
           val TypeRef(_, _, Seq(elementType)) = t
           toCatalystArray(inputObject, elementType)
