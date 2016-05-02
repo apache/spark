@@ -19,7 +19,6 @@ package org.apache.spark.util.collection.unsafe.sort;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.Arrays;
 import java.util.LinkedList;
@@ -43,14 +42,15 @@ import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.executor.TaskMetrics;
 import org.apache.spark.memory.TestMemoryManager;
 import org.apache.spark.memory.TaskMemoryManager;
+import org.apache.spark.serializer.JavaSerializer;
 import org.apache.spark.serializer.SerializerInstance;
+import org.apache.spark.serializer.SerializerManager;
 import org.apache.spark.storage.*;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.util.Utils;
 
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.junit.Assert.*;
-import static org.mockito.AdditionalAnswers.returnsSecondArg;
 import static org.mockito.Answers.RETURNS_SMART_NULLS;
 import static org.mockito.Mockito.*;
 
@@ -60,13 +60,11 @@ public class UnsafeExternalSorterSuite {
   final TestMemoryManager memoryManager =
     new TestMemoryManager(new SparkConf().set("spark.memory.offHeap.enabled", "false"));
   final TaskMemoryManager taskMemoryManager = new TaskMemoryManager(memoryManager, 0);
+  final SerializerManager serializerManager = new SerializerManager(
+    new JavaSerializer(new SparkConf()),
+    new SparkConf().set("spark.shuffle.spill.compress", "false"));
   // Use integer comparison for comparing prefixes (which are partition ids, in this case)
-  final PrefixComparator prefixComparator = new PrefixComparator() {
-    @Override
-    public int compare(long prefix1, long prefix2) {
-      return (int) prefix1 - (int) prefix2;
-    }
-  };
+  final PrefixComparator prefixComparator = PrefixComparators.LONG;
   // Since the key fits within the 8-byte prefix, we don't need to do any record comparison, so
   // use a dummy comparator
   final RecordComparator recordComparator = new RecordComparator() {
@@ -80,12 +78,12 @@ public class UnsafeExternalSorterSuite {
     }
   };
 
-  SparkConf sparkConf;
   File tempDir;
   @Mock(answer = RETURNS_SMART_NULLS) BlockManager blockManager;
   @Mock(answer = RETURNS_SMART_NULLS) DiskBlockManager diskBlockManager;
   @Mock(answer = RETURNS_SMART_NULLS) TaskContext taskContext;
 
+  protected boolean shouldUseRadixSort() { return false; }
 
   private final long pageSizeBytes = new SparkConf().getSizeAsBytes("spark.buffer.pageSize", "4m");
 
@@ -99,15 +97,16 @@ public class UnsafeExternalSorterSuite {
   @Before
   public void setUp() {
     MockitoAnnotations.initMocks(this);
-    sparkConf = new SparkConf();
     tempDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "unsafe-test");
     spillFilesCreated.clear();
     taskContext = mock(TaskContext.class);
     when(taskContext.taskMetrics()).thenReturn(new TaskMetrics());
     when(blockManager.diskBlockManager()).thenReturn(diskBlockManager);
-    when(diskBlockManager.createTempLocalBlock()).thenAnswer(new Answer<Tuple2<TempLocalBlockId, File>>() {
+    when(diskBlockManager.createTempLocalBlock()).thenAnswer(
+        new Answer<Tuple2<TempLocalBlockId, File>>() {
       @Override
-      public Tuple2<TempLocalBlockId, File> answer(InvocationOnMock invocationOnMock) throws Throwable {
+      public Tuple2<TempLocalBlockId, File> answer(InvocationOnMock invocationOnMock)
+          throws Throwable {
         TempLocalBlockId blockId = new TempLocalBlockId(UUID.randomUUID());
         File file = File.createTempFile("spillFile", ".spill", tempDir);
         spillFilesCreated.add(file);
@@ -135,8 +134,6 @@ public class UnsafeExternalSorterSuite {
         );
       }
     });
-    when(blockManager.wrapForCompression(any(BlockId.class), any(InputStream.class)))
-      .then(returnsSecondArg());
   }
 
   @After
@@ -172,11 +169,13 @@ public class UnsafeExternalSorterSuite {
     return UnsafeExternalSorter.create(
       taskMemoryManager,
       blockManager,
+      serializerManager,
       taskContext,
       recordComparator,
       prefixComparator,
       /* initialSize */ 1024,
-      pageSizeBytes);
+      pageSizeBytes,
+      shouldUseRadixSort());
   }
 
   @Test
@@ -374,11 +373,13 @@ public class UnsafeExternalSorterSuite {
     final UnsafeExternalSorter sorter = UnsafeExternalSorter.create(
       taskMemoryManager,
       blockManager,
+      serializerManager,
       taskContext,
       null,
       null,
       /* initialSize */ 1024,
-      pageSizeBytes);
+      pageSizeBytes,
+      shouldUseRadixSort());
     long[] record = new long[100];
     int recordSize = record.length * 8;
     int n = (int) pageSizeBytes / recordSize * 3;
@@ -408,11 +409,13 @@ public class UnsafeExternalSorterSuite {
     final UnsafeExternalSorter sorter = UnsafeExternalSorter.create(
       taskMemoryManager,
       blockManager,
+      serializerManager,
       taskContext,
       recordComparator,
       prefixComparator,
       1024,
-      pageSizeBytes);
+      pageSizeBytes,
+      shouldUseRadixSort());
 
     // Peak memory should be monotonically increasing. More specifically, every time
     // we allocate a new page it should increase by exactly the size of the page.

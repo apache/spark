@@ -36,6 +36,7 @@ import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.QueryTest$;
 import org.apache.spark.sql.Row;
+import org.apache.spark.sql.SQLContext;
 import org.apache.spark.sql.hive.test.TestHive$;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.StructField;
@@ -46,9 +47,8 @@ import org.apache.spark.util.Utils;
 
 public class JavaMetastoreDataSourcesSuite {
   private transient JavaSparkContext sc;
-  private transient HiveContext sqlContext;
+  private transient SQLContext sqlContext;
 
-  String originalDefaultSource;
   File path;
   Path hiveManagedPath;
   FileSystem fs;
@@ -66,14 +66,14 @@ public class JavaMetastoreDataSourcesSuite {
     sqlContext = TestHive$.MODULE$;
     sc = new JavaSparkContext(sqlContext.sparkContext());
 
-    originalDefaultSource = sqlContext.conf().defaultDataSourceName();
     path =
       Utils.createTempDir(System.getProperty("java.io.tmpdir"), "datasource").getCanonicalFile();
     if (path.exists()) {
       path.delete();
     }
-    hiveManagedPath = new Path(sqlContext.catalog().hiveDefaultTableFilePath(
-      new TableIdentifier("javaSavedTable")));
+    HiveSessionCatalog catalog = (HiveSessionCatalog) sqlContext.sessionState().catalog();
+    hiveManagedPath = new Path(
+      catalog.hiveDefaultTableFilePath(new TableIdentifier("javaSavedTable")));
     fs = hiveManagedPath.getFileSystem(sc.hadoopConfiguration());
     if (fs.exists(hiveManagedPath)){
       fs.delete(hiveManagedPath, true);

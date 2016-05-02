@@ -29,7 +29,7 @@ final class SpillInfo {
   final File file;
   final TempShuffleBlockId blockId;
 
-  public SpillInfo(int numPartitions, File file, TempShuffleBlockId blockId) {
+  SpillInfo(int numPartitions, File file, TempShuffleBlockId blockId) {
     this.partitionLengths = new long[numPartitions];
     this.file = file;
     this.blockId = blockId;

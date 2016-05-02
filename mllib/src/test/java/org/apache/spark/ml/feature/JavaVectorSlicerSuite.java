@@ -78,7 +78,7 @@ public class JavaVectorSlicerSuite {
 
     Dataset<Row> output = vectorSlicer.transform(dataset);
 
-    for (Row r : output.select("userFeatures", "features").takeRows(2)) {
+    for (Row r : output.select("userFeatures", "features").takeAsList(2)) {
       Vector features = r.getAs(1);
       Assert.assertEquals(features.size(), 2);
     }

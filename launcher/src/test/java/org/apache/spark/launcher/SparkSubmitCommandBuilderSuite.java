@@ -79,7 +79,6 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
     assertTrue(findInStringList(env.get(CommandBuilderUtils.getLibPathEnvName()),
         File.pathSeparator, "/driverLibPath"));
     assertTrue(findInStringList(findArgValue(cmd, "-cp"), File.pathSeparator, "/driverCp"));
-    assertTrue("Driver -Xms should be configured.", cmd.contains("-Xms42g"));
     assertTrue("Driver -Xmx should be configured.", cmd.contains("-Xmx42g"));
     assertTrue("Command should contain user-defined conf.",
       Collections.indexOfSubList(cmd, Arrays.asList(parser.CONF, "spark.randomOption=foo")) > 0);
@@ -151,6 +150,24 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
     assertEquals("arg1", cmd.get(cmd.size() - 1));
   }
 
+  @Test
+  public void testExamplesRunner() throws Exception {
+    List<String> sparkSubmitArgs = Arrays.asList(
+      SparkSubmitCommandBuilder.RUN_EXAMPLE,
+      parser.MASTER + "=foo",
+      parser.DEPLOY_MODE + "=bar",
+      "SparkPi",
+      "42");
+
+    Map<String, String> env = new HashMap<>();
+    List<String> cmd = buildCommand(sparkSubmitArgs, env);
+    assertEquals("foo", findArgValue(cmd, parser.MASTER));
+    assertEquals("bar", findArgValue(cmd, parser.DEPLOY_MODE));
+    assertEquals(SparkSubmitCommandBuilder.EXAMPLE_CLASS_PREFIX + "SparkPi",
+      findArgValue(cmd, parser.CLASS));
+    assertEquals("42", cmd.get(cmd.size() - 1));
+  }
+
   private void testCmdBuilder(boolean isDriver, boolean useDefaultPropertyFile) throws Exception {
     String deployMode = isDriver ? "client" : "cluster";
 
@@ -184,12 +201,11 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
     // Checks below are different for driver and non-driver mode.
 
     if (isDriver) {
-      assertTrue("Driver -Xms should be configured.", cmd.contains("-Xms1g"));
       assertTrue("Driver -Xmx should be configured.", cmd.contains("-Xmx1g"));
     } else {
       boolean found = false;
       for (String arg : cmd) {
-        if (arg.startsWith("-Xms") || arg.startsWith("-Xmx")) {
+        if (arg.startsWith("-Xmx")) {
           found = true;
           break;
         }
@@ -199,11 +215,7 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
 
     for (String arg : cmd) {
       if (arg.startsWith("-XX:MaxPermSize=")) {
-        if (isDriver) {
-          assertEquals("-XX:MaxPermSize=256m", arg);
-        } else {
-          assertEquals("-XX:MaxPermSize=256m", arg);
-        }
+        assertEquals("-XX:MaxPermSize=256m", arg);
       }
     }
 
@@ -286,7 +298,6 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
   private SparkSubmitCommandBuilder newCommandBuilder(List<String> args) {
     SparkSubmitCommandBuilder builder = new SparkSubmitCommandBuilder(args);
     builder.childEnv.put(CommandBuilderUtils.ENV_SPARK_HOME, System.getProperty("spark.test.home"));
-    builder.childEnv.put(CommandBuilderUtils.ENV_SPARK_ASSEMBLY, "dummy");
     return builder;
   }
 

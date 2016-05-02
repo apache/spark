@@ -21,6 +21,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.sql.types.{LongType, StructField, StructType}
 
 class SQLTransformerSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
@@ -48,5 +49,14 @@ class SQLTransformerSuite
     val t = new SQLTransformer()
       .setStatement("select * from __THIS__")
     testDefaultReadWrite(t)
+  }
+
+  test("transformSchema") {
+    val df = sqlContext.range(10)
+    val outputSchema = new SQLTransformer()
+      .setStatement("SELECT id + 1 AS id1 FROM __THIS__")
+      .transformSchema(df.schema)
+    val expected = StructType(Seq(StructField("id1", LongType, nullable = false)))
+    assert(outputSchema === expected)
   }
 }

@@ -84,7 +84,7 @@ public class JavaSimpleTextClassificationPipeline {
 
     // Make predictions on test documents.
     Dataset<Row> predictions = model.transform(test);
-    for (Row r: predictions.select("id", "text", "probability", "prediction").collectRows()) {
+    for (Row r: predictions.select("id", "text", "probability", "prediction").collectAsList()) {
       System.out.println("(" + r.get(0) + ", " + r.get(1) + ") --> prob=" + r.get(2)
           + ", prediction=" + r.get(3));
     }

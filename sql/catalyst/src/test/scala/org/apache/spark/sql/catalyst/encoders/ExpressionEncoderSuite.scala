@@ -30,11 +30,14 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
 import org.apache.spark.sql.catalyst.util.ArrayData
-import org.apache.spark.sql.types.{ArrayType, ObjectType, StructType}
+import org.apache.spark.sql.types.{ArrayType, Decimal, ObjectType, StructType}
 
 case class RepeatedStruct(s: Seq[PrimitiveData])
 
 case class NestedArray(a: Array[Array[Int]]) {
+  override def hashCode(): Int =
+    java.util.Arrays.deepHashCode(a.asInstanceOf[Array[AnyRef]])
+
   override def equals(other: Any): Boolean = other match {
     case NestedArray(otherArray) =>
       java.util.Arrays.deepEquals(
@@ -64,15 +67,21 @@ case class SpecificCollection(l: List[Int])
 
 /** For testing Kryo serialization based encoder. */
 class KryoSerializable(val value: Int) {
-  override def equals(other: Any): Boolean = {
-    this.value == other.asInstanceOf[KryoSerializable].value
+  override def hashCode(): Int = value
+
+  override def equals(other: Any): Boolean = other match {
+    case that: KryoSerializable => this.value == that.value
+    case _ => false
   }
 }
 
 /** For testing Java serialization based encoder. */
 class JavaSerializable(val value: Int) extends Serializable {
-  override def equals(other: Any): Boolean = {
-    this.value == other.asInstanceOf[JavaSerializable].value
+  override def hashCode(): Int = value
+
+  override def equals(other: Any): Boolean = other match {
+    case that: JavaSerializable => this.value == that.value
+    case _ => false
   }
 }
 
@@ -100,6 +109,8 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
 
   encodeDecodeTest(BigDecimal("32131413.211321313"), "scala decimal")
   // encodeDecodeTest(new java.math.BigDecimal("231341.23123"), "java decimal")
+
+  encodeDecodeTest(Decimal("32131413.211321313"), "catalyst decimal")
 
   encodeDecodeTest("hello", "string")
   encodeDecodeTest(Date.valueOf("2012-12-23"), "date")
@@ -151,6 +162,8 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
   case class InnerClass(i: Int)
   productTest(InnerClass(1))
   encodeDecodeTest(Array(InnerClass(1)), "array of inner class")
+
+  encodeDecodeTest(Array(Option(InnerClass(1))), "array of optional inner class")
 
   productTest(PrimitiveData(1, 1, 1, 1, 1, 1, true))
 
@@ -311,7 +324,7 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
       val attr = AttributeReference("obj", ObjectType(encoder.clsTag.runtimeClass))()
       val inputPlan = LocalRelation(attr)
       val plan =
-        Project(Alias(encoder.fromRowExpression, "obj")() :: Nil,
+        Project(Alias(encoder.deserializer, "obj")() :: Nil,
           Project(encoder.namedExpressions,
             inputPlan))
       assertAnalysisSuccess(plan)
@@ -356,7 +369,7 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
              |${encoder.schema.treeString}
              |
              |fromRow Expressions:
-             |${boundEncoder.fromRowExpression.treeString}
+             |${boundEncoder.deserializer.treeString}
          """.stripMargin)
       }
     }

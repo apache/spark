@@ -19,10 +19,10 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.Transformer
-import org.apache.spark.ml.param.{BooleanParam, Param, ParamMap, StringArrayParam}
+import org.apache.spark.ml.param.{BooleanParam, ParamMap, StringArrayParam}
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{ArrayType, StringType, StructType}
 
@@ -46,10 +46,10 @@ class StopWordsRemover(override val uid: String)
 
   /**
    * the stop words set to be filtered out
-   * Default: [[Array.empty]]
    * @group param
    */
   val stopWords: StringArrayParam = new StringArrayParam(this, "stopWords", "stop words")
+  setDefault(stopWords -> StopWordsRemover.loadStopWords("english"))
 
   /** @group setParam */
   def setStopWords(value: Array[String]): this.type = set(stopWords, value)
@@ -73,21 +73,17 @@ class StopWordsRemover(override val uid: String)
 
   setDefault(stopWords -> Array.empty[String], caseSensitive -> false)
 
-  override def transform(dataset: DataFrame): DataFrame = {
-    val stopWordsSet = if ($(stopWords).isEmpty) {
-      StopWordsRemover.loadStopWords("english").toSet
-    } else {
-      $(stopWords).toSet
-    }
-
+  @Since("2.0.0")
+  override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema)
+    val stopWordsSet = $(stopWords).toSet
     val t = if ($(caseSensitive)) {
       udf { terms: Seq[String] =>
         terms.filter(s => !stopWordsSet.contains(s))
       }
     } else {
       val toLower = (s: String) => if (s != null) s.toLowerCase else s
-      val lowerStopWords = stopWordsSet.map(toLower(_)).toSet
+      val lowerStopWords = stopWordsSet.map(toLower(_))
       udf { terms: Seq[String] =>
         terms.filter(s => !lowerStopWords.contains(toLower(s)))
       }
@@ -98,7 +94,6 @@ class StopWordsRemover(override val uid: String)
   }
 
   override def transformSchema(schema: StructType): StructType = {
-    validateParams()
     val inputType = schema($(inputCol)).dataType
     require(inputType.sameType(ArrayType(StringType)),
       s"Input type must be ArrayType(StringType) but got $inputType.")

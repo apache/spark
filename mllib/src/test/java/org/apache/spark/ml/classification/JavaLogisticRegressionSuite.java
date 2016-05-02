@@ -18,7 +18,6 @@
 package org.apache.spark.ml.classification;
 
 import java.io.Serializable;
-import java.lang.Math;
 import java.util.List;
 
 import org.junit.After;

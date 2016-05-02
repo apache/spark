@@ -62,7 +62,7 @@ private[shared] object SharedParamsCodeGen {
         "every 10 iterations", isValid = "(interval: Int) => interval == -1 || interval >= 1"),
       ParamDesc[Boolean]("fitIntercept", "whether to fit an intercept term", Some("true")),
       ParamDesc[String]("handleInvalid", "how to handle invalid entries. Options are skip (which " +
-        "will filter out rows with bad values), or error (which will throw an errror). More " +
+        "will filter out rows with bad values), or error (which will throw an error). More " +
         "options may be added later",
         isValid = "ParamValidators.inArray(Array(\"skip\", \"error\"))"),
       ParamDesc[Boolean]("standardization", "whether to standardize the training features" +
@@ -71,8 +71,10 @@ private[shared] object SharedParamsCodeGen {
       ParamDesc[Double]("elasticNetParam", "the ElasticNet mixing parameter, in range [0, 1]." +
         " For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty",
         isValid = "ParamValidators.inRange(0, 1)"),
-      ParamDesc[Double]("tol", "the convergence tolerance for iterative algorithms"),
-      ParamDesc[Double]("stepSize", "Step size to be used for each iteration of optimization"),
+      ParamDesc[Double]("tol", "the convergence tolerance for iterative algorithms (>= 0)",
+        isValid = "ParamValidators.gtEq(0)"),
+      ParamDesc[Double]("stepSize", "Step size to be used for each iteration of optimization (>" +
+        " 0)", isValid = "ParamValidators.gt(0)"),
       ParamDesc[String]("weightCol", "weight column name. If this is not set or empty, we treat " +
         "all instance weights as 1.0"),
       ParamDesc[String]("solver", "the solver algorithm for optimization. If this is not set or " +

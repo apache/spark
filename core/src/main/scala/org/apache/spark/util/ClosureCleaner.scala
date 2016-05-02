@@ -19,12 +19,14 @@ package org.apache.spark.util
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 
-import scala.collection.mutable.{Map, Set}
+import scala.collection.mutable.{Map, Set, Stack}
+import scala.language.existentials
 
 import org.apache.xbean.asm5.{ClassReader, ClassVisitor, MethodVisitor, Type}
 import org.apache.xbean.asm5.Opcodes._
 
-import org.apache.spark.{Logging, SparkEnv, SparkException}
+import org.apache.spark.{SparkEnv, SparkException}
+import org.apache.spark.internal.Logging
 
 /**
  * A cleaner that renders closures serializable if they can be done so safely.
@@ -76,33 +78,17 @@ private[spark] object ClosureCleaner extends Logging {
    */
   private def getInnerClosureClasses(obj: AnyRef): List[Class[_]] = {
     val seen = Set[Class[_]](obj.getClass)
-    var stack = List[Class[_]](obj.getClass)
+    val stack = Stack[Class[_]](obj.getClass)
     while (!stack.isEmpty) {
-      val cr = getClassReader(stack.head)
-      stack = stack.tail
+      val cr = getClassReader(stack.pop())
       val set = Set[Class[_]]()
       cr.accept(new InnerClosureFinder(set), 0)
       for (cls <- set -- seen) {
         seen += cls
-        stack = cls :: stack
+        stack.push(cls)
       }
     }
     (seen - obj.getClass).toList
-  }
-
-  private def createNullValue(cls: Class[_]): AnyRef = {
-    if (cls.isPrimitive) {
-      cls match {
-        case java.lang.Boolean.TYPE => new java.lang.Boolean(false)
-        case java.lang.Character.TYPE => new java.lang.Character('\u0000')
-        case java.lang.Void.TYPE =>
-          // This should not happen because `Foo(void x) {}` does not compile.
-          throw new IllegalStateException("Unexpected void parameter in constructor")
-        case _ => new java.lang.Byte(0: Byte)
-      }
-    } else {
-      null
-    }
   }
 
   /**
@@ -232,16 +218,24 @@ private[spark] object ClosureCleaner extends Logging {
     // Note that all outer objects but the outermost one (first one in this list) must be closures
     var outerPairs: List[(Class[_], AnyRef)] = (outerClasses zip outerObjects).reverse
     var parent: AnyRef = null
-    if (outerPairs.size > 0 && !isClosure(outerPairs.head._1)) {
-      // The closure is ultimately nested inside a class; keep the object of that
-      // class without cloning it since we don't want to clone the user's objects.
-      // Note that we still need to keep around the outermost object itself because
-      // we need it to clone its child closure later (see below).
-      logDebug(s" + outermost object is not a closure, so do not clone it: ${outerPairs.head}")
-      parent = outerPairs.head._2 // e.g. SparkContext
-      outerPairs = outerPairs.tail
-    } else if (outerPairs.size > 0) {
-      logDebug(s" + outermost object is a closure, so we just keep it: ${outerPairs.head}")
+    if (outerPairs.size > 0) {
+      val (outermostClass, outermostObject) = outerPairs.head
+      if (isClosure(outermostClass)) {
+        logDebug(s" + outermost object is a closure, so we clone it: ${outerPairs.head}")
+      } else if (outermostClass.getName.startsWith("$line")) {
+        // SPARK-14558: if the outermost object is a REPL line object, we should clone and clean it
+        // as it may carray a lot of unnecessary information, e.g. hadoop conf, spark conf, etc.
+        logDebug(s" + outermost object is a REPL line object, so we clone it: ${outerPairs.head}")
+      } else {
+        // The closure is ultimately nested inside a class; keep the object of that
+        // class without cloning it since we don't want to clone the user's objects.
+        // Note that we still need to keep around the outermost object itself because
+        // we need it to clone its child closure later (see below).
+        logDebug(" + outermost object is not a closure or REPL line object, so do not clone it: " +
+          outerPairs.head)
+        parent = outermostObject // e.g. SparkContext
+        outerPairs = outerPairs.tail
+      }
     } else {
       logDebug(" + there are no enclosing objects!")
     }

@@ -24,6 +24,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions.SpecificMutableRow
+import org.apache.spark.sql.execution.BatchedDataSourceScanExec
 import org.apache.spark.sql.execution.datasources.parquet.TestingUDT.{NestedStruct, NestedStructUDT}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -51,7 +52,8 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
       sql("INSERT INTO TABLE t SELECT * FROM tmp")
       checkAnswer(sqlContext.table("t"), (data ++ data).map(Row.fromTuple))
     }
-    sqlContext.catalog.unregisterTable(TableIdentifier("tmp"))
+    sqlContext.sessionState.catalog.dropTable(
+      TableIdentifier("tmp"), ignoreIfNotExists = true)
   }
 
   test("overwriting") {
@@ -61,7 +63,8 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
       sql("INSERT OVERWRITE TABLE t SELECT * FROM tmp")
       checkAnswer(sqlContext.table("t"), data.map(Row.fromTuple))
     }
-    sqlContext.catalog.unregisterTable(TableIdentifier("tmp"))
+    sqlContext.sessionState.catalog.dropTable(
+      TableIdentifier("tmp"), ignoreIfNotExists = true)
   }
 
   test("self-join") {
@@ -577,6 +580,40 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
 
     assert(CatalystReadSupport.expandUDT(schema) === expected)
   }
+
+  test("read/write wide table") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+
+      val df = sqlContext.range(1000).select(Seq.tabulate(1000) {i => ('id + i).as(s"c$i")} : _*)
+      df.write.mode(SaveMode.Overwrite).parquet(path)
+      checkAnswer(sqlContext.read.parquet(path), df)
+    }
+  }
+
+  test("returning batch for wide table") {
+    withSQLConf("spark.sql.codegen.maxFields" -> "100") {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        val df = sqlContext.range(100).select(Seq.tabulate(110) {i => ('id + i).as(s"c$i")} : _*)
+        df.write.mode(SaveMode.Overwrite).parquet(path)
+
+        // donot return batch, because whole stage codegen is disabled for wide table (>200 columns)
+        val df2 = sqlContext.read.parquet(path)
+        assert(df2.queryExecution.sparkPlan.find(_.isInstanceOf[BatchedDataSourceScanExec]).isEmpty,
+          "Should not return batch")
+        checkAnswer(df2, df)
+
+        // return batch
+        val columns = Seq.tabulate(90) {i => s"c$i"}
+        val df3 = df2.selectExpr(columns : _*)
+        assert(
+          df3.queryExecution.sparkPlan.find(_.isInstanceOf[BatchedDataSourceScanExec]).isDefined,
+          "Should return batch")
+        checkAnswer(df3, df.selectExpr(columns : _*))
+      }
+    }
+  }
 }
 
 object TestingUDT {
@@ -590,14 +627,11 @@ object TestingUDT {
         .add("b", LongType, nullable = false)
         .add("c", DoubleType, nullable = false)
 
-    override def serialize(obj: Any): Any = {
+    override def serialize(n: NestedStruct): Any = {
       val row = new SpecificMutableRow(sqlType.asInstanceOf[StructType].map(_.dataType))
-      obj match {
-        case n: NestedStruct =>
-          row.setInt(0, n.a)
-          row.setLong(1, n.b)
-          row.setDouble(2, n.c)
-      }
+      row.setInt(0, n.a)
+      row.setLong(1, n.b)
+      row.setDouble(2, n.c)
     }
 
     override def userClass: Class[NestedStruct] = classOf[NestedStruct]

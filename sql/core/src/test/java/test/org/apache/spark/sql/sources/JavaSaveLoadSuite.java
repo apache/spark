@@ -40,7 +40,6 @@ public class JavaSaveLoadSuite {
   private transient JavaSparkContext sc;
   private transient SQLContext sqlContext;
 
-  String originalDefaultSource;
   File path;
   Dataset<Row> df;
 
@@ -57,7 +56,6 @@ public class JavaSaveLoadSuite {
     sqlContext = new SQLContext(_sc);
     sc = new JavaSparkContext(_sc);
 
-    originalDefaultSource = sqlContext.conf().defaultDataSourceName();
     path =
       Utils.createTempDir(System.getProperty("java.io.tmpdir"), "datasource").getCanonicalFile();
     if (path.exists()) {

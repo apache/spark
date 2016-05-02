@@ -23,7 +23,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{Dataset, Row}
 
 @BeanInfo
 case class TokenizerTestData(rawText: String, wantedTokens: Array[String])
@@ -106,7 +106,7 @@ class RegexTokenizerSuite
 
 object RegexTokenizerSuite extends SparkFunSuite {
 
-  def testRegexTokenizer(t: RegexTokenizer, dataset: DataFrame): Unit = {
+  def testRegexTokenizer(t: RegexTokenizer, dataset: Dataset[_]): Unit = {
     t.transform(dataset)
       .select("tokens", "wantedTokens")
       .collect()

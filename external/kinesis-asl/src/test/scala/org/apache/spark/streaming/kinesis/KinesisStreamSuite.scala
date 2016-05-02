@@ -99,14 +99,10 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
   }
 
   test("KinesisUtils API") {
-    // Tests the API, does not actually test data receiving
-    val kinesisStream1 = KinesisUtils.createStream(ssc, "mySparkStream",
-      dummyEndpointUrl, Seconds(2),
-      InitialPositionInStream.LATEST, StorageLevel.MEMORY_AND_DISK_2)
-    val kinesisStream2 = KinesisUtils.createStream(ssc, "myAppNam", "mySparkStream",
+    val kinesisStream1 = KinesisUtils.createStream(ssc, "myAppName", "mySparkStream",
       dummyEndpointUrl, dummyRegionName,
       InitialPositionInStream.LATEST, Seconds(2), StorageLevel.MEMORY_AND_DISK_2)
-    val kinesisStream3 = KinesisUtils.createStream(ssc, "myAppNam", "mySparkStream",
+    val kinesisStream2 = KinesisUtils.createStream(ssc, "myAppName", "mySparkStream",
       dummyEndpointUrl, dummyRegionName,
       InitialPositionInStream.LATEST, Seconds(2), StorageLevel.MEMORY_AND_DISK_2,
       dummyAWSAccessKey, dummyAWSSecretKey)
@@ -154,7 +150,9 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
 
     // Verify that KinesisBackedBlockRDD is generated even when there are no blocks
     val emptyRDD = kinesisStream.createBlockRDD(time, Seq.empty)
-    emptyRDD shouldBe a [KinesisBackedBlockRDD[Array[Byte]]]
+    // Verify it's KinesisBackedBlockRDD[_] rather than KinesisBackedBlockRDD[Array[Byte]], because
+    // the type parameter will be erased at runtime
+    emptyRDD shouldBe a [KinesisBackedBlockRDD[_]]
     emptyRDD.partitions shouldBe empty
 
     // Verify that the KinesisBackedBlockRDD has isBlockValid = false when blocks are invalid
@@ -180,17 +178,20 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
       Seconds(10), StorageLevel.MEMORY_ONLY,
       awsCredentials.getAWSAccessKeyId, awsCredentials.getAWSSecretKey)
 
-    val collected = new mutable.HashSet[Int] with mutable.SynchronizedSet[Int]
+    val collected = new mutable.HashSet[Int]
     stream.map { bytes => new String(bytes).toInt }.foreachRDD { rdd =>
-      collected ++= rdd.collect()
-      logInfo("Collected = " + collected.mkString(", "))
+      collected.synchronized {
+        collected ++= rdd.collect()
+        logInfo("Collected = " + collected.mkString(", "))
+      }
     }
     ssc.start()
 
     val testData = 1 to 10
     eventually(timeout(120 seconds), interval(10 second)) {
       testUtils.pushData(testData, aggregateTestData)
-      assert(collected === testData.toSet, "\nData received does not match data sent")
+      assert(collected.synchronized { collected === testData.toSet },
+        "\nData received does not match data sent")
     }
     ssc.stop(stopSparkContext = false)
   }
@@ -205,10 +206,12 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
 
     stream shouldBe a [ReceiverInputDStream[_]]
 
-    val collected = new mutable.HashSet[Int] with mutable.SynchronizedSet[Int]
+    val collected = new mutable.HashSet[Int]
     stream.foreachRDD { rdd =>
-      collected ++= rdd.collect()
-      logInfo("Collected = " + collected.mkString(", "))
+      collected.synchronized {
+        collected ++= rdd.collect()
+        logInfo("Collected = " + collected.mkString(", "))
+      }
     }
     ssc.start()
 
@@ -216,7 +219,8 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
     eventually(timeout(120 seconds), interval(10 second)) {
       testUtils.pushData(testData, aggregateTestData)
       val modData = testData.map(_ + 5)
-      assert(collected === modData.toSet, "\nData received does not match data sent")
+      assert(collected.synchronized { collected === modData.toSet },
+        "\nData received does not match data sent")
     }
     ssc.stop(stopSparkContext = false)
   }

@@ -47,14 +47,11 @@ class ExamplePointUDT extends UserDefinedType[ExamplePoint] {
 
   override def pyUDT: String = "pyspark.sql.tests.ExamplePointUDT"
 
-  override def serialize(obj: Any): GenericArrayData = {
-    obj match {
-      case p: ExamplePoint =>
-        val output = new Array[Any](2)
-        output(0) = p.x
-        output(1) = p.y
-        new GenericArrayData(output)
-    }
+  override def serialize(p: ExamplePoint): GenericArrayData = {
+    val output = new Array[Any](2)
+    output(0) = p.x
+    output(1) = p.y
+    new GenericArrayData(output)
   }
 
   override def deserialize(datum: Any): ExamplePoint = {
@@ -144,6 +141,23 @@ class RowEncoderSuite extends SparkFunSuite {
     val row = encoder.toRow(input)
     val convertedBack = encoder.fromRow(row)
     assert(input.getStruct(0) == convertedBack.getStruct(0))
+  }
+
+  test("encode/decode Decimal") {
+    val schema = new StructType()
+      .add("int", IntegerType)
+      .add("string", StringType)
+      .add("double", DoubleType)
+      .add("decimal", DecimalType.SYSTEM_DEFAULT)
+
+    val encoder = RowEncoder(schema)
+
+    val input: Row = Row(100, "test", 0.123, Decimal(1234.5678))
+    val row = encoder.toRow(input)
+    val convertedBack = encoder.fromRow(row)
+    // Decimal inside external row will be converted back to Java BigDecimal when decoding.
+    assert(input.get(3).asInstanceOf[Decimal].toJavaBigDecimal
+      .compareTo(convertedBack.getDecimal(3)) == 0)
   }
 
   private def encodeDecodeTest(schema: StructType): Unit = {

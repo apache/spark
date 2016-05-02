@@ -59,7 +59,7 @@ public class JavaWord2VecExample {
       .setMinCount(0);
     Word2VecModel model = word2Vec.fit(documentDF);
     Dataset<Row> result = model.transform(documentDF);
-    for (Row r : result.select("result").takeRows(3)) {
+    for (Row r : result.select("result").takeAsList(3)) {
       System.out.println(r);
     }
     // $example off$

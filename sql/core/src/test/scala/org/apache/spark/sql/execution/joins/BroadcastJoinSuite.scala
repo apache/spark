@@ -63,22 +63,23 @@ class BroadcastJoinSuite extends QueryTest with BeforeAndAfterAll {
       // Comparison at the end is for broadcast left semi join
       val joinExpression = df1("key") === df2("key") && df1("value") > df2("value")
       val df3 = df1.join(broadcast(df2), joinExpression, joinType)
-      val plan = EnsureRequirements(sqlContext).apply(df3.queryExecution.sparkPlan)
+      val plan =
+        EnsureRequirements(sqlContext.sessionState.conf).apply(df3.queryExecution.sparkPlan)
       assert(plan.collect { case p: T => p }.size === 1)
       plan.executeCollect()
     }
   }
 
   test("unsafe broadcast hash join updates peak execution memory") {
-    testBroadcastJoin[BroadcastHashJoin]("unsafe broadcast hash join", "inner")
+    testBroadcastJoin[BroadcastHashJoinExec]("unsafe broadcast hash join", "inner")
   }
 
   test("unsafe broadcast hash outer join updates peak execution memory") {
-    testBroadcastJoin[BroadcastHashJoin]("unsafe broadcast hash outer join", "left_outer")
+    testBroadcastJoin[BroadcastHashJoinExec]("unsafe broadcast hash outer join", "left_outer")
   }
 
   test("unsafe broadcast left semi join updates peak execution memory") {
-    testBroadcastJoin[BroadcastLeftSemiJoinHash]("unsafe broadcast left semi join", "leftsemi")
+    testBroadcastJoin[BroadcastHashJoinExec]("unsafe broadcast left semi join", "leftsemi")
   }
 
 }

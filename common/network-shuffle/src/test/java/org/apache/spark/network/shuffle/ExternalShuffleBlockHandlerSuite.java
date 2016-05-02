@@ -113,7 +113,8 @@ public class ExternalShuffleBlockHandlerSuite {
       // pass
     }
 
-    ByteBuffer unexpectedMsg = new UploadBlock("a", "e", "b", new byte[1], new byte[2]).toByteBuffer();
+    ByteBuffer unexpectedMsg = new UploadBlock("a", "e", "b", new byte[1],
+      new byte[2]).toByteBuffer();
     try {
       handler.receive(client, unexpectedMsg, callback);
       fail("Should have thrown");

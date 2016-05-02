@@ -20,21 +20,26 @@ package org.apache.spark.sql.jdbc
 import java.sql.Connection
 import java.util.Properties
 
+import org.scalatest.Ignore
+
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.types.{ArrayType, DecimalType}
 import org.apache.spark.tags.DockerTest
 
 @DockerTest
+@Ignore
 class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
   override val db = new DatabaseOnDocker {
     override val imageName = "postgres:9.4.5"
     override val env = Map(
       "POSTGRES_PASSWORD" -> "rootpass"
     )
+    override val usesIpc = false
     override val jdbcPort = 5432
     override def getJdbcUrl(ip: String, port: Int): String =
       s"jdbc:postgresql://$ip:$port/postgres?user=postgres&password=rootpass"
+    override def getStartupProcessName: Option[String] = None
   }
 
   override def dataPreparation(conn: Connection): Unit = {
