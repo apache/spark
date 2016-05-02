@@ -702,8 +702,8 @@ class DataFrameWriter(object):
             * ``overwrite``: Overwrite existing data.
             * ``ignore``: Silently ignore this operation if data already exists.
             * ``error`` (default case): Throw an exception if data already exists.
-        :param compression: compression codec to use when saving to file. This can be one of the
-                            known case-insensitive shorten names (none, bzip2, gzip, lz4,
+        :param compression: compression codec to use when saving to file. This can be one of the \
+                            known case-insensitive shorten names (none, bzip2, gzip, lz4, \
                             snappy and deflate).
 
         >>> df.write.json(os.path.join(tempfile.mkdtemp(), 'data'))
@@ -743,8 +743,8 @@ class DataFrameWriter(object):
         """Saves the content of the DataFrame in a text file at the specified path.
 
         :param path: the path in any Hadoop supported file system
-        :param compression: compression codec to use when saving to file. This can be one of the
-                            known case-insensitive shorten names (none, bzip2, gzip, lz4,
+        :param compression: compression codec to use when saving to file. This can be one of the \
+                            known case-insensitive shorten names (none, bzip2, gzip, lz4, \
                             snappy and deflate).
 
         The DataFrame must have only one column that is of string type.
@@ -767,8 +767,8 @@ class DataFrameWriter(object):
             * ``ignore``: Silently ignore this operation if data already exists.
             * ``error`` (default case): Throw an exception if data already exists.
 
-        :param compression: compression codec to use when saving to file. This can be one of the
-                            known case-insensitive shorten names (none, bzip2, gzip, lz4,
+        :param compression: compression codec to use when saving to file. This can be one of the \
+                            known case-insensitive shorten names (none, bzip2, gzip, lz4, \
                             snappy and deflate).
         :param sep: sets the single character as a separator for each field and value. If None is \
                     set, it uses the default value, ``,``.
@@ -814,8 +814,8 @@ class DataFrameWriter(object):
             * ``ignore``: Silently ignore this operation if data already exists.
             * ``error`` (default case): Throw an exception if data already exists.
         :param partitionBy: names of partitioning columns
-        :param compression: compression codec to use when saving to file. This can be one of the
-                            known case-insensitive shorten names (none, snappy, zlib, and lzo).
+        :param compression: compression codec to use when saving to file. This can be one of the \
+                            known case-insensitive shorten names (none, snappy, zlib, and lzo). \
                             This will overwrite ``orc.compress``.
 
         >>> orc_df = hiveContext.read.orc('python/test_support/sql/orc_partitioned')
