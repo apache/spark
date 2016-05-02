@@ -263,13 +263,12 @@ class IndexToString private[ml] (override val uid: String)
   /**
    * Optional param for array of labels specifying index-string mapping.
    *
-   * Default: Empty array, in which case [[inputCol]] metadata is used for labels.
+   * Default: Not specified, in which case [[inputCol]] metadata is used for labels.
    * @group param
    */
   final val labels: StringArrayParam = new StringArrayParam(this, "labels",
     "Optional array of labels specifying index-string mapping." +
       " If not provided or if empty, then metadata from inputCol is used instead.")
-  setDefault(labels, Array.empty[String])
 
   /** @group getParam */
   final def getLabels: Array[String] = $(labels)
@@ -292,7 +291,7 @@ class IndexToString private[ml] (override val uid: String)
   override def transform(dataset: Dataset[_]): DataFrame = {
     val inputColSchema = dataset.schema($(inputCol))
     // If the labels array is empty use column metadata
-    val values = if ($(labels).isEmpty) {
+    val values = if (!isDefined(labels) || $(labels).isEmpty) {
       Attribute.fromStructField(inputColSchema)
         .asInstanceOf[NominalAttribute].values.get
     } else {

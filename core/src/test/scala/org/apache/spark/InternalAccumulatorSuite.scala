@@ -213,7 +213,7 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
   private class SaveAccumContextCleaner(sc: SparkContext) extends ContextCleaner(sc) {
     private val accumsRegistered = new ArrayBuffer[Long]
 
-    override def registerAccumulatorForCleanup(a: NewAccumulator[_, _]): Unit = {
+    override def registerAccumulatorForCleanup(a: AccumulatorV2[_, _]): Unit = {
       accumsRegistered += a.id
       super.registerAccumulatorForCleanup(a)
     }
