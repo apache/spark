@@ -489,7 +489,7 @@ class ALSSuite
 }
 
 class ALSCleanerSuite extends SparkFunSuite {
-  test("Clean shuffles") {
+  test("ALS shuffle cleanup standalone") {
     val conf = new SparkConf()
     val localDir = Utils.createTempDir()
     val checkpointDir = Utils.createTempDir()
@@ -497,7 +497,6 @@ class ALSCleanerSuite extends SparkFunSuite {
       FileUtils.listFiles(localDir, TrueFileFilter.INSTANCE, TrueFileFilter.INSTANCE).asScala.toSet
     try {
       conf.set("spark.local.dir", localDir.getAbsolutePath)
-      conf.set("spark.shuffle.manager", "sort")
       val sc = new SparkContext("local[2]", "test", conf)
       try {
         sc.setCheckpointDir(checkpointDir.getAbsolutePath)
@@ -522,7 +521,7 @@ class ALSCleanerSuite extends SparkFunSuite {
     }
   }
 
-  test("ALS shuffle cleanup") {
+  test("ALS shuffle cleanup in algorithm") {
     val conf = new SparkConf()
     val localDir = Utils.createTempDir()
     val checkpointDir = Utils.createTempDir()
@@ -530,12 +529,11 @@ class ALSCleanerSuite extends SparkFunSuite {
       FileUtils.listFiles(localDir, TrueFileFilter.INSTANCE, TrueFileFilter.INSTANCE).asScala.toSet
     try {
       conf.set("spark.local.dir", localDir.getAbsolutePath)
-      conf.set("spark.shuffle.manager", "sort")
       val sc = new SparkContext("local[2]", "test", conf)
       try {
         sc.setCheckpointDir(checkpointDir.getAbsolutePath)
         // Generate test data
-        val (training, _) = ALSSuite.genImplicitTestData(sc, 100, 10, 1, 0.2, 0)
+        val (training, _) = ALSSuite.genImplicitTestData(sc, 20, 5, 1, 0.2, 0)
         // Implicitly test the cleaning of parents during ALS training
         val sqlContext = new SQLContext(sc)
         import sqlContext.implicits._
@@ -544,7 +542,7 @@ class ALSCleanerSuite extends SparkFunSuite {
           .setRegParam(1e-5)
           .setSeed(0)
           .setCheckpointInterval(1)
-          .setMaxIter(50)
+          .setMaxIter(7)
         val model = als.fit(training.toDF())
         val resultingFiles = getAllFiles
         // We expect the last shuffles files, block ratings, user factors, and item factors to be
