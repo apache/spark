@@ -283,12 +283,12 @@ class DataFrameReader(object):
         :param paths: string, or list of strings, for input path(s).
 
         You can set the following CSV-specific options to deal with CSV files:
-            * ``delimiter`` (default ``,``): sets the single character as a delimiter \
+            * ``sep`` (default ``,``): sets the single character as a separator \
                 for each field and value.
             * ``charset`` (default ``UTF-8``): decodes the CSV files by the given \
                 encoding type.
             * ``quote`` (default ``"``): sets the single character used for escaping \
-                quoted values where the delimiter can be part of the value.
+                quoted values where the separator can be part of the value.
             * ``escape`` (default ``\``): sets the single character used for escaping quotes \
                 inside an already quoted value.
             * ``comment`` (default empty string): sets the single character used for skipping \
@@ -305,9 +305,9 @@ class DataFrameReader(object):
                 infinity value.
             * ``negativeInf`` (default ``-Inf``): sets the string representation of a negative \
                 infinity value.
-            * ``dateFormat`` (default ``null``): sets the string that indicates a date format. \
+            * ``dateFormat`` (default ``None``): sets the string that indicates a date format. \
                 Custom date formats follow the formats at ``java.text.SimpleDateFormat``. This \
-                applies to both date type and timestamp type By default, it is `null` which means \
+                applies to both date type and timestamp type. By default, it is None which means \
                 trying to parse times and date by ``java.sql.Timestamp.valueOf()`` and \
                 ``java.sql.Date.valueOf()``.
             * ``maxColumns`` (default ``20480``): defines a hard limit of how many columns \
@@ -316,8 +316,8 @@ class DataFrameReader(object):
                 characters allowed for any given value being read.
             * ``mode`` (default ``PERMISSIVE``): allows a mode for dealing with corrupt records \
                 during parsing.
-                * ``PERMISSIVE`` : sets other fields to `null` when it meets a corrupted record. \
-                    When a schema is set by user, it sets `null` for extra fields.
+                * ``PERMISSIVE`` : sets other fields to ``null`` when it meets a corrupted record. \
+                    When a schema is set by user, it sets ``null`` for extra fields.
                 * ``DROPMALFORMED`` : ignores the whole corrupted records.
                 * ``FAILFAST`` : throws an exception when it meets corrupted records.
 
@@ -703,10 +703,10 @@ class DataFrameWriter(object):
                             snappy and deflate).
 
         You can set the following CSV-specific options to deal with CSV files:
-            * ``delimiter`` (default ``,``): sets the single character as a delimiter \
+            * ``sep`` (default ``,``): sets the single character as a separator \
                 for each field and value.
             * ``quote`` (default ``"``): sets the single character used for escaping \
-                quoted values where the delimiter can be part of the value.
+                quoted values where the separator can be part of the value.
             * ``escape`` (default ``\``): sets the single character used for escaping quotes \
                 inside an already quoted value.
             * ``header`` (default ``false``): writes the names of columns as the first line.

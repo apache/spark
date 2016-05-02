@@ -606,10 +606,10 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * }}}
    *
    * You can set the following CSV-specific option(s) for writing CSV files:
-   * <li>`delimiter` (default `,`): sets the single character as a delimiter for each
+   * <li>`sep` (default `,`): sets the single character as a separator for each
    * field and value.</li>
    * <li>`quote` (default `"`): sets the single character used for escaping quoted values where
-   * the delimiter can be part of the value.</li>
+   * the separator can be part of the value.</li>
    * <li>`escape` (default `\`): sets the single character used for escaping quotes inside
    * an already quoted value.</li>
    * <li>`header` (default `false`): writes the names of columns as the first line.</li>

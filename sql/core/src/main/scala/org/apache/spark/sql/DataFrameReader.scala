@@ -394,12 +394,12 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * through the entire data once, specify the schema explicitly using [[schema]].
    *
    * You can set the following CSV-specific options to deal with CSV files:
-   * <li>`delimiter` (default `,`): sets the single character as a delimiter for each
+   * <li>`sep` (default `,`): sets the single character as a separator for each
    * field and value.</li>
-   * <li>`charset` (default `UTF-8`): decodes the CSV files by the given encoding
+   * <li>`encoding` (default `UTF-8`): decodes the CSV files by the given encoding
    * type.</li>
    * <li>`quote` (default `"`): sets the single character used for escaping quoted values where
-   * the delimiter can be part of the value.</li>
+   * the separator can be part of the value.</li>
    * <li>`escape` (default `\`): sets the single character used for escaping quotes inside
    * an already quoted value.</li>
    * <li>`comment` (default empty string): sets the single character used for skipping lines
@@ -417,7 +417,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * value.</li>
    * <li>`dateFormat` (default `null`): sets the string that indicates a date format. Custom date
    * formats follow the formats at `java.text.SimpleDateFormat`. This applies to both date type
-   * and timestamp type By default, it is `null` which means trying to parse times and date by
+   * and timestamp type. By default, it is `null` which means trying to parse times and date by
    * `java.sql.Timestamp.valueOf()` and `java.sql.Date.valueOf()`.</li>
    * <li>`maxColumns` (default `20480`): defines a hard limit of how many columns
    * a record can have.</li>
