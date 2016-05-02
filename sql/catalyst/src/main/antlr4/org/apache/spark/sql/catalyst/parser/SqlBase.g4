@@ -82,8 +82,7 @@ statement
     | ALTER VIEW tableIdentifier
         DROP (IF EXISTS)? partitionSpec (',' partitionSpec)*           #dropTablePartitions
     | ALTER TABLE tableIdentifier partitionSpec? SET locationSpec      #setTableLocation
-    | DROP TABLE (IF EXISTS)? tableIdentifier PURGE?
-        (FOR METADATA? REPLICATION '(' STRING ')')?                    #dropTable
+    | DROP TABLE (IF EXISTS)? tableIdentifier PURGE?                   #dropTable
     | DROP VIEW (IF EXISTS)? tableIdentifier                           #dropTable
     | CREATE (OR REPLACE)? VIEW (IF NOT EXISTS)? tableIdentifier
         identifierCommentList? (COMMENT STRING)?

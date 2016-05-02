@@ -29,11 +29,12 @@ import org.apache.spark.sql.internal.SQLConf
 class DDLCommandSuite extends PlanTest {
   private val parser = new SparkSqlParser(new SQLConf)
 
-  private def assertUnsupported(sql: String): Unit = {
+  private def assertUnsupported(sql: String, containsThesePhrases: Seq[String] = Seq()): Unit = {
     val e = intercept[ParseException] {
       parser.parsePlan(sql)
     }
     assert(e.getMessage.toLowerCase.contains("operation not allowed"))
+    containsThesePhrases.foreach { p => assert(e.getMessage.toLowerCase.contains(p)) }
   }
 
   test("create database") {
@@ -347,27 +348,13 @@ class DDLCommandSuite extends PlanTest {
     comparePlans(parsed2, expected2)
   }
 
-  // ALTER VIEW view_name ADD [IF NOT EXISTS] PARTITION partition_spec PARTITION partition_spec ...;
-  test("alter view: add partition") {
-    val sql1 =
+  test("alter view: add partition (not supported)") {
+    assertUnsupported(
       """
         |ALTER VIEW view_name ADD IF NOT EXISTS PARTITION
         |(dt='2008-08-08', country='us') PARTITION
         |(dt='2009-09-09', country='uk')
-      """.stripMargin
-    // different constant types in partitioning spec
-    val sql2 =
-    """
-      |ALTER VIEW view_name ADD PARTITION
-      |(col1=NULL, cOL2='f', col3=5, COL4=true)
-    """.stripMargin
-
-    intercept[ParseException] {
-      parser.parsePlan(sql1)
-    }
-    intercept[ParseException] {
-      parser.parsePlan(sql2)
-    }
+      """.stripMargin)
   }
 
   test("alter table: rename partition") {
@@ -392,7 +379,7 @@ class DDLCommandSuite extends PlanTest {
       """.stripMargin)
   }
 
-  // ALTER TABLE table_name DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...] [PURGE]
+  // ALTER TABLE table_name DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...]
   // ALTER VIEW table_name DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...]
   test("alter table/view: drop partitions") {
     val sql1_table =
@@ -403,24 +390,17 @@ class DDLCommandSuite extends PlanTest {
     val sql2_table =
       """
        |ALTER TABLE table_name DROP PARTITION
-       |(dt='2008-08-08', country='us'), PARTITION (dt='2009-09-09', country='uk') PURGE
+       |(dt='2008-08-08', country='us'), PARTITION (dt='2009-09-09', country='uk')
       """.stripMargin
     val sql1_view = sql1_table.replace("TABLE", "VIEW")
-    // Note: ALTER VIEW DROP PARTITION does not support PURGE
-    val sql2_view = sql2_table.replace("TABLE", "VIEW").replace("PURGE", "")
+    val sql2_view = sql2_table.replace("TABLE", "VIEW")
 
     val parsed1_table = parser.parsePlan(sql1_table)
-    val e = intercept[ParseException] {
-      parser.parsePlan(sql2_table)
-    }
-    assert(e.getMessage.contains("Operation not allowed"))
-
-    intercept[ParseException] {
-      parser.parsePlan(sql1_view)
-    }
-    intercept[ParseException] {
-      parser.parsePlan(sql2_view)
-    }
+    val parsed2_table = parser.parsePlan(sql2_table)
+    assertUnsupported(sql1_table + " PURGE")
+    assertUnsupported(sql2_table + " PURGE")
+    assertUnsupported(sql1_view)
+    assertUnsupported(sql2_view)
 
     val tableIdent = TableIdentifier("table_name", None)
     val expected1_table = AlterTableDropPartition(
@@ -429,8 +409,10 @@ class DDLCommandSuite extends PlanTest {
         Map("dt" -> "2008-08-08", "country" -> "us"),
         Map("dt" -> "2009-09-09", "country" -> "uk")),
       ifExists = true)
+    val expected2_table = expected1_table.copy(ifExists = false)
 
     comparePlans(parsed1_table, expected1_table)
+    comparePlans(parsed2_table, expected2_table)
   }
 
   test("alter table: archive partition (not supported)") {
@@ -565,6 +547,7 @@ class DDLCommandSuite extends PlanTest {
     val parsed2 = parser.parsePlan(s"DROP TABLE IF EXISTS $tableName1")
     val parsed3 = parser.parsePlan(s"DROP TABLE $tableName2")
     val parsed4 = parser.parsePlan(s"DROP TABLE IF EXISTS $tableName2")
+    assertUnsupported(s"DROP TABLE IF EXISTS $tableName2 PURGE")
 
     val expected1 =
       DropTable(TableIdentifier("tab", Option("db")), ifExists = false, isView = false)
