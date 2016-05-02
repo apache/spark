@@ -100,8 +100,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       EliminateSorts,
       SimplifyCasts,
       SimplifyCaseConversionExpressions,
-      EliminateSerialization,
-      RewritePredicateSubquery) ::
+      EliminateSerialization) ::
     Batch("Decimal Optimizations", fixedPoint,
       DecimalAggregates) ::
     Batch("Typed Filter Optimization", fixedPoint,
@@ -109,7 +108,10 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
     Batch("LocalRelation", fixedPoint,
       ConvertToLocalRelation) ::
     Batch("OptimizeCodegen", Once,
-      OptimizeCodegen(conf)) :: Nil
+      OptimizeCodegen(conf)) ::
+    Batch("RewriteSubquery", Once,
+      RewritePredicateSubquery,
+      CollapseProject) :: Nil
   }
 
   /**
@@ -1078,7 +1080,14 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
   def createOrderedJoin(input: Seq[LogicalPlan], conditions: Seq[Expression]): LogicalPlan = {
     assert(input.size >= 2)
     if (input.size == 2) {
-      Join(input(0), input(1), Inner, conditions.reduceLeftOption(And))
+      val (joinConditions, others) = conditions.partition(
+        e => !PredicateSubquery.hasPredicateSubquery(e))
+      val join = Join(input(0), input(1), Inner, joinConditions.reduceLeftOption(And))
+      if (others.nonEmpty) {
+        Filter(others.reduceLeft(And), join)
+      } else {
+        join
+      }
     } else {
       val left :: rest = input.toList
       // find out the first join that have at least one join condition
@@ -1091,7 +1100,8 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
       val right = conditionalJoin.getOrElse(rest.head)
 
       val joinedRefs = left.outputSet ++ right.outputSet
-      val (joinConditions, others) = conditions.partition(_.references.subsetOf(joinedRefs))
+      val (joinConditions, others) = conditions.partition(
+        e => e.references.subsetOf(joinedRefs) && !PredicateSubquery.hasPredicateSubquery(e))
       val joined = Join(left, right, Inner, joinConditions.reduceLeftOption(And))
 
       // should not have reference to same logical plan
@@ -1201,9 +1211,16 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
             reduceLeftOption(And).map(Filter(_, left)).getOrElse(left)
           val newRight = rightFilterConditions.
             reduceLeftOption(And).map(Filter(_, right)).getOrElse(right)
-          val newJoinCond = (commonFilterCondition ++ joinCondition).reduceLeftOption(And)
+          val (newJoinConditions, others) =
+            commonFilterCondition.partition(e => !PredicateSubquery.hasPredicateSubquery(e))
+          val newJoinCond = (newJoinConditions ++ joinCondition).reduceLeftOption(And)
 
-          Join(newLeft, newRight, Inner, newJoinCond)
+          val join = Join(newLeft, newRight, Inner, newJoinCond)
+          if (others.nonEmpty) {
+            Filter(others.reduceLeft(And), join)
+          } else {
+            join
+          }
         case RightOuter =>
           // push down the right side only `where` condition
           val newLeft = left
@@ -1543,6 +1560,16 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           // Note that will almost certainly be planned as a Broadcast Nested Loop join. Use EXISTS
           // if performance matters to you.
           Join(p, sub, LeftAnti, Option(Or(anyNull, condition)))
+        case (p, predicate) =>
+          var joined = p
+          val replaced = predicate transformUp {
+            case PredicateSubquery(sub, conditions, nullAware, _) =>
+              // TODO: support null-aware join
+              val exists = AttributeReference("exists", BooleanType, false)()
+              joined = Join(joined, sub, ExistenceJoin(exists), conditions.reduceLeftOption(And))
+              exists
+          }
+          Project(p.output, Filter(replaced, joined))
       }
   }
 }
