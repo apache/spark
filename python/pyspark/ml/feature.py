@@ -1815,6 +1815,7 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadabl
         return self.getOrDefault(self.caseSensitive)
 
     @staticmethod
+    @since("2.0.0")
     def loadStopWords(language):
         """
         Load stop words for the language
@@ -1822,7 +1823,7 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadabl
         italian, norwegian, portuguese, russian, spanish, swedish, turkish
         """
         stopWordsObj = _jvm().org.apache.spark.ml.feature.StopWordsRemover
-        return stopWordsObj.loadStopWords(language)
+        return list(stopWordsObj.loadStopWords(language))
 
 
 @inherit_doc

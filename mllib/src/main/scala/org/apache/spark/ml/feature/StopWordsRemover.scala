@@ -46,6 +46,8 @@ class StopWordsRemover(override val uid: String)
 
   /**
    * The words to be filtered out.
+   * Default: English stop words
+   * @see [[StopWordsRemover.loadStopWords()]]
    * @group param
    */
   val stopWords: StringArrayParam =
@@ -82,6 +84,7 @@ class StopWordsRemover(override val uid: String)
         terms.filter(s => !stopWordsSet.contains(s))
       }
     } else {
+      // TODO: support user locale (SPARK-15064)
       val toLower = (s: String) => if (s != null) s.toLowerCase else s
       val lowerStopWords = $(stopWords).map(toLower(_)).toSet
       udf { terms: Seq[String] =>
