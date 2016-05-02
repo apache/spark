@@ -546,7 +546,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def optimizerInSetConversionThreshold: Int = getConf(OPTIMIZER_INSET_CONVERSION_THRESHOLD)
 
-  def checkpointLocation: String = getConf(CHECKPOINT_LOCATION)
+  def checkpointLocation: Option[String] = getConf(CHECKPOINT_LOCATION)
 
   def filesMaxPartitionBytes: Long = getConf(FILES_MAX_PARTITION_BYTES)
 
@@ -712,16 +712,6 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def getConf[T](entry: ConfigEntry[T]): T = {
     require(sqlConfEntries.get(entry.key) == entry, s"$entry is not registered")
     Option(settings.get(entry.key)).map(entry.valueConverter).orElse(entry.defaultValue).
-      getOrElse(throw new NoSuchElementException(entry.key))
-  }
-
-  /**
-   * Return the value of an optional Spark SQL configuration property for the given key. If the key
-   * is not set yet, throw an exception.
-   */
-  def getConf[T](entry: OptionalConfigEntry[T]): T = {
-    require(sqlConfEntries.get(entry.key) == entry, s"$entry is not registered")
-    Option(settings.get(entry.key)).map(entry.rawValueConverter).
       getOrElse(throw new NoSuchElementException(entry.key))
   }
 

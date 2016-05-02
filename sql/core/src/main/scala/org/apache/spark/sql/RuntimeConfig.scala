@@ -87,7 +87,7 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
   }
 
   protected[sql] def get[T](entry: OptionalConfigEntry[T]): Option[T] = {
-    sqlConf.getOptionalConf(entry)
+    sqlConf.getConf(entry)
   }
 
   /**
