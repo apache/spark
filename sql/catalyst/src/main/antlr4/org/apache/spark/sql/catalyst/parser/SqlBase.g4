@@ -47,7 +47,9 @@ statement
     | createTableHeader ('(' colTypeList ')')? tableProvider
         (OPTIONS tablePropertyList)?                                   #createTableUsing
     | createTableHeader tableProvider
-        (OPTIONS tablePropertyList)? AS? query                         #createTableUsing
+        (OPTIONS tablePropertyList)?
+        (PARTITIONED BY partitionColumnNames=identifierList)?
+        bucketSpec? AS? query                                          #createTableUsing
     | createTableHeader ('(' columns=colTypeList ')')?
         (COMMENT STRING)?
         (PARTITIONED BY '(' partitionColumns=colTypeList ')')?
@@ -128,15 +130,8 @@ statement
     ;
 
 hiveNativeCommands
-    : DELETE FROM tableIdentifier (WHERE booleanExpression)?
-    | TRUNCATE TABLE tableIdentifier partitionSpec?
+    : TRUNCATE TABLE tableIdentifier partitionSpec?
         (COLUMNS identifierList)?
-    | START TRANSACTION (transactionMode (',' transactionMode)*)?
-    | COMMIT WORK?
-    | ROLLBACK WORK?
-    | SHOW PARTITIONS tableIdentifier partitionSpec?
-    | DFS .*?
-    | (CREATE | ALTER | DROP | SHOW | DESC | DESCRIBE) .*?
     ;
 
 unsupportedHiveNativeCommands
@@ -179,6 +174,11 @@ unsupportedHiveNativeCommands
     | kw1=ALTER kw2=TABLE tableIdentifier kw3=TOUCH
     | kw1=ALTER kw2=TABLE tableIdentifier partitionSpec? kw3=COMPACT
     | kw1=ALTER kw2=TABLE tableIdentifier partitionSpec? kw3=CONCATENATE
+    | kw1=START kw2=TRANSACTION
+    | kw1=COMMIT
+    | kw1=ROLLBACK
+    | kw1=DFS
+    | kw1=DELETE kw2=FROM
     ;
 
 createTableHeader

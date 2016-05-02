@@ -577,13 +577,6 @@ private[ann] object FeedForwardModel {
  * @param dataStacker data stacker
  */
 private[ann] class ANNGradient(topology: Topology, dataStacker: DataStacker) extends Gradient {
-
-  override def compute(data: Vector, label: Double, weights: Vector): (Vector, Double) = {
-    val gradient = Vectors.zeros(weights.size)
-    val loss = compute(data, label, weights, gradient)
-    (gradient, loss)
-  }
-
   override def compute(
     data: Vector,
     label: Double,

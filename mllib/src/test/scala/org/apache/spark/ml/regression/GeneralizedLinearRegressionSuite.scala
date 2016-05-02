@@ -180,7 +180,7 @@ class GeneralizedLinearRegressionSuite
     assert(glr.getPredictionCol === "prediction")
     assert(glr.getFitIntercept)
     assert(glr.getTol === 1E-6)
-    assert(glr.getWeightCol === "")
+    assert(!glr.isDefined(glr.weightCol))
     assert(glr.getRegParam === 0.0)
     assert(glr.getSolver == "irls")
     // TODO: Construct model directly instead of via fitting.
@@ -603,7 +603,9 @@ class GeneralizedLinearRegressionSuite
     val residualDegreeOfFreedomR = 1
     val aicR = 18.783
 
+    assert(model.hasSummary)
     val summary = model.summary
+    assert(summary.isInstanceOf[GeneralizedLinearRegressionTrainingSummary])
 
     val devianceResiduals = summary.residuals()
       .select(col("devianceResiduals"))
@@ -643,6 +645,18 @@ class GeneralizedLinearRegressionSuite
     assert(summary.residualDegreeOfFreedomNull === residualDegreeOfFreedomNullR)
     assert(summary.aic ~== aicR absTol 1E-3)
     assert(summary.solver === "irls")
+
+    val summary2: GeneralizedLinearRegressionSummary = model.evaluate(datasetWithWeight)
+    assert(summary.predictions.columns.toSet === summary2.predictions.columns.toSet)
+    assert(summary.predictionCol === summary2.predictionCol)
+    assert(summary.rank === summary2.rank)
+    assert(summary.degreesOfFreedom === summary2.degreesOfFreedom)
+    assert(summary.residualDegreeOfFreedom === summary2.residualDegreeOfFreedom)
+    assert(summary.residualDegreeOfFreedomNull === summary2.residualDegreeOfFreedomNull)
+    assert(summary.nullDeviance === summary2.nullDeviance)
+    assert(summary.deviance === summary2.deviance)
+    assert(summary.dispersion === summary2.dispersion)
+    assert(summary.aic === summary2.aic)
   }
 
   test("glm summary: binomial family with weight") {

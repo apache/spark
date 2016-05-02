@@ -79,10 +79,4 @@ class SQLContextSuite extends SparkFunSuite with SharedSparkContext {
     assert(sqlContext.sessionState.optimizer.batches.flatMap(_.rules).contains(DummyRule))
   }
 
-  test("SQLContext can access `spark.sql.*` configs") {
-    sc.conf.set("spark.sql.with.or.without.you", "my love")
-    val sqlContext = new SQLContext(sc)
-    assert(sqlContext.getConf("spark.sql.with.or.without.you") == "my love")
-  }
-
 }

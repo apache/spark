@@ -184,7 +184,7 @@ class ContinuousQueryManager(sparkSession: SparkSession) {
       val analyzedPlan = df.queryExecution.analyzed
       df.queryExecution.assertAnalyzed()
 
-      if (sparkSession.getConf(SQLConf.UNSUPPORTED_OPERATION_CHECK_ENABLED)) {
+      if (sparkSession.conf.get(SQLConf.UNSUPPORTED_OPERATION_CHECK_ENABLED)) {
         UnsupportedOperationChecker.checkForStreaming(analyzedPlan, outputMode)
       }
 

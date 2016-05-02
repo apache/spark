@@ -44,10 +44,6 @@ class SparkSqlParser(conf: SQLConf) extends AbstractSqlParser {
   protected override def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
     super.parse(substitutor.substitute(command))(toResult)
   }
-
-  protected override def nativeCommand(sqlText: String): LogicalPlan = {
-    HiveNativeCommand(substitutor.substitute(sqlText))
-  }
 }
 
 /**
@@ -55,14 +51,6 @@ class SparkSqlParser(conf: SQLConf) extends AbstractSqlParser {
  */
 class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   import org.apache.spark.sql.catalyst.parser.ParserUtils._
-
-  /**
-   * Pass a command to Hive using a [[HiveNativeCommand]].
-   */
-  override def visitExecuteNativeCommand(
-      ctx: ExecuteNativeCommandContext): LogicalPlan = withOrigin(ctx) {
-    HiveNativeCommand(command(ctx))
-  }
 
   /**
    * Create a [[SetCommand]] logical plan.
@@ -289,6 +277,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     }
     val options = Option(ctx.tablePropertyList).map(visitTablePropertyList).getOrElse(Map.empty)
     val provider = ctx.tableProvider.qualifiedName.getText
+    val bucketSpec = Option(ctx.bucketSpec()).map(visitBucketSpec)
 
     if (ctx.query != null) {
       // Get the backing query.
@@ -302,9 +291,16 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       } else {
         SaveMode.ErrorIfExists
       }
-      CreateTableUsingAsSelect(table, provider, temp, Array.empty, None, mode, options, query)
+
+      val partitionColumnNames =
+        Option(ctx.partitionColumnNames)
+          .map(visitIdentifierList(_).toArray)
+          .getOrElse(Array.empty[String])
+
+      CreateTableUsingAsSelect(
+        table, provider, temp, partitionColumnNames, bucketSpec, mode, options, query)
     } else {
-      val struct = Option(ctx.colTypeList).map(createStructType)
+      val struct = Option(ctx.colTypeList()).map(createStructType)
       CreateTableUsing(table, struct, provider, temp, options, ifNotExists, managedIfNoPath = false)
     }
   }
@@ -645,7 +641,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec),
       fileFormat,
       genericFormat)(
-      command(ctx))
+      parseException("ALTER TABLE SET FILEFORMAT", ctx))
   }
 
   /**
@@ -693,7 +689,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       // Note that Restrict and Cascade are mutually exclusive.
       ctx.RESTRICT != null,
       ctx.CASCADE != null)(
-      command(ctx))
+      parseException("ALTER TABLE CHANGE COLUMN", ctx))
   }
 
   /**
@@ -713,7 +709,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       // Note that Restrict and Cascade are mutually exclusive.
       ctx.RESTRICT != null,
       ctx.CASCADE != null)(
-      command(ctx))
+      parseException("ALTER TABLE ADD COLUMNS", ctx))
   }
 
   /**
@@ -733,7 +729,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       // Note that Restrict and Cascade are mutually exclusive.
       ctx.RESTRICT != null,
       ctx.CASCADE != null)(
-      command(ctx))
+      parseException("ALTER TABLE REPLACE COLUMNS", ctx))
   }
 
   /**
@@ -750,9 +746,18 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     BucketSpec(
       ctx.INTEGER_VALUE.getText.toInt,
       visitIdentifierList(ctx.identifierList),
-      Option(ctx.orderedIdentifierList).toSeq
+      Option(ctx.orderedIdentifierList)
+        .toSeq
         .flatMap(_.orderedIdentifier.asScala)
-        .map(_.identifier.getText))
+        .map { orderedIdCtx =>
+          Option(orderedIdCtx.ordering).map(_.getText).foreach { dir =>
+            if (dir.toLowerCase != "asc") {
+              throw parseException("Only ASC ordering is supported for sorting columns", ctx)
+            }
+          }
+
+          orderedIdCtx.identifier.getText
+        })
   }
 
   /**
@@ -782,7 +787,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       // SET ROLE is the exception to the rule, because we handle this before other SET commands.
       "SET ROLE"
     }
-    throw new ParseException(s"Operation not allowed: $keywords", ctx)
+    throw parseException(keywords, ctx)
   }
 
   /**

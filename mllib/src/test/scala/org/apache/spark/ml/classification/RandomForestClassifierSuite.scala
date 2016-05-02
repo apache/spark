@@ -154,9 +154,16 @@ class RandomForestClassifierSuite
     }
   }
 
+  test("Fitting without numClasses in metadata") {
+    val df: DataFrame = sqlContext.createDataFrame(TreeTests.featureImportanceData(sc))
+    val rf = new RandomForestClassifier().setMaxDepth(1).setNumTrees(1)
+    rf.fit(df)
+  }
+
   /////////////////////////////////////////////////////////////////////////////
   // Tests of feature importance
   /////////////////////////////////////////////////////////////////////////////
+
   test("Feature importance with toy data") {
     val numClasses = 2
     val rf = new RandomForestClassifier()

@@ -29,6 +29,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{CATALOG_IMPLEMENTATION, ConfigEntry}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalog.Catalog
@@ -40,7 +41,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, 
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.ui.SQLListener
-import org.apache.spark.sql.internal.{CatalogImpl, SessionState, SharedState}
+import org.apache.spark.sql.internal.{CatalogImpl, SessionState, SharedState, SQLConf}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.{DataType, LongType, StructType}
 import org.apache.spark.sql.util.ExecutionListenerManager
@@ -53,7 +54,7 @@ import org.apache.spark.util.Utils
 class SparkSession private(
     @transient val sparkContext: SparkContext,
     @transient private val existingSharedState: Option[SharedState])
-  extends Serializable { self =>
+  extends Serializable with Logging { self =>
 
   def this(sc: SparkContext) {
     this(sc, None)
@@ -63,6 +64,19 @@ class SparkSession private(
   /* ----------------------- *
    |  Session-related state  |
    * ----------------------- */
+
+  {
+    val defaultWarehousePath =
+      SQLConf.WAREHOUSE_PATH
+        .defaultValueString
+        .replace("${system:user.dir}", System.getProperty("user.dir"))
+    val warehousePath = sparkContext.conf.get(
+      SQLConf.WAREHOUSE_PATH.key,
+      defaultWarehousePath)
+    sparkContext.conf.set(SQLConf.WAREHOUSE_PATH.key, warehousePath)
+    sparkContext.conf.set("hive.metastore.warehouse.dir", warehousePath)
+    logInfo(s"Setting warehouse location to $warehousePath")
+  }
 
   /**
    * State shared across sessions, including the [[SparkContext]], cached data, listener,
@@ -107,6 +121,18 @@ class SparkSession private(
   protected[sql] def cacheManager: CacheManager = sharedState.cacheManager
   protected[sql] def listener: SQLListener = sharedState.listener
   protected[sql] def externalCatalog: ExternalCatalog = sharedState.externalCatalog
+
+  /**
+   * Runtime configuration interface for Spark.
+   *
+   * This is the interface through which the user can get and set all Spark and Hadoop
+   * configurations that are relevant to Spark SQL. When getting the value of a config,
+   * this defaults to the value set in the underlying [[SparkContext]], if any.
+   *
+   * @group config
+   * @since 2.0.0
+   */
+  @transient lazy val conf: RuntimeConfig = new RuntimeConfig(sessionState.conf)
 
   /**
    * :: Experimental ::
@@ -184,89 +210,6 @@ class SparkSession private(
    */
   def newSession(): SparkSession = {
     new SparkSession(sparkContext, Some(sharedState))
-  }
-
-
-  /* -------------------------------------------------- *
-   |  Methods for accessing or mutating configurations  |
-   * -------------------------------------------------- */
-
-  /**
-   * Runtime configuration interface for Spark.
-   *
-   * This is the interface through which the user can get and set all Spark and Hadoop
-   * configurations that are relevant to Spark SQL. When getting the value of a config,
-   * this defaults to the value set in the underlying [[SparkContext]], if any.
-   *
-   * @group config
-   * @since 2.0.0
-   */
-  @transient lazy val conf: RuntimeConfig = new RuntimeConfig(sessionState.conf)
-
-  /**
-   * Set Spark SQL configuration properties.
-   *
-   * @group config
-   * @since 2.0.0
-   */
-  def setConf(props: Properties): Unit = sessionState.setConf(props)
-
-  /**
-   * Set the given Spark SQL configuration property.
-   *
-   * @group config
-   * @since 2.0.0
-   */
-  def setConf(key: String, value: String): Unit = sessionState.setConf(key, value)
-
-  /**
-   * Return the value of Spark SQL configuration property for the given key.
-   *
-   * @group config
-   * @since 2.0.0
-   */
-  def getConf(key: String): String = sessionState.conf.getConfString(key)
-
-  /**
-   * Return the value of Spark SQL configuration property for the given key. If the key is not set
-   * yet, return `defaultValue`.
-   *
-   * @group config
-   * @since 2.0.0
-   */
-  def getConf(key: String, defaultValue: String): String = {
-    sessionState.conf.getConfString(key, defaultValue)
-  }
-
-  /**
-   * Return all the configuration properties that have been set (i.e. not the default).
-   * This creates a new copy of the config properties in the form of a Map.
-   *
-   * @group config
-   * @since 2.0.0
-   */
-  def getAllConfs: immutable.Map[String, String] = sessionState.conf.getAllConfs
-
-  /**
-   * Set the given Spark SQL configuration property.
-   */
-  protected[sql] def setConf[T](entry: ConfigEntry[T], value: T): Unit = {
-    sessionState.setConf(entry, value)
-  }
-
-  /**
-   * Return the value of Spark SQL configuration property for the given key. If the key is not set
-   * yet, return `defaultValue` in [[ConfigEntry]].
-   */
-  protected[sql] def getConf[T](entry: ConfigEntry[T]): T = sessionState.conf.getConf(entry)
-
-  /**
-   * Return the value of Spark SQL configuration property for the given key. If the key is not set
-   * yet, return `defaultValue`. This is useful when `defaultValue` in ConfigEntry is not the
-   * desired one.
-   */
-  protected[sql] def getConf[T](entry: ConfigEntry[T], defaultValue: T): T = {
-    sessionState.conf.getConf(entry, defaultValue)
   }
 
 
@@ -577,7 +520,7 @@ class SparkSession private(
    * Registers the given [[DataFrame]] as a temporary table in the catalog.
    * Temporary tables exist only during the lifetime of this instance of [[SparkSession]].
    */
-  protected[sql] def registerDataFrameAsTable(df: DataFrame, tableName: String): Unit = {
+  protected[sql] def registerTable(df: DataFrame, tableName: String): Unit = {
     sessionState.catalog.createTempTable(
       sessionState.sqlParser.parseTableIdentifier(tableName).table,
       df.logicalPlan,
@@ -646,15 +589,6 @@ class SparkSession private(
 
   protected[sql] def executePlan(plan: LogicalPlan): QueryExecution = {
     sessionState.executePlan(plan)
-  }
-
-  /**
-   * Executes a SQL query without parsing it, but instead passing it directly to an underlying
-   * system to process. This is currently only used for Hive DDLs and will be removed as soon
-   * as Spark can parse all supported Hive DDLs itself.
-   */
-  protected[sql] def runNativeSql(sqlText: String): Seq[Row] = {
-    sessionState.runNativeSql(sqlText).map { r => Row(r) }
   }
 
   /**
