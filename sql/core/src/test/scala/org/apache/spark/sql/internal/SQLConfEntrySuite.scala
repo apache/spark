@@ -159,9 +159,9 @@ class SQLConfEntrySuite extends SparkFunSuite {
       .stringConf
       .createOptional
 
-    assert(conf.getOptionalConf(confEntry) === None)
+    assert(conf.getConf(confEntry) === None)
     conf.setConfString(key, "a")
-    assert(conf.getOptionalConf(confEntry) === Some("a"))
+    assert(conf.getConf(confEntry) === Some("a"))
   }
 
   test("duplicate entry") {
