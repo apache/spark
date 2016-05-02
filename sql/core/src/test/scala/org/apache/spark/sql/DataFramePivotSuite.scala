@@ -17,14 +17,16 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.expressions.aggregate.PivotFirst
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types._
 
 class DataFramePivotSuite extends QueryTest with SharedSQLContext{
   import testImplicits._
 
-  test("pivot courses with literals") {
+  test("pivot courses") {
     checkAnswer(
       courseSales.groupBy("year").pivot("course", Seq("dotNET", "Java"))
         .agg(sum($"earnings")),
@@ -32,14 +34,14 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext{
     )
   }
 
-  test("pivot year with literals") {
+  test("pivot year") {
     checkAnswer(
       courseSales.groupBy("course").pivot("year", Seq(2012, 2013)).agg(sum($"earnings")),
       Row("dotNET", 15000.0, 48000.0) :: Row("Java", 20000.0, 30000.0) :: Nil
     )
   }
 
-  test("pivot courses with literals and multiple aggregations") {
+  test("pivot courses with multiple aggregations") {
     checkAnswer(
       courseSales.groupBy($"year")
         .pivot("course", Seq("dotNET", "Java"))
@@ -94,4 +96,88 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext{
       Row(2012, 15000.0, 20000.0) :: Row(2013, 48000.0, 30000.0) :: Nil
     )
   }
+
+  // Tests for optimized pivot (with PivotFirst) below
+
+  test("optimized pivot planned") {
+    val df = courseSales.groupBy("year")
+      // pivot with extra columns to trigger optimization
+      .pivot("course", Seq("dotNET", "Java") ++ (1 to 10).map(_.toString))
+      .agg(sum($"earnings"))
+    val queryExecution = sqlContext.executePlan(df.queryExecution.logical)
+    assert(queryExecution.simpleString.contains("pivotfirst"))
+  }
+
+
+  test("optimized pivot courses with literals") {
+    checkAnswer(
+      courseSales.groupBy("year")
+        // pivot with extra columns to trigger optimization
+        .pivot("course", Seq("dotNET", "Java") ++ (1 to 10).map(_.toString))
+        .agg(sum($"earnings"))
+        .select("year", "dotNET", "Java"),
+      Row(2012, 15000.0, 20000.0) :: Row(2013, 48000.0, 30000.0) :: Nil
+    )
+  }
+
+  test("optimized pivot year with literals") {
+    checkAnswer(
+      courseSales.groupBy($"course")
+        // pivot with extra columns to trigger optimization
+        .pivot("year", Seq(2012, 2013) ++ (1 to 10))
+        .agg(sum($"earnings"))
+        .select("course", "2012", "2013"),
+      Row("dotNET", 15000.0, 48000.0) :: Row("Java", 20000.0, 30000.0) :: Nil
+    )
+  }
+
+  test("optimized pivot year with string values (cast)") {
+    checkAnswer(
+      courseSales.groupBy("course")
+        // pivot with extra columns to trigger optimization
+        .pivot("year", Seq("2012", "2013") ++ (1 to 10).map(_.toString))
+        .sum("earnings")
+        .select("course", "2012", "2013"),
+      Row("dotNET", 15000.0, 48000.0) :: Row("Java", 20000.0, 30000.0) :: Nil
+    )
+  }
+
+  test("optimized pivot DecimalType") {
+    val df = courseSales.select($"course", $"year", $"earnings".cast(DecimalType(10, 2)))
+      .groupBy("year")
+      // pivot with extra columns to trigger optimization
+      .pivot("course", Seq("dotNET", "Java") ++ (1 to 10).map(_.toString))
+      .agg(sum($"earnings"))
+      .select("year", "dotNET", "Java")
+
+    assertResult(IntegerType)(df.schema("year").dataType)
+    assertResult(DecimalType(20, 2))(df.schema("Java").dataType)
+    assertResult(DecimalType(20, 2))(df.schema("dotNET").dataType)
+
+    checkAnswer(df, Row(2012, BigDecimal(1500000, 2), BigDecimal(2000000, 2)) ::
+      Row(2013, BigDecimal(4800000, 2), BigDecimal(3000000, 2)) :: Nil)
+  }
+
+  test("PivotFirst supported datatypes") {
+    val supportedDataTypes: Seq[DataType] = DoubleType :: IntegerType :: LongType :: FloatType ::
+      BooleanType :: ShortType :: ByteType :: Nil
+    for (datatype <- supportedDataTypes) {
+      assertResult(true)(PivotFirst.supportsDataType(datatype))
+    }
+    assertResult(true)(PivotFirst.supportsDataType(DecimalType(10, 1)))
+    assertResult(false)(PivotFirst.supportsDataType(null))
+    assertResult(false)(PivotFirst.supportsDataType(ArrayType(IntegerType)))
+  }
+
+  test("optimized pivot with multiple aggregations") {
+    checkAnswer(
+      courseSales.groupBy($"year")
+        // pivot with extra columns to trigger optimization
+        .pivot("course", Seq("dotNET", "Java") ++ (1 to 10).map(_.toString))
+        .agg(sum($"earnings"), avg($"earnings")),
+      Row(Seq(2012, 15000.0, 7500.0, 20000.0, 20000.0) ++ Seq.fill(20)(null): _*) ::
+        Row(Seq(2013, 48000.0, 48000.0, 30000.0, 30000.0) ++ Seq.fill(20)(null): _*) :: Nil
+    )
+  }
+
 }
