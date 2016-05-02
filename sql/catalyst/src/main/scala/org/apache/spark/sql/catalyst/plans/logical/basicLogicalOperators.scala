@@ -107,8 +107,11 @@ case class Filter(condition: Expression, child: LogicalPlan)
 
   override def maxRows: Option[Long] = child.maxRows
 
-  override protected def validConstraints: Set[Expression] =
-    child.constraints.union(splitConjunctivePredicates(condition).toSet)
+  override protected def validConstraints: Set[Expression] = {
+    val predicates = splitConjunctivePredicates(condition)
+      .filterNot(PredicateSubquery.hasPredicateSubquery)
+    child.constraints.union(predicates.toSet)
+  }
 }
 
 abstract class SetOperation(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
@@ -165,6 +168,9 @@ case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation
 }
 
 case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right) {
+
+  def duplicateResolved: Boolean = left.outputSet.intersect(right.outputSet).isEmpty
+
   /** We don't use right.output because those rows get excluded from the set. */
   override def output: Seq[Attribute] = left.output
 
@@ -173,7 +179,8 @@ case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(le
   override lazy val resolved: Boolean =
     childrenResolved &&
       left.output.length == right.output.length &&
-      left.output.zip(right.output).forall { case (l, r) => l.dataType == r.dataType }
+      left.output.zip(right.output).forall { case (l, r) => l.dataType == r.dataType } &&
+      duplicateResolved
 
   override def statistics: Statistics = {
     Statistics(sizeInBytes = left.statistics.sizeInBytes)

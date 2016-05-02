@@ -956,7 +956,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
           GreaterThanOrEqual(e, expression(ctx.lower)),
           LessThanOrEqual(e, expression(ctx.upper))))
       case SqlBaseParser.IN if ctx.query != null =>
-        invertIfNotDefined(InSubQuery(e, plan(ctx.query)))
+        invertIfNotDefined(In(e, Seq(ListQuery(plan(ctx.query)))))
       case SqlBaseParser.IN =>
         invertIfNotDefined(In(e, ctx.expression.asScala.map(expression)))
       case SqlBaseParser.LIKE =>
