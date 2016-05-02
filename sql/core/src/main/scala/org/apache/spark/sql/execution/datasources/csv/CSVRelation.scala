@@ -77,7 +77,6 @@ object CSVRelation extends Logging {
     (tokens: Array[String]) => {
       if (params.dropMalformed && schemaFields.length != tokens.length) {
         val line = tokens.mkString(params.delimiter.toString)
-        logWarning(s"Dropping malformed line: $line")
         malformedLinesInfo.add(line)
         None
       } else if (params.failFast && schemaFields.length != tokens.length) {
@@ -117,7 +116,6 @@ object CSVRelation extends Logging {
         } catch {
           case NonFatal(e) if params.dropMalformed =>
             val line = tokens.mkString(params.delimiter.toString)
-            logWarning("Parse exception. " + s"Dropping malformed line: ${line}")
             malformedLinesInfo.add(line)
             None
         }
@@ -130,7 +128,7 @@ object CSVRelation extends Logging {
       schema: StructType,
       requiredColumns: Array[String],
       options: CSVOptions): RDD[InternalRow] = {
-    val malformedLinesInfo = new MalformedLinesInfo(options.maxStoredMalformedPerPartition)
+    val malformedLinesInfo = new MalformedLinesInfo(options.maxLogRecordsPerPartition)
     val parser = csvParser(schema, requiredColumns, options, malformedLinesInfo)
     tokenizedRDD.mapPartitions { iter =>
       val rows = iter.flatMap(parser(_).toSeq)
@@ -147,7 +145,7 @@ object CSVRelation extends Logging {
       schema: StructType,
       requiredColumns: Array[String],
       options: CSVOptions): Iterator[InternalRow] = {
-    val malformedLinesInfo = new MalformedLinesInfo(options.maxStoredMalformedPerPartition)
+    val malformedLinesInfo = new MalformedLinesInfo(options.maxLogRecordsPerPartition)
     val parser = csvParser(schema, requiredColumns, options, malformedLinesInfo)
     val rows = tokenizedIterator.flatMap(parser(_).toSeq)
     CompletionIterator[InternalRow, Iterator[InternalRow]](rows, {

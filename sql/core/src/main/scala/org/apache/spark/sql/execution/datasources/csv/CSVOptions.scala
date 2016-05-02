@@ -113,8 +113,7 @@ private[sql] class CSVOptions(@transient private val parameters: Map[String, Str
 
   val escapeQuotes = getBool("escapeQuotes", true)
 
-  // Only used in the `COUNTMALFORMED` mode
-  val maxStoredMalformedPerPartition = getInt("maxStoredMalformedPerPartition", 1)
+  val maxLogRecordsPerPartition = getInt("maxLogRecordsPerPartition", 1)
 
   val inputBufferSize = 128
 
