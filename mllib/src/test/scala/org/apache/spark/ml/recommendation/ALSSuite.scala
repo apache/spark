@@ -492,7 +492,7 @@ class ALSCleanerSuite extends SparkFunSuite {
   test("Clean shuffles") {
     val conf = new SparkConf()
     val localDir = Utils.createTempDir()
-    val tempDir = Utils.createTempDir()
+    val checkpointDir = Utils.createTempDir()
     def getAllFiles: Set[File] =
       FileUtils.listFiles(localDir, TrueFileFilter.INSTANCE, TrueFileFilter.INSTANCE).asScala.toSet
     try {
@@ -500,33 +500,32 @@ class ALSCleanerSuite extends SparkFunSuite {
       conf.set("spark.shuffle.manager", "sort")
       val sc = new SparkContext("local[2]", "test", conf)
       try {
-        sc.setCheckpointDir(tempDir.getAbsolutePath)
+        sc.setCheckpointDir(checkpointDir.getAbsolutePath)
         // Test checkpoint and clean parents
-        val filesBefore = getAllFiles
         val input = sc.parallelize(1 to 1000)
         val keyed = input.map(x => (x % 20, 1))
         val shuffled = keyed.reduceByKey(_ + _)
-        val keysOnly = shuffled.map{case (x, _) => x}
+        val keysOnly = shuffled.keys
         val deps = keysOnly.dependencies
-        keysOnly.checkpoint()
         keysOnly.count()
         ALS.cleanShuffleDependencies(sc, deps, true)
-        assert(keysOnly.isCheckpointed)
-        val resultingFiles = getAllFiles -- filesBefore
+        val resultingFiles = getAllFiles
         assert(resultingFiles === Set())
+        // Ensure running count again works fine even if we kill the shuffle files.
+        keysOnly.count()
       } finally {
         sc.stop()
       }
     } finally {
       Utils.deleteRecursively(localDir)
-      Utils.deleteRecursively(tempDir)
+      Utils.deleteRecursively(checkpointDir)
     }
   }
 
   test("ALS shuffle cleanup") {
     val conf = new SparkConf()
     val localDir = Utils.createTempDir()
-    val tempDir = Utils.createTempDir()
+    val checkpointDir = Utils.createTempDir()
     def getAllFiles: Set[File] =
       FileUtils.listFiles(localDir, TrueFileFilter.INSTANCE, TrueFileFilter.INSTANCE).asScala.toSet
     try {
@@ -534,11 +533,10 @@ class ALSCleanerSuite extends SparkFunSuite {
       conf.set("spark.shuffle.manager", "sort")
       val sc = new SparkContext("local[2]", "test", conf)
       try {
-        sc.setCheckpointDir(tempDir.getAbsolutePath)
+        sc.setCheckpointDir(checkpointDir.getAbsolutePath)
         // Generate test data
         val (training, _) = ALSSuite.genImplicitTestData(sc, 100, 10, 1, 0.2, 0)
         // Implicitly test the cleaning of parents during ALS training
-        val filesBefore = getAllFiles
         val sqlContext = new SQLContext(sc)
         import sqlContext.implicits._
         val als = new ALS()
@@ -546,19 +544,21 @@ class ALSCleanerSuite extends SparkFunSuite {
           .setRegParam(1e-5)
           .setSeed(0)
           .setCheckpointInterval(1)
+          .setMaxIter(50)
         val model = als.fit(training.toDF())
-        val resultingFiles = getAllFiles -- filesBefore
-        // We expect the last shuffles file to be around, but no more
+        val resultingFiles = getAllFiles
+        // We expect the last shuffles files, block ratings, user factors, and item factors to be
+        // around but no more.
         val pattern = "shuffle_(\\d+)_.+\\.data".r
-        val rddIds = resultingFiles.flatMap(f =>
-          pattern.findAllIn(f.getName()).matchData.map{_.group(1)})
-        assert(rddIds.toSet.size === 1)
+        val rddIds = resultingFiles.flatMap { f =>
+          pattern.findAllIn(f.getName()).matchData.map { _.group(1) } }
+        assert(rddIds.toSet.size === 4)
       } finally {
         sc.stop()
       }
     } finally {
       Utils.deleteRecursively(localDir)
-      Utils.deleteRecursively(tempDir)
+      Utils.deleteRecursively(checkpointDir)
     }
   }
 }
@@ -709,7 +709,7 @@ object ALSSuite extends Logging {
       rank: Int,
       noiseStd: Double = 0.0,
       seed: Long = 11L): (RDD[Rating[Int]], RDD[Rating[Int]]) = {
-      // The assumption of the implicit feedback model is that unobserved ratings are more likely to
+    // The assumption of the implicit feedback model is that unobserved ratings are more likely to
     // be negatives.
     val positiveFraction = 0.8
     val negativeFraction = 1.0 - positiveFraction

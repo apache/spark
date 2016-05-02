@@ -1363,10 +1363,12 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
   /**
    * Private function to clean up all of the shuffles files from the dependencies and their parents.
    */
-  private[spark] def cleanShuffleDependencies[T](sc: SparkContext, deps: Seq[Dependency[_]],
+  private[spark] def cleanShuffleDependencies[T](
+      sc: SparkContext,
+      deps: Seq[Dependency[_]],
       blocking: Boolean = false): Unit = {
     // If there is no reference tracking we skip clean up.
-    sc.cleaner.foreach{ cleaner =>
+    sc.cleaner.foreach { cleaner =>
       /**
        * Clean the shuffles & all of its parents.
        */
@@ -1375,8 +1377,9 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
           val shuffleId = dep.asInstanceOf[ShuffleDependency[_, _, _]].shuffleId
           cleaner.doCleanupShuffle(shuffleId, blocking)
         }
-        val rddDeps = dep.rdd.dependencies
-        if (rddDeps != null) {
+        val rdd = dep.rdd
+        val rddDeps = rdd.dependencies
+        if (rdd.getStorageLevel == StorageLevel.NONE && rddDeps != null) {
           rddDeps.foreach(cleanEagerly)
         }
       }
