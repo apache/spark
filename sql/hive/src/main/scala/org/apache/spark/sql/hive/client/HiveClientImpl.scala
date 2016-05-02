@@ -43,6 +43,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.execution.QueryExecutionException
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.{CircularBuffer, Utils}
 
 /**
@@ -162,6 +163,11 @@ private[hive] class HiveClientImpl(
           }
           hiveConf.set(k, v)
         }
+        // Then, set the appropriate metastore warehouse dir.
+        hiveConf.setVar(
+          HiveConf.ConfVars.METASTOREWAREHOUSE,
+          HiveClientImpl.metastoreWarehousePath(hiveConf, sparkConf))
+
         val state = new SessionState(hiveConf)
         if (clientLoader.cachedHive != null) {
           Hive.set(clientLoader.cachedHive.asInstanceOf[Hive])
@@ -785,6 +791,31 @@ private[hive] class HiveClientImpl(
         outputFormat = Option(apiPartition.getSd.getOutputFormat),
         serde = Option(apiPartition.getSd.getSerdeInfo.getSerializationLib),
         serdeProperties = apiPartition.getSd.getSerdeInfo.getParameters.asScala.toMap))
+  }
+
+}
+
+private[hive] object HiveClientImpl {
+
+  /**
+   * Resolve the metastore warehouse path based on both Spark and Hive configurations.
+   * If both are set, the Spark value takes precedence.
+   */
+  def metastoreWarehousePath(hiveConf: HiveConf, sparkConf: SparkConf): String = {
+    val sqlConf = new SQLConf
+    sparkConf.getAll.foreach { case (k, v) => sqlConf.setConfString(k, v) }
+    // The user may specify the dir through either SparkConf or hive-site.xml.
+    // If the dir is set in SparkConf, then always use that value.
+    // If the dir is set in hive-site.xml but NOT in SparkConf, then use the Hive value.
+    // If neither is set, use the default value in Spark.
+    val hiveConfVar = HiveConf.ConfVars.METASTOREWAREHOUSE
+    val hiveDefault = new HiveConf(classOf[Configuration]).getVar(hiveConfVar)
+    val hiveValue = HiveConf.getVar(hiveConf, HiveConf.ConfVars.METASTOREWAREHOUSE, hiveDefault)
+    if (hiveValue != hiveDefault && !sqlConf.contains(SQLConf.WAREHOUSE_PATH.key)) {
+      hiveValue
+    } else {
+      sqlConf.warehousePath
+    }
   }
 
 }

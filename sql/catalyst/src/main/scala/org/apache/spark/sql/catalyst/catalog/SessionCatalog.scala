@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
-import java.io.File
-
 import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
@@ -70,7 +68,8 @@ class SessionCatalog(
     val defaultName = "default"
     val defaultDbDefinition =
       CatalogDatabase(defaultName, "default database", conf.warehousePath, Map())
-    // Initialize default database if it doesn't already exist
+    // Initialize default database if it doesn't already exist.
+    // Note: in Hive, the default database already exists so this is a no-op.
     createDatabase(defaultDbDefinition, ignoreIfExists = true)
     defaultName
   }
