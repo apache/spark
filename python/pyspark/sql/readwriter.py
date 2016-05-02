@@ -196,6 +196,10 @@ class DataFrameReader(object):
         :param allowBackslashEscapingAnyCharacter: allows accepting quoting of all character \
                                                    using backslash quoting mechanism. If None is \
                                                    set, it uses the default value, ``false``.
+        :param columnNameOfCorruptRecord: allows renaming the new field having malformed string \
+                                          created by ``PERMISSIVE`` mode. This overrides \
+                                          ``spark.sql.columnNameOfCorruptRecord``. If None is set, \
+                                          it uses the default value ``_corrupt_record``.
         :param mode: allows a mode for dealing with corrupt records during parsing. If None is \
                      set, it uses the default value, ``PERMISSIVE``.
 
@@ -205,11 +209,6 @@ class DataFrameReader(object):
                  ``null`` for extra fields.
                 *  ``DROPMALFORMED`` : ignores the whole corrupted records.
                 *  ``FAILFAST`` : throws an exception when it meets corrupted records.
-
-        :param columnNameOfCorruptRecord: allows renaming the new field having malformed string \
-                                          created by ``PERMISSIVE`` mode. This overrides \
-                                          ``spark.sql.columnNameOfCorruptRecord``. If None is set, \
-                                          it uses the default value ``_corrupt_record``.
 
         >>> df1 = sqlContext.read.json('python/test_support/sql/people.json')
         >>> df1.dtypes
