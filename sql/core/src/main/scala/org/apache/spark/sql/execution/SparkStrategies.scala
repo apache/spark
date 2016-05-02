@@ -310,6 +310,10 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.MapPartitionsInR(f, p, b, is, os, objAttr, child) =>
         execution.MapPartitionsExec(
           execution.r.MapPartitionsRWrapper(f, p, b, is, os), objAttr, planLater(child)) :: Nil
+      case logical.MapGroupsR(f, p, b, is, os, key, value, grouping, data, objAttr, child) =>
+        execution.MapGroupsExec(
+          execution.r.MapGroupRWrapper(f, p, b, is, os), key, value, grouping,
+                data, objAttr, planLater(child)) :: Nil
       case logical.MapElements(f, objAttr, child) =>
         execution.MapElementsExec(f, objAttr, planLater(child)) :: Nil
       case logical.AppendColumns(f, in, out, child) =>

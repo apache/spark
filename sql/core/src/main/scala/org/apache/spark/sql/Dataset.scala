@@ -1999,6 +1999,34 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * Returns a new [[DataFrame]] which contains the aggregated result of applying
+   * [[func]] R function to each group
+   *
+   * @group func
+   * @since 2.0.0
+   */
+  def mapGroupPartitionsInR[K: Encoder](
+    gfunc: T => K,
+    func: Array[Byte],
+    packageNames: Array[Byte],
+    broadcastVars: Array[Object],
+    outputSchema: StructType): DataFrame = {
+
+    val inputPlan = logicalPlan
+    val withGroupingKey = AppendColumns(gfunc, inputPlan)
+    val executed = sqlContext.executePlan(withGroupingKey)
+
+    val kvdg = new KeyValueGroupedDataset(
+      encoderFor[K],
+      encoderFor[T],
+      executed,
+      inputPlan.output,
+      withGroupingKey.newColumns)
+
+    kvdg.flatMapRGroups(func, packageNames, broadcastVars, outputSchema)
+   }
+
+  /**
    * :: Experimental ::
    * (Scala-specific)
    * Returns a new [[Dataset]] by first applying a function to all elements of this [[Dataset]],

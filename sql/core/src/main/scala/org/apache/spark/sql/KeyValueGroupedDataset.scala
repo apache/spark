@@ -21,10 +21,13 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.function._
+import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.sql.catalyst.analysis.UnresolvedDeserializer
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder, OuterScopes}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CreateStruct}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.types.StructType
 
 /**
  * :: Experimental ::
@@ -107,6 +110,30 @@ class KeyValueGroupedDataset[K, V] private[sql](
       sparkSession,
       MapGroups(
         f,
+        groupingAttributes,
+        dataAttributes,
+        logicalPlan))
+  }
+
+  def flatMapRGroups(
+    func: Array[Byte],
+    packageNames: Array[Byte],
+    broadcastVars: Array[Object],
+    outputSchema: StructType): DataFrame = {
+
+    val broadcastVarObj = broadcastVars.map(x => x.asInstanceOf[Broadcast[Object]])
+    val rowEncoder = vEncoder.asInstanceOf[ExpressionEncoder[Row]]
+
+    Dataset.ofRows(
+      sparkSession,
+      MapGroupsR(
+        func,
+        packageNames,
+        broadcastVarObj,
+        outputSchema,
+        unresolvedVEncoder.deserializer,
+        unresolvedKEncoder.deserializer,
+        rowEncoder,
         groupingAttributes,
         dataAttributes,
         logicalPlan))

@@ -155,6 +155,52 @@ private[sql] object SQLUtils {
     df.mapPartitionsInR(func, packageNames, bv, realSchema)
   }
 
+ /**
+  * The helper function for gapply() on R side.
+  */
+ def gapply(
+    df: DataFrame,
+    func: Array[Byte],
+    packageNames: Array[Byte],
+    broadcastVars: Array[Object],
+    schema: StructType,
+    col: String): DataFrame = {
+
+   val realSchema =
+      if (schema == null) {
+        SERIALIZED_R_DATA_SCHEMA
+      } else {
+        schema
+      }
+
+   val dfSchema = df.select(df(col)).schema
+   if (dfSchema.length == 0) throw new IllegalArgumentException(s"Invaid column name $col")
+   val dataType = dfSchema(0).dataType
+
+   val sqlContext = df.sqlContext
+   import sqlContext.implicits._
+
+    dataType match {
+      case ByteType => df.mapGroupPartitionsInR((r: Row) => r.getAs[Byte](col),
+                           func, packageNames, broadcastVars, realSchema)
+      case IntegerType => df.mapGroupPartitionsInR((r: Row) => r.getAs[Int](col),
+                           func, packageNames, broadcastVars, realSchema)
+      case FloatType => df.mapGroupPartitionsInR((r: Row) => r.getAs[Float](col),
+                           func, packageNames, broadcastVars, realSchema)
+      case DoubleType => df.mapGroupPartitionsInR((r: Row) => r.getAs[Double](col),
+                           func, packageNames, broadcastVars, realSchema)
+      case StringType => df.mapGroupPartitionsInR((r: Row) => r.getAs[String](col),
+                           func, packageNames, broadcastVars, realSchema)
+      case BinaryType => df.mapGroupPartitionsInR((r: Row) => r.getAs[Array[Byte]](col),
+                           func, packageNames, broadcastVars, realSchema)
+      case BooleanType => df.mapGroupPartitionsInR((r: Row) => r.getAs[Boolean](col),
+                           func, packageNames, broadcastVars, realSchema)
+      case TimestampType => df.mapGroupPartitionsInR((r: Row) => r.getAs[Long](col),
+                           func, packageNames, broadcastVars, realSchema)
+      case _ => throw new IllegalArgumentException(s"Invaid type $dataType")
+     }
+   }
+
   def dfToCols(df: DataFrame): Array[Array[Any]] = {
     val localDF: Array[Row] = df.collect()
     val numCols = df.columns.length

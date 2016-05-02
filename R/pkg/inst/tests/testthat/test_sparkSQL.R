@@ -2083,6 +2083,43 @@ test_that("dapply() on a DataFrame", {
   expect_identical(expected, result)
 })
 
+test_that("gapply() on a DataFrame", {
+  df <- createDataFrame (
+    sqlContext,
+    list(list(1L, 1, "1", 0.1), list(1L, 2, "2", 0.2), list(3L, 3, "3", 0.3)),
+    c("a", "b", "c", "d"))
+  expected <- collect(df)
+  df1 <- gapply(df, function(x) { x }, schema(df), "a")
+  actual <- collect(df1)
+  expect_identical(actual, expected)
+  
+  # Add a boolean column
+  schema <- structType(structField("a", "integer"), structField("b", "double"),
+                       structField("c", "string"), structField("d", "double"),
+                       structField("e", "boolean"))
+  df2 <- gapply(
+    df,
+    function(x) {
+      y <- cbind(x, x[1] > 1)
+    },
+    schema, "a")
+  actual <- collect(df2)$e
+  expected <- c(FALSE, FALSE, TRUE)
+  expect_identical(actual, expected)
+  
+  # remove columns
+  schema <- structType(structField("a", "integer"))
+  df3 <- gapply(
+    df,
+    function(x) {
+      y <- x[1]
+    },
+    schema, "a")
+  actual <- collect(df3)
+  expected <- collect(select(df, "a"))
+  expect_identical(actual, expected)
+})
+
 unlink(parquetPath)
 unlink(jsonPath)
 unlink(jsonPathNa)

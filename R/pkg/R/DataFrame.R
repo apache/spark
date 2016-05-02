@@ -1187,6 +1187,65 @@ setMethod("dapply",
             dataFrame(sdf)
           })
 
+#' gapply
+#'
+#' Apply a function to each group of a DataFrame.
+#'
+#' @param x A SparkDataFrame
+#' @param func A function to be applied to each group partition specified by grouping
+#'        column of the SparkDataFrame.
+#'        The output of func is a data.frame.
+#' @param schema The schema of the resulting DataFrame after the function is applied.
+#'               It must match the output of func.
+#' @family SparkDataFrame functions
+#' @rdname gapply
+#' @name gapply
+#' @export
+#' @examples
+#' \dontrun{
+#'   df <- createDataFrame (sqlContext, iris)
+#'   gdf <- gapply(df, function(x) { x }, schema(df), "Petal_Width")
+#'   collect(gdf)
+#'
+#' Compute the square of the first columns and output it
+#'
+#' df <- createDataFrame (
+#' sqlContext,
+#' list(list(1L, 1, "1", 0.1), list(1L, 2, "2", 0.2), list(3L, 3, "3", 0.3)),
+#' c("a", "b", "c", "d"))
+#'
+#' schema <- structType(structField("result", "integer"))
+#' df1 <- gapply(
+#'  df,
+#'  function(x) {
+#'    y <- x[1] * x[1]
+#'  },
+#'  schema, "a")
+#'  collect(df1)
+#'
+#' result
+#' ------
+#'   1
+#'   1
+#'   9
+#'
+setMethod("gapply",
+          signature(x = "SparkDataFrame", func = "function", schema = "structType",
+                   col = "character"),
+          function(x, func, schema, col) {
+            packageNamesArr <- serialize(.sparkREnv[[".packages"]],
+                                         connection = NULL)
+
+            broadcastArr <- lapply(ls(.broadcastNames),
+                                   function(name) { get(name, .broadcastNames) })
+
+            sdf <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "gapply", x@sdf,
+                               serialize(cleanClosure(func), connection = NULL),
+                               packageNamesArr,
+                               broadcastArr,
+                               schema$jobj, col)
+            dataFrame(sdf)
+          })
 ############################## RDD Map Functions ##################################
 # All of the following functions mirror the existing RDD map functions,           #
 # but allow for use with DataFrames by first converting to an RRDD before calling #
