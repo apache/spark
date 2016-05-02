@@ -118,7 +118,7 @@ private[csv] object UnivocityParser extends Logging {
         tokens(index),
         field.dataType,
         field.nullable,
-        options.nullValue)
+        options)
       if (subIndex < requiredSize) {
         row(subIndex) = value
       }

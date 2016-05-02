@@ -23,6 +23,7 @@ import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.sql.Row
 
 class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
   test("params") {
@@ -87,6 +88,24 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     assert(resultSchema.length == 3)
     assert(!resultSchema.exists(_.name == "label"))
     assert(resultSchema.toString == model.transform(original).schema.toString)
+  }
+
+  test("allow empty label") {
+    val original = sqlContext.createDataFrame(
+      Seq((1, 2.0, 3.0), (4, 5.0, 6.0), (7, 8.0, 9.0))
+    ).toDF("id", "a", "b")
+    val formula = new RFormula().setFormula("~ a + b")
+    val model = formula.fit(original)
+    val result = model.transform(original)
+    val resultSchema = model.transformSchema(original.schema)
+    val expected = sqlContext.createDataFrame(
+      Seq(
+        (1, 2.0, 3.0, Vectors.dense(2.0, 3.0)),
+        (4, 5.0, 6.0, Vectors.dense(5.0, 6.0)),
+        (7, 8.0, 9.0, Vectors.dense(8.0, 9.0)))
+      ).toDF("id", "a", "b", "features")
+    assert(result.schema.toString == resultSchema.toString)
+    assert(result.collect() === expected.collect())
   }
 
   test("encodes string terms") {

@@ -39,6 +39,10 @@ object ParserUtils {
     stream.getText(Interval.of(0, stream.size()))
   }
 
+  def parseException(message: String, ctx: ParserRuleContext): ParseException = {
+    new ParseException(s"Operation not allowed: $message", ctx)
+  }
+
   /** Get the code that creates the given node. */
   def source(ctx: ParserRuleContext): String = {
     val stream = ctx.getStart.getInputStream

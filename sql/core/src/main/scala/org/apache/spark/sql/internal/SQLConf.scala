@@ -52,6 +52,11 @@ object SQLConf {
 
   }
 
+  val WAREHOUSE_PATH = SQLConfigBuilder("spark.sql.warehouse.dir")
+    .doc("The default location for managed databases and tables.")
+    .stringConf
+    .createWithDefault("${system:user.dir}/spark-warehouse")
+
   val OPTIMIZER_MAX_ITERATIONS = SQLConfigBuilder("spark.sql.optimizer.maxIterations")
     .internal()
     .doc("The max number of iterations the optimizer and analyzer runs.")
@@ -516,13 +521,6 @@ object SQLConf {
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
-    val EXTERNAL_SORT = "spark.sql.planner.externalSort"
-    val USE_SQL_AGGREGATE2 = "spark.sql.useAggregate2"
-    val TUNGSTEN_ENABLED = "spark.sql.tungsten.enabled"
-    val CODEGEN_ENABLED = "spark.sql.codegen"
-    val UNSAFE_ENABLED = "spark.sql.unsafe.enabled"
-    val SORTMERGE_JOIN = "spark.sql.planner.sortMergeJoin"
-    val PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED = "spark.sql.parquet.enableUnsafeRowRecordReader"
   }
 }
 
@@ -652,6 +650,10 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def variableSubstituteDepth: Int = getConf(VARIABLE_SUBSTITUTE_DEPTH)
 
+  def warehousePath: String = {
+    getConf(WAREHOUSE_PATH).replace("${system:user.dir}", System.getProperty("user.dir"))
+  }
+
   override def orderByOrdinal: Boolean = getConf(ORDER_BY_ORDINAL)
 
   override def groupByOrdinal: Boolean = getConf(GROUP_BY_ORDINAL)
@@ -753,10 +755,14 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
     }.toSeq
   }
 
+  /**
+   * Return whether a given key is set in this [[SQLConf]].
+   */
+  def contains(key: String): Boolean = {
+    settings.containsKey(key)
+  }
+
   private def setConfWithCheck(key: String, value: String): Unit = {
-    if (key.startsWith("spark.") && !key.startsWith("spark.sql.")) {
-      logWarning(s"Attempt to set non-Spark SQL config in SQLConf: key = $key, value = $value")
-    }
     settings.put(key, value)
   }
 
@@ -764,7 +770,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
     settings.remove(key)
   }
 
-  private[spark] def unsetConf(entry: ConfigEntry[_]): Unit = {
+  def unsetConf(entry: ConfigEntry[_]): Unit = {
     settings.remove(entry.key)
   }
 
