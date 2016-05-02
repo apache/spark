@@ -66,8 +66,8 @@ public class JavaStatisticsSuite implements Serializable {
 
   @Test
   public void testCorr() {
-    JavaRDD<Double> x = sc.parallelize(Arrays.asList(1.0, 2.0, 3.0, 4.0));
-    JavaRDD<Double> y = sc.parallelize(Arrays.asList(1.1, 2.2, 3.1, 4.3));
+    JavaRDD<Double> x = sc.parallelize(Arrays.asList(1.0, 2.0, 3.0, 4.0), 1);
+    JavaRDD<Double> y = sc.parallelize(Arrays.asList(1.1, 2.2, 3.1, 4.3), 1);
 
     Double corr1 = Statistics.corr(x, y);
     Double corr2 = Statistics.corr(x, y, "pearson");
