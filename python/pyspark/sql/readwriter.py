@@ -274,48 +274,44 @@ class DataFrameReader(object):
         return self._df(self._jreader.text(self._sqlContext._sc._jvm.PythonUtils.toSeq(paths)))
 
     @since(2.0)
-    def csv(self, paths):
+    def csv(self, paths, schema=None, sep=None, encoding=None, quote=None, escape=None,
+            comment=None, header=None, ignoreLeadingWhiteSpace=None, ignoreTrailingWhiteSpace=None,
+            nullValue=None, nanValue=None, positiveInf=None, negativeInf=None, dateFormat=None,
+            maxColumns=None, maxCharsPerColumn=None, mode=None):
         """Loads a CSV file and returns the result as a [[DataFrame]].
 
         This function goes through the input once to determine the input schema. To avoid going
         through the entire data once, specify the schema explicitly using [[schema]].
 
-        :param paths: string, or list of strings, for input path(s).
+        :param paths: string, or list of strings, for input path(s)
+        :param schema: an optional :class:`StructType` for the input schema.
+        :param sep: sets the single character as a separator for each field and value.
+        :param encoding: decodes the CSV files by the given encoding type.
+        :param quote: sets the single character used for escaping quoted values where the \
+                      separator can be part of the value.
+        :param escape: sets the single character used for escaping quotes inside an already \
+                       quoted value.
+        :param comment: sets the single character used for skipping lines beginning with this \
+                        character. By default, it is disabled.
+        :param header: uses the first line as names of columns.
+        :param ignoreLeadingWhiteSpace: defines whether or not leading whitespaces from values \
+                                        being read should be skipped.
+        :param ignoreTrailingWhiteSpace: defines whether or not trailing whitespaces from values \
+                                         being read should be skipped.
+        :param nullValue: sets the string representation of a null value.
+        :param nanValue: sets the string representation of a non-number value.
+        :param positiveInf: sets the string representation of a positive infinity value.
+        :param negativeInf: sets the string representation of a negative infinity value.
+        :param dateFormat: sets the string that indicates a date format. Custom date formats \
+                           follow the formats at ``java.text.SimpleDateFormat``. This \
+                           applies to both date type and timestamp type. By default, it is None \
+                           which means trying to parse times and date by \
+                           ``java.sql.Timestamp.valueOf()`` and ``java.sql.Date.valueOf()``.
+        :param maxColumns: defines a hard limit of how many columns a record can have.
+        :param maxCharsPerColumn: defines the maximum number of characters allowed for any given \
+                                  value being read.
+        :param mode: allows a mode for dealing with corrupt records during parsing.
 
-        You can set the following CSV-specific options to deal with CSV files:
-            * ``sep`` (default ``,``): sets the single character as a separator \
-                for each field and value.
-            * ``charset`` (default ``UTF-8``): decodes the CSV files by the given \
-                encoding type.
-            * ``quote`` (default ``"``): sets the single character used for escaping \
-                quoted values where the separator can be part of the value.
-            * ``escape`` (default ``\``): sets the single character used for escaping quotes \
-                inside an already quoted value.
-            * ``comment`` (default empty string): sets the single character used for skipping \
-                lines beginning with this character. By default, it is disabled.
-            * ``header`` (default ``false``): uses the first line as names of columns.
-            * ``ignoreLeadingWhiteSpace`` (default ``false``): defines whether or not leading \
-                whitespaces from values being read should be skipped.
-            * ``ignoreTrailingWhiteSpace`` (default ``false``): defines whether or not trailing \
-                whitespaces from values being read should be skipped.
-            * ``nullValue`` (default empty string): sets the string representation of a null value.
-            * ``nanValue`` (default ``NaN``): sets the string representation of a non-number \
-                value.
-            * ``positiveInf`` (default ``Inf``): sets the string representation of a positive \
-                infinity value.
-            * ``negativeInf`` (default ``-Inf``): sets the string representation of a negative \
-                infinity value.
-            * ``dateFormat`` (default ``None``): sets the string that indicates a date format. \
-                Custom date formats follow the formats at ``java.text.SimpleDateFormat``. This \
-                applies to both date type and timestamp type. By default, it is None which means \
-                trying to parse times and date by ``java.sql.Timestamp.valueOf()`` and \
-                ``java.sql.Date.valueOf()``.
-            * ``maxColumns`` (default ``20480``): defines a hard limit of how many columns \
-                a record can have.
-            * ``maxCharsPerColumn`` (default ``1000000``): defines the maximum number of \
-                characters allowed for any given value being read.
-            * ``mode`` (default ``PERMISSIVE``): allows a mode for dealing with corrupt records \
-                during parsing.
                 * ``PERMISSIVE`` : sets other fields to ``null`` when it meets a corrupted record. \
                     When a schema is set by user, it sets ``null`` for extra fields.
                 * ``DROPMALFORMED`` : ignores the whole corrupted records.
@@ -325,6 +321,40 @@ class DataFrameReader(object):
         >>> df.dtypes
         [('C0', 'string'), ('C1', 'string')]
         """
+        if schema is not None:
+            self.schema(schema)
+        if sep is not None:
+            self.option("sep", sep)
+        if encoding is not None:
+            self.option("encoding", encoding)
+        if quote is not None:
+            self.option("quote", quote)
+        if escape is not None:
+            self.option("escape", escape)
+        if comment is not None:
+            self.option("comment", comment)
+        if header is not None:
+            self.option("header", header)
+        if ignoreLeadingWhiteSpace is not None:
+            self.option("ignoreLeadingWhiteSpace", ignoreLeadingWhiteSpace)
+        if ignoreTrailingWhiteSpace is not None:
+            self.option("ignoreTrailingWhiteSpace", ignoreTrailingWhiteSpace)
+        if nullValue is not None:
+            self.option("nullValue", nullValue)
+        if nanValue is not None:
+            self.option("nanValue", nanValue)
+        if positiveInf is not None:
+            self.option("positiveInf", positiveInf)
+        if negativeInf is not None:
+            self.option("negativeInf", negativeInf)
+        if dateFormat is not None:
+            self.option("dateFormat", dateFormat)
+        if maxColumns is not None:
+            self.option("maxColumns", maxColumns)
+        if maxCharsPerColumn is not None:
+            self.option("maxCharsPerColumn", maxCharsPerColumn)
+        if mode is not None:
+            self.option("mode", mode)
         if isinstance(paths, basestring):
             paths = [paths]
         return self._df(self._jreader.csv(self._sqlContext._sc._jvm.PythonUtils.toSeq(paths)))
@@ -687,7 +717,8 @@ class DataFrameWriter(object):
         self._jwrite.text(path)
 
     @since(2.0)
-    def csv(self, path, mode=None, compression=None):
+    def csv(self, path, mode=None, compression=None, sep=None, quote=None, escape=None,
+            header=None, nullValue=None):
         """Saves the content of the [[DataFrame]] in CSV format at the specified path.
 
         :param path: the path in any Hadoop supported file system
@@ -698,28 +729,32 @@ class DataFrameWriter(object):
             * ``ignore``: Silently ignore this operation if data already exists.
             * ``error`` (default case): Throw an exception if data already exists.
 
+        :param sep: sets the single character as a separator for each field and value.
+        :param quote: sets the single character used for escaping quoted values where the \
+                      separator can be part of the value.
+        :param escape: sets the single character used for escaping quotes inside an already \
+                       quoted value.
+        :param header: writes the names of columns as the first line.
+        :param nullValue: sets the string representation of a null value.
         :param compression: compression codec to use when saving to file. This can be one of the
                             known case-insensitive shorten names (none, bzip2, gzip, lz4,
                             snappy and deflate).
-
-        You can set the following CSV-specific options to deal with CSV files:
-            * ``sep`` (default ``,``): sets the single character as a separator \
-                for each field and value.
-            * ``quote`` (default ``"``): sets the single character used for escaping \
-                quoted values where the separator can be part of the value.
-            * ``escape`` (default ``\``): sets the single character used for escaping quotes \
-                inside an already quoted value.
-            * ``header`` (default ``false``): writes the names of columns as the first line.
-            * ``nullValue`` (default empty string): sets the string representation of a null value.
-            * ``compression``: compression codec to use when saving to file. This can be one of \
-                the known case-insensitive shorten names (none, bzip2, gzip, lz4, snappy and \
-                deflate).
 
         >>> df.write.csv(os.path.join(tempfile.mkdtemp(), 'data'))
         """
         self.mode(mode)
         if compression is not None:
             self.option("compression", compression)
+        if sep is not None:
+            self.option("sep", sep)
+        if quote is not None:
+            self.option("quote", quote)
+        if escape is not None:
+            self.option("escape", escape)
+        if header is not None:
+            self.option("header", header)
+        if nullValue is not None:
+            self.option("nullValue", header)
         self._jwrite.csv(path)
 
     @since(1.5)
