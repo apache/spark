@@ -55,9 +55,9 @@ private[spark] case class AccumulatorMetadata(
  * The base class for accumulators, that can accumulate inputs of type `IN`, and produce output of
  * type `OUT`.
  */
-abstract class AccumulatorV2[IN, OUT] extends Serializable {
+abstract class AccumulatorV2[@specialized(Int, Long, Double) IN, OUT] extends Serializable {
   private[spark] var metadata: AccumulatorMetadata = _
-  private[AccumulatorV2] var atDriverSide = true
+  private[spark] var atDriverSide = true
 
   /**
    * The following values are used for data property [[AccumulatorV2]]s.
@@ -70,12 +70,12 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
    */
   // For data property accumulators pending and processed updates.
   // Pending and processed are keyed by (rdd id, shuffle id, partition id)
-  private[AccumulatorV2] lazy val pending =
+  private[spark] lazy val pending =
     new mutable.HashMap[(Int, Int, Int), AccumulatorV2[IN, OUT]]()
   // Completed contains the set of (rdd id, shuffle id, partition id) that have been
   // fully processed on the worker side. This is used to determine if the updates should
   // be sent back to the driver for a particular rdd/shuffle/partition combination.
-  private[AccumulatorV2] lazy val completed = new mutable.HashSet[(Int, Int, Int)]()
+  private[spark] lazy val completed = new mutable.HashSet[(Int, Int, Int)]()
   // Processed is keyed by (rdd id, shuffle id) and the value is a bitset containing all partitions
   // for the given key which have been merged into the value. This is used on the driver.
   @transient private[spark] lazy val processed = new mutable.HashMap[(Int, Int), mutable.BitSet]()
@@ -162,11 +162,11 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
    * Takes the inputs and accumulates. e.g. it can be a simple `+=` for counter accumulator.
    * Developers should extend addImpl to customize the adding functionality.
    */
-  final lazy val add: (IN => Unit) = {
+  final def add(v: IN): Unit = {
     if (metadata != null && metadata.dataProperty) {
-      dataPropertyAdd _
+      dataPropertyAdd(v)
     } else {
-      addImpl _
+      addImpl(v)
     }
   }
 
@@ -196,7 +196,7 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
    * Takes the inputs and accumulates. e.g. it can be a simple `+=` for counter accumulator.
    * Developers should extend addImpl to customize the adding functionality.
    */
-  protected def addImpl(v: IN)
+  protected[spark] def addImpl(v: IN)
 
   /**
    * Merges another same-type accumulator into this one and update its state, i.e. this should be

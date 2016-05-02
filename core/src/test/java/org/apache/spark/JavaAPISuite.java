@@ -288,14 +288,17 @@ public class JavaAPISuite implements Serializable {
   @Test
   public void foreach() {
     final Accumulator<Integer> accum = sc.accumulator(0);
+    final LongAccumulator accumV2 = JavaSparkContext.toSparkContext(sc).longAccumulator();
     JavaRDD<String> rdd = sc.parallelize(Arrays.asList("Hello", "World"));
     rdd.foreach(new VoidFunction<String>() {
       @Override
       public void call(String s) {
         accum.add(1);
+        accumV2.add(1L);
       }
     });
     assertEquals(2, accum.value().intValue());
+    assertEquals(2, accumV2.value().longValue());
   }
 
   @Test
