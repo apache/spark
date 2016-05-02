@@ -107,17 +107,16 @@ object PredicateSubquery {
   }
 
   /**
-   * Returns whether there are Not() and any null-aware predicate subquery in the expression.
-   *
-   * If there is no Not in the expression, we could turn the null-aware predicate into
-   * not-null-aware predicate.
+   * Returns whether there are any null-aware predicate subqueries inside Not. If not, we could
+   * turn the null-aware predicate into not-null-aware predicate.
    */
-  def hasNotAndNullAwarePredicate(e: Expression): Boolean = {
-    e.find(_.isInstanceOf[Not]).isDefined &&
-      e.find {
-        case p: PredicateSubquery if p.nullAware => true
+  def hasNullAwarePredicateWithinNot(e: Expression): Boolean = {
+    e.find{ x =>
+      x.isInstanceOf[Not] && e.find {
+        case p: PredicateSubquery => p.nullAware
         case _ => false
       }.isDefined
+    }.isDefined
   }
 }
 

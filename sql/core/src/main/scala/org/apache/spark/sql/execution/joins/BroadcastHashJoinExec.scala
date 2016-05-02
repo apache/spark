@@ -410,7 +410,7 @@ case class BroadcastHashJoinExec(
   }
 
   /**
-   * Generates the code for left semi join.
+   * Generates the code for existence join.
    */
   private def codegenExistence(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     val (broadcastRelation, relationTerm) = prepareBroadcast(ctx)

@@ -274,7 +274,7 @@ case class Join(
   override def output: Seq[Attribute] = {
     joinType match {
       case j: ExistenceJoin =>
-        left.output ++ Seq(j.exists)
+        left.output :+ j.exists
       case LeftExistence(_) =>
         left.output
       case LeftOuter =>

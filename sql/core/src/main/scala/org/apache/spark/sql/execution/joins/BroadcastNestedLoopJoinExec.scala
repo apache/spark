@@ -73,7 +73,7 @@ case class BroadcastNestedLoopJoinExec(
       case FullOuter =>
         left.output.map(_.withNullability(true)) ++ right.output.map(_.withNullability(true))
       case j: ExistenceJoin =>
-        left.output ++ Seq(j.exists)
+        left.output :+ j.exists
       case LeftExistence(_) =>
         left.output
       case x =>
@@ -198,23 +198,18 @@ case class BroadcastNestedLoopJoinExec(
     }
   }
 
-  private def leftSemiPlusJoin(relation: Broadcast[Array[InternalRow]]): RDD[InternalRow] = {
+  private def existenceJoin(relation: Broadcast[Array[InternalRow]]): RDD[InternalRow] = {
     assert(buildSide == BuildRight)
     streamed.execute().mapPartitionsInternal { streamedIter =>
       val buildRows = relation.value
       val joinedRow = new JoinedRow
-      val exists = joinType.asInstanceOf[ExistenceJoin].exists
 
       if (condition.isDefined) {
         val resultRow = new GenericMutableRow(Array[Any](null))
-        if (exists.nullable) {
-          sys.error("Null-aware join is not supported")
-        } else {
-          streamedIter.map { row =>
-            val result = buildRows.exists(r => boundCondition(joinedRow(row, r)))
-            resultRow.setBoolean(0, result)
-            joinedRow(row, resultRow)
-          }
+        streamedIter.map { row =>
+          val result = buildRows.exists(r => boundCondition(joinedRow(row, r)))
+          resultRow.setBoolean(0, result)
+          joinedRow(row, resultRow)
         }
       } else {
         val resultRow = new GenericMutableRow(Array[Any](buildRows.nonEmpty))
@@ -233,7 +228,7 @@ case class BroadcastNestedLoopJoinExec(
    *   FullOuter
    *   LeftSemi with BuildLeft
    *   LeftAnti with BuildLeft
-   *   LeftSemiPlus with BuildLeft
+   *   ExistenceJoin with BuildLeft
    */
   private def defaultJoin(relation: Broadcast[Array[InternalRow]]): RDD[InternalRow] = {
     /** All rows that either match both-way, or rows from streamed joined with nulls. */
@@ -279,7 +274,7 @@ case class BroadcastNestedLoopJoinExec(
         val rel = relation.value
         while (i < rel.length) {
           val result = new GenericInternalRow(Array[Any](matchedBroadcastRows.get(i)))
-          buf += new JoinedRow(rel(i), result)
+          buf += new JoinedRow(rel(i).copy(), result)
           i += 1
         }
         return sparkContext.makeRDD(buf)
@@ -357,14 +352,15 @@ case class BroadcastNestedLoopJoinExec(
       case (LeftAnti, BuildRight) =>
         leftExistenceJoin(broadcastedRelation, exists = false)
       case (j: ExistenceJoin, BuildRight) =>
-        leftSemiPlusJoin(broadcastedRelation)
+        existenceJoin(broadcastedRelation)
       case _ =>
         /**
          * LeftOuter with BuildLeft
          * RightOuter with BuildRight
          * FullOuter
          * LeftSemi with BuildLeft
-         * Anti with BuildLeft
+         * LeftAnti with BuildLeft
+         * ExistenceJoin with BuildLeft
          */
         defaultJoin(broadcastedRelation)
     }

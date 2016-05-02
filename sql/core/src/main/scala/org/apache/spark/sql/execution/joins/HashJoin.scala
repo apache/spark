@@ -44,7 +44,7 @@ trait HashJoin {
       case RightOuter =>
         left.output.map(_.withNullability(true)) ++ right.output
       case j: ExistenceJoin =>
-        left.output ++ Seq(j.exists)
+        left.output :+ j.exists
       case LeftExistence(_) =>
         left.output
       case x =>

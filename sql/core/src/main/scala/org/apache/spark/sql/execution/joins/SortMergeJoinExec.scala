@@ -54,7 +54,7 @@ case class SortMergeJoinExec(
       case FullOuter =>
         (left.output ++ right.output).map(_.withNullability(true))
       case j: ExistenceJoin =>
-        left.output ++ Seq(j.exists)
+        left.output :+ j.exists
       case LeftExistence(_) =>
         left.output
       case x =>
