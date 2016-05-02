@@ -1203,32 +1203,35 @@ setMethod("dapply",
 #' @name gapply
 #' @export
 #' @examples
+#' 
 #' \dontrun{
-#'   df <- createDataFrame (sqlContext, iris)
-#'   gdf <- gapply(df, function(x) { x }, schema(df), "Petal_Width")
-#'   collect(gdf)
 #'
-#' Compute the square of the first columns and output it
+#' df <- createDataFrame (sqlContext, iris)
+#' gdf <- gapply(df, function(x) { x }, schema(df), "Petal_Width")
+#' collect(gdf)
+#'
+#' Compute the arithmetic mean of the second column by grouping
+#' on the first column. Output the groupping value and the average. 
 #'
 #' df <- createDataFrame (
 #' sqlContext,
 #' list(list(1L, 1, "1", 0.1), list(1L, 2, "2", 0.2), list(3L, 3, "3", 0.3)),
 #' c("a", "b", "c", "d"))
 #'
-#' schema <- structType(structField("result", "integer"))
+#' schema <-  structType(structField("a", "integer"), structField("avg", "double"))
 #' df1 <- gapply(
 #'  df,
 #'  function(x) {
-#'    y <- x[1] * x[1]
-#'  },
-#'  schema, "a")
-#'  collect(df1)
+#'   y <- (data.frame(x$a[1], mean(x$b)))
+#' },
+#' schema, "a")
+#' collect(df1)
 #'
-#' result
+#' Result
 #' ------
-#'   1
-#'   1
-#'   9
+#' a avg
+#' 1 1.5
+#' 3 3.0
 #'}
 setMethod("gapply",
           signature(x = "SparkDataFrame", func = "function", schema = "structType",

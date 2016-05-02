@@ -2107,16 +2107,20 @@ test_that("gapply() on a DataFrame", {
   expected <- c(FALSE, FALSE, TRUE)
   expect_identical(actual, expected)
 
-  # remove columns
-  schema <- structType(structField("a", "integer"))
+  # Compute the arithmetic mean of the second column by grouping
+  # on the first column. Output the groupping value and the average.
+  schema <-  structType(structField("a", "integer"), structField("avg", "double"))
   df3 <- gapply(
     df,
     function(x) {
-      y <- x[1]
+      y <- (data.frame(x$a[1], mean(x$b)))
     },
     schema, "a")
   actual <- collect(df3)
-  expected <- collect(select(df, "a"))
+  expected <- collect(select(df, "a", "b"))
+  expected <- data.frame(aggregate(expected$b, by = list(expected$a), FUN = mean))
+  colnames(expected) <- c("a", "avg")
+
   expect_identical(actual, expected)
 })
 
