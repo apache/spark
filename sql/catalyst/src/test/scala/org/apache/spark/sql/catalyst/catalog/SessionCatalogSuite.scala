@@ -160,7 +160,7 @@ class SessionCatalogSuite extends SparkFunSuite {
   }
 
   test("default database location") {
-    val expectedPath = "/user/andrew/spark-warehouse"
+    val expectedPath = "file:/user/andrew/spark-warehouse"
     val conf = SimpleCatalystConf(caseSensitiveAnalysis = false, warehousePath = expectedPath)
     val catalog = new SessionCatalog(newEmptyCatalog(), new SimpleFunctionRegistry, conf)
     assert(catalog.getDatabaseMetadata("default").locationUri == expectedPath)
