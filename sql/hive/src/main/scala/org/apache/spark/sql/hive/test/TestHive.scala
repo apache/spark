@@ -115,6 +115,12 @@ private[hive] class TestHiveSparkSession(
     @transient private val existingSharedState: Option[TestHiveSharedState])
   extends SparkSession(sc) with Logging { self =>
 
+  // TODO: We need to set the temp warehouse path to sc's conf.
+  // Right now, In SparkSession, we will set the warehouse path to the default one
+  // instead of the temp one. Then, we override the setting in TestHiveSharedState
+  // when we creating metadataHive. This flow is not easy to follow and can introduce
+  // confusion when a developer is debugging an issue. We need to refactor this part
+  // to just set the temp warehouse path in sc's conf.
   def this(sc: SparkContext) {
     this(
       sc,
@@ -432,9 +438,6 @@ private[hive] class TestHiveSparkSession(
       // Lots of tests fail if we do not change the partition whitelist from the default.
       sessionState.metadataHive.runSqlHive("set hive.metastore.partition.name.whitelist.pattern=.*")
 
-      // In case a test changed any of these values, restore all the original ones here.
-      sessionState.setDefaultOverrideConfs()
-
       sessionState.catalog.setCurrentDatabase("default")
     } catch {
       case e: Exception =>
@@ -561,23 +564,23 @@ private[hive] object TestHiveContext {
       warehousePath: File,
       scratchDirPath: File,
       metastoreTemporaryConf: Map[String, String]): HiveClient = {
-    val hiveConf = new HiveConf(hadoopConf, classOf[HiveConf])
     HiveUtils.newClientForMetadata(
       conf,
-      hiveConf,
       hadoopConf,
-      hiveClientConfigurations(hiveConf, warehousePath, scratchDirPath, metastoreTemporaryConf))
+      hiveClientConfigurations(hadoopConf, warehousePath, scratchDirPath, metastoreTemporaryConf))
   }
 
   /**
    * Configurations needed to create a [[HiveClient]].
    */
   def hiveClientConfigurations(
-      hiveconf: HiveConf,
+      hadoopConf: Configuration,
       warehousePath: File,
       scratchDirPath: File,
       metastoreTemporaryConf: Map[String, String]): Map[String, String] = {
-    HiveUtils.hiveClientConfigurations(hiveconf) ++ metastoreTemporaryConf ++ Map(
+    HiveUtils.hiveClientConfigurations(hadoopConf) ++ metastoreTemporaryConf ++ Map(
+      // Override WAREHOUSE_PATH and METASTOREWAREHOUSE to use the given path.
+      SQLConf.WAREHOUSE_PATH.key -> warehousePath.toURI.toString,
       ConfVars.METASTOREWAREHOUSE.varname -> warehousePath.toURI.toString,
       ConfVars.METASTORE_INTEGER_JDO_PUSHDOWN.varname -> "true",
       ConfVars.SCRATCHDIR.varname -> scratchDirPath.toURI.toString,

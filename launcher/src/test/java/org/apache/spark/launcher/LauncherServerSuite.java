@@ -26,7 +26,6 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
-import org.junit.Ignore;
 import org.junit.Test;
 import static org.junit.Assert.*;
 
@@ -62,7 +61,7 @@ public class LauncherServerSuite extends BaseSuite {
     }
   }
 
-  @Ignore
+  @Test
   public void testCommunication() throws Exception {
     ChildProcAppHandle handle = LauncherServer.newAppHandle();
     TestClient client = null;

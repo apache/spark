@@ -107,8 +107,11 @@ case class Filter(condition: Expression, child: LogicalPlan)
 
   override def maxRows: Option[Long] = child.maxRows
 
-  override protected def validConstraints: Set[Expression] =
-    child.constraints.union(splitConjunctivePredicates(condition).toSet)
+  override protected def validConstraints: Set[Expression] = {
+    val predicates = splitConjunctivePredicates(condition)
+      .filterNot(PredicateSubquery.hasPredicateSubquery)
+    child.constraints.union(predicates.toSet)
+  }
 }
 
 abstract class SetOperation(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
@@ -270,6 +273,8 @@ case class Join(
 
   override def output: Seq[Attribute] = {
     joinType match {
+      case j: ExistenceJoin =>
+        left.output :+ j.exists
       case LeftExistence(_) =>
         left.output
       case LeftOuter =>
@@ -292,6 +297,8 @@ case class Join(
       case LeftSemi if condition.isDefined =>
         left.constraints
           .union(splitConjunctivePredicates(condition.get).toSet)
+      case j: ExistenceJoin =>
+        left.constraints
       case Inner =>
         left.constraints.union(right.constraints)
       case LeftExistence(_) =>

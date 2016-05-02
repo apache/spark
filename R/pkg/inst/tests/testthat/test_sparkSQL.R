@@ -2043,6 +2043,46 @@ test_that("Histogram", {
   df <- as.DataFrame(sqlContext, data.frame(x = c(1, 2, 3, 4, 100)))
   expect_equal(histogram(df, "x")$counts, c(4, 0, 0, 0, 0, 0, 0, 0, 0, 1))
 })
+
+test_that("dapply() on a DataFrame", {
+  df <- createDataFrame (
+          sqlContext,
+          list(list(1L, 1, "1"), list(2L, 2, "2"), list(3L, 3, "3")),
+          c("a", "b", "c"))
+  ldf <- collect(df)
+  df1 <- dapply(df, function(x) { x }, schema(df))
+  result <- collect(df1)
+  expect_identical(ldf, result)
+
+
+  # Filter and add a column
+  schema <- structType(structField("a", "integer"), structField("b", "double"),
+                       structField("c", "string"), structField("d", "integer"))
+  df1 <- dapply(
+           df,
+           function(x) {
+             y <- x[x$a > 1, ]
+             y <- cbind(y, y$a + 1L)
+           },
+           schema)
+  result <- collect(df1)
+  expected <- ldf[ldf$a > 1, ]
+  expected$d <- expected$a + 1L
+  rownames(expected) <- NULL
+  expect_identical(expected, result)
+
+  # Remove the added column
+  df2 <- dapply(
+           df1,
+           function(x) {
+             x[, c("a", "b", "c")]
+           },
+           schema(df))
+  result <- collect(df2)
+  expected <- expected[, c("a", "b", "c")]
+  expect_identical(expected, result)
+})
+
 unlink(parquetPath)
 unlink(jsonPath)
 unlink(jsonPathNa)

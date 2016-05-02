@@ -12,12 +12,13 @@ export("print.jobj")
 
 # MLlib integration
 exportMethods("glm",
+              "spark.glm",
               "predict",
               "summary",
-              "kmeans",
+              "spark.kmeans",
               "fitted",
-              "naiveBayes",
-              "survreg")
+              "spark.naiveBayes",
+              "spark.survreg")
 
 # Job group lifecycle management methods
 export("setJobGroup",
@@ -45,6 +46,7 @@ exportMethods("arrange",
               "covar_samp",
               "covar_pop",
               "crosstab",
+              "dapply",
               "describe",
               "dim",
               "distinct",
@@ -108,7 +110,7 @@ exportMethods("arrange",
               "write.json",
               "write.parquet",
               "write.text",
-              "ml.save")
+              "write.ml")
 
 exportClasses("Column")
 
@@ -303,7 +305,7 @@ export("as.DataFrame",
        "tables",
        "uncacheTable",
        "print.summary.GeneralizedLinearRegressionModel",
-       "ml.load")
+       "read.ml")
 
 export("structField",
        "structField.jobj",

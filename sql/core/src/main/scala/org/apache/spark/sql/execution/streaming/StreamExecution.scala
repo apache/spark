@@ -242,12 +242,12 @@ class StreamExecution(
     // method. See SPARK-14131.
     //
     // Check to see what new data is available.
-    val newData = microBatchThread.runUninterruptibly {
-      uniqueSources.flatMap(s => s.getOffset.map(o => s -> o))
-    }
-    availableOffsets ++= newData
-
     val hasNewData = awaitBatchLock.synchronized {
+      val newData = microBatchThread.runUninterruptibly {
+        uniqueSources.flatMap(s => s.getOffset.map(o => s -> o))
+      }
+      availableOffsets ++= newData
+
       if (dataAvailable) {
         true
       } else {

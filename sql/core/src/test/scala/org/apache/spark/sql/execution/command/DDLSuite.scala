@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.command
 
 import java.io.File
 
+import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
@@ -64,15 +65,24 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   }
 
   private def createDatabase(catalog: SessionCatalog, name: String): Unit = {
-    catalog.createDatabase(CatalogDatabase(name, "", "", Map()), ignoreIfExists = false)
+    catalog.createDatabase(
+      CatalogDatabase(name, "", sqlContext.conf.warehousePath, Map()), ignoreIfExists = false)
   }
 
   private def createTable(catalog: SessionCatalog, name: TableIdentifier): Unit = {
+    val storage =
+      CatalogStorageFormat(
+        locationUri = Some(catalog.defaultTablePath(name)),
+        inputFormat = None,
+        outputFormat = None,
+        serde = None,
+        serdeProperties = Map())
     catalog.createTable(CatalogTable(
       identifier = name,
       tableType = CatalogTableType.EXTERNAL,
-      storage = CatalogStorageFormat(None, None, None, None, Map()),
-      schema = Seq()), ignoreIfExists = false)
+      storage = storage,
+      schema = Seq(),
+      createTime = 0L), ignoreIfExists = false)
   }
 
   private def createTablePartition(
@@ -81,6 +91,29 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       tableName: TableIdentifier): Unit = {
     val part = CatalogTablePartition(spec, CatalogStorageFormat(None, None, None, None, Map()))
     catalog.createPartitions(tableName, Seq(part), ignoreIfExists = false)
+  }
+
+  test("the qualified path of a database is stored in the catalog") {
+    val catalog = sqlContext.sessionState.catalog
+
+    val path = System.getProperty("java.io.tmpdir")
+    // The generated temp path is not qualified.
+    assert(!path.startsWith("file:/"))
+    sql(s"CREATE DATABASE db1 LOCATION '$path'")
+    val pathInCatalog = new Path(catalog.getDatabaseMetadata("db1").locationUri).toUri
+    assert("file" === pathInCatalog.getScheme)
+    assert(path === pathInCatalog.getPath)
+
+    withSQLConf(
+      SQLConf.WAREHOUSE_PATH.key -> (System.getProperty("java.io.tmpdir"))) {
+      sql(s"CREATE DATABASE db2")
+      val pathInCatalog = new Path(catalog.getDatabaseMetadata("db2").locationUri).toUri
+      assert("file" === pathInCatalog.getScheme)
+      assert(s"${sqlContext.conf.warehousePath}/db2.db" === pathInCatalog.getPath)
+    }
+
+    sql("DROP DATABASE db1")
+    sql("DROP DATABASE db2")
   }
 
   test("Create/Drop Database") {
@@ -96,10 +129,13 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
 
           sql(s"CREATE DATABASE $dbName")
           val db1 = catalog.getDatabaseMetadata(dbNameWithoutBackTicks)
+          val expectedLocation =
+            "file:" + System.getProperty("java.io.tmpdir") +
+              File.separator + s"$dbNameWithoutBackTicks.db"
           assert(db1 == CatalogDatabase(
             dbNameWithoutBackTicks,
             "",
-            System.getProperty("java.io.tmpdir") + File.separator + s"$dbNameWithoutBackTicks.db",
+            expectedLocation,
             Map.empty))
           sql(s"DROP DATABASE $dbName CASCADE")
           assert(!catalog.databaseExists(dbNameWithoutBackTicks))
@@ -121,10 +157,13 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
           val dbNameWithoutBackTicks = cleanIdentifier(dbName)
           sql(s"CREATE DATABASE $dbName")
           val db1 = catalog.getDatabaseMetadata(dbNameWithoutBackTicks)
+          val expectedLocation =
+            "file:" + System.getProperty("java.io.tmpdir") +
+              File.separator + s"$dbNameWithoutBackTicks.db"
           assert(db1 == CatalogDatabase(
             dbNameWithoutBackTicks,
             "",
-            System.getProperty("java.io.tmpdir") + File.separator + s"$dbNameWithoutBackTicks.db",
+            expectedLocation,
             Map.empty))
 
           val message = intercept[AnalysisException] {
@@ -148,7 +187,9 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         try {
           val dbNameWithoutBackTicks = cleanIdentifier(dbName)
           val location =
-            System.getProperty("java.io.tmpdir") + File.separator + s"$dbNameWithoutBackTicks.db"
+            "file:" + System.getProperty("java.io.tmpdir") +
+              File.separator + s"$dbNameWithoutBackTicks.db"
+
           sql(s"CREATE DATABASE $dbName")
 
           checkAnswer(
@@ -209,6 +250,54 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   }
 
   // TODO: test drop database in restrict mode
+
+  test("create table in default db") {
+    val catalog = sqlContext.sessionState.catalog
+    val tableIdent1 = TableIdentifier("tab1", None)
+    createTable(catalog, tableIdent1)
+    val expectedTableIdent = tableIdent1.copy(database = Some("default"))
+    val expectedLocation =
+      catalog.getDatabaseMetadata("default").locationUri + "/tab1"
+    val expectedStorage =
+      CatalogStorageFormat(
+        locationUri = Some(expectedLocation),
+        inputFormat = None,
+        outputFormat = None,
+        serde = None,
+        serdeProperties = Map())
+    val expectedTable =
+      CatalogTable(
+        identifier = expectedTableIdent,
+        tableType = CatalogTableType.EXTERNAL,
+        storage = expectedStorage,
+        schema = Seq(),
+        createTime = 0L)
+    assert(catalog.getTableMetadata(tableIdent1) === expectedTable)
+  }
+
+  test("create table in a specific db") {
+    val catalog = sqlContext.sessionState.catalog
+    createDatabase(catalog, "dbx")
+    val tableIdent1 = TableIdentifier("tab1", Some("dbx"))
+    createTable(catalog, tableIdent1)
+    val expectedLocation =
+      catalog.getDatabaseMetadata("dbx").locationUri + "/tab1"
+    val expectedStorage =
+      CatalogStorageFormat(
+        locationUri = Some(expectedLocation),
+        inputFormat = None,
+        outputFormat = None,
+        serde = None,
+        serdeProperties = Map())
+    val expectedTable =
+      CatalogTable(
+        identifier = tableIdent1,
+        tableType = CatalogTableType.EXTERNAL,
+        storage = expectedStorage,
+        schema = Seq(),
+        createTime = 0L)
+    assert(catalog.getTableMetadata(tableIdent1) === expectedTable)
+  }
 
   test("alter table: rename") {
     val catalog = sqlContext.sessionState.catalog
@@ -534,7 +623,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     if (isDatasourceTable) {
       convertToDatasourceTable(catalog, tableIdent)
     }
-    assert(catalog.getTableMetadata(tableIdent).storage.locationUri.isEmpty)
+    assert(catalog.getTableMetadata(tableIdent).storage.locationUri.isDefined)
     assert(catalog.getTableMetadata(tableIdent).storage.serdeProperties.isEmpty)
     assert(catalog.getPartition(tableIdent, partSpec).storage.locationUri.isEmpty)
     assert(catalog.getPartition(tableIdent, partSpec).storage.serdeProperties.isEmpty)

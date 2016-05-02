@@ -240,16 +240,17 @@ use IPython, set the `PYSPARK_DRIVER_PYTHON` variable to `ipython` when running 
 $ PYSPARK_DRIVER_PYTHON=ipython ./bin/pyspark
 {% endhighlight %}
 
-You can customize the `ipython` command by setting `PYSPARK_DRIVER_PYTHON_OPTS`. For example, to launch
-the [IPython Notebook](http://ipython.org/notebook.html) with PyLab plot support:
+To use the Jupyter notebook (previously known as the IPython notebook), 
 
 {% highlight bash %}
-$ PYSPARK_DRIVER_PYTHON=ipython PYSPARK_DRIVER_PYTHON_OPTS="notebook" ./bin/pyspark
+$ PYSPARK_DRIVER_PYTHON=jupyter ./bin/pyspark
 {% endhighlight %}
 
-After the IPython Notebook server is launched, you can create a new "Python 2" notebook from
+You can customize the `ipython` or `jupyter` commands by setting `PYSPARK_DRIVER_PYTHON_OPTS`. 
+
+After the Jupyter Notebook server is launched, you can create a new "Python 2" notebook from
 the "Files" tab. Inside the notebook, you can input the command `%pylab inline` as part of
-your notebook before you start to try Spark from the IPython notebook.
+your notebook before you start to try Spark from the Jupyter notebook.
 
 </div>
 
