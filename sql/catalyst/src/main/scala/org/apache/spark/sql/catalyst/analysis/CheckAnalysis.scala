@@ -116,7 +116,8 @@ trait CheckAnalysis extends PredicateHelper {
             splitConjunctivePredicates(condition).foreach {
               case _: PredicateSubquery | Not(_: PredicateSubquery) =>
               case e if PredicateSubquery.hasNotAndNullAwarePredicate(e) =>
-                failAnalysis(s"Null-aware sub-queries cannot be used in nested conditions: $e")
+                failAnalysis(s"Null-aware predicate sub-queries cannot be used in nested" +
+                  s" conditions: $e")
               case e =>
             }
 
