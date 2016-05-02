@@ -201,7 +201,7 @@ class TaskMetrics private[spark] () extends Serializable {
     output.RECORDS_WRITTEN -> outputMetrics._recordsWritten
   ) ++ testAccum.map(TEST_ACCUM -> _)
 
-  @transient private[spark] lazy val internalAccums: Seq[NewAccumulator[_, _]] =
+  @transient private[spark] lazy val internalAccums: Seq[AccumulatorV2[_, _]] =
     nameToAccums.values.toIndexedSeq
 
   /* ========================== *
@@ -217,13 +217,13 @@ class TaskMetrics private[spark] () extends Serializable {
   /**
    * External accumulators registered with this task.
    */
-  @transient private lazy val externalAccums = new ArrayBuffer[NewAccumulator[_, _]]
+  @transient private lazy val externalAccums = new ArrayBuffer[AccumulatorV2[_, _]]
 
-  private[spark] def registerAccumulator(a: NewAccumulator[_, _]): Unit = {
+  private[spark] def registerAccumulator(a: AccumulatorV2[_, _]): Unit = {
     externalAccums += a
   }
 
-  private[spark] def accumulators(): Seq[NewAccumulator[_, _]] = internalAccums ++ externalAccums
+  private[spark] def accumulators(): Seq[AccumulatorV2[_, _]] = internalAccums ++ externalAccums
 }
 
 
@@ -271,15 +271,15 @@ private[spark] object TaskMetrics extends Logging {
   /**
    * Construct a [[TaskMetrics]] object from a list of accumulator updates, called on driver only.
    */
-  def fromAccumulators(accums: Seq[NewAccumulator[_, _]]): TaskMetrics = {
+  def fromAccumulators(accums: Seq[AccumulatorV2[_, _]]): TaskMetrics = {
     val tm = new TaskMetrics
     val (internalAccums, externalAccums) =
       accums.partition(a => a.name.isDefined && tm.nameToAccums.contains(a.name.get))
 
     internalAccums.foreach { acc =>
-      val tmAcc = tm.nameToAccums(acc.name.get).asInstanceOf[NewAccumulator[Any, Any]]
+      val tmAcc = tm.nameToAccums(acc.name.get).asInstanceOf[AccumulatorV2[Any, Any]]
       tmAcc.metadata = acc.metadata
-      tmAcc.merge(acc.asInstanceOf[NewAccumulator[Any, Any]])
+      tmAcc.merge(acc.asInstanceOf[AccumulatorV2[Any, Any]])
     }
 
     tm.externalAccums ++= externalAccums
@@ -289,7 +289,7 @@ private[spark] object TaskMetrics extends Logging {
 
 
 private[spark] class BlockStatusesAccumulator
-  extends NewAccumulator[(BlockId, BlockStatus), Seq[(BlockId, BlockStatus)]] {
+  extends AccumulatorV2[(BlockId, BlockStatus), Seq[(BlockId, BlockStatus)]] {
   private[this] var _seq = ArrayBuffer.empty[(BlockId, BlockStatus)]
 
   override def isZero(): Boolean = _seq.isEmpty
@@ -298,7 +298,7 @@ private[spark] class BlockStatusesAccumulator
 
   override def add(v: (BlockId, BlockStatus)): Unit = _seq += v
 
-  override def merge(other: NewAccumulator[(BlockId, BlockStatus), Seq[(BlockId, BlockStatus)]])
+  override def merge(other: AccumulatorV2[(BlockId, BlockStatus), Seq[(BlockId, BlockStatus)]])
   : Unit = other match {
     case o: BlockStatusesAccumulator => _seq ++= o.localValue
     case _ => throw new UnsupportedOperationException(
