@@ -103,6 +103,13 @@ trait CheckAnalysis extends PredicateHelper {
             }
 
           case s @ ScalarSubquery(query, conditions, _) if conditions.nonEmpty =>
+            // Make sure we are using equi-joins.
+            conditions.foreach {
+              case _: EqualTo | _: EqualNullSafe => // ok
+              case e => failAnalysis(
+                s"The correlated scalar subquery can only contain equality predicates: $e")
+            }
+
             // Make sure correlated scalar subqueries contain one row for every outer row by
             // enforcing that they are aggregates which contain exactly one aggregate expressions.
             // The analyzer has already checked that subquery contained only one output column, and
@@ -118,7 +125,9 @@ trait CheckAnalysis extends PredicateHelper {
 
             query match {
               case a: Aggregate => checkAggregate(a)
+              case Filter(_, a: Aggregate) => checkAggregate(a)
               case Project(_, a: Aggregate) => checkAggregate(a)
+              case Project(_, Filter(_, a: Aggregate)) => checkAggregate(a)
               case fail => failAnalysis(s"Correlated scalar subqueries must be Aggregated: $fail")
             }
             s
