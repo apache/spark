@@ -730,6 +730,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
    * is not set yet, returns None.
    */
   def getOptionalConf[T](entry: OptionalConfigEntry[T]): Option[T] = {
+    require(sqlConfEntries.get(entry.key) == entry, s"$entry is not registered")
     Option(settings.get(entry.key)).map(entry.rawValueConverter)
   }
 
