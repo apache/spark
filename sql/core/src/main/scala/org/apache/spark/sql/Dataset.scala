@@ -2005,26 +2005,23 @@ class Dataset[T] private[sql](
    * @group func
    * @since 2.0.0
    */
-  def mapGroupPartitionsInR[K: Encoder](
-    gfunc: T => K,
-    func: Array[Byte],
-    packageNames: Array[Byte],
-    broadcastVars: Array[Object],
-    outputSchema: StructType): DataFrame = {
-
+  private[sql] def mapGroupPartitionsInR[K: Encoder](
+      gfunc: T => K,
+      func: Array[Byte],
+      packageNames: Array[Byte],
+      broadcastVars: Array[Object],
+      outputSchema: StructType): DataFrame = {
     val inputPlan = logicalPlan
     val withGroupingKey = AppendColumns(gfunc, inputPlan)
     val executed = sqlContext.executePlan(withGroupingKey)
-
-    val kvdg = new KeyValueGroupedDataset(
+    val keyValueGroupedData = new KeyValueGroupedDataset(
       encoderFor[K],
       encoderFor[T],
       executed,
       inputPlan.output,
       withGroupingKey.newColumns)
-
-    kvdg.flatMapRGroups(func, packageNames, broadcastVars, outputSchema)
-   }
+    keyValueGroupedData.flatMapRGroups(func, packageNames, broadcastVars, outputSchema)
+  }
 
   /**
    * :: Experimental ::

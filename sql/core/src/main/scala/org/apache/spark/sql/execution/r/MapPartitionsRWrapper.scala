@@ -27,16 +27,15 @@ import org.apache.spark.sql.types.{BinaryType, StructField, StructType}
 /**
  * A function wrapper that applies the given R function to each partition of each group.
  */
-private[sql] case class MapGroupRWrapper(
+private[sql] case class MapGroupsPartitionsRWrapper(
     func: Array[Byte],
     packageNames: Array[Byte],
     broadcastVars: Array[Broadcast[Object]],
     inputSchema: StructType,
     outputSchema: StructType) extends ((Any, Iterator[Any]) => TraversableOnce[Any]) {
-
   def apply(key: Any, iter: Iterator[Any]): TraversableOnce[Any] = {
     PartitionsRHelper.mapPartitionsRHelper(func,
-       packageNames, broadcastVars, inputSchema, outputSchema, iter)
+      packageNames, broadcastVars, inputSchema, outputSchema, iter)
   }
 }
 
@@ -49,18 +48,17 @@ private[sql] case class MapPartitionsRWrapper(
     broadcastVars: Array[Broadcast[Object]],
     inputSchema: StructType,
     outputSchema: StructType) extends (Iterator[Any] => Iterator[Any]) {
-
   def apply(iter: Iterator[Any]): Iterator[Any] = {
     PartitionsRHelper.mapPartitionsRHelper(func,
-       packageNames, broadcastVars, inputSchema, outputSchema, iter)
+      packageNames, broadcastVars, inputSchema, outputSchema, iter)
   }
 }
 
-
 object PartitionsRHelper {
- /**
-  * A helper function to run R UDFs on partitions
-  */
+
+  /**
+   * A helper function to run R UDFs on partitions
+   */
   private[sql] def mapPartitionsRHelper(
     func: Array[Byte],
     packageNames: Array[Byte],
@@ -68,7 +66,7 @@ object PartitionsRHelper {
     inputSchema: StructType,
     outputSchema: StructType,
     iter: Iterator[Any]): Iterator[Any] = {
-     // If the content of current DataFrame is serialized R data?
+    // If the content of current DataFrame is serialized R data?
     val isSerializedRData =
       if (inputSchema == SERIALIZED_R_DATA_SCHEMA) true else false
 
@@ -98,5 +96,5 @@ object PartitionsRHelper {
     } else {
       outputIter.map { bytes => Row.fromSeq(Seq(bytes)) }
     }
- }
+  }
 }

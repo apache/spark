@@ -115,19 +115,35 @@ class KeyValueGroupedDataset[K, V] private[sql](
         logicalPlan))
   }
 
+  /**
+   * Applies the given R function to each group of data.  For each unique group, the function will
+   * be passed the group key and an iterator that contains all of the elements in the group. The
+   * function can return an iterator containing elements of an arbitrary type which will be returned
+   * as a new [[Dataset]].
+   *
+   * This function does not support partial aggregation, and as a result requires shuffling all
+   * the data in the [[Dataset]]. If an application intends to perform an aggregation over each
+   * key, it is best to use the reduce function or an
+   * [[org.apache.spark.sql.expressions#Aggregator Aggregator]].
+   *
+   * Internally, the implementation will spill to disk if any given group is too large to fit into
+   * memory.  However, users must take care to avoid materializing the whole iterator for a group
+   * (for example, by calling `toList`) unless they are sure that this is possible given the memory
+   * constraints of their cluster.
+   *
+   * @since 2.0.0
+   */
   def flatMapRGroups(
-    func: Array[Byte],
+    f: Array[Byte],
     packageNames: Array[Byte],
     broadcastVars: Array[Object],
     outputSchema: StructType): DataFrame = {
-
     val broadcastVarObj = broadcastVars.map(x => x.asInstanceOf[Broadcast[Object]])
     val rowEncoder = vEncoder.asInstanceOf[ExpressionEncoder[Row]]
-
     Dataset.ofRows(
       sparkSession,
-      MapGroupsR(
-        func,
+      MapGroupsPartitionsInR(
+        f,
         packageNames,
         broadcastVarObj,
         outputSchema,

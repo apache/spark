@@ -1135,7 +1135,7 @@ setMethod("summarize",
 #'             func should have only one parameter, to which a data.frame corresponds
 #'             to each partition will be passed.
 #'             The output of func should be a data.frame.
-#' @param schema The schema of the resulting DataFrame after the function is applied.
+#' @param schema The schema of the resulting SparkDataFrame after the function is applied.
 #'               It must match the output of func.
 #' @family SparkDataFrame functions
 #' @rdname dapply
@@ -1189,13 +1189,14 @@ setMethod("dapply",
 
 #' gapply
 #'
-#' Apply a function to each group of a DataFrame.
+#' Apply a function to each group of a DataFrame. The group is defined by an input
+#' grouping column.
 #'
 #' @param x A SparkDataFrame
 #' @param func A function to be applied to each group partition specified by grouping
 #'        column of the SparkDataFrame.
-#'        The output of func is a data.frame.
-#' @param schema The schema of the resulting DataFrame after the function is applied.
+#'        The output of func is a local R data.frame.
+#' @param schema The schema of the resulting SparkDataFrame after the function is applied.
 #'               It must match the output of func.
 #' @family SparkDataFrame functions
 #' @rdname gapply
