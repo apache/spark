@@ -112,7 +112,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     override def stop() = {}
     override def executorHeartbeatReceived(
         execId: String,
-        accumUpdates: Array[(Long, Seq[NewAccumulator[_, _]])],
+        accumUpdates: Array[(Long, Seq[AccumulatorV2[_, _]])],
         blockManagerId: BlockManagerId): Boolean = true
     override def submitTasks(taskSet: TaskSet) = {
       // normally done by TaskSetManager
@@ -483,7 +483,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
       override def defaultParallelism(): Int = 2
       override def executorHeartbeatReceived(
           execId: String,
-          accumUpdates: Array[(Long, Seq[NewAccumulator[_, _]])],
+          accumUpdates: Array[(Long, Seq[AccumulatorV2[_, _]])],
           blockManagerId: BlockManagerId): Boolean = true
       override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {}
       override def applicationAttemptId(): Option[String] = None
@@ -2012,7 +2012,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
       task: Task[_],
       reason: TaskEndReason,
       result: Any,
-      extraAccumUpdates: Seq[NewAccumulator[_, _]] = Seq.empty,
+      extraAccumUpdates: Seq[AccumulatorV2[_, _]] = Seq.empty,
       taskInfo: TaskInfo = createFakeTaskInfo()): CompletionEvent = {
     val accumUpdates = reason match {
       case Success => task.metrics.accumulators()
