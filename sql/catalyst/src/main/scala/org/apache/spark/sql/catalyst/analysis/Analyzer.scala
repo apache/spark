@@ -1081,10 +1081,10 @@ class Analyzer(
       // Step 2: Pull out the predicates if the plan is resolved.
       if (current.resolved) {
         // Make sure the resolved query has the required number of output columns. This is only
-        // needed for IN expressions.
+        // needed for Scalar and IN subqueries.
         if (requiredColumns > 0 && requiredColumns != current.output.size) {
-          failAnalysis(s"The number of fields in the value ($requiredColumns) does not " +
-            s"match with the number of columns in the subquery (${current.output.size})")
+          failAnalysis(s"The number of columns in the subquery (${current.output.size}) " +
+            s"does not match the required number of columns ($requiredColumns)")
         }
         // Pullout predicates and construct a new plan.
         f.tupled(rewriteSubQuery(current, plans))
@@ -1099,8 +1099,11 @@ class Analyzer(
      */
     private def resolveSubQueries(plan: LogicalPlan, plans: Seq[LogicalPlan]): LogicalPlan = {
       plan transformExpressions {
+        case s @ ScalarSubquery(sub, conditions, exprId)
+            if sub.resolved && conditions.isEmpty && sub.output.size != 1 =>
+          failAnalysis(s"Scalar subquery must return only one column, but got ${sub.output.size}")
         case s @ ScalarSubquery(sub, _, exprId) if !sub.resolved =>
-          resolveSubQuery(s, plans)(ScalarSubquery(_, _, exprId))
+          resolveSubQuery(s, plans, 1)(ScalarSubquery(_, _, exprId))
         case e @ Exists(sub, exprId) =>
           resolveSubQuery(e, plans)(PredicateSubquery(_, _, nullAware = false, exprId))
         case In(e, Seq(l @ ListQuery(_, exprId))) if e.resolved =>
