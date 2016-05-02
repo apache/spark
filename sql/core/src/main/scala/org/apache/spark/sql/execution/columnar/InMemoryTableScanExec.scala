@@ -68,7 +68,7 @@ private[sql] case class InMemoryRelation(
 
   override def producedAttributes: AttributeSet = outputSet
 
-  private val batchStats: Accumulable[ArrayBuffer[InternalRow], InternalRow] =
+  private[sql] val batchStats: Accumulable[ArrayBuffer[InternalRow], InternalRow] =
     if (_batchStats == null) {
       child.sqlContext.sparkContext.accumulableCollection(ArrayBuffer.empty[InternalRow])
     } else {
