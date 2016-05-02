@@ -101,6 +101,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       EliminateSorts,
       SimplifyCasts,
       SimplifyCaseConversionExpressions,
+      RewriteCorrelatedScalarSubquery,
       EliminateSerialization) ::
     Batch("Decimal Optimizations", fixedPoint,
       DecimalAggregates) ::
@@ -112,7 +113,6 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       OptimizeCodegen(conf)) ::
     Batch("RewriteSubquery", Once,
       RewritePredicateSubquery,
-      RewriteCorrelatedScalarSubquery,
       CollapseProject) :: Nil
   }
 
@@ -1083,7 +1083,7 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
     assert(input.size >= 2)
     if (input.size == 2) {
       val (joinConditions, others) = conditions.partition(
-        e => !PredicateSubquery.hasPredicateSubquery(e))
+        e => !SubqueryExpression.hasCorrelatedSubquery(e))
       val join = Join(input(0), input(1), Inner, joinConditions.reduceLeftOption(And))
       if (others.nonEmpty) {
         Filter(others.reduceLeft(And), join)
@@ -1103,7 +1103,7 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
 
       val joinedRefs = left.outputSet ++ right.outputSet
       val (joinConditions, others) = conditions.partition(
-        e => e.references.subsetOf(joinedRefs) && !PredicateSubquery.hasPredicateSubquery(e))
+        e => e.references.subsetOf(joinedRefs) && !SubqueryExpression.hasCorrelatedSubquery(e))
       val joined = Join(left, right, Inner, joinConditions.reduceLeftOption(And))
 
       // should not have reference to same logical plan
@@ -1136,7 +1136,7 @@ object OuterJoinElimination extends Rule[LogicalPlan] with PredicateHelper {
    * Returns whether the expression returns null or false when all inputs are nulls.
    */
   private def canFilterOutNull(e: Expression): Boolean = {
-    if (!e.deterministic || PredicateSubquery.hasPredicateSubquery(e)) return false
+    if (!e.deterministic || SubqueryExpression.hasCorrelatedSubquery(e)) return false
     val attributes = e.references.toSeq
     val emptyRow = new GenericInternalRow(attributes.length)
     val v = BindReferences.bindReference(e, attributes).eval(emptyRow)
@@ -1205,7 +1205,6 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
     case f @ Filter(filterCondition, Join(left, right, joinType, joinCondition)) =>
       val (leftFilterConditions, rightFilterConditions, commonFilterCondition) =
         split(splitConjunctivePredicates(filterCondition), left, right)
-
       joinType match {
         case Inner =>
           // push down the single side `where` condition into respective sides
@@ -1214,7 +1213,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
           val newRight = rightFilterConditions.
             reduceLeftOption(And).map(Filter(_, right)).getOrElse(right)
           val (newJoinConditions, others) =
-            commonFilterCondition.partition(e => !PredicateSubquery.hasPredicateSubquery(e))
+            commonFilterCondition.partition(e => !SubqueryExpression.hasCorrelatedSubquery(e))
           val newJoinCond = (newJoinConditions ++ joinCondition).reduceLeftOption(And)
 
           val join = Join(newLeft, newRight, Inner, newJoinCond)
