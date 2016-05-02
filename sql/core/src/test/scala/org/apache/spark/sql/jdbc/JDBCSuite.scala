@@ -603,9 +603,9 @@ class JDBCSuite extends SparkFunSuite
   test("OracleDialect jdbc type mapping") {
     val oracleDialect = JdbcDialects.get("jdbc:oracle")
     val metadata = new MetadataBuilder().putString("name", "test_column").putLong("scale", -127)
-    assert(oracleDialect.getCatalystType(java.sql.Types.NUMERIC, "float", 1, metadata) == 
+    assert(oracleDialect.getCatalystType(java.sql.Types.NUMERIC, "float", 1, metadata) ==
       Some(DecimalType(DecimalType.MAX_PRECISION, 10)))
-    assert(oracleDialect.getCatalystType(java.sql.Types.NUMERIC, "numeric", 0, null) == 
+    assert(oracleDialect.getCatalystType(java.sql.Types.NUMERIC, "numeric", 0, null) ==
       Some(DecimalType(DecimalType.MAX_PRECISION, 10)))
   }
 
