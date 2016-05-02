@@ -310,7 +310,7 @@ class DataFrameReader(object):
 
         :param paths: string, or list of strings, for input path(s).
         :param schema: an optional :class:`StructType` for the input schema.
-        :param sep: sets the single character as a separator for each field and value.
+        :param sep: sets the single character as a separator for each field and value. \
                     If None is set, it uses the default value, ``,``.
         :param encoding: decodes the CSV files by the given encoding type. If None is set, \
                          it uses the default value, ``UTF-8``.
