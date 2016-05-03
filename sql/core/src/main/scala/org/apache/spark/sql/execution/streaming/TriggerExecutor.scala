@@ -65,21 +65,12 @@ case class ProcessingTimeExecutor(processingTime: ProcessingTime, clock: Clock =
       s"${intervalMs} milliseconds, but spent ${realElapsedTimeMs} milliseconds")
   }
 
-  /** Return the next multiple of intervalMs
-   *
-   * e.g. for intervalMs = 100
-   * nextBatchTime(0) = 100
-   * nextBatchTime(1) = 100
-   * ...
-   * nextBatchTime(99) = 100
-   * nextBatchTime(100) = 200
-   * nextBatchTime(101) = 200
-   * ...
-   * nextBatchTime(199) = 200
-   * nextBatchTime(200) = 300
-   *
-   * Note, this way, we'll get nextBatchTime(nextBatchTime(0)) = 200, rather than = 0
-   * */
+  /**
+   * Returns the start time in milliseconds for the next batch interval, given the current time.
+   * Note that a batch interval is inclusive with respect to its start time, and thus calling
+   * `nextBatchTime` with the result of a previous call should return the next interval. (i.e. given
+   * an interval of `100 ms`, `nextBatchTime(nextBatchTime(0)) = 200` rather than `0`).
+   */
   def nextBatchTime(now: Long): Long = {
     now / intervalMs * intervalMs + intervalMs
   }

@@ -35,25 +35,18 @@ class ProcessingTimeExecutorSuite extends SparkFunSuite {
     assert(processingTimeExecutor.nextBatchTime(150) === 200)
   }
 
-  private def testNextBatchTimeAgainstClock(clock: Clock) {
-    val IntervalMS = 100
-    val processingTimeExecutor = ProcessingTimeExecutor(ProcessingTime(IntervalMS), clock)
+  test("calling nextBatchTime with the result of a previous call should return the next interval") {
+    val intervalMS = 100
+    val processingTimeExecutor = ProcessingTimeExecutor(ProcessingTime(intervalMS))
 
     val ITERATION = 10
     var nextBatchTime: Long = 0
-    for (it <- 1 to ITERATION)
+    for (it <- 1 to ITERATION) {
       nextBatchTime = processingTimeExecutor.nextBatchTime(nextBatchTime)
+    }
 
     // nextBatchTime should be 1000
-    assert(nextBatchTime === IntervalMS * ITERATION)
-  }
-
-  test("nextBatchTime against SystemClock") {
-    testNextBatchTimeAgainstClock(new SystemClock)
-  }
-
-  test("nextBatchTime against ManualClock") {
-    testNextBatchTimeAgainstClock(new ManualClock)
+    assert(nextBatchTime === intervalMS * ITERATION)
   }
 
   private def testBatchTermination(intervalMs: Long): Unit = {

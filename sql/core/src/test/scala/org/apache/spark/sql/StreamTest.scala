@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder, Ro
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.util.{Clock, ManualClock, Utils}
+import org.apache.spark.util.{Clock, ManualClock, SystemClock, Utils}
 
 /**
  * A framework for implementing tests for streaming queries and sources.
@@ -138,11 +138,14 @@ trait StreamTest extends QueryTest with Timeouts {
     private def operatorName = if (lastOnly) "CheckLastBatch" else "CheckAnswer"
   }
 
-  /** Stops the stream.  It must currently be running. */
+  /** Stops the stream. It must currently be running. */
   case object StopStream extends StreamAction with StreamMustBeRunning
 
-  /** Starts the stream, resuming if data has already been processed.  It must not be running. */
-  case class StartStream(trigger: Trigger = null, triggerClock: Clock = null) extends StreamAction
+  /** Starts the stream, resuming if data has already been processed. It must not be running. */
+  case class StartStream(
+      trigger: Trigger = ProcessingTime(0),
+      triggerClock: Clock = new SystemClock)
+    extends StreamAction
 
   /** Advance the trigger clock's time manually. */
   case class AdvanceManualClock(timeToAdd: Long) extends StreamAction
@@ -283,35 +286,21 @@ trait StreamTest extends QueryTest with Timeouts {
     try {
       startedTest.foreach { action =>
         action match {
-          case StartStream(_trigger, _triggerClock) =>
+          case StartStream(trigger, triggerClock) =>
             verify(currentStream == null, "stream already running")
             lastStream = currentStream
             currentStream =
-              if (_trigger != null) {
-                // we pass in explicit trigger and triggerClock
-                sqlContext
-                  .streams
-                  .startQuery(
-                    StreamExecution.nextName,
-                    metadataRoot,
-                    stream,
-                    sink,
-                    trigger = _trigger,
-                    triggerClock = _triggerClock,
-                    outputMode = outputMode)
-                  .asInstanceOf[StreamExecution]
-              } else {
-                // we left out trigger and triggerClock as their default values
-                sqlContext
-                  .streams
-                  .startQuery(
-                    StreamExecution.nextName,
-                    metadataRoot,
-                    stream,
-                    sink,
-                    outputMode = outputMode)
-                  .asInstanceOf[StreamExecution]
-              }
+              sqlContext
+                .streams
+                .startQuery(
+                  StreamExecution.nextName,
+                  metadataRoot,
+                  stream,
+                  sink,
+                  trigger,
+                  triggerClock,
+                  outputMode = outputMode)
+                .asInstanceOf[StreamExecution]
             currentStream.microBatchThread.setUncaughtExceptionHandler(
               new UncaughtExceptionHandler {
                 override def uncaughtException(t: Thread, e: Throwable): Unit = {
