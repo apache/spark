@@ -17,15 +17,15 @@
 
 from __future__ import print_function
 
-import sys
 from optparse import OptionParser
+import sys
 
 from pyspark import SparkContext
 
 # $example on$
 from pyspark.ml.classification import LogisticRegression, OneVsRest
 from pyspark.mllib.evaluation import MulticlassMetrics
-from pyspark.sql import Row, SQLContext
+from pyspark.sql import SQLContext
 # $example off$
 
 """
@@ -37,29 +37,30 @@ Run with:
   bin/spark-submit examples/src/main/python/ml/one_vs_rest_example.py
 """
 
-class Params:
-    def __init__(self, input, testInput, maxIter, tol, fitIntercept, regParam,
-                 elasticNetParam, fracTest):
-        self.input = input
-        self.testInput = testInput
-        self.maxIter = maxIter
-        self.tol = tol
-        self.fitIntercept = fitIntercept
-        self.regParam = regParam
-        self.elasticNetParam = elasticNetParam
-        self.fracTest = fracTest
-
+parser = OptionParser()
+parser.add_option("--input", type="string", help="input path to labeled examples. This path must be specified")
+parser.add_option("--fracTest", type="float", default=0.2, help="fraction of data to hold out for testing.  If given option testInput, this option is ignored. default: 0.2")
+parser.add_option("--testInput", type="string", default=None, help="iinput path to test dataset. If given, option fracTest is ignored")
+parser.add_option("--maxIter", type="int", default=100, help="maximum number of iterations for Logistic Regression. default: 100")
+parser.add_option("--tol", type="float", default=1e-6, help="the convergence tolerance of iterations for Logistic Regression. default: 1e-6")
+parser.add_option("--fitIntercept", type="string", default="true", help="fit intercept for Logistic Regression. default: true")
+parser.add_option("--regParam", type="float", default=None, help="the regularization parameter for Logistic Regression. default: None")
+parser.add_option("--elasticNetParam", type="float", default=None, help="the ElasticNet mixing parameter for Logistic Regression. default: None")
 
 def parse(args):
-    parser = OptionParser()
-
-    return Params
+    (params, args) = parser.parse_args(args)
+    assert params.input != None, "input is required"
+    assert 0 <= params.fracTest < 1, "fracTest value incorrect; should be in [0,1)."
+    assert params.fitIntercept in ("true", "false")
+    params.fitIntercept = params.fitIntercept == "true"
+    return params
 
 if __name__ == "__main__":
 
+    print(sys.argv)
     params = parse(sys.argv)
 
-    sc = SparkContext(appName="OneVsRestExample")
+    sc = SparkContext(appName="PythonOneVsRestExample")
     sqlContext = SQLContext(sc)
 
     # $example on$
@@ -91,11 +92,23 @@ if __name__ == "__main__":
     predictions = ovrModel.transform(test)
 
     # evaluate the model
-    predictionsAndLabels = predictions.select("prediction", "label").rdd.map(row => (row.getDouble(0), row.getDouble(1)))
+    predictionAndLabels = predictions.rdd.map(lambda r: (r.prediction, r.label))
 
-    evaluator = MulticlassClassificationEvaluator(
-        labelCol="indexedLabel", predictionCol="prediction", metricName="precision")
-    accuracy = evaluator.evaluate(predictions)
+    metrics = MulticlassMetrics(predictionAndLabels)
+
+    confusionMatrix = metrics.confusionMatrix()
+
+    # compute the false positive rate per label
+    numClasses = train.select('label').distinct().count()
+
+    fprs = [(p, metrics.falsePositiveRate(float(p))) for p in range(numClasses)]
+
+    print("Confusion Matrix")
+    print(confusionMatrix)
+
+    print("label\tfpr")
+    for label, fpr in fprs:
+        print(str(label) + "\t" + str(fpr))
     # $example off$
 
     sc.stop()
