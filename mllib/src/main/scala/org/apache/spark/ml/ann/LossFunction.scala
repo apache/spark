@@ -41,6 +41,35 @@ private[ann] trait LossFunction {
   def loss(output: BDM[Double], target: BDM[Double], delta: BDM[Double]): Double
 }
 
+private[ann] class LinearLayerWithSquaredError extends Layer {
+  override val weightSize = 0
+  override val inPlace = true
+
+  override def getOutputSize(inputSize: Int): Int = inputSize
+  override def createModel(weights: BDV[Double]): LayerModel =
+    new LinearLayerModelWithSquaredError()
+  override def initModel(weights: BDV[Double], random: Random): LayerModel =
+    new LinearLayerModelWithSquaredError()
+}
+
+
+private[ann] class LinearLayerModelWithSquaredError
+  extends FunctionalLayerModel(new FunctionalLayer(new LinearFunction)) with LossFunction {
+  override def loss(output: BDM[Double], target: BDM[Double], delta: BDM[Double]): Double = {
+    println("Output:")
+    println(output)
+    println("Target:")
+    println(target)
+    println("Delta:")
+    println(delta)
+    ApplyInPlace(output, target, delta, (o: Double, t: Double) => o - t)
+    val error = Bsum(delta :* delta) / 2 / output.cols
+    ApplyInPlace(delta, output, delta, (x: Double, o: Double) => x * (o - o * o))
+    println("Error = " + error)
+    error
+  }
+}
+
 private[ann] class SigmoidLayerWithSquaredError extends Layer {
   override val weightSize = 0
   override val inPlace = true
