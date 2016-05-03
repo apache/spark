@@ -82,25 +82,13 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   protected def plan(tree: ParserRuleContext): LogicalPlan = typedVisit(tree)
 
   /**
-   * Make sure we do not try to create a plan for a native command.
-   */
-  override def visitExecuteNativeCommand(ctx: ExecuteNativeCommandContext): LogicalPlan = null
-
-  /**
    * Create a plan for a SHOW FUNCTIONS command.
    */
   override def visitShowFunctions(ctx: ShowFunctionsContext): LogicalPlan = withOrigin(ctx) {
     import ctx._
     if (qualifiedName != null) {
-      val names = qualifiedName().identifier().asScala.map(_.getText).toList
-      names match {
-        case db :: name :: Nil =>
-          ShowFunctions(Some(db), Some(name))
-        case name :: Nil =>
-          ShowFunctions(None, Some(name))
-        case _ =>
-          throw new ParseException("SHOW FUNCTIONS unsupported name", ctx)
-      }
+      val name = visitFunctionName(qualifiedName)
+      ShowFunctions(name.database, Some(name.funcName))
     } else if (pattern != null) {
       ShowFunctions(None, Some(string(pattern)))
     } else {
@@ -117,7 +105,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       if (describeFuncName.STRING() != null) {
         string(describeFuncName.STRING())
       } else if (describeFuncName.qualifiedName() != null) {
-        describeFuncName.qualifiedName().identifier().asScala.map(_.getText).mkString(".")
+        visitFunctionName(describeFuncName.qualifiedName).unquotedString
       } else {
         describeFuncName.getText
       }
@@ -554,19 +542,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       query: LogicalPlan,
       ctx: LateralViewContext): LogicalPlan = withOrigin(ctx) {
     val expressions = expressionList(ctx.expression)
-
-    // Create the generator.
-    val generator = ctx.qualifiedName.getText.toLowerCase match {
-      case "explode" if expressions.size == 1 =>
-        Explode(expressions.head)
-      case "json_tuple" =>
-        JsonTuple(expressions)
-      case name =>
-        UnresolvedGenerator(visitFunctionName(ctx.qualifiedName), expressions)
-    }
-
     Generate(
-      generator,
+      UnresolvedGenerator(visitFunctionName(ctx.qualifiedName), expressions),
       join = true,
       outer = ctx.OUTER != null,
       Some(ctx.tblName.getText.toLowerCase),
