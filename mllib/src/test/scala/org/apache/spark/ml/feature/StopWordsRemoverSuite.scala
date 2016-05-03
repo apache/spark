@@ -20,16 +20,16 @@ package org.apache.spark.ml.feature
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{Dataset, Row}
 
 object StopWordsRemoverSuite extends SparkFunSuite {
-  def testStopWordsRemover(t: StopWordsRemover, dataset: DataFrame): Unit = {
+  def testStopWordsRemover(t: StopWordsRemover, dataset: Dataset[_]): Unit = {
     t.transform(dataset)
       .select("filtered", "expected")
       .collect()
       .foreach { case Row(tokens, wantedTokens) =>
         assert(tokens === wantedTokens)
-    }
+      }
   }
 }
 

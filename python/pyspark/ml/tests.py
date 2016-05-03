@@ -113,7 +113,6 @@ class ParamTypeConversionTests(PySparkTestCase):
         lr.fit(df)
 
     def test_invalid_to_float(self):
-        from pyspark.mllib.linalg import Vectors
         self.assertRaises(Exception, lambda: LogisticRegression(elasticNetParam="happy"))
         lr = LogisticRegression(elasticNetParam=0)
         self.assertRaises(Exception, lambda: lr.setElasticNetParam("panda"))
@@ -336,6 +335,8 @@ class FeatureTests(PySparkTestCase):
         self.assertEqual(stopWordRemover.getInputCol(), "input")
         transformedDF = stopWordRemover.transform(dataset)
         self.assertEqual(transformedDF.head().output, ["panda"])
+        self.assertEqual(type(stopWordRemover.getStopWords()), list)
+        self.assertTrue(isinstance(stopWordRemover.getStopWords()[0], basestring))
         # with particular stop words list
         stopwords = ["panda"]
         stopWordRemover.setStopWords(stopwords)
@@ -347,6 +348,13 @@ class FeatureTests(PySparkTestCase):
         stopwords = StopWordsRemover.loadStopWords("turkish")
         dataset = sqlContext.createDataFrame([Row(input=["acaba", "ama", "biri"])])
         stopWordRemover.setStopWords(stopwords)
+        self.assertEqual(stopWordRemover.getStopWords(), stopwords)
+        transformedDF = stopWordRemover.transform(dataset)
+        self.assertEqual(transformedDF.head().output, [])
+        # with locale
+        stopwords = ["BİRİ"]
+        dataset = sqlContext.createDataFrame([Row(input=["biri"])])
+        stopWordRemover.setStopWords(stopwords).setLocale("tr")
         self.assertEqual(stopWordRemover.getStopWords(), stopwords)
         transformedDF = stopWordRemover.transform(dataset)
         self.assertEqual(transformedDF.head().output, [])
