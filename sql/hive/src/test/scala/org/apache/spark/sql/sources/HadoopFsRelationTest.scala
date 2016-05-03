@@ -516,10 +516,20 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         .save(subdir)
 
       // Inferring schema should throw error as it should not find any file to infer
-      val e = intercept[AnalysisException] {
+      val e = intercept[Exception] {
         sqlContext.read.format(dataSourceName).load(dir)
       }
-      assert(e.getMessage.contains("infer"))
+
+      e match {
+        case _: AnalysisException =>
+          assert(e.getMessage.contains("infer"))
+
+        case _: java.util.NoSuchElementException if e.getMessage.contains("dataSchema") =>
+          // ignore, the source format requires schema to be provided by user
+
+        case _ =>
+          fail("Unexpected error trying to infer schema from empty dir", e)
+      }
 
       /** Test whether data is read with the given path matches the expected answer */
       def testWithPath(path: String, expectedAnswer: Seq[Row]): Unit = {
