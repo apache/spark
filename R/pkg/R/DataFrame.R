@@ -1208,10 +1208,6 @@ setMethod("dapply",
 #' 
 #' \dontrun{
 #'
-#' df <- createDataFrame (sqlContext, iris)
-#' gdf <- gapply(df, function(x) { x }, schema(df), "Petal_Width")
-#' collect(gdf)
-#'
 #' Compute the arithmetic mean of the second column by grouping
 #' on the first column. Output the groupping value and the average. 
 #'
@@ -1224,7 +1220,7 @@ setMethod("dapply",
 #' df1 <- gapply(
 #'   df,
 #'   function(x) {
-#'   y <- (data.frame(x$a[1], mean(x$b)))
+#'     y <- (data.frame(x$a[1], mean(x$b)))
 #' },
 #' schema, "a")
 #' collect(df1)
@@ -1234,6 +1230,29 @@ setMethod("dapply",
 #' a avg
 #' 1 1.5
 #' 3 3.0
+#'
+#' Fit linear models on iris data set by grouping on the 'Species' column and
+#' using Sepal_Length as a target variable, Sepal_Width, Petal_Length and Petal_Width
+#' as training features.
+#' schema <- structType(structField("(Intercept)", "double"),
+#' structField("Sepal_Width", "double"),structField("Petal_Length", "double"),
+#' structField("Petal_Width", "double"))
+#' df1 <- gapply(
+#'   df,
+#'   function(x) {
+#'     m <- suppressWarnings(lm(Sepal_Length ~
+#'     Sepal_Width + Petal_Length + Petal_Width, x))
+#'     data.frame(t(coef(m)))
+#' }, schema, "Species")
+#' collect(df1)
+#'
+#'Result
+#'---------
+#' Model  (Intercept)  Sepal_Width  Petal_Length  Petal_Width
+#' 1        0.699883    0.3303370    0.9455356    -0.1697527
+#' 2        1.895540    0.3868576    0.9083370    -0.6792238
+#' 3        2.351890    0.6548350    0.2375602     0.2521257
+#'
 #'}
 setMethod("gapply",
           signature(x = "SparkDataFrame", func = "function", schema = "structType",
