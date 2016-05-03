@@ -608,6 +608,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * scheduler pool. User-defined properties may also be set here. These properties are propagated
    * through to worker tasks and can be accessed there via
    * [[org.apache.spark.TaskContext#getLocalProperty]].
+   *
+   * These properties are inherited by child threads spawned from this thread. This
+   * may have unexpected consequences when working with thread pools. The standard java
+   * implementation of thread pools have worker threads spawn other worker threads.
+   * As a result, local properties may propagate unpredictably.
    */
   def setLocalProperty(key: String, value: String) {
     if (value == null) {
