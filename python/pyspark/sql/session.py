@@ -59,10 +59,16 @@ def _monkey_patch_RDD(sparkSession):
 
 
 class SparkSession(object):
-    """Main entry point for Spark SQL functionality.
+    """The entry point to programming Spark with the Dataset and DataFrame API.
 
     A SparkSession can be used create :class:`DataFrame`, register :class:`DataFrame` as
     tables, execute SQL over tables, cache tables, and read parquet files.
+    To create a SparkSession, use the following builder pattern:
+
+    >>> spark = SparkSession.builder()
+    ...     .master("local")
+    ...     .config("spark.some.config.option", "some-value")
+    ...     .getOrCreate()
 
     :param sparkContext: The :class:`SparkContext` backing this SparkSession.
     :param jsparkSession: An optional JVM Scala SparkSession. If set, we do not instantiate a new
