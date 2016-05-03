@@ -17,7 +17,6 @@
 
 import operator
 import warnings
-from abc import ABCMeta, abstractmethod
 
 from pyspark import since, keyword_only
 from pyspark.ml import Estimator, Model
@@ -27,7 +26,7 @@ from pyspark.ml.regression import (
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams
 from pyspark.ml.wrapper import JavaWrapper
-from pyspark.mllib.common import inherit_doc, _java2py, _py2java
+from pyspark.mllib.common import inherit_doc
 from pyspark.sql import DataFrame
 from pyspark.sql.functions import udf, when
 from pyspark.sql.types import ArrayType, DoubleType
@@ -41,7 +40,7 @@ __all__ = ['LogisticRegression', 'LogisticRegressionModel',
            'RandomForestClassifier', 'RandomForestClassificationModel',
            'NaiveBayes', 'NaiveBayesModel',
            'MultilayerPerceptronClassifier', 'MultilayerPerceptronClassificationModel',
-           'OneVsRest', 'OneVsRestModel', 'OneVsRestParams']
+           'OneVsRest', 'OneVsRestModel']
 
 
 @inherit_doc
@@ -1154,8 +1153,6 @@ class OneVsRestParams(HasFeaturesCol, HasLabelCol, HasPredictionCol):
     Parameters for OneVsRest and OneVsRestModel.
     """
 
-    __metaclass__ = ABCMeta
-
     classifier = Param(Params._dummy(), "classifier", "base binary classifier")
 
     @since("2.0.0")
@@ -1174,53 +1171,6 @@ class OneVsRestParams(HasFeaturesCol, HasLabelCol, HasPredictionCol):
         Gets the value of classifier or its default value.
         """
         return self.getOrDefault(self.classifier)
-
-    @classmethod
-    @abstractmethod
-    def _from_java(cls, java_stage):
-        raise NotImplementedError()
-
-    @abstractmethod
-    def _to_java(self):
-        raise NotImplementedError()
-
-    def _transfer_param_map_from_java(self, javaParamMap):
-        _java_obj = self._to_java().copy(javaParamMap)
-        paramMap = self._transfer_param_map_from_java_impl(javaParamMap, _java_obj)
-        return paramMap
-
-    def _transfer_param_map_to_java(self, pyParamMap):
-        _java_obj = self.copy(pyParamMap)._to_java()
-        paramMap = self._transfer_param_map_to_java_impl(pyParamMap, _java_obj)
-        return paramMap
-
-    def _transfer_param_map_to_java_impl(self, pyParamMap, java_obj):
-        """
-        Transforms a Python ParamMap into a Java ParamMap.
-        """
-        paramMap = JavaWrapper._new_java_obj("org.apache.spark.ml.param.ParamMap")
-        for param in self.params:
-            if param in pyParamMap:
-                java_param = java_obj.getParam(param.name)
-                if param.name == self.classifier.name:
-                    paramMap.put([java_param.w(pyParamMap[param]._to_java())])
-                else:
-                    paramMap.put([java_param.w(_py2java(sc, pyParamMap[param]))])
-        return paramMap
-
-    def _transfer_param_map_from_java_impl(self, javaParamMap, java_obj):
-        """
-        Transforms a Java ParamMap into a Python ParamMap.
-        """
-        sc = SparkContext._active_spark_context
-        paramMap = dict()
-        for pair in javaParamMap.toList():
-            param = str(pair.param().name())
-            if self.hasParam(param) and param == self.classifier.name:
-                paramMap[self.getParam(param)] = JavaParams._from_java(java_obj.getClassifier())
-            else:
-                paramMap[self.getParam(param)] = _java2py(sc, pair.value())
-        return paramMap
 
 
 @inherit_doc

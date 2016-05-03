@@ -686,10 +686,10 @@ class PersistenceTest(PySparkTestCase):
 
     def _compare_params(self, m1, m2, param):
         """
-        Compare 2 ML params, assert they have the same param. The param must be a parameter of m1.
+        Compare 2 ML Params instances for the given param, and assert both have the same param value
+        and parent. The param must be a parameter of m1.
         """
-        # Prevent key not found error in case of some param neither in paramMap and
-        # defaultParamMap.
+        # Prevent key not found error in case of some param in neither paramMap nor defaultParamMap.
         if m1.isDefined(param):
             paramValue1 = m1.getOrDefault(param)
             paramValue2 = m2.getOrDefault(m2.getParam(param.name))
@@ -1008,28 +1008,6 @@ class OneVsRestTests(PySparkTestCase):
         model = ovr.fit(df)
         output = model.transform(df)
         self.assertEqual(output.columns, ["label", "features", "prediction"])
-
-    def test_save_load(self):
-        temp_path = tempfile.mkdtemp()
-        sqlContext = SQLContext(self.sc)
-        df = sqlContext.createDataFrame([(0.0, Vectors.dense(1.0, 0.8)),
-                                         (1.0, Vectors.sparse(2, [], [])),
-                                         (2.0, Vectors.dense(0.5, 0.5))],
-                                        ["label", "features"])
-        lr = LogisticRegression(maxIter=5, regParam=0.01)
-        ovr = OneVsRest(classifier=lr)
-        model = ovr.fit(df)
-        ovrPath = temp_path + "/ovr"
-        ovr.save(ovrPath)
-        loadedOvr = OneVsRest.load(ovrPath)
-        self.assertEqual(loadedOvr.getFeaturesCol(), ovr.getFeaturesCol())
-        self.assertEqual(loadedOvr.getLabelCol(), ovr.getLabelCol())
-        self.assertEqual(loadedOvr.getClassifier().uid, ovr.getClassifier().uid)
-        modelPath = temp_path + "/ovrModel"
-        model.save(modelPath)
-        loadedModel = OneVsRestModel.load(modelPath)
-        for m, n in zip(model.models, loadedModel.models):
-            self.assertEqual(m.uid, n.uid)
 
 
 class HashingTFTest(PySparkTestCase):
