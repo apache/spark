@@ -110,7 +110,13 @@ class Accumulable[R, T] private (
   /**
    * Access the accumulator's current value; only allowed on driver.
    */
-  def value: R = newAcc.value
+  def value: R = {
+    if (newAcc.isAtDriverSide) {
+      newAcc.value
+    } else {
+      throw new UnsupportedOperationException("Can't read accumulator value in task")
+    }
+  }
 
   /**
    * Get the current value of this accumulator from within a task.
