@@ -20,10 +20,10 @@ package org.apache.spark.streaming.receiver
 import java.nio.ByteBuffer
 
 import scala.collection.mutable.ArrayBuffer
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
-import org.apache.spark.storage.StorageLevel
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.storage.StorageLevel
 
 /**
  * :: DeveloperApi ::
@@ -99,16 +99,16 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
    * (iii) `restart(...)` can be called to restart the receiver. This will call `onStop()`
    * immediately, and then `onStart()` after a delay.
    */
-  def onStart()
+  def onStart(): Unit
 
   /**
    * This method is called by the system when the receiver is stopped. All resources
-   * (threads, buffers, etc.) setup in `onStart()` must be cleaned up in this method.
+   * (threads, buffers, etc.) set up in `onStart()` must be cleaned up in this method.
    */
-  def onStop()
+  def onStop(): Unit
 
   /** Override this to specify a preferred location (hostname). */
-  def preferredLocation : Option[String] = None
+  def preferredLocation: Option[String] = None
 
   /**
    * Store a single item of received data to Spark's memory.
@@ -144,12 +144,12 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
    * for being used in the corresponding InputDStream.
    */
   def store(dataIterator: java.util.Iterator[T], metadata: Any) {
-    supervisor.pushIterator(dataIterator, Some(metadata), None)
+    supervisor.pushIterator(dataIterator.asScala, Some(metadata), None)
   }
 
   /** Store an iterator of received data as a data block into Spark's memory. */
   def store(dataIterator: java.util.Iterator[T]) {
-    supervisor.pushIterator(dataIterator, None, None)
+    supervisor.pushIterator(dataIterator.asScala, None, None)
   }
 
   /**
@@ -257,11 +257,11 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
   private var id: Int = -1
 
   /** Handler object that runs the receiver. This is instantiated lazily in the worker. */
-  @transient private var _supervisor : ReceiverSupervisor = null
+  @transient private var _supervisor: ReceiverSupervisor = null
 
   /** Set the ID of the DStream that this receiver is associated with. */
-  private[streaming] def setReceiverId(id_ : Int) {
-    id = id_
+  private[streaming] def setReceiverId(_id: Int) {
+    id = _id
   }
 
   /** Attach Network Receiver executor to this receiver. */
@@ -273,7 +273,7 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
   /** Get the attached supervisor. */
   private[streaming] def supervisor: ReceiverSupervisor = {
     assert(_supervisor != null,
-      "A ReceiverSupervisor have not been attached to the receiver yet. Maybe you are starting " +
+      "A ReceiverSupervisor has not been attached to the receiver yet. Maybe you are starting " +
         "some computation in the receiver before the Receiver.onStart() has been called.")
     _supervisor
   }

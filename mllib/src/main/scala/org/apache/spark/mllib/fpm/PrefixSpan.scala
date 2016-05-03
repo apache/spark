@@ -20,15 +20,25 @@ package org.apache.spark.mllib.fpm
 import java.{lang => jl, util => ju}
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.mutable
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.reflect.ClassTag
+import scala.reflect.runtime.universe._
 
-import org.apache.spark.Logging
-import org.apache.spark.annotation.Experimental
+import org.json4s.DefaultFormats
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods.{compact, render}
+
+import org.apache.spark.SparkContext
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
+import org.apache.spark.internal.Logging
+import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 
 /**
@@ -38,9 +48,9 @@ import org.apache.spark.storage.StorageLevel
  * The PrefixSpan algorithm is described in J. Pei, et al., PrefixSpan: Mining Sequential Patterns
  * Efficiently by Prefix-Projected Pattern Growth ([[http://doi.org/10.1109/ICDE.2001.914830]]).
  *
- * @param minSupport the minimal support level of the sequential pattern, any pattern appears
- *                   more than  (minSupport * size-of-the-dataset) times will be output
- * @param maxPatternLength the maximal length of the sequential pattern, any pattern appears
+ * @param minSupport the minimal support level of the sequential pattern, any pattern that appears
+ *                   more than (minSupport * size-of-the-dataset) times will be output
+ * @param maxPatternLength the maximal length of the sequential pattern, any pattern that appears
  *                         less than maxPatternLength will be output
  * @param maxLocalProjDBSize The maximum number of items (including delimiters used in the internal
  *                           storage format) allowed in a projected database before local
@@ -51,6 +61,7 @@ import org.apache.spark.storage.StorageLevel
  *       (Wikipedia)]]
  */
 @Experimental
+@Since("1.5.0")
 class PrefixSpan private (
     private var minSupport: Double,
     private var maxPatternLength: Int,
@@ -61,17 +72,20 @@ class PrefixSpan private (
    * Constructs a default instance with default parameters
    * {minSupport: `0.1`, maxPatternLength: `10`, maxLocalProjDBSize: `32000000L`}.
    */
+  @Since("1.5.0")
   def this() = this(0.1, 10, 32000000L)
 
   /**
    * Get the minimal support (i.e. the frequency of occurrence before a pattern is considered
    * frequent).
    */
+  @Since("1.5.0")
   def getMinSupport: Double = minSupport
 
   /**
    * Sets the minimal support level (default: `0.1`).
    */
+  @Since("1.5.0")
   def setMinSupport(minSupport: Double): this.type = {
     require(minSupport >= 0 && minSupport <= 1,
       s"The minimum support value must be in [0, 1], but got $minSupport.")
@@ -82,11 +96,13 @@ class PrefixSpan private (
   /**
    * Gets the maximal pattern length (i.e. the length of the longest sequential pattern to consider.
    */
+  @Since("1.5.0")
   def getMaxPatternLength: Int = maxPatternLength
 
   /**
    * Sets maximal pattern length (default: `10`).
    */
+  @Since("1.5.0")
   def setMaxPatternLength(maxPatternLength: Int): this.type = {
     // TODO: support unbounded pattern length when maxPatternLength = 0
     require(maxPatternLength >= 1,
@@ -98,12 +114,14 @@ class PrefixSpan private (
   /**
    * Gets the maximum number of items allowed in a projected database before local processing.
    */
+  @Since("1.5.0")
   def getMaxLocalProjDBSize: Long = maxLocalProjDBSize
 
   /**
    * Sets the maximum number of items (including delimiters used in the internal storage format)
    * allowed in a projected database before local processing (default: `32000000L`).
    */
+  @Since("1.5.0")
   def setMaxLocalProjDBSize(maxLocalProjDBSize: Long): this.type = {
     require(maxLocalProjDBSize >= 0L,
       s"The maximum local projected database size must be nonnegative, but got $maxLocalProjDBSize")
@@ -116,6 +134,7 @@ class PrefixSpan private (
    * @param data sequences of itemsets.
    * @return a [[PrefixSpanModel]] that contains the frequent patterns
    */
+  @Since("1.5.0")
   def run[Item: ClassTag](data: RDD[Array[Array[Item]]]): PrefixSpanModel[Item] = {
     if (data.getStorageLevel == StorageLevel.NONE) {
       logWarning("Input data is not cached.")
@@ -202,6 +221,7 @@ class PrefixSpan private (
    * @tparam Sequence sequence type, which is an Iterable of Itemsets
    * @return a [[PrefixSpanModel]] that contains the frequent sequential patterns
    */
+  @Since("1.5.0")
   def run[Item, Itemset <: jl.Iterable[Item], Sequence <: jl.Iterable[Itemset]](
       data: JavaRDD[Sequence]): PrefixSpanModel[Item] = {
     implicit val tag = fakeClassTag[Item]
@@ -211,6 +231,7 @@ class PrefixSpan private (
 }
 
 @Experimental
+@Since("1.5.0")
 object PrefixSpan extends Logging {
 
   /**
@@ -530,15 +551,19 @@ object PrefixSpan extends Logging {
   }
 
   /**
-   * Represents a frequence sequence.
+   * Represents a frequent sequence.
    * @param sequence a sequence of itemsets stored as an Array of Arrays
    * @param freq frequency
    * @tparam Item item type
    */
-  class FreqSequence[Item](val sequence: Array[Array[Item]], val freq: Long) extends Serializable {
+  @Since("1.5.0")
+  class FreqSequence[Item] @Since("1.5.0") (
+      @Since("1.5.0") val sequence: Array[Array[Item]],
+      @Since("1.5.0") val freq: Long) extends Serializable {
     /**
      * Returns sequence as a Java List of lists for Java users.
      */
+    @Since("1.5.0")
     def javaSequence: ju.List[ju.List[Item]] = sequence.map(_.toList.asJava).toList.asJava
   }
 }
@@ -548,5 +573,91 @@ object PrefixSpan extends Logging {
  * @param freqSequences frequent sequences
  * @tparam Item item type
  */
-class PrefixSpanModel[Item](val freqSequences: RDD[PrefixSpan.FreqSequence[Item]])
-  extends Serializable
+@Since("1.5.0")
+class PrefixSpanModel[Item] @Since("1.5.0") (
+    @Since("1.5.0") val freqSequences: RDD[PrefixSpan.FreqSequence[Item]])
+  extends Saveable with Serializable {
+
+  /**
+   * Save this model to the given path.
+   * It only works for Item datatypes supported by DataFrames.
+   *
+   * This saves:
+   *  - human-readable (JSON) model metadata to path/metadata/
+   *  - Parquet formatted data to path/data/
+   *
+   * The model may be loaded using [[PrefixSpanModel.load]].
+   *
+   * @param sc  Spark context used to save model data.
+   * @param path  Path specifying the directory in which to save this model.
+   *              If the directory already exists, this method throws an exception.
+   */
+  @Since("2.0.0")
+  override def save(sc: SparkContext, path: String): Unit = {
+    PrefixSpanModel.SaveLoadV1_0.save(this, path)
+  }
+
+  override protected val formatVersion: String = "1.0"
+}
+
+@Since("2.0.0")
+object PrefixSpanModel extends Loader[PrefixSpanModel[_]] {
+
+  @Since("2.0.0")
+  override def load(sc: SparkContext, path: String): PrefixSpanModel[_] = {
+    PrefixSpanModel.SaveLoadV1_0.load(sc, path)
+  }
+
+  private[fpm] object SaveLoadV1_0 {
+
+    private val thisFormatVersion = "1.0"
+
+    private val thisClassName = "org.apache.spark.mllib.fpm.PrefixSpanModel"
+
+    def save(model: PrefixSpanModel[_], path: String): Unit = {
+      val sc = model.freqSequences.sparkContext
+      val sqlContext = SQLContext.getOrCreate(sc)
+
+      val metadata = compact(render(
+        ("class" -> thisClassName) ~ ("version" -> thisFormatVersion)))
+      sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
+
+      // Get the type of item class
+      val sample = model.freqSequences.first().sequence(0)(0)
+      val className = sample.getClass.getCanonicalName
+      val classSymbol = runtimeMirror(getClass.getClassLoader).staticClass(className)
+      val tpe = classSymbol.selfType
+
+      val itemType = ScalaReflection.schemaFor(tpe).dataType
+      val fields = Array(StructField("sequence", ArrayType(ArrayType(itemType))),
+        StructField("freq", LongType))
+      val schema = StructType(fields)
+      val rowDataRDD = model.freqSequences.map { x =>
+        Row(x.sequence, x.freq)
+      }
+      sqlContext.createDataFrame(rowDataRDD, schema).write.parquet(Loader.dataPath(path))
+    }
+
+    def load(sc: SparkContext, path: String): PrefixSpanModel[_] = {
+      implicit val formats = DefaultFormats
+      val sqlContext = SQLContext.getOrCreate(sc)
+
+      val (className, formatVersion, metadata) = Loader.loadMetadata(sc, path)
+      assert(className == thisClassName)
+      assert(formatVersion == thisFormatVersion)
+
+      val freqSequences = sqlContext.read.parquet(Loader.dataPath(path))
+      val sample = freqSequences.select("sequence").head().get(0)
+      loadImpl(freqSequences, sample)
+    }
+
+    def loadImpl[Item: ClassTag](freqSequences: DataFrame, sample: Item): PrefixSpanModel[Item] = {
+      val freqSequencesRDD = freqSequences.select("sequence", "freq").rdd.map { x =>
+        val sequence = x.getAs[Seq[Seq[Item]]](0).map(_.toArray).toArray
+        val freq = x.getLong(1)
+        new PrefixSpan.FreqSequence(sequence, freq)
+      }
+      new PrefixSpanModel(freqSequencesRDD)
+    }
+  }
+}

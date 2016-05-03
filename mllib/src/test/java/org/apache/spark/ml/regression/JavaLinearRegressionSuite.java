@@ -28,7 +28,8 @@ import static org.junit.Assert.assertEquals;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
 import static org.apache.spark.mllib.classification.LogisticRegressionSuite
   .generateLogisticInputAsList;
@@ -38,7 +39,7 @@ public class JavaLinearRegressionSuite implements Serializable {
 
   private transient JavaSparkContext jsc;
   private transient SQLContext jsql;
-  private transient DataFrame dataset;
+  private transient Dataset<Row> dataset;
   private transient JavaRDD<LabeledPoint> datasetRDD;
 
   @Before
@@ -60,10 +61,11 @@ public class JavaLinearRegressionSuite implements Serializable {
   @Test
   public void linearRegressionDefaultParams() {
     LinearRegression lr = new LinearRegression();
-    assert(lr.getLabelCol().equals("label"));
+    assertEquals("label", lr.getLabelCol());
+    assertEquals("auto", lr.getSolver());
     LinearRegressionModel model = lr.fit(dataset);
     model.transform(dataset).registerTempTable("prediction");
-    DataFrame predictions = jsql.sql("SELECT label, prediction FROM prediction");
+    Dataset<Row> predictions = jsql.sql("SELECT label, prediction FROM prediction");
     predictions.collect();
     // Check defaults
     assertEquals("features", model.getFeaturesCol());
@@ -75,7 +77,7 @@ public class JavaLinearRegressionSuite implements Serializable {
     // Set params, train, and check as many params as we can.
     LinearRegression lr = new LinearRegression()
         .setMaxIter(10)
-        .setRegParam(1.0);
+        .setRegParam(1.0).setSolver("l-bfgs");
     LinearRegressionModel model = lr.fit(dataset);
     LinearRegression parent = (LinearRegression) model.parent();
     assertEquals(10, parent.getMaxIter());

@@ -18,33 +18,14 @@
 package org.apache.spark.sql.catalyst.planning
 
 import scala.annotation.tailrec
+import scala.collection.mutable
 
-import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.trees.TreeNodeRef
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-
-/**
- * A pattern that matches any number of filter operations on top of another relational operator.
- * Adjacent filter operators are collected and their conditions are broken up and returned as a
- * sequence of conjunctive predicates.
- *
- * @return A tuple containing a sequence of conjunctive predicates that should be used to filter the
- *         output and a relational operator.
- */
-object FilteredOperation extends PredicateHelper {
-  type ReturnType = (Seq[Expression], LogicalPlan)
-
-  def unapply(plan: LogicalPlan): Option[ReturnType] = Some(collectFilters(Nil, plan))
-
-  @tailrec
-  private def collectFilters(filters: Seq[Expression], plan: LogicalPlan): ReturnType = plan match {
-    case Filter(condition, child) =>
-      collectFilters(filters ++ splitConjunctivePredicates(condition), child)
-    case other => (filters, other)
-  }
-}
+import org.apache.spark.sql.types.IntegerType
 
 /**
  * A pattern that matches any number of project or filter operations on top of another relational
@@ -62,8 +43,9 @@ object PhysicalOperation extends PredicateHelper {
   }
 
   /**
-   * Collects projects and filters, in-lining/substituting aliases if necessary.  Here are two
-   * examples for alias in-lining/substitution.  Before:
+   * Collects all deterministic projects and filters, in-lining/substituting aliases if necessary.
+   * Here are two examples for alias in-lining/substitution.
+   * Before:
    * {{{
    *   SELECT c1 FROM (SELECT key AS c1 FROM t1) t2 WHERE c1 > 10
    *   SELECT c1 AS c2 FROM (SELECT key AS c1 FROM t1) t2 WHERE c1 > 10
@@ -74,114 +56,49 @@ object PhysicalOperation extends PredicateHelper {
    *   SELECT key AS c2 FROM t1 WHERE key > 10
    * }}}
    */
-  def collectProjectsAndFilters(plan: LogicalPlan):
+  private def collectProjectsAndFilters(plan: LogicalPlan):
       (Option[Seq[NamedExpression]], Seq[Expression], LogicalPlan, Map[Attribute, Expression]) =
     plan match {
-      case Project(fields, child) =>
+      case Project(fields, child) if fields.forall(_.deterministic) =>
         val (_, filters, other, aliases) = collectProjectsAndFilters(child)
         val substitutedFields = fields.map(substitute(aliases)).asInstanceOf[Seq[NamedExpression]]
         (Some(substitutedFields), filters, other, collectAliases(substitutedFields))
 
-      case Filter(condition, child) =>
+      case Filter(condition, child) if condition.deterministic =>
         val (fields, filters, other, aliases) = collectProjectsAndFilters(child)
         val substitutedCondition = substitute(aliases)(condition)
         (fields, filters ++ splitConjunctivePredicates(substitutedCondition), other, aliases)
+
+      case BroadcastHint(child) =>
+        collectProjectsAndFilters(child)
 
       case other =>
         (None, Nil, other, Map.empty)
     }
 
-  def collectAliases(fields: Seq[Expression]): Map[Attribute, Expression] = fields.collect {
+  private def collectAliases(fields: Seq[Expression]): Map[Attribute, Expression] = fields.collect {
     case a @ Alias(child, _) => a.toAttribute -> child
   }.toMap
 
-  def substitute(aliases: Map[Attribute, Expression])(expr: Expression): Expression = {
+  private def substitute(aliases: Map[Attribute, Expression])(expr: Expression): Expression = {
     expr.transform {
       case a @ Alias(ref: AttributeReference, name) =>
-        aliases.get(ref).map(Alias(_, name)(a.exprId, a.qualifiers)).getOrElse(a)
+        aliases.get(ref)
+          .map(Alias(_, name)(a.exprId, a.qualifier, isGenerated = a.isGenerated))
+          .getOrElse(a)
 
       case a: AttributeReference =>
-        aliases.get(a).map(Alias(_, a.name)(a.exprId, a.qualifiers)).getOrElse(a)
+        aliases.get(a)
+          .map(Alias(_, a.name)(a.exprId, a.qualifier, isGenerated = a.isGenerated)).getOrElse(a)
     }
   }
 }
 
 /**
- * Matches a logical aggregation that can be performed on distributed data in two steps.  The first
- * operates on the data in each partition performing partial aggregation for each group.  The second
- * occurs after the shuffle and completes the aggregation.
- *
- * This pattern will only match if all aggregate expressions can be computed partially and will
- * return the rewritten aggregation expressions for both phases.
- *
- * The returned values for this match are as follows:
- *  - Grouping attributes for the final aggregation.
- *  - Aggregates for the final aggregation.
- *  - Grouping expressions for the partial aggregation.
- *  - Partial aggregate expressions.
- *  - Input to the aggregation.
- */
-object PartialAggregation {
-  type ReturnType =
-    (Seq[Attribute], Seq[NamedExpression], Seq[Expression], Seq[NamedExpression], LogicalPlan)
-
-  def unapply(plan: LogicalPlan): Option[ReturnType] = plan match {
-    case logical.Aggregate(groupingExpressions, aggregateExpressions, child) =>
-      // Collect all aggregate expressions.
-      val allAggregates =
-        aggregateExpressions.flatMap(_ collect { case a: AggregateExpression1 => a})
-      // Collect all aggregate expressions that can be computed partially.
-      val partialAggregates =
-        aggregateExpressions.flatMap(_ collect { case p: PartialAggregate1 => p})
-
-      // Only do partial aggregation if supported by all aggregate expressions.
-      if (allAggregates.size == partialAggregates.size) {
-        // Create a map of expressions to their partial evaluations for all aggregate expressions.
-        val partialEvaluations: Map[TreeNodeRef, SplitEvaluation] =
-          partialAggregates.map(a => (new TreeNodeRef(a), a.asPartial)).toMap
-
-        // We need to pass all grouping expressions though so the grouping can happen a second
-        // time. However some of them might be unnamed so we alias them allowing them to be
-        // referenced in the second aggregation.
-        val namedGroupingExpressions: Seq[(Expression, NamedExpression)] =
-          groupingExpressions.map {
-            case n: NamedExpression => (n, n)
-            case other => (other, Alias(other, "PartialGroup")())
-          }
-
-        // Replace aggregations with a new expression that computes the result from the already
-        // computed partial evaluations and grouping values.
-        val rewrittenAggregateExpressions = aggregateExpressions.map(_.transformDown {
-          case e: Expression if partialEvaluations.contains(new TreeNodeRef(e)) =>
-            partialEvaluations(new TreeNodeRef(e)).finalEvaluation
-
-          case e: Expression =>
-            namedGroupingExpressions.collectFirst {
-              case (expr, ne) if expr semanticEquals e => ne.toAttribute
-            }.getOrElse(e)
-        }).asInstanceOf[Seq[NamedExpression]]
-
-        val partialComputation = namedGroupingExpressions.map(_._2) ++
-          partialEvaluations.values.flatMap(_.partialEvaluations)
-
-        val namedGroupingAttributes = namedGroupingExpressions.map(_._2.toAttribute)
-
-        Some(
-          (namedGroupingAttributes,
-           rewrittenAggregateExpressions,
-           groupingExpressions,
-           partialComputation,
-           child))
-      } else {
-        None
-      }
-    case _ => None
-  }
-}
-
-
-/**
  * A pattern that finds joins with equality conditions that can be evaluated using equi-join.
+ *
+ * Null-safe equality will be transformed into equality as joining key (replace null with default
+ * value).
  */
 object ExtractEquiJoinKeys extends Logging with PredicateHelper {
   /** (joinType, leftKeys, rightKeys, condition, leftChild, rightChild) */
@@ -193,21 +110,29 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
       logDebug(s"Considering join on: $condition")
       // Find equi-join predicates that can be evaluated before the join, and thus can be used
       // as join keys.
-      val (joinPredicates, otherPredicates) =
-        condition.map(splitConjunctivePredicates).getOrElse(Nil).partition {
-          case EqualTo(l, r) if (canEvaluate(l, left) && canEvaluate(r, right)) ||
-            (canEvaluate(l, right) && canEvaluate(r, left)) => true
-          case _ => false
-        }
-
-      val joinKeys = joinPredicates.map {
-        case EqualTo(l, r) if canEvaluate(l, left) && canEvaluate(r, right) => (l, r)
-        case EqualTo(l, r) if canEvaluate(l, right) && canEvaluate(r, left) => (r, l)
+      val predicates = condition.map(splitConjunctivePredicates).getOrElse(Nil)
+      val joinKeys = predicates.flatMap {
+        case EqualTo(l, r) if canEvaluate(l, left) && canEvaluate(r, right) => Some((l, r))
+        case EqualTo(l, r) if canEvaluate(l, right) && canEvaluate(r, left) => Some((r, l))
+        // Replace null with default value for joining key, then those rows with null in it could
+        // be joined together
+        case EqualNullSafe(l, r) if canEvaluate(l, left) && canEvaluate(r, right) =>
+          Some((Coalesce(Seq(l, Literal.default(l.dataType))),
+            Coalesce(Seq(r, Literal.default(r.dataType)))))
+        case EqualNullSafe(l, r) if canEvaluate(l, right) && canEvaluate(r, left) =>
+          Some((Coalesce(Seq(r, Literal.default(r.dataType))),
+            Coalesce(Seq(l, Literal.default(l.dataType)))))
+        case other => None
       }
-      val leftKeys = joinKeys.map(_._1)
-      val rightKeys = joinKeys.map(_._2)
+      val otherPredicates = predicates.filterNot {
+        case EqualTo(l, r) =>
+          canEvaluate(l, left) && canEvaluate(r, right) ||
+            canEvaluate(l, right) && canEvaluate(r, left)
+        case other => false
+      }
 
       if (joinKeys.nonEmpty) {
+        val (leftKeys, rightKeys) = joinKeys.unzip
         logDebug(s"leftKeys:$leftKeys | rightKeys:$rightKeys")
         Some((joinType, leftKeys, rightKeys, otherPredicates.reduceOption(And), left, right))
       } else {
@@ -218,16 +143,152 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
 }
 
 /**
+ * A pattern that collects the filter and inner joins.
+ *
+ *          Filter
+ *            |
+ *        inner Join
+ *          /    \            ---->      (Seq(plan0, plan1, plan2), conditions)
+ *      Filter   plan2
+ *        |
+ *  inner join
+ *      /    \
+ *   plan0    plan1
+ *
+ * Note: This pattern currently only works for left-deep trees.
+ */
+object ExtractFiltersAndInnerJoins extends PredicateHelper {
+
+  // flatten all inner joins, which are next to each other
+  def flattenJoin(plan: LogicalPlan): (Seq[LogicalPlan], Seq[Expression]) = plan match {
+    case Join(left, right, Inner, cond) =>
+      val (plans, conditions) = flattenJoin(left)
+      (plans ++ Seq(right), conditions ++ cond.toSeq)
+
+    case Filter(filterCondition, j @ Join(left, right, Inner, joinCondition)) =>
+      val (plans, conditions) = flattenJoin(j)
+      (plans, conditions ++ splitConjunctivePredicates(filterCondition))
+
+    case _ => (Seq(plan), Seq())
+  }
+
+  def unapply(plan: LogicalPlan): Option[(Seq[LogicalPlan], Seq[Expression])] = plan match {
+    case f @ Filter(filterCondition, j @ Join(_, _, Inner, _)) =>
+      Some(flattenJoin(f))
+    case j @ Join(_, _, Inner, _) =>
+      Some(flattenJoin(j))
+    case _ => None
+  }
+}
+
+
+/**
  * A pattern that collects all adjacent unions and returns their children as a Seq.
  */
 object Unions {
   def unapply(plan: LogicalPlan): Option[Seq[LogicalPlan]] = plan match {
-    case u: Union => Some(collectUnionChildren(u))
+    case u: Union => Some(collectUnionChildren(mutable.Stack(u), Seq.empty[LogicalPlan]))
     case _ => None
   }
 
-  private def collectUnionChildren(plan: LogicalPlan): Seq[LogicalPlan] = plan match {
-    case Union(l, r) => collectUnionChildren(l) ++ collectUnionChildren(r)
-    case other => other :: Nil
+  // Doing a depth-first tree traversal to combine all the union children.
+  @tailrec
+  private def collectUnionChildren(
+      plans: mutable.Stack[LogicalPlan],
+      children: Seq[LogicalPlan]): Seq[LogicalPlan] = {
+    if (plans.isEmpty) children
+    else {
+      plans.pop match {
+        case Union(grandchildren) =>
+          grandchildren.reverseMap(plans.push(_))
+          collectUnionChildren(plans, children)
+        case other => collectUnionChildren(plans, children :+ other)
+      }
+    }
+  }
+}
+
+/**
+ * Extractor for retrieving Int value.
+ */
+object IntegerIndex {
+  def unapply(a: Any): Option[Int] = a match {
+    case Literal(a: Int, IntegerType) => Some(a)
+    // When resolving ordinal in Sort and Group By, negative values are extracted
+    // for issuing error messages.
+    case UnaryMinus(IntegerLiteral(v)) => Some(-v)
+    case _ => None
+  }
+}
+
+/**
+ * An extractor used when planning the physical execution of an aggregation. Compared with a logical
+ * aggregation, the following transformations are performed:
+ *  - Unnamed grouping expressions are named so that they can be referred to across phases of
+ *    aggregation
+ *  - Aggregations that appear multiple times are deduplicated.
+ *  - The compution of the aggregations themselves is separated from the final result. For example,
+ *    the `count` in `count + 1` will be split into an [[AggregateExpression]] and a final
+ *    computation that computes `count.resultAttribute + 1`.
+ */
+object PhysicalAggregation {
+  // groupingExpressions, aggregateExpressions, resultExpressions, child
+  type ReturnType =
+    (Seq[NamedExpression], Seq[AggregateExpression], Seq[NamedExpression], LogicalPlan)
+
+  def unapply(a: Any): Option[ReturnType] = a match {
+    case logical.Aggregate(groupingExpressions, resultExpressions, child) =>
+      // A single aggregate expression might appear multiple times in resultExpressions.
+      // In order to avoid evaluating an individual aggregate function multiple times, we'll
+      // build a set of the distinct aggregate expressions and build a function which can
+      // be used to re-write expressions so that they reference the single copy of the
+      // aggregate function which actually gets computed.
+      val aggregateExpressions = resultExpressions.flatMap { expr =>
+        expr.collect {
+          case agg: AggregateExpression => agg
+        }
+      }.distinct
+
+      val namedGroupingExpressions = groupingExpressions.map {
+        case ne: NamedExpression => ne -> ne
+        // If the expression is not a NamedExpressions, we add an alias.
+        // So, when we generate the result of the operator, the Aggregate Operator
+        // can directly get the Seq of attributes representing the grouping expressions.
+        case other =>
+          val withAlias = Alias(other, other.toString)()
+          other -> withAlias
+      }
+      val groupExpressionMap = namedGroupingExpressions.toMap
+
+      // The original `resultExpressions` are a set of expressions which may reference
+      // aggregate expressions, grouping column values, and constants. When aggregate operator
+      // emits output rows, we will use `resultExpressions` to generate an output projection
+      // which takes the grouping columns and final aggregate result buffer as input.
+      // Thus, we must re-write the result expressions so that their attributes match up with
+      // the attributes of the final result projection's input row:
+      val rewrittenResultExpressions = resultExpressions.map { expr =>
+        expr.transformDown {
+          case ae: AggregateExpression =>
+            // The final aggregation buffer's attributes will be `finalAggregationAttributes`,
+            // so replace each aggregate expression by its corresponding attribute in the set:
+            ae.resultAttribute
+          case expression =>
+            // Since we're using `namedGroupingAttributes` to extract the grouping key
+            // columns, we need to replace grouping key expressions with their corresponding
+            // attributes. We do not rely on the equality check at here since attributes may
+            // differ cosmetically. Instead, we use semanticEquals.
+            groupExpressionMap.collectFirst {
+              case (expr, ne) if expr semanticEquals expression => ne.toAttribute
+            }.getOrElse(expression)
+        }.asInstanceOf[NamedExpression]
+      }
+
+      Some((
+        namedGroupingExpressions.map(_._2),
+        aggregateExpressions,
+        rewrittenResultExpressions,
+        child))
+
+    case _ => None
   }
 }

@@ -20,16 +20,16 @@ package org.apache.spark.metrics
 import java.util.Properties
 import java.util.concurrent.TimeUnit
 
-import org.apache.spark.util.Utils
-
 import scala.collection.mutable
 
 import com.codahale.metrics.{Metric, MetricFilter, MetricRegistry}
 import org.eclipse.jetty.servlet.ServletContextHandler
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf}
+import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.sink.{MetricsServlet, Sink}
 import org.apache.spark.metrics.source.Source
+import org.apache.spark.util.Utils
 
 /**
  * Spark Metrics System, created by specific "instance", combined by source,
@@ -88,7 +88,7 @@ private[spark] class MetricsSystem private (
    */
   def getServletHandlers: Array[ServletContextHandler] = {
     require(running, "Can only call getServletHandlers on a running MetricsSystem")
-    metricsServlet.map(_.getHandlers).getOrElse(Array())
+    metricsServlet.map(_.getHandlers(conf)).getOrElse(Array())
   }
 
   metricsConfig.initialize()
@@ -196,10 +196,9 @@ private[spark] class MetricsSystem private (
             sinks += sink.asInstanceOf[Sink]
           }
         } catch {
-          case e: Exception => {
-            logError("Sink class " + classPath + " cannot be instantialized")
+          case e: Exception =>
+            logError("Sink class " + classPath + " cannot be instantiated")
             throw e
-          }
         }
       }
     }

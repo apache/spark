@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.planning
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.TreeNode
 
@@ -51,7 +51,7 @@ abstract class QueryPlanner[PhysicalPlan <: TreeNode[PhysicalPlan]] {
    * filled in automatically by the QueryPlanner using the other execution strategies that are
    * available.
    */
-  protected def planLater(plan: LogicalPlan) = this.plan(plan).next()
+  protected def planLater(plan: LogicalPlan): PhysicalPlan = this.plan(plan).next()
 
   def plan(plan: LogicalPlan): Iterator[PhysicalPlan] = {
     // Obviously a lot to do here still...

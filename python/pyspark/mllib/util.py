@@ -23,7 +23,7 @@ if sys.version > '3':
     xrange = range
     basestring = str
 
-from pyspark import SparkContext
+from pyspark import SparkContext, since
 from pyspark.mllib.common import callMLlibFunc, inherit_doc
 from pyspark.mllib.linalg import Vectors, SparseVector, _convert_to_vector
 
@@ -32,6 +32,8 @@ class MLUtils(object):
 
     """
     Helper methods to load, save and pre-process data used in MLlib.
+
+    .. versionadded:: 1.0.0
     """
 
     @staticmethod
@@ -69,6 +71,7 @@ class MLUtils(object):
         return " ".join(items)
 
     @staticmethod
+    @since("1.0.0")
     def loadLibSVMFile(sc, path, numFeatures=-1, minPartitions=None, multiclass=None):
         """
         Loads labeled data in the LIBSVM format into an RDD of
@@ -123,6 +126,7 @@ class MLUtils(object):
         return parsed.map(lambda x: LabeledPoint(x[0], Vectors.sparse(numFeatures, x[1], x[2])))
 
     @staticmethod
+    @since("1.0.0")
     def saveAsLibSVMFile(data, dir):
         """
         Save labeled data in LIBSVM format.
@@ -147,6 +151,7 @@ class MLUtils(object):
         lines.saveAsTextFile(dir)
 
     @staticmethod
+    @since("1.1.0")
     def loadLabeledPoints(sc, path, minPartitions=None):
         """
         Load labeled points saved using RDD.saveAsTextFile.
@@ -172,6 +177,7 @@ class MLUtils(object):
         return callMLlibFunc("loadLabeledPoints", sc, path, minPartitions)
 
     @staticmethod
+    @since("1.5.0")
     def appendBias(data):
         """
         Returns a new vector with `1.0` (bias) appended to
@@ -186,6 +192,7 @@ class MLUtils(object):
             return _convert_to_vector(np.append(vec.toArray(), 1.0))
 
     @staticmethod
+    @since("1.5.0")
     def loadVectors(sc, path):
         """
         Loads vectors saved using `RDD[Vector].saveAsTextFile`
@@ -197,6 +204,8 @@ class MLUtils(object):
 class Saveable(object):
     """
     Mixin for models and transformers which may be saved as files.
+
+    .. versionadded:: 1.3.0
     """
 
     def save(self, sc, path):
@@ -222,9 +231,13 @@ class JavaSaveable(Saveable):
     """
     Mixin for models that provide save() through their Scala
     implementation.
+
+    .. versionadded:: 1.3.0
     """
 
+    @since("1.3.0")
     def save(self, sc, path):
+        """Save this model to the given path."""
         if not isinstance(sc, SparkContext):
             raise TypeError("sc should be a SparkContext, got type %s" % type(sc))
         if not isinstance(path, basestring):
@@ -235,6 +248,8 @@ class JavaSaveable(Saveable):
 class Loader(object):
     """
     Mixin for classes which can load saved models from files.
+
+    .. versionadded:: 1.3.0
     """
 
     @classmethod
@@ -256,6 +271,8 @@ class JavaLoader(Loader):
     """
     Mixin for classes which can load saved models using its Scala
     implementation.
+
+    .. versionadded:: 1.3.0
     """
 
     @classmethod
@@ -280,15 +297,21 @@ class JavaLoader(Loader):
         return java_obj.load(sc._jsc.sc(), path)
 
     @classmethod
+    @since("1.3.0")
     def load(cls, sc, path):
+        """Load a model from the given path."""
         java_model = cls._load_java(sc, path)
         return cls(java_model)
 
 
 class LinearDataGenerator(object):
-    """Utils for generating linear data"""
+    """Utils for generating linear data.
+
+    .. versionadded:: 1.5.0
+    """
 
     @staticmethod
+    @since("1.5.0")
     def generateLinearInput(intercept, weights, xMean, xVariance,
                             nPoints, seed, eps):
         """
@@ -311,6 +334,7 @@ class LinearDataGenerator(object):
             xVariance, int(nPoints), int(seed), float(eps)))
 
     @staticmethod
+    @since("1.5.0")
     def generateLinearRDD(sc, nexamples, nfeatures, eps,
                           nParts=2, intercept=0.0):
         """

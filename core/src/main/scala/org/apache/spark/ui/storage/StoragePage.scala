@@ -54,7 +54,6 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
     "Cached Partitions",
     "Fraction Cached",
     "Size in Memory",
-    "Size in ExternalBlockStore",
     "Size on Disk")
 
   /** Render an HTML row representing an RDD */
@@ -71,7 +70,6 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
       <td>{rdd.numCachedPartitions.toString}</td>
       <td>{"%.0f%%".format(rdd.numCachedPartitions * 100.0 / rdd.numPartitions)}</td>
       <td sorttable_customkey={rdd.memSize.toString}>{Utils.bytesToString(rdd.memSize)}</td>
-      <td sorttable_customkey={rdd.externalBlockStoreSize.toString}>{Utils.bytesToString(rdd.externalBlockStoreSize)}</td>
       <td sorttable_customkey={rdd.diskSize.toString} >{Utils.bytesToString(rdd.diskSize)}</td>
     </tr>
     // scalastyle:on
@@ -104,7 +102,6 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
     "Executor ID",
     "Address",
     "Total Size in Memory",
-    "Total Size in ExternalBlockStore",
     "Total Size on Disk",
     "Stream Blocks")
 
@@ -118,9 +115,6 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
       </td>
       <td sorttable_customkey={status.totalMemSize.toString}>
         {Utils.bytesToString(status.totalMemSize)}
-      </td>
-      <td sorttable_customkey={status.totalExternalBlockStoreSize.toString}>
-        {Utils.bytesToString(status.totalExternalBlockStoreSize)}
       </td>
       <td sorttable_customkey={status.totalDiskSize.toString}>
         {Utils.bytesToString(status.totalDiskSize)}
@@ -162,7 +156,7 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
       streamBlockTableSubrow(block._1, replications.head, replications.size, true)
     } else {
       streamBlockTableSubrow(block._1, replications.head, replications.size, true) ++
-        replications.tail.map(streamBlockTableSubrow(block._1, _, replications.size, false)).flatten
+        replications.tail.flatMap(streamBlockTableSubrow(block._1, _, replications.size, false))
     }
   }
 
@@ -195,8 +189,6 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
       ("Memory", block.memSize)
     } else if (block.storageLevel.useMemory && !block.storageLevel.deserialized) {
       ("Memory Serialized", block.memSize)
-    } else if (block.storageLevel.useOffHeap) {
-      ("External", block.externalBlockStoreSize)
     } else {
       throw new IllegalStateException(s"Invalid Storage Level: ${block.storageLevel}")
     }

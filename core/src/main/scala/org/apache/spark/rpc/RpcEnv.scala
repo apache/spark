@@ -17,15 +17,14 @@
 
 package org.apache.spark.rpc
 
-import java.net.URI
-import java.util.concurrent.TimeoutException
+import java.io.File
+import java.nio.channels.ReadableByteChannel
 
-import scala.concurrent.{Awaitable, Await, Future}
-import scala.concurrent.duration._
-import scala.language.postfixOps
+import scala.concurrent.Future
 
 import org.apache.spark.{SecurityManager, SparkConf}
-import org.apache.spark.util.{RpcUtils, Utils}
+import org.apache.spark.rpc.netty.NettyRpcEnvFactory
+import org.apache.spark.util.RpcUtils
 
 
 /**
@@ -34,25 +33,16 @@ import org.apache.spark.util.{RpcUtils, Utils}
  */
 private[spark] object RpcEnv {
 
-  private def getRpcEnvFactory(conf: SparkConf): RpcEnvFactory = {
-    // Add more RpcEnv implementations here
-    val rpcEnvNames = Map("akka" -> "org.apache.spark.rpc.akka.AkkaRpcEnvFactory")
-    val rpcEnvName = conf.get("spark.rpc", "akka")
-    val rpcEnvFactoryClassName = rpcEnvNames.getOrElse(rpcEnvName.toLowerCase, rpcEnvName)
-    Utils.classForName(rpcEnvFactoryClassName).newInstance().asInstanceOf[RpcEnvFactory]
-  }
-
   def create(
       name: String,
       host: String,
       port: Int,
       conf: SparkConf,
-      securityManager: SecurityManager): RpcEnv = {
-    // Using Reflection to create the RpcEnv to avoid to depend on Akka directly
-    val config = RpcEnvConfig(conf, name, host, port, securityManager)
-    getRpcEnvFactory(conf).create(config)
+      securityManager: SecurityManager,
+      clientMode: Boolean = false): RpcEnv = {
+    val config = RpcEnvConfig(conf, name, host, port, securityManager, clientMode)
+    new NettyRpcEnvFactory().create(config)
   }
-
 }
 
 
@@ -99,21 +89,11 @@ private[spark] abstract class RpcEnv(conf: SparkConf) {
   }
 
   /**
-   * Retrieve the [[RpcEndpointRef]] represented by `systemName`, `address` and `endpointName`
-   * asynchronously.
-   */
-  def asyncSetupEndpointRef(
-      systemName: String, address: RpcAddress, endpointName: String): Future[RpcEndpointRef] = {
-    asyncSetupEndpointRefByURI(uriOf(systemName, address, endpointName))
-  }
-
-  /**
-   * Retrieve the [[RpcEndpointRef]] represented by `systemName`, `address` and `endpointName`.
+   * Retrieve the [[RpcEndpointRef]] represented by `address` and `endpointName`.
    * This is a blocking action.
    */
-  def setupEndpointRef(
-      systemName: String, address: RpcAddress, endpointName: String): RpcEndpointRef = {
-    setupEndpointRefByURI(uriOf(systemName, address, endpointName))
+  def setupEndpointRef(address: RpcAddress, endpointName: String): RpcEndpointRef = {
+    setupEndpointRefByURI(RpcEndpointAddress(address, endpointName).toString)
   }
 
   /**
@@ -135,163 +115,78 @@ private[spark] abstract class RpcEnv(conf: SparkConf) {
   def awaitTermination(): Unit
 
   /**
-   * Create a URI used to create a [[RpcEndpointRef]]. Use this one to create the URI instead of
-   * creating it manually because different [[RpcEnv]] may have different formats.
-   */
-  def uriOf(systemName: String, address: RpcAddress, endpointName: String): String
-
-  /**
    * [[RpcEndpointRef]] cannot be deserialized without [[RpcEnv]]. So when deserializing any object
    * that contains [[RpcEndpointRef]]s, the deserialization codes should be wrapped by this method.
    */
   def deserialize[T](deserializationAction: () => T): T
+
+  /**
+   * Return the instance of the file server used to serve files. This may be `null` if the
+   * RpcEnv is not operating in server mode.
+   */
+  def fileServer: RpcEnvFileServer
+
+  /**
+   * Open a channel to download a file from the given URI. If the URIs returned by the
+   * RpcEnvFileServer use the "spark" scheme, this method will be called by the Utils class to
+   * retrieve the files.
+   *
+   * @param uri URI with location of the file.
+   */
+  def openChannel(uri: String): ReadableByteChannel
+
 }
 
+/**
+ * A server used by the RpcEnv to server files to other processes owned by the application.
+ *
+ * The file server can return URIs handled by common libraries (such as "http" or "hdfs"), or
+ * it can return "spark" URIs which will be handled by `RpcEnv#fetchFile`.
+ */
+private[spark] trait RpcEnvFileServer {
+
+  /**
+   * Adds a file to be served by this RpcEnv. This is used to serve files from the driver
+   * to executors when they're stored on the driver's local file system.
+   *
+   * @param file Local file to serve.
+   * @return A URI for the location of the file.
+   */
+  def addFile(file: File): String
+
+  /**
+   * Adds a jar to be served by this RpcEnv. Similar to `addFile` but for jars added using
+   * `SparkContext.addJar`.
+   *
+   * @param file Local file to serve.
+   * @return A URI for the location of the file.
+   */
+  def addJar(file: File): String
+
+  /**
+   * Adds a local directory to be served via this file server.
+   *
+   * @param baseUri Leading URI path (files can be retrieved by appending their relative
+   *                path to this base URI). This cannot be "files" nor "jars".
+   * @param path Path to the local directory.
+   * @return URI for the root of the directory in the file server.
+   */
+  def addDirectory(baseUri: String, path: File): String
+
+  /** Validates and normalizes the base URI for directories. */
+  protected def validateDirectoryUri(baseUri: String): String = {
+    val fixedBaseUri = "/" + baseUri.stripPrefix("/").stripSuffix("/")
+    require(fixedBaseUri != "/files" && fixedBaseUri != "/jars",
+      "Directory URI cannot be /files nor /jars.")
+    fixedBaseUri
+  }
+
+}
 
 private[spark] case class RpcEnvConfig(
     conf: SparkConf,
     name: String,
     host: String,
     port: Int,
-    securityManager: SecurityManager)
-
-
-/**
- * Represents a host and port.
- */
-private[spark] case class RpcAddress(host: String, port: Int) {
-  // TODO do we need to add the type of RpcEnv in the address?
-
-  val hostPort: String = host + ":" + port
-
-  override val toString: String = hostPort
-
-  def toSparkURL: String = "spark://" + hostPort
-}
-
-
-private[spark] object RpcAddress {
-
-  /**
-   * Return the [[RpcAddress]] represented by `uri`.
-   */
-  def fromURI(uri: URI): RpcAddress = {
-    RpcAddress(uri.getHost, uri.getPort)
-  }
-
-  /**
-   * Return the [[RpcAddress]] represented by `uri`.
-   */
-  def fromURIString(uri: String): RpcAddress = {
-    fromURI(new java.net.URI(uri))
-  }
-
-  def fromSparkURL(sparkUrl: String): RpcAddress = {
-    val (host, port) = Utils.extractHostPortFromSparkUrl(sparkUrl)
-    RpcAddress(host, port)
-  }
-}
-
-
-/**
- * An exception thrown if RpcTimeout modifies a [[TimeoutException]].
- */
-private[rpc] class RpcTimeoutException(message: String, cause: TimeoutException)
-  extends TimeoutException(message) { initCause(cause) }
-
-
-/**
- * Associates a timeout with a description so that a when a TimeoutException occurs, additional
- * context about the timeout can be amended to the exception message.
- * @param duration timeout duration in seconds
- * @param timeoutProp the configuration property that controls this timeout
- */
-private[spark] class RpcTimeout(val duration: FiniteDuration, val timeoutProp: String)
-  extends Serializable {
-
-  /** Amends the standard message of TimeoutException to include the description */
-  private def createRpcTimeoutException(te: TimeoutException): RpcTimeoutException = {
-    new RpcTimeoutException(te.getMessage() + ". This timeout is controlled by " + timeoutProp, te)
-  }
-
-  /**
-   * PartialFunction to match a TimeoutException and add the timeout description to the message
-   *
-   * @note This can be used in the recover callback of a Future to add to a TimeoutException
-   * Example:
-   *    val timeout = new RpcTimeout(5 millis, "short timeout")
-   *    Future(throw new TimeoutException).recover(timeout.addMessageIfTimeout)
-   */
-  def addMessageIfTimeout[T]: PartialFunction[Throwable, T] = {
-    // The exception has already been converted to a RpcTimeoutException so just raise it
-    case rte: RpcTimeoutException => throw rte
-    // Any other TimeoutException get converted to a RpcTimeoutException with modified message
-    case te: TimeoutException => throw createRpcTimeoutException(te)
-  }
-
-  /**
-   * Wait for the completed result and return it. If the result is not available within this
-   * timeout, throw a [[RpcTimeoutException]] to indicate which configuration controls the timeout.
-   * @param  awaitable  the `Awaitable` to be awaited
-   * @throws RpcTimeoutException if after waiting for the specified time `awaitable`
-   *         is still not ready
-   */
-  def awaitResult[T](awaitable: Awaitable[T]): T = {
-    try {
-      Await.result(awaitable, duration)
-    } catch addMessageIfTimeout
-  }
-}
-
-
-private[spark] object RpcTimeout {
-
-  /**
-   * Lookup the timeout property in the configuration and create
-   * a RpcTimeout with the property key in the description.
-   * @param conf configuration properties containing the timeout
-   * @param timeoutProp property key for the timeout in seconds
-   * @throws NoSuchElementException if property is not set
-   */
-  def apply(conf: SparkConf, timeoutProp: String): RpcTimeout = {
-    val timeout = { conf.getTimeAsSeconds(timeoutProp) seconds }
-    new RpcTimeout(timeout, timeoutProp)
-  }
-
-  /**
-   * Lookup the timeout property in the configuration and create
-   * a RpcTimeout with the property key in the description.
-   * Uses the given default value if property is not set
-   * @param conf configuration properties containing the timeout
-   * @param timeoutProp property key for the timeout in seconds
-   * @param defaultValue default timeout value in seconds if property not found
-   */
-  def apply(conf: SparkConf, timeoutProp: String, defaultValue: String): RpcTimeout = {
-    val timeout = { conf.getTimeAsSeconds(timeoutProp, defaultValue) seconds }
-    new RpcTimeout(timeout, timeoutProp)
-  }
-
-  /**
-   * Lookup prioritized list of timeout properties in the configuration
-   * and create a RpcTimeout with the first set property key in the
-   * description.
-   * Uses the given default value if property is not set
-   * @param conf configuration properties containing the timeout
-   * @param timeoutPropList prioritized list of property keys for the timeout in seconds
-   * @param defaultValue default timeout value in seconds if no properties found
-   */
-  def apply(conf: SparkConf, timeoutPropList: Seq[String], defaultValue: String): RpcTimeout = {
-    require(timeoutPropList.nonEmpty)
-
-    // Find the first set property or use the default value with the first property
-    val itr = timeoutPropList.iterator
-    var foundProp: Option[(String, String)] = None
-    while (itr.hasNext && foundProp.isEmpty){
-      val propKey = itr.next()
-      conf.getOption(propKey).foreach { prop => foundProp = Some(propKey, prop) }
-    }
-    val finalProp = foundProp.getOrElse(timeoutPropList.head, defaultValue)
-    val timeout = { Utils.timeStringAsSeconds(finalProp._2) seconds }
-    new RpcTimeout(timeout, finalProp._1)
-  }
-}
+    securityManager: SecurityManager,
+    clientMode: Boolean)

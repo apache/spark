@@ -17,21 +17,15 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.annotation.DeveloperApi
-
 /**
- * :: DeveloperApi ::
  * Physical execution operators for join operations.
  */
 package object joins {
 
-  @DeveloperApi
   sealed abstract class BuildSide
 
-  @DeveloperApi
   case object BuildRight extends BuildSide
 
-  @DeveloperApi
   case object BuildLeft extends BuildSide
 
 }

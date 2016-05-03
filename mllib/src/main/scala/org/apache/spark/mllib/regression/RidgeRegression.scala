@@ -35,9 +35,9 @@ import org.apache.spark.rdd.RDD
  *
  */
 @Since("0.8.0")
-class RidgeRegressionModel (
-    override val weights: Vector,
-    override val intercept: Double)
+class RidgeRegressionModel @Since("1.1.0") (
+    @Since("1.0.0") override val weights: Vector,
+    @Since("0.8.0") override val intercept: Double)
   extends GeneralizedLinearModel(weights, intercept)
   with RegressionModel with Serializable with Saveable with PMMLExportable {
 
@@ -85,6 +85,9 @@ object RidgeRegressionModel extends Loader[RidgeRegressionModel] {
  * its corresponding right hand side label y.
  * See also the documentation for the precise formulation.
  */
+@Since("0.8.0")
+@deprecated("Use ml.regression.LinearRegression with elasticNetParam = 0.0. Note the default " +
+  "regParam is 0.01 for RidgeRegressionWithSGD, but is 0.0 for LinearRegression.", "2.0.0")
 class RidgeRegressionWithSGD private (
     private var stepSize: Double,
     private var numIterations: Int,
@@ -94,7 +97,7 @@ class RidgeRegressionWithSGD private (
 
   private val gradient = new LeastSquaresGradient()
   private val updater = new SquaredL2Updater()
-
+  @Since("0.8.0")
   override val optimizer = new GradientDescent(gradient, updater)
     .setStepSize(stepSize)
     .setNumIterations(numIterations)
@@ -105,6 +108,7 @@ class RidgeRegressionWithSGD private (
    * Construct a RidgeRegression object with default parameters: {stepSize: 1.0, numIterations: 100,
    * regParam: 0.01, miniBatchFraction: 1.0}.
    */
+  @Since("0.8.0")
   def this() = this(1.0, 100, 0.01, 1.0)
 
   override protected def createModel(weights: Vector, intercept: Double) = {
@@ -117,6 +121,8 @@ class RidgeRegressionWithSGD private (
  *
  */
 @Since("0.8.0")
+@deprecated("Use ml.regression.LinearRegression with elasticNetParam = 0.0. Note the default " +
+  "regParam is 0.01 for RidgeRegressionWithSGD, but is 0.0 for LinearRegression.", "2.0.0")
 object RidgeRegressionWithSGD {
 
   /**
@@ -134,7 +140,7 @@ object RidgeRegressionWithSGD {
    *        the number of features in the data.
    *
    */
-  @Since("0.8.0")
+  @Since("1.0.0")
   def train(
       input: RDD[LabeledPoint],
       numIterations: Int,

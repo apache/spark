@@ -163,8 +163,8 @@ class PartitioningSuite extends SparkFunSuite with SharedSparkContext with Priva
     val hashP2 = new HashPartitioner(2)
     assert(rangeP2 === rangeP2)
     assert(hashP2 === hashP2)
-    assert(hashP2 != rangeP2)
-    assert(rangeP2 != hashP2)
+    assert(hashP2 !== rangeP2)
+    assert(rangeP2 !== hashP2)
   }
 
   test("partitioner preservation") {

@@ -19,9 +19,6 @@ package org.apache.spark.ui.scope
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.scheduler._
-import org.apache.spark.scheduler.SparkListenerStageSubmitted
-import org.apache.spark.scheduler.SparkListenerStageCompleted
-import org.apache.spark.scheduler.SparkListenerJobStart
 
 /**
  * Tests that this listener populates and cleans up its data structures properly.

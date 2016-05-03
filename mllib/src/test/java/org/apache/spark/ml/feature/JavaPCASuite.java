@@ -18,11 +18,11 @@
 package org.apache.spark.ml.feature;
 
 import java.io.Serializable;
+import java.util.Arrays;
 import java.util.List;
 
 import scala.Tuple2;
 
-import com.google.common.collect.Lists;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -35,7 +35,7 @@ import org.apache.spark.mllib.linalg.distributed.RowMatrix;
 import org.apache.spark.mllib.linalg.Matrix;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.Vectors;
-import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
 
@@ -78,7 +78,7 @@ public class JavaPCASuite implements Serializable {
 
   @Test
   public void testPCA() {
-    List<Vector> points = Lists.newArrayList(
+    List<Vector> points = Arrays.asList(
       Vectors.sparse(5, new int[]{1, 3}, new double[]{1.0, 7.0}),
       Vectors.dense(2.0, 0.0, 3.0, 4.0, 5.0),
       Vectors.dense(4.0, 0.0, 0.0, 6.0, 7.0)
@@ -100,7 +100,7 @@ public class JavaPCASuite implements Serializable {
       }
     );
 
-    DataFrame df = sqlContext.createDataFrame(featuresExpected, VectorPair.class);
+    Dataset<Row> df = sqlContext.createDataFrame(featuresExpected, VectorPair.class);
     PCAModel pca = new PCA()
       .setInputCol("features")
       .setOutputCol("pca_features")

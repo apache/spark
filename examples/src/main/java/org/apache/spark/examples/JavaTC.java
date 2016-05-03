@@ -41,16 +41,16 @@ public final class JavaTC {
   private static final Random rand = new Random(42);
 
   static List<Tuple2<Integer, Integer>> generateGraph() {
-    Set<Tuple2<Integer, Integer>> edges = new HashSet<Tuple2<Integer, Integer>>(numEdges);
+    Set<Tuple2<Integer, Integer>> edges = new HashSet<>(numEdges);
     while (edges.size() < numEdges) {
       int from = rand.nextInt(numVertices);
       int to = rand.nextInt(numVertices);
-      Tuple2<Integer, Integer> e = new Tuple2<Integer, Integer>(from, to);
+      Tuple2<Integer, Integer> e = new Tuple2<>(from, to);
       if (from != to) {
         edges.add(e);
       }
     }
-    return new ArrayList<Tuple2<Integer, Integer>>(edges);
+    return new ArrayList<>(edges);
   }
 
   static class ProjectFn implements PairFunction<Tuple2<Integer, Tuple2<Integer, Integer>>,
@@ -59,7 +59,7 @@ public final class JavaTC {
 
     @Override
     public Tuple2<Integer, Integer> call(Tuple2<Integer, Tuple2<Integer, Integer>> triple) {
-      return new Tuple2<Integer, Integer>(triple._2()._2(), triple._2()._1());
+      return new Tuple2<>(triple._2()._2(), triple._2()._1());
     }
   }
 
@@ -79,7 +79,7 @@ public final class JavaTC {
       new PairFunction<Tuple2<Integer, Integer>, Integer, Integer>() {
         @Override
         public Tuple2<Integer, Integer> call(Tuple2<Integer, Integer> e) {
-          return new Tuple2<Integer, Integer>(e._2(), e._1());
+          return new Tuple2<>(e._2(), e._1());
         }
     });
 

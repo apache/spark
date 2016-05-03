@@ -19,13 +19,12 @@ package org.apache.spark.mllib.regression
 
 import org.json4s.{DefaultFormats, JValue}
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.rdd.RDD
 
 @Since("0.8.0")
-@Experimental
 trait RegressionModel extends Serializable {
   /**
    * Predict values for the given data set using the model trained.

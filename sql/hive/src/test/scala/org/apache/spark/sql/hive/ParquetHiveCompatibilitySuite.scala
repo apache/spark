@@ -18,37 +18,20 @@
 package org.apache.spark.sql.hive
 
 import java.sql.Timestamp
-import java.util.{Locale, TimeZone}
 
 import org.apache.hadoop.hive.conf.HiveConf
-import org.scalatest.BeforeAndAfterAll
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.datasources.parquet.ParquetCompatibilityTest
-import org.apache.spark.sql.hive.test.TestHive
-import org.apache.spark.sql.{Row, SQLConf, SQLContext}
+import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 
-class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with BeforeAndAfterAll {
-  override def _sqlContext: SQLContext = TestHive
-  private val sqlContext = _sqlContext
-
+class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHiveSingleton {
   /**
    * Set the staging directory (and hence path to ignore Parquet files under)
-   * to that set by [[HiveConf.ConfVars.STAGINGDIR]].
+   * to the default value of hive.exec.stagingdir.
    */
-  private val stagingDir = new HiveConf().getVar(HiveConf.ConfVars.STAGINGDIR)
-
-  private val originalTimeZone = TimeZone.getDefault
-  private val originalLocale = Locale.getDefault
-
-  protected override def beforeAll(): Unit = {
-    TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
-    Locale.setDefault(Locale.US)
-  }
-
-  override protected def afterAll(): Unit = {
-    TimeZone.setDefault(originalTimeZone)
-    Locale.setDefault(originalLocale)
-  }
+  private val stagingDir = ".hive-staging"
 
   override protected def logParquetSchema(path: String): Unit = {
     val schema = readParquetSchema(path, { path =>
@@ -70,7 +53,7 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with Before
         val rows = row :: Row(Seq.fill(row.length)(null): _*) :: Nil
 
         // Don't convert Hive metastore Parquet tables to let Hive write those Parquet files.
-        withSQLConf(HiveContext.CONVERT_METASTORE_PARQUET.key -> "false") {
+        withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false") {
           withTempTable("data") {
             val fields = hiveTypes.zipWithIndex.map { case (typ, index) => s"  col_$index $typ" }
 
@@ -113,7 +96,7 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with Before
       "BOOLEAN", "TINYINT", "SMALLINT", "INT", "BIGINT", "FLOAT", "DOUBLE", "STRING")
   }
 
-  ignore("SPARK-10177 timestamp") {
+  test("SPARK-10177 timestamp") {
     testParquetHiveCompatibility(Row(Timestamp.valueOf("2015-08-24 00:31:00")), "TIMESTAMP")
   }
 

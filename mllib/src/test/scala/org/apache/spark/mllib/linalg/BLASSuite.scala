@@ -18,8 +18,8 @@
 package org.apache.spark.mllib.linalg
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.mllib.linalg.BLAS._
+import org.apache.spark.mllib.util.TestingUtils._
 
 class BLASSuite extends SparkFunSuite {
 
@@ -126,6 +126,31 @@ class BLASSuite extends SparkFunSuite {
     }
   }
 
+  test("spr") {
+    // test dense vector
+    val alpha = 0.1
+    val x = new DenseVector(Array(1.0, 2, 2.1, 4))
+    val U = new DenseVector(Array(1.0, 2, 2, 3, 3, 3, 4, 4, 4, 4))
+    val expected = new DenseVector(Array(1.1, 2.2, 2.4, 3.21, 3.42, 3.441, 4.4, 4.8, 4.84, 5.6))
+
+    spr(alpha, x, U)
+    assert(U ~== expected absTol 1e-9)
+
+    val matrix33 = new DenseVector(Array(1.0, 2, 3, 4, 5))
+    withClue("Size of vector must match the rank of matrix") {
+      intercept[Exception] {
+        spr(alpha, x, matrix33)
+      }
+    }
+
+    // test sparse vector
+    val sv = new SparseVector(4, Array(0, 3), Array(1.0, 2))
+    val U2 = new DenseVector(Array(1.0, 2, 2, 3, 3, 3, 4, 4, 4, 4))
+    spr(0.1, sv, U2)
+    val expectedSparse = new DenseVector(Array(1.1, 2.0, 2.0, 3.0, 3.0, 3.0, 4.2, 4.0, 4.0, 4.4))
+    assert(U2 ~== expectedSparse absTol 1e-15)
+  }
+
   test("syr") {
     val dA = new DenseMatrix(4, 4,
       Array(0.0, 1.2, 2.2, 3.1, 1.2, 3.2, 5.3, 4.6, 2.2, 5.3, 1.8, 3.0, 3.1, 4.6, 3.0, 0.8))
@@ -204,6 +229,7 @@ class BLASSuite extends SparkFunSuite {
     val C14 = C1.copy
     val C15 = C1.copy
     val C16 = C1.copy
+    val C17 = C1.copy
     val expected2 = new DenseMatrix(4, 2, Array(2.0, 1.0, 4.0, 2.0, 4.0, 0.0, 4.0, 3.0))
     val expected3 = new DenseMatrix(4, 2, Array(2.0, 2.0, 4.0, 2.0, 8.0, 0.0, 6.0, 6.0))
     val expected4 = new DenseMatrix(4, 2, Array(5.0, 0.0, 10.0, 5.0, 0.0, 0.0, 5.0, 0.0))
@@ -217,6 +243,10 @@ class BLASSuite extends SparkFunSuite {
     assert(C2 ~== expected2 absTol 1e-15)
     assert(C3 ~== expected3 absTol 1e-15)
     assert(C4 ~== expected3 absTol 1e-15)
+    gemm(1.0, dA, B, 0.0, C17)
+    assert(C17 ~== expected absTol 1e-15)
+    gemm(1.0, sA, B, 0.0, C17)
+    assert(C17 ~== expected absTol 1e-15)
 
     withClue("columns of A don't match the rows of B") {
       intercept[Exception] {

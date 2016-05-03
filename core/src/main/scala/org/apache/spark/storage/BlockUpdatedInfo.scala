@@ -30,8 +30,7 @@ case class BlockUpdatedInfo(
     blockId: BlockId,
     storageLevel: StorageLevel,
     memSize: Long,
-    diskSize: Long,
-    externalBlockStoreSize: Long)
+    diskSize: Long)
 
 private[spark] object BlockUpdatedInfo {
 
@@ -41,7 +40,6 @@ private[spark] object BlockUpdatedInfo {
       updateBlockInfo.blockId,
       updateBlockInfo.storageLevel,
       updateBlockInfo.memSize,
-      updateBlockInfo.diskSize,
-      updateBlockInfo.externalBlockStoreSize)
+      updateBlockInfo.diskSize)
   }
 }

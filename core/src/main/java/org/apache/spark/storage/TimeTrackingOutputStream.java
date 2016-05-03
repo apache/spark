@@ -42,34 +42,34 @@ public final class TimeTrackingOutputStream extends OutputStream {
   public void write(int b) throws IOException {
     final long startTime = System.nanoTime();
     outputStream.write(b);
-    writeMetrics.incShuffleWriteTime(System.nanoTime() - startTime);
+    writeMetrics.incWriteTime(System.nanoTime() - startTime);
   }
 
   @Override
   public void write(byte[] b) throws IOException {
     final long startTime = System.nanoTime();
     outputStream.write(b);
-    writeMetrics.incShuffleWriteTime(System.nanoTime() - startTime);
+    writeMetrics.incWriteTime(System.nanoTime() - startTime);
   }
 
   @Override
   public void write(byte[] b, int off, int len) throws IOException {
     final long startTime = System.nanoTime();
     outputStream.write(b, off, len);
-    writeMetrics.incShuffleWriteTime(System.nanoTime() - startTime);
+    writeMetrics.incWriteTime(System.nanoTime() - startTime);
   }
 
   @Override
   public void flush() throws IOException {
     final long startTime = System.nanoTime();
     outputStream.flush();
-    writeMetrics.incShuffleWriteTime(System.nanoTime() - startTime);
+    writeMetrics.incWriteTime(System.nanoTime() - startTime);
   }
 
   @Override
   public void close() throws IOException {
     final long startTime = System.nanoTime();
     outputStream.close();
-    writeMetrics.incShuffleWriteTime(System.nanoTime() - startTime);
+    writeMetrics.incWriteTime(System.nanoTime() - startTime);
   }
 }

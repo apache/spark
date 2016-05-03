@@ -35,6 +35,10 @@ import threading
 import hashlib
 
 from py4j.protocol import Py4JJavaError
+try:
+    import xmlrunner
+except ImportError:
+    xmlrunner = None
 
 if sys.version_info[:2] <= (2, 6):
     try:
@@ -62,7 +66,7 @@ from pyspark.serializers import read_int, BatchedSerializer, MarshalSerializer, 
     CloudPickleSerializer, CompressedSerializer, UTF8Deserializer, NoOpSerializer, \
     PairDeserializer, CartesianDeserializer, AutoBatchedSerializer, AutoSerializer, \
     FlattenedValuesSerializer
-from pyspark.shuffle import Aggregator, InMemoryMerger, ExternalMerger, ExternalSorter
+from pyspark.shuffle import Aggregator, ExternalMerger, ExternalSorter
 from pyspark import shuffle
 from pyspark.profiler import BasicProfiler
 
@@ -94,17 +98,6 @@ class MergerTests(unittest.TestCase):
         self.agg = Aggregator(lambda x: [x],
                               lambda x, y: x.append(y) or x,
                               lambda x, y: x.extend(y) or x)
-
-    def test_in_memory(self):
-        m = InMemoryMerger(self.agg)
-        m.mergeValues(self.data)
-        self.assertEqual(sum(sum(v) for k, v in m.items()),
-                         sum(xrange(self.N)))
-
-        m = InMemoryMerger(self.agg)
-        m.mergeCombiners(map(lambda x_y: (x_y[0], [x_y[1]]), self.data))
-        self.assertEqual(sum(sum(v) for k, v in m.items()),
-                         sum(xrange(self.N)))
 
     def test_small_dataset(self):
         m = ExternalMerger(self.agg, 1000)
@@ -218,6 +211,11 @@ class SerializationTestCase(unittest.TestCase):
         p2 = loads(dumps(p1, 2))
         self.assertEqual(p1, p2)
 
+        from pyspark.cloudpickle import dumps
+        P2 = loads(dumps(P))
+        p3 = P2(1, 3)
+        self.assertEqual(p1, p3)
+
     def test_itemgetter(self):
         from operator import itemgetter
         ser = CloudPickleSerializer()
@@ -229,6 +227,12 @@ class SerializationTestCase(unittest.TestCase):
         getter = itemgetter(0, 3)
         getter2 = ser.loads(ser.dumps(getter))
         self.assertEqual(getter(d), getter2(d))
+
+    def test_function_module_name(self):
+        ser = CloudPickleSerializer()
+        func = lambda x: x
+        func2 = ser.loads(ser.dumps(func))
+        self.assertEqual(func.__module__, func2.__module__)
 
     def test_attrgetter(self):
         from operator import attrgetter
@@ -255,10 +259,12 @@ class SerializationTestCase(unittest.TestCase):
 
     # Regression test for SPARK-3415
     def test_pickling_file_handles(self):
-        ser = CloudPickleSerializer()
-        out1 = sys.stderr
-        out2 = ser.loads(ser.dumps(out1))
-        self.assertEqual(out1, out2)
+        # to be corrected with SPARK-11160
+        if not xmlrunner:
+            ser = CloudPickleSerializer()
+            out1 = sys.stderr
+            out2 = ser.loads(ser.dumps(out1))
+            self.assertEqual(out1, out2)
 
     def test_func_globals(self):
 
@@ -687,6 +693,21 @@ class RDDTests(ReusedPySparkTestCase):
         bdata = self.sc.broadcast(data)  # 27MB
         m = self.sc.parallelize(range(1), 1).map(lambda x: len(bdata.value)).sum()
         self.assertEqual(N, m)
+
+    def test_unpersist(self):
+        N = 1000
+        data = [[float(i) for i in range(300)] for i in range(N)]
+        bdata = self.sc.broadcast(data)  # 3MB
+        bdata.unpersist()
+        m = self.sc.parallelize(range(1), 1).map(lambda x: len(bdata.value)).sum()
+        self.assertEqual(N, m)
+        bdata.destroy()
+        try:
+            self.sc.parallelize(range(1), 1).map(lambda x: len(bdata.value)).sum()
+        except Exception as e:
+            pass
+        else:
+            raise Exception("job should fail after destroy the broadcast")
 
     def test_multiple_broadcasts(self):
         N = 1 << 21
@@ -1889,6 +1910,17 @@ class ContextTests(unittest.TestCase):
         # Regression test for SPARK-1550
         self.assertRaises(Exception, lambda: SparkContext("an-invalid-master-name"))
 
+    def test_get_or_create(self):
+        with SparkContext.getOrCreate() as sc:
+            self.assertTrue(SparkContext.getOrCreate() is sc)
+
+    def test_parallelize_eager_cleanup(self):
+        with SparkContext() as sc:
+            temp_files = os.listdir(sc._temp_dir)
+            rdd = sc.parallelize([0, 1, 2])
+            post_parallalize_temp_files = os.listdir(sc._temp_dir)
+            self.assertEqual(temp_files, post_parallalize_temp_files)
+
     def test_stop(self):
         sc = SparkContext()
         self.assertNotEqual(SparkContext._active_spark_context, None)
@@ -1956,6 +1988,18 @@ class ContextTests(unittest.TestCase):
             self.assertGreater(sc.startTime, 0)
 
 
+class ConfTests(unittest.TestCase):
+    def test_memory_conf(self):
+        memoryList = ["1T", "1G", "1M", "1024K"]
+        for memory in memoryList:
+            sc = SparkContext(conf=SparkConf().set("spark.python.worker.memory", memory))
+            l = list(range(1024))
+            random.shuffle(l)
+            rdd = sc.parallelize(l, 4)
+            self.assertEqual(sorted(l), rdd.sortBy(lambda x: x).collect())
+            sc.stop()
+
+
 @unittest.skipIf(not _have_scipy, "SciPy not installed")
 class SciPyTests(PySparkTestCase):
 
@@ -1982,13 +2026,37 @@ class NumPyTests(PySparkTestCase):
         self.assertSequenceEqual([3.0, 3.0], s.max().tolist())
         self.assertSequenceEqual([1.0, 1.0], s.sampleStdev().tolist())
 
+        stats_dict = s.asDict()
+        self.assertEqual(3, stats_dict['count'])
+        self.assertSequenceEqual([2.0, 2.0], stats_dict['mean'].tolist())
+        self.assertSequenceEqual([1.0, 1.0], stats_dict['min'].tolist())
+        self.assertSequenceEqual([3.0, 3.0], stats_dict['max'].tolist())
+        self.assertSequenceEqual([6.0, 6.0], stats_dict['sum'].tolist())
+        self.assertSequenceEqual([1.0, 1.0], stats_dict['stdev'].tolist())
+        self.assertSequenceEqual([1.0, 1.0], stats_dict['variance'].tolist())
+
+        stats_sample_dict = s.asDict(sample=True)
+        self.assertEqual(3, stats_dict['count'])
+        self.assertSequenceEqual([2.0, 2.0], stats_sample_dict['mean'].tolist())
+        self.assertSequenceEqual([1.0, 1.0], stats_sample_dict['min'].tolist())
+        self.assertSequenceEqual([3.0, 3.0], stats_sample_dict['max'].tolist())
+        self.assertSequenceEqual([6.0, 6.0], stats_sample_dict['sum'].tolist())
+        self.assertSequenceEqual(
+            [0.816496580927726, 0.816496580927726], stats_sample_dict['stdev'].tolist())
+        self.assertSequenceEqual(
+            [0.6666666666666666, 0.6666666666666666], stats_sample_dict['variance'].tolist())
+
 
 if __name__ == "__main__":
+    from pyspark.tests import *
     if not _have_scipy:
         print("NOTE: Skipping SciPy tests as it does not seem to be installed")
     if not _have_numpy:
         print("NOTE: Skipping NumPy tests as it does not seem to be installed")
-    unittest.main()
+    if xmlrunner:
+        unittest.main(testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'))
+    else:
+        unittest.main()
     if not _have_scipy:
         print("NOTE: SciPy tests were skipped as it does not seem to be installed")
     if not _have_numpy:

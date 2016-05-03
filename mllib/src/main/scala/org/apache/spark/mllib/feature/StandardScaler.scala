@@ -17,24 +17,27 @@
 
 package org.apache.spark.mllib.feature
 
-import org.apache.spark.Logging
-import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
+import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.rdd.RDD
 
 /**
- * :: Experimental ::
  * Standardizes features by removing the mean and scaling to unit std using column summary
  * statistics on the samples in the training set.
+ *
+ * The "unit std" is computed using the
+ * [[https://en.wikipedia.org/wiki/Standard_deviation#Corrected_sample_standard_deviation
+ *   corrected sample standard deviation]],
+ * which is computed as the square root of the unbiased sample variance.
  *
  * @param withMean False by default. Centers the data with mean before scaling. It will build a
  *                 dense output, so this does not work on sparse input and will raise an exception.
  * @param withStd True by default. Scales the data to unit standard deviation.
  */
 @Since("1.1.0")
-@Experimental
-class StandardScaler(withMean: Boolean, withStd: Boolean) extends Logging {
+class StandardScaler @Since("1.1.0") (withMean: Boolean, withStd: Boolean) extends Logging {
 
   @Since("1.1.0")
   def this() = this(false, true)
@@ -64,7 +67,6 @@ class StandardScaler(withMean: Boolean, withStd: Boolean) extends Logging {
 }
 
 /**
- * :: Experimental ::
  * Represents a StandardScaler model that can transform vectors.
  *
  * @param std column standard deviation values
@@ -73,12 +75,11 @@ class StandardScaler(withMean: Boolean, withStd: Boolean) extends Logging {
  * @param withMean whether to center the data before scaling
  */
 @Since("1.1.0")
-@Experimental
-class StandardScalerModel (
-    val std: Vector,
-    val mean: Vector,
-    var withStd: Boolean,
-    var withMean: Boolean) extends VectorTransformer {
+class StandardScalerModel @Since("1.3.0") (
+    @Since("1.3.0") val std: Vector,
+    @Since("1.1.0") val mean: Vector,
+    @Since("1.3.0") var withStd: Boolean,
+    @Since("1.3.0") var withMean: Boolean) extends VectorTransformer {
 
   /**
    */
@@ -136,7 +137,7 @@ class StandardScalerModel (
       vector match {
         case DenseVector(vs) =>
           val values = vs.clone()
-          val size = values.size
+          val size = values.length
           if (withStd) {
             var i = 0
             while (i < size) {
@@ -157,7 +158,7 @@ class StandardScalerModel (
       vector match {
         case DenseVector(vs) =>
           val values = vs.clone()
-          val size = values.size
+          val size = values.length
           var i = 0
           while(i < size) {
             values(i) *= (if (std(i) != 0.0) 1.0 / std(i) else 0.0)
@@ -168,7 +169,7 @@ class StandardScalerModel (
           // For sparse vector, the `index` array inside sparse vector object will not be changed,
           // so we can re-use it to save memory.
           val values = vs.clone()
-          val nnz = values.size
+          val nnz = values.length
           var i = 0
           while (i < nnz) {
             values(i) *= (if (std(indices(i)) != 0.0) 1.0 / std(indices(i)) else 0.0)

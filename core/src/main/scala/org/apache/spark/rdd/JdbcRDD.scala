@@ -17,15 +17,16 @@
 
 package org.apache.spark.rdd
 
-import java.sql.{PreparedStatement, Connection, ResultSet}
+import java.sql.{Connection, ResultSet}
 
 import scala.reflect.ClassTag
 
+import org.apache.spark.{Partition, SparkContext, TaskContext}
+import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.api.java.function.{Function => JFunction}
-import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.NextIterator
-import org.apache.spark.{Logging, Partition, SparkContext, TaskContext}
 
 private[spark] class JdbcPartition(idx: Int, val lower: Long, val upper: Long) extends Partition {
   override def index: Int = idx
@@ -64,11 +65,11 @@ class JdbcRDD[T: ClassTag](
   override def getPartitions: Array[Partition] = {
     // bounds are inclusive, hence the + 1 here and - 1 on end
     val length = BigInt(1) + upperBound - lowerBound
-    (0 until numPartitions).map(i => {
+    (0 until numPartitions).map { i =>
       val start = lowerBound + ((i * length) / numPartitions)
       val end = lowerBound + (((i + 1) * length) / numPartitions) - 1
       new JdbcPartition(i, start.toLong, end.toLong)
-    }).toArray
+    }.toArray
   }
 
   override def compute(thePart: Partition, context: TaskContext): Iterator[T] = new NextIterator[T]

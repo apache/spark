@@ -19,7 +19,10 @@ package org.apache.spark.sql.catalyst.util
 
 import java.sql.{Date, Timestamp}
 import java.text.{DateFormat, SimpleDateFormat}
-import java.util.{TimeZone, Calendar}
+import java.util.{Calendar, TimeZone}
+import javax.xml.bind.DatatypeConverter
+
+import scala.annotation.tailrec
 
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -37,10 +40,12 @@ object DateTimeUtils {
   type SQLTimestamp = Long
 
   // see http://stackoverflow.com/questions/466321/convert-unix-timestamp-to-julian
-  final val JULIAN_DAY_OF_EPOCH = 2440587  // and .5
+  // it's 2440587.5, rounding up to compatible with Hive
+  final val JULIAN_DAY_OF_EPOCH = 2440588
   final val SECONDS_PER_DAY = 60 * 60 * 24L
   final val MICROS_PER_SECOND = 1000L * 1000L
   final val NANOS_PER_SECOND = MICROS_PER_SECOND * 1000L
+  final val MICROS_PER_DAY = MICROS_PER_SECOND * SECONDS_PER_DAY
 
   final val MILLIS_PER_DAY = SECONDS_PER_DAY * 1000L
 
@@ -52,8 +57,16 @@ object DateTimeUtils {
   // this is year -17999, calculation: 50 * daysIn400Year
   final val YearZero = -17999
   final val toYearZero = to2001 + 7304850
+  final val TimeZoneGMT = TimeZone.getTimeZone("GMT")
 
   @transient lazy val defaultTimeZone = TimeZone.getDefault
+
+  // Reuse the Calendar object in each thread as it is expensive to create in each method call.
+  private val threadLocalGmtCalendar = new ThreadLocal[Calendar] {
+    override protected def initialValue: Calendar = {
+      Calendar.getInstance(TimeZoneGMT)
+    }
+  }
 
   // Java TimeZone has no mention of thread safety. Use thread local instance to be safe.
   private val threadLocalLocalTimeZone = new ThreadLocal[TimeZone] {
@@ -63,7 +76,7 @@ object DateTimeUtils {
   }
 
   // `SimpleDateFormat` is not thread-safe.
-  private val threadLocalTimestampFormat = new ThreadLocal[DateFormat] {
+  val threadLocalTimestampFormat = new ThreadLocal[DateFormat] {
     override def initialValue(): SimpleDateFormat = {
       new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
     }
@@ -106,31 +119,24 @@ object DateTimeUtils {
     }
   }
 
+  @tailrec
   def stringToTime(s: String): java.util.Date = {
-    if (!s.contains('T')) {
+    val indexOfGMT = s.indexOf("GMT")
+    if (indexOfGMT != -1) {
+      // ISO8601 with a weird time zone specifier (2000-01-01T00:00GMT+01:00)
+      val s0 = s.substring(0, indexOfGMT)
+      val s1 = s.substring(indexOfGMT + 3)
+      // Mapped to 2000-01-01T00:00+01:00
+      stringToTime(s0 + s1)
+    } else if (!s.contains('T')) {
       // JDBC escape string
       if (s.contains(' ')) {
         Timestamp.valueOf(s)
       } else {
         Date.valueOf(s)
       }
-    } else if (s.endsWith("Z")) {
-      // this is zero timezone of ISO8601
-      stringToTime(s.substring(0, s.length - 1) + "GMT-00:00")
-    } else if (s.indexOf("GMT") == -1) {
-      // timezone with ISO8601
-      val inset = "+00.00".length
-      val s0 = s.substring(0, s.length - inset)
-      val s1 = s.substring(s.length - inset, s.length)
-      if (s0.substring(s0.lastIndexOf(':')).contains('.')) {
-        stringToTime(s0 + "GMT" + s1)
-      } else {
-        stringToTime(s0 + ".0GMT" + s1)
-      }
     } else {
-      // ISO8601 with GMT insert
-      val ISO8601GMT: SimpleDateFormat = new SimpleDateFormat( "yyyy-MM-dd'T'HH:mm:ss.SSSz" )
-      ISO8601GMT.parse(s)
+      DatatypeConverter.parseDateTime(s).getTime()
     }
   }
 
@@ -183,19 +189,20 @@ object DateTimeUtils {
    */
   def fromJulianDay(day: Int, nanoseconds: Long): SQLTimestamp = {
     // use Long to avoid rounding errors
-    val seconds = (day - JULIAN_DAY_OF_EPOCH).toLong * SECONDS_PER_DAY - SECONDS_PER_DAY / 2
+    val seconds = (day - JULIAN_DAY_OF_EPOCH).toLong * SECONDS_PER_DAY
     seconds * MICROS_PER_SECOND + nanoseconds / 1000L
   }
 
   /**
    * Returns Julian day and nanoseconds in a day from the number of microseconds
+   *
+   * Note: support timestamp since 4717 BC (without negative nanoseconds, compatible with Hive).
    */
   def toJulianDay(us: SQLTimestamp): (Int, Long) = {
-    val seconds = us / MICROS_PER_SECOND + SECONDS_PER_DAY / 2
-    val day = seconds / SECONDS_PER_DAY + JULIAN_DAY_OF_EPOCH
-    val secondsInDay = seconds % SECONDS_PER_DAY
-    val nanos = (us % MICROS_PER_SECOND) * 1000L
-    (day.toInt, secondsInDay * NANOS_PER_SECOND + nanos)
+    val julian_us = us + JULIAN_DAY_OF_EPOCH * MICROS_PER_DAY
+    val day = julian_us / MICROS_PER_DAY
+    val micros = julian_us % MICROS_PER_DAY
+    (day.toInt, micros * 1000L)
   }
 
   /**
@@ -245,6 +252,10 @@ object DateTimeUtils {
           i += 3
         } else if (i < 2) {
           if (b == '-') {
+            if (i == 0 && j != 4) {
+              // year should have exact four digits
+              return None
+            }
             segments(i) = currentSegmentValue
             currentSegmentValue = 0
             i += 1
@@ -312,15 +323,24 @@ object DateTimeUtils {
     }
 
     segments(i) = currentSegmentValue
+    if (!justTime && i == 0 && j != 4) {
+      // year should have exact four digits
+      return None
+    }
 
     while (digitsMilli < 6) {
       segments(6) *= 10
       digitsMilli += 1
     }
 
-    if (!justTime && (segments(0) < 1000 || segments(0) > 9999 || segments(1) < 1 ||
+    if (!justTime && (segments(0) < 0 || segments(0) > 9999 || segments(1) < 1 ||
         segments(1) > 12 || segments(2) < 1 || segments(2) > 31)) {
       return None
+    }
+
+    // Instead of return None, we truncate the fractional seconds to prevent inserting NULL
+    if (segments(6) > 999999) {
+      segments(6) = segments(6).toString.take(6).toInt
     }
 
     if (segments(3) < 0 || segments(3) > 23 || segments(4) < 0 || segments(4) > 59 ||
@@ -372,6 +392,10 @@ object DateTimeUtils {
     while (j < bytes.length && (i < 3 && !(bytes(j) == ' ' || bytes(j) == 'T'))) {
       val b = bytes(j)
       if (i < 2 && b == '-') {
+        if (i == 0 && j != 4) {
+          // year should have exact four digits
+          return None
+        }
         segments(i) = currentSegmentValue
         currentSegmentValue = 0
         i += 1
@@ -385,40 +409,54 @@ object DateTimeUtils {
       }
       j += 1
     }
+    if (i == 0 && j != 4) {
+      // year should have exact four digits
+      return None
+    }
     segments(i) = currentSegmentValue
-    if (segments(0) < 1000 || segments(0) > 9999 || segments(1) < 1 || segments(1) > 12 ||
+    if (segments(0) < 0 || segments(0) > 9999 || segments(1) < 1 || segments(1) > 12 ||
         segments(2) < 1 || segments(2) > 31) {
       return None
     }
-    val c = Calendar.getInstance(TimeZone.getTimeZone("GMT"))
+    val c = threadLocalGmtCalendar.get()
+    c.clear()
     c.set(segments(0), segments(1) - 1, segments(2), 0, 0, 0)
     c.set(Calendar.MILLISECOND, 0)
     Some((c.getTimeInMillis / MILLIS_PER_DAY).toInt)
   }
 
   /**
+   * Returns the microseconds since year zero (-17999) from microseconds since epoch.
+   */
+  private def absoluteMicroSecond(microsec: SQLTimestamp): SQLTimestamp = {
+    microsec + toYearZero * MICROS_PER_DAY
+  }
+
+  private def localTimestamp(microsec: SQLTimestamp): SQLTimestamp = {
+    absoluteMicroSecond(microsec) + defaultTimeZone.getOffset(microsec / 1000) * 1000L
+  }
+
+  /**
    * Returns the hour value of a given timestamp value. The timestamp is expressed in microseconds.
    */
-  def getHours(timestamp: SQLTimestamp): Int = {
-    val localTs = (timestamp / 1000) + defaultTimeZone.getOffset(timestamp / 1000)
-    ((localTs / 1000 / 3600) % 24).toInt
+  def getHours(microsec: SQLTimestamp): Int = {
+    ((localTimestamp(microsec) / MICROS_PER_SECOND / 3600) % 24).toInt
   }
 
   /**
    * Returns the minute value of a given timestamp value. The timestamp is expressed in
    * microseconds.
    */
-  def getMinutes(timestamp: SQLTimestamp): Int = {
-    val localTs = (timestamp / 1000) + defaultTimeZone.getOffset(timestamp / 1000)
-    ((localTs / 1000 / 60) % 60).toInt
+  def getMinutes(microsec: SQLTimestamp): Int = {
+    ((localTimestamp(microsec) / MICROS_PER_SECOND / 60) % 60).toInt
   }
 
   /**
    * Returns the second value of a given timestamp value. The timestamp is expressed in
    * microseconds.
    */
-  def getSeconds(timestamp: SQLTimestamp): Int = {
-    ((timestamp / 1000 / 1000) % 60).toInt
+  def getSeconds(microsec: SQLTimestamp): Int = {
+    ((localTimestamp(microsec) / MICROS_PER_SECOND) % 60).toInt
   }
 
   private[this] def isLeapYear(year: Int): Boolean = {

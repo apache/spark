@@ -19,31 +19,38 @@ package org.apache.spark.mllib.linalg
 
 import java.util.{Arrays, Random}
 
-import scala.collection.mutable.{ArrayBuilder => MArrayBuilder, HashSet => MHashSet, ArrayBuffer}
+import scala.collection.mutable.{ArrayBuffer, ArrayBuilder => MArrayBuilder, HashSet => MHashSet}
 
 import breeze.linalg.{CSCMatrix => BSM, DenseMatrix => BDM, Matrix => BM}
+import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
-import org.apache.spark.annotation.{DeveloperApi, Since}
-import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
+import org.apache.spark.annotation.Since
+import org.apache.spark.ml.{linalg => newlinalg}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, UnsafeArrayData}
 import org.apache.spark.sql.types._
 
 /**
  * Trait for a local matrix.
  */
 @SQLUserDefinedType(udt = classOf[MatrixUDT])
+@Since("1.0.0")
 sealed trait Matrix extends Serializable {
 
   /** Number of rows. */
+  @Since("1.0.0")
   def numRows: Int
 
   /** Number of columns. */
+  @Since("1.0.0")
   def numCols: Int
 
   /** Flag that keeps track whether the matrix is transposed or not. False by default. */
+  @Since("1.3.0")
   val isTransposed: Boolean = false
 
   /** Converts to a dense array in column major. */
+  @Since("1.0.0")
   def toArray: Array[Double] = {
     val newArray = new Array[Double](numRows * numCols)
     foreachActive { (i, j, v) =>
@@ -52,10 +59,25 @@ sealed trait Matrix extends Serializable {
     newArray
   }
 
+  /**
+   * Returns an iterator of column vectors.
+   * This operation could be expensive, depending on the underlying storage.
+   */
+  @Since("2.0.0")
+  def colIter: Iterator[Vector]
+
+  /**
+   * Returns an iterator of row vectors.
+   * This operation could be expensive, depending on the underlying storage.
+   */
+  @Since("2.0.0")
+  def rowIter: Iterator[Vector] = this.transpose.colIter
+
   /** Converts to a breeze matrix. */
   private[mllib] def toBreeze: BM[Double]
 
   /** Gets the (i, j)-th element. */
+  @Since("1.3.0")
   def apply(i: Int, j: Int): Double
 
   /** Return the index for the (i, j)-th element in the backing array. */
@@ -65,12 +87,15 @@ sealed trait Matrix extends Serializable {
   private[mllib] def update(i: Int, j: Int, v: Double): Unit
 
   /** Get a deep copy of the matrix. */
+  @Since("1.2.0")
   def copy: Matrix
 
   /** Transpose the Matrix. Returns a new `Matrix` instance sharing the same underlying data. */
+  @Since("1.3.0")
   def transpose: Matrix
 
   /** Convenience method for `Matrix`-`DenseMatrix` multiplication. */
+  @Since("1.2.0")
   def multiply(y: DenseMatrix): DenseMatrix = {
     val C: DenseMatrix = DenseMatrix.zeros(numRows, y.numCols)
     BLAS.gemm(1.0, this, y, 0.0, C)
@@ -78,11 +103,13 @@ sealed trait Matrix extends Serializable {
   }
 
   /** Convenience method for `Matrix`-`DenseVector` multiplication. For binary compatibility. */
+  @Since("1.2.0")
   def multiply(y: DenseVector): DenseVector = {
     multiply(y.asInstanceOf[Vector])
   }
 
   /** Convenience method for `Matrix`-`Vector` multiplication. */
+  @Since("1.4.0")
   def multiply(y: Vector): DenseVector = {
     val output = new DenseVector(new Array[Double](numRows))
     BLAS.gemv(1.0, this, y, 0.0, output)
@@ -93,16 +120,21 @@ sealed trait Matrix extends Serializable {
   override def toString: String = toBreeze.toString()
 
   /** A human readable representation of the matrix with maximum lines and width */
+  @Since("1.4.0")
   def toString(maxLines: Int, maxLineWidth: Int): String = toBreeze.toString(maxLines, maxLineWidth)
 
-  /** Map the values of this matrix using a function. Generates a new matrix. Performs the
-    * function on only the backing array. For example, an operation such as addition or
-    * subtraction will only be performed on the non-zero values in a `SparseMatrix`. */
+  /**
+   * Map the values of this matrix using a function. Generates a new matrix. Performs the
+   * function on only the backing array. For example, an operation such as addition or
+   * subtraction will only be performed on the non-zero values in a `SparseMatrix`.
+   */
   private[spark] def map(f: Double => Double): Matrix
 
-  /** Update all the values of this matrix using the function f. Performed in-place on the
-    * backing array. For example, an operation such as addition or subtraction will only be
-    * performed on the non-zero values in a `SparseMatrix`. */
+  /**
+   * Update all the values of this matrix using the function f. Performed in-place on the
+   * backing array. For example, an operation such as addition or subtraction will only be
+   * performed on the non-zero values in a `SparseMatrix`.
+   */
   private[mllib] def update(f: Double => Double): Matrix
 
   /**
@@ -118,15 +150,22 @@ sealed trait Matrix extends Serializable {
   /**
    * Find the number of non-zero active values.
    */
+  @Since("1.5.0")
   def numNonzeros: Int
 
   /**
    * Find the number of values stored explicitly. These values can be zero as well.
    */
+  @Since("1.5.0")
   def numActives: Int
+
+  /**
+   * Convert this matrix to the new mllib-local representation.
+   * This does NOT copy the data; it copies references.
+   */
+  private[spark] def asML: newlinalg.Matrix
 }
 
-@DeveloperApi
 private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
 
   override def sqlType: StructType = {
@@ -147,16 +186,16 @@ private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
       ))
   }
 
-  override def serialize(obj: Any): InternalRow = {
+  override def serialize(obj: Matrix): InternalRow = {
     val row = new GenericMutableRow(7)
     obj match {
       case sm: SparseMatrix =>
         row.setByte(0, 0)
         row.setInt(1, sm.numRows)
         row.setInt(2, sm.numCols)
-        row.update(3, new GenericArrayData(sm.colPtrs.map(_.asInstanceOf[Any])))
-        row.update(4, new GenericArrayData(sm.rowIndices.map(_.asInstanceOf[Any])))
-        row.update(5, new GenericArrayData(sm.values.map(_.asInstanceOf[Any])))
+        row.update(3, UnsafeArrayData.fromPrimitiveArray(sm.colPtrs))
+        row.update(4, UnsafeArrayData.fromPrimitiveArray(sm.rowIndices))
+        row.update(5, UnsafeArrayData.fromPrimitiveArray(sm.values))
         row.setBoolean(6, sm.isTransposed)
 
       case dm: DenseMatrix =>
@@ -165,7 +204,7 @@ private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
         row.setInt(2, dm.numCols)
         row.setNullAt(3)
         row.setNullAt(4)
-        row.update(5, new GenericArrayData(dm.values.map(_.asInstanceOf[Any])))
+        row.update(5, UnsafeArrayData.fromPrimitiveArray(dm.values))
         row.setBoolean(6, dm.isTransposed)
     }
     row
@@ -230,11 +269,11 @@ private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
  */
 @Since("1.0.0")
 @SQLUserDefinedType(udt = classOf[MatrixUDT])
-class DenseMatrix(
-    val numRows: Int,
-    val numCols: Int,
-    val values: Array[Double],
-    override val isTransposed: Boolean) extends Matrix {
+class DenseMatrix @Since("1.3.0") (
+    @Since("1.0.0") val numRows: Int,
+    @Since("1.0.0") val numCols: Int,
+    @Since("1.0.0") val values: Array[Double],
+    @Since("1.3.0") override val isTransposed: Boolean) extends Matrix {
 
   require(values.length == numRows * numCols, "The number of values supplied doesn't match the " +
     s"size of the matrix! values.length: ${values.length}, numRows * numCols: ${numRows * numCols}")
@@ -254,7 +293,7 @@ class DenseMatrix(
    * @param numCols number of columns
    * @param values matrix entries in column major
    */
-  @Since("1.3.0")
+  @Since("1.0.0")
   def this(numRows: Int, numCols: Int, values: Array[Double]) =
     this(numRows, numCols, values, false)
 
@@ -264,7 +303,7 @@ class DenseMatrix(
   }
 
   override def hashCode: Int = {
-    com.google.common.base.Objects.hashCode(numRows : Integer, numCols: Integer, toArray)
+    com.google.common.base.Objects.hashCode(numRows: Integer, numCols: Integer, toArray)
   }
 
   private[mllib] def toBreeze: BM[Double] = {
@@ -282,6 +321,8 @@ class DenseMatrix(
   override def apply(i: Int, j: Int): Double = values(index(i, j))
 
   private[mllib] def index(i: Int, j: Int): Int = {
+    require(i >= 0 && i < numRows, s"Expected 0 <= i < $numRows, got i = $i.")
+    require(j >= 0 && j < numCols, s"Expected 0 <= j < $numCols, got j = $j.")
     if (!isTransposed) i + numRows * j else j + numCols * i
   }
 
@@ -368,6 +409,25 @@ class DenseMatrix(
       colPtrs(j) = nnz
     }
     new SparseMatrix(numRows, numCols, colPtrs, rowIndices.result(), spVals.result())
+  }
+
+  @Since("2.0.0")
+  override def colIter: Iterator[Vector] = {
+    if (isTransposed) {
+      Iterator.tabulate(numCols) { j =>
+        val col = new Array[Double](numRows)
+        blas.dcopy(numRows, values, j, numCols, col, 0, 1)
+        new DenseVector(col)
+      }
+    } else {
+      Iterator.tabulate(numCols) { j =>
+        new DenseVector(values.slice(j * numRows, (j + 1) * numRows))
+      }
+    }
+  }
+
+  private[spark] override def asML: newlinalg.DenseMatrix = {
+    new newlinalg.DenseMatrix(numRows, numCols, values, isTransposed)
   }
 }
 
@@ -465,6 +525,11 @@ object DenseMatrix {
     }
     matrix
   }
+
+  /** Convert new linalg type to spark.mllib type.  Light copy; only copies references */
+  private[spark] def fromML(m: newlinalg.DenseMatrix): DenseMatrix = {
+    new DenseMatrix(m.numRows, m.numCols, m.values, m.isTransposed)
+  }
 }
 
 /**
@@ -491,13 +556,13 @@ object DenseMatrix {
  */
 @Since("1.2.0")
 @SQLUserDefinedType(udt = classOf[MatrixUDT])
-class SparseMatrix(
-    val numRows: Int,
-    val numCols: Int,
-    val colPtrs: Array[Int],
-    val rowIndices: Array[Int],
-    val values: Array[Double],
-    override val isTransposed: Boolean) extends Matrix {
+class SparseMatrix @Since("1.3.0") (
+    @Since("1.2.0") val numRows: Int,
+    @Since("1.2.0") val numCols: Int,
+    @Since("1.2.0") val colPtrs: Array[Int],
+    @Since("1.2.0") val rowIndices: Array[Int],
+    @Since("1.2.0") val values: Array[Double],
+    @Since("1.3.0") override val isTransposed: Boolean) extends Matrix {
 
   require(values.length == rowIndices.length, "The number of row indices and values don't match! " +
     s"values.length: ${values.length}, rowIndices.length: ${rowIndices.length}")
@@ -527,7 +592,7 @@ class SparseMatrix(
    *                   order for each column
    * @param values non-zero matrix entries in column major
    */
-  @Since("1.3.0")
+  @Since("1.2.0")
   def this(
       numRows: Int,
       numCols: Int,
@@ -540,6 +605,8 @@ class SparseMatrix(
     case _ => false
   }
 
+  override def hashCode(): Int = toBreeze.hashCode
+
   private[mllib] def toBreeze: BM[Double] = {
      if (!isTransposed) {
        new BSM[Double](values, numRows, numCols, colPtrs, rowIndices)
@@ -549,8 +616,6 @@ class SparseMatrix(
      }
   }
 
-  /**
-   */
   @Since("1.3.0")
   override def apply(i: Int, j: Int): Double = {
     val ind = index(i, j)
@@ -558,6 +623,8 @@ class SparseMatrix(
   }
 
   private[mllib] def index(i: Int, j: Int): Int = {
+    require(i >= 0 && i < numRows, s"Expected 0 <= i < $numRows, got i = $i.")
+    require(j >= 0 && j < numCols, s"Expected 0 <= j < $numCols, got j = $j.")
     if (!isTransposed) {
       Arrays.binarySearch(rowIndices, colPtrs(j), colPtrs(j + 1), i)
     } else {
@@ -567,7 +634,7 @@ class SparseMatrix(
 
   private[mllib] def update(i: Int, j: Int, v: Double): Unit = {
     val ind = index(i, j)
-    if (ind == -1) {
+    if (ind < 0) {
       throw new NoSuchElementException("The given row and column indices correspond to a zero " +
         "value. Only non-zero elements in Sparse Matrices can be updated.")
     } else {
@@ -639,6 +706,42 @@ class SparseMatrix(
   @Since("1.5.0")
   override def numActives: Int = values.length
 
+  @Since("2.0.0")
+  override def colIter: Iterator[Vector] = {
+    if (isTransposed) {
+      val indicesArray = Array.fill(numCols)(MArrayBuilder.make[Int])
+      val valuesArray = Array.fill(numCols)(MArrayBuilder.make[Double])
+      var i = 0
+      while (i < numRows) {
+        var k = colPtrs(i)
+        val rowEnd = colPtrs(i + 1)
+        while (k < rowEnd) {
+          val j = rowIndices(k)
+          indicesArray(j) += i
+          valuesArray(j) += values(k)
+          k += 1
+        }
+        i += 1
+      }
+      Iterator.tabulate(numCols) { j =>
+        val ii = indicesArray(j).result()
+        val vv = valuesArray(j).result()
+        new SparseVector(numRows, ii, vv)
+      }
+    } else {
+      Iterator.tabulate(numCols) { j =>
+        val colStart = colPtrs(j)
+        val colEnd = colPtrs(j + 1)
+        val ii = rowIndices.slice(colStart, colEnd)
+        val vv = values.slice(colStart, colEnd)
+        new SparseVector(numRows, ii, vv)
+      }
+    }
+  }
+
+  private[spark] override def asML: newlinalg.SparseMatrix = {
+    new newlinalg.SparseMatrix(numRows, numCols, colPtrs, rowIndices, values, isTransposed)
+  }
 }
 
 /**
@@ -813,6 +916,11 @@ object SparseMatrix {
         SparseMatrix.fromCOO(n, n, nnzVals.map(v => (v._2, v._2, v._1)))
     }
   }
+
+  /** Convert new linalg type to spark.mllib type.  Light copy; only copies references */
+  private[spark] def fromML(m: newlinalg.SparseMatrix): SparseMatrix = {
+    new SparseMatrix(m.numRows, m.numCols, m.colPtrs, m.rowIndices, m.values, m.isTransposed)
+  }
 }
 
 /**
@@ -862,8 +970,16 @@ object Matrices {
       case dm: BDM[Double] =>
         new DenseMatrix(dm.rows, dm.cols, dm.data, dm.isTranspose)
       case sm: BSM[Double] =>
+        // Spark-11507. work around breeze issue 479.
+        val mat = if (sm.colPtrs.last != sm.data.length) {
+          val matCopy = sm.copy
+          matCopy.compact()
+          matCopy
+        } else {
+          sm
+        }
         // There is no isTranspose flag for sparse matrices in Breeze
-        new SparseMatrix(sm.rows, sm.cols, sm.colPtrs, sm.rowIndices, sm.data)
+        new SparseMatrix(mat.rows, mat.cols, mat.colPtrs, mat.rowIndices, mat.data)
       case _ =>
         throw new UnsupportedOperationException(
           s"Do not support conversion from type ${breeze.getClass.getName}.")
@@ -970,7 +1086,7 @@ object Matrices {
   def horzcat(matrices: Array[Matrix]): Matrix = {
     if (matrices.isEmpty) {
       return new DenseMatrix(0, 0, Array[Double]())
-    } else if (matrices.size == 1) {
+    } else if (matrices.length == 1) {
       return matrices(0)
     }
     val numRows = matrices(0).numRows
@@ -1029,7 +1145,7 @@ object Matrices {
   def vertcat(matrices: Array[Matrix]): Matrix = {
     if (matrices.isEmpty) {
       return new DenseMatrix(0, 0, Array[Double]())
-    } else if (matrices.size == 1) {
+    } else if (matrices.length == 1) {
       return matrices(0)
     }
     val numCols = matrices(0).numCols
@@ -1086,5 +1202,13 @@ object Matrices {
       }
       SparseMatrix.fromCOO(numRows, numCols, entries)
     }
+  }
+
+  /** Convert new linalg type to spark.mllib type.  Light copy; only copies references */
+  private[spark] def fromML(m: newlinalg.Matrix): Matrix = m match {
+    case dm: newlinalg.DenseMatrix =>
+      DenseMatrix.fromML(dm)
+    case sm: newlinalg.SparseMatrix =>
+      SparseMatrix.fromML(sm)
   }
 }

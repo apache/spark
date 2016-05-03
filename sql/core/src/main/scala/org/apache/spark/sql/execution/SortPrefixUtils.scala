@@ -21,8 +21,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
-import org.apache.spark.util.collection.unsafe.sort.{PrefixComparators, PrefixComparator}
-
+import org.apache.spark.util.collection.unsafe.sort.{PrefixComparator, PrefixComparators}
 
 object SortPrefixUtils {
 
@@ -64,6 +63,32 @@ object SortPrefixUtils {
         override def compare(prefix1: Long, prefix2: Long): Int = 0
       }
     }
+  }
+
+  /**
+   * Returns whether the specified SortOrder can be satisfied with a radix sort on the prefix.
+   */
+  def canSortFullyWithPrefix(sortOrder: SortOrder): Boolean = {
+    sortOrder.dataType match {
+      // TODO(ekl) long-type is problematic because it's null prefix representation collides with
+      // the lowest possible long value. Handle this special case outside radix sort.
+      case LongType if sortOrder.nullable =>
+        false
+      case BooleanType | ByteType | ShortType | IntegerType | LongType | DateType |
+           TimestampType | FloatType | DoubleType =>
+        true
+      case dt: DecimalType if dt.precision <= Decimal.MAX_LONG_DIGITS =>
+        true
+      case _ =>
+        false
+    }
+  }
+
+  /**
+   * Returns whether the fully sorting on the specified key field is possible with radix sort.
+   */
+  def canSortFullyWithPrefix(field: StructField): Boolean = {
+    canSortFullyWithPrefix(SortOrder(BoundReference(0, field.dataType, field.nullable), Ascending))
   }
 
   /**

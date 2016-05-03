@@ -23,7 +23,7 @@ import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.pmml.PMMLExportable
 import org.apache.spark.mllib.regression.impl.GLMRegressionModel
-import org.apache.spark.mllib.util.{Saveable, Loader}
+import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 
 /**
@@ -34,9 +34,9 @@ import org.apache.spark.rdd.RDD
  *
  */
 @Since("0.8.0")
-class LinearRegressionModel (
-    override val weights: Vector,
-    override val intercept: Double)
+class LinearRegressionModel @Since("1.1.0") (
+    @Since("1.0.0") override val weights: Vector,
+    @Since("0.8.0") override val intercept: Double)
   extends GeneralizedLinearModel(weights, intercept) with RegressionModel with Serializable
   with Saveable with PMMLExportable {
 
@@ -85,24 +85,30 @@ object LinearRegressionModel extends Loader[LinearRegressionModel] {
  * its corresponding right hand side label y.
  * See also the documentation for the precise formulation.
  */
+@Since("0.8.0")
+@deprecated("Use ml.regression.LinearRegression or LBFGS", "2.0.0")
 class LinearRegressionWithSGD private[mllib] (
     private var stepSize: Double,
     private var numIterations: Int,
+    private var regParam: Double,
     private var miniBatchFraction: Double)
   extends GeneralizedLinearAlgorithm[LinearRegressionModel] with Serializable {
 
   private val gradient = new LeastSquaresGradient()
   private val updater = new SimpleUpdater()
+  @Since("0.8.0")
   override val optimizer = new GradientDescent(gradient, updater)
     .setStepSize(stepSize)
     .setNumIterations(numIterations)
+    .setRegParam(regParam)
     .setMiniBatchFraction(miniBatchFraction)
 
   /**
    * Construct a LinearRegression object with default parameters: {stepSize: 1.0,
    * numIterations: 100, miniBatchFraction: 1.0}.
    */
-  def this() = this(1.0, 100, 1.0)
+  @Since("0.8.0")
+  def this() = this(1.0, 100, 0.0, 1.0)
 
   override protected[mllib] def createModel(weights: Vector, intercept: Double) = {
     new LinearRegressionModel(weights, intercept)
@@ -114,6 +120,7 @@ class LinearRegressionWithSGD private[mllib] (
  *
  */
 @Since("0.8.0")
+@deprecated("Use ml.regression.LinearRegression or LBFGS", "2.0.0")
 object LinearRegressionWithSGD {
 
   /**
@@ -138,7 +145,7 @@ object LinearRegressionWithSGD {
       stepSize: Double,
       miniBatchFraction: Double,
       initialWeights: Vector): LinearRegressionModel = {
-    new LinearRegressionWithSGD(stepSize, numIterations, miniBatchFraction)
+    new LinearRegressionWithSGD(stepSize, numIterations, 0.0, miniBatchFraction)
       .run(input, initialWeights)
   }
 
@@ -160,7 +167,7 @@ object LinearRegressionWithSGD {
       numIterations: Int,
       stepSize: Double,
       miniBatchFraction: Double): LinearRegressionModel = {
-    new LinearRegressionWithSGD(stepSize, numIterations, miniBatchFraction).run(input)
+    new LinearRegressionWithSGD(stepSize, numIterations, 0.0, miniBatchFraction).run(input)
   }
 
   /**

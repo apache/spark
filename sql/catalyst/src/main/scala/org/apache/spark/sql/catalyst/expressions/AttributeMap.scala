@@ -26,6 +26,13 @@ object AttributeMap {
   def apply[A](kvs: Seq[(Attribute, A)]): AttributeMap[A] = {
     new AttributeMap(kvs.map(kv => (kv._1.exprId, kv)).toMap)
   }
+
+  /** Given a schema, constructs an [[AttributeMap]] from [[Attribute]] to ordinal */
+  def byIndex(schema: Seq[Attribute]): AttributeMap[Int] = apply(schema.zipWithIndex)
+
+  /** Given a schema, constructs a map from ordinal to Attribute. */
+  def toIndex(schema: Seq[Attribute]): Map[Int, Attribute] =
+    schema.zipWithIndex.map { case (a, i) => i -> a }.toMap
 }
 
 class AttributeMap[A](baseMap: Map[ExprId, (Attribute, A)])

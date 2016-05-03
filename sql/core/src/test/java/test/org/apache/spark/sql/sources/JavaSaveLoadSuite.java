@@ -40,11 +40,10 @@ public class JavaSaveLoadSuite {
   private transient JavaSparkContext sc;
   private transient SQLContext sqlContext;
 
-  String originalDefaultSource;
   File path;
-  DataFrame df;
+  Dataset<Row> df;
 
-  private void checkAnswer(DataFrame actual, List<Row> expected) {
+  private static void checkAnswer(Dataset<Row> actual, List<Row> expected) {
     String errorMessage = QueryTest$.MODULE$.checkAnswer(actual, expected);
     if (errorMessage != null) {
       Assert.fail(errorMessage);
@@ -57,14 +56,13 @@ public class JavaSaveLoadSuite {
     sqlContext = new SQLContext(_sc);
     sc = new JavaSparkContext(_sc);
 
-    originalDefaultSource = sqlContext.conf().defaultDataSourceName();
     path =
       Utils.createTempDir(System.getProperty("java.io.tmpdir"), "datasource").getCanonicalFile();
     if (path.exists()) {
       path.delete();
     }
 
-    List<String> jsonObjects = new ArrayList<String>(10);
+    List<String> jsonObjects = new ArrayList<>(10);
     for (int i = 0; i < 10; i++) {
       jsonObjects.add("{\"a\":" + i + ", \"b\":\"str" + i + "\"}");
     }
@@ -82,23 +80,23 @@ public class JavaSaveLoadSuite {
 
   @Test
   public void saveAndLoad() {
-    Map<String, String> options = new HashMap<String, String>();
+    Map<String, String> options = new HashMap<>();
     options.put("path", path.toString());
     df.write().mode(SaveMode.ErrorIfExists).format("json").options(options).save();
-    DataFrame loadedDF = sqlContext.read().format("json").options(options).load();
+    Dataset<Row> loadedDF = sqlContext.read().format("json").options(options).load();
     checkAnswer(loadedDF, df.collectAsList());
   }
 
   @Test
   public void saveAndLoadWithSchema() {
-    Map<String, String> options = new HashMap<String, String>();
+    Map<String, String> options = new HashMap<>();
     options.put("path", path.toString());
     df.write().format("json").mode(SaveMode.ErrorIfExists).options(options).save();
 
-    List<StructField> fields = new ArrayList<StructField>();
+    List<StructField> fields = new ArrayList<>();
     fields.add(DataTypes.createStructField("b", DataTypes.StringType, true));
     StructType schema = DataTypes.createStructType(fields);
-    DataFrame loadedDF = sqlContext.read().format("json").schema(schema).options(options).load();
+    Dataset<Row> loadedDF = sqlContext.read().format("json").schema(schema).options(options).load();
 
     checkAnswer(loadedDF, sqlContext.sql("SELECT b FROM jsonTable").collectAsList());
   }

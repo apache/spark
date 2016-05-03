@@ -19,11 +19,13 @@
 
 SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 SPARK_ROOT_DIR="$(dirname "$SCRIPT_DIR")"
-PATHS_TO_CHECK="./python/pyspark/ ./ec2/spark_ec2.py ./examples/src/main/python/ ./dev/sparktestsupport"
-PATHS_TO_CHECK="$PATHS_TO_CHECK ./dev/run-tests.py ./python/run-tests.py"
+PATHS_TO_CHECK="./python/pyspark/ ./examples/src/main/python/ ./dev/sparktestsupport"
+PATHS_TO_CHECK="$PATHS_TO_CHECK ./dev/run-tests.py ./python/run-tests.py ./dev/run-tests-jenkins.py"
 PEP8_REPORT_PATH="$SPARK_ROOT_DIR/dev/pep8-report.txt"
 PYLINT_REPORT_PATH="$SPARK_ROOT_DIR/dev/pylint-report.txt"
 PYLINT_INSTALL_INFO="$SPARK_ROOT_DIR/dev/pylint-info.txt"
+SPHINXBUILD=${SPHINXBUILD:=sphinx-build}
+SPHINX_REPORT_PATH="$SPARK_ROOT_DIR/dev/sphinx-report.txt"
 
 cd "$SPARK_ROOT_DIR"
 
@@ -35,7 +37,7 @@ compile_status="${PIPESTATUS[0]}"
 #+ See: https://github.com/apache/spark/pull/1744#issuecomment-50982162
 #+ TODOs:
 #+  - Download pep8 from PyPI. It's more "official".
-PEP8_VERSION="1.6.2"
+PEP8_VERSION="1.7.0"
 PEP8_SCRIPT_PATH="$SPARK_ROOT_DIR/dev/pep8-$PEP8_VERSION.py"
 PEP8_SCRIPT_REMOTE_PATH="https://raw.githubusercontent.com/jcrocholl/pep8/$PEP8_VERSION/pep8.py"
 
@@ -58,27 +60,11 @@ export "PYTHONPATH=$SPARK_ROOT_DIR/dev/pylint"
 export "PYLINT_HOME=$PYTHONPATH"
 export "PATH=$PYTHONPATH:$PATH"
 
-# if [ ! -d "$PYLINT_HOME" ]; then
-#     mkdir "$PYLINT_HOME"
-#     # Redirect the annoying pylint installation output.
-#     easy_install -d "$PYLINT_HOME" pylint==1.4.4 &>> "$PYLINT_INSTALL_INFO"
-#     easy_install_status="$?"
-#
-#     if [ "$easy_install_status" -ne 0 ]; then
-#         echo "Unable to install pylint locally in \"$PYTHONPATH\"."
-#         cat "$PYLINT_INSTALL_INFO"
-#         exit "$easy_install_status"
-#     fi
-#
-#     rm "$PYLINT_INSTALL_INFO"
-#
-# fi
-
 # There is no need to write this output to a file
 #+ first, but we do so so that the check status can
 #+ be output before the report, like with the
 #+ scalastyle and RAT checks.
-python "$PEP8_SCRIPT_PATH" --ignore=E402,E731,E241,W503,E226 $PATHS_TO_CHECK >> "$PEP8_REPORT_PATH"
+python "$PEP8_SCRIPT_PATH" --ignore=E402,E731,E241,W503,E226 --config=dev/tox.ini $PATHS_TO_CHECK >> "$PEP8_REPORT_PATH"
 pep8_status="${PIPESTATUS[0]}"
 
 if [ "$compile_status" -eq 0 -a "$pep8_status" -eq 0 ]; then
@@ -90,25 +76,32 @@ fi
 if [ "$lint_status" -ne 0 ]; then
     echo "PEP8 checks failed."
     cat "$PEP8_REPORT_PATH"
+    rm "$PEP8_REPORT_PATH"
+    exit "$lint_status"
 else
     echo "PEP8 checks passed."
+    rm "$PEP8_REPORT_PATH"
 fi
 
-rm "$PEP8_REPORT_PATH"
-
-# for to_be_checked in "$PATHS_TO_CHECK"
-# do
-#     pylint --rcfile="$SPARK_ROOT_DIR/pylintrc" $to_be_checked >> "$PYLINT_REPORT_PATH"
-# done
-
-# if [ "${PIPESTATUS[0]}" -ne 0 ]; then
-#     lint_status=1
-#     echo "Pylint checks failed."
-#     cat "$PYLINT_REPORT_PATH"
-# else
-#     echo "Pylint checks passed."
-# fi
-
-# rm "$PYLINT_REPORT_PATH"
-
-exit "$lint_status"
+# Check that the documentation builds acceptably, skip check if sphinx is not installed.
+if hash "$SPHINXBUILD" 2> /dev/null; then
+  cd python/docs
+  make clean
+  # Treat warnings as errors so we stop correctly
+  SPHINXOPTS="-a -W" make html &> "$SPHINX_REPORT_PATH" || lint_status=1
+  if [ "$lint_status" -ne 0 ]; then
+    echo "pydoc checks failed."
+    cat "$SPHINX_REPORT_PATH"
+    echo "re-running make html to print full warning list"
+    make clean
+    SPHINXOPTS="-a" make html
+    rm "$SPHINX_REPORT_PATH"
+    exit "$lint_status"
+  else
+    echo "pydoc checks passed."
+    rm "$SPHINX_REPORT_PATH"
+  fi
+  cd ../..
+else
+  echo >&2 "The $SPHINXBUILD command was not found. Skipping pydoc checks for now"
+fi

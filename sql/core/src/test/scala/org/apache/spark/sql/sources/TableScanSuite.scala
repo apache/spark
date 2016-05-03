@@ -31,17 +31,21 @@ class SimpleScanSource extends RelationProvider {
   override def createRelation(
       sqlContext: SQLContext,
       parameters: Map[String, String]): BaseRelation = {
-    SimpleScan(parameters("from").toInt, parameters("TO").toInt)(sqlContext)
+    SimpleScan(parameters("from").toInt, parameters("TO").toInt)(sqlContext.sparkSession)
   }
 }
 
-case class SimpleScan(from: Int, to: Int)(@transient val sqlContext: SQLContext)
+case class SimpleScan(from: Int, to: Int)(@transient val sparkSession: SparkSession)
   extends BaseRelation with TableScan {
+
+  override def sqlContext: SQLContext = sparkSession.wrapped
 
   override def schema: StructType =
     StructType(StructField("i", IntegerType, nullable = false) :: Nil)
 
-  override def buildScan(): RDD[Row] = sqlContext.sparkContext.parallelize(from to to).map(Row(_))
+  override def buildScan(): RDD[Row] = {
+    sparkSession.sparkContext.parallelize(from to to).map(Row(_))
+  }
 }
 
 class AllDataTypesScanSource extends SchemaRelationProvider {
@@ -53,23 +57,27 @@ class AllDataTypesScanSource extends SchemaRelationProvider {
     parameters("option_with_underscores")
     parameters("option.with.dots")
 
-    AllDataTypesScan(parameters("from").toInt, parameters("TO").toInt, schema)(sqlContext)
+    AllDataTypesScan(
+      parameters("from").toInt,
+      parameters("TO").toInt, schema)(sqlContext.sparkSession)
   }
 }
 
 case class AllDataTypesScan(
     from: Int,
     to: Int,
-    userSpecifiedSchema: StructType)(@transient val sqlContext: SQLContext)
+    userSpecifiedSchema: StructType)(@transient val sparkSession: SparkSession)
   extends BaseRelation
   with TableScan {
+
+  override def sqlContext: SQLContext = sparkSession.wrapped
 
   override def schema: StructType = userSpecifiedSchema
 
   override def needConversion: Boolean = true
 
   override def buildScan(): RDD[Row] = {
-    sqlContext.sparkContext.parallelize(from to to).map { i =>
+    sparkSession.sparkContext.parallelize(from to to).map { i =>
       Row(
         s"str_$i",
         s"str_$i".getBytes(StandardCharsets.UTF_8),
@@ -85,6 +93,7 @@ case class AllDataTypesScan(
         Date.valueOf("1970-01-01"),
         new Timestamp(20000 + i),
         s"varchar_$i",
+        s"char_$i",
         Seq(i, i + 1),
         Seq(Map(s"str_$i" -> Row(i.toLong))),
         Map(i -> i.toString),
@@ -115,6 +124,7 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
       Date.valueOf("1970-01-01"),
       new Timestamp(20000 + i),
       s"varchar_$i",
+      s"char_$i",
       Seq(i, i + 1),
       Seq(Map(s"str_$i" -> Row(i.toLong))),
       Map(i -> i.toString),
@@ -154,6 +164,7 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
         |dateField dAte,
         |timestampField tiMestamp,
         |varcharField varchaR(12),
+        |charField ChaR(18),
         |arrayFieldSimple Array<inT>,
         |arrayFieldComplex Array<Map<String, Struct<key:bigInt>>>,
         |mapFieldSimple MAP<iNt, StRing>,
@@ -207,6 +218,7 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
       StructField("dateField", DateType, true) ::
       StructField("timestampField", TimestampType, true) ::
       StructField("varcharField", StringType, true) ::
+      StructField("charField", StringType, true) ::
       StructField("arrayFieldSimple", ArrayType(IntegerType), true) ::
       StructField("arrayFieldComplex",
         ArrayType(
@@ -248,6 +260,7 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
           | dateField,
           | timestampField,
           | varcharField,
+          | charField,
           | arrayFieldSimple,
           | arrayFieldComplex,
           | mapFieldSimple,
@@ -334,7 +347,7 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
 
   test("exceptions") {
     // Make sure we do throw correct exception when users use a relation provider that
-    // only implements the RelationProvier or the SchemaRelationProvider.
+    // only implements the RelationProvider or the SchemaRelationProvider.
     val schemaNotAllowed = intercept[Exception] {
       sql(
         """

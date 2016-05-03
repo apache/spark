@@ -33,7 +33,42 @@ private[spark] case class ApplicationAttemptInfo(
 private[spark] case class ApplicationHistoryInfo(
     id: String,
     name: String,
-    attempts: List[ApplicationAttemptInfo])
+    attempts: List[ApplicationAttemptInfo]) {
+
+  /**
+   * Has this application completed?
+   * @return true if the most recent attempt has completed
+   */
+  def completed: Boolean = {
+    attempts.nonEmpty && attempts.head.completed
+  }
+}
+
+/**
+ *  A probe which can be invoked to see if a loaded Web UI has been updated.
+ *  The probe is expected to be relative purely to that of the UI returned
+ *  in the same [[LoadedAppUI]] instance. That is, whenever a new UI is loaded,
+ *  the probe returned with it is the one that must be used to check for it
+ *  being out of date; previous probes must be discarded.
+ */
+private[history] abstract class HistoryUpdateProbe {
+  /**
+   * Return true if the history provider has a later version of the application
+   * attempt than the one against this probe was constructed.
+   * @return
+   */
+  def isUpdated(): Boolean
+}
+
+/**
+ * All the information returned from a call to `getAppUI()`: the new UI
+ * and any required update state.
+ * @param ui Spark UI
+ * @param updateProbe probe to call to check on the update state of this application attempt
+ */
+private[history] case class LoadedAppUI(
+    ui: SparkUI,
+    updateProbe: () => Boolean)
 
 private[history] abstract class ApplicationHistoryProvider {
 
@@ -49,9 +84,10 @@ private[history] abstract class ApplicationHistoryProvider {
    *
    * @param appId The application ID.
    * @param attemptId The application attempt ID (or None if there is no attempt ID).
-   * @return The application's UI, or None if application is not found.
+   * @return a [[LoadedAppUI]] instance containing the application's UI and any state information
+   *         for update probes, or `None` if the application/attempt is not found.
    */
-  def getAppUI(appId: String, attemptId: Option[String]): Option[SparkUI]
+  def getAppUI(appId: String, attemptId: Option[String]): Option[LoadedAppUI]
 
   /**
    * Called when the server is shutting down.

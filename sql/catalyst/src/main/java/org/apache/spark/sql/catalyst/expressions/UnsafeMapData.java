@@ -17,50 +17,105 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
-import org.apache.spark.sql.types.ArrayData;
-import org.apache.spark.sql.types.MapData;
+import java.nio.ByteBuffer;
+
+import org.apache.spark.sql.catalyst.util.MapData;
+import org.apache.spark.unsafe.Platform;
 
 /**
  * An Unsafe implementation of Map which is backed by raw memory instead of Java objects.
  *
- * Currently we just use 2 UnsafeArrayData to represent UnsafeMapData.
+ * Currently we just use 2 UnsafeArrayData to represent UnsafeMapData, with extra 4 bytes at head
+ * to indicate the number of bytes of the unsafe key array.
+ * [unsafe key array numBytes] [unsafe key array] [unsafe value array]
  */
-public class UnsafeMapData extends MapData {
+// TODO: Use a more efficient format which doesn't depend on unsafe array.
+public final class UnsafeMapData extends MapData {
 
-  public final UnsafeArrayData keys;
-  public final UnsafeArrayData values;
-  // The number of elements in this array
-  private int numElements;
-  // The size of this array's backing data, in bytes
+  private Object baseObject;
+  private long baseOffset;
+
+  // The size of this map's backing data, in bytes.
+  // The 4-bytes header of key array `numBytes` is also included, so it's actually equal to
+  // 4 + key array numBytes + value array numBytes.
   private int sizeInBytes;
 
+  public Object getBaseObject() { return baseObject; }
+  public long getBaseOffset() { return baseOffset; }
   public int getSizeInBytes() { return sizeInBytes; }
 
-  public UnsafeMapData(UnsafeArrayData keys, UnsafeArrayData values) {
+  private final UnsafeArrayData keys;
+  private final UnsafeArrayData values;
+
+  /**
+   * Construct a new UnsafeMapData. The resulting UnsafeMapData won't be usable until
+   * `pointTo()` has been called, since the value returned by this constructor is equivalent
+   * to a null pointer.
+   */
+  public UnsafeMapData() {
+    keys = new UnsafeArrayData();
+    values = new UnsafeArrayData();
+  }
+
+  /**
+   * Update this UnsafeMapData to point to different backing data.
+   *
+   * @param baseObject the base object
+   * @param baseOffset the offset within the base object
+   * @param sizeInBytes the size of this map's backing data, in bytes
+   */
+  public void pointTo(Object baseObject, long baseOffset, int sizeInBytes) {
+    // Read the numBytes of key array from the first 4 bytes.
+    final int keyArraySize = Platform.getInt(baseObject, baseOffset);
+    final int valueArraySize = sizeInBytes - keyArraySize - 4;
+    assert keyArraySize >= 0 : "keyArraySize (" + keyArraySize + ") should >= 0";
+    assert valueArraySize >= 0 : "valueArraySize (" + valueArraySize + ") should >= 0";
+
+    keys.pointTo(baseObject, baseOffset + 4, keyArraySize);
+    values.pointTo(baseObject, baseOffset + 4 + keyArraySize, valueArraySize);
+
     assert keys.numElements() == values.numElements();
-    this.sizeInBytes = keys.getSizeInBytes() + values.getSizeInBytes();
-    this.numElements = keys.numElements();
-    this.keys = keys;
-    this.values = values;
+
+    this.baseObject = baseObject;
+    this.baseOffset = baseOffset;
+    this.sizeInBytes = sizeInBytes;
   }
 
   @Override
   public int numElements() {
-    return numElements;
+    return keys.numElements();
   }
 
   @Override
-  public ArrayData keyArray() {
+  public UnsafeArrayData keyArray() {
     return keys;
   }
 
   @Override
-  public ArrayData valueArray() {
+  public UnsafeArrayData valueArray() {
     return values;
+  }
+
+  public void writeToMemory(Object target, long targetOffset) {
+    Platform.copyMemory(baseObject, baseOffset, target, targetOffset, sizeInBytes);
+  }
+
+  public void writeTo(ByteBuffer buffer) {
+    assert(buffer.hasArray());
+    byte[] target = buffer.array();
+    int offset = buffer.arrayOffset();
+    int pos = buffer.position();
+    writeToMemory(target, Platform.BYTE_ARRAY_OFFSET + offset + pos);
+    buffer.position(pos + sizeInBytes);
   }
 
   @Override
   public UnsafeMapData copy() {
-    return new UnsafeMapData(keys.copy(), values.copy());
+    UnsafeMapData mapCopy = new UnsafeMapData();
+    final byte[] mapDataCopy = new byte[sizeInBytes];
+    Platform.copyMemory(
+      baseObject, baseOffset, mapDataCopy, Platform.BYTE_ARRAY_OFFSET, sizeInBytes);
+    mapCopy.pointTo(mapDataCopy, Platform.BYTE_ARRAY_OFFSET, sizeInBytes);
+    return mapCopy;
   }
 }

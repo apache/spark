@@ -30,7 +30,8 @@ import org.scalatest.concurrent.Timeouts
 import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{Logging, SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark._
+import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.storage.StorageLevel
@@ -81,9 +82,9 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
 
   test("from conf with settings") {
     val myConf = SparkContext.updatedConf(new SparkConf(false), master, appName)
-    myConf.set("spark.cleaner.ttl", "10s")
+    myConf.set("spark.dummyTimeConfig", "10s")
     ssc = new StreamingContext(myConf, batchDuration)
-    assert(ssc.conf.getTimeAsSeconds("spark.cleaner.ttl", "-1") === 10)
+    assert(ssc.conf.getTimeAsSeconds("spark.dummyTimeConfig", "-1") === 10)
   }
 
   test("from existing SparkContext") {
@@ -93,26 +94,27 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
 
   test("from existing SparkContext with settings") {
     val myConf = SparkContext.updatedConf(new SparkConf(false), master, appName)
-    myConf.set("spark.cleaner.ttl", "10s")
+    myConf.set("spark.dummyTimeConfig", "10s")
     ssc = new StreamingContext(myConf, batchDuration)
-    assert(ssc.conf.getTimeAsSeconds("spark.cleaner.ttl", "-1") === 10)
+    assert(ssc.conf.getTimeAsSeconds("spark.dummyTimeConfig", "-1") === 10)
   }
 
   test("from checkpoint") {
     val myConf = SparkContext.updatedConf(new SparkConf(false), master, appName)
-    myConf.set("spark.cleaner.ttl", "10s")
+    myConf.set("spark.dummyTimeConfig", "10s")
     val ssc1 = new StreamingContext(myConf, batchDuration)
     addInputStream(ssc1).register()
     ssc1.start()
     val cp = new Checkpoint(ssc1, Time(1000))
     assert(
       Utils.timeStringAsSeconds(cp.sparkConfPairs
-          .toMap.getOrElse("spark.cleaner.ttl", "-1")) === 10)
+          .toMap.getOrElse("spark.dummyTimeConfig", "-1")) === 10)
     ssc1.stop()
     val newCp = Utils.deserialize[Checkpoint](Utils.serialize(cp))
-    assert(newCp.createSparkConf().getTimeAsSeconds("spark.cleaner.ttl", "-1") === 10)
+    assert(
+      newCp.createSparkConf().getTimeAsSeconds("spark.dummyTimeConfig", "-1") === 10)
     ssc = new StreamingContext(null, newCp, null)
-    assert(ssc.conf.getTimeAsSeconds("spark.cleaner.ttl", "-1") === 10)
+    assert(ssc.conf.getTimeAsSeconds("spark.dummyTimeConfig", "-1") === 10)
   }
 
   test("checkPoint from conf") {
@@ -146,7 +148,7 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     }
   }
 
-  test("start with non-seriazable DStream checkpoints") {
+  test("start with non-serializable DStream checkpoints") {
     val checkpointDir = Utils.createTempDir()
     ssc = new StreamingContext(conf, batchDuration)
     ssc.checkpoint(checkpointDir.getAbsolutePath)
@@ -180,6 +182,46 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     assert(ssc.scheduler.isStarted === false)
   }
 
+  test("start should set local properties of streaming jobs correctly") {
+    ssc = new StreamingContext(conf, batchDuration)
+    ssc.sc.setJobGroup("non-streaming", "non-streaming", true)
+    val sc = ssc.sc
+
+    @volatile var jobGroupFound: String = ""
+    @volatile var jobDescFound: String = ""
+    @volatile var jobInterruptFound: String = ""
+    @volatile var customPropFound: String = ""
+    @volatile var allFound: Boolean = false
+
+    addInputStream(ssc).foreachRDD { rdd =>
+      jobGroupFound = sc.getLocalProperty(SparkContext.SPARK_JOB_GROUP_ID)
+      jobDescFound = sc.getLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION)
+      jobInterruptFound = sc.getLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL)
+      customPropFound = sc.getLocalProperty("customPropKey")
+      allFound = true
+    }
+    ssc.sc.setLocalProperty("customPropKey", "value1")
+    ssc.start()
+
+    // Local props set after start should be ignored
+    ssc.sc.setLocalProperty("customPropKey", "value2")
+
+    eventually(timeout(10 seconds), interval(10 milliseconds)) {
+      assert(allFound === true)
+    }
+
+    // Verify streaming jobs have expected thread-local properties
+    assert(jobGroupFound === null)
+    assert(jobDescFound.contains("Streaming job from"))
+    assert(jobInterruptFound === "false")
+    assert(customPropFound === "value1")
+
+    // Verify current thread's thread-local properties have not changed
+    assert(sc.getLocalProperty(SparkContext.SPARK_JOB_GROUP_ID) === "non-streaming")
+    assert(sc.getLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION) === "non-streaming")
+    assert(sc.getLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL) === "true")
+    assert(sc.getLocalProperty("customPropKey") === "value2")
+  }
 
   test("start multiple times") {
     ssc = new StreamingContext(master, appName, batchDuration)
@@ -256,7 +298,7 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
 
   test("stop gracefully") {
     val conf = new SparkConf().setMaster(master).setAppName(appName)
-    conf.set("spark.cleaner.ttl", "3600s")
+    conf.set("spark.dummyTimeConfig", "3600s")
     sc = new SparkContext(conf)
     for (i <- 1 to 4) {
       logInfo("==================================\n\n\n")
@@ -726,16 +768,42 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
   }
 
   test("queueStream doesn't support checkpointing") {
-    val checkpointDir = Utils.createTempDir()
-    ssc = new StreamingContext(master, appName, batchDuration)
-    val rdd = ssc.sparkContext.parallelize(1 to 10)
-    ssc.queueStream[Int](Queue(rdd)).print()
-    ssc.checkpoint(checkpointDir.getAbsolutePath)
-    val e = intercept[NotSerializableException] {
-      ssc.start()
+    val checkpointDirectory = Utils.createTempDir().getAbsolutePath()
+    def creatingFunction(): StreamingContext = {
+      val _ssc = new StreamingContext(conf, batchDuration)
+      val rdd = _ssc.sparkContext.parallelize(1 to 10)
+      _ssc.checkpoint(checkpointDirectory)
+      _ssc.queueStream[Int](Queue(rdd)).register()
+      _ssc
+    }
+    ssc = StreamingContext.getOrCreate(checkpointDirectory, creatingFunction _)
+    ssc.start()
+    eventually(timeout(10000 millis)) {
+      assert(Checkpoint.getCheckpointFiles(checkpointDirectory).size > 1)
+    }
+    ssc.stop()
+    val e = intercept[SparkException] {
+      ssc = StreamingContext.getOrCreate(checkpointDirectory, creatingFunction _)
     }
     // StreamingContext.validate changes the message, so use "contains" here
-    assert(e.getMessage.contains("queueStream doesn't support checkpointing"))
+    assert(e.getCause.getMessage.contains("queueStream doesn't support checkpointing. " +
+      "Please don't use queueStream when checkpointing is enabled."))
+  }
+
+  test("Creating an InputDStream but not using it should not crash") {
+    ssc = new StreamingContext(master, appName, batchDuration)
+    val input1 = addInputStream(ssc)
+    val input2 = addInputStream(ssc)
+    val output = new TestOutputStream(input2)
+    output.register()
+    val batchCount = new BatchCounter(ssc)
+    ssc.start()
+    // Just wait for completing 2 batches to make sure it triggers
+    // `DStream.getMaxInputStreamRememberDuration`
+    batchCount.waitUntilBatchesCompleted(2, 10000)
+    // Throw the exception if crash
+    ssc.awaitTerminationOrTimeout(1)
+    ssc.stop()
   }
 
   def addInputStream(s: StreamingContext): DStream[Int] = {
@@ -837,7 +905,7 @@ object SlowTestReceiver {
 package object testPackage extends Assertions {
   def test() {
     val conf = new SparkConf().setMaster("local").setAppName("CreationSite test")
-    val ssc = new StreamingContext(conf , Milliseconds(100))
+    val ssc = new StreamingContext(conf, Milliseconds(100))
     try {
       val inputStream = ssc.receiverStream(new TestReceiver)
 

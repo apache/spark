@@ -19,11 +19,9 @@ package org.apache.spark.sql.execution.ui
 
 import javax.servlet.http.HttpServletRequest
 
-import scala.xml.{Node, Unparsed}
+import scala.xml.Node
 
-import org.apache.commons.lang3.StringEscapeUtils
-
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 
 private[sql] class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging {
@@ -74,16 +72,14 @@ private[sql] class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") 
                 }}
               </li>
             }}
-            <li>
-              <strong>Detail: </strong><br/>
-              <pre>{executionUIData.physicalPlanDescription}</pre>
-            </li>
           </ul>
         </div>
 
       val metrics = listener.getExecutionMetrics(executionId)
 
-      summary ++ planVisualization(metrics, executionUIData.physicalPlanGraph)
+      summary ++
+        planVisualization(metrics, executionUIData.physicalPlanGraph) ++
+        physicalPlanDescription(executionUIData.physicalPlanDescription)
     }.getOrElse {
       <div>No information to display for Plan {executionId}</div>
     }
@@ -102,8 +98,8 @@ private[sql] class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") 
     // scalastyle:on
   }
 
-  private def planVisualization(metrics: Map[Long, Any], graph: SparkPlanGraph): Seq[Node] = {
-    val metadata = graph.nodes.flatMap { node =>
+  private def planVisualization(metrics: Map[Long, String], graph: SparkPlanGraph): Seq[Node] = {
+    val metadata = graph.allNodes.flatMap { node =>
       val nodeId = s"plan-meta-data-${node.id}"
       <div id={nodeId}>{node.desc}</div>
     }
@@ -114,14 +110,33 @@ private[sql] class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") 
         <div class="dot-file">
           {graph.makeDotFile(metrics)}
         </div>
-        <div id="plan-viz-metadata-size">{graph.nodes.size.toString}</div>
+        <div id="plan-viz-metadata-size">{graph.allNodes.size.toString}</div>
         {metadata}
       </div>
       {planVisualizationResources}
-      <script>$(function(){{ renderPlanViz(); }})</script>
+      <script>$(function() {{ renderPlanViz(); }})</script>
     </div>
   }
 
   private def jobURL(jobId: Long): String =
     "%s/jobs/job?id=%s".format(UIUtils.prependBaseUri(parent.basePath), jobId)
+
+  private def physicalPlanDescription(physicalPlanDescription: String): Seq[Node] = {
+    <div>
+      <span style="cursor: pointer;" onclick="clickPhysicalPlanDetails();">
+        <span id="physical-plan-details-arrow" class="arrow-closed"></span>
+        <a>Details</a>
+      </span>
+    </div>
+    <div id="physical-plan-details" style="display: none;">
+      <pre>{physicalPlanDescription}</pre>
+    </div>
+    <script>
+      function clickPhysicalPlanDetails() {{
+        $('#physical-plan-details').toggle();
+        $('#physical-plan-details-arrow').toggleClass('arrow-open').toggleClass('arrow-closed');
+      }}
+    </script>
+    <br/>
+  }
 }

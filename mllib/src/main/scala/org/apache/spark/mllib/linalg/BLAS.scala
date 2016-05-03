@@ -20,7 +20,7 @@ package org.apache.spark.mllib.linalg
 import com.github.fommil.netlib.{BLAS => NetlibBLAS, F2jBLAS}
 import com.github.fommil.netlib.BLAS.{getInstance => NativeBLAS}
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 
 /**
  * BLAS routines for MLlib's vectors and matrices.
@@ -75,7 +75,7 @@ private[spark] object BLAS extends Serializable with Logging {
     val xValues = x.values
     val xIndices = x.indices
     val yValues = y.values
-    val nnz = xIndices.size
+    val nnz = xIndices.length
 
     if (a == 1.0) {
       var k = 0
@@ -90,6 +90,13 @@ private[spark] object BLAS extends Serializable with Logging {
         k += 1
       }
     }
+  }
+
+  /** Y += a * x */
+  private[spark] def axpy(a: Double, X: DenseMatrix, Y: DenseMatrix): Unit = {
+    require(X.numRows == Y.numRows && X.numCols == Y.numCols, "Dimension mismatch: " +
+      s"size(X) = ${(X.numRows, X.numCols)} but size(Y) = ${(Y.numRows, Y.numCols)}.")
+    f2jBLAS.daxpy(X.numRows * X.numCols, a, X.values, 1, Y.values, 1)
   }
 
   /**
@@ -128,7 +135,7 @@ private[spark] object BLAS extends Serializable with Logging {
     val xValues = x.values
     val xIndices = x.indices
     val yValues = y.values
-    val nnz = xIndices.size
+    val nnz = xIndices.length
 
     var sum = 0.0
     var k = 0
@@ -147,8 +154,8 @@ private[spark] object BLAS extends Serializable with Logging {
     val xIndices = x.indices
     val yValues = y.values
     val yIndices = y.indices
-    val nnzx = xIndices.size
-    val nnzy = yIndices.size
+    val nnzx = xIndices.length
+    val nnzy = yIndices.length
 
     var kx = 0
     var ky = 0
@@ -181,7 +188,7 @@ private[spark] object BLAS extends Serializable with Logging {
             val sxIndices = sx.indices
             val sxValues = sx.values
             val dyValues = dy.values
-            val nnz = sxIndices.size
+            val nnz = sxIndices.length
 
             var i = 0
             var k = 0
@@ -227,6 +234,49 @@ private[spark] object BLAS extends Serializable with Logging {
       _nativeBLAS = NativeBLAS
     }
     _nativeBLAS
+  }
+
+  /**
+   * Adds alpha * v * v.t to a matrix in-place. This is the same as BLAS's ?SPR.
+   *
+   * @param U the upper triangular part of the matrix in a [[DenseVector]](column major)
+   */
+  def spr(alpha: Double, v: Vector, U: DenseVector): Unit = {
+    spr(alpha, v, U.values)
+  }
+
+  /**
+   * Adds alpha * v * v.t to a matrix in-place. This is the same as BLAS's ?SPR.
+   *
+   * @param U the upper triangular part of the matrix packed in an array (column major)
+   */
+  def spr(alpha: Double, v: Vector, U: Array[Double]): Unit = {
+    val n = v.size
+    v match {
+      case DenseVector(values) =>
+        NativeBLAS.dspr("U", n, alpha, values, 1, U)
+      case SparseVector(size, indices, values) =>
+        val nnz = indices.length
+        var colStartIdx = 0
+        var prevCol = 0
+        var col = 0
+        var j = 0
+        var i = 0
+        var av = 0.0
+        while (j < nnz) {
+          col = indices(j)
+          // Skip empty columns.
+          colStartIdx += (col - prevCol) * (col + prevCol + 1) / 2
+          av = alpha * values(j)
+          i = 0
+          while (i <= j) {
+            U(colStartIdx + indices(i)) += av * values(i)
+            i += 1
+          }
+          j += 1
+          prevCol = col
+        }
+    }
   }
 
   /**
@@ -305,6 +355,8 @@ private[spark] object BLAS extends Serializable with Logging {
       "The matrix C cannot be the product of a transpose() call. C.isTransposed must be false.")
     if (alpha == 0.0 && beta == 1.0) {
       logDebug("gemm: alpha is equal to 0 and beta is equal to 1. Returning C.")
+    } else if (alpha == 0.0) {
+      f2jBLAS.dscal(C.values.length, beta, C.values, 1)
     } else {
       A match {
         case sparse: SparseMatrix => gemm(alpha, sparse, B, beta, C)
@@ -367,7 +419,7 @@ private[spark] object BLAS extends Serializable with Logging {
     val AcolPtrs = A.colPtrs
 
     // Slicing is easy in this case. This is the optimal multiplication setting for sparse matrices
-    if (A.isTransposed){
+    if (A.isTransposed) {
       var colCounterForB = 0
       if (!B.isTransposed) { // Expensive to put the check inside the loop
         while (colCounterForB < nB) {
@@ -408,8 +460,8 @@ private[spark] object BLAS extends Serializable with Logging {
         }
       }
     } else {
-      // Scale matrix first if `beta` is not equal to 0.0
-      if (beta != 0.0) {
+      // Scale matrix first if `beta` is not equal to 1.0
+      if (beta != 1.0) {
         f2jBLAS.dscal(C.values.length, beta, C.values, 1)
       }
       // Perform matrix multiplication and add to C. The rows of A are multiplied by the columns of
@@ -470,8 +522,10 @@ private[spark] object BLAS extends Serializable with Logging {
       s"The columns of A don't match the number of elements of x. A: ${A.numCols}, x: ${x.size}")
     require(A.numRows == y.size,
       s"The rows of A don't match the number of elements of y. A: ${A.numRows}, y:${y.size}")
-    if (alpha == 0.0) {
-      logDebug("gemv: alpha is equal to 0. Returning y.")
+    if (alpha == 0.0 && beta == 1.0) {
+      logDebug("gemv: alpha is equal to 0 and beta is equal to 1. Returning y.")
+    } else if (alpha == 0.0) {
+      scal(beta, y)
     } else {
       (A, x) match {
         case (smA: SparseMatrix, dvx: DenseVector) =>
@@ -526,11 +580,6 @@ private[spark] object BLAS extends Serializable with Logging {
     val xValues = x.values
     val yValues = y.values
 
-    if (alpha == 0.0) {
-      scal(beta, y)
-      return
-    }
-
     if (A.isTransposed) {
       var rowCounterForA = 0
       while (rowCounterForA < mA) {
@@ -581,11 +630,6 @@ private[spark] object BLAS extends Serializable with Logging {
     val Arows = if (!A.isTransposed) A.rowIndices else A.colPtrs
     val Acols = if (!A.isTransposed) A.colPtrs else A.rowIndices
 
-    if (alpha == 0.0) {
-      scal(beta, y)
-      return
-    }
-
     if (A.isTransposed) {
       var rowCounter = 0
       while (rowCounter < mA) {
@@ -604,7 +648,7 @@ private[spark] object BLAS extends Serializable with Logging {
         rowCounter += 1
       }
     } else {
-      scal(beta, y)
+      if (beta != 1.0) scal(beta, y)
 
       var colCounterForA = 0
       var k = 0
@@ -659,7 +703,7 @@ private[spark] object BLAS extends Serializable with Logging {
         rowCounter += 1
       }
     } else {
-      scal(beta, y)
+      if (beta != 1.0) scal(beta, y)
       // Perform matrix-vector multiplication and add to y
       var colCounterForA = 0
       while (colCounterForA < nA) {

@@ -17,26 +17,26 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.param.{BooleanParam, ParamMap, StringArrayParam}
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
-import org.apache.spark.ml.util.Identifiable
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.ml.util._
+import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions.{col, udf}
-import org.apache.spark.sql.types.{ArrayType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, StringType, StructType}
 
 /**
  * stop words list
  */
-private object StopWords {
+private[spark] object StopWords {
 
   /**
    * Use the same default stopwords list as scikit-learn.
    * The original list can be found from "Glasgow Information Retrieval Group"
    * [[http://ir.dcs.gla.ac.uk/resources/linguistic_utils/stop_words]]
    */
-  val EnglishStopWords = Array( "a", "about", "above", "across", "after", "afterwards", "again",
+  val English = Array( "a", "about", "above", "across", "after", "afterwards", "again",
     "against", "all", "almost", "alone", "along", "already", "also", "although", "always",
     "am", "among", "amongst", "amoungst", "amount", "an", "and", "another",
     "any", "anyhow", "anyone", "anything", "anyway", "anywhere", "are",
@@ -86,7 +86,7 @@ private object StopWords {
  */
 @Experimental
 class StopWordsRemover(override val uid: String)
-  extends Transformer with HasInputCol with HasOutputCol {
+  extends Transformer with HasInputCol with HasOutputCol with DefaultParamsWritable {
 
   def this() = this(Identifiable.randomUID("stopWords"))
 
@@ -98,6 +98,7 @@ class StopWordsRemover(override val uid: String)
 
   /**
    * the stop words set to be filtered out
+   * Default: [[StopWords.English]]
    * @group param
    */
   val stopWords: StringArrayParam = new StringArrayParam(this, "stopWords", "stop words")
@@ -110,6 +111,7 @@ class StopWordsRemover(override val uid: String)
 
   /**
    * whether to do a case sensitive comparison over the stop words
+   * Default: false
    * @group param
    */
   val caseSensitive: BooleanParam = new BooleanParam(this, "caseSensitive",
@@ -121,9 +123,10 @@ class StopWordsRemover(override val uid: String)
   /** @group getParam */
   def getCaseSensitive: Boolean = $(caseSensitive)
 
-  setDefault(stopWords -> StopWords.EnglishStopWords, caseSensitive -> false)
+  setDefault(stopWords -> StopWords.English, caseSensitive -> false)
 
-  override def transform(dataset: DataFrame): DataFrame = {
+  @Since("2.0.0")
+  override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema)
     val t = if ($(caseSensitive)) {
         val stopWordsSet = $(stopWords).toSet
@@ -146,10 +149,15 @@ class StopWordsRemover(override val uid: String)
     val inputType = schema($(inputCol)).dataType
     require(inputType.sameType(ArrayType(StringType)),
       s"Input type must be ArrayType(StringType) but got $inputType.")
-    val outputFields = schema.fields :+
-      StructField($(outputCol), inputType, schema($(inputCol)).nullable)
-    StructType(outputFields)
+    SchemaUtils.appendColumn(schema, $(outputCol), inputType, schema($(inputCol)).nullable)
   }
 
   override def copy(extra: ParamMap): StopWordsRemover = defaultCopy(extra)
+}
+
+@Since("1.6.0")
+object StopWordsRemover extends DefaultParamsReadable[StopWordsRemover] {
+
+  @Since("1.6.0")
+  override def load(path: String): StopWordsRemover = super.load(path)
 }

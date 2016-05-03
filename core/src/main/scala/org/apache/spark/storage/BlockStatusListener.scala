@@ -26,8 +26,7 @@ private[spark] case class BlockUIData(
     location: String,
     storageLevel: StorageLevel,
     memSize: Long,
-    diskSize: Long,
-    externalBlockStoreSize: Long)
+    diskSize: Long)
 
 /**
  * The aggregated status of stream blocks in an executor
@@ -40,8 +39,6 @@ private[spark] case class ExecutorStreamBlockStatus(
   def totalMemSize: Long = blocks.map(_.memSize).sum
 
   def totalDiskSize: Long = blocks.map(_.diskSize).sum
-
-  def totalExternalBlockStoreSize: Long = blocks.map(_.externalBlockStoreSize).sum
 
   def numStreamBlocks: Int = blocks.size
 
@@ -62,7 +59,6 @@ private[spark] class BlockStatusListener extends SparkListener {
     val storageLevel = blockUpdated.blockUpdatedInfo.storageLevel
     val memSize = blockUpdated.blockUpdatedInfo.memSize
     val diskSize = blockUpdated.blockUpdatedInfo.diskSize
-    val externalBlockStoreSize = blockUpdated.blockUpdatedInfo.externalBlockStoreSize
 
     synchronized {
       // Drop the update info if the block manager is not registered
@@ -74,8 +70,7 @@ private[spark] class BlockStatusListener extends SparkListener {
               blockManagerId.hostPort,
               storageLevel,
               memSize,
-              diskSize,
-              externalBlockStoreSize)
+              diskSize)
           )
         } else {
           // If isValid is not true, it means we should drop the block.
