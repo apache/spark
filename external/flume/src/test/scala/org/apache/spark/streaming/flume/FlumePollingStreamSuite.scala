@@ -41,9 +41,10 @@ class FlumePollingStreamSuite extends SparkFunSuite with BeforeAndAfter with Log
   val batchDuration = Seconds(1)
 
   val conf = new SparkConf()
-    .setMaster("local[2]")
+    .setMaster("local[4]")
     .setAppName(this.getClass.getSimpleName)
     .set("spark.streaming.clock", "org.apache.spark.util.ManualClock")
+    .set("spark.driver.allowMultipleContexts", "true")
 
   val utils = new PollingFlumeTestUtils
 
@@ -123,7 +124,7 @@ class FlumePollingStreamSuite extends SparkFunSuite with BeforeAndAfter with Log
         utils.assertOutput(headers.asJava, bodies.asJava)
       }
     } finally {
-      ssc.stop()
+      ssc.stop(false)
     }
   }
 
