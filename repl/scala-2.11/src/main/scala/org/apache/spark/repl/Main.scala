@@ -94,10 +94,10 @@ object Main extends Logging {
 
   def createSparkSession(): SparkSession = {
     if (SparkSession.hiveClassesArePresent) {
-      sparkSession = SparkSession.withHiveSupport(sparkContext)
+      sparkSession = SparkSession.builder.enableHiveSupport().getOrCreate()
       logInfo("Created Spark session with Hive support")
     } else {
-      sparkSession = new SparkSession(sparkContext)
+      sparkSession = SparkSession.builder.getOrCreate()
       logInfo("Created Spark session")
     }
     sparkSession

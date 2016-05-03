@@ -841,7 +841,7 @@ private[spark] object JsonProtocol {
         val accumUpdates = Utils.jsonOption(json \ "Accumulator Updates")
           .map(_.extract[List[JValue]].map(accumulableInfoFromJson))
           .getOrElse(taskMetricsFromJson(json \ "Metrics").accumulators().map(acc => {
-            acc.toInfo(Some(acc.localValue), None)
+            acc.toInfo(Some(acc.value), None)
           }))
         ExceptionFailure(className, description, stackTrace, fullStackTrace, None, accumUpdates)
       case `taskResultLost` => TaskResultLost

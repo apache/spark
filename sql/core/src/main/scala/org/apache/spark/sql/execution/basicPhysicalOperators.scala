@@ -492,18 +492,6 @@ case class CoalesceExec(numPartitions: Int, child: SparkPlan) extends UnaryExecN
 }
 
 /**
- * Physical plan for returning a table with the elements from left that are not in right using
- * the built-in spark subtract function.
- */
-case class ExceptExec(left: SparkPlan, right: SparkPlan) extends BinaryExecNode {
-  override def output: Seq[Attribute] = left.output
-
-  protected override def doExecute(): RDD[InternalRow] = {
-    left.execute().map(_.copy()).subtract(right.execute().map(_.copy()))
-  }
-}
-
-/**
  * A plan node that does nothing but lie about the output of its child.  Used to spice a
  * (hopefully structurally equivalent) tree from a different optimization sequence into an already
  * resolved tree.

@@ -31,9 +31,9 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{QueryTest, Row, SQLContext}
+import org.apache.spark.sql.{QueryTest, Row, SparkSession, SQLContext}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.CatalogFunction
-import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.hive.test.{TestHive, TestHiveContext}
 import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
@@ -202,6 +202,19 @@ class HiveSparkSubmitSuite
     runSparkSubmit(args)
   }
 
+  test("set spark.sql.warehouse.dir") {
+    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+    val args = Seq(
+      "--class", SetWarehouseLocationTest.getClass.getName.stripSuffix("$"),
+      "--name", "SetWarehouseLocationTest",
+      "--master", "local-cluster[2,1,1024]",
+      "--conf", "spark.ui.enabled=false",
+      "--conf", "spark.master.rest.enabled=false",
+      "--driver-java-options", "-Dderby.system.durability=test",
+      unusedJar.toString)
+    runSparkSubmit(args)
+  }
+
   // NOTE: This is an expensive operation in terms of time (10 seconds+). Use sparingly.
   // This is copied from org.apache.spark.deploy.SparkSubmitSuite
   private def runSparkSubmit(args: Seq[String]): Unit = {
@@ -258,6 +271,62 @@ class HiveSparkSubmitSuite
     } finally {
       // Ensure we still kill the process in case it timed out
       process.destroy()
+    }
+  }
+}
+
+object SetWarehouseLocationTest extends Logging {
+  def main(args: Array[String]): Unit = {
+    Utils.configTestLog4j("INFO")
+    val warehouseLocation = Utils.createTempDir()
+    warehouseLocation.delete()
+    val hiveWarehouseLocation = Utils.createTempDir()
+    hiveWarehouseLocation.delete()
+
+    val conf = new SparkConf()
+    conf.set("spark.ui.enabled", "false")
+    // We will use the value of spark.sql.warehouse.dir override the
+    // value of hive.metastore.warehouse.dir.
+    conf.set("spark.sql.warehouse.dir", warehouseLocation.toString)
+    conf.set("hive.metastore.warehouse.dir", hiveWarehouseLocation.toString)
+
+    val sc = new SparkContext(conf)
+    val sparkSession = SparkSession.withHiveSupport(sc)
+    val catalog = sparkSession.sessionState.catalog
+
+    sparkSession.sql("drop table if exists testLocation")
+    sparkSession.sql("drop database if exists testLocationDB cascade")
+
+    {
+      sparkSession.sql("create table testLocation (a int)")
+      val tableMetadata =
+        catalog.getTableMetadata(TableIdentifier("testLocation", Some("default")))
+      val expectedLocation =
+        "file:" + warehouseLocation.toString + "/testlocation"
+      val actualLocation = tableMetadata.storage.locationUri.get
+      if (actualLocation != expectedLocation) {
+        throw new Exception(
+          s"Expected table location is $expectedLocation. But, it is actually $actualLocation")
+      }
+      sparkSession.sql("drop table testLocation")
+    }
+
+    {
+      sparkSession.sql("create database testLocationDB")
+      sparkSession.sql("use testLocationDB")
+      sparkSession.sql("create table testLocation (a int)")
+      val tableMetadata =
+        catalog.getTableMetadata(TableIdentifier("testLocation", Some("testLocationDB")))
+      val expectedLocation =
+        "file:" + warehouseLocation.toString + "/testlocationdb.db/testlocation"
+      val actualLocation = tableMetadata.storage.locationUri.get
+      if (actualLocation != expectedLocation) {
+        throw new Exception(
+          s"Expected table location is $expectedLocation. But, it is actually $actualLocation")
+      }
+      sparkSession.sql("drop table testLocation")
+      sparkSession.sql("use default")
+      sparkSession.sql("drop database testLocationDB")
     }
   }
 }

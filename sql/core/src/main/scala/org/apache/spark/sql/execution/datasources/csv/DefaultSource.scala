@@ -68,7 +68,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
 
     val parsedRdd = tokenRdd(sparkSession, csvOptions, header, paths)
     val schema = if (csvOptions.inferSchemaFlag) {
-      CSVInferSchema.infer(parsedRdd, header, csvOptions.nullValue)
+      CSVInferSchema.infer(parsedRdd, header, csvOptions)
     } else {
       // By default fields are assumed to be StringType
       val schemaFields = header.map { fieldName =>

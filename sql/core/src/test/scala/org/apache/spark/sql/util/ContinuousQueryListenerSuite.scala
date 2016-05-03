@@ -19,8 +19,6 @@ package org.apache.spark.sql.util
 
 import java.util.concurrent.ConcurrentLinkedQueue
 
-import scala.util.control.NonFatal
-
 import org.scalatest.BeforeAndAfter
 import org.scalatest.PrivateMethodTester._
 import org.scalatest.concurrent.AsyncAssertions.Waiter
@@ -164,8 +162,8 @@ class ContinuousQueryListenerSuite extends StreamTest with SharedSQLContext with
   }
 
   class QueryStatusCollector extends ContinuousQueryListener {
-
-    private val asyncTestWaiter = new Waiter  // to catch errors in the async listener events
+    // to catch errors in the async listener events
+    @volatile private var asyncTestWaiter = new Waiter
 
     @volatile var startStatus: QueryStatus = null
     @volatile var terminationStatus: QueryStatus = null
@@ -175,11 +173,7 @@ class ContinuousQueryListenerSuite extends StreamTest with SharedSQLContext with
       startStatus = null
       terminationStatus = null
       progressStatuses.clear()
-
-      // To reset the waiter
-      try asyncTestWaiter.await(timeout(1 milliseconds)) catch {
-        case NonFatal(e) =>
-      }
+      asyncTestWaiter = new Waiter
     }
 
     def checkAsyncErrors(): Unit = {
