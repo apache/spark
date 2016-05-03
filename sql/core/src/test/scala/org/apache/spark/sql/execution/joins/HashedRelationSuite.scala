@@ -78,16 +78,6 @@ class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
     // This depends on that the order of items in BytesToBytesMap.iterator() is exactly the same
     // as they are inserted
     assert(java.util.Arrays.equals(os2.toByteArray, os.toByteArray))
-
-    // Spark-14521
-    val ser = new KryoSerializer((new SparkConf)
-      .set("spark.kryo.referenceTracking", "false")).newInstance()
-    val hashed3 = ser.deserialize[UnsafeHashedRelation](ser.serialize(hashed))
-    val os3 = new ByteArrayOutputStream()
-    val out3 = new ObjectOutputStream(os3)
-    hashed3.writeExternal(out3)
-    out3.flush()
-    assert(java.util.Arrays.equals(os.toByteArray, os3.toByteArray))
   }
 
   test("test serialization empty hash map") {
@@ -160,19 +150,40 @@ class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
       assert(rows(1).getInt(0) === i)
       assert(rows(1).getInt(1) === i + 1)
     }
+  }
 
-    // Spark-14521
+  test("Spark-14521") {
+    // Testing Kryo serialization of HashedRelation
+    val unsafeProj = UnsafeProjection.create(
+      Seq(BoundReference(0, IntegerType, false), BoundReference(1, IntegerType, true)))
+    val rows = (0 until 100).map(i => unsafeProj(InternalRow(i, i + 1)).copy())
+    val key = Seq(BoundReference(0, IntegerType, false))
+    val longRelation = LongHashedRelation(rows.iterator ++ rows.iterator, key, 100, mm)
+
     val ser = new KryoSerializer(
       (new SparkConf).set("spark.kryo.referenceTracking", "false")).newInstance()
-    val longRelation3 = ser.deserialize[LongHashedRelation](ser.serialize(longRelation2))
+    val longRelation2 = ser.deserialize[LongHashedRelation](ser.serialize(longRelation))
     (0 until 100).foreach { i =>
-      val rows = longRelation3.get(i).toArray
+      val rows = longRelation2.get(i).toArray
       assert(rows.length === 2)
       assert(rows(0).getInt(0) === i)
       assert(rows(0).getInt(1) === i + 1)
       assert(rows(1).getInt(0) === i)
       assert(rows(1).getInt(1) === i + 1)
     }
+
+    // Testing Kryo serialization of UnsafeHashedRelation
+    val unsafeHashed = UnsafeHashedRelation(rows.iterator, key, 1, mm)
+    val os = new ByteArrayOutputStream()
+    val out = new ObjectOutputStream(os)
+    unsafeHashed.asInstanceOf[UnsafeHashedRelation].writeExternal(out)
+    out.flush()
+    val hashed3 = ser.deserialize[UnsafeHashedRelation](ser.serialize(unsafeHashed))
+    val os3 = new ByteArrayOutputStream()
+    val out3 = new ObjectOutputStream(os3)
+    hashed3.writeExternal(out3)
+    out3.flush()
+    assert(java.util.Arrays.equals(os.toByteArray, os3.toByteArray))
   }
 
   // This test require 4G heap to run, should run it manually
