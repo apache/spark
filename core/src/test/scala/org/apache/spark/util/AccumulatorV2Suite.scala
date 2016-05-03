@@ -17,9 +17,9 @@
 
 package org.apache.spark.util
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark._
 
-class AccumulatorV2Suite extends SparkFunSuite {
+class AccumulatorV2Suite extends SparkFunSuite with LocalSparkContext {
 
   test("LongAccumulator add/avg/sum/count/isZero") {
     val acc = new LongAccumulator
@@ -85,5 +85,49 @@ class AccumulatorV2Suite extends SparkFunSuite {
     assert(acc.count == 4)
     assert(acc.sum == 5.0)
     assert(acc.avg == 1.25)
+  }
+
+  test("ListAccumulator isZero/add/merge/setValue") {
+    val maxI = 1000
+    for (nThreads <- List(1, 10)) {
+      // test single & multi-threaded
+      sc = new SparkContext("local[" + nThreads + "]", "test")
+      val acc = sc.listAccumulator[Double]
+      assert(acc.isZero)
+
+      val d = sc.parallelize((1 to maxI) ++ (1 to maxI)).map(_.toDouble)
+      d.foreach { x => acc.add(x) }
+
+      assert(acc.value.size() === 2*maxI)
+      for (i <- 1 to maxI) {
+        assert(acc.value.contains(i.toDouble))
+      }
+      resetSparkContext()
+    }
+  }
+
+  test("LegacyAccumulatorWrapper") {
+    val acc = new LegacyAccumulatorWrapper("default", AccumulatorParam.StringAccumulatorParam)
+    assert(acc.value === "default")
+    assert(!acc.isZero)
+
+    acc.add("foo")
+    assert(acc.value === "foo")
+    assert(!acc.isZero)
+
+    // test using non-specialized add function
+    acc.add(new java.lang.String("bar"))
+    val acc2 = acc.copyAndReset()
+    assert(acc2.value === "")
+    assert(acc2.isZero)
+
+    assert(acc.value === "bar")
+    assert(!acc.isZero)
+
+    // Test merging
+    acc2.add("baz")
+    acc.merge(acc2)
+    assert(acc.value === "baz")
+    assert(!acc.isZero)
   }
 }
