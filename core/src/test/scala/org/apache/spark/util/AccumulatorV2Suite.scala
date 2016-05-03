@@ -17,7 +17,7 @@
 
 package org.apache.spark.util
 
-import org.apache.spark.{DoubleAccumulator, LongAccumulator, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
 
 class AccumulatorV2Suite extends SparkFunSuite {
 

@@ -30,6 +30,8 @@ import org.apache.spark.sql.execution.{SparkPlanInfo, SQLExecution}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.ui.SparkUI
+import org.apache.spark.util.{AccumulatorMetadata, LongAccumulator}
+
 
 class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
   import testImplicits._
