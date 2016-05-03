@@ -19,7 +19,7 @@ package org.apache.spark.util
 
 import org.apache.spark._
 
-class AccumulatorV2Suite extends SparkFunSuite with LocalSparkContext {
+class AccumulatorV2Suite extends SparkFunSuite {
 
   test("LongAccumulator add/avg/sum/count/isZero") {
     val acc = new LongAccumulator
