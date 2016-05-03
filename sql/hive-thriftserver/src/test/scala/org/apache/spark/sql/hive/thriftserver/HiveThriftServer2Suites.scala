@@ -563,34 +563,6 @@ class HiveThriftHttpServerSuite extends HiveThriftJdbcTest {
       "Operation log root directory is created: " + operationLogPath.getAbsoluteFile
     assert(Source.fromFile(logPath).getLines().exists(_.contains(expectedLine)))
   }
-
-  test("JDBC query execution") {
-    withJdbcStatement { statement =>
-      val queries = Seq(
-        "SET spark.sql.shuffle.partitions=3",
-        "DROP TABLE IF EXISTS test",
-        "CREATE TABLE test(key INT, val STRING)",
-        s"LOAD DATA LOCAL INPATH '${TestData.smallKv}' OVERWRITE INTO TABLE test",
-        "CACHE TABLE test")
-
-      queries.foreach(statement.execute)
-
-      assertResult(5, "Row count mismatch") {
-        val resultSet = statement.executeQuery("SELECT COUNT(*) FROM test")
-        resultSet.next()
-        resultSet.getInt(1)
-      }
-    }
-  }
-
-  test("Checks Hive version") {
-    withJdbcStatement { statement =>
-      val resultSet = statement.executeQuery("SET spark.sql.hive.version")
-      resultSet.next()
-      assert(resultSet.getString(1) === "spark.sql.hive.version")
-      assert(resultSet.getString(2) === HiveUtils.hiveExecutionVersion)
-    }
-  }
 }
 
 class SingleSessionSuite extends HiveThriftJdbcTest {
