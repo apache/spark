@@ -180,27 +180,23 @@ class DataFrameReader(object):
         :param path: string represents path to the JSON dataset,
                      or RDD of Strings storing JSON objects.
         :param schema: an optional :class:`StructType` for the input schema.
-        :param primitivesAsString: infers all primitive values as a string type. If None is set, \
+        :param primitivesAsString: infers all primitive values as a string type. If None is set,
                                    it uses the default value, ``false``.
-        :param prefersDecimal: infers all floating-point values as a decimal type. If the values \
-                               do not fit in decimal, then it infers them as doubles. If None is \
+        :param prefersDecimal: infers all floating-point values as a decimal type. If the values
+                               do not fit in decimal, then it infers them as doubles. If None is
                                set, it uses the default value, ``false``.
-        :param allowComments: ignores Java/C++ style comment in JSON records. If None is set, \
+        :param allowComments: ignores Java/C++ style comment in JSON records. If None is set,
                               it uses the default value, ``false``.
-        :param allowUnquotedFieldNames: allows unquoted JSON field names. If None is set, \
+        :param allowUnquotedFieldNames: allows unquoted JSON field names. If None is set,
                                         it uses the default value, ``false``.
-        :param allowSingleQuotes: allows single quotes in addition to double quotes. If None is \
+        :param allowSingleQuotes: allows single quotes in addition to double quotes. If None is
                                         set, it uses the default value, ``true``.
-        :param allowNumericLeadingZero: allows leading zeros in numbers (e.g. 00012). If None is \
+        :param allowNumericLeadingZero: allows leading zeros in numbers (e.g. 00012). If None is
                                         set, it uses the default value, ``false``.
-        :param allowBackslashEscapingAnyCharacter: allows accepting quoting of all character \
-                                                   using backslash quoting mechanism. If None is \
+        :param allowBackslashEscapingAnyCharacter: allows accepting quoting of all character
+                                                   using backslash quoting mechanism. If None is
                                                    set, it uses the default value, ``false``.
-        :param columnNameOfCorruptRecord: allows renaming the new field having malformed string \
-                                          created by ``PERMISSIVE`` mode. This overrides \
-                                          ``spark.sql.columnNameOfCorruptRecord``. If None is set, \
-                                          it uses the default value ``_corrupt_record``.
-        :param mode: allows a mode for dealing with corrupt records during parsing. If None is \
+        :param mode: allows a mode for dealing with corrupt records during parsing. If None is
                      set, it uses the default value, ``PERMISSIVE``.
 
                 *  ``PERMISSIVE`` : sets other fields to ``null`` when it meets a corrupted \
@@ -209,6 +205,11 @@ class DataFrameReader(object):
                  ``null`` for extra fields.
                 *  ``DROPMALFORMED`` : ignores the whole corrupted records.
                 *  ``FAILFAST`` : throws an exception when it meets corrupted records.
+
+        :param columnNameOfCorruptRecord: allows renaming the new field having malformed string
+                                          created by ``PERMISSIVE`` mode. This overrides
+                                          ``spark.sql.columnNameOfCorruptRecord``. If None is set,
+                                          it uses the default value ``_corrupt_record``.
 
         >>> df1 = sqlContext.read.json('python/test_support/sql/people.json')
         >>> df1.dtypes
@@ -310,47 +311,47 @@ class DataFrameReader(object):
 
         :param path: string, or list of strings, for input path(s).
         :param schema: an optional :class:`StructType` for the input schema.
-        :param sep: sets the single character as a separator for each field and value. \
+        :param sep: sets the single character as a separator for each field and value.
                     If None is set, it uses the default value, ``,``.
-        :param encoding: decodes the CSV files by the given encoding type. If None is set, \
+        :param encoding: decodes the CSV files by the given encoding type. If None is set,
                          it uses the default value, ``UTF-8``.
-        :param quote: sets the single character used for escaping quoted values where the \
-                      separator can be part of the value. If None is set, it uses the default \
+        :param quote: sets the single character used for escaping quoted values where the
+                      separator can be part of the value. If None is set, it uses the default
                       value, ``"``.
-        :param escape: sets the single character used for escaping quotes inside an already \
+        :param escape: sets the single character used for escaping quotes inside an already
                        quoted value. If None is set, it uses the default value, ``\``.
-        :param comment: sets the single character used for skipping lines beginning with this \
+        :param comment: sets the single character used for skipping lines beginning with this
                         character. By default (None), it is disabled.
-        :param header: uses the first line as names of columns. If None is set, it uses the \
+        :param header: uses the first line as names of columns. If None is set, it uses the
                        default value, ``false``.
-        :param ignoreLeadingWhiteSpace: defines whether or not leading whitespaces from values \
-                                        being read should be skipped. If None is set, it uses \
+        :param ignoreLeadingWhiteSpace: defines whether or not leading whitespaces from values
+                                        being read should be skipped. If None is set, it uses
                                         the default value, ``false``.
-        :param ignoreTrailingWhiteSpace: defines whether or not trailing whitespaces from values \
-                                         being read should be skipped. If None is set, it uses \
+        :param ignoreTrailingWhiteSpace: defines whether or not trailing whitespaces from values
+                                         being read should be skipped. If None is set, it uses
                                          the default value, ``false``.
-        :param nullValue: sets the string representation of a null value. If None is set, it uses \
+        :param nullValue: sets the string representation of a null value. If None is set, it uses
                           the default value, empty string.
-        :param nanValue: sets the string representation of a non-number value. If None is set, it \
+        :param nanValue: sets the string representation of a non-number value. If None is set, it
                          uses the default value, ``NaN``.
-        :param positiveInf: sets the string representation of a positive infinity value. If None \
+        :param positiveInf: sets the string representation of a positive infinity value. If None
                             is set, it uses the default value, ``Inf``.
-        :param negativeInf: sets the string representation of a negative infinity value. If None \
+        :param negativeInf: sets the string representation of a negative infinity value. If None
                             is set, it uses the default value, ``Inf``.
-        :param dateFormat: sets the string that indicates a date format. Custom date formats \
-                           follow the formats at ``java.text.SimpleDateFormat``. This \
-                           applies to both date type and timestamp type. By default, it is None \
-                           which means trying to parse times and date by \
+        :param dateFormat: sets the string that indicates a date format. Custom date formats
+                           follow the formats at ``java.text.SimpleDateFormat``. This
+                           applies to both date type and timestamp type. By default, it is None
+                           which means trying to parse times and date by
                            ``java.sql.Timestamp.valueOf()`` and ``java.sql.Date.valueOf()``.
-        :param maxColumns: defines a hard limit of how many columns a record can have. If None is \
+        :param maxColumns: defines a hard limit of how many columns a record can have. If None is
                            set, it uses the default value, ``20480``.
-        :param maxCharsPerColumn: defines the maximum number of characters allowed for any given \
-                                  value being read. If None is set, it uses the default value, \
+        :param maxCharsPerColumn: defines the maximum number of characters allowed for any given
+                                  value being read. If None is set, it uses the default value,
                                   ``1000000``.
-        :param mode: allows a mode for dealing with corrupt records during parsing. If None is \
+        :param mode: allows a mode for dealing with corrupt records during parsing. If None is
                      set, it uses the default value, ``PERMISSIVE``.
 
-                * ``PERMISSIVE`` : sets other fields to ``null`` when it meets a corrupted record. \
+                * ``PERMISSIVE`` : sets other fields to ``null`` when it meets a corrupted record.
                     When a schema is set by user, it sets ``null`` for extra fields.
                 * ``DROPMALFORMED`` : ignores the whole corrupted records.
                 * ``FAILFAST`` : throws an exception when it meets corrupted records.
@@ -702,8 +703,8 @@ class DataFrameWriter(object):
             * ``overwrite``: Overwrite existing data.
             * ``ignore``: Silently ignore this operation if data already exists.
             * ``error`` (default case): Throw an exception if data already exists.
-        :param compression: compression codec to use when saving to file. This can be one of the \
-                            known case-insensitive shorten names (none, bzip2, gzip, lz4, \
+        :param compression: compression codec to use when saving to file. This can be one of the
+                            known case-insensitive shorten names (none, bzip2, gzip, lz4,
                             snappy and deflate).
 
         >>> df.write.json(os.path.join(tempfile.mkdtemp(), 'data'))
@@ -739,12 +740,12 @@ class DataFrameWriter(object):
         self._jwrite.parquet(path)
 
     @since(1.6)
-    def text(self, path, compression=None):
+    def text(self, paths, compression=None):
         """Saves the content of the DataFrame in a text file at the specified path.
 
-        :param path: the path in any Hadoop supported file system
-        :param compression: compression codec to use when saving to file. This can be one of the \
-                            known case-insensitive shorten names (none, bzip2, gzip, lz4, \
+        :param paths: the path in any Hadoop supported file system
+        :param compression: compression codec to use when saving to file. This can be one of the
+                            known case-insensitive shorten names (none, bzip2, gzip, lz4,
                             snappy and deflate).
 
         The DataFrame must have only one column that is of string type.
@@ -752,7 +753,7 @@ class DataFrameWriter(object):
         """
         if compression is not None:
             self.option("compression", compression)
-        self._jwrite.text(path)
+        self._jwrite.text(paths)
 
     @since(2.0)
     def csv(self, path, mode=None, compression=None, sep=None, quote=None, escape=None,
@@ -767,19 +768,19 @@ class DataFrameWriter(object):
             * ``ignore``: Silently ignore this operation if data already exists.
             * ``error`` (default case): Throw an exception if data already exists.
 
-        :param compression: compression codec to use when saving to file. This can be one of the \
-                            known case-insensitive shorten names (none, bzip2, gzip, lz4, \
+        :param compression: compression codec to use when saving to file. This can be one of the
+                            known case-insensitive shorten names (none, bzip2, gzip, lz4,
                             snappy and deflate).
-        :param sep: sets the single character as a separator for each field and value. If None is \
+        :param sep: sets the single character as a separator for each field and value. If None is
                     set, it uses the default value, ``,``.
-        :param quote: sets the single character used for escaping quoted values where the \
-                      separator can be part of the value. If None is set, it uses the default \
+        :param quote: sets the single character used for escaping quoted values where the
+                      separator can be part of the value. If None is set, it uses the default
                       value, ``"``.
-        :param escape: sets the single character used for escaping quotes inside an already \
+        :param escape: sets the single character used for escaping quotes inside an already
                        quoted value. If None is set, it uses the default value, ``\``
-        :param header: writes the names of columns as the first line. If None is set, it uses \
+        :param header: writes the names of columns as the first line. If None is set, it uses
                        the default value, ``false``.
-        :param nullValue: sets the string representation of a null value. If None is set, it uses \
+        :param nullValue: sets the string representation of a null value. If None is set, it uses
                           the default value, empty string.
 
         >>> df.write.csv(os.path.join(tempfile.mkdtemp(), 'data'))
@@ -814,8 +815,8 @@ class DataFrameWriter(object):
             * ``ignore``: Silently ignore this operation if data already exists.
             * ``error`` (default case): Throw an exception if data already exists.
         :param partitionBy: names of partitioning columns
-        :param compression: compression codec to use when saving to file. This can be one of the \
-                            known case-insensitive shorten names (none, snappy, zlib, and lzo). \
+        :param compression: compression codec to use when saving to file. This can be one of the
+                            known case-insensitive shorten names (none, snappy, zlib, and lzo).
                             This will overwrite ``orc.compress``.
 
         >>> orc_df = hiveContext.read.orc('python/test_support/sql/orc_partitioned')
@@ -874,7 +875,7 @@ def _test():
     globs['sqlContext'] = SQLContext(sc)
     globs['hiveContext'] = HiveContext._createForTesting(sc)
     globs['df'] = globs['sqlContext'].read.parquet('python/test_support/sql/parquet_partitioned')
-    globs['sdf'] =\
+    globs['sdf'] = \
         globs['sqlContext'].read.format('text').stream('python/test_support/sql/streaming')
 
     (failure_count, test_count) = doctest.testmod(
