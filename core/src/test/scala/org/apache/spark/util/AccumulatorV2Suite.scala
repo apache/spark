@@ -21,13 +21,15 @@ import org.apache.spark.{DoubleAccumulator, LongAccumulator, SparkFunSuite}
 
 class AccumulatorV2Suite extends SparkFunSuite {
 
-  test("LongAccumulator") {
+  test("LongAccumulator add/avg/sum/count/isZero") {
     val acc = new LongAccumulator
+    assert(acc.isZero)
     assert(acc.count == 0)
     assert(acc.sum == 0)
     assert(acc.avg.isNaN)
 
     acc.add(0)
+    assert(!acc.isZero)
     assert(acc.count == 1)
     assert(acc.sum == 0)
     assert(acc.avg == 0.0)
@@ -52,13 +54,15 @@ class AccumulatorV2Suite extends SparkFunSuite {
     assert(acc.avg == 1.25)
   }
 
-  test("DoubleAccumulator") {
+  test("DoubleAccumulator add/avg/sum/count/isZero") {
     val acc = new DoubleAccumulator
+    assert(acc.isZero)
     assert(acc.count == 0)
     assert(acc.sum == 0.0)
     assert(acc.avg.isNaN)
 
     acc.add(0.0)
+    assert(!acc.isZero)
     assert(acc.count == 1)
     assert(acc.sum == 0.0)
     assert(acc.avg == 0.0)
