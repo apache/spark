@@ -27,7 +27,7 @@ import org.apache.spark.sql.types.{BinaryType, StructField, StructType}
 /**
  * A function wrapper that applies the given R function to each partition of each group.
  */
-private[sql] case class MapGroupsPartitionsRWrapper(
+private[sql] case class MapGroupsRWrapper(
     func: Array[Byte],
     packageNames: Array[Byte],
     broadcastVars: Array[Broadcast[Object]],
@@ -49,8 +49,8 @@ private[sql] case class MapPartitionsRWrapper(
     inputSchema: StructType,
     outputSchema: StructType) extends (Iterator[Any] => Iterator[Any]) {
   def apply(iter: Iterator[Any]): Iterator[Any] = {
-    PartitionsRHelper.mapPartitionsRHelper(func,
-      packageNames, broadcastVars, inputSchema, outputSchema, iter)
+    PartitionsRHelper.mapPartitionsRHelper(
+      func, packageNames, broadcastVars, inputSchema, outputSchema, iter)
   }
 }
 
@@ -60,12 +60,12 @@ object PartitionsRHelper {
    * A helper function to run R UDFs on partitions
    */
   private[sql] def mapPartitionsRHelper(
-    func: Array[Byte],
-    packageNames: Array[Byte],
-    broadcastVars: Array[Broadcast[Object]],
-    inputSchema: StructType,
-    outputSchema: StructType,
-    iter: Iterator[Any]): Iterator[Any] = {
+      func: Array[Byte],
+      packageNames: Array[Byte],
+      broadcastVars: Array[Broadcast[Object]],
+      inputSchema: StructType,
+      outputSchema: StructType,
+      iter: Iterator[Any]): Iterator[Any] = {
     // If the content of current DataFrame is serialized R data?
     val isSerializedRData =
       if (inputSchema == SERIALIZED_R_DATA_SCHEMA) true else false

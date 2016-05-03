@@ -134,25 +134,25 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * @since 2.0.0
    */
   def flatMapRGroups(
-    f: Array[Byte],
-    packageNames: Array[Byte],
-    broadcastVars: Array[Object],
-    outputSchema: StructType): DataFrame = {
-    val broadcastVarObj = broadcastVars.map(x => x.asInstanceOf[Broadcast[Object]])
-    val rowEncoder = vEncoder.asInstanceOf[ExpressionEncoder[Row]]
-    Dataset.ofRows(
-      sparkSession,
-      MapGroupsPartitionsInR(
-        f,
-        packageNames,
-        broadcastVarObj,
-        outputSchema,
-        unresolvedVEncoder.deserializer,
-        unresolvedKEncoder.deserializer,
-        rowEncoder,
-        groupingAttributes,
-        dataAttributes,
-        logicalPlan))
+      f: Array[Byte],
+      packageNames: Array[Byte],
+      broadcastVars: Array[Object],
+      outputSchema: StructType): DataFrame = {
+      val broadcastVarObj = broadcastVars.map(_.asInstanceOf[Broadcast[Object]])
+      val rowEncoder = vEncoder.asInstanceOf[ExpressionEncoder[Row]]
+      Dataset.ofRows(
+        sparkSession,
+        MapGroupsInR(
+          f,
+          packageNames,
+          broadcastVarObj,
+          outputSchema,
+          unresolvedVEncoder.deserializer,
+          unresolvedKEncoder.deserializer,
+          rowEncoder,
+          groupingAttributes,
+          dataAttributes,
+          logicalPlan))
   }
 
   /**

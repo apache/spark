@@ -2005,7 +2005,7 @@ class Dataset[T] private[sql](
    * @group func
    * @since 2.0.0
    */
-  private[sql] def mapGroupPartitionsInR[K: Encoder](
+  private[sql] def mapGroupInR[K: Encoder](
       gfunc: T => K,
       func: Array[Byte],
       packageNames: Array[Byte],

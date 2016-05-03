@@ -256,8 +256,8 @@ case class MapGroups(
     outputObjAttr: Attribute,
     child: LogicalPlan) extends UnaryNode with ObjectProducer
 
-/** Factory for constructing new `MapGroupsR` nodes. */
-object MapGroupsPartitionsInR {
+/** Factory for constructing new `MapGroupsInR` nodes. */
+object MapGroupsInR {
   def apply(
        func: Array[Byte],
        packageNames: Array[Byte],
@@ -269,8 +269,7 @@ object MapGroupsPartitionsInR {
        groupingAttributes: Seq[Attribute],
        dataAttributes: Seq[Attribute],
        child: LogicalPlan): LogicalPlan = {
-
-     val mapped = MapGroupsPartitionsInR(
+     val mapped = MapGroupsInR(
        func,
        packageNames,
        broadcastVars,
@@ -286,7 +285,7 @@ object MapGroupsPartitionsInR {
   }
 }
 
-case class MapGroupsPartitionsInR(
+case class MapGroupsInR(
     func: Array[Byte],
     packageNames: Array[Byte],
     broadcastVars: Array[Broadcast[Object]],
@@ -299,7 +298,7 @@ case class MapGroupsPartitionsInR(
     outputObjAttr: Attribute,
     child: LogicalPlan) extends UnaryNode with ObjectProducer{
 
-    override lazy val schema = outputSchema
+  override lazy val schema = outputSchema
 }
 
 /** Factory for constructing new `CoGroup` nodes. */

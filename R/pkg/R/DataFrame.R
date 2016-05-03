@@ -1191,11 +1191,13 @@ setMethod("dapply",
 #'
 #' Apply a function to each group of a DataFrame. The group is defined by an input
 #' grouping column.
+#' Currently only one grouping column is allowed. Support for multiple columns will
+#' be added later.
 #'
 #' @param x A SparkDataFrame
 #' @param func A function to be applied to each group partition specified by grouping
-#'        column of the SparkDataFrame.
-#'        The output of func is a local R data.frame.
+#'             column of the SparkDataFrame.
+#'             The output of func is a local R data.frame.
 #' @param schema The schema of the resulting SparkDataFrame after the function is applied.
 #'               It must match the output of func.
 #' @family SparkDataFrame functions
@@ -1220,8 +1222,8 @@ setMethod("dapply",
 #'
 #' schema <-  structType(structField("a", "integer"), structField("avg", "double"))
 #' df1 <- gapply(
-#'  df,
-#'  function(x) {
+#'   df,
+#'   function(x) {
 #'   y <- (data.frame(x$a[1], mean(x$b)))
 #' },
 #' schema, "a")

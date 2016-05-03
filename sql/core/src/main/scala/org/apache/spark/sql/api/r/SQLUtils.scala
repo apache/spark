@@ -146,12 +146,7 @@ private[sql] object SQLUtils {
       broadcastVars: Array[Object],
       schema: StructType): DataFrame = {
     val bv = broadcastVars.map(x => x.asInstanceOf[Broadcast[Object]])
-    val realSchema =
-      if (schema == null) {
-        SERIALIZED_R_DATA_SCHEMA
-      } else {
-        schema
-      }
+    val realSchema = if (schema == null) SERIALIZED_R_DATA_SCHEMA else schema
     df.mapPartitionsInR(func, packageNames, bv, realSchema)
   }
 
@@ -159,18 +154,13 @@ private[sql] object SQLUtils {
    * The helper function for gapply() on R side.
    */
   def gapply(
-    df: DataFrame,
-    func: Array[Byte],
-    packageNames: Array[Byte],
-    broadcastVars: Array[Object],
-    schema: StructType,
-    col: String): DataFrame = {
-    val realSchema =
-      if (schema == null) {
-        SERIALIZED_R_DATA_SCHEMA
-      } else {
-        schema
-      }
+      df: DataFrame,
+      func: Array[Byte],
+      packageNames: Array[Byte],
+      broadcastVars: Array[Object],
+      schema: StructType,
+      col: String): DataFrame = {
+    val realSchema = if (schema == null) SERIALIZED_R_DATA_SCHEMA else schema
     val dfSchema = df.select(df(col)).schema
     if (dfSchema.length == 0) throw new IllegalArgumentException(s"Invaid column name $col")
     val dataType = dfSchema(0).dataType
@@ -179,21 +169,21 @@ private[sql] object SQLUtils {
     import sqlContext.implicits._
 
     dataType match {
-      case ByteType => df.mapGroupPartitionsInR((r: Row) => r.getAs[Byte](col),
+      case ByteType => df.mapGroupInR((r: Row) => r.getAs[Byte](col),
                          func, packageNames, broadcastVars, realSchema)
-      case IntegerType => df.mapGroupPartitionsInR((r: Row) => r.getAs[Int](col),
+      case IntegerType => df.mapGroupInR((r: Row) => r.getAs[Int](col),
                             func, packageNames, broadcastVars, realSchema)
-      case FloatType => df.mapGroupPartitionsInR((r: Row) => r.getAs[Float](col),
+      case FloatType => df.mapGroupInR((r: Row) => r.getAs[Float](col),
                           func, packageNames, broadcastVars, realSchema)
-      case DoubleType => df.mapGroupPartitionsInR((r: Row) => r.getAs[Double](col),
+      case DoubleType => df.mapGroupInR((r: Row) => r.getAs[Double](col),
                            func, packageNames, broadcastVars, realSchema)
-      case StringType => df.mapGroupPartitionsInR((r: Row) => r.getAs[String](col),
+      case StringType => df.mapGroupInR((r: Row) => r.getAs[String](col),
                            func, packageNames, broadcastVars, realSchema)
-      case BinaryType => df.mapGroupPartitionsInR((r: Row) => r.getAs[Array[Byte]](col),
+      case BinaryType => df.mapGroupInR((r: Row) => r.getAs[Array[Byte]](col),
                            func, packageNames, broadcastVars, realSchema)
-      case BooleanType => df.mapGroupPartitionsInR((r: Row) => r.getAs[Boolean](col),
+      case BooleanType => df.mapGroupInR((r: Row) => r.getAs[Boolean](col),
                             func, packageNames, broadcastVars, realSchema)
-      case TimestampType => df.mapGroupPartitionsInR((r: Row) => r.getAs[Long](col),
+      case TimestampType => df.mapGroupInR((r: Row) => r.getAs[Long](col),
                               func, packageNames, broadcastVars, realSchema)
       case _ => throw new IllegalArgumentException(s"Invaid type $dataType")
     }
