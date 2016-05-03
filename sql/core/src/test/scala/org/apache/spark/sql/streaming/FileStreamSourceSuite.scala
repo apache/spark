@@ -210,8 +210,9 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
 
   test("FileStreamSource schema: parquet, existing files, no schema") {
     withTempDir { src =>
-      Seq("a", "b", "c").toDS().as("userColumn").toDF()
-        .write.parquet(new File(src, "1").getCanonicalPath)
+      Seq("a", "b", "c").toDS().as("userColumn").toDF().write
+        .mode(org.apache.spark.sql.SaveMode.Overwrite)
+        .parquet(src.getCanonicalPath)
       val schema = createFileStreamSourceAndGetSchema(
         format = Some("parquet"), path = Some(src.getCanonicalPath), schema = None)
       assert(schema === new StructType().add("value", StringType))
