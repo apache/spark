@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
-import java.io.File
-
 import scala.collection.mutable
 
 import org.apache.hadoop.conf.Configuration

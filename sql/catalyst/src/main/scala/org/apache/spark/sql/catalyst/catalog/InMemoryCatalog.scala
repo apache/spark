@@ -17,8 +17,14 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
+import java.io.IOException
+
 import scala.collection.mutable
 
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FileSystem, Path}
+
+import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.util.StringUtils
@@ -73,6 +79,8 @@ class InMemoryCatalog extends ExternalCatalog {
     }
   }
 
+  private val fs = FileSystem.get(new Configuration)
+
   // --------------------------------------------------------------------------
   // Databases
   // --------------------------------------------------------------------------
@@ -85,6 +93,13 @@ class InMemoryCatalog extends ExternalCatalog {
         throw new AnalysisException(s"Database '${dbDefinition.name}' already exists.")
       }
     } else {
+      try {
+        fs.mkdirs(new Path(dbDefinition.locationUri))
+      } catch {
+        case e: IOException =>
+          throw new SparkException(s"Unable to create database ${dbDefinition.name} as failed " +
+            s"to create its directory ${dbDefinition.locationUri}", e)
+      }
       catalog.put(dbDefinition.name, new DatabaseDesc(dbDefinition))
     }
   }
@@ -104,6 +119,14 @@ class InMemoryCatalog extends ExternalCatalog {
         }
       }
       // Remove the database.
+      val dbDefinition = catalog(db).db
+      try {
+        fs.delete(new Path(dbDefinition.locationUri), true)
+      } catch {
+        case e: IOException =>
+          throw new SparkException(s"Unable to drop database ${dbDefinition.name} as failed " +
+            s"to delete its directory ${dbDefinition.locationUri}", e)
+      }
       catalog.remove(db)
     } else {
       if (!ignoreIfNotExists) {
@@ -151,6 +174,16 @@ class InMemoryCatalog extends ExternalCatalog {
         throw new AnalysisException(s"Table '$table' already exists in database '$db'")
       }
     } else {
+      if (tableDefinition.tableType == CatalogTableType.MANAGED) {
+        val dir = new Path(catalog(db).db.locationUri, table)
+        try {
+          fs.mkdirs(dir)
+        } catch {
+          case e: IOException =>
+            throw new SparkException(s"Unable to create table $table as failed " +
+              s"to create its directory $dir", e)
+        }
+      }
       catalog(db).tables.put(table, new TableDesc(tableDefinition))
     }
   }
@@ -161,6 +194,16 @@ class InMemoryCatalog extends ExternalCatalog {
       ignoreIfNotExists: Boolean): Unit = synchronized {
     requireDbExists(db)
     if (tableExists(db, table)) {
+      if (catalog(db).tables(table).table.tableType == CatalogTableType.MANAGED) {
+        val dir = new Path(catalog(db).db.locationUri, table)
+        try {
+          fs.delete(dir, true)
+        } catch {
+          case e: IOException =>
+            throw new SparkException(s"Unable to drop table $table as failed " +
+              s"to delete its directory $dir", e)
+        }
+      }
       catalog(db).tables.remove(table)
     } else {
       if (!ignoreIfNotExists) {
@@ -173,6 +216,19 @@ class InMemoryCatalog extends ExternalCatalog {
     requireTableExists(db, oldName)
     val oldDesc = catalog(db).tables(oldName)
     oldDesc.table = oldDesc.table.copy(identifier = TableIdentifier(newName, Some(db)))
+
+    if (oldDesc.table.tableType == CatalogTableType.MANAGED) {
+      val oldDir = new Path(catalog(db).db.locationUri, oldName)
+      val newDir = new Path(catalog(db).db.locationUri, newName)
+      try {
+        fs.rename(oldDir, newDir)
+      } catch {
+        case e: IOException =>
+          throw new SparkException(s"Unable to rename table $oldName to $newName as failed " +
+            s"to rename its directory $oldDir", e)
+      }
+    }
+
     catalog(db).tables.put(newName, oldDesc)
     catalog(db).tables.remove(oldName)
   }
@@ -245,7 +301,21 @@ class InMemoryCatalog extends ExternalCatalog {
           s"'$db' table '$table':\n$dupSpecsStr")
       }
     }
-    parts.foreach { p => existingParts.put(p.spec, p) }
+
+    val tableDir = new Path(catalog(db).db.locationUri, table)
+    // TODO: we should follow hive to roll back if one partition path failed to create.
+    parts.foreach { p =>
+      if (p.storage.locationUri.isEmpty) {
+        val partitionPath = p.spec.map { case (k, v) => s"$k=$v" }.mkString("/")
+        try {
+          fs.mkdirs(new Path(tableDir, partitionPath))
+        } catch {
+          case e: IOException =>
+            throw new SparkException(s"Unable to create partition path $partitionPath", e)
+        }
+      }
+      existingParts.put(p.spec, p)
+    }
   }
 
   override def dropPartitions(
@@ -263,7 +333,21 @@ class InMemoryCatalog extends ExternalCatalog {
           s"'$db' table '$table':\n$missingSpecsStr")
       }
     }
-    partSpecs.foreach(existingParts.remove)
+
+    val tableDir = new Path(catalog(db).db.locationUri, table)
+    // TODO: we should follow hive to roll back if one partition path failed to delete.
+    partSpecs.foreach { p =>
+      if (existingParts(p).storage.locationUri.isEmpty) {
+        val partitionPath = p.map { case (k, v) => s"$k=$v" }.mkString("/")
+        try {
+          fs.delete(new Path(tableDir, partitionPath), true)
+        } catch {
+          case e: IOException =>
+            throw new SparkException(s"Unable to delete partition path $partitionPath", e)
+        }
+      }
+      existingParts.remove(p)
+    }
   }
 
   override def renamePartitions(
@@ -272,9 +356,24 @@ class InMemoryCatalog extends ExternalCatalog {
       specs: Seq[TablePartitionSpec],
       newSpecs: Seq[TablePartitionSpec]): Unit = synchronized {
     require(specs.size == newSpecs.size, "number of old and new partition specs differ")
+
+    val tableDir = new Path(catalog(db).db.locationUri, table)
+    // TODO: we should follow hive to roll back if one partition path failed to rename.
     specs.zip(newSpecs).foreach { case (oldSpec, newSpec) =>
       val newPart = getPartition(db, table, oldSpec).copy(spec = newSpec)
       val existingParts = catalog(db).tables(table).partitions
+
+      if (newPart.storage.locationUri.isEmpty) {
+        val oldPath = new Path(tableDir, oldSpec.map { case (k, v) => s"$k=$v" }.mkString("/"))
+        val newPath = new Path(tableDir, newSpec.map { case (k, v) => s"$k=$v" }.mkString("/"))
+        try {
+          fs.rename(oldPath, newPath)
+        } catch {
+          case e: IOException =>
+            throw new SparkException(s"Unable to rename partition path $oldPath", e)
+        }
+      }
+
       existingParts.remove(oldSpec)
       existingParts.put(newSpec, newPart)
     }

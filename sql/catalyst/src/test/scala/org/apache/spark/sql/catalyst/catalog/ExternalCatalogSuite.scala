@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
+import java.io.File
+
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.SparkFunSuite
@@ -488,6 +490,51 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     assert(catalog.listFunctions("db2", "func*").toSet == Set("func1", "func2"))
   }
 
+  // --------------------------------------------------------------------------
+  // File System operations
+  // --------------------------------------------------------------------------
+
+  test("create/drop database should create/delete the directory") {
+    val catalog = newBasicCatalog()
+    val db = newDb("mydb")
+    catalog.createDatabase(db, ignoreIfExists = false)
+    assert(new File(db.locationUri).exists())
+
+    catalog.dropDatabase("mydb", ignoreIfNotExists = false, cascade = false)
+    assert(!new File(db.locationUri).exists())
+  }
+
+  test("create/drop/rename table should create/delete/rename the directory") {
+    val catalog = newBasicCatalog()
+    val db = catalog.getDatabase("db1")
+    val table = newTable("myTable", "db1")
+    catalog.createTable("db1", table, ignoreIfExists = false)
+    assert(new File(db.locationUri, "myTable").exists())
+
+    catalog.renameTable("db1", "myTable", "yourTable")
+    assert(!new File(db.locationUri, "myTable").exists())
+    assert(new File(db.locationUri, "yourTable").exists())
+
+    catalog.dropTable("db1", "yourTable", ignoreIfNotExists = false)
+    assert(!new File(db.locationUri, "yourTable").exists())
+  }
+
+  test("create/drop/rename partitions should create/delete/rename the directory") {
+    val catalog = newBasicCatalog()
+    val databaseDir = catalog.getDatabase("db2").locationUri
+
+    catalog.createPartitions("db2", "tbl1", Seq(part1, part2), ignoreIfExists = false)
+    assert(new File(databaseDir, "tbl1/a=1/b=2").exists())
+    assert(new File(databaseDir, "tbl1/a=3/b=4").exists())
+
+    catalog.renamePartitions("db2", "tbl1", Seq(part1.spec), Seq(part3.spec))
+    assert(!new File(databaseDir, "tbl1/a=1/b=2").exists())
+    assert(new File(databaseDir, "tbl1/a=5/b=6").exists())
+
+    catalog.dropPartitions("db2", "tbl1", Seq(part2.spec, part3.spec), ignoreIfNotExists = false)
+    assert(!new File(databaseDir, "tbl1/a=3/b=4").exists())
+    assert(!new File(databaseDir, "tbl1/a=5/b=6").exists())
+  }
 }
 
 
