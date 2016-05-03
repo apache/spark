@@ -23,7 +23,7 @@ sc <- sparkR.init()
 mockFile <- c("Spark is pretty.", "Spark is awesome.")
 
 test_that("textFile() on a local file returns an RDD", {
-  fileName <- tempfile(pattern="spark-test", fileext=".tmp")
+  fileName <- tempfile(pattern = "spark-test", fileext = ".tmp")
   writeLines(mockFile, fileName)
 
   rdd <- textFile(sc, fileName)
@@ -35,7 +35,7 @@ test_that("textFile() on a local file returns an RDD", {
 })
 
 test_that("textFile() followed by a collect() returns the same content", {
-  fileName <- tempfile(pattern="spark-test", fileext=".tmp")
+  fileName <- tempfile(pattern = "spark-test", fileext = ".tmp")
   writeLines(mockFile, fileName)
 
   rdd <- textFile(sc, fileName)
@@ -45,7 +45,7 @@ test_that("textFile() followed by a collect() returns the same content", {
 })
 
 test_that("textFile() word count works as expected", {
-  fileName <- tempfile(pattern="spark-test", fileext=".tmp")
+  fileName <- tempfile(pattern = "spark-test", fileext = ".tmp")
   writeLines(mockFile, fileName)
 
   rdd <- textFile(sc, fileName)
@@ -63,7 +63,7 @@ test_that("textFile() word count works as expected", {
 })
 
 test_that("several transformations on RDD created by textFile()", {
-  fileName <- tempfile(pattern="spark-test", fileext=".tmp")
+  fileName <- tempfile(pattern = "spark-test", fileext = ".tmp")
   writeLines(mockFile, fileName)
 
   rdd <- textFile(sc, fileName) # RDD
@@ -77,8 +77,8 @@ test_that("several transformations on RDD created by textFile()", {
 })
 
 test_that("textFile() followed by a saveAsTextFile() returns the same content", {
-  fileName1 <- tempfile(pattern="spark-test", fileext=".tmp")
-  fileName2 <- tempfile(pattern="spark-test", fileext=".tmp")
+  fileName1 <- tempfile(pattern = "spark-test", fileext = ".tmp")
+  fileName2 <- tempfile(pattern = "spark-test", fileext = ".tmp")
   writeLines(mockFile, fileName1)
 
   rdd <- textFile(sc, fileName1, 1L)
@@ -91,7 +91,7 @@ test_that("textFile() followed by a saveAsTextFile() returns the same content", 
 })
 
 test_that("saveAsTextFile() on a parallelized list works as expected", {
-  fileName <- tempfile(pattern="spark-test", fileext=".tmp")
+  fileName <- tempfile(pattern = "spark-test", fileext = ".tmp")
   l <- list(1, 2, 3)
   rdd <- parallelize(sc, l, 1L)
   saveAsTextFile(rdd, fileName)
@@ -102,8 +102,8 @@ test_that("saveAsTextFile() on a parallelized list works as expected", {
 })
 
 test_that("textFile() and saveAsTextFile() word count works as expected", {
-  fileName1 <- tempfile(pattern="spark-test", fileext=".tmp")
-  fileName2 <- tempfile(pattern="spark-test", fileext=".tmp")
+  fileName1 <- tempfile(pattern = "spark-test", fileext = ".tmp")
+  fileName2 <- tempfile(pattern = "spark-test", fileext = ".tmp")
   writeLines(mockFile, fileName1)
 
   rdd <- textFile(sc, fileName1)
@@ -127,8 +127,8 @@ test_that("textFile() and saveAsTextFile() word count works as expected", {
 })
 
 test_that("textFile() on multiple paths", {
-  fileName1 <- tempfile(pattern="spark-test", fileext=".tmp")
-  fileName2 <- tempfile(pattern="spark-test", fileext=".tmp")
+  fileName1 <- tempfile(pattern = "spark-test", fileext = ".tmp")
+  fileName2 <- tempfile(pattern = "spark-test", fileext = ".tmp")
   writeLines("Spark is pretty.", fileName1)
   writeLines("Spark is awesome.", fileName2)
 
@@ -140,7 +140,7 @@ test_that("textFile() on multiple paths", {
 })
 
 test_that("Pipelined operations on RDDs created using textFile", {
-  fileName <- tempfile(pattern="spark-test", fileext=".tmp")
+  fileName <- tempfile(pattern = "spark-test", fileext = ".tmp")
   writeLines(mockFile, fileName)
 
   rdd <- textFile(sc, fileName)

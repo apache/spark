@@ -18,12 +18,14 @@
 from __future__ import print_function
 
 from pyspark import SparkContext
+# $example on$
 from pyspark.ml import Pipeline
 from pyspark.ml.classification import LogisticRegression
 from pyspark.ml.evaluation import BinaryClassificationEvaluator
 from pyspark.ml.feature import HashingTF, Tokenizer
 from pyspark.ml.tuning import CrossValidator, ParamGridBuilder
 from pyspark.sql import Row, SQLContext
+# $example off$
 
 """
 A simple example demonstrating model selection using CrossValidator.
@@ -36,7 +38,7 @@ Run with:
 if __name__ == "__main__":
     sc = SparkContext(appName="CrossValidatorExample")
     sqlContext = SQLContext(sc)
-
+    # $example on$
     # Prepare training documents, which are labeled.
     LabeledDocument = Row("id", "text", "label")
     training = sc.parallelize([(0, "a b c d e spark", 1.0),
@@ -92,5 +94,6 @@ if __name__ == "__main__":
     selected = prediction.select("id", "text", "probability", "prediction")
     for row in selected.collect():
         print(row)
+    # $example off$
 
     sc.stop()

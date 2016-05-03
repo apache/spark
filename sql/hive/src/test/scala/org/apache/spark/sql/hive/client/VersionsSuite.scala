@@ -19,12 +19,16 @@ package org.apache.spark.sql.hive.client
 
 import java.io.File
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.util.VersionInfo
 
-import org.apache.spark.{Logging, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Literal, NamedExpression}
 import org.apache.spark.sql.catalyst.util.quietly
-import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.tags.ExtendedHiveTest
 import org.apache.spark.util.Utils
@@ -37,6 +41,8 @@ import org.apache.spark.util.Utils
  */
 @ExtendedHiveTest
 class VersionsSuite extends SparkFunSuite with Logging {
+
+  private val sparkConf = new SparkConf()
 
   // In order to speed up test execution during development or in Jenkins, you can specify the path
   // of an existing Ivy cache:
@@ -56,12 +62,27 @@ class VersionsSuite extends SparkFunSuite with Logging {
 
   test("success sanity check") {
     val badClient = IsolatedClientLoader.forVersion(
-      hiveMetastoreVersion = HiveContext.hiveExecutionVersion,
+      hiveMetastoreVersion = HiveUtils.hiveExecutionVersion,
       hadoopVersion = VersionInfo.getVersion,
+      sparkConf = sparkConf,
+      hadoopConf = new Configuration(),
       config = buildConf(),
       ivyPath = ivyPath).createClient()
-    val db = new HiveDatabase("default", "")
-    badClient.createDatabase(db)
+    val db = new CatalogDatabase("default", "desc", "loc", Map())
+    badClient.createDatabase(db, ignoreIfExists = true)
+  }
+
+  test("hadoop configuration preserved") {
+    val hadoopConf = new Configuration();
+    hadoopConf.set("test", "success")
+    val client = IsolatedClientLoader.forVersion(
+      hiveMetastoreVersion = HiveUtils.hiveExecutionVersion,
+      hadoopVersion = VersionInfo.getVersion,
+      sparkConf = sparkConf,
+      hadoopConf = hadoopConf,
+      config = buildConf(),
+      ivyPath = ivyPath).createClient()
+    assert("success" === client.getConf("test", null))
   }
 
   private def getNestedMessages(e: Throwable): String = {
@@ -92,6 +113,8 @@ class VersionsSuite extends SparkFunSuite with Logging {
         IsolatedClientLoader.forVersion(
           hiveMetastoreVersion = "13",
           hadoopVersion = VersionInfo.getVersion,
+          sparkConf = sparkConf,
+          hadoopConf = new Configuration(),
           config = buildConf(),
           ivyPath = ivyPath).createClient()
       }
@@ -111,34 +134,33 @@ class VersionsSuite extends SparkFunSuite with Logging {
         IsolatedClientLoader.forVersion(
           hiveMetastoreVersion = version,
           hadoopVersion = VersionInfo.getVersion,
+          sparkConf = sparkConf,
+          hadoopConf = new Configuration(),
           config = buildConf(),
           ivyPath = ivyPath).createClient()
     }
 
     test(s"$version: createDatabase") {
-      val db = HiveDatabase("default", "")
-      client.createDatabase(db)
+      val db = CatalogDatabase("default", "desc", "loc", Map())
+      client.createDatabase(db, ignoreIfExists = true)
     }
 
     test(s"$version: createTable") {
       val table =
-        HiveTable(
-          specifiedDatabase = Option("default"),
-          name = "src",
-          schema = Seq(HiveColumn("key", "int", "")),
-          partitionColumns = Seq.empty,
-          properties = Map.empty,
-          serdeProperties = Map.empty,
-          tableType = ManagedTable,
-          location = None,
-          inputFormat =
-            Some(classOf[org.apache.hadoop.mapred.TextInputFormat].getName),
-          outputFormat =
-            Some(classOf[org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat[_, _]].getName),
-          serde =
-            Some(classOf[org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe].getName()))
+        CatalogTable(
+          identifier = TableIdentifier("src", Some("default")),
+          tableType = CatalogTableType.MANAGED,
+          schema = Seq(CatalogColumn("key", "int")),
+          storage = CatalogStorageFormat(
+            locationUri = None,
+            inputFormat = Some(classOf[org.apache.hadoop.mapred.TextInputFormat].getName),
+            outputFormat = Some(
+              classOf[org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat[_, _]].getName),
+            serde = Some(classOf[org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe].getName()),
+            serdeProperties = Map.empty
+          ))
 
-      client.createTable(table)
+      client.createTable(table, ignoreIfExists = false)
     }
 
     test(s"$version: getTable") {
@@ -147,10 +169,6 @@ class VersionsSuite extends SparkFunSuite with Logging {
 
     test(s"$version: listTables") {
       assert(client.listTables("default") === Seq("src"))
-    }
-
-    test(s"$version: currentDatabase") {
-      assert(client.currentDatabase === "default")
     }
 
     test(s"$version: getDatabase") {
@@ -171,7 +189,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
     }
 
     test(s"$version: getPartitions") {
-      client.getAllPartitions(client.getTable("default", "src_part"))
+      client.getPartitions(client.getTable("default", "src_part"))
     }
 
     test(s"$version: getPartitionsByFilter") {

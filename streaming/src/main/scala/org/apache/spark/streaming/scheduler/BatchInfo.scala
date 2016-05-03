@@ -41,9 +41,6 @@ case class BatchInfo(
     outputOperationInfos: Map[Int, OutputOperationInfo]
   ) {
 
-  @deprecated("Use streamIdToInputInfo instead", "1.5.0")
-  def streamIdToNumRecords: Map[Int, Long] = streamIdToInputInfo.mapValues(_.numRecords)
-
   /**
    * Time taken for the first job of this batch to start processing from the time this batch
    * was submitted to the streaming scheduler. Essentially, it is

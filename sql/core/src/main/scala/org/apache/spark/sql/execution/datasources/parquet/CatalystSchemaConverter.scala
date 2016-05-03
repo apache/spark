@@ -25,8 +25,9 @@ import org.apache.parquet.schema.OriginalType._
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName._
 import org.apache.parquet.schema.Type.Repetition._
 
-import org.apache.spark.sql.{AnalysisException, SQLConf}
-import org.apache.spark.sql.execution.datasources.parquet.CatalystSchemaConverter.{maxPrecisionForBytes, MAX_PRECISION_FOR_INT32, MAX_PRECISION_FOR_INT64}
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.execution.datasources.parquet.CatalystSchemaConverter.maxPrecisionForBytes
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -37,7 +38,6 @@ import org.apache.spark.sql.types._
  * [[MessageType]] schemas.
  *
  * @see https://github.com/apache/parquet-format/blob/master/LogicalTypes.md
- *
  * @constructor
  * @param assumeBinaryIsString Whether unannotated BINARY fields should be assumed to be Spark SQL
  *        [[StringType]] fields when converting Parquet a [[MessageType]] to Spark SQL
@@ -65,7 +65,8 @@ private[parquet] class CatalystSchemaConverter(
   def this(conf: Configuration) = this(
     assumeBinaryIsString = conf.get(SQLConf.PARQUET_BINARY_AS_STRING.key).toBoolean,
     assumeInt96IsTimestamp = conf.get(SQLConf.PARQUET_INT96_AS_TIMESTAMP.key).toBoolean,
-    writeLegacyParquetFormat = conf.get(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key).toBoolean)
+    writeLegacyParquetFormat = conf.get(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key,
+      SQLConf.PARQUET_WRITE_LEGACY_FORMAT.defaultValue.get.toString).toBoolean)
 
   /**
    * Converts Parquet [[MessageType]] `parquetSchema` to a Spark SQL [[StructType]].
@@ -144,7 +145,7 @@ private[parquet] class CatalystSchemaConverter(
           case INT_16 => ShortType
           case INT_32 | null => IntegerType
           case DATE => DateType
-          case DECIMAL => makeDecimalType(MAX_PRECISION_FOR_INT32)
+          case DECIMAL => makeDecimalType(Decimal.MAX_INT_DIGITS)
           case UINT_8 => typeNotSupported()
           case UINT_16 => typeNotSupported()
           case UINT_32 => typeNotSupported()
@@ -155,7 +156,7 @@ private[parquet] class CatalystSchemaConverter(
       case INT64 =>
         originalType match {
           case INT_64 | null => LongType
-          case DECIMAL => makeDecimalType(MAX_PRECISION_FOR_INT64)
+          case DECIMAL => makeDecimalType(Decimal.MAX_LONG_DIGITS)
           case UINT_64 => typeNotSupported()
           case TIMESTAMP_MILLIS => typeNotImplemented()
           case _ => illegalType()
@@ -402,7 +403,7 @@ private[parquet] class CatalystSchemaConverter(
 
       // Uses INT32 for 1 <= precision <= 9
       case DecimalType.Fixed(precision, scale)
-          if precision <= MAX_PRECISION_FOR_INT32 && !writeLegacyParquetFormat =>
+          if precision <= Decimal.MAX_INT_DIGITS && !writeLegacyParquetFormat =>
         Types
           .primitive(INT32, repetition)
           .as(DECIMAL)
@@ -412,7 +413,7 @@ private[parquet] class CatalystSchemaConverter(
 
       // Uses INT64 for 1 <= precision <= 18
       case DecimalType.Fixed(precision, scale)
-          if precision <= MAX_PRECISION_FOR_INT64 && !writeLegacyParquetFormat =>
+          if precision <= Decimal.MAX_LONG_DIGITS && !writeLegacyParquetFormat =>
         Types
           .primitive(INT64, repetition)
           .as(DECIMAL)
@@ -543,7 +544,7 @@ private[parquet] object CatalystSchemaConverter {
       !name.matches(".*[ ,;{}()\n\t=].*"),
       s"""Attribute name "$name" contains invalid character(s) among " ,;{}()\\n\\t=".
          |Please use alias to rename it.
-       """.stripMargin.split("\n").mkString(" "))
+       """.stripMargin.split("\n").mkString(" ").trim)
   }
 
   def checkFieldNames(schema: StructType): StructType = {
@@ -567,10 +568,6 @@ private[parquet] object CatalystSchemaConverter {
 
   // Returns the minimum number of bytes needed to store a decimal with a given `precision`.
   val minBytesForPrecision = Array.tabulate[Int](39)(computeMinBytesForPrecision)
-
-  val MAX_PRECISION_FOR_INT32 = maxPrecisionForBytes(4) /* 9 */
-
-  val MAX_PRECISION_FOR_INT64 = maxPrecisionForBytes(8) /* 18 */
 
   // Max precision of a decimal value stored in `numBytes` bytes
   def maxPrecisionForBytes(numBytes: Int): Int = {

@@ -26,6 +26,7 @@ import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAg
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.aggregate.{MyDoubleAvg, MyDoubleSum}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 
@@ -127,6 +128,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
   import testImplicits._
 
   override def beforeAll(): Unit = {
+    super.beforeAll()
     val data1 = Seq[(Integer, Integer)](
       (1, 10),
       (null, -60),
@@ -187,10 +189,22 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
   }
 
   override def afterAll(): Unit = {
-    sqlContext.sql("DROP TABLE IF EXISTS agg1")
-    sqlContext.sql("DROP TABLE IF EXISTS agg2")
-    sqlContext.sql("DROP TABLE IF EXISTS agg3")
-    sqlContext.dropTempTable("emptyTable")
+    try {
+      sqlContext.sql("DROP TABLE IF EXISTS agg1")
+      sqlContext.sql("DROP TABLE IF EXISTS agg2")
+      sqlContext.sql("DROP TABLE IF EXISTS agg3")
+      sqlContext.dropTempTable("emptyTable")
+    } finally {
+      super.afterAll()
+    }
+  }
+
+  test("group by function") {
+    Seq((1, 2)).toDF("a", "b").registerTempTable("data")
+
+    checkAnswer(
+      sql("SELECT floor(a) AS a, collect_set(b) FROM data GROUP BY floor(a) ORDER BY a"),
+      Row(1, Array(2)) :: Nil)
   }
 
   test("empty table") {
@@ -790,7 +804,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
         """
           |SELECT corr(b, c) FROM covar_tab WHERE a = 3
         """.stripMargin),
-      Row(null) :: Nil)
+      Row(Double.NaN) :: Nil)
 
     checkAnswer(
       sqlContext.sql(
@@ -799,10 +813,10 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
         """.stripMargin),
       Row(1, null) ::
       Row(2, null) ::
-      Row(3, null) ::
-      Row(4, null) ::
-      Row(5, null) ::
-      Row(6, null) :: Nil)
+      Row(3, Double.NaN) ::
+      Row(4, Double.NaN) ::
+      Row(5, Double.NaN) ::
+      Row(6, Double.NaN) :: Nil)
 
     val corr7 = sqlContext.sql("SELECT corr(b, c) FROM covar_tab").collect()(0).getDouble(0)
     assert(math.abs(corr7 - 0.6633880657639323) < 1e-12)
@@ -833,11 +847,8 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
 
     // one row test
     val df3 = Seq.tabulate(1)(x => (1 * x, x * x * x - 2)).toDF("a", "b")
-    val cov_samp3 = df3.groupBy().agg(covar_samp("a", "b")).collect()(0).get(0)
-    assert(cov_samp3 == null)
-
-    val cov_pop3 = df3.groupBy().agg(covar_pop("a", "b")).collect()(0).getDouble(0)
-    assert(cov_pop3 == 0.0)
+    checkAnswer(df3.groupBy().agg(covar_samp("a", "b")), Row(Double.NaN))
+    checkAnswer(df3.groupBy().agg(covar_pop("a", "b")), Row(0.0))
   }
 
   test("no aggregation function (SPARK-11486)") {
@@ -857,7 +868,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
       FloatType, DoubleType, DecimalType(25, 5), DecimalType(6, 5),
       DateType, TimestampType,
       ArrayType(IntegerType), MapType(StringType, LongType), struct,
-      new MyDenseVectorUDT())
+      new UDT.MyDenseVectorUDT())
     // Right now, we will use SortBasedAggregate to handle UDAFs.
     // UnsafeRow.mutableFieldTypes.asScala.toSeq will trigger SortBasedAggregate to use
     // UnsafeRow as the aggregation buffer. While, dataTypes will trigger
@@ -956,27 +967,33 @@ class TungstenAggregationQuerySuite extends AggregationQuerySuite
 class TungstenAggregationQueryWithControlledFallbackSuite extends AggregationQuerySuite {
 
   override protected def checkAnswer(actual: => DataFrame, expectedAnswer: Seq[Row]): Unit = {
-    (0 to 2).foreach { fallbackStartsAt =>
-      withSQLConf("spark.sql.TungstenAggregate.testFallbackStartsAt" -> fallbackStartsAt.toString) {
-        // Create a new df to make sure its physical operator picks up
-        // spark.sql.TungstenAggregate.testFallbackStartsAt.
-        // todo: remove it?
-        val newActual = DataFrame(sqlContext, actual.logicalPlan)
+    Seq(0, 10).foreach { maxColumnarHashMapColumns =>
+      withSQLConf("spark.sql.codegen.aggregate.map.columns.max" ->
+        maxColumnarHashMapColumns.toString) {
+        (1 to 3).foreach { fallbackStartsAt =>
+          withSQLConf("spark.sql.TungstenAggregate.testFallbackStartsAt" ->
+            s"${(fallbackStartsAt - 1).toString}, ${fallbackStartsAt.toString}") {
+            // Create a new df to make sure its physical operator picks up
+            // spark.sql.TungstenAggregate.testFallbackStartsAt.
+            // todo: remove it?
+            val newActual = Dataset.ofRows(sqlContext.sparkSession, actual.logicalPlan)
 
-        QueryTest.checkAnswer(newActual, expectedAnswer) match {
-          case Some(errorMessage) =>
-            val newErrorMessage =
-              s"""
-                |The following aggregation query failed when using TungstenAggregate with
-                |controlled fallback (it falls back to sort-based aggregation once it has processed
-                |$fallbackStartsAt input rows). The query is
-                |${actual.queryExecution}
-                |
-                |$errorMessage
-              """.stripMargin
+            QueryTest.checkAnswer(newActual, expectedAnswer) match {
+              case Some(errorMessage) =>
+                val newErrorMessage =
+                  s"""
+                     |The following aggregation query failed when using TungstenAggregate with
+                     |controlled fallback (it falls back to bytes to bytes map once it has processed
+                     |${fallbackStartsAt - 1} input rows and to sort-based aggregation once it has
+                     |processed $fallbackStartsAt input rows). The query is ${actual.queryExecution}
+                     |
+                    |$errorMessage
+                  """.stripMargin
 
-            fail(newErrorMessage)
-          case None =>
+                fail(newErrorMessage)
+              case None => // Success
+            }
+          }
         }
       }
     }

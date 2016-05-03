@@ -19,6 +19,7 @@ package org.apache.spark.examples.ml;
 
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.SQLContext;
 
 // $example on$
@@ -26,7 +27,6 @@ import java.util.Arrays;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.feature.Binarizer;
-import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.types.DataTypes;
@@ -51,14 +51,14 @@ public class JavaBinarizerExample {
       new StructField("label", DataTypes.DoubleType, false, Metadata.empty()),
       new StructField("feature", DataTypes.DoubleType, false, Metadata.empty())
     });
-    DataFrame continuousDataFrame = jsql.createDataFrame(jrdd, schema);
+    Dataset<Row> continuousDataFrame = jsql.createDataFrame(jrdd, schema);
     Binarizer binarizer = new Binarizer()
       .setInputCol("feature")
       .setOutputCol("binarized_feature")
       .setThreshold(0.5);
-    DataFrame binarizedDataFrame = binarizer.transform(continuousDataFrame);
-    DataFrame binarizedFeatures = binarizedDataFrame.select("binarized_feature");
-    for (Row r : binarizedFeatures.collect()) {
+    Dataset<Row> binarizedDataFrame = binarizer.transform(continuousDataFrame);
+    Dataset<Row> binarizedFeatures = binarizedDataFrame.select("binarized_feature");
+    for (Row r : binarizedFeatures.collectAsList()) {
       Double binarized_value = r.getDouble(0);
       System.out.println(binarized_value);
     }

@@ -89,7 +89,7 @@ public class JavaTestParams extends JavaParams {
     myDoubleParam_ = new DoubleParam(this, "myDoubleParam", "this is a double param",
       ParamValidators.inRange(0.0, 1.0));
     List<String> validStrings = Arrays.asList("a", "b");
-    myStringParam_ = new Param<String>(this, "myStringParam", "this is a string param",
+    myStringParam_ = new Param<>(this, "myStringParam", "this is a string param",
       ParamValidators.inArray(validStrings));
     myDoubleArrayParam_ =
       new DoubleArrayParam(this, "myDoubleArrayParam", "this is a double param");

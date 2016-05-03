@@ -25,7 +25,8 @@ import org.json4s.JsonDSL._
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, InterpretedOrdering}
-import org.apache.spark.sql.catalyst.util.{DataTypeParser, LegacyTypeStringParser}
+import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, LegacyTypeStringParser}
+import org.apache.spark.sql.catalyst.util.quoteIdentifier
 
 /**
  * :: DeveloperApi ::
@@ -40,6 +41,7 @@ import org.apache.spark.sql.catalyst.util.{DataTypeParser, LegacyTypeStringParse
  * Example:
  * {{{
  * import org.apache.spark.sql._
+ * import org.apache.spark.sql.types._
  *
  * val struct =
  *   StructType(
@@ -167,7 +169,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    * }}}
    */
   def add(name: String, dataType: String): StructType = {
-    add(name, DataTypeParser.parse(dataType), nullable = true, Metadata.empty)
+    add(name, CatalystSqlParser.parseDataType(dataType), nullable = true, Metadata.empty)
   }
 
   /**
@@ -182,7 +184,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    * }}}
    */
   def add(name: String, dataType: String, nullable: Boolean): StructType = {
-    add(name, DataTypeParser.parse(dataType), nullable, Metadata.empty)
+    add(name, CatalystSqlParser.parseDataType(dataType), nullable, Metadata.empty)
   }
 
   /**
@@ -200,12 +202,13 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
       dataType: String,
       nullable: Boolean,
       metadata: Metadata): StructType = {
-    add(name, DataTypeParser.parse(dataType), nullable, metadata)
+    add(name, CatalystSqlParser.parseDataType(dataType), nullable, metadata)
   }
 
   /**
-   * Extracts a [[StructField]] of the given name. If the [[StructType]] object does not
-   * have a name matching the given name, `null` will be returned.
+   * Extracts the [[StructField]] with the given name.
+   *
+   * @throws IllegalArgumentException if a field with the given name does not exist
    */
   def apply(name: String): StructField = {
     nameToField.getOrElse(name,
@@ -214,7 +217,9 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
 
   /**
    * Returns a [[StructType]] containing [[StructField]]s of the given names, preserving the
-   * original order of fields. Those names which do not have matching fields will be ignored.
+   * original order of fields.
+   *
+   * @throws IllegalArgumentException if a field cannot be found for any of the given names
    */
   def apply(names: Set[String]): StructType = {
     val nonExistFields = names -- fieldNamesSet
@@ -227,7 +232,9 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   }
 
   /**
-   * Returns index of a given field
+   * Returns the index of a given field.
+   *
+   * @throws IllegalArgumentException if a field with the given name does not exist
    */
   def fieldIndex(name: String): Int = {
     nameToIndex.getOrElse(name,
@@ -279,7 +286,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   }
 
   override def sql: String = {
-    val fieldTypes = fields.map(f => s"`${f.name}`: ${f.dataType.sql}")
+    val fieldTypes = fields.map(f => s"${quoteIdentifier(f.name)}: ${f.dataType.sql}")
     s"STRUCT<${fieldTypes.mkString(", ")}>"
   }
 
@@ -291,7 +298,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     builder.append("struct<")
     builder.append(fieldTypes.mkString(", "))
     if (fields.length > 2) {
-      if (fields.length - fieldTypes.size == 1) {
+      if (fields.length - fieldTypes.length == 1) {
         builder.append(" ... 1 more field")
       } else {
         builder.append(" ... " + (fields.length - 2) + " more fields")

@@ -118,7 +118,7 @@ object LDAExample {
       preprocess(sc, params.input, params.vocabSize, params.stopwordFile)
     corpus.cache()
     val actualCorpusSize = corpus.count()
-    val actualVocabSize = vocabArray.size
+    val actualVocabSize = vocabArray.length
     val preprocessElapsed = (System.nanoTime() - preprocessStart) / 1e9
 
     println()
@@ -221,6 +221,7 @@ object LDAExample {
     val model = pipeline.fit(df)
     val documents = model.transform(df)
       .select("features")
+      .rdd
       .map { case Row(features: Vector) => features }
       .zipWithIndex()
       .map(_.swap)

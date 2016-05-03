@@ -19,7 +19,6 @@ package org.apache.spark.mllib.random
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.SparkContext._
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.rdd.{RandomRDD, RandomRDDPartition}

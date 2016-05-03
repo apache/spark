@@ -20,12 +20,14 @@ package org.apache.spark.sql.sources
 import java.io.File
 import java.net.URI
 
-import org.apache.spark.sql.{AnalysisException, QueryTest, SQLConf}
+import org.apache.spark.SparkException
+import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.datasources.BucketingUtils
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 
 class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
@@ -54,7 +56,7 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
 
   test("write bucketed data to unsupported data source") {
     val df = Seq(Tuple1("a"), Tuple1("b")).toDF("i")
-    intercept[AnalysisException](df.write.bucketBy(3, "i").format("text").saveAsTable("tt"))
+    intercept[SparkException](df.write.bucketBy(3, "i").format("text").saveAsTable("tt"))
   }
 
   test("write bucketed data to non-hive-table or existing hive table") {
@@ -67,8 +69,8 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
   private val df = (0 until 50).map(i => (i % 5, i % 13, i.toString)).toDF("i", "j", "k")
 
   def tableDir: File = {
-    val identifier = hiveContext.sqlParser.parseTableIdentifier("bucketed_table")
-    new File(URI.create(hiveContext.catalog.hiveDefaultTableFilePath(identifier)))
+    val identifier = hiveContext.sessionState.sqlParser.parseTableIdentifier("bucketed_table")
+    new File(URI.create(hiveContext.sessionState.catalog.hiveDefaultTableFilePath(identifier)))
   }
 
   /**

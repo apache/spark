@@ -15,8 +15,8 @@
 # limitations under the License.
 #
 
-from pyspark import since
-from pyspark.ml.util import keyword_only
+from pyspark import since, keyword_only
+from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel
 from pyspark.ml.param.shared import *
 from pyspark.mllib.common import inherit_doc
@@ -26,7 +26,8 @@ __all__ = ['ALS', 'ALSModel']
 
 
 @inherit_doc
-class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, HasRegParam, HasSeed):
+class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, HasRegParam, HasSeed,
+          JavaMLWritable, JavaMLReadable):
     """
     Alternating Least Squares (ALS) matrix factorization.
 
@@ -81,35 +82,72 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
     Row(user=1, item=0, prediction=2.6258413791656494)
     >>> predictions[2]
     Row(user=2, item=0, prediction=-1.5018409490585327)
+    >>> als_path = temp_path + "/als"
+    >>> als.save(als_path)
+    >>> als2 = ALS.load(als_path)
+    >>> als.getMaxIter()
+    5
+    >>> model_path = temp_path + "/als_model"
+    >>> model.save(model_path)
+    >>> model2 = ALSModel.load(model_path)
+    >>> model.rank == model2.rank
+    True
+    >>> sorted(model.userFactors.collect()) == sorted(model2.userFactors.collect())
+    True
+    >>> sorted(model.itemFactors.collect()) == sorted(model2.itemFactors.collect())
+    True
 
     .. versionadded:: 1.4.0
     """
 
-    rank = Param(Params._dummy(), "rank", "rank of the factorization")
-    numUserBlocks = Param(Params._dummy(), "numUserBlocks", "number of user blocks")
-    numItemBlocks = Param(Params._dummy(), "numItemBlocks", "number of item blocks")
-    implicitPrefs = Param(Params._dummy(), "implicitPrefs", "whether to use implicit preference")
-    alpha = Param(Params._dummy(), "alpha", "alpha for implicit preference")
-    userCol = Param(Params._dummy(), "userCol", "column name for user ids")
-    itemCol = Param(Params._dummy(), "itemCol", "column name for item ids")
-    ratingCol = Param(Params._dummy(), "ratingCol", "column name for ratings")
+    rank = Param(Params._dummy(), "rank", "rank of the factorization",
+                 typeConverter=TypeConverters.toInt)
+    numUserBlocks = Param(Params._dummy(), "numUserBlocks", "number of user blocks",
+                          typeConverter=TypeConverters.toInt)
+    numItemBlocks = Param(Params._dummy(), "numItemBlocks", "number of item blocks",
+                          typeConverter=TypeConverters.toInt)
+    implicitPrefs = Param(Params._dummy(), "implicitPrefs", "whether to use implicit preference",
+                          typeConverter=TypeConverters.toBoolean)
+    alpha = Param(Params._dummy(), "alpha", "alpha for implicit preference",
+                  typeConverter=TypeConverters.toFloat)
+    userCol = Param(Params._dummy(), "userCol", "column name for user ids",
+                    typeConverter=TypeConverters.toString)
+    itemCol = Param(Params._dummy(), "itemCol", "column name for item ids",
+                    typeConverter=TypeConverters.toString)
+    ratingCol = Param(Params._dummy(), "ratingCol", "column name for ratings",
+                      typeConverter=TypeConverters.toString)
     nonnegative = Param(Params._dummy(), "nonnegative",
-                        "whether to use nonnegative constraint for least squares")
+                        "whether to use nonnegative constraint for least squares",
+                        typeConverter=TypeConverters.toBoolean)
+    intermediateStorageLevel = Param(Params._dummy(), "intermediateStorageLevel",
+                                     "StorageLevel for intermediate datasets. Cannot be 'NONE'. " +
+                                     "Default: 'MEMORY_AND_DISK'.",
+                                     typeConverter=TypeConverters.toString)
+    finalStorageLevel = Param(Params._dummy(), "finalStorageLevel",
+                              "StorageLevel for ALS model factors. " +
+                              "Default: 'MEMORY_AND_DISK'.",
+                              typeConverter=TypeConverters.toString)
 
     @keyword_only
     def __init__(self, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10,
                  implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", seed=None,
-                 ratingCol="rating", nonnegative=False, checkpointInterval=10):
+                 ratingCol="rating", nonnegative=False, checkpointInterval=10,
+                 intermediateStorageLevel="MEMORY_AND_DISK",
+                 finalStorageLevel="MEMORY_AND_DISK"):
         """
         __init__(self, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10, \
                  implicitPrefs=false, alpha=1.0, userCol="user", itemCol="item", seed=None, \
-                 ratingCol="rating", nonnegative=false, checkpointInterval=10)
+                 ratingCol="rating", nonnegative=false, checkpointInterval=10, \
+                 intermediateStorageLevel="MEMORY_AND_DISK", \
+                 finalStorageLevel="MEMORY_AND_DISK")
         """
         super(ALS, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.recommendation.ALS", self.uid)
         self._setDefault(rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10,
                          implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", seed=None,
-                         ratingCol="rating", nonnegative=False, checkpointInterval=10)
+                         ratingCol="rating", nonnegative=False, checkpointInterval=10,
+                         intermediateStorageLevel="MEMORY_AND_DISK",
+                         finalStorageLevel="MEMORY_AND_DISK")
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
@@ -117,11 +155,15 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
     @since("1.4.0")
     def setParams(self, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10,
                   implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", seed=None,
-                  ratingCol="rating", nonnegative=False, checkpointInterval=10):
+                  ratingCol="rating", nonnegative=False, checkpointInterval=10,
+                  intermediateStorageLevel="MEMORY_AND_DISK",
+                  finalStorageLevel="MEMORY_AND_DISK"):
         """
         setParams(self, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10, \
                  implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", seed=None, \
-                 ratingCol="rating", nonnegative=False, checkpointInterval=10)
+                 ratingCol="rating", nonnegative=False, checkpointInterval=10, \
+                 intermediateStorageLevel="MEMORY_AND_DISK", \
+                 finalStorageLevel="MEMORY_AND_DISK")
         Sets params for ALS.
         """
         kwargs = self.setParams._input_kwargs
@@ -135,7 +177,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         """
         Sets the value of :py:attr:`rank`.
         """
-        self._paramMap[self.rank] = value
+        self._set(rank=value)
         return self
 
     @since("1.4.0")
@@ -150,7 +192,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         """
         Sets the value of :py:attr:`numUserBlocks`.
         """
-        self._paramMap[self.numUserBlocks] = value
+        self._set(numUserBlocks=value)
         return self
 
     @since("1.4.0")
@@ -165,7 +207,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         """
         Sets the value of :py:attr:`numItemBlocks`.
         """
-        self._paramMap[self.numItemBlocks] = value
+        self._set(numItemBlocks=value)
         return self
 
     @since("1.4.0")
@@ -180,15 +222,15 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         """
         Sets both :py:attr:`numUserBlocks` and :py:attr:`numItemBlocks` to the specific value.
         """
-        self._paramMap[self.numUserBlocks] = value
-        self._paramMap[self.numItemBlocks] = value
+        self._set(numUserBlocks=value)
+        self._set(numItemBlocks=value)
 
     @since("1.4.0")
     def setImplicitPrefs(self, value):
         """
         Sets the value of :py:attr:`implicitPrefs`.
         """
-        self._paramMap[self.implicitPrefs] = value
+        self._set(implicitPrefs=value)
         return self
 
     @since("1.4.0")
@@ -203,7 +245,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         """
         Sets the value of :py:attr:`alpha`.
         """
-        self._paramMap[self.alpha] = value
+        self._set(alpha=value)
         return self
 
     @since("1.4.0")
@@ -218,7 +260,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         """
         Sets the value of :py:attr:`userCol`.
         """
-        self._paramMap[self.userCol] = value
+        self._set(userCol=value)
         return self
 
     @since("1.4.0")
@@ -233,7 +275,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         """
         Sets the value of :py:attr:`itemCol`.
         """
-        self._paramMap[self.itemCol] = value
+        self._set(itemCol=value)
         return self
 
     @since("1.4.0")
@@ -248,7 +290,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         """
         Sets the value of :py:attr:`ratingCol`.
         """
-        self._paramMap[self.ratingCol] = value
+        self._set(ratingCol=value)
         return self
 
     @since("1.4.0")
@@ -263,7 +305,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         """
         Sets the value of :py:attr:`nonnegative`.
         """
-        self._paramMap[self.nonnegative] = value
+        self._set(nonnegative=value)
         return self
 
     @since("1.4.0")
@@ -273,8 +315,38 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         """
         return self.getOrDefault(self.nonnegative)
 
+    @since("2.0.0")
+    def setIntermediateStorageLevel(self, value):
+        """
+        Sets the value of :py:attr:`intermediateStorageLevel`.
+        """
+        self._set(intermediateStorageLevel=value)
+        return self
 
-class ALSModel(JavaModel):
+    @since("2.0.0")
+    def getIntermediateStorageLevel(self):
+        """
+        Gets the value of intermediateStorageLevel or its default value.
+        """
+        return self.getOrDefault(self.intermediateStorageLevel)
+
+    @since("2.0.0")
+    def setFinalStorageLevel(self, value):
+        """
+        Sets the value of :py:attr:`finalStorageLevel`.
+        """
+        self._set(finalStorageLevel=value)
+        return self
+
+    @since("2.0.0")
+    def getFinalStorageLevel(self):
+        """
+        Gets the value of finalStorageLevel or its default value.
+        """
+        return self.getOrDefault(self.finalStorageLevel)
+
+
+class ALSModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
     Model fitted by ALS.
 
@@ -308,16 +380,27 @@ class ALSModel(JavaModel):
 
 if __name__ == "__main__":
     import doctest
+    import pyspark.ml.recommendation
     from pyspark.context import SparkContext
     from pyspark.sql import SQLContext
-    globs = globals().copy()
+    globs = pyspark.ml.recommendation.__dict__.copy()
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:
     sc = SparkContext("local[2]", "ml.recommendation tests")
     sqlContext = SQLContext(sc)
     globs['sc'] = sc
     globs['sqlContext'] = sqlContext
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
-    sc.stop()
+    import tempfile
+    temp_path = tempfile.mkdtemp()
+    globs['temp_path'] = temp_path
+    try:
+        (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+        sc.stop()
+    finally:
+        from shutil import rmtree
+        try:
+            rmtree(temp_path)
+        except OSError:
+            pass
     if failure_count:
         exit(-1)

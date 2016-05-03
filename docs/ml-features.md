@@ -22,10 +22,19 @@ This section covers algorithms for working with features, roughly divided into t
 
 [Term Frequency-Inverse Document Frequency (TF-IDF)](http://en.wikipedia.org/wiki/Tf%E2%80%93idf) is a common text pre-processing step.  In Spark ML, TF-IDF is separate into two parts: TF (+hashing) and IDF.
 
-**TF**: `HashingTF` is a `Transformer` which takes sets of terms and converts those sets into fixed-length feature vectors.  In text processing, a "set of terms" might be a bag of words.
-The algorithm combines Term Frequency (TF) counts with the [hashing trick](http://en.wikipedia.org/wiki/Feature_hashing) for dimensionality reduction.
+**TF**: Both `HashingTF` and `CountVectorizer` can be used to generate the term frequency vectors. 
 
-**IDF**: `IDF` is an `Estimator` which fits on a dataset and produces an `IDFModel`.  The `IDFModel` takes feature vectors (generally created from `HashingTF`) and scales each column.  Intuitively, it down-weights columns which appear frequently in a corpus.
+`HashingTF` is a `Transformer` which takes sets of terms and converts those sets into 
+fixed-length feature vectors.  In text processing, a "set of terms" might be a bag of words.
+The algorithm combines Term Frequency (TF) counts with the 
+[hashing trick](http://en.wikipedia.org/wiki/Feature_hashing) for dimensionality reduction.
+
+`CountVectorizer` converts text documents to vectors of term counts. Refer to [CountVectorizer
+](ml-features.html#countvectorizer) for more details.
+
+**IDF**: `IDF` is an `Estimator` which is fit on a dataset and produces an `IDFModel`.  The 
+`IDFModel` takes feature vectors (generally created from `HashingTF` or `CountVectorizer`) and scales each column.  
+Intuitively, it down-weights columns which appear frequently in a corpus.
 
 Please refer to the [MLlib user guide on TF-IDF](mllib-feature-extraction.html#tf-idf) for more details on Term Frequency and Inverse Document Frequency.
 
@@ -149,6 +158,15 @@ for more details on the API.
 
 {% include_example java/org/apache/spark/examples/ml/JavaCountVectorizerExample.java %}
 </div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [CountVectorizer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.CountVectorizer)
+and the [CountVectorizerModel Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.CountVectorizerModel)
+for more details on the API.
+
+{% include_example python/ml/count_vectorizer_example.py %}
+</div>
 </div>
 
 # Feature Transformers
@@ -185,7 +203,7 @@ for more details on the API.
 <div data-lang="python" markdown="1">
 
 Refer to the [Tokenizer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.Tokenizer) and
-the the [RegexTokenizer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.RegexTokenizer)
+the [RegexTokenizer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.RegexTokenizer)
 for more details on the API.
 
 {% include_example python/ml/tokenizer_example.py %}
@@ -413,6 +431,14 @@ for more details on the API.
 
 {% include_example java/org/apache/spark/examples/ml/JavaDCTExample.java %}
 </div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [DCT Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.DCT)
+for more details on the API.
+
+{% include_example python/ml/dct_example.py %}
+</div>
 </div>
 
 ## StringIndexer
@@ -459,7 +485,7 @@ column, we should get the following:
 "a" gets index `0` because it is the most frequent, followed by "c" with index `1` and "b" with
 index `2`.
 
-Additionaly, there are two strategies regarding how `StringIndexer` will handle
+Additionally, there are two strategies regarding how `StringIndexer` will handle
 unseen labels when you have fit a `StringIndexer` on one dataset and then use it
 to transform another:
 
@@ -771,6 +797,54 @@ for more details on the API.
 
 {% include_example java/org/apache/spark/examples/ml/JavaMinMaxScalerExample.java %}
 </div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [MinMaxScaler Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.MinMaxScaler)
+for more details on the API.
+
+{% include_example python/ml/min_max_scaler_example.py %}
+</div>
+</div>
+
+
+## MaxAbsScaler
+
+`MaxAbsScaler` transforms a dataset of `Vector` rows, rescaling each feature to range [-1, 1] 
+by dividing through the maximum absolute value in each feature. It does not shift/center the 
+data, and thus does not destroy any sparsity.
+
+`MaxAbsScaler` computes summary statistics on a data set and produces a `MaxAbsScalerModel`. The 
+model can then transform each feature individually to range [-1, 1].
+
+The following example demonstrates how to load a dataset in libsvm format and then rescale each feature to [-1, 1].
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+Refer to the [MaxAbsScaler Scala docs](api/scala/index.html#org.apache.spark.ml.feature.MaxAbsScaler)
+and the [MaxAbsScalerModel Scala docs](api/scala/index.html#org.apache.spark.ml.feature.MaxAbsScalerModel)
+for more details on the API.
+
+{% include_example scala/org/apache/spark/examples/ml/MaxAbsScalerExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [MaxAbsScaler Java docs](api/java/org/apache/spark/ml/feature/MaxAbsScaler.html)
+and the [MaxAbsScalerModel Java docs](api/java/org/apache/spark/ml/feature/MaxAbsScalerModel.html)
+for more details on the API.
+
+{% include_example java/org/apache/spark/examples/ml/JavaMaxAbsScalerExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [MaxAbsScaler Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.MaxAbsScaler)
+for more details on the API.
+
+{% include_example python/ml/max_abs_scaler_example.py %}
+</div>
 </div>
 
 ## Bucketizer
@@ -779,7 +853,7 @@ for more details on the API.
 
 * `splits`: Parameter for mapping continuous features into buckets. With n+1 splits, there are n buckets. A bucket defined by splits x,y holds values in the range [x,y) except the last bucket, which also includes y. Splits should be strictly increasing. Values at -inf, inf must be explicitly provided to cover all Double values; Otherwise, values outside the splits specified will be treated as errors. Two examples of `splits` are `Array(Double.NegativeInfinity, 0.0, 1.0, Double.PositiveInfinity)` and `Array(0.0, 1.0, 2.0)`.
 
-Note that if you have no idea of the upper bound and lower bound of the targeted column, you would better add the `Double.NegativeInfinity` and `Double.PositiveInfinity` as the bounds of your splits to prevent a potenial out of Bucketizer bounds exception.
+Note that if you have no idea of the upper bound and lower bound of the targeted column, you would better add the `Double.NegativeInfinity` and `Double.PositiveInfinity` as the bounds of your splits to prevent a potential out of Bucketizer bounds exception.
 
 Note also that the splits that you provided have to be in strictly increasing order, i.e. `s0 < s1 < s2 < ... < sn`.
 
@@ -1117,6 +1191,14 @@ for more details on the API.
 
 {% include_example java/org/apache/spark/examples/ml/JavaVectorSlicerExample.java %}
 </div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [VectorSlicer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.VectorSlicer)
+for more details on the API.
+
+{% include_example python/ml/vector_slicer_example.py %}
+</div>
 </div>
 
 ## RFormula
@@ -1237,5 +1319,13 @@ Refer to the [ChiSqSelector Java docs](api/java/org/apache/spark/ml/feature/ChiS
 for more details on the API.
 
 {% include_example java/org/apache/spark/examples/ml/JavaChiSqSelectorExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [ChiSqSelector Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.ChiSqSelector)
+for more details on the API.
+
+{% include_example python/ml/chisq_selector_example.py %}
 </div>
 </div>

@@ -38,12 +38,14 @@ else:
 
 import numpy as np
 
+from pyspark import since
 from pyspark.sql.types import UserDefinedType, StructField, StructType, ArrayType, DoubleType, \
     IntegerType, ByteType, BooleanType
 
 
 __all__ = ['Vector', 'DenseVector', 'SparseVector', 'Vectors',
-           'Matrix', 'DenseMatrix', 'SparseMatrix', 'Matrices']
+           'Matrix', 'DenseMatrix', 'SparseMatrix', 'Matrices',
+           'QRDecomposition']
 
 
 if sys.version_info[:2] == (2, 7):
@@ -293,7 +295,7 @@ class DenseVector(Vector):
         s = s[start + 1: end]
 
         try:
-            values = [float(val) for val in s.split(',')]
+            values = [float(val) for val in s.split(',') if val]
         except ValueError:
             raise ValueError("Unable to parse values from %s" % s)
         return DenseVector(values)
@@ -558,7 +560,7 @@ class SparseVector(Vector):
     @staticmethod
     def parse(s):
         """
-        Parse string representation back into the DenseVector.
+        Parse string representation back into the SparseVector.
 
         >>> SparseVector.parse(' (4, [0,1 ],[ 4.0,5.0] )')
         SparseVector(4, {0: 4.0, 1: 5.0})
@@ -586,7 +588,7 @@ class SparseVector(Vector):
         new_s = s[ind_start + 1: ind_end]
         ind_list = new_s.split(',')
         try:
-            indices = [int(ind) for ind in ind_list]
+            indices = [int(ind) for ind in ind_list if ind]
         except ValueError:
             raise ValueError("Unable to parse indices from %s." % new_s)
         s = s[ind_end + 1:].strip()
@@ -599,7 +601,7 @@ class SparseVector(Vector):
             raise ValueError("Values array should end with ']'.")
         val_list = s[val_start + 1: val_end].split(',')
         try:
-            values = [float(val) for val in val_list]
+            values = [float(val) for val in val_list if val]
         except ValueError:
             raise ValueError("Unable to parse values from %s." % s)
         return SparseVector(size, indices, values)
@@ -1233,6 +1235,34 @@ class Matrices(object):
         Create a SparseMatrix
         """
         return SparseMatrix(numRows, numCols, colPtrs, rowIndices, values)
+
+
+class QRDecomposition(object):
+    """
+    .. note:: Experimental
+
+    Represents QR factors.
+    """
+    def __init__(self, Q, R):
+        self._Q = Q
+        self._R = R
+
+    @property
+    @since('2.0.0')
+    def Q(self):
+        """
+        An orthogonal matrix Q in a QR decomposition.
+        May be null if not computed.
+        """
+        return self._Q
+
+    @property
+    @since('2.0.0')
+    def R(self):
+        """
+        An upper triangular matrix R in a QR decomposition.
+        """
+        return self._R
 
 
 def _test():

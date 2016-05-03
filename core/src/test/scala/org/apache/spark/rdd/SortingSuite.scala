@@ -19,7 +19,8 @@ package org.apache.spark.rdd
 
 import org.scalatest.Matchers
 
-import org.apache.spark.{Logging, SharedSparkContext, SparkFunSuite}
+import org.apache.spark.{SharedSparkContext, SparkFunSuite}
+import org.apache.spark.internal.Logging
 
 class SortingSuite extends SparkFunSuite with SharedSparkContext with Matchers with Logging {
 

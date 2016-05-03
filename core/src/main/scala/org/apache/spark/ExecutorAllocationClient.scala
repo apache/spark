@@ -23,6 +23,10 @@ package org.apache.spark
  */
 private[spark] trait ExecutorAllocationClient {
 
+
+  /** Get the list of currently active executors */
+  private[spark] def getExecutorIds(): Seq[String]
+
   /**
    * Update the cluster manager on our scheduling needs. Three bits of information are included
    * to help it make decisions.

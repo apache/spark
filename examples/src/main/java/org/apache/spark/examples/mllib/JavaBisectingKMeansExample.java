@@ -33,7 +33,7 @@ import org.apache.spark.mllib.linalg.Vectors;
 // $example off$
 
 /**
- * Java example for graph clustering using power iteration clustering (PIC).
+ * Java example for bisecting k-means clustering.
  */
 public class JavaBisectingKMeansExample {
   public static void main(String[] args) {
@@ -54,9 +54,7 @@ public class JavaBisectingKMeansExample {
     BisectingKMeansModel model = bkm.run(data);
 
     System.out.println("Compute Cost: " + model.computeCost(data));
-    for (Vector center: model.clusterCenters()) {
-      System.out.println("");
-    }
+
     Vector[] clusterCenters = model.clusterCenters();
     for (int i = 0; i < clusterCenters.length; i++) {
       Vector clusterCenter = clusterCenters[i];

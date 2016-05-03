@@ -22,8 +22,6 @@ import java.util.Properties
 import org.apache.commons.lang3.SerializationUtils
 import org.scalatest.{BeforeAndAfterEach, Suite}
 
-import org.apache.spark.SparkFunSuite
-
 /**
  * Mixin for automatically resetting system properties that are modified in ScalaTest tests.
  * This resets the properties after each individual test.

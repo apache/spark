@@ -22,7 +22,7 @@ if sys.version >= '3':
 
 from py4j.java_gateway import JavaClass
 
-from pyspark import RDD, since
+from pyspark import RDD, since, keyword_only
 from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql.column import _to_seq
 from pyspark.sql.types import *
@@ -33,10 +33,13 @@ __all__ = ["DataFrameReader", "DataFrameWriter"]
 
 def to_str(value):
     """
-    A wrapper over str(), but convert bool values to lower case string
+    A wrapper over str(), but converts bool values to lower case strings.
+    If None is given, just returns None, instead of converting it to string "None".
     """
     if isinstance(value, bool):
         return str(value).lower()
+    elif value is None:
+        return value
     else:
         return str(value)
 
@@ -136,6 +139,32 @@ class DataFrameReader(object):
         else:
             return self._df(self._jreader.load())
 
+    @since(2.0)
+    def stream(self, path=None, format=None, schema=None, **options):
+        """Loads a data stream from a data source and returns it as a :class`DataFrame`.
+
+        :param path: optional string for file-system backed data sources.
+        :param format: optional string for format of the data source. Default to 'parquet'.
+        :param schema: optional :class:`StructType` for the input schema.
+        :param options: all other string options
+
+        >>> df = sqlContext.read.format('text').stream('python/test_support/sql/streaming')
+        >>> df.isStreaming
+        True
+        """
+        if format is not None:
+            self.format(format)
+        if schema is not None:
+            self.schema(schema)
+        self.options(**options)
+        if path is not None:
+            if type(path) != str or len(path.strip()) == 0:
+                raise ValueError("If the path is provided for stream, it needs to be a " +
+                                 "non-empty string. List of paths are not supported.")
+            return self._df(self._jreader.stream(path))
+        else:
+            return self._df(self._jreader.stream())
+
     @since(1.4)
     def json(self, path, schema=None):
         """
@@ -152,8 +181,8 @@ class DataFrameReader(object):
         You can set the following JSON-specific options to deal with non-standard JSON files:
             * ``primitivesAsString`` (default ``false``): infers all primitive values as a string \
                 type
-            * `floatAsBigDecimal` (default `false`): infers all floating-point values as a decimal \
-                type
+            * `prefersDecimal` (default `false`): infers all floating-point values as a decimal \
+                type. If the values do not fit in decimal, then it infers them as doubles.
             * ``allowComments`` (default ``false``): ignores Java/C++ style comment in JSON records
             * ``allowUnquotedFieldNames`` (default ``false``): allows unquoted JSON field names
             * ``allowSingleQuotes`` (default ``true``): allows single quotes in addition to double \
@@ -162,6 +191,17 @@ class DataFrameReader(object):
                 (e.g. 00012)
             * ``allowBackslashEscapingAnyCharacter`` (default ``false``): allows accepting quoting \
                 of all character using backslash quoting mechanism
+            *  ``mode`` (default ``PERMISSIVE``): allows a mode for dealing with corrupt records \
+                during parsing.
+                *  ``PERMISSIVE`` : sets other fields to ``null`` when it meets a corrupted \
+                  record and puts the malformed string into a new field configured by \
+                 ``columnNameOfCorruptRecord``. When a schema is set by user, it sets \
+                 ``null`` for extra fields.
+                *  ``DROPMALFORMED`` : ignores the whole corrupted records.
+                *  ``FAILFAST`` : throws an exception when it meets corrupted records.
+            *  ``columnNameOfCorruptRecord`` (default ``_corrupt_record``): allows renaming the \
+                 new field having malformed string created by ``PERMISSIVE`` mode. \
+                 This overrides ``spark.sql.columnNameOfCorruptRecord``.
 
         >>> df1 = sqlContext.read.json('python/test_support/sql/people.json')
         >>> df1.dtypes
@@ -232,6 +272,62 @@ class DataFrameReader(object):
         if isinstance(paths, basestring):
             paths = [paths]
         return self._df(self._jreader.text(self._sqlContext._sc._jvm.PythonUtils.toSeq(paths)))
+
+    @since(2.0)
+    def csv(self, paths):
+        """Loads a CSV file and returns the result as a [[DataFrame]].
+
+        This function goes through the input once to determine the input schema. To avoid going
+        through the entire data once, specify the schema explicitly using [[schema]].
+
+        :param paths: string, or list of strings, for input path(s).
+
+        You can set the following CSV-specific options to deal with CSV files:
+            * ``sep`` (default ``,``): sets the single character as a separator \
+                for each field and value.
+            * ``charset`` (default ``UTF-8``): decodes the CSV files by the given \
+                encoding type.
+            * ``quote`` (default ``"``): sets the single character used for escaping \
+                quoted values where the separator can be part of the value.
+            * ``escape`` (default ``\``): sets the single character used for escaping quotes \
+                inside an already quoted value.
+            * ``comment`` (default empty string): sets the single character used for skipping \
+                lines beginning with this character. By default, it is disabled.
+            * ``header`` (default ``false``): uses the first line as names of columns.
+            * ``ignoreLeadingWhiteSpace`` (default ``false``): defines whether or not leading \
+                whitespaces from values being read should be skipped.
+            * ``ignoreTrailingWhiteSpace`` (default ``false``): defines whether or not trailing \
+                whitespaces from values being read should be skipped.
+            * ``nullValue`` (default empty string): sets the string representation of a null value.
+            * ``nanValue`` (default ``NaN``): sets the string representation of a non-number \
+                value.
+            * ``positiveInf`` (default ``Inf``): sets the string representation of a positive \
+                infinity value.
+            * ``negativeInf`` (default ``-Inf``): sets the string representation of a negative \
+                infinity value.
+            * ``dateFormat`` (default ``None``): sets the string that indicates a date format. \
+                Custom date formats follow the formats at ``java.text.SimpleDateFormat``. This \
+                applies to both date type and timestamp type. By default, it is None which means \
+                trying to parse times and date by ``java.sql.Timestamp.valueOf()`` and \
+                ``java.sql.Date.valueOf()``.
+            * ``maxColumns`` (default ``20480``): defines a hard limit of how many columns \
+                a record can have.
+            * ``maxCharsPerColumn`` (default ``1000000``): defines the maximum number of \
+                characters allowed for any given value being read.
+            * ``mode`` (default ``PERMISSIVE``): allows a mode for dealing with corrupt records \
+                during parsing.
+                * ``PERMISSIVE`` : sets other fields to ``null`` when it meets a corrupted record. \
+                    When a schema is set by user, it sets ``null`` for extra fields.
+                * ``DROPMALFORMED`` : ignores the whole corrupted records.
+                * ``FAILFAST`` : throws an exception when it meets corrupted records.
+
+        >>> df = sqlContext.read.csv('python/test_support/sql/ages.csv')
+        >>> df.dtypes
+        [('C0', 'string'), ('C1', 'string')]
+        """
+        if isinstance(paths, basestring):
+            paths = [paths]
+        return self._df(self._jreader.csv(self._sqlContext._sc._jvm.PythonUtils.toSeq(paths)))
 
     @since(1.5)
     def orc(self, path):
@@ -306,6 +402,10 @@ class DataFrameWriter(object):
         self._sqlContext = df.sql_ctx
         self._jwrite = df._jdf.write()
 
+    def _cq(self, jcq):
+        from pyspark.sql.streaming import ContinuousQuery
+        return ContinuousQuery(jcq)
+
     @since(1.4)
     def mode(self, saveMode):
         """Specifies the behavior when data or table already exists.
@@ -340,7 +440,7 @@ class DataFrameWriter(object):
     def option(self, key, value):
         """Adds an output option for the underlying data source.
         """
-        self._jwrite = self._jwrite.option(key, value)
+        self._jwrite = self._jwrite.option(key, to_str(value))
         return self
 
     @since(1.4)
@@ -348,7 +448,7 @@ class DataFrameWriter(object):
         """Adds output options for the underlying data source.
         """
         for k in options:
-            self._jwrite = self._jwrite.option(k, options[k])
+            self._jwrite = self._jwrite.option(k, to_str(options[k]))
         return self
 
     @since(1.4)
@@ -365,6 +465,44 @@ class DataFrameWriter(object):
         if len(cols) == 1 and isinstance(cols[0], (list, tuple)):
             cols = cols[0]
         self._jwrite = self._jwrite.partitionBy(_to_seq(self._sqlContext._sc, cols))
+        return self
+
+    @since(2.0)
+    def queryName(self, queryName):
+        """Specifies the name of the :class:`ContinuousQuery` that can be started with
+        :func:`startStream`. This name must be unique among all the currently active queries
+        in the associated SQLContext.
+
+        :param queryName: unique name for the query
+
+        >>> writer = sdf.write.queryName('streaming_query')
+        """
+        if not queryName or type(queryName) != str or len(queryName.strip()) == 0:
+            raise ValueError('The queryName must be a non-empty string. Got: %s' % queryName)
+        self._jwrite = self._jwrite.queryName(queryName)
+        return self
+
+    @keyword_only
+    @since(2.0)
+    def trigger(self, processingTime=None):
+        """Set the trigger for the stream query. If this is not set it will run the query as fast
+        as possible, which is equivalent to setting the trigger to ``processingTime='0 seconds'``.
+
+        :param processingTime: a processing time interval as a string, e.g. '5 seconds', '1 minute'.
+
+        >>> # trigger the query for execution every 5 seconds
+        >>> writer = sdf.write.trigger(processingTime='5 seconds')
+        """
+        from pyspark.sql.streaming import ProcessingTime
+        trigger = None
+        if processingTime is not None:
+            if type(processingTime) != str or len(processingTime.strip()) == 0:
+                raise ValueError('The processing time must be a non empty string. Got: %s' %
+                                 processingTime)
+            trigger = ProcessingTime(processingTime)
+        if trigger is None:
+            raise ValueError('A trigger was not provided. Supported triggers: processingTime.')
+        self._jwrite = self._jwrite.trigger(trigger._to_java_trigger(self._sqlContext))
         return self
 
     @since(1.4)
@@ -397,6 +535,55 @@ class DataFrameWriter(object):
             self._jwrite.save()
         else:
             self._jwrite.save(path)
+
+    @ignore_unicode_prefix
+    @since(2.0)
+    def startStream(self, path=None, format=None, partitionBy=None, queryName=None, **options):
+        """Streams the contents of the :class:`DataFrame` to a data source.
+
+        The data source is specified by the ``format`` and a set of ``options``.
+        If ``format`` is not specified, the default data source configured by
+        ``spark.sql.sources.default`` will be used.
+
+        :param path: the path in a Hadoop supported file system
+        :param format: the format used to save
+
+            * ``append``: Append contents of this :class:`DataFrame` to existing data.
+            * ``overwrite``: Overwrite existing data.
+            * ``ignore``: Silently ignore this operation if data already exists.
+            * ``error`` (default case): Throw an exception if data already exists.
+        :param partitionBy: names of partitioning columns
+        :param queryName: unique name for the query
+        :param options: All other string options. You may want to provide a `checkpointLocation`
+            for most streams, however it is not required for a `memory` stream.
+
+        >>> cq = sdf.write.format('memory').queryName('this_query').startStream()
+        >>> cq.isActive
+        True
+        >>> cq.name
+        u'this_query'
+        >>> cq.stop()
+        >>> cq.isActive
+        False
+        >>> cq = sdf.write.trigger(processingTime='5 seconds').startStream(
+        ...     queryName='that_query', format='memory')
+        >>> cq.name
+        u'that_query'
+        >>> cq.isActive
+        True
+        >>> cq.stop()
+        """
+        self.options(**options)
+        if partitionBy is not None:
+            self.partitionBy(partitionBy)
+        if format is not None:
+            self.format(format)
+        if queryName is not None:
+            self.queryName(queryName)
+        if path is None:
+            return self._cq(self._jwrite.startStream())
+        else:
+            return self._cq(self._jwrite.startStream(path))
 
     @since(1.4)
     def insertInto(self, tableName, overwrite=False):
@@ -437,7 +624,7 @@ class DataFrameWriter(object):
         self._jwrite.saveAsTable(name)
 
     @since(1.4)
-    def json(self, path, mode=None):
+    def json(self, path, mode=None, compression=None):
         """Saves the content of the :class:`DataFrame` in JSON format at the specified path.
 
         :param path: the path in any Hadoop supported file system
@@ -447,13 +634,19 @@ class DataFrameWriter(object):
             * ``overwrite``: Overwrite existing data.
             * ``ignore``: Silently ignore this operation if data already exists.
             * ``error`` (default case): Throw an exception if data already exists.
+        :param compression: compression codec to use when saving to file. This can be one of the
+                            known case-insensitive shorten names (none, bzip2, gzip, lz4,
+                            snappy and deflate).
 
         >>> df.write.json(os.path.join(tempfile.mkdtemp(), 'data'))
         """
-        self.mode(mode)._jwrite.json(path)
+        self.mode(mode)
+        if compression is not None:
+            self.option("compression", compression)
+        self._jwrite.json(path)
 
     @since(1.4)
-    def parquet(self, path, mode=None, partitionBy=None):
+    def parquet(self, path, mode=None, partitionBy=None, compression=None):
         """Saves the content of the :class:`DataFrame` in Parquet format at the specified path.
 
         :param path: the path in any Hadoop supported file system
@@ -464,25 +657,73 @@ class DataFrameWriter(object):
             * ``ignore``: Silently ignore this operation if data already exists.
             * ``error`` (default case): Throw an exception if data already exists.
         :param partitionBy: names of partitioning columns
+        :param compression: compression codec to use when saving to file. This can be one of the
+                            known case-insensitive shorten names (none, snappy, gzip, and lzo).
+                            This will overwrite ``spark.sql.parquet.compression.codec``.
 
         >>> df.write.parquet(os.path.join(tempfile.mkdtemp(), 'data'))
         """
         self.mode(mode)
         if partitionBy is not None:
             self.partitionBy(partitionBy)
+        if compression is not None:
+            self.option("compression", compression)
         self._jwrite.parquet(path)
 
     @since(1.6)
-    def text(self, path):
+    def text(self, path, compression=None):
         """Saves the content of the DataFrame in a text file at the specified path.
+
+        :param path: the path in any Hadoop supported file system
+        :param compression: compression codec to use when saving to file. This can be one of the
+                            known case-insensitive shorten names (none, bzip2, gzip, lz4,
+                            snappy and deflate).
 
         The DataFrame must have only one column that is of string type.
         Each row becomes a new line in the output file.
         """
+        if compression is not None:
+            self.option("compression", compression)
         self._jwrite.text(path)
 
+    @since(2.0)
+    def csv(self, path, mode=None, compression=None):
+        """Saves the content of the [[DataFrame]] in CSV format at the specified path.
+
+        :param path: the path in any Hadoop supported file system
+        :param mode: specifies the behavior of the save operation when data already exists.
+
+            * ``append``: Append contents of this :class:`DataFrame` to existing data.
+            * ``overwrite``: Overwrite existing data.
+            * ``ignore``: Silently ignore this operation if data already exists.
+            * ``error`` (default case): Throw an exception if data already exists.
+
+        :param compression: compression codec to use when saving to file. This can be one of the
+                            known case-insensitive shorten names (none, bzip2, gzip, lz4,
+                            snappy and deflate).
+
+        You can set the following CSV-specific options to deal with CSV files:
+            * ``sep`` (default ``,``): sets the single character as a separator \
+                for each field and value.
+            * ``quote`` (default ``"``): sets the single character used for escaping \
+                quoted values where the separator can be part of the value.
+            * ``escape`` (default ``\``): sets the single character used for escaping quotes \
+                inside an already quoted value.
+            * ``header`` (default ``false``): writes the names of columns as the first line.
+            * ``nullValue`` (default empty string): sets the string representation of a null value.
+            * ``compression``: compression codec to use when saving to file. This can be one of \
+                the known case-insensitive shorten names (none, bzip2, gzip, lz4, snappy and \
+                deflate).
+
+        >>> df.write.csv(os.path.join(tempfile.mkdtemp(), 'data'))
+        """
+        self.mode(mode)
+        if compression is not None:
+            self.option("compression", compression)
+        self._jwrite.csv(path)
+
     @since(1.5)
-    def orc(self, path, mode=None, partitionBy=None):
+    def orc(self, path, mode=None, partitionBy=None, compression=None):
         """Saves the content of the :class:`DataFrame` in ORC format at the specified path.
 
         ::Note: Currently ORC support is only available together with
@@ -496,6 +737,9 @@ class DataFrameWriter(object):
             * ``ignore``: Silently ignore this operation if data already exists.
             * ``error`` (default case): Throw an exception if data already exists.
         :param partitionBy: names of partitioning columns
+        :param compression: compression codec to use when saving to file. This can be one of the
+                            known case-insensitive shorten names (none, snappy, zlib, and lzo).
+                            This will overwrite ``orc.compress``.
 
         >>> orc_df = hiveContext.read.orc('python/test_support/sql/orc_partitioned')
         >>> orc_df.write.orc(os.path.join(tempfile.mkdtemp(), 'data'))
@@ -503,6 +747,8 @@ class DataFrameWriter(object):
         self.mode(mode)
         if partitionBy is not None:
             self.partitionBy(partitionBy)
+        if compression is not None:
+            self.option("compression", compression)
         self._jwrite.orc(path)
 
     @since(1.4)
@@ -549,8 +795,10 @@ def _test():
     globs['os'] = os
     globs['sc'] = sc
     globs['sqlContext'] = SQLContext(sc)
-    globs['hiveContext'] = HiveContext(sc)
+    globs['hiveContext'] = HiveContext._createForTesting(sc)
     globs['df'] = globs['sqlContext'].read.parquet('python/test_support/sql/parquet_partitioned')
+    globs['sdf'] =\
+        globs['sqlContext'].read.format('text').stream('python/test_support/sql/streaming')
 
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.readwriter, globs=globs,
