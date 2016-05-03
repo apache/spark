@@ -612,10 +612,13 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
         s"SHOW CREATE TABLE cannot be applied to temporary table")
     }
 
-    require(catalog.tableExists(table), s"Table $table doesn't exist")
+    if (!catalog.tableExists(table)) {
+      throw new AnalysisException(s"Table $table doesn't exist")
+    }
+
     val tableMetadata = catalog.getTableMetadata(table)
 
-    val stmt = if (tableMetadata.properties.contains("spark.sql.sources.provider")) {
+    val stmt = if (DDLUtils.isDatasourceTable(tableMetadata)) {
       showCreateDataSourceTable(tableMetadata)
     } else {
       throw new UnsupportedOperationException(
