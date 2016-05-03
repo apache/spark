@@ -110,7 +110,7 @@ private[spark] object Utils extends Logging {
   }
 
   /** Deserialize a Long value (used for [[org.apache.spark.api.python.PythonPartitioner]]) */
-  def deserializeLongValue(bytes: Array[Byte]) : Long = {
+  def deserializeLongValue(bytes: Array[Byte]): Long = {
     // Note: we assume that we are given a Long value encoded in network (big-endian) byte order
     var result = bytes(7) & 0xFFL
     result = result + ((bytes(6) & 0xFFL) << 8)
@@ -1096,7 +1096,7 @@ private[spark] object Utils extends Logging {
    * Create a jar file at the given path, containing a manifest with a classpath
    * that references all specified entries.
    */
-  def createShortClassPath(tempDir: File, classPath: String) : String = {
+  def createShortClassPath(tempDir: File, classPath: String): String = {
     if (isWindows) {
       val env = new util.HashMap[String, String](System.getenv())
       val javaCps = FileUtil
@@ -1109,7 +1109,7 @@ private[spark] object Utils extends Logging {
     }
   }
 
-  def createShortClassPath(classPath: String) : String = {
+  def createShortClassPath(classPath: String): String = {
     val tempDir = createTempDir("classpaths")
     createShortClassPath(tempDir, classPath)
   }
