@@ -211,7 +211,7 @@ class Dataset[T] private[sql](
 
   private implicit def classTag = unresolvedTEncoder.clsTag
 
-  def sqlContext: SQLContext = sparkSession.wrapped
+  lazy val sqlContext: SQLContext = sparkSession.wrapped
 
   protected[sql] def resolve(colName: String): NamedExpression = {
     queryExecution.analyzed.resolveQuoted(colName, sparkSession.sessionState.analyzer.resolver)
