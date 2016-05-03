@@ -231,12 +231,12 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
         |SELECT count(key), value FROM testDataset GROUP BY value
       """.stripMargin)
 
-    val orcFiles = tmpDir.listFiles()
+    val overwrittenFiles = tmpDir.listFiles()
       .filter(f => f.isFile && f.getName.endsWith(".crc"))
       .sortBy(_.getName)
-    val orcFilesWithoutEmpty = orcFiles.filter(_.length > 0)
+    val overwrittenFilesWithoutEmpty = overwrittenFiles.filter(_.length > 0)
 
-    assert(orcFiles === orcFilesWithoutEmpty)
+    assert(overwrittenFiles === overwrittenFilesWithoutEmpty)
 
     sql("DROP TABLE table1")
   }
