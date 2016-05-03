@@ -88,22 +88,28 @@ class AccumulatorV2Suite extends SparkFunSuite with LocalSparkContext {
   }
 
   test("ListAccumulator") {
-    val maxI = 1000
-    for (nThreads <- List(1, 10)) {
-      // test single & multi-threaded
-      sc = new SparkContext("local[" + nThreads + "]", "test")
-      val acc = sc.listAccumulator[Double]
-      assert(acc.isZero)
+    val acc = new ListAccumulator[Double]
+    assert(acc.value.isEmpty)
+    assert(acc.isZero)
 
-      val d = sc.parallelize((1 to maxI) ++ (1 to maxI)).map(_.toDouble)
-      d.foreach { x => acc.add(x) }
+    acc.add(0.0)
+    assert(acc.value.contains(0.0))
+    assert(!acc.isZero)
 
-      assert(acc.value.size() === 2*maxI)
-      for (i <- 1 to maxI) {
-        assert(acc.value.contains(i.toDouble))
-      }
-      resetSparkContext()
-    }
+    acc.add(new java.lang.Double(1.0))
+    val acc2 = acc.copyAndReset()
+    assert(acc2.value.isEmpty)
+    assert(acc2.isZero)
+
+    assert(acc.value.contains(1.0))
+    assert(!acc.isZero)
+    assert(acc.value.size() === 2)
+
+    // Test merging
+    acc2.add(2.0)
+    acc.merge(acc2)
+    assert(acc.value.contains(2.0))
+    assert(!acc.isZero)
   }
 
   test("LegacyAccumulatorWrapper") {
@@ -115,7 +121,6 @@ class AccumulatorV2Suite extends SparkFunSuite with LocalSparkContext {
     assert(acc.value === "foo")
     assert(!acc.isZero)
 
-    // test using non-specialized add function
     acc.add(new java.lang.String("bar"))
     val acc2 = acc.copyAndReset()
     assert(acc2.value === "")
