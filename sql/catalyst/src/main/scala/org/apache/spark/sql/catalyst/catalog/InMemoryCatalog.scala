@@ -164,7 +164,7 @@ class InMemoryCatalog extends ExternalCatalog {
       catalog(db).tables.remove(table)
     } else {
       if (!ignoreIfNotExists) {
-        throw new AnalysisException(s"Table or View '$table' does not exist in database '$db'")
+        throw new AnalysisException(s"Table or view '$table' does not exist in database '$db'")
       }
     }
   }
@@ -211,7 +211,7 @@ class InMemoryCatalog extends ExternalCatalog {
       loadPath: String,
       isOverwrite: Boolean,
       holdDDLTime: Boolean): Unit = {
-    throw new AnalysisException("loadTable is not implemented for InMemoryCatalog.")
+    throw new UnsupportedOperationException("loadTable is not implemented")
   }
 
   override def loadPartition(
@@ -223,7 +223,7 @@ class InMemoryCatalog extends ExternalCatalog {
       holdDDLTime: Boolean,
       inheritTableSpecs: Boolean,
       isSkewedStoreAsSubdir: Boolean): Unit = {
-    throw new AnalysisException("loadPartition is not implemented for InMemoryCatalog.")
+    throw new UnsupportedOperationException("loadPartition is not implemented.")
   }
 
   // --------------------------------------------------------------------------
@@ -304,8 +304,8 @@ class InMemoryCatalog extends ExternalCatalog {
       partialSpec: Option[TablePartitionSpec] = None): Seq[CatalogTablePartition] = synchronized {
     requireTableExists(db, table)
     if (partialSpec.nonEmpty) {
-      throw new AnalysisException("listPartition does not support partition spec in " +
-        "InMemoryCatalog.")
+      throw new UnsupportedOperationException(
+        "listPartition with partial partition spec is not implemented")
     }
     catalog(db).tables(table).partitions.values.toSeq
   }
