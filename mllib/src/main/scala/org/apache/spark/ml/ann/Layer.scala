@@ -438,9 +438,8 @@ private[ml] object FeedForwardTopology {
       layers(i * 2 + 1) =
         if (i == layerSizes.length - 2) {
           if (softmaxOnTop) {
-//            new SoftmaxLayerWithCrossEntropyLoss()
-              println("Linear Layer Added on Top\n")
-              new LinearLayerWithSquaredError()
+            println("Softmax Layer Added on Top with Cross Entropy Loss")
+            new SoftmaxLayerWithCrossEntropyLoss()
           } else {
             // TODO: squared error is more natural but converges slower
             println("Sigmoid Layer Added on Top\n")
@@ -453,7 +452,33 @@ private[ml] object FeedForwardTopology {
     }
     FeedForwardTopology(layers)
   }
+
+ /**
+  * Creates a multi-layer perceptron regression
+  *
+  * @param layerSizes sizes of layers including input and output size
+  * @return multilayer perceptron topology
+  */
+  def multiLayerPerceptronRegression(
+    layerSizes: Array[Int]): FeedForwardTopology = {
+    println("Initializing Topology")
+    val layers = new Array[Layer]((layerSizes.length - 1) * 2)
+    for (i <- 0 until layerSizes.length - 1) {
+      layers(i * 2) = new AffineLayer(layerSizes(i), layerSizes(i + 1))
+      layers(i * 2 + 1) =
+        if (i == layerSizes.length - 2) {
+          println("Linear Layer with Squared Error Added")
+          new LinearLayerWithSquaredError()
+        } else {
+          println("Functional Layer Added with Sigmoid Argument")
+          new FunctionalLayer(new SigmoidFunction())
+        }
+    }
+    FeedForwardTopology(layers)
+  }
 }
+
+
 
 /**
  * Model of Feed Forward Neural Network.
