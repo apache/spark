@@ -53,24 +53,38 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
     conf.set("spark.authenticate.secret", "good")
     conf.set("spark.ui.acls.enable", "true")
     conf.set("spark.ui.view.acls.groups", "group1,group2")
-    conf.set("spark.user.groups.mapping", "org.apache.spark.DummyGroupMappingServiceProvider")
-
+    // default ShellBasedGroupsMappingProvider is used to resolve user groups
     val securityManager = new SecurityManager(conf);
-    // group1,group2 match
-    assert(securityManager.checkUIViewPermissions("user1") === true)
-    assert(securityManager.checkUIViewPermissions("user2") === true)
+    // assuming executing user does not belong to group1,group2
+    assert(securityManager.checkUIViewPermissions("user1") === false)
+    assert(securityManager.checkUIViewPermissions("user2") === false)
 
     val conf2 = new SparkConf
     conf2.set("spark.authenticate", "true")
     conf2.set("spark.authenticate.secret", "good")
     conf2.set("spark.ui.acls.enable", "true")
-    conf2.set("spark.ui.view.acls.groups", "group4,group5")
+    conf2.set("spark.ui.view.acls.groups", "group1,group2")
+    // explicitly specify a custom GroupsMappingServiceProvider
     conf2.set("spark.user.groups.mapping", "org.apache.spark.DummyGroupMappingServiceProvider")
 
     val securityManager2 = new SecurityManager(conf2);
     // group4,group5 do not match
-    assert(securityManager2.checkUIViewPermissions("user1") === false)
-    assert(securityManager2.checkUIViewPermissions("user2") === false)
+    assert(securityManager2.checkUIViewPermissions("user1") === true)
+    assert(securityManager2.checkUIViewPermissions("user2") === true)
+
+    val conf3 = new SparkConf
+    conf3.set("spark.authenticate", "true")
+    conf3.set("spark.authenticate.secret", "good")
+    conf3.set("spark.ui.acls.enable", "true")
+    conf3.set("spark.ui.view.acls.groups", "group4,group5")
+    // explicitly specify a bogus GroupsMappingServiceProvider
+    conf3.set("spark.user.groups.mapping", "BogusServiceProvider")
+
+    val securityManager3 = new SecurityManager(conf3);
+    // BogusServiceProvider cannot be loaded and an error is logged returning an empty group set
+    assert(securityManager3.checkUIViewPermissions("user1") === false)
+    assert(securityManager3.checkUIViewPermissions("user2") === false)
+
   }
 
   test("set security with api") {
@@ -112,6 +126,25 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
     securityManager.setViewAclsGroups("group4,group5")
     assert(securityManager.checkUIViewPermissions("user1") === false)
     assert(securityManager.checkUIViewPermissions("user2") === false)
+
+
+    val conf2 = new SparkConf
+    conf.set("spark.user.groups.mapping", "BogusServiceProvider")
+
+    val securityManager2 = new SecurityManager(conf2)
+    securityManager2.setAcls(true)
+    securityManager2.setViewAclsGroups("group1,group2")
+
+    // group1,group2 do not match because of BogusServiceProvider
+    assert(securityManager.checkUIViewPermissions("user1") === false)
+    assert(securityManager.checkUIViewPermissions("user2") === false)
+
+    // setting viewAclsGroups to empty should still not match because of BogusServiceProvider
+    securityManager2.setViewAclsGroups("")
+    assert(securityManager.checkUIViewPermissions("user1") === false)
+    assert(securityManager.checkUIViewPermissions("user2") === false)
+
+
   }
 
   test("set security modify acls") {
@@ -319,7 +352,8 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
   }
 
   test("security for groups default behavior") {
-    // no groups or userToGroupsMapper is provided
+    // no groups or userToGroupsMapper provided
+    // this will default to the ShellBasedGroupsMappingProvider
     val conf = new SparkConf
 
     val securityManager = new SecurityManager(conf)

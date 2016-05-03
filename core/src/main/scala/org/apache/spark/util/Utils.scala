@@ -2183,7 +2183,8 @@ private[spark] object Utils extends Logging {
 
   // Returns the groups to which the current user belongs.
   def getCurrentUserGroups(sparkConf: SparkConf, username: String): Set[String] = {
-    val groupProviderClassName = sparkConf.get("spark.user.groups.mapping", "")
+    val groupProviderClassName = sparkConf.get("spark.user.groups.mapping",
+      "org.apache.spark.security.ShellBasedGroupsMappingProvider")
     if (groupProviderClassName != "") {
       try {
         val groupMappingServiceProvider = classForName(groupProviderClassName).newInstance.
@@ -2191,7 +2192,7 @@ private[spark] object Utils extends Logging {
         val currentUserGroups = groupMappingServiceProvider.getGroups(username)
         return currentUserGroups
       } catch {
-        case e: Exception => logError("Unable to get groups for user=" + username + " msg" + e)
+        case e: Exception => logError(s"Error getting groups for user=$username", e)
       }
     }
     EMPTY_USER_GROUPS

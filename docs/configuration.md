@@ -1267,14 +1267,15 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.user.groups.mapping</code></td>
-  <td>Empty</td>
+  <td><code>org.apache.spark.security.ShellBasedGroupsMappingProvider</code></td>
   <td>
     The list of groups for a user are determined by a group mapping service defined by the trait
     org.apache.spark.security.GroupMappingServiceProvider which can configured by this property.
     A default unix shell based implementation is provided <code>org.apache.spark.security.ShellBasedGroupsMappingProvider</code>
     which can be specified to resolve a list of groups for a user.
     <em>Note:</em> This implementation supports only a Unix/Linux based environment. Windows environment is
-    currently <b>not</b> supported.
+    currently <b>not</b> supported. However, a new platform/protocol can be supported by implementing
+    the trait <code>org.apache.spark.security.GroupMappingServiceProvider</code>.
   </td>
 </tr>
 <tr>
