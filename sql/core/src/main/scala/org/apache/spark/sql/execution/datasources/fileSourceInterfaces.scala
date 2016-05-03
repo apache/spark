@@ -252,23 +252,27 @@ trait FileFormat {
       filters: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
-    new (PartitionedFile => Iterator[InternalRow]) {
+    val dataReader = buildReader(
+      sparkSession, dataSchema, partitionSchema, requiredSchema, filters, options, hadoopConf)
+
+    new (PartitionedFile => Iterator[InternalRow]) with Serializable {
       private val fullSchema = requiredSchema.toAttributes ++ partitionSchema.toAttributes
 
       private val joinedRow = new JoinedRow()
 
-      private val appendPartitionColumns = GenerateUnsafeProjection.generate(fullSchema, fullSchema)
+      // Using lazy val to avoid serialization
+      private lazy val appendPartitionColumns =
+        GenerateUnsafeProjection.generate(fullSchema, fullSchema)
 
       override def apply(file: PartitionedFile): Iterator[InternalRow] = {
-        val dataReader = buildReader(
-          sparkSession, dataSchema, partitionSchema, requiredSchema, filters, options, hadoopConf)
+        // Using local val to avoid per-row lazy val check (pre-mature optimization?...)
+        val converter = appendPartitionColumns
 
-        if (file.partitionValues.numFields > 0) {
-          dataReader(file).map { dataRow =>
-            appendPartitionColumns(joinedRow(dataRow, file.partitionValues))
-          }
-        } else {
-          dataReader(file)
+        // Note that we have to apply the converter even though `file.partitionValues` is empty.
+        // This is because the converter is also responsible for converting safe `InternalRow`s into
+        // `UnsafeRow`s.
+        dataReader(file).map { dataRow =>
+          converter(joinedRow(dataRow, file.partitionValues))
         }
       }
     }
