@@ -126,7 +126,7 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
   def merge(other: AccumulatorV2[IN, OUT]): Unit
 
   /**
-   * Access this accumulator's current value; only allowed on driver.
+   * Defines the current value of this accumulator
    */
   def value: OUT
 
