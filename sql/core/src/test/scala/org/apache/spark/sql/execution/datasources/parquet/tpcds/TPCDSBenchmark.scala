@@ -15,14 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.parquet
+package org.apache.spark.sql.execution.datasources.parquet.tpcds
 
-import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Benchmark
+import org.apache.spark.{SparkConf, SparkContext}
 
 /**
  * Benchmark to measure TPCDS query performance.
