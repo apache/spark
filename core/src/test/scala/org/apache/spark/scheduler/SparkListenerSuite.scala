@@ -243,7 +243,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
 
     sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     listener.stageInfos.size should be (4)
-    listener.stageInfos.foreach { case (stageInfo, taskInfoMetrics) =>
+    listener.stageInfos.foreach { case (stageInfo, taskInfoMetrics: Seq[(TaskInfo, TaskMetrics)]) =>
       /**
        * Small test, so some tasks might take less than 1 millisecond, but average should be greater
        * than 0 ms.
