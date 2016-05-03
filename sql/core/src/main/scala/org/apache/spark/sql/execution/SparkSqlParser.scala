@@ -219,32 +219,31 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
 
     // Create the explain comment.
     val statement = plan(ctx.statement)
-    if (isExplainableStatement(statement)) {
-      ExplainCommand(statement, extended = options.exists(_.EXTENDED != null),
-        codegen = options.exists(_.CODEGEN != null))
-    } else {
-      ExplainCommand(OneRowRelation)
-    }
+    ExplainCommand(statement, extended = options.exists(_.EXTENDED != null),
+      codegen = options.exists(_.CODEGEN != null))
   }
 
   /**
-   * Determine if a plan should be explained at all.
-   */
-  protected def isExplainableStatement(plan: LogicalPlan): Boolean = plan match {
-    case _: DescribeTableCommand => false
-    case _ => true
-  }
-
-  /**
-   * Create a [[DescribeTableCommand]] logical plan.
+   * A command for users to describe a table in the given database. If a databaseName is not given,
+   * the current database will be used.
+   * The syntax of using this command in SQL is:
+   * {{{
+   *   DESCRIBE [EXTENDED|FORMATTED] [db_name.]table_name [column_name] [PARTITION partition_spec]
+   * }}}
    */
   override def visitDescribeTable(ctx: DescribeTableContext): LogicalPlan = withOrigin(ctx) {
     // FORMATTED and columns are not supported. Return null and let the parser decide what to do
     // with this (create an exception or pass it on to a different system).
-    if (ctx.describeColName != null || ctx.FORMATTED != null || ctx.partitionSpec != null) {
+    if (ctx.FORMATTED != null) {
       null
     } else {
-      DescribeTableCommand(visitTableIdentifier(ctx.tableIdentifier), ctx.EXTENDED != null)
+      val partitionKeys = Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec)
+      val columnPath = Option(ctx.describeColName).map(visitDescribeColName)
+      DescribeTableCommand(
+        visitTableIdentifier(ctx.tableIdentifier),
+        partitionKeys,
+        columnPath,
+        ctx.EXTENDED != null)
     }
   }
 
@@ -349,6 +348,19 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       key.getText
     }
   }
+
+   /**
+    * A column path can be specified as an parameter to describe command. It is a dot separated
+    * list of identifiers with three special kinds of identifiers namely '$elem$', '$key$' and
+    * '$value$' which are used to represent array element, map key and values respectively.
+    */
+   override def visitDescribeColName(ctx: DescribeColNameContext): String = {
+     var result = ctx.identifier.getText
+     if (!ctx.colpathIdentifier.isEmpty) {
+       result = result  ++ "." ++ ctx.colpathIdentifier.asScala.map { _.getText}.mkString(".")
+     }
+     result
+   }
 
   /**
    * Create a [[CreateDatabase]] command.

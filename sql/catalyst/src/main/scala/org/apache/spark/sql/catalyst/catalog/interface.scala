@@ -110,6 +110,14 @@ case class CatalogTable(
   def partitionColumns: Seq[CatalogColumn] =
     schema.filter { c => partitionColumnNames.contains(c.name) }
 
+   /** Columns this table is bucketed  by. */
+  def bucketColumns: Seq[CatalogColumn] =
+    schema.filter { c => bucketColumnNames.contains(c.name) }
+
+   /** Columns this table is sorted by. */
+  def sortColumns: Seq[CatalogColumn] =
+    schema.filter { c => sortColumnNames.contains(c.name) }
+
   /** Return the database this table was specified to belong to, assuming it exists. */
   def database: String = identifier.database.getOrElse {
     throw new AnalysisException(s"table $identifier did not specify database")

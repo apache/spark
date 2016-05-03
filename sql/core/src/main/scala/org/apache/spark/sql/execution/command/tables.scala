@@ -24,11 +24,13 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, UnaryNode}
-import org.apache.spark.sql.types.{BooleanType, MetadataBuilder, StringType}
+import org.apache.spark.sql.execution.datasources.PartitioningUtils
+import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 case class CreateTableAsSelectLogicalPlan(
@@ -268,12 +270,26 @@ case class LoadData(
 }
 
 /**
- * Command that looks like
+ * A command for users to describe a table in the given database. If a databaseName is not given,
+ * the current database will be used.
+ * The syntax of using this command in SQL is:
  * {{{
- *   DESCRIBE (EXTENDED) table_name;
+ *   DESCRIBE [EXTENDED|FORMATTED] [db_name.]table_name [column_name] [PARTITION partition_spec]
  * }}}
+ * Note : FORMATTED option is not supported.
+ * @param table table to be described.
+ * @param partSpec spec If specified, the specified partition is described. It is effective only
+ *                 when the table is a Hive table
+ * @param  colPath If specified, only the specified column is described. It is effective only
+ *                 when the table is a Hive table
+ * @param isExtended True if "DESCRIBE EXTENDED" is used. Otherwise, false. It is effective only
+ *                   when the table is a Hive table
  */
-case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean)
+case class DescribeTableCommand(
+    table: TableIdentifier,
+    partSpec: Option[TablePartitionSpec],
+    colPath: Option[String],
+    isExtended: Boolean)
   extends RunnableCommand {
 
   override val output: Seq[Attribute] = Seq(
@@ -286,20 +302,147 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean)
       new MetadataBuilder().putString("comment", "comment of the column").build())()
   )
 
+  private def formatColumns(cols: Seq[CatalogColumn]): String = {
+    cols.map { col =>
+      s"""
+         |${col.getClass.getSimpleName}
+         |(name:${col.name}
+         |type:${col.dataType}
+         |comment:${col.comment.orNull}
+       """.stripMargin
+    }.mkString(",")
+  }
+
+  private def formatProperties(props: Map[String, String]): String = {
+    props.map {
+      case (k, v) => s"$k=$v"
+    }.mkString("{", ", ", "}")
+  }
+
+  private def getPartValues(part: CatalogTablePartition, cols: Seq[String]): String = {
+    cols.map { name =>
+      PartitioningUtils.escapePathName(part.spec(name))
+    }.mkString(", ")
+  }
+
+  private def descColPath(table: CatalogTable, colPath: String): Array[Row] = {
+    val names = colPath.split("\\.");
+    val lastName = names(names.length - 1)
+    val fields = table.schema.map {c =>
+      StructField(c.name, CatalystSqlParser.parseDataType(c.dataType), c.nullable)
+    }
+    var dataType: DataType = StructType(fields)
+    for (i <- 0 to names.length -1) {
+      dataType match {
+        case s: StructType =>
+          try {
+            dataType = s.apply(names(i)).dataType
+          } catch {
+            case e: Exception =>
+              throw new AnalysisException(s"Column name/path: ${colPath} does not exist.")
+          }
+        case m: MapType if names(i) == "$key$" => dataType = m.keyType
+        case m: MapType if names(i) == "$value$" => dataType = m.valueType
+        case a: ArrayType if names(i) == "$value$" => dataType = a.elementType
+        case _ => throw new AnalysisException("Column name/path: ${colPath} does not exist")
+      }
+    }
+
+    val result: Seq[Row] = dataType match {
+      case s: StructType =>
+        s.map { f =>
+          Row(f.name, f.dataType.simpleString, "from deserializer")}
+      case d: DataType => Seq(Row(lastName, dataType.simpleString, "from deserializer"))
+    }
+    result.toArray
+  }
+
+  private def descStorageFormat(
+      table: CatalogTable,
+      storage: CatalogStorageFormat): String = {
+    // TODO - check with Lian - from StorageDesc - compress, skewedInfo, storedAsSubDirectories
+    // are not availble. So these are dropped from the output.
+    val storageLocationStr =
+      s"""
+         |${storage.getClass.getSimpleName}(location:${storage.locationUri.orNull},
+         | inputFormat:${storage.inputFormat.orNull},
+         | outputFormat:${storage.outputFormat.orNull},
+         | numBuckets:${table.numBuckets},
+         | serializationLib=${storage.serde.orNull},
+         | parameters=${formatProperties(storage.serdeProperties)},
+         | bucketCols:[${formatColumns(table.bucketColumns)}],
+         | sortCols=[${formatColumns(table.sortColumns)}])
+       """.stripMargin.replaceAll("\n", "").trim
+    storageLocationStr
+  }
+
+  private def descPartExtended(table: CatalogTable, part: CatalogTablePartition): String = {
+    val result = StringBuilder.newBuilder
+    val clsName = part.getClass.getSimpleName
+    result ++= s"${clsName}(values:[${getPartValues(part, table.partitionColumnNames)}], "
+    result ++= s"dbName:${table.database}, "
+    // TODO - check with Lian - no owner info available.
+    result ++= s"createTime:${table.createTime}, "
+    result ++= s"lastAccessTime:${table.lastAccessTime}, "
+    // TODO - check with Lian - no retention info available.
+
+    result ++= s"sd:${descStorageFormat(table, part.storage)}, "
+    // TODO Check with Lian - Hive prints partition keys here. Since we output paritioning keys and
+    // schema already at the start i don't output it here again.
+    result ++= s"parameters:${formatProperties(table.properties)}, "
+    result ++= s"viewOriginalText:${table.viewOriginalText.orNull}, "
+    result ++= s"viewExpandedText:${table.viewText.orNull}, "
+    result ++= s"tableType:${table.tableType})"
+    result.toString
+  }
+
+  private def descTableExtended(table: CatalogTable): String = {
+    val result = StringBuilder.newBuilder
+    result ++= s"${table.getClass.getSimpleName}(tableName:${table.identifier.table}, "
+    result ++= s"dbName:${table.database}, "
+    // TODO - check with Lian - no owner info available.
+    result ++= s"createTime:${table.createTime}, "
+    result ++= s"lastAccessTime:${table.lastAccessTime}, "
+    // TODO - check with Lian - no retention info available.
+
+    result ++= s"sd:${descStorageFormat(table, table.storage)}, "
+    // TODO Check with Lian - Hive prints partition keys here. Since we output paritioning keys
+    // and schema already i don't output it here again.
+    result ++= s"parameters:${formatProperties(table.properties)}, "
+    result ++= s"viewOriginalText:${table.viewOriginalText.orNull}, "
+    result ++= s"viewExpandedText:${table.viewText.orNull}, "
+    result ++= s"tableType:${table.tableType})"
+    result.toString
+  }
+
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val result = new ArrayBuffer[Row]
-    sparkSession.sessionState.catalog.lookupRelation(table) match {
+    val catalog = sparkSession.sessionState.catalog
+    catalog.lookupRelation(table) match {
       case catalogRelation: CatalogRelation =>
-        catalogRelation.catalogTable.schema.foreach { column =>
-          result += Row(column.name, column.dataType, column.comment.orNull)
-        }
+        val tab = catalogRelation.catalogTable
+        val part = partSpec.map(p => Option(catalog.getPartition(table, p))).getOrElse(None)
+        if (colPath.nonEmpty) {
+           result ++= descColPath(tab, colPath.get)
+        } else {
+          catalogRelation.catalogTable.schema.foreach { column =>
+            result += Row(column.name, column.dataType, column.comment.orNull)
+          }
+          if (tab.partitionColumns.nonEmpty) {
+            result += Row("# Partition Information", "", "")
+            result += Row(s"# ${output(0).name}", output(1).name, output(2).name)
 
-        if (catalogRelation.catalogTable.partitionColumns.nonEmpty) {
-          result += Row("# Partition Information", "", "")
-          result += Row(s"# ${output(0).name}", output(1).name, output(2).name)
-
-          catalogRelation.catalogTable.partitionColumns.foreach { col =>
-            result += Row(col.name, col.dataType, col.comment.orNull)
+            tab.partitionColumns.foreach { col =>
+              result += Row(col.name, col.dataType, col.comment.orNull)
+            }
+          }
+          if (isExtended) {
+            if (partSpec.isEmpty) {
+              result += Row("Detailed Table Information", descTableExtended(tab), "")
+            } else {
+              result +=
+                Row("Detailed Partition Information", descPartExtended(tab, part.get), "")
+            }
           }
         }
 
@@ -314,7 +457,6 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean)
     result
   }
 }
-
 
 /**
  * A command for users to get tables in the given database.
