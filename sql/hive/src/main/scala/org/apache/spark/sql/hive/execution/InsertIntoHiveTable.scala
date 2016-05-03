@@ -303,4 +303,3 @@ case class InsertIntoHiveTable(
     sqlContext.sparkContext.parallelize(sideEffectResult.asInstanceOf[Seq[InternalRow]], 1)
   }
 }
-

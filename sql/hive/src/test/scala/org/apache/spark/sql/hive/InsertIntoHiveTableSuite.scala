@@ -116,10 +116,10 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
 
     sql(
       s"""
-         |CREATE TABLE table_with_partition(c1 string)
-         |PARTITIONED by (p1 string,p2 string,p3 string,p4 string,p5 string)
-         |location '${tmpDir.toURI.toString}'
-        """.stripMargin)
+        |CREATE TABLE table_with_partition(c1 string)
+        |PARTITIONED by (p1 string,p2 string,p3 string,p4 string,p5 string)
+        |location '${tmpDir.toURI.toString}'
+      """.stripMargin)
     sql(
       """
         |INSERT OVERWRITE TABLE table_with_partition
@@ -213,5 +213,31 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
 
     sql("DROP TABLE hiveTableWithStructValue")
   }
-}
 
+  test("SPARK-10216: Avoid empty files during overwrite into Hive table with group by query") {
+    val testDataset = hiveContext.sparkContext.parallelize(
+      (1 to 2).map(i => TestData(i, i.toString))).toDF()
+    testDataset.registerTempTable("testDataset")
+
+    val tmpDir = Utils.createTempDir()
+    sql(
+      s"""
+        |CREATE TABLE table1(key int,value string)
+        |location '${tmpDir.toURI.toString}'
+      """.stripMargin)
+    sql(
+      """
+        |INSERT OVERWRITE TABLE table1
+        |SELECT count(key), value FROM testDataset GROUP BY value
+      """.stripMargin)
+
+    val orcFiles = tmpDir.listFiles()
+      .filter(f => f.isFile && f.getName.endsWith(".crc"))
+      .sortBy(_.getName)
+    val orcFilesWithoutEmpty = orcFiles.filter(_.length > 0)
+
+    assert(orcFiles === orcFilesWithoutEmpty)
+
+    sql("DROP TABLE table1")
+  }
+}
