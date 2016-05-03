@@ -1209,19 +1209,19 @@ setMethod("dapply",
 #' \dontrun{
 #'
 #' Computes the arithmetic mean of the second column by grouping
-#' on the first column. Output the groupping value and the average. 
+#' on the first column. Output the grouping value and the average.
 #'
 #' df <- createDataFrame (
 #' sqlContext,
 #' list(list(1L, 1, "1", 0.1), list(1L, 2, "2", 0.2), list(3L, 3, "3", 0.3)),
-#' c("a", "b", "c", "d"))
+#'   c("a", "b", "c", "d"))
 #'
 #' schema <-  structType(structField("a", "integer"), structField("avg", "double"))
 #' df1 <- gapply(
 #'   df,
 #'   function(x) {
 #'     y <- (data.frame(x$a[1], mean(x$b)))
-#' },
+#'   },
 #' schema, df$"a")
 #' collect(df1)
 #'
@@ -1237,15 +1237,15 @@ setMethod("dapply",
 #' 
 #' df <- createDataFrame (sqlContext, iris)
 #' schema <- structType(structField("(Intercept)", "double"),
-#' structField("Sepal_Width", "double"),structField("Petal_Length", "double"),
-#' structField("Petal_Width", "double"))
+#'   structField("Sepal_Width", "double"),structField("Petal_Length", "double"),
+#'   structField("Petal_Width", "double"))
 #' df1 <- gapply(
 #'   df,
 #'   function(x) {
 #'     m <- suppressWarnings(lm(Sepal_Length ~
 #'     Sepal_Width + Petal_Length + Petal_Width, x))
 #'     data.frame(t(coef(m)))
-#' }, schema, "Species")
+#'   }, schema, "Species")
 #' collect(df1)
 #'
 #'Result
