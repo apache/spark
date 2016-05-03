@@ -21,6 +21,7 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, 
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.memory.{StaticMemoryManager, TaskMemoryManager}
+import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.test.SharedSQLContext
@@ -149,6 +150,40 @@ class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
       assert(rows(1).getInt(0) === i)
       assert(rows(1).getInt(1) === i + 1)
     }
+  }
+
+  test("Spark-14521") {
+    val ser = new KryoSerializer(
+      (new SparkConf).set("spark.kryo.referenceTracking", "false")).newInstance()
+    val key = Seq(BoundReference(0, IntegerType, false))
+
+    // Testing Kryo serialization of HashedRelation
+    val unsafeProj = UnsafeProjection.create(
+      Seq(BoundReference(0, IntegerType, false), BoundReference(1, IntegerType, true)))
+    val rows = (0 until 100).map(i => unsafeProj(InternalRow(i, i + 1)).copy())
+    val longRelation = LongHashedRelation(rows.iterator ++ rows.iterator, key, 100, mm)
+    val longRelation2 = ser.deserialize[LongHashedRelation](ser.serialize(longRelation))
+    (0 until 100).foreach { i =>
+      val rows = longRelation2.get(i).toArray
+      assert(rows.length === 2)
+      assert(rows(0).getInt(0) === i)
+      assert(rows(0).getInt(1) === i + 1)
+      assert(rows(1).getInt(0) === i)
+      assert(rows(1).getInt(1) === i + 1)
+    }
+
+    // Testing Kryo serialization of UnsafeHashedRelation
+    val unsafeHashed = UnsafeHashedRelation(rows.iterator, key, 1, mm)
+    val os = new ByteArrayOutputStream()
+    val out = new ObjectOutputStream(os)
+    unsafeHashed.asInstanceOf[UnsafeHashedRelation].writeExternal(out)
+    out.flush()
+    val unsafeHashed2 = ser.deserialize[UnsafeHashedRelation](ser.serialize(unsafeHashed))
+    val os2 = new ByteArrayOutputStream()
+    val out2 = new ObjectOutputStream(os2)
+    unsafeHashed2.writeExternal(out2)
+    out2.flush()
+    assert(java.util.Arrays.equals(os.toByteArray, os2.toByteArray))
   }
 
   // This test require 4G heap to run, should run it manually

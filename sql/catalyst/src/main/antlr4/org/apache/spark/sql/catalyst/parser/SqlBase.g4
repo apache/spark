@@ -389,7 +389,8 @@ sample
     : TABLESAMPLE '('
       ( (percentage=(INTEGER_VALUE | DECIMAL_VALUE) sampleType=PERCENTLIT)
       | (expression sampleType=ROWS)
-      | (sampleType=BUCKET numerator=INTEGER_VALUE OUT OF denominator=INTEGER_VALUE (ON identifier)?))
+      | sampleType=BYTELENGTH_LITERAL
+      | (sampleType=BUCKET numerator=INTEGER_VALUE OUT OF denominator=INTEGER_VALUE (ON (identifier | qualifiedName '(' ')'))?))
       ')'
     ;
 
@@ -893,6 +894,10 @@ SMALLINT_LITERAL
 
 TINYINT_LITERAL
     : DIGIT+ 'Y'
+    ;
+
+BYTELENGTH_LITERAL
+    : DIGIT+ ('B' | 'K' | 'M' | 'G')
     ;
 
 INTEGER_VALUE
