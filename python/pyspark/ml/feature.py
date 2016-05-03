@@ -1749,15 +1749,18 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadabl
         super(StopWordsRemover, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.StopWordsRemover",
                                             self.uid)
-        self._setDefault(stopWords=StopWordsRemover.loadStopWords("english"), caseSensitive=False, locale="en")
+        self._setDefault(stopWords=StopWordsRemover.loadStopWords("english"),
+                         caseSensitive=False, locale="en")
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("1.6.0")
-    def setParams(self, inputCol=None, outputCol=None, stopWords=None, caseSensitive=False, locale="en"):
+    def setParams(self, inputCol=None, outputCol=None, stopWords=None,
+                  caseSensitive=False, locale="en"):
         """
-        setParams(self, inputCol="input", outputCol="output", stopWords=None, caseSensitive=false, locale="en")
+        setParams(self, inputCol="input", outputCol="output", stopWords=None,
+                  caseSensitive=false, locale="en")
         Sets params for this StopWordRemover.
         """
         kwargs = self.setParams._input_kwargs

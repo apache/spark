@@ -21,8 +21,8 @@ import java.util.Locale
 
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.Transformer
-import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.param.{BooleanParam, Param, ParamMap, StringArrayParam}
+import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions.{col, udf}
@@ -47,11 +47,11 @@ class StopWordsRemover(override val uid: String)
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /**
-    * The words to be filtered out.
-    * Default: English stop words
-    * @see [[StopWordsRemover.loadStopWords()]]
-    * @group param
-    */
+   * The words to be filtered out.
+   * Default: English stop words
+   * @see [[StopWordsRemover.loadStopWords()]]
+   * @group param
+   */
   val stopWords: StringArrayParam =
     new StringArrayParam(this, "stopWords", "the words to be filtered out")
 
@@ -62,10 +62,10 @@ class StopWordsRemover(override val uid: String)
   def getStopWords: Array[String] = $(stopWords)
 
   /**
-    * Whether to do a case sensitive comparison over the stop words.
-    * Default: false
-    * @group param
-    */
+   * Whether to do a case sensitive comparison over the stop words.
+   * Default: false
+   * @group param
+   */
   val caseSensitive: BooleanParam = new BooleanParam(this, "caseSensitive",
     "whether to do a case-sensitive comparison over the stop words")
 
@@ -76,10 +76,10 @@ class StopWordsRemover(override val uid: String)
   def getCaseSensitive: Boolean = $(caseSensitive)
 
   /**
-    * Locale for doing a case sensitive comparison
-    * Default: English locale
-    * @group param
-    */
+   * Locale for doing a case sensitive comparison
+   * Default: English locale
+   * @group param
+   */
   val locale: Param[String] = new Param[String](this, "locale",
     "locale for doing a case sensitive comparison")
 
@@ -130,11 +130,11 @@ object StopWordsRemover extends DefaultParamsReadable[StopWordsRemover] {
   override def load(path: String): StopWordsRemover = super.load(path)
 
   /**
-    * Load stop words for the language
-    * Supported languages: danish, dutch, english, finnish, french, german, hungarian,
-    * italian, norwegian, portuguese, russian, spanish, swedish, turkish
-    * @see [[http://anoncvs.postgresql.org/cvsweb.cgi/pgsql/src/backend/snowball/stopwords/]]
-    */
+   * Load stop words for the language
+   * Supported languages: danish, dutch, english, finnish, french, german, hungarian,
+   * italian, norwegian, portuguese, russian, spanish, swedish, turkish
+   * @see [[http://anoncvs.postgresql.org/cvsweb.cgi/pgsql/src/backend/snowball/stopwords/]]
+   */
   @Since("2.0.0")
   def loadStopWords(language: String): Array[String] = {
     require(supportedLanguages.contains(language),
