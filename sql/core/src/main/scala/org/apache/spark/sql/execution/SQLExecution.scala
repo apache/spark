@@ -45,9 +45,9 @@ private[sql] object SQLExecution {
       val executionId = SQLExecution.nextExecutionId
       sc.setLocalProperty(EXECUTION_ID_KEY, executionId.toString)
       val r = try {
-        // We first try to pick up any call site that was set previously, then fall back to
-        // Utils.getCallSite(); because call Utils.getCallSite() on continuous queries directly
-        // would give us call site like "run at <unknown>:0"
+        // sparkContext.getCallSite() would first try to pick up any call site that was previously
+        // set, then fall back to Utils.getCallSite(); call Utils.getCallSite() directly on
+        // continuous queries would give us call site like "run at <unknown>:0"
         val callSite = sparkSession.sparkContext.getCallSite()
 
         sparkSession.sparkContext.listenerBus.post(SparkListenerSQLExecutionStart(
