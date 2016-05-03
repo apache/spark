@@ -341,7 +341,7 @@ keep the paths consistent in both modes.
 # Metrics
 
 Spark has a configurable metrics system based on the
-[Coda Hale Metrics Library](http://metrics.codahale.com/).
+[Dropwizard Metrics Library](http://metrics.dropwizard.io/).
 This allows users to report Spark metrics to a variety of sinks including HTTP, JMX, and CSV
 files. The metrics system is configured via a configuration file that Spark expects to be present
 at `$SPARK_HOME/conf/metrics.properties`. A custom file location can be specified via the

@@ -121,17 +121,13 @@ statement
     | UNCACHE TABLE identifier                                         #uncacheTable
     | CLEAR CACHE                                                      #clearCache
     | LOAD DATA LOCAL? INPATH path=STRING OVERWRITE? INTO TABLE
-      tableIdentifier partitionSpec?                                   #loadData
+        tableIdentifier partitionSpec?                                 #loadData
+    | TRUNCATE TABLE tableIdentifier partitionSpec?
+        (COLUMNS identifierList)?                                      #truncateTable
     | ADD identifier .*?                                               #addResource
     | SET ROLE .*?                                                     #failNativeCommand
     | SET .*?                                                          #setConfiguration
-    | kws=unsupportedHiveNativeCommands .*?                            #failNativeCommand
-    | hiveNativeCommands                                               #executeNativeCommand
-    ;
-
-hiveNativeCommands
-    : TRUNCATE TABLE tableIdentifier partitionSpec?
-        (COLUMNS identifierList)?
+    | unsupportedHiveNativeCommands .*?                                #failNativeCommand
     ;
 
 unsupportedHiveNativeCommands
@@ -265,14 +261,6 @@ constantList
 
 nestedConstantList
     : '(' constantList (',' constantList)* ')'
-    ;
-
-skewedLocation
-    : (constant | constantList) EQ STRING
-    ;
-
-skewedLocationList
-    : '(' skewedLocation (',' skewedLocation)* ')'
     ;
 
 createFileFormat
@@ -609,11 +597,6 @@ explainOption
     : LOGICAL | FORMATTED | EXTENDED | CODEGEN
     ;
 
-transactionMode
-    : ISOLATION LEVEL SNAPSHOT            #isolationLevel
-    | READ accessMode=(ONLY | WRITE)      #transactionAccessMode
-    ;
-
 qualifiedName
     : identifier ('.' identifier)*
     ;
@@ -661,8 +644,7 @@ nonReserved
     | VIEW | REPLACE
     | IF
     | NO | DATA
-    | START | TRANSACTION | COMMIT | ROLLBACK | WORK | ISOLATION | LEVEL
-    | SNAPSHOT | READ | WRITE | ONLY
+    | START | TRANSACTION | COMMIT | ROLLBACK
     | SORT | CLUSTER | DISTRIBUTE | UNSET | TBLPROPERTIES | SKEWED | STORED | DIRECTORIES | LOCATION
     | EXCHANGE | ARCHIVE | UNARCHIVE | FILEFORMAT | TOUCH | COMPACT | CONCATENATE | CHANGE | FIRST
     | AFTER | CASCADE | RESTRICT | BUCKETS | CLUSTERED | SORTED | PURGE | INPUTFORMAT | OUTPUTFORMAT
@@ -778,13 +760,6 @@ START: 'START';
 TRANSACTION: 'TRANSACTION';
 COMMIT: 'COMMIT';
 ROLLBACK: 'ROLLBACK';
-WORK: 'WORK';
-ISOLATION: 'ISOLATION';
-LEVEL: 'LEVEL';
-SNAPSHOT: 'SNAPSHOT';
-READ: 'READ';
-WRITE: 'WRITE';
-ONLY: 'ONLY';
 MACRO: 'MACRO';
 
 IF: 'IF';
