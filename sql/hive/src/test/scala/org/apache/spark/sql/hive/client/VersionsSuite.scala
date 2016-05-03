@@ -149,7 +149,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
       val table =
         CatalogTable(
           identifier = TableIdentifier("src", Some("default")),
-          tableType = CatalogTableType.MANAGED_TABLE,
+          tableType = CatalogTableType.MANAGED,
           schema = Seq(CatalogColumn("key", "int")),
           storage = CatalogStorageFormat(
             locationUri = None,
@@ -189,7 +189,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
     }
 
     test(s"$version: getPartitions") {
-      client.getAllPartitions(client.getTable("default", "src_part"))
+      client.getPartitions(client.getTable("default", "src_part"))
     }
 
     test(s"$version: getPartitionsByFilter") {

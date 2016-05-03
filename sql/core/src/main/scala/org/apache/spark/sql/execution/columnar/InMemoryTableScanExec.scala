@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.columnar
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{Accumulable, Accumulator, Accumulators}
+import org.apache.spark.{Accumulable, Accumulator, AccumulatorContext}
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -68,7 +68,7 @@ private[sql] case class InMemoryRelation(
 
   override def producedAttributes: AttributeSet = outputSet
 
-  private val batchStats: Accumulable[ArrayBuffer[InternalRow], InternalRow] =
+  private[sql] val batchStats: Accumulable[ArrayBuffer[InternalRow], InternalRow] =
     if (_batchStats == null) {
       child.sqlContext.sparkContext.accumulableCollection(ArrayBuffer.empty[InternalRow])
     } else {
@@ -204,7 +204,7 @@ private[sql] case class InMemoryRelation(
     Seq(_cachedColumnBuffers, statisticsToBePropagated, batchStats)
 
   private[sql] def uncache(blocking: Boolean): Unit = {
-    Accumulators.remove(batchStats.id)
+    AccumulatorContext.remove(batchStats.id)
     cachedColumnBuffers.unpersist(blocking)
     _cachedColumnBuffers = null
   }
@@ -217,7 +217,7 @@ private[sql] case class InMemoryTableScanExec(
   extends LeafExecNode {
 
   private[sql] override lazy val metrics = Map(
-    "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   override def output: Seq[Attribute] = attributes
 

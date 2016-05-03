@@ -164,7 +164,7 @@ private[sql] class SQLListener(conf: SparkConf) extends SparkListener with Loggi
         taskEnd.taskInfo.taskId,
         taskEnd.stageId,
         taskEnd.stageAttemptId,
-        taskEnd.taskMetrics.accumulatorUpdates(),
+        taskEnd.taskMetrics.accumulators().map(a => a.toInfo(Some(a.localValue), None)),
         finishTask = true)
     }
   }
@@ -296,7 +296,7 @@ private[sql] class SQLListener(conf: SparkConf) extends SparkListener with Loggi
           }
         }.filter { case (id, _) => executionUIData.accumulatorMetrics.contains(id) }
         mergeAccumulatorUpdates(accumulatorUpdates, accumulatorId =>
-          executionUIData.accumulatorMetrics(accumulatorId).metricParam)
+          executionUIData.accumulatorMetrics(accumulatorId).metricType)
       case None =>
         // This execution has been dropped
         Map.empty
@@ -305,11 +305,11 @@ private[sql] class SQLListener(conf: SparkConf) extends SparkListener with Loggi
 
   private def mergeAccumulatorUpdates(
       accumulatorUpdates: Seq[(Long, Any)],
-      paramFunc: Long => SQLMetricParam[SQLMetricValue[Any], Any]): Map[Long, String] = {
+      metricTypeFunc: Long => String): Map[Long, String] = {
     accumulatorUpdates.groupBy(_._1).map { case (accumulatorId, values) =>
-      val param = paramFunc(accumulatorId)
-      (accumulatorId,
-        param.stringValue(values.map(_._2.asInstanceOf[SQLMetricValue[Any]].value)))
+      val metricType = metricTypeFunc(accumulatorId)
+      accumulatorId ->
+        SQLMetrics.stringValue(metricType, values.map(_._2.asInstanceOf[Long]))
     }
   }
 
@@ -337,7 +337,7 @@ private[spark] class SQLHistoryListener(conf: SparkConf, sparkUI: SparkUI)
         // Filter out accumulators that are not SQL metrics
         // For now we assume all SQL metrics are Long's that have been JSON serialized as String's
         if (a.metadata == Some(SQLMetrics.ACCUM_IDENTIFIER)) {
-          val newValue = new LongSQLMetricValue(a.update.map(_.toString.toLong).getOrElse(0L))
+          val newValue = a.update.map(_.toString.toLong).getOrElse(0L)
           Some(a.copy(update = Some(newValue)))
         } else {
           None
@@ -403,7 +403,7 @@ private[ui] class SQLExecutionUIData(
 private[ui] case class SQLPlanMetric(
     name: String,
     accumulatorId: Long,
-    metricParam: SQLMetricParam[SQLMetricValue[Any], Any])
+    metricType: String)
 
 /**
  * Store all accumulatorUpdates for all tasks in a Spark stage.

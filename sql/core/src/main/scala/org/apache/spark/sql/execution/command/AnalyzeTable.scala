@@ -77,7 +77,7 @@ case class AnalyzeTable(tableName: String) extends RunnableCommand {
           catalogTable.storage.locationUri.map { p =>
             val path = new Path(p)
             try {
-              val fs = path.getFileSystem(sparkSession.sessionState.hadoopConf)
+              val fs = path.getFileSystem(sparkSession.sessionState.newHadoopConf())
               calculateTableSize(fs, path)
             } catch {
               case NonFatal(e) =>

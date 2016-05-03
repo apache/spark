@@ -424,7 +424,7 @@ private[sql] object PartitioningUtils {
     path.foreach { c =>
       if (needsEscaping(c)) {
         builder.append('%')
-        builder.append(f"${c.asInstanceOf[Int]}%02x")
+        builder.append(f"${c.asInstanceOf[Int]}%02X")
       } else {
         builder.append(c)
       }

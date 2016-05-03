@@ -467,7 +467,7 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
     val equalCode = ctx.genEqual(left.dataType, eval1.value, eval2.value)
     ev.copy(code = eval1.code + eval2.code + s"""
         boolean ${ev.value} = (${eval1.isNull} && ${eval2.isNull}) ||
-           (!${eval1.isNull} && $equalCode);""", isNull = "false")
+           (!${eval1.isNull} && !${eval2.isNull} && $equalCode);""", isNull = "false")
   }
 }
 

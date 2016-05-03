@@ -323,10 +323,10 @@ object CreateDataSourceTableUtils extends Logging {
 
     val tableType = if (isExternal) {
       tableProperties.put("EXTERNAL", "TRUE")
-      CatalogTableType.EXTERNAL_TABLE
+      CatalogTableType.EXTERNAL
     } else {
       tableProperties.put("EXTERNAL", "FALSE")
-      CatalogTableType.MANAGED_TABLE
+      CatalogTableType.MANAGED
     }
 
     val maybeSerDe = HiveSerDe.sourceToSerDe(provider, sparkSession.sessionState.conf)

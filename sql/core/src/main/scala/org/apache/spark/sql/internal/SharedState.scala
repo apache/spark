@@ -22,6 +22,7 @@ import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.catalog.{ExternalCatalog, InMemoryCatalog}
 import org.apache.spark.sql.execution.CacheManager
 import org.apache.spark.sql.execution.ui.SQLListener
+import org.apache.spark.util.MutableURLClassLoader
 
 
 /**
@@ -44,4 +45,21 @@ private[sql] class SharedState(val sparkContext: SparkContext) {
    */
   lazy val externalCatalog: ExternalCatalog = new InMemoryCatalog
 
+  /**
+   * A classloader used to load all user-added jar.
+   */
+  val jarClassLoader = new NonClosableMutableURLClassLoader(
+    org.apache.spark.util.Utils.getContextOrSparkClassLoader)
+
+}
+
+
+/**
+ * URL class loader that exposes the `addURL` and `getURLs` methods in URLClassLoader.
+ * This class loader cannot be closed (its `close` method is a no-op).
+ */
+private[sql] class NonClosableMutableURLClassLoader(parent: ClassLoader)
+  extends MutableURLClassLoader(Array.empty, parent) {
+
+  override def close(): Unit = {}
 }

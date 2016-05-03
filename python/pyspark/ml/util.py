@@ -120,14 +120,13 @@ class MLWritable(object):
     .. versionadded:: 2.0.0
     """
 
-    @property
     def write(self):
         """Returns an MLWriter instance for this ML instance."""
         raise NotImplementedError("MLWritable is not yet implemented for type: %r" % type(self))
 
     def save(self, path):
         """Save this ML instance to the given path, a shortcut of `write().save(path)`."""
-        self.write.save(path)
+        self.write().save(path)
 
 
 @inherit_doc
@@ -136,7 +135,6 @@ class JavaMLWritable(MLWritable):
     (Private) Mixin for ML instances that provide :py:class:`JavaMLWriter`.
     """
 
-    @property
     def write(self):
         """Returns an MLWriter instance for this ML instance."""
         return JavaMLWriter(self)

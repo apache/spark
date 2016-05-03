@@ -21,6 +21,7 @@ import java.io.File
 
 import scala.collection.mutable
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
@@ -44,14 +45,21 @@ class SessionCatalog(
     externalCatalog: ExternalCatalog,
     functionResourceLoader: FunctionResourceLoader,
     functionRegistry: FunctionRegistry,
-    conf: CatalystConf) extends Logging {
-  import ExternalCatalog._
+    conf: CatalystConf,
+    hadoopConf: Configuration) extends Logging {
+  import CatalogTypes.TablePartitionSpec
 
+  // For testing only.
   def this(
       externalCatalog: ExternalCatalog,
       functionRegistry: FunctionRegistry,
       conf: CatalystConf) {
-    this(externalCatalog, DummyFunctionResourceLoader, functionRegistry, conf)
+    this(
+      externalCatalog,
+      DummyFunctionResourceLoader,
+      functionRegistry,
+      conf,
+      new Configuration())
   }
 
   // For testing only.
@@ -68,7 +76,8 @@ class SessionCatalog(
   // the corresponding item in the current database.
   protected var currentDb = {
     val defaultName = "default"
-    val defaultDbDefinition = CatalogDatabase(defaultName, "default database", "", Map())
+    val defaultDbDefinition =
+      CatalogDatabase(defaultName, "default database", conf.warehousePath, Map())
     // Initialize default database if it doesn't already exist
     createDatabase(defaultDbDefinition, ignoreIfExists = true)
     defaultName
@@ -81,6 +90,18 @@ class SessionCatalog(
     if (conf.caseSensitiveAnalysis) name else name.toLowerCase
   }
 
+  /**
+   * This method is used to make the given path qualified before we
+   * store this path in the underlying external catalog. So, when a path
+   * does not contain a scheme, this path will not be changed after the default
+   * FileSystem is changed.
+   */
+  private def makeQualifiedPath(path: String): Path = {
+    val hadoopPath = new Path(path)
+    val fs = hadoopPath.getFileSystem(hadoopConf)
+    fs.makeQualified(hadoopPath)
+  }
+
   // ----------------------------------------------------------------------------
   // Databases
   // ----------------------------------------------------------------------------
@@ -88,7 +109,10 @@ class SessionCatalog(
   // ----------------------------------------------------------------------------
 
   def createDatabase(dbDefinition: CatalogDatabase, ignoreIfExists: Boolean): Unit = {
-    externalCatalog.createDatabase(dbDefinition, ignoreIfExists)
+    val qualifiedPath = makeQualifiedPath(dbDefinition.locationUri).toString
+    externalCatalog.createDatabase(
+      dbDefinition.copy(locationUri = qualifiedPath),
+      ignoreIfExists)
   }
 
   def dropDatabase(db: String, ignoreIfNotExists: Boolean, cascade: Boolean): Unit = {
@@ -125,7 +149,8 @@ class SessionCatalog(
   }
 
   def getDefaultDBPath(db: String): String = {
-    System.getProperty("java.io.tmpdir") + File.separator + db + ".db"
+    val database = if (conf.caseSensitiveAnalysis) db else db.toLowerCase
+    new Path(new Path(conf.warehousePath), database + ".db").toString
   }
 
   // ----------------------------------------------------------------------------
@@ -471,13 +496,18 @@ class SessionCatalog(
   }
 
   /**
-   * List all partitions in a table, assuming it exists.
-   * If no database is specified, assume the table is in the current database.
+   * List the metadata of all partitions that belong to the specified table, assuming it exists.
+   *
+   * A partial partition spec may optionally be provided to filter the partitions returned.
+   * For instance, if there exist partitions (a='1', b='2'), (a='1', b='3') and (a='2', b='4'),
+   * then a partial spec of (a='1') will return the first two only.
    */
-  def listPartitions(tableName: TableIdentifier): Seq[CatalogTablePartition] = {
+  def listPartitions(
+      tableName: TableIdentifier,
+      partialSpec: Option[TablePartitionSpec] = None): Seq[CatalogTablePartition] = {
     val db = tableName.database.getOrElse(currentDb)
     val table = formatTableName(tableName.table)
-    externalCatalog.listPartitions(db, table)
+    externalCatalog.listPartitions(db, table, partialSpec)
   }
 
   // ----------------------------------------------------------------------------
@@ -608,6 +638,25 @@ class SessionCatalog(
   }
 
   /**
+   * Look up the [[ExpressionInfo]] associated with the specified function, assuming it exists.
+   */
+  private[spark] def lookupFunctionInfo(name: FunctionIdentifier): ExpressionInfo = {
+    // TODO: just make function registry take in FunctionIdentifier instead of duplicating this
+    val qualifiedName = name.copy(database = name.database.orElse(Some(currentDb)))
+    functionRegistry.lookupFunction(name.funcName)
+      .orElse(functionRegistry.lookupFunction(qualifiedName.unquotedString))
+      .getOrElse {
+        val db = qualifiedName.database.get
+        if (externalCatalog.functionExists(db, name.funcName)) {
+          val metadata = externalCatalog.getFunction(db, name.funcName)
+          new ExpressionInfo(metadata.className, qualifiedName.unquotedString)
+        } else {
+          failFunctionLookup(name.funcName)
+        }
+      }
+  }
+
+  /**
    * Return an [[Expression]] that represents the specified function, assuming it exists.
    *
    * For a temporary function or a permanent function that has been loaded,
@@ -641,6 +690,7 @@ class SessionCatalog(
     // The function has not been loaded to the function registry, which means
     // that the function is a permanent function (if it actually has been registered
     // in the metastore). We need to first put the function in the FunctionRegistry.
+    // TODO: why not just check whether the function exists first?
     val catalogFunction = try {
       externalCatalog.getFunction(currentDb, name.funcName)
     } catch {
@@ -657,7 +707,7 @@ class SessionCatalog(
     val builder = makeFunctionBuilder(qualifiedName.unquotedString, catalogFunction.className)
     createTempFunction(qualifiedName.unquotedString, info, builder, ignoreIfExists = false)
     // Now, we need to create the Expression.
-    return functionRegistry.lookupFunction(qualifiedName.unquotedString, children)
+    functionRegistry.lookupFunction(qualifiedName.unquotedString, children)
   }
 
   /**
@@ -682,8 +732,8 @@ class SessionCatalog(
   // -----------------
 
   /**
-   * Drop all existing databases (except "default") along with all associated tables,
-   * partitions and functions, and set the current database to "default".
+   * Drop all existing databases (except "default"), tables, partitions and functions,
+   * and set the current database to "default".
    *
    * This is mainly used for tests.
    */
@@ -691,6 +741,16 @@ class SessionCatalog(
     val default = "default"
     listDatabases().filter(_ != default).foreach { db =>
       dropDatabase(db, ignoreIfNotExists = false, cascade = true)
+    }
+    listTables(default).foreach { table =>
+      dropTable(table, ignoreIfNotExists = false)
+    }
+    listFunctions(default).foreach { func =>
+      if (func.database.isDefined) {
+        dropFunction(func, ignoreIfNotExists = false)
+      } else {
+        dropTempFunction(func.funcName, ignoreIfNotExists = false)
+      }
     }
     tempTables.clear()
     functionRegistry.clear()

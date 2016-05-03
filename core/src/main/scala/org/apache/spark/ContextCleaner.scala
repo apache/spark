@@ -144,7 +144,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
     registerForCleanup(rdd, CleanRDD(rdd.id))
   }
 
-  def registerAccumulatorForCleanup(a: Accumulable[_, _]): Unit = {
+  def registerAccumulatorForCleanup(a: AccumulatorV2[_, _]): Unit = {
     registerForCleanup(a, CleanAccum(a.id))
   }
 
@@ -212,7 +212,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
     }
   }
 
-  /** Perform shuffle cleanup, asynchronously. */
+  /** Perform shuffle cleanup. */
   def doCleanupShuffle(shuffleId: Int, blocking: Boolean): Unit = {
     try {
       logDebug("Cleaning shuffle " + shuffleId)
@@ -241,7 +241,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
   def doCleanupAccum(accId: Long, blocking: Boolean): Unit = {
     try {
       logDebug("Cleaning accumulator " + accId)
-      Accumulators.remove(accId)
+      AccumulatorContext.remove(accId)
       listeners.asScala.foreach(_.accumCleaned(accId))
       logInfo("Cleaned accumulator " + accId)
     } catch {

@@ -47,7 +47,9 @@ statement
     | createTableHeader ('(' colTypeList ')')? tableProvider
         (OPTIONS tablePropertyList)?                                   #createTableUsing
     | createTableHeader tableProvider
-        (OPTIONS tablePropertyList)? AS? query                         #createTableUsing
+        (OPTIONS tablePropertyList)?
+        (PARTITIONED BY partitionColumnNames=identifierList)?
+        bucketSpec? AS? query                                          #createTableUsing
     | createTableHeader ('(' columns=colTypeList ')')?
         (COMMENT STRING)?
         (PARTITIONED BY '(' partitionColumns=colTypeList ')')?
@@ -106,6 +108,9 @@ statement
     | SHOW DATABASES (LIKE pattern=STRING)?                            #showDatabases
     | SHOW TBLPROPERTIES table=tableIdentifier
         ('(' key=tablePropertyKey ')')?                                #showTblProperties
+    | SHOW COLUMNS (FROM | IN) tableIdentifier
+        ((FROM | IN) db=identifier)?                                   #showColumns
+    | SHOW PARTITIONS tableIdentifier partitionSpec?                   #showPartitions
     | SHOW FUNCTIONS (LIKE? (qualifiedName | pattern=STRING))?         #showFunctions
     | (DESC | DESCRIBE) FUNCTION EXTENDED? describeFuncName            #describeFunction
     | (DESC | DESCRIBE) option=(EXTENDED | FORMATTED)?
@@ -116,25 +121,13 @@ statement
     | UNCACHE TABLE identifier                                         #uncacheTable
     | CLEAR CACHE                                                      #clearCache
     | LOAD DATA LOCAL? INPATH path=STRING OVERWRITE? INTO TABLE
-      tableIdentifier partitionSpec?                                   #loadData
+        tableIdentifier partitionSpec?                                 #loadData
+    | TRUNCATE TABLE tableIdentifier partitionSpec?
+        (COLUMNS identifierList)?                                      #truncateTable
     | ADD identifier .*?                                               #addResource
     | SET ROLE .*?                                                     #failNativeCommand
     | SET .*?                                                          #setConfiguration
-    | kws=unsupportedHiveNativeCommands .*?                            #failNativeCommand
-    | hiveNativeCommands                                               #executeNativeCommand
-    ;
-
-hiveNativeCommands
-    : DELETE FROM tableIdentifier (WHERE booleanExpression)?
-    | TRUNCATE TABLE tableIdentifier partitionSpec?
-        (COLUMNS identifierList)?
-    | SHOW COLUMNS (FROM | IN) tableIdentifier ((FROM|IN) identifier)?
-    | START TRANSACTION (transactionMode (',' transactionMode)*)?
-    | COMMIT WORK?
-    | ROLLBACK WORK?
-    | SHOW PARTITIONS tableIdentifier partitionSpec?
-    | DFS .*?
-    | (CREATE | ALTER | DROP | SHOW | DESC | DESCRIBE) .*?
+    | unsupportedHiveNativeCommands .*?                                #failNativeCommand
     ;
 
 unsupportedHiveNativeCommands
@@ -177,6 +170,11 @@ unsupportedHiveNativeCommands
     | kw1=ALTER kw2=TABLE tableIdentifier kw3=TOUCH
     | kw1=ALTER kw2=TABLE tableIdentifier partitionSpec? kw3=COMPACT
     | kw1=ALTER kw2=TABLE tableIdentifier partitionSpec? kw3=CONCATENATE
+    | kw1=START kw2=TRANSACTION
+    | kw1=COMMIT
+    | kw1=ROLLBACK
+    | kw1=DFS
+    | kw1=DELETE kw2=FROM
     ;
 
 createTableHeader
@@ -263,14 +261,6 @@ constantList
 
 nestedConstantList
     : '(' constantList (',' constantList)* ')'
-    ;
-
-skewedLocation
-    : (constant | constantList) EQ STRING
-    ;
-
-skewedLocationList
-    : '(' skewedLocation (',' skewedLocation)* ')'
     ;
 
 createFileFormat
@@ -607,11 +597,6 @@ explainOption
     : LOGICAL | FORMATTED | EXTENDED | CODEGEN
     ;
 
-transactionMode
-    : ISOLATION LEVEL SNAPSHOT            #isolationLevel
-    | READ accessMode=(ONLY | WRITE)      #transactionAccessMode
-    ;
-
 qualifiedName
     : identifier ('.' identifier)*
     ;
@@ -659,8 +644,7 @@ nonReserved
     | VIEW | REPLACE
     | IF
     | NO | DATA
-    | START | TRANSACTION | COMMIT | ROLLBACK | WORK | ISOLATION | LEVEL
-    | SNAPSHOT | READ | WRITE | ONLY
+    | START | TRANSACTION | COMMIT | ROLLBACK
     | SORT | CLUSTER | DISTRIBUTE | UNSET | TBLPROPERTIES | SKEWED | STORED | DIRECTORIES | LOCATION
     | EXCHANGE | ARCHIVE | UNARCHIVE | FILEFORMAT | TOUCH | COMPACT | CONCATENATE | CHANGE | FIRST
     | AFTER | CASCADE | RESTRICT | BUCKETS | CLUSTERED | SORTED | PURGE | INPUTFORMAT | OUTPUTFORMAT
@@ -776,13 +760,6 @@ START: 'START';
 TRANSACTION: 'TRANSACTION';
 COMMIT: 'COMMIT';
 ROLLBACK: 'ROLLBACK';
-WORK: 'WORK';
-ISOLATION: 'ISOLATION';
-LEVEL: 'LEVEL';
-SNAPSHOT: 'SNAPSHOT';
-READ: 'READ';
-WRITE: 'WRITE';
-ONLY: 'ONLY';
 MACRO: 'MACRO';
 
 IF: 'IF';
