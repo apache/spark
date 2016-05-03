@@ -19,13 +19,11 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import scala.collection.generic.Growable
 import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, MapData}
+import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 /**
  * The Collect aggregate function collects all seen expression values into a list of values.
@@ -47,35 +45,30 @@ abstract class Collect extends ImperativeAggregate {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
 
-  // We need to keep track of the expression id of the list because the dataType of the attribute
-  // (and the attribute itself) will change when the dataType of the child gets resolved.
-  val listExprId = NamedExpression.newExprId
+  override def supportsPartial: Boolean = false
 
-  override def aggBufferAttributes: Seq[AttributeReference] = {
-    Seq(AttributeReference("list", dataType, nullable = false)(listExprId))
-  }
+  override def aggBufferAttributes: Seq[AttributeReference] = Nil
 
   override def aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
 
-  override def inputAggBufferAttributes: Seq[AttributeReference] = {
-    aggBufferAttributes.map(_.newInstance())
+  override def inputAggBufferAttributes: Seq[AttributeReference] = Nil
+
+  protected[this] val buffer: Growable[Any] with Iterable[Any]
+
+  override def initialize(b: MutableRow): Unit = {
+    buffer.clear()
   }
 
-  override def update(buffer: MutableRow, input: InternalRow): Unit = {
-    getMutableArray(buffer) += child.eval(input)
+  override def update(b: MutableRow, input: InternalRow): Unit = {
+    buffer += child.eval(input)
   }
 
   override def merge(buffer: MutableRow, input: InternalRow): Unit = {
-    getMutableArray(buffer) ++= input.getArray(inputAggBufferOffset)
+    sys.error("Collect cannot be used in partial aggregations.")
   }
 
   override def eval(input: InternalRow): Any = {
-    // TODO return null if there are no elements?
-    getMutableArray(input).toFastRandomAccess
-  }
-
-  private def getMutableArray(buffer: InternalRow): MutableArrayData = {
-    buffer.getArray(mutableAggBufferOffset).asInstanceOf[MutableArrayData]
+    new GenericArrayData(buffer.toArray)
   }
 }
 
@@ -92,11 +85,9 @@ case class CollectList(
   override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
-  override def initialize(mutableAggBuffer: MutableRow): Unit = {
-    mutableAggBuffer.update(mutableAggBufferOffset, ListMutableArrayData())
-  }
-
   override def prettyName: String = "collect_list"
+
+  override protected[this] val buffer: mutable.ArrayBuffer[Any] = mutable.ArrayBuffer.empty
 }
 
 case class CollectSet(
@@ -112,72 +103,7 @@ case class CollectSet(
   override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
-  override def initialize(mutableAggBuffer: MutableRow): Unit = {
-    mutableAggBuffer.update(mutableAggBufferOffset, SetMutableArrayData())
-  }
-
   override def prettyName: String = "collect_set"
-}
 
-/**
- * MutableArrayData is an implementation of ArrayData that can be updated in place. This makes
- * the assumption that the buffer holding this object data keeps a reference to this object. This
- * means that this approach is only valid if a GenericInternalRow or a SpecializedInternalRow is
- * used as a buffer.
- */
-abstract class MutableArrayData extends ArrayData {
-  val buffer: Growable[Any] with Iterable[Any]
-
-  /** Add a single element to the MutableArrayData. */
-  def +=(elem: Any): MutableArrayData = {
-    buffer += elem
-    this
-  }
-
-  /** Add another array to the MutableArrayData. */
-  def ++=(elems: ArrayData): MutableArrayData = {
-    elems match {
-      case input: MutableArrayData => buffer ++= input.buffer
-      case input => buffer ++= input.array
-    }
-    this
-  }
-
-  /** Return an ArrayData instance with fast random access properties. */
-  def toFastRandomAccess: ArrayData = this
-
-  protected def getAs[T](ordinal: Int): T
-
-  /* ArrayData methods. */
-  override def numElements(): Int = buffer.size
-  override def array: Array[Any] = buffer.toArray
-  override def isNullAt(ordinal: Int): Boolean = getAs[AnyRef](ordinal) eq null
-  override def get(ordinal: Int, elementType: DataType): AnyRef = getAs(ordinal)
-  override def getBoolean(ordinal: Int): Boolean = getAs(ordinal)
-  override def getByte(ordinal: Int): Byte = getAs(ordinal)
-  override def getShort(ordinal: Int): Short = getAs(ordinal)
-  override def getInt(ordinal: Int): Int = getAs(ordinal)
-  override def getLong(ordinal: Int): Long = getAs(ordinal)
-  override def getFloat(ordinal: Int): Float = getAs(ordinal)
-  override def getDouble(ordinal: Int): Double = getAs(ordinal)
-  override def getDecimal(ordinal: Int, precision: Int, scale: Int): Decimal = getAs(ordinal)
-  override def getUTF8String(ordinal: Int): UTF8String = getAs(ordinal)
-  override def getBinary(ordinal: Int): Array[Byte] = getAs(ordinal)
-  override def getInterval(ordinal: Int): CalendarInterval = getAs(ordinal)
-  override def getStruct(ordinal: Int, numFields: Int): InternalRow = getAs(ordinal)
-  override def getArray(ordinal: Int): ArrayData = getAs(ordinal)
-  override def getMap(ordinal: Int): MapData = getAs(ordinal)
-}
-
-case class ListMutableArrayData(
-    val buffer: ArrayBuffer[Any] = ArrayBuffer.empty) extends MutableArrayData {
-  override protected def getAs[T](ordinal: Int): T = buffer(ordinal).asInstanceOf[T]
-  override def copy(): ListMutableArrayData = ListMutableArrayData(buffer.clone())
-}
-
-case class SetMutableArrayData(
-    val buffer: mutable.HashSet[Any] = mutable.HashSet.empty) extends MutableArrayData {
-  override protected def getAs[T](ordinal: Int): T = buffer.toArray.apply(ordinal).asInstanceOf[T]
-  override def copy(): SetMutableArrayData = SetMutableArrayData(buffer.clone())
-  override def toFastRandomAccess: GenericArrayData = new GenericArrayData(buffer.toArray)
+  override protected[this] val buffer: mutable.HashSet[Any] = mutable.HashSet.empty
 }

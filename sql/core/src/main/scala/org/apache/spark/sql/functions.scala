@@ -195,8 +195,6 @@ object functions {
   /**
    * Aggregate function: returns a list of objects with duplicates.
    *
-   * For now this is an alias for the collect_list Hive UDAF.
-   *
    * @group agg_funcs
    * @since 1.6.0
    */
@@ -219,7 +217,7 @@ object functions {
   def collect_set(e: Column): Column = withAggregateFunction { CollectSet(e.expr) }
 
   /**
-    * Aggregate function: returns a set of objects with duplicate elements eliminated.
+   * Aggregate function: returns a set of objects with duplicate elements eliminated.
    *
    * @group agg_funcs
    * @since 1.6.0
