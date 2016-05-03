@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.sources
 
+import java.io.File
+
 import scala.util.Random
 
 import org.apache.hadoop.fs.Path
@@ -486,7 +488,133 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
     }
   }
 
-  test("Hadoop style globbing") {
+  test("load() - with directory of unpartitioned data in nested subdirs") {
+    withTempPath { file =>
+      val dir = file.getCanonicalPath
+      val subdir = new File(dir, "subdir").getCanonicalPath
+
+      val dataInDir = Seq(1, 2, 3).toDF("value")
+      val dataInSubdir = Seq(4, 5, 6).toDF("value")
+
+      /*
+
+        Directory structure to be generated
+
+        dir
+          |
+          |___ [ files of dataInDir ]
+               |
+               |___ subsubdir
+                         |
+                         |___ [ files of dataInSubdir ]
+      */
+
+      // Generated dataInSubdir, not data in dir
+      partitionedTestDF1.write
+        .format(dataSourceName)
+        .mode(SaveMode.Overwrite)
+        .save(subdir)
+
+      // Inferring schema should throw error as it should not find any file to infer
+      val e = intercept[AnalysisException] {
+        sqlContext.read.format(dataSourceName).load(dir)
+      }
+      assert(e.getMessage.contains("infer"))
+
+      /** Test whether data is read with the given path matches the expected answer */
+      def testWithPath(path: String, expectedAnswer: Seq[Row]): Unit = {
+        val df = sqlContext.read
+          .format(dataSourceName)
+          .schema(dataInDir.schema) // avoid schema inference for any format
+          .load(path)
+        checkAnswer(df, expectedAnswer)
+      }
+
+      // Reading by the path 'file/' *not by 'file/subdir') should give empty results
+      // as there are no files in 'file' and it should not pick up files in 'file/subdir'
+      testWithPath(dir, Seq.empty)
+
+      dataInDir.write
+        .format(dataSourceName)
+        .mode(SaveMode.Overwrite)
+        .save(dir)
+
+      // Should give only rows from partitionedTestDF2
+      testWithPath(dir, dataInDir.collect())
+    }
+  }
+
+  test("Hadoop style globbing - unpartitioned data") {
+    withTempPath { file =>
+
+      val dir = file.getCanonicalPath
+      val subdir = new File(dir, "subdir").getCanonicalPath
+      val subsubdir = new File(subdir, "subsubdir").getCanonicalPath
+      val anotherSubsubdir =
+        new File(new File(dir, "another-subdir"), "another-subsubdir").getCanonicalPath
+
+      val dataInSubdir = Seq(1, 2, 3).toDF("value")
+      val dataInSubsubdir = Seq(4, 5, 6).toDF("value")
+      val dataInAnotherSubsubdir = Seq(7, 8, 9).toDF("value")
+
+      dataInSubdir.write
+        .format (dataSourceName)
+        .mode (SaveMode.Overwrite)
+        .save (subdir)
+
+      dataInSubsubdir.write
+        .format (dataSourceName)
+        .mode (SaveMode.Overwrite)
+        .save (subsubdir)
+
+      dataInAnotherSubsubdir.write
+        .format (dataSourceName)
+        .mode (SaveMode.Overwrite)
+        .save (anotherSubsubdir)
+
+      /*
+
+        Directory structure generated
+
+        dir
+          |
+          |___ subdir
+          |     |
+          |     |___ [ files of dataInSubdir ]
+          |     |
+          |     |___ subsubdir
+          |               |
+          |               |___ [ files of dataInSubsubdir ]
+          |
+          |
+          |___ anotherSubdir
+                |
+                |___ anotherSubsubdir
+                          |
+                          |___ [ files of dataInAnotherSubsubdir ]
+       */
+
+      val schema = dataInSubdir.schema
+
+      /** Test whether data is read with the given path matches the expected answer */
+      def testWithPath(path: String, expectedDf: DataFrame): Unit = {
+        val df = sqlContext.read
+          .format(dataSourceName)
+          .schema(schema) // avoid schema inference for any format
+          .load(path)
+        checkAnswer(df, expectedDf)
+      }
+
+      testWithPath(s"$dir/*/", dataInSubdir)
+      testWithPath(s"$dir/sub*/*", dataInSubdir.union(dataInSubsubdir))
+      testWithPath(s"$dir/another*/*", dataInAnotherSubsubdir)
+      testWithPath(s"$dir/*/another*", dataInAnotherSubsubdir)
+      testWithPath(s"$dir/*/*", dataInSubdir.union(dataInSubsubdir).union(dataInAnotherSubsubdir))
+
+    }
+  }
+
+  test("Hadoop style globbing - partitioned data") {
     withTempPath { file =>
       partitionedTestDF.write
         .format(dataSourceName)

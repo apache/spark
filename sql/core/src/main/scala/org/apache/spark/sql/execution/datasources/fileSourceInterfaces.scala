@@ -291,8 +291,12 @@ class HDFSFileCatalog(
   refresh()
 
   override def listFiles(filters: Seq[Expression]): Seq[Partition] = {
+
     if (partitionSpec().partitionColumns.isEmpty) {
-      Partition(InternalRow.empty, allFiles().filterNot(_.getPath.getName startsWith "_")) :: Nil
+      Partition(
+        InternalRow.empty,
+        unpartitionedDataFiles().filterNot(_.getPath.getName startsWith "_")
+      ) :: Nil
     } else {
       prunePartitions(filters, partitionSpec()).map {
         case PartitionDirectory(values, path) =>
@@ -337,7 +341,13 @@ class HDFSFileCatalog(
     }
   }
 
-  def allFiles(): Seq[FileStatus] = leafFiles.values.toSeq
+  def allFiles(): Seq[FileStatus] = {
+    if (partitionSpec().partitionColumns.isEmpty) {
+      unpartitionedDataFiles()
+    } else {
+      leafFiles.values.toSeq
+    }
+  }
 
   def getStatus(path: Path): Array[FileStatus] = leafDirToChildrenFiles(path)
 
@@ -387,7 +397,7 @@ class HDFSFileCatalog(
     }
   }
 
-  def inferPartitioning(schema: Option[StructType]): PartitionSpec = {
+  private def inferPartitioning(schema: Option[StructType]): PartitionSpec = {
     // We use leaf dirs containing data files to discover the schema.
     val leafDirs = leafDirToChildrenFiles.keys.toSeq
     schema match {
@@ -440,6 +450,22 @@ class HDFSFileCatalog(
       // Make the path qualified (consistent with listLeafFiles and listLeafFilesInParallel).
       val fs = hdfsPath.getFileSystem(hadoopConf)
       hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+    }
+  }
+
+  /** List of files to consider when there is not inferred partitioning scheme */
+  private def unpartitionedDataFiles(): Seq[FileStatus] = {
+    // For each of the input paths, get the list of files inside them
+    paths.flatMap { path =>
+      // Make the path qualified (consistent with listLeafFiles and listLeafFilesInParallel).
+      val fs = path.getFileSystem(hadoopConf)
+      val qualifiedPath = path.makeQualified(fs.getUri, fs.getWorkingDirectory)
+
+      // If it is a directory (i.e. exists in leafDirToChildrenFiles), return its children files
+      // Or if it is a file (i.e. exists in leafFiles), return the path itself
+      leafDirToChildrenFiles.get(qualifiedPath).orElse {
+        leafFiles.get(path).map(Array(_))
+      }.getOrElse(Array.empty)
     }
   }
 
