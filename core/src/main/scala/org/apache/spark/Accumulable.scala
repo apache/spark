@@ -24,6 +24,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.serializer.JavaSerializer
+import org.apache.spark.util.{AccumulatorContext, AccumulatorMetadata, LegacyAccumulatorWrapper}
 
 
 /**

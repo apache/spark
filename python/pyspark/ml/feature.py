@@ -114,8 +114,7 @@ class Binarizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Java
         """
         Sets the value of :py:attr:`threshold`.
         """
-        self._set(threshold=value)
-        return self
+        return self._set(threshold=value)
 
     @since("1.4.0")
     def getThreshold(self):
@@ -190,8 +189,7 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Jav
         """
         Sets the value of :py:attr:`splits`.
         """
-        self._set(splits=value)
-        return self
+        return self._set(splits=value)
 
     @since("1.4.0")
     def getSplits(self):
@@ -295,8 +293,7 @@ class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, 
         """
         Sets the value of :py:attr:`minTF`.
         """
-        self._set(minTF=value)
-        return self
+        return self._set(minTF=value)
 
     @since("1.6.0")
     def getMinTF(self):
@@ -310,8 +307,7 @@ class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, 
         """
         Sets the value of :py:attr:`minDF`.
         """
-        self._set(minDF=value)
-        return self
+        return self._set(minDF=value)
 
     @since("1.6.0")
     def getMinDF(self):
@@ -325,8 +321,7 @@ class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, 
         """
         Sets the value of :py:attr:`vocabSize`.
         """
-        self._set(vocabSize=value)
-        return self
+        return self._set(vocabSize=value)
 
     @since("1.6.0")
     def getVocabSize(self):
@@ -340,8 +335,7 @@ class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, 
         """
         Sets the value of :py:attr:`binary`.
         """
-        self._set(binary=value)
-        return self
+        return self._set(binary=value)
 
     @since("2.0.0")
     def getBinary(self):
@@ -433,8 +427,7 @@ class DCT(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWrit
         """
         Sets the value of :py:attr:`inverse`.
         """
-        self._set(inverse=value)
-        return self
+        return self._set(inverse=value)
 
     @since("1.6.0")
     def getInverse(self):
@@ -500,8 +493,7 @@ class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReada
         """
         Sets the value of :py:attr:`scalingVec`.
         """
-        self._set(scalingVec=value)
-        return self
+        return self._set(scalingVec=value)
 
     @since("1.5.0")
     def getScalingVec(self):
@@ -573,8 +565,7 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures, Java
         """
         Sets the value of :py:attr:`binary`.
         """
-        self._set(binary=value)
-        return self
+        return self._set(binary=value)
 
     @since("2.0.0")
     def getBinary(self):
@@ -647,8 +638,7 @@ class IDF(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritab
         """
         Sets the value of :py:attr:`minDocFreq`.
         """
-        self._set(minDocFreq=value)
-        return self
+        return self._set(minDocFreq=value)
 
     @since("1.4.0")
     def getMinDocFreq(self):
@@ -832,8 +822,7 @@ class MinMaxScaler(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, Jav
         """
         Sets the value of :py:attr:`min`.
         """
-        self._set(min=value)
-        return self
+        return self._set(min=value)
 
     @since("1.6.0")
     def getMin(self):
@@ -847,8 +836,7 @@ class MinMaxScaler(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, Jav
         """
         Sets the value of :py:attr:`max`.
         """
-        self._set(max=value)
-        return self
+        return self._set(max=value)
 
     @since("1.6.0")
     def getMax(self):
@@ -956,8 +944,7 @@ class NGram(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWr
         """
         Sets the value of :py:attr:`n`.
         """
-        self._set(n=value)
-        return self
+        return self._set(n=value)
 
     @since("1.5.0")
     def getN(self):
@@ -1023,8 +1010,7 @@ class Normalizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Jav
         """
         Sets the value of :py:attr:`p`.
         """
-        self._set(p=value)
-        return self
+        return self._set(p=value)
 
     @since("1.4.0")
     def getP(self):
@@ -1106,8 +1092,7 @@ class OneHotEncoder(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, 
         """
         Sets the value of :py:attr:`dropLast`.
         """
-        self._set(dropLast=value)
-        return self
+        return self._set(dropLast=value)
 
     @since("1.4.0")
     def getDropLast(self):
@@ -1175,8 +1160,7 @@ class PolynomialExpansion(JavaTransformer, HasInputCol, HasOutputCol, JavaMLRead
         """
         Sets the value of :py:attr:`degree`.
         """
-        self._set(degree=value)
-        return self
+        return self._set(degree=value)
 
     @since("1.4.0")
     def getDegree(self):
@@ -1257,8 +1241,7 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasSeed, Jav
         """
         Sets the value of :py:attr:`numBuckets`.
         """
-        self._set(numBuckets=value)
-        return self
+        return self._set(numBuckets=value)
 
     @since("2.0.0")
     def getNumBuckets(self):
@@ -1355,8 +1338,7 @@ class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable,
         """
         Sets the value of :py:attr:`minTokenLength`.
         """
-        self._set(minTokenLength=value)
-        return self
+        return self._set(minTokenLength=value)
 
     @since("1.4.0")
     def getMinTokenLength(self):
@@ -1370,8 +1352,7 @@ class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable,
         """
         Sets the value of :py:attr:`gaps`.
         """
-        self._set(gaps=value)
-        return self
+        return self._set(gaps=value)
 
     @since("1.4.0")
     def getGaps(self):
@@ -1385,8 +1366,7 @@ class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable,
         """
         Sets the value of :py:attr:`pattern`.
         """
-        self._set(pattern=value)
-        return self
+        return self._set(pattern=value)
 
     @since("1.4.0")
     def getPattern(self):
@@ -1400,8 +1380,7 @@ class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable,
         """
         Sets the value of :py:attr:`toLowercase`.
         """
-        self._set(toLowercase=value)
-        return self
+        return self._set(toLowercase=value)
 
     @since("2.0.0")
     def getToLowercase(self):
@@ -1462,8 +1441,7 @@ class SQLTransformer(JavaTransformer, JavaMLReadable, JavaMLWritable):
         """
         Sets the value of :py:attr:`statement`.
         """
-        self._set(statement=value)
-        return self
+        return self._set(statement=value)
 
     @since("1.6.0")
     def getStatement(self):
@@ -1540,8 +1518,7 @@ class StandardScaler(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, J
         """
         Sets the value of :py:attr:`withMean`.
         """
-        self._set(withMean=value)
-        return self
+        return self._set(withMean=value)
 
     @since("1.4.0")
     def getWithMean(self):
@@ -1555,8 +1532,7 @@ class StandardScaler(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, J
         """
         Sets the value of :py:attr:`withStd`.
         """
-        self._set(withStd=value)
-        return self
+        return self._set(withStd=value)
 
     @since("1.4.0")
     def getWithStd(self):
@@ -1724,8 +1700,7 @@ class IndexToString(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, 
         """
         Sets the value of :py:attr:`labels`.
         """
-        self._set(labels=value)
-        return self
+        return self._set(labels=value)
 
     @since("1.6.0")
     def getLabels(self):
@@ -1795,8 +1770,7 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadabl
         """
         Specify the stopwords to be filtered.
         """
-        self._set(stopWords=value)
-        return self
+        return self._set(stopWords=value)
 
     @since("1.6.0")
     def getStopWords(self):
@@ -1810,8 +1784,7 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadabl
         """
         Set whether to do a case sensitive comparison over the stop words
         """
-        self._set(caseSensitive=value)
-        return self
+        return self._set(caseSensitive=value)
 
     @since("1.6.0")
     def getCaseSensitive(self):
@@ -2027,8 +2000,7 @@ class VectorIndexer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, Ja
         """
         Sets the value of :py:attr:`maxCategories`.
         """
-        self._set(maxCategories=value)
-        return self
+        return self._set(maxCategories=value)
 
     @since("1.4.0")
     def getMaxCategories(self):
@@ -2137,8 +2109,7 @@ class VectorSlicer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, J
         """
         Sets the value of :py:attr:`indices`.
         """
-        self._set(indices=value)
-        return self
+        return self._set(indices=value)
 
     @since("1.6.0")
     def getIndices(self):
@@ -2152,8 +2123,7 @@ class VectorSlicer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, J
         """
         Sets the value of :py:attr:`names`.
         """
-        self._set(names=value)
-        return self
+        return self._set(names=value)
 
     @since("1.6.0")
     def getNames(self):
@@ -2261,8 +2231,7 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
         """
         Sets the value of :py:attr:`vectorSize`.
         """
-        self._set(vectorSize=value)
-        return self
+        return self._set(vectorSize=value)
 
     @since("1.4.0")
     def getVectorSize(self):
@@ -2276,8 +2245,7 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
         """
         Sets the value of :py:attr:`numPartitions`.
         """
-        self._set(numPartitions=value)
-        return self
+        return self._set(numPartitions=value)
 
     @since("1.4.0")
     def getNumPartitions(self):
@@ -2291,8 +2259,7 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
         """
         Sets the value of :py:attr:`minCount`.
         """
-        self._set(minCount=value)
-        return self
+        return self._set(minCount=value)
 
     @since("1.4.0")
     def getMinCount(self):
@@ -2306,8 +2273,7 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
         """
         Sets the value of :py:attr:`windowSize`.
         """
-        self._set(windowSize=value)
-        return self
+        return self._set(windowSize=value)
 
     @since("2.0.0")
     def getWindowSize(self):
@@ -2412,8 +2378,7 @@ class PCA(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritab
         """
         Sets the value of :py:attr:`k`.
         """
-        self._set(k=value)
-        return self
+        return self._set(k=value)
 
     @since("1.5.0")
     def getK(self):
@@ -2545,8 +2510,7 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, JavaMLReadable, JavaM
         """
         Sets the value of :py:attr:`formula`.
         """
-        self._set(formula=value)
-        return self
+        return self._set(formula=value)
 
     @since("1.5.0")
     def getFormula(self):
@@ -2638,8 +2602,7 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol, Ja
         """
         Sets the value of :py:attr:`numTopFeatures`.
         """
-        self._set(numTopFeatures=value)
-        return self
+        return self._set(numTopFeatures=value)
 
     @since("2.0.0")
     def getNumTopFeatures(self):

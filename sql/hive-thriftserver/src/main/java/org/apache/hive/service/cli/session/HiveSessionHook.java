@@ -33,5 +33,5 @@ public interface HiveSessionHook extends Hook {
    * @param sessionHookContext context
    * @throws HiveSQLException
    */
-  public void run(HiveSessionHookContext sessionHookContext) throws HiveSQLException;
+  void run(HiveSessionHookContext sessionHookContext) throws HiveSQLException;
 }

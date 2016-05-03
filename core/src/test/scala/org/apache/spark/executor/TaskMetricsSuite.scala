@@ -21,6 +21,7 @@ import org.scalatest.Assertions
 
 import org.apache.spark._
 import org.apache.spark.storage.{BlockStatus, StorageLevel, TestBlockId}
+import org.apache.spark.util.AccumulatorV2
 
 
 class TaskMetricsSuite extends SparkFunSuite {
