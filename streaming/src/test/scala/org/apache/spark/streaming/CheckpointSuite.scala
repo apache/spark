@@ -640,11 +640,11 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
         val fileStream = ssc.textFileStream(testDir.toString)
         // Make value 3 take a large time to process, to ensure that the driver
         // shuts down in the middle of processing the 3rd batch
-        CheckpointSuite.batchThreeShouldBlockIndefinitely = true
+        CheckpointSuite.batchThreeShouldBlockALongTime = true
         val mappedStream = fileStream.map(s => {
           val i = s.toInt
           if (i == 3) {
-            if (CheckpointSuite.batchThreeShouldBlockIndefinitely) {
+            if (CheckpointSuite.batchThreeShouldBlockALongTime) {
               // It's not a good idea to let the thread run forever
               // as resource won't be correctly released
               Thread.sleep(6000)
@@ -691,7 +691,7 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
       }
 
       // The original StreamingContext has now been stopped.
-      CheckpointSuite.batchThreeShouldBlockIndefinitely = false
+      CheckpointSuite.batchThreeShouldBlockALongTime = false
 
       // Create files while the streaming driver is down
       for (i <- Seq(4, 5, 6)) {
@@ -928,5 +928,5 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
 }
 
 private object CheckpointSuite extends Serializable {
-  var batchThreeShouldBlockIndefinitely: Boolean = true
+  var batchThreeShouldBlockALongTime: Boolean = true
 }

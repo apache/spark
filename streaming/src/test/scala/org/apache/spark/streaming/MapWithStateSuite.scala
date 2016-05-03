@@ -38,11 +38,11 @@ class MapWithStateSuite extends SparkFunSuite
   protected val batchDuration = Seconds(1)
 
   before {
-    StreamingContext.getActive().foreach { _.stop(stopSparkContext = false) }
+    StreamingContext.getActive().foreach(_.stop(stopSparkContext = false))
   }
 
   after {
-    StreamingContext.getActive().foreach { _.stop(stopSparkContext = false) }
+    StreamingContext.getActive().foreach(_.stop(stopSparkContext = false))
   }
 
   override def beforeAll(): Unit = {
@@ -60,9 +60,9 @@ class MapWithStateSuite extends SparkFunSuite
       }
     } finally {
       super.afterAll()
-    }
-    if (checkpointDir != null) {
-      Utils.deleteRecursively(checkpointDir)
+      if (checkpointDir != null) {
+        Utils.deleteRecursively(checkpointDir)
+      }
     }
   }
 
