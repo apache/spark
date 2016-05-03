@@ -72,6 +72,11 @@ abstract class Collect extends ImperativeAggregate {
   }
 }
 
+/**
+ * Collect a list of elements.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Collects and returns a list of non-unique elements.")
 case class CollectList(
     child: Expression,
     mutableAggBufferOffset: Int = 0,
@@ -90,6 +95,11 @@ case class CollectList(
   override protected[this] val buffer: mutable.ArrayBuffer[Any] = mutable.ArrayBuffer.empty
 }
 
+/**
+ * Collect a list of unique elements.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Collects and returns a set of unique elements.")
 case class CollectSet(
     child: Expression,
     mutableAggBufferOffset: Int = 0,
