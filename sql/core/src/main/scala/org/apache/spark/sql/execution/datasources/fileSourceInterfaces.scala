@@ -31,6 +31,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{expressions, CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution.FileRelation
 import org.apache.spark.sql.sources.{BaseRelation, Filter}
 import org.apache.spark.sql.types.{StringType, StructType}
@@ -236,6 +237,41 @@ trait FileFormat {
     // TODO: Remove this default implementation when the other formats have been ported
     // Until then we guard in [[FileSourceStrategy]] to only call this method on supported formats.
     throw new UnsupportedOperationException(s"buildReader is not supported for $this")
+  }
+
+  /**
+   * Exactly the same as [[buildReader]] except that the reader function returned by this method
+   * appends partition values to [[InternalRow]]s produced by the reader function [[buildReader]]
+   * returns.
+   */
+  private[sql] def buildReaderWithPartitionValues(
+      sparkSession: SparkSession,
+      dataSchema: StructType,
+      partitionSchema: StructType,
+      requiredSchema: StructType,
+      filters: Seq[Filter],
+      options: Map[String, String],
+      hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
+    new (PartitionedFile => Iterator[InternalRow]) {
+      private val fullSchema = requiredSchema.toAttributes ++ partitionSchema.toAttributes
+
+      private val joinedRow = new JoinedRow()
+
+      private val appendPartitionColumns = GenerateUnsafeProjection.generate(fullSchema, fullSchema)
+
+      override def apply(file: PartitionedFile): Iterator[InternalRow] = {
+        val dataReader = buildReader(
+          sparkSession, dataSchema, partitionSchema, requiredSchema, filters, options, hadoopConf)
+
+        if (file.partitionValues.numFields > 0) {
+          dataReader(file).map { dataRow =>
+            appendPartitionColumns(joinedRow(dataRow, file.partitionValues))
+          }
+        } else {
+          dataReader(file)
+        }
+      }
+    }
   }
 
   /**
