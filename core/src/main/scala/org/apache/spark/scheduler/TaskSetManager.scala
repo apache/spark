@@ -32,7 +32,7 @@ import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.SchedulingMode._
 import org.apache.spark.TaskState.TaskState
-import org.apache.spark.util.{Clock, SystemClock, Utils}
+import org.apache.spark.util.{AccumulatorV2, Clock, SystemClock, Utils}
 
 /**
  * Schedules the tasks within a single TaskSet in the TaskSchedulerImpl. This class keeps track of
