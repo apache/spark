@@ -23,6 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.shuffle.FetchFailedException
+import org.apache.spark.util.{AccumulatorContext, AccumulatorV2}
 
 
 class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {

@@ -15,15 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.util
 
 import java.{lang => jl}
 import java.io.ObjectInputStream
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
+import org.apache.spark.{InternalAccumulator, SparkContext, TaskContext}
 import org.apache.spark.scheduler.AccumulableInfo
-import org.apache.spark.util.Utils
 
 
 private[spark] case class AccumulatorMetadata(
@@ -204,8 +204,8 @@ private[spark] object AccumulatorContext {
   private[this] val nextId = new AtomicLong(0L)
 
   /**
-   * Returns a globally unique ID for a new [[Accumulator]].
-   * Note: Once you copy the [[Accumulator]] the ID is no longer unique.
+   * Returns a globally unique ID for a new [[AccumulatorV2]].
+   * Note: Once you copy the [[AccumulatorV2]] the ID is no longer unique.
    */
   def newId(): Long = nextId.getAndIncrement
 
@@ -213,14 +213,14 @@ private[spark] object AccumulatorContext {
   def numAccums: Int = originals.size
 
   /**
-   * Registers an [[Accumulator]] created on the driver such that it can be used on the executors.
+   * Registers an [[AccumulatorV2]] created on the driver such that it can be used on the executors.
    *
    * All accumulators registered here can later be used as a container for accumulating partial
    * values across multiple tasks. This is what [[org.apache.spark.scheduler.DAGScheduler]] does.
    * Note: if an accumulator is registered here, it should also be registered with the active
    * context cleaner for cleanup so as to avoid memory leaks.
    *
-   * If an [[Accumulator]] with the same ID was already registered, this does nothing instead
+   * If an [[AccumulatorV2]] with the same ID was already registered, this does nothing instead
    * of overwriting it. We will never register same accumulator twice, this is just a sanity check.
    */
   def register(a: AccumulatorV2[_, _]): Unit = {
@@ -228,14 +228,14 @@ private[spark] object AccumulatorContext {
   }
 
   /**
-   * Unregisters the [[Accumulator]] with the given ID, if any.
+   * Unregisters the [[AccumulatorV2]] with the given ID, if any.
    */
   def remove(id: Long): Unit = {
     originals.remove(id)
   }
 
   /**
-   * Returns the [[Accumulator]] registered with the given ID, if any.
+   * Returns the [[AccumulatorV2]] registered with the given ID, if any.
    */
   def get(id: Long): Option[AccumulatorV2[_, _]] = {
     Option(originals.get(id)).map { ref =>
@@ -249,7 +249,7 @@ private[spark] object AccumulatorContext {
   }
 
   /**
-   * Clears all registered [[Accumulator]]s. For testing only.
+   * Clears all registered [[AccumulatorV2]]s. For testing only.
    */
   def clear(): Unit = {
     originals.clear()
