@@ -53,6 +53,9 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 1.4.0
    */
   def mode(saveMode: SaveMode): DataFrameWriter = {
+    // mode() is used for non-continuous queries
+    // outputMode() is used for continuous queries
+    assertNotStreaming("mode() can only be called on non-continuous queries")
     this.mode = saveMode
     this
   }
@@ -67,6 +70,9 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 1.4.0
    */
   def mode(saveMode: String): DataFrameWriter = {
+    // mode() is used for non-continuous queries
+    // outputMode() is used for continuous queries
+    assertNotStreaming("mode() can only be called on non-continuous queries")
     this.mode = saveMode.toLowerCase match {
       case "overwrite" => SaveMode.Overwrite
       case "append" => SaveMode.Append
@@ -103,6 +109,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    */
   @Experimental
   def trigger(trigger: Trigger): DataFrameWriter = {
+    assertStreaming("trigger() can only be called on continuous queries")
     this.trigger = trigger
     this
   }
@@ -236,6 +243,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    */
   def save(): Unit = {
     assertNotBucketed()
+    assertNotStreaming("save() can only be called on non-continuous queries")
     val dataSource = DataSource(
       df.sparkSession,
       className = source,
@@ -253,6 +261,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 2.0.0
    */
   def queryName(queryName: String): DataFrameWriter = {
+    assertStreaming("queryName() can only be called on continuous queries")
     this.extraOptions += ("queryName" -> queryName)
     this
   }
@@ -276,6 +285,9 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 2.0.0
    */
   def startStream(): ContinuousQuery = {
+    assertNotBucketed
+    assertStreaming("startStream() can only be called on continuous queries")
+
     if (source == "memory") {
       val queryName =
         extraOptions.getOrElse(
@@ -348,6 +360,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
 
   private def insertInto(tableIdent: TableIdentifier): Unit = {
     assertNotBucketed()
+    assertNotStreaming("insertInto() can only be called on non-continuous queries")
     val partitions = normalizedParCols.map(_.map(col => col -> (None: Option[String])).toMap)
     val overwrite = mode == SaveMode.Overwrite
 
@@ -446,6 +459,8 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   }
 
   private def saveAsTable(tableIdent: TableIdentifier): Unit = {
+    assertNotStreaming("saveAsTable() can only be called on non-continuous queries")
+
     val tableExists = df.sparkSession.sessionState.catalog.tableExists(tableIdent)
 
     (tableExists, mode) match {
@@ -486,6 +501,8 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 1.4.0
    */
   def jdbc(url: String, table: String, connectionProperties: Properties): Unit = {
+    assertNotStreaming("jdbc() can only be called on non-continuous queries")
+
     val props = new Properties()
     extraOptions.foreach { case (key, value) =>
       props.put(key, value)
@@ -542,7 +559,10 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    *
    * @since 1.4.0
    */
-  def json(path: String): Unit = format("json").save(path)
+  def json(path: String): Unit = {
+    assertNotStreaming("json() can only be called on non-continuous queries")
+    format("json").save(path)
+  }
 
   /**
    * Saves the content of the [[DataFrame]] in Parquet format at the specified path.
@@ -558,7 +578,10 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    *
    * @since 1.4.0
    */
-  def parquet(path: String): Unit = format("parquet").save(path)
+  def parquet(path: String): Unit = {
+    assertNotStreaming("parquet() can only be called on non-continuous queries")
+    format("parquet").save(path)
+  }
 
   /**
    * Saves the content of the [[DataFrame]] in ORC format at the specified path.
@@ -575,7 +598,10 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 1.5.0
    * @note Currently, this method can only be used together with `HiveContext`.
    */
-  def orc(path: String): Unit = format("orc").save(path)
+  def orc(path: String): Unit = {
+    assertNotStreaming("orc() can only be called on non-continuous queries")
+    format("orc").save(path)
+  }
 
   /**
    * Saves the content of the [[DataFrame]] in a text file at the specified path.
@@ -596,7 +622,10 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    *
    * @since 1.6.0
    */
-  def text(path: String): Unit = format("text").save(path)
+  def text(path: String): Unit = {
+    assertNotStreaming("text() can only be called on non-continuous queries")
+    format("text").save(path)
+  }
 
   /**
    * Saves the content of the [[DataFrame]] in CSV format at the specified path.
@@ -620,7 +649,10 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    *
    * @since 2.0.0
    */
-  def csv(path: String): Unit = format("csv").save(path)
+  def csv(path: String): Unit = {
+    assertNotStreaming("csv() can only be called on non-continuous queries")
+    format("csv").save(path)
+  }
 
   ///////////////////////////////////////////////////////////////////////////////////////
   // Builder pattern config options
@@ -641,4 +673,21 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   private var numBuckets: Option[Int] = None
 
   private var sortColumnNames: Option[Seq[String]] = None
+
+  ///////////////////////////////////////////////////////////////////////////////////////
+  // Helper functions
+  ///////////////////////////////////////////////////////////////////////////////////////
+
+  private def assertNotStreaming(errMsg: String): Unit = {
+    if (df.isStreaming) {
+      throw new AnalysisException(errMsg)
+    }
+  }
+
+  private def assertStreaming(errMsg: String): Unit = {
+    if (!df.isStreaming) {
+      throw new AnalysisException(errMsg)
+    }
+  }
+
 }

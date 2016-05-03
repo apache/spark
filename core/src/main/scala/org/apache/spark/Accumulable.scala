@@ -17,14 +17,14 @@
 
 package org.apache.spark
 
-import java.io.{ObjectInputStream, Serializable}
+import java.io.Serializable
 
 import scala.collection.generic.Growable
 import scala.reflect.ClassTag
 
 import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.serializer.JavaSerializer
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{AccumulatorContext, AccumulatorMetadata, LegacyAccumulatorWrapper}
 
 
 /**
@@ -49,6 +49,7 @@ import org.apache.spark.util.Utils
  * @tparam R the full accumulated data (result type)
  * @tparam T partial data that can be added in
  */
+@deprecated("use AccumulatorV2", "2.0.0")
 class Accumulable[R, T] private (
     val id: Long,
     // SI-8813: This must explicitly be a private val, or else scala 2.11 doesn't compile
@@ -162,6 +163,7 @@ class Accumulable[R, T] private (
  * @tparam R the full accumulated data (result type)
  * @tparam T partial data that can be added in
  */
+@deprecated("use AccumulatorV2", "2.0.0")
 trait AccumulableParam[R, T] extends Serializable {
   /**
    * Add additional data to the accumulator value. Is allowed to modify and return `r`
@@ -191,6 +193,7 @@ trait AccumulableParam[R, T] extends Serializable {
 }
 
 
+@deprecated("use AccumulatorV2", "2.0.0")
 private[spark] class
 GrowableAccumulableParam[R <% Growable[T] with TraversableOnce[T] with Serializable: ClassTag, T]
   extends AccumulableParam[R, T] {

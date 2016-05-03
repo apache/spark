@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.columnar
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{Accumulable, Accumulator, AccumulatorContext}
+import org.apache.spark.{Accumulable, Accumulator}
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -33,6 +33,8 @@ import org.apache.spark.sql.execution.{LeafExecNode, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.UserDefinedType
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.AccumulatorContext
+
 
 private[sql] object InMemoryRelation {
   def apply(

@@ -21,6 +21,7 @@ import scala.collection.JavaConverters._
 import scala.util.Try
 
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
+import org.antlr.v4.runtime.tree.TerminalNode
 
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -31,7 +32,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation,
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf, VariableSubstitution}
-
+import org.apache.spark.sql.types.DataType
 
 /**
  * Concrete parser for Spark SQL statements.
@@ -780,9 +781,10 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    */
   override def visitFailNativeCommand(
     ctx: FailNativeCommandContext): LogicalPlan = withOrigin(ctx) {
-    val keywords = if (ctx.kws != null) {
-      Seq(ctx.kws.kw1, ctx.kws.kw2, ctx.kws.kw3, ctx.kws.kw4, ctx.kws.kw5, ctx.kws.kw6)
-        .filter(_ != null).map(_.getText).mkString(" ")
+    val keywords = if (ctx.unsupportedHiveNativeCommands != null) {
+      ctx.unsupportedHiveNativeCommands.children.asScala.collect {
+        case n: TerminalNode => n.getText
+      }.mkString(" ")
     } else {
       // SET ROLE is the exception to the rule, because we handle this before other SET commands.
       "SET ROLE"
@@ -1109,7 +1111,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
         // just convert the whole type string to lower case, otherwise the struct field names
         // will no longer be case sensitive. Instead, we rely on our parser to get the proper
         // case before passing it to Hive.
-        CatalystSqlParser.parseDataType(col.dataType.getText).catalogString,
+        typedVisit[DataType](col.dataType).catalogString,
         nullable = true,
         Option(col.STRING).map(string))
     }

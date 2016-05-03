@@ -109,7 +109,7 @@ case class Filter(condition: Expression, child: LogicalPlan)
 
   override protected def validConstraints: Set[Expression] = {
     val predicates = splitConjunctivePredicates(condition)
-      .filterNot(PredicateSubquery.hasPredicateSubquery)
+      .filterNot(SubqueryExpression.hasCorrelatedSubquery)
     child.constraints.union(predicates.toSet)
   }
 }
