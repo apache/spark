@@ -2089,22 +2089,20 @@ test_that("gapply() on a DataFrame", {
     list(list(1L, 1, "1", 0.1), list(1L, 2, "2", 0.2), list(3L, 3, "3", 0.3)),
     c("a", "b", "c", "d"))
   expected <- collect(df)
-  df1 <- gapply(df, function(x) { x }, schema(df), "a")
+  df1 <- gapply(df, function(x) { x }, schema(df), df$"a")
   actual <- collect(df1)
   expect_identical(actual, expected)
 
-  # Add a boolean column
-  schema <- structType(structField("a", "integer"), structField("b", "double"),
-                       structField("c", "string"), structField("d", "double"),
-                       structField("e", "boolean"))
+  # Check the sum of second column by grouping on the first column
+  schema <- structType(structField("a", "integer"), structField("e", "boolean"))
   df2 <- gapply(
     df,
     function(x) {
-      y <- cbind(x, x[1] > 1)
+      y <-data.frame(x$a[1], sum(x$b) > 2)
     },
     schema, "a")
   actual <- collect(df2)$e
-  expected <- c(FALSE, FALSE, TRUE)
+  expected <- c(TRUE, TRUE)
   expect_identical(actual, expected)
 
   # Compute the arithmetic mean of the second column by grouping

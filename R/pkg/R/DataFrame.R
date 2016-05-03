@@ -1208,7 +1208,7 @@ setMethod("dapply",
 #' 
 #' \dontrun{
 #'
-#' Compute the arithmetic mean of the second column by grouping
+#' Computes the arithmetic mean of the second column by grouping
 #' on the first column. Output the groupping value and the average. 
 #'
 #' df <- createDataFrame (
@@ -1222,7 +1222,7 @@ setMethod("dapply",
 #'   function(x) {
 #'     y <- (data.frame(x$a[1], mean(x$b)))
 #' },
-#' schema, "a")
+#' schema, df$"a")
 #' collect(df1)
 #'
 #' Result
@@ -1231,9 +1231,11 @@ setMethod("dapply",
 #' 1 1.5
 #' 3 3.0
 #'
-#' Fit linear models on iris data set by grouping on the 'Species' column and
-#' using Sepal_Length as a target variable, Sepal_Width, Petal_Length and Petal_Width
-#' as training features.
+#' Fits linear models on iris dataset by grouping on the 'Species' column and
+#' using 'Sepal_Length' as a target variable, 'Sepal_Width', 'Petal_Length'
+#' and 'Petal_Width' as training features.
+#' 
+#' df <- createDataFrame (sqlContext, iris)
 #' schema <- structType(structField("(Intercept)", "double"),
 #' structField("Sepal_Width", "double"),structField("Petal_Length", "double"),
 #' structField("Petal_Width", "double"))
@@ -1256,19 +1258,22 @@ setMethod("dapply",
 #'}
 setMethod("gapply",
           signature(x = "SparkDataFrame", func = "function", schema = "structType",
-                   col = "character"),
+                    col = "characterOrColumn"),
           function(x, func, schema, col) {
             packageNamesArr <- serialize(.sparkREnv[[".packages"]],
                                          connection = NULL)
-
             broadcastArr <- lapply(ls(.broadcastNames),
                                    function(name) { get(name, .broadcastNames) })
-
+            if (class(col) == "Column") {
+              colStr <- callJMethod(col@jc, "toString")
+            } else {
+              colStr <- col
+            }
             sdf <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "gapply", x@sdf,
-                               serialize(cleanClosure(func), connection = NULL),
-                               packageNamesArr,
-                               broadcastArr,
-                               schema$jobj, col)
+                     serialize(cleanClosure(func), connection = NULL),
+                     packageNamesArr,
+                     broadcastArr,
+                     schema$jobj, colStr)
             dataFrame(sdf)
           })
 ############################## RDD Map Functions ##################################
