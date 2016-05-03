@@ -34,7 +34,7 @@ class SQLMetric(val metricType: String, initValue: Long = 0L) extends Accumulato
   override def copyAndReset(): SQLMetric = new SQLMetric(metricType, initValue)
 
   override def merge(other: AccumulatorV2[Long, Long]): Unit = other match {
-    case o: SQLMetric => _value += o.localValue
+    case o: SQLMetric => _value += o.value
     case _ => throw new UnsupportedOperationException(
       s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
   }
@@ -45,7 +45,7 @@ class SQLMetric(val metricType: String, initValue: Long = 0L) extends Accumulato
 
   def +=(v: Long): Unit = _value += v
 
-  override def localValue: Long = _value
+  override def value: Long = _value
 
   // Provide special identifier as metadata so we can tell that this is a `SQLMetric` later
   private[spark] override def toInfo(update: Option[Any], value: Option[Any]): AccumulableInfo = {

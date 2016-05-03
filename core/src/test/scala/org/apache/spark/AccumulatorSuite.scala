@@ -70,7 +70,7 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
     // serialize and de-serialize it, to simulate sending accumulator to executor.
     val acc2 = ser.deserialize[LongAccumulator](ser.serialize(acc))
     // value is reset on the executors
-    assert(acc2.localValue == 0)
+    assert(acc2.value == 0)
     assert(!acc2.isAtDriverSide)
 
     acc2.add(10)
@@ -259,7 +259,7 @@ private[spark] object AccumulatorSuite {
    * Make an [[AccumulableInfo]] out of an [[Accumulable]] with the intent to use the
    * info as an accumulator update.
    */
-  def makeInfo(a: AccumulatorV2[_, _]): AccumulableInfo = a.toInfo(Some(a.localValue), None)
+  def makeInfo(a: AccumulatorV2[_, _]): AccumulableInfo = a.toInfo(Some(a.value), None)
 
   /**
    * Run one or more Spark jobs and verify that in at least one job the peak execution memory
