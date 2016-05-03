@@ -291,12 +291,8 @@ class HDFSFileCatalog(
   refresh()
 
   override def listFiles(filters: Seq[Expression]): Seq[Partition] = {
-
     if (partitionSpec().partitionColumns.isEmpty) {
-      Partition(
-        InternalRow.empty,
-        unpartitionedDataFiles().filterNot(_.getPath.getName startsWith "_")
-      ) :: Nil
+      Partition(InternalRow.empty, allFiles().filterNot(_.getPath.getName startsWith "_")) :: Nil
     } else {
       prunePartitions(filters, partitionSpec()).map {
         case PartitionDirectory(values, path) =>
@@ -341,9 +337,30 @@ class HDFSFileCatalog(
     }
   }
 
+  /**
+   * All the files to consider for processing. If there is a partitioning scheme, then
+   * consider all the leaf files in the input paths. Else consider only the input paths
+   * (if a path is file) or their immediate children (if a path is a directory).
+   */
   def allFiles(): Seq[FileStatus] = {
     if (partitionSpec().partitionColumns.isEmpty) {
-      unpartitionedDataFiles()
+      // For each of the input paths, get the list of files inside them
+      paths.flatMap { path =>
+        // Make the path qualified (consistent with listLeafFiles and listLeafFilesInParallel).
+        val fs = path.getFileSystem(hadoopConf)
+        val qualifiedPath = path.makeQualified(fs.getUri, fs.getWorkingDirectory)
+
+        // There are three cases possible with each path
+        // 1. The path is a directory and has children files in it. Then it must be present in
+        //    leafDirToChildrenFiles as those children files will have been found as leaf files.
+        //    Find its children files from leafDirToChildrenFiles and include them.
+        // 2. The path is a file, then it will be present in leafFiles. Include this path.
+        // 3. The path is a directory, but has no children files. Do not include this path.
+
+        leafDirToChildrenFiles.get(qualifiedPath)
+          .orElse { leafFiles.get(path).map(Array(_)) }
+          .getOrElse(Array.empty)
+      }
     } else {
       leafFiles.values.toSeq
     }
@@ -450,22 +467,6 @@ class HDFSFileCatalog(
       // Make the path qualified (consistent with listLeafFiles and listLeafFilesInParallel).
       val fs = hdfsPath.getFileSystem(hadoopConf)
       hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-    }
-  }
-
-  /** List of files to consider when there is not inferred partitioning scheme */
-  private def unpartitionedDataFiles(): Seq[FileStatus] = {
-    // For each of the input paths, get the list of files inside them
-    paths.flatMap { path =>
-      // Make the path qualified (consistent with listLeafFiles and listLeafFilesInParallel).
-      val fs = path.getFileSystem(hadoopConf)
-      val qualifiedPath = path.makeQualified(fs.getUri, fs.getWorkingDirectory)
-
-      // If it is a directory (i.e. exists in leafDirToChildrenFiles), return its children files
-      // Or if it is a file (i.e. exists in leafFiles), return the path itself
-      leafDirToChildrenFiles.get(qualifiedPath).orElse {
-        leafFiles.get(path).map(Array(_))
-      }.getOrElse(Array.empty)
     }
   }
 
