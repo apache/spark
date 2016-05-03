@@ -38,16 +38,11 @@ class TaskMetricsSuite extends SparkFunSuite {
     assert(tm.peakExecutionMemory == 0L)
     assert(tm.updatedBlockStatuses.isEmpty)
     // set or increment values
-    tm.setExecutorDeserializeTime(100L)
-    tm.setExecutorDeserializeTime(1L) // overwrite
-    tm.setExecutorRunTime(200L)
-    tm.setExecutorRunTime(2L)
-    tm.setResultSize(300L)
-    tm.setResultSize(3L)
-    tm.setJvmGCTime(400L)
-    tm.setJvmGCTime(4L)
-    tm.setResultSerializationTime(500L)
-    tm.setResultSerializationTime(5L)
+    tm.incExecutorDeserializeTime(1L) // overwrite
+    tm.incExecutorRunTime(2L)
+    tm.incResultSize(3L)
+    tm.incJvmGCTime(4L)
+    tm.incResultSerializationTime(5L)
     tm.incMemoryBytesSpilled(600L)
     tm.incMemoryBytesSpilled(6L) // add
     tm.incDiskBytesSpilled(700L)
@@ -70,50 +65,6 @@ class TaskMetricsSuite extends SparkFunSuite {
     assert(tm.updatedBlockStatuses == Seq(block1, block2))
   }
 
-  test("mutating shuffle read metrics values") {
-    val tm = new TaskMetrics
-    val sr = tm.shuffleReadMetrics
-    // initial values
-    assert(sr.remoteBlocksFetched == 0)
-    assert(sr.localBlocksFetched == 0)
-    assert(sr.remoteBytesRead == 0L)
-    assert(sr.localBytesRead == 0L)
-    assert(sr.fetchWaitTime == 0L)
-    assert(sr.recordsRead == 0L)
-    // set and increment values
-    sr.setRemoteBlocksFetched(100)
-    sr.setRemoteBlocksFetched(10)
-    sr.incRemoteBlocksFetched(1) // 10 + 1
-    sr.incRemoteBlocksFetched(1) // 10 + 1 + 1
-    sr.setLocalBlocksFetched(200)
-    sr.setLocalBlocksFetched(20)
-    sr.incLocalBlocksFetched(2)
-    sr.incLocalBlocksFetched(2)
-    sr.setRemoteBytesRead(300L)
-    sr.setRemoteBytesRead(30L)
-    sr.incRemoteBytesRead(3L)
-    sr.incRemoteBytesRead(3L)
-    sr.setLocalBytesRead(400L)
-    sr.setLocalBytesRead(40L)
-    sr.incLocalBytesRead(4L)
-    sr.incLocalBytesRead(4L)
-    sr.setFetchWaitTime(500L)
-    sr.setFetchWaitTime(50L)
-    sr.incFetchWaitTime(5L)
-    sr.incFetchWaitTime(5L)
-    sr.setRecordsRead(600L)
-    sr.setRecordsRead(60L)
-    sr.incRecordsRead(6L)
-    sr.incRecordsRead(6L)
-    // assert new values exist
-    assert(sr.remoteBlocksFetched == 12)
-    assert(sr.localBlocksFetched == 24)
-    assert(sr.remoteBytesRead == 36L)
-    assert(sr.localBytesRead == 48L)
-    assert(sr.fetchWaitTime == 60L)
-    assert(sr.recordsRead == 72L)
-  }
-
   test("mutating shuffle write metrics values") {
     val tm = new TaskMetrics
     val sw = tm.shuffleWriteMetrics
@@ -124,12 +75,12 @@ class TaskMetricsSuite extends SparkFunSuite {
     // increment and decrement values
     sw.incBytesWritten(100L)
     sw.incBytesWritten(10L) // 100 + 10
-    sw.decBytesWritten(1L) // 100 + 10 - 1
-    sw.decBytesWritten(1L) // 100 + 10 - 1 - 1
+    sw.incBytesWritten(-1L) // 100 + 10 - 1
+    sw.incBytesWritten(-1L) // 100 + 10 - 1 - 1
     sw.incRecordsWritten(200L)
     sw.incRecordsWritten(20L)
-    sw.decRecordsWritten(2L)
-    sw.decRecordsWritten(2L)
+    sw.incRecordsWritten(-2L)
+    sw.incRecordsWritten(-2L)
     sw.incWriteTime(300L)
     sw.incWriteTime(30L)
     // assert new values exist
@@ -145,8 +96,7 @@ class TaskMetricsSuite extends SparkFunSuite {
     assert(in.bytesRead == 0L)
     assert(in.recordsRead == 0L)
     // set and increment values
-    in.setBytesRead(1L)
-    in.setBytesRead(2L)
+    in.incBytesRead(2L)
     in.incRecordsRead(1L)
     in.incRecordsRead(2L)
     // assert new values exist
@@ -161,10 +111,8 @@ class TaskMetricsSuite extends SparkFunSuite {
     assert(out.bytesWritten == 0L)
     assert(out.recordsWritten == 0L)
     // set values
-    out.setBytesWritten(1L)
-    out.setBytesWritten(2L)
-    out.setRecordsWritten(3L)
-    out.setRecordsWritten(4L)
+    out.incBytesWritten(2L)
+    out.incRecordsWritten(4L)
     // assert new values exist
     assert(out.bytesWritten == 2L)
     assert(out.recordsWritten == 4L)

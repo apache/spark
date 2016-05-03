@@ -95,7 +95,7 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
             if (a.name == Some(InternalAccumulator.RESULT_SIZE)) {
               val acc = a.asInstanceOf[LongAccumulator]
               assert(acc.sum == 0L, "task result size should not have been set on the executors")
-              acc.setValue(size.toLong)
+              acc.add(size.toLong)
               acc
             } else {
               a

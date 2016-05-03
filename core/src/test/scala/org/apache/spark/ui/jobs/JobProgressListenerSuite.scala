@@ -279,11 +279,11 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
       shuffleReadMetrics.incRemoteBlocksFetched(base + 2)
       taskMetrics.mergeShuffleReadMetrics()
       shuffleWriteMetrics.incBytesWritten(base + 3)
-      taskMetrics.setExecutorRunTime(base + 4)
+      taskMetrics.incExecutorRunTime(base + 4)
       taskMetrics.incDiskBytesSpilled(base + 5)
       taskMetrics.incMemoryBytesSpilled(base + 6)
-      inputMetrics.setBytesRead(base + 7)
-      outputMetrics.setBytesWritten(base + 8)
+      inputMetrics.incBytesRead(base + 7)
+      outputMetrics.incBytesWritten(base + 8)
       taskMetrics
     }
 

@@ -276,8 +276,6 @@ class LongAccumulator extends AccumulatorV2[jl.Long, jl.Long] {
       s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
   }
 
-  private[spark] def setValue(newValue: Long): Unit = _sum = newValue
-
   override def localValue: jl.Long = _sum
 }
 
@@ -300,8 +298,6 @@ class DoubleAccumulator extends AccumulatorV2[jl.Double, jl.Double] {
     case _ => throw new UnsupportedOperationException(
       s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
   }
-
-  private[spark] def setValue(newValue: Double): Unit = _sum = newValue
 
   override def localValue: jl.Double = _sum
 }
@@ -361,11 +357,6 @@ class ListAccumulator[T] extends AccumulatorV2[T, java.util.List[T]] {
   }
 
   override def localValue: java.util.List[T] = java.util.Collections.unmodifiableList(_list)
-
-  private[spark] def setValue(newValue: java.util.List[T]): Unit = {
-    _list.clear()
-    _list.addAll(newValue)
-  }
 }
 
 

@@ -815,16 +815,16 @@ private[spark] object JsonProtocolSuite extends Assertions {
       hasOutput: Boolean,
       hasRecords: Boolean = true) = {
     val t = TaskMetrics.empty
-    t.setExecutorDeserializeTime(a)
-    t.setExecutorRunTime(b)
-    t.setResultSize(c)
-    t.setJvmGCTime(d)
-    t.setResultSerializationTime(a + b)
+    t.incExecutorDeserializeTime(a)
+    t.incExecutorRunTime(b)
+    t.incResultSize(c)
+    t.incJvmGCTime(d)
+    t.incResultSerializationTime(a + b)
     t.incMemoryBytesSpilled(a + c)
 
     if (hasHadoopInput) {
       val inputMetrics = t.inputMetrics
-      inputMetrics.setBytesRead(d + e + f)
+      inputMetrics.incBytesRead(d + e + f)
       inputMetrics.incRecordsRead(if (hasRecords) (d + e + f) / 100 else -1)
     } else {
       val sr = t.createTempShuffleReadMetrics()
@@ -837,8 +837,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       t.mergeShuffleReadMetrics()
     }
     if (hasOutput) {
-      t.outputMetrics.setBytesWritten(a + b + c)
-      t.outputMetrics.setRecordsWritten(if (hasRecords) (a + b + c) / 100 else -1)
+      t.outputMetrics.incBytesWritten(a + b + c)
+      t.outputMetrics.incRecordsWritten(if (hasRecords) (a + b + c) / 100 else -1)
     } else {
       val sw = t.shuffleWriteMetrics
       sw.incBytesWritten(a + b + c)
@@ -846,7 +846,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       sw.incRecordsWritten(if (hasRecords) (a + b + c) / 100 else -1)
     }
     // Make at most 6 blocks
-    t.setUpdatedBlockStatuses((1 to (e % 5 + 1)).map { i =>
+    t.incUpdatedBlockStatuses((1 to (e % 5 + 1)).map { i =>
       (RDDBlockId(e % i, f % i), BlockStatus(StorageLevel.MEMORY_AND_DISK_SER_2, a % i, b % i))
     }.toSeq)
     t

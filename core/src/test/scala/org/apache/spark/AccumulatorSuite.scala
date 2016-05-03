@@ -260,10 +260,8 @@ private[spark] object AccumulatorSuite {
   def createLongAccum(
       name: String,
       countFailedValues: Boolean = false,
-      initValue: Long = 0,
       id: Long = AccumulatorContext.newId()): LongAccumulator = {
     val acc = new LongAccumulator
-    acc.setValue(initValue)
     acc.metadata = AccumulatorMetadata(id, Some(name), countFailedValues)
     AccumulatorContext.register(acc)
     acc

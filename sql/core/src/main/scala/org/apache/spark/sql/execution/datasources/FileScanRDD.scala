@@ -72,7 +72,7 @@ class FileScanRDD(
       // previous partitions (SPARK-13071).
       private def updateBytesRead(): Unit = {
         getBytesReadCallback.foreach { getBytesRead =>
-          inputMetrics.setBytesRead(existingBytesRead + getBytesRead())
+          inputMetrics.incBytesRead(existingBytesRead + getBytesRead() - inputMetrics.bytesRead)
         }
       }
 
