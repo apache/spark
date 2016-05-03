@@ -2098,7 +2098,7 @@ test_that("gapply() on a DataFrame", {
   df2 <- gapply(
     df,
     function(x) {
-      y <-data.frame(x$a[1], sum(x$b) > 2)
+      y <- data.frame(x$a[1], sum(x$b) > 2)
     },
     schema, "a")
   actual <- collect(df2)$e
