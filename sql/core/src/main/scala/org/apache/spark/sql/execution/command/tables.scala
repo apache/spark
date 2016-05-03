@@ -306,6 +306,7 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
     result
   }
 
+  // Shows data columns and partitioned columns (if any)
   private def describe(relation: CatalogRelation, buffer: ArrayBuffer[Row]): Unit = {
     describeSchema(relation.catalogTable.schema, buffer)
 
@@ -318,14 +319,16 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
   }
 
   private def describeExtended(relation: CatalogRelation, buffer: ArrayBuffer[Row]): Unit = {
-    describeSchema(relation.catalogTable.schema, buffer)
+    describe(relation, buffer)
+
     buffer += Row("", "", "")
     buffer += Row("# Detailed Table Information", relation.catalogTable.toString, "")
   }
 
   private def describeFormatted(relation: CatalogRelation, buffer: ArrayBuffer[Row]): Unit = {
+    describe(relation, buffer)
+
     val table = relation.catalogTable
-    describeSchema(table.schema, buffer)
 
     buffer += Row("", "", "")
     buffer += Row("# Detailed Table Information", "", "")
@@ -346,6 +349,7 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
     table.storage.serde.foreach(serdeLib => buffer += Row("SerDe Library:", serdeLib, ""))
     table.storage.inputFormat.foreach(format => buffer += Row("InputFormat:", format, ""))
     table.storage.outputFormat.foreach(format => buffer += Row("OutputFormat:", format, ""))
+    buffer += Row("Compressed:", if (table.storage.compressed) "Yes" else "No", "")
     buffer += Row("Num Buckets:", table.numBuckets.toString, "")
     buffer += Row("Bucket Columns:", table.bucketColumnNames.mkString("[", ", ", "]"), "")
     buffer += Row("Sort Columns:", table.sortColumnNames.mkString("[", ", ", "]"), "")
@@ -360,13 +364,13 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
     schema.foreach { column =>
       val comment =
         if (column.metadata.contains("comment")) column.metadata.getString("comment") else ""
-      buffer += Row(column.name, column.dataType.sql, comment)
+      buffer += Row(column.name, column.dataType.sql.toLowerCase, comment)
     }
   }
 
   private def describeSchema(schema: Seq[CatalogColumn], buffer: ArrayBuffer[Row]): Unit = {
     schema.foreach { column =>
-      buffer += Row(column.name, column.dataType, column.comment.getOrElse(""))
+      buffer += Row(column.name, column.dataType.toLowerCase, column.comment.orNull)
     }
   }
 }

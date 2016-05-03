@@ -356,6 +356,7 @@ private[hive] class HiveClientImpl(
           inputFormat = Option(h.getInputFormatClass).map(_.getName),
           outputFormat = Option(h.getOutputFormatClass).map(_.getName),
           serde = Option(h.getSerializationLib),
+          compressed = h.getTTable.getSd.isCompressed,
           serdeProperties = h.getTTable.getSd.getSerdeInfo.getParameters.asScala.toMap
         ),
         properties = h.getParameters.asScala.toMap,
@@ -785,7 +786,7 @@ private[hive] class HiveClientImpl(
         inputFormat = Option(apiPartition.getSd.getInputFormat),
         outputFormat = Option(apiPartition.getSd.getOutputFormat),
         serde = Option(apiPartition.getSd.getSerdeInfo.getSerializationLib),
+        compressed = apiPartition.getSd.isCompressed,
         serdeProperties = apiPartition.getSd.getSerdeInfo.getParameters.asScala.toMap))
   }
-
 }

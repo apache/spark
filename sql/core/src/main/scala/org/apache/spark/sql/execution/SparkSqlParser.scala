@@ -870,6 +870,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
         // Note: Keep this unspecified because we use the presence of the serde to decide
         // whether to convert a table created by CTAS to a datasource table.
         serde = None,
+        compressed = false,
         serdeProperties = Map())
     }
     val fileStorage = Option(ctx.createFileFormat).map(visitCreateFileFormat)
@@ -881,6 +882,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       inputFormat = fileStorage.inputFormat.orElse(defaultStorage.inputFormat),
       outputFormat = fileStorage.outputFormat.orElse(defaultStorage.outputFormat),
       serde = rowStorage.serde.orElse(fileStorage.serde).orElse(defaultStorage.serde),
+      compressed = false,
       serdeProperties = rowStorage.serdeProperties ++ fileStorage.serdeProperties)
 
     // TODO support the sql text - have a proper location for this!
@@ -934,7 +936,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   }
 
   /** Empty storage format for default values and copies. */
-  private val EmptyStorageFormat = CatalogStorageFormat(None, None, None, None, Map.empty)
+  private val EmptyStorageFormat = CatalogStorageFormat(None, None, None, None, false, Map.empty)
 
   /**
    * Create a [[CatalogStorageFormat]].
@@ -1015,7 +1017,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       entry("field.delim", ctx.fieldsTerminatedBy) ++
         entry("serialization.format", ctx.fieldsTerminatedBy) ++
         entry("escape.delim", ctx.escapedBy) ++
-        entry("colelction.delim", ctx.collectionItemsTerminatedBy) ++
+        entry("collection.delim", ctx.collectionItemsTerminatedBy) ++
         entry("mapkey.delim", ctx.keysTerminatedBy) ++
         Option(ctx.linesSeparatedBy).toSeq.map { token =>
           val value = string(token)
@@ -1154,7 +1156,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
 
       case c: RowFormatSerdeContext =>
         // Use a serde format.
-        val CatalogStorageFormat(None, None, None, Some(name), props) = visitRowFormatSerde(c)
+        val CatalogStorageFormat(None, None, None, Some(name), _, props) = visitRowFormatSerde(c)
 
         // SPARK-10310: Special cases LazySimpleSerDe
         val recordHandler = if (name == "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe") {

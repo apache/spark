@@ -507,6 +507,7 @@ abstract class CatalogTestUtils {
     inputFormat = Some(tableInputFormat),
     outputFormat = Some(tableOutputFormat),
     serde = None,
+    compressed = false,
     serdeProperties = Map.empty)
   lazy val part1 = CatalogTablePartition(Map("a" -> "1", "b" -> "2"), storageFormat)
   lazy val part2 = CatalogTablePartition(Map("a" -> "3", "b" -> "4"), storageFormat)
