@@ -34,7 +34,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.scheduler.TaskLocality.TaskLocality
 import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.{AccumulatorV2, ThreadUtils, Utils}
 
 /**
  * Schedules tasks for multiple types of clusters by acting through a SchedulerBackend.
@@ -394,7 +394,7 @@ private[spark] class TaskSchedulerImpl(
         // deserialized.  This brings trouble to the accumulator framework, which depends on
         // serialization to set the `atDriverSide` flag.  Here we call `acc.localValue` instead to
         // be more robust about this issue.
-        val accInfos = updates.map(acc => acc.toInfo(Some(acc.localValue), None))
+        val accInfos = updates.map(acc => acc.toInfo(Some(acc.value), None))
         taskIdToTaskSetManager.get(id).map { taskSetMgr =>
           (id, taskSetMgr.stageId, taskSetMgr.taskSet.stageAttemptId, accInfos)
         }

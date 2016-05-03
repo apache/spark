@@ -254,12 +254,13 @@ class HiveDDLCommandSuite extends PlanTest {
   }
 
   test("use native json_tuple instead of hive's UDTF in LATERAL VIEW") {
-    val plan = parser.parsePlan(
+    val analyzer = TestHive.sparkSession.sessionState.analyzer
+    val plan = analyzer.execute(parser.parsePlan(
       """
         |SELECT *
         |FROM (SELECT '{"f1": "value1", "f2": 12}' json) test
         |LATERAL VIEW json_tuple(json, 'f1', 'f2') jt AS a, b
-      """.stripMargin)
+      """.stripMargin))
 
     assert(plan.children.head.asInstanceOf[Generate].generator.isInstanceOf[JsonTuple])
   }

@@ -203,13 +203,14 @@ case class DataSource(
   def createSink(): Sink = {
     providingClass.newInstance() match {
       case s: StreamSinkProvider => s.createSink(sparkSession.wrapped, options, partitionColumns)
-      case format: FileFormat =>
+
+      case parquet: parquet.DefaultSource =>
         val caseInsensitiveOptions = new CaseInsensitiveMap(options)
         val path = caseInsensitiveOptions.getOrElse("path", {
           throw new IllegalArgumentException("'path' is not specified")
         })
+        new FileStreamSink(sparkSession, path, parquet, partitionColumns, options)
 
-        new FileStreamSink(sparkSession, path, format)
       case _ =>
         throw new UnsupportedOperationException(
           s"Data source $className does not support streamed writing")

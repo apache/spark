@@ -234,4 +234,51 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       sql("select a from l group by 1 having exists (select 1 from r where d < min(b))"),
       Row(null) :: Row(1) :: Row(3) :: Nil)
   }
+
+  test("correlated scalar subquery in where") {
+    checkAnswer(
+      sql("select * from l where b < (select max(d) from r where a = c)"),
+      Row(2, 1.0) :: Row(2, 1.0) :: Nil)
+  }
+
+  test("correlated scalar subquery in select") {
+    checkAnswer(
+      sql("select a, (select sum(b) from l l2 where l2.a = l1.a) sum_b from l l1"),
+      Row(1, 4.0) :: Row(1, 4.0) :: Row(2, 2.0) :: Row(2, 2.0) :: Row(3, 3.0) ::
+      Row(null, null) :: Row(null, null) :: Row(6, null) :: Nil)
+  }
+
+  test("correlated scalar subquery in select (null safe)") {
+    checkAnswer(
+      sql("select a, (select sum(b) from l l2 where l2.a <=> l1.a) sum_b from l l1"),
+      Row(1, 4.0) :: Row(1, 4.0) :: Row(2, 2.0) :: Row(2, 2.0) :: Row(3, 3.0) ::
+        Row(null, 5.0) :: Row(null, 5.0) :: Row(6, null) :: Nil)
+  }
+
+  test("correlated scalar subquery in aggregate") {
+    checkAnswer(
+      sql("select a, (select sum(d) from r where a = c) sum_d from l l1 group by 1, 2"),
+      Row(1, null) :: Row(2, 6.0) :: Row(3, 2.0) :: Row(null, null) :: Row(6, null) :: Nil)
+  }
+
+  test("non-aggregated correlated scalar subquery") {
+    val msg1 = intercept[AnalysisException] {
+      sql("select a, (select b from l l2 where l2.a = l1.a) sum_b from l l1")
+    }
+    assert(msg1.getMessage.contains("Correlated scalar subqueries must be Aggregated"))
+
+    val msg2 = intercept[AnalysisException] {
+      sql("select a, (select b from l l2 where l2.a = l1.a group by 1) sum_b from l l1")
+    }
+    assert(msg2.getMessage.contains(
+      "The output of a correlated scalar subquery must be aggregated"))
+  }
+
+  test("non-equal correlated scalar subquery") {
+    val msg1 = intercept[AnalysisException] {
+      sql("select a, (select b from l l2 where l2.a < l1.a) sum_b from l l1")
+    }
+    assert(msg1.getMessage.contains(
+      "The correlated scalar subquery can only contain equality predicates"))
+  }
 }

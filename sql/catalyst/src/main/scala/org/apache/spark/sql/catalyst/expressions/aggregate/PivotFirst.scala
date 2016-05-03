@@ -141,12 +141,12 @@ case class PivotFirst(
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
 
 
-  override lazy val aggBufferAttributes: Seq[AttributeReference] =
+  override val aggBufferAttributes: Seq[AttributeReference] =
     pivotIndex.toList.sortBy(_._2).map(kv => AttributeReference(kv._1.toString, valueDataType)())
 
-  override lazy val aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
+  override val aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
 
-  override lazy val inputAggBufferAttributes: Seq[AttributeReference] =
+  override val inputAggBufferAttributes: Seq[AttributeReference] =
     aggBufferAttributes.map(_.newInstance())
 }
 

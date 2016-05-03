@@ -24,6 +24,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.storage.{BlockId, BlockStatus}
+import org.apache.spark.util.{AccumulatorContext, AccumulatorMetadata, AccumulatorV2, LongAccumulator}
 
 
 /**
@@ -98,7 +99,7 @@ class TaskMetrics private[spark] () extends Serializable {
   /**
    * Storage statuses of any blocks that have been updated as a result of this task.
    */
-  def updatedBlockStatuses: Seq[(BlockId, BlockStatus)] = _updatedBlockStatuses.localValue
+  def updatedBlockStatuses: Seq[(BlockId, BlockStatus)] = _updatedBlockStatuses.value
 
   // Setters and increment-ers
   private[spark] def setExecutorDeserializeTime(v: Long): Unit =
@@ -300,12 +301,12 @@ private[spark] class BlockStatusesAccumulator
 
   override def merge(other: AccumulatorV2[(BlockId, BlockStatus), Seq[(BlockId, BlockStatus)]])
   : Unit = other match {
-    case o: BlockStatusesAccumulator => _seq ++= o.localValue
+    case o: BlockStatusesAccumulator => _seq ++= o.value
     case _ => throw new UnsupportedOperationException(
       s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
   }
 
-  override def localValue: Seq[(BlockId, BlockStatus)] = _seq
+  override def value: Seq[(BlockId, BlockStatus)] = _seq
 
   def setValue(newValue: Seq[(BlockId, BlockStatus)]): Unit = {
     _seq.clear()

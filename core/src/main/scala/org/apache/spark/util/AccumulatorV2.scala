@@ -15,15 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.util
 
 import java.{lang => jl}
 import java.io.ObjectInputStream
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
+import org.apache.spark.{InternalAccumulator, SparkContext, TaskContext}
 import org.apache.spark.scheduler.AccumulableInfo
-import org.apache.spark.util.Utils
 
 
 private[spark] case class AccumulatorMetadata(
@@ -126,23 +126,9 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
   def merge(other: AccumulatorV2[IN, OUT]): Unit
 
   /**
-   * Access this accumulator's current value; only allowed on driver.
+   * Defines the current value of this accumulator
    */
-  final def value: OUT = {
-    if (atDriverSide) {
-      localValue
-    } else {
-      throw new UnsupportedOperationException("Can't read accumulator value in task")
-    }
-  }
-
-  /**
-   * Defines the current value of this accumulator.
-   *
-   * This is NOT the global value of the accumulator.  To get the global value after a
-   * completed operation on the dataset, call `value`.
-   */
-  def localValue: OUT
+  def value: OUT
 
   // Called by Java when serializing an object
   final protected def writeReplace(): Any = {
@@ -182,7 +168,7 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
     if (metadata == null) {
       "Un-registered Accumulator: " + getClass.getSimpleName
     } else {
-      getClass.getSimpleName + s"(id: $id, name: $name, value: $localValue)"
+      getClass.getSimpleName + s"(id: $id, name: $name, value: $value)"
     }
   }
 }
@@ -204,8 +190,8 @@ private[spark] object AccumulatorContext {
   private[this] val nextId = new AtomicLong(0L)
 
   /**
-   * Returns a globally unique ID for a new [[Accumulator]].
-   * Note: Once you copy the [[Accumulator]] the ID is no longer unique.
+   * Returns a globally unique ID for a new [[AccumulatorV2]].
+   * Note: Once you copy the [[AccumulatorV2]] the ID is no longer unique.
    */
   def newId(): Long = nextId.getAndIncrement
 
@@ -213,14 +199,14 @@ private[spark] object AccumulatorContext {
   def numAccums: Int = originals.size
 
   /**
-   * Registers an [[Accumulator]] created on the driver such that it can be used on the executors.
+   * Registers an [[AccumulatorV2]] created on the driver such that it can be used on the executors.
    *
    * All accumulators registered here can later be used as a container for accumulating partial
    * values across multiple tasks. This is what [[org.apache.spark.scheduler.DAGScheduler]] does.
    * Note: if an accumulator is registered here, it should also be registered with the active
    * context cleaner for cleanup so as to avoid memory leaks.
    *
-   * If an [[Accumulator]] with the same ID was already registered, this does nothing instead
+   * If an [[AccumulatorV2]] with the same ID was already registered, this does nothing instead
    * of overwriting it. We will never register same accumulator twice, this is just a sanity check.
    */
   def register(a: AccumulatorV2[_, _]): Unit = {
@@ -228,14 +214,14 @@ private[spark] object AccumulatorContext {
   }
 
   /**
-   * Unregisters the [[Accumulator]] with the given ID, if any.
+   * Unregisters the [[AccumulatorV2]] with the given ID, if any.
    */
   def remove(id: Long): Unit = {
     originals.remove(id)
   }
 
   /**
-   * Returns the [[Accumulator]] registered with the given ID, if any.
+   * Returns the [[AccumulatorV2]] registered with the given ID, if any.
    */
   def get(id: Long): Option[AccumulatorV2[_, _]] = {
     Option(originals.get(id)).map { ref =>
@@ -249,7 +235,7 @@ private[spark] object AccumulatorContext {
   }
 
   /**
-   * Clears all registered [[Accumulator]]s. For testing only.
+   * Clears all registered [[AccumulatorV2]]s. For testing only.
    */
   def clear(): Unit = {
     originals.clear()
@@ -257,91 +243,136 @@ private[spark] object AccumulatorContext {
 }
 
 
+/**
+ * An [[AccumulatorV2 accumulator]] for computing sum, count, and averages for 64-bit integers.
+ *
+ * @since 2.0.0
+ */
 class LongAccumulator extends AccumulatorV2[jl.Long, jl.Long] {
   private[this] var _sum = 0L
+  private[this] var _count = 0L
 
-  override def isZero: Boolean = _sum == 0
+  /**
+   * Adds v to the accumulator, i.e. increment sum by v and count by 1.
+   * @since 2.0.0
+   */
+  override def isZero: Boolean = _count == 0L
 
   override def copyAndReset(): LongAccumulator = new LongAccumulator
 
-  override def add(v: jl.Long): Unit = _sum += v
+  /**
+   * Adds v to the accumulator, i.e. increment sum by v and count by 1.
+   * @since 2.0.0
+   */
+  override def add(v: jl.Long): Unit = {
+    _sum += v
+    _count += 1
+  }
 
-  def add(v: Long): Unit = _sum += v
+  /**
+   * Adds v to the accumulator, i.e. increment sum by v and count by 1.
+   * @since 2.0.0
+   */
+  def add(v: Long): Unit = {
+    _sum += v
+    _count += 1
+  }
 
+  /**
+   * Returns the number of elements added to the accumulator.
+   * @since 2.0.0
+   */
+  def count: Long = _count
+
+  /**
+   * Returns the sum of elements added to the accumulator.
+   * @since 2.0.0
+   */
   def sum: Long = _sum
 
+  /**
+   * Returns the average of elements added to the accumulator.
+   * @since 2.0.0
+   */
+  def avg: Double = _sum.toDouble / _count
+
   override def merge(other: AccumulatorV2[jl.Long, jl.Long]): Unit = other match {
-    case o: LongAccumulator => _sum += o.sum
-    case _ => throw new UnsupportedOperationException(
-      s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
+    case o: LongAccumulator =>
+      _sum += o.sum
+      _count += o.count
+    case _ =>
+      throw new UnsupportedOperationException(
+        s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
   }
 
   private[spark] def setValue(newValue: Long): Unit = _sum = newValue
 
-  override def localValue: jl.Long = _sum
+  override def value: jl.Long = _sum
 }
 
 
+/**
+ * An [[AccumulatorV2 accumulator]] for computing sum, count, and averages for double precision
+ * floating numbers.
+ *
+ * @since 2.0.0
+ */
 class DoubleAccumulator extends AccumulatorV2[jl.Double, jl.Double] {
-  private[this] var _sum = 0.0
-
-  override def isZero: Boolean = _sum == 0.0
-
-  override def copyAndReset(): DoubleAccumulator = new DoubleAccumulator
-
-  override def add(v: jl.Double): Unit = _sum += v
-
-  def add(v: Double): Unit = _sum += v
-
-  def sum: Double = _sum
-
-  override def merge(other: AccumulatorV2[jl.Double, jl.Double]): Unit = other match {
-    case o: DoubleAccumulator => _sum += o.sum
-    case _ => throw new UnsupportedOperationException(
-      s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
-  }
-
-  private[spark] def setValue(newValue: Double): Unit = _sum = newValue
-
-  override def localValue: jl.Double = _sum
-}
-
-
-class AverageAccumulator extends AccumulatorV2[jl.Double, jl.Double] {
   private[this] var _sum = 0.0
   private[this] var _count = 0L
 
-  override def isZero: Boolean = _sum == 0.0 && _count == 0
+  override def isZero: Boolean = _count == 0L
 
-  override def copyAndReset(): AverageAccumulator = new AverageAccumulator
+  override def copyAndReset(): DoubleAccumulator = new DoubleAccumulator
 
+  /**
+   * Adds v to the accumulator, i.e. increment sum by v and count by 1.
+   * @since 2.0.0
+   */
   override def add(v: jl.Double): Unit = {
     _sum += v
     _count += 1
   }
 
-  def add(d: Double): Unit = {
-    _sum += d
+  /**
+   * Adds v to the accumulator, i.e. increment sum by v and count by 1.
+   * @since 2.0.0
+   */
+  def add(v: Double): Unit = {
+    _sum += v
     _count += 1
   }
 
-  override def merge(other: AccumulatorV2[jl.Double, jl.Double]): Unit = other match {
-    case o: AverageAccumulator =>
-      _sum += o.sum
-      _count += o.count
-    case _ => throw new UnsupportedOperationException(
-      s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
-  }
+  /**
+   * Returns the number of elements added to the accumulator.
+   * @since 2.0.0
+   */
+  def count: Long = _count
 
-  override def localValue: jl.Double = if (_count == 0) {
-    Double.NaN
-  } else {
-    _sum / _count
-  }
-
+  /**
+   * Returns the sum of elements added to the accumulator.
+   * @since 2.0.0
+   */
   def sum: Double = _sum
 
-  def count: Long = _count
+  /**
+   * Returns the average of elements added to the accumulator.
+   * @since 2.0.0
+   */
+  def avg: Double = _sum / _count
+
+  override def merge(other: AccumulatorV2[jl.Double, jl.Double]): Unit = other match {
+    case o: DoubleAccumulator =>
+      _sum += o.sum
+      _count += o.count
+    case _ =>
+      throw new UnsupportedOperationException(
+        s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
+  }
+
+  private[spark] def setValue(newValue: Double): Unit = _sum = newValue
+
+  override def value: jl.Double = _sum
 }
 
 
@@ -355,12 +386,12 @@ class ListAccumulator[T] extends AccumulatorV2[T, java.util.List[T]] {
   override def add(v: T): Unit = _list.add(v)
 
   override def merge(other: AccumulatorV2[T, java.util.List[T]]): Unit = other match {
-    case o: ListAccumulator[T] => _list.addAll(o.localValue)
+    case o: ListAccumulator[T] => _list.addAll(o.value)
     case _ => throw new UnsupportedOperationException(
       s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
   }
 
-  override def localValue: java.util.List[T] = java.util.Collections.unmodifiableList(_list)
+  override def value: java.util.List[T] = java.util.Collections.unmodifiableList(_list)
 
   private[spark] def setValue(newValue: java.util.List[T]): Unit = {
     _list.clear()
@@ -385,10 +416,10 @@ class LegacyAccumulatorWrapper[R, T](
   override def add(v: T): Unit = _value = param.addAccumulator(_value, v)
 
   override def merge(other: AccumulatorV2[T, R]): Unit = other match {
-    case o: LegacyAccumulatorWrapper[R, T] => _value = param.addInPlace(_value, o.localValue)
+    case o: LegacyAccumulatorWrapper[R, T] => _value = param.addInPlace(_value, o.value)
     case _ => throw new UnsupportedOperationException(
       s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
   }
 
-  override def localValue: R = _value
+  override def value: R = _value
 }
