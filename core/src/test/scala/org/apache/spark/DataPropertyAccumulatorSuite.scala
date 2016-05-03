@@ -23,6 +23,7 @@ import scala.ref.WeakReference
 import org.scalatest.Matchers
 
 import org.apache.spark.scheduler._
+import org.apache.spark.util.{AccumulatorContext, AccumulatorMetadata, AccumulatorV2, LongAccumulator}
 
 
 class DataPropertyAccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContext {

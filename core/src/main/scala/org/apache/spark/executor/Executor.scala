@@ -362,7 +362,7 @@ private[spark] class Executor(
               Seq.empty
             }
 
-          val accUpdates = accums.map(acc => acc.toInfo(Some(acc.localValue), None))
+          val accUpdates = accums.map(acc => acc.toInfo(Some(acc.value), None))
 
           val serializedTaskEndReason = {
             try {

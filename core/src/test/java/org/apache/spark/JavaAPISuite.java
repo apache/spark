@@ -70,6 +70,7 @@ import org.apache.spark.partial.PartialResult;
 import org.apache.spark.rdd.RDD;
 import org.apache.spark.serializer.KryoSerializer;
 import org.apache.spark.storage.StorageLevel;
+import org.apache.spark.util.LongAccumulator;
 import org.apache.spark.util.StatCounter;
 
 // The test suite itself is Serializable so that anonymous Function implementations can be

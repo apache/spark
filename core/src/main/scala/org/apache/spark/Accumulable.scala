@@ -126,7 +126,13 @@ class Accumulable[R, T] private (
   /**
    * Access the accumulator's current value; only allowed on driver.
    */
-  def value: R = newAcc.value
+  def value: R = {
+    if (newAcc.isAtDriverSide) {
+      newAcc.value
+    } else {
+      throw new UnsupportedOperationException("Can't read accumulator value in task")
+    }
+  }
 
   /**
    * Get the current value of this accumulator from within a task.
@@ -137,7 +143,7 @@ class Accumulable[R, T] private (
    * The typical use of this method is to directly mutate the local value, eg., to add
    * an element to a Set.
    */
-  def localValue: R = newAcc.localValue
+  def localValue: R = newAcc.value
 
   /**
    * Set the accumulator's value; only allowed on driver and only for non-data property

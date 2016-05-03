@@ -366,7 +366,7 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
     // The listener should only track the ones that are actually SQL metrics.
     val sqlMetric = SQLMetrics.createMetric(sparkContext, "beach umbrella")
     val nonSqlMetric = sparkContext.accumulator[Int](0, "baseball")
-    val sqlMetricInfo = sqlMetric.toInfo(Some(sqlMetric.localValue), None)
+    val sqlMetricInfo = sqlMetric.toInfo(Some(sqlMetric.value), None)
     val nonSqlMetricInfo = nonSqlMetric.toInfo(Some(nonSqlMetric.localValue), None)
     val taskInfo = createTaskInfo(0, 0)
     taskInfo.accumulables ++= Seq(sqlMetricInfo, nonSqlMetricInfo)
