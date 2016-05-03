@@ -39,8 +39,12 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
     val conf = new SparkConf().setAppName("test").setMaster("local")
       .set("spark.driver.allowMultipleContexts", "false")
     sc = new SparkContext(conf)
+    val envBefore = SparkEnv.get
     // A SparkContext is already running, so we shouldn't be able to create a second one
     intercept[SparkException] { new SparkContext(conf) }
+    val envAfter = SparkEnv.get
+    // SparkEnv and other context variables should be the same
+    assert(envBefore == envAfter)
     // After stopping the running context, we should be able to create a new one
     resetSparkContext()
     sc = new SparkContext(conf)
@@ -318,5 +322,33 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
       assert(sc.executorAllocationManager.isEmpty)
       assert(sc.getConf.getInt("spark.executor.instances", 0) === 6)
     }
+  }
+
+
+  test("localProperties are inherited by spawned threads.") {
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+    sc.setLocalProperty("testProperty", "testValue")
+    var result = "unset";
+    val thread = new Thread() { override def run() = {result = sc.getLocalProperty("testProperty")}}
+    thread.start()
+    thread.join()
+    sc.stop()
+    assert(result == "testValue")
+  }
+
+  test("localProperties do not cross-talk between threads.") {
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+    var result = "unset";
+    val thread1 = new Thread() {
+      override def run() = {sc.setLocalProperty("testProperty", "testValue")}}
+    // testProperty should be unset and thus return null
+    val thread2 = new Thread() {
+      override def run() = {result = sc.getLocalProperty("testProperty")}}
+    thread1.start()
+    thread1.join()
+    thread2.start()
+    thread2.join()
+    sc.stop()
+    assert(result == null)
   }
 }

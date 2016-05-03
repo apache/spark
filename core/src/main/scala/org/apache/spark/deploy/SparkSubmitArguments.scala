@@ -173,6 +173,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       .orNull
     name = Option(name).orElse(sparkProperties.get("spark.app.name")).orNull
     jars = Option(jars).orElse(sparkProperties.get("spark.jars")).orNull
+    files = Option(files).orElse(sparkProperties.get("spark.files")).orNull
     ivyRepoPath = sparkProperties.get("spark.jars.ivy").orNull
     packages = Option(packages).orElse(sparkProperties.get("spark.jars.packages")).orNull
     packagesExclusions = Option(packagesExclusions)

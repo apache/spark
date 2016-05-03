@@ -28,7 +28,7 @@ import scala.util.control.NonFatal
 import org.scalatest.Matchers
 import org.scalatest.exceptions.TestFailedException
 
-import org.apache.spark.AccumulatorParam.{ListAccumulatorParam, StringAccumulatorParam}
+import org.apache.spark.AccumulatorParam.StringAccumulatorParam
 import org.apache.spark.scheduler._
 import org.apache.spark.serializer.JavaSerializer
 
@@ -234,21 +234,6 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
     acc.merge("kindness")
     assert(acc.value === "kindness")
   }
-
-  test("list accumulator param") {
-    val acc = new Accumulator(Seq.empty[Int], new ListAccumulatorParam[Int], Some("numbers"))
-    assert(acc.value === Seq.empty[Int])
-    acc.add(Seq(1, 2))
-    assert(acc.value === Seq(1, 2))
-    acc += Seq(3, 4)
-    assert(acc.value === Seq(1, 2, 3, 4))
-    acc ++= Seq(5, 6)
-    assert(acc.value === Seq(1, 2, 3, 4, 5, 6))
-    acc.merge(Seq(7, 8))
-    assert(acc.value === Seq(1, 2, 3, 4, 5, 6, 7, 8))
-    acc.setValue(Seq(9, 10))
-    assert(acc.value === Seq(9, 10))
-  }
 }
 
 private[spark] object AccumulatorSuite {
@@ -273,7 +258,7 @@ private[spark] object AccumulatorSuite {
    * Make an [[AccumulableInfo]] out of an [[Accumulable]] with the intent to use the
    * info as an accumulator update.
    */
-  def makeInfo(a: NewAccumulator[_, _]): AccumulableInfo = a.toInfo(Some(a.localValue), None)
+  def makeInfo(a: AccumulatorV2[_, _]): AccumulableInfo = a.toInfo(Some(a.localValue), None)
 
   /**
    * Run one or more Spark jobs and verify that in at least one job the peak execution memory
