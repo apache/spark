@@ -300,7 +300,7 @@ abstract class PartitioningAwareFileCatalog(
     partitionSchema: Option[StructType])
   extends FileCatalog with Logging {
 
-  private val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(parameters)
+  protected val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(parameters)
 
   protected def leafFiles: mutable.LinkedHashMap[Path, FileStatus]
 
@@ -322,52 +322,6 @@ abstract class PartitioningAwareFileCatalog(
   override def allFiles(): Seq[FileStatus] = leafFiles.values.toSeq
 
   override def getStatus(path: Path): Array[FileStatus] = leafDirToChildrenFiles(path)
-
-  protected def listLeafFiles(paths: Seq[Path]): mutable.LinkedHashSet[FileStatus] = {
-    if (paths.length >= sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold) {
-      HadoopFsRelation.listLeafFilesInParallel(paths, hadoopConf, sparkSession.sparkContext)
-    } else {
-      val statuses: Seq[FileStatus] = paths.flatMap { path =>
-        val fs = path.getFileSystem(hadoopConf)
-        logInfo(s"Listing $path on driver")
-        // Dummy jobconf to get to the pathFilter defined in configuration
-        val jobConf = new JobConf(hadoopConf, this.getClass)
-        val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
-
-        val statuses = {
-          val stats = Try(fs.listStatus(path)).getOrElse(Array.empty[FileStatus])
-          if (pathFilter != null) stats.filter(f => pathFilter.accept(f.getPath)) else stats
-        }
-
-        statuses.map {
-          case f: LocatedFileStatus => f
-
-          // NOTE:
-          //
-          // - Although S3/S3A/S3N file system can be quite slow for remote file metadata
-          //   operations, calling `getFileBlockLocations` does no harm here since these file system
-          //   implementations don't actually issue RPC for this method.
-          //
-          // - Here we are calling `getFileBlockLocations` in a sequential manner, but it should a
-          //   a big deal since we always use to `listLeafFilesInParallel` when the number of paths
-          //   exceeds threshold.
-          case f => new LocatedFileStatus(f, fs.getFileBlockLocations(f, 0, f.getLen))
-        }
-      }.filterNot { status =>
-        val name = status.getPath.getName
-        HadoopFsRelation.shouldFilterOut(name)
-      }
-
-      val (dirs, files) = statuses.partition(_.isDirectory)
-
-      // It uses [[LinkedHashSet]] since the order of files can affect the results. (SPARK-11500)
-      if (dirs.isEmpty) {
-        mutable.LinkedHashSet(files: _*)
-      } else {
-        mutable.LinkedHashSet(files: _*) ++ listLeafFiles(dirs.map(_.getPath))
-      }
-    }
-  }
 
   protected def inferPartitioning(): PartitionSpec = {
     // We use leaf dirs containing data files to discover the schema.
@@ -506,6 +460,54 @@ class HDFSFileCatalog(
     cachedLeafDirToChildrenFiles = files.toArray.groupBy(_.getPath.getParent)
     cachedPartitionSpec = null
   }
+
+
+  protected def listLeafFiles(paths: Seq[Path]): mutable.LinkedHashSet[FileStatus] = {
+    if (paths.length >= sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold) {
+      HadoopFsRelation.listLeafFilesInParallel(paths, hadoopConf, sparkSession.sparkContext)
+    } else {
+      val statuses: Seq[FileStatus] = paths.flatMap { path =>
+        val fs = path.getFileSystem(hadoopConf)
+        logInfo(s"Listing $path on driver")
+        // Dummy jobconf to get to the pathFilter defined in configuration
+        val jobConf = new JobConf(hadoopConf, this.getClass)
+        val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
+
+        val statuses = {
+          val stats = Try(fs.listStatus(path)).getOrElse(Array.empty[FileStatus])
+          if (pathFilter != null) stats.filter(f => pathFilter.accept(f.getPath)) else stats
+        }
+
+        statuses.map {
+          case f: LocatedFileStatus => f
+
+          // NOTE:
+          //
+          // - Although S3/S3A/S3N file system can be quite slow for remote file metadata
+          //   operations, calling `getFileBlockLocations` does no harm here since these file system
+          //   implementations don't actually issue RPC for this method.
+          //
+          // - Here we are calling `getFileBlockLocations` in a sequential manner, but it should a
+          //   a big deal since we always use to `listLeafFilesInParallel` when the number of paths
+          //   exceeds threshold.
+          case f => new LocatedFileStatus(f, fs.getFileBlockLocations(f, 0, f.getLen))
+        }
+      }.filterNot { status =>
+        val name = status.getPath.getName
+        HadoopFsRelation.shouldFilterOut(name)
+      }
+
+      val (dirs, files) = statuses.partition(_.isDirectory)
+
+      // It uses [[LinkedHashSet]] since the order of files can affect the results. (SPARK-11500)
+      if (dirs.isEmpty) {
+        mutable.LinkedHashSet(files: _*)
+      } else {
+        mutable.LinkedHashSet(files: _*) ++ listLeafFiles(dirs.map(_.getPath))
+      }
+    }
+  }
+
 
   override def equals(other: Any): Boolean = other match {
     case hdfs: HDFSFileCatalog => paths.toSet == hdfs.paths.toSet
