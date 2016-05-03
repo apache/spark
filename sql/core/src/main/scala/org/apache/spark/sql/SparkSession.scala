@@ -54,6 +54,7 @@ import org.apache.spark.util.Utils
  * {{{
  *   SparkSession.builder()
  *     .master("local")
+ *     .appName("Word Count")
  *     .config("spark.some.config.option", "some-value").
  *     .getOrCreate()
  * }}}
@@ -63,7 +64,7 @@ class SparkSession private(
     @transient private val existingSharedState: Option[SharedState])
   extends Serializable with Logging { self =>
 
-  def this(sc: SparkContext) {
+  private[sql] def this(sc: SparkContext) {
     this(sc, None)
   }
 
@@ -573,7 +574,7 @@ class SparkSession private(
    * common Scala objects into [[DataFrame]]s.
    *
    * {{{
-   *   val sparkSession = new SparkSession(sc)
+   *   val sparkSession = SparkSession.builder.getOrCreate()
    *   import sparkSession.implicits._
    * }}}
    *
@@ -585,6 +586,15 @@ class SparkSession private(
     protected override def _sqlContext: SQLContext = wrapped
   }
   // scalastyle:on
+
+  /**
+   * Stop the underlying [[SparkContext]].
+   *
+   * @since 2.0.0
+   */
+  def stop(): Unit = {
+    sparkContext.stop()
+  }
 
   protected[sql] def parseSql(sql: String): LogicalPlan = {
     sessionState.sqlParser.parsePlan(sql)
