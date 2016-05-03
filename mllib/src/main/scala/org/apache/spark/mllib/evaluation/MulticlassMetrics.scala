@@ -151,6 +151,14 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[(Double, Doubl
   lazy val recall: Double = precision
 
   /**
+   * Returns accuracy
+   * (equals to precision for multicalss classifier
+   * because it is tp/labelCount)
+   */
+  @Since("2.0.0")
+  lazy val accuracy: Double = precision
+
+  /**
    * Returns f-measure
    * (equals to precision and recall because precision equals recall)
    */
