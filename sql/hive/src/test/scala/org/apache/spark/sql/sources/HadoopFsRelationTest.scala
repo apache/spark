@@ -695,6 +695,24 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       }
     }
   }
+
+  test("SPARK-10216: Avoid empty files during overwriting table with group by query") {
+    withTempPath { path =>
+      val df = sqlContext.range(0, 5)
+      val groupedDF = df.groupBy("id").count()
+      groupedDF.write
+        .format(dataSourceName)
+        .mode(SaveMode.Overwrite)
+        .save(path.getCanonicalPath)
+
+      val overwrittenFiles = path.listFiles()
+        .filter(f => f.isFile && !f.getName.startsWith(".") && !f.getName.startsWith("_"))
+        .sortBy(_.getName)
+      val overwrittenFilesWithoutEmpty = overwrittenFiles.filter(_.length > 0)
+
+      assert(overwrittenFiles === overwrittenFilesWithoutEmpty)
+    }
+  }
 }
 
 // This class is used to test SPARK-8578. We should not use any custom output committer when
