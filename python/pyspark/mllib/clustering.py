@@ -31,8 +31,8 @@ from collections import namedtuple
 
 from pyspark import SparkContext, since
 from pyspark.rdd import RDD, ignore_unicode_prefix
+from pyspark.ml.linalg import SparseVector, _convert_to_vector, DenseVector
 from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc, callJavaFunc, _py2java, _java2py
-from pyspark.mllib.linalg import SparseVector, _convert_to_vector, DenseVector
 from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.stat.distribution import MultivariateGaussian
 from pyspark.mllib.util import Saveable, Loader, inherit_doc, JavaLoader, JavaSaveable
@@ -370,7 +370,7 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader):
 
     A clustering model derived from the Gaussian Mixture Model method.
 
-    >>> from pyspark.mllib.linalg import Vectors, DenseMatrix
+    >>> from pyspark.ml.linalg import Vectors, DenseMatrix
     >>> from numpy.testing import assert_equal
     >>> from shutil import rmtree
     >>> import os, tempfile
@@ -922,7 +922,7 @@ class LDAModel(JavaModelWrapper, JavaSaveable, Loader):
     - Original LDA paper (journal version):
     Blei, Ng, and Jordan.  "Latent Dirichlet Allocation."  JMLR, 2003.
 
-    >>> from pyspark.mllib.linalg import Vectors
+    >>> from pyspark.ml.linalg import Vectors
     >>> from numpy.testing import assert_almost_equal, assert_equal
     >>> data = [
     ...     [1, Vectors.dense([0.0, 1.0])],

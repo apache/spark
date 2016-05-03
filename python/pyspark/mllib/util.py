@@ -24,8 +24,8 @@ if sys.version > '3':
     basestring = str
 
 from pyspark import SparkContext, since
+from pyspark.ml.linalg import Vectors, SparseVector, _convert_to_vector
 from pyspark.mllib.common import callMLlibFunc, inherit_doc
-from pyspark.mllib.linalg import Vectors, SparseVector, _convert_to_vector
 
 
 class MLUtils(object):
