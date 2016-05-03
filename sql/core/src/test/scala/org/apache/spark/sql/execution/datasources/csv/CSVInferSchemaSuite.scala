@@ -41,13 +41,14 @@ class CSVInferSchemaSuite extends SparkFunSuite {
     val textValueTwo = "1" * 39
     val expectedTypeTwo = DoubleType
     assert(CSVInferSchema.inferField(NullType, textValueTwo, options) == expectedTypeTwo)
+    assert(CSVInferSchema.inferField(IntegerType, "10.0", options) == DecimalType(3, 1))
+    assert(CSVInferSchema.inferField(IntegerType, "0.01", options) == DoubleType)
   }
 
   test("String fields types are inferred correctly from other types") {
     val options = new CSVOptions(Map.empty[String, String])
     assert(CSVInferSchema.inferField(LongType, "1.0", options) == DecimalType(2, 1))
     assert(CSVInferSchema.inferField(LongType, "test", options) == StringType)
-    assert(CSVInferSchema.inferField(IntegerType, "1.0", options) == DecimalType(2, 1))
     assert(CSVInferSchema.inferField(DoubleType, null, options) == DoubleType)
     assert(CSVInferSchema.inferField(DoubleType, "test", options) == StringType)
     assert(CSVInferSchema.inferField(LongType, "2015-08-20 14:57:00", options) == TimestampType)
@@ -63,6 +64,8 @@ class CSVInferSchemaSuite extends SparkFunSuite {
     val textValueTwo = "0.01"
     val expectedTypeTwo = DoubleType
     assert(CSVInferSchema.inferField(NullType, textValueTwo, options) == expectedTypeTwo)
+    assert(CSVInferSchema.inferField(IntegerType, "10.0", options) == DecimalType(3, 1))
+    assert(CSVInferSchema.inferField(IntegerType, "0.01", options) == DoubleType)
   }
 
   test("Timestamp field types are inferred correctly via custom data format") {
