@@ -214,7 +214,7 @@ class RFormulaModel private[feature](
   override def transformSchema(schema: StructType): StructType = {
     checkCanTransform(schema)
     val withFeatures = pipelineModel.transformSchema(schema)
-    if (hasLabelCol(withFeatures)) {
+    if (resolvedFormula.label.isEmpty || hasLabelCol(withFeatures)) {
       withFeatures
     } else if (schema.exists(_.name == resolvedFormula.label)) {
       val nullable = schema(resolvedFormula.label).dataType match {
@@ -236,7 +236,7 @@ class RFormulaModel private[feature](
 
   private def transformLabel(dataset: Dataset[_]): DataFrame = {
     val labelName = resolvedFormula.label
-    if (hasLabelCol(dataset.schema)) {
+    if (labelName.isEmpty || hasLabelCol(dataset.schema)) {
       dataset.toDF
     } else if (dataset.schema.exists(_.name == labelName)) {
       dataset.schema(labelName).dataType match {

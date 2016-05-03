@@ -19,7 +19,8 @@ package org.apache.spark.sql.execution.datasources.csv
 
 import java.io.File
 import java.nio.charset.UnsupportedCharsetException
-import java.sql.Timestamp
+import java.sql.{Date, Timestamp}
+import java.text.SimpleDateFormat
 
 import scala.collection.JavaConverters._
 
@@ -45,6 +46,8 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   private val disableCommentsFile = "disable_comments.csv"
   private val boolFile = "bool.csv"
   private val simpleSparseFile = "simple_sparse.csv"
+  private val numbersFile = "numbers.csv"
+  private val datesFile = "dates.csv"
   private val unescapedQuotesFile = "unescaped-quotes.csv"
 
   private def testFile(fileName: String): String = {
@@ -367,6 +370,54 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     assert(results.toSeq.map(_.toSeq) === expected)
   }
 
+  test("inferring timestamp types via custom date format") {
+    val options = Map(
+      "header" -> "true",
+      "inferSchema" -> "true",
+      "dateFormat" -> "dd/MM/yyyy hh:mm")
+    val results = sqlContext.read
+      .format("csv")
+      .options(options)
+      .load(testFile(datesFile))
+      .select("date")
+      .collect()
+
+    val dateFormat = new SimpleDateFormat("dd/MM/yyyy hh:mm")
+    val expected =
+      Seq(Seq(new Timestamp(dateFormat.parse("26/08/2015 18:00").getTime)),
+        Seq(new Timestamp(dateFormat.parse("27/10/2014 18:30").getTime)),
+        Seq(new Timestamp(dateFormat.parse("28/01/2016 20:00").getTime)))
+    assert(results.toSeq.map(_.toSeq) === expected)
+  }
+
+  test("load date types via custom date format") {
+    val customSchema = new StructType(Array(StructField("date", DateType, true)))
+    val options = Map(
+      "header" -> "true",
+      "inferSchema" -> "false",
+      "dateFormat" -> "dd/MM/yyyy hh:mm")
+    val results = sqlContext.read
+      .format("csv")
+      .options(options)
+      .schema(customSchema)
+      .load(testFile(datesFile))
+      .select("date")
+      .collect()
+
+    val dateFormat = new SimpleDateFormat("dd/MM/yyyy hh:mm")
+    val expected = Seq(
+      new Date(dateFormat.parse("26/08/2015 18:00").getTime),
+      new Date(dateFormat.parse("27/10/2014 18:30").getTime),
+      new Date(dateFormat.parse("28/01/2016 20:00").getTime))
+    val dates = results.toSeq.map(_.toSeq.head)
+    expected.zip(dates).foreach {
+      case (expectedDate, date) =>
+        // As it truncates the hours, minutes and etc., we only check
+        // if the dates (days, months and years) are the same via `toString()`.
+        assert(expectedDate.toString === date.toString)
+    }
+  }
+
   test("setting comment to null disables comment support") {
     val results = sqlContext.read
       .format("csv")
@@ -430,42 +481,37 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   }
 
   test("SPARK-13543 Write the output as uncompressed via option()") {
-    val clonedConf = new Configuration(hadoopConfiguration)
-    hadoopConfiguration.set("mapreduce.output.fileoutputformat.compress", "true")
-    hadoopConfiguration
-      .set("mapreduce.output.fileoutputformat.compress.type", CompressionType.BLOCK.toString)
-    hadoopConfiguration
-      .set("mapreduce.output.fileoutputformat.compress.codec", classOf[GzipCodec].getName)
-    hadoopConfiguration.set("mapreduce.map.output.compress", "true")
-    hadoopConfiguration.set("mapreduce.map.output.compress.codec", classOf[GzipCodec].getName)
+    val extraOptions = Map(
+      "mapreduce.output.fileoutputformat.compress" -> "true",
+      "mapreduce.output.fileoutputformat.compress.type" -> CompressionType.BLOCK.toString,
+      "mapreduce.map.output.compress" -> "true",
+      "mapreduce.map.output.compress.codec" -> classOf[GzipCodec].getName
+    )
     withTempDir { dir =>
-      try {
-        val csvDir = new File(dir, "csv").getCanonicalPath
-        val cars = sqlContext.read
-          .format("csv")
-          .option("header", "true")
-          .load(testFile(carsFile))
+      val csvDir = new File(dir, "csv").getCanonicalPath
+      val cars = sqlContext.read
+        .format("csv")
+        .option("header", "true")
+        .options(extraOptions)
+        .load(testFile(carsFile))
 
-        cars.coalesce(1).write
-          .format("csv")
-          .option("header", "true")
-          .option("compression", "none")
-          .save(csvDir)
+      cars.coalesce(1).write
+        .format("csv")
+        .option("header", "true")
+        .option("compression", "none")
+        .options(extraOptions)
+        .save(csvDir)
 
-        val compressedFiles = new File(csvDir).listFiles()
-        assert(compressedFiles.exists(!_.getName.endsWith(".csv.gz")))
+      val compressedFiles = new File(csvDir).listFiles()
+      assert(compressedFiles.exists(!_.getName.endsWith(".csv.gz")))
 
-        val carsCopy = sqlContext.read
-          .format("csv")
-          .option("header", "true")
-          .load(csvDir)
+      val carsCopy = sqlContext.read
+        .format("csv")
+        .option("header", "true")
+        .options(extraOptions)
+        .load(csvDir)
 
-        verifyCars(carsCopy, withHeader = true)
-      } finally {
-        // Hadoop 1 doesn't have `Configuration.unset`
-        hadoopConfiguration.clear()
-        clonedConf.asScala.foreach(entry => hadoopConfiguration.set(entry.getKey, entry.getValue))
-      }
+      verifyCars(carsCopy, withHeader = true)
     }
   }
 
@@ -489,5 +535,27 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       .load(testFile(carsFile))
 
     verifyCars(cars, withHeader = false, checkTypes = false)
+  }
+
+  test("nulls, NaNs and Infinity values can be parsed") {
+    val numbers = sqlContext
+      .read
+      .format("csv")
+      .schema(StructType(List(
+        StructField("int", IntegerType, true),
+        StructField("long", LongType, true),
+        StructField("float", FloatType, true),
+        StructField("double", DoubleType, true)
+      )))
+      .options(Map(
+        "header" -> "true",
+        "mode" -> "DROPMALFORMED",
+        "nullValue" -> "--",
+        "nanValue" -> "NAN",
+        "negativeInf" -> "-INF",
+        "positiveInf" -> "INF"))
+      .load(testFile(numbersFile))
+
+    assert(numbers.count() == 8)
   }
 }

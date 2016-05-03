@@ -136,13 +136,12 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
 
   /**
    * Whether to over-/under-sample training instances according to the given weights in weightCol.
-   * If empty, all instances are treated equally (weight 1.0).
-   * Default is empty, so all instances have weight one.
+   * If not set or empty, all instances are treated equally (weight 1.0).
+   * Default is not set, so all instances have weight one.
    * @group setParam
    */
   @Since("1.6.0")
   def setWeightCol(value: String): this.type = set(weightCol, value)
-  setDefault(weightCol -> "")
 
   /**
    * Set the solver algorithm used for optimization.
@@ -163,7 +162,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     val numFeatures = dataset.select(col($(featuresCol))).limit(1).rdd.map {
       case Row(features: Vector) => features.size
     }.first()
-    val w = if ($(weightCol).isEmpty) lit(1.0) else col($(weightCol))
+    val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
 
     if (($(solver) == "auto" && $(elasticNetParam) == 0.0 &&
       numFeatures <= WeightedLeastSquares.MAX_NUM_FEATURES) || $(solver) == "normal") {
@@ -389,9 +388,6 @@ class LinearRegressionModel private[ml] (
 
   private var trainingSummary: Option[LinearRegressionTrainingSummary] = None
 
-  @deprecated("Use coefficients instead.", "1.6.0")
-  def weights: Vector = coefficients
-
   override val numFeatures: Int = coefficients.size
 
   /**
@@ -562,6 +558,7 @@ class LinearRegressionSummary private[regression] (
     val predictionCol: String,
     val labelCol: String,
     val featuresCol: String,
+    @deprecated("The model field is deprecated and will be removed in 2.1.0.", "2.0.0")
     val model: LinearRegressionModel,
     private val diagInvAtWA: Array[Double]) extends Serializable {
 
@@ -645,7 +642,11 @@ class LinearRegressionSummary private[regression] (
    * the square root of the instance weights.
    */
   lazy val devianceResiduals: Array[Double] = {
-    val weighted = if (model.getWeightCol.isEmpty) lit(1.0) else sqrt(col(model.getWeightCol))
+    val weighted = if (!model.isDefined(model.weightCol) || model.getWeightCol.isEmpty) {
+      lit(1.0)
+    } else {
+      sqrt(col(model.getWeightCol))
+    }
     val dr = predictions.select(col(model.getLabelCol).minus(col(model.getPredictionCol))
       .multiply(weighted).as("weightedResiduals"))
       .select(min(col("weightedResiduals")).as("min"), max(col("weightedResiduals")).as("max"))
@@ -667,7 +668,7 @@ class LinearRegressionSummary private[regression] (
       throw new UnsupportedOperationException(
         "No Std. Error of coefficients available for this LinearRegressionModel")
     } else {
-      val rss = if (model.getWeightCol.isEmpty) {
+      val rss = if (!model.isDefined(model.weightCol) || model.getWeightCol.isEmpty) {
         meanSquaredError * numInstances
       } else {
         val t = udf { (pred: Double, label: Double, weight: Double) =>

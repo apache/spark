@@ -103,7 +103,7 @@ case class FilterExec(condition: Expression, child: SparkPlan)
   }
 
   private[sql] override lazy val metrics = Map(
-    "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
     child.asInstanceOf[CodegenSupport].inputRDDs()
@@ -229,7 +229,7 @@ case class SampleExec(
   override def output: Seq[Attribute] = child.output
 
   private[sql] override lazy val metrics = Map(
-    "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   protected override def doExecute(): RDD[InternalRow] = {
     if (withReplacement) {
@@ -322,7 +322,7 @@ case class RangeExec(
   extends LeafExecNode with CodegenSupport {
 
   private[sql] override lazy val metrics = Map(
-    "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   // output attributes should not affect the results
   override lazy val cleanArgs: Seq[Any] = Seq(start, step, numSlices, numElements)
@@ -488,18 +488,6 @@ case class CoalesceExec(numPartitions: Int, child: SparkPlan) extends UnaryExecN
 
   protected override def doExecute(): RDD[InternalRow] = {
     child.execute().coalesce(numPartitions, shuffle = false)
-  }
-}
-
-/**
- * Physical plan for returning a table with the elements from left that are not in right using
- * the built-in spark subtract function.
- */
-case class ExceptExec(left: SparkPlan, right: SparkPlan) extends BinaryExecNode {
-  override def output: Seq[Attribute] = left.output
-
-  protected override def doExecute(): RDD[InternalRow] = {
-    left.execute().map(_.copy()).subtract(right.execute().map(_.copy()))
   }
 }
 

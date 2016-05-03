@@ -78,7 +78,7 @@ private[sql] case class InsertIntoHadoopFsRelation(
           s"cannot save to file.")
     }
 
-    val hadoopConf = new Configuration(sparkSession.sessionState.hadoopConf)
+    val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(options)
     val fs = outputPath.getFileSystem(hadoopConf)
     val qualifiedOutputPath = outputPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
 
@@ -131,7 +131,7 @@ private[sql] case class InsertIntoHadoopFsRelation(
             dataColumns = dataColumns,
             inputSchema = query.output,
             PartitioningUtils.DEFAULT_PARTITION_NAME,
-            sparkSession.getConf(SQLConf.PARTITION_MAX_FILES),
+            sparkSession.conf.get(SQLConf.PARTITION_MAX_FILES),
             isAppend)
         }
 

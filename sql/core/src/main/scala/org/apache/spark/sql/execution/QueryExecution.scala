@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.execution.command.{DescribeTableCommand, ExecutedCommandExec, HiveNativeCommand}
+import org.apache.spark.sql.execution.command.{DescribeTableCommand, ExecutedCommandExec}
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReuseExchange}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BinaryType, DateType, DecimalType, TimestampType, _}
@@ -199,12 +199,10 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
     }
   }
 
-  def simpleString: String = logical match {
-    case _: HiveNativeCommand => "<Native command: executed by Hive>"
-    case _ =>
-      s"""== Physical Plan ==
-         |${stringOrError(executedPlan)}
-        """.stripMargin.trim
+  def simpleString: String = {
+    s"""== Physical Plan ==
+       |${stringOrError(executedPlan)}
+      """.stripMargin.trim
   }
 
   override def toString: String = {

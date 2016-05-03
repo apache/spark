@@ -68,7 +68,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
 
     val parsedRdd = tokenRdd(sparkSession, csvOptions, header, paths)
     val schema = if (csvOptions.inferSchemaFlag) {
-      CSVInferSchema.infer(parsedRdd, header, csvOptions.nullValue)
+      CSVInferSchema.infer(parsedRdd, header, csvOptions)
     } else {
       // By default fields are assumed to be StringType
       val schemaFields = header.map { fieldName =>
@@ -99,16 +99,17 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       partitionSchema: StructType,
       requiredSchema: StructType,
       filters: Seq[Filter],
-      options: Map[String, String]): (PartitionedFile) => Iterator[InternalRow] = {
+      options: Map[String, String],
+      hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
     val csvOptions = new CSVOptions(options)
     val headers = requiredSchema.fields.map(_.name)
 
-    val conf = new Configuration(sparkSession.sessionState.hadoopConf)
-    val broadcastedConf = sparkSession.sparkContext.broadcast(new SerializableConfiguration(conf))
+    val broadcastedHadoopConf =
+      sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
     (file: PartitionedFile) => {
       val lineIterator = {
-        val conf = broadcastedConf.value.value
+        val conf = broadcastedHadoopConf.value.value
         new HadoopFileLinesReader(file, conf).map { line =>
           new String(line.getBytes, 0, line.getLength, csvOptions.charset)
         }

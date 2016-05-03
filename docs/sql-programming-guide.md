@@ -1147,6 +1147,11 @@ parquetFile <- read.parquet(sqlContext, "people.parquet")
 # Parquet files can also be registered as tables and then used in SQL statements.
 registerTempTable(parquetFile, "parquetFile")
 teenagers <- sql(sqlContext, "SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19")
+schema <- structType(structField("name", "string"))
+teenNames <- dapply(df, function(p) { cbind(paste("Name:", p$name)) }, schema)
+for (teenName in collect(teenNames)$name) {
+  cat(teenName, "\n")
+}
 {% endhighlight %}
 
 </div>
