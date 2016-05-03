@@ -49,7 +49,7 @@ if __name__ == "__main__":
     parser.add_argument('--convergenceTol', default=1e-3, type=float, help='convergence threshold')
     parser.add_argument('--maxIterations', default=100, type=int, help='Number of iterations')
     parser.add_argument('--seed', default=random.getrandbits(19),
-                        type=long, help='Random seed')
+                        type=int, help='Random seed')
     args = parser.parse_args()
 
     conf = SparkConf().setAppName("GMM")
