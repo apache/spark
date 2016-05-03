@@ -19,6 +19,7 @@ from __future__ import print_function
 import sys
 import warnings
 from functools import reduce
+from threading import RLock
 
 if sys.version >= '3':
     basestring = unicode = str
@@ -444,6 +445,77 @@ class SparkSession(object):
         :return: :class:`DataFrameReader`
         """
         return DataFrameReader(self._wrapped)
+
+    @classmethod
+    @since(2.0)
+    def builder(cls):
+        """Returns a new :class:`SparkSession.Builder` for constructing a :class:`SparkSession`.
+        """
+        return SparkSession.Builder()
+
+    class Builder(object):
+        """Builder for :class:`SparkSession`.
+        """
+
+        _lock = RLock()
+        _options = {}
+
+        @since(2.0)
+        def config(self, key=None, value=None, conf=None):
+            """Sets a config option. Options set using this method are automatically propagated to
+            both :class:`SparkConf` and :class:`SparkSession`'s own configuration.
+
+            :param key: a key name string for configuration property
+            :param value: a value for configuration property
+            :param conf: an instance of :class:`SparkConf`
+            """
+            with SparkSession.Builder._lock:
+                if conf is None:
+                    self._options[key] = str(value)
+                else:
+                    for (k, v) in conf.getAll():
+                        self._options[k] = v
+                return self
+
+        @since(2.0)
+        def master(self, master):
+            """Sets the Spark master URL to connect to, such as "local" to run locally, "local[4]"
+            to run locally with 4 cores, or "spark://master:7077" to run on a Spark standalone
+            cluster.
+
+            :param master: a url for spark master
+            """
+            return self.config("spark.master", master)
+
+        @since(2.0)
+        def appName(self, name):
+            """Sets a name for the application, which will be shown in the Spark web UI.
+
+            :param name: an application name
+            """
+            return self.config("spark.app.name", name)
+
+        @since(2.0)
+        def enableHiveSupport(self):
+            """Enables Hive support, including connectivity to a persistent Hive metastore, support
+            for Hive serdes, and Hive user-defined functions.
+            """
+            return self.config("spark.sql.catalogImplementation", "hive")
+
+        @since(2.0)
+        def getOrCreate(self):
+            """Gets an existing :class:`SparkSession` or, if there is no existing one, creates a new
+            one based on the options set in this builder.
+            """
+            with SparkSession.Builder._lock:
+                from pyspark.conf import SparkConf
+                from pyspark.context import SparkContext
+                from pyspark.sql.context import SQLContext
+                sparkConf = SparkConf()
+                for key, value in self._options.iteritems():
+                    sparkConf.set(key, value)
+                sparkContext = SparkContext.getOrCreate(sparkConf)
+                return SQLContext.getOrCreate(sparkContext).sparkSession
 
 
 def _test():
