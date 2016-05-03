@@ -1341,28 +1341,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /**
-   * Create and register an average accumulator, which accumulates double inputs by recording the
-   * total sum and total count, and produce the output by sum / total.  Note that Double.NaN will be
-   * returned if no input is added.
-   */
-  def averageAccumulator: AverageAccumulator = {
-    val acc = new AverageAccumulator
-    register(acc)
-    acc
-  }
-
-  /**
-   * Create and register an average accumulator, which accumulates double inputs by recording the
-   * total sum and total count, and produce the output by sum / total.  Note that Double.NaN will be
-   * returned if no input is added.
-   */
-  def averageAccumulator(name: String): AverageAccumulator = {
-    val acc = new AverageAccumulator
-    register(acc, name)
-    acc
-  }
-
-  /**
    * Create and register a list accumulator, which starts with empty list and accumulates inputs
    * by adding them into the inner list.
    */
