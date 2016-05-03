@@ -1313,7 +1313,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * supported for Hadoop-supported filesystems.
    */
   def addFile(path: String, recursive: Boolean): Unit = {
-    val uri =Utils.resolveURI(path)
+    val uri = Utils.resolveURI(path)
     val schemeCorrectedPath = uri.toString
 
     val hadoopPath = new Path(schemeCorrectedPath)
