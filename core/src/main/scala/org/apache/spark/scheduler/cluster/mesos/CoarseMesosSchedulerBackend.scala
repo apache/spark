@@ -277,25 +277,35 @@ private[spark] class CoarseMesosSchedulerBackend(
         matchesAttributeRequirements(slaveOfferConstraints, offerAttributes)
       }
 
-      unmatchedOffers.foreach { offer =>
-        declineOffer(d, offer, "unmet constraints", rejectOfferDurationForUnmetConstraints)
-      }
-
+      declineUnmatchedOffers(d, unmatchedOffers)
       handleMatchedOffers(d, matchedOffers)
     }
   }
 
-  private def declineOffer(d: SchedulerDriver, offer: Offer, reason: String, refuseSeconds: Long) {
+  private def declineUnmatchedOffers(d: SchedulerDriver, offers: Buffer[Offer]): Unit = {
+    offers.foreach { offer =>
+      declineOffer(d, offer, Some("unmet constraints"),
+        Some(rejectOfferDurationForUnmetConstraints))
+    }
+  }
+
+  private def declineOffer(d: SchedulerDriver, offer: Offer, reason: Option[String] = None,
+      refuseSeconds: Option[Long] = None): Unit = {
+
     val id = offer.getId.getValue
     val offerAttributes = toAttributeMap(offer.getAttributesList)
     val mem = getResource(offer.getResourcesList, "mem")
     val cpus = getResource(offer.getResourcesList, "cpus")
 
-    logDebug(s"Declining offer ($reason): $id with attributes: $offerAttributes mem: $mem"
-      + s" cpu: $cpus for $rejectOfferDurationForUnmetConstraints seconds")
+    logDebug(s"Declining offer: $id with attributes: $offerAttributes mem: $mem"
+      + s" cpu: $cpus for $refuseSeconds seconds" + reason.fold("")(r => s" (reason: $r)"))
 
-    val filters = Filters.newBuilder().setRefuseSeconds(refuseSeconds).build()
-    d.declineOffer(offer.getId, filters)
+    refuseSeconds match {
+      case Some(seconds) =>
+        val filters = Filters.newBuilder().setRefuseSeconds(seconds).build()
+        d.declineOffer(offer.getId, filters)
+      case _ => d.declineOffer(offer.getId)
+    }
   }
 
   /**
@@ -331,12 +341,10 @@ private[spark] class CoarseMesosSchedulerBackend(
           Collections.singleton(offer.getId),
           offerTasks.asJava)
       } else if (totalCoresAcquired >= maxCores) {
-        declineOffer(d, offer, "reached max cores", rejectOfferDurationForReachedMaxCores)
+        declineOffer(d, offer, Some("reached max cores"),
+          Some(rejectOfferDurationForReachedMaxCores))
       } else {
-        logDebug(s"Declining offer: $id with attributes: $offerAttributes " +
-          s"mem: $offerMem cpu: $offerCpus")
-
-        d.declineOffer(offer.getId)
+        declineOffer(d, offer)
       }
     }
   }
