@@ -649,13 +649,8 @@ class SparkSubmitSuite
   // NOTE: This is an expensive operation in terms of time (10 seconds+). Use sparingly.
   private def runSparkSubmit(args: Seq[String]): Unit = {
     val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
-    val sparkSubmit = if (Utils.isWindows) {
-      Seq(new File("..\\bin\\spark-submit.cmd").getAbsolutePath) ++ args
-    } else {
-      Seq("./bin/spark-submit") ++ args
-    }
     val process = Utils.executeCommand(
-      sparkSubmit,
+      Seq("./bin/spark-submit") ++ args,
       new File(sparkHome),
       Map("SPARK_TESTING" -> "1", "SPARK_HOME" -> sparkHome))
 

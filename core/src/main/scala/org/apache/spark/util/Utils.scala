@@ -1014,17 +1014,7 @@ private[spark] object Utils extends Logging {
    * Check to see if file is a symbolic link.
    */
   def isSymlink(file: File): Boolean = {
-    if (file == null) throw new NullPointerException("File must not be null")
-    if (isWindows) {
-      return Files.isSymbolicLink(Paths.get(file.toURI))
-    }
-    val fileInCanonicalDir = if (file.getParent() == null) {
-      file
-    } else {
-      new File(file.getParentFile().getCanonicalFile(), file.getName())
-    }
-
-    !fileInCanonicalDir.getCanonicalFile().equals(fileInCanonicalDir.getAbsoluteFile())
+    return Files.isSymbolicLink(Paths.get(file.toURI))
   }
 
   /**
