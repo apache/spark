@@ -2093,7 +2093,8 @@ test_that("gapply() on a DataFrame", {
   actual <- collect(df1)
   expect_identical(actual, expected)
 
-  # Check the sum of second column by grouping on the first column
+  # Computes the sum of second column by grouping on the first column and checks
+  # if the sum is larger than 2
   schema <- structType(structField("a", "integer"), structField("e", "boolean"))
   df2 <- gapply(
     df,
@@ -2105,7 +2106,7 @@ test_that("gapply() on a DataFrame", {
   expected <- c(TRUE, TRUE)
   expect_identical(actual, expected)
 
-  # Compute the arithmetic mean of the second column by grouping
+  # Computes the arithmetic mean of the second column by grouping
   # on the first column. Output the groupping value and the average.
   schema <-  structType(structField("a", "integer"), structField("avg", "double"))
   df3 <- gapply(
