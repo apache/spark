@@ -471,11 +471,20 @@ class SparkSession(object):
             """Sets a config option. Options set using this method are automatically propagated to
             both :class:`SparkConf` and :class:`SparkSession`'s own configuration.
 
+            For an existing SparkConf, use `conf` parameter.
+            >>> from pyspark.conf import SparkConf
+            >>> SparkSession.builder().config(conf=SparkConf())
+            <pyspark.sql.session.Builder object at ...>
+
+            For a (key, value) pair, you can omit parameter names.
+            >>> SparkSession.builder().config("spark.some.config.option", "some-value")
+            <pyspark.sql.session.Builder object at ...>
+
             :param key: a key name string for configuration property
             :param value: a value for configuration property
             :param conf: an instance of :class:`SparkConf`
             """
-            with SparkSession.Builder._lock:
+            with self._lock:
                 if conf is None:
                     self._options[key] = str(value)
                 else:
@@ -513,7 +522,7 @@ class SparkSession(object):
             """Gets an existing :class:`SparkSession` or, if there is no existing one, creates a new
             one based on the options set in this builder.
             """
-            with SparkSession.Builder._lock:
+            with self._lock:
                 from pyspark.conf import SparkConf
                 from pyspark.context import SparkContext
                 from pyspark.sql.context import SQLContext
