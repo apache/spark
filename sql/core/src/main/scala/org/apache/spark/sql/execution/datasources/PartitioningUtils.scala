@@ -95,7 +95,8 @@ private[sql] object PartitioningUtils {
 
     // We create pairs of (path -> path's partition value) here
     // If the corresponding partition value is None, the pair will be skipped
-    val pathsWithPartitionValues = paths.zip(partitionValues).flatMap(x => x._2.map(x._1 -> _))
+    val pathsWithPartitionValues =
+      paths.zip(partitionValues).flatMap(x => x._2.map(x._1 -> _))
 
     if (pathsWithPartitionValues.isEmpty) {
       // This dataset is not partitioned.
@@ -184,10 +185,8 @@ private[sql] object PartitioningUtils {
         return (None, None)
       }
 
-      if (basePaths.contains(currentPath) ||
-        basePaths.exists(_.toString.startsWith(currentPath.toString))) {
+      if (basePaths.contains(currentPath)) {
         // If the currentPath is one of base paths. We should stop.
-        // If the currentPath is the basis of one of base paths. We should stop.
         finished = true
       } else {
         // Let's say currentPath is a path of "/table/a=1/", currentPath.getName will give us a=1.
