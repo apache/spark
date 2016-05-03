@@ -121,7 +121,7 @@ class Accumulable[R, T] private (
    * The typical use of this method is to directly mutate the local value, eg., to add
    * an element to a Set.
    */
-  def localValue: R = newAcc.localValue
+  def localValue: R = newAcc.value
 
   /**
    * Set the accumulator's value; only allowed on driver.
