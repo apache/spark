@@ -95,8 +95,7 @@ private[sql] object PartitioningUtils {
 
     // We create pairs of (path -> path's partition value) here
     // If the corresponding partition value is None, the pair will be skipped
-    val pathsWithPartitionValues =
-      paths.zip(partitionValues).flatMap(x => x._2.map(x._1 -> _))
+    val pathsWithPartitionValues = paths.zip(partitionValues).flatMap(x => x._2.map(x._1 -> _))
 
     if (pathsWithPartitionValues.isEmpty) {
       // This dataset is not partitioned.
