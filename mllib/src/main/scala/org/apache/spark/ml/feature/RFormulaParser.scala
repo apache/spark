@@ -20,7 +20,7 @@ package org.apache.spark.ml.feature
 import scala.collection.mutable
 import scala.util.parsing.combinator.RegexParsers
 
-import org.apache.spark.mllib.linalg.VectorUDT
+import org.apache.spark.ml.linalg.VectorUDT
 import org.apache.spark.sql.types._
 
 /**

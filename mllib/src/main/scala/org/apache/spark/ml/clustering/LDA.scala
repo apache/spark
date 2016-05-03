@@ -22,6 +22,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.linalg.{Matrix, Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasCheckpointInterval, HasFeaturesCol, HasMaxIter, HasSeed}
 import org.apache.spark.ml.util._
@@ -30,7 +31,8 @@ import org.apache.spark.mllib.clustering.{DistributedLDAModel => OldDistributedL
   LDAOptimizer => OldLDAOptimizer, LocalLDAModel => OldLocalLDAModel,
   OnlineLDAOptimizer => OldOnlineLDAOptimizer}
 import org.apache.spark.mllib.impl.PeriodicCheckpointer
-import org.apache.spark.mllib.linalg.{Matrix, Vector, Vectors, VectorUDT}
+import org.apache.spark.mllib.linalg.{Matrices => OldMatrices, Vector => OldVector,
+  Vectors => OldVectors}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions.{col, monotonicallyIncreasingId, udf}
@@ -425,7 +427,7 @@ sealed abstract class LDAModel private[ml] (
    * then this returns the fixed (given) value for the [[docConcentration]] parameter.
    */
   @Since("1.6.0")
-  def estimatedDocConcentration: Vector = getModel.docConcentration
+  def estimatedDocConcentration: Vector = getModel.docConcentration.asML
 
   /**
    * Inferred topics, where each topic is represented by a distribution over terms.
@@ -437,7 +439,7 @@ sealed abstract class LDAModel private[ml] (
    *          collecting a large amount of data to the driver (on the order of vocabSize x k).
    */
   @Since("1.6.0")
-  def topicsMatrix: Matrix = oldLocalModel.topicsMatrix
+  def topicsMatrix: Matrix = oldLocalModel.topicsMatrix.asML
 
   /** Indicates whether this instance is of type [[DistributedLDAModel]] */
   @Since("1.6.0")
@@ -551,8 +553,8 @@ object LocalLDAModel extends MLReadable[LocalLDAModel] {
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
       val oldModel = instance.oldLocalModel
-      val data = Data(instance.vocabSize, oldModel.topicsMatrix, oldModel.docConcentration,
-        oldModel.topicConcentration, oldModel.gammaShape)
+      val data = Data(instance.vocabSize, oldModel.topicsMatrix.asML,
+        oldModel.docConcentration.asML, oldModel.topicConcentration, oldModel.gammaShape)
       val dataPath = new Path(path, "data").toString
       sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }
@@ -574,8 +576,8 @@ object LocalLDAModel extends MLReadable[LocalLDAModel] {
       val docConcentration = data.getAs[Vector](2)
       val topicConcentration = data.getAs[Double](3)
       val gammaShape = data.getAs[Double](4)
-      val oldModel = new OldLocalLDAModel(topicsMatrix, docConcentration, topicConcentration,
-        gammaShape)
+      val oldModel = new OldLocalLDAModel(OldMatrices.fromML(topicsMatrix),
+        OldVectors.fromML(docConcentration), topicConcentration, gammaShape)
       val model = new LocalLDAModel(metadata.uid, vocabSize, oldModel, sparkSession)
       DefaultParamsReader.getAndSetParams(model, metadata)
       model
@@ -844,7 +846,7 @@ class LDA @Since("1.6.0") (
     transformSchema(dataset.schema, logging = true)
     val oldLDA = new OldLDA()
       .setK($(k))
-      .setDocConcentration(getOldDocConcentration)
+      .setDocConcentration(OldVectors.fromML(getOldDocConcentration))
       .setTopicConcentration(getOldTopicConcentration)
       .setMaxIterations($(maxIter))
       .setSeed($(seed))
@@ -872,13 +874,13 @@ class LDA @Since("1.6.0") (
 private[clustering] object LDA extends DefaultParamsReadable[LDA] {
 
   /** Get dataset for spark.mllib LDA */
-  def getOldDataset(dataset: Dataset[_], featuresCol: String): RDD[(Long, Vector)] = {
+  def getOldDataset(dataset: Dataset[_], featuresCol: String): RDD[(Long, OldVector)] = {
     dataset
       .withColumn("docId", monotonicallyIncreasingId())
       .select("docId", featuresCol)
       .rdd
       .map { case Row(docId: Long, features: Vector) =>
-        (docId, features)
+        (docId, OldVectors.fromML(features))
       }
   }
 

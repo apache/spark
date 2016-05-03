@@ -22,11 +22,12 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param.{IntParam, Param, ParamMap, Params}
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.clustering.{KMeans => MLlibKMeans, KMeansModel => MLlibKMeansModel}
-import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
+import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{IntegerType, StructType}
@@ -116,10 +117,11 @@ class KMeansModel private[ml] (
     validateAndTransformSchema(schema)
   }
 
-  private[clustering] def predict(features: Vector): Int = parentModel.predict(features)
+  private[clustering] def predict(features: Vector): Int =
+    parentModel.predict(OldVectors.fromML(features))
 
   @Since("1.5.0")
-  def clusterCenters: Array[Vector] = parentModel.clusterCenters
+  def clusterCenters: Array[Vector] = parentModel.clusterCenters.map(_.asML)
 
   /**
    * Return the K-means cost (sum of squared distances of points to their nearest center) for this
@@ -129,7 +131,9 @@ class KMeansModel private[ml] (
   @Since("2.0.0")
   def computeCost(dataset: Dataset[_]): Double = {
     SchemaUtils.checkColumnType(dataset.schema, $(featuresCol), new VectorUDT)
-    val data = dataset.select(col($(featuresCol))).rdd.map { case Row(point: Vector) => point }
+    val data = dataset.select(col($(featuresCol))).rdd.map { case Row(point: Vector) =>
+      OldVectors.fromML(point)
+    }
     parentModel.computeCost(data)
   }
 
@@ -202,7 +206,8 @@ object KMeansModel extends MLReadable[KMeansModel] {
       val dataPath = new Path(path, "data").toString
       val data: Dataset[Data] = sqlContext.read.parquet(dataPath).as[Data]
       val clusterCenters = data.collect().sortBy(_.clusterIdx).map(_.clusterCenter)
-      val model = new KMeansModel(metadata.uid, new MLlibKMeansModel(clusterCenters))
+      val model = new KMeansModel(metadata.uid,
+        new MLlibKMeansModel(clusterCenters.map(OldVectors.fromML)))
 
       DefaultParamsReader.getAndSetParams(model, metadata)
       model
@@ -269,7 +274,9 @@ class KMeans @Since("1.5.0") (
 
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): KMeansModel = {
-    val rdd = dataset.select(col($(featuresCol))).rdd.map { case Row(point: Vector) => point }
+    val rdd = dataset.select(col($(featuresCol))).rdd.map { case Row(point: Vector) =>
+      OldVectors.fromML(point)
+    }
 
     val instr = Instrumentation.create(this, rdd)
     instr.logParams(featuresCol, predictionCol, k, initMode, initSteps, maxIter, seed, tol)
