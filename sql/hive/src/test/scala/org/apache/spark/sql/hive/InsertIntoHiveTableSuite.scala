@@ -232,7 +232,7 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
       """.stripMargin)
 
     val overwrittenFiles = tmpDir.listFiles()
-      .filter(f => f.isFile && f.getName.endsWith(".crc"))
+      .filter(f => f.isFile && !f.getName.endsWith(".crc"))
       .sortBy(_.getName)
     val overwrittenFilesWithoutEmpty = overwrittenFiles.filter(_.length > 0)
 
