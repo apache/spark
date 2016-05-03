@@ -181,7 +181,8 @@ private[joins] class UnsafeHashedRelation(
     write(out.writeInt, out.writeLong, out.write)
   }
 
-  private def write(writeInt: (Int) => Unit,
+  private def write(
+      writeInt: (Int) => Unit,
       writeLong: (Long) => Unit,
       writeBuffer: (Array[Byte], Int, Int) => Unit) : Unit = {
     writeInt(numFields)
@@ -348,9 +349,7 @@ private[joins] object UnsafeHashedRelation {
  *
  * see http://java-performance.info/implementing-world-fastest-java-int-to-int-hash-map/
  */
-private[execution] final class LongToUnsafeRowMap(
-    val mm: TaskMemoryManager,
-    capacity: Int)
+private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, capacity: Int)
   extends MemoryConsumer(mm) with Externalizable with KryoSerializable {
 
   // Whether the keys are stored in dense mode or not.
