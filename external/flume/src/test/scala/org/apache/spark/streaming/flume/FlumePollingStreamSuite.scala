@@ -47,13 +47,18 @@ class FlumePollingStreamSuite extends SparkFunSuite with BeforeAndAfter with Log
     .set("spark.driver.allowMultipleContexts", "true")
 
   val utils = new PollingFlumeTestUtils
-
+  var sscCopy: StreamingContext = null
   test("flume polling test") {
     testMultipleTimes(testFlumePolling)
   }
 
   test("flume polling test multiple hosts") {
     testMultipleTimes(testFlumePollingMultipleHost)
+  }
+
+  after {
+    // stop underlying sparkcontext, when 'sscCopy' is the last ssc of this suite
+    sscCopy.stop()
   }
 
   /**
@@ -124,7 +129,9 @@ class FlumePollingStreamSuite extends SparkFunSuite with BeforeAndAfter with Log
         utils.assertOutput(headers.asJava, bodies.asJava)
       }
     } finally {
+      // here stop ssc only, but not underlying sparkcontext
       ssc.stop(false)
+      sscCopy = ssc
     }
   }
 
