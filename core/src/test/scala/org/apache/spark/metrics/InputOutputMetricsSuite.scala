@@ -61,7 +61,8 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
     pw.close()
 
     // Path to tmpFile
-    tmpFilePath = Utils.resolveURI(tmpFile.getAbsolutePath).toString  }
+    tmpFilePath = Utils.resolveURI(tmpFile.getAbsolutePath).toString
+  }
 
   after {
     Utils.deleteRecursively(tmpDir)

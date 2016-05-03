@@ -418,7 +418,8 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     if (Utils.isWindows) {
       // It seems "#" is not valid for a local file path, and it will be escaped by the File.toURI
       assertResolves("""hdfs:/jar1,file:/jar2,jar3,C:\pi.py#py.pi,C:\path to\jar4""",
-        s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:/C:/pi.py%23py.pi,file:/C:/path%20to/jar4")    }
+        s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:/C:/pi.py%23py.pi,file:/C:/path%20to/jar4")
+    }
   }
 
   test("nonLocalPaths") {
