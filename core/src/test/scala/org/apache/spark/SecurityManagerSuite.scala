@@ -84,7 +84,6 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
     // BogusServiceProvider cannot be loaded and an error is logged returning an empty group set
     assert(securityManager3.checkUIViewPermissions("user1") === false)
     assert(securityManager3.checkUIViewPermissions("user2") === false)
-
   }
 
   test("set security with api") {
@@ -127,7 +126,6 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
     assert(securityManager.checkUIViewPermissions("user1") === false)
     assert(securityManager.checkUIViewPermissions("user2") === false)
 
-
     val conf2 = new SparkConf
     conf.set("spark.user.groups.mapping", "BogusServiceProvider")
 
@@ -143,8 +141,6 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
     securityManager2.setViewAclsGroups("")
     assert(securityManager.checkUIViewPermissions("user1") === false)
     assert(securityManager.checkUIViewPermissions("user2") === false)
-
-
   }
 
   test("set security modify acls") {
