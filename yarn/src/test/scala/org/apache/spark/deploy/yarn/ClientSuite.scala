@@ -147,7 +147,7 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
 
     val tempDir = Utils.createTempDir()
     try {
-      client.prepareLocalResources(tempDir.getAbsolutePath(), Nil)
+      client.prepareLocalResources(new Path(tempDir.getAbsolutePath()), Nil)
       sparkConf.get(APP_JAR) should be (Some(USER))
 
       // The non-local path should be propagated by name only, since it will end up in the app's
@@ -238,14 +238,17 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
     val client = createClient(sparkConf)
 
     val tempDir = Utils.createTempDir()
-    client.prepareLocalResources(tempDir.getAbsolutePath(), Nil)
+    client.prepareLocalResources(new Path(tempDir.getAbsolutePath()), Nil)
 
     assert(sparkConf.get(SPARK_JARS) ===
       Some(Seq(s"local:${jar4.getPath()}", s"local:${single.getAbsolutePath()}/*")))
 
-    verify(client).copyFileToRemote(any(classOf[Path]), meq(new Path(jar1.toURI())), anyShort())
-    verify(client).copyFileToRemote(any(classOf[Path]), meq(new Path(jar2.toURI())), anyShort())
-    verify(client).copyFileToRemote(any(classOf[Path]), meq(new Path(jar3.toURI())), anyShort())
+    verify(client).copyFileToRemote(any(classOf[Path]), meq(new Path(jar1.toURI())), anyShort(),
+      anyBoolean(), any())
+    verify(client).copyFileToRemote(any(classOf[Path]), meq(new Path(jar2.toURI())), anyShort(),
+      anyBoolean(), any())
+    verify(client).copyFileToRemote(any(classOf[Path]), meq(new Path(jar3.toURI())), anyShort(),
+      anyBoolean(), any())
 
     val cp = classpath(client)
     cp should contain (buildPath(PWD, LOCALIZED_LIB_DIR, "*"))
@@ -260,14 +263,15 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
 
     val sparkConf = new SparkConf().set(SPARK_ARCHIVE, archive.getPath())
     val client = createClient(sparkConf)
-    client.prepareLocalResources(temp.getAbsolutePath(), Nil)
+    client.prepareLocalResources(new Path(temp.getAbsolutePath()), Nil)
 
-    verify(client).copyFileToRemote(any(classOf[Path]), meq(new Path(archive.toURI())), anyShort())
+    verify(client).copyFileToRemote(any(classOf[Path]), meq(new Path(archive.toURI())), anyShort(),
+      anyBoolean(), any())
     classpath(client) should contain (buildPath(PWD, LOCALIZED_LIB_DIR, "*"))
 
     sparkConf.set(SPARK_ARCHIVE, LOCAL_SCHEME + ":" + archive.getPath())
     intercept[IllegalArgumentException] {
-      client.prepareLocalResources(temp.getAbsolutePath(), Nil)
+      client.prepareLocalResources(new Path(temp.getAbsolutePath()), Nil)
     }
   }
 
@@ -280,8 +284,7 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
 
     val sparkConf = new SparkConfWithEnv(Map("SPARK_HOME" -> temp.getAbsolutePath()))
     val client = createClient(sparkConf)
-    client.prepareLocalResources(temp.getAbsolutePath(), Nil)
-    verify(client).copyFileToRemote(any(classOf[Path]), meq(new Path(jar.toURI())), anyShort())
+    client.prepareLocalResources(new Path(temp.getAbsolutePath()), Nil)
     classpath(client) should contain (buildPath(PWD, LOCALIZED_LIB_DIR, "*"))
   }
 
@@ -290,13 +293,14 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
     val jarsDir = new File(libs, "jars")
     assert(jarsDir.mkdir())
     new FileOutputStream(new File(libs, "RELEASE")).close()
-    val userLibs = Utils.createTempDir()
+    val userLib1 = Utils.createTempDir()
+    val userLib2 = Utils.createTempDir()
 
     val jar1 = TestUtils.createJarWithFiles(Map(), jarsDir)
-    val jar2 = TestUtils.createJarWithFiles(Map(), userLibs)
+    val jar2 = TestUtils.createJarWithFiles(Map(), userLib1)
     // Copy jar2 to jar3 with same name
     val jar3 = {
-      val target = new File(userLibs, new File(jar1.toURI).getName)
+      val target = new File(userLib2, new File(jar2.toURI).getName)
       val input = new FileInputStream(jar2.getPath)
       val output = new FileOutputStream(target)
       Utils.copyStream(input, output, closeStreams = true)
@@ -308,9 +312,9 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
 
     val client = createClient(sparkConf)
     val tempDir = Utils.createTempDir()
-    client.prepareLocalResources(tempDir.getAbsolutePath(), Nil)
+    client.prepareLocalResources(new Path(tempDir.getAbsolutePath()), Nil)
 
-    // Only jar2 will be added to SECONDARY_JARS, jar3 which has the same name with jar1 will be
+    // Only jar2 will be added to SECONDARY_JARS, jar3 which has the same name with jar2 will be
     // ignored.
     sparkConf.get(SECONDARY_JARS) should be (Some(Seq(new File(jar2.toURI).getName)))
   }
@@ -382,7 +386,7 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
     val clientArgs = new ClientArguments(args)
     val client = spy(new Client(clientArgs, conf, sparkConf))
     doReturn(new Path("/")).when(client).copyFileToRemote(any(classOf[Path]),
-      any(classOf[Path]), anyShort())
+      any(classOf[Path]), anyShort(), anyBoolean(), any())
     client
   }
 

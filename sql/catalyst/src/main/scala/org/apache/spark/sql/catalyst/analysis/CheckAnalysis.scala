@@ -27,7 +27,7 @@ import org.apache.spark.sql.types._
 /**
  * Throws user facing errors when passed invalid queries that fail to analyze.
  */
-trait CheckAnalysis {
+trait CheckAnalysis extends PredicateHelper {
 
   /**
    * Override to provide additional checks for correct analysis.
@@ -52,7 +52,7 @@ trait CheckAnalysis {
       case p if p.analyzed => // Skip already analyzed sub-plans
 
       case u: UnresolvedRelation =>
-        u.failAnalysis(s"Table or View not found: ${u.tableIdentifier}")
+        u.failAnalysis(s"Table or view not found: ${u.tableIdentifier}")
 
       case operator: LogicalPlan =>
         operator transformExpressionsUp {
@@ -102,6 +102,35 @@ trait CheckAnalysis {
               case None => w
             }
 
+          case s @ ScalarSubquery(query, conditions, _) if conditions.nonEmpty =>
+            // Make sure we are using equi-joins.
+            conditions.foreach {
+              case _: EqualTo | _: EqualNullSafe => // ok
+              case e => failAnalysis(
+                s"The correlated scalar subquery can only contain equality predicates: $e")
+            }
+
+            // Make sure correlated scalar subqueries contain one row for every outer row by
+            // enforcing that they are aggregates which contain exactly one aggregate expressions.
+            // The analyzer has already checked that subquery contained only one output column, and
+            // added all the grouping expressions to the aggregate.
+            def checkAggregate(a: Aggregate): Unit = {
+              val aggregates = a.expressions.flatMap(_.collect {
+                case a: AggregateExpression => a
+              })
+              if (aggregates.isEmpty) {
+                failAnalysis("The output of a correlated scalar subquery must be aggregated")
+              }
+            }
+
+            query match {
+              case a: Aggregate => checkAggregate(a)
+              case Filter(_, a: Aggregate) => checkAggregate(a)
+              case Project(_, a: Aggregate) => checkAggregate(a)
+              case Project(_, Filter(_, a: Aggregate)) => checkAggregate(a)
+              case fail => failAnalysis(s"Correlated scalar subqueries must be Aggregated: $fail")
+            }
+            s
         }
 
         operator match {
@@ -109,6 +138,15 @@ trait CheckAnalysis {
             failAnalysis(
               s"filter expression '${f.condition.sql}' " +
                 s"of type ${f.condition.dataType.simpleString} is not a boolean.")
+
+          case f @ Filter(condition, child) =>
+            splitConjunctivePredicates(condition).foreach {
+              case _: PredicateSubquery | Not(_: PredicateSubquery) =>
+              case e if PredicateSubquery.hasNullAwarePredicateWithinNot(e) =>
+                failAnalysis(s"Null-aware predicate sub-queries cannot be used in nested" +
+                  s" conditions: $e")
+              case e =>
+            }
 
           case j @ Join(_, _, UsingJoin(_, cols), _) =>
             val from = operator.inputSet.map(_.name).mkString(", ")
@@ -209,6 +247,16 @@ trait CheckAnalysis {
                 | but one table has '${firstError.output.length}' columns and another table has
                 | '${s.children.head.output.length}' columns""".stripMargin)
 
+          case p if p.expressions.exists(ScalarSubquery.hasCorrelatedScalarSubquery) =>
+            p match {
+              case _: Filter | _: Aggregate | _: Project => // Ok
+              case other => failAnalysis(
+                s"Correlated scalar sub-queries can only be used in a Filter/Aggregate/Project: $p")
+            }
+
+          case p if p.expressions.exists(PredicateSubquery.hasPredicateSubquery) =>
+            failAnalysis(s"Predicate sub-queries can only be used in a Filter: $p")
+
           case _ => // Fallbacks to the following checks
         }
 
@@ -242,7 +290,16 @@ trait CheckAnalysis {
                  |Failure when resolving conflicting references in Intersect:
                  |$plan
                  |Conflicting attributes: ${conflictingAttributes.mkString(",")}
-                 |""".stripMargin)
+               """.stripMargin)
+
+          case e: Except if !e.duplicateResolved =>
+            val conflictingAttributes = e.left.outputSet.intersect(e.right.outputSet)
+            failAnalysis(
+              s"""
+                 |Failure when resolving conflicting references in Except:
+                 |$plan
+                 |Conflicting attributes: ${conflictingAttributes.mkString(",")}
+               """.stripMargin)
 
           case o if !o.resolved =>
             failAnalysis(

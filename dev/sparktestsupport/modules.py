@@ -151,6 +151,18 @@ hive_thriftserver = Module(
 )
 
 
+hivecontext_compatibility = Module(
+    name="hivecontext-compatibility",
+    dependencies=[hive],
+    source_file_regexes=[
+        "sql/hivecontext-compatibility/",
+    ],
+    sbt_test_goals=[
+        "hivecontext-compatibility/test"
+    ]
+)
+
+
 sketch = Module(
     name="sketch",
     dependencies=[],
@@ -322,6 +334,9 @@ pyspark_sql = Module(
     python_test_goals=[
         "pyspark.sql.types",
         "pyspark.sql.context",
+        "pyspark.sql.session",
+        "pyspark.sql.conf",
+        "pyspark.sql.catalog",
         "pyspark.sql.column",
         "pyspark.sql.dataframe",
         "pyspark.sql.group",

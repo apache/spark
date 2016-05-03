@@ -24,8 +24,9 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete, Count}
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
 
@@ -110,7 +111,8 @@ class AnalysisErrorSuite extends AnalysisTest {
     "scalar subquery with 2 columns",
      testRelation.select(
        (ScalarSubquery(testRelation.select('a, dateLit.as('b))) + Literal(1)).as('a)),
-     "Scalar subquery must return only one column, but got 2" :: Nil)
+       "The number of columns in the subquery (2)" ::
+       "does not match the required number of columns (1)":: Nil)
 
   errorTest(
     "scalar subquery with no column",
@@ -443,5 +445,59 @@ class AnalysisErrorSuite extends AnalysisTest {
           AttributeReference("c", MapType(IntegerType, StringType))(exprId = ExprId(4)))))
 
     assertAnalysisError(plan2, "map type expression `a` cannot be used in join conditions" :: Nil)
+  }
+
+  test("PredicateSubQuery is used outside of a filter") {
+    val a = AttributeReference("a", IntegerType)()
+    val b = AttributeReference("b", IntegerType)()
+    val plan = Project(
+      Seq(a, Alias(In(a, Seq(ListQuery(LocalRelation(b)))), "c")()),
+      LocalRelation(a))
+    assertAnalysisError(plan, "Predicate sub-queries can only be used in a Filter" :: Nil)
+  }
+
+  test("PredicateSubQuery is used is a nested condition") {
+    val a = AttributeReference("a", IntegerType)()
+    val b = AttributeReference("b", IntegerType)()
+    val c = AttributeReference("c", BooleanType)()
+    val plan1 = Filter(Cast(Not(In(a, Seq(ListQuery(LocalRelation(b))))), BooleanType),
+      LocalRelation(a))
+    assertAnalysisError(plan1,
+      "Null-aware predicate sub-queries cannot be used in nested conditions" :: Nil)
+
+    val plan2 = Filter(Or(Not(In(a, Seq(ListQuery(LocalRelation(b))))), c), LocalRelation(a, c))
+    assertAnalysisError(plan2,
+      "Null-aware predicate sub-queries cannot be used in nested conditions" :: Nil)
+  }
+
+  test("PredicateSubQuery correlated predicate is nested in an illegal plan") {
+    val a = AttributeReference("a", IntegerType)()
+    val b = AttributeReference("b", IntegerType)()
+    val c = AttributeReference("c", IntegerType)()
+
+    val plan1 = Filter(
+      Exists(
+        Join(
+          LocalRelation(b),
+          Filter(EqualTo(OuterReference(a), c), LocalRelation(c)),
+          LeftOuter,
+          Option(EqualTo(b, c)))),
+      LocalRelation(a))
+    assertAnalysisError(plan1, "Accessing outer query column is not allowed in" :: Nil)
+
+    val plan2 = Filter(
+      Exists(
+        Join(
+          Filter(EqualTo(OuterReference(a), c), LocalRelation(c)),
+          LocalRelation(b),
+          RightOuter,
+          Option(EqualTo(b, c)))),
+      LocalRelation(a))
+    assertAnalysisError(plan2, "Accessing outer query column is not allowed in" :: Nil)
+
+    val plan3 = Filter(
+      Exists(Union(LocalRelation(b), Filter(EqualTo(OuterReference(a), c), LocalRelation(c)))),
+      LocalRelation(a))
+    assertAnalysisError(plan3, "Accessing outer query column is not allowed in" :: Nil)
   }
 }

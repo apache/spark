@@ -991,7 +991,7 @@ case class ScalaUDF(
 
   override def doGenCode(
       ctx: CodegenContext,
-      ev: ExprCode): String = {
+      ev: ExprCode): ExprCode = {
 
     ctx.references += this
 
@@ -1042,7 +1042,7 @@ case class ScalaUDF(
       s"(${ctx.boxedType(dataType)})${catalystConverterTerm}" +
         s".apply($funcTerm.apply(${funcArguments.mkString(", ")}));"
 
-    s"""
+    ev.copy(code = s"""
       $evalCode
       ${converters.mkString("\n")}
       $callFunc
@@ -1051,8 +1051,7 @@ case class ScalaUDF(
       ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
       if (!${ev.isNull}) {
         ${ev.value} = $resultTerm;
-      }
-    """
+      }""")
   }
 
   private[this] val converter = CatalystTypeConverters.createToCatalystConverter(dataType)

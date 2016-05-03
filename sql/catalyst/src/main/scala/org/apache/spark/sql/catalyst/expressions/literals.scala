@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
+import java.util.Objects
 
 import org.json4s.JsonAST._
 
@@ -170,6 +171,8 @@ case class Literal protected (value: Any, dataType: DataType)
 
   override def toString: String = if (value != null) value.toString else "null"
 
+  override def hashCode(): Int = 31 * (31 * Objects.hashCode(dataType)) + Objects.hashCode(value)
+
   override def equals(other: Any): Boolean = other match {
     case o: Literal =>
       dataType.equals(o.dataType) &&
@@ -191,17 +194,17 @@ case class Literal protected (value: Any, dataType: DataType)
 
   override def eval(input: InternalRow): Any = value
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // change the isNull and primitive to consts, to inline them
     if (value == null) {
       ev.isNull = "true"
-      s"final ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};"
+      ev.copy(s"final ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};")
     } else {
       dataType match {
         case BooleanType =>
           ev.isNull = "false"
           ev.value = value.toString
-          ""
+          ev.copy("")
         case FloatType =>
           val v = value.asInstanceOf[Float]
           if (v.isNaN || v.isInfinite) {
@@ -209,7 +212,7 @@ case class Literal protected (value: Any, dataType: DataType)
           } else {
             ev.isNull = "false"
             ev.value = s"${value}f"
-            ""
+            ev.copy("")
           }
         case DoubleType =>
           val v = value.asInstanceOf[Double]
@@ -218,20 +221,20 @@ case class Literal protected (value: Any, dataType: DataType)
           } else {
             ev.isNull = "false"
             ev.value = s"${value}D"
-            ""
+            ev.copy("")
           }
         case ByteType | ShortType =>
           ev.isNull = "false"
           ev.value = s"(${ctx.javaType(dataType)})$value"
-          ""
+          ev.copy("")
         case IntegerType | DateType =>
           ev.isNull = "false"
           ev.value = value.toString
-          ""
+          ev.copy("")
         case TimestampType | LongType =>
           ev.isNull = "false"
           ev.value = s"${value}L"
-          ""
+          ev.copy("")
         // eval() version may be faster for non-primitive types
         case other =>
           super[CodegenFallback].doGenCode(ctx, ev)

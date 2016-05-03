@@ -24,10 +24,10 @@ import scala.collection.mutable.{ArrayBuffer, ArrayBuilder => MArrayBuilder, Has
 import breeze.linalg.{CSCMatrix => BSM, DenseMatrix => BDM, Matrix => BM}
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
-import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.annotation.Since
+import org.apache.spark.ml.{linalg => newlinalg}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
-import org.apache.spark.sql.catalyst.util.GenericArrayData
+import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, UnsafeArrayData}
 import org.apache.spark.sql.types._
 
 /**
@@ -158,6 +158,12 @@ sealed trait Matrix extends Serializable {
    */
   @Since("1.5.0")
   def numActives: Int
+
+  /**
+   * Convert this matrix to the new mllib-local representation.
+   * This does NOT copy the data; it copies references.
+   */
+  private[spark] def asML: newlinalg.Matrix
 }
 
 private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
@@ -187,9 +193,9 @@ private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
         row.setByte(0, 0)
         row.setInt(1, sm.numRows)
         row.setInt(2, sm.numCols)
-        row.update(3, new GenericArrayData(sm.colPtrs.map(_.asInstanceOf[Any])))
-        row.update(4, new GenericArrayData(sm.rowIndices.map(_.asInstanceOf[Any])))
-        row.update(5, new GenericArrayData(sm.values.map(_.asInstanceOf[Any])))
+        row.update(3, UnsafeArrayData.fromPrimitiveArray(sm.colPtrs))
+        row.update(4, UnsafeArrayData.fromPrimitiveArray(sm.rowIndices))
+        row.update(5, UnsafeArrayData.fromPrimitiveArray(sm.values))
         row.setBoolean(6, sm.isTransposed)
 
       case dm: DenseMatrix =>
@@ -198,7 +204,7 @@ private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
         row.setInt(2, dm.numCols)
         row.setNullAt(3)
         row.setNullAt(4)
-        row.update(5, new GenericArrayData(dm.values.map(_.asInstanceOf[Any])))
+        row.update(5, UnsafeArrayData.fromPrimitiveArray(dm.values))
         row.setBoolean(6, dm.isTransposed)
     }
     row
@@ -419,6 +425,10 @@ class DenseMatrix @Since("1.3.0") (
       }
     }
   }
+
+  private[spark] override def asML: newlinalg.DenseMatrix = {
+    new newlinalg.DenseMatrix(numRows, numCols, values, isTransposed)
+  }
 }
 
 /**
@@ -515,6 +525,11 @@ object DenseMatrix {
     }
     matrix
   }
+
+  /** Convert new linalg type to spark.mllib type.  Light copy; only copies references */
+  private[spark] def fromML(m: newlinalg.DenseMatrix): DenseMatrix = {
+    new DenseMatrix(m.numRows, m.numCols, m.values, m.isTransposed)
+  }
 }
 
 /**
@@ -589,6 +604,8 @@ class SparseMatrix @Since("1.3.0") (
     case m: Matrix => toBreeze == m.toBreeze
     case _ => false
   }
+
+  override def hashCode(): Int = toBreeze.hashCode
 
   private[mllib] def toBreeze: BM[Double] = {
      if (!isTransposed) {
@@ -720,6 +737,10 @@ class SparseMatrix @Since("1.3.0") (
         new SparseVector(numRows, ii, vv)
       }
     }
+  }
+
+  private[spark] override def asML: newlinalg.SparseMatrix = {
+    new newlinalg.SparseMatrix(numRows, numCols, colPtrs, rowIndices, values, isTransposed)
   }
 }
 
@@ -894,6 +915,11 @@ object SparseMatrix {
         val nnzVals = entries.filter(v => v._1 != 0.0)
         SparseMatrix.fromCOO(n, n, nnzVals.map(v => (v._2, v._2, v._1)))
     }
+  }
+
+  /** Convert new linalg type to spark.mllib type.  Light copy; only copies references */
+  private[spark] def fromML(m: newlinalg.SparseMatrix): SparseMatrix = {
+    new SparseMatrix(m.numRows, m.numCols, m.colPtrs, m.rowIndices, m.values, m.isTransposed)
   }
 }
 
@@ -1176,5 +1202,13 @@ object Matrices {
       }
       SparseMatrix.fromCOO(numRows, numCols, entries)
     }
+  }
+
+  /** Convert new linalg type to spark.mllib type.  Light copy; only copies references */
+  private[spark] def fromML(m: newlinalg.Matrix): Matrix = m match {
+    case dm: newlinalg.DenseMatrix =>
+      DenseMatrix.fromML(dm)
+    case sm: newlinalg.SparseMatrix =>
+      SparseMatrix.fromML(sm)
   }
 }

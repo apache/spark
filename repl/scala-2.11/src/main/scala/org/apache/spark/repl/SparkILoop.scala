@@ -38,21 +38,22 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
       processLine("""
         @transient val sc = {
           val _sc = org.apache.spark.repl.Main.createSparkContext()
-          println("Spark context available as sc " +
+          _sc.uiWebUrl.foreach(webUrl => println(s"Spark context Web UI available at ${webUrl}"))
+          println("Spark context available as 'sc' " +
             s"(master = ${_sc.master}, app id = ${_sc.applicationId}).")
           _sc
         }
         """)
       processLine("""
-        @transient val sqlContext = {
-          val _sqlContext = org.apache.spark.repl.Main.createSQLContext()
-          println("SQL context available as sqlContext.")
-          _sqlContext
+        @transient val spark = {
+          val _session = org.apache.spark.repl.Main.createSparkSession()
+          println("Spark session available as 'spark'.")
+          _session
         }
         """)
       processLine("import org.apache.spark.SparkContext._")
-      processLine("import sqlContext.implicits._")
-      processLine("import sqlContext.sql")
+      processLine("import spark.implicits._")
+      processLine("import spark.sql")
       processLine("import org.apache.spark.sql.functions._")
     }
   }

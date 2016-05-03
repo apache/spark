@@ -20,8 +20,9 @@ package org.apache.spark.sql.execution.joins
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
+import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution.{RowIterator, SparkPlan}
-import org.apache.spark.sql.execution.metric.LongSQLMetric
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.{IntegralType, LongType}
 
 trait HashJoin {
@@ -43,12 +44,16 @@ trait HashJoin {
         left.output ++ right.output.map(_.withNullability(true))
       case RightOuter =>
         left.output.map(_.withNullability(true)) ++ right.output
+      case j: ExistenceJoin =>
+        left.output :+ j.exists
       case LeftExistence(_) =>
         left.output
       case x =>
         throw new IllegalArgumentException(s"HashJoin should not take $x as the JoinType")
     }
   }
+
+  override def outputPartitioning: Partitioning = streamedPlan.outputPartitioning
 
   protected lazy val (buildPlan, streamedPlan) = buildSide match {
     case BuildLeft => (left, right)
@@ -110,15 +115,14 @@ trait HashJoin {
     (r: InternalRow) => true
   }
 
-  protected def createResultProjection(): (InternalRow) => InternalRow = {
-    if (joinType == LeftSemi) {
+  protected def createResultProjection(): (InternalRow) => InternalRow = joinType match {
+    case LeftExistence(_) =>
       UnsafeProjection.create(output, output)
-    } else {
+    case _ =>
       // Always put the stream side on left to simplify implementation
       // both of left and right side could be null
       UnsafeProjection.create(
         output, (streamedPlan.output ++ buildPlan.output).map(_.withNullability(true)))
-    }
   }
 
   private def innerJoin(
@@ -184,6 +188,23 @@ trait HashJoin {
     }
   }
 
+  private def existenceJoin(
+      streamIter: Iterator[InternalRow],
+      hashedRelation: HashedRelation): Iterator[InternalRow] = {
+    val joinKeys = streamSideKeyGenerator()
+    val result = new GenericMutableRow(Array[Any](null))
+    val joinedRow = new JoinedRow
+    streamIter.map { current =>
+      val key = joinKeys(current)
+      lazy val buildIter = hashedRelation.get(key)
+      val exists = !key.anyNull && buildIter != null && (condition.isEmpty || buildIter.exists {
+        (row: InternalRow) => boundCondition(joinedRow(current, row))
+      })
+      result.setBoolean(0, exists)
+      joinedRow(current, result)
+    }
+  }
+
   private def antiJoin(
       streamIter: Iterator[InternalRow],
       hashedRelation: HashedRelation): Iterator[InternalRow] = {
@@ -201,7 +222,7 @@ trait HashJoin {
   protected def join(
       streamedIter: Iterator[InternalRow],
       hashed: HashedRelation,
-      numOutputRows: LongSQLMetric): Iterator[InternalRow] = {
+      numOutputRows: SQLMetric): Iterator[InternalRow] = {
 
     val joinedIter = joinType match {
       case Inner =>
@@ -212,6 +233,8 @@ trait HashJoin {
         semiJoin(streamedIter, hashed)
       case LeftAnti =>
         antiJoin(streamedIter, hashed)
+      case j: ExistenceJoin =>
+        existenceJoin(streamedIter, hashed)
       case x =>
         throw new IllegalArgumentException(
           s"BroadcastHashJoin should not take $x as the JoinType")

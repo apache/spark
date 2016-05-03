@@ -182,7 +182,7 @@ private[spark] class BlockManager(
     val shuffleConfig = new ExecutorShuffleInfo(
       diskBlockManager.localDirs.map(_.toString),
       diskBlockManager.subDirsPerLocalDir,
-      shuffleManager.shortName)
+      shuffleManager.getClass.getName)
 
     val MAX_ATTEMPTS = 3
     val SLEEP_TIME_SECS = 5
@@ -260,7 +260,12 @@ private[spark] class BlockManager(
   def waitForAsyncReregister(): Unit = {
     val task = asyncReregisterTask
     if (task != null) {
-      Await.ready(task, Duration.Inf)
+      try {
+        Await.ready(task, Duration.Inf)
+      } catch {
+        case NonFatal(t) =>
+          throw new Exception("Error occurred while waiting for async. reregistration", t)
+      }
     }
   }
 
@@ -796,13 +801,18 @@ private[spark] class BlockManager(
           reportBlockStatus(blockId, info, putBlockStatus)
         }
         Option(TaskContext.get()).foreach { c =>
-          c.taskMetrics().incUpdatedBlockStatuses(Seq((blockId, putBlockStatus)))
+          c.taskMetrics().incUpdatedBlockStatuses(blockId -> putBlockStatus)
         }
       }
       logDebug("Put block %s locally took %s".format(blockId, Utils.getUsedTimeMs(startTimeMs)))
       if (level.replication > 1) {
         // Wait for asynchronous replication to finish
-        Await.ready(replicationFuture, Duration.Inf)
+        try {
+          Await.ready(replicationFuture, Duration.Inf)
+        } catch {
+          case NonFatal(t) =>
+            throw new Exception("Error occurred while waiting for replication to finish", t)
+        }
       }
       if (blockWasSuccessfullyStored) {
         None
@@ -948,7 +958,7 @@ private[spark] class BlockManager(
           reportBlockStatus(blockId, info, putBlockStatus)
         }
         Option(TaskContext.get()).foreach { c =>
-          c.taskMetrics().incUpdatedBlockStatuses(Seq((blockId, putBlockStatus)))
+          c.taskMetrics().incUpdatedBlockStatuses(blockId -> putBlockStatus)
         }
         logDebug("Put block %s locally took %s".format(blockId, Utils.getUsedTimeMs(startTimeMs)))
         if (level.replication > 1) {
@@ -1247,7 +1257,7 @@ private[spark] class BlockManager(
     }
     if (blockIsUpdated) {
       Option(TaskContext.get()).foreach { c =>
-        c.taskMetrics().incUpdatedBlockStatuses(Seq((blockId, status)))
+        c.taskMetrics().incUpdatedBlockStatuses(blockId -> status)
       }
     }
     status.storageLevel
@@ -1301,7 +1311,7 @@ private[spark] class BlockManager(
           reportBlockStatus(blockId, info, removeBlockStatus)
         }
         Option(TaskContext.get()).foreach { c =>
-          c.taskMetrics().incUpdatedBlockStatuses(Seq((blockId, removeBlockStatus)))
+          c.taskMetrics().incUpdatedBlockStatuses(blockId -> removeBlockStatus)
         }
     }
   }

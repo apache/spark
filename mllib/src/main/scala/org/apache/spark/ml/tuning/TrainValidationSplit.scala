@@ -94,7 +94,6 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
   override def fit(dataset: Dataset[_]): TrainValidationSplitModel = {
     val schema = dataset.schema
     transformSchema(schema, logging = true)
-    val sqlCtx = dataset.sqlContext
     val est = $(estimator)
     val eval = $(evaluator)
     val epm = $(estimatorParamMaps)
