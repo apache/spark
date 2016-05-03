@@ -729,7 +729,7 @@ class PersistenceTest(PySparkTestCase):
             self.assertEqual(len(m1.stages), len(m2.stages))
             for s1, s2 in zip(m1.stages, m2.stages):
                 self._compare_pipelines(s1, s2)
-        elif isinstance(m1, OneVsRestParams):
+        elif isinstance(m1, OneVsRest) or isinstance(m1, OneVsRestModel):
             for p in m1.params:
                 self._compare_params(m1, m2, p)
             if isinstance(m1, OneVsRestModel):
