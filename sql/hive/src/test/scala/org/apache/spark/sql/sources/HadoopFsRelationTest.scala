@@ -696,7 +696,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
     }
   }
 
-  test("SPARK-10216: Avoid empty files during overwriting table with group by query") {
+  test("SPARK-10216: Avoid empty files during overwriting with group by query") {
     withTempPath { path =>
       val df = sqlContext.range(0, 5)
       val groupedDF = df.groupBy("id").count()
