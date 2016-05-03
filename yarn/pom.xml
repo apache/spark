@@ -30,6 +30,7 @@
   <name>Spark Project YARN</name>
   <properties>
     <sbt.project.name>yarn</sbt.project.name>
+    <jersey-1.version>1.9</jersey-1.version>
   </properties>
 
   <dependencies>
@@ -156,25 +157,25 @@
        <groupId>com.sun.jersey</groupId>
        <artifactId>jersey-core</artifactId>
        <scope>test</scope>
-       <version>1.9</version>
+       <version>${jersey-1.version}</version>
      </dependency>
      <dependency>
        <groupId>com.sun.jersey</groupId>
        <artifactId>jersey-json</artifactId>
        <scope>test</scope>
-       <version>1.9</version>
+       <version>${jersey-1.version}</version>
      </dependency>
      <dependency>
        <groupId>com.sun.jersey</groupId>
        <artifactId>jersey-server</artifactId>
        <scope>test</scope>
-       <version>1.9</version>
+       <version>${jersey-1.version}</version>
      </dependency>
      <dependency>
        <groupId>com.sun.jersey.contribs</groupId>
        <artifactId>jersey-guice</artifactId>
        <scope>test</scope>
-       <version>1.9</version>
+       <version>${jersey-1.version}</version>
      </dependency>
 
     <!--
