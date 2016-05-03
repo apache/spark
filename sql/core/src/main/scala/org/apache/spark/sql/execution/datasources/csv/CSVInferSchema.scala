@@ -186,11 +186,13 @@ private[csv] object CSVInferSchema {
       val index = numericPrecedence.lastIndexWhere(t => t == t1 || t == t2)
       Some(numericPrecedence(index))
 
+    // These two cases below deal with when `DecimalType` is larger than `IntegralType`.
     case (t1: IntegralType, t2: DecimalType) if t2.isWiderThan(t1) =>
       Some(t2)
     case (t1: DecimalType, t2: IntegralType) if t1.isWiderThan(t2) =>
       Some(t1)
 
+    // These two cases below deal with when `IntegralType` is larger than `DecimalType`.
     case (t1: IntegralType, t2: DecimalType) =>
       findTightestCommonType(DecimalType.forType(t1), t2)
     case (t1: DecimalType, t2: IntegralType) =>
